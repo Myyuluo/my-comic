@@ -709,7 +709,7 @@ class _DataRootWidgetState extends State<_DataRootWidget> {
             message: t.data_storage_change_confirm_title);
       case DataRootTargetRejection.targetNotEmpty:
         return t.data_storage_migrate_failed(
-            message: t.data_storage_location_hint);
+            message: t.data_storage_location_title);
       case DataRootTargetRejection.containsExecutable:
         return t.data_storage_reject_install_dir;
     }
@@ -733,7 +733,7 @@ class _DataRootWidgetState extends State<_DataRootWidget> {
       title: t.data_storage_location_title,
       subtitle: _migrating
           ? t.data_storage_migrating
-          : '${t.data_storage_location_hint}\n${_currentLocationLabel()}',
+          : _currentLocationLabel(),
       icon: FushiIcons.folder,
       controlBelow: true,
       // 行 onTap 注册焦点目标（方向导航可达）；trailing 按钮是视觉入口。

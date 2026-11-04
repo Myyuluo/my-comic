@@ -97,19 +97,18 @@ bool hasAnyNavigationModule(ModuleVisibility visibility) =>
 ///   让对应的合成面板整个消失。
 ModuleId? moduleOfSettingsDestination(SettingsDestinationId id) => switch (id) {
   SettingsDestinationId.appearance => null,
-  SettingsDestinationId.floatingBall => null,
+  SettingsDestinationId.floatingBall => ModuleId.lookup,
   SettingsDestinationId.profiles => null,
-  SettingsDestinationId.reading => null,
-  SettingsDestinationId.lookup => null,
+  SettingsDestinationId.reading => ModuleId.books,
+  SettingsDestinationId.lookup => ModuleId.lookup,
   SettingsDestinationId.storage => null,
   SettingsDestinationId.system => null,
   SettingsDestinationId.readerQuickSettings => null,
   SettingsDestinationId.appIcon => null,
   SettingsDestinationId.videoQuickSettings => null,
   SettingsDestinationId.shortcuts => null,
-  // 模型是设备级资源（本机 OCR / ASR 模型、系统 TTS）：不属任何模块。其中的
-  // 「LLM」子页仍按 `ai` → services 门控，见下。
-  SettingsDestinationId.models => null,
+  // 模型（LLM / OCR / ASR / TTS）属于 AI/OCR 域，my-comic 不提供。
+  SettingsDestinationId.models => ModuleId.ai,
   SettingsDestinationId.manga => ModuleId.manga,
   SettingsDestinationId.video => ModuleId.video,
   SettingsDestinationId.cardCreation => ModuleId.cardCreation,
@@ -118,11 +117,13 @@ ModuleId? moduleOfSettingsDestination(SettingsDestinationId id) => switch (id) {
   // 在线服务与媒体追踪同属「第三方服务」一个开关：追踪本就是靠在线服务的
   // 凭据跑的，分成两个开关只会让用户关了一半还留着另一半。
   SettingsDestinationId.services => ModuleId.services,
-  SettingsDestinationId.mediaTracking => ModuleId.services,
+  // my-comic 保留 Tracking（漫画阅读进度发布）；它不再依赖被移除的在线服务
+  // 模块，恒在。
+  SettingsDestinationId.mediaTracking => null,
   // AI 自 2026-10-13 起是独立模块（用户要能整块关掉 AI 而不连坐在线服务）。
   SettingsDestinationId.ai => ModuleId.ai,
-  // 互联是从同步备份拆出去的一级分类，共享同一套后端与私有状态，同一个开关。
-  SettingsDestinationId.syncBackup => ModuleId.sync,
+  // 本地备份导入/导出属于漫画域，保留；云端同步与互联已删除。
+  SettingsDestinationId.syncBackup => null,
   SettingsDestinationId.interconnect => ModuleId.sync,
 };
 

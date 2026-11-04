@@ -10,14 +10,11 @@ import 'package:flutter/gestures.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart' hide ModifierKey;
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart'
-    show Consumer, WidgetRef;
 import 'package:fushi/src/utils/components/glass/fushi_icon.dart';
 import 'package:path/path.dart' as p;
 import 'package:window_manager/window_manager.dart';
 
 import 'package:fushi_anki/fushi_anki.dart';
-import 'package:fushi/src/models/module_registry.dart';
 import 'package:fushi/src/anki/source_review_session.dart';
 import 'package:fushi_audio/fushi_audio.dart';
 import 'package:fushi_core/fushi_core.dart';
@@ -29,7 +26,6 @@ import 'package:fushi/src/models/fushi_reader_palette.dart';
 import 'package:fushi/src/models/module_id.dart';
 import 'package:fushi/src/media/manga/manga_ocr_background_job.dart';
 import 'package:fushi/src/media/manga/manga_ocr_provider.dart';
-import 'package:fushi/src/media/manga/manga_ocr_settings_section.dart';
 import 'package:fushi/src/utils/misc/screen_wakelock.dart';
 import 'package:fushi/src/media/manga/ocr/manga_ocr_job_registry.dart';
 import 'package:fushi_engine/ocr/manga_ocr_service.dart';
@@ -67,14 +63,11 @@ import 'package:fushi/src/media/manga/ocr/manga_ocr_cache_recovery.dart';
 import 'package:fushi/src/media/manga/ocr/manga_ocr_engine.dart';
 import 'package:fushi/src/media/manga/ocr/google_lens_disclosure.dart';
 import 'package:fushi/src/media/manga/manga_ocr_wizard_engines.dart';
-import 'package:fushi/src/pages/implementations/ai_settings_route.dart';
 import 'package:fushi/src/media/manga/reader/manga_reader_auto_ocr.dart';
 import 'package:fushi/src/media/manga/reader/manga_reader_stream_ocr.dart';
 import 'package:fushi/src/media/manga/library/online_manga_chapter_updates.dart'
     show mangaChapterDisplayName;
 import 'package:fushi/src/media/manga/reader/manga_reader_chrome.dart';
-import 'package:fushi/src/utils/components/fushi_floating_toolbar.dart'
-    show FushiToolbarFab;
 import 'package:fushi/src/utils/components/fushi_desktop_title_bar.dart'
     show FushiTitleBarColorScope, FushiTitleBarColors, fushiTitleBarColorsOn;
 import 'package:fushi/src/media/manga/reader/manga_reader_settings_sheet.dart';
@@ -1932,7 +1925,7 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
       );
     }
     if (!mounted) return;
-    _showOcrBoxes = readerPreferences.showOcrBoxes;
+    _showOcrBoxes = false;
     _spreadDirection = readerPreferences.direction == 'ltr' ? 'ltr' : 'rtl';
     _background = MangaBackgroundKey.fromKey(readerPreferences.background);
     _zoomPercent = readerPreferences.zoomStart.clamp(
@@ -4002,6 +3995,9 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
   /// 下顶栏的「识别本卷」。自动路径在本页实例里对同一目录只排一次（用户取消 / 任务
   /// 失败后不会被下一次设置变更悄悄排回去）；没有可用引擎不记账，下完模型再调就会排。
   Future<void> _maybeStartVolumeOcr({bool userInitiated = false}) async {
+    // my-comic：端上 OCR / AI 识别已移除，不再自动或手动排整卷识别任务。
+    return;
+    // ignore: dead_code
     // 直读章没有整卷任务可排，走页级的边看边识别（设置面板改了触发方式 / 引擎
     // 时也经这里进来）。
     if (_streamingChapter && !userInitiated) {
@@ -4153,6 +4149,9 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
   /// 在线直读章的边看边识别：从读者当前页起识别眼前这页与后面几页，识别完一页
   /// 热替换一页（[MangaStreamPageOcr]）。手动触发模式下不自动识别。
   Future<void> _maybeStartStreamingOcr() async {
+    // my-comic：端上 OCR 已移除，在线直读不再边看边识别。
+    return;
+    // ignore: dead_code
     final MangaReaderSession? session = _pageSession;
     if (!mounted ||
         !_streamingChapter ||
@@ -4508,6 +4507,9 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
   /// 处理 OCR 文字命中后的选词 payload：记录所在句子（喂制卡/收藏）并在选区矩形上开查词
   /// 弹窗。词/句/矩形契约由纯函数 [dispatchMangaSelection] 承担（可单测）。
   Future<void> processMangaSelection(ReaderSelectionData data) async {
+    // my-comic：漫画阅读器不再内嵌查词 / 制卡；选区不驱动词典弹窗或制卡状态。
+    return;
+    // ignore: dead_code
     if (!mounted) return;
     _miningTextRect = _sentenceRectOf(data);
     final Size screen = MediaQuery.of(context).size;
@@ -5419,37 +5421,6 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
             );
           }
         },
-        ocrSettings: Consumer(
-          builder: (BuildContext context, WidgetRef ocrRef, Widget? child) =>
-              MangaOcrSettingsSection(
-                presentation: MangaOcrSettingsPresentation.readerPanel,
-                service: ocrRef.watch(mangaOcrServiceProvider),
-                enginePreferenceGetter: () => appModel.mangaOcrEnginePreference,
-                enginePreferenceSetter: (String value) async {
-                  await appModel.setMangaOcrEnginePreference(value);
-                  unawaited(_maybeStartVolumeOcr());
-                },
-                parallelTasksGetter: () => appModel.mangaOcrParallelTasks,
-                parallelTasksSetter: appModel.setMangaOcrParallelTasks,
-                localModelGetter: () => appModel.mangaOcrLocalModel,
-                localModelSetter: appModel.setMangaOcrLocalModel,
-                lensLanguageGetter: () => appModel.mangaOcrLensLanguage,
-                lensLanguageSetter: appModel.setMangaOcrLensLanguage,
-                pairedHostModelGetter: () => appModel.mangaOcrPairedHostModel,
-                pairedHostModelSetter: appModel.setMangaOcrPairedHostModel,
-                // AI 档位面板按 aiModeGetter 是否为 null 自我门控：AI 模块关掉时不传。
-                aiModeGetter: isAiModuleEnabled(appModel.moduleVisibility)
-                    ? () => appModel.mangaOcrAiMode
-                    : null,
-                aiModeSetter: appModel.setMangaOcrAiMode,
-                aiProviderReady: () => mangaAiOcrProviderReady(appModel),
-                openAiSettings: pushAiSettingsPage,
-                remoteRunner: createInterconnectMangaOcrRunner(
-                  appModel,
-                  appModel.database,
-                ),
-              ),
-        ),
         supportedDeviceKeys: <String>{
           if (Platform.isAndroid ||
               Platform.isIOS ||
@@ -5536,7 +5507,7 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
         prefs.scaleType != _readerPreferences.scaleType;
     setState(() {
       _readerPreferences = prefs;
-      _showOcrBoxes = prefs.showOcrBoxes;
+      _showOcrBoxes = false;
       // 翻页动画只认全局 `manga_page_animation`（animateTransitions 是它的旧投影，
       // 作品覆盖里残留的旧值不再生效）；墨水屏的降级在 _effectivePageAnimation。
       _readPageTurnPreferences();
@@ -6062,23 +6033,6 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
                         ),
                       ),
                     ),
-                  // OCR 进度浮标：顶栏下沿的右上角，不随顶栏收起（查词弹窗盖在
-                  // 它上面）。
-                  if (_buildOcrProgressBadge() case final Widget badge)
-                    Positioned(
-                      top:
-                          MediaQuery.paddingOf(context).top +
-                          kMangaChromeBarHeight,
-                      left: kMangaChromeEdgeInset + 4,
-                      right: kMangaChromeEdgeInset + 4,
-                      child: Align(alignment: Alignment.topRight, child: badge),
-                    ),
-                  // 查词弹窗层：必须在同一个键盘 Focus 子树里，否则原生词典
-                  // WebView 持焦后会吞掉翻页键。
-                  Positioned.fill(
-                    key: const ValueKey<String>('manga_dictionary_host'),
-                    child: buildDictionary(),
-                  ),
                   // 顶栏 = 返回键 + 标题/页码 + 动作组。
                   //
                   // 返回键是本页**唯一**的出口，它的可见性只能由用户意图
@@ -6342,24 +6296,7 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
           bubbleLabel: _pageLabelFor,
         ),
       ),
-      toolbar: MangaReaderToolbar(
-        groups: plan.toolbar,
-        // FAB = 本页主操作：识别框开关（查词的入口）。开 = 圆角方、关 = 圆，按
-        // M3E 弹簧形状变形；与快捷键 / 悬浮球同一执行体。Apple 无 FAB，开关
-        // 在工具栏里（[_ocrBoxesToggleAction]）。
-        fab: isGlassDesign(context)
-            ? null
-            : KeyedSubtree(
-                key: const ValueKey<String>('manga_ocr_boxes_toggle'),
-                child: FushiToolbarFab(
-                  icon: _ocrBoxesIcon,
-                  tooltip: t.manga_ocr_boxes_toggle,
-                  rounded: _showOcrBoxes,
-                  morphing: true,
-                  onPressed: () => unawaited(_toggleOcrBoxes()),
-                ),
-              ),
-      ),
+      toolbar: MangaReaderToolbar(groups: plan.toolbar),
     );
   }
 
@@ -6565,16 +6502,6 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
         ),
       ],
       <MangaChromeAction>[
-        // 整卷 OCR 运行时给一个取消入口（真停任务；本页不会再自动排回去）。
-        if (_wholeVolumeOcrRunning)
-          MangaChromeAction(
-            key: const ValueKey<String>('manga_ocr_cancel_button'),
-            icon: Icons.stop_circle_outlined,
-            label: t.dialog_cancel,
-            slot: MangaChromeSlot.top,
-            priority: 9,
-            onPressed: _cancelWholeVolumeOcr,
-          ),
         if (desktopWindowFullscreenSupported)
           MangaChromeAction(
             key: const ValueKey<String>('manga_fullscreen_button'),
@@ -6602,26 +6529,6 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
           priority: 1,
           onPressed: () => unawaited(_jumpToPage(1)),
         ),
-        // 默认进入即整卷识别；只有触发方式设成「手动」时才给这个入口。
-        if (_showManualVolumeOcrAction)
-          MangaChromeAction(
-            key: const ValueKey<String>('manga_reader_ocr_volume_button'),
-            icon: Icons.document_scanner_outlined,
-            label: t.manga_reader_ocr_volume,
-            slot: MangaChromeSlot.top,
-            priority: 4,
-            onPressed: () =>
-                unawaited(_maybeStartVolumeOcr(userInitiated: true)),
-          ),
-        if (_showRerunVolumeOcrAction)
-          MangaChromeAction(
-            key: const ValueKey<String>('manga_reader_ocr_rerun_button'),
-            icon: Icons.document_scanner_outlined,
-            label: t.manga_reader_ocr_rerun,
-            slot: MangaChromeSlot.top,
-            priority: 1,
-            onPressed: () => unawaited(_rerunVolumeOcr()),
-          ),
         MangaChromeAction(
           key: const ValueKey<String>('manga_reader_settings_button'),
           icon: Icons.settings_outlined,
@@ -6639,9 +6546,6 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
           onPressed: _toggleMangaChrome,
         ),
       ],
-      // Apple 没有 FAB：识别框开关是工具栏末组的一颗普通开关按钮（开 = 强调色
-      // 字形，[FushiFloatingToolbar] 的 Apple 选中态）。
-      if (isGlassDesign(context)) <MangaChromeAction>[_ocrBoxesToggleAction()],
     ];
   }
 
@@ -6683,29 +6587,6 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
             source: _MangaReaderInputSource.floatingBall,
           ),
         ),
-        'ocr_boxes': ReaderHeaderAction(
-          key: const ValueKey<String>('manga_floating_ball_ocr_boxes'),
-          icon: _showOcrBoxes
-              ? Icons.highlight_alt
-              : Icons.highlight_alt_outlined,
-          label: t.manga_ocr_boxes_toggle,
-          onPressed: () => unawaited(_toggleOcrBoxes()),
-        ),
-        if (_showManualVolumeOcrAction)
-          'ocr_volume': ReaderHeaderAction(
-            key: const ValueKey<String>('manga_floating_ball_ocr_volume'),
-            icon: Icons.document_scanner_outlined,
-            label: t.manga_reader_ocr_volume,
-            onPressed: () =>
-                unawaited(_maybeStartVolumeOcr(userInitiated: true)),
-          ),
-        if (_showRerunVolumeOcrAction)
-          'ocr_rerun': ReaderHeaderAction(
-            key: const ValueKey<String>('manga_floating_ball_ocr_rerun'),
-            icon: Icons.document_scanner_outlined,
-            label: t.manga_reader_ocr_rerun,
-            onPressed: () => unawaited(_rerunVolumeOcr()),
-          ),
         if (_shelfEntry != null)
           'chapters': ReaderHeaderAction(
             key: const ValueKey<String>('manga_floating_ball_chapters'),

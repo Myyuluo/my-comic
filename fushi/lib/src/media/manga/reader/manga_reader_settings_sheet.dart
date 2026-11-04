@@ -229,16 +229,6 @@ List<MangaReaderPreferenceDescriptor> mangaReaderPreferenceDescriptors(
   // 旧「过渡动画」开关（animateTransitions）已并进「翻页动画」四选一（见
   // [MangaPageTurnSettings]），不再作为一行露出；字段只为旧覆盖 JSON 兼容保留。
   MangaReaderPreferenceDescriptor(
-    key: 'lookupOnHover',
-    kind: MangaReaderPreferenceKind.toggle,
-    title: t.manga_reader_lookup_on_hover,
-  ),
-  MangaReaderPreferenceDescriptor(
-    key: 'showOcrBoxes',
-    kind: MangaReaderPreferenceKind.toggle,
-    title: t.manga_ocr_boxes_toggle,
-  ),
-  MangaReaderPreferenceDescriptor(
     key: 'autoScrollSpeed',
     kind: MangaReaderPreferenceKind.integer,
     title: t.manga_reader_auto_scroll_speed,
@@ -285,12 +275,6 @@ List<MangaReaderPreferenceDescriptor> mangaReaderPreferenceDescriptors(
     kind: MangaReaderPreferenceKind.choice,
     title: t.manga_background,
     choices: const <String>['black', 'white', 'gray', 'theme'],
-  ),
-  MangaReaderPreferenceDescriptor(
-    key: 'ocrTrigger',
-    kind: MangaReaderPreferenceKind.choice,
-    title: t.manga_reader_ocr_trigger,
-    choices: const <String>['automatic', 'manual'],
   ),
   MangaReaderPreferenceDescriptor(
     key: 'colorFilterColor',
@@ -388,7 +372,7 @@ const double _kScopeBarReserve = 96;
 
 class _MangaReaderSettingsSheetState extends State<MangaReaderSettingsSheet>
     with SingleTickerProviderStateMixin {
-  late final TabController _tabs = TabController(length: 4, vsync: this);
+  late final TabController _tabs = TabController(length: 3, vsync: this);
   late Map<String, Object?> _overrides;
 
   /// 最后一次成功落库的覆盖值：保存失败时回滚到这里，而不是回滚到「点之前」——
@@ -1012,7 +996,6 @@ class _MangaReaderSettingsSheetState extends State<MangaReaderSettingsSheet>
             for (final MangaReaderPreferenceDescriptor d in orphans) _row(d),
           ],
         ),
-      if (tab == 3 && widget.ocrSettings != null) widget.ocrSettings!,
     ];
   }
 
@@ -1206,11 +1189,6 @@ class _MangaReaderSettingsSheetState extends State<MangaReaderSettingsSheet>
         icon: FushiIcons.filter,
         key: const ValueKey<String>('manga_settings_tab_label_2'),
       ),
-      ReaderPanelTab(
-        label: t.manga_reader_tab_ocr,
-        icon: FushiIcons.ocr,
-        key: const ValueKey<String>('manga_settings_tab_label_3'),
-      ),
     ];
     // 四段带图标至少要这么宽；更窄（小屏手机竖屏）就整排横滑，不压扁文字。
     const double minWidth = 384;
@@ -1339,7 +1317,7 @@ class _MangaReaderSettingsSheetState extends State<MangaReaderSettingsSheet>
             child: TabBarView(
               controller: _tabs,
               children: <Widget>[
-                for (int tab = 0; tab < 4; tab++)
+                for (int tab = 0; tab < 3; tab++)
                   FushiEntranceScope(
                     child: ListView(
                       key: PageStorageKey<String>('manga_settings_tab_$tab'),

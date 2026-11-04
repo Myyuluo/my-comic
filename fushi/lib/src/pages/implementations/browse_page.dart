@@ -14,7 +14,6 @@ import 'package:fushi/src/media/audiobook/audiobook_material_service.dart';
 import 'package:fushi/src/media/audiobook/book_import_dialog.dart';
 import 'package:fushi/src/media/discovery/discovery_download_tasks_section.dart';
 import 'package:fushi/src/media/drag_drop/drop_classification.dart';
-import 'package:fushi/src/media/drag_drop/fushi_file_drop_target.dart';
 import 'package:fushi_engine/media/discovery/discovery_models.dart';
 import 'package:fushi_engine/media/torrent/torrent_network_diagnosis.dart';
 import 'package:fushi/src/media/manga/discovery/manga_discovery_page.dart';
@@ -38,7 +37,6 @@ import 'package:fushi/src/pages/implementations/torrent_settings_section.dart';
 import 'package:fushi/src/pages/implementations/video_discovery_detail_page.dart';
 import 'package:fushi/src/pages/implementations/video_discovery_page.dart';
 import 'package:fushi/src/pages/implementations/video_download_jobs_panel.dart';
-import 'package:fushi/src/pages/implementations/video_download_subscriptions_panel.dart';
 import 'package:fushi/src/pages/implementations/video_external_provider_settings_section.dart';
 import 'package:fushi/src/settings/settings_detail_page.dart';
 import 'package:fushi/src/settings/settings_schema_services.dart';
@@ -798,20 +796,6 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
               label: t.media_import_segment_stores,
               onTap: () => openOnlineSourceStores(context, storesDomain),
             ),
-          if (onDownloads) ...<Widget>[
-            FushiIconButton(
-              icon: Icons.add,
-              tooltip: t.download_task_add,
-              label: t.download_task_add,
-              onTap: _openManualTaskDialog,
-            ),
-            FushiIconButton(
-              key: const ValueKey<String>('browse-download-settings'),
-              icon: Icons.settings_outlined,
-              tooltip: t.download_settings,
-              onTap: _openDownloadSettings,
-            ),
-          ],
         ];
         if (actions.isEmpty) {
           _actionsSlot.release(this);
@@ -856,33 +840,18 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
   }
 
   /// 「下载」页签：任务 / 订阅两段（可横滑切换）。
+  /// 「下载」页签：my-comic 只保留漫画章节下载任务（在线章节 / mokuro 整卷）。
+  /// torrent / 磁力 / 直链 / 视频订阅等统一下载中心入口已随非漫画域移除。
   Widget _buildDownloadsTab() {
-    return _BrowseSwipeSections<BrowseDownloadsSection>(
-      pickerKey: const ValueKey<String>('browse-downloads-section-picker'),
-      tabs: <LibrarySectionTab<BrowseDownloadsSection>>[
-        LibrarySectionTab<BrowseDownloadsSection>(
-          value: BrowseDownloadsSection.tasks,
-          label: t.download_tasks_tab,
-        ),
-        LibrarySectionTab<BrowseDownloadsSection>(
-          value: BrowseDownloadsSection.subscriptions,
-          label: t.download_subscriptions_tab,
-        ),
-      ],
-      selected: _downloadsSection,
-      onChanged: (BrowseDownloadsSection value) {
-        _chrome.resetToTop();
-        setState(() => _downloadsSection = value);
-      },
-      focusIdPrefix: 'browse-downloads-section',
-      onEdgeOverscroll: (int delta) => _handOffFrom(BrowseTab.downloads, delta),
-      // 任务 / 订阅两页的主滚动视图自己在顶部为浮动头部占位（内容滚到头部之下）。
-      pageHandlesInset: true,
-      pageBuilder: (BrowseDownloadsSection section) => switch (section) {
-        BrowseDownloadsSection.tasks => _buildTasks(),
-        BrowseDownloadsSection.subscriptions =>
-          const VideoDownloadSubscriptionsPanel(),
-      },
+    final FushiDesignTokens tokens = FushiDesignTokens.of(context);
+    return ListView(
+      padding: EdgeInsets.fromLTRB(
+        tokens.spacing.page,
+        FushiFloatingChromeInset.of(context) + tokens.spacing.gap,
+        tokens.spacing.page,
+        tokens.spacing.page,
+      ),
+      children: const <Widget>[MangaDownloadTasksSection()],
     );
   }
 
@@ -1086,69 +1055,65 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
     // 初始页签：跳转请求 / initialTab 播种进 [_selectedTab]，此刻不可见就落第一个
     // 页签（见 [_syncTabController]）。
     final TabController controller = _syncTabController(tabs);
-    // 整页是 .torrent 的落点（桌面拖放）；移动端 FushiFileDropTarget 直接透传。
-    return FushiFileDropTarget(
-      debugLabel: 'downloads',
-      onDrop: _handleDownloadsDrop,
-      // 2026-10 体验优化：BUG-1003 的 inset 关闭原先对整页生效，来源 / 扩展 /
-      // 发现页签里的搜索框在手机上会被软键盘直接盖住、列表也滚不到底。只在
-      // 「下载」页签（贴底任务区）关 inset，其它页签恢复默认让键盘顶起 body。
-      child: AnimatedBuilder(
-        animation: controller,
-        builder: (BuildContext context, Widget? body) {
-          final bool onDownloads =
-              tabs[controller.index.clamp(0, tabs.length - 1)] ==
-              BrowseTab.downloads;
-          return Scaffold(
-            // BUG-1003：下载页签把输入框放在上半部、任务折叠区贴底、中段列表是
-            // 唯一的 Expanded。默认 resizeToAvoidBottomInset:true 时，手机软键盘
-            // 弹出会压掉 body 高度、顶掉贴底任务区。在该页签关掉 inset 让键盘
-            // 只覆盖下半部（打字时本就不看），顶部输入框保持可见、布局不反流。
-            resizeToAvoidBottomInset: !onDownloads,
-            body: body,
-          );
-        },
-        // 作为 home tab 时外层已有 SafeArea，这里的 SafeArea 兜的是独立 push
-        // 进来（设置入口）时的状态栏避让，双层无副作用。
-        child: SafeArea(
-          bottom: false,
-          // 头部（一级页签行）叠在正文上、随滚动收放（与库页同一套，见
-          // [FushiFloatingChromeOverlay]）；各页签的二级页签行在 [_BrowseSwipeSections]
-          // 里同样叠放，排在这一行下面、一起收。
-          child: FushiFloatingChromeScope(
-            controller: _chrome,
-            child: FushiFloatingChromeOverlay(
-              chrome: isCupertinoPlatform(context)
-                  ? const SizedBox.shrink()
-                  : _buildHeader(controller, tabs),
-              child: NotificationListener<ScrollNotification>(
-                onNotification: _onScroll,
-                // 只在选中页签变化时重建（controller 的 notifyListeners 只在下标
-                // 变化时触发），用来给隐藏页签关焦点。
-                child: AnimatedBuilder(
-                  animation: controller,
-                  builder: (BuildContext context, Widget? _) => TabBarView(
-                    // 页签序列一变就整个换新：旧 TabBarView 的 PageController 停在
-                    // 旧下标上，换绑新控制器的那一帧会先把旧下标处（多半是新插进来
-                    // 的「来源」）建出来再跳走——白建一个页签还被保活。
-                    key: ValueKey<String>(
-                      tabs.map((BrowseTab tab) => tab.name).join(','),
-                    ),
-                    controller: controller,
-                    children: <Widget>[
-                      for (final BrowseTab tab in tabs)
-                        _BrowseTabKeepAlive(
-                          key: ValueKey<BrowseTab>(tab),
-                          active: tabs[controller.index] == tab,
-                          child: switch (tab) {
-                            BrowseTab.sources ||
-                            BrowseTab.extensions => _buildOnlineTab(),
-                            BrowseTab.discover => _buildResourceHub(),
-                            BrowseTab.downloads => _buildDownloadsTab(),
-                          },
-                        ),
-                    ],
+    // my-comic：torrent / 磁力拖放入口已移除，下载页只承载漫画章节下载任务。
+    // 2026-10 体验优化：BUG-1003 的 inset 关闭原先对整页生效，来源 / 扩展 /
+    // 发现页签里的搜索框在手机上会被软键盘直接盖住、列表也滚不到底。只在
+    // 「下载」页签（贴底任务区）关 inset，其它页签恢复默认让键盘顶起 body。
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (BuildContext context, Widget? body) {
+        final bool onDownloads =
+            tabs[controller.index.clamp(0, tabs.length - 1)] ==
+            BrowseTab.downloads;
+        return Scaffold(
+          // BUG-1003：下载页签把输入框放在上半部、任务折叠区贴底、中段列表是
+          // 唯一的 Expanded。默认 resizeToAvoidBottomInset:true 时，手机软键盘
+          // 弹出会压掉 body 高度、顶掉贴底任务区。在该页签关掉 inset 让键盘
+          // 只覆盖下半部（打字时本就不看），顶部输入框保持可见、布局不反流。
+          resizeToAvoidBottomInset: !onDownloads,
+          body: body,
+        );
+      },
+      // 作为 home tab 时外层已有 SafeArea，这里的 SafeArea 兜的是独立 push
+      // 进来（设置入口）时的状态栏避让，双层无副作用。
+      child: SafeArea(
+        bottom: false,
+        // 头部（一级页签行）叠在正文上、随滚动收放（与库页同一套，见
+        // [FushiFloatingChromeOverlay]）；各页签的二级页签行在 [_BrowseSwipeSections]
+        // 里同样叠放，排在这一行下面、一起收。
+        child: FushiFloatingChromeScope(
+          controller: _chrome,
+          child: FushiFloatingChromeOverlay(
+            chrome: isCupertinoPlatform(context)
+                ? const SizedBox.shrink()
+                : _buildHeader(controller, tabs),
+            child: NotificationListener<ScrollNotification>(
+              onNotification: _onScroll,
+              // 只在选中页签变化时重建（controller 的 notifyListeners 只在下标
+              // 变化时触发），用来给隐藏页签关焦点。
+              child: AnimatedBuilder(
+                animation: controller,
+                builder: (BuildContext context, Widget? _) => TabBarView(
+                  // 页签序列一变就整个换新：旧 TabBarView 的 PageController 停在
+                  // 旧下标上，换绑新控制器的那一帧会先把旧下标处（多半是新插进来
+                  // 的「来源」）建出来再跳走——白建一个页签还被保活。
+                  key: ValueKey<String>(
+                    tabs.map((BrowseTab tab) => tab.name).join(','),
                   ),
+                  controller: controller,
+                  children: <Widget>[
+                    for (final BrowseTab tab in tabs)
+                      _BrowseTabKeepAlive(
+                        key: ValueKey<BrowseTab>(tab),
+                        active: tabs[controller.index] == tab,
+                        child: switch (tab) {
+                          BrowseTab.sources ||
+                          BrowseTab.extensions => _buildOnlineTab(),
+                          BrowseTab.discover => _buildResourceHub(),
+                          BrowseTab.downloads => _buildDownloadsTab(),
+                        },
+                      ),
+                  ],
                 ),
               ),
             ),
