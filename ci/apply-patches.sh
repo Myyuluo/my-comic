@@ -29,18 +29,30 @@ fi
 
 echo "Pub cache: $PUB_CACHE_DIR"
 
-# Apply hosted package patches
+# Apply hosted package patches.
+#
+# The same package can be cached under several hosted roots: `pub.dev` plus
+# any mirror configured with PUB_HOSTED_URL (this repo's Windows baseline uses
+# `pub.flutter-io.cn`). Patch every copy that exists — patching only pub.dev
+# silently leaves the mirror copy unpatched, and that is the copy the build
+# actually resolves when the lockfile URLs point at the mirror.
 if [ -d "$PATCHES_DIR/hosted" ]; then
   for pkg_dir in "$PATCHES_DIR/hosted"/*/; do
     pkg_name="$(basename "$pkg_dir")"
-    target_dir="$PUB_CACHE_DIR/hosted/pub.dev/$pkg_name"
-    if [ ! -d "$target_dir" ]; then
+    patched_any=0
+    for hosted_root in "$PUB_CACHE_DIR"/hosted/*/; do
+      target_dir="${hosted_root}${pkg_name}"
+      if [ ! -d "$target_dir" ]; then
+        continue
+      fi
+      echo "Patching hosted/$pkg_name ($(basename "$hosted_root")) ..."
+      cp -r "$pkg_dir"* "$target_dir/"
+      patched_any=1
+    done
+    if [ "$patched_any" -eq 0 ]; then
       echo "WARNING: hosted/$pkg_name not in pub cache (version drifted or dependency removed); skipping."
       skipped=$((skipped + 1))
-      continue
     fi
-    echo "Patching hosted/$pkg_name ..."
-    cp -r "$pkg_dir"* "$target_dir/"
   done
 fi
 

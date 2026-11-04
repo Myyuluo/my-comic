@@ -10,7 +10,6 @@ list(APPEND FLUTTER_PLUGIN_LIST
   flutter_webrtc
   gamepads_linux
   hotkey_manager_linux
-  media_kit_libs_linux
   media_kit_video
   record_linux
   screen_retriever_linux

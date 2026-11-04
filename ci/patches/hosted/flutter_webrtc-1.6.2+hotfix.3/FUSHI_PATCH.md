@@ -38,6 +38,16 @@ Remove this override when upstream exposes client-area WGC capture with correct
 stride/dimensions, deterministic disposal, and startup failure propagation; rerun
 the PMv2 real-window capture spike before changing the backend.
 
+## my-comic v1: Windows platform disabled
+
+`pubspec.yaml` is a whole-file override that drops the `windows` plugin
+platform. my-comic does not ship game streaming (ADR-0002), and the plugin
+links `libwebrtc.dll` directly, so keeping the plugin registered would require
+the 20 MB DLL to stay in every install. Removing the platform declaration makes
+Flutter skip the plugin build/registration on Windows while the Dart package
+remains resolvable for the residual game-stream source files (their UI is
+unreachable). Restore the `windows:` entry if game streaming ever returns.
+
 ## Other whole-file overrides in this directory
 
 - `windows/application_loopback_capturer.cc` (BUG-2725): the feeder thread

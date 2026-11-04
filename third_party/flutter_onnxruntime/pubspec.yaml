@@ -48,8 +48,13 @@ flutter:
       web:
         pluginClass: FlutterOnnxruntimeWebPlugin
         fileName: web/flutter_onnxruntime_web_plugin.dart
-      windows:
-        pluginClass: FlutterOnnxruntimePlugin
+      # my-comic (ticket 04): the Windows plugin registration is intentionally
+      # removed. ONNX Runtime is only used by the on-device OCR/ASR paths,
+      # which v1 does not ship (ADR-0002); dropping the platform declaration
+      # keeps onnxruntime.dll / onnxruntime_providers_shared.dll out of the
+      # Windows bundle while the Dart API remains compilable for the residual
+      # (unreachable) OCR/ASR code. Android/Linux/Apple declarations are kept
+      # untouched because this ticket only covers the Windows v1 product.
 
 topics:
  - onnx
