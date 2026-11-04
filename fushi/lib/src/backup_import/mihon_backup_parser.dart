@@ -82,6 +82,10 @@ class MihonBackupParser {
     final List<MihonBackupManga> mangas = <MihonBackupManga>[];
     final List<MihonBackupCategory> categories = <MihonBackupCategory>[];
     final Map<int, String> sourceNames = <int, String>{};
+    final List<MihonBackupSourcePreferences> sourcePreferences =
+        <MihonBackupSourcePreferences>[];
+    final List<MihonBackupExtensionStore> extensionStores =
+        <MihonBackupExtensionStore>[];
 
     while (!reader.isAtEnd) {
       final int tag = reader.readTag();
@@ -104,6 +108,14 @@ class MihonBackupParser {
         if (source.name.isNotEmpty) {
           sourceNames[source.id] = source.name;
         }
+      } else if (field == 105 && wireType == 2) {
+        sourcePreferences.add(
+          _readSourcePreferences(_ProtoReader(reader.readBytes())),
+        );
+      } else if (field == 106 && wireType == 2) {
+        extensionStores.add(
+          _readExtensionStore(_ProtoReader(reader.readBytes())),
+        );
       } else {
         reader.skip(wireType);
       }
@@ -113,6 +125,12 @@ class MihonBackupParser {
       mangas: List<MihonBackupManga>.unmodifiable(mangas),
       categories: List<MihonBackupCategory>.unmodifiable(categories),
       sourceNames: Map<int, String>.unmodifiable(sourceNames),
+      sourcePreferences: List<MihonBackupSourcePreferences>.unmodifiable(
+        sourcePreferences,
+      ),
+      extensionStores: List<MihonBackupExtensionStore>.unmodifiable(
+        extensionStores,
+      ),
     );
   }
 
@@ -131,6 +149,7 @@ class MihonBackupParser {
     final List<MihonBackupChapter> chapters = <MihonBackupChapter>[];
     final List<int> categoryOrders = <int>[];
     final List<MihonBackupHistory> history = <MihonBackupHistory>[];
+    final List<MihonBackupTracking> tracking = <MihonBackupTracking>[];
 
     while (!reader.isAtEnd) {
       final int tag = reader.readTag();
@@ -166,6 +185,8 @@ class MihonBackupParser {
           while (!packed.isAtEnd) {
             categoryOrders.add(packed.readVarint());
           }
+        case 18 when wireType == 2:
+          tracking.add(_readTracking(_ProtoReader(reader.readBytes())));
         case 100 when wireType == 0:
           favorite = reader.readVarint() != 0;
         case 104 when wireType == 2:
@@ -190,6 +211,248 @@ class MihonBackupParser {
       chapters: List<MihonBackupChapter>.unmodifiable(chapters),
       categoryOrders: List<int>.unmodifiable(categoryOrders),
       history: List<MihonBackupHistory>.unmodifiable(history),
+      tracking: List<MihonBackupTracking>.unmodifiable(tracking),
+    );
+  }
+
+  static MihonBackupTracking _readTracking(_ProtoReader reader) {
+    int syncId = 0;
+    int? libraryId;
+    int? mediaIdInt;
+    String trackingUrl = '';
+    String title = '';
+    double lastChapterRead = 0;
+    int totalChapters = 0;
+    double score = 0;
+    int status = 0;
+    int? startedReadingDate;
+    int? finishedReadingDate;
+    bool private = false;
+    int? mediaId;
+
+    while (!reader.isAtEnd) {
+      final int tag = reader.readTag();
+      final int field = tag >> 3;
+      final int wireType = tag & 0x7;
+      switch (field) {
+        case 1 when wireType == 0:
+          syncId = reader.readVarint();
+        case 2 when wireType == 0:
+          libraryId = _zeroToNull(reader.readVarint());
+        case 3 when wireType == 0:
+          mediaIdInt = _zeroToNull(reader.readVarint());
+        case 4 when wireType == 2:
+          trackingUrl = reader.readString();
+        case 5 when wireType == 2:
+          title = reader.readString();
+        case 6 when wireType == 5:
+          lastChapterRead = reader.readFloat32();
+        case 7 when wireType == 0:
+          totalChapters = reader.readVarint();
+        case 8 when wireType == 5:
+          score = reader.readFloat32();
+        case 9 when wireType == 0:
+          status = reader.readVarint();
+        case 10 when wireType == 0:
+          startedReadingDate = _zeroToNull(reader.readVarint());
+        case 11 when wireType == 0:
+          finishedReadingDate = _zeroToNull(reader.readVarint());
+        case 12 when wireType == 0:
+          private = reader.readVarint() != 0;
+        case 100 when wireType == 0:
+          mediaId = _zeroToNull(reader.readVarint());
+        default:
+          reader.skip(wireType);
+      }
+    }
+
+    return MihonBackupTracking(
+      syncId: syncId,
+      libraryId: libraryId,
+      mediaIdInt: mediaIdInt,
+      trackingUrl: trackingUrl,
+      title: title,
+      lastChapterRead: lastChapterRead,
+      totalChapters: totalChapters,
+      score: score,
+      status: status,
+      startedReadingDate: startedReadingDate,
+      finishedReadingDate: finishedReadingDate,
+      private: private,
+      mediaId: mediaId,
+    );
+  }
+
+  static MihonBackupSourcePreferences _readSourcePreferences(
+    _ProtoReader reader,
+  ) {
+    String sourceKey = '';
+    final List<MihonBackupPreference> preferences = <MihonBackupPreference>[];
+    while (!reader.isAtEnd) {
+      final int tag = reader.readTag();
+      final int field = tag >> 3;
+      final int wireType = tag & 0x7;
+      switch (field) {
+        case 1 when wireType == 2:
+          sourceKey = reader.readString();
+        case 2 when wireType == 2:
+          preferences.add(_readPreference(_ProtoReader(reader.readBytes())));
+        default:
+          reader.skip(wireType);
+      }
+    }
+    return MihonBackupSourcePreferences(
+      sourceKey: sourceKey,
+      preferences: List<MihonBackupPreference>.unmodifiable(preferences),
+    );
+  }
+
+  static MihonBackupPreference _readPreference(_ProtoReader reader) {
+    String key = '';
+    MihonBackupPreferenceValue value = const MihonBackupPreferenceValue(
+      type: MihonBackupPreferenceType.unsupported,
+    );
+    while (!reader.isAtEnd) {
+      final int tag = reader.readTag();
+      final int field = tag >> 3;
+      final int wireType = tag & 0x7;
+      switch (field) {
+        case 1 when wireType == 2:
+          key = reader.readString();
+        case 2 when wireType == 2:
+          value = _readPreferenceValue(_ProtoReader(reader.readBytes()));
+        default:
+          reader.skip(wireType);
+      }
+    }
+    return MihonBackupPreference(key: key, value: value);
+  }
+
+  /// kotlinx.serialization protobuf polymorphic envelope:
+  /// `{1: serial name, 2: payload message}` where the payload stores the
+  /// subclass value at field 1.
+  static MihonBackupPreferenceValue _readPreferenceValue(_ProtoReader reader) {
+    String serialName = '';
+    Uint8List? payload;
+    while (!reader.isAtEnd) {
+      final int tag = reader.readTag();
+      final int field = tag >> 3;
+      final int wireType = tag & 0x7;
+      switch (field) {
+        case 1 when wireType == 2:
+          serialName = reader.readString();
+        case 2 when wireType == 2:
+          payload = reader.readBytes();
+        default:
+          reader.skip(wireType);
+      }
+    }
+
+    final String simpleName = serialName.split('.').last;
+    final MihonBackupPreferenceType type = switch (simpleName) {
+      'StringPreferenceValue' => MihonBackupPreferenceType.string,
+      'BooleanPreferenceValue' => MihonBackupPreferenceType.boolean,
+      'IntPreferenceValue' => MihonBackupPreferenceType.integer,
+      'LongPreferenceValue' => MihonBackupPreferenceType.long,
+      'FloatPreferenceValue' => MihonBackupPreferenceType.float,
+      'StringSetPreferenceValue' => MihonBackupPreferenceType.stringSet,
+      _ => MihonBackupPreferenceType.unsupported,
+    };
+    if (payload == null) {
+      return MihonBackupPreferenceValue(type: type);
+    }
+
+    final _ProtoReader values = _ProtoReader(payload);
+    Object? value;
+    while (!values.isAtEnd) {
+      final int tag = values.readTag();
+      final int field = tag >> 3;
+      final int wireType = tag & 0x7;
+      if (field != 1) {
+        values.skip(wireType);
+        continue;
+      }
+      switch (type) {
+        case MihonBackupPreferenceType.string when wireType == 2:
+          value = values.readString();
+        case MihonBackupPreferenceType.boolean when wireType == 0:
+          value = values.readVarint() != 0;
+        case MihonBackupPreferenceType.integer when wireType == 0:
+          value = values.readVarint();
+        case MihonBackupPreferenceType.long when wireType == 0:
+          value = values.readVarint();
+        case MihonBackupPreferenceType.float when wireType == 5:
+          value = values.readFloat32();
+        case MihonBackupPreferenceType.stringSet when wireType == 2:
+          value = <String>[
+            ...(value as List<String>? ?? const <String>[]),
+            values.readString(),
+          ];
+        default:
+          values.skip(wireType);
+      }
+    }
+    return MihonBackupPreferenceValue(
+      type: type,
+      // Proto3 omits zero-valued scalars; restore the type's default so an
+      // empty string / false / 0 preference is still imported.
+      value:
+          value ??
+          switch (type) {
+            MihonBackupPreferenceType.string => '',
+            MihonBackupPreferenceType.boolean => false,
+            MihonBackupPreferenceType.integer => 0,
+            MihonBackupPreferenceType.long => 0,
+            MihonBackupPreferenceType.float => 0.0,
+            MihonBackupPreferenceType.stringSet => <String>[],
+            MihonBackupPreferenceType.unsupported => null,
+          },
+    );
+  }
+
+  static MihonBackupExtensionStore _readExtensionStore(_ProtoReader reader) {
+    String indexUrl = '';
+    String name = '';
+    String? badgeLabel;
+    String signingKey = '';
+    String contactWebsite = '';
+    String? contactDiscord;
+    bool? isLegacy;
+    String? extensionListUrl;
+    while (!reader.isAtEnd) {
+      final int tag = reader.readTag();
+      final int field = tag >> 3;
+      final int wireType = tag & 0x7;
+      switch (field) {
+        case 1 when wireType == 2:
+          indexUrl = reader.readString();
+        case 2 when wireType == 2:
+          name = reader.readString();
+        case 3 when wireType == 2:
+          badgeLabel = _emptyToNull(reader.readString());
+        case 4 when wireType == 2:
+          contactWebsite = reader.readString();
+        case 5 when wireType == 2:
+          signingKey = reader.readString();
+        case 6 when wireType == 2:
+          contactDiscord = _emptyToNull(reader.readString());
+        case 7 when wireType == 0:
+          isLegacy = reader.readVarint() != 0;
+        case 8 when wireType == 2:
+          extensionListUrl = _emptyToNull(reader.readString());
+        default:
+          reader.skip(wireType);
+      }
+    }
+    return MihonBackupExtensionStore(
+      indexUrl: indexUrl,
+      name: name,
+      badgeLabel: badgeLabel,
+      signingKey: signingKey,
+      contactWebsite: contactWebsite,
+      contactDiscord: contactDiscord,
+      isLegacy: isLegacy,
+      extensionListUrl: extensionListUrl,
     );
   }
 
@@ -316,6 +579,10 @@ class MihonBackupParser {
     if (value == null || value.isEmpty) return null;
     return value;
   }
+
+  /// Proto3 omits zero-valued scalars; the backup models use nullable ints for
+  /// "not set" (timestamps, remote ids) so keep that distinction.
+  static int? _zeroToNull(int value) => value == 0 ? null : value;
 }
 
 class MihonBackupData {
@@ -323,6 +590,8 @@ class MihonBackupData {
     required this.mangas,
     required this.categories,
     required this.sourceNames,
+    this.sourcePreferences = const <MihonBackupSourcePreferences>[],
+    this.extensionStores = const <MihonBackupExtensionStore>[],
   });
 
   final List<MihonBackupManga> mangas;
@@ -330,6 +599,12 @@ class MihonBackupData {
 
   /// Backup source id → display name from `BackupSource` (field 101).
   final Map<int, String> sourceNames;
+
+  /// Top-level `BackupSourcePreferences` entries (field 105).
+  final List<MihonBackupSourcePreferences> sourcePreferences;
+
+  /// Top-level `BackupExtensionStore` entries (field 106).
+  final List<MihonBackupExtensionStore> extensionStores;
 }
 
 class MihonBackupManga {
@@ -348,6 +623,7 @@ class MihonBackupManga {
     required this.chapters,
     required this.categoryOrders,
     required this.history,
+    this.tracking = const <MihonBackupTracking>[],
   });
 
   final int source;
@@ -370,6 +646,9 @@ class MihonBackupManga {
   /// (`MangaBackupCreator.kt`); restore resolves order → `BackupCategory` name.
   final List<int> categoryOrders;
   final List<MihonBackupHistory> history;
+
+  /// `BackupManga.tracking` (field 18).
+  final List<MihonBackupTracking> tracking;
 }
 
 class MihonBackupChapter {
@@ -425,6 +704,107 @@ class MihonBackupSource {
 
   final int id;
   final String name;
+}
+
+/// `BackupManga.tracking` entry. [syncId] is Mihon's tracker id
+/// (`TrackerManager`: 1 MAL, 2 AniList, 3 Kitsu, 4 Shikimori, 5 Bangumi, …).
+class MihonBackupTracking {
+  const MihonBackupTracking({
+    required this.syncId,
+    required this.libraryId,
+    required this.mediaIdInt,
+    required this.trackingUrl,
+    required this.title,
+    required this.lastChapterRead,
+    required this.totalChapters,
+    required this.score,
+    required this.status,
+    required this.startedReadingDate,
+    required this.finishedReadingDate,
+    required this.private,
+    required this.mediaId,
+  });
+
+  final int syncId;
+  final int? libraryId;
+
+  /// Deprecated `mediaId` (proto field 3) written by Mihon 1.x.
+  final int? mediaIdInt;
+  final String trackingUrl;
+  final String title;
+  final double lastChapterRead;
+  final int totalChapters;
+  final double score;
+  final int status;
+  final int? startedReadingDate;
+  final int? finishedReadingDate;
+  final bool private;
+
+  /// Current remote id (proto field 100); takes precedence over [mediaIdInt].
+  final int? mediaId;
+
+  int? get remoteId => mediaId ?? mediaIdInt;
+}
+
+class MihonBackupSourcePreferences {
+  const MihonBackupSourcePreferences({
+    required this.sourceKey,
+    required this.preferences,
+  });
+
+  /// Mihon's `ConfigurableSource.preferenceKey()` = `source_<sourceId>`.
+  final String sourceKey;
+  final List<MihonBackupPreference> preferences;
+}
+
+class MihonBackupPreference {
+  const MihonBackupPreference({required this.key, required this.value});
+
+  final String key;
+  final MihonBackupPreferenceValue value;
+}
+
+enum MihonBackupPreferenceType {
+  string,
+  boolean,
+  integer,
+  long,
+  float,
+  stringSet,
+  unsupported,
+}
+
+class MihonBackupPreferenceValue {
+  const MihonBackupPreferenceValue({required this.type, this.value});
+
+  final MihonBackupPreferenceType type;
+
+  /// `String`, `bool`, `int`, `double` or `List<String>` depending on [type].
+  final Object? value;
+}
+
+/// `BackupExtensionStore` (top-level field 106). Unlike the source preference
+/// values, these are plain protobuf fields, not a polymorphic envelope.
+class MihonBackupExtensionStore {
+  const MihonBackupExtensionStore({
+    required this.indexUrl,
+    required this.name,
+    required this.badgeLabel,
+    required this.signingKey,
+    required this.contactWebsite,
+    required this.contactDiscord,
+    required this.isLegacy,
+    required this.extensionListUrl,
+  });
+
+  final String indexUrl;
+  final String name;
+  final String? badgeLabel;
+  final String signingKey;
+  final String contactWebsite;
+  final String? contactDiscord;
+  final bool? isLegacy;
+  final String? extensionListUrl;
 }
 
 /// Cursor over a protobuf wire-format message.

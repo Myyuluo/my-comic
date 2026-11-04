@@ -44,6 +44,39 @@ class FixtureHistory {
   final int readDuration;
 }
 
+class FixtureTracking {
+  const FixtureTracking({
+    required this.syncId,
+    required this.mediaId,
+    this.mediaIdInt = 0,
+    this.trackingUrl = '',
+    this.title = '',
+    this.lastChapterRead = 0,
+    this.totalChapters = 0,
+    this.score = 0,
+    this.status = 0,
+    this.startedReadingDate = 0,
+    this.finishedReadingDate = 0,
+    this.private = false,
+    this.libraryId = 0,
+  });
+
+  /// Mihon `Tracker.id`: 1 MAL, 2 AniList, 3 Kitsu, 4 Shikimori, 5 Bangumi…
+  final int syncId;
+  final int mediaId;
+  final int mediaIdInt;
+  final String trackingUrl;
+  final String title;
+  final double lastChapterRead;
+  final int totalChapters;
+  final double score;
+  final int status;
+  final int startedReadingDate;
+  final int finishedReadingDate;
+  final bool private;
+  final int libraryId;
+}
+
 class FixtureManga {
   const FixtureManga({
     required this.source,
@@ -60,6 +93,7 @@ class FixtureManga {
     this.chapters = const <FixtureChapter>[],
     this.categoryOrders = const <int>[],
     this.history = const <FixtureHistory>[],
+    this.tracking = const <FixtureTracking>[],
   });
 
   final int source;
@@ -76,6 +110,7 @@ class FixtureManga {
   final List<FixtureChapter> chapters;
   final List<int> categoryOrders;
   final List<FixtureHistory> history;
+  final List<FixtureTracking> tracking;
 }
 
 class FixtureCategory {
@@ -97,12 +132,71 @@ class FixtureSource {
   final String name;
 }
 
+/// One `BackupExtensionStore` (top-level field 106).
+class FixtureExtensionStore {
+  const FixtureExtensionStore({
+    required this.indexUrl,
+    required this.name,
+    this.badgeLabel,
+    this.signingKey = '',
+    this.contactWebsite = '',
+    this.contactDiscord,
+    this.isLegacy = false,
+    this.extensionListUrl,
+  });
+
+  final String indexUrl;
+  final String name;
+  final String? badgeLabel;
+  final String signingKey;
+  final String contactWebsite;
+  final String? contactDiscord;
+  final bool? isLegacy;
+  final String? extensionListUrl;
+}
+
+/// The value half of a `BackupPreference` (a kotlinx.serialization sealed
+/// `PreferenceValue`, encoded as {serialName, payload}).
+enum FixturePreferenceType {
+  intValue,
+  longValue,
+  floatValue,
+  stringValue,
+  booleanValue,
+  stringSetValue,
+}
+
+class FixturePreference {
+  const FixturePreference({
+    required this.key,
+    required this.type,
+    required this.value,
+  });
+
+  final String key;
+  final FixturePreferenceType type;
+  final Object value;
+}
+
+class FixtureSourcePreferences {
+  const FixtureSourcePreferences({
+    required this.sourceKey,
+    required this.prefs,
+  });
+
+  final String sourceKey;
+  final List<FixturePreference> prefs;
+}
+
 /// Writes a gzip-compressed Mihon backup file into [directory].
 Future<File> writeFixtureBackup(
   Directory directory, {
   required List<FixtureManga> mangas,
   List<FixtureCategory> categories = const <FixtureCategory>[],
   List<FixtureSource> sources = const <FixtureSource>[],
+  List<FixtureExtensionStore> extensionStores = const <FixtureExtensionStore>[],
+  List<FixtureSourcePreferences> sourcePreferences =
+      const <FixtureSourcePreferences>[],
   bool gzip = true,
   String name = 'fixture.tachibk',
 }) async {
@@ -110,6 +204,8 @@ Future<File> writeFixtureBackup(
     mangas: mangas,
     categories: categories,
     sources: sources,
+    extensionStores: extensionStores,
+    sourcePreferences: sourcePreferences,
   );
   final List<int> bytes = gzip ? gzipEncode(payload) : payload;
   final File file = File('${directory.path}${Platform.pathSeparator}$name');
@@ -121,6 +217,9 @@ Uint8List encodeFixtureBackup({
   required List<FixtureManga> mangas,
   List<FixtureCategory> categories = const <FixtureCategory>[],
   List<FixtureSource> sources = const <FixtureSource>[],
+  List<FixtureExtensionStore> extensionStores = const <FixtureExtensionStore>[],
+  List<FixtureSourcePreferences> sourcePreferences =
+      const <FixtureSourcePreferences>[],
 }) {
   final _ProtoWriter top = _ProtoWriter();
   for (final FixtureManga manga in mangas) {
@@ -131,6 +230,12 @@ Uint8List encodeFixtureBackup({
   }
   for (final FixtureSource source in sources) {
     top.bytes(101, _encodeSource(source));
+  }
+  for (final FixtureSourcePreferences preferences in sourcePreferences) {
+    top.bytes(105, _encodeSourcePreferences(preferences));
+  }
+  for (final FixtureExtensionStore store in extensionStores) {
+    top.bytes(106, _encodeExtensionStore(store));
   }
   return top.takeBytes();
 }
@@ -159,6 +264,9 @@ Uint8List _encodeManga(FixtureManga manga) {
   }
   for (final FixtureHistory history in manga.history) {
     w.bytes(104, _encodeHistory(history));
+  }
+  for (final FixtureTracking tracking in manga.tracking) {
+    w.bytes(18, _encodeTracking(tracking));
   }
   // Proto default for `favorite` is true, so only write the false case.
   if (!manga.favorite) w.varint(100, 0);
@@ -200,6 +308,95 @@ Uint8List _encodeSource(FixtureSource source) {
   w.string(1, source.name);
   w.varint(2, source.id);
   return w.takeBytes();
+}
+
+Uint8List _encodeTracking(FixtureTracking tracking) {
+  final _ProtoWriter w = _ProtoWriter();
+  w.varint(1, tracking.syncId);
+  if (tracking.libraryId != 0) w.varint(2, tracking.libraryId);
+  if (tracking.mediaIdInt != 0) w.varint(3, tracking.mediaIdInt);
+  if (tracking.trackingUrl.isNotEmpty) w.string(4, tracking.trackingUrl);
+  w.string(5, tracking.title);
+  if (tracking.lastChapterRead != 0) {
+    w.float32(6, tracking.lastChapterRead);
+  }
+  if (tracking.totalChapters != 0) w.varint(7, tracking.totalChapters);
+  if (tracking.score != 0) w.float32(8, tracking.score);
+  if (tracking.status != 0) w.varint(9, tracking.status);
+  if (tracking.startedReadingDate != 0) {
+    w.varint(10, tracking.startedReadingDate);
+  }
+  if (tracking.finishedReadingDate != 0) {
+    w.varint(11, tracking.finishedReadingDate);
+  }
+  if (tracking.private) w.varint(12, 1);
+  if (tracking.mediaId != 0) w.varint(100, tracking.mediaId);
+  return w.takeBytes();
+}
+
+Uint8List _encodeExtensionStore(FixtureExtensionStore store) {
+  final _ProtoWriter w = _ProtoWriter();
+  w.string(1, store.indexUrl);
+  w.string(2, store.name);
+  if (store.badgeLabel != null) w.string(3, store.badgeLabel!);
+  w.string(4, store.contactWebsite);
+  w.string(5, store.signingKey);
+  if (store.contactDiscord != null) w.string(6, store.contactDiscord!);
+  if (store.isLegacy != null) w.varint(7, store.isLegacy! ? 1 : 0);
+  if (store.extensionListUrl != null) {
+    w.string(8, store.extensionListUrl!);
+  }
+  return w.takeBytes();
+}
+
+Uint8List _encodeSourcePreferences(FixtureSourcePreferences preferences) {
+  final _ProtoWriter w = _ProtoWriter();
+  w.string(1, preferences.sourceKey);
+  for (final FixturePreference preference in preferences.prefs) {
+    w.bytes(2, _encodePreference(preference));
+  }
+  return w.takeBytes();
+}
+
+Uint8List _encodePreference(FixturePreference preference) {
+  final _ProtoWriter w = _ProtoWriter();
+  w.string(1, preference.key);
+  w.bytes(2, _encodePreferenceValue(preference.type, preference.value));
+  return w.takeBytes();
+}
+
+/// kotlinx.serialization protobuf encodes a sealed class as
+/// `{1: fully-qualified serial name, 2: payload message}`; every value class
+/// carries its single `value` field at proto field 1.
+Uint8List _encodePreferenceValue(FixturePreferenceType type, Object value) {
+  final _ProtoWriter payload = _ProtoWriter();
+  final String serialName;
+  switch (type) {
+    case FixturePreferenceType.intValue:
+      serialName = 'IntPreferenceValue';
+      payload.varint(1, value as int);
+    case FixturePreferenceType.longValue:
+      serialName = 'LongPreferenceValue';
+      payload.varint(1, value as int);
+    case FixturePreferenceType.floatValue:
+      serialName = 'FloatPreferenceValue';
+      payload.float32(1, (value as num).toDouble());
+    case FixturePreferenceType.stringValue:
+      serialName = 'StringPreferenceValue';
+      payload.string(1, value as String);
+    case FixturePreferenceType.booleanValue:
+      serialName = 'BooleanPreferenceValue';
+      payload.varint(1, (value as bool) ? 1 : 0);
+    case FixturePreferenceType.stringSetValue:
+      serialName = 'StringSetPreferenceValue';
+      for (final String item in (value as List<String>)) {
+        payload.string(1, item);
+      }
+  }
+  final _ProtoWriter envelope = _ProtoWriter();
+  envelope.string(1, 'eu.kanade.tachiyomi.data.backup.models.$serialName');
+  envelope.bytes(2, payload.takeBytes());
+  return envelope.takeBytes();
 }
 
 /// Minimal protobuf wire-format writer (only the field kinds the fixture uses).
