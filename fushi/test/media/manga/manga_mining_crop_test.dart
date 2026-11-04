@@ -1,13 +1,10 @@
-import 'dart:io';
 import 'dart:ui' show Rect, Size;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:fushi/src/media/manga/manga_mining_crop.dart';
 import 'package:fushi/src/mining/advanced_mining/advanced_mining_capabilities.dart';
 import 'package:fushi_anki/fushi_anki_core.dart';
+import 'package:fushi/src/media/manga/manga_mining_crop.dart';
 import 'package:fushi_engine/media/manga/panel_detection.dart';
-
-import '../../helpers/source_guard.dart';
 
 void main() {
   group('mangaContainingPanel', () {
@@ -289,104 +286,6 @@ void main() {
         plan(setting: true, page: null).kind,
         MangaCardImageKind.wholePage,
       );
-    });
-  });
-
-  group('漫画页制卡接线（源码守卫）', () {
-    // 注释掩掉再折叠空白（注释里会写「await」之类的字眼），走共享词法掩码。
-    final String flat = compactCode(
-      File(
-        'lib/src/media/manga/reader/manga_fushi_page.dart',
-      ).readAsStringSync(),
-    );
-
-    String onMineBody() {
-      final int start = flat.indexOf(
-        'Future<MinePopupResult>onMineFromPopup(Map<String,String>fields)async{',
-      );
-      expect(start, isNonNegative);
-      return flat.substring(
-        start,
-        flat.indexOf('Future<void>_recordMinedCount'),
-      );
-    }
-
-    test('覆盖项与制卡页在第一个 await 之前同步读出', () {
-      final String body = onMineBody();
-      final int read = body.indexOf('MiningRequestOverrides.readFrom(fields,)');
-      final int plan = body.indexOf('resolveMangaCardImagePlan(');
-      final int firstAwait = body.indexOf('await');
-      expect(read, isNonNegative);
-      expect(plan, isNonNegative);
-      expect(read, lessThan(firstAwait));
-      expect(plan, lessThan(firstAwait));
-      expect(
-        body.contains('cropToPanelByDefault:appModel.mangaMiningCropToPanel'),
-        isTrue,
-      );
-    });
-
-    test('四种分支都接上：不要图 / 用户框 / 自动分镜 / 整页', () {
-      final String body = onMineBody();
-      expect(
-        body.contains('imagePlan.kind!=MangaCardImageKind.omit'),
-        isTrue,
-        reason: 'omitImage 时不能带卡图',
-      );
-      expect(body.contains('MangaCardImageKind.crop=>imagePlan.crop'), isTrue);
-      expect(
-        body.contains('MangaCardImageKind.autoPanel=>await_autoPanelCropRect('),
-        isTrue,
-      );
-      expect(
-        body.contains(
-          'MangaCardImageKind.wholePage||MangaCardImageKind.omit=>null',
-        ),
-        isTrue,
-      );
-      // 裁不出来时保留整页原图：先算整页 coverPath，裁成功才覆盖。
-      expect(
-        body.indexOf('coverPath=awaitensureMangaCoverPng(pageImage);'),
-        lessThan(body.indexOf('coverPath=cropped.path;')),
-      );
-      // 打了码的裁图失败：不要卡图，不退回整页原图。
-      expect(
-        body.contains('}elseif(imagePlan.mosaic.isNotEmpty){coverPath=null;'),
-        isTrue,
-      );
-      expect(body.contains('mosaic:imagePlan.mosaic,'), isTrue);
-      // 临时裁图在制卡结束后清理。
-      expect(body.contains('_deleteTempDir(dir)'), isTrue);
-    });
-
-    test('裁切走引擎的后台 isolate，从原图字节出发', () {
-      expect(flat.contains('awaitcropMangaPageAsync('), isTrue);
-      expect(flat.contains('File(pageImage).readAsBytes()'), isTrue);
-      expect(
-        flat.contains('maxLongEdge:compression.screenshotMaxLongEdge'),
-        isTrue,
-        reason: '输出按「制卡图片质量」档缩放',
-      );
-    });
-
-    test('漫画页覆写高级制卡分区，只提供图片分区', () {
-      final int start = flat.indexOf(
-        'Future<AdvancedMiningSections>buildAdvancedMiningSections(',
-      );
-      expect(start, isNonNegative);
-      final String body = flat.substring(
-        start,
-        flat.indexOf('Future<Uint8List?>_loadMiningPageBytes('),
-      );
-      expect(
-        body.contains('mangaImage:AdvancedMiningMangaImageSection('),
-        isTrue,
-      );
-      expect(body.contains('sentence:'), isFalse);
-      expect(body.contains('audio:'), isFalse);
-      expect(body.contains('videoImage:'), isFalse);
-      expect(body.contains('session.page(pageIndex)'), isFalse);
-      expect(flat.contains('(awaitsession.page(pageIndex)).bytes'), isTrue);
     });
   });
 }

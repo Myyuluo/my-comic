@@ -711,15 +711,12 @@ String mangaPageDivHtml(
 }
 
 /// 自包含窗口文档：spread → flex-row（RTL 经 direction:rtl 排序）+ 视口裁剪 +
-/// translateX 只显示当前跨页；webtoon → 竖向堆叠 + 滚动。内联选词 JS + 一个
-/// 手势机（swipe→翻页 / scroll→滚动报告 / tap→选词或放大）。
+/// translateX 只显示当前跨页；webtoon → 竖向堆叠 + 滚动。内联手势机负责
+/// swipe→翻页 / scroll→滚动报告 / tap→放大或翻页。
 ///
-/// OCR 框有两条明确的查词入口（单击 / Shift 悬停），都走同一个字级选词函数
-/// `_selectOcrChar()`：命中层先定位到字符节点，再调
-/// `fushiSelection.selectFromPosition(node, 0, 40, x, y, fromHover)`（fromHover 随 payload 回传，宿主据此区分悬停与点击）。第三个参数是
-/// maxLength，漏传 → 扫描循环 gate `< undefined` 恒假 → text 恒空 →
-/// onTextSelected 永不触发（查词哑火）。Task 19 的内联选区 JS 只注入
-/// ReaderSelectionScripts 的定义。手势机与选词 pointerup 共存；裸图单击保持 no-op。
+/// 漫画阅读器不注入选词脚本（ADR-0002）：`inlineSelectionJs` 在生产路径为空，
+/// 单击 OCR 文字层会落到点击热区翻页，Shift 悬停不产生查词。`mangaWindowDocument`
+/// 仍保留这条注入缝给历史文档测试与 `.mokuro` 文字层渲染。
 ///
 /// ERRATA C1（翻页导航）：spread 模式把 strip 包进 `#manga-viewport`
 /// (`overflow:hidden`)，每跨页单元宽恒 100vw（双页 50vw×2 / 单页 100vw），靠
@@ -794,7 +791,6 @@ String mangaWindowDocument(
     autoZoomWidePages = preferences.autoZoomWide;
     panWidePages = preferences.panWide;
     zoomStartPosition = preferences.zoomStartPosition;
-    showOcrBoxes = preferences.showOcrBoxes;
     // 翻页动画只认 `manga_page_animation`（调用方传入的 [pageAnimation]）；
     // animateTransitions 是它的旧投影，不再参与判定。墨水屏强制无动画。
     if (preferences.einkMode) pageAnimation = MangaPageAnimation.none;

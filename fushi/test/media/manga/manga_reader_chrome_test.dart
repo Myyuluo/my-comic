@@ -2,10 +2,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter/services.dart' show LogicalKeyboardKey;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:fushi/src/media/manga/reader/manga_fushi_page.dart'
-    show mangaSelectionRectFromPayload;
 import 'package:fushi/src/media/manga/reader/manga_reader_chrome.dart';
-import 'package:fushi/src/reader/reader_selection_data.dart';
 import 'package:fushi/src/utils/components/fushi_floating_toolbar.dart'
     show FushiToolbarFab, kFushiFloatingToolbarExtent;
 
@@ -88,43 +85,6 @@ void main() {
           contentReady: true,
         ),
         isFalse,
-      );
-    });
-  });
-
-  group('mangaSelectionRectFromPayload', () {
-    test('固定态 WebView 让位后选区矩形整体下移 viewportOrigin', () {
-      final ReaderSelectionData data = ReaderSelectionData.fromJson(
-        <String, dynamic>{
-          'text': 'x',
-          'sentence': 'x',
-          'rect': <String, dynamic>{
-            'x': 10.0,
-            'y': 20.0,
-            'width': 30.0,
-            'height': 40.0,
-          },
-        },
-      );
-      expect(
-        mangaSelectionRectFromPayload(
-          data,
-          fallbackScreen: const Size(800, 600),
-          viewportOrigin: const Offset(0, 72),
-        ),
-        const Rect.fromLTWH(10, 92, 30, 40),
-      );
-      // 无 rect 的兜底：WebView 中心再加偏移。
-      final ReaderSelectionData noRect = ReaderSelectionData.fromJson(
-        <String, dynamic>{'text': 'x', 'sentence': 'x'},
-      );
-      expect(
-        mangaSelectionRectFromPayload(
-          noRect,
-          fallbackScreen: const Size(800, 528),
-          viewportOrigin: const Offset(0, 72),
-        ).center,
-        const Offset(400, 264 + 72),
       );
     });
   });

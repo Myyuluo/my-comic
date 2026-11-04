@@ -228,6 +228,9 @@ List<MangaReaderPreferenceDescriptor> mangaReaderPreferenceDescriptors(
   ),
   // 旧「过渡动画」开关（animateTransitions）已并进「翻页动画」四选一（见
   // [MangaPageTurnSettings]），不再作为一行露出；字段只为旧覆盖 JSON 兼容保留。
+  //
+  // 查词 / Anki 相关项（lookupOnHover、showOcrBoxes、ocrTrigger）已随
+  // 非漫画控件从漫画阅读器移除（ADR-0002）；旧覆盖 JSON 里的这些键不再露出。
   MangaReaderPreferenceDescriptor(
     key: 'autoScrollSpeed',
     kind: MangaReaderPreferenceKind.integer,
@@ -300,12 +303,14 @@ List<MangaReaderPreferenceDescriptor> mangaReaderPreferenceDescriptors(
 /// 漫画阅读设置面板：宽窗贴右侧（章节目录占左侧，不提供左右换边），窄窗
 /// （手机竖屏）从底部升起——与小说阅读器的设置侧板同一外壳与同一判据。
 ///
+/// 只保留漫画阅读相关项（阅读模式 / 布局 / 翻页 / 显示 / 滤镜）；查词、OCR 与
+/// Anki 制卡相关项已按 ADR-0002 移除。
+///
 /// [onGlobalChanged] 非空时底部作用域切换可切到「全局」：改动以稀疏补丁写进全局
 /// 默认（调用方负责合并落库并重应用），没有单独设置的作品都跟着变。
 Future<void> showMangaReaderSettingsSheet({
   required BuildContext context,
   required MangaReaderPreferences globalDefaults,
-  Widget? ocrSettings,
   Map<String, Object?> overrides = const <String, Object?>{},
   required Future<void> Function(Map<String, Object?>) onChanged,
   Future<void> Function(Map<String, Object?> patch)? onGlobalChanged,
@@ -317,7 +322,6 @@ Future<void> showMangaReaderSettingsSheet({
   side: ReaderSideSheetSide.right,
   bottomSheetWhenCompact: true,
   builder: (BuildContext context) => MangaReaderSettingsSheet(
-    ocrSettings: ocrSettings,
     globalDefaults: globalDefaults,
     overrides: overrides,
     onChanged: onChanged,
@@ -339,7 +343,6 @@ class MangaReaderSettingsSheet extends StatefulWidget {
     required this.onChanged,
     this.onGlobalChanged,
     this.supportedDeviceKeys = const <String>{},
-    this.ocrSettings,
     this.pageTurn,
     this.onPageTurnChanged,
   });
@@ -350,7 +353,6 @@ class MangaReaderSettingsSheet extends StatefulWidget {
   /// 全局默认的稀疏补丁写入；null = 只能改当前作品（「全局」段置灰）。
   final Future<void> Function(Map<String, Object?> patch)? onGlobalChanged;
   final Set<String> supportedDeviceKeys;
-  final Widget? ocrSettings;
 
   /// 翻页动画三项的当前值；null = 面板不显示这一组。
   final MangaPageTurnSettings? pageTurn;
@@ -564,10 +566,6 @@ class _MangaReaderSettingsSheetState extends State<MangaReaderSettingsSheet>
       'theme' => t.manga_background_theme,
       _ => t.manga_background_black,
     },
-    'ocrTrigger' =>
-      value == 'manual'
-          ? t.manga_reader_ocr_manual
-          : t.manga_reader_ocr_automatic,
     'direction' =>
       value == 'ltr' ? t.manga_direction_ltr : t.manga_direction_rtl,
     'scaleType' => switch (value) {
@@ -643,9 +641,6 @@ class _MangaReaderSettingsSheetState extends State<MangaReaderSettingsSheet>
     'saturation' => FushiIcons.appearance,
     'customColorFilter' => FushiIcons.filter,
     'colorFilterOpacity' => FushiIcons.visibility,
-    'lookupOnHover' => FushiIcons.mouse,
-    'showOcrBoxes' => FushiIcons.visibility,
-    'ocrTrigger' => FushiIcons.ocr,
     _ => null,
   };
 
@@ -709,11 +704,10 @@ class _MangaReaderSettingsSheetState extends State<MangaReaderSettingsSheet>
           MangaPanelOption<String>(value: choice, label: _label(d.key, choice)),
       ];
 
-  /// 少而短的选项（方向、背景、OCR 触发）用整行按钮组；其余用选择行（点开弹层）。
+  /// 少而短的选项（方向、背景）用整行按钮组；其余用选择行（点开弹层）。
   static const Set<String> _segmentedKeys = <String>{
     'direction',
     'background',
-    'ocrTrigger',
   };
 
   Widget _choice(MangaReaderPreferenceDescriptor d) {
@@ -729,7 +723,6 @@ class _MangaReaderSettingsSheetState extends State<MangaReaderSettingsSheet>
           title: d.title,
           subtitle: _scopeNote(d.key),
           icon: _rowIcon(d.key),
-          info: d.key == 'ocrTrigger' ? t.manga_reader_ocr_engine_note : null,
           options: _options(d),
           selected: selected,
           onChanged: onChanged,
@@ -843,7 +836,7 @@ class _MangaReaderSettingsSheetState extends State<MangaReaderSettingsSheet>
     MangaReaderPreferenceKind.integer => _integer(d),
   };
 
-  /// 旧四页归属（未登记进下面分组表的项按它落到所属页末尾的「其他」组，
+  /// 旧三页归属（未登记进下面分组表的项按它落到所属页末尾的「其他」组，
   /// 新加的偏好不会凭空消失）。
   int _tab(String key) {
     if (const <String>{
@@ -857,13 +850,6 @@ class _MangaReaderSettingsSheetState extends State<MangaReaderSettingsSheet>
       'colorFilterOpacity',
     }.contains(key)) {
       return 2;
-    }
-    if (const <String>{
-      'ocrTrigger',
-      'showOcrBoxes',
-      'lookupOnHover',
-    }.contains(key)) {
-      return 3;
     }
     if (const <String>{
       'background',
@@ -954,12 +940,7 @@ class _MangaReaderSettingsSheetState extends State<MangaReaderSettingsSheet>
         <String>['customColorFilter', 'colorFilterColor', 'colorFilterOpacity'],
       ),
     ],
-    _ => <(String Function(), List<String>)>[
-      (
-        () => t.manga_reader_group_ocr_lookup,
-        <String>['lookupOnHover', 'showOcrBoxes', 'ocrTrigger'],
-      ),
-    ],
+    _ => <(String Function(), List<String>)>[],
   };
 
   List<Widget> _tabBlocks(
@@ -1190,7 +1171,7 @@ class _MangaReaderSettingsSheetState extends State<MangaReaderSettingsSheet>
         key: const ValueKey<String>('manga_settings_tab_label_2'),
       ),
     ];
-    // 四段带图标至少要这么宽；更窄（小屏手机竖屏）就整排横滑，不压扁文字。
+    // 三段带图标至少要这么宽；更窄（小屏手机竖屏）就整排横滑，不压扁文字。
     const double minWidth = 384;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
