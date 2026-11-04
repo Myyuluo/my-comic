@@ -164,6 +164,118 @@ class _MihonBackupImportReportDialog extends StatelessWidget {
         ),
         style: tokens.type.listSubtitle,
       ),
+      const SizedBox(height: 8),
+      Text(
+        t.backup_import_mihon_summary_history(count: report.historyRowsWritten),
+        style: tokens.type.listSubtitle,
+      ),
+      if (report.trackingMappingsImported +
+              report.trackingMappingsMerged +
+              report.trackingSkipped >
+          0) ...[
+        const SizedBox(height: 8),
+        Text(
+          t.backup_import_mihon_summary_tracking(
+            imported: report.trackingMappingsImported,
+            merged: report.trackingMappingsMerged,
+            skipped: report.trackingSkipped,
+          ),
+          style: tokens.type.listSubtitle,
+        ),
+        if (report.trackingInvalidRemoteIds > 0) ...[
+          const SizedBox(height: 8),
+          Text(
+            t.backup_import_mihon_tracking_invalid(
+              count: report.trackingInvalidRemoteIds,
+            ),
+            style: tokens.type.listSubtitle,
+          ),
+        ],
+        if (report.unsupportedTrackers.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Text(
+            t.backup_import_mihon_tracking_unsupported(
+              names: report.unsupportedTrackers
+                  .map(
+                    (MihonBackupTrackerIssue issue) =>
+                        '${issue.name} (${issue.count})',
+                  )
+                  .join(', '),
+            ),
+            style: tokens.type.listSubtitle,
+          ),
+        ],
+      ],
+      if (report.extensionStoresImported +
+              report.extensionStoresMerged +
+              report.extensionStoresSkipped >
+          0) ...[
+        const SizedBox(height: 8),
+        Text(
+          t.backup_import_mihon_summary_extension_stores(
+            imported: report.extensionStoresImported,
+            merged: report.extensionStoresMerged,
+            skipped: report.extensionStoresSkipped,
+          ),
+          style: tokens.type.listSubtitle,
+        ),
+        if (report.extensionStoresSkipped > 0) ...[
+          const SizedBox(height: 8),
+          Text(
+            t.backup_import_mihon_extension_stores_skipped(
+              count: report.extensionStoresSkipped,
+            ),
+            style: tokens.type.listSubtitle,
+          ),
+        ],
+        if (report.extensionStoresFailed > 0) ...[
+          const SizedBox(height: 8),
+          Text(
+            t.backup_import_mihon_extension_stores_failed(
+              count: report.extensionStoresFailed,
+            ),
+            style: tokens.type.listSubtitle,
+          ),
+        ],
+      ],
+      if (report.sourcePreferencesImported + report.sourcePreferencesSkipped >
+          0) ...[
+        const SizedBox(height: 8),
+        Text(
+          t.backup_import_mihon_summary_source_preferences(
+            imported: report.sourcePreferencesImported,
+            skipped: report.sourcePreferencesSkipped,
+          ),
+          style: tokens.type.listSubtitle,
+        ),
+        if (report.sourcePreferencesSkipped > 0) ...[
+          const SizedBox(height: 8),
+          Text(
+            t.backup_import_mihon_source_preferences_skipped(
+              count: report.sourcePreferencesSkipped,
+            ),
+            style: tokens.type.listSubtitle,
+          ),
+        ],
+        if (report.sourcePreferencesFailed > 0) ...[
+          const SizedBox(height: 8),
+          Text(
+            t.backup_import_mihon_source_preferences_failed(
+              count: report.sourcePreferencesFailed,
+            ),
+            style: tokens.type.listSubtitle,
+          ),
+        ],
+        if (report.sourcePreferencesForMissingSources > 0) ...[
+          const SizedBox(height: 8),
+          Text(
+            t.backup_import_mihon_source_preferences_missing(
+              count: report.sourcePreferencesForMissingSources,
+            ),
+            style: tokens.type.listSubtitle,
+          ),
+        ],
+      ],
       if (report.skippedByReason[MihonBackupSkipReason.notInLibrary] !=
           null) ...[
         const SizedBox(height: 8),
