@@ -24,8 +24,8 @@ void main() {
     // 门只跑 `fushi/` 那套，`packages/` 下的字面量拿不到同一次批量替换。
     // 「当前 schema 恰好是第几版」的等值守卫属于迁移阶梯测试
     // （`fushi/test/database/migration_*.dart`），不属于这里。
-    expect(database.schemaVersion, greaterThanOrEqualTo(65),
-        reason: 'v65 = Mihon 漫画扩展生态五张表；低于此版本本用例的表还不存在');
+    expect(database.schemaVersion, kMyComicSchemaVersion,
+        reason: 'my-comic 全新 schema 从 v1 起算；Mihon 五张表必须随首建 schema 存在');
     await database.upsertMangaExtensionStore(
       MangaExtensionStoresCompanion.insert(
         indexUrl: 'https://repo.example/index.json',

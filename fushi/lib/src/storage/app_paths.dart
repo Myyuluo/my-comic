@@ -2,7 +2,10 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:fushi_core/fushi_core.dart'
-    show fushiDatabaseFileName, legacyHibikiDatabaseFileName;
+    show
+        fushiDatabaseFileName,
+        fushiLegacyDatabaseFileName,
+        legacyHibikiDatabaseFileName;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -451,10 +454,9 @@ class AppPaths {
   /// 纪律：**只准异步 `exists()` + 超时**，绝不 `existsSync()`（这条路径同样在启动最早期
   /// 的主 isolate 上跑）。超时/抛错都按「老安装」处理（保守）。
   ///
-  /// 兼看旧文件名 [legacyHibikiDatabaseFileName]：改名前从未升级过的老安装主库还叫
-  /// `hibiki.db`。本版本不再改名迁移它（开库时 fushi_core 抛
-  /// `UnsupportedLegacySchemaException`，提示先装桥接版本），但这里仍必须认它——
-  /// 只认新名会把老安装误判成全新安装、换到新布局的空数据根上。
+  /// 兼看 Fushi 的旧库名（`fushi.db` / `hibiki.db`）：my-comic 从不打开它们，
+  /// 但这里必须认它们存在——否则已有 Fushi 安装的机器会被误判成全新安装、换到
+  /// 新布局的空数据根上（文档目录布局判定只看这个布尔值）。
   static Future<bool> existingInstallHasDatabase() async {
     try {
       final Directory support = await _resolveSupportRoot();
@@ -463,6 +465,7 @@ class AppPaths {
               .exists()
               .timeout(const Duration(seconds: 2), onTimeout: () => true);
       return await dbExists(fushiDatabaseFileName) ||
+          await dbExists(fushiLegacyDatabaseFileName) ||
           await dbExists(legacyHibikiDatabaseFileName);
     } catch (_) {
       return true;

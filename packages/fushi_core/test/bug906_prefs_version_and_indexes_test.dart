@@ -81,14 +81,14 @@ void main() {
   });
 
   group('BUG-906 B: hot-path indexes exist after onCreate', () {
-    test('_ensureIndexes creates the audio_cues / tag_id / source_type indexes',
+    test('_ensureIndexes creates the manga-domain hot-path indexes',
         () async {
       final FushiDatabase db = FushiDatabase.forTesting(
         NativeDatabase.memory(),
       );
       addTearDown(db.close);
 
-      // Force the lazy open so onCreate (createAll + _ensureIndexes) runs.
+      // Force the lazy open so onCreate (_createMyComicSchema + _ensureIndexes) runs.
       await db.getPref('bug906_touch');
 
       Future<bool> indexExists(String name) async {
@@ -103,11 +103,12 @@ void main() {
       }
 
       const List<String> required = <String>[
-        'idx_audio_cues_book_chapter_sentence',
-        // v79 五张标签映射表合一：per-table tag_id 索引随旧表消亡，
-        // 统一表一条索引覆盖全部 kind。
+        'idx_profile_settings_profile',
+        'idx_search_history_key',
         'idx_tag_assignments_tag_id',
-        'idx_favorite_words_source_type',
+        'idx_activity_events_timestamp',
+        'idx_manga_download_jobs_identity',
+        'idx_manga_download_jobs_status_created',
       ];
       for (final String name in required) {
         expect(await indexExists(name), isTrue, reason: 'missing index $name');

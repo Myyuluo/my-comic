@@ -104,6 +104,14 @@ class DictionaryRepository {
   // ── loadFromDb ───────────────────────────────────────────────────────
 
   Future<void> loadFromDb() async {
+    // my-comic：漫画-only schema 不创建 dictionary_metadata / dictionary_history。
+    // 词典域已从产品移除；残留调用点（Profile 切换 / popup 入口）必须 no-op，
+    // 不得让缺失表把启动或 Profile 切换打崩。
+    if (!await _db.hasTable('dictionary_metadata')) {
+      _dictionariesCache = <Dictionary>[];
+      _dictionaryHistoryResults.clear();
+      return;
+    }
     // 历史落库是 debounce 写穿：重载（启动 no-op / Profile 切换 TODO-1077）前
     // 先 flush pending 变更，保持「变更先于重载落库」的旧语义，防旧快照复活。
     await flushPendingWritesNow();

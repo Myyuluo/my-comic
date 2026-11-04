@@ -1199,10 +1199,6 @@ mixin _FushiDbContentMisc
           await (delete(readerPositions)
                 ..where((t) => t.bookUid.equals(bookUid)))
               .go();
-          await (delete(bookmarks)..where((t) => t.bookUid.equals(bookUid)))
-              .go();
-          await (delete(bookCustomCss)..where((t) => t.bookUid.equals(bookUid)))
-              .go();
           await (delete(mangaReaderOverrides)
                 ..where((t) => t.bookUid.equals(bookUid)))
               .go();
@@ -1221,26 +1217,7 @@ mixin _FushiDbContentMisc
         // 排在本 mixin 之后，`on` 不到。）
         await (delete(mangaDownloadJobs)..where((t) => t.bookKey.equals(bookKey)))
             .go();
-        // SRT books linked to this epub key their cues on srt_books.uid, NOT
-        // the epub bookKey, so delete those cues before dropping the srt rows.
-        // (HBK-AUDIT-041 follow-up: deleteEpubBook owns the full cascade; the
-        // reader source no longer deletes these rows itself.)
-        final List<String> srtUids = await (selectOnly(srtBooks)
-              ..addColumns([srtBooks.uid])
-              ..where(srtBooks.bookKey.equals(bookKey)))
-            .map((r) => r.read(srtBooks.uid)!)
-            .get();
-        for (final String uid in srtUids) {
-          await (delete(audioCues)..where((t) => t.bookKey.equals(uid))).go();
-          // v77：标签映射是逻辑外键，随宿主显式清理（附属 SRT 行也一并清）。
-          await deleteTagAssignmentsForHost(TagHostKind.srt, uid);
-        }
-        await (delete(srtBooks)..where((t) => t.bookKey.equals(bookKey))).go();
         await deleteTagAssignmentsForHost(TagHostKind.epub, bookKey);
-        // Audiobook + its cues are keyed directly by bookKey now.
-        await (delete(audioCues)..where((t) => t.bookKey.equals(bookKey))).go();
-        await (delete(audiobooks)..where((t) => t.bookKey.equals(bookKey)))
-            .go();
         // TODO-616：同事务清 shelf_entry。v83 起 epub 域 entryKey = uid。
         // 若该书还登记过 'srt' 行（EPUB 附属有声书），deleteAudiobookByBookKey 已
         // 幂等清，此处只清 'epub' 行。

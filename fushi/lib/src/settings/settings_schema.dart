@@ -78,14 +78,16 @@ List<SettingsDestination> _buildDestinations() {
   // my-comic v1：设置只保留漫画域。非漫画分类（视频、游戏、查词、制卡、
   // 模型/AI、在线服务、互联、阅读器 EPUB 排版、悬浮球、Profile、存储明细）
   // 不再进入这棵树——设置主页、搜索索引与主从详情都只读取这一份列表。
-  // 保留：外观与交互（界面/导航）、漫画、下载（存储位置）、Tracking、备份、
+  // 保留：外观与交互（界面/导航）、漫画、下载（存储位置）、Tracking、
   // 系统与关于。
+  //
+  // Fushi 的「同步与备份」分类（`.fushi.zip` 导入/导出）已移除；Mihon
+  // `.tachibk` Import 由后续 ticket 以独立入口提供（ticket 06/07）。
   return List<SettingsDestination>.unmodifiable(<SettingsDestination>[
     buildAppearanceDestination(),
     buildMangaDestination(),
     buildDownloadsDestination(),
     if (kMediaTrackingEnabled) buildMediaTrackingDestination(),
-    buildSyncBackupDestination(),
     buildSystemDestination(),
   ]);
 }

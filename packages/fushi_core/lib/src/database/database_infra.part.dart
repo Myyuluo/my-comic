@@ -77,6 +77,12 @@ mixin _FushiDbInfra on _$FushiDatabase {
     return rows.isNotEmpty;
   }
 
+  /// 该库文件里是否存在 [tableName]。
+  ///
+  /// my-comic 的漫画-only schema 不创建历史表；仍被编译的残留死代码在触碰数据库
+  /// 前可用它做能力判断（例如词典仓储在启动/Profile 切换时的 no-op 早退）。
+  Future<bool> hasTable(String tableName) => _tableExists(tableName);
+
   /// v118 迁移：把 [tableName] 里尚未记录的 `local_added_at` 回填成
   /// `imported_at`（理由见迁移步注释）。只碰 NULL 行，重跑幂等。没有
   /// `imported_at` 列的表（阶梯上的合成 / 残缺库，与其它加列步的 `_columnExists`

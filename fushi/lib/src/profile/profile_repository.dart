@@ -136,21 +136,8 @@ class ProfileRepository {
       ));
     }
 
-    // TODO-1077: dictionary enable-list / order / source / language visibility
-    // live in the standalone `dictionary_metadata` table, not in prefs, so they
-    // were previously shared across all profiles. Snapshot one row per
-    // dictionary (key = dictionary name) into the dedicated
-    // [ProfileKeys.categoryDictionaryMeta] category so they follow the profile.
-    final List<DictionaryMetaRow> dictRows =
-        await _db.getAllDictionaryMetadata();
-    for (final DictionaryMetaRow row in dictRows) {
-      entries.add(ProfileSettingsCompanion.insert(
-        profileId: profileId,
-        category: ProfileKeys.categoryDictionaryMeta,
-        key: row.name,
-        value: _encodeDictionaryMeta(row),
-      ));
-    }
+    // my-comic：词典域已移除，`dictionary_metadata` 不在漫画-only schema 里，
+    // 因此不再把词典元数据快照进 Profile。
 
     await _db.replaceProfileSettings(profileId, entries);
   }
@@ -165,14 +152,6 @@ class ProfileRepository {
 
     final ankiMap = <String, String>{};
     final prefMap = <String, String>{};
-    // TODO-1077: snapshot rows for the dictionary_metadata table. `hasDictMeta`
-    // distinguishes "profile has no dictionary_meta snapshot at all" (old
-    // snapshot, pre-TODO-1077) from "profile intentionally has zero
-    // dictionaries". Only the latter may prune the live table; the former MUST
-    // be left untouched so a switch never wipes the shared dictionary config.
-    final Map<String, DictionaryMetadataCompanion> dictMetaMap =
-        <String, DictionaryMetadataCompanion>{};
-    bool hasDictMeta = false;
     for (final row in rows) {
       switch (row.category) {
         case ProfileKeys.categoryAnki:
@@ -180,13 +159,8 @@ class ProfileRepository {
         case ProfileKeys.categoryPref:
           prefMap[row.key] = row.value;
         case ProfileKeys.categoryDictionaryMeta:
-          hasDictMeta = true;
-          final DictionaryMetadataCompanion? companion =
-              _decodeDictionaryMeta(row.key, row.value);
-          // Defensive: a single corrupt row degrades gracefully (skipped)
-          // instead of aborting the whole profile-apply (mirrors the Anki
-          // fieldMappings try/catch, HBK-AUDIT-043).
-          if (companion != null) dictMetaMap[row.key] = companion;
+          // my-comic：词典域已移除；旧快照里的这一分类原样保留、不再应用。
+          break;
         // Legacy categories from old snapshots
         case ProfileKeys.categoryDictionary:
           prefMap[row.key] = row.value;
@@ -243,24 +217,6 @@ class ProfileRepository {
       //     never break userspace：自愈保留，只是判据从「快照即真相」换成磁盘。
       // `hasDictMeta` 保留：前 TODO-1077 的旧快照没有 dictionary_meta 行，跳过整
       // 段即可，不能被误当成「没有词典」。
-      if (hasDictMeta) {
-        for (final MapEntry<String, DictionaryMetadataCompanion> entry
-            in dictMetaMap.entries) {
-          final DictionaryMetadataCompanion companion = entry.value;
-          final int updated = await _db.applyDictionaryMetaProfileColumns(
-            name: entry.key,
-            order: companion.order.value,
-            hiddenLanguagesJson: companion.hiddenLanguagesJson.value,
-            collapsedLanguagesJson: companion.collapsedLanguagesJson.value,
-            expandedLanguagesJson: companion.expandedLanguagesJson.value,
-            languageOverride: companion.languageOverride.value,
-          );
-          if (updated == 0 &&
-              (_isDictionaryInstalled?.call(entry.key) ?? false)) {
-            await _db.upsertDictionaryMeta(companion);
-          }
-        }
-      }
       for (final entry in prefMap.entries) {
         // [FushiDatabase.setPref] auto-bumps the persisted prefs-version
         // (TODO-855) for every non-version key written here, so the common

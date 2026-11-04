@@ -273,91 +273,10 @@ class MediaTrackingRepository {
     bool isMapped(TrackingMediaType type, String key) =>
         mapped.contains('${type.value}|$key');
 
-    final List<VideoBookRow> videos = await _db.allVideoBooks();
-    final Map<String, VideoBookRow> videosByUid = <String, VideoBookRow>{
-      for (final VideoBookRow video in videos) video.bookUid: video,
-    };
-    final List<MediaCollectionRow> collections =
-        await _db.getAllMediaCollections();
-    final List<MediaCollectionItemRow> members =
-        await _db.getAllCollectionItems();
-    final Map<int, List<MediaCollectionItemRow>> videoMembersByCollection =
-        <int, List<MediaCollectionItemRow>>{};
-    for (final MediaCollectionItemRow member in members) {
-      if (member.mediaType != MediaKind.video.dbValue) continue;
-      videoMembersByCollection
-          .putIfAbsent(member.collectionId, () => <MediaCollectionItemRow>[])
-          .add(member);
-    }
-
+    // my-comic 只保留漫画/书籍域；视频与游戏（video_books / galgames）不在
+    // 漫画-only schema 里，因此不参与「未关联条目」列表。
     final List<MediaTrackingUnlinkedItem> result =
         <MediaTrackingUnlinkedItem>[];
-    final Set<String> videosCoveredByPlaylist = <String>{};
-    for (final MediaCollectionRow collection in collections) {
-      final String key = collection.id.toString();
-      if (collection.collectionType != 'playlist' ||
-          !isMapped(TrackingMediaType.videoCollection, key)) {
-        continue;
-      }
-      for (final MediaCollectionItemRow member
-          in videoMembersByCollection[collection.id] ??
-              const <MediaCollectionItemRow>[]) {
-        if (videosByUid[member.entryKey]?.completedAt != null) {
-          videosCoveredByPlaylist.add(member.entryKey);
-        }
-      }
-    }
-    for (final MediaCollectionRow collection in collections) {
-      if (collection.collectionType != 'playlist') continue;
-      final String key = collection.id.toString();
-      if (isMapped(TrackingMediaType.videoCollection, key)) continue;
-      final List<MediaCollectionItemRow> collectionMembers =
-          videoMembersByCollection[collection.id] ??
-              const <MediaCollectionItemRow>[];
-      int lastCompletedAt = 0;
-      final Set<String> completedMembers = <String>{};
-      for (final MediaCollectionItemRow member in collectionMembers) {
-        final VideoBookRow? video = videosByUid[member.entryKey];
-        final DateTime? completedAt = video?.completedAt;
-        if (completedAt == null ||
-            videosCoveredByPlaylist.contains(member.entryKey) ||
-            isMapped(TrackingMediaType.video, member.entryKey)) {
-          continue;
-        }
-        completedMembers.add(member.entryKey);
-        lastCompletedAt =
-            math.max(lastCompletedAt, completedAt.millisecondsSinceEpoch);
-      }
-      if (completedMembers.isEmpty) continue;
-      videosCoveredByPlaylist.addAll(completedMembers);
-      result.add(
-        MediaTrackingUnlinkedItem(
-          mediaType: TrackingMediaType.videoCollection,
-          mediaKey: key,
-          mediaTitle: collection.name,
-          kind: TrackingKind.anime,
-          lastActivityAt: lastCompletedAt,
-        ),
-      );
-    }
-
-    for (final VideoBookRow video in videos) {
-      final DateTime? completedAt = video.completedAt;
-      if (completedAt == null ||
-          videosCoveredByPlaylist.contains(video.bookUid) ||
-          isMapped(TrackingMediaType.video, video.bookUid)) {
-        continue;
-      }
-      result.add(
-        MediaTrackingUnlinkedItem(
-          mediaType: TrackingMediaType.video,
-          mediaKey: video.bookUid,
-          mediaTitle: video.title,
-          kind: TrackingKind.anime,
-          lastActivityAt: completedAt.millisecondsSinceEpoch,
-        ),
-      );
-    }
 
     // v82：reader_positions 键 = 书 uid，按行 uid 直查（空 uid 视同无阅读记录）。
     final Map<String, ReaderPositionRow> positions =
@@ -386,21 +305,6 @@ class MediaTrackingRepository {
             position?.updatedAt ?? 0,
             completedAt?.millisecondsSinceEpoch ?? 0,
           ),
-        ),
-      );
-    }
-
-    for (final GalgameRow game in await _db.getAllGalgames()) {
-      if (game.playStatus <= 0 || isMapped(TrackingMediaType.game, game.id)) {
-        continue;
-      }
-      result.add(
-        MediaTrackingUnlinkedItem(
-          mediaType: TrackingMediaType.game,
-          mediaKey: game.id,
-          mediaTitle: game.name,
-          kind: TrackingKind.game,
-          lastActivityAt: game.addedAt,
         ),
       );
     }
@@ -542,6 +446,9 @@ class MediaTrackingRepository {
     required String bookUid,
     int? collectionId,
   }) async {
+    // my-comic：漫画-only schema 没有 video_books。
+    return null;
+    // ignore: dead_code
     final VideoBookRow? video = await _db.getVideoBookByBookUid(bookUid);
     if (video == null) return null;
     final MediaCollectionRow? collection = collectionId == null
@@ -581,6 +488,9 @@ class MediaTrackingRepository {
   /// 文件名的纯函数、不落库，语义见 collection_season_groups.dart）。service 据此
   /// 判定「多季合集」并绕开结构性失真的合集级映射；存量合集零迁移即受保护。
   Future<List<String>> loadCollectionVideoGroupKeys(int collectionId) async {
+    // my-comic：漫画-only schema 没有 video_books。
+    return const <String>[];
+    // ignore: dead_code
     final List<MediaCollectionItemRow> items =
         await _db.getCollectionItems(collectionId);
     final List<String> keys = <String>[];
@@ -615,6 +525,9 @@ class MediaTrackingRepository {
   }
 
   Future<AutoGameTrackingSource?> loadAutoGameSource(String gameId) async {
+    // my-comic：漫画-only schema 没有 galgames。
+    return null;
+    // ignore: dead_code
     final GalgameRow? game = await _db.getGalgame(gameId);
     if (game == null) return null;
     return (
@@ -634,6 +547,9 @@ class MediaTrackingRepository {
   Future<List<PersistedGameTrackingStatus>> loadPersistedGameTrackingStatus({
     required int afterMs,
   }) async {
+    // my-comic：漫画-only schema 没有 galgames，游戏追踪不再参与补发。
+    return const <PersistedGameTrackingStatus>[];
+    // ignore: dead_code
     final List<GalgameRow> games = await _db.getAllGalgames();
     if (games.isEmpty) return const <PersistedGameTrackingStatus>[];
     final Map<String, List<GalgameSourceRow>> sources =
@@ -736,6 +652,9 @@ class MediaTrackingRepository {
       loadCompletedVideoTrackingProgress({
     required int afterMs,
   }) async {
+    // my-comic：漫画-only schema 没有 video_books，视频追踪不再参与补发。
+    return const <CompletedVideoTrackingProgress>[];
+    // ignore: dead_code
     final List<MediaTrackingMappingRow> mappings = await listMappings();
     final List<CompletedVideoTrackingProgress> result =
         <CompletedVideoTrackingProgress>[];
