@@ -88,8 +88,6 @@ const Set<String> kMangaCarrierFileExtensions = <String>{
   '.rar',
   '.cb7',
   '.zip',
-  '.epub',
-  '.pdf',
 };
 
 /// 判定 [path] 的载体身份。
