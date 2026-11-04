@@ -85,7 +85,7 @@ import 'package:fushi/src/sync/sync_settings_schema.dart'
 List<CtlRoute> buildDataCtlRoutes(DesktopCtlContext context) {
   final _CtlDataTasks tasks = _CtlDataTasks();
   return <CtlRoute>[
-    ..._backupRoutes(context, tasks),
+    // my-comic：`.fushi.zip` 备份导入/导出路由已移除（ticket 05）。
     ..._syncRoutes(context),
     ..._downloadRoutes(context),
     ..._mediaServerRoutes(context),

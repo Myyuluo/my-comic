@@ -782,7 +782,7 @@ class AppModel with ChangeNotifier {
         // 跟上：不先 loadFromDb，_rebuildDictPathsCacheAsync 读的还是旧列表，刚被
         // 删掉的那本会被重新映射回引擎——幽灵词典，且它的目录再也删不掉
         // （BUG-1756）。
-        await dictRepo.loadFromDb();
+        // my-comic：词典域已移除，启动/Profile 切换不读 dictionary_metadata。
         await _rebuildDictPathsCacheAsync();
         dictRepo.clearDictionaryResultsCache();
       },
@@ -2125,6 +2125,9 @@ class AppModel with ChangeNotifier {
   void _migrateDictionaryTypes() {
     if (_dictTypesMigrated) return;
     _dictTypesMigrated = true;
+    // my-comic：词典域已移除（dictionary_metadata 不在 schema 里）。词典列表恒空，
+    // 回填扫描不做任何数据库访问。
+    if (dictRepo.dictionaries.isEmpty) return;
     unawaited(_backfillDictionarySourceMetadata());
     final dicts = dictRepo.dictionaries;
     for (final d in dicts) {
@@ -2767,7 +2770,7 @@ class AppModel with ChangeNotifier {
   /// `clearDictionaryResultsCache` do for the incremental per-mutation paths,
   /// but for the bulk "the whole table just changed underneath us" case.
   Future<void> reloadDictionariesFromDb() async {
-    await dictRepo.loadFromDb();
+    // my-comic：词典域已移除，不读 dictionary_metadata。
     await _rebuildDictPathsCacheAsync();
     dictRepo.clearDictionaryResultsCache();
     dictionarySearchAgainNotifier.notifyListeners();
@@ -3203,43 +3206,14 @@ class AppModel with ChangeNotifier {
       _database = FushiDatabase(_databaseDirectory.path);
       _databaseOpened = true;
 
-      // Sync-pref maintenance, before any repository loads them or sync runs:
-      // 1) recover device-local sync config if a previous backup import crashed
-      //    after overwriting the DB but before re-applying the preserved keys;
-      // 2) fold the deprecated "SMB"(WebDAV-gateway) config into WebDAV;
-      // 3) migrate the mutually-exclusive `backendType==fushiServer` interconnect
-      //    selection to the independent interconnect toggle (interconnect and a
-      //    cloud backup backend can now coexist).
-      await BackupRestoreService.recoverPendingRestore(_databaseDirectory.path);
-
-      // 沙箱重定位自愈：数据根被**平台**挪走后，把库里的绝对路径重基过去。
+      // my-comic：Fushi 的备份恢复（`.fushi.zip` / 旧库导入）与互联/云同步已移除。
+      // 全新 schema 从 `my_comic.db` 起步，不恢复、不迁移任何 Fushi 旧数据。
       //
-      // iOS 每次安装/更新都会换掉 app 容器 UUID，文件随容器走、库里记的旧路径
-      // 集体悬空 —— 症状是「更新一次，整个书架全部『找不到书籍文件』」，每次更新
-      // 复发。这一步必须在**任何消费路径的东西读库之前**跑（下面的 SyncRepository
-      // 迁移、各 repository 的 load、媒体历史都要读路径列），也必须在
-      // recoverPendingImport **之后**：崩在半途的备份导入恢复出来的库同样带着
-      // 导出设备的旧根，要一起重基。
+      // 沙箱重定位（路径重基）依赖 Fushi 的全部媒体表，漫画-only schema 下不再
+      // 运行；my-comic 是全新安装模型，没有需要从旧容器重基的存量路径。
       //
-      // 自愈失败只上报、不阻塞启动：用户至多回到修复前的状态，绝不能因为对账
-      // 出错而进不去 app（台账故意不写，下次启动会重试）。
-      await SandboxRelocation.reconcile(
-        db: _database,
-        documentsRoot: _appDirectory.path,
-        supportRoot: _databaseDirectory.path,
-        onError: (Object e, StackTrace stack) => ErrorLogService.instance
-            .log('AppModel.sandboxRelocation', e, stack),
-      );
-      //    cloud backup backend can now coexist);
-      // 4) BUG-1576: drop the pre-decoupling GLOBAL folder cache. Two channels
-      //    took turns writing that single pair of keys, so its value can no
-      //    longer be attributed to any one remote — and an interconnect/WebDAV
-      //    folderId is an ABSOLUTE URL, which the other channel would then hit
-      //    (Basic credentials attached). It is a pure cache: every backend
-      //    re-resolves its root/book folders by name on the next sweep.
-      await SyncRepository(_database).migrateSmbToWebDav();
-      await SyncRepository(_database).migrateInterconnectBackendToToggle();
-      await SyncRepository(_database).migrateFolderCacheToPerChannel();
+      // Fushi 的 sync 偏好迁移（SMB→WebDAV / 互联开关 / folder cache 清理）同样
+      // 只服务已删除的同步功能，不再执行。
 
       /// Prepare all repositories (objects created first, then loaded in
       /// parallel to avoid serial await chains).
@@ -3266,7 +3240,8 @@ class AppModel with ChangeNotifier {
       await Future.wait(<Future<void>>[
         prefsRepo.loadFromDb().then((_) => _applyStatDayResetHour()),
         profileRepo.ensureDefaultProfile(),
-        dictRepo.loadFromDb(),
+        // my-comic：词典域已移除；DictionaryRepository 只作为懒构造占位保留，
+        // 不在启动时读取 dictionary_metadata（该表不在漫画-only schema 里）。
         mediaHistoryRepo.loadFromDb(),
       ]);
       prefsRepo.addListener(notifyListeners);
@@ -3275,25 +3250,9 @@ class AppModel with ChangeNotifier {
       await prefsRepo.settleMiningImageModeInstallDefault();
       // 阅读器工具栏样式一次性强制悬浮（含各 Profile 快照），之后尊重用户选择。
       await prefsRepo.settleReaderToolbarStyleFloating();
-      // 「挖词目标」出厂默认：新装 Fushi 复习、老用户照旧 Anki 且复习模块保持关（不提醒）。
-      // 推荐包回执是设备本地文件、不随备份恢复消失：据它认出「新用户在引导里导入了推荐包」。
-      await prefsRepo.settleSrsMiningTargetInstallDefault(
-        freshOnboardingPackImport: await RecommendedPackTutorialState(
-          appDirectory,
-        ).hasImportReceipt,
-      );
-      // 复习默认开之后，新装用户从不经过 [setModuleEnabled] 打开复习，那里「第一次打开
-      // 复习时把日界设成凌晨 4 点（与 Anki 一致）」的落点就够不着：在这里补同一条规则。
-      // 只在日界从没设过时写（老用户迁移后复习是关的，走不到这里）。
-      // 经模块可见性判：正式版构建里复习整体缺席，不该替用户改统计日界。
-      if (moduleVisibility.isEnabled(ModuleId.srs) &&
-          prefsRepo.getPref(kStatDayResetHourPrefKey) == null) {
-        await setStatDayResetHour(SrsDayContext.defaultRolloverHour);
-      }
-      // 偏好一装载就把折叠开关推给 TexthookerService（进程级单例、无 ref）。漏了这一步
-      // 开关就只在「本次会话里手动改过」时才生效，重启后静默退回默认值。
-      TexthookerService.instance.foldProgressiveLines =
-          prefsRepo.galHookFoldProgressiveLines;
+      // my-comic：SRS/Anki 挖词目标、推荐包回执与查词折叠开关都已随非漫画域移除。
+      // settleSrsMiningTargetInstallDefault 会读 mined_sentences / pending_mine_queue，
+      // 这两张表不在漫画-only schema 里，启动期不得调用。
       // 代理是**进程级**网络出口配置，却只存在偏好里；同步层的单例（GoogleDriveAuth 等）
       // 拿不到 AppModel，以前就只能各自裸连——BUG-1348 的谷歌云盘登录超时正是如此。四个
       // 代理读取器的绑定已下沉到 `PreferencesRepository.loadFromDb()`（偏好变得可读的
@@ -3369,13 +3328,8 @@ class AppModel with ChangeNotifier {
         }
       }
 
-      // 词典样式规则的 CSS 编译产物按当前编译器重算（Android 独立弹窗只读这份缓存）。
-      await refreshCompiledDictStyleCssCache();
-
-      // TODO-1260：内部对每本词典的资源目录做 exists() 探测（数据根派生），同样叠超时。
-      ErrorLogService.instance
-          .markInitStep('rebuild-dict-paths（词典资源目录 exists + 物化探测）');
-      await _guardInitIo('rebuild-dict-paths', _rebuildDictPathsCacheAsync());
+      // my-comic：词典样式缓存与词典资源目录探测都属于已删除的查词域。
+      // dictionary_metadata 不在漫画-only schema 里，启动期不得触碰。
 
       _localAudioManager = LocalAudioManager(
         prefsRepo: prefsRepo,
@@ -3491,8 +3445,7 @@ class AppModel with ChangeNotifier {
       );
 
       debugPrint(
-          '[Fushi] init: search preload (deferred to after first frame)');
-      unawaited(_warmUpSearchAfterFirstFrame());
+          '[Fushi] init: search preload skipped (my-comic: no dictionary domain)');
       // 已下架的本机 OCR 模型（约 10 GB 的 CUDA 档）留在磁盘上的目录：设置页与
       // 存储页都没有它的入口了，不清就永远占着空间。幂等、失败只记日志。
       unawaited(deleteRemovedMangaOcrModelDirs());
@@ -3650,7 +3603,7 @@ class AppModel with ChangeNotifier {
           onCacheRebuild: _rebuildDictPathsCache,
           isLowMemory: () => prefsRepo.lowMemoryMode);
       _dictionaryRepoReady = true;
-      await dictRepo.loadFromDb();
+      // my-comic：词典域已移除，不读 dictionary_metadata。
 
       mediaHistoryRepo = MediaHistoryRepository(_database);
       await mediaHistoryRepo.loadFromDb();
