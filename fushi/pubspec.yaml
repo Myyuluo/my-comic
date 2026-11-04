@@ -134,9 +134,9 @@ dependencies:
   json_annotation: ^4.8.1
   json_serializable: ^6.6.1
   just_audio: ^0.9.31
-  just_audio_media_kit: ^2.1.0
-  # media_kit_libs_windows_audio 移除：与视频用的 media_kit_libs_video 抢同名 libmpv
-  # 归档(同下载路径不同 MD5)，video libs 是 audio 超集，统一提供 libmpv。
+  # my-comic (ticket 04)：just_audio 的桌面 media_kit 后端已移除——它本身不再
+  # 参与任何漫画路径，且 just_audio_media_kit / media_kit_libs_* 会把 libmpv 拉回
+  # 安装包。桌面音频播放（听书 / 查词发音）不在 my-comic 范围内。
   kana_kit: ^2.0.0
   macos_ui: ^2.2.2
   material_color_utilities: ^0.13.0
@@ -188,9 +188,12 @@ dependencies:
   record: 6.0.0
   brotli: ^0.6.0
   bonsoir: ^7.1.1
+  # my-comic (ticket 04)：media_kit_libs_video 已移除（libmpv / FFmpeg / x265 /
+  # ANGLE 的唯一来源）。media_kit / media_kit_video 的 Dart API 仍被树内残留的
+  # 视频域文件引用；没有 libs 包时 media_kit_video 走 CMake 的 stub 分支，
+  # Windows 端不再编入或随包任何 libmpv 运行时。
   media_kit: ^1.2.6
   media_kit_video: ^2.0.1
-  media_kit_libs_video: ^1.0.7
   # 移动端 ffmpeg：用「自编」的 ffmpeg-kit（arthenica 源码 + NDK r25 重编最小变体），
   # 替代崩溃的第三方预编译 ffmpeg-kit 变体（其 libffmpegkit_abidetect.so 在
   # Android 16/API 36 上 JNI_OnLoad 返回非法版本，启动即崩，BUG-122）。vendored 包见

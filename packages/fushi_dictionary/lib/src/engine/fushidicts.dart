@@ -161,6 +161,29 @@ class FushiDicts {
   static FushidictsFfiBindings? _bindings;
   Pointer<Void>? _handle;
 
+  /// my-comic (ticket 04): the Windows bundle no longer ships
+  /// `fushidicts_ffi.dll` (dictionary lookup is not part of the manga-only
+  /// scope). Opening the dynamic library then throws; degrade to "engine
+  /// unavailable" instead of aborting AppModel startup. The dictionary UI is
+  /// unreachable in my-comic, so every real entry point is already gated on
+  /// [isInitialized]; this only keeps the residual (non-manga) startup path
+  /// alive.
+  static bool _nativeUnavailable = false;
+
+  /// Whether the native dictionary library could be opened.
+  static bool get isNativeAvailable => !_nativeUnavailable;
+
+  static FushiDicts? _createEngineOrNull() {
+    if (_nativeUnavailable) return null;
+    try {
+      return FushiDicts();
+    } on Object catch (error) {
+      _nativeUnavailable = true;
+      fushiDebugPrint('FushiDicts: native engine unavailable: $error');
+      return null;
+    }
+  }
+
   // ── singleton ──────────────────────────────────────────────────
   static FushiDicts? _instance;
   static Map<String, String> _stylesCache = {};
@@ -285,7 +308,13 @@ class FushiDicts {
     _pending = null;
     _generation++;
     _instance?.dispose();
-    final h = FushiDicts();
+    final FushiDicts? h = _createEngineOrNull();
+    if (h == null) {
+      _instance = null;
+      _loadedDictCount = 0;
+      _stylesCache = <String, String>{};
+      return;
+    }
     h._loadCachedTransforms();
     for (final p in paths) {
       h.addTermDict(p);
@@ -383,7 +412,8 @@ class FushiDicts {
     _pending = null;
     final int generation = _generation;
 
-    final FushiDicts shadow = FushiDicts();
+    final FushiDicts? shadow = _createEngineOrNull();
+    if (shadow == null) return;
     _inFlightShadow = shadow;
     // 只有真的把 shadow 交给 _instance 之后才算「所有权转移」；在那之前的任何
     // 出口（作废、抛异常、被外部提前销毁）都必须由 finally 把它销毁掉，否则
@@ -446,7 +476,13 @@ class FushiDicts {
     // 不把过时集合盖回来。
     _generation++;
     _instance?.dispose();
-    final h = FushiDicts();
+    final FushiDicts? h = _createEngineOrNull();
+    if (h == null) {
+      _instance = null;
+      _loadedDictCount = 0;
+      _stylesCache = <String, String>{};
+      return;
+    }
     h._loadCachedTransforms();
     for (final p in termPaths) {
       h.addTermDict(p);
@@ -577,10 +613,18 @@ class FushiDicts {
   /// Static (handle-free): only reads blobs.bin/hash.table on disk, so it can
   /// run during type migration before any query handle exists.
   static int probeDictContent(String dir) {
-    _bindings ??= FushidictsFfiBindings();
-    final p = dir.toNativeUtf8(allocator: calloc);
+    // my-comic (ticket 04): see [_nativeUnavailable]. A missing engine simply
+    // reports "no content" so the residual startup type-migration path does
+    // not throw.
+    if (_nativeUnavailable) return 0;
+    final Pointer<Utf8> p = dir.toNativeUtf8(allocator: calloc);
     try {
+      _bindings ??= FushidictsFfiBindings();
       return _bindings!.probeDictContent(p);
+    } on Object catch (error) {
+      _nativeUnavailable = true;
+      fushiDebugPrint('FushiDicts: native engine unavailable: $error');
+      return 0;
     } finally {
       calloc.free(p);
     }

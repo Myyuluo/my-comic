@@ -83,27 +83,14 @@ add_subdirectory("runner")
 # them to the application.
 include(flutter/generated_plugins.cmake)
 
-# The pinned libwebrtc desktop converter uses GetWindowRect rather than the
-# captured buffer's row pitch; PMv2 Windows processes can silently lose every
-# frame. Feed our existing WGC client-area capture into its custom video source.
-# Only Fushi's explicit window-stream constraint selects this adapter.
-target_sources(flutter_webrtc_plugin PRIVATE
-  "runner/game_stream_webrtc_capture.cpp"
-  "runner/window_capture.cpp")
-target_include_directories(flutter_webrtc_plugin PRIVATE "runner")
-target_compile_definitions(flutter_webrtc_plugin PRIVATE FUSHI_GAME_STREAM_WGC)
-target_link_libraries(flutter_webrtc_plugin PRIVATE
-  d3d11 dxgi dwmapi windowsapp windowscodecs shlwapi)
-
-# === fushidicts native dictionary engine ===
-set(FUSHIDICTS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../native/fushidicts")
-add_subdirectory("${FUSHIDICTS_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/fushidicts")
-
-# === fushi_aacs: the libaacs ABI module libbluray loads for AACS disc menus ===
-# libbluray (inside the bundled libmpv) resolves it as "libaacs.dll" from the
-# application directory, so it must sit next to the executable.
-add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../../native/fushi_aacs"
-  "${CMAKE_CURRENT_BINARY_DIR}/fushi_aacs")
+# my-comic (ticket 04): flutter_webrtc is not registered on Windows (see the
+# ci/patches/hosted/flutter_webrtc-* pubspec override), so the app-owned
+# WGC capture adapter target no longer exists. Game streaming / WebRTC is out
+# of the manga-only scope (ADR-0002).
+#
+# The fushidicts / fushi_aacs native targets were removed here as well:
+# fushidicts backs the (non-manga) dictionary engine, and libaacs only serves
+# libbluray inside the now-removed libmpv runtime.
 
 # === Installation ===
 set(INSTALL_BUNDLE_DATA_DIR "${CMAKE_INSTALL_PREFIX}/data")
@@ -142,166 +129,27 @@ endif()
 # sqlite3.dll 掩盖过这个缺口：它同时由 sqlite3_flutter_libs 走 PLUGIN_BUNDLED_LIBRARIES
 # 装进 bundle，所以 native-assets 这条通道从来没通过也看不出来。
 set(NATIVE_ASSETS_DIR "${PROJECT_BUILD_DIR}native_assets/windows/")
+# my-comic (ticket 04): pdfium is the PDF reader's native engine, which v1 does
+# not ship (local manga only covers CBZ/ZIP/folder/.mokuro). Exclude it from
+# the native-assets copy so the DLL never reaches the bundle; sqlite3.dll (the
+# other native asset) is still installed by sqlite3_flutter_libs and must stay.
 install(DIRECTORY "${NATIVE_ASSETS_DIR}"
    DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
-   COMPONENT Runtime)
+   COMPONENT Runtime
+   PATTERN "pdfium.dll" EXCLUDE)
 
-# Install fushidicts DLL next to the executable
-install(TARGETS fushidicts_ffi RUNTIME DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
-  COMPONENT Runtime)
-
-# libaacs.dll (native/fushi_aacs) next to the executable for libbluray.
-install(TARGETS fushi_aacs RUNTIME DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
-  COMPONENT Runtime)
-
-# === 内置 libtorrent 引擎（Debug 可选，Profile/Release 必需）===
-# fushi_torrent 依赖 libtorrent+boost+openssl（vcpkg 首次源码编译约 40min），
-# 不强制只做 UI 的开发机构建它。故采用本机预编译：由
-# native/fushi_torrent/build_windows_dll.ps1 事先产出 4 个 DLL 到
-# prebuilt/windows-x64/。Debug 缺失时仍可构建（运行时明确报告后端不可用）；
-# Profile/Release 缺失时由下方 install 守卫失败，禁止生成残缺安装包。
-set(FUSHI_TORRENT_PREBUILT_DIR
-  "${CMAKE_CURRENT_SOURCE_DIR}/../../native/fushi_torrent/prebuilt/windows-x64")
-set(FUSHI_TORRENT_DLLS
-  "fushi_torrent_ffi.dll"
-  "torrent-rasterbar.dll"
-  "libssl-3-x64.dll"
-  "libcrypto-3-x64.dll")
-foreach(_dll ${FUSHI_TORRENT_DLLS})
-  set(_dll_path "${FUSHI_TORRENT_PREBUILT_DIR}/${_dll}")
-  if(EXISTS "${_dll_path}")
-    install(FILES "${_dll_path}" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
-      COMPONENT Runtime)
-  endif()
-endforeach()
-
-# === 互联 P2P 隧道（iroh，可选）===
-# native/fushi_p2p/build_windows_dll.ps1 产出 prebuilt/windows-x64/fushi_p2p.dll，
-# 存在则随包。缺失时 P2P 能力判不可用（设置里不出现开关），其余互联照常——故意
-# 不像 libtorrent 那样在 Release 强制：P2P 缺库是可降级的（能力整块隐藏，不会像
-# 内置 torrent 那样「宣称有后端却打不开」），没装 Rust 的开发机照样能出 Release 包。
-# 发布包的保证在流水线侧：release-desktop.yml 先跑 build_windows_dll.ps1（失败即红），
-# 出包后再核对 bundle 里确有 fushi_p2p.dll
-# （docs/specs/2026-09-28-interconnect-remote-reach.md §5 / §9）。
-set(FUSHI_P2P_DLL
-  "${CMAKE_CURRENT_SOURCE_DIR}/../../native/fushi_p2p/prebuilt/windows-x64/fushi_p2p.dll")
-if(EXISTS "${FUSHI_P2P_DLL}")
-  install(FILES "${FUSHI_P2P_DLL}" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
-    COMPONENT Runtime)
-endif()
-
-# === SRS 排程内核（fsrs-rs，copy-if-present）===
-# native/fushi_fsrs/build_windows_dll.ps1 产出 prebuilt/windows-x64/fushi_fsrs.dll，
-# 存在则随包到 exe 同级（Dart 侧 packages/fushi_srs 的 FushiFsrs 按 exe 同级定位）。
-# 缺失时 SRS 原生内核判不可用，构建照常——与上面 fushi_p2p 同一语义；发布包的保证在
-# 流水线侧（先跑构建脚本，失败即红）。
-set(FUSHI_FSRS_DLL
-  "${CMAKE_CURRENT_SOURCE_DIR}/../../native/fushi_fsrs/prebuilt/windows-x64/fushi_fsrs.dll")
-if(EXISTS "${FUSHI_FSRS_DLL}")
-  install(FILES "${FUSHI_FSRS_DLL}" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
-    COMPONENT Runtime)
-endif()
-
-# Debug builds may intentionally omit the expensive libtorrent prebuild so UI
-# work stays lightweight. A Profile/Release bundle, however, must never be
-# produced while advertising an embedded backend that cannot open at runtime.
-# Check at install time because Flutter's Visual Studio generator is
-# multi-config and CMAKE_BUILD_TYPE is empty during configure.
-install(CODE "
-  if(CMAKE_INSTALL_CONFIG_NAME MATCHES \"^(Profile|Release)$\")
-    foreach(_dll IN ITEMS
-        fushi_torrent_ffi.dll
-        torrent-rasterbar.dll
-        libssl-3-x64.dll
-        libcrypto-3-x64.dll)
-      if(NOT EXISTS \"${FUSHI_TORRENT_PREBUILT_DIR}/\${_dll}\")
-        message(FATAL_ERROR
-          \"Missing required Windows download runtime: \${_dll}. \"
-          \"Run native/fushi_torrent/build_windows_dll.ps1 before building a Profile/Release bundle.\")
-      endif()
-    endforeach()
-  endif()
-" COMPONENT Runtime)
-
-# 同理，Profile/Release bundle 绝不能在缺 pdfium.dll 的情况下产出（BUG-2419）。
-# 上面的 install(DIRECTORY NATIVE_ASSETS_DIR) 是修复本身，这条守卫是防复发的那一半：
-# 任何人再次重写这份 CMakeLists 并丢掉 native assets 那两句时，构建立刻失败，而不是
-# 又发一个「声称支持 PDF、一导入就永久转圈」的安装包。
-#
-# 这是唯一能挡住回归的东西——flutter analyze 与 Dart 单测在结构上永远看不到 bundle
-# 里有哪些文件，而验证构建跑的是 --debug，也不经过这条 install 路径。
-#
-# 判据路径必须用 ${INSTALL_BUNDLE_LIB_DIR}（不转义），**不能**用
-# \${CMAKE_INSTALL_PREFIX}（转义）。本仓的 bundle 目录是生成器表达式（上面的
-# BUILD_BUNDLE_DIR = $<TARGET_FILE_DIR:...>），生成出来的 cmake_install.cmake 里
-# 第 5 行就是 `set(CMAKE_INSTALL_PREFIX "$<TARGET_FILE_DIR:fushi>")` —— 脚本期这个
-# 变量永远是那串**未求值的 genex 字面量**，EXISTS 恒假，与 dll 在不在无关，于是
-# Windows Release 构建 100% 失败（CI 日志里 `Installing: .../pdfium.dll` 明明成功）。
-# install(DESTINATION) 不受影响是因为 DESTINATION 的 genex 在 generate 期求值；
-# install(CODE) 里只有不转义的 ${...} 才会被 generate 期求值。
-install(CODE "
-  if(CMAKE_INSTALL_CONFIG_NAME MATCHES \"^(Profile|Release)$\")
-    if(NOT EXISTS \"${INSTALL_BUNDLE_LIB_DIR}/pdfium.dll\")
-      message(FATAL_ERROR
-        \"Missing pdfium.dll in the Windows bundle. \"
-        \"PDF import and the PDF reader hang forever without it (BUG-2419). \"
-        \"Expected it to arrive from ${NATIVE_ASSETS_DIR} via the install(DIRECTORY) rule above.\")
-    endif()
-  endif()
-" COMPONENT Runtime)
-
-# === galgame hook helper 随包普通文件（可选，本地/CI 事先构建）===
-# helper（injector exe + hook DLL）**绝不链接进 fushi.exe**。BUG-1449 起，两个架构由
-# install_into_bundle.ps1 在构建期校验 zip 后解包到 exe 同级 voice_hook/<arch>/；安装包
-# 不再携带 galgame_helper/ zip，也不再依赖运行期把第二份副本同步到 plain files。
-#
-# 增量输出目录可能残留上一次构建的 voice_hook/。若这次 dist 不完整，或 dist 的源码指纹
-# 不属于当前 checkout，安装脚本必须让残留 helper **明确不可加载**而不是把旧 DLL 伪装成
-# 新构建（BUG-1881）；功能明确不可用胜过静默注入旧件。脚本用「整目录改名让位」实现，
-# 因为被注进游戏的 hook DLL 删不掉但可以改名——直接 Remove-Item 会让整个
-# flutter build windows 因为「上次玩的游戏还没退」而失败（BUG-1880）。
-#
-# 两档宽容分开门控，因为它们不是同一件事：
-# - `-AllowMissingDistribution`（**所有配置**）：这个工作区还没跑过 build_distribution.ps1。
-#   这不只是开发机的便利——release-desktop.yml 里 `flutter build windows --release` 跑在
-#   build_distribution.ps1 **之前**，发布构建走到这里时 dist 必然为空。发布包真正的
-#   fail-closed 门是随后那一步：它不带任何 Allow* 开关地再调一次同一个脚本，装不上就红，
-#   而 ISCC 打包又在它之后。把这里改成 Profile/Release 硬失败 = 每次发布构建必红。
-# - `$<$<CONFIG:Debug>:-AllowStaleDistribution>`：dist 齐全但指纹来自另一个 checkout。
-#   Debug 允许（禁用旧 helper 继续构建），Profile/Release 拒绝——那是拿另一份源码的
-#   helper 去凑发布产物。
-#
-# 必须用 generator expression：Flutter 的 Visual Studio 生成器是多配置的，configure 期
-# CMAKE_BUILD_TYPE 为空，任何 configure 期判断都只会永远走同一个分支。install(CODE) 支持
-# genex 是 CMake 3.14 起（正好是本文件的 cmake_minimum_required 下限）。
-# 实测（cmake 4.3.3 + "Visual Studio 17 2022"，三个配置各跑一次 cmake --install --config）：
-# Debug 展开成 `-AllowStaleDistribution`，Profile/Release 整个参数消失（不留空参数）。
-#
-# 要在本地拿到 helper：先在 native/galgame_hook 下跑 tools/build_distribution.ps1。
-set(FUSHI_GALGAME_HELPER_DIST_DIR
-  "${CMAKE_CURRENT_SOURCE_DIR}/../../native/galgame_hook/dist")
-set(FUSHI_GALGAME_HELPER_INSTALL_SCRIPT
-  "${CMAKE_CURRENT_SOURCE_DIR}/../../native/galgame_hook/tools/install_into_bundle.ps1")
-install(CODE "
-  execute_process(
-    COMMAND powershell.exe -NoProfile -ExecutionPolicy Bypass
-      -File \"${FUSHI_GALGAME_HELPER_INSTALL_SCRIPT}\"
-      -BundleDirectory \"${CMAKE_INSTALL_PREFIX}\"
-      -DistDirectory \"${FUSHI_GALGAME_HELPER_DIST_DIR}\"
-      -AllowMissingDistribution
-      $<$<CONFIG:Debug>:-AllowStaleDistribution>
-    RESULT_VARIABLE _galgame_helper_result
-    OUTPUT_VARIABLE _galgame_helper_stdout
-    ERROR_VARIABLE _galgame_helper_stderr)
-  if(NOT _galgame_helper_result EQUAL 0)
-    message(FATAL_ERROR
-      \"install_into_bundle.ps1 failed (\${_galgame_helper_result}):\\n\"
-      \"\${_galgame_helper_stdout}\\n\${_galgame_helper_stderr}\")
-  endif()
-  if(NOT \"\${_galgame_helper_stdout}\" STREQUAL \"\")
-    message(STATUS \"\${_galgame_helper_stdout}\")
-  endif()
-" COMPONENT Runtime)
+# my-comic (ticket 04): the following native runtimes are not shipped because
+# they only serve non-manga features (ADR-0002):
+#   - fushidicts_ffi.dll (dictionary engine)
+#   - fushi_aacs / libaacs.dll (Blu-ray AACS; only used by the removed libmpv)
+#   - fushi_torrent_ffi.dll + torrent-rasterbar + OpenSSL (BT/torrent)
+#   - fushi_p2p.dll (Interconnect P2P)
+#   - fushi_fsrs.dll (Anki SRS scheduling)
+#   - voice_hook/ galgame helper files
+# Their install rules were removed instead of being made optional, so a
+# Release build can no longer silently re-introduce them.
+# The corresponding Dart code stays compilable (out of this ticket's scope),
+# but the native libraries are absent and those features are unavailable.
 
 # === Magpie 随包精简归档（可选，本地/CI 事先构建）===
 # 与上面的 helper 规则同源同理由（BUG-1246）：Magpie 删掉下载链路之后，`magpie_bundle/`

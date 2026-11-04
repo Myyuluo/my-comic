@@ -86,37 +86,13 @@ dependency_overrides:
     path: third_party/carousel_slider
   fading_edge_scrollview:
     path: third_party/fading_edge_scrollview
-  # BUG-073: upstream media_kit_libs_windows_video 1.0.11 pins a 2023-09-24
-  # libmpv whose FFmpeg build cannot decode TrueHD (TrueHD 5.1 movies play with
-  # NO sound — verified the bundled DLL fails `Opening decoder truehd` at
-  # runtime). Vendored fork repoints the CMake download to a maintained
-  # full-FFmpeg libmpv (zhongfly/mpv-winbuild) that decodes TrueHD; see
-  # third_party/media_kit_libs_windows_video/windows/CMakeLists.txt. Same DLL
-  # also backs the audiobook player, so this fixes TrueHD audiobooks too.
-  media_kit_libs_windows_video:
-    path: third_party/media_kit_libs_windows_video
-  # BUG-073 (cont.): the SAME TrueHD gap exists on macOS/iOS/Android — media-kit's
-  # "default" FFmpeg flavor enables the truehd demuxer but not its decoder, so
-  # TrueHD audio is silent on every platform, not just Windows. These forks switch
-  # each platform to the "full" flavor (which enables all decoders). Linux uses
-  # the system libmpv (full FFmpeg) and needs no override.
-  #
-  # TODO-1137: every media-kit release, full flavor included, is built against
-  # FFmpeg 6.0 (2023-02) — off the maintenance branches, no security backports,
-  # and this is the library that decodes whatever file the user opens. All three
-  # are therefore built from our own forks at FFmpeg 6.1.6 (6.1 LTS tip) and
-  # mirrored into the permanent `vendor-libmpv` release: Android from
-  # libmpv-android-video-build, macOS/iOS from libmpv-darwin-build, both on the
-  # `hibiki/ffmpeg-6.1.6` branch. Staying inside 6.x keeps the FFmpeg API stable,
-  # so mpv itself is unchanged (7.x would force a mpv bump, which in turn makes
-  # libplacebo a hard dependency neither build repo has).
-  # See each package's Makefile / build.gradle for the repoint + checksums.
-  media_kit_libs_macos_video:
-    path: third_party/media_kit_libs_macos_video
-  media_kit_libs_ios_video:
-    path: third_party/media_kit_libs_ios_video
-  media_kit_libs_android_video:
-    path: third_party/media_kit_libs_android_video
+  # my-comic (ticket 04): the media_kit_libs_* overrides were removed together
+  # with the media_kit_libs_video dependency. Those packages were the only
+  # source of libmpv / FFmpeg / x265 / ANGLE in the Windows bundle; my-comic
+  # only keeps the manga reader, so the video/audio native runtime is not
+  # shipped. media_kit_video is still overridden below because the Dart-side
+  # video files remain in the tree (their UI is unreachable) and compile
+  # against the stub branch that the plugin uses when libs are absent.
   # BUG-235: media_kit_video 2.0.1's MaterialDesktopSeekBarState.onPointerUp /
   # onPointerMove call controller(context) (dereferences State.context) with no
   # mounted guard. Fushi tears down the controls subtree on fullscreen

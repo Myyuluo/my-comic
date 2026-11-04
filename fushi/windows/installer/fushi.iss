@@ -691,6 +691,23 @@ end;
 // 平台限制（如实记录）：Windows 不提供程序化「固定到任务栏」的公开接口，
 // 所以任务栏固定项这里只能删掉指向已消失的 hibiki.exe 的死链接，
 // 无法自动改指 fushi.exe、也无法重新固定；用户需要的话得手动再固定一次。
+{ Delete every file matching Pattern inside Dir. Inno's DeleteFile does not
+  expand wildcards, so walk the directory explicitly. }
+procedure DeleteFilesByPattern(const Dir, Pattern: string);
+var
+  FindRec: TFindRec;
+begin
+  if FindFirst(AddBackslash(Dir) + Pattern, FindRec) then
+  try
+    repeat
+      if (FindRec.Attributes and FILE_ATTRIBUTE_DIRECTORY) = 0 then
+        DeleteFile(AddBackslash(Dir) + FindRec.Name);
+    until not FindNext(FindRec);
+  finally
+    FindClose(FindRec);
+  end;
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep <> ssPostInstall then
@@ -708,6 +725,37 @@ begin
   // 「exe 同目录」，等于给「新 DLL 缺失时静默加载上一版旧 ABI」留口子。
   DeleteFile(ExpandConstant('{app}\hibiki_torrent_ffi.dll'));
   DeleteFile(ExpandConstant('{app}\hoshidicts_ffi.dll'));
+
+  // my-comic v1（ticket 04）：这些原生运行时已不再随包。Inno 只覆盖同名文件，
+  // 升级安装不会自动清掉旧版本留下的 libmpv / FFmpeg / ANGLE / ONNX / PDFium /
+  // torrent / 词典 / WebRTC 二进制；不删就等于「新版说已移除、磁盘上还在」。
+  // 全部位于 {app}，且都是可再生成的运行时文件，不涉及用户数据。
+  DeleteFile(ExpandConstant('{app}\libmpv-2.dll'));
+  DeleteFile(ExpandConstant('{app}\libEGL.dll'));
+  DeleteFile(ExpandConstant('{app}\libGLESv2.dll'));
+  DeleteFile(ExpandConstant('{app}\d3dcompiler_47.dll'));
+  DeleteFile(ExpandConstant('{app}\vk_swiftshader.dll'));
+  DeleteFile(ExpandConstant('{app}\opengl32sw.dll'));
+  DeleteFile(ExpandConstant('{app}\media_kit_libs_windows_video_plugin.dll'));
+  DeleteFile(ExpandConstant('{app}\libwebrtc.dll'));
+  DeleteFile(ExpandConstant('{app}\onnxruntime.dll'));
+  DeleteFile(ExpandConstant('{app}\onnxruntime_providers_shared.dll'));
+  DeleteFile(ExpandConstant('{app}\pdfium.dll'));
+  DeleteFile(ExpandConstant('{app}\fushi_torrent_ffi.dll'));
+  DeleteFile(ExpandConstant('{app}\torrent-rasterbar.dll'));
+  DeleteFile(ExpandConstant('{app}\libssl-3-x64.dll'));
+  DeleteFile(ExpandConstant('{app}\libcrypto-3-x64.dll'));
+  DeleteFile(ExpandConstant('{app}\fushi_p2p.dll'));
+  DeleteFile(ExpandConstant('{app}\fushi_fsrs.dll'));
+  DeleteFile(ExpandConstant('{app}\fushidicts_ffi.dll'));
+  DeleteFile(ExpandConstant('{app}\libaacs.dll'));
+  DeleteFile(ExpandConstant('{app}\libbluray-awt-j2se-1.5.0.jar'));
+  DeleteFile(ExpandConstant('{app}\libbluray-j2se-1.5.0.jar'));
+  // libmpv 的 FFmpeg/ANGLE 运行时是一大组 fbd*.dll（约 100 个文件）。
+  DeleteFilesByPattern(ExpandConstant('{app}'), 'fbd*.dll');
+  // 蓝光菜单与 galgame helper 目录都只服务已移除的功能。
+  DelTree(ExpandConstant('{app}\bluray'), True, True, True);
+  DelTree(ExpandConstant('{app}\voice_hook'), True, True, True);
 
   // 三处旧名快捷方式全部指向已删除的 hibiki.exe，都是死链接。
   // 1) 桌面
