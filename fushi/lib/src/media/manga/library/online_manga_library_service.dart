@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:crypto/crypto.dart';
 import 'package:drift/drift.dart';
 import 'package:path/path.dart' as p;
 
@@ -62,14 +61,6 @@ class OnlineMangaLibraryService {
   /// 依赖就走两条路径。null = 只落库不提醒。
   final UpdateFeedService? updateFeed;
 
-  /// 身份串的分隔符：NUL。
-  ///
-  /// 写成 `String.fromCharCode(0)` 而不是源码里的裸字节，有两个理由：裸 NUL 会
-  /// 让 git 把这个 .dart 判成 binary（diff/merge 直接丢改动）；而这个值一旦变
-  /// 化，**全部存量书架条目的 bookKey 都会变** —— 主键失配 + 磁盘目录对不上 =
-  /// 用户的在线漫画整片消失。让它显式、独立、难被顺手"清理"掉。
-  static final String _identitySeparator = String.fromCharCode(0);
-
   /// 书架身份。
   ///
   /// 摘要而不是明文拼接：作品 URL 会进文件路径，长度和字符集都不可控。
@@ -85,15 +76,12 @@ class OnlineMangaLibraryService {
     required String extensionPackage,
     required String sourceId,
     required String seriesKey,
-  }) {
-    final String identity = <String>[
-      extensionPackage,
-      sourceId,
-      seriesKey,
-    ].join(_identitySeparator);
-    final String digest = sha256.convert(utf8.encode(identity)).toString();
-    return '${runtime.wireValue}-${digest.substring(0, 32)}';
-  }
+  }) => onlineMangaBookKeyFor(
+    runtime: runtime,
+    extensionPackage: extensionPackage,
+    sourceId: sourceId,
+    seriesKey: seriesKey,
+  );
 
   static String bookKeyOf(OnlineMangaLibraryEntry entry) => bookKeyFor(
     runtime: entry.runtime,

@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 
 /// 提供这条书架条目的在线漫画运行时。
@@ -48,6 +49,27 @@ const String kInterconnectMangaPackage = 'fushi.interconnect';
 ///
 /// ⚠️ 同样已进 bookKey，**永不可改**。
 const String kInterconnectMangaSourceId = 'library';
+
+/// 在线漫画书架身份（`EpubBooks.bookKey`）的**唯一推导点**。
+///
+/// 身份三元组 `extensionPackage NUL sourceId NUL seriesKey` 的摘要既是主键也是
+/// 磁盘目录名；Mihon 条目必须与 v88 前逐字节一致。抽成顶层函数是为了让不依赖
+/// 运行时（[OnlineMangaLibraryService] 所在的重文件）的调用方——例如 Backup
+/// Import——复用同一份推导，而不是各自抄一遍摘要算法。
+String onlineMangaBookKeyFor({
+  required OnlineMangaRuntimeKind runtime,
+  required String extensionPackage,
+  required String sourceId,
+  required String seriesKey,
+}) {
+  final String identity = <String>[
+    extensionPackage,
+    sourceId,
+    seriesKey,
+  ].join(String.fromCharCode(0));
+  final String digest = sha256.convert(utf8.encode(identity)).toString();
+  return '${runtime.wireValue}-${digest.substring(0, 32)}';
+}
 
 /// 归一化后的章节。
 ///
