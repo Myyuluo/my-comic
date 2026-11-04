@@ -4,6 +4,9 @@
 *.fushi.zip
 app.mihon_*.tachibk
 
+# Local manga test files — never commit
+*.cbz
+
 # Flutter / Dart build outputs (my-comic additions; unanchored on purpose)
 build/
 .dart_tool/
