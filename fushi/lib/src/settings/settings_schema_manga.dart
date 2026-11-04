@@ -6,7 +6,6 @@ import 'package:fushi/src/media/manga/library/manga_resume_point.dart';
 import 'package:fushi/src/media/manga/manga_view_prefs.dart';
 import 'package:fushi/src/media/manga/manga_reader_preferences.dart';
 import 'package:fushi/src/media/manga/manga_reading_mode.dart';
-import 'package:fushi/src/media/manga/manga_panel_model_settings.dart';
 import 'package:fushi/src/models/module_registry.dart';
 import 'package:fushi/src/pages/implementations/home_page.dart';
 import 'package:fushi/src/settings/settings_context.dart';
@@ -49,7 +48,7 @@ SettingsDestination buildMangaDestination() {
       _mangaPagingSection(),
       _mangaDisplaySection(),
       _mangaSpreadPanelsSection(),
-      buildMangaOcrSection(),
+      // my-comic：端上 OCR / AI 识别与 Anki 制卡属于已移除域，不再提供设置入口。
       buildMangaCatalogSection(),
     ],
   );
@@ -436,39 +435,8 @@ SettingsSection _mangaSpreadPanelsSection() {
             c.appModel.setMangaWidePageSolo(value),
         defaultValue: kMangaWidePageSoloDefault,
       ),
-      SettingsNavigationItem(
-        id: 'manga.panel_model',
-        title: t.manga_panel_model,
-        subtitle: t.manga_panel_model_desc,
-        icon: FushiIcons.modelTraining,
-        child: () => SettingsDestination(
-          id: SettingsDestinationId.manga,
-          title: t.manga_panel_model,
-          icon: FushiIcons.modelTraining,
-          sections: const <SettingsSection>[],
-          body: (_) => const MangaPanelModelSettings(),
-        ),
-      ),
-      SettingsSwitchItem(
-        id: 'manga.panel_navigation',
-        title: t.manga_panel_navigation,
-        subtitle: t.manga_panel_navigation_subtitle,
-        icon: Icons.view_carousel_outlined,
-        value: (SettingsContext c) => c.appModel.mangaPanelNavigationEnabled,
-        onChanged: (SettingsContext c, bool value) =>
-            c.appModel.setMangaPanelNavigationEnabled(value),
-        defaultValue: kMangaPanelNavigationDefault,
-      ),
-      SettingsSwitchItem(
-        id: 'manga.mining_crop_to_panel',
-        title: t.manga_mining_crop_to_panel,
-        subtitle: t.manga_mining_crop_to_panel_hint,
-        icon: FushiIcons.crop,
-        value: (SettingsContext c) => c.appModel.mangaMiningCropToPanel,
-        onChanged: (SettingsContext c, bool value) =>
-            c.appModel.setMangaMiningCropToPanel(value),
-        defaultValue: kMangaMiningCropToPanelDefault,
-      ),
+      // my-comic：面板模型/面板导航依赖端上 OCR 检测，`mining_crop_to_panel`
+      // 属于 Anki 制卡，已经随非漫画域移除。
     ],
   );
 }

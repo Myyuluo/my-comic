@@ -1,7 +1,6 @@
 import 'package:fushi/src/utils/components/glass/fushi_icon.dart';
 import 'package:fushi/src/utils/fushi_icons.dart';
 import 'package:fushi/src/utils/components/glass/fushi_apple_scroll_chrome.dart';
-import 'package:fushi_dictionary/fushi_dictionary.dart';
 import 'dart:async';
 import 'dart:io';
 
@@ -23,9 +22,6 @@ import 'package:flutter/services.dart' hide ModifierKey;
 import 'package:fushi_anki/fushi_anki.dart' show AnkiMediaDedupReport;
 import 'package:fushi/src/anki/anki_media_dedup_dialogs.dart';
 import 'package:fushi/src/onboarding/recommended_pack_download_mini_bar.dart';
-import 'package:fushi/src/onboarding/recommended_pack_tutorial_prompt.dart';
-import 'package:fushi/src/onboarding/recommended_pack_tutorial_state.dart';
-import 'package:fushi/src/updates/update_probes.dart';
 import 'package:fushi/src/utils/components/fushi_desktop_title_bar.dart';
 import 'package:fushi/src/utils/components/fushi_floating_chrome.dart'
     show
@@ -43,7 +39,6 @@ import 'package:fushi/src/sync/desktop_foreground_guard.dart';
 import 'package:fushi/src/anki/anki_media_dedup_runner.dart';
 import 'package:fushi/src/anki/anki_view_model.dart'
     show ankiRepositoryProvider;
-import 'package:fushi/src/anki/lapis_template_service.dart';
 import 'package:fushi/src/leaderboard/leaderboard_paired_login.dart';
 import 'package:fushi/src/leaderboard/leaderboard_service.dart';
 import 'package:fushi/src/sync/sync_auto_trigger.dart';
@@ -98,8 +93,6 @@ import 'package:fushi/src/pages/implementations/video_discovery_detail_page.dart
 import 'package:fushi/src/pages/implementations/video_discovery_page.dart'
     show VideoDiscoveryController;
 import 'package:fushi/src/pages/implementations/video_library_shell.dart';
-import 'package:fushi/src/pages/implementations/browse_moved_notice.dart'
-    show maybeShowBrowseMovedNotice;
 import 'package:fushi/src/pages/implementations/media_server/media_server_browse_page.dart'
     show MediaServerEntry;
 import 'package:fushi/src/media/video/media_server/media_server_config.dart'
@@ -513,97 +506,6 @@ class _HomePageState extends BasePageState<HomePage>
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
-      // 在下面任何分支改写 first_time_setup 之前取：「下载 → 浏览」搬迁提示要据此
-      // 区分全新安装与升级（见 browse_moved_notice.dart）。
-      final bool freshInstall = appModelNoUpdate.isFirstTimeSetup;
-      final RecommendedPackTutorialState tutorialState =
-          RecommendedPackTutorialState(appModelNoUpdate.appDirectory);
-      if (await tutorialState.shouldPrompt) {
-        // Persist before the prompt can consume its receipt or open a tutorial.
-        // Killing the app in the tutorial must not replay the setup wizard.
-        appModelNoUpdate.setFirstTimeSetupFlag();
-        await appModelNoUpdate.setOnboardingCompleted(value: true);
-      }
-      if (!mounted) return;
-      // Serialize follow-up with ordinary onboarding and update dialogs.
-      final bool tutorialOffered = await showRecommendedPackTutorialPrompt(
-        context: context,
-        state: tutorialState,
-        onStart: () async {
-          await Navigator.of(context).push(
-            adaptivePageRoute<void>(
-              context: context,
-              builder: (_) => const OnboardingWizardPage(tutorialOnly: true),
-              fullscreenDialog: true,
-            ),
-          );
-        },
-      );
-      if (!mounted) return;
-
-      if (!tutorialOffered && appModel.isFirstTimeSetup) {
-        appModel.setLastSelectedDictionaryFormat(
-          JapaneseLanguage.instance.standardFormat,
-        );
-        appModel.setFirstTimeSetupFlag();
-        // 全新安装：把新手引导标成「待完成」再进下面的弹出分支。既有安装升级
-        // 上来时该键缺省即 true（不弹）；中途杀进程下次启动值仍是 false，会
-        // 重新弹出（缺省语义见 PreferencesRepository.onboardingCompleted）。
-        await appModel.setOnboardingCompleted(value: false);
-      }
-
-      // 新手引导在更新弹窗之前弹（避免两个模态抢同一帧）；向导关闭（完成/
-      // 跳过/返回）后统一标记完成，之后可从「设置 → 系统」随时重新打开。
-      if (mounted && !tutorialOffered && !appModel.onboardingCompleted) {
-        await Navigator.of(context).push(
-          adaptivePageRoute<void>(
-            context: context,
-            builder: (_) => const OnboardingWizardPage(),
-            fullscreenDialog: true,
-          ),
-        );
-        await appModel.setOnboardingCompleted(value: true);
-      }
-
-      // 「下载」改名「浏览」：升级前关着下载的用户照旧关着，但一次性告诉他们发现与
-      // 在线来源搬到了哪里、在哪里打开（所有者 2026-09-28 拍板）。排在新手引导之后、
-      // 更新弹窗之前，与它们串行，不抢同一帧。
-      if (mounted) {
-        await maybeShowBrowseMovedNotice(
-          context: context,
-          appModel: appModelNoUpdate,
-          freshInstall: freshInstall,
-        );
-      }
-
-      if (mounted) {
-        UpdateChecker.scheduleCheck(
-          context,
-          appVersion,
-          // BUG-457：beta/debug 通道用 buildNumber 还原本机已安装 release sequence，
-          // 避免无后缀 `X.Y.Z` release 包永判「已是最新」。
-          currentBuildNumber: appModel.packageInfo.buildNumber,
-          neverRemind: appModel.updateNeverRemind,
-          autoInstall: appModel.updateAutoInstall,
-          betaChannel: appModel.updateBetaChannel,
-          debugChannel: appModel.updateDebugChannel,
-          customProxy: appModel.updateCustomProxy,
-          // TODO-1024 / BUG-479：启动期后台检查跑完即把结果写回缓存，下次「检查更新」
-          // 直接读缓存乐观反馈（恒快）。auto 路径不读缓存（仍后台静默刷新）。
-          cacheWriter: appModel.setUpdateCheckCache,
-          // v101：把「确实有新版」这条事实同时投进更新中心。既有对话框照旧——
-          // 用户点掉对话框之后，红点与更新页仍留着这条，不再是「弹过一次就没了」。
-          // 回调是同步的（投递不该挡住更新流程），所以这里 unawaited 出去。
-          onUpdateAvailable: (String version, String? releaseUrl) => unawaited(
-            publishAppReleaseUpdate(
-              feed: appModel.updateFeedService,
-              version: version,
-              releaseUrl: releaseUrl,
-            ),
-          ),
-        );
-      }
-
       // v101 后台更新检查（漫画新章 / 漫画扩展）。与上面的 app 版本检查并列放在
       // 启动期：用户最想知道「我不在的时候更新了什么」的时刻就是刚打开应用。
       // 各域自己的到期判据挡住频繁重启造成的重复请求。
@@ -612,68 +514,6 @@ class _HomePageState extends BasePageState<HomePage>
       // running 行并续跑队列。放在这里而不是 initialise()：完成钩子的自动 OCR 要
       // 从 navigator 的 context 装配引擎，HomePage 就绪之前拿不到。
       unawaited(appModel.startMangaDownloads());
-
-      // 这一段是 HomePage 层的模块专属后台自启：同步（sync）与视频索引（video）。
-      // 模块关掉就不再拉起——「关掉的模块下次启动不该还在后台跑」。已经在飞的
-      // 任务不受影响（这里只决定启不启，不去 stop 任何东西）。
-      final ModuleVisibility startupModules = appModelNoUpdate.moduleVisibility;
-      if (startupModules.isEnabled(ModuleId.sync)) {
-        _triggerFullAutoSync();
-      }
-      if (startupModules.isEnabled(ModuleId.video)) {
-        unawaited(
-          appModel.database.interruptStaleVideoSourceScrapeRuns().catchError((
-            Object error,
-            StackTrace stackTrace,
-          ) {
-            ErrorLogService.instance.log(
-              'HomePage.interruptStaleVideoScrapeRuns',
-              error,
-              stackTrace,
-            );
-            return 0;
-          }),
-        );
-        // v77 之前已经存在于库中的来源不会自动重触发扫描。启动时做一次纯本地、
-        // 幂等的作品索引，把旧合集/独立电影补成规范 VideoMetadataWork；否则系列页
-        // 能看到临时卡片，点进详情却永远只能落到无资料的旧合集视图。
-        unawaited(_backfillVideoMetadataWorks());
-      }
-      // 首帧同步之后挂定时轮询，让静止不动的设备也能周期性拉到远端改动（见
-      // [_periodicSyncInterval] 注释）。dispose 时 cancel。排行榜书架同步挂在同一个
-      // 定时器上（它自己有 30 分钟节流），所以定时器不再只随同步模块开启。
-      final bool periodicAutoSync = startupModules.isEnabled(ModuleId.sync);
-      _periodicSyncTimer = Timer.periodic(_periodicSyncInterval, (_) {
-        if (periodicAutoSync) _triggerFullAutoSync();
-        _maybeSyncLeaderboard();
-      });
-
-      // Lapis 模板启动自动迁移：Fushi 基线/客制化变了且 Anki 端仍是 Fushi
-      // 已知产物时，自动备份后推送新 styling（手改内容绝不自动覆盖，Anki 未
-      // 运行静默跳过）。服务内部有每进程一次的闸门，HomePage 重建不会重跑。
-      if (mounted) {
-        unawaited(
-          LapisTemplateService(
-            ref.read(ankiRepositoryProvider),
-          ).maybeAutoMigrateOnStartup().catchError((Object e, StackTrace s) {
-            ErrorLogService.instance.log('HomePage.lapisAutoMigrate', e, s);
-          }),
-        );
-      }
-
-      // Anki 媒体去重的自动处理：**默认关**，只有用户在设置页主动打开才会跑。
-      // 打开之后也只是自动干跑并把清单提示出来，用户确认后才真删；只有再显式
-      // 打开「自动直接删除」才跳过确认（判定全在
-      // [AnkiMediaDedupRunner.maybeAutoRunOnStartup]，这里不做二次决策）。
-      if (mounted) {
-        unawaited(
-          _maybeAutoDedupAnkiMedia().catchError((Object e, StackTrace s) {
-            ErrorLogService.instance.log('HomePage.ankiMediaDedupAuto', e, s);
-          }),
-        );
-      }
-
-      _maybeSyncLeaderboard();
     });
   }
 
@@ -897,11 +737,6 @@ class _HomePageState extends BasePageState<HomePage>
     super.didChangeAppLifecycleState(state);
     if (AppLifecycleState.resumed == state) {
       debugPrint('Lifecycle Resumed');
-      appModel.searchDictionary(
-        searchTerm: JapaneseLanguage.instance.helloWorld,
-        searchWithWildcards: false,
-        useCache: false,
-      );
       // TODO-900: OS 层失焦（Alt+Tab 切窗）后 Flutter 不保证把 primaryFocus 归还到
       // 首页键事件 Focus，导致切窗回来后页级 / 全局快捷键全死，只能重启 app 才靠
       // autofocus 抢回。对齐视频页 [_reclaimVideoFocusIfOwned] 的 resumed 回收范式。

@@ -4,11 +4,15 @@
 
 **Blocked by:** 01: Baseline build + repo snapshot
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] 导航中不再有小说/EPUB、视频/Aniyomi、有声书、词典/查词、Anki/SRS、galgame、AI/OCR、BT、云同步/Interconnect、Fushi Server 入口
-- [ ] Settings 不再暴露非漫画 sections
-- [ ] 移除 telemetry、更新检查、自动更新
-- [ ] 移除相关 assets/strings/routes，不留下可进入的隐藏入口
-- [ ] 漫画 Library、Sources、Reader、Downloads、Settings 仍可用
-- [ ] Windows build 成功
+- [x] 导航中不再有小说/EPUB、视频/Aniyomi、有声书、词典/查词、Anki/SRS、galgame、AI/OCR、BT、云同步/Interconnect、Fushi Server 入口
+- [x] Settings 不再暴露非漫画 sections
+- [x] 移除 telemetry、更新检查、自动更新
+- [x] 移除相关 assets/strings/routes，不留下可进入的隐藏入口
+- [x] 漫画 Library、Sources、Reader、Downloads、Settings 仍可用
+- [x] Windows build 成功
+
+## Comments
+
+Built at commit ff3f2df0; see docs/agent/baseline-build.md

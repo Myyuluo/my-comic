@@ -93,26 +93,13 @@ DropIntent decideDropIntent({
       if (files.hasAny) return DropIntent.unsupportedSurface;
       return DropIntent.ignore;
     case DropSurface.manga:
-      // 漫画库：漫画载体是主业，优先判。
+      // my-comic：漫画库只接受漫画载体。非漫画文件（EPUB/PDF/视频/字幕/音频/
+      // URL/torrent）不再自动转进已移除的书 / 视频 / BT 域，一律回「本页面不支持」。
       if (files.mangas.isNotEmpty) return DropIntent.importNewManga;
       if (files.unsupportedMangas.isNotEmpty) {
         return DropIntent.unsupportedMangaArchive;
       }
-      // 其余（epub / 视频 / 字幕 / 音频 / URL）**原样沿用 books 表面的既有行为**。
-      //
-      // 这里曾改成一律回「本页面不支持」，理由是「把 epub 悄悄导进另一个书架，
-      // 用户会以为文件丢了」。但漫画库本就是书架页的 `mangaOnly` 壳、共用同一个
-      // drop target，改之前拖 epub 进来是**会自动导进普通书架的**——那是一项用户
-      // 可能一直在用的既有能力，移除它属于 break userspace。要不要改成「不支持」
-      // 是产品决定，在用户拍板前默认保持现状。
-      //
-      // 委托而不是抄一遍：books 分支后续任何演进（自动切视频导入、URL 流媒体、
-      // 拖字幕挂到书卡……）漫画库自动跟上，不会漂成两套。
-      return decideDropIntent(
-        surface: DropSurface.books,
-        files: files,
-        cardHit: cardHit,
-      );
+      return files.hasAny ? DropIntent.unsupportedSurface : DropIntent.ignore;
     case DropSurface.video:
       // 文件夹优先于其中的单个文件：用户拖一整个剧集目录进来，要的是「把这个目录
       // 加成来源」，不是「导入我恰好也选中的那一个 mp4」。蓝光盘同理且更强：拖进来

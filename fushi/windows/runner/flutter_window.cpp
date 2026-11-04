@@ -789,19 +789,9 @@ bool FlutterWindow::OnCreate() {
           &flutter::StandardMethodCodec::GetInstance());
 
   RegisterImeGuardChannel();
-  RegisterLookupImeChannel();
-  RegisterFloatingLyricChannel();
-  RegisterFloatingBallChannel();
-  RegisterGalHookTextChannel();
-  RegisterGlobalLookupChannel();
-  RegisterForegroundSelectionChannel();
-  RegisterWindowCaptureChannel();
-  RegisterSystemOcrChannel();
-  RegisterHdrVideoHostChannel();
-  RegisterAudioLoopbackChannel();
-  RegisterVoiceHookChannel();
-  RegisterMagpieChannel();
-  RegisterGameStreamInputChannel();
+  // my-comic：查词浮窗 / 悬浮球 / 有声书浮窗 / galgame hook / OCR / 视频捕获 /
+  // 游戏串流等非漫画原生窗口与通道不再注册，避免创建隐藏的原生入口
+  // （例如桌面查词窗 “Fushi Lookup”）。
   RegisterSystemFontListChannel(flutter_controller_->engine()->messenger());
   RegisterSystemTransparencyChannel(flutter_controller_->engine()->messenger());
 

@@ -15,14 +15,11 @@ import 'package:fushi/src/utils/adaptive/nav_bar_style.dart';
 import 'package:fushi/src/updates/host_self_update_service.dart';
 import 'package:fushi/src/updates/local_update_notifier.dart';
 import 'package:fushi/src/updates/update_check_scheduler.dart';
-import 'package:fushi/src/updates/app_update_check.dart';
 import 'package:fushi/src/updates/usage_heartbeat.dart';
 import 'package:fushi_engine/updates/update_feed_kind.dart';
 import 'package:fushi/src/updates/update_feed_service.dart';
 import 'package:fushi/src/updates/update_probes.dart';
 import 'package:fushi/src/pages/implementations/updates_center_open.dart';
-import 'package:fushi/src/feedback/feedback_reply_alerts.dart'
-    show feedbackReplyNotificationsEnabled;
 import 'package:fushi/src/feedback/feedback_reply_state.dart'
     show decodeFeedbackNotificationPayload;
 import 'package:fushi/src/pages/implementations/feedback/feedback_common.dart'
@@ -95,7 +92,6 @@ import 'package:fushi/src/reader/reader_control_layout.dart';
 import 'package:fushi/src/reader/reader_settings.dart';
 import 'package:fushi/src/lookup/browser_extension_installer.dart';
 import 'package:fushi/src/lookup/effective_lookup_size.dart';
-import 'package:fushi/src/lookup/lookup_ime_channel.dart';
 import 'package:fushi/src/lookup/lookup_ime_language.dart';
 import 'package:fushi/src/lookup/overlay_stat_source.dart';
 import 'package:fushi_engine/models/dictionary_directory.dart';
@@ -1295,9 +1291,7 @@ class AppModel with ChangeNotifier {
     // 冷启动回放都要有可跳转的 context。
     // 反馈回复提醒共用同一个通知后端：更新提醒的系统通知关着、反馈回复开着时，
     // 点击回调与冷启动回放也得挂上，否则点反馈通知拉起的 app 不会跳到那条反馈。
-    unawaited(feed.warmUpNotifier(
-      otherConsumers: feedbackReplyNotificationsEnabled(prefsRepo),
-    ));
+    unawaited(feed.warmUpNotifier());
     final UpdateCheckScheduler scheduler = UpdateCheckScheduler(
       prefs: prefsRepo,
       isKindEnabled: feed.isKindEnabled,
@@ -1325,40 +1319,24 @@ class AppModel with ChangeNotifier {
               UpdateFeedKind.mangaExtension,
               MihonMediaKind.manga,
             ),
-        UpdateFeedKind.animeExtension: () => _runMihonExtensionProbe(
-              feed,
-              UpdateFeedKind.animeExtension,
-              MihonMediaKind.anime,
-            ),
       },
       // 自动更新开着时：扩展两个域在启动这一轮无视 24 小时间隔照查——自动安装
       // 只在「刚启动、还没碰过在线源」时做，被推迟的更新要在下次启动兑现。
       dueOnStart: mihonExtensionAutoUpdate
           ? const <UpdateFeedKind>{
               UpdateFeedKind.mangaExtension,
-              UpdateFeedKind.animeExtension,
-            }
+              }
           : const <UpdateFeedKind>{},
     );
     _updateCheckScheduler = scheduler;
     scheduler.start();
-    // 安装统计心跳（iOS / 关了开关时它自己不发）：与更新检查同生命周期。
-    final UsageHeartbeat heartbeat = UsageHeartbeat.forFushi(
-      prefs: prefsRepo,
-      executableVersion: packageInfo.version,
-      channel: () => appUpdateChannelOf(this).name,
-    );
-    _usageHeartbeat = heartbeat;
-    heartbeat.start();
+    // my-comic：安装统计 heartbeat（telemetry）已移除。
   }
 
   Future<void> stopUpdateChecks() async {
     final UpdateCheckScheduler? scheduler = _updateCheckScheduler;
-    final UsageHeartbeat? heartbeat = _usageHeartbeat;
     _updateCheckScheduler = null;
-    _usageHeartbeat = null;
     await scheduler?.stop();
-    await heartbeat?.stop();
   }
 
   /// TODO-855: last prefs-version this process has reconciled its cache against.
@@ -3526,16 +3504,7 @@ class AppModel with ChangeNotifier {
       // TODO-855: prime the prefs-version watermark from the freshly loaded
       // cache (keeps refreshPrefCacheIfChanged consistent if ever reused here).
       _lastSeenPrefsVersion = prefsRepo.prefsVersion;
-      // 刻意**不加模块门**：这只是给 native 悬浮词典窗注册「查词 / 制卡」回调，
-      // 是 app 外取词**能力**而不是查词页入口。用户拍板「关 lookup 只关页面入口，
-      // 查词能力全留」，注销回调会让已开着的悬浮窗查不出词、按钮静默失败。
-      _setupFloatingDictHandlers();
-      // 把查词输入法语言同步给原生查词界面：Android 的悬浮词典 / 弹窗词典搜索框是
-      // 原生 EditText，读的是这份持久化值。放这里而不是只在设置页写——用户可能从
-      // 备份恢复、或在别的设备改了同步过来，那些路径都不经设置页。
-      unawaited(
-        LookupImeChannel.persistForNativeSurfaces(effectiveLookupImeLanguage),
-      );
+      // my-comic：悬浮词典 / 弹窗词典 / 输入法同步等查词入口已移除。
       // 已迁移只读态（Fushi 迁移 P1-4）：不再自启互联服务——两版并存时端口
       // 固定必冲突（SyncServerPortInUseException 会打到用户脸上）；老版只保
       // 留「重新导出」通道。
@@ -3558,48 +3527,7 @@ class AppModel with ChangeNotifier {
       // 模块门（sync）：这两条都是「同步与备份 + 互联」专属后台——服务器要绑端口
       // 起发现广播，监听器要挂 DB 订阅并按写入推同步。关掉 sync 模块后不再自启，
       // 代价是本机不再作为互联 host 被别的设备发现/连接，合集增删也不再自动推送。
-      if (modules.isEnabled(ModuleId.sync)) {
-        if (modules.isEnabled(ModuleId.games)) _configureGameStreamLibrary();
-        unawaited(syncServerController.startIfEnabled().then((
-          FushiServerStartOutcome outcome,
-        ) {
-          if (outcome is FushiServerPortInUse) {
-            ErrorLogService.instance.log(
-              'AppModel.startSyncServer',
-              'port ${outcome.port} in use',
-              StackTrace.current,
-            );
-          } else if (outcome is FushiServerStartError) {
-            ErrorLogService.instance.log(
-              'AppModel.startSyncServer',
-              outcome.message,
-              StackTrace.current,
-            );
-          }
-        }).catchError((Object e, StackTrace s) {
-          ErrorLogService.instance.log('AppModel.startSyncServer', e, s);
-        }));
-        // 合集变更 → 防抖轻量同步（根修「合集经常没同步」：合集维度原本只搭载在
-        // 低频全量 sweep 上，增删合集后长时间不推送）。任何合集表写入都会在防抖
-        // 后跑一轮只含合集维度的双通道同步，见 installCollectionsSyncWatcher 文档。
-        installCollectionsSyncWatcher(db: database);
-      }
-      // 刻意**不加模块门**：它是「让任意 yomitan-api 客户端查 Fushi 词典」的查词
-      // 能力（端口 19633），开关落在恒在的「设置 → 查词」分类里，且移动端同样可用
-      // （browserExtension 模块仅桌面存在）。挂 browserExtension 门会一次犯两个错：
-      // 移动端直接失去该服务，桌面端则开关显示「开」而服务不跑。
-      if (fushiApiServerEnabled) {
-        // fail-open：自启动失败绝不阻塞 init、不改开关语义，但必须留痕（BUG-911），
-        // 与邻居 startSyncServer / refreshBrowserExtensionCopy 一致记日志，避免静默吞异常。
-        unawaited(startFushiApiServer().catchError((Object e, StackTrace s) {
-          ErrorLogService.instance
-              .log('AppModel.startFushiApiServer.autostart', e, s);
-          // 端口被占：开关已被复位，用户却毫不知情——交给启动提醒弹出说明。
-          if (e is SyncServerPortInUseException) {
-            fushiApiStartupPortConflict.value = e.port;
-          }
-        }));
-      }
+      // my-comic：Fushi Server / 云同步 / 互联后台服务已移除。
       // BUG-726：桌面端启动时把 <appSupport> 下已解压的浏览器扩展副本刷新到当前内置版本
       // （只在用户装过扩展、指纹不一致时重解压；没装过不落盘）。此前该副本只在手动跑
       // 「安装扩展」助手时写入 → app 升级后磁盘副本永远停在安装当天的旧版，扩展弹窗与
@@ -3608,42 +3536,9 @@ class AppModel with ChangeNotifier {
       // 助手，模块关掉后那个页面本身也不存在。关掉后不再刷新副本，也不再算内置指纹
       // （查词响应里的 `extensionBuild` 字段随之省略——扩展模块已关，没有消费者）。
       // 平台判据走 modules（browserExtension 仅桌面），与函数内既有的桌面早退同向。
-      if (modules.isEnabled(ModuleId.browserExtension)) {
-        unawaited(
-            refreshBrowserExtensionCopy().catchError((Object e, StackTrace s) {
-          ErrorLogService.instance
-              .log('AppModel.refreshBrowserExtensionCopy', e, s);
-        }));
-      }
-      // 刻意**不加模块门**：texthooker 是「连 Textractor / mpv / agent，把收到的
-      // 文本拿去查词」的查词能力（不只 galgame），开关同样落在恒在的「设置 → 查词」
-      // 分类里，且那个开关自己就直接 start/stop 本管理器——只在启动侧加门会让
-      // 「开关是开的但重启后不连」，两处判据当场漂开。
-      if (texthookerEnabled) {
-        TexthookerWsClientManager.instance.start(texthookerUrls);
-      }
-      // TODO-861③：启动 check-due 词典自动更新（前台、静默、不弹错）。fire-and-forget，
-      // 失败自吞 + 记日志，绝不阻塞 / 中断 app init（守卫见 maybeAutoUpdateDictionaries）。
-      unawaited(
-          maybeAutoUpdateDictionaries().catchError((Object e, StackTrace s) {
-        ErrorLogService.instance
-            .log('AppModel.maybeAutoUpdateDictionaries', e, s);
-      }));
-      // 番剧下载：启动 qb 完成监听 + 自动入库（fire-and-forget；未配置 qb 时每
-      // tick 直接返回，无网络开销，绝不阻塞/中断 init）。
-      // 模块门（downloads）：番剧下载完成监听是「下载中心」专属后台（计划仓储 +
-      // 完成轮询 + 自动入库）。关掉 downloads 后不再自启，代价是已推给 qb / 内置引擎
-      // 的种子下完后不会被自动识别入库（种子本身照常下完，重开模块后下一 tick 补上）。
-      //
-      // 门只加在调用点：[startAnimeDownloadService] 函数体内部顺序敏感（懒建 session、
-      // resume 剪枝哨兵），守卫测试按源码顺序扫它，绝不能把判断插进函数中段。
-      if (modules.isEnabled(ModuleId.browse)) {
-        unawaited(
-            startAnimeDownloadService().catchError((Object e, StackTrace s) {
-          ErrorLogService.instance
-              .log('AppModel.startAnimeDownloadService', e, s);
-        }));
-      }
+      // my-comic：浏览器查词扩展已移除。
+      // my-comic：texthooker / 词典自动更新等查词后台已移除。
+      // my-comic：BT/torrent 番剧下载后台已移除。
       // 推荐包（9.5 GB zip）的包目录进场收尾：删掉「已导入」的残包、搬改名前的旧
       // 半截文件，再把下载阶段对齐磁盘。
       //
@@ -3660,12 +3555,6 @@ class AppModel with ChangeNotifier {
       // BUG-2109：同时这也是 `stage` 在新进程里唯一的对盘点。不跑它，stage 永远
       // 停在 idle，设置 → 系统里那行（判据是 `isActive`）就不渲染：下完没导入就
       // 关 app 的用户，重开后磁盘上躺着的 9.5 GB 既看不见也导不了。
-      unawaited(recommendedPackDownloadController
-          .prepareDiskState()
-          .catchError((Object e, StackTrace s) {
-        ErrorLogService.instance
-            .log('AppModel.recommendedPackPrepareDiskState', e, s);
-      }));
       notifyListeners();
     } on DataRootUnavailableException catch (e, stack) {
       // BUG-815: a custom data root IS configured but is currently unreachable

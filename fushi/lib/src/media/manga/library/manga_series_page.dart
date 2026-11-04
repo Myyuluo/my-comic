@@ -702,10 +702,7 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     } on OnlineMangaUnavailable catch (error, stack) {
       ErrorLogService.instance.log('MangaSeriesPage.sibling', error, stack);
       if (mounted) {
-        FushiToast.show(
-          msg: error.userMessage,
-          severity: ToastSeverity.error,
-        );
+        FushiToast.show(msg: error.userMessage, severity: ToastSeverity.error);
       }
       return;
     } finally {
@@ -1303,10 +1300,7 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
       if (mounted) {
         _challengeRetry = () => _openChapterAt(index);
         setState(() => _refreshError = error);
-        FushiToast.show(
-          msg: error.userMessage,
-          severity: ToastSeverity.error,
-        );
+        FushiToast.show(msg: error.userMessage, severity: ToastSeverity.error);
       }
     } on Object catch (error, stack) {
       ErrorLogService.instance.log('MangaSeriesPage.openChapter', error, stack);
@@ -1368,8 +1362,10 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
       ref: ref,
       mediaSource: MangaFushiSource.instance,
       item: launchItem,
-      launchPageBuilder: () => MangaFushiSource.instance
-          .buildChapterLaunchPage(item: launchItem, chapterIndex: chapterIndex),
+      launchPageBuilder: () => MangaFushiSource.instance.buildChapterLaunchPage(
+        item: launchItem,
+        chapterIndex: chapterIndex,
+      ),
     );
   }
 
@@ -1557,8 +1553,7 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
                   _currentChapterAnchor,
                   duration: fushiMotionDuration(context, FushiMotion.medium),
                 ),
-          onUnreadOnlyToggled: () =>
-              setState(() => _unreadOnly = !_unreadOnly),
+          onUnreadOnlyToggled: () => setState(() => _unreadOnly = !_unreadOnly),
           onChapterTap: (OnlineMangaChapter chapter) {
             final int index = _entry?.indexOfChapterKey(chapter.key) ?? -1;
             if (index >= 0) unawaited(_openChapterAt(index));
@@ -1602,8 +1597,7 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
                     unawaited(_revealChapterDownload(chapter)),
           onOcr: _bookKey == null
               ? null
-              : (OnlineMangaChapter chapter) =>
-                    unawaited(_ocrChapter(chapter)),
+              : (OnlineMangaChapter chapter) => unawaited(_ocrChapter(chapter)),
         ),
       ],
     );
@@ -1954,21 +1948,8 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
   /// 订阅（书签）与登录是图标钮。本地卷只有「OCR 设置」。
   List<Widget> _buildSecondaryActions() {
     if (_isLocal) {
-      // 进阅读器也会自动整卷识别，但那要求先打开书；这里给不打开就能识别的入口，
-      // 与在线作品的「识别全部已下载」同一层级。任务在跑 / 排队时由横幅接管（有
-      // 取消），按钮置灰不重复排。
-      final bool ocrScheduled = _ocrJob != null || _ocrQueued.isNotEmpty;
-      return <Widget>[
-        MediaDetailSecondaryButton(
-          buttonKey: const ValueKey<String>('manga_series_ocr_volume'),
-          icon: FushiIcons.ocr,
-          label: t.manga_reader_ocr_volume,
-          onPressed: _busy || ocrScheduled
-              ? null
-              : () => unawaited(_ocrLocalVolume()),
-        ),
-        _ocrSettingsButton(),
-      ];
+      // my-comic：端上 OCR 已移除，本地卷详情页不再提供识别 / OCR 设置入口。
+      return <Widget>[];
     }
     final OnlineMangaLibraryEntry? entry = _entry;
     final bool inLibrary = _row != null;
@@ -2077,27 +2058,6 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
           enabled: !_busy,
           onSelected: () => unawaited(_toggleAutoDownload()),
         ),
-      if (inLibrary) ...<MediaDetailMenuItem>[
-        MediaDetailMenuItem(
-          key: const ValueKey<String>('manga_series_auto_ocr_chip'),
-          icon: autoOcr ? FushiIcons.filled(FushiIcons.success) : FushiIcons.ocr,
-          label: t.manga_series_auto_ocr,
-          onSelected: () => unawaited(_setAutoOcr(!autoOcr)),
-        ),
-        MediaDetailMenuItem(
-          key: const ValueKey<String>('manga_series_ocr_all_downloaded'),
-          icon: FushiIcons.ocr,
-          label: t.manga_series_ocr_all_downloaded,
-          enabled: !_busy,
-          onSelected: () => unawaited(_ocrAllDownloaded()),
-        ),
-        MediaDetailMenuItem(
-          key: const ValueKey<String>('manga_series_ocr_settings'),
-          icon: FushiIcons.settings,
-          label: t.manga_ocr_settings_open,
-          onSelected: () => unawaited(_openOcrSettings()),
-        ),
-      ],
     ];
   }
 

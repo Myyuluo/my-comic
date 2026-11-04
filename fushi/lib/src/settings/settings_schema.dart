@@ -2,23 +2,13 @@ import 'package:fushi/src/utils/fushi_icons.dart';
 import 'package:fushi/i18n/strings.g.dart';
 import 'package:fushi/src/settings/settings_context.dart';
 import 'package:fushi/src/settings/settings_destination.dart';
-import 'package:fushi/src/settings/settings_schema_models.dart';
 import 'package:fushi/src/settings/settings_schema_appearance.dart';
-import 'package:fushi/src/settings/settings_schema_card_creation.dart';
 import 'package:fushi/src/settings/settings_schema_downloads.dart';
-import 'package:fushi/src/settings/settings_schema_floating_ball.dart';
-import 'package:fushi/src/settings/settings_schema_game.dart';
-import 'package:fushi/src/settings/settings_schema_lookup.dart';
 import 'package:fushi/src/settings/settings_schema_manga.dart';
 import 'package:fushi_engine/media/tracking/media_tracking_service.dart'
     show kMediaTrackingEnabled;
 import 'package:fushi/src/settings/settings_schema_tracking.dart';
-import 'package:fushi/src/settings/settings_schema_profiles.dart';
-import 'package:fushi/src/settings/settings_schema_reading.dart';
-import 'package:fushi/src/settings/settings_schema_services.dart';
-import 'package:fushi/src/settings/settings_schema_storage.dart';
 import 'package:fushi/src/settings/settings_schema_system.dart';
-import 'package:fushi/src/settings/settings_schema_video.dart';
 import 'package:fushi/src/sync/sync_settings_schema.dart';
 import 'package:fushi/utils.dart';
 
@@ -85,24 +75,17 @@ List<SettingsDestination> buildSettingsSchema(SettingsContext context) =>
 /// [_SettingsSchemaCache] 的「为什么可以缓存」；新增分类若需要读动态状态，写进 item
 /// 闭包，不要写在这里（有源码守卫 `settings_schema_cache_test.dart` 钉零参调用）。
 List<SettingsDestination> _buildDestinations() {
-  // 导航分组与此处共用固定顺序；平台/模块可见性仍在展示时求值。
+  // my-comic v1：设置只保留漫画域。非漫画分类（视频、游戏、查词、制卡、
+  // 模型/AI、在线服务、互联、阅读器 EPUB 排版、悬浮球、Profile、存储明细）
+  // 不再进入这棵树——设置主页、搜索索引与主从详情都只读取这一份列表。
+  // 保留：外观与交互（界面/导航）、漫画、下载（存储位置）、Tracking、备份、
+  // 系统与关于。
   return List<SettingsDestination>.unmodifiable(<SettingsDestination>[
     buildAppearanceDestination(),
-    buildFloatingBallDestination(),
-    buildReadingDestination(),
     buildMangaDestination(),
-    buildVideoDestination(),
-    buildGameDestination(),
-    if (kMediaTrackingEnabled) buildMediaTrackingDestination(),
-    buildLookupDestination(),
-    buildCardCreationDestination(),
-    buildModelsDestination(),
     buildDownloadsDestination(),
-    buildServicesDestination(),
-    buildProfilesDestination(),
+    if (kMediaTrackingEnabled) buildMediaTrackingDestination(),
     buildSyncBackupDestination(),
-    buildInterconnectDestination(),
-    buildStorageDestination(),
     buildSystemDestination(),
   ]);
 }

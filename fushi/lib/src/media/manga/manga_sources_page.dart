@@ -8,7 +8,6 @@ import 'package:fushi_dictionary/fushi_dictionary.dart';
 import 'package:fushi/media.dart';
 import 'package:fushi/src/media/import/quick_import_section.dart';
 import 'package:fushi/src/media/manga/manga_import_dialog.dart';
-import 'package:fushi/src/media/manga/interconnect/interconnect_manga_source_row.dart';
 import 'package:fushi/src/models/app_model.dart';
 import 'package:fushi/src/pages/implementations/media_sources_view.dart';
 import 'package:fushi/src/utils/components/fushi_floating_chrome.dart';
@@ -82,7 +81,7 @@ class _MangaSourcesPageState extends ConsumerState<MangaSourcesPage> {
         // 对话框内含文件 / 文件夹 / OCR 向导）。
         QuickImportSection(
           heroIcon: FushiIcons.manga,
-          formats: const <String>['CBZ', 'ZIP', 'PDF', 'MOKURO', 'JPG', 'PNG'],
+          formats: const <String>['CBZ', 'ZIP', 'MOKURO', 'JPG', 'PNG'],
           actions: <QuickImportAction>[
             QuickImportAction(
               icon: FushiIcons.manga,
@@ -148,20 +147,7 @@ class _MangaSourcesPageState extends ConsumerState<MangaSourcesPage> {
                   tokens.spacing.page,
                   tokens.spacing.page,
                 ),
-                children: <Widget>[
-                  _buildLocalSegment(),
-                  const SizedBox(height: 28),
-                  FushiStaggeredEntrance(
-                    index: 6,
-                    child: _sectionTitle(t.media_import_segment_sources),
-                  ),
-                  const SizedBox(height: 8),
-                  // 互联那一行不受商店合规边界约束，iOS 上照常提供。
-                  const FushiStaggeredEntrance(
-                    index: 7,
-                    child: InterconnectMangaSourceRow(),
-                  ),
-                ],
+                children: <Widget>[_buildLocalSegment()],
               ),
             ),
           ),

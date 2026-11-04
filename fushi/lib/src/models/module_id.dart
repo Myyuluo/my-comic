@@ -111,6 +111,16 @@ enum ModuleId {
   /// 纪律：任何读写模块开关的地方只用本字段，绝不用 `.name` 拼键。
   final String prefKey;
 
+  /// my-comic v1 产品范围：只保留漫画域。
+  ///
+  /// 非漫画模块（书籍/EPUB、视频、游戏、查词、复习、听书、制卡、在线服务、AI、
+  /// 同步互联）的枚举值与偏好键暂时保留，以便旧备份/旧数据解析不炸；但它们的
+  /// UI、路由、设置分类和后台自启入口在 my-comic 中一律不可见。可见性合成
+  /// （[ModuleVisibility.resolve]）直接跳过非漫画模块，任何消费点都无法再把它们
+  /// 打开。漫画在线来源与章节下载所在的「浏览」模块属于漫画域，保留。
+  bool get isInMyComicScope =>
+      this == ModuleId.manga || this == ModuleId.browse;
+
   /// 本模块在当前平台上**是否存在**（与用户意愿无关）。
   ///
   /// 平台判据只在这里写一次。此前它散在 `home_page.dart`（games 判
@@ -325,6 +335,10 @@ class ModuleVisibility {
   }) {
     final Set<ModuleId> enabled = <ModuleId>{};
     for (final ModuleId id in ModuleId.values) {
+      // my-comic 只保留漫画域：非漫画模块即使偏好里开着（旧安装升级上来）也
+      // 永远不进入可见集合。这一处是「导航 / 设置 / 快捷键 / 后台自启」所有
+      // 模块门控的唯一合成点，不在各消费点重复过滤。
+      if (!id.isInMyComicScope) continue;
       if (!id.availableOn(
         isWindows: isWindows,
         isDesktop: isDesktop,
