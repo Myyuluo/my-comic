@@ -1,0 +1,20 @@
+# Upstream
+
+my-comic is based on a source snapshot of **Fushi v3.0.0**. The snapshot is frozen: my-comic does not follow later Fushi updates (see `docs/adr/0003-freeze-upstream.md`).
+
+- Upstream project: Fushi
+- Upstream repository: <https://github.com/hajisensai/Fushi>
+- Tag: `v3.0.0`
+- Commit: `51fbb9b183829b4668fd5d69cd3a4d7349ab112b`
+- Snapshot acquired: 2026-11-04
+- Acquisition method: shallow clone (`git clone --depth 1 --branch v3.0.0`); full upstream history is not imported
+- Upstream license: GNU General Public License v3.0 — see [`LICENSE`](LICENSE)
+
+## Notes
+
+- The upstream tree is vendored as the source baseline. Only the repository metadata, `.gitignore` and agent documentation were adjusted during import; application code is unchanged.
+- Upstream `CLAUDE.md` and `AGENTS.md` are preserved under `docs/agent/` as `Fushi-CLAUDE.md` and `Fushi-AGENTS.md`.
+- Upstream `.claude/settings.json` is intentionally not placed at the repository root (it would change local agent permissions); its contents are preserved under `docs/agent/fushi-claude-config/`.
+- Upstream Git submodules referenced by `.gitmodules` (`references/ReinaManager`, `references/ShokoServer`, `references/mangayomi`) are research references and are not vendored in this snapshot.
+- The v3.0.0 tag omits `third_party/media_kit_libs_windows_video/vendored/ANGLE.7z`, but its Windows CMake requires that file and pins its MD5 (`e866f13e8d552348058afaafe869b1ed`). The archive was restored from the upstream-pinned URL `https://github.com/alexmercerind/flutter-windows-ANGLE-OpenGL-ES/releases/download/v1.0.1/ANGLE.7z` and MD5-verified before being added.
+- libtorrent prebuilt DLLs are produced locally from `native/fushi_torrent/vcpkg.json` (pinned libtorrent 2.0.11 / vcpkg baseline `aae277acf4e7de287ddb5e208b5316614de6aad7`) and are not committed, matching upstream's `prebuilt/` ignore rule.
