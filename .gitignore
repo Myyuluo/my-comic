@@ -1,0 +1,11 @@
+# Private backups — never commit
+*.tachibk
+*.fushi.zip
+app.mihon_*.tachibk
+
+# Flutter / Dart build outputs
+build/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+*.log
