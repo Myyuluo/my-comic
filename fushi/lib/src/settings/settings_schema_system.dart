@@ -18,6 +18,7 @@ import 'package:fushi/src/pages/implementations/updates_center_open.dart'
 import 'package:fushi/src/onboarding/recommended_pack_discard.dart';
 import 'package:fushi/src/onboarding/recommended_pack_download_row.dart';
 import 'package:fushi/src/onboarding/recommended_pack_import.dart';
+import 'package:fushi/src/backup_import/mihon_backup_import_flow.dart';
 import 'package:fushi/src/settings/settings_actions.dart';
 import 'package:fushi/src/settings/settings_context.dart';
 import 'package:fushi/src/settings/settings_destination.dart';
@@ -239,6 +240,27 @@ SettingsDestination buildSystemDestination() {
                 mode: LaunchMode.externalApplication,
               );
             },
+          ),
+        ],
+      ),
+      // my-comic：Mihon v0.21.3 `.tachibk` Import。Fushi 自己的
+      // `.fushi.zip` 同步与备份链路随非漫画域一起移除，这里只保留把已有
+      // Mihon Library 带过来的最小入口；文件只在本机解析与落库，不上传。
+      SettingsSection(
+        id: 'system.section.backup',
+        presentation: SettingsSectionPresentation.alwaysExpanded,
+        title: t.backup_import_mihon_section,
+        items: <SettingsItem>[
+          SettingsActionItem(
+            id: 'system.import_mihon_backup',
+            title: t.backup_import_mihon_title,
+            subtitle: t.backup_import_mihon_subtitle,
+            icon: FushiIcons.restoreBackup,
+            cli: const SettingsCliAction.unsupported(
+              'The backup file is chosen from the app window: '
+              'Settings → System → Backup → Import Mihon backup.',
+            ),
+            onTap: runMihonBackupImport,
           ),
         ],
       ),

@@ -1061,6 +1061,55 @@ mixin _FushiDbContentMisc
     );
   }
 
+  /// Backup Import 专用：以**备份里的时刻**写入一条章状态，并与本机既有状态
+  /// 做并集合并。
+  ///
+  /// 与 [saveMangaChapterState] 的差别全部来自「导入是重放一个历史快照，不是
+  /// 现在读了一章」：
+  /// - `updatedAt` 用备份推导出的时刻（history.lastRead / chapter.dateFetch），
+  ///   不是 now——否则整库导入会把每一章都标成「刚刚读过」，「继续阅读」和
+  ///   「最近阅读」排序全军覆没；
+  /// - 已读标记只增不减（既有 readAt 优先），页码取两边较大值，页数/偏移沿用
+  ///   已知值；导入绝不把本机更靠后的进度往回退。
+  Future<void> importMangaChapterState({
+    required String bookUid,
+    required String chapterKey,
+    required int lastPage,
+    int lastFraction = -1,
+    int? pageCount,
+    int? readAt,
+    required int updatedAt,
+  }) async {
+    if (bookUid.isEmpty || chapterKey.isEmpty) return;
+    final MangaChapterStateRow? existing = await getMangaChapterState(
+      bookUid: bookUid,
+      chapterKey: chapterKey,
+    );
+    final int mergedLastPage =
+        existing != null && existing.lastPage > lastPage
+            ? existing.lastPage
+            : lastPage;
+    final int mergedLastFraction =
+        existing != null && existing.lastFraction > lastFraction
+            ? existing.lastFraction
+            : lastFraction;
+    final int mergedUpdatedAt =
+        existing != null && existing.updatedAt > updatedAt
+            ? existing.updatedAt
+            : updatedAt;
+    await into(mangaChapterStates).insertOnConflictUpdate(
+      MangaChapterStatesCompanion.insert(
+        bookUid: bookUid,
+        chapterKey: chapterKey,
+        lastPage: Value<int>(mergedLastPage),
+        lastFraction: Value<int>(mergedLastFraction),
+        pageCount: Value<int?>(existing?.pageCount ?? pageCount),
+        readAt: Value<int?>(existing?.readAt ?? readAt),
+        updatedAt: mergedUpdatedAt,
+      ),
+    );
+  }
+
   /// 显式把一章标回未读（作品页的「标为未读」动作）。
   Future<void> clearMangaChapterRead({
     required String bookUid,
