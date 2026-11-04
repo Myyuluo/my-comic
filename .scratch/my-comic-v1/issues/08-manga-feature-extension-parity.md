@@ -2,7 +2,7 @@
 
 **What to build:** 验收 my-comic 的漫画功能与 Extension 行为：用 Keiyoushi 和真实 Extension 走通安装/搜索/阅读/下载，逐项核对 Library、Category、Source、Reader、Download、History、Update、Tracking、Local source。
 
-**Blocked by:** 04: 删除非漫画原生库并测量体积；05: 全新漫画-only DB schema；06: Backup Import：最小端到端；07: Backup Import：完整字段；11: Contract：删除残留非漫画 Dart 代码与旧表声明
+**Blocked by:** 04: 删除非漫画原生库并测量体积；05: 全新漫画-only DB schema；06: Backup Import：最小端到端；07: Backup Import：完整字段；11: Contract：删除残留非漫画 Dart 代码与旧表声明；16: 恢复 Fushi v3.0.0 原版 UI shell/设计
 
 **Status:** ready-for-agent
 

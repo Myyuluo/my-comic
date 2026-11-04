@@ -98,10 +98,12 @@ my-comic 是一个 Windows 桌面漫画阅读器，以 Fushi v3.0.0 的代码快
 55. 作为用户，我希望应用不内置、不托管任何 Extension store 或 Extension，以便自行选择来源。
 56. 作为用户，我希望 my-comic 在 Extension、Backup、Manga 功能和数据映射四个轴上与 Mihon 兼容，以便知道能期待什么。
 57. 作为用户，我希望源码以 GPL-3.0 公开并可修改，以便审计和二次开发。
+58. 作为用户，我希望 my-comic 的 UI 与 Fushi v3.0.0 使用同一套设计和审美，以便获得我选择这个项目时的视觉体验；任何 UI 改动都要先得到我的允许。
 
 ## Implementation Decisions
 
 - **代码基座**：使用 Fushi v3.0.0 的源码快照，保留 Flutter UI 和 JVM sidecar 扩展运行时；不跟随上游更新（ADR-0001、ADR-0003）。
+- **UI fidelity（硬约束）**：保留 Fushi v3.0.0 的原版 shell、组件、主题、布局和视觉语言；只隐藏/移除非漫画入口，不得用自定义 shell 或重设计替换；任何 UI 改动必须先获得用户明确许可（ADR-0008）。
 - **产品范围**：只保留漫画域。删除 EPUB/小说、视频/Aniyomi、有声书、词典/查词、Anki/SRS、galgame、AI/OCR、BT/发现、云同步/Interconnect、Fushi Server，以及阅读器内嵌的查词/Anki/统计入口（ADR-0002）。
 - **数据库**：使用全新 schema，不迁移 Fushi 旧数据；只维护 my-comic 自己的迁移链（ADR-0002）。
 - **领域模型**：Library、Manga、Chapter、Page、Category、Reading progress、History、Download、Tracking、Extension、Extension store、Source、Local source。术语以 `GLOSSARY.md` 为准。
@@ -127,7 +129,7 @@ my-comic 是一个 Windows 桌面漫画阅读器，以 Fushi v3.0.0 的代码快
 - **主 seam**：Sidecar HTTP API（Flutter ↔ JVM sidecar）。覆盖 Extension 安装/运行和 Backup Import 两个核心风险；这是 Fushi 已有的 seam，不新增。
 - **被测模块**：sidecar 的 Backup Import 解析与报告、Extension runtime adapter、Import 去重与缺失 Source/Tracker 处理。
 - **测试数据**：真实 Mihon v0.21.3 `.tachibk`（脱敏后用于本地测试，不入库）、Keiyoushi `index.pb`、一个真实 Extension JAR。仓库内使用脱敏/合成 fixture。
-- **UI 验收**：Library、Browse/Sources、Reader、Settings/Backup Import 用人工验收清单；v1 不新增 Flutter widget/integration seam。
+- **UI 验收**：Library、Browse/Sources、Reader、Settings/Backup Import 用人工验收清单；v1 不新增 Flutter widget/integration seam。任何 UI 改动必须与 Fushi v3.0.0 截图/组件对照，并在用户明确批准后才合并；ticket 11 的 `home_shell.dart` 替换是反例，恢复见 ticket 16。
 - **发布冒烟**：启动 Windows exe → 添加 Keiyoushi → 安装一个 Extension → 搜索/阅读 → 导入 Backup；作为发布门，不是常驻测试。
 - **Prior art**：Fushi 现有 Dart widget/integration 测试与 sidecar 测试；Mihon v0.21.3 的 backup model/restore 行为作为语义参照。
 - **必须失败的场景**：Import 丢失 Library/Category/Reading progress；缺失 Source 中止 Import；缺失 Tracker 中止 Import；Extension 安装/运行相对 Fushi v3.0.0 回归。
@@ -150,6 +152,6 @@ my-comic 是一个 Windows 桌面漫画阅读器，以 Fushi v3.0.0 的代码快
 
 - 真实 `.tachibk` 位于项目目录，只用于本地测试；必须加入 `.gitignore`，不读取进上下文、不提交、不上传。
 - 兼容目标：Mihon v0.21.3、extension-lib 1.6、Keiyoushi `index.pb`。
-- 参考文档：`GLOSSARY.md`、`docs/adr/0001`–`0006`、`docs/agents/domain.md`。
+- 参考文档：`GLOSSARY.md`、`docs/adr/0001`–`0008`、`docs/agents/domain.md`。
 - 实现前先完成 M0：在 Windows 上从源码构建并运行 Fushi v3.0.0，记录基线体积；未完成 M0 不开始删除模块。
 - GPL 合规：发布二进制时同时提供对应源码；保留 Fushi 和第三方 notices。
