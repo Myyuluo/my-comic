@@ -188,58 +188,40 @@ void main() {
     );
   });
 
-  // ── 查词/制卡接线 ────────────────────────────────────────────────────
+  // ── 阅读器只保留漫画阅读控件（ADR-0002）─────────────────────────────
 
-  test('漫画页接在共享查词链路上（BaseSourcePage + buildDictionary + 弹窗入口）', () {
+  test('漫画页不再挂查词弹窗 / 选词 / Anki 制卡入口', () {
     final String src = read('lib/src/media/manga/reader/manga_fushi_page.dart');
     expect(
       src.contains('class MangaFushiPage extends BaseSourcePage'),
       isTrue,
-      reason: '漫画页必须是 BaseSourcePage 才能复用查词弹窗链路',
+      reason: '漫画页仍需 BaseSourcePage 提供阅读页生命周期与进度落库',
     );
-    expect(src.contains('BaseSourcePageState<MangaFushiPage>'), isTrue);
-    expect(
-      src.contains('buildDictionary()'),
-      isTrue,
-      reason: '弹窗层必须在 widget 树里，否则查词结果不渲染',
-    );
-    expect(src.contains('searchDictionaryResult('), isTrue);
-    expect(
-      src.contains('setCurrentSentence('),
-      isTrue,
-      reason: '整句必须经 setCurrentSentence 送出，制卡/收藏才拿得到句子',
-    );
+    for (final String removed in <String>[
+      'buildDictionary()',
+      'searchDictionaryResult(',
+      'setCurrentSentence(',
+      'onMineFromPopup',
+      'AnkiMiningContext(',
+      'mineEntry(',
+      '_registerSelectionHandlers',
+    ]) {
+      expect(src.contains(removed), isFalse, reason: '不得再出现 $removed');
+    }
   });
 
-  test('制卡走 onMineFromPopup + AnkiMiningContext，卡图=当前页图文件路径', () {
+  test('漫画页不再启用 OCR 控件或自动识别', () {
     final String src = read('lib/src/media/manga/reader/manga_fushi_page.dart');
-    expect(src.contains('onMineFromPopup'), isTrue, reason: '制卡入口');
-    expect(src.contains('AnkiMiningContext('), isTrue);
-    expect(
-      src.contains('coverPath'),
-      isTrue,
-      reason: '卡图经 coverPath 传**文件路径**（页图本就在盘上）',
-    );
-    expect(src.contains('AnkiMiningSource.book'), isTrue);
-    expect(src.contains('mineEntry('), isTrue);
-    expect(
-      src.contains('_updateCurrentPageImagePath'),
-      isTrue,
-      reason: '卡图路径必须在加载/翻页/滚动/切模式全路径更新，否则封面恒 null',
-    );
-  });
-
-  test('卡图更新在全部推进路径被调用（加载/翻页/滚动/切模式）', () {
-    final String src = read('lib/src/media/manga/reader/manga_fushi_page.dart');
-    // 至少 4 处调用点：_loadInitialWindow、_onMangaTurn（窗口内分支）、
-    // _onMangaScroll（spread 变化）、_toggleReadingMode。
-    final int calls = '_updateCurrentPageImagePath()'.allMatches(src).length;
-    expect(
-      calls >= 4,
-      isTrue,
-      reason:
-          '卡图更新调用点不足（$calls < 4）——旧分支修过的坑：'
-          '漏路径会让制卡封面在该路径后恒为旧页/null',
-    );
+    for (final String removed in <String>[
+      'manga_ocr_boxes_toggle',
+      '_toggleOcrBoxes',
+      '_maybeStartVolumeOcr',
+      '_maybeStartStreamingOcr',
+      '_buildOcrProgressBadge',
+      '_showManualVolumeOcrAction',
+      '_showRerunVolumeOcrAction',
+    ]) {
+      expect(src.contains(removed), isFalse, reason: '不得再出现 $removed');
+    }
   });
 }

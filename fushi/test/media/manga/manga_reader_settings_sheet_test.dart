@@ -260,8 +260,8 @@ void main() {
     final Set<String> seen = <String>{};
     final List<MangaReaderPreferenceDescriptor> all =
         mangaReaderPreferenceDescriptors(const <String>{});
-    for (int tab = 0; tab < 4; tab++) {
-      // 窄于四段最小宽度时页签栏整排横滑（不压扁文字）：像用户一样先把
+    for (int tab = 0; tab < 3; tab++) {
+      // 窄于三段最小宽度时页签栏整排横滑（不压扁文字）：像用户一样先把
       // 页签滑进视口再点，且它必须真能被点中。
       await tester.ensureVisible(tabLabel(tab));
       await tester.pumpAndSettle();

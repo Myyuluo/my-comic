@@ -346,7 +346,7 @@ void main() {
       expect(start, isNonNegative);
       final String body = page.substring(
         start,
-        page.indexOf("'ocr_boxes': ReaderHeaderAction(", start),
+        page.indexOf("'chapters': ReaderHeaderAction(", start),
       );
       String iconOf(String key) {
         final int at = body.indexOf("ValueKey<String>('$key')");

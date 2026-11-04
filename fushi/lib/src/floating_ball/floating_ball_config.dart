@@ -165,13 +165,11 @@ const List<String> kVideoFloatingBallButtons = <String>[
   'screenshot',
 ];
 
-/// 漫画页专属按钮 id。整卷 OCR / 重跑 / 章节目录只在满足条件时由页面提供。
+/// 漫画页专属按钮 id。只保留漫画阅读动作：上一页 / 下一页 / 章节目录。
+/// 查词与 OCR 入口已按 ADR-0002 从漫画阅读器移除。
 const List<String> kMangaFloatingBallButtons = <String>[
   'previous',
   'next',
-  'ocr_boxes',
-  'ocr_volume',
-  'ocr_rerun',
   'chapters',
 ];
 
@@ -261,6 +259,15 @@ enum FloatingBallGlobalAction {
     required bool isDesktop,
     required bool lookupModuleEnabled,
   }) {
+    // 漫画阅读器没有查词入口（ADR-0002）：全局查词类按钮也一律不出现在漫画球上。
+    if (scope == FloatingBallScope.manga &&
+        (this == FloatingBallGlobalAction.lookup ||
+            this == FloatingBallGlobalAction.popupLookup ||
+            this == FloatingBallGlobalAction.clipboard ||
+            this == FloatingBallGlobalAction.screenOcr ||
+            this == FloatingBallGlobalAction.cameraOcr)) {
+      return false;
+    }
     if (scope == FloatingBallScope.system &&
         this == FloatingBallGlobalAction.feedback) {
       return false;
