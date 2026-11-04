@@ -68,3 +68,4 @@ No installer was produced by `flutter build`; Inno Setup is not installed on thi
 - `flutter pub get` was run against the configured pub mirror; the upstream lock was restored after the build so the committed snapshot is unmodified apart from the imported sources and documented additions.
 - Native prerequisites that upstream CI obtains from its artifact store were produced locally: libtorrent DLLs via vcpkg, WebView2 SDK via NuGet, and the ANGLE archive from its pinned URL.
 - The JVM sidecar runtime (`mihon_bridge`) is not installed by `flutter build windows`; it is built by a separate upstream step and was out of scope for this baseline.
+- Build cache: `native/fushi_torrent/prebuilt/windows-x64/` is preserved outside the repo at `E:\tmp\mycomic-build-cache\fushi_torrent-prebuilt\` (`prebuilt/` is ignored by `native/fushi_torrent/.gitignore`).
