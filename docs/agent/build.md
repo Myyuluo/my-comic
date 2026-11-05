@@ -34,6 +34,22 @@ bundle 布局：`build/linux/x64/<mode>/bundle/{fushi, lib/, data/, mihon_bridge
 
 本机没有 Linux：用 Docker Desktop（`debian:trixie` + 拷进 `/opt/flutter` 的 3.47.6 SDK）构建；源码以 `git ls-files -co --exclude-standard` 打包进 docker 卷再编，别直接 bind mount 工作区（`.dart_tool/package_config.json` 会被写成 Linux 路径）。跑 app / 集成测试用 `Xvfb :99` + `dbus-run-session`；容器里没有 user namespace，WebView 相关测试要设 `WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1`（**只限容器测试**）。
 
+## Windows 桌面（本地构建/运行）
+
+`flutter build windows` **不会**产出 `mihon_bridge`；Fushi 的 Windows CI 是在构建后单独把 runtime 复制进 Release。本地等价入口是仓库根目录的 `启动MyComic.bat`（或直接运行 `script/build_and_run.ps1`）：
+
+- 按 `fushi/.fvmrc` 定位 Flutter（候选顺序沿用 `tool/bootstrap.ps1`；本脚本额外允许 `FUSHI_FLUTTER` 指向 SDK 目录）。
+- 用 HEAD 与 `fushi/build/.last_built_commit` 比较；未变化且 exe 存在时跳过构建，否则执行 `flutter pub get` + `flutter build windows --release`。
+- 目标构建的 `fushi.exe` 正在运行时中止并提示，不强制杀进程。`-NoLaunch` 只构建/打包不启动；`-SkipBuild` 跳过构建（验证/运维用）。
+- Windows 构建需要 `nuget.exe`（WebView2/WIL 依赖）。脚本按 `-NuGetPath` / `MYCOMIC_NUGET` / `.dart_tool/nuget/nuget.exe` / 常见安装目录 / PATH 查找；找不到时在构建前明确报错，而不是让 CMake 生成 `NUGET-NOTFOUND`。
+- 本机 pub 镜像与 upstream `pubspec.lock` 的 URL 可能不匹配；plain `pub get` 会升级到不兼容版本（image / dio / dartssh2），让 `flutter build` 失败。脚本在 `.dart_tool/my-comic/pubspec.lock` 保留一份本地已知可用 lock：构建时先用它执行 `pub get --enforce-lockfile`，无论成败都恢复工作区 lock，随后用 `--no-pub` 构建；只有本地 lock 缺失或不再满足 pubspec 时才重新解析，并在构建成功后更新本地 lock。
+- `fushi/lib/i18n/strings.g.dart` 是 gitignored 的生成文件（Slang）。脚本在它缺失、或任一 `*.i18n.json` 比它新时执行 `dart run slang` + `dart format lib/i18n/strings.g.dart`。
+- runtime 缓存放在 `.dart_tool/mihon_bridge`（已忽略）。缓存缺失时，优先从 `-RuntimeSource` / `MYCOMIC_MIHON_RUNTIME_SOURCE` 指定的现有 runtime 复制，否则调用 `tool/mihon/build_desktop_runtime.ps1`（与 CI 同一命令）。显式指定但无效的 `-RuntimeSource` 会直接失败，不会静默改走源码构建。
+- 缓存原样复制到 `fushi/build/windows/x64/runner/Release/mihon_bridge`，并同时核对 `checksums.json` 与固定的官方 Fushi v3.0.0 JAR SHA256（`648886ca…e4df`）；本地不跑 `verify_desktop_runtime.ps1`（它依赖 PowerShell 7），CI 的 verify 不变。
+- app 只启动 exe 同级的随包副本，缺失时以 `RUNTIME_MISSING` 失败（ADR-0009）。
+
+首次在没有缓存、也没有官方 Fushi runtime 的机器上，先运行一次上述脚本的源码构建分支，或用 `-RuntimeSource <官方 Fushi 的 mihon_bridge 目录>` 播种缓存。扩展验收可以用 `FUSHI_TEST_MIHON_RESOURCES=<runtime 目录> FUSHI_TEST_MIHON_APK=<扩展 APK> FUSHI_TEST_MIHON_STORE_E2E=1 flutter test --no-pub test/media/manga/mihon_real_extension_e2e_test.dart`；未设置 `FUSHI_TEST_MIHON_STORE_E2E=1` 时，联网的 store 索引用例会跳过。
+
 ## Melos
 
 仓库根是 Melos workspace（`fushi_workspace`）。常用：`melos run analyze` / `melos run test` / `melos run build:android`。
