@@ -114,9 +114,8 @@ class MediaSourcesViewState extends ConsumerState<MediaSourcesView>
   /// Fushi 互联不是 `media_sources` 扫描根，但它确实是**本机之外的同一批本地
   /// 文件**（局域网里另一台自己的设备），所以与扫描根同列。
   ///
-  /// 🔴 别再往这里加「网站」型来源（BUG-1431）：mokuro.moe 曾挂在这一节，用户口径
-  /// 是它不该跟扫描根混在一起。在线漫画源统一归 `MangaSourcesPage` 的「漫画源」
-  /// 一节（`MokuroMoeSourceRow`），与扩展提供的源同级。
+  /// 🔴 别再往这里加「网站」型来源（BUG-1431）：用户口径是网站型在线源不该跟
+  /// 扫描根混在一起。在线漫画源统一归「浏览 › 在线源」，与扩展提供的源同级。
   bool? _interconnectEnabled;
 
   /// 每个来源 id → 当前**累计拥有**的媒体条目数（TODO-1036）。

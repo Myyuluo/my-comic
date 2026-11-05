@@ -231,7 +231,7 @@ void main() {
   );
 
   test(
-    'catalog endpoint is separate from OCR and data root belongs to storage',
+    'catalog endpoint removed, cover cache stays',
     () {
       final SettingsDestination manga = buildMangaDestination();
       expect(
@@ -239,14 +239,14 @@ void main() {
           manga,
           'manga.section.catalog',
         ).items.map((SettingsItem i) => i.id),
-        contains('manga.online_catalog_base_url'),
+        isNot(contains('manga.online_catalog_base_url')),
       );
       expect(
         _section(
           manga,
-          'manga.section.ocr',
+          'manga.section.catalog',
         ).items.map((SettingsItem i) => i.id),
-        isNot(contains('manga.online_catalog_base_url')),
+        contains('manga.cover_cache_max_age'),
       );
       expect(
         _item(buildStorageDestination(), 'sync.data_storage_location'),

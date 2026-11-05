@@ -1,4 +1,4 @@
-// 漫画章节 / mokuro 卷下载队列（v103）：在线漫画「先下载再读」的持久化任务表，
+// 漫画章节下载队列（v103）：在线漫画「先下载再读」的持久化任务表，
 // 单 worker 串行取任务。表语义见 tables.dart 的 MangaDownloadJobs。
 part of 'database.dart';
 
@@ -112,8 +112,12 @@ mixin _FushiDbMangaDownload on _$FushiDatabase {
   Future<int> deleteMangaDownloadJob(String jobId) =>
       (delete(mangaDownloadJobs)..where((t) => t.jobId.equals(jobId))).go();
 
-  /// 删一本书的全部任务行（删书 / 移出书架时随 `deleteEpubBook` 级联；mokuro 卷
-  /// 的 `book_key` 是 `mokuro:<系列>`，不与任何书行同键，天然不受影响）。
+  /// 删除某种任务类型的全部任务行。启动时用来清理已移除功能的旧任务。
+  Future<int> deleteMangaDownloadJobsOfKind(String kind) =>
+      (delete(mangaDownloadJobs)..where((t) => t.kind.equals(kind))).go();
+
+  /// 删一本书的全部任务行（删书 / 移出书架时随 `deleteEpubBook` 级联；旧 mokuro
+  /// 卷的 `book_key` 不与任何书行同键，且启动时会被清理）。
   Future<int> deleteMangaDownloadJobsForBook(String bookKey) =>
       (delete(mangaDownloadJobs)..where((t) => t.bookKey.equals(bookKey))).go();
 

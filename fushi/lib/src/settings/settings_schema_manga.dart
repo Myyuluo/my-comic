@@ -49,7 +49,7 @@ SettingsDestination buildMangaDestination() {
       _mangaDisplaySection(),
       _mangaSpreadPanelsSection(),
       // my-comic：端上 OCR / AI 识别与 Anki 制卡属于已移除域，不再提供设置入口。
-      buildMangaCatalogSection(),
+      buildMangaCoverCacheSection(),
     ],
   );
 }

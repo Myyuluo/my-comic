@@ -69,7 +69,6 @@ void main() {
       'lib/src/media/online/online_source_browse_page.dart',
       'lib/src/media/manga/discovery/manga_discovery_page.dart',
       'lib/src/media/manga/interconnect/interconnect_manga_browse_page.dart',
-      'lib/src/media/manga/online/mokuro_moe_catalog_view.dart',
       // 2026-10 漫画阅读器重做：「全部页面」缩略图网格。
       'lib/src/media/manga/reader/manga_reader_page_grid.dart',
       // 合集详情（视频剧集列表 / 书与游戏成员网格）与首页仪表盘分区 + 横滚行。

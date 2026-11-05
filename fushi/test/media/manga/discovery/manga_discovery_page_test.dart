@@ -153,7 +153,6 @@ void main() {
   testWidgets('头部有来源筛选下拉 + 搜索框，页首是「浏览来源」快捷条', (WidgetTester tester) async {
     await tester.pumpWidget(wrap(MangaDiscoveryPage(
       catalogOverride: const MangaSourceCatalog(
-        mokuroEnabled: true,
         mihonSources: <MangaOnlineSourceRow>[_mihonSource],
       ),
       sourceFeedsOverride: <MangaDiscoverySourceFeed>[
@@ -181,10 +180,6 @@ void main() {
     );
     final Finder browse = find.text(t.manga_discovery_sources_browse);
     expect(browse, findsOneWidget);
-    expect(
-      find.byKey(const ValueKey<String>('manga-source-mokuro')),
-      findsOneWidget,
-    );
     expect(
       find.byKey(const ValueKey<String>('manga-mihon-mihon:pkg:1')),
       findsOneWidget,
@@ -236,7 +231,6 @@ void main() {
 
     await tester.pumpWidget(wrap(MangaDiscoveryPage(
       catalogOverride: const MangaSourceCatalog(
-        mokuroEnabled: true,
         mihonSources: <MangaOnlineSourceRow>[_mihonSource],
       ),
       sourceFeedsOverride: <MangaDiscoverySourceFeed>[
@@ -262,11 +256,6 @@ void main() {
 
     expect(find.byType(MangaDiscoverySourceRow), findsNothing);
     expect(find.byType(MangaDiscoverySourceGrid), findsOneWidget);
-    expect(
-      find.byKey(const ValueKey<String>('manga-source-mokuro')),
-      findsNothing,
-      reason: '没选中的来源磁贴跟着收起',
-    );
     expect(
       find.byKey(const ValueKey<String>('manga-mihon-mihon:pkg:1')),
       findsOneWidget,

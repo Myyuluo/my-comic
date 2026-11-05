@@ -3156,7 +3156,7 @@ abstract final class MangaDownloadJobKind {
   /// 在线来源（Mihon / Aidoku / 互联）的单章。
   static const String chapter = 'chapter';
 
-  /// mokuro.moe 整卷（替代原内存队列 `MokuroMoeDownloadQueue`）。
+  /// 旧 mokuro.moe 整卷任务（功能已移除；保留值域供旧库 CHECK 兼容，启动时清理）。
   static const String mokuroVolume = 'mokuro_volume';
 }
 
@@ -3169,12 +3169,12 @@ abstract final class MangaDownloadJobStatus {
   static const String cancelled = 'cancelled';
 }
 
-/// 漫画章节 / mokuro 卷的下载任务队列（schema v103，device-local）。
+/// 漫画章节的下载任务队列（schema v103，device-local）。
 ///
 /// 设计稿 `docs/specs/2026-09-12-manga-download-first-design.md` §2.2。
-/// 在线漫画改成「先下载再读」后，每个待下载的章（或 mokuro.moe 卷）在这里占
-/// 一行；单 worker 按 `(status, created_at)` 串行取任务，进程死亡后 `running`
-/// 行由 `resetRunningMangaDownloadJobs` 复位回 `queued` 续跑。
+/// 在线漫画改成「先下载再读」后，每个待下载的章在这里占一行；单 worker 按
+/// `(status, created_at)` 串行取任务，进程死亡后 `running` 行由
+/// `resetRunningMangaDownloadJobs` 复位回 `queued` 续跑。
 ///
 /// **不复用 `video_download_jobs`**：那张表的 CHECK 强制 magnet / backend /
 /// fingerprint 非空、stage 限 torrent 六段，塞章节任务要造假值。
@@ -3192,13 +3192,13 @@ class MangaDownloadJobs extends Table {
   /// 取 [MangaDownloadJobKind]。
   TextColumn get kind => text()();
 
-  /// 在线条目 bookKey；mokuro 卷为 `mokuro:<seriesName>`。
+  /// 在线条目 bookKey；旧 mokuro 卷为 `mokuro:<seriesName>`（遗留值，启动时清理）。
   TextColumn get bookKey => text()();
 
-  /// 章 key；mokuro 卷为卷名。
+  /// 章 key；旧 mokuro 卷为卷名（遗留值）。
   TextColumn get chapterKey => text()();
 
-  /// `mihon` / `aidoku` / `interconnect` / `mokuro_moe`。
+  /// `mihon` / `aidoku` / `interconnect`；旧 mokuro 卷的 `mokuro_moe` 是遗留值。
   TextColumn get runtime => text()();
 
   /// 展示用作品名 / 章名。落快照而不是 join 回源表：源条目可能已被移出书架。
@@ -3212,7 +3212,7 @@ class MangaDownloadJobs extends Table {
   IntColumn get pagesDone => integer().withDefault(const Constant(0))();
   IntColumn get pagesTotal => integer().withDefault(const Constant(0))();
 
-  /// 自动重试次数（退避 2s/8s/20s，与 mokuro 队列既有语义一致）。
+  /// 自动重试次数（退避 2s/8s/20s）。
   IntColumn get attemptCount => integer().withDefault(const Constant(0))();
   TextColumn get lastError => text().nullable()();
 

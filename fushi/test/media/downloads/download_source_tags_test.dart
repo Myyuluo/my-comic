@@ -4,8 +4,6 @@ import 'package:fushi/i18n/strings.g.dart';
 import 'package:fushi/src/media/downloads/download_source_method.dart';
 import 'package:fushi/src/media/downloads/download_task_card.dart';
 import 'package:fushi/src/media/downloads/manga_download_tasks_section.dart';
-import 'package:fushi/src/media/manga/download/manga_download_service.dart'
-    show kMokuroMoeDownloadRuntime;
 import 'package:fushi/src/models/preference_keys.dart';
 import 'package:fushi/src/pages/implementations/download_notice.dart';
 import 'package:fushi/src/profile/profile_keys.dart';
@@ -44,10 +42,6 @@ void main() {
       ));
       expect(mangaDownloadSourceOf('aidoku'), (
         method: DownloadTransferMethod.extension,
-        external: true,
-      ));
-      expect(mangaDownloadSourceOf(kMokuroMoeDownloadRuntime), (
-        method: DownloadTransferMethod.direct,
         external: true,
       ));
       // 互联对端是用户自己的设备：HTTP 拉取，不算外部来源。

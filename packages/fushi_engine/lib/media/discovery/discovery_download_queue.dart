@@ -1,7 +1,7 @@
 /// 发现页 HTTP 直链下载队列：app 生命周期常驻（组装点懒建），发现页负责
 /// enqueue，关闭页面**不**中断下载（统一下载中心语义，与 torrent 任务同级）。
 ///
-/// 执行模型与重试语义照搬 `MokuroMoeDownloadQueue`（顺序一次一个任务；单任务
+/// 执行模型与重试语义沿用旧的顺序单任务队列（顺序一次一个任务；单任务
 /// 失败/取消只标记该任务、继续下一个；自动重试**就地复活**同一任务对象、退避
 /// 期间不占执行位；手动重试清零自动重试预算）。字节层复用 `ResumableDownloader`
 /// （`.part` 续传 + Range + 原子 promote），失败/取消保留 `.part`，重试即续传。
@@ -26,7 +26,7 @@ import 'package:fushi_engine/utils/net/app_http.dart';
 import 'package:meta/meta.dart';
 import 'package:fushi_engine/foundation/engine_notifier.dart';
 
-/// 自动重试退避梯度；长度即最大自动重试次数（语义同 `kMokuroMoeRetryBackoff`）。
+/// 自动重试退避梯度；长度即最大自动重试次数。
 const List<Duration> kDiscoveryDownloadRetryBackoff = <Duration>[
   Duration(seconds: 2),
   Duration(seconds: 8),

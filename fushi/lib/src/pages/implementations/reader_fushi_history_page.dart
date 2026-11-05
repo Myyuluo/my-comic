@@ -561,12 +561,6 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
     _collectionTablesSub = appModelNoUpdate.database
         .watchCollectionTablesChanged()
         .listen(_onCollectionTablesChanged);
-    // 统一下载中心：mokuro.moe 卷经漫画下载服务后台落库（可能在「在线目录」
-    // 页关闭后才完成）。监听 mokuroImportedCount 增量失效书架 provider，取代旧的
-    // 「对话框关闭回传导入数」信号（该信号已随对话框改队列化而移除）。
-    _mokuroImported = ref.read(appProvider).mangaDownloadService.mokuroImportedCount;
-    _mokuroImportedSeen = _mokuroImported!.value;
-    _mokuroImported!.addListener(_onMokuroImportedChanged);
     // BUG-992：顶层 tab IndexedStack 保活（BUG-750）后，切回书架不再隐式重拉远端书 →
     // 远端占位卡 + 书库概览总数要等用户手动下拉刷新才补齐。监听全局 tab 信号，切回
     // 书架 tab 时自动重拉一次远端（缓存 _lastRemoteState 顶住 waiting、不闪屏）。
@@ -652,20 +646,6 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
     });
   }
 
-  /// mokuro.moe 卷新建书行的计数（`MangaDownloadService.mokuroImportedCount`，
-  /// app 级；initState 挂监听、dispose 摘除）。
-  ValueNotifier<int>? _mokuroImported;
-  int _mokuroImportedSeen = 0;
-
-  void _onMokuroImportedChanged() {
-    if (!mounted) return;
-    final int imported = _mokuroImported?.value ?? 0;
-    if (imported == _mokuroImportedSeen) return;
-    _mokuroImportedSeen = imported;
-    ref.invalidate(fushiBooksProvider(JapaneseLanguage.instance));
-    ref.invalidate(srtBooksProvider);
-  }
-
   @override
   void dispose() {
     _memberInfoRevision.dispose();
@@ -675,7 +655,6 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
     mediaType.tabRefreshNotifier.removeListener(_reloadShelfMapsOnTabRefresh);
     _collectionTablesSub?.cancel();
     _collectionsReloadDebounce?.cancel();
-    _mokuroImported?.removeListener(_onMokuroImportedChanged);
     homeShellTabNotifier.removeListener(_onShellTabActivated);
     appModelNoUpdate.prefsRepo.removeListener(_onPrefsChangedForRemoteGate);
     assert(() {
@@ -1071,9 +1050,6 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
           icon: Icons.folder_copy_outlined,
           onTap: _openManageSources,
         ),
-      // 漫画「在线目录」入口已从书架移除（属漫画域，入口收敛到下载页）；
-      // mokuro.moe 下载队列监听仍保留在 initState——下载页触发的后台落库
-      // 依赖它刷新书架。
       // 视频导入入口**只属于视频 tab**（HomeVideoPage），书架不放视频导入——
       // 书架是书的地方。这里保留编译期常量门控（默认关）只为旧调试路径，运行时
       // 实验开关不再在书架放出视频导入（用户反馈：书架不该有视频导入入口）。
@@ -2759,36 +2735,40 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
             icon: mediaSource.icon,
             message: t.reader_no_books_added,
           ),
-          SizedBox(height: tokens.spacing.gap + tokens.spacing.gap / 2),
-          if (shell != null)
-            FushiFilledButton.icon(
-              icon: const FushiIcon(Icons.library_add_outlined, size: 18),
-              label: Text(t.library_empty_go_import),
-              onPressed: () => shell.select(MediaLibraryViewKind.sources),
-            )
-          else
-            FushiFilledButton.icon(
-              icon: const FushiIcon(Icons.library_add_outlined, size: 18),
-              label: Text(_mangaOnly ? t.manga_import_action : t.srt_import),
-              onPressed: () async {
-                // 空态兜底与页头兜底指向同一个对话框：漫画库开漫画框，书架开书籍框。
-                final bool? imported = await showAppDialog<bool>(
-                  context: context,
-                  builder: (_) => _mangaOnly
-                      ? MangaImportDialog(db: appModel.database)
-                      : BookImportDialog(
-                          prefs: appModel.prefsRepo,
-                          repo: SrtBookRepository(appModel.database),
-                          audiobookRepo: AudiobookRepository(appModel.database),
-                          db: appModel.database,
-                        ),
-                );
-                if (imported == true) {
-                  ref.invalidate(fushiBooksProvider(JapaneseLanguage.instance));
-                  ref.invalidate(srtBooksProvider);
-                }
-              },
-            ),
+          // 2026-11-05：漫画的 Local import 已搬到「浏览」，空书架只留提示。
+          // 普通书架仍保留原来的「去导入」引导。
+          if (!_mangaOnly) ...[
+            SizedBox(height: tokens.spacing.gap + tokens.spacing.gap / 2),
+            if (shell != null)
+              FushiFilledButton.icon(
+                icon: const FushiIcon(Icons.library_add_outlined, size: 18),
+                label: Text(t.library_empty_go_import),
+                onPressed: () => shell.select(MediaLibraryViewKind.sources),
+              )
+            else
+              FushiFilledButton.icon(
+                icon: const FushiIcon(Icons.library_add_outlined, size: 18),
+                label: Text(t.srt_import),
+                onPressed: () async {
+                  // 空态兜底与页头兜底指向同一个对话框：书架开书籍框。
+                  final bool? imported = await showAppDialog<bool>(
+                    context: context,
+                    builder: (_) => BookImportDialog(
+                      prefs: appModel.prefsRepo,
+                      repo: SrtBookRepository(appModel.database),
+                      audiobookRepo: AudiobookRepository(appModel.database),
+                      db: appModel.database,
+                    ),
+                  );
+                  if (imported == true) {
+                    ref.invalidate(
+                      fushiBooksProvider(JapaneseLanguage.instance),
+                    );
+                    ref.invalidate(srtBooksProvider);
+                  }
+                },
+              ),
+          ],
         ],
       ),
     );

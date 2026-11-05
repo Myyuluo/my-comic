@@ -29,7 +29,6 @@ void main() {
       'lib/src/media/collections/collection_one_key_sort.dart',
       '../packages/fushi_engine/lib/media/tracking/media_tracking_repository.dart',
       'lib/src/pages/implementations/collections_page.dart',
-      'lib/src/media/manga/online/mokuro_moe_catalog_view.dart',
     ];
     for (final String rel in thinCallers) {
       test(rel, () {

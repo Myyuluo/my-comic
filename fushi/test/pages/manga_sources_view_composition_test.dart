@@ -82,17 +82,10 @@ void main() {
       expect(sources, isNot(contains('MihonInstalledSourcesSection(')));
     });
 
-    // BUG-1431，用户口径：「mokuro 不应该单独显示，应该和漫画扩展同一层级」。
-    // 它此前是「本地扫描根」一节里的一行（和 Fushi 互联并排），但它是个网站。
-    test('mokuro.moe 归「漫画源」一节，不再挂在本地扫描根下', () {
-      expect(online, contains('MokuroMoeSourceRow('));
-      expect(
-        online.indexOf('MokuroMoeSourceRow('),
-        greaterThan(
-          online.indexOf('if (section == OnlineSourcesSection.sources)'),
-        ),
-        reason: '它必须落在「来源」节里，与扩展提供的在线源同节',
-      );
+    // 2026-11-05 用户口径：应用不再内置任何 Source，Mokuro.moe 从在线源移除。
+    test('在线源面不再有内置 mokuro.moe 行，扫描根视图也没有', () {
+      expect(online, isNot(contains('MokuroMoeSourceRow')));
+      expect(online, isNot(contains('mokuro_moe')));
       expect(sources, isNot(contains('MokuroMoeSourceRow')));
       final String localRoots = maskComments(
         File(p.join('lib', 'src', 'pages', 'implementations',
@@ -124,8 +117,9 @@ void main() {
     });
 
     // BUG-1710：原「浏览」tab 已并进「发现」，这些能力现在落在发现页 +
-    // 「浏览来源」节两个文件里。断言跟着搬家，一条都没放宽。
-    test('「发现」页恒有 mokuro.moe，Mihon 在线源与它并列', () {
+    // 「浏览来源」节两个文件里。2026-11-05 起内置 mokuro.moe 已移除，
+    // 「浏览来源」由 Mihon 在线源与 OPDS 构成。
+    test('「发现」页的浏览来源由 Mihon 源与 OPDS 构成，不再有内置 mokuro.moe', () {
       final String discovery =
           _read(<String>['discovery', 'manga_discovery_page.dart']);
       final String section =
@@ -135,23 +129,14 @@ void main() {
         contains('if (!MihonRuntimeFactory.isSupported) return;'),
         reason: '同上：iOS 上不得触碰 AppModel.mihonManager',
       );
-      expect(
-        section,
-        contains('t.mihon_source_browse_mokuro'),
-        reason: 'mokuro.moe 是内置来源，任何平台都必须在「浏览来源」节里',
-      );
+      expect(section, isNot(contains('mokuroSourceId')));
+      expect(section, isNot(contains('mihon_source_browse_mokuro')));
       expect(
         discovery,
         contains('MihonSourceBrowsePage('),
         reason: '已启用的 Mihon 在线源要能从「发现」直接进内容，不是只在设置里躺着',
       );
-      // BUG-1431：mokuro.moe 与扩展源遵守同一条可见性规则——「来源」里关掉的源
-      // 不出现在浏览入口里。以前它那个开关只让目录页显示成禁用态，行照旧列着。
-      expect(
-        discovery,
-        contains('isMokuroMoeSourceEnabled('),
-        reason: '「发现」必须尊重「来源」里的 mokuro.moe 开关，否则同一节两种开关语义',
-      );
+      expect(discovery, isNot(contains('isMokuroMoeSourceEnabled(')));
       // 合并后新增的能力：来源筛选下拉 + 搜索框（与书/galgame 发现页同形）。
       expect(
         discovery,

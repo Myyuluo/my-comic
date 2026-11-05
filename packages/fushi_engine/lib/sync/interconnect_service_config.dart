@@ -34,8 +34,6 @@ class InterconnectServiceConfigSnapshot {
     // 配好却处于关闭状态的 key——正是本清单文档里说的「只搬内容不搬能力」。
     'jimaku_enabled',
     'qb_connection_config',
-    'manga_online_catalog_base_url',
-    'manga_online_catalog_enabled',
     // Bangumi 追番同步：令牌 + 账号显示名成对同步（只搬令牌会让子设备 UI 挂着
     // 上一个账号的名字）。令牌变更的对账水位归零见 [applyTo]。
     kBangumiAccessTokenPref,
@@ -56,8 +54,6 @@ class InterconnectServiceConfigSnapshot {
     'jimaku_api_key': PrefCodec.encode(''),
     'jimaku_enabled': PrefCodec.encode(true),
     'qb_connection_config': PrefCodec.encode(''),
-    'manga_online_catalog_base_url': PrefCodec.encode('https://mokuro.moe'),
-    'manga_online_catalog_enabled': PrefCodec.encode(true),
     kBangumiAccessTokenPref: PrefCodec.encode(''),
     kBangumiAccountNamePref: PrefCodec.encode(''),
     kVideoMetadataAniDbClientNamePref: PrefCodec.encode(''),

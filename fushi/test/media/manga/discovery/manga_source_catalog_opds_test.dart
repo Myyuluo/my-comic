@@ -1,4 +1,4 @@
-/// OPDS 服务器作为漫画「浏览来源」的第四类来源。
+/// OPDS 服务器作为漫画「浏览来源」的一类来源。
 ///
 /// 这一节是 OPDS 漫画那一半**唯一**的 UI 入口：没有它，cbz 分类与
 /// `importMangaArchive` 端口全是够不到的死代码——统一发现页的四个注入点
@@ -32,23 +32,19 @@ void main() {
 
     test('sourceOptions 不含 OPDS——它没有热门 feed，进下拉就是个恒空的选择', () {
       final MangaSourceCatalog catalog = MangaSourceCatalog(
-        mokuroEnabled: true,
         opdsServers: <OpdsServerConfig>[_server('a', name: 'Shelf')],
       );
       final List<String> ids =
           catalog.sourceOptions.map((DiscoverySourceOption o) => o.id).toList();
-      expect(ids, <String>[MangaSourceCatalog.mokuroSourceId]);
+      expect(ids, isEmpty);
       expect(ids.any((String id) => id.contains('opds')), isFalse);
     });
 
     test('filterById 收窄到具体来源时，OPDS 卡片一并让位', () {
       final MangaSourceCatalog catalog = MangaSourceCatalog(
-        mokuroEnabled: true,
         opdsServers: <OpdsServerConfig>[_server('a')],
       );
-      final MangaSourceCatalog narrowed =
-          catalog.filterById(MangaSourceCatalog.mokuroSourceId);
-      expect(narrowed.mokuroEnabled, isTrue);
+      final MangaSourceCatalog narrowed = catalog.filterById('some-source');
       expect(narrowed.opdsServers, isEmpty,
           reason: '选中了别的来源，OPDS 卡片留在列表里与选择无关');
     });
@@ -75,7 +71,6 @@ void main() {
             body: SingleChildScrollView(
               child: MangaSourceCatalogSection(
                 catalog: catalog,
-                onOpenMokuro: () {},
                 onOpenMihon: (_) {},
                 onOpenOpds: onOpenOpds,
               ),

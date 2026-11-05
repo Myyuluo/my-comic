@@ -199,9 +199,9 @@ void main() {
     });
 
     test('readerShelf 零留白后，两个裸内容页必须自带横向内边距', () {
-      // 共享侧向留白归零，是因为媒体墙**卡片自带内边距**。但这两页的内容体
-      // （MediaSourcesView / MokuroMoeCatalogView）是裸的文字行与搜索框 + 封面网格，
-      // 自身零内边距——共享留白一撤就直接贴窗口边 0px。所以它们必须在页面壳里自己
+      // 共享侧向留白归零，是因为媒体墙**卡片自带内边距**。但这一页的内容体
+      // （MediaSourcesView）是裸的文字行与搜索框 + 封面网格，
+      // 自身零内边距——共享留白一撤就直接贴窗口边 0px。所以它必须在页面壳里自己
       // 补，量级与其余媒体墙页一致（这里取 spacing.page，与同页 FushiPageHeader 的
       // 横向内边距同源，标题与正文左缘对齐）。注释先剥掉，防止说明文字假绿。
       for (final ({String path, String label}) page
@@ -209,10 +209,6 @@ void main() {
         (
           path: 'lib/src/pages/implementations/media_sources_page.dart',
           label: '来源页',
-        ),
-        (
-          path: 'lib/src/media/manga/online/mokuro_moe_catalog_page.dart',
-          label: 'mokuro 在线目录页',
         ),
       ]) {
         final String code =

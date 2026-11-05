@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -36,6 +37,34 @@ MangaDownloadService _service(FushiDatabase db) {
   );
 }
 
+/// 直接写一条章节任务行：本组测试只关心任务中心的映射与分组，不跑 worker。
+Future<void> _insertMangaJob(
+  FushiDatabase db, {
+  required String jobId,
+  required String bookKey,
+  required String chapterKey,
+  required String title,
+  required String chapterTitle,
+  required int createdAt,
+}) => db.upsertMangaDownloadJob(
+  MangaDownloadJobsCompanion.insert(
+    jobId: jobId,
+    kind: MangaDownloadJobKind.chapter,
+    bookKey: bookKey,
+    chapterKey: chapterKey,
+    runtime: 'mihon',
+    title: title,
+    chapterTitle: chapterTitle,
+    status: const Value<String>(MangaDownloadJobStatus.queued),
+    pagesDone: const Value<int>(0),
+    pagesTotal: const Value<int>(0),
+    attemptCount: const Value<int>(0),
+    autoOcr: const Value<bool>(false),
+    createdAt: createdAt,
+    updatedAt: createdAt,
+  ),
+);
+
 void main() {
   test(
     'manga selective cleanup removes only that row and keeps the others',
@@ -48,13 +77,17 @@ void main() {
         service.dispose();
         await db.close();
       });
-      expect(
-        await service.enqueueMokuroVolumes(
-          seriesName: 'Series',
-          volumeNames: <String>['01', '02', '03'],
-        ),
-        3,
-      );
+      for (int i = 1; i <= 3; i++) {
+        await _insertMangaJob(
+          db,
+          jobId: 'job-$i',
+          bookKey: 'series',
+          chapterKey: '0$i',
+          title: 'Series',
+          chapterTitle: '0$i',
+          createdAt: i,
+        );
+      }
       final List<MangaDownloadJobRow> rows = await service.listJobs();
       final MangaDownloadJobRow running = rows[0];
       final MangaDownloadJobRow removed = rows[1];
@@ -177,7 +210,7 @@ void main() {
   );
 
   testWidgets(
-    'manga groups exact series and re-enqueue of a done volume reuses its row',
+    'manga groups exact series by bookKey',
     (WidgetTester tester) async {
       final FushiDatabase db = FushiDatabase.forTesting(
         NativeDatabase.memory(),
@@ -200,19 +233,38 @@ void main() {
       );
       await tester.pump();
       expect(entries, isEmpty);
-      await service.enqueueMokuroVolumes(
-        seriesName: 'Series',
-        volumeNames: <String>['01', '02'],
+      await _insertMangaJob(
+        db,
+        jobId: 'series-01',
+        bookKey: 'series',
+        chapterKey: '01',
+        title: 'Series',
+        chapterTitle: '01',
+        createdAt: 1,
       );
-      await service.enqueueMokuroVolumes(
-        seriesName: 'Series Special',
-        volumeNames: <String>['01'],
+      await _insertMangaJob(
+        db,
+        jobId: 'series-02',
+        bookKey: 'series',
+        chapterKey: '02',
+        title: 'Series',
+        chapterTitle: '02',
+        createdAt: 2,
+      );
+      await _insertMangaJob(
+        db,
+        jobId: 'series-special-01',
+        bookKey: 'series-special',
+        chapterKey: '01',
+        title: 'Series Special',
+        chapterTitle: '01',
+        createdAt: 3,
       );
       await tester.pump();
       expect(entries, hasLength(3));
       expect(entries![0].collectionKey, entries![1].collectionKey);
       expect(entries![0].collectionKey, isNot(entries![2].collectionKey));
-      expect(entries![0].collectionKey, mokuroMoeBookKey('Series'));
+      expect(entries![0].collectionKey, 'series');
       expect(entries![0].collectionTitle, 'Series');
       expect(entries![2].collectionTitle, 'Series Special');
       expect(entries![0].kind, DownloadTaskKind.manga);
@@ -220,37 +272,6 @@ void main() {
       expect(entries![0].actions.cancel, isNotNull);
       expect(entries![0].actions.retry, isNull);
       expect(entries![0].actions.clear, isNull);
-
-      // done 后再入队同卷：job_id 由身份派生 → 同一行复位 queued，不新建行。
-      final String firstId = entries![0].id;
-      final String jobId = firstId.substring('manga:'.length);
-      await db.updateMangaDownloadJobStatus(
-        jobId,
-        status: MangaDownloadJobStatus.done,
-        updatedAt: 1,
-        completedAt: 1,
-      );
-      // 表变更 → 信号流 → 重取 → setState：隔着一次异步读，多 pump 一帧。
-      await tester.pump();
-      await tester.pump();
-      expect(entries![0].status, DownloadTaskStatus.completed);
-      expect(entries![0].actions.clear, isNotNull);
-      final ({MangaDownloadJobRow row, bool added}) again =
-          await service.enqueueMokuroVolume(
-        seriesName: 'Series',
-        volumeName: '01',
-      );
-      expect(again.added, isTrue);
-      expect(again.row.jobId, jobId);
-      await tester.pump();
-      await tester.pump();
-      expect(entries, hasLength(3));
-      expect(
-        entries!.map((DownloadTaskEntry entry) => entry.id).toSet(),
-        hasLength(3),
-      );
-      expect(entries![0].id, firstId);
-      expect(entries![0].status, DownloadTaskStatus.queued);
 
       final BuildContext context = tester.element(find.byType(Scaffold));
       expect(entries!.first.builder(context), isA<DownloadTaskCard>());

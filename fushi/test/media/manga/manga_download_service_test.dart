@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi/src/media/manga/download/manga_download_auto_ocr.dart';
@@ -213,6 +214,52 @@ void main() {
         bookKey: bookKey,
         chapterKey: chapterKey,
       ))!;
+
+  test('start 清理旧的 mokuro 卷任务行，章节任务保留', () async {
+    final MangaDownloadService downloads = build();
+    addTearDown(downloads.dispose);
+    await db.upsertMangaDownloadJob(
+      MangaDownloadJobsCompanion.insert(
+        jobId: 'legacy-mokuro-01',
+        kind: MangaDownloadJobKind.mokuroVolume,
+        bookKey: 'mokuro:Series',
+        chapterKey: 'Series 01',
+        runtime: 'mokuro_moe',
+        title: 'Series · Series 01',
+        chapterTitle: 'Series 01',
+        status: const Value<String>(MangaDownloadJobStatus.done),
+        pagesDone: const Value<int>(1),
+        pagesTotal: const Value<int>(1),
+        attemptCount: const Value<int>(0),
+        autoOcr: const Value<bool>(false),
+        createdAt: 1,
+        updatedAt: 1,
+      ),
+    );
+    await db.upsertMangaDownloadJob(
+      MangaDownloadJobsCompanion.insert(
+        jobId: 'chapter-01',
+        kind: MangaDownloadJobKind.chapter,
+        bookKey: bookKey,
+        chapterKey: 'ch-1',
+        runtime: 'mihon',
+        title: 'Fixture',
+        chapterTitle: 'ch-1',
+        status: const Value<String>(MangaDownloadJobStatus.done),
+        pagesDone: const Value<int>(1),
+        pagesTotal: const Value<int>(1),
+        attemptCount: const Value<int>(0),
+        autoOcr: const Value<bool>(false),
+        createdAt: 2,
+        updatedAt: 2,
+      ),
+    );
+
+    await downloads.start();
+
+    expect(await db.listMangaDownloadJobs(), hasLength(1));
+    expect((await db.listMangaDownloadJobs()).single.jobId, 'chapter-01');
+  });
 
   test('入队 → worker 跑完：三张图落盘、manga.json 尺寸真实、行 done', () async {
     final MangaDownloadService downloads = build();

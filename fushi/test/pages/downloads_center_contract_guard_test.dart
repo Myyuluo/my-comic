@@ -25,30 +25,44 @@ void main() {
 
     expect(
       code,
-      contains('enum BrowseTab { discover, sources, extensions, downloads }'),
+      contains(
+        'enum BrowseTab '
+        '{ sources, discover, localImport, downloads, extensions }',
+      ),
       reason: '浏览页顶层只能有且必须有四个目的地，顺序即页头顺序',
     );
-    // 2026-09-28 用户拍板：发现排第一（打开浏览默认落在发现）。页头顺序由
-    // _visibleTabs 的列表字面量决定，枚举顺序只是文档；两处都钉住。
+    // 2026-11-05 用户口径：在线源 → 发现 → 导入 → 下载；打开浏览默认落在
+    // 第一个可见页签（在线源）。页头顺序由 _visibleTabs 的列表字面量决定，
+    // 枚举顺序只是文档；两处都钉住。
     expect(
       compactCode(methodBody(source, 'List<BrowseTab> _visibleTabs(')),
       contains(
-        '[if(discover)BrowseTab.discover,if(online)BrowseTab.sources,'
-        'BrowseTab.downloads,]',
+        '[if(online)BrowseTab.sources,if(discover)BrowseTab.discover,'
+        'BrowseTab.localImport,BrowseTab.downloads,]',
       ),
       // 2026-10-14 用户：来源 / 扩展并成一个「在线源」页签（BrowseTab.sources
       // 那一槽），二级行右侧切来源 / 扩展。
-      reason: '浏览页签顺序：发现 → 在线源 → 下载',
+      reason: '浏览页签顺序：在线源 → 发现 → 导入 → 下载',
     );
     final String labels = compactCode(methodBody(source, 'String _tabLabel('));
     for (final String label in <String>[
       'BrowseTab.sources=>t.media_import_segment_sources,',
       'BrowseTab.extensions=>t.media_import_segment_extensions,',
       'BrowseTab.discover=>t.library_view_discover,',
+      'BrowseTab.localImport=>t.library_view_import,',
       'BrowseTab.downloads=>t.nav_downloads,',
     ]) {
       expect(labels, contains(label), reason: '页签文案缺失：$label');
     }
+    // 导入页签必须真接到漫画 Local import 页，而不是一个空壳。
+    expect(
+      compactCode(source),
+      contains('BrowseTab.localImport=>_buildLocalImportTab(),'),
+    );
+    expect(
+      compactCode(source),
+      contains('Widget_buildLocalImportTab()=>constMangaSourcesPage(embedded:true);'),
+    );
     expect(
       code,
       isNot(contains('LibrarySectionTab<int>')),
@@ -58,12 +72,7 @@ void main() {
     expect(
       code,
       contains('enum BrowseDownloadsSection { tasks, subscriptions }'),
-      reason: '「下载」页签必须保留任务 / 订阅两段',
-    );
-    expect(
-      code,
-      contains("'browse-downloads-section-picker'"),
-      reason: '任务 / 订阅标签条必须有稳定 key，便于焦点导航与行为验证',
+      reason: '导航请求仍按任务 / 订阅枚举直落；my-comic 下载页只有漫画任务列表',
     );
 
     // 页签控制器由本页持有（按页签 id 落回选中，PR #1707 审查），同一个控制器
@@ -75,11 +84,6 @@ void main() {
       isTrue,
       reason: '任务段不得再被从下载中心拆掉',
     );
-    expect(
-      identifierCall('VideoDownloadSubscriptionsPanel').hasMatch(structural),
-      isTrue,
-      reason: '订阅段不得再被从下载中心拆掉',
-    );
 
     // 设置：独立页 BrowseDownloadSettingsPage，入口是「下载」页签页头的齿轮。
     final String settingsPage = source.substring(
@@ -90,7 +94,6 @@ void main() {
       isTrue,
       reason: '下载设置页不得再被从浏览模块拆掉',
     );
-    expect(code, contains("'browse-download-settings'"));
     expect(
       compactCode(methodBody(source, 'Future<void> _openDownloadSettings(')),
       contains('constBrowseDownloadSettingsPage()'),

@@ -85,16 +85,10 @@ void main() {
       );
     });
 
-    test('第三方备份导入只在设置里，不进书的快速导入区', () {
-      // 用户 2026-09-28：`.hoshi` 等第三方书库备份导入只保留设置 › 同步与
-      // 备份的「第三方导入」入口，书的导入页不再并排一个按钮。
+    test('第三方备份导入不进书的快速导入区', () {
+      // 用户 2026-09-28：`.hoshi` 等第三方书库备份导入不再并排放在书的导入页。
       expect(page, isNot(contains('t.hoshi_import_entry')));
       expect(page, isNot(contains('ExternalReaderImportPage')));
-      expect(
-        _read('lib/src/sync/sync_settings_schema.dart'),
-        contains('ExternalReaderImportPage'),
-        reason: '设置里的入口必须还在',
-      );
     });
 
     test('漫画接同一个共享 importFolder 流程', () {
@@ -188,33 +182,30 @@ void main() {
       expect(browse, contains('bool get wantKeepAlive => true;'));
     });
 
-    test('漫画在线源与小说 / 视频一样点行进源（mokuro.moe 行进目录）', () {
+    test('漫画在线源点行进源；不再有内置 mokuro.moe 行', () {
       expect(mangaOnline, contains('MihonInstalledSourcesSection('));
       expect(mangaOnline, contains('onOpenSource: _openMihonSource'));
       expect(mangaOnline, contains('MihonSourceBrowsePage('));
-      expect(
-        'MokuroMoeSourceRow(onOpen: _openMokuro)'.allMatches(mangaOnline),
-        hasLength(2),
-        reason: '有 / 无 Mihon 宿主两条分支里的 mokuro.moe 行都要能点进目录',
-      );
+      expect(mangaOnline, isNot(contains('MokuroMoeSourceRow')));
+      expect(mangaOnline, isNot(contains('mokuro_moe')));
     });
 
-    test('来源 / 扩展 / 发现 / 下载的二级选择是标签页，不再是分段按钮', () {
+    test('来源 / 扩展 / 发现的二级选择是标签页，不再是分段按钮', () {
       expect(browse, isNot(contains('FushiSegmentedStrip')));
       expect(browse, isNot(contains('ButtonSegment<')));
       expect(
         RegExp(
           r'_BrowseSwipeSections<(?:OnlineSourcesDomain|_DownloadsResourceDomain|BrowseDownloadsSection)>\(',
         ).allMatches(browse),
-        hasLength(3),
-        reason: '来源 / 扩展共用一处 + 发现 + 下载，共三处二级标签条',
+        hasLength(2),
+        reason: '来源 / 扩展共用一处 + 发现，共两处二级标签条（下载页只有任务列表）',
       );
       // One additional generic constructor belongs only to the explicit
       // widget-test seam. Keep a total budget so new production domains cannot
       // silently escape the typed-site assertions above.
       expect(
         RegExp(r'_BrowseSwipeSections<\w+>\(').allMatches(browse),
-        hasLength(4),
+        hasLength(3),
       );
       final String seam = methodBody(
         browse,
@@ -228,13 +219,12 @@ void main() {
         'secondary: true'.allMatches(browse),
         hasLength(2),
         reason:
-            '三处二级标签条共用 _BrowseSwipeSections 里同一份 secondary tabs；'
+            '两处二级标签条共用 _BrowseSwipeSections 里同一份 secondary tabs；'
             '另一处是在线源二级行右侧的来源 / 扩展页签',
       );
       for (final String key in <String>[
         r"'browse-${tab.name}-domain-picker'",
         "'downloads-resource-type-picker'",
-        "'browse-downloads-section-picker'",
       ]) {
         expect(browse, contains(key), reason: '二级标签条保留稳定 key：$key');
       }

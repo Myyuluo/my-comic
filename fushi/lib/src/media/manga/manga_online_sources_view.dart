@@ -6,8 +6,6 @@ import 'package:fushi/src/media/manga/mihon/mihon_installed_sources_section.dart
 import 'package:fushi/src/media/manga/mihon/mihon_manager.dart';
 import 'package:fushi/src/media/manga/mihon/mihon_runtime_factory.dart';
 import 'package:fushi/src/media/manga/mihon/mihon_source_browse_page.dart';
-import 'package:fushi/src/media/manga/online/mokuro_moe_catalog_view.dart';
-import 'package:fushi/src/media/manga/online/mokuro_moe_source_row.dart';
 import 'package:fushi/src/models/app_model.dart';
 import 'package:fushi/src/models/store_compliance.dart';
 import 'package:fushi/src/pages/implementations/browse_online_sources_view.dart';
@@ -27,11 +25,9 @@ import 'package:fushi/src/utils/components/fushi_floating_chrome.dart';
 /// - [OnlineSourcesSection.stores]：Mihon 扩展仓库；
 /// - [OnlineSourcesSection.extensions]：可装扩展目录 + 已装扩展启停 / 卸载 +
 ///   导入本地 APK；
-/// - [OnlineSourcesSection.sources]：内置 mokuro.moe 与扩展提供的源并列（启停 /
-///   排序 / 偏好 / 清数据 / 置顶，[MihonInstalledSourcesSection]）；点已启用的
-///   行进该源的浏览页，与小说 / 视频域同一交互。
-///
-/// 🔴 mokuro.moe 归「在线源」（BUG-1431）：它是个网站，不是本地扫描根。
+/// - [OnlineSourcesSection.sources]：扩展提供的源（启停 / 排序 / 偏好 / 清数据 /
+///   置顶，[MihonInstalledSourcesSection]）；点已启用的行进该源的浏览页，与
+///   小说 / 视频域同一交互。应用不内置任何 Source；没有扩展源时只显示提示。
 ///
 /// 🔴 滚动容器必须是 [CustomScrollView]（BUG-1441）：扩展目录要渲染整个扩展仓库
 /// （keiyoushi 有 1900+ 条），只有 sliver 才能懒建。
@@ -91,24 +87,6 @@ class _MangaOnlineSourcesViewState
     );
   }
 
-  /// 点内置的 mokuro.moe 行进它的目录（与漫画发现页的入口同一个视图）。
-  void _openMokuro() {
-    final AppModel appModel = ref.read(appProvider);
-    Navigator.of(context).push(
-      adaptivePageRoute<void>(
-        context: context,
-        builder: (BuildContext context) => FushiPageScaffold(
-          title: t.mihon_source_browse_mokuro,
-          // 不叠放：MokuroMoeCatalogView 是「固定搜索行 / 卷选择头 + 网格 / 列表
-          // + 底部动作行」的竖排正文，搜索行嵌在视图状态里、挪不进 headerBottom，
-          // 叠到页头底下会被胶囊盖住。
-          extendBodyBehindHeader: false,
-          body: MokuroMoeCatalogView(db: appModel.database, embedded: true),
-        ),
-      ),
-    );
-  }
-
   /// 扩展宿主不可用时统一的占位（iOS）。结构不变，只是这一节没内容。
   Widget _unavailableNote() => Padding(
     padding: const EdgeInsets.all(24),
@@ -127,25 +105,11 @@ class _MangaOnlineSourcesViewState
           MihonInstalledSourcesSection(
             key: const ValueKey<String>('manga_mihon_sources'),
             manager: manager,
-            // 内置在线源与扩展提供的源同节同级：mokuro.moe 是个网站，不是本地
-            // 扫描根（BUG-1431）。
-            leading: <Widget>[
-              MokuroMoeSourceRow(onOpen: _openMokuro),
-              const SizedBox(height: 4),
-            ],
+            emptyLabel: t.mihon_source_empty,
             onOpenSource: _openMihonSource,
           )
         else if (onlineSourcesAvailable)
-          SliverToBoxAdapter(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                MokuroMoeSourceRow(onOpen: _openMokuro),
-                const SizedBox(height: 8),
-                _unavailableNote(),
-              ],
-            ),
-          )
+          SliverToBoxAdapter(child: _unavailableNote())
         else
           const SliverToBoxAdapter(child: SizedBox.shrink())
       else if (onlineSourcesAvailable && manager != null)

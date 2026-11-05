@@ -149,9 +149,8 @@ void main() {
     await _pumpDialog(tester, db, 'manga');
 
     expect(find.text('Fushi Interconnect'), findsOneWidget);
-    // BUG-1431：mokuro.moe 是个网站，不是扫描根，已挪到「来源」视图的「漫画源」
-    // 一节（`MokuroMoeSourceRow`），与扩展提供的在线源同级。这条反向锚防止它被
-    // 重新塞回本地扫描根列表。
+    // BUG-1431：网站型来源不是扫描根。Mokuro.moe 已随内置源移除；这条反向锚
+    // 防止任何网站在线源被重新塞回本地扫描根列表。
     expect(find.text('Mokuro.moe'), findsNothing);
     expect(find.text('Manga A'), findsOneWidget);
     expect(find.text(r'D:\manga\a'), findsOneWidget);

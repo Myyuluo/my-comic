@@ -17,6 +17,7 @@ import 'package:fushi/src/media/drag_drop/drop_classification.dart';
 import 'package:fushi_engine/media/discovery/discovery_models.dart';
 import 'package:fushi_engine/media/torrent/torrent_network_diagnosis.dart';
 import 'package:fushi/src/media/manga/discovery/manga_discovery_page.dart';
+import 'package:fushi/src/media/manga/manga_sources_page.dart';
 import 'package:fushi/src/media/torrent/torrent_network_issue_banner.dart';
 import 'package:fushi/src/media/downloads/manga_download_tasks_section.dart';
 import 'package:fushi/src/pages/implementations/interconnect_download_tasks_section.dart';
@@ -57,15 +58,16 @@ import 'package:fushi/utils.dart';
 import 'package:fushi_core/fushi_core.dart'
     show VideoDownloadJobFileRow, VideoDownloadJobRow;
 
-/// 「浏览」页签（Mihon 的 Browse 形态）：来源 / 扩展 / 发现 / 下载。
+/// 「浏览」页签（Mihon 的 Browse 形态）：在线源 / 发现 / 导入 / 下载。
 ///
 /// 2026-09-27 由「下载」模块改名而来（持久化键 `module_downloads_enabled` 冻结），
 /// 同时把散在各库页与导入页的在线入口收拢到这里：
-/// - **来源**：小说（LNReader）/ 漫画（Mihon + mokuro.moe）/ 视频（Aniyomi）三域
-///   已装扩展提供的在线源，点进源的浏览页；
-/// - **扩展**：三域的可装扩展目录与已装扩展管理，扩展仓库挂在本页签的「仓库」
+/// - **在线源**：小说（LNReader）/ 漫画（Mihon）/ 视频（Aniyomi）三域已装扩展
+///   提供的在线源；「来源 / 扩展」在页签内由二级胶囊切换，扩展仓库挂在「仓库」
 ///   动作上（Mihon 把 repo 放在 Extensions 的工具栏）；
 /// - **发现**：书 / 漫画 / 游戏 / 视频四域的生产发现页（原「资源」页签）；
+/// - **导入**：漫画的 Local import（快速导入、常驻扫描根、互联对端），2026-11-05
+///   从漫画页搬来；
 /// - **下载**：统一下载中心的任务与订阅，下载设置在页头齿轮里。
 ///
 /// 每个页签内先选内容域，再直接复用各域自己的生产组件，不另写第二套 UI。
@@ -102,7 +104,7 @@ class BrowsePage extends ConsumerStatefulWidget {
 
 /// 「浏览」的页签。**用枚举而不是下标**：页签随平台 / 模块开关增减，跨页跳转
 /// （视频发现详情「管理订阅」等）若按下标就会在页签少一个时静默落错页。
-enum BrowseTab { discover, sources, extensions, downloads }
+enum BrowseTab { sources, discover, localImport, downloads, extensions }
 
 /// 顶层页签接力（二级标签越界横滑）时，目标页签的二级标签要不要按衔接方向
 /// 重新落端（往后落首段、往前落末段）。
@@ -324,11 +326,10 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
     return next;
   }
 
-  /// 此刻可见的页签，顺序即页头顺序。
+  /// 此刻可见的页签，顺序即页头顺序：在线源 → 发现 → 导入 → 下载。
   ///
-  /// 来源 / 扩展两页签只在至少一个域有在线来源时出现（漫画域有内置 mokuro.moe，
-  /// 不依赖扩展宿主；三个库模块全关时就只剩发现与下载）；发现页签跟四个库模块
-  /// 走；下载恒在。
+  /// 在线源页签只在至少一个域有在线来源时出现；发现页签跟四个库模块走；
+  /// 导入跟随浏览模块恒在；下载恒在。
   List<BrowseTab> _visibleTabs(AppModel appModel) {
     final bool online = visibleOnlineSourcesDomains(
       appModel.moduleVisibility,
@@ -342,11 +343,14 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
           appModel.moduleVisibility,
           gamesForm: appModel.gamesModuleForm,
         ).isNotEmpty;
-    // 发现排第一（2026-09-28 用户拍板）：打开浏览默认落在发现页签。
+    // 2026-11-05 用户口径：浏览页签顺序 在线源 → 发现 → 导入 → 下载；
+    // 默认落地沿用「第一个可见页签」，因此打开浏览落在在线源。
     return <BrowseTab>[
-      if (discover) BrowseTab.discover,
       // 来源 / 扩展并成一个「在线源」页签（见 [_onlineSection]）。
       if (online) BrowseTab.sources,
+      if (discover) BrowseTab.discover,
+      // 导入跟着浏览页走，不额外看漫画模块开关。
+      BrowseTab.localImport,
       BrowseTab.downloads,
     ];
   }
@@ -355,6 +359,7 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
     BrowseTab.sources => t.media_import_segment_sources,
     BrowseTab.extensions => t.media_import_segment_extensions,
     BrowseTab.discover => t.library_view_discover,
+    BrowseTab.localImport => t.library_view_import,
     BrowseTab.downloads => t.nav_downloads,
   };
 
@@ -505,6 +510,9 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
           _downloadsSection = toFirst
               ? BrowseDownloadsSection.values.first
               : BrowseDownloadsSection.values.last;
+        case BrowseTab.localImport:
+          // 导入页没有二级分区，无须落端。
+          break;
       }
     });
     controller.animateTo(target);
@@ -839,8 +847,10 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
     );
   }
 
-  /// 「下载」页签：任务 / 订阅两段（可横滑切换）。
-  /// 「下载」页签：my-comic 只保留漫画章节下载任务（在线章节 / mokuro 整卷）。
+  /// 「导入」页签：复用漫画的 Local import 页（快速导入 + 常驻来源 + 互联对端）。
+  Widget _buildLocalImportTab() => const MangaSourcesPage(embedded: true);
+
+  /// 「下载」页签：my-comic 只保留漫画章节下载任务。
   /// torrent / 磁力 / 直链 / 视频订阅等统一下载中心入口已随非漫画域移除。
   Widget _buildDownloadsTab() {
     final FushiDesignTokens tokens = FushiDesignTokens.of(context);
@@ -1110,6 +1120,7 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
                           BrowseTab.sources ||
                           BrowseTab.extensions => _buildOnlineTab(),
                           BrowseTab.discover => _buildResourceHub(),
+                          BrowseTab.localImport => _buildLocalImportTab(),
                           BrowseTab.downloads => _buildDownloadsTab(),
                         },
                       ),

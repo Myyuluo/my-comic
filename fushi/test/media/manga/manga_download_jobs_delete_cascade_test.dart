@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi/src/media/manga/download/manga_download_service.dart';
@@ -63,6 +64,8 @@ OnlineMangaLibraryEntry _entry() => const OnlineMangaLibraryEntry(
       chapters: <OnlineMangaChapter>[_chapter],
     );
 
+const String legacyMokuroBookKey = 'mokuro:Series';
+
 void main() {
   late Directory root;
   late FushiDatabase db;
@@ -90,9 +93,23 @@ void main() {
       chapter: _chapter,
       autoOcr: false,
     );
-    await downloads.enqueueMokuroVolume(
-      seriesName: 'Series',
-      volumeName: 'Series 01',
+    await db.upsertMangaDownloadJob(
+      MangaDownloadJobsCompanion.insert(
+        jobId: 'legacy-mokuro-01',
+        kind: MangaDownloadJobKind.mokuroVolume,
+        bookKey: legacyMokuroBookKey,
+        chapterKey: 'Series 01',
+        runtime: 'mokuro_moe',
+        title: 'Series · Series 01',
+        chapterTitle: 'Series 01',
+        status: const Value<String>(MangaDownloadJobStatus.queued),
+        pagesDone: const Value<int>(0),
+        pagesTotal: const Value<int>(0),
+        attemptCount: const Value<int>(0),
+        autoOcr: const Value<bool>(false),
+        createdAt: 1,
+        updatedAt: 1,
+      ),
     );
     expect(await db.listMangaDownloadJobs(), hasLength(2));
   });
@@ -108,15 +125,15 @@ void main() {
       .map((MangaDownloadJobRow r) => r.bookKey)
       .toSet();
 
-  test('deleteEpubBook 级联删该书的章节任务，mokuro 卷任务不受影响', () async {
+  test('deleteEpubBook 级联删该书的章节任务，旧 mokuro 任务不受影响', () async {
     await db.deleteEpubBook(bookKey, tombstone: true);
     expect(await db.getEpubBook(bookKey), isNull);
-    expect(await bookKeysLeft(), <String>{mokuroMoeBookKey('Series')});
+    expect(await bookKeysLeft(), <String>{legacyMokuroBookKey});
   });
 
   test('deleteMangaDownloadJobsForBook 直接调也删干净', () async {
     expect(await db.deleteMangaDownloadJobsForBook(bookKey), 1);
-    expect(await bookKeysLeft(), <String>{mokuroMoeBookKey('Series')});
+    expect(await bookKeysLeft(), <String>{legacyMokuroBookKey});
     expect(await db.getEpubBook(bookKey), isNotNull, reason: '只删任务行，不动书');
   });
 }

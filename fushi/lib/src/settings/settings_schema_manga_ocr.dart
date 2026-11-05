@@ -1,5 +1,3 @@
-import 'package:material_ui/material_ui.dart';
-
 import 'package:fushi/src/models/module_registry.dart';
 import 'package:fushi/src/utils/fushi_icons.dart';
 import 'package:fushi/src/media/manga/manga_ocr_provider.dart';
@@ -8,7 +6,6 @@ import 'package:fushi/src/media/manga/manga_ocr_wizard_engines.dart'
 import 'package:fushi/src/media/manga/manga_ocr_settings_section.dart';
 import 'package:fushi/src/pages/implementations/ai_settings_route.dart';
 import 'package:fushi/src/media/manga/mihon/mihon_cover_cache.dart';
-import 'package:fushi/src/media/manga/online/mokuro_moe_client.dart';
 import 'package:fushi/src/settings/settings_context.dart';
 import 'package:fushi/src/settings/settings_destination.dart';
 import 'package:fushi/src/settings/settings_page_reset.dart'
@@ -76,30 +73,16 @@ SettingsDestination buildOcrSettingsPage(SettingsDestinationId owner) {
   );
 }
 
-/// Online catalog connectivity is separate from local OCR configuration.
-SettingsSection buildMangaCatalogSection() {
+/// 在线源封面缓存（原「在线目录」段；Mokuro.moe 内置源移除后只剩缓存项）。
+SettingsSection buildMangaCoverCacheSection() {
   return SettingsSection(
     id: 'manga.section.catalog',
     presentation: SettingsSectionPresentation.collapsed,
     title: t.manga_online_catalog_title,
     // 收起时报「N 项已修改」，与同页其它折叠分组同口径（#2042 形态）。
     summaryBuilder: (SettingsContext c) =>
-        settingsSectionModifiedSummary(buildMangaCatalogSection(), c),
+        settingsSectionModifiedSummary(buildMangaCoverCacheSection(), c),
     items: <SettingsItem>[
-      // 漫画「在线目录」站点根 URL（O1 mokuro.moe 目录源）。空串/尾斜杠由
-      // MokuroMoeClient 的 normalizeMokuroMoeBaseUrl 归一回默认站点，故这里
-      // 只 trim 存原值、不做格式校验。
-      SettingsTextItem(
-        id: 'manga.online_catalog_base_url',
-        title: t.manga_online_base_url_label,
-        icon: FushiIcons.cloud,
-        keyboardType: TextInputType.url,
-        placeholder: kMokuroMoeDefaultBaseUrl,
-        value: (SettingsContext settingsContext) =>
-            settingsContext.appModel.mangaOnlineCatalogBaseUrl,
-        onChanged: (SettingsContext settingsContext, String value) =>
-            settingsContext.appModel.setMangaOnlineCatalogBaseUrl(value.trim()),
-      ),
       // 在线源封面磁盘缓存的保留天数（BUG-2450 用户诉求「缓存失效时间拉长」）。
       // 生效点是 MihonCoverCache.maxAge：过期条目下次读取时删掉重取。
       SettingsSliderItem(

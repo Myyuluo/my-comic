@@ -18,8 +18,6 @@ import 'package:fushi/src/media/manga/mihon/mihon_enabled_sources.dart';
 import 'package:fushi/src/media/manga/mihon/mihon_manager.dart';
 import 'package:fushi/src/media/manga/mihon/mihon_runtime_factory.dart';
 import 'package:fushi/src/media/manga/mihon/mihon_source_browse_page.dart';
-import 'package:fushi/src/media/manga/online/mokuro_moe_catalog_view.dart';
-import 'package:fushi/src/media/manga/online/mokuro_moe_source_row.dart';
 import 'package:fushi/src/models/app_model.dart';
 import 'package:fushi/src/pages/implementations/discovery/discovery_widgets.dart';
 import 'package:fushi/src/pages/implementations/discovery_header.dart';
@@ -36,9 +34,8 @@ import 'package:fushi/src/utils/components/fushi_staggered_entrance.dart';
 /// 页头下面一行是与书 / galgame 发现页同形的 [DiscoveryHeaderControls]（来源筛选
 /// 下拉 + 搜索框），正文**只由用户自己启用的来源**构成：
 ///
-/// 1. 「浏览来源」快捷条（[MangaSourceCatalogSection]）：内置 mokuro.moe 目录 +
-///    已启用 Mihon 在线源 + OPDS 服务器，一源一枚磁贴，点进
-///    各自的目录页；
+/// 1. 「浏览来源」快捷条（[MangaSourceCatalogSection]）：已启用 Mihon 在线源 +
+///    OPDS 服务器，一源一枚磁贴，点进各自的目录页；
 /// 2. 每个已启用在线源的「热门」横滑行（[MangaDiscoverySourceRow]），行头带
 ///    「查看全部」直达该源目录。
 ///
@@ -51,8 +48,8 @@ import 'package:fushi/src/utils/components/fushi_staggered_entrance.dart';
 /// 的来源失败横幅（[DiscoveryProviderWarningBanner]，印来源展示名），全部失败时换
 /// 成可重试的整块提示；单源网格滚到离底 600 以内自动翻下一页。
 ///
-/// 「浏览来源」节保留：它是 mokuro.moe / OPDS 这些**没有热门行**的来源在
-/// 本页唯一的入口——下拉选中它们时正文只剩这一块磁贴，删掉就成了空白页。
+/// 「浏览来源」节保留：它是 OPDS 这些**没有热门行**的来源在本页唯一的入口——
+/// 下拉选中它们时正文只剩这一块磁贴，删掉就成了空白页。
 ///
 /// 此前页首是 MAL（经 Jikan）的趋势 / 热门 / 高分 / 最新完结四条元数据行，点开
 /// 再在已启用来源里按标题猜可读条目。那条链路整体移除：Jikan 频繁 5xx / 限流
@@ -209,11 +206,7 @@ class _MangaDiscoveryPageState extends ConsumerState<MangaDiscoveryPage> {
   MangaSourceCatalog _catalog() {
     if (_injected) return widget.catalogOverride ?? const MangaSourceCatalog();
     final MihonManager? manager = _mihonManager;
-    // watch（不是 read）：mokuro.moe 开关经 PreferencesRepository -> AppModel 转发
-    // 过来，本页在库页壳里是 Offstage 保活的，不 watch 就永远停在旧值上
-    // （BUG-1431 同因：「来源」里关掉的源必须立刻从这里消失）。
     return MangaSourceCatalog(
-      mokuroEnabled: isMokuroMoeSourceEnabled(ref.watch(appProvider)),
       mihonSources: manager == null
           ? const <MangaOnlineSourceRow>[]
           : enabledMangaOnlineSources(manager),
@@ -234,8 +227,8 @@ class _MangaDiscoveryPageState extends ConsumerState<MangaDiscoveryPage> {
   ///
   /// 壳的判据是「壳**有**在线来源视图」而不是「壳在」：[MediaLibraryShellScope.select]
   /// 对不存在的视图静默忽略，拿后者当判据就会渲染一个点了什么都不发生的按钮。
-  /// 去处是漫画库的「来源」（[MediaLibraryViewKind.onlineSources]，Mihon 源 +
-  /// mokuro.moe），不是「导入」——导入页只有本地来源，装不了在线源。
+  /// 去处是漫画库的「来源」（[MediaLibraryViewKind.onlineSources]，Mihon 源），
+  /// 不是「导入」——导入页只有本地来源，装不了在线源。
   VoidCallback? _openSourcesAction() =>
       widget.onOpenSources ??
       MediaLibraryShellScope.maybeOf(context)
@@ -250,26 +243,6 @@ class _MangaDiscoveryPageState extends ConsumerState<MangaDiscoveryPage> {
         onPressed: _refresh,
         icon: const FushiIcon(FushiIcons.refresh),
       );
-
-  void _openMokuro() {
-    final AppModel appModel = ref.read(appProvider);
-    Navigator.of(context).push(
-      adaptivePageRoute<void>(
-        context: context,
-        builder: (BuildContext context) => FushiPageScaffold(
-          title: t.mihon_source_browse_mokuro,
-          // 不叠放：MokuroMoeCatalogView 是「固定搜索行 / 卷选择头 + 网格 / 列表
-          // + 底部动作行」的竖排正文，搜索行嵌在视图状态里、挪不进 headerBottom，
-          // 叠到页头底下会被胶囊盖住。
-          extendBodyBehindHeader: false,
-          body: MokuroMoeCatalogView(
-            db: appModel.database,
-            embedded: true,
-          ),
-        ),
-      ),
-    );
-  }
 
   void _openMihonSource(MangaOnlineSourceRow source) {
     final MihonManager? manager = _mihonManager;
@@ -321,10 +294,6 @@ class _MangaDiscoveryPageState extends ConsumerState<MangaDiscoveryPage> {
   /// 就被推进一张新页面、再给所有来源各发一轮请求。视频发现页防抖成立，是因为它在
   /// 本页原地刷新结果。
   ///
-  /// mokuro.moe 走**另一条**路：它不在聚合搜索的源模型里
-  /// （`manga_global_search_runner` 只认 Mihon 在线源），硬塞进去只会
-  /// 得到一个恒空的段。选中它时提交搜索因此直接打开 mokuro 目录页——那里有站内
-  /// 搜索，能力不丢。选「全部来源」时它同样不参与聚合，只是不拦搜索。
   void _submitSearch(
     String rawQuery,
     MangaSourceCatalog catalog,
@@ -332,10 +301,6 @@ class _MangaDiscoveryPageState extends ConsumerState<MangaDiscoveryPage> {
   ) {
     final String query = rawQuery.trim();
     if (query.isEmpty) return;
-    if (selected == MangaSourceCatalog.mokuroSourceId) {
-      _openMokuro();
-      return;
-    }
     final MangaSourceCatalog scope = catalog.filterById(selected);
     // 一个源都没有时搜索页的空态要能把用户带去「来源」视图装来源：去处由库页壳
     // 提供（[_openSourcesAction]），弹掉搜索页也由壳自己做。
@@ -429,7 +394,6 @@ class _MangaDiscoveryPageState extends ConsumerState<MangaDiscoveryPage> {
     if (catalog.isEmpty && feeds.isEmpty) return _buildEmpty();
     final Widget catalogSection = MangaSourceCatalogSection(
       catalog: catalog.filterById(selected),
-      onOpenMokuro: _openMokuro,
       onOpenMihon: _openMihonSource,
       onOpenOpds: _openOpdsServer,
     );

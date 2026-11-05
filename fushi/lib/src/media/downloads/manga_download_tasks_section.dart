@@ -14,9 +14,9 @@ import 'package:fushi/src/media/manga/library/manga_chapter_list.dart'
 import 'package:fushi/src/models/app_model.dart';
 import 'package:fushi/utils.dart';
 
-/// 「下载」页任务 tab 的漫画分区：读 `manga_download_jobs`（在线章节 +
-/// mokuro.moe 整卷同一张表）输出 [DownloadTaskEntry]，与 torrent / 直链 / 远端
-/// 任务并列进统一列表（设计稿 2026-09-12 §4，取代原 `MokuroMoeTasksSection`）。
+/// 「下载」页任务 tab 的漫画分区：读 `manga_download_jobs`（在线章节任务）输出
+/// [DownloadTaskEntry]，与 torrent / 直链 / 远端任务并列进统一列表
+/// （设计稿 2026-09-12 §4）。
 ///
 /// 只做映射，不持有任务：动作全部委托 [MangaDownloadService]（取消 / 重试 /
 /// 清除），行的真相是表——`watchJobs` 一响就整体重取。独立使用时空表不占位；
@@ -107,9 +107,11 @@ class _MangaDownloadTasksSectionState
 
 /// 一条任务行 → 统一下载中心条目。
 ///
-/// `id = manga:<jobId>`；`collectionKey` 在线章节取 bookKey、mokuro 卷取
-/// `mokuro:<系列>`（表里的 bookKey 本来就是这个形状）；动作：未结束可取消、
+/// `id = manga:<jobId>`；`collectionKey` 取 bookKey；动作：未结束可取消、
 /// failed / cancelled 可重试（同一行复位，BUG-1433）、已结束可清除。
+String _mangaTaskTitle(MangaDownloadJobRow job) =>
+    '${job.title} · ${job.chapterTitle}';
+
 DownloadTaskEntry mangaDownloadTaskEntry(
   MangaDownloadJobRow job,
   MangaDownloadService downloads,
@@ -123,16 +125,13 @@ DownloadTaskEntry mangaDownloadTaskEntry(
       : job.pagesTotal > 0
           ? (job.pagesDone / job.pagesTotal).clamp(0.0, 1.0)
           : null;
-  final String? seriesName = mokuroMoeSeriesNameOf(job.bookKey);
-  final String collectionTitle = seriesName ?? job.title;
+  final String collectionTitle = job.title;
   final String status = _statusLabel(job);
   final ({DownloadTransferMethod method, bool external}) source =
       mangaDownloadSourceOf(job.runtime);
   return DownloadTaskEntry(
     id: id,
-    title: job.kind == MangaDownloadJobKind.mokuroVolume
-        ? job.title
-        : '${job.title} · ${job.chapterTitle}',
+    title: _mangaTaskTitle(job),
     createdAt: job.createdAt,
     kind: DownloadTaskKind.manga,
     status: switch (job.status) {
@@ -158,9 +157,7 @@ DownloadTaskEntry mangaDownloadTaskEntry(
       taskId: id,
       method: source.method,
       externalSource: source.external,
-      title: job.kind == MangaDownloadJobKind.mokuroVolume
-          ? job.title
-          : job.chapterTitle,
+      title: job.chapterTitle,
       status: status,
       subtitle: collectionTitle,
       progress: progress,
@@ -173,17 +170,13 @@ DownloadTaskEntry mangaDownloadTaskEntry(
   );
 }
 
-/// 漫画下载任务的传输方式与是否外部来源（按 `runtime` 列）：Mihon / 旧
-/// Aidoku 是扩展从第三方站点抓、mokuro.moe 是该站的 HTTP 直链、互联是从自己
-/// 已配对的设备 HTTP 拉取（不算外部来源）。未知值按扩展源处理并标外部。
+/// 漫画下载任务的传输方式与是否外部来源（按 `runtime` 列）：Mihon 是扩展从
+/// 第三方站点抓、互联是从自己已配对的设备 HTTP 拉取（不算外部来源）。未知值按
+/// 扩展源处理并标外部。
 ({DownloadTransferMethod method, bool external}) mangaDownloadSourceOf(
   String runtime,
 ) =>
     switch (runtime) {
-      kMokuroMoeDownloadRuntime => (
-          method: DownloadTransferMethod.direct,
-          external: true,
-        ),
       'interconnect' => (
           method: DownloadTransferMethod.direct,
           external: false
@@ -272,11 +265,7 @@ class _MangaDownloadTaskRow extends StatelessWidget {
       subtitleMaxLines: 2,
       titleMaxLines: 2,
       leading: statusIcon,
-      title: Text(
-        job.kind == MangaDownloadJobKind.mokuroVolume
-            ? job.title
-            : '${job.title} · ${job.chapterTitle}',
-      ),
+      title: Text(_mangaTaskTitle(job)),
       subtitle: Text(
         status,
         maxLines: 2,

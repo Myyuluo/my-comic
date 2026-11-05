@@ -10,7 +10,7 @@ import 'package:fushi/src/utils/components/glass/fushi_icon.dart';
 import 'package:fushi/src/utils/fushi_icons.dart';
 import 'package:fushi/utils.dart';
 
-/// 「Fushi 互联」在漫画「来源」一节里的一行（与 [MokuroMoeSourceRow] 同构、同级）。
+/// 「Fushi 互联」在漫画「来源」一节里的一行（与在线源行同构、同级）。
 ///
 /// 开关**刻意不在这里**：互联总开关是全应用一个（同步设置页、本地扫描根那一节都能
 /// 改），在漫画源里再放一个会让用户以为它只管漫画。这一行只反映它当前是不是开着，

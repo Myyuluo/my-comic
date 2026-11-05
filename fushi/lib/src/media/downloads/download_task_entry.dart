@@ -17,7 +17,7 @@ enum DownloadTaskStatus {
 ///
 /// 槽位为 null 表示**该来源根本没有这个概念**，而不是「此刻不可用」——统一列表里
 /// 四类任务的能力天然不齐：任务级优先级只有 video job 的持久化调度器有；
-/// mokuro 与直链是单跑道内存队列，一次只跑一个、无调度器、连暂停态都不存在，
+/// 直链是单跑道内存队列，一次只跑一个、无调度器、连暂停态都不存在，
 /// 所以既没有 [setPriority] 也没有 [resume]（它们的「续传」是 retry 走 Range，
 /// 语义上是重跑而非恢复）。
 ///
@@ -50,7 +50,7 @@ class DownloadTaskActions {
   final Future<void> Function()? pause;
 
   /// 取消：**不可恢复**地中止，之后只能靠 [retry] 重跑。
-  /// 与 [pause] 是两种语义，不要合并——mokuro / 直链只有这一种。
+  /// 与 [pause] 是两种语义，不要合并——单跑道队列只有这一种。
   final Future<void> Function()? cancel;
 
   /// 从 [pause] 的暂停态原地恢复。Range 断点续传不算——那属于 [retry]。

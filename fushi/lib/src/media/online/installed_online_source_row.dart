@@ -8,9 +8,8 @@ import 'package:fushi/utils.dart';
 
 // 已装在线源列表（「浏览 › 来源」与各库页「来源」子标签）三域共用的 M3E 积木。
 //
-// 漫画 / 视频（Mihon / Aniyomi，`MihonInstalledSourcesSection`）、小说
-// （LNReader，`LnReaderInstalledSourcesSection`）与内置 mokuro.moe 行
-// （`MokuroMoeSourceRow`）同一种行形态：
+// 漫画 / 视频（Mihon / Aniyomi，`MihonInstalledSourcesSection`）与小说
+// （LNReader，`LnReaderInstalledSourcesSection`）共用同一种行形态：
 //
 // - 分段列表行（[FushiGroupedListItem]）：行首 M3E 开关、名称、副标题 = 语言
 //   tag + 扩展名 / 站点；窄行（手机）标题独占一行、动作挪到第二层，名字不被截断；

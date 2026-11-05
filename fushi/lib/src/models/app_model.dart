@@ -122,8 +122,6 @@ import 'package:fushi/src/media/manga/mihon/mihon_manager.dart';
 import 'package:fushi/src/media/manga/mihon/mihon_models.dart';
 import 'package:fushi/src/media/manga/mihon/mihon_runtime.dart';
 import 'package:fushi/src/media/manga/mihon/mihon_runtime_factory.dart';
-import 'package:fushi/src/media/manga/online/mokuro_moe_client.dart';
-import 'package:fushi/src/media/manga/online/mokuro_moe_volume_downloader.dart';
 import 'package:fushi_engine/media/torrent/anime_download_config.dart';
 import 'package:fushi_engine/media/torrent/download_timeouts.dart';
 import 'package:fushi/src/media/torrent/download_relocate_service.dart';
@@ -4699,22 +4697,18 @@ class AppModel with ChangeNotifier {
   AnimeDownloadSubscriptionStore? get animeDownloadSubscriptionStore =>
       _animeDownloadSubscriptionStore;
 
-  /// 漫画下载服务（懒建，app 生命周期常驻；设计稿 2026-09-12 §4）：在线章节 +
-  /// mokuro.moe 整卷共用一张任务表、一个 worker。
+  /// 漫画下载服务（懒建，app 生命周期常驻；设计稿 2026-09-12 §4）：在线章节
+  /// 任务表、一个 worker。
   ///
-  /// 作品页 / 阅读器 / mokuro 目录页只负责 enqueue；worker 在 [startMangaDownloads]
+  /// 作品页 / 阅读器只负责 enqueue；worker 在 [startMangaDownloads]
   /// （HomePage 就绪后）才开始消费，之前入队的任务留在表里等着。关库 / 切 Profile
-  /// 时在 [quiesceBackgroundDatabaseWriters] 销毁。书架页监听
-  /// [MangaDownloadService.mokuroImportedCount] 增量刷新书列表。
+  /// 时在 [quiesceBackgroundDatabaseWriters] 销毁。
   MangaDownloadService? _mangaDownloadService;
   MangaDownloadService get mangaDownloadService =>
       _mangaDownloadService ??= MangaDownloadService(
         database: database,
         serviceFor: onlineMangaLibraryService,
         onChapterDownloaded: _autoOcrDownloadedMangaChapter,
-        mokuroDownloader: () => MokuroMoeVolumeDownloader(
-          client: MokuroMoeClient(baseUrl: mangaOnlineCatalogBaseUrl),
-        ),
       );
 
   /// 启动章节下载 worker：复位上次进程死亡留下的 `running` 行并开始消费。幂等。
@@ -4801,7 +4795,7 @@ class AppModel with ChangeNotifier {
 
   /// Mihon 扩展生态宿主（Android 原生 / Windows、macOS 内置 Java sidecar）。
   ///
-  /// 与 mokuro 下载队列一样按首次访问懒建：普通书架和 Mokuro 浏览不会启动 JVM，
+  /// 与漫画下载服务一样按首次访问懒建：普通书架和在线源浏览不会启动 JVM，
   /// 只有进入漫画源/漫画扩展/来源设置才读取扩展数据库；桌面 runtime 又会等到
   /// 第一次真正调用扩展时才启动 M-Extension-Server。
   MihonManager? _mihonManager;
@@ -9775,15 +9769,6 @@ class AppModel with ChangeNotifier {
 
   Future<void> setMangaReaderPreferences(MangaReaderPreferences value) =>
       prefsRepo.setMangaReaderPreferences(value);
-
-  /// 漫画「在线目录」站点根 URL（O1 mokuro.moe 目录源；空值由 client 归一回默认）。
-  String get mangaOnlineCatalogBaseUrl => prefsRepo.mangaOnlineCatalogBaseUrl;
-  Future<void> setMangaOnlineCatalogBaseUrl(String value) =>
-      prefsRepo.setMangaOnlineCatalogBaseUrl(value);
-
-  bool get mangaOnlineCatalogEnabled => prefsRepo.mangaOnlineCatalogEnabled;
-  Future<void> setMangaOnlineCatalogEnabled(bool value) =>
-      prefsRepo.setMangaOnlineCatalogEnabled(value);
 
   /// 作品页「完成后自动识别」chip 的持久值；单章 / 整部入队都读它作 `auto_ocr`。
   bool get mangaDownloadAutoOcr => prefsRepo.mangaDownloadAutoOcr;

@@ -15,21 +15,28 @@ import 'package:fushi/src/utils/components/fushi_staggered_entrance.dart';
 import 'package:fushi/src/utils/fushi_icons.dart';
 import 'package:fushi/utils.dart';
 
-/// 漫画库「导入」视图：本地来源的管理处。
+/// 「浏览 › 导入」视图：漫画 Local import 的管理处。
 ///
 /// 自上而下：快速导入（单卷 / 单文件 + 导入文件夹）、常驻来源（漫画扫描根，与书 /
 /// 视频共用的 [MediaSourcesView]），以及互联对端的漫画库（读的是用户自己另一台
 /// 设备上的库，与 Plex / Jellyfin 客户端连自己的服务器同类，不受商店合规边界约束，
 /// iOS 上照常提供）。
 ///
-/// 扩展仓库 / 扩展目录 / 扩展提供的在线源（含 mokuro.moe）2026-09-27 起只住在顶层
-/// 「浏览」模块（`MangaOnlineSourcesView`，Mihon 的 Browse 形态），本页不再挂在线
-/// 入口。
+/// 页签文案本身已是标题，本页不再渲染页内大标题。扩展仓库 / 扩展目录 / 在线源
+/// 住在同一「浏览」模块的「在线源」页签（Mihon 的 Browse 形态），本页不挂在线入口。
 class MangaSourcesPage extends ConsumerStatefulWidget {
-  const MangaSourcesPage({super.key, this.navigation});
+  const MangaSourcesPage({
+    super.key,
+    this.navigation,
+    this.embedded = false,
+  });
 
-  /// 库页视图导航条（由 `MediaLibraryShell` 传入，作为页头主内容）。
+  /// 页面导航条；嵌在宿主页签里时为 null。
   final Widget? navigation;
+
+  /// 嵌在宿主页签里时隐藏自身页头（浏览 › 导入）：页签文案已经是标题，
+  /// 不重复渲染「来源管理」。
+  final bool embedded;
 
   @override
   ConsumerState<MangaSourcesPage> createState() => _MangaSourcesPageState();
@@ -56,9 +63,7 @@ class _MangaSourcesPageState extends ConsumerState<MangaSourcesPage> {
   Widget _sectionTitle(String title) =>
       Text(title, style: context.fushiType.titleLargeEmphasized);
 
-  /// 页头。与 `MediaSourcesPage` 同一范式：库页视图导航条存在时它就是页头主位，
-  /// **不再另渲染一个页面大标题**——导航条自己已经标明了当前在哪个视图，标题只是
-  /// 重复占一行。仅在没有导航条（独立 push 进来）时才回退到文字标题。
+  /// 页头：导航条存在时占页头主位；独立使用时回退到文字标题。
   Widget _buildHeader() {
     // 「添加来源」已从页头收敛到「常驻来源」区头（TODO-2930），页头只留导航条。
     const List<Widget> actions = <Widget>[];
@@ -135,7 +140,8 @@ class _MangaSourcesPageState extends ConsumerState<MangaSourcesPage> {
       kind: DesktopContentKind.readerShelf,
       child: Column(
         children: <Widget>[
-          if (!isCupertinoPlatform(context)) _buildHeader(),
+          if (!widget.embedded && !isCupertinoPlatform(context))
+            _buildHeader(),
           Expanded(
             // 顶部让出库页壳浮动工具区的高度（不在壳里时为 0）：内容滚到工具区
             // 底下，工具区收起后上方不再留一条空白。

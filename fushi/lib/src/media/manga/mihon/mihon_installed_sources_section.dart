@@ -31,21 +31,16 @@ class MihonInstalledSourcesSection extends StatefulWidget {
   const MihonInstalledSourcesSection({
     required this.manager,
     super.key,
-    this.leading = const <Widget>[],
     this.onOpenSource,
     this.emptyLabel,
   });
 
   final MihonManager manager;
 
-  /// 排在扩展源之前的内置源行（漫画：mokuro.moe、互联对端）。普通 box widget，
-  /// 各自带底部间距；有内置行时扩展源一组挂「全部来源」小标题。
-  final List<Widget> leading;
-
   /// 点行进该源的浏览页；为 null 时行不可点。小说 / 漫画 / 视频三域都传。
   final void Function(MangaOnlineSourceRow source)? onOpenSource;
 
-  /// 一个扩展源都没有时的提示；为 null 不提示（有内置行的域列表不算空）。
+  /// 一个扩展源都没有时的提示；为 null 不提示。
   final String? emptyLabel;
 
   @override
@@ -352,8 +347,8 @@ class _MihonInstalledSourcesSectionState
     final List<String> languages = onlineSourceLanguages(
       all.map((MangaOnlineSourceRow row) => row.language),
     );
-    // 无置顶且没有内置行时整段只有一组，不必再挂「全部来源」小标题。
-    final bool showAllHeader = pinned.isNotEmpty || widget.leading.isNotEmpty;
+    // 无置顶时整段只有一组，不必再挂「全部来源」小标题。
+    final bool showAllHeader = pinned.isNotEmpty;
     return FushiEntranceScope(
       replayKey: '${_status.name}|$_language',
       child: SliverMainAxisGroup(
@@ -380,7 +375,6 @@ class _MihonInstalledSourcesSectionState
                     const OnlineSourcesReorderDisabledHint(),
                 ],
                 const SizedBox(height: 12),
-                ...widget.leading,
               ],
             ),
           ),

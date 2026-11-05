@@ -279,7 +279,7 @@ class _DownloadTaskBrowserState extends State<DownloadTaskBrowser> {
   ///
   /// 选中集是纯 id，渲染集合会随筛选、搜索、分组折叠与后台刷新变化，所以每次都
   /// 现取交集：既避免动到用户看不见的条目，也天然剔掉已经消失的幽灵 id（任务跑完
-  /// 被清出列表、直链/mokuro 的自增 id 随进程重启作废）。
+  /// 被清出列表、直链任务的自增 id 随进程重启作废）。
   List<DownloadTaskEntry> _selectedVisible(List<DownloadTaskEntry> rendered) {
     return rendered
         .where((DownloadTaskEntry task) => _selectedIds.contains(task.id))
@@ -364,7 +364,7 @@ class _DownloadTaskBrowserState extends State<DownloadTaskBrowser> {
   /// 文件一起删」。确认框里的 N 就是 [targets] 的条数。
   Future<void> _confirmDelete(List<DownloadTaskEntry> targets) async {
     if (targets.isEmpty || _batchRunning) return;
-    // 「同时删除文件」只在选中集里真有条目兑现得了时才摆出来——mokuro / 直链
+    // 「同时删除文件」只在选中集里真有条目兑现得了时才摆出来——直链
     // 只能把条目移出列表，勾了也删不掉盘上的东西（与单条删除确认框同一纪律）。
     final bool offerDeleteFiles = targets.any(
       (DownloadTaskEntry task) => task.actions.deletesFiles,

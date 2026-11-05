@@ -10,7 +10,7 @@ enum DownloadBatchAction { pause, resume, retry, cancel, clear, delete }
 /// 一次批量操作的结果。
 ///
 /// [unsupported] 与 [failed] 是**两回事**：前者是这条任务的来源根本没有这个动作
-/// （单跑道队列没有暂停、mokuro 删不了磁盘文件），后者是支持但执行时出错。混成
+/// （单跑道队列没有暂停、直链任务删不了磁盘文件），后者是支持但执行时出错。混成
 /// 一个数字会让用户以为「失败了、再试一次就好」，而实际上再试一百次也一样。
 class DownloadBatchOutcome {
   const DownloadBatchOutcome({
@@ -130,7 +130,7 @@ String describeDownloadBatchOutcome(DownloadBatchOutcome outcome) {
 /// 「清除已完成」里一条已完成任务会被怎样处理。
 ///
 /// 来源能力天然不齐，所以「清除已完成」不能简单地对每条调 clear 或 delete：
-/// - 只有 [DownloadTaskActions.clear] 的（直链 / mokuro / 漫画 / 转录）只能移出列表；
+/// - 只有 [DownloadTaskActions.clear] 的（直链 / 漫画 / 转录）只能移出列表；
 /// - 只有能删文件的 [DownloadTaskActions.delete] 的（video job、扩展源成品）没有
 ///   「只清记录」——它们的 delete 会联动删库行、摘种子，不勾「同时删除文件」时
 ///   绝不能拿它冒充清除；

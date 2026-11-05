@@ -1,17 +1,17 @@
 /// 漫画发现页的「可浏览来源」一节 + 它的数据快照。
 ///
 /// 这一节是此前独立存在的「浏览」视图（`manga_browse_page.dart`）的全部内容：
-/// 内置 mokuro.moe 目录 + 已启用 Mihon 在线源 + OPDS 服务器，各自一张卡片、
-/// 点进各自的浏览页。两个 tab 的文案被改成同一个「发现」之后
-/// （`library_view_discover` 与 `library_view_browse` 在漫画库同时挂着），用户点
-/// 哪个都分不清；能力合进发现页，冗余 tab 删掉（BUG-1710）。
+/// 已启用 Mihon 在线源 + OPDS 服务器，各自一张卡片、点进各自的浏览页。两个 tab
+/// 的文案被改成同一个「发现」之后（`library_view_discover` 与
+/// `library_view_browse` 在漫画库同时挂着），用户点哪个都分不清；能力合进发现页，
+/// 冗余 tab 删掉（BUG-1710）。应用不内置任何 Source，因此这里没有默认磁贴。
 ///
 /// 快照 [MangaSourceCatalog] 是页面与本节之间**唯一**的数据契约：页面负责按平台
 /// 发现来源（或在测试里直接注入），本节只负责渲染。这样 widget 测试不用架起真实
 /// 扩展宿主，也不用碰 `AppModel`。
 ///
 /// 平台差异只体现在**内容**上，不体现在结构上：Mihon 仅桌面/安卓有宿主，没有
-/// 宿主的平台（iOS）这一节仍在原位，只列内置来源。
+/// 宿主的平台（iOS）这一节仍在原位，只列用户自配的 OPDS。
 library;
 
 import 'package:material_ui/material_ui.dart';
@@ -32,42 +32,28 @@ import 'package:fushi/utils.dart';
 @immutable
 class MangaSourceCatalog {
   const MangaSourceCatalog({
-    this.mokuroEnabled = false,
     this.mihonSources = const <MangaOnlineSourceRow>[],
     this.opdsServers = const <OpdsServerConfig>[],
   });
 
-  /// 内置 mokuro.moe 目录的来源 id。
-  static const String mokuroSourceId = 'mokuro';
-
   /// Mihon 在线源的来源 id（与 `mihonDiscoverySourceFeeds` 生成的 feed id 同式）。
   static String mihonSourceId(MangaOnlineSourceRow source) =>
       'mihon:${source.extensionPackage}:${source.sourceId}';
-
-  /// 内置 mokuro.moe 目录是否参与浏览（「来源」视图里的开关）。
-  final bool mokuroEnabled;
 
   /// 已启用、且提供它的扩展也启用的 Mihon 在线源。
   final List<MangaOnlineSourceRow> mihonSources;
 
   /// 已启用的、用户自配的 OPDS 书目服务器（供漫画的那一面）。
   ///
-  /// 与前三类的差别：OPDS **没有「热门 feed」的概念**——它的根就是一棵可浏览的
-  /// 目录树。所以它只出现在「浏览来源」卡片里，**不进** [sourceOptions]：
-  /// 进了下拉就意味着选中它以后正文该显示一行热门，而那一行恒空
-  /// （mokuro 已有先例：它同样不在聚合搜索的源模型里，选中即直接开目录页）。
+  /// 与 Mihon 源的差别：OPDS **没有「热门 feed」的概念**——它的根就是一棵可浏览
+  /// 的目录树。所以它只出现在「浏览来源」卡片里，**不进** [sourceOptions]：
+  /// 进了下拉就意味着选中它以后正文该显示一行热门，而那一行恒空。
   final List<OpdsServerConfig> opdsServers;
 
-  bool get isEmpty =>
-      !mokuroEnabled && mihonSources.isEmpty && opdsServers.isEmpty;
+  bool get isEmpty => mihonSources.isEmpty && opdsServers.isEmpty;
 
-  /// 下拉选项（按 mokuro -> Mihon 的展示顺序，与卡片顺序一致）。
+  /// 下拉选项（Mihon 源的展示顺序，与卡片顺序一致）。
   List<DiscoverySourceOption> get sourceOptions => <DiscoverySourceOption>[
-        if (mokuroEnabled)
-          DiscoverySourceOption(
-            id: mokuroSourceId,
-            label: t.mihon_source_browse_mokuro,
-          ),
         for (final MangaOnlineSourceRow source in mihonSources)
           DiscoverySourceOption(
             id: mihonSourceId(source),
@@ -85,7 +71,6 @@ class MangaSourceCatalog {
   MangaSourceCatalog filterById(String sourceId) {
     if (sourceId == kDiscoveryAllSourcesId) return this;
     return MangaSourceCatalog(
-      mokuroEnabled: mokuroEnabled && sourceId == mokuroSourceId,
       mihonSources: mihonSources
           .where((MangaOnlineSourceRow source) =>
               mihonSourceId(source) == sourceId)
@@ -110,14 +95,12 @@ class MangaSourceCatalog {
 class MangaSourceCatalogSection extends StatelessWidget {
   const MangaSourceCatalogSection({
     required this.catalog,
-    required this.onOpenMokuro,
     required this.onOpenMihon,
     required this.onOpenOpds,
     super.key,
   });
 
   final MangaSourceCatalog catalog;
-  final VoidCallback onOpenMokuro;
   final ValueChanged<MangaOnlineSourceRow> onOpenMihon;
   final ValueChanged<OpdsServerConfig> onOpenOpds;
 
@@ -127,20 +110,6 @@ class MangaSourceCatalogSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final List<Widget> tiles = <Widget>[
-      if (catalog.mokuroEnabled)
-        _SourceTile(
-          key: const ValueKey<String>('manga-source-mokuro'),
-          leading: const FushiListLeadingIcon(
-            FushiIcons.books,
-            shape: FushiLeadingShape.cookie,
-            tone: FushiCardTone.primary,
-            size: 36,
-            iconSize: 20,
-          ),
-          title: t.mihon_source_browse_mokuro,
-          subtitle: 'mokuro.moe',
-          onTap: onOpenMokuro,
-        ),
       for (final MangaOnlineSourceRow source in catalog.mihonSources)
         _SourceTile(
           key: ValueKey<String>(

@@ -129,14 +129,6 @@ void main() {
       snapshot.preferences[kVideoMetadataAniDbClientVersionPref],
       PrefCodec.encode(''),
     );
-    expect(
-      snapshot.preferences['manga_online_catalog_base_url'],
-      PrefCodec.encode('https://mokuro.moe'),
-    );
-    expect(
-      snapshot.preferences['manga_online_catalog_enabled'],
-      PrefCodec.encode(true),
-    );
   });
 
   test('client ignores unknown fields and applies only changed rows', () async {
@@ -150,20 +142,15 @@ void main() {
         'jimaku_api_key': PrefCodec.encode('new'),
         kVideoMetadataAniDbClientNamePref: PrefCodec.encode('synced-client'),
         kVideoMetadataAniDbClientVersionPref: PrefCodec.encode('9'),
-        'manga_online_catalog_enabled': PrefCodec.encode(false),
         'sync_device_id': PrefCodec.encode('attacker-device'),
         'future_secret': PrefCodec.encode('attacker-secret'),
       },
     });
 
-    expect(await snapshot.applyTo(db), 4);
+    expect(await snapshot.applyTo(db), 3);
     expect(
       await db.getPref('jimaku_api_key'),
       PrefCodec.encode('new'),
-    );
-    expect(
-      await db.getPref('manga_online_catalog_enabled'),
-      PrefCodec.encode(false),
     );
     expect(
       await db.getPref(kVideoMetadataAniDbClientNamePref),

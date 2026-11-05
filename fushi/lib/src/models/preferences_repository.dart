@@ -4859,22 +4859,6 @@ class PreferencesRepository extends ChangeNotifier
     notifyListeners();
   }
 
-  /// 漫画「在线目录」站点根 URL（O1：mokuro.moe 目录源；`MokuroMoeClient` 消费，
-  /// 空串/尾斜杠由 client 侧 `normalizeMokuroMoeBaseUrl` 归一回默认站点）。
-  String get mangaOnlineCatalogBaseUrl =>
-      getPref('manga_online_catalog_base_url',
-          defaultValue: 'https://mokuro.moe') as String;
-
-  Future<void> setMangaOnlineCatalogBaseUrl(String value) async {
-    await setPref('manga_online_catalog_base_url', value);
-    notifyListeners();
-  }
-
-  /// Whether the mokuro.moe internet catalog participates in manga browsing.
-  /// Defaults to true to preserve the pre-source-toggle behaviour.
-  bool get mangaOnlineCatalogEnabled =>
-      getPref('manga_online_catalog_enabled', defaultValue: true) as bool;
-
   /// 作品页「完成后自动识别」：章节下载任务入队时的 `auto_ocr` 取值（设计稿
   /// 2026-09-12 §5）。默认关——自动 OCR 要么占本机算力要么走已配对主机，
   /// 不该在用户没点过的情况下悄悄开始。
@@ -4883,11 +4867,6 @@ class PreferencesRepository extends ChangeNotifier
 
   Future<void> setMangaDownloadAutoOcr(bool value) async {
     await setPref('manga_download_auto_ocr', value);
-    notifyListeners();
-  }
-
-  Future<void> setMangaOnlineCatalogEnabled(bool value) async {
-    await setPref('manga_online_catalog_enabled', value);
     notifyListeners();
   }
 
