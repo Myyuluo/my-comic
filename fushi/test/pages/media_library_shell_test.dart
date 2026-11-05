@@ -78,9 +78,16 @@ void main() {
     );
   }
 
-  Widget harness(List<MediaLibraryViewSpec> views) => MaterialApp(
+  Widget harness(
+    List<MediaLibraryViewSpec> views, {
+    bool alwaysShowChrome = false,
+  }) => MaterialApp(
     home: Scaffold(
-      body: MediaLibraryShell(focusIdPrefix: 'test-library-view', views: views),
+      body: MediaLibraryShell(
+        focusIdPrefix: 'test-library-view',
+        alwaysShowChrome: alwaysShowChrome,
+        views: views,
+      ),
     ),
   );
 
@@ -380,6 +387,29 @@ void main() {
       findsNothing,
     );
     expect(probe.gotRealNavigation[0], isFalse);
+  });
+
+  testWidgets('alwaysShowChrome：单视图仍画浮动工具栏和单页签', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      harness(
+        <MediaLibraryViewSpec>[
+          spec(0, MediaLibraryViewKind.library, '书架'),
+        ],
+        alwaysShowChrome: true,
+      ),
+    );
+    expect(
+      find.byType(FushiAdjustableSegmented<MediaLibraryViewKind>),
+      findsOneWidget,
+    );
+    final FushiSectionTabBar<MediaLibraryViewKind> strip = tester.widget(
+      topStrip(),
+    );
+    expect(valuesOf(strip), <MediaLibraryViewKind>[
+      MediaLibraryViewKind.library,
+    ]);
   });
 
   // -------------------------------------------------------------------------

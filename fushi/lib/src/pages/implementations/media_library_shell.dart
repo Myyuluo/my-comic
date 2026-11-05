@@ -125,6 +125,7 @@ class MediaLibraryShell extends StatefulWidget {
   const MediaLibraryShell({
     required this.views,
     required this.focusIdPrefix,
+    this.alwaysShowChrome = false,
     super.key,
   });
 
@@ -133,6 +134,11 @@ class MediaLibraryShell extends StatefulWidget {
 
   /// 分段条的焦点 id 前缀（每个域一个，避免多域同时挂载时撞 id）。
   final String focusIdPrefix;
+
+  /// 只有一个视图时也画浮动工具栏（壳标题 + 单页签 + 页头动作）。
+  /// 默认 false：单视图域的页面自己负责页头，不额外放一条空壳 tab。
+  /// 漫画页只剩书架后仍要靠壳画「漫画」标题、书架页签和右上角动作。
+  final bool alwaysShowChrome;
 
   @override
   State<MediaLibraryShell> createState() => _MediaLibraryShellState();
@@ -219,7 +225,7 @@ class _MediaLibraryShellState extends State<MediaLibraryShell> {
     final Set<MediaLibraryViewKind> kinds = <MediaLibraryViewKind>{
       for (final MediaLibraryViewSpec spec in views) spec.kind,
     };
-    if (views.length < 2) {
+    if (views.length < 2 && !widget.alwaysShowChrome) {
       return MediaLibraryShellScope(
         kinds: kinds,
         select: _select,

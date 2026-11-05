@@ -15,6 +15,8 @@ class MangaLibraryPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return MediaLibraryShell(
       focusIdPrefix: 'manga-library-view',
+      // 只剩书架一个视图，但「漫画」标题、书架页签和右上角动作仍由壳画。
+      alwaysShowChrome: true,
       views: <MediaLibraryViewSpec>[
         MediaLibraryViewSpec(
           kind: MediaLibraryViewKind.library,
