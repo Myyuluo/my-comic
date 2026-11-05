@@ -1,7 +1,7 @@
 # 17: 恢复随包 Extension runtime 的本地构建
 
 **Blocked by:** none
-**Status:** ready-for-agent
+**Status:** resolved
 
 ## Problem Statement
 
@@ -125,4 +125,4 @@ Bundled extension runtime。`flutter build windows` 不会生成 `mihon_bridge`�
 - 环境补充（已写入脚本与 `docs/agent/build.md`）：本机 `FUSHI_FLUTTER` 指向 SDK 目录时脚本自动补 `bin\flutter.bat`；NuGet 从 `.dart_tool/nuget/nuget.exe` 解析；`strings.g.dart` 缺失时自动 `dart run slang` + `dart format`。本地仍不跑需要 PowerShell 7 的 `verify_desktop_runtime.ps1`。
 - 依赖解析：本机 pub 镜像与 upstream lock 的 URL 不匹配，plain `pub get` 会升级到 image 4.12 / dio 5.11 / dartssh2 2.14 并导致 `flutter build` 失败。脚本改用 `.dart_tool/my-comic/pubspec.lock` 的本地已知可用 lock + `pub get --enforce-lockfile`，构建用 `--no-pub`，工作区 lock 保持 upstream 版本。
 - 评审修复：脚本钉住官方 JAR SHA256（缓存/来源/打包/清单四层校验）；显式指定但无效的 `-RuntimeSource` 直接失败；store E2E 加 `FUSHI_TEST_MIHON_STORE_E2E=1` 门控；守卫测试钉死复制目标与官方哈希。
-- 待办：用户在 UI 里用 `启动MyComic.bat` 手工确认一次（添加 Keiyoushi store → 安装 Extension → Source 可用），之后把 ticket 置 resolved 并合并回 `integration/my-comic-v1-restored`。
+- 2026-11-05 UI 验收：用户确认 UI 设计正常、Extension 安装/功能正常、漫画阅读与导入正常。ticket 置 resolved 并合并回 `integration/my-comic-v1-restored`。
