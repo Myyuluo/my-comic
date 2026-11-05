@@ -28,6 +28,14 @@ _Avoid_: 扩展、插件
 Extension 的索引，例如 Keiyoushi 的 `index.pb`。它列出可安装的 Extension，本身不是 Source。
 _Avoid_: 插件仓库、repo（容易与 Git 仓库混淆）
 
+**Signer（签名者）**:
+Extension 的签名身份，以证书指纹标识；一个 Signer 可以被用户标记为 trusted 或 untrusted。
+_Avoid_: 签名者指纹、证书
+
+**Trust（信任）**:
+用户对某个 Signer 的明确接受记录；从未 trusted 的 Signer 安装 Extension 需要先确认。
+_Avoid_: 授权、白名单
+
 **Manga（漫画）**:
 书架中的一部作品，是 Library、Category、Reading progress 和 Tracking 的归属对象。
 _Avoid_: 条目、书籍
@@ -95,6 +103,10 @@ _Avoid_: 服务器、后端（避免暗示需要用户自建服务器）
 **Extension runtime（扩展运行时）**:
 Sidecar 加上 Android 兼容层，用于执行 Mihon Extension。
 _Avoid_: 插件引擎
+
+**Bundled extension runtime（随包扩展运行时）**:
+随应用构建或安装包分发的 Extension runtime 副本；my-comic 只启动这一份，不从系统或其他安装目录查找运行时。
+_Avoid_: 外部运行时、系统 Java
 
 **Mihon-compatible**:
 本项目在四个轴上的兼容承诺：Extension、Backup、Manga 功能、数据映射。它不表示 UI 与 Mihon 相同，也不表示代码是 Mihon 的移植。
