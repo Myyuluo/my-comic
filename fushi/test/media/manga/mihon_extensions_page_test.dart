@@ -172,6 +172,67 @@ void main() {
     await tester.pump();
   });
 
+  // 预览是**单例**：同一时间只允许一条「下载 → 加载源 → 浏览 → 安装/放弃」流程。
+  // 用户口径：连点两个不同扩展的预览时，后来的那条应当按标记直接取消，不能走到
+  // beginPreview 才抛 PREVIEW_IN_PROGRESS（那个异常会被弹成错误对话框）。
+  testWidgets('预览是单例：前一条流程结束前，另一个扩展的预览被静默取消',
+      (WidgetTester tester) async {
+    manager.dispose();
+    final _BlockingActionManager blocking = _BlockingActionManager(
+      database: database,
+      rootDirectory: root,
+      runtime: _PageRuntime(),
+    );
+    manager = blocking;
+    await manager.reload();
+    manager.available = <MihonAvailableExtension>[
+      _extension(
+        name: 'First extension',
+        packageName: 'org.example.first',
+        sourceName: 'First source',
+      ),
+      _extension(
+        name: 'Second extension',
+        packageName: 'org.example.second',
+        sourceName: 'Second source',
+      ),
+    ];
+    await pumpStandalone(tester);
+
+    final Finder previews =
+        find.widgetWithText(TextButton, t.mihon_extension_preview);
+    expect(previews, findsNWidgets(2));
+    // 直接拿回调模拟「两次点击都已派发」的竞态：第一次点击后页面会重建，第二次
+    // 点击的回调是重建前捕获的，正好对应真实设备上连点时的时序。
+    final VoidCallback firstAction = tester
+        .widget<TextButton>(glassUnwrap<TextButton>(previews.at(0)))
+        .onPressed!;
+    final VoidCallback secondAction = tester
+        .widget<TextButton>(glassUnwrap<TextButton>(previews.at(1)))
+        .onPressed!;
+
+    firstAction();
+    await tester.pump();
+    secondAction();
+    await tester.pump();
+
+    expect(
+      blocking.prepareCalls,
+      1,
+      reason: '第二条预览必须在前置下载/加载之前就被单例标记拦下，'
+          '而不是走到 beginPreview 抛 PREVIEW_IN_PROGRESS',
+    );
+    expect(
+      find.text(t.mihon_extension_error),
+      findsNothing,
+      reason: '取消是静默的：不能把 PREVIEW_IN_PROGRESS 弹成错误对话框',
+    );
+
+    await tester.pumpWidget(const SizedBox());
+    blocking.failPending();
+    await tester.pump();
+  });
+
   // BUG-1441（其一）：可搜字段里混进了**仓库级**的 `storeUrl`。同一个仓库的每个
   // 扩展 storeUrl 完全一样，于是任何命中该 URL 的查询都会「命中全部」——用户搜
   // 「raw」（想找 RawKuma 这类生肉源），keiyoushi 索引地址里的斜杠 raw 斜杠让 1900

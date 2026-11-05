@@ -114,6 +114,30 @@ class MihonManager extends ChangeNotifier {
     if (_extensionActionPackages.remove(packageName)) _notify();
   }
 
+  /// 预览流程是**单例**：同一时间只允许一个扩展走完「下载 → 加载源 → 浏览 →
+  /// 安装/放弃」。
+  ///
+  /// 与 [_activePreviewPackage] 的区别在于抢占时机：那个标记要到 [beginPreview]
+  /// 里、也就是下载和签名校验之后才置位。两个扩展错开几毫秒点预览时，后来的
+  /// 那个会先把 APK 下载完，再在 [beginPreview] 撞上 `PREVIEW_IN_PROGRESS`，最后
+  /// 被 UI 弹成错误框。这个标记由 UI 在任何异步工作开始前抢占，后到的预览按
+  /// 标记静默放弃。放在 manager 上是为了跨页面重建 / 导航存活（与
+  /// [tryBeginExtensionAction] 同理）。
+  bool _previewFlowActive = false;
+
+  bool get isPreviewFlowActive => _previewFlowActive;
+
+  /// 抢占唯一的预览槽。返回 false 表示已有预览流程，调用方应静默放弃本次预览。
+  bool tryBeginPreviewFlow() {
+    if (_previewFlowActive) return false;
+    _previewFlowActive = true;
+    return true;
+  }
+
+  void endPreviewFlow() {
+    _previewFlowActive = false;
+  }
+
   /// Desktop window close ends in a process-level fast exit, so ordinary
   /// ChangeNotifier/widget disposal is not guaranteed to run. Register this
   /// bounded callback with the app exit barrier to stop the exact retained
@@ -942,6 +966,8 @@ class MihonManager extends ChangeNotifier {
       );
     }
     final String packageName = proposal.inspection.packageName;
+    // 正常路径上 UI 已经在下载前用 [tryBeginPreviewFlow] 抢占单例槽；这里保留
+    // 异常作为最后一道防线，给绕过页面流程的调用方一个明确的失败信号。
     if (_activePreviewPackage != null) {
       throw const MihonRuntimeException(
         'PREVIEW_IN_PROGRESS',

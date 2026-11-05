@@ -259,6 +259,9 @@ class _MihonExtensionsPageState extends ConsumerState<MihonExtensionsPage> {
   /// **不写库、不进受信任签名表**。用户看完在预览页底部二选一：放弃（删干净）
   /// 或安装（走与直接安装完全相同的签名确认框）。
   Future<void> _preview(MihonAvailableExtension extension) async {
+    // 预览是单例：先占槽，再开始下载。占不到说明已有预览流程在跑，直接静默
+    // 放弃——不能走到 beginPreview 才抛 PREVIEW_IN_PROGRESS 弹错误框。
+    if (!_manager!.tryBeginPreviewFlow()) return;
     MihonPreviewSession? session;
     MihonInstallProposal? proposal;
     try {
@@ -302,6 +305,8 @@ class _MihonExtensionsPageState extends ConsumerState<MihonExtensionsPage> {
           ),
         );
       }
+    } finally {
+      _manager!.endPreviewFlow();
     }
   }
 

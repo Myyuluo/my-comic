@@ -119,6 +119,21 @@ void main() {
     );
   });
 
+  // 预览流程的 UI 层单例槽：抢在 prepareStoreInstall（下载 100 MiB APK）之前
+  // 占用，后到的预览按标记静默放弃；流程无论成功、取消还是报错都必须释放，
+  // 否则预览入口会被永久锁死。
+  test('预览槽是单例：未释放前后来者拿不到，释放后可再次占用', () {
+    expect(manager.tryBeginPreviewFlow(), isTrue);
+    expect(manager.isPreviewFlowActive, isTrue);
+    expect(manager.tryBeginPreviewFlow(), isFalse);
+
+    manager.endPreviewFlow();
+
+    expect(manager.isPreviewFlowActive, isFalse);
+    expect(manager.tryBeginPreviewFlow(), isTrue);
+    manager.endPreviewFlow();
+  });
+
   test('已安装的扩展不给预览（会顶掉用户正在用的那份）', () async {
     final MihonInstallProposal first = await prepare(<int>[1, 2, 3]);
     await manager.commitInstall(first, trustSigner: true);
