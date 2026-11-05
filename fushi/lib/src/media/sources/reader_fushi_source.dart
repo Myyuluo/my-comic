@@ -1042,8 +1042,11 @@ class ReaderFushiSource extends ReaderMediaSource {
   }) async {
     try {
       // 原件位置在 audiobooks / srt_books 行上，deleteEpubBook 的事务会把它们
-      // 级联删掉，必须先快照。
-      final Audiobook? audiobookBefore = deleteLocalFiles
+      // 级联删掉，必须先快照。my-comic 的漫画-only live schema 没有这两张表：
+      // 表不存在 = 没有对应附件，跳过查询而不是让删除整体抛 `no such table`。
+      final bool hasAudiobooksTable = await db.hasTable('audiobooks');
+      final bool hasSrtBooksTable = await db.hasTable('srt_books');
+      final Audiobook? audiobookBefore = deleteLocalFiles && hasAudiobooksTable
           ? await AudiobookRepository(db).findByBookKey(bookKey)
           : null;
       LocalFileDeleteReport localFileReport = const LocalFileDeleteReport();
@@ -1058,8 +1061,9 @@ class ReaderFushiSource extends ReaderMediaSource {
       // The book's on-disk extract dir and the srt uid must be resolved BEFORE
       // the transaction, because deleteEpubBook deletes the rows they live on.
       final EpubBookRow? bookRow = await db.getEpubBook(bookKey);
-      final SrtBookRepository srtRepo = SrtBookRepository(db);
-      final SrtBook? srt = await srtRepo.findByBookKey(bookKey);
+      final SrtBook? srt = hasSrtBooksTable
+          ? await SrtBookRepository(db).findByBookKey(bookKey)
+          : null;
 
       // BUG-439：bookKey 指向的行不存在（孤儿壳行 bookKey==''、key 不匹配、或重复
       // 删除）时，以前 deleteEpubBook 删 0 行后仍无条件 return true 谎报成功，调用方
@@ -1263,10 +1267,18 @@ class ReaderFushiSource extends ReaderMediaSource {
     required String bookKey,
   }) async {
     if (bookKey.isEmpty) return false;
-    final Audiobook? ab = await AudiobookRepository(db).findByBookKey(bookKey);
-    if (ab != null && await resolveAudiobookHasLocalFiles(ab.audioPaths)) {
-      return true;
+    // my-comic 的 live schema 是漫画-only（37 表），不含 audiobooks / srt_books。
+    // 这两个查询以前无条件执行，在漫画-only 库上抛 `no such table`，删除按钮在弹
+    // 确认框之前就中断——用户看到的就是「点删除没反应」。表不存在等价于「没有
+    // 可删的原件」，跳过即可；完整 schema（测试库）行为不变。
+    if (await db.hasTable('audiobooks')) {
+      final Audiobook? ab =
+          await AudiobookRepository(db).findByBookKey(bookKey);
+      if (ab != null && await resolveAudiobookHasLocalFiles(ab.audioPaths)) {
+        return true;
+      }
     }
+    if (!await db.hasTable('srt_books')) return false;
     final SrtBook? srt = await SrtBookRepository(db).findByBookKey(bookKey);
     return srt != null && await resolveAudiobookHasLocalFiles(srt.audioPaths);
   }

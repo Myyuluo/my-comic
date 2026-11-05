@@ -654,6 +654,45 @@ void main() {
     });
 
     test(
+        'my-comic 漫画-only schema（无 audiobooks / srt_books 表）也能删除漫画，'
+        '不再抛 no such table', () async {
+      // 回归：真实 FushiDatabase(dir) 走 _createMyComicSchema（37 张 live 表），
+      // 不像 forTesting 那样建全表。以前 hasLocalFiles / deleteBook 无条件查
+      // audiobooks / srt_books，漫画页点「删除」在弹确认框前就抛
+      // `no such table`，用户看到的是“点了没反应”。
+      final Directory dbDir =
+          Directory.systemTemp.createTempSync('fushi_manga_only_delete');
+      addTearDown(() {
+        if (dbDir.existsSync()) dbDir.deleteSync(recursive: true);
+      });
+      final FushiDatabase db = FushiDatabase(dbDir.path);
+      addTearDown(db.close);
+      MediaSource.setDatabase(db);
+
+      expect(await db.hasTable('audiobooks'), isFalse);
+      expect(await db.hasTable('srt_books'), isFalse);
+      await db.insertEpubBook(epubBook('manga1').copyWith(
+            format: Value<String>(BookFormat.manga.dbValue),
+          ));
+
+      expect(
+        await ReaderFushiSource.instance
+            .hasLocalFiles(db: db, bookKey: 'manga1'),
+        isFalse,
+        reason: '漫画-only 库没有音频表 = 没有可删原件，不得抛异常',
+      );
+      final DeleteBookResult result =
+          await ReaderFushiSource.instance.deleteBook(
+        db: db,
+        bookKey: 'manga1',
+        deleteLocalFiles: true,
+      );
+      expect(result.deleted, isTrue);
+      expect(result.failureReason, isNull);
+      expect(await db.getEpubBook('manga1'), isNull);
+    });
+
+    test(
         'BUG-3443 推送方向：从所有设备删除经互联收下的在线漫画，墓碑写对端键 '
         '（本机 interconnect- 键是单向哈希，对端认不出）', () async {
       final db = FushiDatabase.forTesting(NativeDatabase.memory());

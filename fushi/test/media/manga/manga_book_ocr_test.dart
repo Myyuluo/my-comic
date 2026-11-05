@@ -104,22 +104,26 @@ void main() {
     expect(await pendingMangaOcrTargets(row), isEmpty);
   });
 
-  test('卡菜单与多选底栏接到同一条 OCR 路径，漫画卡不再出现有声书入口（源码守卫）', () {
+  test('漫画卡菜单与多选底栏不再提供 OCR 入口（2026-11-05 用户口径）', () {
     final String shelf = File(
       'lib/src/pages/implementations/reader_fushi_history_page.dart',
     ).readAsStringSync();
     final String books = File(
       'lib/src/pages/implementations/reader_history/books.part.dart',
     ).readAsStringSync();
+    // 漫画页不再需要漫画翻译 / OCR：卡菜单与批量栏入口都已移除。
+    expect(shelf, isNot(contains('t.manga_library_ocr_action')));
+    expect(books, isNot(contains('t.manga_library_ocr_action')));
     expect(
-      shelf.contains(
-        'if (isManga && modules.isEnabled(ModuleId.manga))\n'
-        '        DialogQuickAction(\n'
-        '          label: t.manga_library_ocr_action,',
-      ),
-      isTrue,
-      reason: '漫画卡快捷格必须是 OCR',
+      books.contains("ValueKey<String>('reader_shelf_batch_ocr')"),
+      isFalse,
     );
+    expect(
+      books.contains('enqueuePendingMangaOcrForBooks('),
+      isFalse,
+      reason: '书架页不再有 OCR 排队入口',
+    );
+    // 漫画阅读器不播有声书，「导入有声书」仍不得出现在漫画卡上。
     expect(
       RegExp(
         r'if \(!isManga && modules\.isEnabled\(ModuleId\.listening\)\)\s*'
@@ -127,15 +131,6 @@ void main() {
       ).hasMatch(shelf),
       isTrue,
       reason: '漫画阅读器不播有声书，「导入有声书」不得出现在漫画卡上',
-    );
-    expect(
-      books.contains("ValueKey<String>('reader_shelf_batch_ocr')"),
-      isTrue,
-    );
-    expect(
-      'enqueuePendingMangaOcrForBooks('.allMatches(books).length,
-      greaterThanOrEqualTo(2),
-      reason: '卡菜单与多选底栏共用同一个入口函数',
     );
   });
 }

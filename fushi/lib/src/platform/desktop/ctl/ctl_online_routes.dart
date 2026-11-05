@@ -1114,7 +1114,7 @@ class _OnlineCtl {
         await appModel.mangaDownloadService.enqueueChapters(
           entry: entry,
           chapters: pending,
-          autoOcr: appModel.mangaDownloadAutoOcr,
+          autoOcr: false,
         );
         return <String, Object?>{
           'kind': kind.name,

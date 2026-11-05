@@ -52,11 +52,14 @@ void main() {
   // 同一把尺判「读到没读到」、同一套网格。书架端曾是另一套网格 + 翻页查看器 +
   // 自己的进度索引（各扫一遍 = 同一张图在两处被判出不同的「读到没读到」，横版图
   // 也各裁各的），现在只剩装载与接线。「删一行就悄悄长回第二份」的形状钉在源码层。
-  test('两个插图表面共用 EpubBook.images 这一份枚举与同一份 ReaderGalleryPage', () {
+  test('阅读器插图册只用 EpubBook.images 这一份枚举', () {
     // BUG-3370（#2206）把插图表挪到后台 isolate 建（UI isolate 不再同步读
     // book.images），但清单仍是 EpubBook.images 这一份：阅读器经
     // _loadBookImagesOffUiIsolate 在后台算好后 adoptImages 回填、返回的就是
     // book.images（盘上缓存存的也是它的结果），不是第二份枚举。
+    //
+    // 2026-11-05：书架长按菜单的「查看插画」入口已删除，书架端插图库随 ticket 20
+    // 一并移除；仅保留阅读器内的 ReaderGalleryPage。
     expect(
         RegExp(r'final List<EpubImageRef> images =\s*'
                 r'await _loadBookImagesOffUiIsolate\(book,')
@@ -74,29 +77,6 @@ void main() {
         reason: '后台建好的插图表必须回填进 EpubBook，后续读取都走 book.images');
     expect(loaderBody.contains('return book.images;'), isTrue,
         reason: '阅读器拿到的清单就是 EpubBook.images 本身');
-    final String shelf =
-        File('lib/src/pages/implementations/illustrations_viewer_page.dart')
-            .readAsStringSync();
-    expect(
-        shelf.contains(
-            "import 'package:fushi/src/reader/reader_gallery_page.dart';"),
-        isTrue,
-        reason: '书架端「查看插图」必须直接用阅读器内的 ReaderGalleryPage');
-    expect(shelf.contains('images: input.book.images,'), isTrue,
-        reason: '书架端的清单也只许来自 EpubBook.images');
-    expect(shelf.contains('currentChapter: position?.sectionIndex,'), isTrue,
-        reason: '没有位置行的书传 null，不得退化成 (0, 0) 把整本糊掉');
-    for (final String forbidden in <String>[
-      'GridView',
-      'PageView',
-      'maskedIllustrationCover(',
-      'IllustrationProgressIndex',
-      'querySelectorAll',
-      'InteractiveViewer(',
-    ]) {
-      expect(shelf.contains(forbidden), isFalse,
-          reason: '书架端不得再长出第二份网格 / 查看器 / 进度索引：$forbidden');
-    }
     expect(File('lib/src/reader/illustration_progress_index.dart').existsSync(),
         isFalse,
         reason: '书架端专用的进度索引已退役（判据由 EpubImageRef 自带）');

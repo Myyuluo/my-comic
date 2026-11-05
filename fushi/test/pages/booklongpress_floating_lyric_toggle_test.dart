@@ -85,10 +85,12 @@ void main() {
       reason: '书卡菜单必须直挂「在线刮削封面」（统一刮削入口层级）。',
     );
 
-    expect(epubActions, contains('t.view_illustrations'));
+    // 2026-11-05：查看插画 / 指定配置 / 编辑书籍 CSS 入口已从漫画页菜单移除
+    // （my-comic 不需要）；有声书导入与悬浮字幕仍按模块门控保留。
+    expect(epubActions, isNot(contains('t.view_illustrations')));
     expect(epubActions, contains('t.audiobook_import'));
-    expect(epubActions, contains('t.profile_book_profile'));
-    expect(epubActions, contains('t.book_css_editor_edit_css'));
+    expect(epubActions, isNot(contains('t.profile_book_profile')));
+    expect(epubActions, isNot(contains('t.book_css_editor_edit_css')));
     expect(epubActions, contains('floating_lyric_toggle_action'));
 
     // TODO-1191：SRT 卡长按菜单不再列冗余的「选择封面图片」——选封面统一走
@@ -101,8 +103,8 @@ void main() {
     // 「导入音频」已扩成「重新导入」（音频 + 字幕两半，见 SrtBookReimportDialog）：
     // 旧入口只能换音频，字幕书的字幕在首次导入后全仓无处可换。
     expect(srtActions, contains('t.srt_book_reimport'));
-    expect(srtActions, contains('t.profile_book_profile'));
-    expect(srtActions, contains('t.book_css_editor_edit_css'));
+    expect(srtActions, isNot(contains('t.profile_book_profile')));
+    expect(srtActions, isNot(contains('t.book_css_editor_edit_css')));
     // TODO-1068：SRT/有声书卡长按菜单对称补悬浮字幕入口，与 EPUB 侧一致。
     expect(
       srtActions,
@@ -121,7 +123,7 @@ void main() {
     );
   });
 
-  test('单卡长按菜单含「加入合集」入口，合集详情页语境隐藏', () {
+  test('单卡长按菜单不再含「加入合集」入口', () {
     final String epubActions = _sectionSource(
       src,
       'List<DialogAction> extraActions(MediaItem item) {',
@@ -132,102 +134,25 @@ void main() {
       'List<DialogAction> _srtExtraActions(',
       '  Future<void> _showSrtBookDialog(',
     );
-    // EPUB 卡：有入口，entryKey 编码与批量三档一致（v83：epub 成员键 = uid，
-    // 页面身份 bookKey 在 _addEpubToCollection 落库前经 resolveEpubBookUid 换算），
-    // 合集详情页成员卡语境（inCollectionDetail）隐藏。
-    expect(epubActions, contains('t.add_to_collection'));
-    // P5：mediaType 走 MediaKind 枚举（落库串仍 'epub'，见 media_kind_test）。
-    expect(epubActions, contains('mediaType: MediaKind.epub'));
-    expect(epubActions, contains('if (!inCollectionDetail)'));
-    // v83 换算针：落库入口必须先 bookKey→uid（换算不上兜底沿用 bookKey——透传
-    // 语义），再以换算结果传 entryKey。切出 _addEpubToCollection 方法体单独断言，
-    // 免得同文件标签域（tag_assignments epub 键冻结在 bookKey，有意分期）的
-    // `entryKey: bookKey` 字面量把「isNot」断言污染成假红/假绿。
-    final String addToCollectionBody = _sectionSource(
-      src,
-      'Future<void> _addEpubToCollection(MediaItem item, String bookKey)',
-      '  Future<void> _toggleBookCompleted(',
-    );
-    expect(
-      addToCollectionBody,
-      contains('resolveEpubBookUid(bookKey) ?? bookKey'),
-      reason: 'v83：单卡加入合集必须把 bookKey 换算成成员表键域的 uid'
-          '（换算不上沿用 bookKey，与批量档兜底口径一致）。',
-    );
-    expect(
-      addToCollectionBody,
-      contains('entryKey: entryKey'),
-      reason: '落库传换算后的 entryKey（uid）。',
-    );
-    expect(
-      addToCollectionBody,
-      isNot(contains('entryKey: bookKey')),
-      reason: '直接拿 bookKey 当合集成员 entryKey 是 v83 前的旧域——回归即红。',
-    );
-    // SRT/有声书卡：有入口，entryKey 编码一致（srt → uid），详情页注入
-    // 「移出合集」时隐藏（removeFromCollection 非空）。
-    expect(srtActions, contains('t.add_to_collection'));
-    expect(srtActions, contains('mediaType: MediaKind.srt'));
-    expect(srtActions, contains('entryKey: book.uid'));
-    expect(srtActions, contains('if (removeFromCollection == null)'));
-    // 合集详情页渲染路径必须真的走 inCollectionDetail: true（隐藏加入入口）。
-    expect(
-      src,
-      contains('_epubExtraActions(it, inCollectionDetail: true)'),
-      reason: '详情页成员卡菜单必须经 inCollectionDetail 隐藏「加入合集」。',
-    );
-    // 两侧落库都走共享单卡弹窗（与批量三档同一 addToCollection DAO 路径）。
-    expect(epubActions, contains('showAddToCollectionDialog'));
-    expect(srtActions, contains('showAddToCollectionDialog'));
+    // 2026-11-05：漫画页不再提供合集功能；合集本身的删除见 ticket 21。
+    expect(epubActions, isNot(contains('t.add_to_collection')));
+    expect(srtActions, isNot(contains('t.add_to_collection')));
+    expect(epubActions, isNot(contains('showAddToCollectionDialog')));
+    expect(srtActions, isNot(contains('showAddToCollectionDialog')));
   });
 
-  test('SRT 卡长按菜单对称补「查看插画」并 EPUB-backed 门控（TODO-1191）', () {
+  test('SRT 卡长按菜单不再含「查看插画」入口', () {
     final String srtActions = _sectionSource(
       src,
       'List<DialogAction> _srtExtraActions(',
       '  Future<void> _showSrtBookDialog(',
     );
-    // 对称：SRT 卡菜单必须与 EPUB 卡一样含「查看插画」入口。
-    expect(
-      srtActions,
-      contains('t.view_illustrations'),
-      reason: 'SRT/有声书卡长按菜单也必须有「查看插画」入口（TODO-1191）。',
-    );
-    // 复用 EPUB 侧同一 _openIllustrations 回调，不另起实现。
-    expect(
-      srtActions,
-      contains('_openIllustrations(item, bookKey)'),
-      reason: 'SRT 卡「查看插画」复用 EPUB 侧同一 _openIllustrations 回调。',
-    );
-    // 门控：仅在该 SRT 书有对应 EpubBooks 行（extractDir 存在）时展示；
-    // 纯字幕书 / EPUB 未生成完不命中，入口不显示。
-    expect(
-      srtActions,
-      contains('_epubBackedBookKeys.contains(bookKey)'),
-      reason: 'SRT 卡「查看插画」必须按 EPUB-backing 门控（纯 SRT 无 EPUB 不显示）。',
-    );
-    // TODO-1191（用户反馈）：外层「选择封面图片」与「编辑信息」弹窗重复，移除；
-    // 选封面统一走编辑信息弹窗，且封面在 SRT 卡上经 override thumbnail 真正生效
-    //（见下方 _buildSrtCover override 守卫）。
+    expect(srtActions, isNot(contains('t.view_illustrations')));
+    expect(srtActions, isNot(contains('_openIllustrations')));
     expect(
       srtActions,
       isNot(contains('t.srt_import_pick_cover')),
       reason: 'TODO-1191：SRT 卡长按菜单移除冗余「选择封面图片」。',
-    );
-  });
-
-  test('_epubBackedBookKeys 由 books（EpubBooks 行）真值填充（TODO-1191）', () {
-    // 门控真值来源：books 列表（fushiBooksProvider 的全部 EpubBooks 行）解析出的
-    // bookKey 全集；确保门控不是空集导致入口永不显示。
-    expect(
-      src.contains('epubBackedBookKeys.add(key)'),
-      isTrue,
-      reason: '_epubBackedBookKeys 必须从 books 的 EpubBooks 行填充。',
-    );
-    expect(
-      src.contains('_epubBackedBookKeys = epubBackedBookKeys;'),
-      isTrue,
-      reason: '填充后的 EPUB-backing 集合必须写回 state 供菜单门控读取。',
     );
   });
 
@@ -260,8 +185,7 @@ void main() {
   test('书籍长按对话框隐藏阅读按钮，点击卡片仍负责阅读', () {
     final String srtDialog = _sectionSource(
       src,
-      // 复查F3 起签名带 onRemoveFromCollection 注入参，锚点用前缀。
-      'Future<void> _showSrtBookDialog(SrtBook book,',
+      'Future<void> _showSrtBookDialog(SrtBook book)',
       '  bool _srtBookHasMissingAudio(',
     );
     // BUG-2969：EPUB / 漫画 / PDF 书卡的长按对话框抽成 _showEpubItemMenu（书架卡与
@@ -271,11 +195,7 @@ void main() {
       'Widget _buildEpubBookCard(MediaItem item,',
       '      child: buildMediaItemContent(item),',
     );
-    expect(
-      epubCard,
-      contains('onLongPress: () =>\n'
-          '          _showEpubItemMenu(item, removeFromCollection: removeFromCollection),'),
-    );
+    expect(epubCard, contains('onLongPress: () => _showEpubItemMenu(item),'));
     final String epubDialog = _sectionSource(
       src,
       'Future<void> _showEpubItemMenu(',

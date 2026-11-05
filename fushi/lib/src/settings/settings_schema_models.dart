@@ -12,13 +12,10 @@ import 'package:fushi/src/media/audiobook/tts/gpt_sovits_local_page.dart';
 import 'package:fushi/src/media/audiobook/tts/irodori_local_page.dart';
 import 'package:fushi/src/media/audiobook/tts/tts_services.dart';
 import 'package:fushi/src/media/audiobook/tts/tts_voice_settings_page.dart';
-import 'package:fushi/src/media/manga/manga_ocr_models_storage_section.dart';
-import 'package:fushi/src/media/manga/manga_ocr_provider.dart';
 import 'package:fushi/src/models/module_registry.dart';
 import 'package:fushi/src/settings/settings_context.dart';
 import 'package:fushi/src/settings/settings_destination.dart';
 import 'package:fushi/src/settings/settings_schema_ai.dart';
-import 'package:fushi/src/settings/settings_schema_manga_ocr.dart';
 import 'package:fushi/src/utils/fushi_icons.dart';
 import 'package:fushi/utils.dart';
 
@@ -55,13 +52,6 @@ SettingsDestination buildModelsDestination() {
             child: buildAiDestination,
           ),
           SettingsNavigationItem(
-            id: 'models.ocr',
-            title: 'OCR',
-            subtitle: t.models_ocr_summary,
-            icon: FushiIcons.ocr,
-            child: () => buildOcrSettingsPage(SettingsDestinationId.models),
-          ),
-          SettingsNavigationItem(
             // 搜索锚点沿用存储页时代的 id（深链 / 搜索历史仍指向它）。
             id: 'listening.asr_models',
             title: t.asr_models_section,
@@ -83,9 +73,7 @@ SettingsDestination buildModelsDestination() {
         id: 'models.section.files',
         title: t.models_section_files,
         visible: (SettingsContext c) =>
-            _isMangaOcrLocalSupported ||
-            _isLocalTtsSupported(c) ||
-            _isLocalIrodoriSupported(c),
+            _isLocalTtsSupported(c) || _isLocalIrodoriSupported(c),
         items: <SettingsItem>[
           // 语音合成的「模型文件」：GPT-SoVITS 整合包（约 19 GB）与 OCR 模型并列管理，
           // 点进去是同一个本机部署页（下载 / 删除 / 指向已有整合包）。
@@ -97,14 +85,6 @@ SettingsDestination buildModelsDestination() {
           _localIrodoriItem(
             id: 'models.files.irodori',
             title: t.audiobook_tts_irodori_local_package,
-          ),
-          SettingsNavigationItem(
-            id: 'storage.ocr_models',
-            title: t.manga_ocr_local_model,
-            subtitle: t.storage_ocr_models_hint,
-            icon: FushiIcons.ocr,
-            visible: (_) => _isMangaOcrLocalSupported,
-            child: _buildMangaOcrModelsDestination,
           ),
         ],
       ),
@@ -122,24 +102,6 @@ SettingsDestination _buildAsrModelsDestination() {
     sections: const <SettingsSection>[],
     body: (SettingsContext _) =>
         AsrModelsSettingsSection(service: createAsrTranscriptionService()),
-  );
-}
-
-/// 本机能不能跑本地 ONNX OCR（ORT native 可用性，BUG-1780）。
-bool get _isMangaOcrLocalSupported =>
-    createMangaOcrService().isSupportedPlatform;
-
-/// 每个本机 OCR 模型的下载 / 删除（OCR 子页里只管「用哪个」）。
-SettingsDestination _buildMangaOcrModelsDestination() {
-  return SettingsDestination(
-    id: SettingsDestinationId.models,
-    visible: (_) => _isMangaOcrLocalSupported,
-    title: t.manga_ocr_local_model,
-    icon: FushiIcons.ocr,
-    sections: const <SettingsSection>[],
-    body: (SettingsContext _) => MangaOcrModelsStorageSection(
-      serviceFor: (model) => createMangaOcrService(localModel: model),
-    ),
   );
 }
 

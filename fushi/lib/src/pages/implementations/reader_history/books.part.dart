@@ -38,16 +38,12 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
         srtUid,
       );
 
-  /// [selectable]（默认 true）= 多选态可单独勾选。块2：合集行成员卡传 false
-  /// （selectionKey 置空 → 不画勾、不可单独勾），点击照常开书。
-  /// [removeFromCollection] 非空（合集详情页成员卡）时给长按 / 右键对话框补「移出合集」
-  /// 动作，让键盘/手柄用户（聚焦长按 A 弹此对话框，不经网格指针菜单）也能移出。
-  /// [focusIdPrefix]：详情页渲染路径传 'collection-detail-' 隔离焦点 id 命名空间
-  /// （BUG-1009，见 [_buildCollectionMemberCard]）；书架路径恒空串（id 不变）。
+  /// [selectable]（默认 true）= 多选态可单独勾选。
+  /// [focusIdPrefix]：详情页渲染路径传 'collection-detail-' 隔离焦点 id 命名空间；
+  /// 书架路径恒空串（id 不变）。
   Widget _buildSrtCard(SrtBook book,
       {String? epubCoverUri,
       bool selectable = true,
-      VoidCallback? removeFromCollection,
       String focusIdPrefix = ''}) {
     final String selKey = 'srt_${book.uid}';
     final tagWidget = _buildSrtBookTagLabels(book.uid);
@@ -80,8 +76,7 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
       dragMediaRef: MediaRef(kind: MediaKind.srt, entryKey: book.uid),
       dragLabel: displayTitle,
       onTap: () => _openSrtBook(book),
-      onLongPress: () =>
-          _showSrtBookDialog(book, removeFromCollection: removeFromCollection),
+      onLongPress: () => _showSrtBookDialog(book),
       child: _bookCardLayout(
         title: displayTitle,
         cover: _buildSrtCover(book, epubCoverUri: epubCoverUri),
@@ -204,8 +199,7 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
     );
   }
 
-  List<DialogAction> _srtExtraActions(BuildContext dialogContext, SrtBook book,
-      {VoidCallback? removeFromCollection}) {
+  List<DialogAction> _srtExtraActions(BuildContext dialogContext, SrtBook book) {
     final String bookKey = book.bookKey;
     final MediaItem item = _srtBookMediaItem(book);
     // 与 EPUB 卡菜单同款：一次快照，逐条按模块过滤通往别的模块的项。
@@ -264,44 +258,9 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
         icon: Icons.drive_file_rename_outline,
         onPressed: () => _renameBook(dialogContext, item),
       ),
-      // 合集详情页成员卡：补「移出合集」（网格右键 / 长按与键盘/手柄长按 A 都走这
-      // 一个菜单，BUG-2969）。
-      ..._removeFromCollectionActions(dialogContext, removeFromCollection),
-      // 单卡「加入合集」：与 EPUB 卡菜单对称，纯字幕书（bookKey 为空）也可加入；
-      // entryKey 编码与 shelfSelectionToEntry 对 'srt_<uid>' 选择键的解码一致（= uid）。
-      // 合集详情页成员卡语境（已注入「移出合集」）不显示——同一条目在详情页语境下
-      // 再加合集没有意义。
-      if (removeFromCollection == null)
-        DialogListAction(
-          label: t.add_to_collection,
-          icon: Icons.collections_bookmark_outlined,
-          onPressed: () async {
-            Navigator.pop(dialogContext);
-            await _addSrtToCollection(book);
-          },
-        ),
       // 统一三库页卡菜单：SRT 卡与 EPUB/视频/游戏卡对称含「标签」项（用户
       // 2026-07-28 拍板推翻 TODO-455；内部自行收起本对话框）。身份 =
       // SrtBooks.uid（与合集/批量选择键解码一致）。
-      // 内容语言：决定正文用哪条字体链。SRT 文件本身不声明语言，只能手动指定。
-      // 配对 SRT 书（bookKey 非空）的正文由 EpubBooks 行承载，语言在书卡菜单里改；
-      // 这一项写的是 SrtBooks.language，standalone 书开场时读它（_applySrtBookLanguage）。
-      DialogListAction(
-        label: t.book_language_action,
-        icon: Icons.translate,
-        onPressed: () async {
-          Navigator.pop(dialogContext);
-          await showContentLanguagePicker(
-            context: context,
-            title: t.book_language_action,
-            description: t.book_language_description,
-            current: book.language,
-            autoDetected: '',
-            onSelected: (String? tag) =>
-                appModel.database.updateSrtBookLanguage(book.uid, tag),
-          );
-        },
-      ),
       DialogListAction(
         label: t.tag_label,
         icon: Icons.sell_outlined,
@@ -342,31 +301,6 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
           onPressed: () =>
               _resetBookReadingState(item, bookKey, srtUid: book.uid),
         ),
-        // TODO-1191：与 EPUB 卡菜单对称补「查看插画」。仅在该 SRT 书有对应
-        // EpubBooks 行（[_epubBackedBookKeys] 命中 = extractDir 存在）时展示，
-        // 复用 EPUB 侧同一 [_openIllustrations]（自行 Navigator.pop + 打开
-        // [IllustrationsViewerPage] = 阅读器内同一份插图册，无插图时页面友好
-        // 占位）。菜单里的「选择封面
-        // 图片」动作已移除——选封面统一走「编辑信息」弹窗的封面字段（EPUB / SRT 皆可）。
-        if (_epubBackedBookKeys.contains(bookKey))
-          DialogQuickAction(
-            label: t.view_illustrations,
-            icon: Icons.image_outlined,
-            onPressed: () => _openIllustrations(item, bookKey),
-          ),
-        DialogListAction(
-          label: t.profile_book_profile,
-          icon: Icons.account_circle_outlined,
-          onPressed: () => _openBookProfilePicker(item, bookKey),
-        ),
-        DialogListAction(
-          label: t.book_css_editor_edit_css,
-          icon: Icons.code_outlined,
-          onPressed: () {
-            Navigator.pop(dialogContext);
-            _openCssEditor(bookKey);
-          },
-        ),
         // TODO-1068：SRT/有声书卡长按菜单对称补「悬浮字幕」项（与 EPUB 侧
         // extraActions 一致）。复用同一 i18n key、同一回调、同一平台门控；
         // bookKey 非空才可用，_toggleFloatingLyricFromShelf 按 bookKey 解析。
@@ -387,29 +321,7 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
     ];
   }
 
-  /// 单卡「加入合集」（SRT/有声书卡菜单入口）：弹共享的合集选择弹窗（新建合集
-  /// 默认名 = 该书标题剥卷号，与批量档1同款推导）；加入成功后按
-  /// [_combineAddToExisting] 同款刷新（重取分组映射 + 重绘）。
-  Future<void> _addSrtToCollection(SrtBook book) async {
-    final bool added = await showAddToCollectionDialog(
-      context: context,
-      database: appModel.database,
-      mediaType: MediaKind.srt,
-      entryKey: book.uid,
-      isMemberVisible: _isCollectionMemberVisible,
-      // P4：用户看到的默认合集名用改名后的显示名（身份 entryKey 仍是 raw uid）。
-      defaultNewName: deriveSeriesDefaultName(
-        <String>[_srtDisplayTitle(book)],
-        fallback: t.series_default_name,
-      ),
-    );
-    if (!added || !mounted) return;
-    _shelfMapsFuture = _loadShelfMaps();
-    _rebuild(() {});
-  }
-
-  Future<void> _showSrtBookDialog(SrtBook book,
-      {VoidCallback? removeFromCollection}) async {
+  Future<void> _showSrtBookDialog(SrtBook book) async {
     await showAppDialog(
       context: context,
       builder: (ctx) => MediaItemDialogPage(
@@ -421,8 +333,7 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
         coverFallbackIcon: isEpubBackedAudiobookSrt(book)
             ? Icons.headphones_outlined
             : Icons.subtitles_outlined,
-        extraActions: (_) => _srtExtraActions(ctx, book,
-            removeFromCollection: removeFromCollection),
+        extraActions: (_) => _srtExtraActions(ctx, book),
       ),
     );
     if (mounted) _rebuild(() {});
@@ -466,77 +377,43 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
   void _selectAll() {
     _rebuild(() => _selection.selectAll(
           loose: _selectableLooseKeys(),
-          collections: _visibleCollectionIds,
+          collections: const <int>[],
         ));
   }
 
   void _invertSelection() {
     _rebuild(() => _selection.invert(
           loose: _selectableLooseKeys(),
-          collections: _visibleCollectionIds,
+          collections: const <int>[],
         ));
   }
 
   Widget _buildBatchActionBar() {
-    // 块2/3/4：计数与按钮可用态涵盖散卡选中集 + 合集选中集。
-    // BUG-2458：散卡选中集里混着远端占位键——「已选 N」计全部，但组合 / 打标签 /
-    // 删除三个本地动作只按本地键判可用态与取目标；远端键只喂「下载」。
+    // BUG-2458：散卡选中集里混着远端占位键——「已选 N」计全部，但打标签 /
+    // 删除两个本地动作只按本地键判可用态与取目标；远端键只喂「下载」。
+    // 2026-11-05：合集已删除，选中集只剩散卡。
     final Set<String> localKeys = _selectedLocalKeys;
     final Set<String> remoteKeys = _selectedRemoteKeys;
-    final int selectedCount =
-        _selectedKeys.length + _selectedCollectionIds.length;
-    final bool hasLocalSelection =
-        localKeys.isNotEmpty || _selectedCollectionIds.isNotEmpty;
-    // 复查 #5：组合按钮 noop 档（0 合集 0 散卡 / 仅 1 合集且无散卡）不再当启用态死按钮，
-    // 只在真能组合（新建 / 并入 / 合并）时才可点，与 [_batchCombineIntoSeries] 同判据。
-    final bool canCombine = classifyCombine(
-          collectionCount: _selectedCollectionIds.length,
-          looseCount: localKeys.length,
-        ) !=
-        CombineTier.noop;
     return BatchActionBar(
-      selectedCount: selectedCount,
+      selectedCount: _selectedKeys.length,
       onSelectAll: _selectAll,
       onInvertSelection: _invertSelection,
       actions: <Widget>[
         FushiIconButton(
           key: const ValueKey<String>('reader_shelf_batch_download'),
-          // BUG-3337：勾中的合集里有云端成员也可下载（合集一键全部下载）。
-          enabled: remoteKeys.isNotEmpty ||
-              _selectedCollectionRemoteMembers.isNotEmpty,
+          enabled: remoteKeys.isNotEmpty,
           onTap: _batchDownloadSelectedRemote,
           icon: Icons.download_outlined,
           tooltip: t.remote_book_download,
         ),
         FushiIconButton(
-          key: const ValueKey<String>('reader_shelf_batch_combine'),
-          enabled: canCombine,
-          onTap: _batchCombineIntoSeries,
-          // 组合成系列用 playlist_add，与页头「收藏夹」入口的
-          // collections_bookmark_outlined 区分开（二者语义无关，避免同图标歧义）。
-          icon: Icons.playlist_add,
-          tooltip: t.combine_into_series,
-        ),
-        FushiIconButton(
-          // 散卡与合集都能打标签（合集在选择器里二选一：合集本身 / 合集内全部条目）。
           key: const ValueKey<String>('reader_shelf_batch_tag'),
-          enabled: hasLocalSelection,
+          enabled: localKeys.isNotEmpty,
           onTap: _batchShowTagPicker,
           icon: Icons.sell_outlined,
           tooltip: t.tag_label,
         ),
-        // BUG-3337：漫画库多选补「识别文字」——与卡菜单同一条排队路径
-        // （[enqueuePendingMangaOcrForBooks]），选中合集时识别合集里的每一本。
-        if (_mangaOnly && _moduleVisibility.isEnabled(ModuleId.manga))
-          FushiIconButton(
-            key: const ValueKey<String>('reader_shelf_batch_ocr'),
-            enabled: hasLocalSelection,
-            onTap: _batchOcrSelectedManga,
-            icon: FushiIcons.ocr,
-            tooltip: t.manga_library_ocr_action,
-          ),
         FushiIconButton(
-          // 只作用于散卡书（合集不是一本书，没有进度可重置），与打标签同一可用态。
           key: const ValueKey<String>('reader_shelf_batch_reset_progress'),
           enabled: localKeys.isNotEmpty,
           onTap: _batchResetReadingState,
@@ -545,7 +422,7 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
         ),
         FushiIconButton(
           key: const ValueKey<String>('reader_shelf_batch_delete'),
-          enabled: hasLocalSelection,
+          enabled: localKeys.isNotEmpty,
           onTap: _batchDeleteConfirm,
           icon: Icons.delete_outline,
           tooltip: t.dialog_delete,
@@ -553,51 +430,6 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
         ),
       ],
     );
-  }
-
-  /// 卡菜单 / 多选「识别文字」（BUG-3337）：[bookKeys] 里每本漫画还没识别的部分
-  /// （在线作品 = 已下载未识别的章，本地卷 = 未识别的卷）排进 OCR 队列。
-  /// [dialog] 为真时先收起卡片长按菜单。
-  Future<void> _ocrMangaBooks(Iterable<String> bookKeys,
-      {bool dialog = false}) async {
-    if (dialog) Navigator.pop(context);
-    await enqueuePendingMangaOcrForBooks(
-      context: context,
-      appModel: appModel,
-      registry: ref.read(mangaOcrJobRegistryProvider),
-      bookKeys: bookKeys,
-    );
-  }
-
-  /// 多选「识别文字」：散卡漫画 + 选中合集里的每一本。目标在剪枝后一次定死。
-  Future<void> _batchOcrSelectedManga() async {
-    if (!await _pruneStaleSelection() || !mounted) return;
-    final Set<String> bookKeys = <String>{
-      for (final String key in _selectedLocalKeys)
-        if (_parseBookKey(key) case final String bookKey) bookKey,
-    };
-    // 合集成员行 epub entryKey = uid（v83）；透传 / 旧行仍是 bookKey。剪枝刚刷新过
-    // bookKey→uid 换算表，这里反查回 bookKey。
-    final Map<String, String> bookKeyByUid = <String, String>{
-      for (final MapEntry<String, String> e in _epubUidByKey.entries)
-        e.value: e.key,
-    };
-    for (final int id in _selectedCollectionIds) {
-      final List<MediaCollectionItemRow> items =
-          await appModel.database.getCollectionItems(id);
-      for (final MediaCollectionItemRow item in items) {
-        if (MediaKind.tryParse(item.mediaType) != MediaKind.epub) continue;
-        bookKeys.add(bookKeyByUid[item.entryKey] ?? item.entryKey);
-      }
-    }
-    if (!mounted || bookKeys.isEmpty) return;
-    final int queued = await enqueuePendingMangaOcrForBooks(
-      context: context,
-      appModel: appModel,
-      registry: ref.read(mangaOcrJobRegistryProvider),
-      bookKeys: bookKeys,
-    );
-    if (queued > 0 && mounted) _exitSelectionMode();
   }
 
   /// 批量「重置阅读状态」：与单卡同一确认框、同一落地函数 [resetBookReadingState]。
@@ -666,26 +498,18 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
     );
   }
 
-  /// 块4：批量删除区分解散/删媒体。
-  /// - 选中合集 → 解散（[FushiDatabase.deleteMediaCollection]：只解除分组，不删媒体本体）；
-  /// - 选中散卡 → 删媒体本体（EPUB/SRT，现状语义）；
-  /// - 混选 → 确认框文案写明「删 N 个媒体、解散 M 个合集」。
+  /// 批量删除选中散卡（EPUB / 漫画 / SRT）。
+  /// 2026-11-05：合集已删除，不再有「解散合集」分支。
   Future<void> _batchDeleteConfirm() async {
-    // 先剔幽灵键再取数：确认框里的 N / M 必须是真会被删的条数。
+    // 先剔幽灵键再取数：确认框里的 N 必须是真会被删的条数。
     if (!await _pruneStaleSelection() || !mounted) return;
     // **在弹确认框之前就把目标定死**：选中集是只暴露当前可见项的派生视图，弹窗
     // 期间任何一次改变可见序的重建（筛选 provider 解析完成、书架刷新）都会让它
     // 自己变，跨 await 两侧各读一次会让确认框的数字与实际删除量对不上。
     final Set<String> targetKeys = _selectedLocalKeys;
-    final Set<int> targetCollectionIds = Set<int>.of(_selectedCollectionIds);
     final int mediaCount = targetKeys.length;
-    final int collectionCount = targetCollectionIds.length;
-    if (mediaCount == 0 && collectionCount == 0) return;
-    final String baseMessage = collectionCount == 0
-        ? t.batch_delete_confirm(n: mediaCount)
-        : mediaCount == 0
-            ? t.batch_dissolve_confirm(m: collectionCount)
-            : t.batch_delete_mixed_confirm(n: mediaCount, m: collectionCount);
+    if (mediaCount == 0) return;
+    final String baseMessage = t.batch_delete_confirm(n: mediaCount);
     // 勾过但被当前搜索/标签筛选挡住的那些不会被删，必须说出来。
     // 只数本地键：远端占位键不是删除对象（BUG-2458 审查 #4）。
     final int hidden = _selection.hiddenSelectedCountWhere(
@@ -694,20 +518,16 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
     final String message = hidden == 0
         ? baseMessage
         : '$baseMessage\n\n${t.batch_hidden_by_filter_note(n: hidden)}';
-    // TODO-2470 死角②：勾选框只在它真能兑现时才摆出来，两个条件缺一不可——
-    //   ① 本轮真会删媒体本体（纯解散合集 mediaCount==0 只解除分组，scope 无处可用，
-    //      合集自身的删除传播走 collection_sync_engine；与视频页同一判断）；
-    //   ② 本机存在删除传播通道（纯本地零网络判据）。
-    final bool canSyncEverywhere = mediaCount > 0 &&
+    // TODO-2470 死角②：本机没有任何删除传播通道时不摆那个兑现不了的勾选框。
+    final bool canSyncEverywhere =
         await hasDeletionPropagationChannel(SyncRepository(appModel.database));
     // 「同时删除本地文件」只在选中散卡里至少有一条**显式登记了 app 目录之外的
     // 原始音频**时才摆出来（书本体没有可删原件，见 ReaderFushiSource.deleteBook）。
-    final bool anyLocalFiles =
-        mediaCount > 0 && await _selectionHasLocalFiles();
+    final bool anyLocalFiles = await _selectionHasLocalFiles();
     // 「同时删除统计数据」只在选中散卡里至少有一本**带 bookKey** 的书时摆出来；
     // 全是纯字幕书就不摆（执行时也跳过它们，见下面的删除循环）。
     final bool anyStatisticsTarget =
-        mediaCount > 0 && await _selectionHasStatisticsTarget(targetKeys);
+        await _selectionHasStatisticsTarget(targetKeys);
     final DeletePromptPreferenceStore preferenceStore =
         DeletePromptPreferenceStore(appModel.database);
     final DeletePromptRememberedChoices? rememberedChoices =
@@ -718,17 +538,13 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
       builder: (ctx) => ReaderHistoryDeleteDialog(
         title: t.dialog_delete,
         message: message,
-        // 纯解散合集（mediaCount==0）不碰媒体本体，不能挂「会删解压目录/有声书」
-        // 的披露；只有真删散卡时才披露真实删除范围。
-        disclosure: mediaCount == 0
-            ? null
-            : buildDeletionDisclosure(
-                target: DeletionDisclosureTarget.shelfBook,
-              ),
+        disclosure: buildDeletionDisclosure(
+          target: DeletionDisclosureTarget.shelfBook,
+        ),
         showSyncScope: canSyncEverywhere,
         localFilesSubtitle:
             anyLocalFiles ? t.delete_local_files_audio_desc : null,
-        // 纯解散合集不删任何书，统计无从谈起；全是纯字幕书同样不摆。
+        // 全是纯字幕书时不摆统计删除。
         statisticsSubtitle: anyStatisticsTarget ? _statisticsSubtitle : null,
         rememberedChoices: rememberedChoices,
         onPersistChoices: preferenceStore.write,
@@ -742,7 +558,7 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
     // 几十本书要删好几秒，用户以为没生效又点一次，或在删除途中改选中集。
     final Set<String> toDelete = targetKeys;
     final ValueNotifier<int> progress = ValueNotifier<int>(0);
-    final int total = targetCollectionIds.length + toDelete.length;
+    final int total = toDelete.length;
     final NavigatorState progressNavigator =
         Navigator.of(context, rootNavigator: true);
     unawaited(
@@ -763,8 +579,6 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
     try {
       await _runBatchDelete(
         targetKeys: toDelete,
-        targetCollectionIds: targetCollectionIds,
-        collectionCount: collectionCount,
         decision: decision,
         progress: progress,
       );
@@ -774,28 +588,15 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
   }
 
   /// [_batchDeleteConfirm] 确认后的执行体（2026-10 体验优化拆出，外层负责忙碌态）。
-  /// 每处理完一个目标（合集或散卡）把 [progress] +1。
+  /// 每处理完一张卡把 [progress] +1。
   Future<void> _runBatchDelete({
     required Set<String> targetKeys,
-    required Set<int> targetCollectionIds,
-    required int collectionCount,
     required DeleteDecision decision,
     required ValueNotifier<int> progress,
   }) async {
     final DeleteScope scope = decision.scope;
     final bool deleteLocalFiles = decision.deleteLocalFiles;
     final bool deleteStatistics = decision.deleteStatistics;
-
-    // 先解散选中合集（只删合集容器 + 成员引用行，绝不删媒体本体）。
-    // 用确认框弹出前定死的那份目标，不重新读选中集。
-    final Set<int> toDissolve = targetCollectionIds;
-    int dissolved = 0;
-    for (final int id in toDissolve) {
-      final int removed =
-          await deleteMediaCollectionWithAssets(appModel.database, id);
-      if (removed > 0) dissolved++;
-      progress.value++;
-    }
 
     int deleted = 0;
     LocalFileDeleteReport localFiles = const LocalFileDeleteReport();
@@ -859,24 +660,12 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
     ref.invalidate(fushiBooksProvider(JapaneseLanguage.instance));
     ref.invalidate(bookTagMapProvider);
     ref.invalidate(srtBookTagMapProvider);
-    // 解散后合集映射失效，重取（合集行随之消失）。
     _shelfMapsFuture = _loadShelfMaps();
     _exitSelectionMode();
-    // 复查 #7：零成功（deleted==0 且 dissolved==0）时兜底文案按「选择构成」诚实分派——
-    // 只选散卡（collectionCount==0）说「已删除 0 本」，否则说「已解散 0 个合集」；不再
-    // 无条件谎报解散类别（对齐 BUG-439 诚实计数精神）。
-    final String successMsg = deleted > 0 && dissolved > 0
-        ? t.batch_delete_mixed_success(n: deleted, m: dissolved)
-        : deleted > 0
-            ? t.batch_delete_success(n: deleted)
-            : collectionCount == 0
-                ? t.batch_delete_success(n: deleted)
-                : t.batch_dissolve_success(m: dissolved);
+    // BUG-439 诚实计数：只报真实删掉的本数。
     FushiToast.show(
-      msg: successMsg,
-      severity: deleted > 0 || dissolved > 0
-          ? ToastSeverity.success
-          : ToastSeverity.warning,
+      msg: t.batch_delete_success(n: deleted),
+      severity: deleted > 0 ? ToastSeverity.success : ToastSeverity.warning,
     );
     reportLocalFileDeleteFailures(
       localFiles,
@@ -958,8 +747,6 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
         if (row.uid.isNotEmpty) row.bookKey: row.uid,
     };
     final List<SrtBook> srtBooks = await SrtBookRepository(db).listAll();
-    final List<MediaCollectionRow> collections =
-        await db.getAllMediaCollections();
     if (!mounted) return false;
     // BUG-2458：远端占位键的存在性真值是最近一次拉到的远端目录（占位卡就是从它
     // 渲染的），不在本地表里；不纳入就会被当幽灵键整批剔光。
@@ -976,7 +763,7 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
             _remoteSrtSelectionKey(book),
         ],
       },
-      collections: <int>{for (final MediaCollectionRow c in collections) c.id},
+      collections: const <int>{},
     );
     if (dropped == 0) return _selection.isNotEmpty;
     _rebuild(() {});
@@ -995,8 +782,7 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
     // 一抛就永远转圈（卡死）。必须在开弹窗前剔干净。
     if (!await _pruneStaleSelection() || !mounted) return;
     // 共享标签选择器（搜索 / 一键新建 / 三态）。散卡按 epub=bookKey、srt=uid 成
-    // MediaRef；选中的合集交给选择器的「合集本身 / 合集内全部条目」二选一（单个格子
-    // 模式下选中合集也能批量打标签，不再只作用于散卡）。
+    // MediaRef。2026-11-05：合集已删除，选择器只作用于散卡。
     final List<MediaRef> media = <MediaRef>[
       for (final String key in _selectedLocalKeys)
         if (key.startsWith('srt_'))
@@ -1004,214 +790,15 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
         else if (_parseBookKey(key) case final String bookKey)
           MediaRef(kind: MediaKind.epub, entryKey: bookKey),
     ];
-    final TagTargets targets = TagTargets(
-      media: media,
-      collectionIds: _selectedCollectionIds.toList()..sort(),
-    );
+    final TagTargets targets = TagTargets(media: media);
     if (targets.isEmpty) return;
     await showTagPicker(context, targets: targets);
     if (!mounted) return;
     ref.invalidate(allTagsProvider);
-    ref.invalidate(collectionTagMapProvider);
-    ref.invalidate(filteredCollectionIdsProvider);
     ref.invalidate(bookTagMapProvider);
     ref.invalidate(srtBookTagMapProvider);
     ref.invalidate(filteredBookIdsProvider);
     ref.invalidate(filteredSrtBookUidsProvider);
-  }
-
-  /// v83：合集成员表的 epub entryKey 已切 `epub_books.uid`；选区解码身份
-  /// （[shelfSelectionToEntry]）与标题/封面映射仍在 bookKey 域。排序、标题匹配
-  /// 全程留在 bookKey 域，只在**落库那一步**经本函数单向换算；换算不上（书行
-  /// 被并发删除的残余竞态）沿用原值——与 addToCollection 撞外键的既有剪枝兜底
-  /// 一致，不静默丢条目。srt/video 键本就是稳定 uid，原样透传。
-  String _collectionEntryKeyFor(ShelfEntryRef ref) =>
-      ref.mediaType == MediaKind.epub
-          ? (_epubUidByKey[ref.entryKey] ?? ref.entryKey)
-          : ref.entryKey;
-
-  /// 块3：批量「组合」按钮三档自适应（[classifyCombine]）。书架选择键经
-  /// shelfSelectionToEntry 解码成 (mediaType, entryKey)：
-  /// - 仅散卡 → 命名弹窗新建合集（[_combineCreateNew]）；
-  /// - 恰 1 合集 + 若干散卡 → 散卡并入该合集（[_combineAddToExisting]，不弹命名）；
-  /// - ≥2 合集（可带散卡）→ 合并成一个（[_combineMergeCollections]，默认名=成员最多合集名）。
-  Future<void> _batchCombineIntoSeries() async {
-    // 幽灵键会让 addToCollection 撞外键且无人 catch（用户只看到「点了没反应」）。
-    if (!await _pruneStaleSelection() || !mounted) return;
-    final List<int> collectionIds = _selectedCollectionIds.toList()..sort();
-    // 成员序按显示标题自然序落盘（`卷1 < 卷2 < 卷10`），不用 `_selectedKeys` 的
-    // 点选顺序——否则框选一套书建出来的合集内部是乱的（BUG-1436）。标题走
-    // display-title 门面，与用户看到的一致。
-    // 键带 mediaType：epub 的 bookKey 与 srt 的 uid 是两个独立值域，裸 entryKey
-    // 做映射键有撞键风险。
-    final Map<String, String> titleByRef = <String, String>{
-      for (final MediaItem item in _visibleEpubBooks)
-        if (shelfSelectionToEntry(
-          item.mediaIdentifier,
-          ShelfSelectionSurface.books,
-        )
-            case final ShelfEntryRef ref)
-          '${ref.mediaType}|${ref.entryKey}':
-              displayTitleForBook(item: item, rawTitle: item.title),
-      for (final SrtBook book in _visibleSrtBooks)
-        '${MediaKind.srt}|${book.uid}': _srtDisplayTitle(book),
-    };
-    final List<ShelfEntryRef> looseRefs = sortNewCollectionMembersNaturally(
-      <ShelfEntryRef>[
-        for (final String key in _selectedLocalKeys)
-          if (shelfSelectionToEntry(key, ShelfSelectionSurface.books)
-              case final ShelfEntryRef ref)
-            ref,
-      ],
-      titleOf: (ShelfEntryRef r) =>
-          titleByRef['${r.mediaType}|${r.entryKey}'] ?? r.entryKey,
-    );
-    final CombineTier tier = classifyCombine(
-      collectionCount: collectionIds.length,
-      looseCount: looseRefs.length,
-    );
-    switch (tier) {
-      case CombineTier.noop:
-        return;
-      case CombineTier.createNew:
-        await _combineCreateNew(looseRefs);
-      case CombineTier.addToExisting:
-        await _combineAddToExisting(collectionIds.single, looseRefs);
-      case CombineTier.mergeCollections:
-        await _combineMergeCollections(collectionIds, looseRefs);
-    }
-  }
-
-  /// 档1：仅散卡 → 命名弹窗新建合集，逐条 addToCollection。
-  Future<void> _combineCreateNew(List<ShelfEntryRef> refs) async {
-    // TODO-1125 B：预填合集默认名——收集选中条目标题（epub 用 mediaIdentifier、srt 用
-    // 'srt_<uid>' 与选择键同编码匹配），经 deriveSeriesDefaultName 剥卷号取公共前缀；
-    // 推导为空则兜底 t.series_default_name（「新系列」）。
-    // P4：标题过 display-title 门面——用户看到的默认合集名应是改名后的新名
-    // （合集成员身份 entryKey 仍是 raw，不受影响）。
-    final List<String> memberTitles = <String>[
-      for (final MediaItem item in _visibleEpubBooks)
-        if (_selectedKeys.contains(item.mediaIdentifier))
-          displayTitleForBook(item: item, rawTitle: item.title),
-      for (final SrtBook book in _visibleSrtBooks)
-        if (_selectedKeys.contains('srt_${book.uid}')) _srtDisplayTitle(book),
-    ];
-    final String defaultName = deriveSeriesDefaultName(
-      memberTitles,
-      fallback: t.series_default_name,
-    );
-    // TODO-947：把选中的前 4 本书封面传进命名弹窗，铺成手机文件夹式网格缩略预览，
-    // 让用户在确认合并时直观看到「我把哪几本合并进去了」。
-    final List<Widget> previewCovers = <Widget>[
-      for (final MediaItem item in _visibleEpubBooks)
-        if (_selectedKeys.contains(item.mediaIdentifier))
-          _slotCover(
-            _ShelfBookSlot(epub: item),
-            _epubCoverUrisByBookKey,
-          ),
-      for (final SrtBook book in _visibleSrtBooks)
-        if (_selectedKeys.contains('srt_${book.uid}'))
-          _slotCover(
-            _ShelfBookSlot(srt: book),
-            _epubCoverUrisByBookKey,
-          ),
-    ].take(4).toList();
-    final String? name = await showCollectionNameDialog(
-      context: context,
-      title: t.create_series,
-      initialName: defaultName,
-      previewCovers: previewCovers,
-    );
-    if (name == null || !mounted) return;
-    final int collectionId =
-        await appModel.database.createMediaCollection(name);
-    for (final ShelfEntryRef ref in refs) {
-      // v83：epub 落库键 = uid（[_collectionEntryKeyFor]，剪枝时已刷新换算表）。
-      await appModel.database.addToCollection(
-          collectionId, ref.mediaType, _collectionEntryKeyFor(ref));
-    }
-    if (!mounted) return;
-    _exitSelectionMode();
-    _shelfMapsFuture = _loadShelfMaps();
-    _rebuild(() {});
-    FushiToast.show(msg: t.series_created, severity: ToastSeverity.success);
-  }
-
-  /// 档2：恰 1 合集 + 若干散卡 → 散卡并入该合集（不弹命名）。
-  Future<void> _combineAddToExisting(
-    int collectionId,
-    List<ShelfEntryRef> refs,
-  ) async {
-    for (final ShelfEntryRef ref in refs) {
-      // v83：epub 落库键 = uid（[_collectionEntryKeyFor]，剪枝时已刷新换算表）。
-      await appModel.database.addToCollection(
-          collectionId, ref.mediaType, _collectionEntryKeyFor(ref));
-    }
-    if (!mounted) return;
-    _exitSelectionMode();
-    _shelfMapsFuture = _loadShelfMaps();
-    _rebuild(() {});
-    FushiToast.show(
-        msg: t.batch_add_to_collection_success(n: refs.length),
-        severity: ToastSeverity.success);
-  }
-
-  /// 档3：≥2 合集（可带散卡）→ 合并成一个。目标 = 成员最多合集（其名作默认名，
-  /// 确认框可改名）；目标吸收其余合集成员（addToCollection）+ 散卡加入，其余合集
-  /// deleteMediaCollection 解散（只解除分组，不删媒体本体）。
-  Future<void> _combineMergeCollections(
-    List<int> collectionIds,
-    List<ShelfEntryRef> refs,
-  ) async {
-    final FushiDatabase db = appModel.database;
-    final Map<int, List<MediaCollectionItemRow>> itemsById =
-        <int, List<MediaCollectionItemRow>>{};
-    for (final int id in collectionIds) {
-      itemsById[id] = await db.getCollectionItems(id);
-    }
-    final MergeTargetChoice choice = chooseMergeTarget(
-      <({int id, String name, int memberCount})>[
-        for (final int id in collectionIds)
-          (
-            id: id,
-            name: _collectionsById[id]?.name ?? '',
-            memberCount: itemsById[id]!.length,
-          ),
-      ],
-    );
-    if (!mounted) return;
-    final String? name = await showCollectionNameDialog(
-      context: context,
-      title: t.collection_merge_title,
-      initialName: choice.defaultName,
-    );
-    if (name == null || !mounted) return;
-    final int targetId = choice.targetId;
-    // 复查 #6（TOCTOU）：成员快照上面是在命名确认框「之前」取的，框开着期间若有新成员
-    // 同步进源合集，用旧快照迁移会漏掉这些新成员，随后 deleteMediaCollection 把它们连
-    // 同源合集一起删掉 → 分组丢失。确认后、迁移前对每个源合集「重取」最新成员再迁移，
-    // addToCollection 幂等去重，重复成员无副作用。
-    for (final int id in collectionIds) {
-      if (id == targetId) continue;
-      final List<MediaCollectionItemRow> members =
-          await db.getCollectionItems(id);
-      for (final MediaCollectionItemRow m in members) {
-        // 原样搬家现有成员行：行值可能是对端未知种类，走 raw 版防静默丢成员。
-        await db.addToCollectionRaw(targetId, m.mediaType, m.entryKey);
-      }
-      await deleteMediaCollectionWithAssets(db, id);
-    }
-    for (final ShelfEntryRef ref in refs) {
-      // v83：epub 落库键 = uid（[_collectionEntryKeyFor]，剪枝时已刷新换算表）。
-      await db.addToCollection(
-          targetId, ref.mediaType, _collectionEntryKeyFor(ref));
-    }
-    await db.renameMediaCollection(targetId, name);
-    if (!mounted) return;
-    _exitSelectionMode();
-    _shelfMapsFuture = _loadShelfMaps();
-    _rebuild(() {});
-    FushiToast.show(msg: t.collection_merged, severity: ToastSeverity.success);
   }
 
   Future<void> _confirmDeleteSrtBook(SrtBook book) async {
@@ -1386,20 +973,6 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
     _rebuild(() {});
   }
 
-  /// 书卡菜单「查看统计」：关掉菜单后按本书身份反查统计（书 / 漫画同走 bookKey）。
-  Future<void> _openItemStatistics(MediaItem item, String bookKey) async {
-    Navigator.pop(context);
-    await showMediaItemStatsDialog(
-      context,
-      database: appModel.database,
-      target: MediaItemStatsTarget(
-        mediaKind: kActivityMediaBook,
-        mediaKeys: <String>{bookKey},
-        title: item.title,
-      ),
-    );
-  }
-
   /// 书卡 / 配对字幕书卡「重置阅读状态」：先收起长按菜单，弹确认框（可选只撤最近
   /// 一次会话 / 全清学习记录，默认都不动），确认后经 [resetBookReadingState] 落库
   /// （位置写回开头而不是删行——删行会被同步通道从对端灌回，见该函数文件头），
@@ -1451,39 +1024,6 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
     ref.invalidate(completedEpubBookKeysProvider);
     _shelfMapsFuture = _loadShelfMaps();
     _rebuild(() {});
-  }
-
-  Future<void> _openIllustrations(MediaItem item, String bookKey) async {
-    Navigator.pop(context);
-    final EpubBookRow? row = await appModel.database.getEpubBook(bookKey);
-    if (!mounted || row == null) return;
-    Navigator.push(
-      context,
-      adaptivePageRoute(
-        context: context,
-        builder: (_) => IllustrationsViewerPage(
-          // P4：页标题给人看，过门面；插画定位身份走 extractDir + uid（v82：
-          // revealed_images 键 = EpubBooks.uid，行在手直接取）。
-          bookTitle: displayTitleForBook(item: item, rawTitle: item.title),
-          extractDir: row.extractDir,
-          bookUid: row.uid,
-          database: appModel.database,
-          // 「跳到此插图」：画廊已自行 pop，这里按插图所在章 / 章内位置开书
-          // （与阅读器内切卷跳章同一条 initialBookmarkJump 路径）。
-          onJumpTo: (EpubImageRef image) => appModel.openMedia(
-            ref: ref,
-            mediaSource: item.getMediaSource(appModel: appModel),
-            item: item,
-            initialBookmarkJump: Bookmark(
-              sectionIndex: image.jumpChapterIndex,
-              normCharOffset: image.normCharOffset,
-              label: '',
-              createdAt: DateTime.now(),
-            ),
-          ),
-        ),
-      ),
-    );
   }
 
   /// 书架卡片菜单「重新导入」（字幕书）：音频 + 字幕两半一起换。
@@ -1829,70 +1369,6 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
     }
   }
 
-  /// 书的内容语言选择框。选择器 UI 与词典共用（[showContentLanguagePicker]），
-  /// 这里只负责读当前值与写库。
-  ///
-  /// 写完刷新页面即可——阅读器下次开书时读 EpubBooks.language 建链；书已经开着
-  /// 时改语言不即时重渲（正文 CSS 在开书时生成），关掉重开生效。
-  Future<void> _openBookLanguagePicker(String bookKey) async {
-    Navigator.pop(context);
-    final FushiDatabase db = appModel.database;
-    final EpubBookRow? row = await db.getEpubBook(bookKey);
-    if (!mounted) return;
-    final String? current = row?.language;
-    await showContentLanguagePicker(
-      context: context,
-      title: t.book_language_action,
-      description: t.book_language_description,
-      current: current,
-      // 书没有「自动值」可显示：dc:language 在导入时就直接写进了同一列，读回来
-      // 分不清是自动回填的还是用户手动指定的。留空 = 只显示「自动」这一项本身。
-      autoDetected: '',
-      // 写完不刷新书架：语言不出现在卡片上，重建一遍纯属浪费。生效点在阅读器
-      // 开书时读这一列建字体链。
-      onSelected: (String? tag) => db.updateEpubBookLanguage(bookKey, tag),
-    );
-  }
-
-  Future<void> _openCssEditor(String bookKey) async {
-    final EpubBookRow? row = await appModel.database.getEpubBook(bookKey);
-    final String extractDir = row?.extractDir ?? '';
-    final bool exists = await EpubStorage.bookDirExists(extractDir);
-    if (!exists) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          FushiSnackBar(content: Text(t.book_css_editor_no_extract_dir)),
-        );
-      }
-      return;
-    }
-    if (mounted) {
-      await Navigator.push(
-        context,
-        adaptivePageRoute<void>(
-          context: context,
-          builder: (_) => BookCssEditorPage(extractDir: extractDir),
-        ),
-      );
-    }
-  }
-
-  void _openBookProfilePicker(MediaItem item, String bookKey) {
-    Navigator.pop(context);
-    final String bookUid = bookKey;
-    final ProfileRepository profileRepo = ref.read(profileRepositoryProvider);
-    final ProfileUiState profileState = ref.read(profileViewModelProvider);
-
-    showAppDialog<void>(
-      context: context,
-      builder: (ctx) => _BookProfileDialog(
-        bookUid: bookUid,
-        profileRepo: profileRepo,
-        profiles: profileState.profiles,
-        activeProfileName: profileState.activeProfile?.name ?? '',
-      ),
-    );
-  }
 }
 
 class _AudiobookInfo {

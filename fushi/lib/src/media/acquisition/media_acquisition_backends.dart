@@ -286,7 +286,7 @@ class MihonMangaAcquisitionBackend implements MediaAcquisitionBackend {
       await appModel.mangaDownloadService.enqueueChapters(
         entry: entry,
         chapters: pending,
-        autoOcr: appModel.mangaDownloadAutoOcr,
+        autoOcr: false,
       );
       return DownloadStartResult.started(<DownloadStartNotice>[
         ...notices,

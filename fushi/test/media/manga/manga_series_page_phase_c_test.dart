@@ -14,12 +14,6 @@ import 'package:fushi/src/media/manga/library/manga_series_page.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_service.dart';
 import 'package:fushi/src/media/manga/library/online_manga_runtime_adapter.dart';
-import 'package:fushi/src/media/manga/manga_ocr_background_job.dart';
-import 'package:fushi/src/media/manga/manga_ocr_provider.dart';
-import 'package:fushi_engine/ocr/manga_ocr_service.dart';
-import 'package:fushi/src/media/manga/manga_ocr_wizard_engines.dart';
-import 'package:fushi/src/media/manga/ocr/manga_ocr_engine.dart';
-import 'package:fushi/src/media/manga/ocr/manga_ocr_job_registry.dart';
 import 'package:fushi/src/media/media_item.dart';
 import 'package:fushi/src/media/media_source.dart';
 import 'package:fushi/src/models/preferences_repository.dart';
@@ -68,89 +62,9 @@ class _FakeAdapter implements OnlineMangaRuntimeAdapter {
   ) async => <int>[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 }
 
-/// 内置 ONNX 引擎「模型全就绪」的假实现：让 `probeMangaOcrEngines` 判定 localOnnx
-/// 可用。任务事件流由记录型注册表替换，这里的 `ocrFolder` 不会被调到。
-class _FakeOcrService implements MangaOcrService {
-  @override
-  bool get isSupportedPlatform => true;
-
-  @override
-  Future<MangaOcrModelStatus> modelStatus() async => const MangaOcrModelStatus(
-    detectorReady: true,
-    recognizerReady: true,
-    diskBytes: 1,
-    totalBytes: 1,
-  );
-
-  @override
-  Stream<MangaOcrDownloadEvent> downloadModels() =>
-      const Stream<MangaOcrDownloadEvent>.empty();
-
-  @override
-  Future<int> deleteModels() async => 0;
-
-  @override
-  Stream<MangaOcrVolumeEvent> ocrFolder({
-    required String imageDirPath,
-    String? volumeTitle,
-    int startPage = 0,
-  }) => const Stream<MangaOcrVolumeEvent>.empty();
-}
-
-class _EnqueueRecord {
-  const _EnqueueRecord({
-    required this.bookKey,
-    required this.managedDirectory,
-    required this.engine,
-    required this.mangaJsonPath,
-  });
-
-  final String bookKey;
-  final String managedDirectory;
-  final MangaOcrEngineId engine;
-  final String mangaJsonPath;
-}
-
-/// 记录 `enqueue` 的参数；真正排进去的任务换成空事件流（立即结束），不跑真 OCR。
-class _RecordingRegistry extends MangaOcrJobRegistry {
-  _RecordingRegistry({this.events});
-
-  final List<_EnqueueRecord> records = <_EnqueueRecord>[];
-
-  /// 非 null 时用它顶替真 OCR 事件流（可控进度，BUG-2481 的横幅测试用）；
-  /// 默认空流 = 任务立即结束。
-  final Stream<MangaOcrBackgroundEvent>? events;
-
-  @override
-  Future<MangaOcrRunningJob?> enqueue({
-    required MangaOcrBackgroundJob job,
-    required String mangaJsonPath,
-  }) {
-    records.add(
-      _EnqueueRecord(
-        bookKey: job.bookKey,
-        managedDirectory: job.managedDirectory,
-        engine: job.engine,
-        mangaJsonPath: mangaJsonPath,
-      ),
-    );
-    return super.enqueue(
-      job: MangaOcrBackgroundJob(
-        bookKey: job.bookKey,
-        managedDirectory: job.managedDirectory,
-        engine: job.engine,
-        events: events ?? const Stream<MangaOcrBackgroundEvent>.empty(),
-      ),
-      mangaJsonPath: mangaJsonPath,
-    );
-  }
-}
-
 class _TestAppModel extends AppModel {
   _TestAppModel(this._db, this._library, Directory root)
     : super(testPlatformServices()) {
-    // 真 PreferencesRepository 挂在同一个内存 DB 上：chip 的写穿要能在
-    // `preferences` 表里查到。
     wireLocalAudioForTesting(
       prefsRepo: PreferencesRepository(_db),
       databaseDirectory: root,
@@ -169,10 +83,6 @@ class _TestAppModel extends AppModel {
     OnlineMangaRuntimeKind runtime,
   ) => _library;
 
-  /// 出厂默认是 Google Lens（要过上传同意闸门）；这里钉成内置引擎走无交互路径。
-  @override
-  String get mangaOcrEnginePreference => MangaOcrEnginePreference.localOnnx.key;
-
   @override
   Future<void> openMedia({
     required WidgetRef ref,
@@ -189,27 +99,14 @@ class _TestAppModel extends AppModel {
   }
 }
 
-Widget _harness(
-  AppModel appModel,
-  String bookKey, {
-  required MangaOcrJobRegistry registry,
-}) => ProviderScope(
+Widget _harness(AppModel appModel, String bookKey) => ProviderScope(
   overrides: <Override>[
     platformServicesProvider.overrideWithValue(testPlatformServices()),
     appProvider.overrideWith((ref) => appModel),
-    mangaOcrJobRegistryProvider.overrideWithValue(registry),
   ],
   child: TranslationProvider(
     child: MaterialApp(
-      home: MangaSeriesPage(
-        target: ShelfMangaSeriesTarget(bookKey),
-        ocrEnginesOverride: MangaOcrWizardEngines(
-          service: _FakeOcrService(),
-          initialEnginePreference: 'local_onnx',
-          initialLensLanguage: 'ja',
-          lensLanguageSetter: (_) async {},
-        ),
-      ),
+      home: MangaSeriesPage(target: ShelfMangaSeriesTarget(bookKey)),
     ),
   ),
 );
@@ -341,14 +238,12 @@ void main() {
   testWidgets('下载全部：已下载的不入队、再点一次不重复', (WidgetTester tester) async {
     sizeView(tester);
     final _TestAppModel appModel = _TestAppModel(db, library, root);
-    final _RecordingRegistry registry = _RecordingRegistry();
-
     late String bookKey;
     await tester.runAsync(() async {
       final EpubBookRow row = await library.add(_entry());
       bookKey = row.bookKey;
       await _writeDownloadedChapter(row.extractDir, '/chapter/1');
-      await tester.pumpWidget(_harness(appModel, bookKey, registry: registry));
+      await tester.pumpWidget(_harness(appModel, bookKey));
       await _pumpUntil(
         tester,
         find.byKey(const ValueKey<String>('manga_chapter_download_downloaded')),
@@ -385,215 +280,11 @@ void main() {
     expect(jobs, hasLength(2), reason: '已排队的章不重复入队');
   });
 
-  testWidgets('自动识别 chip：写穿偏好表，随后入队的章 autoOcr=true', (
-    WidgetTester tester,
-  ) async {
-    sizeView(tester);
-    final _TestAppModel appModel = _TestAppModel(db, library, root);
-    final _RecordingRegistry registry = _RecordingRegistry();
-
-    late String bookKey;
-    await tester.runAsync(() async {
-      final EpubBookRow row = await library.add(_entry());
-      bookKey = row.bookKey;
-      await tester.pumpWidget(_harness(appModel, bookKey, registry: registry));
-      await _pumpUntil(tester, find.byKey(_moreKey));
-      expect(appModel.mangaDownloadAutoOcr, isFalse);
-
-      await tester.tap(find.byKey(_moreKey));
-      await _settle(tester);
-      await tester.tap(
-        find.byKey(const ValueKey<String>('manga_series_auto_ocr_chip')),
-      );
-      await _settle(tester);
-    });
-
-    expect(appModel.mangaDownloadAutoOcr, isTrue);
-    final String? raw = await db.getPref('manga_download_auto_ocr');
-    expect(raw, isNotNull, reason: '偏好必须写穿到 preferences 表，不是只改内存');
-    expect(PrefCodec.decode(raw!, false), isTrue);
-
-    // 单章下载走章节行溢出菜单的「下载」：点章节本身现在是开读（未下载章在线
-    // 直读，#1659 撤回设计稿 2026-09-12 §1.1），不再入队。
-    await tester.runAsync(() async {
-      await tester.tap(_chapterMenu('Chapter 1'));
-      await _settle(tester);
-      await tester.tap(find.text(t.manga_chapter_download_action));
-      await _settle(tester);
-    });
-    final MangaDownloadJobRow? job = await db.findMangaDownloadJob(
-      kind: MangaDownloadJobKind.chapter,
-      bookKey: bookKey,
-      chapterKey: '/chapter/1',
-    );
-    expect(job, isNotNull);
-    expect(job!.autoOcr, isTrue, reason: '单章入队读 chip 的持久值');
-  });
-
-  testWidgets('识别本章：已下载章的菜单里有该项，排一条 localOnnx 任务；未下载章没有', (
-    WidgetTester tester,
-  ) async {
-    sizeView(tester);
-    final _TestAppModel appModel = _TestAppModel(db, library, root);
-    final _RecordingRegistry registry = _RecordingRegistry();
-
-    late String bookKey;
-    late String bookDir;
-    await tester.runAsync(() async {
-      final EpubBookRow row = await library.add(_entry());
-      bookKey = row.bookKey;
-      bookDir = row.extractDir;
-      await _writeDownloadedChapter(bookDir, '/chapter/1');
-      await tester.pumpWidget(_harness(appModel, bookKey, registry: registry));
-      await _pumpUntil(
-        tester,
-        find.byKey(const ValueKey<String>('manga_chapter_download_downloaded')),
-      );
-
-      // 未下载章：菜单里没有「识别本章」。
-      await tester.tap(_chapterMenu('Chapter 2'));
-      await _settle(tester);
-      expect(
-        find.byKey(const ValueKey<String>('manga_chapter_ocr')),
-        findsNothing,
-      );
-      // 关掉菜单。
-      await tester.tapAt(const Offset(5, 5));
-      await _settle(tester);
-
-      await tester.tap(_chapterMenu('Chapter 1'));
-      await _settle(tester);
-      expect(
-        find.byKey(const ValueKey<String>('manga_chapter_ocr')),
-        findsOneWidget,
-      );
-      await tester.tap(find.byKey(const ValueKey<String>('manga_chapter_ocr')));
-      await _settle(tester);
-    });
-
-    expect(registry.records, hasLength(1));
-    final _EnqueueRecord record = registry.records.single;
-    final Directory chapterDir = mangaChapterDirectory(bookDir, '/chapter/1');
-    expect(record.bookKey, bookKey);
-    expect(record.managedDirectory, chapterDir.path);
-    expect(record.engine, MangaOcrEngineId.localOnnx);
-    expect(record.mangaJsonPath, mangaChapterJsonFile(chapterDir).path);
-  });
-
-  testWidgets('识别进度（BUG-2481）：任务在跑时作品页有横幅 + 章节行「识别中 x/y」，取消后消失', (
-    WidgetTester tester,
-  ) async {
-    sizeView(tester);
-    final _TestAppModel appModel = _TestAppModel(db, library, root);
-    final StreamController<MangaOcrBackgroundEvent> events =
-        StreamController<MangaOcrBackgroundEvent>();
-    final _RecordingRegistry registry = _RecordingRegistry(
-      events: events.stream,
-    );
-
-    await tester.runAsync(() async {
-      final EpubBookRow row = await library.add(_entry());
-      await _writeDownloadedChapter(row.extractDir, '/chapter/1');
-      await tester.pumpWidget(
-        _harness(appModel, row.bookKey, registry: registry),
-      );
-      await _pumpUntil(
-        tester,
-        find.byKey(const ValueKey<String>('manga_chapter_download_downloaded')),
-      );
-      expect(
-        find.byKey(const ValueKey<String>('manga_series_ocr_banner')),
-        findsNothing,
-      );
-
-      await tester.tap(_chapterMenu('Chapter 1'));
-      await _settle(tester);
-      await tester.tap(find.byKey(const ValueKey<String>('manga_chapter_ocr')));
-      await _settle(tester);
-      events.add(MangaOcrBackgroundEvent.progress(pagesDone: 1, pagesTotal: 3));
-      await _settle(tester);
-    });
-
-    expect(
-      find.byKey(const ValueKey<String>('manga_series_ocr_banner')),
-      findsOneWidget,
-    );
-    expect(
-      find.text(
-        t.manga_series_ocr_running(chapter: 'Chapter 1', done: '1', total: '3'),
-      ),
-      findsOneWidget,
-    );
-    // 章节行副标题里也有进度。
-    expect(
-      find.textContaining(
-        t.manga_chapter_ocr_status_running(done: '1', total: '3'),
-      ),
-      findsOneWidget,
-    );
-
-    await tester.runAsync(() async {
-      await tester.tap(
-        find.byKey(const ValueKey<String>('manga_series_ocr_cancel')),
-      );
-      await _settle(tester);
-    });
-    expect(
-      find.byKey(const ValueKey<String>('manga_series_ocr_banner')),
-      findsNothing,
-    );
-    expect(registry.running(registry.records.single.bookKey), isNull);
-    // close() 要等订阅者处理完取消才落定：真异步，必须在 runAsync 里等。
-    await tester.runAsync(events.close);
-  });
-
-  testWidgets('识别全部已下载：只排 blocks 全空的那章', (WidgetTester tester) async {
-    sizeView(tester);
-    final _TestAppModel appModel = _TestAppModel(db, library, root);
-    final _RecordingRegistry registry = _RecordingRegistry();
-
-    late String bookKey;
-    late String bookDir;
-    await tester.runAsync(() async {
-      final EpubBookRow row = await library.add(_entry());
-      bookKey = row.bookKey;
-      bookDir = row.extractDir;
-      await _writeDownloadedChapter(bookDir, '/chapter/1', withBlocks: true);
-      await _writeDownloadedChapter(bookDir, '/chapter/2');
-      await tester.pumpWidget(_harness(appModel, bookKey, registry: registry));
-      await _pumpUntil(
-        tester,
-        find.byKey(const ValueKey<String>('manga_chapter_download_downloaded')),
-      );
-      await _settle(tester);
-      expect(
-        find.byKey(const ValueKey<String>('manga_chapter_download_downloaded')),
-        findsNWidgets(2),
-      );
-
-      await tester.tap(find.byKey(_moreKey));
-      await _settle(tester);
-      await tester.tap(
-        find.byKey(const ValueKey<String>('manga_series_ocr_all_downloaded')),
-      );
-      await _settle(tester);
-    });
-
-    expect(registry.records, hasLength(1), reason: '已识别过的章跳过');
-    expect(
-      registry.records.single.managedDirectory,
-      mangaChapterDirectory(bookDir, '/chapter/2').path,
-    );
-    expect(registry.records.single.bookKey, bookKey);
-  });
-
   testWidgets('订阅：书签开 → subscribed+autoDownload；菜单关自动下载；书签关两位都关', (
     WidgetTester tester,
   ) async {
     sizeView(tester);
     final _TestAppModel appModel = _TestAppModel(db, library, root);
-    final _RecordingRegistry registry = _RecordingRegistry();
-
     late String bookKey;
     Future<OnlineMangaLibraryEntry> persisted() async {
       final EpubBookRow row = (await db.getEpubBook(bookKey))!;
@@ -603,7 +294,7 @@ void main() {
     await tester.runAsync(() async {
       final EpubBookRow row = await library.add(_entry());
       bookKey = row.bookKey;
-      await tester.pumpWidget(_harness(appModel, bookKey, registry: registry));
+      await tester.pumpWidget(_harness(appModel, bookKey));
       await _pumpUntil(
         tester,
         find.byKey(const ValueKey<String>('manga_series_subscribe')),

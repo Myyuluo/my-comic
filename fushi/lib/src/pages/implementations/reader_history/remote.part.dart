@@ -67,9 +67,7 @@ extension _ReaderHistoryRemote on _ReaderFushiHistoryPageState {
         forceRefresh: forceRefresh,
         fetch: client.listRemoteBooks,
       );
-      final RemoteCollectionAdoptionService adoption =
-          RemoteCollectionAdoptionService(appModel.database);
-      await adoption.adoptBooks(books);
+      // 2026-11-05：合集已删除，不再收养远端合集归属。
       // #6: 远端与本地是同一本书时（同 bookKey）不在混排网格重复展示（只显示本地卡）。
       final List<EpubBookMeta> localBooks =
           await appModel.database.getEpubBookMetas();
@@ -326,17 +324,12 @@ extension _ReaderHistoryRemote on _ReaderFushiHistoryPageState {
   /// 让批量与用户逐张点的节奏等价。服务不可达在进循环前判一次，只提示一次
   /// （单本路径每次各弹一条）。
   ///
-  /// BUG-3337：勾中的**合集**也参与——下它格子里画着的云端成员
-  /// （[_remoteMembersByCollection]），即「合集一键全部下载」。散卡与合集成员按
-  /// 下载身份去重，同一本不会排两次。
   Future<void> _batchDownloadSelectedRemote() async {
     final Set<String> keys = _selectedRemoteKeys;
-    final List<_ShelfBookSlot> collectionMembers =
-        _selectedCollectionRemoteMembers;
-    if (keys.isEmpty && collectionMembers.isEmpty) return;
+    if (keys.isEmpty) return;
     final _RemoteBookState? state = _lastRemoteState;
     _exitSelectionMode();
-    if (state == null && collectionMembers.isEmpty) return;
+    if (state == null) return;
     if (_remoteBookClient == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         FushiSnackBar(content: Text(t.remote_book_unavailable)),
@@ -344,15 +337,12 @@ extension _ReaderHistoryRemote on _ReaderFushiHistoryPageState {
       return;
     }
     final List<_ShelfBookSlot> targets = <_ShelfBookSlot>[
-      if (state != null)
-        for (final RemoteBookInfo book in state.books)
-          if (keys.contains(_remoteBookSelectionKey(book)))
-            _ShelfBookSlot(remote: book),
-      if (state != null)
-        for (final RemoteAudiobookInfo book in state.srtAudiobooks)
-          if (keys.contains(_remoteSrtSelectionKey(book)))
-            _ShelfBookSlot(remoteSrt: book),
-      ...collectionMembers,
+      for (final RemoteBookInfo book in state.books)
+        if (keys.contains(_remoteBookSelectionKey(book)))
+          _ShelfBookSlot(remote: book),
+      for (final RemoteAudiobookInfo book in state.srtAudiobooks)
+        if (keys.contains(_remoteSrtSelectionKey(book)))
+          _ShelfBookSlot(remoteSrt: book),
     ];
     final Set<String> queued = <String>{};
     // 页面卸载后停止派发：已起的任务归管理器继续跑到底，未起的不再用已 dispose
@@ -372,13 +362,6 @@ extension _ReaderHistoryRemote on _ReaderFushiHistoryPageState {
       }
     }
   }
-
-  /// 多选里勾中的合集折进格子的云端成员（[_remoteMembersByCollection]），按合集
-  /// 选中序展开。批量栏「下载」的可用态与派发共用这一份。
-  List<_ShelfBookSlot> get _selectedCollectionRemoteMembers => <_ShelfBookSlot>[
-        for (final int id in _selectedCollectionIds)
-          ...?_remoteMembersByCollection[id],
-      ];
 
   /// 远端占位卡右上角的下载态角标（BUG-1561 书侧补齐）：进行中 → 进度环，失败 →
   /// 失败角标（tooltip 带 [InterconnectDownloadManager] 存的本地化失败原因），
@@ -441,12 +424,7 @@ extension _ReaderHistoryRemote on _ReaderFushiHistoryPageState {
   ///   后端（[CloudRemoteBookClient]）没有删除接口，按类型隐藏（真实能力边界）。
   ///   二次确认写明是哪台 host 上的哪本书（反馈 nvlhtczbro）。
   ///
-  /// [removeFromCollection] 非空 = 合集详情页成员语境，菜单补「移出合集」
-  /// （BUG-2969：合集内外同一个菜单，见 [_showCollectionMemberMenu]）。
-  void _showRemoteBookDialog(
-    RemoteBookInfo book, {
-    VoidCallback? removeFromCollection,
-  }) {
+  void _showRemoteBookDialog(RemoteBookInfo book) {
     final RemoteBookClient? client = _remoteBookClient;
     final bool canDelete = client is InterconnectSyncBackend;
     showAppDialog<void>(
@@ -456,10 +434,6 @@ extension _ReaderHistoryRemote on _ReaderFushiHistoryPageState {
         coverBackdrop: _remoteBookCoverBackdrop(book),
         title: book.displayName,
         showLaunchAction: false,
-        listActions: _removeFromCollectionActions(
-          dialogContext,
-          removeFromCollection,
-        ),
         quickActions: <DialogQuickAction>[
           DialogQuickAction(
             label: t.remote_book_download,
@@ -559,25 +533,6 @@ extension _ReaderHistoryRemote on _ReaderFushiHistoryPageState {
           .log('ReaderFushiHistoryPage.interconnectHostLabel', e, stack);
     }
     return describeInterconnectHost(urls, backend.resolvedHostBaseUrl);
-  }
-
-  /// 合集详情页成员语境下菜单末尾的「移出合集」（本地书卡 / SRT 卡 / 远端占位卡
-  /// 同一条，BUG-2969）；[removeFromCollection] 为 null（书架语境）返回空表。
-  List<DialogListAction> _removeFromCollectionActions(
-    BuildContext dialogContext,
-    VoidCallback? removeFromCollection,
-  ) {
-    if (removeFromCollection == null) return const <DialogListAction>[];
-    return <DialogListAction>[
-      DialogListAction(
-        label: t.collection_remove_member,
-        icon: Icons.remove_circle_outline,
-        onPressed: () {
-          Navigator.pop(dialogContext);
-          removeFromCollection();
-        },
-      ),
-    ];
   }
 
   /// 展示远端书的基本元数据（书名 + 是否含有声书）。纯信息弹窗。
@@ -929,13 +884,8 @@ extension _ReaderHistoryRemote on _ReaderFushiHistoryPageState {
         final EpubBookRow? localBook = await appModel.database.getEpubBook(
           localBookKey,
         );
-        if (localBook != null) {
-          await RemoteCollectionAdoptionService(
-            appModel.database,
-          ).adoptBook(book, localBook: localBook);
-        }
-        // 本机身份（入库行 + 别名 + 合集归属）此刻已齐：占位卡立刻让位，不等整个
-        // 任务（进度回填、有声书包）跑完。
+        // 本机身份（入库行 + 别名）此刻已齐：占位卡立刻让位，不等整个任务
+        // （进度回填、有声书包）跑完。
         _onRemoteBookLanded(book.downloadId);
       }
       // 漫画：把 host 端按本阅读模式作为初始值落地（互联完整支持批次；一次性，
@@ -1599,10 +1549,7 @@ extension _ReaderHistoryRemote on _ReaderFushiHistoryPageState {
   /// SRT 不接删除，真实能力边界」——那条描述偏保守：`DELETE /api/library/audiobooks/
   /// <identity>` 的 host 端 identity 解析同时查 `Audiobooks(bookKey)` 与 `SrtBooks(uid)`，
   /// 传 uid 本就能命中，缺的只是这个 UI 入口。
-  void _showRemoteSrtDialog(
-    RemoteAudiobookInfo book, {
-    VoidCallback? removeFromCollection,
-  }) {
+  void _showRemoteSrtDialog(RemoteAudiobookInfo book) {
     final String title = book.title ?? book.identity;
     final RemoteBookClient? client = _remoteBookClient;
     final bool canDelete = client is InterconnectSyncBackend;
@@ -1612,10 +1559,6 @@ extension _ReaderHistoryRemote on _ReaderFushiHistoryPageState {
         cover: _coverPlaceholderIcon(Icons.headphones_outlined),
         title: title,
         showLaunchAction: false,
-        listActions: _removeFromCollectionActions(
-          dialogContext,
-          removeFromCollection,
-        ),
         quickActions: <DialogQuickAction>[
           DialogQuickAction(
             label: t.remote_book_download,

@@ -17,7 +17,6 @@ import 'package:fushi_audio/fushi_audio.dart';
 import 'package:fushi/src/media/sources/reader_fushi_source.dart';
 import 'package:fushi/src/models/app_model.dart';
 import 'package:fushi/src/models/module_id.dart';
-import 'package:fushi/src/pages/implementations/book_css_editor_page.dart';
 import 'package:fushi/src/reader/reader_audiobook_panel.dart';
 import 'package:fushi/src/reader/reader_navigation_widgets.dart';
 import 'package:fushi/src/reader/reader_panel_kit.dart';
@@ -897,8 +896,6 @@ class _ReaderQuickSettingsSheetState extends State<ReaderQuickSettingsSheet>
           if (tab == ReaderSettingsTab.listening)
             _buildAudiobookSettingsSection(Theme.of(context)),
           _buildReaderTabSchema(tab),
-          if (tab == ReaderSettingsTab.appearance && widget.extractDir != null)
-            _buildBookCssEditorSection(),
         ],
     };
     return FushiEntranceScope(
@@ -1240,46 +1237,10 @@ class _ReaderQuickSettingsSheetState extends State<ReaderQuickSettingsSheet>
     );
   }
 
-  /// 「编辑书籍 CSS」入口行。归类语义对齐：CSS 改的是排版（字号/行高/边距等同
-  /// 一维度），属「布局与显示」组而非「外观」，故随 layout 子页渲染（窄窗 push
-  /// 子页 + 宽窗右 pane 共用）。仅当书籍解压目录可用（`extractDir != null`）时
-  /// 出现；点击打开 [BookCssEditorPage]，返回后整章重排以应用新 CSS。
-  Widget _buildBookCssEditorRow() {
-    return AdaptiveSettingsNavigationRow(
-      title: t.book_css_editor_edit_css,
-      icon: FushiIcons.code,
-      onTap: () async {
-        await Navigator.push(
-          context,
-          adaptivePageRoute(
-            context: context,
-            builder: (_) => BookCssEditorPage(extractDir: widget.extractDir!),
-          ),
-        );
-        await _reloadLayoutLive();
-      },
-    );
-  }
-
-  /// 「编辑书籍 CSS」入口行的外层 section。与主题卡（`_buildThemeSelectorSection`）
-  /// 同构：普通布局子页与歌词模式子页里，它与走 `buildDetailContent` 的 schema
-  /// section（layout 配置项组）并列同一 Column。schema 正文现走
-  /// `insetHorizontally:false`、不再自带横向缩进，横向留白由本面板外层 padding 统一
-  /// 提供，故 CSS 入口条裸放 section 即与配置行等宽（BUG-573），且与 bespoke 的
-  /// 「导航 / 有声书」子页同为宽版（TODO-1321）。
-  Widget _buildBookCssEditorSection() {
-    // 与 _buildThemeSelectorSection 同理：CSS 入口条裸放即可与上方 layout 配置行、
-    // 以及 bespoke 的「导航 / 有声书」子页左右等宽、同为宽版。横向留白由本面板外层
-    // padding 统一提供，schema 正文经 insetHorizontally:false 不再自带横向缩进
-    // （BUG-573 的等宽仍成立，统一到更宽的外层 padding 宽度，TODO-1321）。
-    return AdaptiveSettingsSection(
-      children: <Widget>[_buildBookCssEditorRow()],
-    );
-  }
-
-  /// 「布局与显示」子页详情：主题选择器（TODO-802 并入）→ layout schema 行 →
-  /// 可选「编辑书籍 CSS」行。窄窗 push 子页与宽窗右 pane 共用（经
-  /// [_subPageContent] 的 'layout' 分支）。
+  /// 「布局与显示」子页详情：主题选择器（TODO-802 并入）→ layout schema 行。
+  /// 窄窗 push 子页与宽窗右 pane 共用（经 [_subPageContent] 的 'layout' 分支）。
+  ///
+  /// 2026-11-05：书籍 CSS 编辑器入口已随长按菜单一并移除（my-comic 不需要）。
   Widget _buildLayoutDetail() {
     final Widget layoutContent =
         _buildReaderGroupContent(ReaderGroup.layout, t.section_layout);
@@ -1289,7 +1250,6 @@ class _ReaderQuickSettingsSheetState extends State<ReaderQuickSettingsSheet>
       children: <Widget>[
         _buildThemeSelectorSection(),
         layoutContent,
-        if (widget.extractDir != null) _buildBookCssEditorSection(),
       ],
     );
   }
@@ -2223,10 +2183,11 @@ class _ReaderQuickSettingsSheetState extends State<ReaderQuickSettingsSheet>
   }
 
   /// 歌词模式的「布局与显示」子页详情。TODO-802 可达性修复：删「外观」组后，歌词
-  /// 模式以前经外观组才够得到的主题选择器 + 编辑书籍 CSS 行，现随歌词布局子页一并
-  /// 露出（主题在最前，其次歌词字号/边距等专属控件，最后 extractDir 可用时的 CSS
-  /// 行），否则歌词模式将完全够不到主题/CSS。歌词字号/边距是歌词专属设置（写
-  /// 歌词-only `setLyrics*` setter），非 schema 项，故保持 bespoke。
+  /// 模式以前经外观组才够得到的主题选择器，现随歌词布局子页一并露出（主题在最前，
+  /// 其次歌词字号/边距等专属控件）。歌词字号/边距是歌词专属设置（写歌词-only
+  /// `setLyrics*` setter），非 schema 项，故保持 bespoke。
+  ///
+  /// 2026-11-05：书籍 CSS 编辑器入口已移除。
   Widget _buildLyricsDisplaySection() {
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -2234,7 +2195,6 @@ class _ReaderQuickSettingsSheetState extends State<ReaderQuickSettingsSheet>
       children: <Widget>[
         _buildThemeSelectorSection(),
         _buildLyricsMarginSection(),
-        if (widget.extractDir != null) _buildBookCssEditorSection(),
       ],
     );
   }

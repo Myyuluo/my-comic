@@ -19,7 +19,6 @@ import 'package:fushi/src/media/manga/manga_module.dart';
 import 'package:fushi_engine/media/manga/manga_storage.dart'
     show MangaImportException;
 import 'package:fushi/src/models/app_model.dart';
-import 'package:fushi/src/sync/interconnect_manga_ocr_client.dart';
 import 'package:fushi/utils.dart';
 
 /// 漫画导入对话框。
@@ -39,8 +38,6 @@ class MangaImportDialog extends StatefulWidget {
     required this.db,
     this.initialPath,
     this.initialPaths = const <String>[],
-    this.mangaOcrRemoteRunner,
-    this.ocrEntryDesktopOverride,
     super.key,
   });
 
@@ -52,13 +49,6 @@ class MangaImportDialog extends StatefulWidget {
   /// 拖放多选时预填的一组漫画路径。≥2 个可导的卷时进「逐卷批量」模式（每卷各成
   /// 一本、书名取各自名字），只有一个时与 [initialPath] 等价。
   final List<String> initialPaths;
-
-  /// 测试缝：注入远程 OCR runner（探测已配对 host 能力 + 代跑）。null = 生产路径，
-  /// 由 [MangaOcrWizardEngines.resolve] 按 [db] 构造 [InterconnectMangaOcrClient]。
-  final MangaOcrRemoteRunner? mangaOcrRemoteRunner;
-
-  /// 测试缝：覆盖「是否桌面平台」判定。null = 用真实 [isDesktopPlatform]。
-  final bool? ocrEntryDesktopOverride;
 
   @override
   State<MangaImportDialog> createState() => _MangaImportDialogState();
@@ -201,10 +191,6 @@ class _MangaImportDialogState extends State<MangaImportDialog>
           title: t.manga_import_action,
           body: _buildForm(),
           actions: <Widget>[
-            FushiDialogAction(
-              label: t.manga_ocr_wizard_title,
-              onPressed: importing ? null : _openOcrWizard,
-            ),
             FushiDialogAction(
               label: t.dialog_cancel,
               onPressed: importing ? null : () => Navigator.pop(context),
@@ -431,22 +417,6 @@ class _MangaImportDialogState extends State<MangaImportDialog>
         ),
         severity: ToastSeverity.error,
       );
-    }
-  }
-
-  // ── OCR ─────────────────────────────────────────────────────────────────
-
-  /// 打开 OCR 导入漫画向导：向导内选裸图片文件夹跑整卷 OCR 后无缝落库；成功
-  /// （返回 bookKey）则连同关闭本导入框并回传 true，让书架刷新。
-  Future<void> _openOcrWizard() async {
-    final String? bookKey = await MangaModule.openOcrImportWizard(
-      context: context,
-      db: widget.db,
-      remoteRunnerOverride: widget.mangaOcrRemoteRunner,
-      desktopOverride: widget.ocrEntryDesktopOverride,
-    );
-    if (bookKey != null && mounted) {
-      Navigator.pop(context, true);
     }
   }
 

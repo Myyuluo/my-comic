@@ -188,48 +188,10 @@ void main() {
       final String fn = slice(
         booksPart,
         'Future<void> _confirmDeleteEpub(',
-        'Future<void> _openIllustrations(',
+        'Future<void> _resetBookReadingState(',
         where: '_confirmDeleteEpub',
       );
       expect(fn, contains('displayTitleForBook(item: item'));
-    });
-
-    test('「查看插画」页标题经门面', () {
-      final String fn = slice(
-        booksPart,
-        'Future<void> _openIllustrations(',
-        'Future<void> _openSrtBookReimport(',
-        where: '_openIllustrations',
-      );
-      expect(fn, contains('bookTitle: displayTitleForBook(item: item'));
-    });
-
-    test('批量组合默认名与单卡加入合集默认名经门面', () {
-      // 批量档1（EPUB + SRT 成员标题）。
-      final String combine = slice(
-        booksPart,
-        'Future<void> _combineCreateNew(',
-        'Future<void> _combineAddToExisting(',
-        where: '_combineCreateNew',
-      );
-      expect(combine, contains('displayTitleForBook(item: item'));
-      expect(combine, contains('_srtDisplayTitle(book)'));
-      // 单卡：SRT 侧。
-      final String srtAdd = slice(
-        booksPart,
-        'Future<void> _addSrtToCollection(',
-        'Future<void> _showSrtBookDialog(',
-        where: '_addSrtToCollection',
-      );
-      expect(srtAdd, contains('_srtDisplayTitle(book)'));
-      // 单卡：EPUB 侧（宿主文件）。
-      final String epubAdd = slice(
-        historyPage,
-        'Future<void> _addEpubToCollection(',
-        'Future<void> _toggleBookCompleted(',
-        where: '_addEpubToCollection',
-      );
-      expect(epubAdd, contains('displayTitleForBook(item: item'));
     });
   });
 

@@ -1308,7 +1308,7 @@ class AppModel with ChangeNotifier {
                 mangaDownloadService.enqueueChapters(
               entry: entry,
               chapters: chapters,
-              autoOcr: mangaDownloadAutoOcr,
+              autoOcr: false,
             ),
           );
         },

@@ -146,11 +146,6 @@ void main() {
       reason: '删除是本地动作，纯远端选中集不能启用',
     );
     expect(
-      batchButtonEnabled(tester, 'reader_shelf_batch_combine'),
-      isFalse,
-      reason: '组合是本地动作，纯远端选中集不能启用',
-    );
-    expect(
       tester
           .widget<IconButton>(glassUnwrap<IconButton>(find.byKey(
               ValueKey<String>('remote_book_download_${safeKey('Cloud Two')}'))))

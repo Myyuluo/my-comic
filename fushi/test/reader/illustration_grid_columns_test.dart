@@ -97,17 +97,12 @@ void main() {
     });
   });
 
-  test('书架端插图库与阅读器插图册用同一条列数规则（不再钉死 maxCrossAxisExtent）', () {
-    final String viewer = File(
-      'lib/src/pages/implementations/illustrations_viewer_page.dart',
-    ).readAsStringSync();
+  test('阅读器插图册用统一的列数规则（不再钉死 maxCrossAxisExtent）', () {
+    // 2026-11-05：书架端「查看插画」入口与插图库已随 ticket 20 删除，
+    // 这里只守阅读器内 ReaderGalleryPage 的列数规则。
     final String gallery = File(
       'lib/src/reader/reader_gallery_page.dart',
     ).readAsStringSync();
-    // BUG-2589：书架端不再有自己的网格，直接用阅读器内的 ReaderGalleryPage。
-    expect(viewer, contains('ReaderGalleryPage('));
-    expect(viewer, isNot(contains('GridView')));
-    expect(viewer, isNot(contains('maxCrossAxisExtent:')));
     expect(gallery, contains('illustrationGridColumnsForWidth('));
     expect(gallery, isNot(contains('_kCardMaxExtent')));
   });

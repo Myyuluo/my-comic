@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../helpers/source_guard.dart';
-import '../pages/reader_history_source_corpus.dart';
 
 /// 合并守卫：MD3 对话框壳（FushiDialogFrame / FushiModalSheetFrame / 设计令牌）
 /// 一致性静态守卫。原来每个对话框各占一个 *_md3_static_test.dart 文件，断言同形但
@@ -91,35 +90,6 @@ void main() {
       );
 
       _expectSharedIconButtons(code, '录音对话框');
-    });
-  });
-
-  group('book_profile_dialog_md3_static', () {
-    test('book profile dialog owns shared MD3 dialog and sheet chrome', () {
-      final String code = maskCommentsAndStrings(readReaderHistorySource());
-      // 旧写法把「State 类 + Frame 类」拼成一段偶然区间（起点是 StatefulWidget、
-      // 终点是**下一个**类名），谁改名都会漂。改成各自作用域各断言其职责。
-      final String stateCode = methodBody(
-        code,
-        'class _BookProfileDialogState',
-      );
-      final String frameCode = methodBody(code, 'class BookProfileDialogFrame');
-
-      expect(
-        containsIdentifierCall(stateCode, 'BookProfileDialogFrame'),
-        isTrue,
-        reason: '书籍 Profile 对话框必须经由共享 Frame 出壳',
-      );
-      expect(
-        containsIdentifierCall(stateCode, 'adaptiveAlertDialog'),
-        isFalse,
-        reason: '书籍 Profile 对话框不得回到旧 adaptiveAlertDialog 工厂',
-      );
-      _expectMd3DialogChrome(
-        frameCode,
-        'BookProfileDialogFrame',
-        requireTokens: false,
-      );
     });
   });
 

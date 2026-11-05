@@ -169,12 +169,6 @@ void main() {
       'FushiTagInputChip(',
       'FushiTagToggleChip(',
     ],
-    // BUG-2589：书架端「查看插图」只剩装载壳，画廊本体是阅读器内的
-    // ReaderGalleryPage（自带顶栏，不走 FushiToolScaffold / FushiCard）。
-    'lib/src/pages/implementations/illustrations_viewer_page.dart': <String>[
-      'FushiPageScaffold',
-      'ReaderGalleryPage',
-    ],
     'lib/src/pages/base_history_page.dart': <String>['FushiCard'],
     'lib/src/pages/implementations/history_reader_page.dart': <String>[
       'FushiDesignTokens',
@@ -199,12 +193,6 @@ void main() {
       'FushiPopupSurface',
       'FushiCompactSearchRow',
       'FushiOverlayScaffold',
-    ],
-    'lib/src/pages/implementations/book_css_editor_page.dart': <String>[
-      'FushiToolScaffold',
-      'FushiEditorPanel',
-      'FushiSelectableChip',
-      'FushiPlaceholderMessage',
     ],
     'lib/src/pages/implementations/anki_settings_page.dart': <String>[
       'AdaptiveSettingsTextField',
@@ -469,13 +457,6 @@ void main() {
         'const EdgeInsets.all(16)',
         'const SizedBox(height: 8)',
       ],
-      'lib/src/pages/implementations/illustrations_viewer_page.dart': <String>[
-        'adaptiveAppBar',
-        'surfaceContainerLow',
-        'BorderRadius.circular(8)',
-        'const SizedBox(height: 16)',
-        'const EdgeInsets.all(8)',
-      ],
       'lib/src/pages/base_history_page.dart': <String>[
         'return Material(',
         'InkWell(',
@@ -513,13 +494,6 @@ void main() {
         'TextField(',
         'BorderRadius.circular(',
         'fontSize:',
-      ],
-      'lib/src/pages/implementations/book_css_editor_page.dart': <String>[
-        'adaptiveAppBar',
-        'ChoiceChip(',
-        'fontSize: 13',
-        'OutlineInputBorder',
-        'Center(child: Text(',
       ],
       'lib/src/pages/implementations/anki_settings_page.dart': <String>[
         'OutlineInputBorder',
@@ -2380,7 +2354,7 @@ class AnotherPopupPart {
     final String deleteDialog = _sectionSource(
       source,
       'class ReaderHistoryDeleteDialog',
-      'class _BookProfileDialog',
+      source.length,
     );
     // 批量 / 单条打标签统一走共享标签选择器 [TagPickerPanel]：窄屏 sheet、宽屏
     // FushiDialogFrame 弹层，主体是 FushiModalSheetFrame（MD3 chrome 闭环）。
@@ -3502,47 +3476,6 @@ class AnotherPopupPart {
     );
   });
 
-  test('book CSS confirmation dialog uses shared M3E dialog chrome', () {
-    final String source = File(
-      'lib/src/pages/implementations/book_css_editor_page.dart',
-    ).readAsStringSync();
-    final String dialogSource = _sectionSource(
-      source,
-      'class BookCssConfirmationDialog<T>',
-      source.length,
-    );
-
-    expect(dialogSource, contains('FushiDialogFrame('));
-    expect(dialogSource, contains('FushiModalSheetFrame('));
-    expect(dialogSource, isNot(contains('adaptiveAlertDialog(')));
-  });
-
-  test('book CSS editor shell uses shared M3E spacing tokens', () {
-    final String source = File(
-      'lib/src/pages/implementations/book_css_editor_page.dart',
-    ).readAsStringSync();
-    final String editorBuild = _functionSource(
-      source,
-      'Widget build(BuildContext context)',
-      '@visibleForTesting',
-    );
-
-    expect(editorBuild, contains('FushiDesignTokens.of(context)'));
-    expect(editorBuild, contains('tokens.spacing'));
-    expect(editorBuild, contains('FushiSelectableChip('));
-    expect(editorBuild, contains('FushiEditorPanel('));
-    expect(editorBuild, isNot(contains('height: 40')));
-    expect(editorBuild, isNot(contains('const EdgeInsets.only(right: 6)')));
-    expect(
-      editorBuild,
-      isNot(
-        contains('const EdgeInsets.symmetric(horizontal: 12, vertical: 6)'),
-      ),
-    );
-    expect(editorBuild, isNot(contains('spacing: 8')));
-    expect(editorBuild, isNot(contains('runSpacing: 4')));
-  });
-
   test('collection dialogs use shared M3E dialog chrome', () {
     final String source = File(
       'lib/src/pages/implementations/collections_page.dart',
@@ -3713,23 +3646,6 @@ class AnotherPopupPart {
     expect(
       historyTile,
       isNot(contains('const EdgeInsets.fromLTRB(2, 2, 2, 4)')),
-    );
-
-    final String illustrationsSource = File(
-      'lib/src/pages/implementations/illustrations_viewer_page.dart',
-    ).readAsStringSync();
-    final String illustrationsBody = _sectionSource(
-      illustrationsSource,
-      'Widget _buildPending(BuildContext context)',
-      illustrationsSource.length,
-    );
-    // 装载 / 出错态改由共享 FushiLoadingView / FushiPlaceholderMessage 承担
-    // 间距（它们内部取 tokens.spacing），页面不再自排。
-    expect(illustrationsBody, contains('FushiLoadingView'));
-    expect(illustrationsBody, contains('FushiPlaceholderMessage'));
-    expect(
-      illustrationsBody,
-      isNot(contains('padding: const EdgeInsets.all(32)')),
     );
 
     final String profileSource = File(

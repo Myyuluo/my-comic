@@ -74,14 +74,13 @@ void main() {
     expect(source, isNot(contains('Widget _buildThemeSelector()')));
   });
 
-  test('layout sub-page hosts theme selector + book-CSS row; lyrics mode keeps '
-      'them reachable (TODO-802/774/801)', () {
+  test('layout sub-page hosts theme selector; book-CSS row removed '
+      '(TODO-802/774, my-comic 2026-11-05)', () {
     final String source = File(
       'lib/src/media/audiobook/reader_quick_settings_sheet.dart',
     ).readAsStringSync();
 
-    // TODO-802/774：主题选择器从已删的「外观」组并入「布局与显示」子页顶部；
-    // TODO-801：CSS 行也在 layout 子页（仅 extractDir 可用时）。
+    // TODO-802/774：主题选择器从已删的「外观」组并入「布局与显示」子页顶部。
     final String layoutDetailSource = _between(
       source,
       '  Widget _buildLayoutDetail()',
@@ -97,40 +96,28 @@ void main() {
       contains('_buildReaderGroupContent(ReaderGroup.layout'),
       reason: 'layout 子页详情渲染 layout schema 行',
     );
+    // 2026-11-05 用户口径：书籍 CSS 编辑器入口已随长按菜单一并移除。
     expect(
       layoutDetailSource,
-      contains('_buildBookCssEditorSection()'),
-      reason: 'TODO-801/BUG-573：编辑书籍 CSS 行经等宽 section 随 layout 子页详情渲染',
+      isNot(contains('_buildBookCssEditorSection()')),
+      reason: 'my-comic 不需要书籍 CSS 编辑器',
     );
     expect(
-      layoutDetailSource,
-      contains('widget.extractDir != null'),
-      reason: 'extractDir 不可用时不渲染 CSS 行（保留显示条件）',
+      source,
+      isNot(contains('BookCssEditorPage')),
+      reason: 'CSS 编辑器页已删除，阅读器快捷设置不得再引用',
     );
 
     // 主题选择器卡用主题专用 context（换肤后还 _syncThemeSelection）。
     final String themeSectionSource = _between(
       source,
       '  Widget _buildThemeSelectorSection(',
-      '  Widget _buildBookCssEditorRow()',
+      '  Widget _buildLayoutDetail()',
     );
     expect(
       themeSectionSource,
       contains('buildThemeSelector(_themeSettingsContext())'),
     );
-
-    // CSS 编辑入口行本身仍保留打开 BookCssEditorPage + 返回后整章重排的逻辑。
-    final String cssRowSource = _between(
-      source,
-      '  Widget _buildBookCssEditorRow()',
-      '  Widget _buildLayoutDetail()',
-    );
-    expect(cssRowSource, contains('book_css_editor_edit_css'));
-    expect(
-      cssRowSource,
-      contains('BookCssEditorPage(extractDir: widget.extractDir!'),
-    );
-    expect(cssRowSource, contains('_reloadLayoutLive()'));
 
     // 'layout' 子页分支调用 _buildLayoutDetail（非直接 _buildReaderGroupContent）。
     expect(
@@ -139,8 +126,7 @@ void main() {
       reason: 'layout 子页（非歌词模式）经 _buildLayoutDetail 渲染',
     );
 
-    // TODO-802 可达性：歌词模式布局子页也露出主题选择器 + CSS 行，否则删外观组后
-    // 歌词模式将完全够不到主题/CSS。
+    // TODO-802 可达性：歌词模式布局子页也露出主题选择器。
     final String lyricsSource = _between(
       source,
       '  Widget _buildLyricsDisplaySection()',
@@ -153,10 +139,9 @@ void main() {
     );
     expect(
       lyricsSource,
-      contains('_buildBookCssEditorSection()'),
-      reason: 'TODO-802/BUG-573：歌词模式（extractDir 可用时）经等宽 section 达到编辑书籍 CSS',
+      isNot(contains('_buildBookCssEditorSection()')),
+      reason: 'my-comic 不需要书籍 CSS 编辑器',
     );
-    expect(lyricsSource, contains('widget.extractDir != null'));
   });
 
   test('reader quick settings sheet uses shared MD3 sheet chrome', () {
