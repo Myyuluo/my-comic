@@ -265,6 +265,9 @@ class _ReaderPdfPageState extends BaseSourcePageState<ReaderPdfPage>
   Future<void> _persistPosition(int pageIndex) async {
     _lastSavedPageIndex = pageIndex;
     final FushiDatabase db = appModel.database;
+    // 无痕阅读：在**落库时**现读开关（设置里切完不必重启）。开启时页码照写，
+    // 但 reader_positions.updatedAt 冻结，不产生「最近阅读」信号。
+    final bool incognito = appModel.incognitoReading;
     // v82：uid 缺失时只跳过位置写入（不拿 bookKey 兜底造孤儿行）；下方「已读完」
     // 标记走 bookKey 键的 epub_books 表，照常执行。
     final String? bookUid = _bookUid;
@@ -277,6 +280,7 @@ class _ReaderPdfPageState extends BaseSourcePageState<ReaderPdfPage>
           // PDF 无章内字符偏移。**必须显式传值**（传 null 会掉进 EPUB 专用的
           // 「跨 section 精确锚失效」启发式）。
           charOffset: 0,
+          advanceUpdatedAt: !incognito,
         );
       } catch (e, stack) {
         ErrorLogService.instance
@@ -284,8 +288,9 @@ class _ReaderPdfPageState extends BaseSourcePageState<ReaderPdfPage>
       }
     }
     // 翻到最后一页 → 幂等写「已读完」（判据用总页数，PDF 无 chapters）。
+    // 无痕阅读：书级完成标记是 History 的可见信号，自动写入跳过。
     final int pageCount = _bookRow?.chapterCount ?? 0;
-    if (pageCount > 0 && pageIndex >= pageCount - 1) {
+    if (!incognito && pageCount > 0 && pageIndex >= pageCount - 1) {
       try {
         await db.markEpubBookCompletedIfUnset(widget.bookKey, DateTime.now());
       } catch (e, stack) {

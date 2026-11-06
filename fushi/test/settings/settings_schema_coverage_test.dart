@@ -87,6 +87,14 @@ const Map<String, String> kCoveredElsewhere = <String, String>{
       'test/updates/update_feed_service_test.dart（关掉的域整批丢弃）',
   'system/System notifications':
       'test/updates/update_feed_service_test.dart（总开关只关通知不关红点）',
+  // 无痕阅读（读行为 spec ticket 04）：写 prefsRepo（changed=true），生效点在
+  // 阅读器**落库路径**——开启后续读位置照写，但 reader_positions.updatedAt
+  // 冻结、章节 readAt 与书级 completedAt 不写。harness 里没有打开的书可读，
+  // 观测不到；由真页面测试逐条咬住（真实 37 表库 + 真实偏好库）：
+  'system/Incognito reading':
+      'test/pages/manga_incognito_reading_test.dart（漫画：续读位置照写、'
+      '最近阅读时间冻结、章节已读/书级完成不写、页内切换立即生效） + '
+      'test/pages/incognito_reading_wiring_guard_test.dart（EPUB / PDF / 漫画落库接线）',
   // 「反馈有新回复时通知我」：写 prefsRepo（changed=true），生效点是移动端后台任务
   // 的排 / 撤与桌面定时 tick 的系统通知——harness 里没有 workmanager 与本机反馈。
   // 行为由服务层用例咬住：「开 + 有未结案 → 排；关 → 撤」「关着 → 不发请求」。
@@ -1753,7 +1761,8 @@ void main() {
       expect(
         verdicts.where((ItemVerdict v) => v.effectVerified).length,
         greaterThanOrEqualTo(3),
-        reason: 'appearance(T2) 应有多项被探针确认真生效'
+        reason:
+            'appearance(T2) 应有多项被探针确认真生效'
             '（reading(T1) 随非漫画阅读域移除）',
       );
       // 下拉行（`SettingsSegmentedItem(dropdown: true)`）以前根本不在 _focusedSettingsRow

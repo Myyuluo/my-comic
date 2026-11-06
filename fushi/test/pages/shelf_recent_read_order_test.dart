@@ -73,6 +73,20 @@ void main() {
       expect(lastReadAtForBookKey(lastReadAtByUid, uidByKey, 'legacy-key'), 50);
       expect(lastReadAtForBookKey(lastReadAtByUid, uidByKey, null), isNull);
     });
+
+    test('0 是无痕新行的哨兵：不算「最近读过」，排序回落导入时间', () {
+      // ticket 04：无痕阅读首次读一本没读过的书时，reader_positions 新行的
+      // updatedAt = 0（不是 now）。它必须被当成「没有阅读历史」，否则书架
+      // 「最近阅读」会把这本书从导入序掉到最底——这次阅读就改变了排序。
+      expect(
+        lastReadAtForBookKey(
+          <String, int>{'uid-incognito': 0},
+          <String, String>{'new-book': 'uid-incognito'},
+          'new-book',
+        ),
+        isNull,
+      );
+    });
   });
 
   group('bookLastReadAtProvider（真 DB 读 reader_positions.updatedAt）', () {

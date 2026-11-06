@@ -3575,6 +3575,8 @@
   "import_theme_invalid": "Mã giao diện không hợp lệ",
   "import_theme_success": "Đã nhập giao diện",
   "import_unsupported_file_format": "Định dạng tệp không được hỗ trợ: $ext",
+  "incognito_reading": "Incognito reading",
+  "incognito_reading_hint": "Pause recording reading history",
   "increase": "Tăng",
   "info_empty_home_tab": "Lịch sử trống",
   "init_error_message": "Khởi tạo thất bại: $error",

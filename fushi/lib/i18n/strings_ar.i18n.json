@@ -3575,6 +3575,8 @@
   "import_theme_invalid": "رمز مظهر غير صالح",
   "import_theme_success": "تم استيراد المظهر",
   "import_unsupported_file_format": "صيغة ملف غير مدعومة: $ext",
+  "incognito_reading": "Incognito reading",
+  "incognito_reading_hint": "Pause recording reading history",
   "increase": "زيادة",
   "info_empty_home_tab": "السجل فارغ",
   "init_error_message": "فشلت التهيئة: $error",

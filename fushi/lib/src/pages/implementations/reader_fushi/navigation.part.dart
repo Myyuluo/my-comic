@@ -1551,6 +1551,10 @@ extension _ReaderNavigation on _ReaderFushiPageState {
       'section=$section normOffset=${saveArgs.normCharOffset} '
       'charOffset=$charOffset',
     );
+    // 无痕阅读：在**落库时**现读开关（设置里切完不必重启）。开启时位置照写，
+    // 但 reader_positions.updatedAt 冻结（书架最近阅读 / 继续阅读 hero / 互联
+    // LWW 都不因这次阅读推进）。
+    final bool incognito = appModel.incognitoReading;
     final ReaderPositionRepository repo = ReaderPositionRepository(
       appModel.database,
     );
@@ -1559,6 +1563,7 @@ extension _ReaderNavigation on _ReaderFushiPageState {
         bookUid: bookUid,
         sectionIndex: section,
         normCharOffset: saveArgs.normCharOffset,
+        advanceUpdatedAt: !incognito,
         // BUG-162: >=0 写精确锚（char_offset 列）。<0（WebView 当帧算不出精确偏移）
         // 传 null → ReaderPositionRepository.save 在同 section 保留既有精确锚、仅跨
         // section 失效。BUG-285 回归：TODO-265 误改成直接传 -1，使 _refreshProgress /
@@ -1584,7 +1589,9 @@ extension _ReaderNavigation on _ReaderFushiPageState {
         book.chapters.isNotEmpty &&
         section >= book.chapters.length - 1 &&
         progress >= 0.999;
-    if (completed) {
+    // 无痕阅读：书级完成标记属于 History 的可见信号，自动写入跳过。Tracking
+    // （recordBookProgress）与统计不受影响，照常走下面的链路。
+    if (completed && !incognito) {
       await appModel.database.markEpubBookCompletedIfUnset(
         widget.bookKey,
         DateTime.now(),

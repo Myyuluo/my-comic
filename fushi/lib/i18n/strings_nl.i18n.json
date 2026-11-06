@@ -3575,6 +3575,8 @@
   "import_theme_invalid": "Ongeldige themacode",
   "import_theme_success": "Thema geïmporteerd",
   "import_unsupported_file_format": "Niet-ondersteund bestandsformaat: $ext",
+  "incognito_reading": "Incognito reading",
+  "incognito_reading_hint": "Pause recording reading history",
   "increase": "Verhogen",
   "info_empty_home_tab": "Geschiedenis is leeg",
   "init_error_message": "Initialisatie mislukt: $error",

@@ -1,3 +1,4 @@
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi_core/fushi_core.dart';
@@ -202,5 +203,70 @@ void main() {
 
   test('findAllByBookUid on empty table is empty', () async {
     expect(await repo.findAllByBookUid(), isEmpty);
+  });
+
+  // 无痕阅读（ticket 04）：续读位置照常写，但 reader_positions.updatedAt 是
+  // History 的可见信号（书架「最近阅读」排序 / 继续阅读 hero / 互联 LWW），
+  // 必须冻结。已有行保留原值；新行用哨兵 0（不是“现在”），不得冒充刚读过。
+  group('advanceUpdatedAt: false（无痕阅读冻结 History 时间戳）', () {
+    test('existing row keeps updatedAt while all position fields advance',
+        () async {
+      await db.upsertReaderPosition(const ReaderPositionsCompanion(
+        bookUid: Value('book-incognito'),
+        sectionIndex: Value(1),
+        normCharOffset: Value(100),
+        updatedAt: Value(1000),
+      ));
+
+      await repo.save(
+        bookUid: 'book-incognito',
+        sectionIndex: 4,
+        normCharOffset: 4200,
+        charOffset: 1234,
+        advanceUpdatedAt: false,
+      );
+
+      final pos = await repo.findByBookUid('book-incognito');
+      expect(pos, isNotNull);
+      expect(pos!.sectionIndex, 4, reason: '续读章节必须照常更新');
+      expect(pos.normCharOffset, 4200, reason: '续读位置必须照常更新');
+      expect(pos.charOffset, 1234, reason: '精确锚必须照常更新');
+      expect(pos.updatedAt, 1000,
+          reason: 'History 时间戳冻结：已有值原样保留');
+    });
+
+    test('new row gets non-recent sentinel, not "now"', () async {
+      await repo.save(
+        bookUid: 'book-new-incognito',
+        sectionIndex: 2,
+        normCharOffset: 700,
+        advanceUpdatedAt: false,
+      );
+
+      final pos = await repo.findByBookUid('book-new-incognito');
+      expect(pos, isNotNull);
+      expect(pos!.sectionIndex, 2);
+      expect(pos.updatedAt, 0,
+          reason: '新行必须用非近期哨兵，否则「最近阅读」会把它当成刚读过');
+    });
+
+    test('default save (incognito off) still advances updatedAt', () async {
+      await db.upsertReaderPosition(const ReaderPositionsCompanion(
+        bookUid: Value('book-normal'),
+        sectionIndex: Value(0),
+        normCharOffset: Value(0),
+        updatedAt: Value(1),
+      ));
+
+      await repo.save(
+        bookUid: 'book-normal',
+        sectionIndex: 1,
+        normCharOffset: 10,
+      );
+
+      final pos = await repo.findByBookUid('book-normal');
+      expect(pos!.updatedAt, greaterThan(1),
+          reason: '关掉无痕后必须恢复推进最近阅读');
+    });
   });
 }

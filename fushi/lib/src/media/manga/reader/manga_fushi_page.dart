@@ -3013,8 +3013,15 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
     );
   }
 
-  Future<void> _markCurrentChapterRead() =>
-      _saveCurrentChapterState(readAt: DateTime.now().millisecondsSinceEpoch);
+  Future<void> _markCurrentChapterRead() async {
+    // 无痕阅读：翻到章尾自动写「已读」属于 History 的可见信号，跳过。显式
+    // 「标记已读 / 取消已读」是用户动作（作品页 / 书架级联的 DB 调用），不经过
+    // 这里，照常生效。
+    if (appModel.incognitoReading) return;
+    await _saveCurrentChapterState(
+      readAt: DateTime.now().millisecondsSinceEpoch,
+    );
+  }
 
   /// Keep one spread worth of precise OCR hit targets in the stable manga
   /// document. All page images stay in the same lazy-loaded strip, so changing
@@ -3577,6 +3584,10 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
     _lastSavedPage = page;
     _lastSavedFraction = fraction;
     final FushiDatabase db = appModel.database;
+    // 无痕阅读：在**落库时**现读开关，设置里切完下一次保存立即生效。开启时
+    // 续读位置与在线漫画当前章时间戳照写，但不推进 History 的可见信号
+    //（reader_positions.updatedAt / readAt / 书级完成标记）。
+    final bool incognito = appModel.incognitoReading;
     final bool isWebtoon = _mode.isContinuous;
     // v82：uid 缺失 = 库里没有这本书的持久行（内存兜底行不算），位置与「已读完」
     // 都无处可落，整段跳过——不拿 bookKey / 现造 uid 兜底写孤儿行。
@@ -3593,14 +3604,16 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
         charOffset: isWebtoon
             ? MangaFushiPage.webtoonFractionToCharOffset(fraction)
             : 0,
+        advanceUpdatedAt: !incognito,
       );
     } catch (e, stack) {
       ErrorLogService.instance.log('MangaFushiPage._persistPosition', e, stack);
     }
-    // 翻到最后一页 → 幂等写「已读完」（判据用总页数）。
+    // 翻到最后一页 → 幂等写「已读完」（判据用总页数）。无痕期间不写——
+    // 书级完成标记是 History 的可见信号。
     final int pageCount = _payload?.images.length ?? 0;
     final bool atLastPage = pageCount > 0 && page >= pageCount - 1;
-    if (atLastPage) {
+    if (atLastPage && !incognito) {
       try {
         await db.markEpubBookCompletedIfUnset(widget.bookKey, DateTime.now());
       } catch (e, stack) {
@@ -3620,7 +3633,12 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
             ? MangaFushiPage.webtoonFractionToCharOffset(fraction)
             : -1,
         pageCount: pageCount > 0 ? pageCount : null,
-        readAt: atLastPage ? DateTime.now().millisecondsSinceEpoch : null,
+        // 无痕期间不自动写章节已读；既有 readAt 由 saveMangaChapterState
+        // 回填保留（已有历史不清空）。章节 updatedAt 仍推进，保证在线漫画
+        // 「继续阅读」指向当前章。
+        readAt: atLastPage && !incognito
+            ? DateTime.now().millisecondsSinceEpoch
+            : null,
       );
     } catch (e, stack) {
       ErrorLogService.instance.log('MangaFushiPage.saveChapterState', e, stack);

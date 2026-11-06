@@ -3575,6 +3575,8 @@
   "import_theme_invalid": "Codice tema non valido",
   "import_theme_success": "Tema importato",
   "import_unsupported_file_format": "Formato file non supportato: $ext",
+  "incognito_reading": "Incognito reading",
+  "incognito_reading_hint": "Pause recording reading history",
   "increase": "Aumenta",
   "info_empty_home_tab": "La cronologia è vuota",
   "init_error_message": "Inizializzazione fallita: $error",

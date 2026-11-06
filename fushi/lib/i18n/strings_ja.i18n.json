@@ -3575,6 +3575,8 @@
   "import_theme_invalid": "無効なテーマコード",
   "import_theme_success": "テーマをインポートしました",
   "import_unsupported_file_format": "未対応のファイル形式: $ext",
+  "incognito_reading": "Incognito reading",
+  "incognito_reading_hint": "Pause recording reading history",
   "increase": "増加",
   "info_empty_home_tab": "履歴はありません",
   "init_error_message": "初期化に失敗しました：$error",

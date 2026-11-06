@@ -3575,6 +3575,8 @@
   "import_theme_invalid": "Kode tema tidak valid",
   "import_theme_success": "Tema berhasil diimpor",
   "import_unsupported_file_format": "Format file tidak didukung: $ext",
+  "incognito_reading": "Incognito reading",
+  "incognito_reading_hint": "Pause recording reading history",
   "increase": "Tambah",
   "info_empty_home_tab": "Riwayat kosong",
   "init_error_message": "Inisialisasi gagal: $error",

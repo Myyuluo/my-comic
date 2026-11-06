@@ -3575,6 +3575,8 @@
   "import_theme_invalid": "유효하지 않은 테마 코드",
   "import_theme_success": "테마가 가져와졌습니다",
   "import_unsupported_file_format": "지원하지 않는 파일 형식: $ext",
+  "incognito_reading": "Incognito reading",
+  "incognito_reading_hint": "Pause recording reading history",
   "increase": "증가",
   "info_empty_home_tab": "기록이 비어 있습니다",
   "init_error_message": "초기화 실패: $error",

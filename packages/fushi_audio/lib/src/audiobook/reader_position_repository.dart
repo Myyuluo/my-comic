@@ -23,14 +23,23 @@ class ReaderPositionRepository {
     };
   }
 
+  /// 写入一次阅读位置。
+  ///
+  /// [advanceUpdatedAt] = false（无痕阅读）：位置字段照常写入，但
+  /// `reader_positions.updatedAt` **冻结**——它是 History 的可见信号（书架
+  /// 「最近阅读」排序 / 继续阅读 hero / 互联 LWW），无痕期间不得推进。已有行
+  /// 原样保留旧值；新行用哨兵 0（非近期），不冒充「刚读过」。默认 true = 现有
+  /// 行为（每次保存都刷新时间戳）。
   Future<void> save({
     required String bookUid,
     required int sectionIndex,
     required int normCharOffset,
     int? charOffset,
+    bool advanceUpdatedAt = true,
   }) async {
-    final ReaderPositionRow? existing =
-        charOffset == null ? await _db.getReaderPosition(bookUid) : null;
+    final ReaderPositionRow? existing = (!advanceUpdatedAt || charOffset == null)
+        ? await _db.getReaderPosition(bookUid)
+        : null;
     // TODO-1292 / BUG（退出图1重进图2）：char_offset（精确锚）与 norm_char_offset（分数）
     // 是同一位置的两套坐标，恢复时精确锚优先（reader shell 在 initialCharOffset>=0 时走
     // restoreToCharOffset）。此前同 section 传 null（WebView 当帧算不出精确偏移：竖排/ruby
@@ -59,7 +68,12 @@ class ReaderPositionRepository {
       sectionIndex: Value(sectionIndex),
       normCharOffset: Value(normCharOffset),
       charOffset: charOffsetValue,
-      updatedAt: Value(DateTime.now().millisecondsSinceEpoch),
+      updatedAt: Value(
+        advanceUpdatedAt
+            ? DateTime.now().millisecondsSinceEpoch
+            // 新行没有旧值可冻结：哨兵 0 明确表示「不是一次近期阅读」。
+            : existing?.updatedAt ?? 0,
+      ),
     ));
   }
 
