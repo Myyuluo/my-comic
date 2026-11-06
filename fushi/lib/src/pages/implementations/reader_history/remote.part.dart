@@ -84,7 +84,9 @@ extension _ReaderHistoryRemote on _ReaderFushiHistoryPageState {
       // BUG-2505 好不容易补上的那个补拉入口又被挡掉：用户第一次没下成功之后，
       // 书架上再也找不到第二次下载的地方。
       final Set<String> localAudiobookKeys = <String>{};
-      if (!_mangaOnly) {
+      // my-comic 的漫画-only live schema（37 表）没有 audiobooks；表不存在 = 本端
+      // 没有有声书可判重，跳过查询而不是撞缺表异常（能力判据统一走 helper）。
+      if (!_mangaOnly && await appModel.database.hasAudiobooksTable) {
         for (final AudiobookRow ab
             in await appModel.database.getAllAudiobooks()) {
           if (await audiobookAudioIsIntact(
@@ -314,8 +316,8 @@ extension _ReaderHistoryRemote on _ReaderFushiHistoryPageState {
   /// - 本地在线漫画条目：按作品页「下载全部」的规则入队全部未下载、未排队、
   ///   未锁定的 Chapter；本地卷没有可下载内容，跳过并提示数量。
   /// - 远端章节漫画：先经既有收养链加入本机 Library，再按同一规则入队。
-  /// - 远端整本包 / 纯 SRT 有声书：沿用既有整本下载链
-  ///   （[_downloadRemoteBook] / [_downloadRemoteSrtAudiobook]）。
+  /// - 远端整本漫画包：沿用既有整本下载链（[_downloadRemoteBook]）。
+  /// - 纯 SRT 有声书与非漫画远端书：**不服务**，混选时计入「跳过」提示。
   ///
   /// **串行**：管理器只按 id 去重、无并发上限，「全选 → 下载」若一帧内扇出 N 个
   /// 并行 HTTP + N 个并行导入落库，对手机端互联 host 是真实压力；逐本 await
@@ -345,20 +347,27 @@ extension _ReaderHistoryRemote on _ReaderFushiHistoryPageState {
       localTargets.add((bookKey: bookKey, entry: entry));
     }
 
-    final List<RemoteBookInfo> remoteBooks = <RemoteBookInfo>[
+    final List<RemoteBookInfo> selectedRemoteBooks = <RemoteBookInfo>[
       for (final RemoteBookInfo book in state?.books ?? const <RemoteBookInfo>[])
         if (remoteKeys.contains(_remoteBookSelectionKey(book))) book,
     ];
-    final List<RemoteAudiobookInfo> remoteSrtBooks = <RemoteAudiobookInfo>[
-      for (final RemoteAudiobookInfo book
-          in state?.srtAudiobooks ?? const <RemoteAudiobookInfo>[])
-        if (remoteKeys.contains(_remoteSrtSelectionKey(book))) book,
-    ];
+    // 批量下载只服务在线漫画：非漫画远端书与纯 SRT 有声书既不下载，也不影响
+    // 「本批是否有目标」，混选时只计入跳过数量。
+    final List<RemoteBookInfo> remoteBooks = selectedRemoteBooks
+        .where(_isDownloadableRemoteManga)
+        .toList();
+    final int skippedRemoteNonManga = selectedRemoteBooks.length -
+        remoteBooks.length +
+        (state?.srtAudiobooks ?? const <RemoteAudiobookInfo>[])
+            .where(
+              (RemoteAudiobookInfo book) =>
+                  remoteKeys.contains(_remoteSrtSelectionKey(book)),
+            )
+            .length;
 
     _exitSelectionMode();
-    final bool hasOnlineTarget = localTargets.isNotEmpty ||
-        remoteBooks.isNotEmpty ||
-        remoteSrtBooks.isNotEmpty;
+    final bool hasOnlineTarget =
+        localTargets.isNotEmpty || remoteBooks.isNotEmpty;
     if (!hasOnlineTarget) return;
 
     final RemoteBookClient? client = _remoteBookClient;
@@ -417,15 +426,6 @@ extension _ReaderHistoryRemote on _ReaderFushiHistoryPageState {
       }
     }
 
-    for (final RemoteAudiobookInfo book in remoteSrtBooks) {
-      if (!mounted) return;
-      if (client == null) {
-        showRemoteUnavailableOnce();
-        continue;
-      }
-      await _downloadRemoteSrtAudiobook(book);
-    }
-
     if (!mounted) return;
     // 一次 toast 展示全部结果：FushiToast 同刻只留一条，分多条会被后者顶掉，
     // 跳过的本地卷 / 锁定章数量就看不见了。
@@ -436,14 +436,17 @@ extension _ReaderHistoryRemote on _ReaderFushiHistoryPageState {
         t.manga_series_download_all_locked_skipped(count: lockedSkipped),
       if (skippedLocalVolumes > 0)
         t.batch_download_local_volumes_skipped(count: skippedLocalVolumes),
+      if (skippedRemoteNonManga > 0)
+        t.batch_download_remote_non_manga_skipped(
+          count: skippedRemoteNonManga,
+        ),
       if (failures > 0) t.manga_online_failed,
     ];
     if (lines.isEmpty) {
       final bool chapterTargetsExist = localTargets.isNotEmpty ||
           remoteBooks.any((RemoteBookInfo book) => book.hasMangaChapters);
       final bool wholeBookTargetsExist =
-          remoteBooks.any((RemoteBookInfo book) => !book.hasMangaChapters) ||
-              remoteSrtBooks.isNotEmpty;
+          remoteBooks.any((RemoteBookInfo book) => !book.hasMangaChapters);
       if (chapterTargetsExist && !wholeBookTargetsExist) {
         FushiToast.show(msg: t.manga_series_download_all_none);
       }
@@ -470,29 +473,21 @@ extension _ReaderHistoryRemote on _ReaderFushiHistoryPageState {
       bookDir,
       entry.chapters.map((OnlineMangaChapter chapter) => chapter.key),
     );
-    final List<OnlineMangaChapter> pending = <OnlineMangaChapter>[];
-    int lockedSkipped = 0;
-    for (final OnlineMangaChapter chapter in entry.chapters.reversed) {
-      if (downloaded.contains(chapter.key)) continue;
-      final String? status = jobs[chapter.key]?.status;
-      if (status == MangaDownloadJobStatus.queued ||
-          status == MangaDownloadJobStatus.running) {
-        continue;
-      }
-      if (chapter.locked) {
-        lockedSkipped++;
-        continue;
-      }
-      pending.add(chapter);
-    }
-    if (pending.isNotEmpty) {
+    // 与作品页「下载全部」共用同一条纯规划（review D2）。
+    final ({List<OnlineMangaChapter> pending, int lockedSkipped}) plan =
+        planMangaChapterDownload(
+      entry: entry,
+      downloadedChapterKeys: downloaded,
+      jobsByChapterKey: jobs,
+    );
+    if (plan.pending.isNotEmpty) {
       await downloads.enqueueChapters(
         entry: entry,
-        chapters: pending,
+        chapters: plan.pending,
         autoOcr: false,
       );
     }
-    return (queued: pending.length, lockedSkipped: lockedSkipped);
+    return (queued: plan.pending.length, lockedSkipped: plan.lockedSkipped);
   }
 
   /// 单卡下载（远端章节漫画）与批量下载共用的队列结果提示。
@@ -1591,7 +1586,12 @@ extension _ReaderHistoryRemote on _ReaderFushiHistoryPageState {
         failed: true,
       );
     }
-    final List<SrtBookRow> localSrt = await appModel.database.getAllSrtBooks();
+    // my-comic 的漫画-only live schema（37 表）没有 srt_books：表不存在 = 本端没有
+    // 纯字幕书可判重（占位卡照常出现），不能让整份远端状态落到缺表异常。
+    final List<SrtBookRow> localSrt =
+        await appModel.database.hasSrtBooksTable
+            ? await appModel.database.getAllSrtBooks()
+            : const <SrtBookRow>[];
     final Set<String> localUids = localSrt.map((SrtBookRow r) => r.uid).toSet();
     // BUG-2551：本地已有同 uid 行**不等于**已经拿到这本的音频。一次落成零音频 /
     // 断链的本地行会让占位卡永久消失——用户第一次没下成功之后就再也下不了。
@@ -1645,7 +1645,8 @@ extension _ReaderHistoryRemote on _ReaderFushiHistoryPageState {
       slotAspectRatio: kShelfBookCardAspectRatio,
       cardKey: ValueKey<String>('remote_srt_card_$safeKey'),
       focusId: FushiFocusId('${focusIdPrefix}reader-shelf-remote-srt-$safeKey'),
-      // BUG-2458：与远端 EPUB 卡同规则，多选态可勾选、批量下载。
+      // BUG-2458：与远端 EPUB 卡同规则，多选态可勾选；但批量下载只服务在线
+      // 漫画，纯 SRT 有声书即使被勾选也不会被批量下载（ticket 02 复审 B）。
       selectionKey: selectable ? _remoteSrtSelectionKey(book) : null,
       onTap: () => _downloadRemoteSrtAudiobook(book),
       // 长按 / 右键：弹动作面板，与远端 EPUB 卡（[_showRemoteBookDialog]）一致

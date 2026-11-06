@@ -3978,7 +3978,7 @@ class _FushiPageHeaderRowState extends State<_FushiPageHeaderRow> {
     // 可见 = 没被保活外壳停帧（TickerMode）且不在 IndexedStack 的隐藏子区里
     // （[Visibility]，IndexedStack 不停帧）。两者都建立依赖，变化时本页头重建、
     // 重新登记。
-    slot.claim(
+    slot.claimActions(
       this,
       visible: TickerMode.valuesOf(context).enabled && Visibility.of(context),
       actions: FushiShellHeaderActions(

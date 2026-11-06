@@ -14,7 +14,7 @@ import 'package:fushi/utils.dart';
 import 'package:fushi/src/utils/fushi_icons.dart';
 
 /// 书架 / 视频 tab 共享的标签筛选栏：横向 tag chip（点选筛选、长按拖拽重排）+ 末尾
-/// 「管理标签」齿轮；可选「批量选择」动作（仅书架多选书需要，[onToggleSelectionMode]
+/// 「管理标签」标签图标；可选「批量选择」动作（仅书架多选书需要，[onToggleSelectionMode]
 /// 为 null 时不渲染）。两处用同一组件，保证标签栏外观/交互完全一致。
 ///
 /// 筛选状态走共享的 [selectedTagIdsProvider]（与书架联动）；管理标签返回后刷新
@@ -102,7 +102,7 @@ class FushiTagFilterBar extends ConsumerStatefulWidget {
   final bool tagsInMenu;
 
   /// [FushiTagFilterBarPart.tags] 嵌进库页工具行搜索框右边那段（宽屏）：不留页边、
-  /// 不重复「管理标签」chip（齿轮已常驻行尾），高度与搜索框同高。
+  /// 不重复「管理标签」chip（管理标签入口已常驻行尾），高度与搜索框同高。
   final bool inlineTags;
 
   /// 管理标签返回后，调用方据此刷新自身的标签映射 provider（book / video）。
@@ -132,11 +132,11 @@ class _FushiTagFilterBarState extends ConsumerState<FushiTagFilterBar> {
     final bool actionsOnly = widget.part == FushiTagFilterBarPart.actions;
     // 「管理标签」（新建 / 改名 / 删除标签的入口）。整栏 / 标签段形态下有标签才
     // 显示；拆进工具行（actions）后**常驻**——没有任何标签时这里就是唯一的
-    // 新建标签入口，key 沿用书架窄屏那枚常驻齿轮的 `library_tag_settings`。
+    // 新建标签入口，key 沿用书架窄屏那枚常驻管理标签入口的 `library_tag_settings`。
     final Widget tagManage = KeyedSubtree(
       key: const ValueKey<String>('library_tag_settings'),
       child: _tagBarAction(
-        icon: FushiIcons.settingsGear,
+        icon: FushiIcons.tag,
         tooltip: t.tag_manage,
         onTap: () => _openTagManagement(context),
       ),
@@ -179,11 +179,11 @@ class _FushiTagFilterBarState extends ConsumerState<FushiTagFilterBar> {
     final List<Widget> trailing = tagsOnly
         ? const <Widget>[]
         : <Widget>[...tagActions, ...viewActions];
-    // 拆出的标签段不钉住动作：齿轮跟在标签后面滚动。
+    // 拆出的标签段不钉住动作：管理标签入口跟在标签后面滚动。
     final bool pinned = widget.pinActions && !tagsOnly;
 
     // 拆段形态（库页标签栏）：不再有行首「管理标签」大 chip——它与工具行行尾常驻
-    // 的「管理标签」齿轮（`library_tag_settings`）是同一个入口，重复（2026-10-09
+    // 的「管理标签」图标（`library_tag_settings`）是同一个入口，重复（2026-10-09
     // 用户拍板砍掉大的）。有筛选时行尾一枚「清除」chip。
     // 行首可选的「生效中筛选条件」chip（库页筛选面板的结果），与标签之间一道
     // 竖分隔把两类条件分开。
@@ -713,7 +713,7 @@ List<FushiIconButton> libraryHeaderTagActions(
     if (showTagManagement)
       FushiIconButton(
         key: const ValueKey<String>('library_tag_settings'),
-        icon: FushiIcons.settingsGear,
+        icon: FushiIcons.tag,
         tooltip: t.tag_manage,
         overflowPriority: tagManagePriority,
         onTap: () => openLibraryTagManagement(

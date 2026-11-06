@@ -34,6 +34,7 @@ import 'package:fushi/src/utils/misc/fushi_toast.dart';
 import 'package:fushi_engine/epub/epub_storage.dart';
 import 'package:fushi_engine/media/manga/manga_storage.dart';
 import 'package:fushi_engine/sync/fushi_library_host_service.dart';
+import 'package:fushi_engine/sync/sync_asset_store.dart' show SyncTransferProgress;
 import 'package:fushi_engine/sync/ttu_filename.dart';
 import 'package:fushi_audio/fushi_audio.dart';
 import 'package:fushi_core/fushi_core.dart';
@@ -79,6 +80,22 @@ const RemoteBookInfo _remoteWholeBook = RemoteBookInfo(
   format: 'manga',
   hasMangaContent: true,
   hasMangaChapters: false,
+);
+
+/// 普通 EPUB 远端书：非漫画，批量下载不得服务（ticket 02 复审 B）。
+const RemoteBookInfo _remoteEpubBook = RemoteBookInfo(
+  title: 'Remote Epub',
+  bookKey: 'peer-epub-1',
+  hasContent: true,
+  format: 'epub',
+);
+
+/// 纯 SRT 远端有声书：非漫画，批量下载不得服务（ticket 02 复审 B）。
+const RemoteAudiobookInfo _remoteSrtAudiobook = RemoteAudiobookInfo(
+  bookKey: '',
+  uid: 'remote-srt-1',
+  title: 'Remote SRT',
+  hasAudio: true,
 );
 
 const List<OnlineMangaChapter> _chapters = <OnlineMangaChapter>[
@@ -198,17 +215,35 @@ class _FakeMangaAdapter implements OnlineMangaRuntimeAdapter {
 /// 可当「互联对端」用的远端客户端：章节漫画收养路径要求
 /// `client is InterconnectSyncBackend`，因此继承真实后端并只覆写测试用到的端点。
 class _FakeInterconnectClient extends InterconnectSyncBackend {
-  _FakeInterconnectClient(this.books)
-    : super.withProbe((String _, String __) async => true);
+  _FakeInterconnectClient(
+    this.books, {
+    this.audiobooks = const <RemoteAudiobookInfo>[],
+  }) : super.withProbe((String _, String __) async => true);
 
   final List<RemoteBookInfo> books;
+  final List<RemoteAudiobookInfo> audiobooks;
   final List<String> fetchedTitles = <String>[];
+  final List<String> fetchedAudiobookIds = <String>[];
 
   @override
   String get remoteLibrarySourceId => kInterconnectRemoteLibrarySourceId;
 
   @override
   Future<List<RemoteBookInfo>> listRemoteBooks() async => books;
+
+  @override
+  Future<List<RemoteAudiobookInfo>> listRemoteAudiobooks() async => audiobooks;
+
+  @override
+  Future<void> getRemoteAudiobook(
+    String bookKey,
+    File dest, {
+    SyncTransferProgress? onProgress,
+    bool fresh = false,
+  }) async {
+    fetchedAudiobookIds.add(bookKey);
+    await dest.writeAsBytes(<int>[1]);
+  }
 
   @override
   Future<void> getRemoteBook(
@@ -359,7 +394,10 @@ void main() {
     return bookKey;
   }
 
-  Widget buildApp({RemoteBookClient? remoteClient}) => ProviderScope(
+  Widget buildApp({
+    RemoteBookClient? remoteClient,
+    bool mangaOnly = true,
+  }) => ProviderScope(
     overrides: <Override>[
       appProvider.overrideWith((ref) => appModel),
       fushiBooksProvider.overrideWith(
@@ -376,7 +414,7 @@ void main() {
             child ?? const SizedBox.shrink(),
         home: Scaffold(
           body: ReaderFushiHistoryPage(
-            mangaOnly: true,
+            mangaOnly: mangaOnly,
             remoteBookClientLoader: () async => remoteClient,
             remoteBookDownloadDestination: (RemoteBookInfo book) async =>
                 File('${pathProviderDir.path}/${book.title.hashCode}.bin'),
@@ -390,6 +428,7 @@ void main() {
   Future<void> pumpPage(
     WidgetTester tester, {
     RemoteBookClient? remoteClient,
+    bool mangaOnly = true,
   }) async {
     tester.view.physicalSize = const Size(1400, 1200);
     tester.view.devicePixelRatio = 1.0;
@@ -398,7 +437,9 @@ void main() {
     navKey = GlobalKey<NavigatorState>();
     // FushiToast 在桌面/测试走自绘 overlay，必须有 navigatorKey 才渲染。
     FushiToast.navigatorKey = navKey;
-    await tester.pumpWidget(buildApp(remoteClient: remoteClient));
+    await tester.pumpWidget(
+      buildApp(remoteClient: remoteClient, mangaOnly: mangaOnly),
+    );
     await tester.pumpAndSettle();
   }
 
@@ -411,6 +452,12 @@ void main() {
   Finder remoteCard(String title) => find.byKey(
     ValueKey<String>(
       'remote_book_card_${sanitizeTtuFilename(title).replaceAll(RegExp(r'[^A-Za-z0-9._-]+'), '_')}',
+    ),
+  );
+
+  Finder remoteSrtCard(String title) => find.byKey(
+    ValueKey<String>(
+      'remote_srt_card_${sanitizeTtuFilename(title).replaceAll(RegExp(r'[^A-Za-z0-9._-]+'), '_')}',
     ),
   );
 
@@ -657,6 +704,135 @@ void main() {
       await db.listMangaDownloadJobs(),
       isEmpty,
       reason: '整本包不产生章节下载任务',
+    );
+  });
+
+  testWidgets('只选中远端纯 SRT 有声书：批量下载禁用且不发起下载', (
+    WidgetTester tester,
+  ) async {
+    final _FakeInterconnectClient client = _FakeInterconnectClient(
+      const <RemoteBookInfo>[],
+      audiobooks: const <RemoteAudiobookInfo>[_remoteSrtAudiobook],
+    );
+    await pumpPage(tester, remoteClient: client, mangaOnly: false);
+    expect(remoteSrtCard('Remote SRT'), findsOneWidget);
+
+    await enterSelectionMode(tester);
+    await tester.tap(remoteSrtCard('Remote SRT'));
+    await tester.pumpAndSettle();
+
+    expect(
+      batchButtonEnabled(tester, 'reader_shelf_batch_download'),
+      isFalse,
+      reason: '远端纯 SRT 有声书不是漫画，批量下载按钮必须禁用',
+    );
+    await tester.tap(
+      find.byKey(const ValueKey<String>('reader_shelf_batch_download')),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      client.fetchedAudiobookIds,
+      isEmpty,
+      reason: '非漫画远端条目不得经批量下载执行',
+    );
+  });
+
+  testWidgets('只选中非漫画远端书：批量下载禁用且不下载', (
+    WidgetTester tester,
+  ) async {
+    final _FakeInterconnectClient client = _FakeInterconnectClient(
+      const <RemoteBookInfo>[_remoteEpubBook],
+    );
+    await pumpPage(tester, remoteClient: client, mangaOnly: false);
+    expect(remoteCard('Remote Epub'), findsOneWidget);
+
+    await enterSelectionMode(tester);
+    await tester.tap(remoteCard('Remote Epub'));
+    await tester.pumpAndSettle();
+
+    expect(
+      batchButtonEnabled(tester, 'reader_shelf_batch_download'),
+      isFalse,
+      reason: '非漫画远端书（EPUB）不得启用批量下载',
+    );
+    await tester.tap(
+      find.byKey(const ValueKey<String>('reader_shelf_batch_download')),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      client.fetchedTitles,
+      isEmpty,
+      reason: '非漫画远端书不得经批量下载执行',
+    );
+  });
+
+  testWidgets('混选漫画与非漫画远端条目：只下载漫画目标，其余计入跳过提示', (
+    WidgetTester tester,
+  ) async {
+    final _FakeInterconnectClient client = _FakeInterconnectClient(
+      const <RemoteBookInfo>[_remoteWholeBook, _remoteEpubBook],
+      audiobooks: const <RemoteAudiobookInfo>[_remoteSrtAudiobook],
+    );
+    await pumpPage(tester, remoteClient: client, mangaOnly: false);
+    expect(remoteCard('Remote Whole Book'), findsOneWidget);
+    expect(remoteCard('Remote Epub'), findsOneWidget);
+    expect(remoteSrtCard('Remote SRT'), findsOneWidget);
+
+    await enterSelectionMode(tester);
+    for (final Finder card in <Finder>[
+      remoteCard('Remote Whole Book'),
+      remoteCard('Remote Epub'),
+      remoteSrtCard('Remote SRT'),
+    ]) {
+      await tester.tap(card);
+      await tester.pumpAndSettle();
+    }
+    expect(find.text(t.batch_selected_count(n: 3)), findsOneWidget);
+    expect(
+      batchButtonEnabled(tester, 'reader_shelf_batch_download'),
+      isTrue,
+      reason: '混选里有可下载的漫画整本包，批量下载必须启用',
+    );
+
+    await tester.runAsync(() async {
+      await tester.tap(
+        find.byKey(const ValueKey<String>('reader_shelf_batch_download')),
+      );
+      await tester.pump();
+      for (int i = 0; i < 300; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        await tester.pump();
+        if (find
+            .textContaining(
+              t.batch_download_remote_non_manga_skipped(count: 2),
+            )
+            .evaluate()
+            .isNotEmpty) {
+          break;
+        }
+      }
+    });
+    await tester.pump(const Duration(milliseconds: 250));
+
+    expect(
+      client.fetchedTitles,
+      contains('peer-whole-1'),
+      reason: '混选里的远端漫画整本包仍要下载',
+    );
+    expect(
+      client.fetchedTitles,
+      isNot(contains('peer-epub-1')),
+      reason: '非漫画远端书不得下载',
+    );
+    expect(
+      client.fetchedAudiobookIds,
+      isEmpty,
+      reason: '纯 SRT 有声书不得下载',
+    );
+    expect(
+      find.textContaining(t.batch_download_remote_non_manga_skipped(count: 2)),
+      findsOneWidget,
+      reason: '混选里被跳过的两个非漫画远端条目要计入提示',
     );
   });
 

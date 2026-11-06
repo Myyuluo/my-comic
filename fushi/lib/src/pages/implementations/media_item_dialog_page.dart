@@ -74,6 +74,15 @@ final class DialogDangerAction extends DialogAction {
   final bool muted;
 }
 
+/// 动作是否是「危险红」样式：未 muted 的 [DialogDangerAction]，或标了
+/// destructive 的 [DialogListAction]。MD3 与 Apple 两套菜单共用这一条判据
+/// （review D6：此前两处各写一份 switch，改一处漏一处就会两端红色不一致）。
+bool _isDestructiveDialogAction(DialogAction action) => switch (action) {
+  DialogDangerAction(muted: false) => true,
+  DialogListAction(destructive: true) => true,
+  _ => false,
+};
+
 // ---------------------------------------------------------------------------
 // Dialog page
 // ---------------------------------------------------------------------------
@@ -974,11 +983,9 @@ class MediaItemDialogFrame extends StatelessWidget {
                     icon: actions[first + c].icon,
                     label: actions[first + c].label,
                     onPressed: actions[first + c].onPressed,
-                    foreground: switch (actions[first + c]) {
-                      DialogDangerAction(muted: false) => colors.error,
-                      DialogListAction(destructive: true) => colors.error,
-                      _ => null,
-                    },
+                    foreground: _isDestructiveDialogAction(actions[first + c])
+                        ? colors.error
+                        : null,
                     borderRadius: BorderRadiusDirectional.only(
                       topStart: top && c == 0 ? outer : inner,
                       topEnd: top && c == inRow - 1 ? outer : inner,
@@ -1049,10 +1056,7 @@ class MediaItemDialogFrame extends StatelessWidget {
                         icon: action.icon,
                         label: action.label,
                         onPressed: action.onPressed,
-                        destructive: switch (action) {
-                          DialogListAction(destructive: true) => true,
-                          _ => false,
-                        },
+                        destructive: _isDestructiveDialogAction(action),
                       );
                     },
                   ),

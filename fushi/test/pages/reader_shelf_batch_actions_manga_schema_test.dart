@@ -381,6 +381,38 @@ void main() {
     );
   });
 
+  test('schema 能力 helper 是历史表存在性的唯一判据', () async {
+    expect(
+      await db.hasSrtBooksTable,
+      isFalse,
+      reason: '37 表 schema 没有 srt_books',
+    );
+    expect(
+      await db.hasAudiobooksTable,
+      isFalse,
+      reason: '37 表 schema 没有 audiobooks',
+    );
+
+    await db.customStatement('''
+CREATE TABLE srt_books (
+  id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+  uid TEXT NOT NULL UNIQUE,
+  title TEXT NOT NULL,
+  author TEXT,
+  audio_root TEXT,
+  audio_paths_json TEXT,
+  srt_path TEXT NOT NULL,
+  cover_path TEXT,
+  imported_at INTEGER NOT NULL,
+  local_added_at INTEGER,
+  book_key TEXT NOT NULL DEFAULT '',
+  language TEXT
+)
+''');
+    expect(await db.hasSrtBooksTable, isTrue, reason: '表存在时能力位必须为真');
+    expect(await db.hasAudiobooksTable, isFalse, reason: '能力位按表分别判定，不互相连坐');
+  });
+
   test('srt_books 缺表时读接口按空集合处理，不抛缺表异常', () async {
     expect(await db.hasTable('srt_books'), isFalse);
     final SrtBookRepository repo = SrtBookRepository(db);

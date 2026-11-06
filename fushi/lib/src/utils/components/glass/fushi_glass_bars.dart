@@ -1481,40 +1481,38 @@ class FushiShellTitleScope extends InheritedWidget {
       oldWidget.title != title || oldWidget.actionsSlot != actionsSlot;
 }
 
-/// 首页外壳大标题条右侧的「页头动作」槽（2026-10-04「顶部标签栏做成全宽」）。
+/// 外壳内容槽的共享登记状态机。
 ///
-/// 库页的页头原本把分区页签和动作（搜索 / 合集 / 刷新…）挤在同一行，页签只
-/// 分到左边一截。iOS 26 / macOS 26 的做法是动作进大标题行右侧的工具栏胶囊、
-/// MD3 是 top app bar 的 actions 位——两者都是「标题行右侧」。外壳的大标题条
-/// 正好就是那一行，所以页头在外壳里时把动作**登记**到这里，自己那一行只剩
-/// 页签、整行铺满。
-///
-/// 同一外壳下常驻着多份页头（保活的 tab / 分区、IndexedStack 里的子区），
+/// 同一外壳下常驻着多份登记方（保活的 tab / 分区、IndexedStack 里的子区），
 /// 每份登记时带上自己此刻是否可见（TickerMode + [Visibility]），槽显示**最后
-/// 登记的可见**那份。登记发生在页头 build 期，通知延到帧末（build 期不能让
-/// 树上更早的条重建）。
-class FushiShellActionsSlot extends ChangeNotifier {
-  final Map<Object, ({bool visible, Widget actions})> _claims =
-      <Object, ({bool visible, Widget actions})>{};
+/// 登记的可见**那份。登记发生在 build 期，通知延到帧末（build 期不能让树上更早
+/// 的条重建）。
+///
+/// [FushiShellActionsSlot]（页头动作）与视图页签位的内容槽
+/// （`MediaLibraryChromeTabsSlot`，ticket 06）共用这一份状态机；此前两者各抄了
+/// 一份，行为已经需要同步维护（review D1）。
+class FushiShellClaimSlot extends ChangeNotifier {
+  final Map<Object, ({bool visible, Widget content})> _claims =
+      <Object, ({bool visible, Widget content})>{};
   bool _notifyScheduled = false;
   bool _disposed = false;
 
-  /// 当前应显示的动作；没有可见的登记时为 null。
-  Widget? get actions {
+  /// 当前应显示的内容；没有可见的登记时为 null。
+  Widget? get content {
     Widget? result;
-    for (final ({bool visible, Widget actions}) claim in _claims.values) {
-      if (claim.visible) result = claim.actions;
+    for (final ({bool visible, Widget content}) claim in _claims.values) {
+      if (claim.visible) result = claim.content;
     }
     return result;
   }
 
-  /// [owner]（通常是页头的 State）登记 / 更新自己的动作。
-  void claim(Object owner, {required bool visible, required Widget actions}) {
-    _claims[owner] = (visible: visible, actions: actions);
+  /// [owner]（通常是页头 / 视图的 State）登记 / 更新自己的内容。
+  void claim(Object owner, {required bool visible, required Widget content}) {
+    _claims[owner] = (visible: visible, content: content);
     _scheduleNotify();
   }
 
-  /// [owner] 撤回登记（页头卸载、或不再需要外壳代放动作）。
+  /// [owner] 撤回登记（卸载、或不再需要外壳代画）。
   void release(Object owner) {
     if (_claims.remove(owner) != null) _scheduleNotify();
   }
@@ -1535,6 +1533,25 @@ class FushiShellActionsSlot extends ChangeNotifier {
     _claims.clear();
     super.dispose();
   }
+}
+
+/// 首页外壳大标题条右侧的「页头动作」槽（2026-10-04「顶部标签栏做成全宽」）。
+///
+/// 库页的页头原本把分区页签和动作（搜索 / 合集 / 刷新…）挤在同一行，页签只
+/// 分到左边一截。iOS 26 / macOS 26 的做法是动作进大标题行右侧的工具栏胶囊、
+/// MD3 是 top app bar 的 actions 位——两者都是「标题行右侧」。外壳的大标题条
+/// 正好就是那一行，所以页头在外壳里时把动作**登记**到这里，自己那一行只剩
+/// 页签、整行铺满。
+class FushiShellActionsSlot extends FushiShellClaimSlot {
+  /// 当前应显示的动作；没有可见的登记时为 null。
+  Widget? get actions => content;
+
+  /// 登记页头动作（沿用「动作」叫法；与基类 [claim] 的 `content` 同义）。
+  void claimActions(
+    Object owner, {
+    required bool visible,
+    required Widget actions,
+  }) => claim(owner, visible: visible, content: actions);
 }
 
 /// 首页外壳（库页 / 浏览 / 查词）的页面大标题条：在库页自己的分区页签行

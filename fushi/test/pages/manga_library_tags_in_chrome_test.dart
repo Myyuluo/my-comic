@@ -16,6 +16,7 @@ import 'package:fushi/src/pages/implementations/media_library_shell.dart';
 import 'package:fushi/src/pages/implementations/reader_fushi_history_page.dart';
 import 'package:fushi/src/utils/components/fushi_floating_chrome.dart'
     show FushiFloatingChromeBar, FushiShellInlineTitle;
+import 'package:fushi/src/utils/fushi_icons.dart';
 import 'package:fushi/utils.dart';
 import 'package:fushi_audio/fushi_audio.dart';
 import 'package:fushi_core/fushi_core.dart';
@@ -207,6 +208,22 @@ void main() {
       (chipCenter - actionsCenter).abs(),
       lessThan(4.0),
       reason: 'Tag chips 与右上角动作同一行',
+    );
+  });
+
+  testWidgets('漫画页页头「管理标签」动作使用标签图标', (WidgetTester tester) async {
+    await seedManga('m1', '漫画一');
+    await pumpPage(tester);
+
+    final Finder manage = find.byKey(
+      const ValueKey<String>('library_tag_settings'),
+    );
+    expect(manage, findsOneWidget, reason: '漫画页页头必须有管理标签入口');
+    final FushiIconButton button = tester.widget<FushiIconButton>(manage);
+    expect(
+      button.icon,
+      FushiIcons.tag,
+      reason: '管理标签入口与标签选择 / 管理页使用同一标签图标，不得再用齿轮',
     );
   });
 

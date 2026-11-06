@@ -43,6 +43,13 @@ OnlineMangaLibraryEntry? _onlineMangaEntryFromRow(EpubBookRow? row) {
   return entry;
 }
 
+/// 可经批量下载搬走的远端漫画：`format == 'manga'`，且有章节（在线条目，走收养
+/// + 逐章入队）或有整本包内容（`hasContent`，走整本文件下载链）。纯 SRT 有声书、
+/// EPUB / PDF 等非漫画远端条目一律不算——批量下载只服务在线漫画（ticket 02 复审 B）。
+bool _isDownloadableRemoteManga(RemoteBookInfo book) =>
+    BookFormat.parseOrEpub(book.format) == BookFormat.manga &&
+    (book.hasMangaChapters || book.hasContent);
+
 /// 选中集里的本地键 → 在线漫画条目（批量下载按钮可用态的唯一数据源）。
 final _shelfOnlineMangaEntryProvider =
     FutureProvider.family<OnlineMangaLibraryEntry?, String>(
@@ -414,7 +421,8 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
 
   Widget _buildBatchActionBar() {
     // BUG-2458：散卡选中集里混着远端占位键——「已选 N」计全部，但打标签 /
-    // 删除两个本地动作只按本地键判可用态与取目标；远端键只喂「下载」。
+    // 删除两个本地动作只按本地键判可用态与取目标；远端键只喂「下载」，且只有
+    // 可下载漫画（format=manga + 章节 / 整本包）才点亮该动作（ticket 02 复审 B）。
     // 2026-11-05：合集已删除，选中集只剩散卡。
     // 2026-11-06（ticket 02）：下载只服务在线漫画——本地卷没有可下载的章节，
     // 只选中它们时禁用；本地在线漫画条目（带章节列表的在线描述符）同样启用。
@@ -431,6 +439,14 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
               ref.watch(_shelfOnlineMangaEntryProvider(bookKey)).valueOrNull,
         )
         .any((OnlineMangaLibraryEntry? entry) => entry != null);
+    // 远端选中项里只有可下载漫画算数：纯 SRT 有声书与非漫画远端书都不启用下载。
+    final _RemoteBookState? remoteState = _lastRemoteState;
+    final bool hasDownloadableRemoteManga = remoteState != null &&
+        remoteState.books.any(
+          (RemoteBookInfo book) =>
+              remoteKeys.contains(_remoteBookSelectionKey(book)) &&
+              _isDownloadableRemoteManga(book),
+        );
     return BatchActionBar(
       selectedCount: _selectedKeys.length,
       onSelectAll: _selectAll,
@@ -438,7 +454,7 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
       actions: <Widget>[
         FushiIconButton(
           key: const ValueKey<String>('reader_shelf_batch_download'),
-          enabled: remoteKeys.isNotEmpty || hasOnlineLocalManga,
+          enabled: hasDownloadableRemoteManga || hasOnlineLocalManga,
           onTap: _batchDownloadSelected,
           icon: Icons.download_outlined,
           tooltip: t.remote_book_download,
@@ -641,7 +657,7 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
     final Set<String> toDelete = targetKeys;
     // my-comic 的漫画-only live schema（37 表）没有 srt_books：表不存在时选中集
     // 里不可能有本地字幕卡（卡片本就渲染不出来），跳过 srt 分支而不是撞缺表异常。
-    final bool hasSrtBooks = await appModel.database.hasTable('srt_books');
+    final bool hasSrtBooks = await appModel.database.hasSrtBooksTable;
     if (deleteLocalFiles) {
       // 先停止引用再销毁实体：正在播的那本若在本批里，句柄不放掉删除必然失败。
       // 会话身份对 EPUB 有声书是 bookKey、对纯字幕书是 srt uid，两种都塞进去。

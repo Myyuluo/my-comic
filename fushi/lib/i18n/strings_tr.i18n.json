@@ -1255,6 +1255,7 @@
   "batch_dissolve_confirm": "$m koleksiyon dağıtılsın mı? Gruplama kaldırılır; medya korunur.",
   "batch_dissolve_success": "$m koleksiyon dağıtıldı.",
   "batch_download_local_volumes_skipped": "Skipped $count local volume(s) without downloadable chapters",
+  "batch_download_remote_non_manga_skipped": "Skipped $count non-manga remote item(s)",
   "batch_hidden_by_filter_note": "Seçili ${n} öğe daha geçerli filtre tarafından gizlendi ve işlenmeyecek.",
   "batch_invert_selection": "Tersine Çevir",
   "batch_select": "Seç",
