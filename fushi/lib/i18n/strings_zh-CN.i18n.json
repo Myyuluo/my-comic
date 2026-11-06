@@ -2284,6 +2284,7 @@
   "download_tracker_section": "Tracker 订阅",
   "download_tracker_url": "订阅地址",
   "download_video_source_required": "需要视频来源",
+  "downloads_page_no_tasks": "暂无下载任务",
   "drag_drop_failed": "拖入的文件处理失败，请重试。",
   "drag_drop_folder_source_added": "已把文件夹添加为来源并开始扫描",
   "drag_drop_folder_source_exists": "该文件夹已经是来源了",

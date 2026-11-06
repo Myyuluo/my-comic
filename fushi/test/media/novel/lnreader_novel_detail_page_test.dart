@@ -274,41 +274,14 @@ void main() {
       find.byKey(const ValueKey<String>('online-work-external-source-chip')),
       findsOneWidget,
     );
-
-    TextStyle titleStyle() => tester.widget<Text>(heroTitle).style!;
-    Color authorFill() =>
-        (tester
-                    .widget<DecoratedBox>(
-                      find
-                          .descendant(
-                            of: find.ancestor(
-                              of: find.text('Author A'),
-                              matching: find.byType(MediaDetailChipView),
-                            ),
-                            matching: find.byType(DecoratedBox),
-                          )
-                          .first,
-                    )
-                    .decoration
-                as BoxDecoration)
-            .color!;
-    final Color restingFill = authorFill();
-
-    final TestGesture mouse = await tester.createGesture(
-      kind: PointerDeviceKind.mouse,
-    );
-    await mouse.addPointer(location: Offset.zero);
-    addTearDown(mouse.removePointer);
-    await mouse.moveTo(tester.getCenter(heroTitle));
-    await tester.pumpAndSettle();
+    // 小说页不传点击回调：共享骨架不会给标题 / 作者挂任何鼠标交互层
+    // （悬停提亮、下划线、光标变化都随之为零变化）。共享包装层自己的悬停 /
+    // 指针契约见 media_detail_header_links_test。
     expect(
-      titleStyle().decoration,
-      isNot(TextDecoration.underline),
-      reason: '小说页标题不传点击回调，悬停外观不变',
+      find.byType(MediaDetailMouseHoverTap),
+      findsNothing,
+      reason: '小说页标题与作者保持纯展示、不可点击',
     );
-    await mouse.moveTo(tester.getCenter(find.text('Author A')));
-    await tester.pumpAndSettle();
-    expect(authorFill(), restingFill, reason: '小说页作者 chip 悬停不提亮');
 
     await tester.tap(heroTitle, kind: PointerDeviceKind.mouse);
     await tester.tap(find.text('Author A'), kind: PointerDeviceKind.mouse);

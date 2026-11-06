@@ -2284,6 +2284,7 @@
   "download_tracker_section": "Tracker subscription",
   "download_tracker_url": "Subscription URL",
   "download_video_source_required": "Video source required",
+  "downloads_page_no_tasks": "No download tasks yet",
   "drag_drop_failed": "Couldn't handle the dropped files. Please try again.",
   "drag_drop_folder_source_added": "Folder added as a library source and scanned.",
   "drag_drop_folder_source_exists": "That folder is already a library source.",

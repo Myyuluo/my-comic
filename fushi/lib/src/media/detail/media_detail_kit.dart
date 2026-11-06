@@ -242,6 +242,54 @@ class MediaDetailChip {
   final VoidCallback? onTap;
 }
 
+/// 只响应鼠标点击 + 悬停反馈的包装层（hero 标题 / 作者 chip 共用）。
+///
+/// 交互刻意做得很窄（2026-11-07 ticket 03）：
+/// - [onTap] 为 null：**完全不加**手势 / 悬停层，[builder] 只收到 `hovering =
+///   false`，子树与纯展示时逐字节一致；
+/// - [onTap] 非 null：悬停时 [builder] 收到 `hovering = true`（调用方据此加下划线 /
+///   提亮）；只响应鼠标点击（[GestureDetector.supportedDevices]），不建立键盘焦点、
+///   不响应 Enter；[MouseRegion] 不声明 cursor，鼠标指针沿用祖先（默认箭头）。
+class MediaDetailMouseHoverTap extends StatefulWidget {
+  const MediaDetailMouseHoverTap({
+    required this.onTap,
+    required this.builder,
+    super.key,
+  });
+
+  /// 鼠标点击回调；null = 纯展示（不加任何交互层）。
+  final VoidCallback? onTap;
+
+  /// 按当前悬停状态构建内容。
+  final Widget Function(BuildContext context, bool hovering) builder;
+
+  @override
+  State<MediaDetailMouseHoverTap> createState() =>
+      _MediaDetailMouseHoverTapState();
+}
+
+class _MediaDetailMouseHoverTapState extends State<MediaDetailMouseHoverTap> {
+  bool _hovering = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final VoidCallback? onTap = widget.onTap;
+    final Widget child = widget.builder(context, _hovering && onTap != null);
+    if (onTap == null) return child;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovering = true),
+      onExit: (_) => setState(() => _hovering = false),
+      child: GestureDetector(
+        supportedDevices: const <ui.PointerDeviceKind>{
+          ui.PointerDeviceKind.mouse,
+        },
+        onTap: onTap,
+        child: child,
+      ),
+    );
+  }
+}
+
 /// 元信息 chip 行（年份 · 集数 · 时长 · 评分 / 作者 · 来源 · 状态）。
 class MediaDetailChipRow extends StatelessWidget {
   const MediaDetailChipRow({
@@ -270,19 +318,10 @@ class MediaDetailChipRow extends StatelessWidget {
 
 /// 单枚元信息 chip：M3E 小件圆角 8 的饱和色块（neutral = surfaceContainerHighest），
 /// Apple 系统填充色胶囊，墨水屏描边。
-class MediaDetailChipView extends StatefulWidget {
+class MediaDetailChipView extends StatelessWidget {
   const MediaDetailChipView({required this.chip, super.key});
 
   final MediaDetailChip chip;
-
-  @override
-  State<MediaDetailChipView> createState() => _MediaDetailChipViewState();
-}
-
-class _MediaDetailChipViewState extends State<MediaDetailChipView> {
-  bool _hovering = false;
-
-  MediaDetailChip get _chip => widget.chip;
 
   @override
   Widget build(BuildContext context) {
@@ -290,14 +329,12 @@ class _MediaDetailChipViewState extends State<MediaDetailChipView> {
     final bool apple = isGlassDesign(context);
     final bool eink = isEinkTheme(context);
     final (Color fill, Color fg) = _colors(context, cs, apple, eink);
-    final IconData? icon = _chip.icon;
-    final VoidCallback? onTap = _chip.onTap;
-    final Color effectiveFill = _hovering && onTap != null
-        ? Color.alphaBlend(cs.primary.withValues(alpha: 0.12), fill)
-        : fill;
-    final Widget content = DecoratedBox(
+    final IconData? icon = chip.icon;
+    Widget content(bool hovering) => DecoratedBox(
       decoration: BoxDecoration(
-        color: effectiveFill,
+        color: hovering
+            ? Color.alphaBlend(cs.primary.withValues(alpha: 0.12), fill)
+            : fill,
         borderRadius: BorderRadius.circular(apple ? 999 : 8),
         border: eink ? Border.all(color: cs.outline) : null,
       ),
@@ -317,7 +354,7 @@ class _MediaDetailChipViewState extends State<MediaDetailChipView> {
             ],
             Flexible(
               child: Text(
-                _chip.label,
+                chip.label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: context.fushiType.labelLargeEmphasized.tabular.copyWith(
@@ -330,18 +367,13 @@ class _MediaDetailChipViewState extends State<MediaDetailChipView> {
         ),
       ),
     );
-    // 不传回调时保持原样：没有额外手势 / 悬停层，命中与外观都不变。
-    if (onTap == null) return content;
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovering = true),
-      onExit: (_) => setState(() => _hovering = false),
-      child: GestureDetector(
-        supportedDevices: const <ui.PointerDeviceKind>{
-          ui.PointerDeviceKind.mouse,
-        },
-        onTap: onTap,
-        child: content,
-      ),
+    // 不传回调时保持原样：不加任何交互层，命中与外观都不变。传回调时悬停提亮
+    // （鼠标指针保持默认，只响应鼠标点击）。
+    final VoidCallback? onTap = chip.onTap;
+    if (onTap == null) return content(false);
+    return MediaDetailMouseHoverTap(
+      onTap: onTap,
+      builder: (BuildContext context, bool hovering) => content(hovering),
     );
   }
 
@@ -351,7 +383,7 @@ class _MediaDetailChipViewState extends State<MediaDetailChipView> {
     bool apple,
     bool eink,
   ) {
-    final MediaDetailChip chip = _chip;
+    final MediaDetailChip chip = this.chip;
     if (eink) return (cs.surface, cs.onSurface);
     if (apple) {
       final FushiAppleColors palette = appleColorsOf(context);
@@ -622,6 +654,7 @@ class MediaDetailHero extends StatelessWidget {
             .copyWith(color: cs.onSurface, height: 1.1);
     final VoidCallback? onTitleTap = this.onTitleTap;
     // 不传回调时保持原样：同一个 Text、同一套样式，没有额外手势 / 悬停层。
+    // 传回调时悬停加下划线（鼠标指针保持默认，只响应鼠标点击）。
     final Widget titleText = onTitleTap == null
         ? Text(
             title,
@@ -631,12 +664,21 @@ class MediaDetailHero extends StatelessWidget {
             textAlign: align,
             style: titleStyle,
           )
-        : _MediaDetailClickableTitle(
-            text: title,
-            textKey: titleKey,
-            textAlign: align,
-            style: titleStyle,
+        : MediaDetailMouseHoverTap(
             onTap: onTitleTap,
+            builder: (BuildContext context, bool hovering) => Text(
+              title,
+              key: titleKey,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              textAlign: align,
+              style: hovering
+                  ? titleStyle.copyWith(
+                      decoration: TextDecoration.underline,
+                      decorationColor: titleStyle.color,
+                    )
+                  : titleStyle,
+            ),
           );
     return Column(
       crossAxisAlignment: cross,
@@ -706,64 +748,6 @@ class MediaDetailHero extends StatelessWidget {
           ),
         ],
       ],
-    );
-  }
-}
-
-/// 可点击的 hero 标题（[MediaDetailHero.onTitleTap]）。
-///
-/// 交互刻意做得很窄：**只响应鼠标点击**（[GestureDetector.supportedDevices]），
-/// 不建立键盘焦点、不响应 Enter；鼠标指针保持默认（[MouseRegion] 不声明 cursor，
-/// 沿用祖先）；悬停只加下划线，静止外观与原 [Text] 完全一致。
-class _MediaDetailClickableTitle extends StatefulWidget {
-  const _MediaDetailClickableTitle({
-    required this.text,
-    required this.textAlign,
-    required this.style,
-    required this.onTap,
-    this.textKey,
-  });
-
-  final String text;
-  final TextAlign textAlign;
-  final TextStyle style;
-  final VoidCallback onTap;
-  final Key? textKey;
-
-  @override
-  State<_MediaDetailClickableTitle> createState() =>
-      _MediaDetailClickableTitleState();
-}
-
-class _MediaDetailClickableTitleState
-    extends State<_MediaDetailClickableTitle> {
-  bool _hovering = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final TextStyle style = _hovering
-        ? widget.style.copyWith(
-            decoration: TextDecoration.underline,
-            decorationColor: widget.style.color,
-          )
-        : widget.style;
-    return MouseRegion(
-      onEnter: (_) => setState(() => _hovering = true),
-      onExit: (_) => setState(() => _hovering = false),
-      child: GestureDetector(
-        supportedDevices: const <ui.PointerDeviceKind>{
-          ui.PointerDeviceKind.mouse,
-        },
-        onTap: widget.onTap,
-        child: Text(
-          widget.text,
-          key: widget.textKey,
-          maxLines: 3,
-          overflow: TextOverflow.ellipsis,
-          textAlign: widget.textAlign,
-          style: style,
-        ),
-      ),
     );
   }
 }

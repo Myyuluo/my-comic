@@ -155,7 +155,7 @@ void main() {
       expect(legacyOff.enabled, <ModuleId>{ModuleId.manga, ModuleId.browse});
     });
 
-    test('平台 / 合规门禁仍在：iOS 上浏览不出现，Manga 不受影响', () {
+    test('resolve 把平台不可用的模块直接剔除，与 pref 真值无关（my-comic 范围）', () {
       final ModuleVisibility ios = ModuleVisibility.resolve(
         prefOf: (ModuleId _) => true,
         isWindows: false,

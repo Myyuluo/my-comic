@@ -1,10 +1,9 @@
-// 复习模块（ModuleId.srs）的值域与门控。
+// 复习模块（ModuleId.srs）的出厂默认与门控。
 //
 // my-comic 只保留漫画域（ModuleId.isInMyComicScope）：复习的枚举值、持久化键与
-// 映射表仍在（旧备份 / 旧数据解析不炸），但可见性合成永远排除它，导航与设置里
-// 都不出现。原 Fushi 的安装判定（settleSrsMiningTargetInstallDefault）已不再被
-// AppModel.initialise() 调用——它要读的 mined_sentences / pending_mine_queue 不在
-// 漫画-only schema 里。
+// 映射表仍在（旧备份 / 旧数据解析不炸），但可见性合成永远排除它。安装判定
+// `settleSrsMiningTargetInstallDefault` 已不被 `AppModel.initialise()` 调用——
+// 它要读的 mined_sentences / pending_mine_queue 不在漫画-only schema 里。
 //
 // - 出厂默认：ModuleId.defaultEnabled 全开（值域契约，不代表可见）；
 // - 底栏 / 侧栏：无论模块开关是什么，都没有「复习」tab；
@@ -24,6 +23,7 @@ import 'package:fushi/src/models/preferences_repository.dart';
 import 'package:fushi/src/onboarding/onboarding_steps.dart';
 import 'package:fushi/src/platform/platform_providers.dart';
 import 'package:fushi/src/settings/settings_schema_appearance.dart';
+import 'package:fushi/src/srs/srs_mining_target.dart';
 import 'package:fushi/src/sync/desktop_lookup_service.dart';
 import 'package:fushi/src/utils/misc/update_checker.dart';
 import 'package:fushi_core/fushi_core.dart';
@@ -221,28 +221,27 @@ void main() {
   });
 
   group('导航', () {
-    test('复习模块仍在值域里，但可见性合成永远排除它（my-comic）', () {
-      final ModuleVisibility on = ModuleVisibility.resolve(
-        prefOf: (ModuleId _) => true,
-        isWindows: true,
-        isDesktop: true,
-        isIOS: false,
-        isAndroid: false,
+    test('关着没有复习 tab；打开后紧跟查词（值域映射仍在）', () {
+      final ModuleVisibility off = ModuleVisibility(
+        ModuleId.values.toSet()..remove(ModuleId.srs),
       );
-      expect(on.isEnabled(ModuleId.srs), isFalse);
-      expect(homeActiveTabs(on), isNot(contains(HomeTab.srs)));
-      // 映射表仍保留（值域 / 备份解析不炸），只是合成时不启用。
+      expect(homeActiveTabs(off), isNot(contains(HomeTab.srs)));
+      final ModuleVisibility on = ModuleVisibility(ModuleId.values.toSet());
+      final List<HomeTab> tabs = homeActiveTabs(on);
+      expect(tabs.indexOf(HomeTab.srs), tabs.indexOf(HomeTab.dictionaries) + 1);
+      // 映射表仍保留（值域 / 备份解析不炸），只是可见性合成时不启用。
       expect(moduleOfHomeTab(HomeTab.srs), ModuleId.srs);
       expect(homeTabOfModule(ModuleId.srs), HomeTab.srs);
       expect(homeNavItemFor(HomeTab.srs).label, t.nav_srs);
     });
 
-    testWidgets('真 HomePage：导航不出现复习（即使库里存着 module_srs_enabled=true）', (
+    testWidgets('真 HomePage：老用户升级后看不到复习、不弹任何引导或提示（my-comic）', (
       WidgetTester tester,
     ) async {
       final _Harness h = await _pumpHome(
         tester,
         seed: (PreferencesRepository prefs) async {
+          // 老用户：首页跑过、引导完成过；旧库里还存着「复习开着」。
           await prefs.setPref('first_time_setup', false);
           await prefs.setOnboardingCompleted(value: true);
           await prefs.setModuleEnabled(ModuleId.srs, true);
@@ -253,7 +252,8 @@ void main() {
         findsNothing,
         reason: 'my-comic 只保留漫画域：旧偏好开着也不能把复习塞进导航',
       );
-      // 不弹引导、对话框 / 底部弹层 / 横幅，也不把引导重新标回待完成。
+      // 「老用户不提醒」：不弹引导、对话框 / 底部弹层 / 横幅，也不把引导重新
+      // 标回待完成。
       expect(find.byType(OnboardingWizardPage), findsNothing);
       expect(find.byType(Dialog), findsNothing);
       expect(find.byType(BottomSheet), findsNothing);
@@ -261,6 +261,7 @@ void main() {
       expect(find.byType(SnackBar), findsNothing);
       expect(h.prefs.getPref('onboarding_completed'), isTrue);
       expect(h.prefs.getPref('first_time_setup'), isFalse);
+      expect(h.app.srsMiningTarget, SrsMiningTarget.anki);
 
       // 运行期再写一次开关，导航仍然不出现复习。
       await tester.runAsync(() => h.app.setModuleEnabled(ModuleId.srs, true));

@@ -119,17 +119,24 @@ class DownloadExternalSourceTag extends StatelessWidget {
   );
 }
 
-/// 在线扩展源作品页头部的两枚 chip（扩展源 + 外部来源），三域作品页共用。
-List<MediaDetailChip> extensionSourceDetailChips() => <MediaDetailChip>[
+/// 在线扩展源作品页头部的状态 chip（扩展源 + 外部来源），三域作品页共用。
+///
+/// [includeExternal] 控制是否带「外部来源」一枚：漫画作品页要求只保留「扩展源」
+/// （2026-11-07 用户明确移除「外部来源」），显式传 false；小说等既有页面用默认
+/// true，两枚都显示——不靠调用方按 key 过滤列表。
+List<MediaDetailChip> extensionSourceDetailChips({
+  bool includeExternal = true,
+}) => <MediaDetailChip>[
   MediaDetailChip(
     t.download_method_extension,
     icon: DownloadTransferMethod.extension.icon,
     key: const ValueKey<String>('online-work-extension-source-chip'),
   ),
-  MediaDetailChip(
-    t.download_source_external,
-    icon: kExternalSourceIcon,
-    tone: MediaDetailChipTone.tertiary,
-    key: const ValueKey<String>('online-work-external-source-chip'),
-  ),
+  if (includeExternal)
+    MediaDetailChip(
+      t.download_source_external,
+      icon: kExternalSourceIcon,
+      tone: MediaDetailChipTone.tertiary,
+      key: const ValueKey<String>('online-work-external-source-chip'),
+    ),
 ];
