@@ -298,9 +298,9 @@ void main() {
       );
     });
 
-    test('Manga 与浏览拥有的设置分类不因旧开关偏好消失', () {
-      // ticket 01：设置里由 Manga / 浏览拥有的分类跟随常驻导航，旧偏好不再
-      // 把它们藏掉（「下载」分类的更名留给 ticket 04）。
+    test('Manga 的设置分类不因旧开关偏好消失；存储与下载恒在', () {
+      // ticket 01：设置里由 Manga 拥有的分类跟随常驻导航，旧偏好不再把它藏掉；
+      // ticket 04 起「存储与下载」已与浏览模块拆绑，任何可见性下都恒在。
       final ModuleVisibility legacyOff = ModuleVisibility.resolve(
         prefOf: (ModuleId _) => false,
         isWindows: true,
