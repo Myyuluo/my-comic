@@ -50,22 +50,22 @@ void main() {
     });
   });
 
-  group('homeActiveTabs 按用户顺序', () {
-    test('没排过 = 排序功能上线前的固定顺序', () {
+  group('homeActiveTabs 固定导航 + 用户顺序', () {
+    test('没排过 = 固定导航 Manga → 浏览在前，其余按枚举顺序接后', () {
       expect(homeActiveTabs(const ModuleVisibility(allNav)), <HomeTab>[
+        HomeTab.manga,
+        HomeTab.browse,
         HomeTab.home,
         HomeTab.books,
-        HomeTab.manga,
         HomeTab.video,
         HomeTab.games,
-        HomeTab.browse,
         HomeTab.dictionaries,
         HomeTab.browserExtension,
         HomeTab.settings,
       ]);
     });
 
-    test('排过的模块打头，没排到的按枚举顺序接后，设置恒在最后', () {
+    test('排过的模块打头（固定导航不动），没排到的按枚举顺序接后，设置恒在最后', () {
       final List<HomeTab> tabs = homeActiveTabs(
         const ModuleVisibility(
           allNav,
@@ -73,16 +73,27 @@ void main() {
         ),
       );
       expect(tabs, <HomeTab>[
+        HomeTab.manga,
+        HomeTab.browse,
         HomeTab.dictionaries,
         HomeTab.video,
         HomeTab.home,
         HomeTab.books,
-        HomeTab.manga,
         HomeTab.games,
-        HomeTab.browse,
         HomeTab.browserExtension,
         HomeTab.settings,
       ]);
+    });
+
+    test('旧的排序偏好不能把浏览排到漫画前面', () {
+      final List<HomeTab> tabs = homeActiveTabs(
+        const ModuleVisibility(
+          allNav,
+          order: <ModuleId>[ModuleId.browse, ModuleId.lookup, ModuleId.manga],
+        ),
+      );
+      expect(tabs.take(2), <HomeTab>[HomeTab.manga, HomeTab.browse]);
+      expect(tabs.last, HomeTab.settings);
     });
 
     test('关掉的模块不出 tab，但不打乱其余模块的相对顺序', () {
@@ -142,8 +153,9 @@ void main() {
         full.indexOf(ModuleId.browserExtension),
       );
       expect(result.indexOf(ModuleId.sync), full.indexOf(ModuleId.sync));
+      // 固定导航（Manga → 浏览）不吃拖拽；重排只影响它们之后的模块。
       expect(
-        homeActiveTabs(ModuleVisibility(allNav, order: result)).take(3),
+        homeActiveTabs(ModuleVisibility(allNav, order: result)).skip(2).take(3),
         <HomeTab>[HomeTab.dictionaries, HomeTab.home, HomeTab.books],
       );
     });

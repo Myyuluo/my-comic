@@ -1071,7 +1071,8 @@ Future<Object?> _listModules(DesktopCtlContext context) async {
       for (final ModuleId module in ModuleId.values)
         _moduleJson(appModel, module),
     ],
-    // 用户排的底栏 / 侧栏顺序（全量，含本平台不可用的模块）。
+    // 底栏 / 侧栏顺序（全量，含本平台不可用的模块）：一级导航常驻项固定在前，
+    // 其余按用户排的顺序。旧排序偏好不能改变 Manga / 浏览的位置。
     'order': <String>[
       for (final ModuleId module in appModel.moduleVisibility.ordered)
         module.name,
@@ -1101,6 +1102,9 @@ Future<Object?> _setModule(DesktopCtlContext context, CtlCall call) async {
 
 /// 底栏 / 侧栏模块顺序：给出的模块按给出顺序排到最前，没提到的保持原相对顺序
 /// （与设置页拖拽排序同一个 `AppModel.setModuleOrder`，存全量顺序）。
+///
+/// 一级导航常驻项（Manga / 浏览）固定在前，给出的顺序不能移动它们——写入照常
+/// 落库，但 `ModuleVisibility.ordered` 会忽略它们在偏好里的位置。
 Future<Object?> _setModuleOrder(DesktopCtlContext context, CtlCall call) async {
   final List<String> raw = call.stringList('order');
   if (raw.isEmpty) throw const CtlFailure.badRequest('order 缺失（模块 id 列表）');

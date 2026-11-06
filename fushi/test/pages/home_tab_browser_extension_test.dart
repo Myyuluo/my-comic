@@ -59,20 +59,20 @@ void main() {
     expect(settings, equals(ext + 1));
   });
 
-  test('games 与 browserExtension 同开时顺序为 视频 < 游戏 < 下载 < 词典 < 扩展 < 设置', () {
+  test('固定导航在前，其余 tab 按枚举顺序接后且扩展紧邻设置', () {
     final List<HomeTab> tabs = homeActiveTabs(
       _visibility(video: true, games: true, browserExtension: true),
     );
-    final int video = tabs.indexOf(HomeTab.video);
-    final int games = tabs.indexOf(HomeTab.games);
-    final int downloads = tabs.indexOf(HomeTab.browse);
-    final int dict = tabs.indexOf(HomeTab.dictionaries);
-    final int ext = tabs.indexOf(HomeTab.browserExtension);
-    final int settings = tabs.indexOf(HomeTab.settings);
-    expect(games, equals(video + 1));
-    expect(downloads, equals(games + 1));
-    expect(dict, equals(downloads + 1));
-    expect(ext, equals(dict + 1));
-    expect(settings, equals(ext + 1));
+    expect(tabs, <HomeTab>[
+      HomeTab.manga,
+      HomeTab.browse,
+      HomeTab.home,
+      HomeTab.books,
+      HomeTab.video,
+      HomeTab.games,
+      HomeTab.dictionaries,
+      HomeTab.browserExtension,
+      HomeTab.settings,
+    ]);
   });
 }
