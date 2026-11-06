@@ -37,11 +37,21 @@ class SrtBookRepository {
   /// 书架 / 媒体源列出用的全量读取。列出前顺手自愈被旧数据根遗弃的绝对路径
   /// （[repairMovedPaths]）——范式同 `VideoBookRepository.listForShelf` 对封面的
   /// 自愈（TODO-1255）。
+  ///
+  /// my-comic 的漫画-only live schema（37 表）没有 `srt_books` 这张非漫画表：
+  /// 表不存在 = 本机没有字幕书，按空集合返回，绝不抛 `no such table` 让书架的
+  /// 批量动作整批静默失败。完整 schema 行为不变。
   Future<List<SrtBook>> listAll() async {
+    if (!await _hasSrtBooksTable()) return const <SrtBook>[];
     await repairMovedPaths();
     final rows = await _db.getAllSrtBooks();
     return rows.map(_rowToModel).toList();
   }
+
+  /// 读接口的缺表判据：my-comic live schema 没有 `srt_books`。
+  /// 表不存在等价于「没有这条字幕书记录」（空集合 / null），
+  /// 与 `ReaderFushiSource.hasLocalFiles` 的守卫口径一致。
+  Future<bool> _hasSrtBooksTable() => _db.hasTable('srt_books');
 
   /// BUG-1575 第二步：自愈已经落在用户库里的坏路径。
   ///
@@ -165,12 +175,14 @@ class SrtBookRepository {
   }
 
   Future<SrtBook?> findByUid(String uid) async {
+    if (!await _hasSrtBooksTable()) return null;
     final row = await _db.getSrtBookByUid(uid);
     if (row == null) return null;
     return _rowToModel(row);
   }
 
   Future<SrtBook?> findByBookKey(String bookKey) async {
+    if (!await _hasSrtBooksTable()) return null;
     final row = await _db.getSrtBookByBookKey(bookKey);
     if (row == null) return null;
     return _rowToModel(row);

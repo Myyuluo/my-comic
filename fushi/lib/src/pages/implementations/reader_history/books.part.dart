@@ -602,6 +602,9 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
     LocalFileDeleteReport localFiles = const LocalFileDeleteReport();
     // 目标集在确认框弹出前就定死（[targetKeys]），不重新读 `_selectedKeys`。
     final Set<String> toDelete = targetKeys;
+    // my-comic 的漫画-only live schema（37 表）没有 srt_books：表不存在时选中集
+    // 里不可能有本地字幕卡（卡片本就渲染不出来），跳过 srt 分支而不是撞缺表异常。
+    final bool hasSrtBooks = await appModel.database.hasTable('srt_books');
     if (deleteLocalFiles) {
       // 先停止引用再销毁实体：正在播的那本若在本批里，句柄不放掉删除必然失败。
       // 会话身份对 EPUB 有声书是 bookKey、对纯字幕书是 srt uid，两种都塞进去。
@@ -618,6 +621,8 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
     }
     for (final key in toDelete) {
       if (key.startsWith('srt_')) {
+        // 缺表守卫（见上面 [hasSrtBooks]）：不查询不存在的 srt_books。
+        if (!hasSrtBooks) continue;
         final String uid = key.substring(4);
         final SrtBookRepository repo = SrtBookRepository(appModel.database);
         final SrtBook? book = await repo.findByUid(uid);
@@ -746,11 +751,7 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
       for (final EpubBookMeta row in epubBooks)
         if (row.uid.isNotEmpty) row.bookKey: row.uid,
     };
-    // my-comic 的 37 表 live schema 没有 srt_books（听书模块已移除）：表不存在时
-    // 选中集里不可能有本地 SRT 条目，按空集合处理，不让整批动作静默失败。
-    final List<SrtBook> srtBooks = await db.hasTable('srt_books')
-        ? await SrtBookRepository(db).listAll()
-        : const <SrtBook>[];
+    final List<SrtBook> srtBooks = await SrtBookRepository(db).listAll();
     if (!mounted) return false;
     // BUG-2458：远端占位键的存在性真值是最近一次拉到的远端目录（占位卡就是从它
     // 渲染的），不在本地表里；不纳入就会被当幽灵键整批剔光。
