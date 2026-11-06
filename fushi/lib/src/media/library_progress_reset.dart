@@ -139,7 +139,7 @@ Future<void> resetBookReadingState({
   // my-comic 的漫画-only live schema（37 表）没有 audiobooks 这张非漫画表：
   // 表不存在 = 本书没有有声书记录，跳过位置归零；完整 schema 行为不变。
   // 单卡菜单与批量栏共用本函数，守卫放在这里两处入口同时生效。
-  if (await db.hasTable('audiobooks')) {
+  if (await db.hasAudiobooksTable) {
     final AudiobookRepository audiobooks = AudiobookRepository(db);
     if (await audiobooks.findByBookKey(bookKey) != null) {
       await audiobooks.updatePositionMs(bookKey: bookKey, positionMs: 0);

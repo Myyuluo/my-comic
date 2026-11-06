@@ -313,16 +313,25 @@ void main() {
 
   testWidgets('在线漫画标记为已读完：全部 Chapter 写入已读时刻，页码与当前章不变',
       (WidgetTester tester) async {
+    late Map<String, MangaChapterStateRow> before;
+    late int beforeContinueLastPosition;
     final EpubBookRow? seeded = await tester.runAsync(() async {
       final EpubBookRow row = await insertOnlineManga();
       await seedChapterState(row.uid, '/chapter/3', lastPage: 5, updatedAt: 1000);
-      await seedChapterState(row.uid, '/chapter/2', lastPage: 9, updatedAt: 3000);
       await seedChapterState(
         row.uid,
-        '/chapter/1',
-        lastPage: 15,
-        lastFraction: 7,
-        updatedAt: 2000,
+        '/chapter/2',
+        lastPage: 9,
+        lastFraction: 3,
+        updatedAt: 3000,
+      );
+      // /chapter/1 故意不播种：级联会新插一行，updatedAt 必须是 0（不参与
+      // 「最近动过哪一章」的竞争），不能是 now 把续读选章顶到列表首章。
+      before = await db.getMangaChapterStates(row.uid);
+      beforeContinueLastPosition = continueMangaChapterIndex(
+        _onlineEntry(),
+        before,
+        target: MangaResumeTarget.lastPosition,
       );
       return row;
     });
@@ -376,11 +385,37 @@ void main() {
       reason: '标记读完不能改每章上次页码',
     );
     expect(states['/chapter/2']!.lastPage, 9);
-    expect(states['/chapter/1']!.lastPage, 15);
     expect(
-      states['/chapter/1']!.lastFraction,
-      7,
+      states['/chapter/2']!.lastFraction,
+      3,
       reason: '连续阅读的偏移也保留',
+    );
+    expect(
+      states['/chapter/3']!.updatedAt,
+      1000,
+      reason: '既有行的 updatedAt 是续读选章判据，级联不能盖成 now',
+    );
+    expect(states['/chapter/2']!.updatedAt, 3000);
+    expect(
+      states['/chapter/1']!.updatedAt,
+      0,
+      reason: '级联新插入的行用 0，不参与「最近动过哪一章」的竞争',
+    );
+    expect(
+      states['/chapter/1']!.readAt,
+      isNotNull,
+      reason: '新插入的行同样要写成已读',
+    );
+    // 播种时声明的当前章 = updatedAt 最大的 /chapter/2（列表下标 1）。
+    expect(beforeContinueLastPosition, 1);
+    expect(
+      continueMangaChapterIndex(
+        _onlineEntry(),
+        states,
+        target: MangaResumeTarget.lastPosition,
+      ),
+      1,
+      reason: '标记读完不得把「最近续读」的当前章换成列表首章',
     );
   });
 
@@ -426,6 +461,12 @@ void main() {
     final EpubBookRow row = seeded!;
     final Map<String, MangaChapterStateRow> before =
         (await tester.runAsync(() => db.getMangaChapterStates(row.uid)))!;
+    final int beforeContinueLastPosition = continueMangaChapterIndex(
+      _onlineEntry(),
+      before,
+      target: MangaResumeTarget.lastPosition,
+    );
+    expect(beforeContinueLastPosition, 1, reason: '播种的当前章是 /chapter/2');
 
     await tester.pumpWidget(
       buildApp(<MediaItem>[
@@ -486,6 +527,15 @@ void main() {
       continueMangaChapterIndex(_onlineEntry(), after),
       1,
       reason: '取消后当前章仍是最后动过的那章，而不是列表首章',
+    );
+    expect(
+      continueMangaChapterIndex(
+        _onlineEntry(),
+        after,
+        target: MangaResumeTarget.lastPosition,
+      ),
+      beforeContinueLastPosition,
+      reason: '取消已读完前后，最近续读的当前章必须保持不变',
     );
     expect(
       resolveMangaChapterResumePoint(after['/chapter/2']),

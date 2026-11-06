@@ -13,6 +13,7 @@ import 'package:fushi/src/utils/components/glass/fushi_icon.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi/src/media/manga/download/manga_download_service.dart';
 import 'package:fushi/src/media/manga/library/manga_chapter_list.dart';
+import 'package:fushi/src/media/manga/library/manga_download_planner.dart';
 import 'package:fushi/src/media/manga/library/manga_resume_point.dart';
 import 'package:fushi/src/media/manga/library/manga_chapter_storage.dart';
 import 'package:fushi/src/utils/misc/reveal_in_file_manager.dart'
@@ -394,19 +395,16 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     final AppModel? appModel = _appModelOrNull;
     if (entry == null || appModel == null || _bookKey == null) return;
     // 锁定章（未登录 / 未购买）入队必败，整批跳过并说清楚跳了几个；用户登录并
-    // 刷新后它们会脱锁，再点一次即可（BUG-2479）。
-    int lockedSkipped = 0;
-    final List<OnlineMangaChapter> pending = <OnlineMangaChapter>[];
-    for (final OnlineMangaChapter chapter in entry.chapters.reversed) {
-      if (_downloaded.contains(chapter.key) || _isChapterPending(chapter)) {
-        continue;
-      }
-      if (chapter.locked) {
-        lockedSkipped++;
-        continue;
-      }
-      pending.add(chapter);
-    }
+    // 刷新后它们会脱锁，再点一次即可（BUG-2479）。规划规则与书架批量下载共用
+    // [planMangaChapterDownload]（review D2）。
+    final ({List<OnlineMangaChapter> pending, int lockedSkipped}) plan =
+        planMangaChapterDownload(
+      entry: entry,
+      downloadedChapterKeys: _downloaded,
+      jobsByChapterKey: _jobs,
+    );
+    final int lockedSkipped = plan.lockedSkipped;
+    final List<OnlineMangaChapter> pending = plan.pending;
     if (lockedSkipped > 0) {
       FushiToast.show(
         msg: t.manga_series_download_all_locked_skipped(count: lockedSkipped),
@@ -617,12 +615,6 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     FushiToast.show(msg: t.mihon_source_login_saved);
     // 登录态变了，章节的锁位跟着变：立刻从源重取，用户不用自己想到去点刷新。
     await _refreshFromSource();
-  }
-
-  bool _isChapterPending(OnlineMangaChapter chapter) {
-    final String? status = _jobs[chapter.key]?.status;
-    return status == MangaDownloadJobStatus.queued ||
-        status == MangaDownloadJobStatus.running;
   }
 
   /// 书签 = 订阅开关：开订阅时默认同时开「新章自动下载」；关订阅把两位一起关

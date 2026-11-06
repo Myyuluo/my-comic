@@ -73,49 +73,10 @@ class MediaLibraryViewSpec {
 /// 数据与交互在视图 State 里（共享的 [FushiTagFilterBar]），壳只负责那个位置，
 /// 所以视图像页头登记动作（[FushiShellActionsSlot]）一样，把要画的内容登记到本槽。
 /// 壳取「最后登记的可见内容」；没有登记时该位置留空。
-class MediaLibraryChromeTabsSlot extends ChangeNotifier {
-  final Map<Object, ({bool visible, Widget content})> _claims =
-      <Object, ({bool visible, Widget content})>{};
-  bool _notifyScheduled = false;
-  bool _disposed = false;
-
-  /// 当前应显示的自定义内容；没有可见登记时为 null。
-  Widget? get content {
-    Widget? result;
-    for (final ({bool visible, Widget content}) claim in _claims.values) {
-      if (claim.visible) result = claim.content;
-    }
-    return result;
-  }
-
-  /// [owner]（通常是视图 State）登记 / 更新自己的页签位内容。
-  void claim(Object owner, {required bool visible, required Widget content}) {
-    _claims[owner] = (visible: visible, content: content);
-    _scheduleNotify();
-  }
-
-  /// [owner] 撤回登记（视图卸载、或不再需要壳代画）。
-  void release(Object owner) {
-    if (_claims.remove(owner) != null) _scheduleNotify();
-  }
-
-  void _scheduleNotify() {
-    if (_notifyScheduled || _disposed) return;
-    _notifyScheduled = true;
-    WidgetsBinding.instance.addPostFrameCallback((Duration _) {
-      _notifyScheduled = false;
-      if (!_disposed) notifyListeners();
-    });
-    WidgetsBinding.instance.ensureVisualUpdate();
-  }
-
-  @override
-  void dispose() {
-    _disposed = true;
-    _claims.clear();
-    super.dispose();
-  }
-}
+///
+/// 登记状态机与 [FushiShellActionsSlot] 共用 [FushiShellClaimSlot]（review D1：
+/// 两处曾各抄一份完全相同的 `_claims` / 帧末通知 / dispose）。
+class MediaLibraryChromeTabsSlot extends FushiShellClaimSlot {}
 
 /// 向壳内子树暴露「切到某个视图」的能力（[InheritedWidget]，不改 builder 签名）。
 ///

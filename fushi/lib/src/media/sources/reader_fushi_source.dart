@@ -1044,8 +1044,8 @@ class ReaderFushiSource extends ReaderMediaSource {
       // 原件位置在 audiobooks / srt_books 行上，deleteEpubBook 的事务会把它们
       // 级联删掉，必须先快照。my-comic 的漫画-only live schema 没有这两张表：
       // 表不存在 = 没有对应附件，跳过查询而不是让删除整体抛 `no such table`。
-      final bool hasAudiobooksTable = await db.hasTable('audiobooks');
-      final bool hasSrtBooksTable = await db.hasTable('srt_books');
+      final bool hasAudiobooksTable = await db.hasAudiobooksTable;
+      final bool hasSrtBooksTable = await db.hasSrtBooksTable;
       final Audiobook? audiobookBefore = deleteLocalFiles && hasAudiobooksTable
           ? await AudiobookRepository(db).findByBookKey(bookKey)
           : null;
@@ -1271,14 +1271,14 @@ class ReaderFushiSource extends ReaderMediaSource {
     // 这两个查询以前无条件执行，在漫画-only 库上抛 `no such table`，删除按钮在弹
     // 确认框之前就中断——用户看到的就是「点删除没反应」。表不存在等价于「没有
     // 可删的原件」，跳过即可；完整 schema（测试库）行为不变。
-    if (await db.hasTable('audiobooks')) {
+    if (await db.hasAudiobooksTable) {
       final Audiobook? ab =
           await AudiobookRepository(db).findByBookKey(bookKey);
       if (ab != null && await resolveAudiobookHasLocalFiles(ab.audioPaths)) {
         return true;
       }
     }
-    if (!await db.hasTable('srt_books')) return false;
+    if (!await db.hasSrtBooksTable) return false;
     final SrtBook? srt = await SrtBookRepository(db).findByBookKey(bookKey);
     return srt != null && await resolveAudiobookHasLocalFiles(srt.audioPaths);
   }

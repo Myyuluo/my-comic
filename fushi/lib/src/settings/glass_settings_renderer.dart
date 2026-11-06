@@ -132,14 +132,14 @@ class GlassSettingsRenderer implements SettingsRenderer {
     required ValueChanged<SettingsDestinationId> onDestinationSelected,
   }) {
     final BuildContext context = settingsContext.context;
-    final List<SettingsNavigationGroup> groups = groupSettingsDestinations(
+    final List<SettingsDestination> ordered = groupSettingsDestinations(
       destinations,
     );
-    if (groups.isEmpty) return const SizedBox.shrink();
+    if (ordered.isEmpty) return const SizedBox.shrink();
     return AdaptiveSettingsSection(
       key: settingsHomeGroupKey,
       children: <Widget>[
-        for (final SettingsDestination destination in groups.single.destinations)
+        for (final SettingsDestination destination in ordered)
           AdaptiveSettingsNavigationRow(
             key: ValueKey<SettingsDestinationId>(destination.id),
             title: destination.title,
@@ -425,15 +425,15 @@ class GlassSettingsSidebarList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final List<SettingsNavigationGroup> groups = groupSettingsDestinations(
+    final List<SettingsDestination> ordered = groupSettingsDestinations(
       destinations,
     );
-    if (groups.isEmpty) return const SizedBox.shrink();
+    if (ordered.isEmpty) return const SizedBox.shrink();
     return Column(
       key: settingsHomeGroupKey,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        for (final SettingsDestination destination in groups.single.destinations)
+        for (final SettingsDestination destination in ordered)
           GlassSettingsSidebarRow(
             key: ValueKey<SettingsDestinationId>(destination.id),
             icon: destination.icon,

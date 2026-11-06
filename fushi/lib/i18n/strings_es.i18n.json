@@ -1255,6 +1255,7 @@
   "batch_dissolve_confirm": "¿Disolver $m colección(es)? La agrupación se elimina; los medios se conservan.",
   "batch_dissolve_success": "Se disolvieron $m colección(es).",
   "batch_download_local_volumes_skipped": "Skipped $count local volume(s) without downloadable chapters",
+  "batch_download_remote_non_manga_skipped": "Skipped $count non-manga remote item(s)",
   "batch_hidden_by_filter_note": "Otros ${n} elementos seleccionados están ocultos por el filtro actual y no se procesarán.",
   "batch_invert_selection": "Invertir",
   "batch_select": "Seleccionar",

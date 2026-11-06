@@ -125,11 +125,12 @@ class MaterialSettingsRenderer implements SettingsRenderer {
     required ValueChanged<SettingsDestinationId> onDestinationSelected,
   }) {
     final BuildContext context = settingsContext.context;
-    final List<SettingsNavigationGroup> groups = groupSettingsDestinations(
+    final List<SettingsDestination> ordered = groupSettingsDestinations(
       destinations,
     );
-    if (groups.isEmpty) return const SizedBox.shrink();
-    // 2026-10 动效重做：分类分组首次出现时错峰淡入（进场窗口跟着本列表挂载）。
+    if (ordered.isEmpty) return const SizedBox.shrink();
+    // 2026-10 动效重做：唯一一张分类分组卡首次出现时淡入（进场窗口跟着本列表
+    // 挂载）。首页已扁平化，分组下标恒为 0，不做行级错峰。
     return FushiEntranceScope(
       child: FushiStaggeredEntrance(
         key: const ValueKey<String>('settings-home-entrance'),
@@ -137,7 +138,7 @@ class MaterialSettingsRenderer implements SettingsRenderer {
         child: AdaptiveSettingsSection(
           key: settingsHomeGroupKey,
           children: <Widget>[
-            for (final SettingsDestination destination in groups.single.destinations)
+            for (final SettingsDestination destination in ordered)
               FushiListItem(
                 key: ValueKey<SettingsDestinationId>(destination.id),
                 // M3E：分类图标坐在按分类着色的形状色块里（饱和 container
@@ -515,15 +516,15 @@ class Md3SettingsNavList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final List<SettingsNavigationGroup> groups = groupSettingsDestinations(
+    final List<SettingsDestination> ordered = groupSettingsDestinations(
       destinations,
     );
-    if (groups.isEmpty) return const SizedBox.shrink();
+    if (ordered.isEmpty) return const SizedBox.shrink();
     return Column(
       key: settingsHomeGroupKey,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        for (final SettingsDestination destination in groups.single.destinations)
+        for (final SettingsDestination destination in ordered)
           Md3SettingsNavRow(
             key: ValueKey<SettingsDestinationId>(destination.id),
             icon: destination.icon,

@@ -1,6 +1,16 @@
 // 基础设施：表/列存在性探测与幂等索引（God 类拆分 2026-08）。
 part of 'database.dart';
 
+/// 可能不在 my-comic 漫画-only live schema（37 表）里的历史表名。
+///
+/// 触碰这些表的代码一律先经 [FushiDatabase.hasAudiobooksTable] /
+/// [FushiDatabase.hasSrtBooksTable]（或 [FushiDatabase.hasTable] 配这里）判断，
+/// 不要散落表名字面量——否则漫画-only 库会在「表不存在」上抛异常。
+abstract final class FushiSchemaTables {
+  static const String audiobooks = 'audiobooks';
+  static const String srtBooks = 'srt_books';
+}
+
 mixin _FushiDbInfra on _$FushiDatabase {
   static final RegExp _identifierRe = RegExp(r'^[a-zA-Z_]\w*$');
 
@@ -82,6 +92,14 @@ mixin _FushiDbInfra on _$FushiDatabase {
   /// my-comic 的漫画-only schema 不创建历史表；仍被编译的残留死代码在触碰数据库
   /// 前可用它做能力判断（例如词典仓储在启动/Profile 切换时的 no-op 早退）。
   Future<bool> hasTable(String tableName) => _tableExists(tableName);
+
+  /// `audiobooks` 表是否存在。my-comic 的漫画-only live schema（37 表）没有它，
+  /// 完整 schema 才有；触碰该表的代码一律先问这里，不要手写表名字面量。
+  Future<bool> get hasAudiobooksTable =>
+      hasTable(FushiSchemaTables.audiobooks);
+
+  /// `srt_books` 表是否存在。理由同 [hasAudiobooksTable]。
+  Future<bool> get hasSrtBooksTable => hasTable(FushiSchemaTables.srtBooks);
 
   /// v118 迁移：把 [tableName] 里尚未记录的 `local_added_at` 回填成
   /// `imported_at`（理由见迁移步注释）。只碰 NULL 行，重跑幂等。没有

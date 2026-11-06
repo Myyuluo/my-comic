@@ -1255,6 +1255,7 @@
   "batch_dissolve_confirm": "Giải tán $m bộ sưu tập? Nhóm bị xóa; nội dung được giữ lại.",
   "batch_dissolve_success": "Đã giải tán $m bộ sưu tập.",
   "batch_download_local_volumes_skipped": "Skipped $count local volume(s) without downloadable chapters",
+  "batch_download_remote_non_manga_skipped": "Skipped $count non-manga remote item(s)",
   "batch_hidden_by_filter_note": "Còn ${n} mục đã chọn bị ẩn bởi bộ lọc hiện tại và sẽ không được xử lý.",
   "batch_invert_selection": "Đảo ngược",
   "batch_select": "Chọn",

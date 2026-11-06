@@ -667,7 +667,7 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
         if (actions.isEmpty) {
           _actionsSlot.release(this);
         } else {
-          _actionsSlot.claim(
+          _actionsSlot.claimActions(
             this,
             visible: true,
             actions: FushiShellHeaderActions(actions: actions),

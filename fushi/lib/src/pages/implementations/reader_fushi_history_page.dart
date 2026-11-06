@@ -35,6 +35,7 @@ import 'package:fushi/src/media/import/real_path_directory_picker.dart';
 import 'package:fushi/src/media/manga/download/manga_download_service.dart';
 import 'package:fushi/src/media/manga/interconnect/interconnect_manga_source.dart';
 import 'package:fushi/src/media/manga/library/manga_chapter_storage.dart';
+import 'package:fushi/src/media/manga/library/manga_download_planner.dart';
 import 'package:fushi/src/media/manga/library/manga_series_page.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_service.dart';
@@ -233,6 +234,11 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
   ModuleVisibility get _moduleVisibility => appModelNoUpdate.moduleVisibility;
 
   Future<Map<String, _AudiobookInfo>> _loadAllAudiobookInfo() async {
+    // my-comic 的漫画-only live schema（37 表）没有 audiobooks：表不存在 = 本端
+    // 没有有声书信息，返回空表而不是让整页 FutureBuilder 落到缺表异常。
+    if (!await appModel.database.hasAudiobooksTable) {
+      return const <String, _AudiobookInfo>{};
+    }
     final repo = AudiobookRepository(appModel.database);
     final allAudiobooks = await repo.buildBookKeyMap();
     final result = <String, _AudiobookInfo>{};
@@ -452,8 +458,9 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
   ///
   /// BUG-2458：远端占位卡此前返回 null = 不可多选，多选态点云书直接开下载。远端
   /// 键与本地键同住一个选中集（卡片勾选态 / 计数 / Shift 区间选 / 长按扫选全复用），
-  /// 只在批量动作那层按 [_isRemoteSelectionKey] 分流：本地三动作只吃本地键、
-  /// 「下载」只吃远端键。
+  /// 只在批量动作那层按 [_isRemoteSelectionKey] 分流：本地三动作只吃本地键；
+  /// 「下载」只吃远端**漫画**键（纯 SRT 有声书与非漫画远端书在下载执行 / 可用态
+  /// 里被排除，ticket 02 复审 B）。
   String? _looseSelectionKey(_ShelfBookSlot slot) {
     final MediaItem? epub = slot.epub;
     if (epub != null) return epub.mediaIdentifier;
@@ -2190,8 +2197,10 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
   ///
   /// 在线漫画（描述符里带 Chapter 列表）额外级联章状态：标记时把本书所有 Chapter
   /// 的已读时刻置为已读，取消时清空；两种情况都不碰每章上次页码，也不碰描述符里
-  /// 的当前章位置（`currentChapterIndex`），下次仍从原页继续。本地卷没有 Chapter，
-  /// 只切换书级完成标记，阅读位置与页进度保持真实。
+  /// 的当前章位置（`currentChapterIndex`），下次仍从原页继续。标记级联还保留既有
+  /// 行的 `updatedAt`（续读选章判据），新行用 0 不参与竞争——整批写 now 会让续读
+  /// 跳到列表首章（ticket 02 复审 C）。本地卷没有 Chapter，只切换书级完成标记，
+  /// 阅读位置与页进度保持真实。
   /// [bookKey] 为空（无 EPUB 正文的纯字幕书）时静默忽略——该书无进度维度、也无
   /// 完成真值载体，与 [_openSrtBook] 的 `srt_epub_not_ready` 门控一致。
   Future<void> _toggleBookCompleted(String bookKey) async {
@@ -2199,10 +2208,11 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
     if (bookKey.isEmpty) return;
     final bool wasCompleted = _completedBookKeys.contains(bookKey);
     final EpubBookRow? row = await appModel.database.getEpubBook(bookKey);
-    final OnlineMangaLibraryEntry? entry = row == null
-        ? null
-        : OnlineMangaLibraryEntry.tryParse(row.sourceMetadata);
-    if (entry != null && entry.chapters.isNotEmpty && row!.uid.isNotEmpty) {
+    // 统一走 [_onlineMangaEntryFromRow]：它同时要求 `BookFormat.manga` + 带章节的
+    // 在线描述符，与批量下载 / 阅读器判据同源（review D3：这里曾只 parse 描述符，
+    // 非 manga 格式的残留描述符也会被当成在线漫画去级联章状态）。
+    final OnlineMangaLibraryEntry? entry = _onlineMangaEntryFromRow(row);
+    if (entry != null && row != null && row.uid.isNotEmpty) {
       if (wasCompleted) {
         await appModel.database.clearMangaChaptersRead(row.uid);
       } else {
@@ -2212,6 +2222,8 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
             for (final OnlineMangaChapter chapter in entry.chapters)
               chapter.key,
           ],
+          // 书架级联：保留既有行的 updatedAt（续读选章判据），新行用 0 不参与竞争。
+          preserveUpdatedAt: true,
         );
       }
     }
