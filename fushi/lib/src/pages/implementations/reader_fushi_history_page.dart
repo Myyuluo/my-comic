@@ -2184,12 +2184,34 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
   /// 手动切换书 / 有声书「已读完」状态：写 EpubBooks.completedAt（单一真值，按
   /// bookKey），有声书 SRT 卡也调它（传其配对 bookKey）。已完成 → 清除；未完成 →
   /// 置当前时间。切换后重取完成集合并重绘，概览统计与卡片视觉下一帧即同步。
+  ///
+  /// 在线漫画（描述符里带 Chapter 列表）额外级联章状态：标记时把本书所有 Chapter
+  /// 的已读时刻置为已读，取消时清空；两种情况都不碰每章上次页码，也不碰描述符里
+  /// 的当前章位置（`currentChapterIndex`），下次仍从原页继续。本地卷没有 Chapter，
+  /// 只切换书级完成标记，阅读位置与页进度保持真实。
   /// [bookKey] 为空（无 EPUB 正文的纯字幕书）时静默忽略——该书无进度维度、也无
   /// 完成真值载体，与 [_openSrtBook] 的 `srt_epub_not_ready` 门控一致。
   Future<void> _toggleBookCompleted(String bookKey) async {
     Navigator.pop(context);
     if (bookKey.isEmpty) return;
     final bool wasCompleted = _completedBookKeys.contains(bookKey);
+    final EpubBookRow? row = await appModel.database.getEpubBook(bookKey);
+    final OnlineMangaLibraryEntry? entry = row == null
+        ? null
+        : OnlineMangaLibraryEntry.tryParse(row.sourceMetadata);
+    if (entry != null && entry.chapters.isNotEmpty && row!.uid.isNotEmpty) {
+      if (wasCompleted) {
+        await appModel.database.clearMangaChaptersRead(row.uid);
+      } else {
+        await appModel.database.markMangaChaptersRead(
+          bookUid: row.uid,
+          chapterKeys: <String>[
+            for (final OnlineMangaChapter chapter in entry.chapters)
+              chapter.key,
+          ],
+        );
+      }
+    }
     await appModel.database.setEpubBookCompleted(
       bookKey,
       wasCompleted ? null : DateTime.now(),

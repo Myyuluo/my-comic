@@ -1128,6 +1128,22 @@ mixin _FushiDbContentMisc
     );
   }
 
+  /// 批量清除一本书**全部章节**的已读时刻（书架卡「取消已读完」级联）。
+  ///
+  /// 与逐章 [clearMangaChapterRead] 的区别只在范围：一次清空整本书。只动
+  /// `readAt`——`lastPage` / `lastFraction` / `pageCount` 原样保留，取消后下次打开
+  /// 仍从原页继续；`updatedAt` 也**不**盖成 now：它是「最近动过哪一章」的唯一判据
+  /// （见 `manga_resume_point.dart` 的 `continueMangaChapterIndex`），整书一起改
+  /// now 会让各章并列、继续阅读落到列表首章而不是用户当前那一章。
+  Future<void> clearMangaChaptersRead(String bookUid) async {
+    if (bookUid.isEmpty) return;
+    await (update(mangaChapterStates)
+          ..where((t) => t.bookUid.equals(bookUid)))
+        .write(
+      const MangaChapterStatesCompanion(readAt: Value<int?>(null)),
+    );
+  }
+
   /// 批量标记已读（作品页的「标记此章及更早为已读」）。
   Future<void> markMangaChaptersRead({
     required String bookUid,
