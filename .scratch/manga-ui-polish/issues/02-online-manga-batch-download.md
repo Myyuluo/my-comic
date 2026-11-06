@@ -4,11 +4,15 @@
 
 **Blocked by:** 01（修复批量选择栏的失效动作）
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] 只选中本地卷时下载按钮禁用。
-- [ ] 选中至少一部在线漫画时下载按钮启用；混合选中时跳过本地卷并提示跳过数量。
-- [ ] 在线漫画的全部未下载、未排队、未锁定 Chapter 入队，已下载 / 排队中 / 锁定章节按既有规则跳过。
-- [ ] 远端有章节的在线漫画先加入 Library 再入队全部章节；远端无章节整本包按整本下载。
-- [ ] 单卡下载与批量下载使用同一套启用与跳过规则。
-- [ ] 测试覆盖启用、禁用、跳过、远端章节漫画、远端整本包与非章节书分支。
+- [x] 只选中本地卷时下载按钮禁用。
+- [x] 选中至少一部在线漫画时下载按钮启用；混合选中时跳过本地卷并提示跳过数量。
+- [x] 在线漫画的全部未下载、未排队、未锁定 Chapter 入队，已下载 / 排队中 / 锁定章节按既有规则跳过。
+- [x] 远端有章节的在线漫画先加入 Library 再入队全部章节；远端无章节整本包按整本下载。
+- [x] 单卡下载与批量下载使用同一套启用与跳过规则。
+- [x] 测试覆盖启用、禁用、跳过、远端章节漫画、远端整本包与非章节书分支。
+
+## Comments
+
+- 2026-11-06: Resolved on `integration/manga-ui-polish` (ticket merge `462551fc`; dual-axis review-fix merge `a0571b85`). Review follow-up further restricted download to online manga: remote SRT audiobooks and non-manga remote books no longer enable or participate.

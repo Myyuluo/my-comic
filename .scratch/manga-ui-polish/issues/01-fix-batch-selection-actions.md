@@ -4,10 +4,14 @@
 
 **Blocked by:** None（can start immediately）
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] 在 37 表 schema 下选中漫画后，批量标签、重置进度、删除分别能打开对应流程并完成。
-- [ ] 全选与反选会更新「已选 N」，并作用于当前可见的漫画。
-- [ ] 批量路径对不存在的非漫画表按空集合处理；表存在时行为不变。
-- [ ] 单卡菜单与批量栏共用的选中项存在性检查路径都有回归测试。
-- [ ] `flutter analyze` 与定向测试通过。
+- [x] 在 37 表 schema 下选中漫画后，批量标签、重置进度、删除分别能打开对应流程并完成。
+- [x] 全选与反选会更新「已选 N」，并作用于当前可见的漫画。
+- [x] 批量路径对不存在的非漫画表按空集合处理；表存在时行为不变。
+- [x] 单卡菜单与批量栏共用的选中项存在性检查路径都有回归测试。
+- [x] `flutter analyze` 与定向测试通过。
+
+## Comments
+
+- 2026-11-06: Resolved on `integration/manga-ui-polish` (ticket merge `6b619423`; dual-axis review-fix merge `a0571b85`).

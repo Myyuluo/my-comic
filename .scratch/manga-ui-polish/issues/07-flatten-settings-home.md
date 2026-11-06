@@ -4,11 +4,15 @@
 
 **Blocked by:** None（can start immediately）
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] 设置首页不再显示「界面 / 内容 / 连接 / 应用」四个一级分组标题。
-- [ ] 所有二级分类在同一张连续分组卡中，顺序为外观与交互 → 漫画 → 下载 → 系统与关于。
-- [ ] 窄屏列表与宽屏左侧导航使用同一套扁平顺序。
-- [ ] 分类详情页内的二级分组标题保持不变。
-- [ ] 「下载」分类标题本次不改名。
-- [ ] 测试覆盖无一级标题、单一分组、分类顺序与宽窄布局。
+- [x] 设置首页不再显示「界面 / 内容 / 连接 / 应用」四个一级分组标题。
+- [x] 所有二级分类在同一张连续分组卡中，顺序为外观与交互 → 漫画 → 下载 → 系统与关于。
+- [x] 窄屏列表与宽屏左侧导航使用同一套扁平顺序。
+- [x] 分类详情页内的二级分组标题保持不变。
+- [x] 「下载」分类标题本次不改名。
+- [x] 测试覆盖无一级标题、单一分组、分类顺序与宽窄布局。
+
+## Comments
+
+- 2026-11-06: Resolved on `integration/manga-ui-polish` (ticket merge `72f3a0f8`; dual-axis review-fix merge `a0571b85`). Two pre-existing lookup-settings tests still fail because my-comic's schema intentionally lacks the lookup destination.
