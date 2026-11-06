@@ -15,7 +15,6 @@ import 'package:fushi/i18n/strings.g.dart';
 import 'package:fushi/src/focus/page_scroll_registry.dart';
 import 'package:fushi/src/settings/settings_context.dart';
 import 'package:fushi/src/settings/settings_destination.dart';
-import 'package:fushi/src/settings/settings_navigation_groups.dart';
 import 'package:fushi/src/settings/settings_search.dart';
 import 'package:fushi/src/utils/adaptive/adaptive_platform.dart';
 import 'package:fushi/src/utils/components/fushi_design_tokens.dart';
@@ -246,17 +245,6 @@ SettingsIconTone settingsIconToneFor(SettingsDestinationId id) => switch (id) {
   SettingsDestinationId.appIcon ||
   SettingsDestinationId.shortcuts => SettingsIconTone.gray,
 };
-
-/// 导航分组的色调（分组标题的小色点、搜索结果分组头用）。
-SettingsIconTone settingsIconToneForGroup(SettingsNavigationGroupId id) =>
-    switch (id) {
-      SettingsNavigationGroupId.interface => SettingsIconTone.purple,
-      SettingsNavigationGroupId.content => SettingsIconTone.blue,
-      SettingsNavigationGroupId.learning => SettingsIconTone.orange,
-      SettingsNavigationGroupId.connections => SettingsIconTone.teal,
-      SettingsNavigationGroupId.data => SettingsIconTone.green,
-      SettingsNavigationGroupId.app => SettingsIconTone.gray,
-    };
 
 /// (容器色, 前景色)。M3E 走 ColorScheme 的三组强调 container（饱和色块），
 /// Apple 走 iOS 系统色实底 + 白色字形。墨水屏下一律塌缩成描边友好的中性色。

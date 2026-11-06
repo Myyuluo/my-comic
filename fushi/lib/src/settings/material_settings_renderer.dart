@@ -115,8 +115,9 @@ class MaterialSettingsRenderer implements SettingsRenderer {
     );
   }
 
-  /// Android 16「设置」首页的分类列表（不含滚动容器）：每组一个分段分组列表，
-  /// 行 = 单色图标 + 标题（不显示摘要，用户 2026-10-04），点进去 push 详情页。
+  /// Android 16「设置」首页的分类列表（不含滚动容器）：所有二级分类收进同一张
+  /// 连续分组卡，不再有「界面 / 内容 / 连接 / 应用」一级分组标题；行 = 单色图标 +
+  /// 标题（不显示摘要，用户 2026-10-04），点进去 push 详情页。
   /// 设置主页的窄屏布局把它放进带大标题顶栏的滚动视图。
   Widget buildDestinationGroups({
     required SettingsContext settingsContext,
@@ -124,49 +125,42 @@ class MaterialSettingsRenderer implements SettingsRenderer {
     required ValueChanged<SettingsDestinationId> onDestinationSelected,
   }) {
     final BuildContext context = settingsContext.context;
+    final List<SettingsNavigationGroup> groups = groupSettingsDestinations(
+      destinations,
+    );
+    if (groups.isEmpty) return const SizedBox.shrink();
     // 2026-10 动效重做：分类分组首次出现时错峰淡入（进场窗口跟着本列表挂载）。
     return FushiEntranceScope(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          for (final (int index, SettingsNavigationGroup group)
-              in groupSettingsDestinations(destinations).indexed)
-            FushiStaggeredEntrance(
-              key: ValueKey<(String, SettingsNavigationGroupId)>(
-                ('entrance', group.id),
-              ),
-              index: index,
-              child: AdaptiveSettingsSection(
-                key: ValueKey<SettingsNavigationGroupId>(group.id),
-                title: group.id.title(context),
-                children: <Widget>[
-                  for (final SettingsDestination destination
-                      in group.destinations)
-                    FushiListItem(
-                      key: ValueKey<SettingsDestinationId>(destination.id),
-                      // M3E：分类图标坐在按分组着色的形状色块里（饱和
-                      // container 分区），首页一眼能分出「内容 / 学习 / 连接」。
-                      leading: SettingsShapeIcon(
-                        icon: destination.icon,
-                        tone: settingsIconToneFor(destination.id),
-                        size: 36,
-                      ),
-                      title: Text(destination.title),
-                      titleMaxLines: 2,
-                      onTap: () {
-                        onDestinationSelected(destination.id);
-                        Navigator.of(context).push(
-                          MaterialPageRoute<void>(
-                            builder: (_) =>
-                                SettingsDetailPage(destination: destination),
-                          ),
-                        );
-                      },
+      child: FushiStaggeredEntrance(
+        key: const ValueKey<String>('settings-home-entrance'),
+        index: 0,
+        child: AdaptiveSettingsSection(
+          key: settingsHomeGroupKey,
+          children: <Widget>[
+            for (final SettingsDestination destination in groups.single.destinations)
+              FushiListItem(
+                key: ValueKey<SettingsDestinationId>(destination.id),
+                // M3E：分类图标坐在按分类着色的形状色块里（饱和 container
+                // 分区），首页一眼能分出外观 / 漫画 / 下载 / 系统。
+                leading: SettingsShapeIcon(
+                  icon: destination.icon,
+                  tone: settingsIconToneFor(destination.id),
+                  size: 36,
+                ),
+                title: Text(destination.title),
+                titleMaxLines: 2,
+                onTap: () {
+                  onDestinationSelected(destination.id);
+                  Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) =>
+                          SettingsDetailPage(destination: destination),
                     ),
-                ],
+                  );
+                },
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -505,8 +499,8 @@ class _ShellInsetScrollView extends StatelessWidget {
   }
 }
 
-/// 宽屏左栏的分类列表（不含滚动容器）：分组之间留 12，组首一行 titleSmall
-/// onSurfaceVariant 小标题；行见 [Md3SettingsNavRow]。
+/// 宽屏左栏的分类列表（不含滚动容器）：一级分组标题已移除，所有二级分类在一个
+/// 连续列表里按 schema 顺序排列；行见 [Md3SettingsNavRow]。
 class Md3SettingsNavList extends StatelessWidget {
   const Md3SettingsNavList({
     required this.destinations,
@@ -521,49 +515,22 @@ class Md3SettingsNavList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ThemeData theme = Theme.of(context);
-    final FushiDesignTokens tokens = FushiDesignTokens.of(context);
     final List<SettingsNavigationGroup> groups = groupSettingsDestinations(
       destinations,
     );
+    if (groups.isEmpty) return const SizedBox.shrink();
     return Column(
+      key: settingsHomeGroupKey,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        for (int g = 0; g < groups.length; g++)
-          Padding(
-            key: ValueKey<SettingsNavigationGroupId>(groups[g].id),
-            padding: EdgeInsets.only(top: g == 0 ? 0 : tokens.spacing.gap + 4),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                Padding(
-                  padding: EdgeInsets.fromLTRB(
-                    tokens.spacing.rowHorizontal,
-                    tokens.spacing.gap,
-                    tokens.spacing.rowHorizontal,
-                    tokens.spacing.gap / 2,
-                  ),
-                  child: Text(
-                    groups[g].id.title(context),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ),
-                for (final SettingsDestination destination
-                    in groups[g].destinations)
-                  Md3SettingsNavRow(
-                    key: ValueKey<SettingsDestinationId>(destination.id),
-                    icon: destination.icon,
-                    tone: settingsIconToneFor(destination.id),
-                    title: destination.title,
-                    selected: destination.id == selectedDestinationId,
-                    onTap: () => onDestinationSelected(destination.id),
-                  ),
-              ],
-            ),
+        for (final SettingsDestination destination in groups.single.destinations)
+          Md3SettingsNavRow(
+            key: ValueKey<SettingsDestinationId>(destination.id),
+            icon: destination.icon,
+            tone: settingsIconToneFor(destination.id),
+            title: destination.title,
+            selected: destination.id == selectedDestinationId,
+            onTap: () => onDestinationSelected(destination.id),
           ),
       ],
     );

@@ -13,6 +13,7 @@ import 'package:fushi/src/models/preferences_repository.dart';
 import 'package:fushi/src/models/theme_notifier.dart';
 import 'package:fushi/src/reader/reader_settings.dart';
 import 'package:fushi/src/settings/cupertino_settings_renderer.dart';
+import 'package:fushi/src/settings/glass_settings_renderer.dart';
 import 'package:fushi/src/settings/material_settings_renderer.dart';
 import 'package:fushi/src/settings/settings_context.dart';
 import 'package:fushi/src/settings/settings_detail_page.dart';
@@ -114,6 +115,62 @@ SettingsDestination _fixtureDestination() {
     ],
   );
 }
+
+/// 设置首页应展示的 my-comic 二级分类：外观与交互 → 漫画 → 下载 → 系统与关于。
+List<SettingsDestination> _orderedHomeDestinations() => <SettingsDestination>[
+  SettingsDestination(
+    id: SettingsDestinationId.appearance,
+    title: 'Appearance',
+    icon: Icons.palette_outlined,
+    sections: const <SettingsSection>[],
+  ),
+  SettingsDestination(
+    id: SettingsDestinationId.manga,
+    title: 'Manga',
+    icon: Icons.auto_stories_outlined,
+    sections: const <SettingsSection>[],
+  ),
+  SettingsDestination(
+    id: SettingsDestinationId.downloads,
+    title: 'Downloads',
+    icon: Icons.download_outlined,
+    sections: const <SettingsSection>[],
+  ),
+  SettingsDestination(
+    id: SettingsDestinationId.system,
+    title: 'System & about',
+    icon: Icons.info_outline,
+    sections: const <SettingsSection>[],
+  ),
+];
+
+const List<SettingsDestinationId> _orderedHomeDestinationIds =
+    <SettingsDestinationId>[
+      SettingsDestinationId.appearance,
+      SettingsDestinationId.manga,
+      SettingsDestinationId.downloads,
+      SettingsDestinationId.system,
+    ];
+
+/// 一级分组标题「界面 / 内容 / 连接 / 应用」在设置首页必须全部消失。
+void _expectNoFirstLevelGroupHeadings() {
+  for (final String heading in <String>[
+    t.settings_group_interface,
+    t.settings_group_content,
+    t.settings_group_learning,
+    t.settings_group_connections,
+    t.settings_group_data,
+    t.settings_group_app,
+  ]) {
+    expect(find.text(heading), findsNothing, reason: '一级分组标题「$heading」必须移除');
+  }
+}
+
+List<SettingsDestinationId> _rowDestinationIds(Iterable<Widget> rows) => rows
+    .map(
+      (Widget row) => (row.key! as ValueKey<SettingsDestinationId>).value,
+    )
+    .toList(growable: false);
 
 Widget _buildHome(
   CupertinoThemeData? cupertinoTheme,
@@ -537,11 +594,20 @@ void main() {
 
     // MD3 Expressive 重设计（Android 16 平板设置）：宽屏左栏是导航抽屉式
     // Md3SettingsNavList / Md3SettingsNavRow（选中 = secondaryContainer 全圆角
-    // 胶囊），不再是 AdaptiveSettingsSection + FushiListItem(pill)。契约不变：
-    // 固定分组（组标题）、当前项胶囊选中、行尾没有 chevron。
+    // 胶囊），不再是 AdaptiveSettingsSection + FushiListItem(pill)。设置首页
+    // 扁平化后不再画「界面 / 内容 / 连接 / 应用」一级分组标题，全部分类在同一个
+    // 连续列表里按 schema 顺序排列；当前项胶囊选中、行尾没有 chevron。
     expect(find.byType(Md3SettingsNavList), findsOneWidget);
-    expect(find.text(t.settings_group_interface), findsOneWidget);
-    expect(find.text(t.settings_group_content), findsOneWidget);
+    _expectNoFirstLevelGroupHeadings();
+    expect(
+      _rowDestinationIds(
+        tester.widgetList<Md3SettingsNavRow>(find.byType(Md3SettingsNavRow)),
+      ),
+      <SettingsDestinationId>[
+        SettingsDestinationId.appearance,
+        SettingsDestinationId.video,
+      ],
+    );
     expect(find.widgetWithText(Md3SettingsNavRow, 'Video'), findsOneWidget);
     final Md3SettingsNavRow selectedRow = tester.widget<Md3SettingsNavRow>(
       find.widgetWithText(Md3SettingsNavRow, 'Appearance'),
@@ -602,6 +668,182 @@ void main() {
       // 构建，这里不 pump 它）。
       item.onTap!();
       expect(tapped, SettingsDestinationId.appearance);
+    },
+  );
+
+  testWidgets(
+    'material narrow settings home is one untitled card in schema order',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(
+        _harness(
+          platform: TargetPlatform.android,
+          builder: (SettingsContext settingsContext) {
+            return MaterialSettingsRenderer().buildDestinationList(
+              settingsContext: settingsContext,
+              destinations: _orderedHomeDestinations(),
+              selectedDestinationId: SettingsDestinationId.appearance,
+              onDestinationSelected: (_) {},
+            );
+          },
+        ),
+      );
+
+      // 单一连续分组卡：没有一级分组标题，四类按 schema 顺序排在同一张卡里。
+      expect(find.byType(AdaptiveSettingsSection), findsOneWidget);
+      expect(
+        tester
+            .widget<AdaptiveSettingsSection>(
+              find.byType(AdaptiveSettingsSection),
+            )
+            .title,
+        isNull,
+        reason: '设置首页分组卡不再带一级分组标题',
+      );
+      _expectNoFirstLevelGroupHeadings();
+      expect(
+        _rowDestinationIds(
+          tester.widgetList<FushiListItem>(find.byType(FushiListItem)),
+        ),
+        _orderedHomeDestinationIds,
+      );
+    },
+  );
+
+  testWidgets(
+    'material wide settings nav is one flat list in schema order',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(
+        _harness(
+          platform: TargetPlatform.android,
+          builder: (SettingsContext settingsContext) {
+            return MaterialSettingsRenderer().buildDestinationList(
+              settingsContext: settingsContext,
+              destinations: _orderedHomeDestinations(),
+              selectedDestinationId: SettingsDestinationId.appearance,
+              onDestinationSelected: (_) {},
+              pushRoutes: false,
+            );
+          },
+        ),
+      );
+
+      expect(find.byType(Md3SettingsNavList), findsOneWidget);
+      // 宽屏左栏直接坐在页面底上，不叠分组卡。
+      expect(find.byType(AdaptiveSettingsSection), findsNothing);
+      _expectNoFirstLevelGroupHeadings();
+      expect(
+        _rowDestinationIds(
+          tester.widgetList<Md3SettingsNavRow>(find.byType(Md3SettingsNavRow)),
+        ),
+        _orderedHomeDestinationIds,
+      );
+    },
+  );
+
+  testWidgets(
+    'glass narrow settings home is one untitled card in schema order',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(
+        _harness(
+          platform: TargetPlatform.macOS,
+          builder: (SettingsContext settingsContext) {
+            return GlassSettingsRenderer().buildDestinationList(
+              settingsContext: settingsContext,
+              destinations: _orderedHomeDestinations(),
+              selectedDestinationId: SettingsDestinationId.appearance,
+              onDestinationSelected: (_) {},
+            );
+          },
+        ),
+      );
+
+      expect(find.byType(AdaptiveSettingsSection), findsOneWidget);
+      expect(
+        tester
+            .widget<AdaptiveSettingsSection>(
+              find.byType(AdaptiveSettingsSection),
+            )
+            .title,
+        isNull,
+        reason: '玻璃窄屏同一张分组卡，不再有分组标题',
+      );
+      _expectNoFirstLevelGroupHeadings();
+      expect(
+        _rowDestinationIds(
+          tester.widgetList<AdaptiveSettingsNavigationRow>(
+            find.byType(AdaptiveSettingsNavigationRow),
+          ),
+        ),
+        _orderedHomeDestinationIds,
+      );
+    },
+  );
+
+  testWidgets(
+    'glass wide settings sidebar is one flat list in schema order',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(
+        _harness(
+          platform: TargetPlatform.macOS,
+          builder: (SettingsContext settingsContext) {
+            return GlassSettingsRenderer().buildDestinationList(
+              settingsContext: settingsContext,
+              destinations: _orderedHomeDestinations(),
+              selectedDestinationId: SettingsDestinationId.appearance,
+              onDestinationSelected: (_) {},
+              pushRoutes: false,
+            );
+          },
+        ),
+      );
+
+      expect(find.byType(GlassSettingsSidebarList), findsOneWidget);
+      _expectNoFirstLevelGroupHeadings();
+      expect(
+        _rowDestinationIds(
+          tester.widgetList<GlassSettingsSidebarRow>(
+            find.byType(GlassSettingsSidebarRow),
+          ),
+        ),
+        _orderedHomeDestinationIds,
+      );
+    },
+  );
+
+  testWidgets(
+    'cupertino settings home is one untitled section in schema order',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(
+        _harness(
+          platform: TargetPlatform.iOS,
+          designSystemTheme: const FushiDesignSystemTheme(
+            FushiDesignSystem.cupertino,
+          ),
+          builder: (SettingsContext settingsContext) {
+            return CupertinoSettingsRenderer().buildDestinationList(
+              settingsContext: settingsContext,
+              destinations: _orderedHomeDestinations(),
+              selectedDestinationId: SettingsDestinationId.appearance,
+              onDestinationSelected: (_) {},
+            );
+          },
+        ),
+      );
+
+      expect(find.byType(CupertinoListSection), findsOneWidget);
+      expect(
+        tester.widget<CupertinoListSection>(find.byType(CupertinoListSection)).header,
+        isNull,
+        reason: 'Cupertino 设置首页不再有分组 header',
+      );
+      _expectNoFirstLevelGroupHeadings();
+      expect(
+        tester
+            .widgetList<CupertinoListTile>(find.byType(CupertinoListTile))
+            .map((CupertinoListTile tile) => (tile.title as Text).data)
+            .toList(growable: false),
+        <String>['Appearance', 'Manga', 'Downloads', 'System & about'],
+      );
     },
   );
 

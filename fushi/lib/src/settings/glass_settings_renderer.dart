@@ -122,8 +122,9 @@ class GlassSettingsRenderer implements SettingsRenderer {
     );
   }
 
-  /// iOS「设置」首页的分组分类列表（不含滚动容器）：每组一张 inset grouped
-  /// 卡，行 = 强调色单色图标 + 标题 + chevron，点进去 push 详情页。设置主页的
+  /// iOS「设置」首页的分类列表（不含滚动容器）：所有二级分类收进同一张
+  /// inset grouped 卡，不再有「界面 / 内容 / 连接 / 应用」一级分组标题；
+  /// 行 = 强调色单色图标 + 标题 + chevron，点进去 push 详情页。设置主页的
   /// 窄屏布局把它和大标题、搜索框放进同一个滚动视图。
   Widget buildDestinationGroups({
     required SettingsContext settingsContext,
@@ -131,33 +132,27 @@ class GlassSettingsRenderer implements SettingsRenderer {
     required ValueChanged<SettingsDestinationId> onDestinationSelected,
   }) {
     final BuildContext context = settingsContext.context;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+    final List<SettingsNavigationGroup> groups = groupSettingsDestinations(
+      destinations,
+    );
+    if (groups.isEmpty) return const SizedBox.shrink();
+    return AdaptiveSettingsSection(
+      key: settingsHomeGroupKey,
       children: <Widget>[
-        for (final SettingsNavigationGroup group in groupSettingsDestinations(
-          destinations,
-        ))
-          AdaptiveSettingsSection(
-            key: ValueKey<SettingsNavigationGroupId>(group.id),
-            title: group.id.title(context),
-            children: <Widget>[
-              for (final SettingsDestination destination in group.destinations)
-                AdaptiveSettingsNavigationRow(
-                  key: ValueKey<SettingsDestinationId>(destination.id),
-                  title: destination.title,
-                  icon: destination.icon,
-                  showIcon: true,
-                  onTap: () {
-                    onDestinationSelected(destination.id);
-                    Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (_) =>
-                            SettingsDetailPage(destination: destination),
-                      ),
-                    );
-                  },
+        for (final SettingsDestination destination in groups.single.destinations)
+          AdaptiveSettingsNavigationRow(
+            key: ValueKey<SettingsDestinationId>(destination.id),
+            title: destination.title,
+            icon: destination.icon,
+            showIcon: true,
+            onTap: () {
+              onDestinationSelected(destination.id);
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => SettingsDetailPage(destination: destination),
                 ),
-            ],
+              );
+            },
           ),
       ],
     );
@@ -413,8 +408,9 @@ class GlassSettingsRenderer implements SettingsRenderer {
   }
 }
 
-/// macOS「系统设置」侧栏的分类列表（不含滚动容器）：分组之间留 14 的空隙，
-/// 组首一行克制的 11 号 semibold 灰字；行 = 单色强调色图标 + 单行标题。
+/// macOS「系统设置」侧栏的分类列表（不含滚动容器）：一级分组标题已移除，
+/// 所有二级分类在一个连续列表里按 schema 顺序排列；行 = 单色强调色图标 +
+/// 单行标题。
 class GlassSettingsSidebarList extends StatelessWidget {
   const GlassSettingsSidebarList({
     required this.destinations,
@@ -429,46 +425,22 @@ class GlassSettingsSidebarList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final FushiAppleColors apple = appleColorsOf(context);
     final List<SettingsNavigationGroup> groups = groupSettingsDestinations(
       destinations,
     );
+    if (groups.isEmpty) return const SizedBox.shrink();
     return Column(
+      key: settingsHomeGroupKey,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        for (int g = 0; g < groups.length; g++)
-          Padding(
-            key: ValueKey<SettingsNavigationGroupId>(groups[g].id),
-            padding: EdgeInsets.only(top: g == 0 ? 0 : 14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(10, 0, 10, 4),
-                  child: Text(
-                    groups[g].id.title(context),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      height: 1.3,
-                      color: apple.tertiaryLabel,
-                    ),
-                  ),
-                ),
-                for (final SettingsDestination destination
-                    in groups[g].destinations)
-                  GlassSettingsSidebarRow(
-                    key: ValueKey<SettingsDestinationId>(destination.id),
-                    icon: destination.icon,
-                    tone: settingsIconToneFor(destination.id),
-                    title: destination.title,
-                    selected: destination.id == selectedDestinationId,
-                    onTap: () => onDestinationSelected(destination.id),
-                  ),
-              ],
-            ),
+        for (final SettingsDestination destination in groups.single.destinations)
+          GlassSettingsSidebarRow(
+            key: ValueKey<SettingsDestinationId>(destination.id),
+            icon: destination.icon,
+            tone: settingsIconToneFor(destination.id),
+            title: destination.title,
+            selected: destination.id == selectedDestinationId,
+            onTap: () => onDestinationSelected(destination.id),
           ),
       ],
     );
