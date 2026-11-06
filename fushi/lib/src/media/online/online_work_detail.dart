@@ -67,6 +67,8 @@ class OnlineWorkHeader extends StatelessWidget {
     this.backdrop,
     this.overline,
     this.extra,
+    this.titleKey,
+    this.onTitleTap,
   });
 
   /// 封面内容（各域自己的取图组件）；外面统一套 2:3 封面卡。
@@ -108,6 +110,12 @@ class OnlineWorkHeader extends StatelessWidget {
   /// 简介之后的附加内容（Cloudflare 验证、错误提示条等）。
   final Widget? extra;
 
+  /// 落在 hero 大标题上的 key。
+  final Key? titleKey;
+
+  /// hero 大标题的鼠标点击回调；null = 纯展示（既有页面不传，行为不变）。
+  final VoidCallback? onTitleTap;
+
   @override
   Widget build(BuildContext context) {
     final String? summary = description?.trim();
@@ -146,6 +154,8 @@ class OnlineWorkHeader extends StatelessWidget {
         extra != null;
     return MediaDetailHero(
       title: title,
+      titleKey: titleKey,
+      onTitleTap: onTitleTap,
       cover: cover,
       backdrop: backdrop,
       overline: overline,
