@@ -1915,6 +1915,9 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
         item: item,
         isHistory: isHistory,
         showLaunchAction: false,
+        // 漫画卡菜单（含作品页「管理本卷」）把「编辑信息」提到列表首项；
+        // 其它书卡保持历史行为（内置动作追加在末尾）。
+        editInfoFirst: _isMangaItem(item),
         extraActions: (MediaItem it) => _epubExtraActions(it),
       ),
     );
@@ -1972,10 +1975,13 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
     final ModuleVisibility modules = _moduleVisibility;
     final bool isManga = _isMangaItem(item);
     return <DialogAction>[
-      DialogDangerAction(
-        label: t.dialog_delete,
-        onPressed: () => _confirmDeleteEpub(item, bookKey),
-      ),
+      // 漫画卡：删除是列表末位的红色危险项（见方法末尾），不再单列危险区。
+      // 非漫画书卡维持原布局。
+      if (!isManga)
+        DialogDangerAction(
+          label: t.dialog_delete,
+          onPressed: () => _confirmDeleteEpub(item, bookKey),
+        ),
       // 有声书导入仍受听书模块门控（develop 侧）；「重命名」不受它管。
       if (!isManga && modules.isEnabled(ModuleId.listening))
         DialogQuickAction(
@@ -2021,11 +2027,13 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
         ),
       ],
       // 三库页对称：视频卡/游戏卡的菜单里「重命名」都排在列表项首位，书卡对齐。
-      DialogListAction(
-        label: t.book_rename,
-        icon: Icons.drive_file_rename_outline,
-        onPressed: () => _renameBook(context, item),
-      ),
+      // 漫画卡例外：2026-11-05 用户口径，漫画页菜单只保留阅读/管理必需动作。
+      if (!isManga)
+        DialogListAction(
+          label: t.book_rename,
+          icon: Icons.drive_file_rename_outline,
+          onPressed: () => _renameBook(context, item),
+        ),
       // 桌面才有文件管理器契约（[currentRevealHost] 在移动端返回 null）——整条隐藏，
       // 而不是画一个点了没反应的按钮。漫画卷要手改 mokuro 数据时，这一条直接把书目录
       // 里的 manga.json 选中，省掉「书在哪个 bookKey 目录」这层猜。
@@ -2085,6 +2093,15 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
               ? Icons.subtitles_off_outlined
               : Icons.subtitles_outlined,
           onPressed: () => _toggleFloatingLyricFromShelf(bookKey),
+        ),
+      // 漫画卡：删除排在列表末位（不再单列危险区），但保留危险红色；
+      // 点击仍走 [_confirmDeleteEpub] 的原有确认流程。
+      if (isManga)
+        DialogListAction(
+          label: t.dialog_delete,
+          icon: FushiIcons.delete,
+          destructive: true,
+          onPressed: () => _confirmDeleteEpub(item, bookKey),
         ),
     ];
   }
