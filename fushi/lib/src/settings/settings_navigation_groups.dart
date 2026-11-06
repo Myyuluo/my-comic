@@ -1,77 +1,25 @@
 import 'package:flutter/widgets.dart';
-import 'package:fushi/i18n/strings.g.dart';
 import 'package:fushi/src/settings/settings_destination.dart';
 
-/// 一级导航分组固定展开，分区内部的展开策略与此无关。
-enum SettingsNavigationGroupId {
-  interface,
-  content,
-  learning,
-  connections,
-  data,
-  app;
+/// 设置首页唯一连续分组的稳定 key：窄屏分组卡与宽屏左侧导航列表共用。
+const ValueKey<String> settingsHomeGroupKey = ValueKey<String>(
+  'settings-home-group',
+);
 
-  String title(BuildContext context) => switch (this) {
-    interface => context.t.settings_group_interface,
-    content => context.t.settings_group_content,
-    learning => context.t.settings_group_learning,
-    connections => context.t.settings_group_connections,
-    data => context.t.settings_group_data,
-    app => context.t.settings_group_app,
-  };
-}
-
+/// 设置首页的连续分组单元。一级分组标题（界面 / 内容 / 连接 / 应用）已移除，
+/// 分组只承载按 schema 顺序排列的二级分类。
 class SettingsNavigationGroup {
-  SettingsNavigationGroup(this.id, Iterable<SettingsDestination> destinations)
+  SettingsNavigationGroup(Iterable<SettingsDestination> destinations)
     : destinations = List<SettingsDestination>.unmodifiable(destinations);
 
-  final SettingsNavigationGroupId id;
   final List<SettingsDestination> destinations;
 }
 
-SettingsNavigationGroupId settingsNavigationGroupFor(
-  SettingsDestinationId id,
-) => switch (id) {
-  SettingsDestinationId.appearance ||
-  SettingsDestinationId.floatingBall => SettingsNavigationGroupId.interface,
-  SettingsDestinationId.reading ||
-  SettingsDestinationId.manga ||
-  SettingsDestinationId.video ||
-  SettingsDestinationId.game ||
-  SettingsDestinationId.mediaTracking => SettingsNavigationGroupId.content,
-  SettingsDestinationId.lookup ||
-  SettingsDestinationId.cardCreation ||
-  SettingsDestinationId.models => SettingsNavigationGroupId.learning,
-  SettingsDestinationId.downloads ||
-  SettingsDestinationId.services ||
-  SettingsDestinationId.ai => SettingsNavigationGroupId.connections,
-  SettingsDestinationId.profiles ||
-  SettingsDestinationId.syncBackup ||
-  SettingsDestinationId.interconnect ||
-  SettingsDestinationId.storage => SettingsNavigationGroupId.data,
-  SettingsDestinationId.system ||
-  SettingsDestinationId.readerQuickSettings ||
-  SettingsDestinationId.videoQuickSettings ||
-  SettingsDestinationId.appIcon ||
-  SettingsDestinationId.shortcuts => SettingsNavigationGroupId.app,
-};
-
-/// 接收经过平台和模块门控后的列表，保留 schema 组内顺序，不生成空标题。
+/// 接收经过平台和模块门控后的列表，保留 schema 顺序返回唯一的连续分组；
+/// 空输入返回空列表，渲染器据此不画空分组卡。
 List<SettingsNavigationGroup> groupSettingsDestinations(
   List<SettingsDestination> destinations,
 ) {
-  return <SettingsNavigationGroup>[
-    for (final SettingsNavigationGroupId id in SettingsNavigationGroupId.values)
-      if (destinations.any(
-        (SettingsDestination destination) =>
-            settingsNavigationGroupFor(destination.id) == id,
-      ))
-        SettingsNavigationGroup(
-          id,
-          destinations.where(
-            (SettingsDestination destination) =>
-                settingsNavigationGroupFor(destination.id) == id,
-          ),
-        ),
-  ];
+  if (destinations.isEmpty) return const <SettingsNavigationGroup>[];
+  return <SettingsNavigationGroup>[SettingsNavigationGroup(destinations)];
 }

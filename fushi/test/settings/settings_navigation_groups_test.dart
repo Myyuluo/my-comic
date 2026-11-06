@@ -3,57 +3,35 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi/src/settings/settings_destination.dart';
 import 'package:fushi/src/settings/settings_navigation_groups.dart';
 
-SettingsDestination destination(SettingsDestinationId id) =>
+SettingsDestination destination(SettingsDestinationId id, String title) =>
     SettingsDestination(
       id: id,
-      title: id.name,
+      title: title,
       icon: Icons.settings,
       sections: const <SettingsSection>[],
     );
 
 void main() {
-  test('hidden modules do not leave empty headings or change peer order', () {
+  test('all visible destinations form one continuous group in schema order', () {
     final List<SettingsDestination> visible = <SettingsDestination>[
-      destination(SettingsDestinationId.appearance),
-      destination(SettingsDestinationId.lookup),
-      destination(SettingsDestinationId.cardCreation),
-      destination(SettingsDestinationId.downloads),
-      destination(SettingsDestinationId.storage),
-      destination(SettingsDestinationId.system),
+      destination(SettingsDestinationId.appearance, '外观与交互'),
+      destination(SettingsDestinationId.manga, '漫画'),
+      destination(SettingsDestinationId.downloads, '下载'),
+      destination(SettingsDestinationId.system, '系统与关于'),
     ];
-    final List<SettingsNavigationGroup> groups = groupSettingsDestinations(
-      visible,
-    );
-    expect(
-      groups.map((SettingsNavigationGroup group) => group.id),
-      <SettingsNavigationGroupId>[
-        SettingsNavigationGroupId.interface,
-        SettingsNavigationGroupId.learning,
-        SettingsNavigationGroupId.connections,
-        SettingsNavigationGroupId.data,
-        SettingsNavigationGroupId.app,
-      ],
-    );
-    expect(
-      groups.expand((SettingsNavigationGroup group) => group.destinations),
-      visible,
-    );
-    expect(groupSettingsDestinations(const <SettingsDestination>[]), isEmpty);
-  });
 
-  test('tracking stays with content when enabled', () {
-    final List<SettingsDestination> visible = <SettingsDestination>[
-      destination(SettingsDestinationId.reading),
-      destination(SettingsDestinationId.manga),
-      destination(SettingsDestinationId.video),
-      destination(SettingsDestinationId.game),
-      destination(SettingsDestinationId.mediaTracking),
-    ];
     final List<SettingsNavigationGroup> groups = groupSettingsDestinations(
       visible,
     );
-    expect(groups.single.id, SettingsNavigationGroupId.content);
+
+    // 设置首页不再按「界面 / 内容 / 连接 / 应用」切一级分组：所有二级分类
+    // 收进唯一一个连续分组，顺序完全跟随 schema。
+    expect(groups, hasLength(1));
     expect(groups.single.destinations, visible);
     expect(() => groups.single.destinations.clear(), throwsUnsupportedError);
+  });
+
+  test('empty input yields no group (no empty heading or card)', () {
+    expect(groupSettingsDestinations(const <SettingsDestination>[]), isEmpty);
   });
 }
