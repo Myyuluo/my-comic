@@ -496,13 +496,17 @@ const Set<String> kKnownPreferenceKeys = <String>{
   'update_download_source',
   'update_never_remind',
   // bool ×6（v101 统一更新提醒）：各域一个「要不要提醒」开关 + 系统通知总
-  // 开关。默认全 true（装了订阅功能就是想被告知）。域开关关掉 = 该域整批不投递
-  // （不进更新页、不出红点、不发通知）；总开关只掐系统通知，红点照常。
+  // 开关。默认值按域（`UpdateFeedKind.defaultEnabled`）：漫画新章默认 false
+  // （2026-11 用户要求，未开启不后台检查），其余域默认 true。域开关关掉 = 该域
+  // 整批不投递（不进更新页、不出红点、不发通知）；总开关只掐系统通知，红点照常。
   // 调用点走 `UpdateFeedKind.enabledPrefKey` / [kUpdateSystemNotificationsPref]
   // 常量，不是裸字面量——守卫扫不到，但纪律要求登记。
   'updates_notify_anime_extension',
   'updates_notify_app_release',
   'updates_notify_manga_chapter',
+  // bool：漫画新章提醒一次性重置的已跑标记。设备本地（Profile 快照排除）：
+  // 值是「本安装迁过没有」，跟着快照走会让迁移在切 Profile 后重跑。
+  'updates_notify_manga_chapter_default_off_migrated',
   'updates_notify_manga_extension',
   'updates_notify_video_episode',
   'updates_system_notifications',

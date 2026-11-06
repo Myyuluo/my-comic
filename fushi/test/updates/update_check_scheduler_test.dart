@@ -4,6 +4,7 @@ import 'package:fushi_core/fushi_core.dart';
 
 import 'package:fushi/src/models/preferences_repository.dart';
 import 'package:fushi/src/updates/update_check_scheduler.dart';
+import 'package:fushi/src/updates/update_feed_service.dart';
 import 'package:fushi_engine/updates/update_feed_kind.dart';
 
 /// v101 后台检查调度：到期判据、开关门控、失败照样记时刻、重入保护。
@@ -45,9 +46,13 @@ void main() {
 
     clock = clock.add(const Duration(hours: 1));
     await scheduler.runDue();
-    expect(calls, 1, reason: '漫画间隔 6 小时，一小时后不该再查');
+    expect(calls, 1, reason: '漫画间隔 24 小时，一小时后不该再查');
 
-    clock = clock.add(const Duration(hours: 6));
+    clock = clock.add(const Duration(hours: 22)); // 距上次 23 小时
+    await scheduler.runDue();
+    expect(calls, 1, reason: '没到 24 小时仍然不查');
+
+    clock = clock.add(const Duration(hours: 1)); // 距上次 24 小时
     await scheduler.runDue();
     expect(calls, 2);
   });
@@ -116,6 +121,51 @@ void main() {
     enabled = false;
     await scheduler.checkNow(UpdateFeedKind.mangaChapter);
     expect(calls, 2, reason: '关掉的域连手动检查也不跑');
+  });
+
+  test('漫画新章提醒默认关闭：后台 probe 不跑，开启后才跑', () async {
+    prefs = await makePrefs();
+    final UpdateFeedService feed = UpdateFeedService(database: db, prefs: prefs);
+    int calls = 0;
+    final UpdateCheckScheduler scheduler = UpdateCheckScheduler(
+      prefs: prefs,
+      // 生产装配：调度器直接用服务层的开关判据（AppModel.startUpdateChecks）。
+      isKindEnabled: feed.isKindEnabled,
+      probes: <UpdateFeedKind, UpdateProbe>{
+        UpdateFeedKind.mangaChapter: () async => calls++,
+      },
+      now: () => clock,
+    );
+
+    await scheduler.runDue();
+    expect(calls, 0,
+        reason: '未存偏好 = 默认关闭；探针不跑，更新中心条目 / 通知 / 自动下载也就都不会发生');
+    expect(
+      prefs.containsKey(updateLastCheckPrefKey(UpdateFeedKind.mangaChapter)),
+      isFalse,
+      reason: '没查过就不该记「查过了」，否则用户开启后要白等 24 小时',
+    );
+
+    await feed.setKindEnabled(UpdateFeedKind.mangaChapter, true);
+    await scheduler.runDue();
+    expect(calls, 1, reason: '用户开启后立即补一次');
+  });
+
+  test('漫画扩展域默认仍开启：启动轮照常跑 probe', () async {
+    prefs = await makePrefs();
+    final UpdateFeedService feed = UpdateFeedService(database: db, prefs: prefs);
+    int calls = 0;
+    final UpdateCheckScheduler scheduler = UpdateCheckScheduler(
+      prefs: prefs,
+      isKindEnabled: feed.isKindEnabled,
+      probes: <UpdateFeedKind, UpdateProbe>{
+        UpdateFeedKind.mangaExtension: () async => calls++,
+      },
+      now: () => clock,
+    );
+
+    await scheduler.runDue();
+    expect(calls, 1, reason: '扩展更新提醒默认值保持不变');
   });
 
   test('没有登记 probe 的域不跑（番剧走自己的相位节奏）', () async {

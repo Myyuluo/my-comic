@@ -48,7 +48,8 @@ typedef OnlineMangaAutoDownload = Future<void> Function(
 ///
 /// 订阅（设计稿 2026-09-12 §5）：`autoDownload` 为真的条目，这次刷新新出现的章
 /// （[newlyAppearedChapters] 同一判据——首次拉取、身份漂移都不算）交给
-/// [autoDownload] 入队。**不另起 Timer**：追更就挂在这条 6 小时探针上。
+/// [autoDownload] 入队。**不另起 Timer**：追更就挂在这条周期探针上（最小间隔
+/// 由 `UpdateCheckScheduler.kDefaultUpdateCheckIntervals` 决定，漫画域为 24 小时）。
 ///
 /// **串行**而不是并发：几十条书架条目并发打同一个源站等于自制一次小型压测，
 /// 而这是后台任务，快几秒对用户没有任何意义。

@@ -42,11 +42,12 @@ class UpdateCheckScheduler {
 
   /// 各域的最小检查间隔。
   ///
-  /// 漫画 6 小时：连载更新是天级事件，查得再密也只是给源站加压。
+  /// 漫画 24 小时：连载更新是天级事件，查得再密也只是给源站加压（2026-11 从
+  /// 6 小时放宽到 24 小时）。
   /// 扩展与 app 24 小时：版本发布是周级事件，一天一次已经足够快。
   static const Map<UpdateFeedKind, Duration> kDefaultUpdateCheckIntervals =
       <UpdateFeedKind, Duration>{
-    UpdateFeedKind.mangaChapter: Duration(hours: 6),
+    UpdateFeedKind.mangaChapter: Duration(hours: 24),
     UpdateFeedKind.mangaExtension: Duration(hours: 24),
     UpdateFeedKind.animeExtension: Duration(hours: 24),
     UpdateFeedKind.appRelease: Duration(hours: 24),

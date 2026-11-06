@@ -81,10 +81,12 @@ class UpdateFeedService implements UpdateFeedPublisher {
   /// （分组通知的 id 由组名派生，事先不可枚举）。
   final Map<UpdateFeedKind, Set<int>> _shownIds = <UpdateFeedKind, Set<int>>{};
 
-  /// 这个域要不要提醒。默认全开——用户装了订阅功能就是想被告知，默认关等于功能
-  /// 不存在。
+  /// 这个域要不要提醒。默认值按域（[UpdateFeedKind.defaultEnabled]）：漫画新章
+  /// 默认关（用户没开就不后台检查），其余域保持原来的默认开。设置页读的是同一
+  /// 份默认值，两处必须一致。
   bool isKindEnabled(UpdateFeedKind kind) =>
-      _prefs.getPref(kind.enabledPrefKey, defaultValue: true) as bool;
+      _prefs.getPref(kind.enabledPrefKey, defaultValue: kind.defaultEnabled)
+          as bool;
 
   Future<void> setKindEnabled(UpdateFeedKind kind, bool enabled) =>
       _prefs.setPref(kind.enabledPrefKey, enabled);
