@@ -22,13 +22,6 @@ mixin _LocalLibraryHostBooks on _LocalLibraryHostBase, _LocalLibraryHostShared {
     // 合集详情页也不会有这两卷。出清单前先归一次（幂等、已归组时近零开销）。用同步
     // 状态窄锁（与合集清单落库同表同锁）而非 _runExclusive：后者在 app 里罩着整个
     // 自动同步轮，清单请求会被卡到对端超时。归组失败不挡清单，照旧按已有归属出。
-    try {
-      await _runSyncStateExclusive(() async {
-        await BookSeriesGrouper(_db).groupAll();
-      });
-    } catch (e, stack) {
-      engineLog.log('LocalLibraryHostService.listBooks.groupSeries', e, stack);
-    }
     final List<EpubBookRow> rows = await _db.getAllEpubBooks();
     // 该书是否已配「可经 live-sync 导出」的有声书。判据必须与 [listAudiobooks] /
     // [exportAudiobook] 完全同源——仅 Audiobooks 行还不够，导出格式需 srtBookUid，
@@ -45,8 +38,6 @@ mixin _LocalLibraryHostBooks on _LocalLibraryHostBase, _LocalLibraryHostShared {
         await _db.allBookTagAddedAtByName();
     final Map<String, Map<String, int>> tagTombByKey =
         await _db.allTagTombstonesByName(MediaKind.epub);
-    final Map<String, RemoteCollectionMembership> membership =
-        await _primaryCollectionMembership();
     // BUG-1488：host 上用户改过的书名（`preferences` 的 override 覆盖层）随清单
     // 下发，否则 peer 永远只看得到 raw `epub_books.title`。一趟 prefs 读。
     final Map<String, OverrideTitleEntry> overrideTitles =
@@ -119,18 +110,6 @@ mixin _LocalLibraryHostBooks on _LocalLibraryHostBase, _LocalLibraryHostShared {
         tags: tagsByBookKey[r.bookKey] ?? const <String>[],
         tagsAddedAt: tagAddedAtByKey[r.bookKey] ?? const <String, int>{},
         tagTombstones: tagTombByKey[r.bookKey] ?? const <String, int>{},
-        // 合集成员键（v83）：epub 成员行 entryKey = 本机 epub_books.uid，书侧组键
-        // 用 r.uid（§2.3 任务5.1 的 wire 面貌仍是 bookKey，与本地键域无关）。
-        // epub|bookKey 兜底：sync 落地的透传行（书当时还没下载）在下一轮 apply
-        // 收敛前仍以对端 bookKey 为键，窗口期内按 bookKey 也查一把，归属不闪断。
-        // srt-backed 有声书兜底：该书以 srt|uid 入合集时，epub 两键都 miss，
-        // 回退查 srt|uid（BUG-812）。散卡（三键都无）= null。
-        collection: membership[MediaKind.epub.compositeKey(r.uid)] ??
-            membership[MediaKind.epub.compositeKey(r.bookKey)] ??
-            (srtUidByBookKey[r.bookKey] != null
-                ? membership[
-                    MediaKind.srt.compositeKey(srtUidByBookKey[r.bookKey]!)]
-                : null),
         progressPercent: progressByKey[r.bookKey]?.percent ?? 0,
         progressUpdatedAtMs: progressByKey[r.bookKey]?.updatedAtMs ?? 0,
         // client 书架排序要与本地条目同一把尺子：不下发入库时刻，对端只能给远端

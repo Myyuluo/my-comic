@@ -1639,24 +1639,8 @@ void main() {
         }
       }
 
-      // 两条会在窄行渲染成菜单的分段项必须真的被驱动；只数总行数无法发现
-      // 菜单按键串错行后遍历缩水（此前57行仍能越过>40门）。
-      for (final String id in <String>[
-        'reading/Page / scroll',
-        'reading/Hide furigana',
-      ]) {
-        final List<ItemVerdict> rows = verdicts
-            .where((ItemVerdict v) => v.id == id)
-            .toList();
-        expect(rows, hasLength(1), reason: '$id 必须在真实焦点遍历中可达');
-        expect(rows.single.changed, isTrue, reason: '$id 必须真正改值');
-        expect(rows.single.persisted, isTrue, reason: '$id 必须写穿DB');
-        expect(
-          rows.single.effectVerified,
-          isTrue,
-          reason: '$id 必须改变reader CSS渲染输入',
-        );
-      }
+      // 「阅读」分类（reading/Page / scroll 等 EPUB 排版项）随 my-comic v1
+      // 移除非漫画阅读域一并删除，不再有需要驱动的窄行分段项。
 
       // 全局还原：改过的 key 写回初值，测试新增的 key 删除，再校验快照一致。
       final Map<String, String> afterAll = Map<String, String>.from(
@@ -1748,13 +1732,13 @@ void main() {
         destFindings,
         isEmpty,
         reason:
-            '全部 8 个 destination 都应能渲染（根本性修复：测试侧 wire 全部'
+            '全部 5 个 destination 都应能渲染（根本性修复：测试侧 wire 全部'
             '子系统）。渲染失败: ${destFindings.join("; ")}',
       );
       expect(
         verdicts.length,
-        greaterThan(40),
-        reason: '应遍历到跨全部 8 个分组的大量可操作控件（焦点可达）',
+        greaterThan(30),
+        reason: '应遍历到跨全部 5 个分组的大量可操作控件（焦点可达）',
       );
       final List<ItemVerdict> notPersisted = verdicts
           .where((ItemVerdict v) => v.changed && !v.persisted)
@@ -1768,8 +1752,9 @@ void main() {
       );
       expect(
         verdicts.where((ItemVerdict v) => v.effectVerified).length,
-        greaterThanOrEqualTo(8),
-        reason: 'reading(T1)+appearance(T2) 应有多项被探针确认真生效',
+        greaterThanOrEqualTo(3),
+        reason: 'appearance(T2) 应有多项被探针确认真生效'
+            '（reading(T1) 随非漫画阅读域移除）',
       );
       // 下拉行（`SettingsSegmentedItem(dropdown: true)`）以前根本不在 _focusedSettingsRow
       // 的识别名单里，整类设置项一条账都没有。光「认出来」不够——`FocusDriver.adjust` 的
@@ -1781,8 +1766,8 @@ void main() {
           .toList();
       expect(
         pickers.length,
-        greaterThanOrEqualTo(20),
-        reason: '全仓下拉型设置项应被遍历到（认出来这一步）',
+        greaterThanOrEqualTo(2),
+        reason: '保留下来的下拉型设置项应被遍历到（认出来这一步）',
       );
       // 「驱动那一步」以前钉的是绝对数（写穿 >= 18）——那数的是**当前平台恰好有
       // 多少行**，不是不变式。下拉行里有 4 条挂着 `Platform.isWindows`

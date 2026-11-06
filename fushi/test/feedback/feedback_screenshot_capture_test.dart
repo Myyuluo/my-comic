@@ -146,7 +146,7 @@ void main() {
     expect(await fitFeedbackScreenshotPng(small), same(small));
   });
 
-  test('接线：iOS/Android 走原生、悬浮球截图期间藏球、Android 实现了 captureScreen', () {
+  test('接线：iOS/Android 走原生、Android 实现了 captureScreen', () {
     final String diag = File(
       'lib/src/feedback/feedback_diagnostics.dart',
     ).readAsStringSync();
@@ -165,11 +165,7 @@ void main() {
       isTrue,
       reason: '反馈截图要把长边上限传给原生，原生侧缩好再编码',
     );
-    final String host = File(
-      'lib/src/floating_ball/app_floating_ball_host.dart',
-    ).readAsStringSync();
-    expect(host, contains('feedbackWindowCaptureActive.value ||'));
-    expect(host, contains('feedbackWindowCaptureActive.addListener('));
+    // 悬浮球（以及截图期间藏球）随 my-comic v1 移除。
     final String android = File(
       'android/app/src/main/java/app/fushi/reader/FloatingBallChannel.java',
     ).readAsStringSync();

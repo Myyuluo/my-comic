@@ -30,11 +30,9 @@ void main() {
       final int reload = present.indexOf(
         'if (_controller != null) await _loadInitialWindow();',
       );
-      final int streamingReturn = present.indexOf('if (streaming) {');
       expect(installed, greaterThanOrEqualTo(0));
+      // 换章重装必须发生在 payload 挂上之后，否则屏上仍停在旧章文档。
       expect(reload, greaterThan(installed));
-      // 直读章提前 return 之前就要重装，否则在线直读换章照样停在旧文档。
-      expect(streamingReturn, greaterThan(reload));
     },
   );
 

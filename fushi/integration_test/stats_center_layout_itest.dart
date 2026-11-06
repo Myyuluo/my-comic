@@ -10,7 +10,7 @@ import 'package:drift/drift.dart' show Value;
 import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:fushi/src/mining/galgame_library.dart';
+
 import 'package:fushi/src/models/app_model.dart';
 import 'package:fushi/src/pages/implementations/leaderboard/leaderboard_tab.dart';
 import 'package:fushi/src/pages/implementations/statistics_center_page.dart';
@@ -98,38 +98,6 @@ Future<void> _seedThreeDomains(AppModel appModel) async {
   }
 
   // 游戏：库里一条条目 + 三条游玩骨架 + 对应的 hook 字数段。
-  const String gameId = 'game-fixture';
-  await appModel.galgameRepo.addAll(<GalgameEntry>[
-    GalgameEntry(
-      id: gameId,
-      name: 'ATRI -My Dear Moments-',
-      exePath: r'D:\fixture\atri\atri.exe',
-      workdir: r'D:\fixture\atri',
-      addedAt: now.subtract(const Duration(days: 30)),
-    ),
-  ]);
-  for (int d = 0; d < 3; d++) {
-    final DateTime start = DateTime(now.year, now.month, now.day - d, 21);
-    final DateTime end = start.add(Duration(minutes: 40 + d * 11));
-    await db.insertGalgameSession(
-      GalgameSessionsCompanion.insert(
-        gameId: gameId,
-        startMs: start.millisecondsSinceEpoch,
-        endMs: end.millisecondsSinceEpoch,
-        durationSeconds: end.difference(start).inSeconds,
-        dateKey: FushiDatabase.statDateKeyOf(end),
-      ),
-    );
-    await segment(
-      kind: kActivityMediaGame,
-      key: gameId,
-      title: 'ATRI -My Dear Moments-',
-      daysAgo: d,
-      hour: 21,
-      minutes: 0,
-      chars: 2800 + d * 640,
-    );
-  }
 
   // 四个计数面 × 三个来源：时段卡的后四行（查词 / 制卡 / 收藏 / 收藏语句）。
   // 游戏来源是本轮新加的（`lookup/overlay_stat_source.dart`），播它正是为了确认
@@ -186,8 +154,6 @@ void main() {
       const List<(StatsCenterTab, String)> tabs = <(StatsCenterTab, String)>[
         (StatsCenterTab.overview, 'overview'),
         (StatsCenterTab.reading, 'reading'),
-        (StatsCenterTab.video, 'video'),
-        (StatsCenterTab.game, 'game'),
       ];
       for (int i = 0; i < tabs.length; i++) {
         final (StatsCenterTab tab, String name) = tabs[i];

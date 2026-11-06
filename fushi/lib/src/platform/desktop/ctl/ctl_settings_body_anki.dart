@@ -12,7 +12,7 @@ import 'package:fushi/src/anki/ankiconnect_port_repair.dart'
 import 'package:fushi/src/anki/lapis_style_editor_page.dart'
     show LapisVisualEditorResult, applyLapisVisualEditorResult;
 import 'package:fushi/src/anki/lapis_template_service.dart';
-import 'package:fushi/src/mining/video_online_mining_mode.dart';
+
 import 'package:fushi/src/platform/desktop/ctl/ctl_settings_body_items.dart';
 import 'package:fushi/src/settings/settings_context.dart';
 import 'package:fushi/src/settings/settings_destination.dart';
@@ -595,130 +595,6 @@ CtlBodyPage _mediaPage() {
             c.appModel.toggleMiningAudioFollowPlaybackSpeed();
           }
         },
-      ),
-      _choice<VideoMiningImageMode>(
-        id: 'video_mining_image_mode',
-        title: t.video_mining_image_mode,
-        options: <SettingsSegmentOption<VideoMiningImageMode>>[
-          SettingsSegmentOption<VideoMiningImageMode>(
-            value: VideoMiningImageMode.gif,
-            label: t.video_mining_image_mode_gif,
-          ),
-          SettingsSegmentOption<VideoMiningImageMode>(
-            value: VideoMiningImageMode.videoClip,
-            label: t.video_mining_image_mode_video_clip,
-          ),
-          SettingsSegmentOption<VideoMiningImageMode>(
-            value: VideoMiningImageMode.currentFrame,
-            label: t.video_mining_image_mode_current_frame,
-          ),
-          SettingsSegmentOption<VideoMiningImageMode>(
-            value: VideoMiningImageMode.subtitleStart,
-            label: t.video_mining_image_mode_subtitle_start,
-          ),
-        ],
-        selected: (SettingsContext c) => c.appModel.videoMiningImageMode,
-        onChanged: (SettingsContext c, VideoMiningImageMode v) =>
-            c.appModel.setVideoMiningImageMode(v),
-      ),
-      _clipFormatChoice(
-        id: 'video_mining_clip_format',
-        title: t.video_mining_clip_format,
-        read: (SettingsContext c) => c.appModel.videoMiningClipFormat,
-        write: (SettingsContext c, MiningClipFormat v) =>
-            c.appModel.setVideoMiningClipFormat(v),
-      ),
-      _animatedFormatChoice(
-        id: 'video_mining_animated_format',
-        title: t.video_mining_animated_format,
-        read: (SettingsContext c) => c.appModel.videoMiningAnimatedFormat,
-        write: (SettingsContext c, MiningAnimatedFormat v) =>
-            c.appModel.setVideoMiningAnimatedFormat(v),
-      ),
-      _stillFormatChoice(
-        id: 'video_mining_still_format',
-        title: t.video_mining_still_format,
-        subtitle: t.video_mining_still_format_hint,
-        read: (SettingsContext c) => c.appModel.videoMiningStillFormat,
-        write: (SettingsContext c, MiningStillFormat v) =>
-            c.appModel.setVideoMiningStillFormat(v),
-      ),
-      _choice<VideoOnlineMiningMode>(
-        id: 'video_online_mining_mode',
-        title: t.video_online_mining_mode,
-        options: <SettingsSegmentOption<VideoOnlineMiningMode>>[
-          SettingsSegmentOption<VideoOnlineMiningMode>(
-            value: VideoOnlineMiningMode.background,
-            label: t.video_online_mining_mode_background,
-          ),
-          SettingsSegmentOption<VideoOnlineMiningMode>(
-            value: VideoOnlineMiningMode.deferred,
-            label: t.video_online_mining_mode_deferred,
-          ),
-          SettingsSegmentOption<VideoOnlineMiningMode>(
-            value: VideoOnlineMiningMode.wait,
-            label: t.video_online_mining_mode_wait,
-          ),
-        ],
-        selected: (SettingsContext c) => c.appModel.videoOnlineMiningMode,
-        onChanged: (SettingsContext c, VideoOnlineMiningMode v) =>
-            c.appModel.setVideoOnlineMiningMode(v),
-      ),
-      // galgame 制卡（页面里只在 Windows 出现）。
-      _choice<VideoMiningImageMode>(
-        id: 'gal_mining_image_mode',
-        title: t.gal_mining_image_mode,
-        visible: (SettingsContext _) => Platform.isWindows,
-        options: <SettingsSegmentOption<VideoMiningImageMode>>[
-          SettingsSegmentOption<VideoMiningImageMode>(
-            value: VideoMiningImageMode.gif,
-            label: t.video_mining_image_mode_gif,
-          ),
-          SettingsSegmentOption<VideoMiningImageMode>(
-            value: VideoMiningImageMode.currentFrame,
-            label: t.gal_mining_image_mode_screenshot,
-          ),
-          SettingsSegmentOption<VideoMiningImageMode>(
-            value: VideoMiningImageMode.videoClip,
-            label: t.gal_mining_image_mode_video_clip,
-          ),
-        ],
-        // 历史值可能是 subtitleStart（与视频项共用枚举）：与页面一致，按 isStill
-        // 归到静态截图。
-        selected: (SettingsContext c) {
-          final VideoMiningImageMode current = c.appModel.galMiningImageMode;
-          return current.isVideoClip
-              ? VideoMiningImageMode.videoClip
-              : current.isStill
-              ? VideoMiningImageMode.currentFrame
-              : VideoMiningImageMode.gif;
-        },
-        onChanged: (SettingsContext c, VideoMiningImageMode v) =>
-            c.appModel.setGalMiningImageMode(v),
-      ),
-      _clipFormatChoice(
-        id: 'gal_mining_clip_format',
-        title: t.gal_mining_clip_format,
-        visible: (SettingsContext _) => Platform.isWindows,
-        read: (SettingsContext c) => c.appModel.galMiningClipFormat,
-        write: (SettingsContext c, MiningClipFormat v) =>
-            c.appModel.setGalMiningClipFormat(v),
-      ),
-      _animatedFormatChoice(
-        id: 'gal_mining_animated_format',
-        title: t.gal_mining_animated_format,
-        visible: (SettingsContext _) => Platform.isWindows,
-        read: (SettingsContext c) => c.appModel.galMiningAnimatedFormat,
-        write: (SettingsContext c, MiningAnimatedFormat v) =>
-            c.appModel.setGalMiningAnimatedFormat(v),
-      ),
-      _stillFormatChoice(
-        id: 'gal_mining_still_format',
-        title: t.gal_mining_still_format,
-        visible: (SettingsContext _) => Platform.isWindows,
-        read: (SettingsContext c) => c.appModel.galMiningStillFormat,
-        write: (SettingsContext c, MiningStillFormat v) =>
-            c.appModel.setGalMiningStillFormat(v),
       ),
     ],
   );

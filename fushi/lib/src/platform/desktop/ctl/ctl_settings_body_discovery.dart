@@ -1,5 +1,4 @@
 import 'package:flutter/widgets.dart';
-import 'package:fushi/src/media/discovery/alist_site_config.dart';
 import 'package:fushi/src/media/discovery/audiobookshelf_server_config.dart';
 import 'package:fushi/src/media/discovery/discovery_server_probes.dart';
 import 'package:fushi/src/media/discovery/media_discovery_source.dart';
@@ -35,11 +34,6 @@ List<CtlBodyPage> buildCtlDiscoveryBodyPages() => <CtlBodyPage>[
     items: <SettingsItem>[_opdsList(), _opdsTest()],
   ),
   CtlBodyPage(
-    breadcrumb: _crumb(t.discovery_alist_settings_title),
-    visible: _discoveryAvailable,
-    items: <SettingsItem>[_alistList(), _alistTest()],
-  ),
-  CtlBodyPage(
     breadcrumb: _crumb(t.discovery_audiobookshelf_settings_title),
     visible: _discoveryAvailable,
     items: <SettingsItem>[_absList(), _absSignIn(), _absSignOut(), _absTest()],
@@ -51,8 +45,6 @@ const String kCtlDiscoverySourcesListId =
     'services.discovery_sources.cli.sources';
 const String kCtlOpdsListId = 'services.opds_servers.cli.servers';
 const String kCtlOpdsTestId = 'services.opds_servers.cli.test';
-const String kCtlAListListId = 'services.alist_sites.cli.sites';
-const String kCtlAListTestId = 'services.alist_sites.cli.test';
 const String kCtlAbsListId = 'services.audiobookshelf_servers.cli.servers';
 const String kCtlAbsSignInId = 'services.audiobookshelf_servers.cli.sign_in';
 const String kCtlAbsSignOutId = 'services.audiobookshelf_servers.cli.sign_out';
@@ -298,123 +290,6 @@ SettingsActionItem _opdsTest() => _action(
     params: const <SettingsCliParam>[_idParam],
     run: (SettingsContext c, Map<String, String> args) async =>
         (await probeOpdsServer(_requireOpds(c, args['id']!))).toJson(),
-  ),
-);
-
-// ── AList / OpenList ────────────────────────────────────────────────────────
-
-List<AListSiteConfig> _alistSites(SettingsContext c) =>
-    c.appModel.prefsRepo.discoveryAListSites;
-
-Map<String, Object?> _alistRecord(AListSiteConfig s) => <String, Object?>{
-  'id': s.id,
-  'name': s.name,
-  'url': s.baseUrl.toString(),
-  'kinds': _kindsWire(s.kinds),
-  'username': s.username,
-  'hasPassword': s.password.isNotEmpty,
-  'enabled': s.enabled,
-  'allowInsecureHttp': s.allowInsecureHttp,
-};
-
-AListSiteConfig _requireAList(SettingsContext c, String id) =>
-    _alistSites(c).firstWhere(
-      (AListSiteConfig s) => s.id == id,
-      orElse: () => throw ArgumentError('没有 AList 站点「$id」'),
-    );
-
-AListSiteConfig _alistFrom(
-  String id,
-  Map<String, String> f, {
-  AListSiteConfig? base,
-}) => AListSiteConfig(
-  id: id,
-  name: f['name']?.trim() ?? base?.name ?? '',
-  baseUrl: f.containsKey('url') ? _parseUrl(f['url']!) : base!.baseUrl,
-  kinds: f.containsKey('kinds')
-      ? _parseKinds(f['kinds']!)
-      : base?.kinds ?? kDefaultAListSiteKinds,
-  username: f['username']?.trim() ?? base?.username ?? '',
-  password: f['password'] ?? base?.password ?? '',
-  enabled: _optBool(f, 'enabled') ?? base?.enabled ?? true,
-  allowInsecureHttp:
-      _optBool(f, 'allow_http') ?? base?.allowInsecureHttp ?? false,
-);
-
-final List<SettingsCliParam> _alistFields = <SettingsCliParam>[
-  const SettingsCliParam('url', help: '站点根地址（如 https://alist.example.com）'),
-  const SettingsCliParam('name', help: '显示名；省略 = 用主机名', required: false),
-  SettingsCliParam(
-    'kinds',
-    help:
-        '显示在哪些库，逗号分隔：'
-        '${DiscoveryMediaKind.values.map((DiscoveryMediaKind k) => k.name).join(',')}'
-        '；省略 = 默认',
-    required: false,
-  ),
-  const SettingsCliParam('username', help: '账号；空 = 游客', required: false),
-  const SettingsCliParam(
-    'password',
-    help: '密码；空串 = 清除',
-    required: false,
-    secret: true,
-  ),
-  const SettingsCliParam(
-    'enabled',
-    help: 'true/false，默认 true',
-    required: false,
-  ),
-  const SettingsCliParam(
-    'allow_http',
-    help: 'true/false：放行明文 HTTP，默认 false',
-    required: false,
-  ),
-];
-
-SettingsCustomItem _alistList() => _listItem(
-  id: kCtlAListListId,
-  title: t.discovery_alist_settings_title,
-  cli: SettingsCliList(
-    list: (SettingsContext c) async => <Map<String, Object?>>[
-      for (final AListSiteConfig s in _alistSites(c)) _alistRecord(s),
-    ],
-    add: (SettingsContext c, Map<String, String> f) async {
-      final AListSiteConfig created = _alistFrom(_newId('alist'), f);
-      await c.appModel.setDiscoveryAListSites(<AListSiteConfig>[
-        ..._alistSites(c),
-        created,
-      ]);
-      return _alistRecord(created);
-    },
-    update: (SettingsContext c, String id, Map<String, String> f) async {
-      final AListSiteConfig next = _alistFrom(
-        id,
-        f,
-        base: _requireAList(c, id),
-      );
-      await c.appModel.setDiscoveryAListSites(<AListSiteConfig>[
-        for (final AListSiteConfig s in _alistSites(c)) s.id == id ? next : s,
-      ]);
-      return _alistRecord(next);
-    },
-    remove: (SettingsContext c, String id) async {
-      _requireAList(c, id);
-      await c.appModel.setDiscoveryAListSites(<AListSiteConfig>[
-        for (final AListSiteConfig s in _alistSites(c))
-          if (s.id != id) s,
-      ]);
-    },
-    fields: _alistFields,
-  ),
-);
-
-SettingsActionItem _alistTest() => _action(
-  id: kCtlAListTestId,
-  title: t.discovery_alist_test,
-  cli: SettingsCliAction(
-    params: const <SettingsCliParam>[_idParam],
-    run: (SettingsContext c, Map<String, String> args) async =>
-        (await probeAListSite(_requireAList(c, args['id']!))).toJson(),
   ),
 );
 

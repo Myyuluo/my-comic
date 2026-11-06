@@ -33,7 +33,6 @@ workspace:
   - packages/fushi_p2p
   - packages/fushi_platform
   - packages/fushi_srs
-  - packages/fushi_torrent
   - packages/gamepads_android_stub
   - packages/gamepads_windows
 
@@ -152,6 +151,13 @@ dependency_overrides:
   # 写法、或把约束放宽成 `>=3.6.1 <5.0.0`——届时删掉这条 override 与补丁目录。
   # sha 一变补丁自动跳过并告警，不会静默失效。
   archive: ^3.6.1
+  # image 4.4+ 要求 archive 4；archive 因 fushi_asr_onnx_ffi 仍钉在 3.6.1，
+  # 保持与锁文件一致的 4.3.0（4.3.0 是最后一个兼容 archive 3.x 的版本）。
+  image: 4.3.0
+  # 与 HEAD 锁文件一致：新版本在 Dart 3.13 / 当前 API 下编译失败
+  # （dartssh2 2.14 的 int? 提升、dio 5.11 新增 transformTimeout）。
+  dartssh2: 2.11.0
+  dio: 5.1.2
 
 # Melos 7 的配置位置就是这里（7.0 起 melos.yaml 被废弃）。包列表不再重复声明：
 # 成员由上面的 workspace: 决定，melos 直接读它。

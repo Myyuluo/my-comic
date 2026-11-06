@@ -1,19 +1,17 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:fushi_engine/ai/web_knowledge.dart';
-import 'package:fushi_engine/media/video/acquisition/video_acquisition_models.dart';
+
 import 'package:fushi/src/utils/fushi_icons.dart';
 import 'package:fushi/src/models/module_id.dart';
 import 'package:fushi/src/models/module_registry.dart';
 import 'package:fushi/src/models/store_compliance.dart';
-import 'package:fushi/src/pages/implementations/ai_interconnect_host_row.dart';
 import 'package:fushi/src/pages/implementations/ai_provider_settings_section.dart';
 import 'package:fushi/src/pages/implementations/ai_web_knowledge_sites_section.dart';
 import 'package:fushi/src/settings/settings_context.dart';
 import 'package:fushi/src/settings/settings_destination.dart';
 import 'package:fushi/src/settings/settings_kit.dart' show settingsResetSpecFor;
 import 'package:fushi/utils.dart';
-import 'package:fushi_engine/media/video/subtitle/subtitle_language_preference.dart'
-    show subtitleLanguageNativeName;
+
 
 /// 「AI」一级设置分类：用户自配的大模型提供商 + 每个功能用哪家。
 ///
@@ -89,172 +87,6 @@ SettingsDestination buildAiDestination() {
                     c.refresh,
                   )
                 : const <Widget>[],
-          ),
-        ],
-      ),
-      SettingsSection(
-        id: 'ai.video_download',
-        title: t.ai_video_download_section,
-        // 「AI 下视频」= 在线发现 + 下载中心两条能力都在才有意义：iOS 合规砍掉任一
-        // 条（判据只在 store_compliance.dart 写一次）或用户关了下载模块，这一段
-        // 整个不渲染、不进搜索索引。
-        visible: (SettingsContext c) =>
-            StoreRestrictedCapability.downloads.isAvailable &&
-            StoreRestrictedCapability.externalDiscovery.isAvailable &&
-            c.appModel.moduleVisibility.isEnabled(ModuleId.browse),
-        presentation: SettingsSectionPresentation.collapsed,
-        summaryBuilder: (SettingsContext c) =>
-            _aiSectionModifiedSummary('ai.video_download', c),
-        items: <SettingsItem>[
-          // 经 Fushi 互联交给已配对电脑办（PR #1749 的 `/api/assistant` 会话）：判据一直是
-          // 「下载执行设备」偏好，此前只挂在下载设置页，AI 页看不到这条路。这里是同一
-          // 偏好的第二处入口；未配对时给可见说明 + 去配对，而不是整行消失。
-          SettingsCustomItem.rows(
-            id: 'ai.interconnect_host',
-            searchTitle: t.ai_interconnect_host_title,
-            rowsBuilder: (SettingsContext c) => c.appModel.isPreferencesReady
-                ? <Widget>[AiInterconnectHostRow(appModel: c.appModel)]
-                : const <Widget>[],
-          ),
-          SettingsSegmentedItem<String>(
-            id: 'ai.video_download_quality',
-            dropdown: true,
-            title: t.ai_video_download_quality,
-            subtitle: t.ai_video_download_quality_hint,
-            options: <SettingsSegmentOption<String>>[
-              SettingsSegmentOption<String>(
-                value: '',
-                label: t.ai_video_download_quality_unset,
-              ),
-              SettingsSegmentOption<String>(
-                value: kVideoAcquisitionPrefAsk,
-                label: t.ai_video_download_quality_ask,
-              ),
-              // 档位字面量（`2160p` …）是分辨率事实，不翻译；`best` / `any` 才有文案。
-              for (final VideoAcquisitionQuality quality
-                  in VideoAcquisitionQuality.values)
-                SettingsSegmentOption<String>(
-                  value: quality.storageKey,
-                  label: switch (quality) {
-                    VideoAcquisitionQuality.best =>
-                      t.ai_video_download_quality_best,
-                    VideoAcquisitionQuality.any =>
-                      t.ai_video_download_quality_any,
-                    _ => quality.storageKey,
-                  },
-                ),
-            ],
-            selected: (SettingsContext c) =>
-                c.appModel.prefsRepo.aiVideoDownloadQuality,
-            onChanged: (SettingsContext c, String value) =>
-                c.appModel.prefsRepo.setAiVideoDownloadQuality(value),
-            defaultValue: '',
-          ),
-          SettingsSegmentedItem<VideoAcquisitionSourcePref>(
-            id: 'ai.video_download_source',
-            dropdown: true,
-            title: t.ai_video_download_source,
-            subtitle: t.ai_video_download_source_hint,
-            options: <SettingsSegmentOption<VideoAcquisitionSourcePref>>[
-              for (final VideoAcquisitionSourcePref source
-                  in VideoAcquisitionSourcePref.values)
-                SettingsSegmentOption<VideoAcquisitionSourcePref>(
-                  value: source,
-                  label: switch (source) {
-                    VideoAcquisitionSourcePref.any =>
-                      t.ai_video_download_source_any,
-                    VideoAcquisitionSourcePref.best =>
-                      t.ai_video_download_source_best,
-                    VideoAcquisitionSourcePref.bluray =>
-                      t.ai_video_download_source_bluray,
-                    VideoAcquisitionSourcePref.web =>
-                      t.ai_video_download_source_web,
-                  },
-                ),
-            ],
-            selected: (SettingsContext c) => VideoAcquisitionSourcePref.parse(
-              c.appModel.prefsRepo.aiVideoDownloadSource,
-            ),
-            onChanged: (SettingsContext c, VideoAcquisitionSourcePref value) =>
-                c.appModel.prefsRepo.setAiVideoDownloadSource(value.storageKey),
-            defaultValue: VideoAcquisitionSourcePref.any,
-          ),
-          SettingsSegmentedItem<VideoAcquisitionBitratePref>(
-            id: 'ai.video_download_bitrate',
-            dropdown: true,
-            title: t.ai_video_download_bitrate,
-            subtitle: t.ai_video_download_bitrate_hint,
-            options: <SettingsSegmentOption<VideoAcquisitionBitratePref>>[
-              for (final VideoAcquisitionBitratePref bitrate
-                  in VideoAcquisitionBitratePref.values)
-                SettingsSegmentOption<VideoAcquisitionBitratePref>(
-                  value: bitrate,
-                  label: switch (bitrate) {
-                    VideoAcquisitionBitratePref.any =>
-                      t.ai_video_download_bitrate_any,
-                    VideoAcquisitionBitratePref.high =>
-                      t.ai_video_download_bitrate_high,
-                    VideoAcquisitionBitratePref.low =>
-                      t.ai_video_download_bitrate_low,
-                  },
-                ),
-            ],
-            selected: (SettingsContext c) => VideoAcquisitionBitratePref.parse(
-              c.appModel.prefsRepo.aiVideoDownloadBitrate,
-            ),
-            onChanged: (SettingsContext c, VideoAcquisitionBitratePref value) =>
-                c.appModel.prefsRepo.setAiVideoDownloadBitrate(
-                  value.storageKey,
-                ),
-            defaultValue: VideoAcquisitionBitratePref.any,
-          ),
-          // 跳过特典：对所有下载进视频来源的任务生效（管线现读偏好），放在这一段是
-          // 因为「带不带 PV」是用户在配 AI 下视频时提的；键是全局下载偏好。
-          SettingsSwitchItem(
-            id: 'ai.video_download_skip_extras',
-            title: t.ai_video_download_skip_extras,
-            subtitle: t.ai_video_download_skip_extras_hint,
-            icon: Icons.movie_filter_outlined,
-            value: (SettingsContext c) =>
-                c.appModel.prefsRepo.videoDownloadSkipExtras,
-            onChanged: (SettingsContext c, bool value) =>
-                c.appModel.prefsRepo.setVideoDownloadSkipExtras(value),
-            defaultValue: false,
-          ),
-          SettingsSegmentedItem<String>(
-            id: 'ai.video_download_subtitle_language',
-            dropdown: true,
-            title: t.ai_video_download_subtitle_language,
-            subtitle: t.ai_video_download_subtitle_language_hint,
-            options: <SettingsSegmentOption<String>>[
-              SettingsSegmentOption<String>(
-                value: '',
-                label: t.ai_video_download_subtitle_language_unset,
-              ),
-              SettingsSegmentOption<String>(
-                value: kVideoAcquisitionPrefAsk,
-                label: t.ai_video_download_subtitle_language_ask,
-              ),
-              SettingsSegmentOption<String>(
-                value: kVideoAcquisitionSubtitleOriginal,
-                label: t.ai_video_download_subtitle_language_original,
-              ),
-              // 语言名用母语写法（与字幕面板同一函数），不随界面语言变。
-              for (final String code in kVideoAcquisitionSubtitleLanguageCodes)
-                SettingsSegmentOption<String>(
-                  value: code,
-                  label: subtitleLanguageNativeName(code),
-                ),
-              SettingsSegmentOption<String>(
-                value: kVideoAcquisitionSubtitleNone,
-                label: t.ai_video_download_subtitle_language_none,
-              ),
-            ],
-            selected: (SettingsContext c) =>
-                c.appModel.prefsRepo.aiVideoDownloadSubtitleLanguage,
-            onChanged: (SettingsContext c, String value) =>
-                c.appModel.prefsRepo.setAiVideoDownloadSubtitleLanguage(value),
-            defaultValue: '',
           ),
         ],
       ),

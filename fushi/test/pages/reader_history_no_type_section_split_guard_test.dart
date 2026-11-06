@@ -76,19 +76,18 @@ void main() {
       isTrue,
       reason: 'SRT 与 EPUB 必须构造进同一合并列表（无类型分区）',
     );
-    // 单一 shelfGroups 交给 _buildShelfGroupSlivers 分区渲染（去碎片方案 A：
-    // 合集格子与散书同一 SliverGrid）。SRT/EPUB 仍在同一合并列表、同一网格混排
-    // （itemCount: groups.length），**依旧没有按类型拆的分区头**——本守卫保护的
-    // 不变量不变，渲染载体从交错 slivers 换成分区 slivers。
+    // 2026-11-05：合集删除后，单一 shelfSlots 直接交给 _buildShelfSlotSlivers
+    // 平铺渲染（每张卡一个格子）。SRT/EPUB 仍在同一合并列表、同一网格混排
+    // （itemCount: slots.length），**依旧没有按类型拆的分区头**。
     expect(
-      body.contains('..._buildShelfGroupSlivers('),
+      body.contains('..._buildShelfSlotSlivers('),
       isTrue,
-      reason: '单一合并 shelfGroups 必须整体交给分区渲染（无类型拆分）',
+      reason: '单一合并 shelfSlots 必须整体交给网格渲染（无类型拆分）',
     );
     expect(
-      body.contains('itemCount: groups.length'),
+      body.contains('itemCount: slots.length'),
       isTrue,
-      reason: '合集格子与散书（SRT+EPUB 混排）共用同一个网格',
+      reason: 'SRT+EPUB 混排共用同一个网格',
     );
   });
 }

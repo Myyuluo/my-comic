@@ -15,8 +15,7 @@ import 'package:fushi_engine/epub/book_title_conflict.dart';
 import 'package:fushi_engine/media/discovery/discovery_models.dart';
 import 'package:fushi_engine/media/external_provider.dart'
     show ExternalProviderFailure;
-import 'package:fushi_engine/media/video/subtitle/subtitle_language_preference.dart'
-    show resolveSubtitleDownloadLanguage;
+
 import 'package:fushi_engine/sync/fushi_library_host_service.dart'
     show
         RemoteVideoInfo,
@@ -44,29 +43,24 @@ import 'package:fushi/src/media/novel/online/lnreader_online_book.dart';
 import 'package:fushi/src/media/novel/online/novel_online_sources_gate.dart';
 import 'package:fushi/src/media/sources/reader_fushi_source.dart'
     show fushiBooksProvider, srtBooksProvider;
-import 'package:fushi/src/media/video/online/anime_source_library.dart';
-import 'package:fushi/src/media/video/online/anime_source_video_client.dart';
-import 'package:fushi/src/media/video/online/video_online_sources_gate.dart';
-import 'package:fushi/src/media/video/video_playback_remote.dart';
+
+
+
+
 import 'package:fushi/src/models/app_model.dart';
 import 'package:fushi/src/models/home_tab.dart';
 import 'package:fushi/src/models/store_compliance.dart';
-import 'package:fushi/src/pages/implementations/download_actions.dart'
-    show startDiscoveryItemDownload;
+
 import 'package:fushi/src/pages/implementations/home_page.dart'
     show homeActiveTabs, homeShellTabNotifier;
-import 'package:fushi/src/platform/desktop/ctl/ctl_ai_download_routes.dart';
+
 import 'package:fushi/src/platform/desktop/ctl/ctl_online_downloads.dart';
 import 'package:fushi/src/platform/desktop/ctl/ctl_online_filters.dart';
 import 'package:fushi/src/platform/desktop/ctl/ctl_online_support.dart';
 import 'package:fushi/src/platform/desktop/ctl/desktop_ctl_context.dart';
-import 'package:fushi/src/media/video/video_library_delete.dart'
-    show VideoLibraryDeleteResult;
-import 'package:fushi/src/pages/implementations/interconnect_download_tasks_section.dart'
-    show
-        canDeleteCompletedDownloadFiles,
-        deleteCompletedInterconnectDownloadFiles;
-import 'package:fushi/src/sync/interconnect_download_manager.dart';
+
+
+
 import 'package:fushi/utils.dart' show createAppHttpClient, t;
 
 /// online 域控制通道路由（CLI 侧命令见 `packages/fushi_cli/lib/src/commands/online_commands.dart`）。
@@ -114,26 +108,6 @@ List<CtlRoute> buildOnlineCtlRoutes(DesktopCtlContext context) {
       '/api/admin/online/manga-downloads/:id',
       ctl.removeMangaDownload,
     ),
-    CtlRoute.get(
-      '/api/admin/online/episode-downloads',
-      ctl.listEpisodeDownloads,
-    ),
-    CtlRoute.get(
-      '/api/admin/online/episode-downloads/:id',
-      ctl.getEpisodeDownload,
-    ),
-    CtlRoute.post(
-      '/api/admin/online/episode-downloads/:id/pause',
-      ctl.pauseEpisodeDownload,
-    ),
-    CtlRoute.post(
-      '/api/admin/online/episode-downloads/:id/resume',
-      ctl.resumeEpisodeDownload,
-    ),
-    CtlRoute.delete(
-      '/api/admin/online/episode-downloads/:id',
-      ctl.removeEpisodeDownload,
-    ),
     CtlRoute.post(
       '/api/admin/sources/:sourceId/settings',
       ctl.setSourceSettings,
@@ -152,7 +126,6 @@ List<CtlRoute> buildOnlineCtlRoutes(DesktopCtlContext context) {
     // ── 发现 ──────────────────────────────────────────────────────────────
     CtlRoute.get('/api/admin/discovery/sources', ctl.listDiscoverySources),
     CtlRoute.get('/api/admin/discovery/search', ctl.searchDiscovery),
-    CtlRoute.post('/api/admin/discovery/acquire', ctl.acquireDiscovery),
     // ── 播放遥控 ──────────────────────────────────────────────────────────
     CtlRoute.get('/api/admin/playback', ctl.playbackStatus),
     CtlRoute.post('/api/admin/playback/control', ctl.playbackControl),
@@ -162,7 +135,6 @@ List<CtlRoute> buildOnlineCtlRoutes(DesktopCtlContext context) {
     CtlRoute.get('/api/admin/navigation', ctl.listNavigation),
     CtlRoute.post('/api/admin/navigation', ctl.navigate),
     // ── AI 下载会话 ───────────────────────────────────────────────────────
-    ...buildAiDownloadCtlRoutes(context),
   ];
 }
 
@@ -190,12 +162,7 @@ class _OnlineCtl {
           throw const CtlFailure.unsupported('本平台没有 Mihon 扩展宿主');
         }
       case OnlineCtlKind.anime:
-        if (!StoreRestrictedCapability.onlineVideoSource.isAvailable) {
-          throw const CtlFailure.rejected('本平台构建不提供在线视频源（商店合规）');
-        }
-        if (!isVideoOnlineSourcesAvailable) {
-          throw const CtlFailure.unsupported('本平台没有 Aniyomi 扩展宿主');
-        }
+        throw const CtlFailure.unsupported('视频在线源已移除');
       case OnlineCtlKind.novel:
         if (!StoreRestrictedCapability.onlineNovelSource.isAvailable) {
           throw const CtlFailure.rejected('本平台构建不提供在线小说源（商店合规）');
@@ -771,32 +738,7 @@ class _OnlineCtl {
           result.hasNextPage,
         );
       case OnlineCtlKind.anime:
-        final MihonManager manager = await _mihon(kind);
-        final MihonSourceContext ctx = await _mihonContext(manager, sourceId);
-        final List<MihonFilter> filters = await _mihonErrors(
-          () => manager.animeRuntime.getAnimeFilters(
-            ctx.extension,
-            ctx.source,
-            preferences: ctx.preferences,
-          ),
-        );
-        final MihonAnimePage result = await _mihonErrors(
-          () => manager.animeRuntime.searchAnime(
-            ctx.extension,
-            ctx.source,
-            page: page,
-            query: query,
-            filters: filters,
-            preferences: ctx.preferences,
-          ),
-        );
-        return _catalogueJson(
-          kind,
-          sourceId,
-          page,
-          result.items,
-          result.hasNextPage,
-        );
+        throw const CtlFailure.unsupported('视频在线源已移除');
     }
   }
 
@@ -845,40 +787,6 @@ class _OnlineCtl {
 
   /// 视频作品：与 [AnimeSourceDetailPage] `_load` 同一条（详情 → 剧集 → 播放序）。
   /// 调用方负责 dispose 返回的 client。
-  Future<AnimeSourceVideoClient> _fetchAnime(
-    MihonManager manager,
-    MihonSourceContext ctx,
-    String url,
-  ) async {
-    final MihonAnime details = await _mihonErrors(
-      () => manager.animeRuntime.getAnimeDetails(
-        ctx.extension,
-        ctx.source,
-        MihonAnime(url: url, title: ''),
-        preferences: ctx.preferences,
-      ),
-    );
-    final MihonAnime anime = MihonAnime(
-      url: url,
-      title: '',
-    ).mergedWithDetails(details);
-    final List<MihonEpisode> episodes = await _mihonErrors(
-      () => manager.animeRuntime.getEpisodes(
-        ctx.extension,
-        ctx.source,
-        anime,
-        preferences: ctx.preferences,
-      ),
-    );
-    return AnimeSourceVideoClient(
-      manager: manager,
-      context: ctx,
-      anime: anime,
-      episodes: sortEpisodesForPlayback(episodes),
-      subtitleLanguageResolver: () => resolveCtlSubtitleLanguage(appModel),
-    );
-  }
-
   /// 漫画章节的阅读序（旧 → 新）。源给的是新在前，与「下载全部」的 `.reversed` 同口径。
   static List<OnlineMangaChapter> _mangaReadingOrder(
     OnlineMangaLibraryEntry entry,
@@ -953,40 +861,7 @@ class _OnlineCtl {
           ],
         };
       case OnlineCtlKind.anime:
-        final MihonManager manager = await _mihon(kind);
-        final MihonSourceContext ctx = await _mihonContext(manager, sourceId);
-        final AnimeSourceVideoClient client = await _fetchAnime(
-          manager,
-          ctx,
-          url,
-        );
-        try {
-          final AnimeSourceEpisodeStatus status = await AnimeSourceLibrary(
-            database: appModel.database,
-          ).episodeStatus(client);
-          final List<RemoteVideoInfo> videos = client.remoteVideos;
-          return <String, Object?>{
-            'kind': kind.name,
-            'source': sourceId,
-            'url': url,
-            'title': client.anime.title,
-            'author': client.anime.author,
-            'summary': client.anime.description,
-            'cover': client.anime.coverUrl,
-            'episodes': <Map<String, Object?>>[
-              for (int i = 0; i < videos.length; i++)
-                <String, Object?>{
-                  'index': i + 1,
-                  'name': client.episodes[i].name,
-                  'number': client.episodes[i].number,
-                  'inLibrary': !status.missing.contains(videos[i].id),
-                  'downloaded': status.downloaded.contains(videos[i].id),
-                },
-            ],
-          };
-        } finally {
-          client.dispose();
-        }
+        throw const CtlFailure.unsupported('视频在线源已移除');
     }
   }
 
@@ -1058,27 +933,7 @@ class _OnlineCtl {
           'chapters': fetched.chapters.length,
         };
       case OnlineCtlKind.anime:
-        // 作品页「加入媒体库」：每集一行在线行，归进作品合集。
-        final MihonManager manager = await _mihon(kind);
-        final MihonSourceContext ctx = await _mihonContext(manager, sourceId);
-        final AnimeSourceVideoClient client = await _fetchAnime(
-          manager,
-          ctx,
-          url,
-        );
-        try {
-          final int added = await AnimeSourceLibrary(
-            database: appModel.database,
-          ).addToLibrary(client);
-          return <String, Object?>{
-            'kind': kind.name,
-            'title': client.anime.title,
-            'added': added,
-            'episodes': client.remoteVideos.length,
-          };
-        } finally {
-          client.dispose();
-        }
+        throw const CtlFailure.unsupported('视频在线源已移除');
     }
   }
 
@@ -1124,50 +979,7 @@ class _OnlineCtl {
           'lockedSkipped': picked.length - pending.length,
         };
       case OnlineCtlKind.anime:
-        if (!StoreRestrictedCapability.downloads.isAvailable) {
-          throw const CtlFailure.rejected('本平台构建不提供下载中心（商店合规）');
-        }
-        final MihonManager manager = await _mihon(kind);
-        final MihonSourceContext ctx = await _mihonContext(manager, sourceId);
-        final AnimeSourceVideoClient client = await _fetchAnime(
-          manager,
-          ctx,
-          url,
-        );
-        final List<RemoteVideoInfo> videos = client.remoteVideos;
-        final List<int> picked;
-        try {
-          picked = parseCtlIndexRanges(range, videos.length);
-        } on Object {
-          client.dispose();
-          rethrow;
-        }
-        final List<String> ids = <String>[
-          for (final int i in picked) videos[i].id,
-        ];
-        // 作品页「下载」同一入口：交给 app 级下载管理器（任务在「浏览 › 下载」）。
-        // 它在第一个 await 之前就用 copyForDownload 拿走了自己的副本，所以这份
-        // template 可以随即释放（作品页退出时也是这样释放它的 client）。
-        final Future<void> started = startAnimeEpisodeDownloads(
-          manager: context.ref.read(interconnectDownloadManagerProvider),
-          library: AnimeSourceLibrary(
-            database: appModel.database,
-            onlinePositionReader: (String id) =>
-                readCtlAnimeOnlinePosition(appModel, id),
-          ),
-          template: client,
-          episodeIds: ids,
-        );
-        client.dispose();
-        unawaited(started);
-        return <String, Object?>{
-          'kind': kind.name,
-          'title': client.anime.title,
-          'queued': ids.length,
-          // 任务键 = 剧集 id（`source anime-dl get/pause/resume/rm` 用）。
-          'taskIds': ids,
-          'episodes': <String>[for (final int i in picked) videos[i].title],
-        };
+        throw const CtlFailure.unsupported('视频在线源已移除');
     }
   }
 
@@ -1290,134 +1102,6 @@ class _OnlineCtl {
     }
     _requireConfirm(call, '清除已结束的漫画下载任务');
     await appModel.mangaDownloadService.clearFinished();
-    return null;
-  }
-
-  // ── 视频源剧集下载（下载页「扩展源」分区，InterconnectDownloadManager）────
-
-  InterconnectDownloadManager _episodeManager() {
-    if (!StoreRestrictedCapability.downloads.isAvailable) {
-      throw const CtlFailure.rejected('本平台构建不提供下载中心（商店合规）');
-    }
-    return context.ref.read(interconnectDownloadManagerProvider);
-  }
-
-  Map<String, Object?> _episodeJson(
-    InterconnectDownloadManager manager,
-    InterconnectDownloadTask task,
-  ) => ctlEpisodeDownloadTaskJson(
-    task,
-    canPause: manager.canPause(task.id),
-    canRestart: manager.canRestart(task.id),
-  );
-
-  InterconnectDownloadTask _requireEpisode(
-    InterconnectDownloadManager manager,
-    String id,
-  ) => manager.taskFor(id) ?? (throw CtlFailure.notFound('没有这个剧集下载任务：$id'));
-
-  /// 缺省只列视频扩展源的剧集；`all=true` 连同互联设备 / 媒体服务器拉取的任务。
-  Future<Object?> listEpisodeDownloads(CtlCall call) async {
-    final InterconnectDownloadManager manager = _episodeManager();
-    final bool all = call.optBool('all') ?? false;
-    final List<InterconnectDownloadTask> tasks =
-        manager.tasks.values
-            .where(
-              (InterconnectDownloadTask t) =>
-                  all || t.origin == InterconnectDownloadOrigin.extension,
-            )
-            .toList()
-          ..sort(
-            (InterconnectDownloadTask a, InterconnectDownloadTask b) =>
-                (b.startedAt ?? 0).compareTo(a.startedAt ?? 0),
-          );
-    return <String, Object?>{
-      'tasks': <Map<String, Object?>>[
-        for (final InterconnectDownloadTask t in tasks)
-          _episodeJson(manager, t),
-      ],
-    };
-  }
-
-  Future<Object?> getEpisodeDownload(CtlCall call) async {
-    final InterconnectDownloadManager manager = _episodeManager();
-    return _episodeJson(manager, _requireEpisode(manager, call.params['id']!));
-  }
-
-  /// 下载页「暂停」：中止传输、保留 `.part`，之后 resume 续传。
-  Future<Object?> pauseEpisodeDownload(CtlCall call) async {
-    final InterconnectDownloadManager manager = _episodeManager();
-    final String id = call.params['id']!;
-    final InterconnectDownloadTask task = _requireEpisode(manager, id);
-    if (!manager.canPause(id)) {
-      throw CtlFailure.conflict('任务不能暂停（当前：${task.status.name}）');
-    }
-    manager.pause(id);
-    return _episodeJson(manager, _requireEpisode(manager, id));
-  }
-
-  /// 下载页「继续」/「重试」：同一个 [InterconnectDownloadManager.resume]，它的
-  /// future 要到任务结束才完成，所以不等；进度用 `source anime-dl get` 查。
-  Future<Object?> resumeEpisodeDownload(CtlCall call) async {
-    final InterconnectDownloadManager manager = _episodeManager();
-    final String id = call.params['id']!;
-    final InterconnectDownloadTask task = _requireEpisode(manager, id);
-    if (!manager.canRestart(id)) {
-      throw CtlFailure.conflict('任务不能继续（当前：${task.status.name}）');
-    }
-    unawaited(manager.resume(id));
-    return _episodeJson(manager, _requireEpisode(manager, id));
-  }
-
-  /// 下载页「删除」：未完成任务 = 放弃（`deleteFiles` 时连 `.part` 删掉，否则只移出
-  /// 列表、`.part` 留着续传）；已完成任务只清记录（成品删除走媒体库删除，那条链
-  /// 还要处理库行与播放句柄）。在下的任务先暂停。
-  Future<Object?> removeEpisodeDownload(CtlCall call) async {
-    final InterconnectDownloadManager manager = _episodeManager();
-    final String id = call.params['id']!;
-    _requireConfirm(call, '删除剧集下载任务');
-    final InterconnectDownloadTask task = _requireEpisode(manager, id);
-    final bool deleteFiles = call.optBool('deleteFiles') ?? false;
-    if (task.isRunning) {
-      throw const CtlFailure.conflict('任务还在下载，先 pause 再删除');
-    }
-    if (task.status == InterconnectDownloadStatus.completed) {
-      if (!deleteFiles) {
-        manager.clearTask(id);
-        return null;
-      }
-      if (!canDeleteCompletedDownloadFiles(task)) {
-        throw const CtlFailure.badRequest(
-          '这条已完成任务没有可删的成品（只有视频扩展源剧集可连文件删除），'
-          '去掉 --delete-files 只清记录',
-        );
-      }
-      // 下载页「删除并删文件」同一条：按文件找库行走媒体库删除链 / 只删孤儿文件，
-      // 删掉了才移出记录；删不掉把原因回给 CLI。
-      VideoLibraryDeleteResult? outcome;
-      final bool done = await deleteCompletedInterconnectDownloadFiles(
-        database: appModel.database,
-        pipeline: appModel.videoDownloadPipelineService,
-        manager: manager,
-        task: task,
-        report: (VideoLibraryDeleteResult result) => outcome = result,
-      );
-      if (!done) {
-        throw CtlFailure.conflict(
-          '成品没删掉，任务保留：${describeCtlVideoDeleteFailure(outcome)}',
-        );
-      }
-      return <String, Object?>{
-        'id': id,
-        'deletedRows': outcome?.deleted ?? 0,
-        'deletedFile': task.destPath,
-      };
-    }
-    if (deleteFiles) {
-      await manager.discard(id);
-    } else {
-      manager.clearTask(id);
-    }
     return null;
   }
 
@@ -1856,50 +1540,16 @@ class _OnlineCtl {
     };
   }
 
-  /// `discover get`：发现页「下载」按钮同一个 [startDiscoveryItemDownload]（torrent /
-  /// 直链 → 下载中心 → 自动入库）。它可能弹出 app 内确认（如 torrent 选目标），所以
-  /// 先把主窗口带到前台。
-  Future<Object?> acquireDiscovery(CtlCall call) async {
-    _requireDiscovery();
-    if (!StoreRestrictedCapability.downloads.isAvailable) {
-      throw const CtlFailure.rejected('本平台构建不提供下载中心（商店合规）');
-    }
-    final String id = call.requireString('id');
-    final DiscoveryResourceItem? item = _discoveryResults[id];
-    if (item == null) {
-      throw CtlFailure.notFound('没有结果 $id（结果只在本次 app 运行内有效，先 discover search）');
-    }
-    if (!item.isDownloadable) throw CtlFailure.rejected('结果 $id 不可下载');
-    await context.focusMainWindow();
-    final BuildContext? buildContext = context.navigator?.context;
-    if (buildContext == null || !buildContext.mounted) {
-      throw const CtlFailure.conflict('主窗口尚未就绪');
-    }
-    final DownloadStartResult result = await startDiscoveryItemDownload(
-      context: buildContext,
-      appModel: appModel,
-      item: item,
-    );
-    return <String, Object?>{
-      'id': id,
-      'title': item.title,
-      'started': result.started,
-      if (result.started && result.summary != null) 'message': result.summary,
-      if (result.failureReason != null) 'reason': result.failureReason,
-    };
-  }
-
   // ── 播放遥控 ────────────────────────────────────────────────────────────
 
-  /// 可遥控的播放器有两种：视频播放页（页面在 initState 登记进
-  /// [videoPlaybackRemotes]，叠加时最上层优先）与进程级有声书会话
-  /// （[AppModel.audiobookSession]，脱离阅读器存活）。`target` 缺省时视频页开着就
-  /// 控制视频（它盖在一切之上），否则有声书；见 [resolveCtlPlaybackTarget]。
-  CtlPlaybackTarget? _playbackTarget(CtlCall call) => resolveCtlPlaybackTarget(
-    requested: call.optString('target'),
-    hasVideo: videoPlaybackRemotes.current.value != null,
-    hasAudiobook: appModel.audiobookSession.controller != null,
-  );
+  /// 可遥控的播放器只有进程级有声书会话（[AppModel.audiobookSession]）。
+  /// `target` 缺省时也返回有声书；显式 `video` 一律视为没有可遥控目标。
+  CtlPlaybackTarget? _playbackTarget(CtlCall call) {
+    if (call.optString('target') == 'video') return null;
+    return appModel.audiobookSession.controller != null
+        ? CtlPlaybackTarget.audiobook
+        : null;
+  }
 
   AudiobookPlayerController _requirePlayer() {
     final AudiobookPlayerController? controller =
@@ -1910,32 +1560,16 @@ class _OnlineCtl {
     return controller;
   }
 
-  /// 视频页遥控面 + 就绪快照；没有视频页 / 控制器未就绪都是 409。
-  (VideoPlaybackRemote, VideoPlaybackSnapshot) _requireVideo() {
-    final VideoPlaybackRemote? remote = videoPlaybackRemotes.current.value;
-    if (remote == null) throw const CtlFailure.conflict('没有打开的视频播放页');
-    final VideoPlaybackSnapshot? snapshot = remote.snapshot();
-    if (snapshot == null) {
-      throw const CtlFailure.conflict('视频还在加载，稍后再试');
-    }
-    return (remote, snapshot);
-  }
-
-  /// 没指定 target 且两边都没有时的统一报错。
+  /// 没指定 target 且没有可遥控目标时的统一报错。
   CtlPlaybackTarget _requireTarget(CtlCall call) =>
       _playbackTarget(call) ??
-      (throw const CtlFailure.conflict('没有正在播放的视频或有声书'));
+      (throw const CtlFailure.conflict('没有正在播放的有声书'));
 
   Future<Object?> playbackStatus(CtlCall call) async {
     switch (_playbackTarget(call)) {
       case null:
         return <String, Object?>{'active': false};
       case CtlPlaybackTarget.video:
-        final VideoPlaybackRemote? remote = videoPlaybackRemotes.current.value;
-        if (remote == null) {
-          return <String, Object?>{'active': false, 'kind': 'video'};
-        }
-        return ctlVideoPlaybackJson(remote.snapshot());
       case CtlPlaybackTarget.audiobook:
         final AudiobookSession session = appModel.audiobookSession;
         final AudiobookPlayerController? controller = session.controller;
@@ -1967,30 +1601,12 @@ class _OnlineCtl {
 
   Future<Object?> playbackControl(CtlCall call) async {
     final String action = call.requireString('action');
-    if (_requireTarget(call) == CtlPlaybackTarget.video) {
-      final (VideoPlaybackRemote remote, _) = _requireVideo();
-      switch (action) {
-        case 'pause':
-          await remote.pause();
-        case 'resume' || 'play':
-          await remote.play();
-        case 'toggle':
-          await remote.toggle();
-        case 'next':
-          await remote.nextCue();
-        case 'prev':
-          await remote.previousCue();
-        default:
-          _unknownAction(action);
-      }
-      return ctlVideoPlaybackJson(remote.snapshot());
-    }
+    _requireTarget(call);
     final AudiobookPlayerController controller = _requirePlayer();
     switch (action) {
       case 'pause':
         await controller.pause();
       case 'resume' || 'play':
-        // play() 的 Future 在部分后端挂到暂停才 settle（BUG-1736），不能等。
         unawaited(controller.play());
       case 'toggle':
         if (controller.isPlaying) {
@@ -2016,26 +1632,12 @@ class _OnlineCtl {
     if (seconds == null) throw const CtlFailure.badRequest('seconds 必须是数字');
     final bool relative = call.optBool('relative') ?? false;
     final int deltaMs = (seconds * 1000).round();
-    if (_requireTarget(call) == CtlPlaybackTarget.video) {
-      final (VideoPlaybackRemote remote, VideoPlaybackSnapshot snapshot) =
-          _requireVideo();
-      if (relative) {
-        // 与快捷键 ←/→ 同一入口（controller.seekRelative，含连按基准累积）。
-        await remote.seekByMs(deltaMs);
-      } else {
-        final int total = snapshot.durationMs ?? 0;
-        await remote.seekToMs(
-          total > 0 ? deltaMs.clamp(0, total) : (deltaMs < 0 ? 0 : deltaMs),
-        );
-      }
-      return ctlVideoPlaybackJson(remote.snapshot());
-    }
+    _requireTarget(call);
     final AudiobookPlayerController controller = _requirePlayer();
     final int targetMs = relative
         ? controller.globalPosition.inMilliseconds + deltaMs
         : deltaMs;
     final int total = controller.totalDuration.inMilliseconds;
-    // 有声书面板整书进度条同一入口（跨文件拆分在控制器里做）。
     await controller.seekGlobalMs(
       total > 0 ? targetMs.clamp(0, total) : (targetMs < 0 ? 0 : targetMs),
     );
@@ -2048,12 +1650,7 @@ class _OnlineCtl {
     if (rate == null || rate < 0.25 || rate > 4) {
       throw const CtlFailure.badRequest('rate 必须在 0.25–4 之间');
     }
-    if (_requireTarget(call) == CtlPlaybackTarget.video) {
-      final (VideoPlaybackRemote remote, _) = _requireVideo();
-      // 页内倍速菜单同一入口（夹取 + 按 bookUid 持久化）。
-      await remote.setRate(rate);
-      return ctlVideoPlaybackJson(remote.snapshot());
-    }
+    _requireTarget(call);
     final AudiobookPlayerController controller = _requirePlayer();
     await controller.setSpeed(rate);
     return _playbackJson(appModel.audiobookSession, controller);
@@ -2099,30 +1696,6 @@ class _OnlineCtl {
       'covered': navigator.canPop(),
     };
   }
-}
-
-/// 视频源剧集的默认字幕语言：与作品页 `_preferredSubtitleLanguage` 同一条链
-/// （字幕工作台默认语言 > 默认内容语言）。
-String? resolveCtlSubtitleLanguage(AppModel appModel) =>
-    resolveSubtitleDownloadLanguage(
-      explicitSubtitlePreference: appModel.jimakuDefaultLanguage,
-      globalDefaultContentLanguage: appModel.defaultContentLanguage,
-    );
-
-/// 一集的在线断点：与作品页 `_readOnlinePosition` 同一把键（播放页合集模式落盘的
-/// `(成员 id, 0)`），下载完登记本地行时接过去。没有 / 近起点返回 null。
-AnimeOnlinePosition? readCtlAnimeOnlinePosition(AppModel appModel, String id) {
-  int readInt(String key) {
-    final Object? raw = appModel.prefsRepo.getPref(key, defaultValue: 0);
-    return raw is num ? raw.toInt() : int.tryParse('${raw ?? ''}') ?? 0;
-  }
-
-  final int positionMs = readInt(videoRemotePositionEpisodePrefKey(id, 0));
-  if (positionMs <= 0) return null;
-  return (
-    positionMs: positionMs,
-    playedAt: readInt(videoRemotePositionEpisodeAtPrefKey(id, 0)),
-  );
 }
 
 /// CLI 发起的 LNReader 整本下载：与作品页下载对话框同一个 [LnReaderBookDownload.run]，

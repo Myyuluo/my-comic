@@ -86,7 +86,9 @@ class InterconnectPlaybackPositionSync {
 
   /// host 端位置（host 无记录 → 0@0）。
   Future<PlaybackPosition> remotePosition(String key) => switch (kind) {
-    PlaybackPositionKind.video => _backend.remoteVideoPosition(key),
+    // 视频域已移除；保留了旧记录的读路径，但不再与 host 同步。
+    PlaybackPositionKind.video =>
+      Future<PlaybackPosition>.value((positionMs: 0, updatedAtMs: 0)),
     PlaybackPositionKind.audiobook => _backend.remoteAudiobookPosition(key),
   };
 
@@ -171,11 +173,8 @@ class InterconnectPlaybackPositionSync {
   }
 
   Future<void> _putRemote(String key, PlaybackPosition p) => switch (kind) {
-    PlaybackPositionKind.video => _backend.putRemoteVideoPosition(
-      key,
-      p.positionMs,
-      p.updatedAtMs,
-    ),
+    // 视频域已移除，不再向 host 推送视频位置。
+    PlaybackPositionKind.video => Future<void>.value(),
     PlaybackPositionKind.audiobook => _backend.putRemoteAudiobookPosition(
       key,
       p.positionMs,

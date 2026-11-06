@@ -52,11 +52,7 @@ void main() {
       1,
       reason: '_tryPanelTurn 按导航开关与 isWebtoon 收口',
     );
-    expect(
-      flat.contains('if(_mode.isWebtoon)returnconst<Rect>[];'),
-      isTrue,
-      reason: '制卡取分镜（_miningPanels）同样按 isWebtoon 跳过分镜一级',
-    );
+    // 制卡取分镜（_miningPanels）随非漫画阅读器控件一起移除，不再守卫。
     expect(
       flat.contains('appModel.mangaPanelNavigation&&_mode.isPaged'),
       isTrue,

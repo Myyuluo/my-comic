@@ -2,9 +2,9 @@ import 'dart:typed_data';
 
 import 'package:test/test.dart';
 import 'package:fushi_engine/media/manga/panel_detection.dart';
-import 'package:fushi_engine/ocr/ocr_inference.dart';
-import 'package:fushi_engine/ocr/text_detector.dart'
-    show computeLetterbox, kDetInputSize;
+import 'package:fushi_engine/media/manga/panel_geometry.dart';
+
+
 import 'package:fushi_engine/media/manga/mokuro_payload.dart';
 import 'package:fushi_engine/media/manga/mokuro_sidecar.dart';
 

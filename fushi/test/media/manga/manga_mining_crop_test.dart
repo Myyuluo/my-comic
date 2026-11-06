@@ -1,9 +1,10 @@
 import 'dart:ui' show Rect, Size;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:fushi/src/mining/advanced_mining/advanced_mining_capabilities.dart';
+
 import 'package:fushi_anki/fushi_anki_core.dart';
 import 'package:fushi/src/media/manga/manga_mining_crop.dart';
+import 'package:fushi/src/mining/advanced_mining/advanced_mining_capabilities.dart';
 import 'package:fushi_engine/media/manga/panel_detection.dart';
 
 void main() {

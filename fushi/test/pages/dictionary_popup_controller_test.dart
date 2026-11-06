@@ -3,7 +3,7 @@ import 'package:fake_async/fake_async.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi/src/diagnostics/lookup_perf_trace.dart';
-import 'package:fushi/src/diagnostics/video_diag_log.dart';
+
 import 'package:fushi/src/pages/implementations/dictionary_popup_controller.dart';
 import 'package:fushi/src/pages/implementations/dictionary_popup_webview.dart'
     show DictionaryPopupWebViewState;
@@ -34,12 +34,9 @@ void main() {
   });
 
   // PR #1598 审查：在途的查词计时游标是进程级的，关栈不收尾就会被下一次别的宿主
-  // 的 revealRendered 当成自己的收尾——打出「视频页旧词 total=几分钟」的假行。
+  // 的 revealRendered 当成自己的收尾——打出「旧词 total=几分钟」的假行。
   test('dismissAt / clear 把在途的 LookupPerfTrace 收尾成 dismissed', () {
-    VideoDiagLog.instance.resetForTesting();
-    VideoDiagLog.instance.enableForTesting();
     addTearDown(() {
-      VideoDiagLog.instance.resetForTesting();
       LookupPerfTrace.current = null;
     });
 

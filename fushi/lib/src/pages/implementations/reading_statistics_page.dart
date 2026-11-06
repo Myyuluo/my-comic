@@ -105,17 +105,9 @@ class _ReadingStatisticsPageState extends BasePageState<ReadingStatisticsPage> {
     earliestKey: earliestStatDateKey(_byDay.keys),
   );
 
-  /// 合集归属映射（书架同源）：按书 tile 显示所属合集名用。
-  /// - [_collectionNamesById]：collectionId → 合集名。
-  /// - [_primaryCollectionByEntry]：'epub|<uid>' → 折叠归属的主 collectionId
-  ///   （v83：成员表 epub entryKey = `epub_books.uid`）。
-  /// - [_bookKeyByTitle]：legacy 无身份行（mediaKey ''）只有 title，经 epub_books
-  ///   反查 bookKey 的回退表；带身份的事实直接用 [_BookData.bookKey]。
-  /// - [_epubUidByBookKey]：bookKey → uid 换算表（查归属映射前转一跳）。
-  Map<int, String> _collectionNamesById = <int, String>{};
-  Map<String, int> _primaryCollectionByEntry = <String, int>{};
+  /// legacy 无身份行（mediaKey ''）只有 title，经 epub_books 反查 bookKey 的回退
+  /// 表；带身份的事实直接用 [_BookData.bookKey]。
   Map<String, String> _bookKeyByTitle = <String, String>{};
-  Map<String, String> _epubUidByBookKey = <String, String>{};
 
   /// 库里同名 ≥2 本的 title（BUG-2216：按书分组的吸收否决，legacy 无身份行不许
   /// 吸进任何一本）。
@@ -269,20 +261,8 @@ class _ReadingStatisticsPageState extends BasePageState<ReadingStatisticsPage> {
           .toList();
       _counterRows = counters;
       _favoriteRows = favs;
-      // 合集归属（书架同源）：title→bookKey→'epub|bookKey'→合集名，喂 per-book tile。
-      _collectionNamesById = <int, String>{
-        for (final MediaCollectionRow c in await db.getAllMediaCollections())
-          c.id: c.name,
-      };
-      _primaryCollectionByEntry = await db.getPrimaryCollectionIdByEntry();
       // BUG-2216：同名 ≥2 本的 title 不进反查表（贴给任意一本都是错贴）。
       _bookKeyByTitle = uniqueBookKeyByTitle(epubRows);
-      // v83：成员表 epub entryKey = uid，同批行顺带建换算表（空 uid 异常行不进
-      // 表，查归属时按 bookKey 原样回退）。
-      _epubUidByBookKey = <String, String>{
-        for (final EpubBookMeta r in epubRows)
-          if (r.uid.isNotEmpty) r.bookKey: r.uid,
-      };
       _loadHourlyData(facts);
       _bookItemsByKey = <String, MediaItem>{
         for (final MediaItem item
@@ -585,18 +565,8 @@ class _ReadingStatisticsPageState extends BasePageState<ReadingStatisticsPage> {
         f.title;
   }
 
-  /// 事实行 → 所属合集名（[_collectionNameForBook] 的事实行版，同一 v83 键契约）。
-  String? _statFactCollectionName(StatFact f) {
-    final String? bookKey = f.mediaKey.isNotEmpty
-        ? f.mediaKey
-        : _bookKeyByTitle[f.title];
-    if (bookKey == null) return null;
-    return statCollectionName(
-      MediaKind.epub.compositeKey(_epubUidByBookKey[bookKey] ?? bookKey),
-      _primaryCollectionByEntry,
-      _collectionNamesById,
-    );
-  }
+  /// 合集功能已移除，统计行不再显示合集归属。
+  String? _statFactCollectionName(StatFact f) => null;
 
   /// 范围区块（Niratan「Range」）：范围条（时间窗口分段 + 日期翻页）→ 范围
   /// 时长图 → 所选范围卡 → 学习日历，与总览 / 观看 / 游戏 tab 同序。范围驱动
@@ -1203,19 +1173,8 @@ class _ReadingStatisticsPageState extends BasePageState<ReadingStatisticsPage> {
     await _loadFromDatabase();
   }
 
-  /// 按书 tile 的所属合集名（书架同款「主合集」折叠归属，无则 null）。bookKey 优先
-  /// 用 tile 自带身份，legacy 无身份 tile 才按 title 经 epub_books 反查；再经
-  /// [_epubUidByBookKey] 换算拼 'epub|<uid>' 命中（v83 成员表键；换算不上按 bookKey
-  /// 回退）。
-  String? _collectionNameForBook(_BookData book) {
-    final String? bookKey = book.bookKey ?? _bookKeyByTitle[book.title];
-    if (bookKey == null) return null;
-    return statCollectionName(
-      MediaKind.epub.compositeKey(_epubUidByBookKey[bookKey] ?? bookKey),
-      _primaryCollectionByEntry,
-      _collectionNamesById,
-    );
-  }
+  /// 合集功能已移除，书 tile 不再显示合集归属。
+  String? _collectionNameForBook(_BookData book) => null;
 
   /// BUG-1018 (A1)：统计页书名列**渲染时**应用 override 书名（编辑对话框改名后
   /// 这里同步显示新名）。统计行仍按 DB 原 title 做计数键 / 删除（历史数据身份
@@ -1246,16 +1205,8 @@ class _ReadingStatisticsPageState extends BasePageState<ReadingStatisticsPage> {
           );
   }
 
-  /// 会话行的所属合集名（BUG-2417：合集里段 title 是分册名，行上得写清是哪套
-  /// 书）。会话自带 bookKey 身份（段 mediaKey），经 [_epubUidByBookKey] 换算拼
-  /// 'epub|<uid>'，与 [_collectionNameForBook] 同一 v83 键契约。
-  String? _sessionCollectionName(StudySession s) => s.mediaKey.isEmpty
-      ? null
-      : statCollectionName(
-          MediaKind.epub.compositeKey(_epubUidByBookKey[s.mediaKey] ?? s.mediaKey),
-          _primaryCollectionByEntry,
-          _collectionNamesById,
-        );
+  /// 合集功能已移除，会话行不再显示合集归属。
+  String? _sessionCollectionName(StudySession s) => null;
 
   /// 删一次会话：段写零（同步安全），再从 DB 重新聚合。
   Future<void> _deleteSession(StudySession s) async {

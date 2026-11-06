@@ -3,9 +3,54 @@ import 'dart:io';
 import 'package:fushi_engine/media/video/ffmpeg_backend.dart';
 import 'package:fushi_engine/mining/immersion_mining_request.dart'
     show MiningClipFormat;
-import 'package:fushi_engine/media/video/video_clip_exporter.dart';
+import 'package:path/path.dart' as p;
+
 import 'package:fushi_engine/utils/misc/desktop_audio_clipper.dart'
     show buildFfmpegRemoteInputArgs;
+
+/// 视频片段导出的失败原因。
+enum VideoClipExportFailure {
+  invalidRange,
+  inputMissing,
+  ffmpegUnavailable,
+  ffmpegFailed,
+  outputMissing,
+}
+
+/// 视频片段导出的结果。
+class VideoClipExportResult {
+  const VideoClipExportResult._({
+    required this.outputPath,
+    required this.failure,
+    this.detail,
+  });
+
+  const VideoClipExportResult.success(String outputPath)
+      : this._(outputPath: outputPath, failure: null);
+
+  const VideoClipExportResult.failure(
+    VideoClipExportFailure failure, {
+    String? detail,
+  }) : this._(outputPath: null, failure: failure, detail: detail);
+
+  final String? outputPath;
+  final VideoClipExportFailure? failure;
+  final String? detail;
+
+  bool get isSuccess => outputPath != null && failure == null;
+}
+
+/// MP4 系容器把 moov 放到文件头，便于边下边播。
+List<String> buildClipFaststartArgs(String outputPath) {
+  switch (p.extension(outputPath).toLowerCase()) {
+    case '.mp4':
+    case '.m4v':
+    case '.mov':
+      return const <String>['-movflags', '+faststart'];
+    default:
+      return const <String>[];
+  }
+}
 
 /// One timeline for the selected picture and sentence sound, in the container /
 /// codecs of [format] (see [MiningClipFormat]). A pre-trimmed

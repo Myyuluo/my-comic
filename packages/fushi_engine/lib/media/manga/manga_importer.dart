@@ -10,7 +10,8 @@ import 'package:fushi_engine/epub/book_title_conflict.dart';
 import 'package:fushi_engine/media/manga/import/image_size_probe.dart';
 import 'package:fushi_engine/media/manga/manga_storage.dart';
 import 'package:fushi_engine/media/manga/mokuro_payload.dart';
-import 'package:fushi_engine/ocr/manga_ocr_folder_job.dart';
+import 'package:fushi_engine/media/manga/page_enumeration.dart';
+
 import 'package:fushi_engine/media/media_extensions.dart';
 import 'package:fushi_engine/sync/ttu_filename.dart';
 import 'package:fushi_engine/utils/misc/fushi_time_format.dart';

@@ -9,7 +9,7 @@ import 'package:fushi/i18n/strings.g.dart';
 import 'package:fushi/media.dart';
 import 'package:fushi/models.dart';
 import 'package:fushi/src/anki/anki_view_model.dart';
-import 'package:fushi_engine/media/video/video_book_repository.dart';
+
 import 'package:fushi/src/models/preferences_repository.dart';
 import 'package:fushi/src/leaderboard/leaderboard_service.dart';
 import 'package:fushi/src/pages/implementations/home_dashboard_page.dart';
@@ -155,7 +155,7 @@ void main() {
         child: TranslationProvider(
           child: MaterialApp(
             home: Scaffold(
-              body: HomeDashboardPage(videoRepo: VideoBookRepository(db)),
+              body: const HomeDashboardPage(),
             ),
           ),
         ),
@@ -182,7 +182,7 @@ void main() {
             '之前（BUG-1182），不是取回来再丢弃');
   });
 
-  testWidgets('开关开启（阳性对照）：书 / 视频两个域各取数，证明 harness 真能到达取数处',
+  testWidgets('开关开启（阳性对照）：书域取数，证明 harness 真能到达取数处',
       (WidgetTester tester) async {
     // 默认即 true，显式写出以固定前提。
     await prefs.setShowRemoteEntries(true);
@@ -193,12 +193,9 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(
       remoteCache.readKeys.toSet(),
-      containsAll(<String>[
-        RemoteLibraryCacheKeys.books,
-        RemoteLibraryCacheKeys.videos,
-      ]),
-      reason: '开关开着时两个远端域都必须取数；此对照保证上一条用例的 0 次不是'
-          '「互联配置/鉴权没过」造成的假绿',
+      contains(RemoteLibraryCacheKeys.books),
+      reason: '开关开着时书域必须取数；此对照保证上一条用例的 0 次不是'
+          '「互联配置/鉴权没过」造成的假绿（视频域随视频模块移除）',
     );
   });
 
@@ -216,12 +213,9 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(
       remoteCache.readKeys.toSet(),
-      containsAll(<String>[
-        RemoteLibraryCacheKeys.books,
-        RemoteLibraryCacheKeys.videos,
-      ]),
+      contains(RemoteLibraryCacheKeys.books),
       reason: '开关翻开必须立即补拉远端（对齐 BUG-1182 的 prefsRepo 监听模式），'
-          '不能要求用户重进首页',
+          '不能要求用户重进首页（视频域随视频模块移除）',
     );
     // 2026-10 首页精简删掉了活动时间轴：远端活动流不再拉（省一次网络往返）。
     expect(

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:fushi/src/utils/misc/exit_after_persist.dart';
 import 'dart:io';
 import 'dart:isolate';
 import 'dart:math' as math;
@@ -21,9 +22,9 @@ import 'package:fushi/src/profile/profile_view_model.dart';
 import 'package:fushi/src/media/sources/reader_fushi_source.dart';
 import 'package:fushi/src/models/fushi_reader_palette.dart';
 import 'package:fushi/src/models/module_id.dart';
-import 'package:fushi/src/media/manga/manga_ocr_provider.dart';
+
 import 'package:fushi/src/utils/misc/screen_wakelock.dart';
-import 'package:fushi_engine/ocr/manga_ocr_service.dart';
+
 import 'package:fushi/src/media/manga/manga_overlay_html.dart';
 import 'package:fushi/src/media/manga/manga_reading_mode.dart';
 import 'package:fushi_engine/media/manga/manga_storage.dart';
@@ -31,8 +32,7 @@ import 'package:fushi/src/media/manga/manga_reading_stats.dart';
 import 'package:fushi/src/media/manga/manga_view_prefs.dart';
 import 'package:fushi/src/media/manga/manga_reader_preferences.dart';
 import 'package:fushi/src/media/manga/manga_panel_detector.dart';
-import 'package:fushi/src/media/manga/manga_panel_model_service.dart'
-    show mangaPanelModelRevision;
+
 import 'package:fushi/src/media/manga/manga_panel_navigation.dart';
 import 'package:fushi/src/media/manga/manga_spread_model.dart';
 import 'package:fushi/src/utils/adaptive/fushi_fold_posture.dart';
@@ -47,9 +47,9 @@ import 'package:fushi/src/media/manga/library/online_manga_runtime_adapter.dart'
 import 'package:fushi/src/media/online/online_source_error_text.dart';
 import 'package:fushi_engine/media/manga/mokuro_payload.dart';
 import 'package:fushi_engine/media/manga/panel_detection.dart';
-import 'package:fushi/src/media/manga/ocr/manga_ocr_cache_recovery.dart';
-import 'package:fushi/src/media/manga/ocr/google_lens_disclosure.dart';
-import 'package:fushi/src/media/manga/manga_ocr_wizard_engines.dart';
+
+
+
 import 'package:fushi/src/media/manga/library/online_manga_chapter_updates.dart'
     show mangaChapterDisplayName;
 import 'package:fushi/src/media/manga/reader/manga_reader_chrome.dart';
@@ -92,8 +92,8 @@ import 'package:fushi/src/media/manga/library/manga_resume_point.dart';
 import 'package:fushi/src/media/manga/reader/manga_chapter_drawer.dart';
 import 'package:fushi/src/reader/reader_desktop_chrome.dart'
     show ReaderHeaderAction, ReaderSideSheetSide, showReaderSideSheet;
-import 'package:fushi/src/floating_ball/floating_ball_config.dart';
-import 'package:fushi/src/floating_ball/floating_ball_scene.dart';
+
+
 import 'package:fushi/src/reader/reader_session_remote.dart';
 import 'package:fushi/src/reader/illustration_zoom_viewer.dart'
     show copyImageFileToClipboard, shareImageFile;
@@ -101,7 +101,7 @@ import 'package:fushi/src/startup/exit_flush_registry.dart';
 import 'package:fushi/src/stats/read_unit_ledger.dart';
 import 'package:fushi/src/webview/webview_death_guard.dart';
 import 'package:fushi/utils.dart';
-import 'package:fushi/src/media/video/video_exit_flush.dart';
+
 
 /// Manga reader implementation owned by the standalone manga module.
 ///
@@ -347,8 +347,6 @@ class MangaFushiPage extends BaseSourcePage {
     this.initialChapterIndex,
     this.initialPage,
     this.sourceReview,
-    this.ocrEnginesOverride,
-    this.lensDisclosureOverride,
   });
 
   /// 在线漫画：调用方点名要开的章（下标，见 [mangaReaderOpenChapterIndex]）。null =
@@ -359,13 +357,6 @@ class MangaFushiPage extends BaseSourcePage {
   /// 书级保存位置，在线章取代该章的章级进度。null = 按保存位置恢复。桌面控制通道
   /// `library open --page` 用它。
   final int? initialPage;
-
-  /// 兼容旧调用方的 OCR 引擎集合参数。漫画阅读器不再启动 OCR（ADR-0002），
-  /// 该值在阅读器内已无行为；保留字段避免波及作品页 / 测试构造点。
-  final MangaOcrWizardEngines? ocrEnginesOverride;
-
-  /// 兼容旧调用方的 Google Lens 同意闸门参数。漫画阅读器不再启动 OCR。
-  final GoogleLensDisclosureGate? lensDisclosureOverride;
 
   /// `EpubBooks` 主键（净化后的标题），由 `hoshi://book/<bookKey>` 解析而来。
   ///
@@ -1844,13 +1835,6 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
     // 第一页更新了」）。调用方（换章落末页）随后在新文档上 translate，所以要 await。
     if (_controller != null) await _loadInitialWindow();
     if (!mounted) return;
-    // 在线直读章没有章目录可供缓存恢复，直接跳过。
-    if (streaming) return;
-    // A cancelled/background task intentionally does not replace manga.json,
-    // but every atomic page cache is already safe to use. Restore those pages
-    // after the first paint so opening a large book stays fast and existing
-    // `.mokuro` text overlays remain available across reader restarts.
-    unawaited(_recoverIncrementalOcrCache(row.extractDir, payload));
   }
 
   Future<void> _loadOnlineBookFromShelf(
@@ -2207,71 +2191,6 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
       entry: entry,
       chapterIndex: _shelfChapterIndex,
     );
-  }
-
-  Future<void> _recoverIncrementalOcrCache(
-    String managedDirectory,
-    MokuroPayload loadedPayload,
-  ) async {
-    try {
-      final MangaOcrService localService = ref.read(mangaOcrServiceProvider);
-      final String? localCachePath = localService is MangaOcrPageService
-          ? await (localService as MangaOcrPageService).resolvePageCacheDirPath(
-              imageDirPath: managedDirectory,
-            )
-          : null;
-      final MangaOcrCacheRecovery recovery = await recoverCachedMangaOcr(
-        managedDirectory: managedDirectory,
-        basePayload: loadedPayload,
-        localEngineSignature: localCachePath == null
-            ? null
-            : p.basename(localCachePath),
-      );
-      final MokuroPayload? current = _payload;
-      if (!mounted ||
-          recovery.recoveredPageIndices.isEmpty ||
-          current == null ||
-          current.images.length != recovery.payload.images.length ||
-          _bookRow?.extractDir != managedDirectory) {
-        return;
-      }
-      final List<MokuroImage> merged = List<MokuroImage>.of(current.images);
-      for (final int pageIndex in recovery.recoveredPageIndices) {
-        final MokuroImage recovered = recovery.payload.images[pageIndex];
-        final MokuroImage existing = merged[pageIndex];
-        if (existing.blocks.isNotEmpty) continue;
-        merged[pageIndex] = MokuroImage(
-          url: existing.url,
-          size: recovered.size,
-          blocks: recovered.blocks,
-        );
-      }
-      final MokuroPayload recoveredPayload = MokuroPayload(
-        images: merged,
-        ocr: recovery.payload.ocr ?? current.ocr,
-      );
-      setState(() => _payload = recoveredPayload);
-
-      final Set<int> visiblePages = <int>{
-        for (final int spreadIndex in _loadedSpreads)
-          if (spreadIndex >= 0 && spreadIndex < _spreads.length)
-            ..._spreads[spreadIndex].pageIndices,
-      };
-      for (final int pageIndex in recovery.recoveredPageIndices) {
-        if (visiblePages.contains(pageIndex)) {
-          await _replacePageOcrOverlay(
-            pageIndex,
-            recoveredPayload.images[pageIndex],
-          );
-        }
-      }
-    } catch (error, stack) {
-      ErrorLogService.instance.log(
-        'MangaFushiPage.recoverIncrementalOcrCache',
-        error,
-        stack,
-      );
-    }
   }
 
   /// 当前视口是否横屏（宽 > 高）。自动布局的唯一判据。
@@ -3103,48 +3022,13 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
   /// a keyboard-input gap). Dense magazines remain bounded because character
   /// nodes from the previous spread are removed before the new ones are added.
   Future<void> _replaceSpreadOcr(int spreadIndex) async {
-    final InAppWebViewController? controller = _controller;
-    if (controller == null ||
-        spreadIndex < 0 ||
-        spreadIndex >= _spreads.length) {
-      return;
-    }
-    final Set<int> spreadIndices = MangaFushiPage.mangaWindowRange(
+    // OCR 文本层已随 OCR 域移除；这里只保留「当前窗口加载了哪些 spread」的记账。
+    if (spreadIndex < 0 || spreadIndex >= _spreads.length) return;
+    _loadedSpreads = MangaFushiPage.mangaWindowRange(
       spreadCount: _spreads.length,
       current: spreadIndex,
       radius: _mode.isContinuous ? 1 : _kWindowRadius,
     ).toSet();
-    final Set<int> pageIndices = <int>{
-      for (final int index in spreadIndices) ..._spreads[index].pageIndices,
-    };
-    final Map<String, String> htmlByPage = <String, String>{
-      for (final int pageIndex in pageIndices)
-        if (pageIndex >= 0 && pageIndex < _payload!.images.length)
-          '$pageIndex': mangaOcrBoxesHtml(_payload!.images[pageIndex]),
-    };
-    await controller.evaluateJavascript(
-      source:
-          '''
-(function(){
-  var keep = new Set(${jsonEncode(pageIndices.toList())});
-  var htmlByPage = ${jsonEncode(htmlByPage)};
-  document.querySelectorAll('.manga-page').forEach(function(page){
-    var index = Number(page.getAttribute('data-page'));
-    if (!keep.has(index)) {
-      if (page.getAttribute('data-ocr-loaded') === '1') {
-        page.querySelectorAll('.ocr-box').forEach(function(node){ node.remove(); });
-        page.setAttribute('data-ocr-loaded', '0');
-      }
-      return;
-    }
-    if (page.getAttribute('data-ocr-loaded') === '1') return;
-    (page.querySelector('.manga-source') || page).insertAdjacentHTML('beforeend', htmlByPage[String(index)] || '');
-    page.setAttribute('data-ocr-loaded', '1');
-  });
-})();
-''',
-    );
-    _loadedSpreads = spreadIndices;
   }
 
   Future<void> _jumpToPageAnchor(String dir) async {
@@ -4632,14 +4516,6 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
                     bottom: _chromeBottomInset,
                     child: _buildBody(),
                   ),
-                  // 全局悬浮球的场景按钮（零尺寸，见 [_buildMangaFloatingBallScene]）。
-                  Positioned(
-                    left: 0,
-                    top: 0,
-                    width: 0,
-                    height: 0,
-                    child: _buildMangaFloatingBallScene(),
-                  ),
                   if (_sourceReviewSession
                       case final SourceReviewSession session)
                     Positioned(
@@ -5091,56 +4967,6 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
     ];
   }
 
-  /// 全局悬浮球（docs/specs/2026-09-28-floating-ball.md）的漫画场景按钮：上 / 下
-  /// 一页、章节目录（仅书架在线条目）。翻页走与键盘 / 手柄同一个
-  /// [_executeReaderInputAction]。正文没就绪时不给按钮（与顶栏动作组同一判据）。
-  ///
-  /// 键是 [kMangaFloatingBallButtons] 里的 id；显示哪几颗由 设置 → 悬浮球 → 漫画
-  /// 决定。应用内悬浮球关闭时宿主不渲染，这里无条件挂载也无副作用。
-  Widget _buildMangaFloatingBallScene() {
-    if (!_chromeActionsEnabled) {
-      return const FloatingBallScene(
-        scope: FloatingBallScope.manga,
-        actions: <String, ReaderHeaderAction>{},
-      );
-    }
-    // 图标跟文字走（上一页 ‹ / 下一页 ›），不按右→左翻页镜像：球是一列竖排的
-    // 「图标 + 文字」，与页面左右没有空间对应，镜像后成了「上一页 ›」，用户
-    // 当成画反了（BUG-3365 截图）。
-    return FloatingBallScene(
-      scope: FloatingBallScope.manga,
-      actions: <String, ReaderHeaderAction>{
-        'previous': ReaderHeaderAction(
-          key: const ValueKey<String>('manga_floating_ball_previous'),
-          icon: Icons.chevron_left,
-          label: t.shortcut_action_manga_page_backward,
-          onPressed: () => _executeReaderInputAction(
-            MangaReaderInputAction.previous,
-            source: _MangaReaderInputSource.floatingBall,
-          ),
-        ),
-        'next': ReaderHeaderAction(
-          key: const ValueKey<String>('manga_floating_ball_next'),
-          icon: Icons.chevron_right,
-          label: t.shortcut_action_manga_page_forward,
-          onPressed: () => _executeReaderInputAction(
-            MangaReaderInputAction.next,
-            source: _MangaReaderInputSource.floatingBall,
-          ),
-        ),
-        if (_shelfEntry != null)
-          'chapters': ReaderHeaderAction(
-            key: const ValueKey<String>('manga_floating_ball_chapters'),
-            icon: Icons.list_alt_outlined,
-            label: t.manga_series_chapters_action,
-            onPressed: _switchingChapter
-                ? null
-                : () => unawaited(_showChapterPicker()),
-          ),
-      },
-    );
-  }
-
   IconData get _spreadPreferenceIcon {
     switch (_spreadPreference) {
       case MangaSpreadPreference.auto:
@@ -5543,24 +5369,6 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
     }
     if (!mounted || !_windowGate.owns(ticket)) {
       return;
-    }
-    // OCR may have completed after loadData captured the payload but before
-    // this generation became ready. Reconcile only the current viewport so
-    // those results cannot disappear until the next page turn.
-    final Object? visiblePages = await controller.evaluateJavascript(
-      source: 'window.__mangaVisiblePages && window.__mangaVisiblePages();',
-    );
-    if (!mounted || !_windowGate.owns(ticket)) return;
-    if (_mode.isContinuous && visiblePages is List) {
-      _viewportOcrPages = visiblePages
-          .whereType<num>()
-          .map((num page) => page.toInt())
-          .toList();
-    }
-    for (final int pageIndex in _visibleOverlayPages()) {
-      final MokuroImage page = _payload!.images[pageIndex];
-      if (page.blocks.isNotEmpty) await _replacePageOcrOverlay(pageIndex, page);
-      if (!mounted || !_windowGate.owns(ticket)) return;
     }
     _windowGate.complete(ticket, MangaWindowLoadOutcome.ready);
     _recordProgress();

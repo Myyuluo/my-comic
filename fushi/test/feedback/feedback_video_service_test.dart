@@ -11,8 +11,9 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi/src/feedback/feedback_service.dart';
-import 'package:fushi/src/feedback/feedback_store.dart';
 import 'package:fushi/src/feedback/feedback_video.dart';
+import 'package:fushi/src/feedback/feedback_store.dart';
+
 import 'package:fushi_engine/feedback/feedback_models.dart';
 import 'package:fushi_engine/leaderboard/leaderboard_client.dart';
 import 'package:fushi_engine/leaderboard/leaderboard_identity.dart';

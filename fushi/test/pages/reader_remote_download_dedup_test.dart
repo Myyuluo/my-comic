@@ -96,6 +96,7 @@ void main() {
   String safeKey(String title) =>
       sanitizeTtuFilename(title).replaceAll(RegExp(r'[^A-Za-z0-9._-]+'), '_');
 
+  // 已移除：my-comic v1 移除同步互联后远端书架 UI 恒不可达，保留源码以备恢复。
   testWidgets('#6 远端与本地同 bookKey 的书在配对区被去重隐藏', (WidgetTester tester) async {
     // 本地已有「Dup Book」（同 bookKey）。
     final String key = sanitizeTtuFilename('Dup Book');
@@ -128,8 +129,9 @@ void main() {
           ValueKey<String>('remote_book_card_${safeKey('Only Remote Book')}')),
       findsOneWidget,
     );
-  });
+  }, skip: true);
 
+  // 已移除：my-comic v1 移除同步互联后远端书架 UI 恒不可达，保留源码以备恢复。
   testWidgets('#3 远端书下载中显示进度徽章（进行中反馈），下载按钮被替换', (WidgetTester tester) async {
     final _GatedFakeRemoteBookClient client = _GatedFakeRemoteBookClient();
     await tester.pumpWidget(buildApp(client: client));
@@ -151,7 +153,7 @@ void main() {
 
     client.completer.complete();
     await tester.pump();
-  });
+  }, skip: true);
 }
 
 class _ListFakeRemoteBookClient implements RemoteBookClient {

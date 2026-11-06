@@ -4,8 +4,8 @@ import 'dart:io';
 import 'package:fushi_asr_core/asr_core.dart';
 import 'package:fushi_cli/fushi_cli.dart';
 import 'package:fushi_engine/foundation/engine_paths.dart';
-import 'package:fushi_engine/ocr/manga_ocr_local_model.dart';
-import 'package:fushi_engine/ocr/manga_ocr_service.dart';
+
+
 import 'package:fushi_engine/tts/local/gpt_sovits_local_engine.dart';
 import 'package:fushi_engine/tts/local/gpt_sovits_local_package.dart';
 import 'package:fushi_engine/tts/local/irodori_local_engine.dart';
@@ -31,9 +31,9 @@ import 'package:fushi/src/media/audiobook/tts/tts_voice_settings_page.dart'
         newTtsPresetId,
         ttsDefaultParams,
         ttsPresetsAfterDelete;
-import 'package:fushi/src/media/manga/manga_ocr_provider.dart';
-import 'package:fushi/src/media/manga/ocr/manga_ocr_local_model_labels.dart';
-import 'package:fushi/src/media/manga/ocr/manga_ocr_model_downloads.dart';
+
+
+
 import 'package:fushi/src/platform/desktop/ctl/ctl_settings_wire.dart';
 import 'package:fushi/src/platform/desktop/ctl/desktop_ctl_context.dart';
 import 'package:fushi/src/utils/misc/error_log_service.dart';
@@ -126,10 +126,9 @@ List<CtlRoute> buildSettingsModelCtlRoutes(DesktopCtlContext context) {
 /// 模型类别（路径第一段）。
 abstract final class CtlModelKind {
   static const String asr = 'asr';
-  static const String ocr = 'ocr';
   static const String gptSovits = 'gpt-sovits';
   static const String irodori = 'irodori';
-  static const List<String> all = <String>[asr, ocr, gptSovits, irodori];
+  static const List<String> all = <String>[asr, gptSovits, irodori];
 }
 
 class _CtlModelState {
@@ -160,13 +159,6 @@ class _CtlModelState {
             await _asrJson(pack),
       ],
     },
-    'ocr': <String, Object?>{
-      'supported': createMangaOcrService().isSupportedPlatform,
-      'models': <Map<String, Object?>>[
-        for (final MangaOcrLocalModel model in platformMangaOcrLocalModels())
-          await _ocrJson(model),
-      ],
-    },
     'gptSovits': _gptSovitsJson(),
     'irodori': _irodoriJson(),
   };
@@ -191,8 +183,6 @@ class _CtlModelState {
     switch (_requireKind(kind)) {
       case CtlModelKind.asr:
         return _asrJson(_requireAsrPack(id));
-      case CtlModelKind.ocr:
-        return _ocrJson(_requireOcrModel(id));
       case CtlModelKind.irodori:
         _requireLocalId(CtlModelKind.irodori, id);
         return _irodoriJson();
@@ -206,8 +196,6 @@ class _CtlModelState {
     switch (_requireKind(kind)) {
       case CtlModelKind.asr:
         return _downloadAsr(_requireAsrPack(id));
-      case CtlModelKind.ocr:
-        return _downloadOcr(_requireOcrModel(id));
       case CtlModelKind.irodori:
         _requireLocalId(CtlModelKind.irodori, id);
         return _installIrodori(call);
@@ -227,13 +215,6 @@ class _CtlModelState {
         // 已落盘的 `.part` 留着，下次下载由下载器 Range 续上（与设置页同语义）。
         await _asrDownloads.cancel(pack.id);
         return _asrJson(pack);
-      case CtlModelKind.ocr:
-        final MangaOcrLocalModel model = _requireOcrModel(id);
-        if (!_ocrDownloads.isActive(model)) {
-          throw CtlFailure.conflict('${model.key} 没有进行中的下载');
-        }
-        await _ocrDownloads.cancel(model);
-        return _ocrJson(model);
       case CtlModelKind.irodori:
         _requireLocalId(CtlModelKind.irodori, id);
         final IrodoriLocalEngine engine = _requireIrodoriSupported();
@@ -279,15 +260,6 @@ class _CtlModelState {
     switch (_requireKind(kind)) {
       case CtlModelKind.asr:
         return _deleteAsr(_requireAsrPack(id));
-      case CtlModelKind.ocr:
-        final MangaOcrLocalModel model = _requireOcrModel(id);
-        if (_ocrDownloads.isActive(model)) {
-          throw CtlFailure.conflict('${model.key} 正在下载，先取消');
-        }
-        final int freed = await createMangaOcrService(
-          localModel: model,
-        ).deleteModels();
-        return <String, Object?>{...await _ocrJson(model), 'freedBytes': freed};
       case CtlModelKind.irodori:
         _requireLocalId(CtlModelKind.irodori, id);
         final IrodoriLocalEngine engine = _requireIrodoriSupported();
@@ -425,77 +397,6 @@ class _CtlModelState {
     final AsrModelStore store = await _asrDownloads.openPackStore(pack);
     final int freed = await store.deleteAll();
     return <String, Object?>{...await _asrJson(pack), 'freedBytes': freed};
-  }
-
-  // ── OCR ──────────────────────────────────────────────────────────────────
-
-  MangaOcrModelDownloads get _ocrDownloads =>
-      context.ref.read(mangaOcrModelDownloadsProvider);
-
-  MangaOcrLocalModel _requireOcrModel(String id) {
-    final String needle = id.trim().toLowerCase();
-    final List<MangaOcrLocalModel> models = platformMangaOcrLocalModels();
-    for (final MangaOcrLocalModel model in models) {
-      if (model.key == needle ||
-          model.name.toLowerCase() == needle ||
-          (needle == 'default' && model == kDefaultMangaOcrLocalModel)) {
-        if (!createMangaOcrService(localModel: model).isSupportedPlatform) {
-          throw const CtlFailure.unsupported('本机没有可用的 ONNX Runtime，不能用本地 OCR');
-        }
-        return model;
-      }
-    }
-    throw CtlFailure.notFound(
-      '没有 OCR 模型「$id」；可选：${models.map((MangaOcrLocalModel m) => m.key).join(' | ')}',
-    );
-  }
-
-  Future<Map<String, Object?>> _ocrJson(MangaOcrLocalModel model) async {
-    final MangaOcrService service = createMangaOcrService(localModel: model);
-    final MangaOcrModelDownloadProgress? progress = _ocrDownloads.progressOf(
-      model,
-    );
-    Map<String, Object?> status;
-    try {
-      final MangaOcrModelStatus s = await service.modelStatus();
-      status = <String, Object?>{
-        'ready': s.allReady,
-        'diskBytes': s.diskBytes,
-        'totalBytes': s.totalBytes,
-        'obtainedBytes': s.obtainedBytes,
-      };
-    } catch (e) {
-      status = <String, Object?>{'error': '$e'};
-    }
-    return <String, Object?>{
-      'kind': CtlModelKind.ocr,
-      'id': model.key,
-      'name': localModelLabel(model),
-      ...status,
-      if (progress != null)
-        'download': <String, Object?>{
-          'state': progress.cancelling ? 'cancelling' : 'downloading',
-          'receivedBytes': progress.receivedBytes,
-          'totalBytes': status['totalBytes'],
-          'file': progress.currentFile,
-        }
-      else if (_ocrDownloads.lastErrorOf(model) case final String error)
-        'download': <String, Object?>{'state': 'failed', 'error': error},
-    };
-  }
-
-  Future<Object?> _downloadOcr(MangaOcrLocalModel model) async {
-    final MangaOcrService service = createMangaOcrService(localModel: model);
-    final MangaOcrModelStatus status = await service.modelStatus();
-    if (status.allReady) {
-      return <String, Object?>{...await _ocrJson(model), 'alreadyReady': true};
-    }
-    if (!_ocrDownloads.start(model, service)) {
-      throw CtlFailure.conflict(
-        '${model.key} 已在下载（models status ocr ${model.key}）',
-      );
-    }
-    return <String, Object?>{...await _ocrJson(model), 'started': true};
   }
 
   // ── 本机 GPT-SoVITS ─────────────────────────────────────────────────────

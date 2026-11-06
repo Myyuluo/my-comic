@@ -21,7 +21,7 @@ import 'package:fushi_audio/fushi_audio.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi_engine/epub/book_title_conflict.dart';
 import 'package:fushi_engine/epub/epub_importer.dart';
-import 'package:fushi_engine/media/video/external_video.dart';
+
 import 'package:fushi_engine/media/audiobook/text_to_epub.dart';
 import 'package:fushi_engine/media/discovery/discovery_models.dart'
     show DiscoveryMediaKind;
@@ -34,9 +34,9 @@ import 'package:fushi/src/media/import/external_book.dart';
 import 'package:fushi/src/media/import/import_carrier.dart';
 import 'package:fushi/src/media/manga/import/manga_folder_batch.dart';
 import 'package:fushi/src/media/manga/manga_module.dart';
-import 'package:fushi/src/media/source_library/add_local_folder_source.dart';
-import 'package:fushi/src/mining/galgame_library.dart';
-import 'package:fushi/src/mining/galgame_repository.dart';
+
+
+
 import 'package:fushi/src/pdf/pdf_importer.dart';
 import 'package:fushi/src/platform/desktop/ctl/ctl_library_entries.dart';
 
@@ -61,7 +61,6 @@ const String kLibraryCtlVideoFileHint =
 class LibraryCtlImporter {
   LibraryCtlImporter({
     required FushiDatabase db,
-    required GalgameRepository galgameRepo,
     required bool Function(LibraryCtlKind kind) isKindEnabled,
     required bool keepDuplicates,
     Future<String?> Function(String path)? ingestVideoFile,
@@ -70,7 +69,6 @@ class LibraryCtlImporter {
   }) : _ingestVideoFile = ingestVideoFile,
        _enqueueTranscription = enqueueTranscription,
        _db = db,
-       _galgameRepo = galgameRepo,
        _isKindEnabled = isKindEnabled,
        // 有人在屏幕前（外部打开书）时交给用户裁决：同名不等于同一本书（两部作品
        // 的 `01.cbz`），不能只凭标题就当成「已在库」。CLI 不传，仍是 skip / suffix。
@@ -81,7 +79,6 @@ class LibraryCtlImporter {
            : const DuplicatePolicy.skip();
 
   final FushiDatabase _db;
-  final GalgameRepository _galgameRepo;
   final bool Function(LibraryCtlKind kind) _isKindEnabled;
   final DuplicatePolicy _policy;
   final Future<String?> Function(String path)? _ingestVideoFile;
@@ -89,38 +86,9 @@ class LibraryCtlImporter {
 
   /// 视频单文件：走外部打开同一个入库入口（按路径去重，同一文件重复导入复用旧条目）。
   Future<LibraryCtlImportResult> _importVideoFile(String path) async {
-    final LibraryCtlImportResult? gated = _moduleGate(
-      path,
-      LibraryCtlKind.video,
-    );
-    if (gated != null) return gated;
-    final Future<String?> Function(String path)? ingest = _ingestVideoFile;
-    if (ingest == null || !isSupportedVideoFile(path)) {
-      return _unsupported(
-        path,
-        kLibraryCtlVideoFileHint,
-        kind: LibraryCtlKind.video,
-      );
-    }
-    final String? bookUid = await ingest(path);
-    if (bookUid == null) {
-      return LibraryCtlImportResult(
-        path: path,
-        status: LibraryCtlImportStatus.failed,
-        kind: LibraryCtlKind.video,
-        message: '视频入库失败（原因见 app 内提示）',
-      );
-    }
-    return LibraryCtlImportResult(
-      path: path,
-      status: LibraryCtlImportStatus.imported,
-      kind: LibraryCtlKind.video,
-      keys: <String>[LibraryCtlKey(LibraryCtlStore.video, bookUid).wire],
-    );
+    return _unsupported(path, '视频域已移除', kind: LibraryCtlKind.video);
   }
 
-  /// 逐个路径导入。`--kind audiobook` 时全部路径（目录递归展开）合起来是**一本**
-  /// 有声书的素材（正文 + 字幕 + 音频）。
   Future<List<LibraryCtlImportResult>> importAll(
     List<String> paths, {
     LibraryCtlKind? kind,
@@ -438,24 +406,7 @@ class LibraryCtlImporter {
     LibraryCtlKind kind,
     SourceLibraryKind sourceKind,
   ) async {
-    final LibraryCtlImportResult? gated = _moduleGate(path, kind);
-    if (gated != null) return gated;
-    final AddLocalFolderResult result = await addLocalFolderAsSource(
-      db: _db,
-      mediaKind: sourceKind.dbValue,
-      path: path,
-    );
-    final bool added = result.outcome == AddLocalFolderOutcome.added;
-    return LibraryCtlImportResult(
-      path: path,
-      status: added
-          ? LibraryCtlImportStatus.sourceAdded
-          : LibraryCtlImportStatus.sourceExists,
-      kind: kind,
-      message: added
-          ? '已登记为来源（id=${result.sourceId}）并扫描：${result.rootPath}'
-          : '已是来源库：${result.rootPath}（要重扫用 library scan）',
-    );
+    return _unsupported(path, '媒体来源库已移除', kind: kind);
   }
 
   /// 游戏：单个 exe 直接登记；目录按发现页同一启发式挑主程序。
@@ -463,79 +414,9 @@ class LibraryCtlImporter {
     String path, {
     required bool isDirectory,
   }) async {
-    final LibraryCtlImportResult? gated = _moduleGate(
-      path,
-      LibraryCtlKind.game,
-    );
-    if (gated != null) return gated;
-    final List<String> exes;
-    if (isDirectory) {
-      final List<String> files = <String>[];
-      final Map<String, int> sizes = <String, int>{};
-      for (final FileSystemEntity entity in Directory(
-        path,
-      ).listSync(recursive: true, followLinks: false)) {
-        if (entity is File) {
-          files.add(entity.path);
-          sizes[entity.path] = entity.lengthSync();
-        }
-      }
-      final DiscoveryImportPlan plan = classifyDiscoveryDirectory(
-        DiscoveryMediaKind.game,
-        files,
-        fileSizes: sizes,
-      );
-      if (plan is! RegisterGameExesPlan) {
-        return _unsupported(
-          path,
-          '目录里找不到游戏主程序（.exe）',
-          kind: LibraryCtlKind.game,
-        );
-      }
-      exes = plan.exePaths;
-    } else {
-      if (p.extension(path).toLowerCase() != '.exe') {
-        return _unsupported(path, '游戏只认 .exe 或游戏目录', kind: LibraryCtlKind.game);
-      }
-      exes = <String>[path];
-    }
-    if (!_galgameRepo.isLoaded) await _galgameRepo.load();
-    final List<String> fresh = filterOutDuplicateGameExes(
-      _galgameRepo.games,
-      exes,
-    );
-    if (fresh.isEmpty) {
-      return LibraryCtlImportResult(
-        path: path,
-        status: LibraryCtlImportStatus.skipped,
-        kind: LibraryCtlKind.game,
-        message: '这个游戏已在库',
-      );
-    }
-    final DateTime base = DateTime.now();
-    // 批内 id 用微秒错开，防同微秒撞 id（同游戏库拖拽入库 / 发现页登记）。
-    final List<GalgameEntry> entries = <GalgameEntry>[
-      for (int i = 0; i < fresh.length; i++)
-        newGalgameEntryFromExe(
-          fresh[i],
-          now: base.add(Duration(microseconds: i)),
-        ),
-    ];
-    await _galgameRepo.addAll(entries);
-    return LibraryCtlImportResult(
-      path: path,
-      status: LibraryCtlImportStatus.imported,
-      kind: LibraryCtlKind.game,
-      keys: <String>[
-        for (final GalgameEntry entry in entries)
-          LibraryCtlKey(LibraryCtlStore.game, entry.id).wire,
-      ],
-    );
+    return _unsupported(path, '游戏域已移除', kind: LibraryCtlKind.game);
   }
 
-  /// 有声书：全部路径（目录递归展开）= 一本书的素材，按发现页同一分类挑正文 /
-  /// 字幕 / 音频，再走同一条对齐入库管线。正文同名已在库时不自动附着音频（有损
-  /// 操作，交互入口是有声书导入对话框）。
   Future<LibraryCtlImportResult> _importAudiobook(List<String> paths) async {
     final String label = paths.join(' ');
     final LibraryCtlImportResult? gated = _moduleGate(

@@ -9,7 +9,7 @@
 // 本文件刻意只依赖 fushi_core / fushi_audio / gal 会话控制器（不碰 AppModel、不碰
 // widget），所以每条判据都能用内存 DB 直接测行为，而不是只能靠源码扫描守卫。
 
-import 'package:fushi/src/mining/gal_hook_session_controller.dart';
+
 import 'package:fushi_audio/fushi_audio.dart';
 import 'package:fushi_core/fushi_core.dart';
 
@@ -42,14 +42,11 @@ String minedSentenceSourceForGameKey(String? activityGameKey) =>
 /// 「这次查词的句子确实来自 hook」，得把来源标记从捕获侧一路穿过 overlay bridge
 /// （C++ 浮窗 → popup.js → Dart handler）再落到每个写入点，成本与收益不成比例，
 /// 暂不做。反过来，会话没在跑时绝不会误记游戏域（key 恒 null）。
-String overlayStatSourceType() =>
-    statSourceTypeForGameKey(GalHookSessionController.instance.activityGameKey);
+String overlayStatSourceType() => statSourceTypeForGameKey(null);
 
 /// [overlayStatSourceType] 的收藏句 / 制卡句值域版本（`addMinedSentence` 的
 /// `source` 参数用它，那一列不是 `StatSourceKind` 值域）。
-String overlayMinedSentenceSource() => minedSentenceSourceForGameKey(
-      GalHookSessionController.instance.activityGameKey,
-    );
+String overlayMinedSentenceSource() => minedSentenceSourceForGameKey(null);
 
 /// app 外浮窗的收藏词读 / 切换（`favoriteCheck` / `favoriteEntry` 两个桥共用）。
 /// 返回**切换后**的收藏态；[toggle] 为 false 时只读、不写。

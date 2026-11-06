@@ -1,10 +1,8 @@
-import 'package:fushi_engine/media/video/download/video_subtitle_registry.dart'
-    show VideoSubtitleRegistry;
+
 import 'package:fushi_engine/srs/ankiconnect/srs_ankiconnect_endpoint.dart';
 import 'package:fushi_engine/sync/fushi_remote_api_handlers.dart';
 import 'package:fushi_engine/sync/fushi_remote_lookup_service.dart';
-import 'package:fushi/src/media/video/browser_video_study_bridge.dart'
-    show BrowserVideoSample;
+
 import 'package:fushi/src/sync/extension_font_api.dart';
 import 'package:fushi/src/sync/fushi_api_server.dart';
 import 'package:fushi/src/sync/yomitan_tokenize_adapter.dart';
@@ -27,12 +25,10 @@ class FushiApiServerManager {
     String Function()? appLocaleProvider,
     RemotePopupDictionaryCss Function()? popupDictionaryCssProvider,
     void Function(double maxWidth, double maxHeight)? onExtensionPopupSize,
-    void Function(BrowserVideoSample sample)? onExtensionStudy,
     ExtensionFavoriteHandler? onExtensionFavorite,
     void Function()? onExtensionSeen,
     void Function()? onLookupActivity,
     void Function(String build, String? version)? onExtensionReport,
-    Future<VideoSubtitleRegistry?> Function()? subtitleRegistryProvider,
     String Function()? extensionTestPageProvider,
     ExtensionFontApi? fontApi,
     SrsExtensionApi? Function()? srsApiProvider,
@@ -49,12 +45,10 @@ class FushiApiServerManager {
        _appLocaleProvider = appLocaleProvider,
        _popupDictionaryCssProvider = popupDictionaryCssProvider,
        _onExtensionPopupSize = onExtensionPopupSize,
-       _onExtensionStudy = onExtensionStudy,
        _onExtensionFavorite = onExtensionFavorite,
        _onExtensionSeen = onExtensionSeen,
        _onLookupActivity = onLookupActivity,
        _onExtensionReport = onExtensionReport,
-       _subtitleRegistryProvider = subtitleRegistryProvider,
        _extensionTestPageProvider = extensionTestPageProvider,
        _fontApi = fontApi,
        _srsApiProvider = srsApiProvider;
@@ -81,7 +75,6 @@ class FushiApiServerManager {
   // 弹窗尺寸精细化 Phase D：扩展弹窗拖角调整后回写尺寸的 sink，透传给 [FushiApiServer]。
   final void Function(double maxWidth, double maxHeight)? _onExtensionPopupSize;
   // 扩展视频沉浸时间样本的 sink，透传给 [FushiApiServer]（app 侧进学习统计）。
-  final void Function(BrowserVideoSample sample)? _onExtensionStudy;
   final ExtensionFavoriteHandler? _onExtensionFavorite;
   // 浏览器扩展连接探活回调，透传给 [FushiApiServer]（app 侧记录 last-seen）。
   final void Function()? _onExtensionSeen;
@@ -92,7 +85,6 @@ class FushiApiServerManager {
   // 加载的 build，与内置指纹比对给出更新提示）。
   final void Function(String build, String? version)? _onExtensionReport;
   // 「Jimaku 查字幕」扩展桥：Jimaku API key 供给器，透传给 [FushiApiServer]。
-  final Future<VideoSubtitleRegistry?> Function()? _subtitleRegistryProvider;
   // 新手引导「试一试」页的 HTML 供给器，透传给 [FushiApiServer]（GET 路由）。
   final String Function()? _extensionTestPageProvider;
   // 扩展字幕外观「字体」下拉框的真源（app 字体目录 + 推荐字体下载），透传给
@@ -134,12 +126,10 @@ class FushiApiServerManager {
       appLocaleProvider: _appLocaleProvider,
       popupDictionaryCssProvider: _popupDictionaryCssProvider,
       onExtensionPopupSize: _onExtensionPopupSize,
-      onExtensionStudy: _onExtensionStudy,
       onExtensionFavorite: _onExtensionFavorite,
       onExtensionSeen: _onExtensionSeen,
       onLookupActivity: _onLookupActivity,
       onExtensionReport: _onExtensionReport,
-      subtitleRegistryProvider: _subtitleRegistryProvider,
       extensionTestPageProvider: _extensionTestPageProvider,
       fontApi: _fontApi,
       srsApiProvider: _srsApiProvider,

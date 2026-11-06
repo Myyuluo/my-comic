@@ -5,29 +5,29 @@ import 'dart:io';
 import 'package:drift/drift.dart' show Value;
 import 'package:material_ui/material_ui.dart';
 import 'package:fushi_engine/foundation/pref_store.dart';
-import 'package:fushi_engine/ocr/manga_ocr_service.dart';
+
 import 'package:fushi/src/platform/desktop/desktop_device_info_service.dart';
 import 'package:fushi_engine/sync/fushi_library_host_service.dart';
-import 'package:fushi_engine/sync/fushi_manga_ocr_host.dart';
+
 import 'package:fushi_engine/sync/fushi_remote_lookup_service.dart';
-import 'package:fushi/src/mining/gal_hook_session_controller.dart';
-import 'package:fushi/src/sync/game_stream_host.dart';
-import 'package:fushi/src/sync/game_stream_mining.dart';
-import 'package:fushi_engine/sync/interconnect_graphic_subtitle_export.dart';
-import 'package:fushi/src/sync/texthooker_service.dart';
-import 'package:fushi_engine/sync/downloads/host_download_host.dart';
-import 'package:fushi_engine/sync/assistant/host_assistant.dart';
-import 'package:fushi_engine/sync/game_stream/game_stream_library.dart';
-import 'package:fushi_engine/sync/game_stream/game_stream_protocol.dart';
-import 'package:fushi_engine/sync/game_stream/game_stream_service.dart';
+
+
+
+
+
+
+
+
+
+
 import 'package:fushi_engine/sync/fushi_sync_server.dart';
-import 'package:fushi_engine/sync/graphic_subtitle_track_export.dart';
-import 'package:fushi_engine/sync/video_remote_service.dart';
+
+
 import 'package:fushi_engine/sync/host_jobs/host_job_manager.dart';
 import 'package:fushi_engine/sync/host_update/host_update_protocol.dart';
 import 'package:fushi_engine/sync/interconnect_device_name.dart';
 import 'package:fushi_engine/sync/interconnect_leaderboard_link.dart';
-import 'package:fushi_engine/sync/subscriptions/host_subscription_host.dart';
+
 import 'package:fushi/src/sync/lan_discovery_service.dart';
 import 'package:fushi/src/sync/interconnect_p2p_app.dart';
 import 'package:fushi_engine/sync/interconnect_p2p.dart';
@@ -82,18 +82,9 @@ class FushiSyncServerController extends ChangeNotifier {
     required String Function() syncDataDir,
     required FushiRemoteLookupService Function() remoteLookupServiceFactory,
     FushiRemoteMiningService Function()? miningServiceFactory,
-    VideoRemoteService Function()? videoRemoteServiceFactory,
-    Future<void> Function()? videoRemoteStopped,
     FushiRemoteHistoryService Function()? historyServiceFactory,
     FushiLibraryHostService Function()? libraryServiceFactory,
-    MangaOcrService Function()? mangaOcrServiceFactory,
-    Map<String, MangaOcrService> Function()? mangaOcrModelServicesFactory,
     Future<HostJobManager> Function()? hostJobsFactory,
-    HostDownloadHost Function()? downloadsFactory,
-    HostSubscriptionHost Function()? subscriptionsFactory,
-    HostAssistantProvider Function()? assistantFactory,
-    VideoSubtitleBackfillRunner? videoSubtitleBackfill,
-    GraphicSubtitleTrackExporter? graphicSubtitleTrackExporter,
     HostSelfUpdater Function()? hostSelfUpdater,
     InterconnectLeaderboardLinkHost Function()? leaderboardLinkHost,
     PrefStore Function()? prefsStore,
@@ -103,19 +94,9 @@ class FushiSyncServerController extends ChangeNotifier {
         _syncDataDir = syncDataDir,
         _remoteLookupServiceFactory = remoteLookupServiceFactory,
         _miningServiceFactory = miningServiceFactory,
-        _videoRemoteServiceFactory = videoRemoteServiceFactory,
-        _videoRemoteStopped = videoRemoteStopped,
         _historyServiceFactory = historyServiceFactory,
         _libraryServiceFactory = libraryServiceFactory,
-        _mangaOcrServiceFactory = mangaOcrServiceFactory,
-        _mangaOcrModelServicesFactory = mangaOcrModelServicesFactory,
         _hostJobsFactory = hostJobsFactory,
-        _downloadsFactory = downloadsFactory,
-        _subscriptionsFactory = subscriptionsFactory,
-        _assistantFactory = assistantFactory,
-        _videoSubtitleBackfill = videoSubtitleBackfill,
-        _graphicSubtitleTrackExporter = graphicSubtitleTrackExporter ??
-            exportGraphicSubtitleTrackForInterconnect,
         _hostSelfUpdater = hostSelfUpdater,
         _leaderboardLinkHost = leaderboardLinkHost,
         _prefsStore = prefsStore,
@@ -130,39 +111,15 @@ class FushiSyncServerController extends ChangeNotifier {
   final String Function() _syncDataDir;
   final FushiRemoteLookupService Function() _remoteLookupServiceFactory;
   final FushiRemoteMiningService Function()? _miningServiceFactory;
-  final VideoRemoteService Function()? _videoRemoteServiceFactory;
-  final Future<void> Function()? _videoRemoteStopped;
   final FushiRemoteHistoryService Function()? _historyServiceFactory;
   final FushiLibraryHostService Function()? _libraryServiceFactory;
 
-  /// 漫画 P3：互联 host 代跑 OCR 的服务工厂。null（headless/单测）= 不接线，
-  /// server 的 `/api/ocr/*` 端点 404、capabilities 不带 `mangaOcr` 字段。
-  final MangaOcrService Function()? _mangaOcrServiceFactory;
-
-  /// 对端可点名的模型（key → 服务）。null = 只跑 host 当前选择的模型。
-  final Map<String, MangaOcrService> Function()? _mangaOcrModelServicesFactory;
-
-  /// 通用任务（`/api/jobs`，目前 ASR）/ 代下载（`/api/downloads`）/ 内容订阅
-  /// （`/api/subscriptions`）三面的装配工厂。三者此前只在无头 `fushi_server` 接线，
-  /// app 当 host 时对端探到的能力位里没有它们，手机端「下载到 电脑」的选项根本
-  /// 不出现。null（headless/单测）= 不接线，对应端点 404、能力位不带该字段。
+  /// 通用任务（`/api/jobs`，目前 ASR）的装配工厂。null（headless/单测）=
+  /// 不接线，对应端点 404、能力位不带该字段。
   ///
   /// 任务管理器要 `load()` 磁盘记录才能用，所以是异步工厂；每次 start 新建，stop
   /// 时 server 内部 `disposeAll`。
   final Future<HostJobManager> Function()? _hostJobsFactory;
-  final HostDownloadHost Function()? _downloadsFactory;
-  final HostSubscriptionHost Function()? _subscriptionsFactory;
-
-  /// AI 助手会话（`/api/assistant`：手机把一句话交给本机的 AI 去办）。
-  final HostAssistantProvider Function()? _assistantFactory;
-
-  /// 「立即给这个视频补字幕」（`POST /api/library/videos/<id>/subtitle/backfill`）。
-  /// null（headless/单测）= 端点 501。
-  final VideoSubtitleBackfillRunner? _videoSubtitleBackfill;
-
-  /// 图形字幕整轨回传（`GET .../graphicsubtitle`）的抽取实现：缺省为引擎的位图字幕抽轨
-  /// （[exportGraphicSubtitleTrackForInterconnect]，带缓存与在途合并）。
-  final GraphicSubtitleTrackExporter _graphicSubtitleTrackExporter;
 
   /// 远程更新本机 app 的实现（反馈 Pp8XPyve0N）。null（headless/单测）= 不接线，
   /// `/api/host/update` 404、能力位 `hostUpdate=false`。
@@ -179,227 +136,6 @@ class FushiSyncServerController extends ChangeNotifier {
 
   FushiSyncServer? _server;
   LanBroadcastService? _broadcast;
-  FushiRemoteGameStreamService? _gameStreamService;
-  FushiGameStreamHost? _gameStreamHost;
-  bool _gameStreamTexthookerAttached = false;
-  TexthookerLineEntry? _lastPublishedGameLine;
-  int? _gameStreamHwnd;
-  DateTime? _gameStreamHookStartedAt;
-  FushiGameStreamMiningAdapter? _gameStreamMining;
-  FushiGameStreamHost? get activeGameStreamHost => _gameStreamHost;
-
-  /// Host-side game-stream session registry. The game page creates a session
-  /// only after the user explicitly starts streaming; merely enabling LAN sync
-  /// never exposes a game window.
-  ///
-  /// The instance is torn down by [stop] (sessions die with the server), so a
-  /// [restart] hands receivers a fresh one. The library is controller-owned
-  /// configuration and is re-attached to every instance; binding it to one
-  /// instance made every host look "outdated" after a port/TLS change.
-  FushiRemoteGameStreamService get gameStreamService =>
-      _gameStreamService ??= (FushiRemoteGameStreamService()
-        ..library = _gameStreamLibrary);
-
-  FushiGameStreamHost get gameStreamHost {
-    _gameStreamHost ??= FushiGameStreamHost(service: gameStreamService)
-      ..addListener(_onGameStreamHostChanged);
-    return _gameStreamHost!;
-  }
-
-  void _onGameStreamHostChanged() {
-    if (_gameStreamService?.session?.state.isTerminal == true) {
-      _detachGameStreamTexthooker();
-    }
-    notifyListeners();
-  }
-
-  FushiGameStreamMiningAdapter Function()? _gameStreamMiningFactory;
-  GameStreamLibraryHost? _gameStreamLibrary;
-
-  /// Windows host library for receivers ("launch from library, then stream").
-  /// [miningFactory] builds the same Anki adapter the workbench button uses,
-  /// so a remotely launched stream mines exactly like a local one.
-  void configureGameStreamLibrary(
-    GameStreamLibraryHost? library, {
-    FushiGameStreamMiningAdapter Function()? miningFactory,
-  }) {
-    _gameStreamLibrary = library;
-    _gameStreamMiningFactory = miningFactory;
-    _gameStreamService?.library = library;
-  }
-
-  /// [GameStreamSessionStarter] for remote launches: installs the mining
-  /// adapter, then opens the capture session reserved for the requester.
-  Future<GameStreamSession> startLaunchedGameStream({
-    required int hwnd,
-    required GameStreamVideoSettings settings,
-    required String gameId,
-    required String gameTitle,
-    required String launchId,
-  }) async {
-    final FushiGameStreamMiningAdapter? mining = _gameStreamMiningFactory
-        ?.call();
-    if (mining != null) configureGameStreamMining(mining);
-    try {
-      return await startGameStream(
-        hwnd: hwnd,
-        settings: settings,
-        gameId: gameId,
-        gameTitle: gameTitle,
-        launchId: launchId,
-      );
-    } catch (_) {
-      configureGameStreamMining(null);
-      rethrow;
-    }
-  }
-
-  Future<GameStreamSession> startGameStream({
-    required int hwnd,
-    GameStreamVideoSettings settings = const GameStreamVideoSettings(),
-    String? gameId,
-    String? gameTitle,
-    String? launchId,
-  }) async {
-    final GalHookSessionState hook = GalHookSessionController.instance.state;
-    if (!Platform.isWindows ||
-        hook.boundWindow?.hwnd != hwnd ||
-        !hook.isActive) {
-      throw StateError('需要当前运行中的 Windows 游戏会话');
-    }
-    if (!isRunning) {
-      final FushiServerStartOutcome outcome = await start();
-      if (outcome is! FushiServerStarted) {
-        throw StateError('无法启动 Fushi 互联服务');
-      }
-    }
-    final GalHookSessionState currentHook =
-        GalHookSessionController.instance.state;
-    if (!currentHook.isActive ||
-        currentHook.boundWindow?.hwnd != hwnd ||
-        currentHook.sessionStartedAt != hook.sessionStartedAt) {
-      _detachGameStreamTexthooker();
-      throw StateError('游戏会话已变化，请重新开启串流');
-    }
-    _gameStreamHwnd = hwnd;
-    _gameStreamHookStartedAt = hook.sessionStartedAt;
-    _attachGameStreamTexthooker();
-    try {
-      final GameStreamSession session = await gameStreamHost.start(
-        hwnd: hwnd,
-        settings: settings,
-        gameId: gameId,
-        gameTitle: gameTitle,
-        launchId: launchId,
-      );
-      final GalHookSessionState liveHook =
-          GalHookSessionController.instance.state;
-      if (!liveHook.isActive ||
-          liveHook.boundWindow?.hwnd != hwnd ||
-          liveHook.sessionStartedAt != hook.sessionStartedAt ||
-          _gameStreamHwnd != hwnd) {
-        await stopGameStream(reason: 'game_session_ended');
-        throw StateError('游戏会话已结束');
-      }
-      _publishLatestGameLine();
-      return session;
-    } catch (_) {
-      _detachGameStreamTexthooker();
-      rethrow;
-    }
-  }
-
-  void publishGameStreamText(GameStreamTextEvent event) =>
-      gameStreamService.publishText(event);
-
-  /// Installs the app-owned galgame/Anki adapter without making the shared
-  /// engine depend on Flutter repositories. Callers should set this before
-  /// enabling the host session and clear it when the app-owned adapter is
-  /// disposed.
-  void configureGameStreamMining(FushiGameStreamMiningAdapter? adapter) {
-    if (!identical(_gameStreamMining, adapter)) _gameStreamMining?.clear();
-    _gameStreamMining = adapter;
-    gameStreamService.onMine = adapter?.handler;
-  }
-
-  Future<void> stopGameStream({String reason = 'stopped'}) async {
-    await _gameStreamHost?.stop(reason: reason);
-    _detachGameStreamTexthooker();
-  }
-
-  void _attachGameStreamTexthooker() {
-    if (_gameStreamTexthookerAttached) return;
-    _gameStreamTexthookerAttached = true;
-    TexthookerService.instance.addListener(_publishLatestGameLine);
-    GalHookSessionController.instance.addListener(_onGameHookChanged);
-  }
-
-  void _onGameHookChanged() {
-    final GalHookSessionState hook = GalHookSessionController.instance.state;
-    if (hook.boundWindow?.hwnd != _gameStreamHwnd ||
-        !hook.isActive ||
-        hook.sessionStartedAt != _gameStreamHookStartedAt) {
-      unawaited(stopGameStream(reason: 'game_session_ended'));
-    }
-  }
-
-  void _detachGameStreamTexthooker() {
-    if (_gameStreamTexthookerAttached) {
-      _gameStreamTexthookerAttached = false;
-      TexthookerService.instance.removeListener(_publishLatestGameLine);
-      GalHookSessionController.instance.removeListener(_onGameHookChanged);
-    }
-    _gameStreamHwnd = null;
-    _gameStreamHookStartedAt = null;
-    _lastPublishedGameLine = null;
-    _gameStreamMining?.clear();
-    _gameStreamMining = null;
-    if (_gameStreamService != null) _gameStreamService!.onMine = null;
-  }
-
-  void _publishLatestGameLine() {
-    final GameStreamSession? session = _gameStreamService?.session;
-    final TexthookerLineEntry? entry = TexthookerService.instance.lastEntry;
-    if (session == null ||
-        entry == null ||
-        session.state.isTerminal ||
-        !GalHookSessionController.instance.isLineInCurrentSession(entry) ||
-        (entry.id == _lastPublishedGameLine?.id &&
-            entry.text == _lastPublishedGameLine?.text &&
-            entry.audioResourceId == _lastPublishedGameLine?.audioResourceId)) {
-      return;
-    }
-    _lastPublishedGameLine = entry;
-    final GameStreamTextEvent event = GameStreamTextEvent(
-      sessionId: session.sessionId,
-      lineId: entry.id,
-      text: entry.text,
-      timestampMs:
-          entry.hookTimestampMs ?? entry.receivedAt.millisecondsSinceEpoch,
-      thread: entry.textThreadKey ?? entry.textThreadLabel,
-      audioResourceId: entry.audioResourceId,
-    );
-    publishGameStreamText(event);
-    final FushiGameStreamMiningAdapter? mining = _gameStreamMining;
-    final int? hwnd = _gameStreamHwnd;
-    if (mining != null && hwnd != null) {
-      unawaited(
-        mining
-            .captureLine(event, hwnd: hwnd)
-            .then<void>(
-              (bool captured) {},
-              onError: (Object error, StackTrace stack) {
-                ErrorLogService.instance.log(
-                  'GameStream.captureLine',
-                  error,
-                  stack,
-                );
-              },
-            ),
-      );
-    }
-  }
-
   /// BUG-1551：**在飞**的一次 [start]。`isRunning` 只看 [_server]，而 [_server]
   /// 直到 `server.start()` 真绑上端口才赋值——在那之前还隔着读端口/口令、（首次）
   /// 生成 RSA 自签证书、取设备名、迁移旧同步根等好几个 await。启动期
@@ -547,13 +283,6 @@ class FushiSyncServerController extends ChangeNotifier {
     // 同样 fire-and-forget，exit(0) 兜底回收 socket。
     unawaited(_server?.stop());
     _server = null;
-    unawaited(_gameStreamHost?.stop(reason: 'host_shutdown'));
-    _detachGameStreamTexthooker();
-    _gameStreamService?.dispose();
-    _gameStreamService = null;
-    _gameStreamHost?.removeListener(_onGameStreamHostChanged);
-    _gameStreamHost?.dispose();
-    _gameStreamHost = null;
     notifyListeners();
   }
 
@@ -679,18 +408,9 @@ class FushiSyncServerController extends ChangeNotifier {
       allowLan: true,
       remoteLookupService: _remoteLookupServiceFactory(),
       miningService: _miningServiceFactory?.call(),
-      videoRemoteService: _videoRemoteServiceFactory?.call(),
       historyService: _historyServiceFactory?.call(),
       libraryService: _libraryServiceFactory?.call(),
-      // 漫画 P3：远程 OCR 任务管理器。上传页图落 <syncDataDir>/manga_ocr_jobs
-      // （TTL 自清理）。每次 start 新建管理器，stop 时 server 内部 disposeAll。
-      mangaOcrJobs: _buildMangaOcrJobManager(),
-      // 通用任务 / 代下载 / 订阅：与无头 fushi_server 同一份引擎路由，只是实现
-      // 挂在 app 自己的管线上（见 app_download_host.dart）。
       hostJobs: hostJobs,
-      downloads: _downloadsFactory?.call(),
-      subscriptions: _subscriptionsFactory?.call(),
-      assistant: _assistantFactory?.call(),
       securityContext: securityContext,
       hostFingerprint: hostFingerprint,
       deviceName: deviceName,
@@ -701,9 +421,6 @@ class FushiSyncServerController extends ChangeNotifier {
       // FFI engine so the browser extension's rewritten <img> GET can fetch
       // them. Null-safe: before the engine is initialised it yields null and
       // the endpoint answers 404.
-      // 游戏串流（本 PR）：仅当主机本地点了「开始串流」才非空；null = 串流端点
-      // 全部 404，行为与从前一致。
-      gameStreamService: gameStreamService,
       dictionaryMediaProvider: (String dict, String mediaPath) =>
           FushiDicts.isInitialized
               ? FushiDicts.instance.getMediaFile(dict, mediaPath)
@@ -727,8 +444,6 @@ class FushiSyncServerController extends ChangeNotifier {
       // 反代地址每次 capabilities 实时读，改完不必重启互联服务。
       ..hostId = hostId
       ..publicUrlsProvider = repo.getInterconnectPublicUrls
-      ..videoSubtitleBackfill = _videoSubtitleBackfill
-      ..graphicSubtitleTrackExporter = _graphicSubtitleTrackExporter
       // 远程更新本机（反馈 Pp8XPyve0N）：开关 / 平台门在实现里按请求实时判。
       ..hostSelfUpdater = _hostSelfUpdater?.call()
       // 已配对设备跟随本机账户自动登录（开关在实现里按请求实时读）。
@@ -765,22 +480,6 @@ class FushiSyncServerController extends ChangeNotifier {
     return const FushiServerStarted();
   }
 
-  /// 漫画 P3：按注入的 OCR 服务工厂构造远程 OCR 任务管理器；未注入返回 null
-  /// （server 端点整体关闭）。上传页图落 `<syncDataDir>/manga_ocr_jobs`（TTL
-  /// 自清理），每次 [start] 新建、server stop 时其内部 disposeAll。
-  MangaOcrHostJobManager? _buildMangaOcrJobManager() {
-    final MangaOcrService Function()? factory = _mangaOcrServiceFactory;
-    if (factory == null) return null;
-    return MangaOcrHostJobManager(
-      service: factory(),
-      modelServices: _mangaOcrModelServicesFactory?.call() ??
-          const <String, MangaOcrService>{},
-      jobRoot: Directory(
-        '${_syncDataDir()}${Platform.pathSeparator}manga_ocr_jobs',
-      ),
-    );
-  }
-
   /// Stop the host. [persistDisabled] writes `serverEnabled=false` (the user
   /// toggled it off); an app-exit/transient stop leaves the flag untouched so a
   /// future launch restores hosting.
@@ -807,14 +506,6 @@ class FushiSyncServerController extends ChangeNotifier {
     currentAppInterconnectP2pRuntime?.current?.hostStop();
     await broadcast?.stop();
     await server?.stop();
-    if (server != null) await _videoRemoteStopped?.call();
-    await _gameStreamHost?.stop(reason: 'host_shutdown');
-    _detachGameStreamTexthooker();
-    _gameStreamService?.dispose();
-    _gameStreamService = null;
-    _gameStreamHost?.removeListener(_onGameStreamHostChanged);
-    _gameStreamHost?.dispose();
-    _gameStreamHost = null;
     if (persistDisabled) await _repo.setServerEnabled(false);
     notifyListeners();
   }

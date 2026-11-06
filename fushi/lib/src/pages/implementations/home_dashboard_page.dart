@@ -4,8 +4,8 @@ import 'package:fushi_dictionary/fushi_dictionary.dart';
 import 'dart:async';
 import 'package:drift/drift.dart'
     show ResultSetImplementation, TableUpdate, TableUpdateQuery;
-import 'package:fushi_engine/sync/remote_collection_adoption_service.dart';
-import 'package:fushi_engine/sync/collection_book_identity_index.dart';
+
+
 import 'package:flutter/foundation.dart'
     show kIsWeb;
 import 'package:material_ui/material_ui.dart';
@@ -18,18 +18,18 @@ import 'package:fushi/src/models/app_model.dart';
 import 'package:fushi/src/models/module_id.dart';
 import 'package:fushi/src/models/module_registry.dart';
 import 'package:fushi/src/models/preferences_repository.dart';
-import 'package:fushi/src/media/collections/collection_continue.dart';
-import 'package:fushi/src/media/video/video_duration_pref.dart';
+
+
 import 'package:fushi/src/media/media_cover_source.dart';
 import 'package:fushi_engine/media/tracking/bangumi_api_client.dart';
 import 'package:fushi/src/media/tracking/media_tracking_labels.dart';
 import 'package:fushi_engine/media/tracking/media_tracking_repository.dart';
 import 'package:fushi_engine/media/tracking/media_tracking_service.dart';
-import 'package:fushi/src/mining/galgame_library.dart';
-import 'package:fushi/src/mining/galgame_repository.dart';
-import 'package:fushi/src/media/video/cover_ui/portrait_cover_image.dart';
-import 'package:fushi_engine/media/video/m3u8_playlist.dart';
-import 'package:fushi_engine/media/video/video_book_repository.dart';
+
+
+
+
+
 import 'package:fushi/src/pages/base_module_tab_page.dart';
 import 'package:fushi/src/pages/implementations/home_dashboard_widgets.dart';
 import 'package:fushi/src/pages/implementations/home_srs_panel.dart';
@@ -42,9 +42,8 @@ import 'package:fushi/src/utils/components/fushi_floating_toolbar.dart';
 import 'package:fushi/src/pages/implementations/updates_center_open.dart';
 import 'package:fushi/src/pages/implementations/home_page.dart';
 import 'package:fushi/src/pages/implementations/updates_dashboard_banner.dart';
-import 'package:fushi/src/pages/implementations/home_video_page.dart'
-    show openLocalVideoBook;
-import 'package:fushi/src/pages/implementations/collections_page.dart';
+
+
 import 'package:fushi/src/pages/implementations/stat_shared.dart';
 import 'package:fushi/src/pages/implementations/statistics_center_page.dart';
 import 'package:fushi/src/pages/implementations/leaderboard/leaderboard_tab.dart';
@@ -53,8 +52,7 @@ import 'package:fushi/src/pages/implementations/leaderboard/leaderboard_common.d
 import 'package:fushi/src/leaderboard/leaderboard_service.dart';
 import 'package:fushi_engine/leaderboard/leaderboard_models.dart'
     show LeaderboardSelf;
-import 'package:fushi/src/media/video/video_library_overview.dart'
-    show formatVideoPosition;
+
 import 'package:fushi/src/utils/components/fushi_animated_size.dart';
 import 'package:fushi/src/utils/components/fushi_press_scale.dart';
 import 'package:fushi/src/settings/settings_detail_page.dart';
@@ -103,30 +101,8 @@ bool isDashboardContinueBook(MediaItem item, Set<String> completedBookKeys) {
       ShelfReadStatus.reading;
 }
 
-/// 书合集在首页「继续」区的续读目标下标（[sorted] 已按组内 sortIndex 排好）。
-///
-/// 用户实报：20 卷的合集读完第 1 卷，「继续」区里这套书直接消失、第 2 卷不出现
-/// ——旧实现逐本按 [isDashboardContinueBook] 过滤，卷 1 判 finished 出局、卷 2
-/// 没进度判 unread 也进不来。与视频合集 Next-Up 同一判据 [continueMemberIndex]
-/// （锚点 = 最近读过的那卷，它读完就推进下一卷）。
-///
-/// 整组一卷都没开始读（不劝人从头开始）或目标仍是读完的卷（整套读完）→ null，
-/// 合集不出卡。
-@visibleForTesting
-int? dashboardBookCollectionContinueIndex(
-  List<CollectionMemberProgress> sorted,
-) {
-  if (!sorted.any((CollectionMemberProgress m) => m.hasStarted)) return null;
-  final int idx = continueMemberIndex(sorted);
-  if (sorted[idx].completed) return null;
-  return idx;
-}
-
 /// 首页是否用双栏版式：横屏（宽 > 高，且至少 600 宽）或宽屏（≥ 840，平板竖屏
 /// 以上的桌面窗口）。竖屏手机 / 平板竖屏走单栏。
-///
-/// 横屏手机（约 800×380）高度紧张，单栏会把主角卡和今日统计挤成上下两屏；
-/// 双栏让两者并排出现在首屏。
 @visibleForTesting
 bool dashboardUsesTwoColumns(Size size) =>
     size.width >= 840 || (size.width >= 600 && size.width > size.height);
@@ -140,106 +116,6 @@ double dashboardHeroCoverHeight(double mainColumnWidth) =>
 @visibleForTesting
 double dashboardRowCoverHeight(double mainColumnWidth) =>
     (mainColumnWidth * 0.2).clamp(132.0, 200.0);
-
-/// 「继续」视频竖卡的封面路径：按「作品海报（合集主封面）→ 这一集自己的封面 →
-/// 同合集其它集的封面」顺序取**第一张磁盘上真存在**的（与视频页合集卡
-/// `_collectionRowCoverProvider` 同口径：自有封面不在就借成员的）。
-///
-/// 反馈 5CTpiVJ7-v：此前只认 `海报 ?? 这一集封面` 一个候选，合集主封面指向的
-/// 文件不在（换盘 / 清缓存 / 刮削改过路径）或这一集还没抽帧时，主角卡与横滑卡
-/// 直接掉成「图标 + 名字」占位，而视频页同一部作品照样有封面。全部候选都不存在
-/// 返回 null（调用方画占位）。
-@visibleForTesting
-String? dashboardVideoCoverPath({
-  required String? collectionCover,
-  required String? ownCover,
-  Iterable<String?> memberCovers = const <String?>[],
-  required bool Function(String path) exists,
-}) {
-  bool usable(String? path) => path != null && path.isNotEmpty && exists(path);
-  if (usable(collectionCover)) return collectionCover;
-  if (usable(ownCover)) return ownCover;
-  // 逐个惰性取：找到第一张存在的就停。
-  for (final String? path in memberCovers) {
-    if (usable(path)) return path;
-  }
-  return null;
-}
-
-/// 「继续」视频卡的进度（[dashboardVideoContinueProgress] 的结果）。
-///
-/// - [fraction]：封面底部进度条（0..1）；null = 不画。
-/// - [episode]：集数角标「第 N 集」（1 起）；null = 不是多集。
-/// - [percent]：单视频百分比角标（知道总时长时）。
-/// - [positionMs]：前两者都给不出时退回「看到的时间点」角标。
-typedef DashboardVideoProgress = ({
-  double? fraction,
-  int? episode,
-  int? percent,
-  int? positionMs,
-});
-
-/// 首页「继续」视频卡的进度口径（反馈「小说有进度显示，视频缺了进度显示」）。
-///
-/// 此前只有单行多集播放列表画进度（[videoWatchFraction]：看到第几集），合集里的
-/// 某一集与单视频一律不画——`VideoBooks` 不存总时长，算不出百分比。现在：
-/// - 单行多集播放列表（[playlistEpisodeCount] ≥ 2）：角标「第 N 集」，进度条仍是
-///   集粒度（`currentEpisode / 集数`）；
-/// - 合集里的一集（[collectionEpisode] 非空）：角标「第 N 集」，进度条是这一集
-///   看到哪（[durationMs] 已知时）；
-/// - 单视频：[durationMs] 已知 → 进度条 + 百分比角标，否则角标退回看到的时间点。
-///
-/// [durationMs] 来自视频规格探测缓存（`VideoFileSpecs`），流媒体 / 没探测过的
-/// 文件为 null。纯函数，单测直接覆盖各分支。
-@visibleForTesting
-DashboardVideoProgress dashboardVideoContinueProgress({
-  required bool completed,
-  required int positionMs,
-  required int? durationMs,
-  required int currentEpisode,
-  required int playlistEpisodeCount,
-  int? collectionEpisode,
-  int collectionEpisodeCount = 0,
-}) {
-  final int? total = durationMs;
-  final double? inEpisode = total != null && total > 0 && positionMs > 0
-      ? (positionMs / total).clamp(0.0, 1.0)
-      : null;
-  if (playlistEpisodeCount >= 2) {
-    return (
-      fraction: videoWatchFraction(
-        completed: completed,
-        currentEpisode: currentEpisode,
-        episodeCount: playlistEpisodeCount,
-      ),
-      episode: currentEpisode.clamp(0, playlistEpisodeCount - 1) + 1,
-      percent: null,
-      positionMs: null,
-    );
-  }
-  if (collectionEpisode != null && collectionEpisodeCount >= 2) {
-    return (
-      fraction: inEpisode,
-      episode: collectionEpisode,
-      percent: null,
-      positionMs: null,
-    );
-  }
-  if (inEpisode != null) {
-    return (
-      fraction: inEpisode,
-      episode: null,
-      percent: (inEpisode * 100).round(),
-      positionMs: null,
-    );
-  }
-  return (
-    fraction: null,
-    episode: null,
-    percent: null,
-    positionMs: positionMs > 0 ? positionMs : null,
-  );
-}
 
 /// 首页浮动工具栏起始侧的头像胶囊（2026-10 精简：左上角原「首页」标题胶囊换成
 /// 头像）。头像来源只有现成的一处——排行榜账户头像（[LeaderboardAvatar]，本
@@ -423,24 +299,7 @@ class _HomeAvatarPillState extends ConsumerState<_HomeAvatarPill> {
 /// [initState] 一次并发载入，结果按数据库实例做快照（BUG-3034），重建时首帧直接
 /// 用快照渲染。
 class HomeDashboardPage extends BaseModuleTabPage {
-  const HomeDashboardPage({
-    super.key,
-    required this.videoRepo,
-    this.openVideoOverride,
-  });
-
-  /// 视频库仓库：仪表盘「继续观看」与视频计数的数据源（[VideoBookRepository.listForShelf]）。
-  final VideoBookRepository videoRepo;
-
-  /// 测试缝：打开本地视频播放页的实现覆盖（默认走共享 [openLocalVideoBook] 真实
-  /// 路由）。widget 测试无法构建 media_kit 播放页，注入替身即可断言「点继续卡/
-  /// 活动条 = 直接续播（带 playlistCollectionId）」的接线；生产恒 null。
-  final Future<void> Function(
-    BuildContext context,
-    VideoBookRepository repo,
-    String bookUid,
-    int? playlistCollectionId,
-  )? openVideoOverride;
+  const HomeDashboardPage({super.key});
 
   @override
   BaseModuleTabPageState<HomeDashboardPage> createState() =>
@@ -462,41 +321,17 @@ class _ContinueEntry {
     required this.recentMs,
     this.progress,
     this.badgeLabel,
-    this.badgeIcon,
-    this.collectionName,
-    this.collectionId,
     this.book,
-    this.video,
-    this.game,
     this.remote,
   });
 
-  /// 所属主合集 id（v68 横版选图链按它取合集附加图组）；null = 散卡。
-  final int? collectionId;
-
-  /// 本条的媒体种类。书按真实身份区分 [MediaKind.epub] / [MediaKind.srt]
-  /// （两者在本区块行为一致，经 [isBook] 归并），不再用一个 bool 硬编码二元。
+  /// 本条的媒体种类。书按真实身份区分 [MediaKind.epub] / [MediaKind.srt]。
   final MediaKind kind;
-
-  /// 视频分支（横版封面 / 直接续播）。
-  bool get isVideo => kind == MediaKind.video;
 
   /// 书分支（竖版封面 / openMedia）：EPUB 与 SRT 在本区块完全同行为。
   bool get isBook => kind == MediaKind.epub || kind == MediaKind.srt;
 
-  /// 游戏分支（竖版封面 / 跳游戏 tab）。
-  bool get isGame => kind == MediaKind.game;
-
   /// 本条所属功能模块（首页聚合列表的门控判据）。
-  ///
-  /// ⚠️ 漫画盖不住 [MediaKind]（见 `module_registry.dart`）：漫画行是
-  /// `EpubBooks.format=='manga'` 派生，[kind] 仍是 [MediaKind.epub]。本地书条目
-  /// 能从 [MediaItem.mediaSourceIdentifier] 认出漫画身份（`_bookToMediaItem` 给
-  /// 漫画行打的就是 [MangaFushiSource.kUniqueKey]），所以这里能按 manga 单独门控。
-  ///
-  /// 远端补位条目（[remote]）判不出漫画，一律按 [moduleOfMediaKind] 归 books
-  /// ——host 侧的漫画本就进不了「继续」（`remoteContinueCandidates` 按
-  /// `hasContent` 已把无 EPUB 内容树的漫画/PDF 行滤掉，BUG-1638）。
   ModuleId get module =>
       book?.mediaSourceIdentifier == MangaFushiSource.kUniqueKey
       ? ModuleId.manga
@@ -507,26 +342,14 @@ class _ContinueEntry {
   /// 最近活动时刻（epoch 毫秒），仅用于混排排序。
   final int recentMs;
 
-  /// 封面底部进度条分数（0..1）；null = 无可展示进度不画（游戏、远端视频，见
-  /// [dashboardVideoContinueProgress]）。
+  /// 封面底部进度条分数（0..1）；null = 无可展示进度不画。
   final double? progress;
 
-  /// 封面右上角进度角标：书 =「42%」，视频 =「第 N 集」/「37%」/ 看到的时间点；
-  /// null = 不画（游戏没有完成度）。
+  /// 封面右上角进度角标：书 =「42%」。
   final String? badgeLabel;
-  final IconData? badgeIcon;
-
-  /// 所属主合集名（显示名规则：非合集上下文显示合集名）；null = 散卡。本地条目
-  /// 查折叠归属映射，远端条目由 host 直接携带。
-  final String? collectionName;
   final MediaItem? book;
-  final VideoBookRow? video;
 
-  /// 本地游戏（BUG-1111）。游戏是**本机局域身份**（`galgames.id`），不参与互联
-  /// 远端补位——对端没有对应行，拿过来也打不开。
-  final GalgameEntry? game;
-
-  /// 互联 host 上的在读书/在看视频（本地无此条目时的远端补位，「继续也走互联」）。
+  /// 互联 host 上的在读书（本地无此条目时的远端补位，「继续也走互联」）。
   final RemoteContinueCandidate? remote;
 }
 
@@ -540,37 +363,17 @@ class _ContinueEntry {
 class _HomeDashboardSnapshot {
   const _HomeDashboardSnapshot({
     required this.statWindow,
-    required this.videos,
-    required this.games,
     required this.tracking,
     required this.readingRows,
-    required this.watchRows,
-    required this.gameRows,
-    required this.collectionNamesById,
-    required this.primaryCollectionByEntry,
-    required this.collectionCoverById,
     required this.epubUidByBookKey,
     required this.epubLocalAddedAtByKey,
-    required this.memberSortIndex,
-    required this.videoWatchAtByUid,
-    required this.videoDurationMsByPath,
   });
 
   final StatWindow statWindow;
-  final List<VideoBookRow> videos;
-  final List<GalgameEntry> games;
   final MediaTrackingStatus tracking;
   final List<StatFact> readingRows;
-  final List<StatFact> watchRows;
-  final List<StatFact> gameRows;
-  final Map<int, String> collectionNamesById;
-  final Map<String, int> primaryCollectionByEntry;
-  final Map<int, String> collectionCoverById;
   final Map<String, String> epubUidByBookKey;
   final Map<String, int> epubLocalAddedAtByKey;
-  final Map<String, int> memberSortIndex;
-  final Map<String, int> videoWatchAtByUid;
-  final Map<String, int> videoDurationMsByPath;
 }
 
 class _BangumiWatchedDialog extends StatefulWidget {
@@ -723,23 +526,7 @@ class _HomeDashboardPageState
   /// 侧栏「最近添加」最多几条：侧栏只给一眼「新进了什么」，完整列表在各库页。
   static const int _kRecentLimit = 4;
 
-  /// 视频文件路径 → 容器时长（毫秒，[VideoFileSpecs] 探测缓存，只查在看的
-  /// 视频）。`VideoBooks` 不存总时长，单视频 / 合集里的某一集要画「看到哪」的
-  /// 进度条只能借这份缓存；查不到（流媒体 / 还没探测过）时角标退回看到的时间点。
-  Map<String, int> _videoDurationMsByPath = const <String, int>{};
-
-  /// [initState] 异步载入的视频库（继续观看 + 视频计数）。
-  List<VideoBookRow> _videos = const <VideoBookRow>[];
-
-  /// 合集主封面（`MediaCollections.coverPath`，刮削落地的作品海报）：「继续」
-  /// 竖卡的视频优先用它，集封面多是横版截帧。
-  Map<int, String> _collectionCoverById = const <int, String>{};
-
-  /// [_loadDashboardDataUnsafe] 载入的游戏库整表缓存（P4：日明细「游戏」节 +
-  /// 活动时间轴游戏行的显示名反查用；空表 = 库为空或尚未载入）。
-  List<GalgameEntry> _games = const <GalgameEntry>[];
-
-  /// 互联 host 上的「继续」远端补位候选（本地无同 key/uid 的在读书/在看视频）。
+  /// 互联 host 上的「继续」远端补位候选（本地无同 key/uid 的在读书）。
   List<RemoteContinueCandidate> _remoteContinue =
       const <RemoteContinueCandidate>[];
 
@@ -750,51 +537,29 @@ class _HomeDashboardPageState
   /// 渲染层回退通用「远端」文案）。「标明设备来源」的数据源。
   String? _remoteDeviceName;
 
-  /// 上一次远端取数时「显示远端条目」门控的值（对齐视频页 BUG-1182 的
-  /// `_remoteGateAtLastLoad`），用于在 prefsRepo 的高频通知里只识别门控翻转。
+  /// 上一次远端取数时「显示远端条目」门控的值，用于在 prefsRepo 的高频通知里
+  /// 只识别门控翻转。
   bool _remoteGateAtLastLoad = true;
 
   /// 「显示远端条目」开关落在 prefsRepo（独立 ChangeNotifier），不经 AppModel
-  /// 通知、也不在 [_scheduleReload] 的表级信号里——必须显式订阅（[initState] 挂，
-  /// [dispose] 解除）才能让翻开关立即生效。
+  /// 通知、也不在 [_scheduleReload] 的表级信号里——必须显式订阅。
   PreferencesRepository? _prefsRepoForRemoteGate;
 
-  /// 已加载的统一事实面日行（v92：[StatFacts.daily] 按 mediaKind 分三份；今日
-  /// 目标分子 / 今日时长 / 近 7 日日均都对它求和，免重查）。
+  /// 已加载的统一事实面日行（阅读）。
   List<StatFact> _readingRows = const <StatFact>[];
-  List<StatFact> _watchRows = const <StatFact>[];
-  List<StatFact> _gameRows = const <StatFact>[];
 
-  /// 完整日面（阅读 + 观看 + 游戏），今日目标 / 今日时长 / 近 7 日日均的数据源
-  /// （BUG-1993：目标口径 = 学习域）。派生 getter，不另存状态。
-  Iterable<StatFact> get _dailyRows =>
-      _readingRows.followedBy(_watchRows).followedBy(_gameRows);
+  /// 完整日面（阅读），今日目标 / 今日时长 / 近 7 日日均的数据源。
+  Iterable<StatFact> get _dailyRows => _readingRows;
 
-  /// 合集归属映射（统计页/书架同源，显示名规则「非合集上下文拼合集名」用）：
-  /// - [_collectionNamesById]：collectionId → 合集名。
-  /// - [_primaryCollectionByEntry]：'<mediaType>|<entryKey>' → 折叠归属主 collectionId。
-  /// - [_epubUidByBookKey]：v83 起成员表 epub entryKey = `epub_books.uid`，页面
-  ///   手里的 bookKey 查归属映射前经此表换算（书架 `_epubUidByKey` 同款口径）。
-  Map<int, String> _collectionNamesById = const <int, String>{};
-  Map<String, int> _primaryCollectionByEntry = const <String, int>{};
+  /// v83 起成员表 epub entryKey = `epub_books.uid`，页面手里的 bookKey 查阅读
+  /// 进度时经此表换算（书架同款口径）。
   Map<String, String> _epubUidByBookKey = const <String, String>{};
 
-  /// epub bookKey → 本机开始拥有的时刻（epoch 毫秒，`EpubBooks.localAddedAt`，
-  /// v118）：宽屏「最近添加」封面行的书侧排序时间源（视频用
-  /// [VideoBookRow.localAddedAt]、游戏用 [GalgameEntry.addedAt]）。**不是**
-  /// `importedAt`——互联下载的书那一列是对端的入库时刻。
+  /// epub bookKey → 本机开始拥有的时刻（epoch 毫秒，`EpubBooks.localAddedAt`）。
   Map<String, int> _epubLocalAddedAtByKey = const <String, int>{};
 
-  /// 本帧「继续」行实际显示的条目（[_buildStudyContinueCard] 写入）：宽屏「最近
-  /// 添加」行据此去重，同一部作品不在两行各出一张。
+  /// 本帧「继续」行实际显示的条目：宽屏「最近添加」行据此去重。
   List<_ContinueEntry> _continueVisible = const <_ContinueEntry>[];
-
-  /// '<mediaType>|<entryKey>' → 条目在其主折叠合集里的组内 sortIndex（只记归属
-  /// 主合集的行，书架/视频页同口径）。继续区合集 Next-Up 的组内排序键。
-  Map<String, int> _memberSortIndex = const <String, int>{};
-
-  /// 每个视频 bookUid 的最近观看时刻（epoch 毫秒），继续观看排序用。
-  Map<String, int> _videoWatchAtByUid = const <String, int>{};
 
   /// Bangumi 追踪链路的可见状态（[MediaTrackingService.loadStatus]）。
   MediaTrackingStatus _tracking = MediaTrackingStatus.empty;
@@ -847,12 +612,6 @@ class _HomeDashboardPageState
         .database
         .watchDashboardDataChanges()
         .listen((_) => _scheduleReload());
-    // P4：游戏改名/刮削（库页写穿 galgames 表后 GalgameRepository.load() 通知）
-    // 也要刷新日明细/时间轴的游戏显示名——galgames 表不在
-    // watchDashboardDataChanges 的表集里，走仓储 ChangeNotifier 这条既有通道
-    // 与视频（videoBooks 表级信号）对齐失效语义。
-    _galgameRepo = ref.read(appProvider).galgameRepo
-      ..addListener(_scheduleReload);
     // Bangumi 同步状态：outbox 与偏好都不在 watchDashboardDataChanges 的表集里，
     // 由服务层每轮同步结束后自增的 revision 通知（后台自动同步完成也会刷新本卡）。
     _trackingRevision = ref
@@ -878,9 +637,6 @@ class _HomeDashboardPageState
 
   /// 追踪状态版本号（[initState] 挂监听，[dispose] 解除）。
   EngineValueListenable<int>? _trackingRevision;
-
-  /// 游戏库仓储（[initState] 挂监听，[dispose] 解除）。
-  GalgameRepository? _galgameRepo;
 
   /// 首页 tab 保活（2026-10 切 tab 卡顿）后，切回首页不再整页重挂载；切回时
   /// 只补做隐藏期间被推迟的重载（[_reloadDeferredWhileHidden]），并经共享 TTL
@@ -946,7 +702,6 @@ class _HomeDashboardPageState
     _reloadDebounce?.cancel();
     _midnightReload?.cancel();
     unawaited(_dataChangeSub?.cancel());
-    _galgameRepo?.removeListener(_scheduleReload);
     _trackingRevision?.removeListener(_scheduleReload);
     _prefsRepoForRemoteGate?.removeListener(_onPrefsChangedForRemoteGate);
     _dashboardScrollController.dispose();
@@ -986,126 +741,30 @@ class _HomeDashboardPageState
     final DateTime loadedAt = DateTime.now();
     final StatWindow statWindow = StatWindow(loadedAt);
     _armMidnightReload(loadedAt);
-    // 视频书架、统计事实面、合集/附加图四张表互不依赖：一次全部发出，让 Drift
-    // 后台执行器流水线化（首页首绘被这串 await 串行 gate）。
-    final Future<List<VideoBookRow>> videosF = widget.videoRepo.listForShelf();
-    // v92：学习统计只经统一事实面读取（study_segments + 冻结的 legacy 投影表，
-    // 游戏时长来自 galgame_sessions、游戏 hook 字数来自 legacy game 行 + 段），
-    // 首页不再自己读六张表各自累加——与阅读/视频/游戏统计页同一份事实。
+    // 统计事实面与追踪状态互不依赖：一次并发发出。
     final Future<StatFacts> factsF = loadStatFacts(db);
-    final Future<List<MediaCollectionRow>> collectionsF =
-        db.getAllMediaCollections();
-    // 折叠归属主合集 + 组内 sortIndex 一次查回，且只查本机库里还在的条目
-    // （BUG-3034：原先 getPrimaryCollectionIdByEntry + getAllCollectionItems 两次
-    // 全表物化，在线源 / 播放列表合集把成员表撑到八万行时单这两步 640–950 ms）。
-    final Future<Map<String, ({int collectionId, int sortIndex})>>
-        membershipF = db.getLocalPrimaryCollectionMembership();
-    // 游戏库整表（「继续」区在玩的游戏）。仓储缓存与表恒一致，
-    // 未载入过才真查 DB（毫秒级）；load() 会 notify → 本页监听器防抖重载一次
-    // 后 isLoaded=true，不再形成回环。与其余读并发发出（此前排在整批之后串行）。
-    final GalgameRepository galgameRepo = appModel.galgameRepo;
-    final Future<List<GalgameEntry>> gamesF = galgameRepo.isLoaded
-        ? Future<List<GalgameEntry>>.value(galgameRepo.games)
-        : galgameRepo.load();
-    // Bangumi 追踪状态（映射 + 待办 + 上次同步结果）。读的是本地库与偏好，不发
-    // 网络请求，可以和其它聚合一起进首屏。临时下线期间卡不挂载，状态也不必查。
     final Future<MediaTrackingStatus> trackingF = kMediaTrackingEnabled
         ? appModel.mediaTrackingService.loadStatus()
         : Future<MediaTrackingStatus>.value(MediaTrackingStatus.empty);
-    await Future.wait<Object?>(<Future<Object?>>[
-      videosF,
-      factsF,
-      collectionsF,
-      membershipF,
-      gamesF,
-      trackingF,
-    ]);
-    final List<VideoBookRow> videos = await videosF;
+    await Future.wait<Object?>(<Future<Object?>>[factsF, trackingF]);
     final StatFacts facts = await factsF;
     final List<StatFact> reading = facts.dailyBooks.toList(growable: false);
-    final List<StatFact> watch = facts.dailyVideos.toList(growable: false);
-    final List<StatFact> game = facts.dailyGames.toList(growable: false);
-    final List<GalgameEntry> games = await gamesF;
-    // 合集归属映射（统计页/书架同源）：显示名规则「非合集上下文拼合集名」用。
-    final List<MediaCollectionRow> collections = await collectionsF;
-    final Map<int, String> collectionNamesById = <int, String>{
-      for (final MediaCollectionRow c in collections) c.id: c.name,
-    };
-    final Map<int, String> collectionCoverById = <int, String>{
-      for (final MediaCollectionRow c in collections)
-        if (c.coverPath case final String path when path.isNotEmpty)
-          c.id: path,
-    };
-    final Map<String, ({int collectionId, int sortIndex})> membership =
-        await membershipF;
-    final Map<String, int> primaryByEntry = <String, int>{
-      for (final MapEntry<String, ({int collectionId, int sortIndex})> e
-          in membership.entries)
-        e.key: e.value.collectionId,
-    };
-    // 组内序：条目在其主折叠合集里的 sortIndex（视频页/书架 _loadShelfMaps 同
-    // 口径——只记归属主合集的行；SQL 侧已按主键回查好）。
-    final Map<String, int> memberSortIndex = <String, int>{
-      for (final MapEntry<String, ({int collectionId, int sortIndex})> e
-          in membership.entries)
-        e.key: e.value.sortIndex,
-    };
     final List<EpubBookMeta> epubRows = facts.epubRows;
-    // v83：成员表 epub entryKey = uid，同批行顺带建 bookKey→uid 换算表（空 uid
-    // 异常行不进表，查归属时按 bookKey 原样回退）。
     final Map<String, String> epubUidByBookKey = <String, String>{
       for (final EpubBookMeta r in epubRows)
         if (r.uid.isNotEmpty) r.bookKey: r.uid,
     };
-    // 「最近添加」= 本机最近开始拥有的（v118 localAddedAt），不是原始入库时刻：
-    // 刚从互联对端下载的旧书 importedAt 是对端多年前的入库时刻，按它排进不了这一行。
     final Map<String, int> epubLocalAddedAtByKey = <String, int>{
       for (final EpubBookMeta r in epubRows)
         if (r.localAddedAt != null) r.bookKey: r.localAddedAt!,
     };
-
-    // 每个视频的最近观看时刻（按 bookUid 取 lastActiveMs 最大值；legacy 无身份行
-    // mediaKey '' 跳过）。
-    final Map<String, int> watchAt = <String, int>{};
-    for (final StatFact w in watch) {
-      final String uid = w.mediaKey;
-      if (uid.isEmpty) continue;
-      if (w.lastActiveMs > (watchAt[uid] ?? 0)) {
-        watchAt[uid] = w.lastActiveMs;
-      }
-    }
-
     final MediaTrackingStatus tracking = await trackingF;
-
-    // 在看视频的总时长（「继续」卡进度条 / 百分比角标）：只查有断点的本地文件，
-    // 一条 IN 查询拿全；探测缓存里没有的（流媒体 / 没探测过）不进表。
-    final Map<String, VideoFileSpecRow> specs = await db.videoFileSpecsByPath(
-      <String>[
-        for (final VideoBookRow v in videos)
-          if (v.lastPositionMs > 0 && v.completedAt == null) v.videoPath,
-      ],
-    );
-    final Map<String, int> durationByPath = <String, int>{
-      for (final MapEntry<String, VideoFileSpecRow> e in specs.entries)
-        if ((e.value.durationMs ?? 0) > 0) e.key: e.value.durationMs!,
-    };
-
     final _HomeDashboardSnapshot snapshot = _HomeDashboardSnapshot(
       statWindow: statWindow,
-      videos: videos,
-      games: games,
       tracking: tracking,
       readingRows: reading,
-      watchRows: watch,
-      gameRows: game,
-      collectionNamesById: collectionNamesById,
-      primaryCollectionByEntry: primaryByEntry,
-      collectionCoverById: collectionCoverById,
       epubUidByBookKey: epubUidByBookKey,
       epubLocalAddedAtByKey: epubLocalAddedAtByKey,
-      memberSortIndex: memberSortIndex,
-      videoWatchAtByUid: watchAt,
-      videoDurationMsByPath: durationByPath,
     );
     _snapshots[db] = snapshot;
     if (!mounted) return;
@@ -1118,20 +777,10 @@ class _HomeDashboardPageState
   /// 不在快照里，由 [_loadRemoteDashboardData] 增量到达。
   void _applySnapshot(_HomeDashboardSnapshot s) {
     _statWindow = s.statWindow;
-    _videos = s.videos;
-    _games = s.games;
     _tracking = s.tracking;
     _readingRows = s.readingRows;
-    _watchRows = s.watchRows;
-    _gameRows = s.gameRows;
-    _collectionNamesById = s.collectionNamesById;
-    _primaryCollectionByEntry = s.primaryCollectionByEntry;
-    _collectionCoverById = s.collectionCoverById;
     _epubUidByBookKey = s.epubUidByBookKey;
     _epubLocalAddedAtByKey = s.epubLocalAddedAtByKey;
-    _memberSortIndex = s.memberSortIndex;
-    _videoWatchAtByUid = s.videoWatchAtByUid;
-    _videoDurationMsByPath = s.videoDurationMsByPath;
   }
 
   /// 「继续也走 fushi 互联」：互联启用且已配对时，从 host 拉取书清单（内联
@@ -1145,74 +794,29 @@ class _HomeDashboardPageState
   /// 不传：本地数据变了，补位要按新的本地集合重算。
   Future<void> _loadRemoteDashboardData({bool skipIfUnchanged = false}) async {
     final AppModel appModel = ref.read(appProvider);
-    // 「显示远端条目」门控前移到取数之前（BUG-1182 视频页同款）：此前本页只判
-    // 互联开关，关掉开关的用户仍全额付远端请求的网络代价、远端条目照混排。
-    // 门控必须是第一道闸——关着就零远端工作，翻关时顺手清掉已到达的远端状态。
     _remoteGateAtLastLoad = appModel.prefsRepo.showRemoteEntries;
     if (!_remoteGateAtLastLoad) {
       _clearRemoteDashboardData();
       return;
     }
     final SyncRepository syncRepo = SyncRepository(appModel.database);
-    // 互联是独立开关（已与云备份后端解耦），未启用/未配对直接跳过。
     if (!await syncRepo.isInterconnectEnabled()) return;
     final InterconnectSyncBackend backend = InterconnectSyncBackend.instance;
     if (!await backend.restoreAuth(syncRepo)) return;
     try {
-      // BUG-1180：首页不在 `_keepAliveTabs` 里，每次切回首页整页重建 → 远端请求
-      // 原本每次都重发；`_scheduleReload` 的 400ms 防抖重载还会再走一遍。改为
-      // ① 过共享 TTL 缓存（书/视频清单与书架、视频页同槽，谁先拉到谁受益），
-      // ② 请求并行而不是串行。
       final RemoteLibraryCache cache = ref.read(remoteLibraryCacheProvider);
-      // 与书架 / 视频库远端占位卡同一道过滤（BUG-3508）：本端「从所有设备删除」过的
-      // 书 / 视频在墓碑送达 host 前不能以远端「继续」卡复活。**先于取清单读**（见
-      // loadPendingRemoteDeletionKeys）。
       final Set<String> deletedBookKeys = await loadPendingRemoteDeletionKeys(
         appModel.database,
         SyncTombstoneKind.book,
         remoteLibrarySourceId: backend.remoteLibrarySourceId,
       );
-      final Set<String> deletedVideoKeys = await loadPendingRemoteDeletionKeys(
-        appModel.database,
-        SyncTombstoneKind.video,
-        remoteLibrarySourceId: backend.remoteLibrarySourceId,
-      );
-      final List<Object> results = await Future.wait<Object>(<Future<Object>>[
-        // 首页只走互联（上面已 return 掉未启用的情况），来源身份仍从 backend 自己
-        // 取而不是写字面量——书/视频两个域与书架、视频页同槽命中，靠的就是双方报出
-        // 同一个 id（BUG-1202）。
-        cache.read<List<RemoteBookInfo>>(
-          sourceId: backend.remoteLibrarySourceId,
-          key: RemoteLibraryCacheKeys.books,
-          fetch: backend.listRemoteBooks,
-        ),
-        cache.read<List<RemoteVideoInfo>>(
-          sourceId: backend.remoteLibrarySourceId,
-          key: RemoteLibraryCacheKeys.videos,
-          fetch: backend.listRemoteVideos,
-        ),
-      ]);
       final List<RemoteBookInfo> remoteBooks =
-          results[0] as List<RemoteBookInfo>;
-      final List<RemoteVideoInfo> remoteVideos =
-          results[1] as List<RemoteVideoInfo>;
-      final RemoteCollectionAdoptionService adoption =
-          RemoteCollectionAdoptionService(appModel.database);
-      // TTL 内缓存回的是同一个清单对象，它的合集收养已经落过库：不再逐条重做
-      // （书那边每轮还要全表装载一次身份索引）。保活后切回首页会走这里。
-      if (!identical(remoteBooks, _adoptedRemoteBooks)) {
-        await adoption.adoptBooks(remoteBooks);
-        _adoptedRemoteBooks = remoteBooks;
-      }
-      if (!identical(remoteVideos, _adoptedRemoteVideos)) {
-        for (final RemoteVideoInfo video in remoteVideos) {
-          await adoption.adoptVideo(video);
-        }
-        _adoptedRemoteVideos = remoteVideos;
-      }
-      if (skipIfUnchanged &&
-          identical(remoteBooks, _appliedRemoteBooks) &&
-          identical(remoteVideos, _appliedRemoteVideos)) {
+          await cache.read<List<RemoteBookInfo>>(
+        sourceId: backend.remoteLibrarySourceId,
+        key: RemoteLibraryCacheKeys.books,
+        fetch: backend.listRemoteBooks,
+      );
+      if (skipIfUnchanged && identical(remoteBooks, _appliedRemoteBooks)) {
         return;
       }
       if (!mounted) return;
@@ -1224,28 +828,17 @@ class _HomeDashboardPageState
           ReaderFushiSource.parseBookKey(item.mediaIdentifier) ??
               item.mediaIdentifier,
       };
-      localBookKeys.addAll(
-        (await CollectionBookIdentityIndex.load(appModel.database)).uidByKey.keys,
-      );
-      if (!mounted) return;
-      final Set<String> localVideoUids = <String>{
-        for (final VideoBookRow v in _videos) v.bookUid,
-      };
       final List<RemoteContinueCandidate> continueCandidates =
           remoteContinueCandidates(
         localBookKeys: localBookKeys,
-        localVideoUids: localVideoUids,
+        localVideoUids: const <String>{},
         remoteBooks: filterOutLocallyDeletedRemoteBooks(
           remote: remoteBooks,
           deletedKeys: deletedBookKeys,
           keyOf: sanitizeTtuFilename,
         ),
-        remoteVideos: filterOutLocallyDeletedRemoteVideos(
-          remote: remoteVideos,
-          deletedKeys: deletedVideoKeys,
-        ),
+        remoteVideos: const <RemoteVideoInfo>[],
       );
-      // 设备来源标注：配对时存下的 host 设备名（多地址时取第一个启用且有名的）。
       final List<FushiClientUrl> urls = await syncRepo.getFushiClientUrls();
       String? deviceName;
       for (final FushiClientUrl u in urls) {
@@ -1259,7 +852,6 @@ class _HomeDashboardPageState
       setState(() {
         _remoteContinue = continueCandidates;
         _appliedRemoteBooks = remoteBooks;
-        _appliedRemoteVideos = remoteVideos;
         _remoteCoverFetcher = remoteCoverFetcherFor(backend);
         _remoteDeviceName = deviceName;
       });
@@ -1277,7 +869,6 @@ class _HomeDashboardPageState
         _remoteCoverFetcher != null;
     if (!hasRemoteState) return;
     _appliedRemoteBooks = null;
-    _appliedRemoteVideos = null;
     setState(() {
       _remoteContinue = const <RemoteContinueCandidate>[];
       _remoteCoverFetcher = null;
@@ -1517,15 +1108,6 @@ class _HomeDashboardPageState
               label: t.stat_center_title,
               onPressed: _openStatisticsCenter,
             ),
-            // 收藏夹：唯一入口（用户定案 2026-10-14，同统计中心 2026-09-01 的收敛）。
-            // 收藏夹不按模块隔离，书架 / 视频库页头各挂一个打开的都是同一页，反而
-            // 误导成「本模块的收藏夹」，所以撤掉库页入口、统一从首页进。
-            FushiToolbarItem(
-              key: const ValueKey<String>('home-toolbar-collections'),
-              icon: FushiIcons.collection,
-              label: t.collections,
-              onPressed: _openCollections,
-            ),
             // 排行榜：统计中心隔壁单独一颗按钮（2026-10-01 从统计中心 tab 抽出）。
             FushiToolbarItem(
               key: const ValueKey<String>('home-toolbar-leaderboard'),
@@ -1605,189 +1187,40 @@ class _HomeDashboardPageState
       return lastReadByKey[epubUidByKey[bookKey] ?? bookKey] ?? 0;
     }
 
-    _ContinueEntry bookEntry(
-      MediaItem item, {
-      required int recentMs,
-      required String? collectionName,
-      int? volume,
-    }) {
+    for (final MediaItem item in books) {
+      if (!isDashboardContinueBook(item, completedBookKeys)) continue;
       final int percent = item.duration > 0
           ? ((item.position / item.duration) * 100).clamp(0, 100).round()
           : 0;
-      return _ContinueEntry(
-        kind: _bookMediaKind(item),
-        // BUG-1018 (A1)：书名走与书架卡同一 override 通道（编辑对话框改名后
-        // 首页「继续」区同步显示新名），不直接读 DB 原名。
-        title: ReaderFushiSource.instance.getDisplayTitleFromMediaItem(item),
-        recentMs: recentMs,
-        progress: percent / 100,
-        // 合集里的第几卷优先（下一卷还没开读时 0% 没有信息量），进度条照画。
-        badgeLabel:
-            volume != null ? t.home_continue_volume(n: volume) : '$percent%',
-        collectionName: collectionName,
-        book: item,
+      entries.add(
+        _ContinueEntry(
+          kind: _bookMediaKind(item),
+          // 书名走与书架卡同一 override 通道（编辑对话框改名后首页同步显示新名）。
+          title: ReaderFushiSource.instance.getDisplayTitleFromMediaItem(item),
+          recentMs: bookRecentMs(item),
+          progress: percent / 100,
+          badgeLabel: '$percent%',
+          book: item,
+        ),
       );
     }
-
-    // 书合集感知续读（与下方视频 Next-Up 同口径）：成员按主折叠合集归组，每个
-    // 合集在继续区最多一张卡，续读目标由 [dashboardBookCollectionContinueIndex]
-    // 定；散书保持「在读」逐本过滤的现行为。
-    final Map<int, List<MediaItem>> booksByCollection =
-        <int, List<MediaItem>>{};
-    for (final MediaItem item in books) {
-      final int? cid = _primaryCollectionByEntry[_bookCollectionKey(item)];
-      if (cid != null) {
-        (booksByCollection[cid] ??= <MediaItem>[]).add(item);
-        continue;
-      }
-      if (isDashboardContinueBook(item, completedBookKeys)) {
-        entries.add(
-          bookEntry(item, recentMs: bookRecentMs(item), collectionName: null),
-        );
-      }
-    }
-    for (final MapEntry<int, List<MediaItem>> ce
-        in booksByCollection.entries) {
-      final List<MediaItem> sorted = List<MediaItem>.of(ce.value)
-        ..sort((MediaItem a, MediaItem b) {
-          final int ai = _memberSortIndex[_bookCollectionKey(a)] ?? 1 << 30;
-          final int bi = _memberSortIndex[_bookCollectionKey(b)] ?? 1 << 30;
-          if (ai != bi) return ai.compareTo(bi);
-          return a.mediaIdentifier.compareTo(b.mediaIdentifier);
-        });
-      final List<int> readAt = <int>[
-        for (final MediaItem m in sorted) bookRecentMs(m),
-      ];
-      final int? idx =
-          dashboardBookCollectionContinueIndex(<CollectionMemberProgress>[
-        for (int i = 0; i < sorted.length; i++)
-          CollectionMemberProgress(
-            positionMs: sorted[i].position,
-            completed: classifyShelfReadStatus(
-                  completed: completedBookKeys.contains(bookKeyOf(sorted[i])),
-                  position: sorted[i].position,
-                  duration: sorted[i].duration,
-                ) ==
-                ShelfReadStatus.finished,
-            lastPlayedAt: readAt[i],
-          ),
-      ]);
-      if (idx == null) continue;
-      // 单元活跃时刻 = 组内各卷最近阅读时刻最大值（含读完的卷——下一卷卡按
-      // 「刚读完上一卷」的时间参与混排）。
-      final int recent = readAt.fold<int>(0, (int a, int b) => a > b ? a : b);
-      entries.add(bookEntry(
-        sorted[idx],
-        recentMs: recent,
-        collectionName: _collectionNamesById[ce.key],
-        volume: sorted.length >= 2 ? idx + 1 : null,
-      ));
-    }
-    // 视频侧合集感知 Next-Up（用户实报：合集里看完一集，合集不该从「继续」消
-    // 失，应推进为下一集）：成员按主折叠合集归组，每个合集在继续区**最多一张
-    // 卡**——组内复用视频页 hero 同口径（BUG-848 computeVideoLibraryOverview
-    // 的单元逻辑：sortIndex 排序 + [continueMemberIndex] 的 Jellyfin Next-Up
-    // 语义）；整组看完/整组没看过不出卡。散卡保持「有断点且未看完」现行为。
-    // 单行多集形态（playlistJson/currentEpisode 行内集数）completedAt 按整行，
-    // 天然沿用现行为。
-    final Map<int, List<VideoBookRow>> videosByCollection =
-        <int, List<VideoBookRow>>{};
-    final List<VideoBookRow> standaloneVideos = <VideoBookRow>[];
-    for (final VideoBookRow v in _videos) {
-      final int? cid =
-          _primaryCollectionByEntry[MediaKind.video.compositeKey(v.bookUid)];
-      if (cid == null) {
-        standaloneVideos.add(v);
-      } else {
-        (videosByCollection[cid] ??= <VideoBookRow>[]).add(v);
-      }
-    }
-    for (final VideoBookRow v in standaloneVideos) {
-      if (v.lastPositionMs > 0 && v.completedAt == null) {
-        final int recent = _videoWatchAtByUid[v.bookUid] ?? v.importedAt ?? 0;
-        entries.add(
-          _videoContinueEntry(v, collectionName: null, recentMs: recent),
-        );
-      }
-    }
-    for (final MapEntry<int, List<VideoBookRow>> ce
-        in videosByCollection.entries) {
-      final ({VideoBookRow row, int index, int count})? target =
-          _collectionResumeTarget(ce.value);
-      if (target == null) continue;
-      final VideoBookRow resume = target.row;
-      // 单元活跃时刻 = 成员观看时刻最大值（含已完成集——Next-Up 卡按「刚看完
-      // 上一集」的时间参与混排），无统计行回退续播目标导入时间。
-      int recent = 0;
-      for (final VideoBookRow m in ce.value) {
-        final int at = _videoWatchAtByUid[m.bookUid] ?? 0;
-        if (at > recent) recent = at;
-      }
-      if (recent == 0) {
-        recent = resume.importedAt ?? 0;
-      }
-      entries.add(_videoContinueEntry(
-        resume,
-        collectionName: _collectionNamesById[ce.key],
-        collectionId: ce.key,
-        recentMs: recent,
-        // 合集里的第几集（组内 sortIndex 序，1 起）；只有一集的合集不标集数。
-        collectionEpisode: target.count >= 2 ? target.index + 1 : null,
-        collectionEpisodeCount: target.count,
-      ));
-    }
-    // BUG-1111：在玩的游戏。判据是「玩过」（lastPlayedMs>0）——游戏没有「读完/
-    // 看完」这种完成度概念（`galgames` 无 completedAt，时长/次数由
-    // `galgame_sessions` 现算），所以不做「未完成」过滤；排序与取前 N 由下面统一
-    // 的 recentMs 倒序 + take(10) 兜住，不会淹没书与视频。
-    // 合集单元收敛与视频侧 [_collectionResumeTarget] 同口径：**一个合集在继续区
-    // 最多一张卡**。卡标题恒取合集名，不收敛的话同合集 N 个游戏会排出 N 张同名
-    // 卡，直接把继续区刷屏。游戏无完成度可推进「下一部」（视频那套 Next-Up 依赖
-    // completedAt），续玩目标取组内 lastPlayedMs 最大的一部——与该单元的 recentMs
-    // 同源，混排位置也就是「这个系列最近一次玩」的时刻。
-    final Map<int, GalgameEntry> gameResumeByCollection = <int, GalgameEntry>{};
-    for (final GalgameEntry g in _games) {
-      if (g.lastPlayedMs <= 0) continue;
-      final int? cid =
-          _primaryCollectionByEntry[MediaKind.game.compositeKey(g.id)];
-      if (cid == null) {
-        entries.add(_gameContinueEntry(g, collectionName: null));
-        continue;
-      }
-      final GalgameEntry? best = gameResumeByCollection[cid];
-      if (best == null || g.lastPlayedMs > best.lastPlayedMs) {
-        gameResumeByCollection[cid] = g;
-      }
-    }
-    for (final MapEntry<int, GalgameEntry> ge
-        in gameResumeByCollection.entries) {
-      entries.add(_gameContinueEntry(
-        ge.value,
-        // 合集名缺失（名字表没这行）→ null，与散卡同渲染，安全降级。
-        collectionName: _collectionNamesById[ge.key],
-      ));
-    }
-    // 互联 host 的远端补位（本地无同 key/uid 的在读书/在看视频），与本地条目
-    // 按最近活动时刻统一混排（「继续也走互联」）。
+    // 互联 host 的远端补位（本地无同 key/uid 的在读书）。
     for (final RemoteContinueCandidate c in _remoteContinue) {
-      entries.add(_ContinueEntry(
-        // BUG-1119：此前是 `c.isVideo ? video : epub` 二元降维——远端 SRT 书会被
-        // 抹成 epub、第三种媒体装不下（BUG-1111 的漏网消费点）。直读候选种类。
-        kind: c.kind,
-        title: c.title,
-        recentMs: c.recentMs,
-        // 远端书带 host 阅读百分比可画进度条；远端视频无集数/完成信息不画。
-        progress: c.isVideo ? null : c.percent / 100,
-        badgeLabel: c.isVideo ? null : '${c.percent}%',
-        collectionName: c.collectionName,
-        remote: c,
-      ));
+      if (c.isVideo) continue;
+      entries.add(
+        _ContinueEntry(
+          kind: c.kind,
+          title: c.title,
+          recentMs: c.recentMs,
+          progress: c.percent / 100,
+          badgeLabel: '${c.percent}%',
+          remote: c,
+        ),
+      );
     }
     entries.sort(
       (_ContinueEntry a, _ContinueEntry b) => b.recentMs.compareTo(a.recentMs),
     );
-    // 模块门控：关掉的模块的条目**先出局再 take(10)**——顺序反过来会出现「过滤后
-    // 不足 10 条」（前 10 条恰好全是被关模块的条目时甚至整行空掉）。
     final ModuleVisibility visibility = appModel.moduleVisibility;
     final List<_ContinueEntry> visible = entries
         .where((_ContinueEntry e) => visibility.isEnabled(e.module))
@@ -1932,64 +1365,39 @@ class _HomeDashboardPageState
     required double coverHeight,
   }) {
     final String kind = _kindLabel(entry.kind);
-    final String? collectionName = entry.collectionName;
     final List<String> subtitle = <String>[
       kind,
-      if (collectionName != null && collectionName != entry.title) entry.title,
       if (entry.remote != null) _remoteDeviceName ?? t.home_remote_source,
     ];
     final int recent = entry.recentMs;
-    // 卡片比例跟着实际用到的图走（用户 2026-10-14）：探测与渲染共用同一个
-    // provider；作品竖版海报 → 竖槽，回落到的每集截图 / 横版画面 → 16:9 横槽。
-    final ImageProvider? image = _videoCoverImage(entry);
-    return HomeCoverOrientationProbe(
-      image: image,
-      builder: (BuildContext context, bool landscape) => HomeContinueHero(
-        cover: _continueCover(
-          tokens,
-          appModel,
-          entry,
-          videoImage: image,
-          landscape: landscape,
-        ),
-        coverHeight: coverHeight,
-        landscapeCover: landscape,
-        eyebrow: recent > 0
-            ? formatActivityRelativeTime(recent, DateTime.now())
-            : null,
-        title: collectionName ?? entry.title,
-        subtitle: subtitle.join(' · '),
-        progress: entry.progress,
-        progressLabel: entry.badgeLabel,
-        actionLabel: _resumeActionLabel(entry),
-        actionIcon: _resumeActionIcon(entry),
-        onOpen: () => unawaited(_openContinueEntry(appModel, entry)),
-      ),
+    return HomeContinueHero(
+      cover: _continueCover(tokens, appModel, entry),
+      coverHeight: coverHeight,
+      landscapeCover: false,
+      eyebrow: recent > 0
+          ? formatActivityRelativeTime(recent, DateTime.now())
+          : null,
+      title: entry.title,
+      subtitle: subtitle.join(' · '),
+      progress: entry.progress,
+      progressLabel: entry.badgeLabel,
+      actionLabel: _resumeActionLabel(entry),
+      actionIcon: _resumeActionIcon(entry),
+      onOpen: () => unawaited(_openContinueEntry(appModel, entry)),
     );
   }
 
   /// 条目类型的短标签（阅读 / 观看 / 游戏）：主角卡副标题与「最近添加」行共用。
   String _kindLabel(MediaKind kind) => switch (kind) {
-        MediaKind.video => t.home_filter_watch,
-        MediaKind.game => t.home_filter_game,
         MediaKind.epub || MediaKind.srt => t.home_filter_read,
+        _ => t.home_filter_read,
       };
 
   /// 主角卡主按钮与「继续」FAB 共用的动作文案。
-  String _resumeActionLabel(_ContinueEntry entry) => switch (entry.kind) {
-        MediaKind.video => t.video_continue_watching,
-        MediaKind.epub || MediaKind.srt => t.book_continue_reading,
-        // 游戏卡落地是切到游戏库（启动走那边的确认链），文案说「打开」；
-        // 不用「继续」——会与分区标题撞成同一个词。
-        MediaKind.game => t.collection_open,
-      };
+  String _resumeActionLabel(_ContinueEntry entry) => t.book_continue_reading;
 
   /// 主角卡主按钮与「继续」FAB 共用的动作图标。
-  IconData _resumeActionIcon(_ContinueEntry entry) => switch (entry.kind) {
-        MediaKind.video => FushiIcons.play,
-        MediaKind.epub || MediaKind.srt => FushiIcons.books,
-        MediaKind.game => FushiIcons.games,
-      };
+  IconData _resumeActionIcon(_ContinueEntry entry) => FushiIcons.books;
 
   /// 「最近添加」卡（用户 2026-10-09：桌面 / 平板横屏空白太多；10-10 起带标题、
   /// 放进双栏版式的侧栏）。
@@ -2009,22 +1417,10 @@ class _HomeDashboardPageState
     List<MediaItem> books,
   ) {
     final Set<String> shownBooks = <String>{};
-    final Set<String> shownVideos = <String>{};
-    final Set<int> shownVideoCollections = <int>{};
-    final Set<String> shownGames = <String>{};
     for (final _ContinueEntry e in _continueVisible) {
       if (e.remote != null) continue;
       if (e.book != null) shownBooks.add(e.book!.mediaIdentifier);
-      if (e.video != null) {
-        if (e.collectionId != null) {
-          shownVideoCollections.add(e.collectionId!);
-        } else {
-          shownVideos.add(e.video!.bookUid);
-        }
-      }
-      if (e.game != null) shownGames.add(e.game!.id);
     }
-
     final List<_ContinueEntry> entries = <_ContinueEntry>[];
     for (final MediaItem item in books) {
       if (shownBooks.contains(item.mediaIdentifier)) continue;
@@ -2040,68 +1436,6 @@ class _HomeDashboardPageState
         book: item,
       ));
     }
-
-    final Map<int, List<VideoBookRow>> videosByCollection =
-        <int, List<VideoBookRow>>{};
-    for (final VideoBookRow v in _videos) {
-      final int? cid =
-          _primaryCollectionByEntry[MediaKind.video.compositeKey(v.bookUid)];
-      if (cid != null) {
-        (videosByCollection[cid] ??= <VideoBookRow>[]).add(v);
-        continue;
-      }
-      final int addedAt = v.localAddedAt ?? 0;
-      if (addedAt <= 0 || shownVideos.contains(v.bookUid)) continue;
-      entries.add(_ContinueEntry(
-        kind: MediaKind.video,
-        title: v.title,
-        recentMs: addedAt,
-        video: v,
-      ));
-    }
-    for (final MapEntry<int, List<VideoBookRow>> ce
-        in videosByCollection.entries) {
-      if (shownVideoCollections.contains(ce.key)) continue;
-      int addedAt = 0;
-      for (final VideoBookRow m in ce.value) {
-        final int at = m.localAddedAt ?? 0;
-        if (at > addedAt) addedAt = at;
-      }
-      if (addedAt <= 0) continue;
-      // 点开落到组内第一集（sortIndex 序，缺失沉底）——新加的合集还没看过，从头
-      // 开始；播放器按主合集建剧集面板，上下集照常可切。
-      final VideoBookRow first = ce.value.reduce(
-        (VideoBookRow a, VideoBookRow b) {
-          final int ai =
-              _memberSortIndex[MediaKind.video.compositeKey(a.bookUid)] ??
-                  1 << 30;
-          final int bi =
-              _memberSortIndex[MediaKind.video.compositeKey(b.bookUid)] ??
-                  1 << 30;
-          if (ai != bi) return ai < bi ? a : b;
-          return a.bookUid.compareTo(b.bookUid) <= 0 ? a : b;
-        },
-      );
-      entries.add(_ContinueEntry(
-        kind: MediaKind.video,
-        title: first.title,
-        recentMs: addedAt,
-        collectionName: _collectionNamesById[ce.key],
-        collectionId: ce.key,
-        video: first,
-      ));
-    }
-
-    for (final GalgameEntry g in _games) {
-      if (shownGames.contains(g.id)) continue;
-      entries.add(_ContinueEntry(
-        kind: MediaKind.game,
-        title: g.displayName,
-        recentMs: g.addedAt.millisecondsSinceEpoch,
-        game: g,
-      ));
-    }
-
     final ModuleVisibility visibility = appModel.moduleVisibility;
     entries.sort(
       (_ContinueEntry a, _ContinueEntry b) => b.recentMs.compareTo(a.recentMs),
@@ -2194,34 +1528,17 @@ class _HomeDashboardPageState
     _ContinueEntry entry, {
     required double coverHeight,
   }) {
-    final ImageProvider? image = _videoCoverImage(entry);
     return Align(
       alignment: AlignmentDirectional.bottomStart,
-      child: HomeCoverOrientationProbe(
-        image: image,
-        builder: (BuildContext context, bool landscape) {
-          final Size slot = homeContinueCoverSize(
-            portraitWidth: coverHeight * _kContinueCoverAspect,
-            landscape: landscape,
-          );
-          return HomeContinueCoverCard(
-            cover: _continueCover(
-              tokens,
-              appModel,
-              entry,
-              videoImage: image,
-              landscape: landscape,
-            ),
-            width: slot.width,
-            height: slot.height,
-            title: _continueDisplayTitle(entry),
-            progress: entry.progress,
-            badgeLabel: entry.badgeLabel,
-            badgeIcon: entry.badgeIcon,
-            showTitle: true,
-            onTap: () => unawaited(_openContinueEntry(appModel, entry)),
-          );
-        },
+      child: HomeContinueCoverCard(
+        cover: _continueCover(tokens, appModel, entry),
+        width: coverHeight * _kContinueCoverAspect,
+        height: coverHeight,
+        title: _continueDisplayTitle(entry),
+        progress: entry.progress,
+        badgeLabel: entry.badgeLabel,
+        showTitle: true,
+        onTap: () => unawaited(_openContinueEntry(appModel, entry)),
       ),
     );
   }
@@ -2229,7 +1546,7 @@ class _HomeDashboardPageState
   /// 卡的显示名（读屏标签 / 悬停提示 / 无封面兜底）：合集成员显示合集名（非合集
   /// 上下文拼合集名的老规则），远端条目缀设备名标明来源。
   String _continueDisplayTitle(_ContinueEntry entry) {
-    final String title = entry.collectionName ?? entry.title;
+    final String title = entry.title;
     if (entry.remote == null) return title;
     return '$title · ${_remoteDeviceName ?? t.home_remote_source}';
   }
@@ -2241,136 +1558,6 @@ class _HomeDashboardPageState
       ReaderFushiSource.parseSrtBookUid(item.mediaIdentifier) != null
           ? MediaKind.srt
           : MediaKind.epub;
-
-  /// 书 [MediaItem] → 合集归属键：epub 用 uid（v83 成员表键；bookKey 经
-  /// [_epubUidByBookKey] 换算，换算不上按 bookKey 回退——与透传成员行同键），
-  /// standalone SRT 书身份是 `hoshi://srtbook/<uid>`（BUG-1018 A3）→ 'srt|<uid>'；
-  /// 识别不出回退 epub 键（查不中合集，安全降级）。
-  ///
-  /// v83 前写入、仍以 bookKey 为 entryKey 的旧成员行：
-  /// [FushiDatabase.getLocalPrimaryCollectionMembership] 两种键都收，这里 uid 键
-  /// 查不中归属时退到 bookKey 键，否则旧合集在「继续」区按散书逐本判、续读推进
-  /// 不到下一卷。
-  String _bookCollectionKey(MediaItem item) {
-    final String? bookKey =
-        ReaderFushiSource.parseBookKey(item.mediaIdentifier);
-    if (bookKey != null) {
-      final String uidKey =
-          MediaKind.epub.compositeKey(_epubUidByBookKey[bookKey] ?? bookKey);
-      if (_primaryCollectionByEntry.containsKey(uidKey)) return uidKey;
-      final String legacyKey = MediaKind.epub.compositeKey(bookKey);
-      return _primaryCollectionByEntry.containsKey(legacyKey)
-          ? legacyKey
-          : uidKey;
-    }
-    final String? srtUid =
-        ReaderFushiSource.parseSrtBookUid(item.mediaIdentifier);
-    if (srtUid != null) return MediaKind.srt.compositeKey(srtUid);
-    // 有意的 miss-key 兜底：entryKey 是完整 hoshi:// 标识而非 bookKey，
-    // 查不中合集，安全降级为散卡。
-    return MediaKind.epub.compositeKey(item.mediaIdentifier);
-  }
-
-  /// 视频行 → 继续卡条目（散卡与合集续播目标共用），进度见
-  /// [dashboardVideoContinueProgress]（反馈「小说有进度显示，视频缺了进度显示」）。
-  /// [collectionEpisode] = 合集续播目标在组内是第几集（1 起，单集合集为 null）。
-  _ContinueEntry _videoContinueEntry(
-    VideoBookRow v, {
-    required String? collectionName,
-    int? collectionId,
-    required int recentMs,
-    int? collectionEpisode,
-    int collectionEpisodeCount = 0,
-  }) {
-    final DashboardVideoProgress p = dashboardVideoContinueProgress(
-      completed: v.completedAt != null,
-      positionMs: v.lastPositionMs,
-      durationMs: _videoDurationMsByPath[v.videoPath],
-      currentEpisode: v.currentEpisode,
-      playlistEpisodeCount: playlistEpisodeCount(v.playlistJson),
-      collectionEpisode: collectionEpisode,
-      collectionEpisodeCount: collectionEpisodeCount,
-    );
-    final int? episode = p.episode;
-    final int? percent = p.percent;
-    final int? positionMs = p.positionMs;
-    return _ContinueEntry(
-      kind: MediaKind.video,
-      title: v.title,
-      recentMs: recentMs,
-      progress: p.fraction,
-      // 角标三选一：多集 →「第 N 集」；单视频知道总时长 →「37%」；都不知道 →
-      // 看到的时间点（▶ 12:34）。
-      badgeLabel: episode != null
-          ? t.home_continue_episode(n: episode)
-          : percent != null
-              ? '$percent%'
-              : (positionMs != null ? formatVideoPosition(positionMs) : null),
-      badgeIcon: positionMs != null ? FushiIcons.play : null,
-      collectionName: collectionName,
-      collectionId: collectionId,
-      video: v,
-    );
-  }
-
-  /// 游戏行 → 继续卡条目（散卡与合集续玩目标共用）：与库页/时间轴同一显示名
-  /// 口径（改名/刮削后首页同步）；无完成度概念不画进度条（progress 留 null），
-  /// [recentMs] 恒取最近游玩时刻。
-  _ContinueEntry _gameContinueEntry(
-    GalgameEntry game, {
-    required String? collectionName,
-  }) {
-    return _ContinueEntry(
-      kind: MediaKind.game,
-      title: game.displayName,
-      recentMs: game.lastPlayedMs,
-      collectionName: collectionName,
-      game: game,
-    );
-  }
-
-  /// 合集单元的续播目标（**视频页 hero 同口径**，BUG-848
-  /// computeVideoLibraryOverview 的单元逻辑）：成员按主合集组内 sortIndex
-  /// （缺失沉底）→ bookUid 排序，跑 [continueMemberIndex]（最靠后有痕迹一集；
-  /// 它已完成则推进下一集）。整组无痕迹（没看过，不劝人从头开始）或目标仍是
-  /// 已完成集（整季看完）→ null 不出卡（自然滚出继续区）。返回续播目标与它在
-  /// 组内的序号 / 组大小（「继续」卡的集数角标）。
-  ({VideoBookRow row, int index, int count})? _collectionResumeTarget(
-    List<VideoBookRow> members,
-  ) {
-    final List<VideoBookRow> sorted = List<VideoBookRow>.of(members)
-      ..sort((VideoBookRow a, VideoBookRow b) {
-        final int ai =
-            _memberSortIndex[MediaKind.video.compositeKey(a.bookUid)] ??
-                1 << 30;
-        final int bi =
-            _memberSortIndex[MediaKind.video.compositeKey(b.bookUid)] ??
-                1 << 30;
-        if (ai != bi) return ai.compareTo(bi);
-        return a.bookUid.compareTo(b.bookUid);
-      });
-    final bool anyTrace = sorted.any(
-      (VideoBookRow m) => m.completedAt != null || m.lastPositionMs > 0,
-    );
-    if (!anyTrace) return null;
-    final PreferencesRepository prefs = ref.read(appProvider).prefsRepo;
-    final List<CollectionMemberProgress> progress = <CollectionMemberProgress>[
-      for (final VideoBookRow m in sorted)
-        CollectionMemberProgress(
-          positionMs: m.lastPositionMs,
-          completed: m.completedAt != null,
-          lastPlayedAt: m.lastPlayedAt,
-          // BUG-3491：片长用来分辨「已打勾的集正在重看」。
-          durationMs: videoDurationMsFromPref(
-            prefs.getPref(videoDurationPrefKey(m.bookUid)),
-          ),
-        ),
-    ];
-    final int idx = continueMemberIndex(progress);
-    final VideoBookRow resume = sorted[idx];
-    if (progress[idx].isFinished) return null;
-    return (row: resume, index: idx, count: sorted.length);
-  }
 
   /// 「继续」卡封面本体（远端 / 视频 / 游戏 / 书四路）。封面行不再挂标题文字，
   /// 取不到图的条目一律画「图标 + 条目名」兜底（[_coverPlaceholder]）。
@@ -2386,24 +1573,12 @@ class _HomeDashboardPageState
     bool landscape = false,
   }) {
     final String title = _continueDisplayTitle(entry);
-    if (entry.isVideo) {
-      return _coverImage(
-        tokens,
-        videoImage ?? _videoCoverImage(entry),
-        icon: mediaCoverFallbackIcon(MediaKind.video),
-        title: title,
-        landscape: landscape,
-      );
-    }
     if (entry.remote != null) return _remoteCover(tokens, entry);
-    if (entry.isGame) return _gameCover(tokens, entry.game!, title: title);
     final ImageProvider image =
         ReaderFushiSource.instance.getDisplayThumbnailFromMediaItem(
       appModel: appModel,
       item: entry.book!,
     );
-    // 没有封面的书，取图链回的是一张透明占位图（[kTransparentImage]），整卡会是
-    // 一块空白——直接画「图标 + 书名」兜底。
     if (image is MemoryImage && identical(image.bytes, kTransparentImage)) {
       return _coverPlaceholder(tokens, FushiIcons.books, title: title);
     }
@@ -2441,119 +1616,15 @@ class _HomeDashboardPageState
     final RemoteContinueCandidate remote = entry.remote!;
     final String? coverUrl = remote.coverUrl;
     final RemoteCoverFetcher? fetcher = _remoteCoverFetcher;
-    final IconData icon =
-        entry.isVideo ? FushiIcons.video : FushiIcons.books;
+    final IconData icon = FushiIcons.books;
     final String title = _continueDisplayTitle(entry);
     if (coverUrl == null || coverUrl.isEmpty || fetcher == null) {
       return _coverPlaceholder(tokens, icon, title: title);
     }
-    // 远端封面横竖不可知（host 侧可能是截帧也可能是海报）：竖卡，横图裁进去。
-    return PortraitCoverImage(
+    return Image(
       image: RemoteCoverImage(coverUrl, fetcher, cacheKey: remote.id),
-      cropMismatch: true,
-      errorBuilder: (BuildContext _) =>
-          _coverPlaceholder(tokens, icon, title: title),
-    );
-  }
-
-  /// 视频条目实际用到的那张封面：本地走 [dashboardVideoCoverPath] 回退链（作品海报
-  /// → 本集封面 → 同合集其它集封面），远端是 host 下发的封面。非视频 / 取不到图
-  /// → null（卡片按竖卡画占位）。
-  ImageProvider? _videoCoverImage(_ContinueEntry entry) {
-    if (!entry.isVideo) return null;
-    final RemoteContinueCandidate? remote = entry.remote;
-    if (remote != null) {
-      final String? url = remote.coverUrl;
-      final RemoteCoverFetcher? fetcher = _remoteCoverFetcher;
-      if (url == null || url.isEmpty || fetcher == null) return null;
-      return RemoteCoverImage(url, fetcher, cacheKey: remote.id);
-    }
-    final VideoBookRow? video = entry.video;
-    if (video == null) return null;
-    final int? cid = entry.collectionId;
-    return resolveMediaCoverImage(
-      kind: MediaKind.video,
-      localPath: dashboardVideoCoverPath(
-        collectionCover: cid == null ? null : _collectionCoverById[cid],
-        ownCover: video.coverPath,
-        memberCovers: cid == null
-            ? const <String?>[]
-            : _collectionMemberCovers(cid, except: video.bookUid),
-        exists: (String path) => File(path).existsSync(),
-      ),
-      decodeWidth: kLocalCoverDecodePixelWidth,
-    );
-  }
-
-  /// 同一主合集里其它集的封面路径（懒序列，[dashboardVideoCoverPath] 找到第一张
-  /// 存在的就停，不会把整部作品的文件都探一遍）。
-  Iterable<String?> _collectionMemberCovers(
-    int collectionId, {
-    required String except,
-  }) sync* {
-    for (final VideoBookRow v in _videos) {
-      if (v.bookUid == except) continue;
-      if (_primaryCollectionByEntry[MediaKind.video.compositeKey(v.bookUid)] !=
-          collectionId) {
-        continue;
-      }
-      yield v.coverPath;
-    }
-  }
-
-  /// 游戏封面（BUG-1111 / BUG-1112）：目录扫描 / exe 图标 / 刮削最终都落到
-  /// `galgames.coverPath`，显示侧交给统一来源解析器，不在页面重复同步文件探测。
-  /// exe 内嵌图标是方图，走 [PortraitCoverImage] 垫底完整显示而非硬裁（BUG-1299）。
-  Widget _gameCover(
-    FushiDesignTokens tokens,
-    GalgameEntry game, {
-    required String title,
-  }) {
-    return _localCover(
-      tokens,
-      kind: MediaKind.game,
-      path: game.coverPath,
-      title: title,
-    );
-  }
-
-  /// 本地视频 / 游戏封面：来源解析共用 [resolveMediaCoverImage]，渲染交给
-  /// [PortraitCoverImage]（2:3 竖槽，横图居中裁切）。取不到图 →「图标 + [title]」
-  /// 兜底。
-  Widget _localCover(
-    FushiDesignTokens tokens, {
-    required MediaKind kind,
-    required String? path,
-    required String title,
-  }) {
-    return _coverImage(
-      tokens,
-      resolveMediaCoverImage(
-        kind: kind,
-        localPath: path,
-        decodeWidth: kLocalCoverDecodePixelWidth,
-      ),
-      icon: mediaCoverFallbackIcon(kind),
-      title: title,
-    );
-  }
-
-  /// 封面渲染：[landscape] = 16:9 横槽（横图完整铺满，介于方与 16:9 之间的图模糊
-  /// 垫底完整显示）；否则 2:3 竖槽（竖图铺满，横图居中裁切——只剩「最近添加」小
-  /// 方块与游戏这类不分流的地方会走到）。取不到图 →「图标 + [title]」兜底。
-  Widget _coverImage(
-    FushiDesignTokens tokens,
-    ImageProvider? image, {
-    required IconData icon,
-    required String title,
-    bool landscape = false,
-  }) {
-    if (image == null) return _coverPlaceholder(tokens, icon, title: title);
-    return PortraitCoverImage(
-      image: image,
-      landscapeSlot: landscape,
-      cropMismatch: !landscape,
-      errorBuilder: (BuildContext _) =>
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) =>
           _coverPlaceholder(tokens, icon, title: title),
     );
   }
@@ -2619,21 +1690,8 @@ class _HomeDashboardPageState
     AppModel appModel,
     _ContinueEntry entry,
   ) async {
-    // 卡片本身已按 [_ContinueEntry.module] 过滤过（关掉的模块根本没有卡），所以
-    // 这里的每条落地路径都在开着的模块内；[_goToTab] 的门只是防御性兜底。
     if (entry.remote != null) {
-      _goToTab(entry.isVideo ? HomeTab.video : HomeTab.books);
-      return;
-    }
-    if (entry.isVideo) {
-      await _openLocalVideo(entry.video!.bookUid);
-      return;
-    }
-    // BUG-1111：游戏卡点击**切到游戏 tab**，不直接拉起游戏。启动 galgame 要走
-    // 位数探测 / helper 确认下载 / 注入会话（`GamesLibraryPage._launchGame`，
-    // 数秒且可能弹窗），从首页静默触发是危险的误操作面；库页才是启动入口。
-    if (entry.isGame) {
-      _goToTab(HomeTab.games);
+      _goToTab(HomeTab.books);
       return;
     }
     final MediaItem item = entry.book!;
@@ -2661,30 +1719,6 @@ class _HomeDashboardPageState
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(FushiSnackBar(content: Text(t.module_disabled_hint)));
-  }
-
-  /// 直接续播本地视频：与视频页 hero/卡片同一条共享路由入口 [openLocalVideoBook]
-  /// （合集成员带主合集 id → 播放器建剧集面板/上下集/连播；散卡单视频打开）。
-  /// 播放页关闭后无需手动刷新——lastPositionMs 落库触发 videoBooks 表级变更，
-  /// [_scheduleReload] 自动重查。测试经 [HomeDashboardPage.openVideoOverride] 注入替身。
-  Future<void> _openLocalVideo(String bookUid) async {
-    final int? playlistCollectionId =
-        _primaryCollectionByEntry[MediaKind.video.compositeKey(bookUid)];
-    final Future<void> Function(
-      BuildContext context,
-      VideoBookRepository repo,
-      String bookUid,
-      int? playlistCollectionId,
-    ) open = widget.openVideoOverride ??
-        (BuildContext context, VideoBookRepository repo, String bookUid,
-                int? playlistCollectionId) =>
-            openLocalVideoBook(
-              context: context,
-              repo: repo,
-              bookUid: bookUid,
-              playlistCollectionId: playlistCollectionId,
-            );
-    await open(context, widget.videoRepo, bookUid, playlistCollectionId);
   }
 
   // ── 学习头部行 / 目标 ────────────────────────────────────────────────────
@@ -2739,17 +1773,6 @@ class _HomeDashboardPageState
       adaptivePageRoute<void>(
         context: context,
         builder: (_) => const StatisticsCenterPage(),
-      ),
-    );
-  }
-
-  /// 收藏夹入口（唯一入口：书架 / 漫画 / 视频库页头的收藏夹按钮已撤）。
-  void _openCollections() {
-    Navigator.push(
-      context,
-      adaptivePageRoute<void>(
-        context: context,
-        builder: (_) => const CollectionsPage(),
       ),
     );
   }

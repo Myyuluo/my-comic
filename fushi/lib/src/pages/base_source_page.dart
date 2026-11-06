@@ -1,6 +1,9 @@
 import 'dart:async';
-import 'package:fushi/src/mining/advanced_mining/advanced_mining_capabilities.dart';
+
 import 'package:fushi/src/anki/source_review_navigation.dart';
+import 'package:fushi/src/mining/advanced_mining/advanced_mining_dialog.dart';
+import 'package:fushi/src/mining/advanced_mining/advanced_mining_capabilities.dart';
+import 'package:fushi/src/utils/misc/exit_after_persist.dart';
 import 'package:fushi/src/anki/source_review_session.dart';
 import 'package:fushi/src/diagnostics/lookup_perf_trace.dart';
 
@@ -17,7 +20,7 @@ import 'package:fushi/src/anki/anki_view_model.dart';
 import 'package:fushi/src/anki/anki_mined_card_action_sheet.dart';
 import 'package:fushi/src/lookup/effective_lookup_size.dart';
 import 'package:fushi/src/media/favorites/favorite_lookup_context.dart';
-import 'package:fushi/src/media/video/video_exit_flush.dart';
+
 import 'package:fushi/src/media/audiobook/mining_sentence_draft.dart'
     show SentenceContextSlot;
 import 'package:fushi/src/models/module_id.dart';
@@ -26,7 +29,7 @@ import 'package:fushi/src/pages/implementations/dictionary_popup_input_bridge.da
 import 'package:fushi/src/pages/implementations/dictionary_popup_layer.dart';
 import 'package:fushi/src/pages/implementations/dictionary_popup_webview.dart';
 import 'package:fushi/src/anki/advanced_mining_deck_section.dart';
-import 'package:fushi/src/mining/advanced_mining/advanced_mining_dialog.dart';
+
 import 'package:fushi/src/shortcuts/mouse_binding_dispatch.dart';
 import 'package:fushi/src/shortcuts/shortcut_action.dart';
 import 'package:fushi/src/pages/implementations/stat_activity.dart';

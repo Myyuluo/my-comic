@@ -185,6 +185,9 @@ Future<_HomeShellAppModel> _pumpHome(
   );
   await tester.pump();
   await tester.pump();
+  // HomePage 启动后台更新检查会挂一个周期 Timer；测试卸载页面后它仍活着，
+  // 命不中「无 pending timer」不变式。挂载完成后显式停掉（幂等）。
+  await appModel.stopUpdateChecks();
   expect(HomePage.debugSelectTab, isNotNull,
       reason: 'HomePage 必须已挂载并注册 debugSelectTab 生产钩子');
   return appModel;
@@ -222,25 +225,8 @@ void main() {
         .setMockMethodCallHandler(const MethodChannel('window_manager'), null);
   });
 
-  testWidgets('查词模块开着：请求打开查词落在 tab 上（不推路由），pending 被消费',
-      (WidgetTester tester) async {
-    final _HomeShellAppModel appModel =
-        await _pumpHome(tester, dictionariesEnabled: true);
-
-    DesktopLookupService.instance.triggerLookup(' tabword ');
-    appModel.requestHomeDictionaryTab();
-    await _settle(tester);
-
-    expect(find.byType(HomeDictionaryPage), findsOneWidget);
-    expect(
-      find.byKey(const ValueKey<String>('home-dictionary-route-back')),
-      findsNothing,
-      reason: 'tab 承载不产生路由栈，不该画返回箭头。',
-    );
-    expect(appModel.searchedTerms, <String>['tabword']);
-    expect(DesktopLookupService.instance.pendingText, isNull);
-    await _unmount(tester);
-  });
+  // my-comic v1 只保留漫画域（ModuleId.isInMyComicScope），查词 tab 恒不可见；
+  // 查词请求一律走独立路由，不再有「落在 tab 上」的分支。
 
   testWidgets('查词模块关掉：tab 确实隐藏，但请求改推独立路由，pending 仍被消费',
       (WidgetTester tester) async {
@@ -351,33 +337,6 @@ void main() {
     await _unmount(tester);
   });
 
-  // 上一条的死角：底下那层恰好已经停在查词 tab 上。早退判据若只看 `_currentTab`，
-  // 这次请求会变成**彻底的 no-op**（窗口弹到前台、一点反馈都没有）。
-  testWidgets('底层已在查词 tab 且被全屏路由遮住：仍必须推独立路由，不得早退成 no-op',
-      (WidgetTester tester) async {
-    final _HomeShellAppModel appModel =
-        await _pumpHome(tester, dictionariesEnabled: true);
-
-    HomePage.debugSelectTab!(HomeTab.dictionaries);
-    await _settle(tester);
-    expect(find.byType(HomeDictionaryPage), findsOneWidget);
-
-    unawaited(Navigator.of(appModel.navigatorKey.currentContext!).push<void>(
-      MaterialPageRoute<void>(
-        builder: (_) => const Scaffold(body: Center(child: Text('video-上层'))),
-      ),
-    ));
-    await _settle(tester);
-
-    appModel.requestHomeDictionaryTab();
-    await _settle(tester);
-
-    expect(
-      find.byKey(const ValueKey<String>('home-dictionary-route-back')),
-      findsOneWidget,
-      reason: '「已经在查词 tab 上」只有 HomePage 在栈顶时才等于「已经显示出来了」。',
-    );
-    expect(find.text('video-上层', skipOffstage: false), findsOneWidget);
-    await _unmount(tester);
-  });
+  // 「底层已在查词 tab」的死角随查词 tab 在 my-comic 中恒不可见而消失：
+  // 查词页只以独立路由承载（见上一条）。
 }

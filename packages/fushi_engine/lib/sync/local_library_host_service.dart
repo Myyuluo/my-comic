@@ -4,49 +4,30 @@ import 'package:drift/drift.dart'
     show Value;
 import 'package:fushi_engine/models/dictionary_directory.dart';
 import 'package:fushi_engine/models/local_audio_db_entry.dart';
-import 'package:fushi_engine/media/video/video_library_import.dart'
-    show parseSubtitleCues;
-import 'package:fushi_engine/media/video/video_sidecar.dart'
-    show
-        defaultSidecarSubtitleSuffix,
-        findSidecarSubtitle,
-        isSidecarSubtitleSuffix,
-        listSidecarSubtitles,
-        pickSidecar,
-        sidecarSuffixesDisplacedBy;
+
+
 import 'package:fushi_audio/fushi_audio_core.dart'
     show AudioCue, AudiobookStorage, readTextWithEncoding;
 import 'package:fushi_engine/media/media_pref_keys.dart';
-import 'package:fushi_engine/media/video/anime_source_video_path.dart';
-import 'package:fushi_engine/media/video/m3u8_playlist.dart'
-    show PlaylistEntry;
-import 'package:fushi_engine/media/video/strm_file.dart'
-    show isNetworkOnlyVideoPath, lacksLocalMediaFile;
-import 'package:fushi_engine/media/video/metadata/video_library_scrape_sweep.dart'
-    show VideoPendingScrapeWork, planScrapeWorksForCollection;
-import 'package:fushi_engine/media/video/metadata/video_metadata_database_store.dart';
-import 'package:fushi_engine/media/video/metadata/video_metadata_locked_fields.dart';
-import 'package:fushi_engine/media/video/metadata/video_metadata_models.dart'
-    show VideoMetadataMediaKind, VideoMetadataProviderKind, VideoMetadataWork;
-import 'package:fushi_engine/media/video/metadata/video_metadata_provider.dart'
-    show VideoMetadataEpisodeGroupSummary, VideoMetadataLookup;
-import 'package:fushi_engine/media/video/metadata/video_metadata_work_loader.dart';
-import 'package:fushi_engine/media/video/metadata/video_scrape_operation_gate.dart';
-import 'package:fushi_engine/media/video/metadata/video_source_scrape_task.dart'
-    show
-        SourceScrapeReport,
-        VideoSourceScrapeConfirmationCandidate,
-        VideoSourceScrapeTaskController;
-import 'package:fushi_engine/media/video/metadata/video_source_work_planner.dart';
-import 'package:fushi_engine/media/source_library/source_library_row.dart'
-    show SourceLibraryRow;
-import 'package:fushi_engine/sync/video_metadata_manifest.dart';
-import 'package:fushi_engine/sync/video_metadata_work_target.dart';
-import 'package:fushi_engine/media/video/scraper/cover_meta_store.dart';
-import 'package:fushi_engine/media/video/video_book_repository.dart';
-import 'package:fushi_engine/media/video/video_storage.dart';
-import 'package:fushi_engine/media/video/series_playback_prefs.dart'
-    show effectiveSeriesAudioTrackId, effectiveSeriesDelayMs, effectiveSeriesSecondaryDelayMs;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 import 'package:fushi_engine/sync/online_novel_book.dart';
 import 'package:fushi_engine/sync/manga_sync_package.dart'
     show hasExportableMangaContent, kMangaPackageMarker, repackageMangaBook;
@@ -54,15 +35,15 @@ import 'package:fushi_engine/stats/stat_facts.dart';
 import 'package:fushi_engine/sync/aggregate_snapshot.dart';
 import 'package:fushi_engine/sync/override_title_lookup.dart';
 import 'package:fushi_engine/sync/aggregate_sync_service.dart';
-import 'package:fushi_engine/sync/collection_manifest.dart';
-import 'package:fushi_engine/sync/collection_sync_engine.dart';
+
+
 import 'package:fushi_engine/sync/tag_sync.dart';
 import 'package:fushi_engine/sync/fushi_library_host_service.dart';
 import 'package:fushi_engine/sync/interconnect_service_config.dart';
 import 'package:fushi_engine/sync/interconnect_profile_transfer.dart';
 import 'package:fushi_engine/sync/deletion_propagation.dart';
 import 'package:fushi_engine/sync/sync_asset_package_service.dart';
-import 'package:fushi_engine/sync/collection_sync_baseline.dart';
+
 import 'package:fushi_engine/sync/sync_channel_scope.dart';
 import 'package:fushi_engine/sync/epub_repackage.dart';
 import 'package:fushi_engine/utils/misc/desktop_audio_clipper.dart'
@@ -70,7 +51,7 @@ import 'package:fushi_engine/utils/misc/desktop_audio_clipper.dart'
 import 'package:fushi_core/fushi_core.dart';
 import 'package:path/path.dart' as p;
 import 'package:fushi_engine/foundation/engine_log.dart';
-import 'package:fushi_engine/media/collections/book_series_grouper.dart';
+
 import 'package:fushi_engine/dictionary/dictionary_engine_hooks.dart';
 import 'package:fushi_engine/sync/override_title_db.dart';
 import 'package:fushi_engine/media/manga/manga_chapter_storage.dart'
@@ -91,8 +72,6 @@ part 'local_library_host_service/books.part.dart';
 part 'local_library_host_service/manga.part.dart';
 part 'local_library_host_service/local_audio.part.dart';
 part 'local_library_host_service/audiobooks.part.dart';
-part 'local_library_host_service/videos.part.dart';
-part 'local_library_host_service/video_metadata.part.dart';
 part 'local_library_host_service/sync_state.part.dart';
 
 // ── 跨域共享的顶层 helper（原 LocalLibraryHostService 的 private static；mixin 体内看不到宿主类
@@ -124,16 +103,10 @@ abstract class _LocalLibraryHostBase
         FushiLibraryHostService,
         MangaLibraryHost,
         DeletionTombstoneHost,
-        VideoDeletionHost,
-        VideoPlaybackSyncHost,
         AudiobookDelayHost,
         AudiobookSubtitleHost,
-        VideoSubtitleDefaultHost,
-        VideoSubtitleClearHost,
         InterconnectServiceConfigHost,
         InterconnectProfileHost,
-        VideoMetadataHost,
-        VideoMetadataOrderingHost,
         TagSyncHost {
   FushiDatabase get _db;
   Directory get _dictionaryResourceRoot;
@@ -157,13 +130,6 @@ abstract class _LocalLibraryHostBase
   Future<void> Function(LocalAudioPackageContents)? get _onLocalAudioImported;
   Directory? get _audioDatabaseRoot;
   Future<void> Function(String displayName)? get _removeLocalAudioEntry;
-  String get _videoSubtitleLangCode;
-  Directory? get _uploadedVideoRoot;
-  Directory? get _videoCoversDirectory;
-  Future<String?> Function(
-      {required String videoPath,
-      required String bookUid})? get _extractVideoCover;
-  Future<VideoSourceScrapeTaskController?> Function()? get _scrapeController;
 }
 
 /// 用真实 Fushi 库（Drift DB + [SyncAssetPackageService]）实现 host 库服务。
@@ -193,8 +159,6 @@ class LocalLibraryHostService extends _LocalLibraryHostBase
         _LocalLibraryHostManga,
         _LocalLibraryHostLocalAudio,
         _LocalLibraryHostAudiobooks,
-        _LocalLibraryHostVideos,
-        _LocalLibraryHostVideoMetadata,
         _LocalLibraryHostSyncState {
   LocalLibraryHostService({
     required FushiDatabase db,
@@ -219,14 +183,6 @@ class LocalLibraryHostService extends _LocalLibraryHostBase
       required String title,
       required int updatedAt,
     })? adoptOverrideTitle,
-    String videoSubtitleLangCode = 'ja',
-    Directory? uploadedVideoRoot,
-    Directory? videoCoversDirectory,
-    Future<String?> Function({
-      required String videoPath,
-      required String bookUid,
-    })? extractVideoCover,
-    Future<VideoSourceScrapeTaskController?> Function()? scrapeController,
   })  : _db = db,
         _dictionaryResourceRoot = dictionaryResourceRoot,
         _packages = packages,
@@ -244,12 +200,7 @@ class LocalLibraryHostService extends _LocalLibraryHostBase
         _isProfileTransferEnabled = isProfileTransferEnabled,
         _exportActiveProfileJson = exportActiveProfileJson,
         _importProfileJson = importProfileJson,
-        _adoptOverrideTitle = adoptOverrideTitle,
-        _videoSubtitleLangCode = videoSubtitleLangCode,
-        _uploadedVideoRoot = uploadedVideoRoot,
-        _videoCoversDirectory = videoCoversDirectory,
-        _extractVideoCover = extractVideoCover,
-        _scrapeController = scrapeController;
+        _adoptOverrideTitle = adoptOverrideTitle;
 
   @override
   final FushiDatabase _db;
@@ -341,33 +292,6 @@ class LocalLibraryHostService extends _LocalLibraryHostBase
   @override
   final Future<void> Function(String displayName)? _removeLocalAudioEntry;
 
-  // ── 视频（P4-1）──────────────────────────────────────────────────────────────
-
-  /// 视频 sidecar 字幕匹配的目标语言代码（默认 'ja'）。
-  /// 生产传 JapaneseLanguage.instance.languageCode（P4 接线任务完成后注入真实值）。
-  @override
-  final String _videoSubtitleLangCode;
-
-  /// client→host 上传视频的落盘根目录（可选；null 时 [importVideo] 抛 [UnsupportedError]）。
-  /// 生产传 `<documents>/remote_videos`（[AppPaths.remoteVideosDirectory] 同目录，与
-  /// client 下载远端视频落点一致）。
-  @override
-  final Directory? _uploadedVideoRoot;
-  @override
-  final Directory? _videoCoversDirectory;
-
-  /// 上传视频后的封面抽取回调（可选、best-effort；null 时上传的视频无封面占位）。
-  /// 生产传 `extractVideoCover`（桌面 ffmpeg 抽帧；移动端无 ffmpeg 返 null 留空占位）。
-  @override
-  final Future<String?> Function(
-      {required String videoPath, required String bookUid})? _extractVideoCover;
-
-  /// 7a 远程刮削用的 host 刮削控制器解析器（可选）。控制器归 UI 层（HomePage）
-  /// 持有并按偏好重建，host 不自造第二个协调器（两个协调器会各自抢
-  /// `VideoScrapeOperationGate`），只在请求到来时取一次。null / 解析出 null →
-  /// candidates 回空、scrape 回 notPlanned。
-  @override
-  final Future<VideoSourceScrapeTaskController?> Function()? _scrapeController;
 }
 
 /// 跨域共享的查询 helper（书 / 视频 / 有声书都用）：主合集归属一趟映射、可导出有声书键集。
@@ -389,64 +313,6 @@ mixin _LocalLibraryHostShared on _LocalLibraryHostBase {
     } catch (e, stack) {
       engineLog.log('LocalLibraryHostService.writeHostSyncTombstone', e, stack);
     }
-  }
-
-  /// `'<mediaType>|<entryKey>'` → 该条目的**主合集归属**（多端库联合视图 §2.3
-  /// 任务5.1）的一趟映射。归属跟随 [FushiDatabase.getPrimaryCollectionIdByEntry] 的
-  /// 「最小 collectionId」折叠语义：一条目属多合集时只带它折进的那一张，与库网格
-  /// 折叠 / UI 占位卡归行一致。孤儿引用（合集已删）跳过 = 无归属（散卡）。每个被引用
-  /// 合集只 [getCollectionItems] 一次，避免逐条目 N+1。
-  Future<Map<String, RemoteCollectionMembership>>
-      _primaryCollectionMembership() async =>
-          (await _primaryCollectionData()).membership;
-
-  /// [_primaryCollectionMembership] 的富版本：同一趟查询顺带产出
-  /// `'<mediaType>|<entryKey>'` → 主归属合集**行**（[MediaCollectionRow]）的映射，
-  /// 供 listVideos 解析系列级播放偏好（`subtitleDelayMs` / `audioTrackId`，schema
-  /// v52「同系列共享」——此前清单只读 row 级值，host 在合集里调的轴/选的音轨
-  /// 远端永远看不到）。
-  Future<
-      ({
-        Map<String, RemoteCollectionMembership> membership,
-        Map<String, MediaCollectionRow> collectionByEntry,
-      })> _primaryCollectionData() async {
-    final Map<String, int> primaryByEntry =
-        await _db.getPrimaryCollectionIdByEntry();
-    if (primaryByEntry.isEmpty) {
-      return (
-        membership: const <String, RemoteCollectionMembership>{},
-        collectionByEntry: const <String, MediaCollectionRow>{},
-      );
-    }
-    final Map<int, MediaCollectionRow> collectionsById =
-        <int, MediaCollectionRow>{
-      for (final MediaCollectionRow c in await _db.getAllMediaCollections())
-        c.id: c,
-    };
-    final Map<String, RemoteCollectionMembership> out =
-        <String, RemoteCollectionMembership>{};
-    final Map<String, MediaCollectionRow> rowByEntry =
-        <String, MediaCollectionRow>{};
-    // 只遍历真正承载某条目主归属的合集（按 id 去重），逐合集取一次成员行。
-    for (final int cid in primaryByEntry.values.toSet()) {
-      final MediaCollectionRow? col = collectionsById[cid];
-      if (col == null) continue; // 孤儿引用：归属合集已删 → 该条目退化散卡。
-      for (final MediaCollectionItemRow item
-          in await _db.getCollectionItems(cid)) {
-        // v83：epub 成员行 entryKey = 本机 epub_books.uid（透传行 = 对端 bookKey），
-        // 本 map 键随成员表面貌走——bookKey 侧消费方（listBooks）负责先换到 uid。
-        final String key = '${item.mediaType}|${item.entryKey}';
-        // 仅记录以本合集为主归属的成员（该条目也可能在别的更大 id 合集里）。
-        if (primaryByEntry[key] != cid) continue;
-        out[key] = RemoteCollectionMembership(
-          collectionName: col.name,
-          collectionType: col.collectionType,
-          sortIndex: item.sortIndex,
-        );
-        rowByEntry[key] = col;
-      }
-    }
-    return (membership: out, collectionByEntry: rowByEntry);
   }
 
   // ── 有声书包（T3.1）────────────────────────────────────────────────────────

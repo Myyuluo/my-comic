@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi/src/media/media_search_text.dart';
-import 'package:fushi/src/mining/galgame_library_query.dart'
-    show normalizeGalgameSearchText;
+
 
 /// P5-A：书架 / 视频 / 游戏三个库页共用的搜索归一化与匹配。
 ///
@@ -115,17 +114,4 @@ void main() {
     });
   });
 
-  test('游戏侧 normalizeGalgameSearchText 委托后与共享实现逐字符一致', () {
-    for (final String s in <String>[
-      'Fate／stay night',
-      'ＦＡＴＥ・ｓｔａｙ',
-      'カタカナ　テスト',
-      'ラーメン',
-      '「括弧」〜波ダッシュ…',
-      '',
-    ]) {
-      expect(normalizeGalgameSearchText(s), normalizeMediaSearchText(s),
-          reason: '委托必须逐字符一致：$s');
-    }
-  });
 }

@@ -34,17 +34,12 @@ class CtlHostRequest {
 const Set<String> kCtlHostActions = <String>{
   'host',
   'books',
-  'videos',
   'audiobooks',
   'manga',
   'dict',
-  'metadata',
-  'scrape',
   'activity',
-  'collections',
   'tags',
   'tombstones',
-  'assistant',
 };
 
 /// 往 `ctl` 参数表里补本文件用到的选项。
@@ -52,18 +47,7 @@ void addCtlHostOptions(ArgParser parser) {
   parser
     ..addOption('set', help: 'progress / position / delay / playback：写入的 JSON（不给则读取）')
     ..addOption('query', abbr: 'q', help: 'scrape search：搜索词')
-    ..addOption('collection', help: 'scrape：按合集定位作品（合集名）')
-    ..addOption('collection-type', help: 'scrape：合集类型（配合 --collection）')
-    ..addOption('provider', help: 'scrape identify / downloads add：anidb | mal | tmdb')
-    ..addOption('external-id', help: 'scrape identify / downloads add：该来源的作品 id')
-    ..addOption('which', help: 'videos subtitle clear：primary | secondary | all', defaultsTo: 'primary')
-    ..addFlag('all-sidecars', negatable: false, help: 'videos subtitle clear：视频旁全部 sidecar 字幕都备份挪走')
-    ..addOption('lang', help: 'videos subtitle backfill：要的字幕语言（如 ja），缺省按 host 设置')
-    ..addOption('episode-group', help: 'scrape identify / episode-group：TMDB 分集排序 id')
-    ..addOption('feature', help: 'assistant start：功能名')
-    ..addOption('locale', help: 'assistant start：界面语言', defaultsTo: 'zh-CN')
-    ..addOption('after', help: 'assistant show：只要比这个 revision 新的视图')
-    ..addFlag('wait', negatable: false, help: 'assistant show：长轮询等新视图；jobs submit：等任务结束')
+    ..addFlag('wait', negatable: false, help: 'jobs submit：等任务结束')
     ..addOption('language', abbr: 'l', help: 'jobs submit asr：语言 tag', defaultsTo: 'ja')
     ..addOption('out', abbr: 'o', help: 'jobs submit / result：产物写到这里');
 }
@@ -72,20 +56,11 @@ void addCtlHostOptions(ArgParser parser) {
 const String kCtlHostUsage = '''
   ── 经互联接口（admin 代理）──
   books [ls] | progress <bookKey> [--set '<json>']
-  videos [ls] [--grep s] | rm <id> | position|playback <id> [--set '<json>']
-         | subtitle clear <id> [--which primary|secondary|all] [--all-sidecars]
-         | subtitle backfill <id> [--lang ja]
   audiobooks [ls] | position|delay <key> [--set '<json>']
   manga manifest <bookKey>
   dict [ls]
-  metadata [ls]
-  scrape search <bookUid> -q <词> | identify <bookUid> --provider anidb|mal|tmdb --external-id <id>
-         [--media-kind tv|movie] [--episode-group g] | episode-groups <bookUid>
-         | episode-group <bookUid> --episode-group <g>      （合集作品用 --collection 名 --collection-type 类型）
-         | pending | sweep（补刮从未识别的作品） | ai-identify <pending id>
-  activity | collections | tags | tombstones
+  activity | tags | tombstones
   jobs submit asr <音频> [-l ja] [-o x.srt] [--wait] | get <id> | result <id> [产物名] [-o 文件]
-  assistant start --feature <f> | show <id> [--after n] [--wait] | act <id> '<json>' | stop <id>
   host <GET|POST|PUT|DELETE> <互联路径，如 library/books> ['<json>']   直调任意互联接口''';
 
 /// 把一个代理动作翻成请求；用法不对写 [err] 返回 null。

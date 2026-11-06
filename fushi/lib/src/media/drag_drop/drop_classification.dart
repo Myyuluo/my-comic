@@ -1,5 +1,4 @@
-import 'package:fushi_engine/media/video/bluray/bluray_disc.dart'
-    show blurayDiscRootForFile;
+
 import 'package:path/path.dart' as p;
 
 /// 书籍扩展名（不带点，小写）。= epub + pdf + TextToEpub.supportedExtensions。
@@ -341,9 +340,8 @@ DroppedFiles classifyDroppedFiles(
       continue;
     }
     final String ext = _ext(path);
-    final String? discRoot = blurayDiscRootForFile(path);
-    if (discRoot != null) blurayDiscs.add(discRoot);
-    bool matched = discRoot != null;
+    // 蓝光目录解析已随视频域移除；目录分支在上方已处理。
+    bool matched = false;
     // 图片包（`.zip`）：光看扩展名与词典包同形，必须真读包——同 isDirectory，判据
     // 由 widget 层注入。命中即**只**归 mangas（不再落 dictionaries），否则图片型
     // zip 会走到 books 分支的 `files.hasAny` 兜底、回「本页面不支持」，而导入对话框

@@ -357,8 +357,7 @@ void main() {
   test('顶层页分区导航收敛到 LibrarySectionTabs（不许各写一份）', () {
     const Map<String, String> topBarSources = <String, String>{
       '书架/漫画': 'lib/src/pages/implementations/media_library_shell.dart',
-      '视频': 'lib/src/pages/implementations/video_library_shell.dart',
-      '游戏': 'lib/src/pages/implementations/game_shared.dart',
+      // 视频 / 游戏顶层壳随 my-comic v1 移除非漫画模块一并删除。
       // 下载页也是顶层 tab、也切四个独立目的地，同属这条收敛（它页内还有
       // TabBarView，走 controlled 形态共用同一个 TabController）。
       '下载': 'lib/src/pages/implementations/browse_page.dart',

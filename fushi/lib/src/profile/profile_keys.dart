@@ -8,9 +8,8 @@ import 'package:fushi_engine/media/media_pref_keys.dart'
 import 'package:fushi_engine/media/override_title_key.dart';
 import 'package:fushi_engine/profile/profile_document.dart'
     show kObsoleteGalgameUpscalingModePrefKey, kProfileSettingCategoryPref;
-import 'package:fushi/src/media/video/video_online_services_preferences.dart';
-import 'package:fushi/src/media/video/video_screenshot_destination.dart'
-    show kVideoScreenshotDirectoryPref;
+
+
 import 'package:fushi/src/models/module_id.dart';
 import 'package:fushi/src/models/preferences_repository.dart';
 import 'package:fushi/src/sync/pref_redaction_policy.dart';
@@ -75,7 +74,6 @@ class ProfileKeys {
     // 「工具栏样式强制悬浮」一次性迁移标记：同族（迁移本身会改写各 Profile 快照
     // 里的 reader_toolbar_style，标记只描述本安装）。
     PreferencesRepository.readerToolbarStyleFloatingMigratedKey,
-    kVideoOnlineServicesSetupDismissedPref,
     'current_home_tab_index',
     // 宽屏导航 rail 的展开 / 收起记的是本机窗口布局，与 current_home_tab_index
     // 同族；进快照的话切 Profile 会把侧栏忽宽忽窄地翻过去。
@@ -119,10 +117,6 @@ class ProfileKeys {
     // path that may not even exist on this machine.
     'download_save_root',
     'download_save_root_history',
-    // 截图目录与 download_save_root 同族同理：它描述的是这台设备的磁盘，不是阅读
-    // Profile。随 Profile 走会让切 Profile 后截图落到本机不存在的路径上。
-    // 去向枚举（对话框/剪贴板/目录）是真偏好，照常随 Profile。
-    kVideoScreenshotDirectoryPref,
     obsoleteGalgameUpscalingModePrefKey,
     // TODO-855: the monotonic prefs-version counter is the cross-process signal
     // the :popup process reads to decide whether to refresh its warm-reuse

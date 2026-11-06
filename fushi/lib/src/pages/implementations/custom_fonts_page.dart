@@ -1,13 +1,14 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:fushi/src/media/video/video_subtitle_style.dart';
 
 import 'package:dio/dio.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:fushi/media.dart';
 import 'package:fushi/models.dart';
 import 'package:fushi/pages.dart';
-import 'package:fushi/src/media/video/video_subtitle_style.dart';
-import 'package:fushi/src/lookup/gal_hook_text_overlay_controller.dart';
+
+
 import 'package:fushi/src/models/app_font_loader.dart';
 import 'package:fushi/src/pages/implementations/font_preview/font_specimen.dart';
 import 'package:fushi/src/pages/implementations/font_preview/font_file_metadata.dart';
@@ -507,12 +508,6 @@ Future<void> persistCustomFontState({
   }
   await settings.refreshFromDb();
   await appModel.refreshAppFont();
-  // 平台门在**取单例之前**：GalHookTextOverlayController.instance 会把整套 galgame
-  // 单例图（含 GalIngameLookupController 与它挂上去、永不释放的监听器）建起来。
-  // 非 Windows 用户只是存了一次字体，不该因此拉起一整个 Windows 专属子系统。
-  if (GalHookTextOverlayController.isSupported) {
-    await GalHookTextOverlayController.instance.applyFontFromSettings();
-  }
   ReaderFushiSource.onSettingsChangedLive?.call();
 }
 
@@ -1157,9 +1152,7 @@ class _CustomFontsPageState extends BasePageState<CustomFontsPage> {
           FontTargetPreview(
             target: _previewTarget,
             families: families,
-            subtitleStyle: VideoSubtitleStyle.decode(
-              appModel.videoSubtitleStyle,
-            ),
+            subtitleStyle: VideoSubtitleStyle.defaults,
           ),
         ],
       ),

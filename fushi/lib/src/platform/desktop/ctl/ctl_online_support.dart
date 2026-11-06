@@ -10,7 +10,7 @@ library;
 
 import 'package:fushi_cli/fushi_cli.dart' show CtlFailure;
 
-import 'package:fushi/src/media/video/video_playback_remote.dart';
+
 import 'package:fushi/src/models/home_tab.dart';
 
 /// 在线扩展 / 在线源的内容域。
@@ -312,29 +312,4 @@ CtlPlaybackTarget? resolveCtlPlaybackTarget({
     default:
       throw CtlFailure.badRequest('未知 target：$requested（video | audiobook）');
   }
-}
-
-/// 视频页遥控状态的应答形状（与有声书那份同字段，`kind: video`，身份键是 `bookUid`）。
-/// [snapshot] 为 null = 视频页已打开但控制器还没就绪（`ready: false`）。
-Map<String, Object?> ctlVideoPlaybackJson(VideoPlaybackSnapshot? snapshot) {
-  if (snapshot == null) {
-    return <String, Object?>{'active': true, 'kind': 'video', 'ready': false};
-  }
-  return <String, Object?>{
-    'active': true,
-    'kind': 'video',
-    'ready': true,
-    'bookUid': snapshot.bookUid,
-    'title': snapshot.title,
-    'playing': snapshot.playing,
-    'positionMs': snapshot.positionMs,
-    'durationMs': snapshot.durationMs,
-    'speed': snapshot.speed,
-    'cue': snapshot.cue,
-    if (snapshot.volume != null) 'volume': snapshot.volume,
-    if (snapshot.audioTrackId != null) 'audioTrack': snapshot.audioTrackId,
-    if (snapshot.subtitleSource != null) 'subtitle': snapshot.subtitleSource,
-    if (snapshot.secondarySubtitleSource != null)
-      'secondarySubtitle': snapshot.secondarySubtitleSource,
-  };
 }

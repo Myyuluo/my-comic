@@ -3,10 +3,9 @@ import 'dart:io';
 
 import 'package:fushi_engine/media/cover_file_writer.dart';
 import 'package:fushi_engine/media/video/ffmpeg_backend.dart';
-import 'package:fushi_engine/media/video/youtube_source_resolver.dart'
-    show kYoutubeStreamReplayUserAgent;
-import 'package:fushi_engine/media/video/video_clip_exporter.dart'
-    show resolveAudioMapIndex;
+
+
+
 // 动图格式枚举与 VideoMiningImageMode 同住 mining 侧（两者都是「制卡封面怎么取」的
 // 取值域）。本文件只消费它选编码器参数，不反向依赖 mining 逻辑，无环。
 import 'package:fushi_engine/mining/immersion_mining_request.dart'
@@ -20,8 +19,25 @@ import 'package:fushi_engine/sync/tls/fushi_pinning_http.dart'
 
 // resolveFfmpegExecutable 已移到 ffmpeg_backend.dart（执行配置的自然归宿）；
 // 从这里 re-export 让既有 importer 与测试仍从本文件解析它。
-export 'package:fushi_engine/media/video/ffmpeg_backend.dart'
-    show resolveFfmpegExecutable;
+
+
+/// 远端回放 UA：部分 CDN 只接受浏览器 UA。
+const String _kRemotePlaybackUserAgent =
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+    '(KHTML, like Gecko) Chrome/124.0 Safari/537.36';
+
+/// 把请求的 [audioStreamIndex] 归一成实际拼进 `-map 0:a:N` 的下标；越界返回
+/// null（不加 `-map`，跟随 ffmpeg 默认音频选择）。
+int? resolveAudioMapIndex({
+  required int? audioStreamIndex,
+  required int? audioStreamCount,
+}) {
+  if (audioStreamIndex == null || audioStreamIndex < 0) return null;
+  if (audioStreamCount != null && audioStreamIndex >= audioStreamCount) {
+    return null;
+  }
+  return audioStreamIndex;
+}
 
 typedef FfmpegFailureReporter = void Function(String summary);
 
@@ -328,7 +344,7 @@ List<String> buildFfmpegRemoteInputArgs(String inputPath,
     // BUG-2625：调用方显式给了 UA（在线源扩展声明的）就用它——播放器用哪个 UA 取到流，
     // ffmpeg 就得用同一个，否则站点按 UA 判定拒发（实测 403）。
     '-user_agent',
-    headers.userAgent ?? kYoutubeStreamReplayUserAgent,
+    headers.userAgent ?? _kRemotePlaybackUserAgent,
     // BUG-2574：防盗链 —— B 站直链不带 Referer 会被 CDN 直接 403（ffmpeg 连输入都打不开），
     // 见 [kBilibiliCdnReferer] 的实测。仅 B 站 host 命中，YouTube 等完全不受影响。
     // BUG-2625：调用方显式给的 Referer 优先于按 host 推出的那条。
@@ -464,7 +480,7 @@ Future<String?> materializeRemoteAudioViaRangeDownload({
       final http.Response res = await client.get(
         Uri.parse(buildGoogleVideoRangeUrl(audioUrl, start, end)),
         // TODO-1365（BUG-669）：range 下载 UA 与铸流 UA 一致，见 [kYoutubeStreamReplayUserAgent]。
-        headers: <String, String>{'User-Agent': kYoutubeStreamReplayUserAgent},
+        headers: <String, String>{'User-Agent': _kRemotePlaybackUserAgent},
       );
       // 416（range 越界）= 上一片恰好取到流末尾：正常 EOF，用已下载数据收尾。
       if (res.statusCode == 416) break;

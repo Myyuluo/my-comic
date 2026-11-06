@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:drift/native.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -128,21 +126,6 @@ void main() {
     );
   });
 
-  test('首页首帧接线：先取全新安装判据，在更新弹窗之前提示', () {
-    final String source = File(
-      'lib/src/pages/implementations/home_page.dart',
-    ).readAsStringSync();
-    final int fresh = source.indexOf(
-      'final bool freshInstall = appModelNoUpdate.isFirstTimeSetup;',
-    );
-    final int tutorial = source.indexOf(
-      'appModelNoUpdate.setFirstTimeSetupFlag()',
-    );
-    final int notice = source.indexOf('await maybeShowBrowseMovedNotice(');
-    final int update = source.indexOf('UpdateChecker.scheduleCheck(');
-    expect(fresh, isNonNegative);
-    expect(tutorial, greaterThan(fresh), reason: '改写 first_time_setup 之前取');
-    expect(notice, greaterThan(fresh));
-    expect(update, greaterThan(notice), reason: '与更新弹窗串行，排在它之前');
-  });
+  // 首帧接线（更新弹窗前的搬迁提示）随 my-comic v1 启动流程精简一并移除；
+  // decideBrowseMovedNotice / 标记持久化 / 提示框文案仍保留单测。
 }

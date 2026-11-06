@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:fushi/src/media/media_item_factory.dart';
 import 'dart:ui'
     show AppExitResponse, PlatformDispatcher;
 import 'package:cupertino_ui/cupertino_ui.dart';
@@ -51,7 +52,7 @@ import 'package:fushi/utils.dart';
 import 'package:fushi/src/shortcuts/global_navigation.dart';
 import 'package:fushi/src/lookup/lookup_deep_link.dart';
 import 'package:fushi/src/startup/desktop_window_placement.dart';
-import 'package:fushi/src/diagnostics/video_diag_log.dart';
+
 import 'package:fushi/src/stats/study_diag_log.dart';
 import 'package:fushi_audio/fushi_audio.dart' show StudyClock;
 import 'package:fushi/src/settings/settings_schema.dart'
@@ -94,15 +95,14 @@ import 'package:fushi/src/feedback/feedback_push.dart'
     show RemotePushPlatform;
 import 'package:fushi/src/pages/implementations/feedback/feedback_common.dart'
     show openFeedbackTicket, showFeedbackReplyNotice;
-import 'package:fushi_engine/media/video/download/video_download_pipeline_service.dart';
-import 'package:fushi_engine/media/video/external_video.dart';
-import 'package:fushi_engine/media/video/metadata/video_scrape_operation_gate.dart';
-import 'package:fushi_engine/media/video/scraper/cover_meta_store.dart';
-import 'package:fushi_engine/media/video/video_cover_extractor.dart'
-    show extractVideoCover;
-import 'package:fushi_engine/media/video/video_book_repository.dart';
-import 'package:fushi_engine/media/video/video_storage.dart';
-import 'package:fushi/src/pages/implementations/video_fushi_page.dart';
+
+
+
+
+
+
+
+
 import 'package:fushi/src/profile/profile_view_model.dart';
 import 'package:drift/drift.dart'
     show Value;
@@ -128,11 +128,6 @@ import 'package:fushi/src/utils/system_transparency.dart';
 
 Color? _savedSplashColor;
 
-/// 桌面端「从 app 外打开视频文件」时，runner 经 `set_dart_entrypoint_arguments`
-/// 把视频路径传进 `main(List<String> args)`；这里暂存，待 app 初始化完成后由
-/// [_FushiReaderAppState] 打开播放页并加入书架。null 表示本次启动不是外部打开视频。
-String? _pendingExternalVideoPath;
-
 /// 同上，「从 app 外用 Fushi 打开书 / 漫画」（`.epub` / `.pdf` / `.txt` / `.cbz` …，
 /// 见 [kExternalBookOpenExtensions]）。与视频互斥：同一个 argv 只落一边。
 String? _pendingExternalBookPath;
@@ -148,21 +143,6 @@ final List<String> _pendingCardSourceUrls = <String>[];
 /// 完成前到达的先暂存，首帧后逐条弹确认框再配对
 /// （docs/specs/2026-09-28-interconnect-remote-reach.md §4）。
 final List<String> _pendingPairLinks = <String>[];
-
-/// 外部打开新视频时的自动封面锁边界。maintenance 已开始时 [action] 仍可按
-/// `allowAutoCover == false` 建立无封面的媒体行，但不得产生自动封面文件。
-Future<T> _runExternalVideoCoverMutation<T>(
-  Future<T> Function(bool allowAutoCover) action,
-) async {
-  final VideoScrapeOperationLease? lease =
-      VideoScrapeOperationGate.tryEnterOperation();
-  if (lease == null) return action(false);
-  try {
-    return await VideoCoverMutationGate.runExclusive<T>(() => action(true));
-  } finally {
-    lease.release();
-  }
-}
 
 /// Single source of truth for the status/navigation bar overlay style.
 ///
@@ -483,9 +463,6 @@ void main([List<String> args = const <String>[]]) {
     // 并发跑；串行 await 四段小 IO 是启动到 LoadingPage 之前的纯等待。
     await Future.wait<void>(<Future<void>>[
       DebugLogService.instance.init(),
-      // 用户 2026-09-22：视频卡顿 / 查词卡的分析日志。默认关闭（开关在设置 › 诊断），
-      // init 只读一次偏好 + 解析日志文件位置，关着时后续全链路零开销。
-      VideoDiagLog.instance.init(),
       // TODO-1232 A3：读一次 native 持久化的渲染后端选择（关 Impeller 实验开关），
       // 供设置项同步渲染。非 Android 静默降级为不支持。
       RenderBackendService.instance.init(),
@@ -675,8 +652,7 @@ class _FushiReaderAppState extends ConsumerState<FushiReaderApp>
   bool _isMainIntent = true;
   StreamSubscription? _intentsSubscription;
 
-  /// 守卫：确保外部打开的视频只被打开一次（[build] 可能多次重建）。
-  bool _externalVideoHandled = false;
+  /// 守卫：确保外部打开的书只被打开一次（[build] 可能多次重建）。
   bool _externalBookHandled = false;
 
   /// BUG-1666：同上——`fushi://lookup` 深链查词只触发一次。
@@ -709,9 +685,6 @@ class _FushiReaderAppState extends ConsumerState<FushiReaderApp>
   /// D-Bus，第二次启动的 argv 经 `command-line` 信号落到首实例再推过来（见
   /// `linux/runner/my_application.cc`）。macOS 走 `source_urls` 事件流与系统
   /// open-file 事件，不注册本通道。
-  static const MethodChannel _externalVideoChannel =
-      MethodChannel('app.fushi/external_video');
-
   /// TODO-1092: Windows 系统强调色/主题色实时变更通知 channel。runner 侧
   /// （`windows/runner/flutter_window.cpp` 的 MessageHandler）收到
   /// WM_DWMCOLORIZATIONCOLORCHANGED / WM_SETTINGCHANGE("ImmersiveColorSet") /
@@ -1103,9 +1076,7 @@ class _FushiReaderAppState extends ConsumerState<FushiReaderApp>
       // closeDatabase()，它们关库后要在文件层动整个 DB 目录，放行一个仍在飞的
       // `_process` 是数据安全问题（BUG-1505）。退出路径不同——进程马上就没了。
       await appModel
-          .closeDatabase(
-            pipelineDrainTimeout: VideoDownloadPipelineService.stopDrainTimeout,
-          )
+          .closeDatabase()
           .timeout(_closeDatabaseOnExitTimeout);
     });
     debugPrint(
@@ -1497,29 +1468,18 @@ class _FushiReaderAppState extends ConsumerState<FushiReaderApp>
       return null;
     }
     // 原生层（Windows WM_COPYDATA / Linux D-Bus）转交的是任意候选路径、不看扩展名：
-    // 视频之外，书 / 漫画文件也从这里进来（文件关联「打开方式」）。
-    final bool isVideo = isSupportedVideoFile(videoPath);
-    final bool isBook = !isVideo && isSupportedExternalBookFile(videoPath);
-    if (!isVideo && !isBook) return null;
+    // 书 / 漫画文件从这里进来（文件关联「打开方式」）。
+    if (!isSupportedExternalBookFile(videoPath)) return null;
     if (!File(videoPath).existsSync()) return null;
 
     if (!appModel.isInitialised || appModel.navigatorKey.currentState == null) {
       // 首实例尚未就绪：交还首启路径，build 完成后接手打开。
-      if (isBook) {
-        _pendingExternalBookPath = videoPath;
-        _externalBookHandled = false;
-      } else {
-        _pendingExternalVideoPath = videoPath;
-        _externalVideoHandled = false;
-      }
+      _pendingExternalBookPath = videoPath;
+      _externalBookHandled = false;
       if (mounted) setState(() {});
       return null;
     }
-    if (isBook) {
-      await _openExternalBook(videoPath);
-    } else {
-      await _openExternalVideo(videoPath);
-    }
+    await _openExternalBook(videoPath);
     return null;
   }
 
@@ -1559,7 +1519,6 @@ class _FushiReaderAppState extends ConsumerState<FushiReaderApp>
     );
     final LibraryCtlImportResult result = (await LibraryCtlImporter(
       db: appModel.database,
-      galgameRepo: appModel.galgameRepo,
       isKindEnabled: (LibraryCtlKind kind) =>
           appModel.moduleVisibility.isEnabled(kind.module),
       keepDuplicates: false,
@@ -1658,11 +1617,7 @@ class _FushiReaderAppState extends ConsumerState<FushiReaderApp>
   /// 不 await 落地：视频分支会 await 播放页 push，那要等用户关掉播放页才返回，
   /// CLI 不该挂到那时候。
   Future<CtlOpenResult> _handleCtlOpen(String target) async {
-    final CtlOpenResult verdict = classifyCtlOpenTarget(
-      target,
-      videoModuleEnabled:
-          ref.read(appProvider).moduleVisibility.isEnabled(ModuleId.video),
-    );
+    final CtlOpenResult verdict = classifyCtlOpenTarget(target);
     if (!verdict.accepted) return verdict;
     await _focusMainWindowForCtl();
     unawaited(
@@ -1699,135 +1654,6 @@ class _FushiReaderAppState extends ConsumerState<FushiReaderApp>
     );
     return null;
   }
-
-  /// 处理「从 app 外用 Fushi 打开视频」：建/取一条外部视频 VideoBook（videoPath
-  /// 存外部绝对路径，不复制文件），然后用全局 navigator push [VideoFushiPage]
-  /// 播放。bookUid 用 [externalVideoBookUid]（全路径 sha1）派生，幂等——同一文件
-  /// 重复打开复用同条记录、保留上次进度。入库后书架视频分区自动出现该条目。
-  ///
-  /// 字幕无需在此预解析：[VideoFushiPage] 加载时若 [VideoBookRow.subtitleSource]
-  /// 为空会自动探测同名 sidecar 字幕（见 `findSidecarSubtitle`）。
-  Future<void> _openExternalVideo(String videoPath) async {
-    final NavigatorState? navigator = appModel.navigatorKey.currentState;
-    if (navigator == null) return;
-
-    final String? bookUid = await _ingestExternalVideo(videoPath);
-    if (bookUid == null) return;
-    final VideoBookRepository repo = VideoBookRepository(appModel.database);
-
-    if (!mounted) return;
-    // This process-level launch path owns a NavigatorState but has no themed
-    // descendant BuildContext, so its route contract is explicitly Material.
-    await navigator.push(
-      MaterialPageRoute<void>(
-        builder: (_) =>
-            VideoFushiPage.neutralized(bookUid: bookUid, repo: repo),
-      ),
-    );
-  }
-
-  /// 外部视频入库（不打开）：模块门 → 存在性 → 按路径去重建/取 VideoBook。
-  /// 失败（模块关 / 文件不存在 / 入库异常）已给 toast 并返回 null。
-  /// [_openExternalVideo] 与 `fushi_cli library import` 共用这一个入口。
-  Future<String?> _ingestExternalVideo(String videoPath) async {
-    // ⓪ 模块门：视频模块关掉时「看不见也到不了」——文件关联 / 命令行 argv /
-    // 单实例转发 / 拖拽四条外部路径都汇到这里，是唯一能读到偏好的落地点（冷启动
-    // argv 分支跑在 AppModel.initialise 之前，那时 prefs 还在 Drift 里读不到）。
-    //
-    // 判定必须排在**入库之前**：下面会经 VideoBookRepository 建/取一行
-    // video_books，若放行到那之后再拦，视频就进了一个用户根本看不见的库。给
-    // toast 而不是静默——双击 mkv 毫无反应会被当成 app 坏了。
-    if (!appModel.moduleVisibility.isEnabled(ModuleId.video)) {
-      FushiToast.show(
-        msg: t.module_disabled_hint,
-        severity: ToastSeverity.info,
-      );
-      return null;
-    }
-
-    // ③ 存在性校验：冷启动 argv 路径虽在 main() 已 existsSync 过，但从那次检查到
-    // 此处首帧入库之间文件可能被移动/删除（或检查与使用间的竞态），故再校验一次；
-    // 文件不存在则不入库、不静默吞，给与既有失败路径一致的 toast 反馈（TODO-903）。
-    if (!await File(videoPath).exists()) {
-      FushiToast.show(
-        msg: t.video_file_not_found,
-        severity: ToastSeverity.error,
-      );
-      return null;
-    }
-
-    final VideoBookRepository repo = VideoBookRepository(appModel.database);
-
-    String bookUid;
-    try {
-      bookUid = await _runExternalVideoCoverMutation(
-        (bool allowAutoCover) async {
-          // ② 去重：同一物理文件若已库内导入（`video/<basename>` 身份），复用其旧
-          // bookUid，不再派生 `video/ext/<sha1>` 第二身份插第二行。按 videoPath 命中
-          // 走仓库单一真相源 findByVideoPath（与 isDuplicateVideoPath 同比对语义）。
-          final VideoBookRow? sameFile = await repo.findByVideoPath(videoPath);
-          if (sameFile != null) return sameFile.bookUid;
-
-          final String candidateUid = externalVideoBookUid(videoPath);
-          final VideoBookRow? existing = await repo.getByBookUid(candidateUid);
-          if (existing != null) return candidateUid;
-
-          CoverMetaStore? coverMetaStore;
-          String? coverPath;
-          if (allowAutoCover) {
-            try {
-              final CoverMetaStore store =
-                  CoverMetaStore(await VideoStorage.coversDir());
-              if (await store.allowsAutoFrameWrite(candidateUid)) {
-                coverMetaStore = store;
-                // ① 封面：复用库内导入同款 extractVideoCover（桌面 ffmpeg 抽帧；移动端无
-                // ffmpeg 时返 null 留空占位）。仅新建外部条目时抽一次。
-                coverPath = await extractVideoCover(
-                  videoPath: videoPath,
-                  bookUid: candidateUid,
-                );
-              }
-            } on Object catch (error) {
-              // provenance 不可读时 fail closed：仍建无封面的媒体行。
-              debugPrint(
-                '[Fushi] external video cover admission failed: $error',
-              );
-            }
-          }
-          await repo.saveVideoBook(VideoBooksCompanion(
-            bookUid: Value(candidateUid),
-            title: Value(p.basenameWithoutExtension(videoPath)),
-            videoPath: Value(videoPath),
-            coverPath: Value<String?>(coverPath),
-            importedAt: Value(DateTime.now().millisecondsSinceEpoch),
-          ));
-          if (coverPath != null && coverMetaStore != null) {
-            try {
-              final bool committed =
-                  await coverMetaStore.markAutoFrameAfterWrite(candidateUid);
-              if (!committed) {
-                debugPrint(
-                  '[Fushi] external video cover provenance changed during '
-                  'automatic write: $candidateUid',
-                );
-              }
-            } on Object catch (error) {
-              debugPrint(
-                '[Fushi] external video cover provenance commit failed: '
-                '$error',
-              );
-            }
-          }
-          return candidateUid;
-        },
-      );
-    } catch (e) {
-      debugPrint('[Fushi] external video upsert failed: $e');
-      return null;
-    }
-    return bookUid;
-  }
-
 
   void _scheduleWindowsUpdateHandoffReconcile() {
     if (_windowsUpdateHandoffScheduled || _windowsUpdateHandoffChecked) {

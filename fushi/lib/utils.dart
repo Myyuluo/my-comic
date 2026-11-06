@@ -30,7 +30,7 @@ export 'src/utils/components/fushi_list_tile.dart';
 export 'src/utils/components/fushi_focusable.dart';
 export 'src/utils/components/fushi_hover_lift.dart';
 export 'src/utils/components/fushi_focus_ring.dart';
-export 'src/utils/components/galgame_poster_card.dart';
+
 export 'src/utils/components/fushi_design_tokens.dart';
 export 'src/utils/components/fushi_motion_tokens.dart';
 export 'src/utils/components/fushi_m3e_overlays.dart' hide FushiSpringCurve;

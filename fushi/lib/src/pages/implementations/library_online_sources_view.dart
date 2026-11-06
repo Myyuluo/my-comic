@@ -8,7 +8,7 @@ import 'package:fushi/src/media/manga/mihon/mihon_manager.dart';
 import 'package:fushi/src/media/manga/mihon/mihon_runtime_factory.dart';
 import 'package:fushi/src/media/novel/online/lnreader_manager.dart';
 import 'package:fushi/src/media/novel/online/novel_online_sources_gate.dart';
-import 'package:fushi/src/media/video/online/video_online_sources_gate.dart';
+
 import 'package:fushi/src/models/app_model.dart';
 import 'package:fushi/src/models/store_compliance.dart';
 import 'package:fushi/src/pages/implementations/browse_online_sources_view.dart';
@@ -132,13 +132,7 @@ _StoreRefreshTarget? _storeRefreshTarget(
         refresh: manager.refreshStores,
       );
     case OnlineSourcesDomain.video:
-      if (!isVideoOnlineSourcesAvailable) return null;
-      final MihonManager manager = appModel.animeMihonManager;
-      return (
-        listenable: manager,
-        loading: () => manager.loading,
-        refresh: manager.refreshStores,
-      );
+      return null;
     case OnlineSourcesDomain.novel:
       if (!isNovelOnlineSourcesAvailable) return null;
       final LnReaderManager manager = appModel.lnReaderManager;

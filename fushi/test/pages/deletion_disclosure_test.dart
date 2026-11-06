@@ -100,8 +100,7 @@ void main() {
   });
 
   group('BUG-1305 layer2 every destructive entry must carry a disclosure', () {
-    test('shelf single/batch delete and collection member delete are wired',
-        () {
+    test('shelf single/batch delete and audiobook delete are wired', () {
       final String books = readSource(
           'lib/src/pages/implementations/reader_history/books.part.dart');
       expect(
@@ -111,23 +110,7 @@ void main() {
             'batch); each must build a structured disclosure',
       );
 
-      final String historyPage = readSource(
-          'lib/src/pages/implementations/reader_fushi_history_page.dart');
-      expect(
-        historyPage
-            .contains('deleteMembersDisclosure: buildDeletionDisclosure'),
-        isTrue,
-        reason: 'book collection member delete recursively removes the extract '
-            'dir and the audiobook dir, so it must disclose',
-      );
-
-      final String gridDetail = readSource(
-          'lib/src/pages/implementations/media_collection_grid_detail_page.dart');
-      expect(
-        gridDetail.contains('checkedDisclosure: canDeleteMembers'),
-        isTrue,
-        reason: 'collection detail page deletes the same dirs, must disclose',
-      );
+      // 合集成员删除入口随 my-comic v1 移除合集功能一并删除。
 
       final String audiobook =
           readSource('lib/src/media/audiobook/audiobook_import_dialog.dart');

@@ -4,9 +4,8 @@ import 'package:fushi_audio/fushi_audio.dart';
 import 'package:fushi_cli/fushi_cli.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi_dictionary/fushi_dictionary.dart' show JapaneseLanguage;
-import 'package:fushi_engine/media/collections/collection_asset_reclaim.dart'
-    show clearCollectionOwnCover;
-import 'package:fushi_engine/media/video/video_book_repository.dart';
+
+
 import 'package:fushi_engine/utils/net/app_http.dart';
 import 'package:path/path.dart' as p;
 
@@ -15,8 +14,8 @@ import 'package:fushi/src/media/library_progress_reset.dart';
 import 'package:fushi/src/media/media_cover_service.dart';
 import 'package:fushi/src/media/media_item.dart';
 import 'package:fushi/src/media/media_source.dart';
-import 'package:fushi/src/media/source_library/add_local_folder_source.dart';
-import 'package:fushi/src/media/source_library/source_library_removal.dart';
+
+
 import 'package:fushi/src/media/sources/reader_fushi_source.dart';
 import 'package:fushi/src/models/app_model.dart';
 import 'package:fushi/src/pages/implementations/tag_filter_sheet.dart'
@@ -25,7 +24,7 @@ import 'package:fushi/src/pages/implementations/tag_filter_sheet.dart'
         bookTagMapProvider,
         filteredBookIdsProvider,
         filteredSrtBookUidsProvider;
-import 'package:fushi/src/platform/desktop/ctl/ctl_collection_routes.dart';
+
 import 'package:fushi/src/platform/desktop/ctl/ctl_library_entries.dart';
 import 'package:fushi/src/platform/desktop/ctl/ctl_library_shelf.dart';
 import 'package:fushi/src/platform/desktop/ctl/desktop_ctl_context.dart';
@@ -48,19 +47,6 @@ List<CtlRoute> buildLibraryManageCtlRoutes(DesktopCtlContext context) {
   final _LibraryManageHandlers h = _LibraryManageHandlers(context);
   const String root = kLibraryCtlManageRoot;
   return <CtlRoute>[
-    CtlRoute.get('$root/collections', h.listCollections),
-    CtlRoute.post('$root/collections', h.createCollection),
-    CtlRoute.get('$root/collections/:id', h.collectionDetail),
-    CtlRoute.put('$root/collections/:id', h.renameCollection),
-    CtlRoute.delete('$root/collections/:id', h.deleteCollection),
-    CtlRoute.post('$root/collections/:id/members', h.addMembers),
-    CtlRoute.delete('$root/collections/:id/members', h.removeMembers),
-    CtlRoute.put('$root/collections/:id/cover', h.collectionCover),
-    CtlRoute.post('$root/collections/:id/tags', h.tagCollection),
-    CtlRoute.delete('$root/collections/:id/tags', h.untagCollection),
-    // 合集定序（手动 order / 一键 sort 含 AI）：同一前缀、同一 `collection` CLI 组；
-    // 实现在 ctl_collection_routes.dart（AI 指派来源要能注入，单独成文件便于测试）。
-    ...buildCollectionCtlRoutes(context),
     CtlRoute.get('$root/tags', h.listTags),
     CtlRoute.post('$root/tags', h.createTag),
     CtlRoute.put('$root/tags/:id', h.updateTag),
@@ -117,7 +103,7 @@ class _LibraryManageHandlers {
   FushiDatabase get _db => _app.database;
 
   LibraryCtlShelf get _shelf =>
-      LibraryCtlShelf(db: _db, galgameRepo: _app.galgameRepo);
+      LibraryCtlShelf(db: _db);
 
   void _requireWritable() {
     if (_app.isMigrationReadonly) {
@@ -167,118 +153,6 @@ class _LibraryManageHandlers {
       _context.ref.invalidate(filteredBookIdsProvider);
       _context.ref.invalidate(filteredSrtBookUidsProvider);
     }
-  }
-
-  // ── 合集 ─────────────────────────────────────────────────────────────
-
-  Future<Object?> listCollections(CtlCall call) async {
-    final String? containing = call.optString('key');
-    return <String, Object?>{
-      'collections': await _shelf.listCollections(
-        containing: containing == null ? null : _parseKeyText(containing),
-      ),
-    };
-  }
-
-  Future<Object?> collectionDetail(CtlCall call) =>
-      _shelf.collectionDetail(_intParam(call, 'id'));
-
-  Future<Object?> createCollection(CtlCall call) async {
-    _requireWritable();
-    final Map<String, Object?> created = await _shelf.createCollection(
-      call.requireString('name'),
-      type: call.optString('type') ?? 'collection',
-    );
-    _refreshShelf();
-    return created;
-  }
-
-  Future<Object?> renameCollection(CtlCall call) async {
-    _requireWritable();
-    final Map<String, Object?> renamed = await _shelf.renameCollection(
-      _intParam(call, 'id'),
-      call.requireString('name'),
-    );
-    _refreshShelf();
-    return renamed;
-  }
-
-  Future<Object?> deleteCollection(CtlCall call) async {
-    _requireConfirm(call);
-    _requireWritable();
-    final Map<String, Object?> deleted = await _shelf.deleteCollection(
-      _intParam(call, 'id'),
-    );
-    _refreshShelf();
-    return deleted;
-  }
-
-  Future<Object?> addMembers(CtlCall call) async {
-    _requireWritable();
-    final Map<String, Object?> result = await _shelf.addMembers(
-      _intParam(call, 'id'),
-      _keys(call),
-    );
-    _refreshShelf();
-    return result;
-  }
-
-  Future<Object?> removeMembers(CtlCall call) async {
-    _requireWritable();
-    final Map<String, Object?> result = await _shelf.removeMembers(
-      _intParam(call, 'id'),
-      _keys(call),
-    );
-    _refreshShelf();
-    return result;
-  }
-
-  /// 合集自有封面（合集详情页「设置封面」）：本地图片路径或 http(s) URL；`reset`
-  /// 清掉自有封面、回落成员借用链。
-  Future<Object?> collectionCover(CtlCall call) async {
-    _requireWritable();
-    final int id = _intParam(call, 'id');
-    final MediaCollectionRow? row = await _db.getMediaCollectionById(id);
-    if (row == null) throw CtlFailure.notFound('没有 id=$id 的合集');
-    if (call.optBool('reset') == true) {
-      await clearCollectionOwnCover(_db, id);
-      _refreshShelf();
-      return <String, Object?>{'id': id, 'cover': null};
-    }
-    final String destPath = await _withCoverSource(call, (File image) async {
-      try {
-        return await MediaCoverService.applyCollectionCover(
-          database: _db,
-          collectionId: id,
-          pickedPath: image.path,
-        );
-      } on StateError catch (e) {
-        throw CtlFailure.conflict('${e.message}，稍后再试');
-      }
-    });
-    _refreshShelf();
-    return <String, Object?>{'id': id, 'cover': destPath};
-  }
-
-  Future<Object?> tagCollection(CtlCall call) async {
-    _requireWritable();
-    final Map<String, Object?> result = await _shelf.addTags(
-      _tagNames(call),
-      collectionId: _intParam(call, 'id'),
-      create: call.optBool('create') == true,
-    );
-    _refreshShelf(tags: true);
-    return result;
-  }
-
-  Future<Object?> untagCollection(CtlCall call) async {
-    _requireWritable();
-    final Map<String, Object?> result = await _shelf.removeTags(
-      _tagNames(call),
-      collectionId: _intParam(call, 'id'),
-    );
-    _refreshShelf(tags: true);
-    return result;
   }
 
   // ── 标签 ─────────────────────────────────────────────────────────────
@@ -496,15 +370,7 @@ class _LibraryManageHandlers {
           'rawTitle': rawTitle,
         };
       case LibraryCtlStore.video:
-        if (reset) {
-          throw const CtlFailure.rejected('视频改名直接改标题，没有「恢复原名」');
-        }
-        final VideoBookRepository repo = VideoBookRepository(_db);
-        if (await repo.getByBookUid(key.id) == null) {
-          throw CtlFailure.notFound('视频库里没有 ${key.wire}');
-        }
-        await repo.updateTitle(key.id, title!.trim());
-        return <String, Object?>{'key': key.wire, 'title': title.trim()};
+        throw const CtlFailure.unsupported('视频域已移除');
       case LibraryCtlStore.game:
         throw const CtlFailure.rejected('游戏改名请用 game 命令');
     }
@@ -558,6 +424,7 @@ class _LibraryManageHandlers {
     }
   }
 
+
   Future<Object?> itemCover(CtlCall call) async {
     _requireWritable();
     final LibraryCtlKey key = _key(call);
@@ -594,27 +461,9 @@ class _LibraryManageHandlers {
         _refreshShelf();
         return <String, Object?>{'key': key.wire, 'reset': reset};
       case LibraryCtlStore.video:
-        if (reset) {
-          throw const CtlFailure.rejected('视频封面不支持清除，请换一张图');
-        }
-        final VideoBookRepository repo = VideoBookRepository(_db);
-        if (await repo.getByBookUid(key.id) == null) {
-          throw CtlFailure.notFound('视频库里没有 ${key.wire}');
-        }
-        final String dest = await _withCoverSource(call, (File image) async {
-          try {
-            return await MediaCoverService.applyVideoCoverManual(
-              repo: repo,
-              bookUid: key.id,
-              pickedPath: image.path,
-            );
-          } on StateError catch (e) {
-            throw CtlFailure.conflict('${e.message}，稍后再试');
-          }
-        });
-        return <String, Object?>{'key': key.wire, 'cover': dest};
+        throw const CtlFailure.unsupported('视频域已移除');
       case LibraryCtlStore.game:
-        throw const CtlFailure.rejected('游戏封面请用 game 命令');
+        throw const CtlFailure.unsupported('游戏域已移除');
     }
   }
 
@@ -668,16 +517,7 @@ class _LibraryManageHandlers {
           records: records,
         );
       case LibraryCtlStore.video:
-        final VideoBookRepository repo = VideoBookRepository(_db);
-        final VideoBookRow? row = await repo.getByBookUid(key.id);
-        if (row == null) throw CtlFailure.notFound('视频库里没有 ${key.wire}');
-        await resetVideoWatchState(
-          db: _db,
-          repo: repo,
-          bookUid: key.id,
-          title: row.title,
-          records: records,
-        );
+        throw const CtlFailure.unsupported('视频域已移除');
       case LibraryCtlStore.game:
         throw const CtlFailure.rejected('游戏没有阅读进度可重置');
     }
@@ -693,39 +533,7 @@ class _LibraryManageHandlers {
 
   /// 来源页「添加本地文件夹」同一函数（登记后立即扫描）。
   Future<Object?> addSource(CtlCall call) async {
-    _requireWritable();
-    final String path = call.requireString('path');
-    if (!File(path).isAbsolute) {
-      throw CtlFailure.badRequest('路径必须是绝对路径：$path');
-    }
-    if (!Directory(path).existsSync()) {
-      throw CtlFailure.notFound('目录不存在：$path');
-    }
-    final String kindRaw = call.requireString('kind');
-    final SourceLibraryKind? kind = SourceLibraryKind.tryParse(kindRaw);
-    if (kind == null) {
-      throw CtlFailure.badRequest('来源种类只能是 book / video / manga，收到「$kindRaw」');
-    }
-    final LibraryCtlKind ctlKind = switch (kind) {
-      SourceLibraryKind.book => LibraryCtlKind.book,
-      SourceLibraryKind.video => LibraryCtlKind.video,
-      SourceLibraryKind.manga => LibraryCtlKind.manga,
-    };
-    if (!_app.moduleVisibility.isEnabled(ctlKind.module)) {
-      throw CtlFailure.rejected('「${ctlKind.wireName}」所属模块已在设置里关闭');
-    }
-    final AddLocalFolderResult result = await addLocalFolderAsSource(
-      db: _db,
-      mediaKind: kind.dbValue,
-      path: path,
-    );
-    _refreshShelf();
-    return <String, Object?>{
-      'added': result.outcome == AddLocalFolderOutcome.added,
-      if (result.sourceId != null) 'id': result.sourceId,
-      'path': result.rootPath,
-      'kind': kind.dbValue,
-    };
+    throw const CtlFailure.unsupported('媒体来源库已移除');
   }
 
   Future<MediaSourceRow> _requireSource(int id) async {
@@ -746,29 +554,6 @@ class _LibraryManageHandlers {
   /// 来源页「移除来源」同一函数：条目保留（source_id 归空）；视频下载订阅 / 未整理
   /// 任务迁到 `migrateTo` 指定的视频来源，没给就停用（与移除对话框不选迁移一致）。
   Future<Object?> removeSource(CtlCall call) async {
-    _requireConfirm(call);
-    _requireWritable();
-    final int id = _intParam(call, 'id');
-    final MediaSourceRow row = await _requireSource(id);
-    final int? migrateTo = call.optInt('migrateTo');
-    try {
-      await removeSourceLibrary(
-        database: _db,
-        prefs: _app.prefsRepo,
-        sourceId: id,
-        migrateVideoDownloadsTo: migrateTo,
-        disableVideoDownloadSubscriptions: migrateTo == null,
-        videoDownloadPipeline: _app.videoDownloadPipelineService,
-      );
-    } on ArgumentError {
-      throw CtlFailure.badRequest('migrateTo=$migrateTo 不是另一个视频来源');
-    }
-    _refreshShelf();
-    return <String, Object?>{
-      'deleted': true,
-      'id': id,
-      'label': row.label,
-      if (migrateTo != null) 'migratedTo': migrateTo,
-    };
+    throw const CtlFailure.unsupported('媒体来源库已移除');
   }
 }

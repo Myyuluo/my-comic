@@ -9,8 +9,7 @@ import 'package:flutter/foundation.dart';
 import 'package:fushi/src/models/audio_source_config.dart';
 import 'package:fushi_engine/media/override_title_key.dart';
 import 'package:fushi_engine/utils/archive/native_zip.dart';
-import 'package:fushi_engine/media/video/strm_file.dart'
-    show isNetworkOnlyVideoPath;
+
 import 'package:fushi/src/models/local_audio_manager.dart';
 import 'package:fushi/src/models/module_id.dart';
 import 'package:fushi/src/sync/backup_merge_engine.dart';
@@ -23,7 +22,7 @@ import 'package:fushi_dictionary/fushi_dictionary.dart';
 import 'package:fushi_srs/fushi_srs.dart' show SrsEntityKind;
 import 'package:path/path.dart' as p;
 import 'package:sqlite3/sqlite3.dart' as sqlite;
-import 'package:fushi_engine/media/video/anime_source_video_path.dart';
+
 
 part 'backup_service/fs_retry.part.dart';
 part 'backup_service/path_rebase.part.dart';
@@ -1067,8 +1066,12 @@ class BackupService {
   /// aligned (TODO-1261).
   /// Online video source episodes (`anime-source://`, re-fetched from the
   /// extension at play time) are streaming rows as well.
-  static bool _isStreamingVideoPath(String videoPath) =>
-      isNetworkOnlyVideoPath(videoPath);
+  static bool _isStreamingVideoPath(String videoPath) {
+    final Uri? uri = Uri.tryParse(videoPath);
+    if (uri == null) return false;
+    return const <String>{'http', 'https', 'rtsp', 'rtmp', 'udp'}
+        .contains(uri.scheme);
+  }
 
   /// COUNT(*) of a table on the live DB (used to report honest export totals).
   Future<int> _countRows(String table) async {

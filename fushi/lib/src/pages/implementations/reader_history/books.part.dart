@@ -1225,49 +1225,11 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
           FushiSnackBar(content: Text(t.drag_drop_need_card_target)),
         );
       case DropIntent.importNewVideo:
-        // 书架拖入视频 → 自动切到视频导入流程，带上文件（不再只提示让用户手动切，
-        // TODO-558）。视频卡与书卡同页渲染，无需跨 tab 通信。
-        if (!modules.isEnabled(ModuleId.video)) {
-          showModuleDisabled();
-          return;
-        }
-        _openVideoImportPrefilled(
-          videoPath: files.videos.first,
-          subtitlePath:
-              files.subtitles.isNotEmpty ? files.subtitles.first : null,
-        );
       case DropIntent.importNewPlaylist:
-        if (!modules.isEnabled(ModuleId.video)) {
-          showModuleDisabled();
-          return;
-        }
-        _openPlaylistImportPrefilled(playlistPath: files.playlists.first);
       case DropIntent.importVideoUrl:
-        // 书架拖入网络流 URL → 自动切到视频导入（预填 URL 并入库），与拖视频文件的
-        // 自动切换一致（TODO-1306）。
-        if (!modules.isEnabled(ModuleId.video)) {
-          showModuleDisabled();
-          return;
-        }
-        _openStreamImportPrefilled(streamUrl: files.urls.first);
       case DropIntent.importTorrent:
-        // 拖入 .torrent → 下载中心「添加任务」对话框预填种子；内容类型按落点预填
-        // （漫画库→漫画、书架→小说），用户可在框里改。下载中心是独立模块，关掉
-        // 时与其它模块一样给可见提示而不是静默。
-        if (!modules.isEnabled(ModuleId.browse)) {
-          showModuleDisabled();
-          return;
-        }
-        unawaited(
-          showManualDownloadTaskDialog(
-            context: context,
-            appModel: appModel,
-            torrentPaths: files.torrents,
-            initialDiscoveryKind: _mangaOnly
-                ? DiscoveryMediaKind.manga
-                : DiscoveryMediaKind.novel,
-          ),
-        );
+        // 视频 / 种子导入已随非漫画域移除。
+        break;
       case DropIntent.unsupportedSurface:
         debugPrint('[fushi-drop] [reader-shelf] intent=unsupportedSurface');
         ScaffoldMessenger.of(context).showSnackBar(

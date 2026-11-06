@@ -7,14 +7,11 @@ import 'package:fushi_dictionary/fushi_dictionary.dart';
 import 'package:path/path.dart' as p;
 
 import 'package:fushi/src/media/sources/reader_fushi_source.dart';
-import 'package:fushi/src/media/video/video_library_delete.dart'
-    show VideoLibraryDeleteResult, deleteVideoBooksWithDecision;
-import 'package:fushi_engine/media/video/video_book_repository.dart'
-    show VideoBookRepository;
+
+
 import 'package:fushi_engine/sync/deletion_propagation.dart'
     show DeleteDecision, DeleteScope;
-import 'package:fushi/src/media/video/video_shader_downloader.dart'
-    show anime4kInstalledBytes, deleteAnime4kShaderFiles;
+
 import 'package:fushi/src/pages/implementations/tag_filter_sheet.dart'
     show bookTagMapProvider, srtBookTagMapProvider;
 import 'package:fushi/src/settings/settings_context.dart';
@@ -25,6 +22,10 @@ import 'package:fushi/utils.dart';
 /// 设置 →「存储」页的取数与删除原语集合：页面（`StorageUsageView`）与控制通道
 /// （`ctl_settings_body_storage.dart`）共用同一份接线，删除一律走各域既有路径
 /// （书 `ReaderFushiSource.deleteBook`、纯字幕书 `SrtBookRepository.delete`、
+Future<int> _noAnime4kBytes() async => 0;
+
+Future<List<String>> _noAnime4kDelete() async => const <String>[];
+
 /// 词典 `AppModel.deleteDictionary`、主库快照 `deleteDatabaseSnapshotFiles`、
 /// Anime4K `deleteAnime4kShaderFiles`）。
 class StorageUsageActions {
@@ -39,8 +40,8 @@ class StorageUsageActions {
     this.dictionaryDisplayNamesProvider,
     this.videosProvider,
     this.deleteVideo,
-    this.anime4kBytesProvider = anime4kInstalledBytes,
-    this.anime4kDelete = deleteAnime4kShaderFiles,
+    this.anime4kBytesProvider = _noAnime4kBytes,
+    this.anime4kDelete = _noAnime4kDelete,
   });
 
   /// 真实接线（原 `settings_schema_storage.dart` 里的闭包）。
@@ -76,26 +77,6 @@ class StorageUsageActions {
       c.ref.invalidate(fushiBooksProvider);
       c.ref.invalidate(srtBookTagMapProvider);
       return null;
-    },
-    // BUG-1870：主库快照残留的删除原语在 fushi_core（与扫描侧识别口径同源）。
-    videosProvider: () => loadStorageVideoRefs(c.appModel.database),
-    // 视频库自己的删除链（与视频页单删、下载中心「删除（连同文件）」同一条）：
-    // 放播放器句柄 → 下载任务标 skip → 删行 + app 副本 → 删文件 → 对账下载任务。
-    // 只删本机（不立跨端墓碑）、不动统计——这里是「腾空间」，不是「从库里抹掉」。
-    deleteVideo: (String bookUid) async {
-      final FushiDatabase db = c.appModel.database;
-      final VideoLibraryDeleteResult result =
-          await deleteVideoBooksWithDecision(
-            repo: VideoBookRepository(db),
-            database: db,
-            pipeline: c.appModel.videoDownloadPipelineService,
-            bookUids: <String>[bookUid],
-            decision: const DeleteDecision(
-              scope: DeleteScope.keepLocalOnly,
-              deleteLocalFiles: true,
-            ),
-          );
-      return storageVideoDeleteFailureReason(result);
     },
     deleteDatabaseSnapshots: () async =>
         deleteDatabaseSnapshotFiles(await AppPaths.supportRootDirectory()),
@@ -180,19 +161,6 @@ class StorageEntryDeleteOutcome {
 
   final String? failure;
   final bool changed;
-}
-
-/// 一次视频删除的失败摘要：行没删掉 / 文件没删掉都算失败（文件留在盘上，用户
-/// 以为腾了空间其实没有）；全成功 → null。
-String? storageVideoDeleteFailureReason(VideoLibraryDeleteResult result) {
-  if (result.failed.isNotEmpty) {
-    return '${result.failed.first.error}';
-  }
-  if (result.localFiles.failures.isNotEmpty) {
-    final LocalFileDeleteFailure first = result.localFiles.failures.first;
-    return '${p.basename(first.path)}: ${first.error}';
-  }
-  return null;
 }
 
 /// 明细能不能删（只读子项删它就是绕过护栏的裸删）。

@@ -103,55 +103,6 @@ mixin _LocalLibraryHostSyncState
     );
   }
 
-  // ── 合集清单（多端库联合视图 §2.3 任务5.2）──────────────────────────────────
-
-  /// 读 host 合集全量快照清单。直接复用云后端同一 [loadLocalCollectionManifest]（同一
-  /// DB 读取逻辑），保证互联与云通道 materialize 结果字节等价、无第二套实现。
-  @override
-  Future<CollectionManifest> getCollectionManifest() =>
-      loadLocalCollectionManifest(_db);
-
-  /// 把 client 上报的合集清单并入 host DB 并返回合并后清单。
-  ///
-  /// 与云后端 orchestrator [SyncOrchestrator.syncCollections] 的核心完全同构，仅
-  /// 通道不同：`CollectionSyncEngine.merge`（host 自身 `sync_collections_baseline_ms`
-  /// 因果基线）→ [applyCollectionLocalChanges] 把本地变更集落 host DB → 推进 host
-  /// 基线 → 返回合并后清单（client 端再拿它重跑引擎收敛，双端同一并集）。
-  ///
-  /// 基线的角色：区分「未见过的移出/删除墓碑」（新闻 → 生效）与「本端已裁决过、
-  /// 成员/合集仍在即代表之后重加/重建」（旧闻 → 活胜）。host 每次合并成功后推进基线，
-  /// 使已应用的墓碑成为「旧闻」，日后本端或对端重加时不被旧墓碑再删（收敛正确性依赖
-  /// 此推进，见 collection_sync_engine 注释）。
-  ///
-  /// 经 [_runSyncStateExclusive] 串行：读清单→合并→落库→推基线整体互斥，避免与
-  /// 本机出站同步的合集落库交错（BUG-2717：不再等 host 自己的整轮同步）。重放同一
-  /// 清单幂等（应用端按目标态调和）。
-  @override
-  Future<CollectionManifest> mergeCollectionManifest(
-    CollectionManifest incoming,
-  ) async {
-    late CollectionManifest merged;
-    await _runSyncStateExclusive(() async {
-      final CollectionManifest local = await loadLocalCollectionManifest(_db);
-      // BUG-1579：host 收 POST 走**自己那本账**（[SyncChannelScope.host]）。它与
-      // 本机作为 client 跑的云/互联通道是三条独立的因果轴：共用一个键时，client
-      // 通道刚推进的基线会把对端 POST 来的移出墓碑判成旧闻 → 引擎按「活胜」撤销
-      // → 再回传给对端，用户的移出被自己另一条通道悄悄撤销。
-      final int baseline =
-          await readCollectionsSyncBaselineMs(_db, SyncChannelScope.host);
-      final CollectionSyncOutcome outcome = CollectionSyncEngine.merge(
-        local: local,
-        remote: incoming,
-        lastSyncedAtMs: baseline,
-      );
-      await applyCollectionLocalChanges(_db, outcome.changes);
-      await writeCollectionsSyncBaselineMs(
-          _db, SyncChannelScope.host, DateTime.now().millisecondsSinceEpoch);
-      merged = outcome.merged;
-    });
-    return merged;
-  }
-
   // ── 标签清单（互联标签同步，tag_sync.dart）────────────────────────────────
 
   @override

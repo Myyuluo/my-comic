@@ -9,10 +9,14 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
-import 'package:fushi_engine/ocr/ocr_inference.dart';
-import 'package:fushi_engine/ocr/text_detector.dart'
-    show LetterboxTransform, computeLetterbox, kDetInputSize, rtdetrPreprocess;
+
+
+import 'package:fushi_asr_core/asr_core.dart' show OnnxSession, OnnxTensor;
+import 'package:fushi_engine/media/manga/panel_geometry.dart';
 import 'package:image/image.dart' as img;
+
+typedef OcrSession = OnnxSession;
+typedef OcrTensor = OnnxTensor;
 
 const int kPanelClassId = 0;
 const int kPanelTextClassId = 1;

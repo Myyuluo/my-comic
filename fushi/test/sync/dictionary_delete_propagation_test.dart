@@ -5,7 +5,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi/src/sync/interconnect_sync_backend.dart';
 import 'package:fushi_engine/sync/aggregate_snapshot.dart';
-import 'package:fushi_engine/sync/collection_manifest.dart';
+
 import 'package:fushi_engine/sync/fushi_library_host_service.dart';
 import 'package:fushi_engine/sync/fushi_sync_server.dart';
 import 'package:fushi/src/sync/sync_repository.dart';
@@ -54,14 +54,6 @@ class _FakeLibraryService implements FushiLibraryHostService {
   @override
   Future<void> applyAggregateSnapshot(AggregateSnapshot snapshot) async {}
 
-  @override
-  Future<CollectionManifest> getCollectionManifest() async =>
-      CollectionManifest.empty;
-
-  @override
-  Future<CollectionManifest> mergeCollectionManifest(
-          CollectionManifest incoming) async =>
-      incoming;
 
   final List<String> deleted = <String>[];
 

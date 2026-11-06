@@ -705,7 +705,7 @@ String mangaPageDivHtml(
       '<img src="${_escapeAttr(imgSrc)}" loading="$loading" '
       'fetchpriority="$fetchPriority" decoding="async" '
       'style="pointer-events:none;object-fit:${scaleType == MangaScaleType.stretch ? 'fill' : 'contain'};">'
-      '${mangaOcrBoxesHtml(page)}'
+      // OCR 文本层已随 OCR 域移除：页图只渲染图片，不再叠透明文本框。
       '</div>'
       '</div>';
 }

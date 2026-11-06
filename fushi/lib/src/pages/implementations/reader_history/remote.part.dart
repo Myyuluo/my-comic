@@ -72,9 +72,7 @@ extension _ReaderHistoryRemote on _ReaderFushiHistoryPageState {
       final List<EpubBookMeta> localBooks =
           await appModel.database.getEpubBookMetas();
       final Set<String> localKeys = <String>{
-        ...localBooks.map((EpubBookMeta r) => r.bookKey),
-        ...(await CollectionBookIdentityIndex.load(appModel.database))
-            .uidByKey.keys,
+        for (final EpubBookMeta r in localBooks) r.bookKey,
       };
       // BUG-2505：本端已有 EPUB 但还没有配套有声书的 bookKey，要与远端 hasAudiobook
       // 对上——这些书被下面的去重整条藏掉，它们的有声书只能从本地书卡菜单补拉。
@@ -850,12 +848,8 @@ extension _ReaderHistoryRemote on _ReaderFushiHistoryPageState {
         },
       );
       // 后续有声书失败可重试，已经落地的 EPUB/漫画必须复用实际行。
-      final CollectionBookIdentityIndex identities =
-          await CollectionBookIdentityIndex.load(appModel.database);
-      final String? existingUid = identities.uidByKey[book.downloadId];
-      final EpubBookRow? existingBook = existingUid == null
-          ? null
-          : await appModel.database.getEpubBookByUid(existingUid);
+      final EpubBookRow? existingBook =
+          await appModel.database.getEpubBook(book.downloadId);
       final bool hasExistingContent = existingBook != null &&
           (existingBook.format == BookFormat.manga.dbValue
               ? hasExportableMangaContent(existingBook.extractDir)

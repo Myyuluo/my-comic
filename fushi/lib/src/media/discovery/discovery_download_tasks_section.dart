@@ -1,5 +1,6 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:fushi/src/media/downloads/download_task_delete_confirm.dart';
 
 import 'package:fushi/src/media/downloads/download_source_method.dart';
 import 'package:fushi/src/utils/components/glass/fushi_icon.dart';
@@ -9,8 +10,7 @@ import 'package:fushi_engine/media/discovery/discovery_models.dart';
 import 'package:fushi/src/models/app_model.dart';
 import 'package:fushi/src/media/downloads/download_task_entry.dart';
 import 'package:fushi/src/media/downloads/download_task_card.dart';
-import 'package:fushi/src/pages/implementations/video_download_jobs_panel.dart'
-    show showDownloadTaskDeleteConfirm;
+
 import 'package:fushi/src/utils/misc/reveal_in_file_manager.dart';
 import 'package:fushi/utils.dart';
 import 'package:fushi/src/utils/misc/engine_listenable.dart';

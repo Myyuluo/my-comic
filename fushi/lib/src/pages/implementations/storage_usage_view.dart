@@ -8,7 +8,7 @@ import 'package:fushi_core/fushi_core.dart' show DatabaseSnapshotDeletionResult;
 import 'package:material_color_utilities/material_color_utilities.dart'
     show Hct;
 
-import 'package:fushi/src/media/video/video_shader_downloader.dart';
+
 import 'package:fushi/src/settings/settings_schema_widgets.dart'
     show settingsFootnoteStyle;
 import 'package:fushi/src/storage/storage_usage_actions.dart';
@@ -34,6 +34,10 @@ import 'package:fushi/utils.dart';
 /// 删除一律复用各域既有路径（见 [StorageUsageService] 头注释），本文件零裸
 /// `Directory.delete`。所有依赖经构造参数注入（服务/取数/删除回调），
 /// widget 测试注 fake 即可；真实接线在 `settings_schema_storage.dart`。
+Future<int> _noAnime4kBytes() async => 0;
+
+Future<List<String>> _noAnime4kDelete() async => const <String>[];
+
 class StorageUsageView extends ConsumerStatefulWidget {
   const StorageUsageView({
     required this.service,
@@ -47,8 +51,8 @@ class StorageUsageView extends ConsumerStatefulWidget {
     required this.deleteFiles,
     this.videosProvider,
     this.deleteVideo,
-    this.anime4kBytesProvider = anime4kInstalledBytes,
-    this.anime4kDelete = deleteAnime4kShaderFiles,
+    this.anime4kBytesProvider = _noAnime4kBytes,
+    this.anime4kDelete = _noAnime4kDelete,
     super.key,
   });
 
@@ -69,10 +73,6 @@ class StorageUsageView extends ConsumerStatefulWidget {
          deleteDictionary: actions.deleteDictionary,
          deleteDatabaseSnapshots: actions.deleteDatabaseSnapshots,
          deleteFiles: actions.deleteFiles,
-         videosProvider: actions.videosProvider,
-         deleteVideo: actions.deleteVideo,
-         anime4kBytesProvider: actions.anime4kBytesProvider,
-         anime4kDelete: actions.anime4kDelete,
          key: key,
        );
 

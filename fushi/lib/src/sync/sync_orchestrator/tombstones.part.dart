@@ -239,8 +239,8 @@ extension _SyncOrchestratorTombstones on SyncOrchestrator {
         await backend.deleteRemoteLocalAudio(itemKey);
         return true;
       case SyncTombstoneKind.video:
-        // 唯一会如实报「不支持」的一条：视频删除端点是本次新增的，旧 host 没有。
-        return backend.deleteRemoteVideo(itemKey);
+        // 视频域已移除，不再向 host 推送视频删除。
+        return false;
       case SyncTombstoneKind.favoriteword:
       case SyncTombstoneKind.favoritesentence:
         // [_hasInterconnectDeletionChannel] 已挡在前面，走不到这里。

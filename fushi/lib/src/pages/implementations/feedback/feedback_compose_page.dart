@@ -10,6 +10,7 @@
 // 压完按表单此刻的内容自动发出；压缩失败则撤销这次提交，附件行给出原因与「重新压缩」。
 
 import 'dart:async';
+import 'package:fushi/src/feedback/feedback_video.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -18,7 +19,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fushi/src/feedback/feedback_draft_store.dart';
 import 'package:fushi/src/feedback/feedback_service.dart';
-import 'package:fushi/src/feedback/feedback_video.dart';
+
 import 'package:fushi/src/leaderboard/leaderboard_service.dart';
 import 'package:fushi/src/pages/implementations/feedback/feedback_common.dart';
 import 'package:fushi/src/utils/misc/clipboard_image.dart';

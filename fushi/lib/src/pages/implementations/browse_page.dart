@@ -15,32 +15,30 @@ import 'package:fushi/src/media/audiobook/book_import_dialog.dart';
 import 'package:fushi/src/media/discovery/discovery_download_tasks_section.dart';
 import 'package:fushi/src/media/drag_drop/drop_classification.dart';
 import 'package:fushi_engine/media/discovery/discovery_models.dart';
-import 'package:fushi_engine/media/torrent/torrent_network_diagnosis.dart';
+
 import 'package:fushi/src/media/manga/discovery/manga_discovery_page.dart';
 import 'package:fushi/src/media/manga/manga_sources_page.dart';
-import 'package:fushi/src/media/torrent/torrent_network_issue_banner.dart';
+
 import 'package:fushi/src/media/downloads/manga_download_tasks_section.dart';
-import 'package:fushi/src/pages/implementations/interconnect_download_tasks_section.dart';
-import 'package:fushi/src/pages/implementations/remote_download_tasks_section.dart';
-import 'package:fushi_engine/media/video/download/video_download_pipeline_service.dart';
+
+
+
 import 'package:fushi/src/models/app_model.dart';
 import 'package:fushi/src/models/module_id.dart';
 import 'package:fushi/src/models/store_compliance.dart';
 import 'package:fushi/src/ai/ai_media_acquisition_assistant.dart'
     show AiMediaAcquisitionDomain;
-import 'package:fushi/src/pages/implementations/anime_download_dialog.dart';
+
 import 'package:fushi/src/pages/implementations/browse_online_sources_view.dart';
-import 'package:fushi/src/pages/implementations/discovery_ai_acquire_action.dart';
-import 'package:fushi/src/pages/implementations/manual_download_task_dialog.dart';
+
 import 'package:fushi/src/pages/implementations/media_discovery_page.dart';
-import 'package:fushi/src/pages/implementations/torrent_detail_dialog.dart';
-import 'package:fushi/src/pages/implementations/torrent_settings_section.dart';
-import 'package:fushi/src/pages/implementations/video_discovery_detail_page.dart';
-import 'package:fushi/src/pages/implementations/video_discovery_page.dart';
-import 'package:fushi/src/pages/implementations/video_download_jobs_panel.dart';
-import 'package:fushi/src/pages/implementations/video_external_provider_settings_section.dart';
+
+
+
+
+
+
 import 'package:fushi/src/settings/settings_detail_page.dart';
-import 'package:fushi/src/settings/settings_schema_services.dart';
 import 'package:fushi/src/sync/interconnect_peer_addresses.dart';
 import 'package:fushi/src/sync/sync_repository.dart';
 import 'package:fushi/src/utils/components/section_visibility.dart';
@@ -77,8 +75,6 @@ class BrowsePage extends ConsumerStatefulWidget {
     this.initialTab,
     this.initialDownloadsSection = BrowseDownloadsSection.tasks,
     this.navigationRequest,
-    this.videoDiscoveryController,
-    this.videoDiscoveryActions = const VideoDiscoveryActions(),
   });
 
   /// 打开时停在哪个页签；null 或此刻不可见 = 第一个可见页签。
@@ -92,11 +88,6 @@ class BrowsePage extends ConsumerStatefulWidget {
   /// 判新请求；首次挂载时它优先于 [initialTab]。
   final BrowseNavigationRequest? navigationRequest;
 
-  /// 与视频模块共用同一套生产发现服务，避免下载页另起网络生命周期。
-  final VideoDiscoveryController? videoDiscoveryController;
-
-  /// 视频发现详情、资源搜索与订阅动作由首页组合根统一注入。
-  final VideoDiscoveryActions videoDiscoveryActions;
 
   @override
   ConsumerState<BrowsePage> createState() => _BrowsePageState();
@@ -210,28 +201,6 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
   /// 悬浮按钮组胶囊画出（与库页壳 [MediaLibraryShell] 同构）。
   final FushiShellActionsSlot _actionsSlot = FushiShellActionsSlot();
 
-  /// 「下载执行设备」指向的已配对主机名；null = 本机（任务汇总 hero 的设备 chip）。
-  String? _executionDeviceLabel;
-
-  /// 按偏好解析执行设备的显示名：与 [resolveDownloadExecution] 同一判据——偏好
-  /// 指向的主机已不在配对清单里就算本机（那边会退回本机下载）。只读名字，不探测。
-  Future<void> _refreshExecutionDevice() async {
-    final AppModel appModel = ref.read(appProvider);
-    final String url = appModel.prefsRepo.downloadExecutionHostUrl;
-    String? label;
-    if (url.isNotEmpty) {
-      final FushiClientUrl? paired = interconnectPeerRepresentativeOf(
-        await SyncRepository(appModel.database).getFushiClientUrls(),
-        url,
-      );
-      if (paired != null) {
-        label = paired.deviceName ?? Uri.tryParse(url)?.host ?? url;
-      }
-    }
-    if (!mounted || label == _executionDeviceLabel) return;
-    setState(() => _executionDeviceLabel = label);
-  }
-
   /// 头部（一级页签行 + 各页签的二级页签行）随滚动收放的状态：与四个库页
   /// 同一套规则（下滚收起、上滚弹回、只认主滚动区、平滑滚轮拉回不算）。头部
   /// 叠在正文上，收放不改正文视口（BUG-2975）。
@@ -247,16 +216,13 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
   @override
   void initState() {
     super.initState();
-    unawaited(_refreshExecutionDevice());
     // 初始域 = 第一个可见域，不再硬编码 books：books 模块关掉时旧实现会停在一个
     // 已被过滤掉的域上（分段条选中值不在选项里 → 分段控件直接 assert，发现页也
     // 会挂在一个用户已关掉的模块上）。四个域全关时保持字段原值，此时
     // [_buildResourceHub] 整块不渲染，字段不参与任何渲染判据。
     final AppModel initialAppModel = ref.read(appProvider);
-    final List<_DownloadsResourceDomain> domains = _visibleResourceDomains(
-      initialAppModel.moduleVisibility,
-      gamesForm: initialAppModel.gamesModuleForm,
-    );
+    final List<_DownloadsResourceDomain> domains =
+        _visibleResourceDomains(initialAppModel.moduleVisibility);
     if (domains.isNotEmpty) _resourceDomain = domains.first;
     final List<OnlineSourcesDomain> onlineDomains = visibleOnlineSourcesDomains(
       initialAppModel.moduleVisibility,
@@ -339,10 +305,7 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
     // 不能静默漏门。
     final bool discover =
         StoreRestrictedCapability.externalDiscovery.isAvailable &&
-        _visibleResourceDomains(
-          appModel.moduleVisibility,
-          gamesForm: appModel.gamesModuleForm,
-        ).isNotEmpty;
+        _visibleResourceDomains(appModel.moduleVisibility).isNotEmpty;
     // 2026-11-05 用户口径：浏览页签顺序 在线源 → 发现 → 导入 → 下载；
     // 默认落地沿用「第一个可见页签」，因此打开浏览落在在线源。
     return <BrowseTab>[
@@ -499,10 +462,7 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
           }
         case BrowseTab.discover:
           final List<_DownloadsResourceDomain> domains =
-              _visibleResourceDomains(
-                appModel.moduleVisibility,
-                gamesForm: appModel.gamesModuleForm,
-              );
+              _visibleResourceDomains(appModel.moduleVisibility);
           if (domains.isNotEmpty) {
             _resourceDomain = toFirst ? domains.first : domains.last;
           }
@@ -580,20 +540,10 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
     return matchAudiobookMaterial(scan.index, key: key, title: job.title);
   }
 
-  Widget _buildVideoResourceTab() => VideoDiscoveryPage(
-    key: const ValueKey<String>('downloads-resource-video-discovery'),
-    navigation: const SizedBox.shrink(),
-    embedded: true,
-    controller: widget.videoDiscoveryController,
-    actions: widget.videoDiscoveryActions,
-  );
-
   String _resourceDomainLabel(_DownloadsResourceDomain domain) =>
       switch (domain) {
         _DownloadsResourceDomain.books => t.books,
         _DownloadsResourceDomain.manga => t.manga_library,
-        _DownloadsResourceDomain.games => t.nav_game,
-        _DownloadsResourceDomain.video => t.nav_video,
       };
 
   void _selectResourceDomain(_DownloadsResourceDomain domain) {
@@ -633,51 +583,13 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
             DiscoveryMediaKind.novel,
             DiscoveryMediaKind.audiobook,
           ],
-          onAiAcquire: _aiAcquireAction(domain),
         ),
         _DownloadsResourceDomain.manga => MangaDiscoveryPage(
           embedded: true,
           onOpenSources: _mangaSourcesAction(),
-          onAiAcquire: _aiAcquireAction(domain),
         ),
-        _DownloadsResourceDomain.games => MediaDiscoveryPage(
-          kinds: const <DiscoveryMediaKind>[DiscoveryMediaKind.game],
-          onAiAcquire: _aiAcquireAction(domain),
-        ),
-        _DownloadsResourceDomain.video => _buildVideoResourceTab(),
-      };
 
-  /// 「AI 下载」入口（小说 / 漫画 / 游戏发现页；视频域是首页注入的「AI 下视频」）。
-  ///
-  /// 门与点击行为在 [discoveryAiAcquireAction]（库页「发现」子标签共用）。
-  ValueChanged<String>? _aiAcquireAction(_DownloadsResourceDomain domain) {
-    final (AiMediaAcquisitionDomain, OnlineSourcesDomain?)? target =
-        switch (domain) {
-          _DownloadsResourceDomain.books => (
-            AiMediaAcquisitionDomain.novel,
-            OnlineSourcesDomain.novel,
-          ),
-          _DownloadsResourceDomain.manga => (
-            AiMediaAcquisitionDomain.manga,
-            OnlineSourcesDomain.manga,
-          ),
-          _DownloadsResourceDomain.games => (
-            AiMediaAcquisitionDomain.game,
-            null,
-          ),
-          _DownloadsResourceDomain.video => null,
-        };
-    if (target == null) return null;
-    final (AiMediaAcquisitionDomain aiDomain, OnlineSourcesDomain? online) =
-        target;
-    return discoveryAiAcquireAction(
-      context: context,
-      readAppModel: () => ref.read(appProvider),
-      domain: aiDomain,
-      domainLabel: _resourceDomainLabel(domain),
-      onlineDomain: online,
-    );
-  }
+      };
 
   /// 二级标签页只负责选择内容域；域内筛选、搜索与结果展示全部沿用各模块
   /// 自己的生产发现页。四个固定目的地直接可见，避免无标签的表单型下拉框
@@ -687,10 +599,8 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
     // 模块门控：四个域分属 books / manga / games / video，关掉的模块不出段，
     // 它的发现页也一并不建（隐藏域不该继续挂在树上跑网络）。
     final AppModel appModel = ref.watch(appProvider);
-    final List<_DownloadsResourceDomain> domains = _visibleResourceDomains(
-      appModel.moduleVisibility,
-      gamesForm: appModel.gamesModuleForm,
-    );
+    final List<_DownloadsResourceDomain> domains =
+        _visibleResourceDomains(appModel.moduleVisibility);
     // 四个域全关：整块资源分区不渲染——空的标签条 + 空页面是「渲染出来但点不
     // 出任何东西」，正是要消灭的形态。
     if (domains.isEmpty) return const SizedBox.shrink();
@@ -722,57 +632,6 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
     );
   }
 
-  /// 手动添加任务（磁力链接 / .torrent 文件）：与搜索出的资源同走 v78 持久
-  /// 管线，任务出现在任务 tab、同一套排序/搜索/优先级/删除操作。
-  Future<void> _openManualTaskDialog() async {
-    await showManualDownloadTaskDialog(
-      context: context,
-      appModel: ref.read(appProvider),
-    );
-  }
-
-  /// 拖 `.torrent` 进下载页 → 与页头「添加任务」同一对话框、预填种子（多个种子
-  /// 逐个开框）。其它文件在本页没有语义，给明确提示而不是静默——拖放没有
-  /// 「不渲染入口」这个选项，落点就是整页。
-  Future<void> _handleDownloadsDrop(List<String> paths, Offset _) async {
-    final DroppedFiles files = classifyDroppedFiles(paths);
-    if (files.torrents.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        FushiSnackBar(content: Text(t.drag_drop_unsupported_on_downloads)),
-      );
-      return;
-    }
-    await showManualDownloadTaskDialog(
-      context: context,
-      appModel: ref.read(appProvider),
-      torrentPaths: files.torrents,
-    );
-  }
-
-  /// 下载设置（原「设置」页签）：push 一页，入口在「下载」页签的页头齿轮与番剧
-  /// 下载对话框「去设置」。
-  Future<void> _openDownloadSettings() async {
-    await Navigator.of(context).push(
-      adaptivePageRoute<void>(
-        context: context,
-        builder: (BuildContext context) => const BrowseDownloadSettingsPage(),
-      ),
-    );
-    // 执行设备可能在设置页里改过：回来刷新汇总 hero 的设备 chip。
-    if (mounted) await _refreshExecutionDevice();
-  }
-
-  /// 统一门头：与四个库页（[MediaLibraryShell]）同一套 M3E 浮动工具栏行
-  /// （[FushiFloatingChromeBar]）——外壳大标题下面一行，左边是贴合内容宽的
-  /// 一级页签单层浮动胶囊（摆不下在胶囊里横滑渐隐），右边是同高的悬浮按钮组
-  /// 胶囊；整行左右缘与大标题、页面内容同一条页边。独立 push 进来（无 home
-  /// 壳）时页签胶囊左边多一枚返回键圆胶囊。
-  ///
-  /// 页签走 [LibrarySectionTabs.controlled]：本页的 [TabController] 同时驱动
-  /// [TabBarView]，横滑时指示器跟手连续滑动。
-  ///
-  /// 页头动作只在「下载」页签出现（「添加任务」+ 下载设置）：它们不是来源 / 扩展 /
-  /// 发现的动作。动作登记进本页自己的 [_actionsSlot]，由按钮组胶囊画出。
   Widget _buildHeader(TabController controller, List<BrowseTab> tabs) {
     // 下拉框会临时 push PopupRoute；只看本页自己的 PageRoute，避免展开菜单时
     // 左上角凭空出现返回键。
@@ -865,201 +724,6 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
     );
   }
 
-  Widget _buildTasks() {
-    // 有声书「转录后入库」任务包在最外层：它的条目经闭包并进下面统一列表的
-    // additionalTasks，与各下载来源并列排序/筛选。
-    // BUG-2950：内置引擎网络被掐（fake-ip 不转发 UDP / DHT 不可达）时在任务区
-    // 顶部说明原因；无问题时横幅零高度。横幅作为任务列表的顶部一块随列表滚动
-    // （列表自己在最上方为浮动头部占位，横幅不会被头部盖住）。
-    final Widget banner = ValueListenableBuilder<TorrentNetworkIssue>(
-      valueListenable: ref.read(appProvider).torrentNetworkIssue,
-      builder: (BuildContext context, TorrentNetworkIssue issue, _) =>
-          TorrentNetworkIssueBanner(
-            issue: issue,
-            margin: const EdgeInsets.only(top: 12),
-          ),
-    );
-    return AudiobookTranscribeTasksSection(
-      tasksBuilder:
-          (BuildContext context, List<DownloadTaskEntry> transcribe) =>
-              _buildTaskSources(transcribe, banner),
-    );
-  }
-
-  Widget _buildTaskSources(List<DownloadTaskEntry> transcribe, Widget banner) {
-    return AnimeDownloadDialog(
-      embedded: true,
-      tasksOnly: true,
-      showTasks: false,
-      onOpenSettings: _openDownloadSettings,
-      tasksBuilder: (BuildContext context, List<DownloadTaskEntry> legacy) =>
-          DiscoveryDownloadTasksSection(
-            tasksBuilder:
-                (
-                  BuildContext context,
-                  List<DownloadTaskEntry> direct,
-                ) => MangaDownloadTasksSection(
-                  tasksBuilder:
-                      (
-                        BuildContext context,
-                        List<DownloadTaskEntry> manga,
-                      ) => RemoteDownloadTasksSection(
-                        tasksBuilder:
-                            (
-                              BuildContext context,
-                              List<DownloadTaskEntry> remote,
-                            ) => InterconnectDownloadTasksSection(
-                              tasksBuilder:
-                                  (
-                                    BuildContext context,
-                                    List<DownloadTaskEntry> interconnect,
-                                  ) => VideoDownloadJobsPanel.database(
-                                    unified: true,
-                                    additionalTasks: <DownloadTaskEntry>[
-                                      ...legacy,
-                                      ...direct,
-                                      ...manga,
-                                      ...remote,
-                                      ...interconnect,
-                                      ...transcribe,
-                                    ],
-                                    database: ref.read(appProvider).database,
-                                    header: banner,
-                                    workFocus: _downloadsWorkFocus,
-                                    onClearWorkFocus: () => setState(
-                                      () => _downloadsWorkFocus = null,
-                                    ),
-                                    onAddTask: _openManualTaskDialog,
-                                    executionDeviceLabel: _executionDeviceLabel,
-                                    onOpenExecutionSettings:
-                                        _openDownloadSettings,
-                                    metricsLoader: ref
-                                        .read(appProvider)
-                                        .videoDownloadPipelineService
-                                        ?.loadTaskSnapshots,
-                                    onRetry: (VideoDownloadJobRow job) async {
-                                      await ref
-                                          .read(appProvider)
-                                          .videoDownloadPipelineService
-                                          ?.retryJob(job.jobId);
-                                    },
-                                    onResume: (VideoDownloadJobRow job) async {
-                                      await ref
-                                          .read(appProvider)
-                                          .videoDownloadPipelineService
-                                          ?.resumeJob(job.jobId);
-                                    },
-                                    onCancel: (VideoDownloadJobRow job) async {
-                                      await ref
-                                          .read(appProvider)
-                                          .videoDownloadPipelineService
-                                          ?.cancelJob(job.jobId);
-                                    },
-                                    onPairAudiobook:
-                                        (VideoDownloadJobRow job) async {
-                                          await _pairDownloadedAudiobook(job);
-                                        },
-                                    onOpenDetails: (VideoDownloadJobRow job) async {
-                                      final appModel = ref.read(appProvider);
-                                      final pipeline =
-                                          appModel.videoDownloadPipelineService;
-                                      final details = pipeline != null
-                                          ? await pipeline.loadJobDetails(
-                                              job.jobId,
-                                            )
-                                          : buildPersistedVideoDownloadJobDetails(
-                                              job,
-                                              await appModel.database
-                                                  .getVideoDownloadJobFiles(
-                                                    job.jobId,
-                                                  ),
-                                            );
-                                      if (!context.mounted) return;
-                                      final String torrentId =
-                                          (job.backendTaskId ??
-                                                  job.torrentHash ??
-                                                  '')
-                                              .trim();
-                                      await showAppDialog<void>(
-                                        context: context,
-                                        builder: (BuildContext dialogContext) =>
-                                            TorrentTaskDetailDialog.task(
-                                              torrentId: torrentId,
-                                              title: job.title,
-                                              torrentTitle:
-                                                  job.resourceTitle
-                                                          ?.trim()
-                                                          .isNotEmpty ==
-                                                      true
-                                                  ? job.resourceTitle!.trim()
-                                                  : job.title,
-                                              backendOverride: details.backend,
-                                              liveDataAbsence:
-                                                  details.liveDataAbsence,
-                                              initialSnapshot: details.snapshot,
-                                              initialFiles: details.files,
-                                              networkIssue:
-                                                  appModel.torrentNetworkIssue,
-                                            ),
-                                      );
-                                    },
-                                    onSetPriority:
-                                        (
-                                          VideoDownloadJobRow job,
-                                          int priority,
-                                        ) async {
-                                          final pipeline = ref
-                                              .read(appProvider)
-                                              .videoDownloadPipelineService;
-                                          await pipeline?.setJobPriority(
-                                            job.jobId,
-                                            priority,
-                                          );
-                                        },
-                                    locationLoader:
-                                        (VideoDownloadJobRow job) async {
-                                          final pipeline = ref
-                                              .read(appProvider)
-                                              .videoDownloadPipelineService;
-                                          return pipeline == null
-                                              ? null
-                                              : await pipeline
-                                                    .resolveJobLocation(
-                                                      job.jobId,
-                                                    );
-                                        },
-                                    onDelete:
-                                        (
-                                          job, {
-                                          required bool deleteFiles,
-                                        }) async {
-                                          final appModel = ref.read(
-                                            appProvider,
-                                          );
-                                          final pipeline = appModel
-                                              .videoDownloadPipelineService;
-                                          if (pipeline != null) {
-                                            await pipeline.deleteJob(
-                                              job.jobId,
-                                              deleteFiles: deleteFiles,
-                                            );
-                                          } else {
-                                            await deletePersistedVideoDownloadJob(
-                                              database: appModel.database,
-                                              job: job,
-                                              deleteFiles: deleteFiles,
-                                            );
-                                          }
-                                        },
-                                  ),
-                            ),
-                      ),
-                ),
-          ),
-    );
-  }
-
-  @override
   Widget build(BuildContext context) {
     final List<BrowseTab> tabs = _visibleTabs(ref.watch(appProvider));
     // 初始页签：跳转请求 / initialTab 播种进 [_selectedTab]，此刻不可见就落第一个
@@ -1380,71 +1044,7 @@ class _BrowseTabKeepAliveState extends State<_BrowseTabKeepAlive>
   }
 }
 
-/// 下载设置页：内置引擎 / qBittorrent、在线服务入口、下载路由。原「下载」页的
-/// 「设置」页签，2026-09-27 起改为「浏览 › 下载」页头齿轮 push 的独立页。
-class BrowseDownloadSettingsPage extends ConsumerWidget {
-  const BrowseDownloadSettingsPage({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final FushiDesignTokens tokens = FushiDesignTokens.of(context);
-    final bool servicesEnabled = ref
-        .watch(appProvider)
-        .moduleVisibility
-        .isEnabled(ModuleId.services);
-    return BrowseSubPage(
-      title: t.download_settings,
-      // 与设置详情页同一种页面：页边距由这里给，正文全是真正的设置分组
-      // （MD3 分段卡 / Apple inset grouped），组件自己不再缩进。
-      // 页头浮在正文上：顶部让位（浮动工具区 inset）从 BrowseSubPage 正文子树
-      // 里读（本 build 的 context 在页面壳之上）。
-      child: Builder(
-        builder: (BuildContext context) => ListView(
-          padding: EdgeInsets.fromLTRB(
-            tokens.spacing.page,
-            tokens.spacing.gap + FushiFloatingChromeInset.of(context),
-            tokens.spacing.page,
-            tokens.spacing.page + MediaQuery.paddingOf(context).bottom,
-          ),
-          children: <Widget>[
-            const TorrentSettingsSection(),
-            // 索引器 / 字幕来源 / 发现来源已迁到设置 → 在线服务（第三方凭据一个家）；
-            // 下载设置页留一条跳转，番剧下载对话框「去设置」落到这里仍能一步到达。
-            // 「在线服务」分类被 [ModuleId.services] 关掉时这一组不渲染：它指向的
-            // 设置分类此刻已从设置页消失，留着就是一条通往不存在页面的死路。
-            if (servicesEnabled)
-              AdaptiveSettingsSection(
-                children: <Widget>[
-                  Builder(
-                    builder: (BuildContext rowContext) =>
-                        AdaptiveSettingsNavigationRow(
-                          title: t.settings_destination_services,
-                          subtitle: t.settings_services_link_subtitle,
-                          icon: Icons.cloud_outlined,
-                          showIcon: true,
-                          onTap: () => Navigator.of(rowContext).push(
-                            adaptivePageRoute(
-                              context: rowContext,
-                              builder: (_) => SettingsDetailPage(
-                                destination: buildServicesDestination(),
-                              ),
-                            ),
-                          ),
-                        ),
-                  ),
-                ],
-              ),
-            const VideoExternalProviderSettingsSection(
-              scope: VideoExternalProviderScope.downloadRouting,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-enum _DownloadsResourceDomain { books, manga, games, video }
+enum _DownloadsResourceDomain { books, manga }
 
 /// 资源域 → 所属功能模块（穷尽 switch：加域时编译器强制补齐这张表）。
 ///
@@ -1454,8 +1054,7 @@ ModuleId _moduleOfResourceDomain(_DownloadsResourceDomain domain) =>
     switch (domain) {
       _DownloadsResourceDomain.books => ModuleId.books,
       _DownloadsResourceDomain.manga => ModuleId.manga,
-      _DownloadsResourceDomain.games => ModuleId.games,
-      _DownloadsResourceDomain.video => ModuleId.video,
+
     };
 
 /// 此刻可见的资源域，顺序即标签顺序（枚举声明序）。
@@ -1463,12 +1062,8 @@ ModuleId _moduleOfResourceDomain(_DownloadsResourceDomain domain) =>
 /// games 域是「找 galgame 资源下到本机」，只对本机游戏库形态成立；非 Windows
 /// 的 games 模块是串流接收端（游戏装在 Windows 主机上），不出这个域。
 List<_DownloadsResourceDomain> _visibleResourceDomains(
-  ModuleVisibility visibility, {
-  required GamesModuleForm? gamesForm,
-}) => <_DownloadsResourceDomain>[
+  ModuleVisibility visibility,
+) => <_DownloadsResourceDomain>[
   for (final _DownloadsResourceDomain domain in _DownloadsResourceDomain.values)
-    if (visibility.isEnabled(_moduleOfResourceDomain(domain)) &&
-        (domain != _DownloadsResourceDomain.games ||
-            gamesForm == GamesModuleForm.localLibrary))
-      domain,
+    if (visibility.isEnabled(_moduleOfResourceDomain(domain))) domain,
 ];

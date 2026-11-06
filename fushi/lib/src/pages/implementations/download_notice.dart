@@ -141,17 +141,9 @@ class _DownloadNoticeDialogState extends State<DownloadNoticeDialog> {
   }
 }
 
-bool _dismissed(AppModel appModel, DownloadNoticeKind kind) => switch (kind) {
-  DownloadNoticeKind.p2p => appModel.p2pDownloadNoticeDismissed,
-  DownloadNoticeKind.gameResource => appModel.gameResourceNoticeDismissed,
-};
+bool _dismissed(AppModel appModel, DownloadNoticeKind kind) => false;
 
-Future<void> _dismiss(AppModel appModel, DownloadNoticeKind kind) =>
-    switch (kind) {
-      DownloadNoticeKind.p2p => appModel.setP2pDownloadNoticeDismissed(),
-      DownloadNoticeKind.gameResource =>
-        appModel.setGameResourceNoticeDismissed(),
-    };
+Future<void> _dismiss(AppModel appModel, DownloadNoticeKind kind) async {}
 
 /// 发起下载前调用：需要说明就弹框，返回这次是否继续。
 ///

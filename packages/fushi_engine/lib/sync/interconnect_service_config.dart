@@ -1,5 +1,5 @@
 import 'package:fushi_engine/media/tracking/media_tracking_service.dart';
-import 'package:fushi_engine/media/video/metadata/video_source_scrape_config.dart';
+
 import 'package:fushi_engine/sync/fushi_library_host_service.dart';
 import 'package:fushi_core/fushi_core.dart';
 
@@ -29,40 +29,15 @@ class InterconnectServiceConfigSnapshot {
   /// - `media_source_secret_*`、`sync_*`：网络来源密码/私钥与配对凭据，属设备本地；
   /// - 设备身份与本地路径（device_id、端口、下载根、因果基线等）。
   static const Set<String> sharedPreferenceKeys = <String>{
-    'jimaku_api_key',
-    // 启用开关必须跟着 key 一起搬：只搬 key 不搬开关，子设备会拿到一把
-    // 配好却处于关闭状态的 key——正是本清单文档里说的「只搬内容不搬能力」。
-    'jimaku_enabled',
-    'qb_connection_config',
     // Bangumi 追番同步：令牌 + 账号显示名成对同步（只搬令牌会让子设备 UI 挂着
     // 上一个账号的名字）。令牌变更的对账水位归零见 [applyTo]。
     kBangumiAccessTokenPref,
     kBangumiAccountNamePref,
-    // 视频刮削 / 字幕 / 资源索引器的外部服务身份：同一套账号在哪台设备上都该
-    // 刮到同一份资料、搜到同一批字幕。
-    kVideoMetadataAniDbClientNamePref,
-    kVideoMetadataAniDbClientVersionPref,
-    'video_scraper_tmdb_api_key',
-    'video_subtitle_opensubtitles_config',
-    // SubDL：key + 开关成对搬（同 jimaku 那对的理由）。
-    'video_subtitle_subdl_api_key',
-    'video_subtitle_subdl_enabled',
-    'video_resource_torznab_config',
   };
 
   static final Map<String, String> _defaultRawValues = <String, String>{
-    'jimaku_api_key': PrefCodec.encode(''),
-    'jimaku_enabled': PrefCodec.encode(true),
-    'qb_connection_config': PrefCodec.encode(''),
     kBangumiAccessTokenPref: PrefCodec.encode(''),
     kBangumiAccountNamePref: PrefCodec.encode(''),
-    kVideoMetadataAniDbClientNamePref: PrefCodec.encode(''),
-    kVideoMetadataAniDbClientVersionPref: PrefCodec.encode(''),
-    'video_scraper_tmdb_api_key': PrefCodec.encode(''),
-    'video_subtitle_opensubtitles_config': PrefCodec.encode(''),
-    'video_subtitle_subdl_api_key': PrefCodec.encode(''),
-    'video_subtitle_subdl_enabled': PrefCodec.encode(true),
-    'video_resource_torznab_config': PrefCodec.encode(''),
   };
 
   /// Raw [PrefCodec] values, kept raw so the client does not double-encode

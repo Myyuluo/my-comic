@@ -5,9 +5,14 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi/i18n/strings.g.dart';
 import 'package:fushi/src/media/audiobook/mining_sentence_draft.dart';
+
+
+
+
 import 'package:fushi/src/mining/advanced_mining/advanced_mining_capabilities.dart';
 import 'package:fushi/src/mining/advanced_mining/advanced_mining_dialog.dart';
 import 'package:fushi/src/mining/advanced_mining/advanced_mining_manga_panels.dart';
+import 'package:fushi/src/mining/advanced_mining/advanced_mining_sections.dart';
 import 'package:fushi/src/mining/advanced_mining/manga_crop_selector.dart';
 import 'package:fushi/src/utils/components/fushi_floating_page_chrome.dart';
 import 'package:fushi/src/utils/components/glass/fushi_glass_buttons.dart';

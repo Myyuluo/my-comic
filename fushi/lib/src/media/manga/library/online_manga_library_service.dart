@@ -16,7 +16,7 @@ import 'package:fushi_engine/media/cover_file_writer.dart'
     show CoverImageInvalidException;
 import 'package:fushi_engine/media/manga/manga_storage.dart';
 import 'package:fushi_engine/sync/fushi_library_host_service.dart';
-import 'package:fushi_engine/sync/remote_collection_adoption_service.dart';
+
 import 'package:fushi_engine/updates/update_feed_kind.dart';
 import 'package:fushi/src/updates/update_feed_service.dart';
 
@@ -105,7 +105,6 @@ class OnlineMangaLibraryService {
         chapters: entry.chapters,
       );
       final EpubBookRow row = (await database.getEpubBook(bookKey))!;
-      await _adoptRemoteCollection(entry, row);
       return row;
     }
 
@@ -165,7 +164,6 @@ class OnlineMangaLibraryService {
     );
     final EpubBookRow row = (await database.getEpubBook(bookKey))!;
     await _clearPeerDeletionTombstone(entry);
-    await _adoptRemoteCollection(entry, row);
     return row;
   }
 
@@ -184,21 +182,6 @@ class OnlineMangaLibraryService {
     await database.clearSyncDeletionTombstone(
       SyncTombstoneKind.book.dbValue,
       peerKey,
-    );
-  }
-
-  Future<void> _adoptRemoteCollection(
-    OnlineMangaLibraryEntry entry,
-    EpubBookRow row,
-  ) async {
-    if (entry.runtime != OnlineMangaRuntimeKind.interconnect) return;
-    await RemoteCollectionAdoptionService(database).adoptMembership(
-      membership: RemoteCollectionMembership.fromJson(
-        entry.series.raw['collection'],
-      ),
-      mediaType: MediaKind.epub,
-      remoteEntryKey: entry.series.key,
-      localEntryKey: row.uid,
     );
   }
 

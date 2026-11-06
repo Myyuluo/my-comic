@@ -1,6 +1,6 @@
 import 'package:fushi/src/media/media_item.dart';
 import 'package:fushi/src/media/sources/reader_fushi_source.dart';
-import 'package:fushi/src/mining/galgame_library.dart';
+
 import 'package:fushi_core/fushi_core.dart';
 
 /// 媒体统一路线 P4：display-title 统一解析门面。
@@ -88,23 +88,6 @@ String displayTitleForBook({
 /// 视频改名直写 `video_books.title` 列（无覆盖层是正确设计），raw 即显示名。
 /// 本函数存在是为了让面级守卫知道「这里想过」——视频上屏面统一走本入口，
 /// 将来若引入覆盖层只改这一处。
-String displayTitleForVideo(VideoBookRow row) => row.title;
-
-/// 游戏的显示名解析：委托 [GalgameEntry.displayName]
-/// （customData.name > nameCn > name > 本地默认名）。
-///
-/// [entry] 查不到（已删游戏 / 活动行按旧名无法匹配库内条目）时回退 [rawTitle]
-/// （活动事件落库时的标题快照）。
-String displayTitleForGame({
-  GalgameEntry? entry,
-  required String rawTitle,
-}) {
-  final String? name = entry?.displayName;
-  if (name == null || name.isEmpty) {
-    return rawTitle;
-  }
-  return name;
-}
 
 /// 统计 / 活动行「只有 raw title」语境的显示名解析。
 ///

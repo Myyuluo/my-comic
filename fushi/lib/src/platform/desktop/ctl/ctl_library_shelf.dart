@@ -22,21 +22,17 @@ import 'package:drift/native.dart' show SqliteException;
 import 'package:fushi_audio/fushi_audio.dart';
 import 'package:fushi_cli/fushi_cli.dart' show CtlFailure;
 import 'package:fushi_core/fushi_core.dart';
-import 'package:fushi_engine/media/collections/collection_asset_reclaim.dart'
-    show deleteMediaCollectionWithAssets;
-import 'package:fushi_engine/media/video/video_book_repository.dart';
 
-import 'package:fushi/src/media/collections/add_to_collection_dialog.dart'
-    show CollectionMemberVisibility, countVisibleCollectionMembers;
-import 'package:fushi/src/media/collections/collection_episode_slot.dart'
-    show videoCollectionMemberVisibility;
+
+
+
+
 import 'package:fushi/src/media/display_title.dart';
 import 'package:fushi/src/media/tags/tag_picker_sheet.dart'
     show addTagToHost, removeTagFromHost, tagsForMediaRef;
-import 'package:fushi/src/mining/galgame_library.dart';
-import 'package:fushi/src/mining/galgame_repository.dart';
-import 'package:fushi/src/pages/implementations/games_library_page.dart'
-    show isGameCollectionMemberVisible;
+
+
+
 import 'package:fushi/src/pages/implementations/tag_management_page.dart'
     show kTagPresetColors;
 import 'package:fushi/src/platform/desktop/ctl/ctl_library_entries.dart';
@@ -54,15 +50,16 @@ const int _kSqliteConstraintUnique = 2067;
 /// 书签章内进度的满分（与阅读器 `_addBookmarkAtCurrentPosition` 同口径：0–10000）。
 const int kLibraryCtlBookmarkFractionScale = 10000;
 
+/// 合集成员可见性判据（媒体类型, 成员键 → 是否可见）。
+typedef CollectionMemberVisibility = bool Function(
+  String mediaType,
+  String entryKey,
+);
+
 class LibraryCtlShelf {
-  LibraryCtlShelf({
-    required FushiDatabase db,
-    required GalgameRepository galgameRepo,
-  }) : _db = db,
-       _games = galgameRepo;
+  LibraryCtlShelf({required FushiDatabase db}) : _db = db;
 
   final FushiDatabase _db;
-  final GalgameRepository _games;
 
   // ── 条目键 → 各域身份 ─────────────────────────────────────────────────
 
@@ -78,20 +75,12 @@ class LibraryCtlShelf {
     return book;
   }
 
-  Future<VideoBookRow> _requireVideo(LibraryCtlKey key) async {
-    final VideoBookRow? row = await VideoBookRepository(
-      _db,
-    ).getByBookUid(key.id);
-    if (row == null) throw CtlFailure.notFound('视频库里没有 ${key.wire}');
-    return row;
+  Future<Never> _requireVideo(LibraryCtlKey key) async {
+    throw const CtlFailure.unsupported('视频域已移除');
   }
 
-  Future<GalgameEntry> _requireGame(LibraryCtlKey key) async {
-    if (!_games.isLoaded) await _games.load();
-    for (final GalgameEntry game in _games.games) {
-      if (game.id == key.id) return game;
-    }
-    throw CtlFailure.notFound('游戏库里没有 ${key.wire}');
+  Future<Never> _requireGame(LibraryCtlKey key) async {
+    throw const CtlFailure.unsupported('游戏域已移除');
   }
 
   /// 条目在**合集成员表**里的身份：epub 成员行 entryKey 是书行 uid（v83，书架
@@ -186,26 +175,11 @@ class LibraryCtlShelf {
           row.bookKey,
         ],
     };
-    final CollectionMemberVisibility video = videoCollectionMemberVisibility(
-      localBookUids: <String>{
-        for (final VideoBookRow row in await VideoBookRepository(_db).listAll())
-          row.bookUid,
-      },
-      remoteOnlyIds: const <String>{},
-    );
-    if (!_games.isLoaded) await _games.load();
-    final List<GalgameEntry> games = _games.games;
     return (String mediaType, String entryKey) =>
         switch (MediaKind.tryParse(mediaType)) {
-          MediaKind.video => video(mediaType, entryKey),
-          MediaKind.game => isGameCollectionMemberVisible(
-            games: games,
-            mediaType: mediaType,
-            entryKey: entryKey,
-          ),
           MediaKind.srt => srtUids.contains(entryKey),
           MediaKind.epub => epubEntryKeys.contains(entryKey),
-          null => false,
+          _ => false,
         };
   }
 
@@ -229,16 +203,31 @@ class LibraryCtlShelf {
         if (row.coverPath != null) 'coverPath': row.coverPath,
       };
 
+  static Map<int, int> _countVisibleMembers(
+    List<MediaCollectionItemRow> items,
+    CollectionMemberVisibility isVisible,
+  ) {
+    final Map<int, int> counts = <int, int>{};
+    for (final MediaCollectionItemRow item in items) {
+      if (!isVisible(item.mediaType, item.entryKey)) continue;
+      counts[item.collectionId] = (counts[item.collectionId] ?? 0) + 1;
+    }
+    return counts;
+  }
+
   /// 全部合集（按排序权重）。[containing] 非空时只列含这个条目的合集。
   Future<List<Map<String, Object?>>> listCollections({
     LibraryCtlKey? containing,
   }) async {
     final List<MediaCollectionItemRow> items = await _db
         .getAllCollectionItems();
-    final Map<int, int> counts = countVisibleCollectionMembers(
-      items,
-      await collectionMemberVisibility(),
-    );
+    final CollectionMemberVisibility isVisible =
+        await collectionMemberVisibility();
+    final Map<int, int> counts = <int, int>{};
+    for (final MediaCollectionItemRow item in items) {
+      if (!isVisible(item.mediaType, item.entryKey)) continue;
+      counts[item.collectionId] = (counts[item.collectionId] ?? 0) + 1;
+    }
     Set<int>? only;
     if (containing != null) {
       final MediaRef ref = await collectionRefFor(containing);
@@ -283,7 +272,7 @@ class LibraryCtlShelf {
     return <String, Object?>{
       ..._collectionJson(
         row,
-        countVisibleCollectionMembers(items, isVisible)[id] ?? 0,
+        _countVisibleMembers(items, isVisible)[id] ?? 0,
       ),
       'tags': <String>[
         for (final BookTagRow tag in await _db.getTagsForCollection(id))
@@ -311,15 +300,7 @@ class LibraryCtlShelf {
                 rawTitle: book.title,
               );
       case LibraryCtlStore.video:
-        final VideoBookRow? row = await VideoBookRepository(
-          _db,
-        ).getByBookUid(key.id);
-        return row == null ? null : displayTitleForVideo(row);
       case LibraryCtlStore.game:
-        if (!_games.isLoaded) await _games.load();
-        for (final GalgameEntry game in _games.games) {
-          if (game.id == key.id) return game.displayName;
-        }
         return null;
     }
   }
@@ -371,7 +352,7 @@ class LibraryCtlShelf {
   /// 详情页「删除合集」默认选项一致）。
   Future<Map<String, Object?>> deleteCollection(int id) async {
     final MediaCollectionRow row = await _requireCollection(id);
-    final int deleted = await deleteMediaCollectionWithAssets(_db, id);
+    final int deleted = await _db.deleteMediaCollection(id);
     if (deleted == 0) throw CtlFailure.conflict('合集 id=$id 没删掉');
     return <String, Object?>{'deleted': true, 'id': id, 'name': row.name};
   }

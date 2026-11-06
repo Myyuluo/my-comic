@@ -11,13 +11,13 @@ import 'package:fushi/src/media/discovery/discovery_labels.dart';
 import 'package:fushi/src/media/discovery/media_discovery_service.dart';
 import 'package:fushi/src/media/discovery/media_discovery_source.dart';
 import 'package:fushi_engine/media/external_provider.dart';
-import 'package:fushi_engine/media/torrent/nyaa_client.dart';
+
 import 'package:fushi/src/focus/fushi_focus_controller.dart';
 import 'package:fushi/src/models/app_model.dart';
 import 'package:fushi/src/models/preferences_repository.dart';
 import 'package:fushi/src/pages/implementations/discovery/discovery_widgets.dart';
 import 'package:fushi/src/pages/implementations/discovery_header.dart';
-import 'package:fushi/src/pages/implementations/download_actions.dart';
+
 import 'package:fushi/utils.dart';
 import 'package:fushi/src/utils/components/fushi_floating_chrome.dart'
     show
@@ -26,7 +26,7 @@ import 'package:fushi/src/utils/components/fushi_floating_chrome.dart'
         FushiFloatingChromeOverlay;
 import 'package:fushi/src/utils/net/app_http_image.dart';
 import 'package:fushi/src/utils/misc/engine_listenable.dart';
-import 'package:fushi/src/media/discovery/sources/nyaa_discovery_source.dart';
+
 
 /// 统一发现页：书（小说/有声书）与 galgame 共用的多源在线资源发现视图。
 ///
@@ -218,9 +218,6 @@ class _MediaDiscoveryPageState extends State<MediaDiscoveryPage> {
 
   bool get _hideSuspectedManga => _prefs?.discoveryHideSuspectedManga ?? true;
 
-  NyaaQualityFilter get _nyaaQualityFilter =>
-      NyaaQualityFilter.fromIndex(_prefs?.discoveryNyaaQualityFilter ?? 0);
-
   /// 当前结果里有没有种子类条目（带做种数）。做种相关的 chip / 灰显只对它们
   /// 有意义，OPDS / 直链源不该凭空多一排控件。
   bool get _hasSeederEntries => _entries.any(
@@ -233,19 +230,6 @@ class _MediaDiscoveryPageState extends State<MediaDiscoveryPage> {
             e is DiscoveryResourceItem &&
             e.contentHint != DiscoveryContentHint.none,
       );
-
-  /// 当前会打到 Nyaa 的来源集合里有没有 Nyaa 源：过滤三态是 nyaa 的服务端参数
-  /// （`f`），只在它真会生效时露出。
-  bool get _nyaaFilterAvailable {
-    final MediaDiscoveryService? service = _appModel?.mediaDiscoveryService;
-    if (service == null) return false;
-    if (_sourceId != kDiscoveryAllSourcesId) {
-      return service.sourceById(_sourceId) is NyaaDiscoverySource;
-    }
-    return service
-        .sourcesFor(_kind)
-        .any((MediaDiscoverySource s) => s is NyaaDiscoverySource);
-  }
 
   static int _seedersOf(DiscoveryEntry e) =>
       e is DiscoveryResourceItem ? (e.seeders ?? -1) : -1;
@@ -324,15 +308,6 @@ class _MediaDiscoveryPageState extends State<MediaDiscoveryPage> {
     if (prefs == null) return;
     unawaited(prefs.setDiscoveryHideSuspectedManga(value));
     setState(() => _revealHidden = false);
-  }
-
-  /// 过滤三态是服务端参数：写穿偏好后必须重新请求（源在每次请求时读偏好）。
-  void _setNyaaQualityFilter(NyaaQualityFilter value) {
-    final PreferencesRepository? prefs = _prefs;
-    if (prefs == null || value == _nyaaQualityFilter) return;
-    unawaited(prefs.setDiscoveryNyaaQualityFilter(value.index));
-    setState(() {});
-    unawaited(_load());
   }
 
   DiscoveryAggregateResult? _result;
@@ -570,31 +545,8 @@ class _MediaDiscoveryPageState extends State<MediaDiscoveryPage> {
   }
 
   Future<void> _download(DiscoveryResourceItem item) async {
-    final AppModel? appModel = _resolveAppModel();
-    if (appModel == null || !item.isDownloadable) return;
-    // 「解析中」只对 torrent 有意义（要先向来源取种子）；直链直接入队。
-    final bool torrent = item.payloadKind == DiscoveryPayloadKind.torrent;
-    final String resolvingKey = '${item.sourceId}\u0000${item.id}';
-    if (torrent) {
-      if (!_resolvingTorrentIds.add(resolvingKey)) return;
-      if (mounted) setState(() {});
-    }
-    try {
-      showDownloadStartNotices(
-        await startDiscoveryItemDownload(
-          context: context,
-          appModel: appModel,
-          item: item,
-        ),
-      );
-    } finally {
-      if (torrent) {
-        _resolvingTorrentIds.remove(resolvingKey);
-        if (mounted) setState(() {});
-      }
-    }
+    // my-comic：视频/torrent 下载已移除。
   }
-
   String _kindLabel(DiscoveryMediaKind kind) => discoveryMediaKindLabel(kind);
 
   String _subtitleFor(
@@ -676,22 +628,6 @@ class _MediaDiscoveryPageState extends State<MediaDiscoveryPage> {
               leadingIcon: Icons.filter_alt_outlined,
               selected: _hideSuspectedManga,
               onSelected: _setHideSuspectedManga,
-            ),
-        ],
-      if (_nyaaFilterAvailable)
-        <Widget>[
-          for (final NyaaQualityFilter f in NyaaQualityFilter.values)
-            FushiSelectableChip(
-              key: ValueKey<String>('discovery_nyaa_filter_${f.index}'),
-              label: switch (f) {
-                NyaaQualityFilter.all => t.discovery_nyaa_filter_all,
-                NyaaQualityFilter.noRemakes =>
-                  t.discovery_nyaa_filter_no_remakes,
-                NyaaQualityFilter.trustedOnly =>
-                  t.discovery_nyaa_filter_trusted_only,
-              },
-              selected: _nyaaQualityFilter == f,
-              onSelected: (_) => _setNyaaQualityFilter(f),
             ),
         ],
     ];

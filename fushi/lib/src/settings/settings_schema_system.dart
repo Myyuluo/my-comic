@@ -22,7 +22,6 @@ import 'package:fushi/src/backup_import/mihon_backup_import_flow.dart';
 import 'package:fushi/src/settings/settings_actions.dart';
 import 'package:fushi/src/settings/settings_context.dart';
 import 'package:fushi/src/settings/settings_destination.dart';
-import 'package:fushi/src/diagnostics/video_diag_export.dart';
 import 'package:fushi/src/stats/study_diag_export.dart';
 import 'package:fushi/src/sync/sync_http.dart';
 import 'package:fushi/src/updates/app_update_check.dart';
@@ -550,12 +549,6 @@ Future<String> _buildStudyDiagLog(AppModel appModel) => buildStudyDiagExport(
   statDayResetHour: appModel.statDayResetHour,
 );
 
-Future<String> _buildVideoDiagLog(AppModel appModel) =>
-    buildVideoDiagExportFromDisk(
-      appVersion: resolveCurrentAppVersion(appModel.packageInfo.version),
-      lowMemoryMode: appModel.lowMemoryMode,
-    );
-
 /// 设置 › 诊断 › 导出统计诊断日志（正文见 [buildStudyDiagExport]）。
 Future<void> _exportStudyDiagLog(SettingsContext settingsContext) async {
   final String log = await _buildStudyDiagLog(settingsContext.appModel);
@@ -565,19 +558,6 @@ Future<void> _exportStudyDiagLog(SettingsContext settingsContext) async {
     log: log,
     fileName: 'fushi_study_diag_log.txt',
     subject: t.study_diag_share_subject,
-  );
-}
-
-/// 设置 › 诊断 › 导出视频诊断日志（正文见 [buildVideoDiagExportFromDisk]）。
-/// 三段：头信息（含小内存模式 / 热槽状态）+ 统一时间轴 + libmpv 原始日志尾部。
-Future<void> _exportVideoDiagLog(SettingsContext settingsContext) async {
-  final String log = await _buildVideoDiagLog(settingsContext.appModel);
-  if (!settingsContext.context.mounted) return;
-  await saveLogToFile(
-    context: settingsContext.context,
-    log: log,
-    fileName: 'fushi_video_diag_log.txt',
-    subject: t.video_diag_share_subject,
   );
 }
 

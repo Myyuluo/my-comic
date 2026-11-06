@@ -97,6 +97,7 @@ void main() {
   String safeKey(String title) =>
       sanitizeTtuFilename(title).replaceAll(RegExp(r'[^A-Za-z0-9._-]+'), '_');
 
+  // 已移除：my-comic v1 移除同步互联后远端书架 UI 恒不可达，保留源码以备恢复。
   testWidgets('远端书混排进主 SliverGrid 且带云角标', (WidgetTester tester) async {
     await tester.pumpWidget(buildApp(_ListFakeRemoteBookClient(
       const <RemoteBookInfo>[
@@ -118,8 +119,9 @@ void main() {
       findsOneWidget,
       reason: '远端占位卡必须是主散卡网格（SliverGrid）的一个 cell（混排，非独立分区）',
     );
-  });
+  }, skip: true);
 
+  // 已移除：my-comic v1 移除同步互联后远端书架 UI 恒不可达，保留源码以备恢复。
   testWidgets('本地已有同 bookKey 的书不重复渲染远端占位', (WidgetTester tester) async {
     final String key = sanitizeTtuFilename('Dup Book');
     final Directory extractDir =
@@ -152,7 +154,7 @@ void main() {
           ValueKey<String>('remote_book_card_${safeKey('Only Remote Book')}')),
       findsOneWidget,
     );
-  });
+  }, skip: true);
 
   testWidgets('「显示远端条目」开关关闭 → 占位卡全部不渲染', (WidgetTester tester) async {
     await prefs.setShowRemoteEntries(false);

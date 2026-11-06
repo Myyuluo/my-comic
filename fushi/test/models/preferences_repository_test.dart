@@ -340,11 +340,6 @@ void main() {
       expect(repo.startupModule, isNull);
     });
 
-    test('videoSubtitleListAutoScroll defaults to true (TODO-613)', () {
-      // 字幕列表「自动滚动到当前播放句」默认开，与历史面板纯内存默认 true 一致。
-      expect(repo.videoSubtitleListAutoScroll, true);
-    });
-
     test('audiobookBackgroundPlay defaults to false (TODO-702 exit stops)', () {
       // 有声书退出即停是默认：新装 / 从未切过开关的用户退出阅读页就停止播放。
       expect(repo.audiobookBackgroundPlay, false);
@@ -644,27 +639,6 @@ void main() {
       repo2.dispose();
     });
 
-    test('texthooker prefs round-trip', () async {
-      expect(repo.texthookerEnabled, false);
-      expect(repo.texthookerUrls, [
-        'ws://localhost:6677',
-        'ws://localhost:9001',
-        'ws://localhost:2333',
-      ]);
-
-      await repo.setTexthookerEnabled(true);
-      await repo.setTexthookerUrls(['ws://localhost:6677']);
-
-      expect(repo.texthookerEnabled, true);
-      expect(repo.texthookerUrls, ['ws://localhost:6677']);
-
-      // 跨实例 reload，验换行编码经 DB 字符串往返后能正确 split 回 List
-      final repo2 = PreferencesRepository(db);
-      await repo2.loadFromDb();
-      expect(repo2.texthookerEnabled, true);
-      expect(repo2.texthookerUrls, ['ws://localhost:6677']);
-      repo2.dispose();
-    });
 
     test('lookupBlockCapture defaults false and round-trips on the frozen key',
         () async {
@@ -711,27 +685,6 @@ void main() {
           reason: 'the two prefs are decoupled');
     });
 
-    test('setVideoSubtitleListAutoScroll round-trips through DB (TODO-613)',
-        () async {
-      // 默认 true；关掉后跨实例 reload 仍为 false（落 Drift preferences、记住设置）。
-      expect(repo.videoSubtitleListAutoScroll, true);
-      await repo.setVideoSubtitleListAutoScroll(false);
-      expect(repo.videoSubtitleListAutoScroll, false);
-
-      final PreferencesRepository repo2 = PreferencesRepository(db);
-      await repo2.loadFromDb();
-      addTearDown(repo2.dispose);
-      expect(repo2.videoSubtitleListAutoScroll, false,
-          reason: '自动滚动开关必须跨实例 reload 记住（TODO-613）');
-
-      // 再开回 true 也持久。
-      await repo.setVideoSubtitleListAutoScroll(true);
-      final PreferencesRepository repo3 = PreferencesRepository(db);
-      await repo3.loadFromDb();
-      addTearDown(repo3.dispose);
-      expect(repo3.videoSubtitleListAutoScroll, true);
-    });
-
     test('setAudiobookBackgroundPlay round-trips through DB (TODO-702)',
         () async {
       // 默认 false；开启后跨实例 reload 仍为 true（落 Drift preferences、记住设置）。
@@ -755,43 +708,6 @@ void main() {
   });
 
   // ── jimaku per-series language memory (TODO-674) ──────────────────────
-
-  group('jimakuPreferredLanguages (TODO-674)', () {
-    test('defaults to empty map', () {
-      expect(repo.jimakuPreferredLanguages, isEmpty);
-    });
-
-    test('round-trips a single series language through DB', () async {
-      await repo.setJimakuPreferredLanguage('naruto', 'ja');
-      expect(repo.jimakuPreferredLanguages['naruto'], 'ja');
-
-      final PreferencesRepository repo2 = PreferencesRepository(db);
-      await repo2.loadFromDb();
-      addTearDown(repo2.dispose);
-      expect(repo2.jimakuPreferredLanguages['naruto'], 'ja');
-    });
-
-    test('multiple series do not overwrite each other', () async {
-      await repo.setJimakuPreferredLanguage('naruto', 'ja');
-      await repo.setJimakuPreferredLanguage('one piece', 'zh');
-      await repo.setJimakuPreferredLanguage('naruto', 'en'); // 覆盖同系列
-
-      final PreferencesRepository repo2 = PreferencesRepository(db);
-      await repo2.loadFromDb();
-      addTearDown(repo2.dispose);
-      final Map<String, String> langs = repo2.jimakuPreferredLanguages;
-      expect(langs['naruto'], 'en');
-      expect(langs['one piece'], 'zh');
-      expect(langs, hasLength(2));
-    });
-
-    test('corrupted JSON falls back to empty map', () async {
-      await repo.setPref('jimaku_pref_langs', 'not-json');
-      expect(repo.jimakuPreferredLanguages, isEmpty);
-    });
-  });
-
-  // ── cache coherence ──────────────────────────────────────────────────
 
   group('cache coherence', () {
     test('getPref reads from cache without extra DB hit', () {
@@ -1071,61 +987,6 @@ void main() {
       expect(repo.readingGoalDailyChars, 0);
       await repo.setReadingGoalDailyChars(9999999);
       expect(repo.readingGoalDailyChars, 1000000);
-    });
-  });
-
-  // ── TODO-1119: Windows 黑闪运行时提示「不再提示」偏好 ───────────────────
-
-  group('videoBlackFlickerNoticeSuppressed (TODO-1119)', () {
-    test('defaults to false (提示允许弹)', () {
-      expect(repo.videoBlackFlickerNoticeSuppressed, false);
-    });
-
-    test('set true 写穿并跨新实例从 DB 恢复', () async {
-      await repo.setVideoBlackFlickerNoticeSuppressed(true);
-      expect(repo.videoBlackFlickerNoticeSuppressed, true);
-
-      final PreferencesRepository repo2 = PreferencesRepository(db);
-      await repo2.loadFromDb();
-      addTearDown(repo2.dispose);
-      expect(repo2.videoBlackFlickerNoticeSuppressed, true);
-    });
-
-    test('set false 可复位', () async {
-      await repo.setVideoBlackFlickerNoticeSuppressed(true);
-      expect(repo.videoBlackFlickerNoticeSuppressed, true);
-      await repo.setVideoBlackFlickerNoticeSuppressed(false);
-      expect(repo.videoBlackFlickerNoticeSuppressed, false);
-    });
-  });
-
-  group('remoteSubtitleSources（远端字幕持久化）', () {
-    test('remoteSubtitleKey：ep0 省略后缀，ep>0 加 #ep', () {
-      expect(PreferencesRepository.remoteSubtitleKey('bk', 0), 'bk');
-      expect(PreferencesRepository.remoteSubtitleKey('bk', 3), 'bk#ep3');
-    });
-
-    test('set/read 按 bookUid+episode 跨实例 reload 记住', () async {
-      expect(repo.remoteSubtitleSource('bk'), isNull);
-      await repo.setRemoteSubtitleSource('bk', 0, '/data/sub.ja.srt');
-      await repo.setRemoteSubtitleSource('bk', 2, 'off:');
-      expect(repo.remoteSubtitleSource('bk'), '/data/sub.ja.srt');
-      expect(repo.remoteSubtitleSource('bk', episodeIndex: 2), 'off:');
-
-      final PreferencesRepository repo2 = PreferencesRepository(db);
-      await repo2.loadFromDb();
-      addTearDown(repo2.dispose);
-      expect(repo2.remoteSubtitleSource('bk'), '/data/sub.ja.srt',
-          reason: '远端字幕选择必须跨实例记住（否则退出即丢）');
-      expect(repo2.remoteSubtitleSource('bk', episodeIndex: 2), 'off:');
-    });
-
-    test('source=null 删除该 key（不影响其它集）', () async {
-      await repo.setRemoteSubtitleSource('bk', 0, '/a.srt');
-      await repo.setRemoteSubtitleSource('bk', 1, '/b.srt');
-      await repo.setRemoteSubtitleSource('bk', 0, null);
-      expect(repo.remoteSubtitleSource('bk'), isNull);
-      expect(repo.remoteSubtitleSource('bk', episodeIndex: 1), '/b.srt');
     });
   });
 }

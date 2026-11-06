@@ -16,9 +16,10 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:fushi_engine/media/audio/flac_encoder.dart';
+import 'package:fushi_engine/media/video/ffmpeg_backend.dart';
 import 'package:fushi_engine/media/audio_cd/audio_cd_disc.dart';
 import 'package:fushi_engine/media/audio_cd/windows_audio_cd_drive.dart';
-import 'package:fushi_engine/media/video/ffmpeg_backend.dart';
+
 import 'package:fushi_engine/utils/misc/safe_file_name.dart';
 import 'package:path/path.dart' as p;
 

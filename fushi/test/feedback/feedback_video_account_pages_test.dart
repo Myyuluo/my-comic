@@ -2,8 +2,8 @@
 // - 提交页可选 1 个视频，提交后视频流式传到 v0；
 // - 详情页：服务端有视频时列条目（不去取视频字节）、补传窗口内可「追加视频」、
 //   待传附件给「重试上传」；
-// - 已登录账户时「我的反馈」列出别的设备提交的工单，详情走账户签名、没有「从本机移除」；
-// - 处理台详情：视频给「播放视频」入口，不当截图去解码。
+// - 已登录账户时「我的反馈」列出别的设备提交的工单，详情走账户签名、没有「从本机移除」。
+// - 处理台视频播放页随 my-comic v1 移除视频模块删除。
 
 import 'dart:async';
 import 'dart:convert';
@@ -11,16 +11,16 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:fushi/src/feedback/feedback_video.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi/src/feedback/feedback_service.dart';
 import 'package:fushi/src/feedback/feedback_store.dart';
-import 'package:fushi/src/feedback/feedback_video.dart';
+
 import 'package:fushi/src/leaderboard/leaderboard_service.dart';
 import 'package:fushi/src/leaderboard/leaderboard_store.dart';
 import 'package:fushi/src/pages/implementations/feedback/feedback_center_page.dart';
 import 'package:fushi/src/pages/implementations/feedback/feedback_detail_page.dart';
-import 'package:fushi/src/pages/implementations/feedback/feedback_dev_page.dart';
 import 'package:fushi/utils.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi_engine/feedback/feedback_models.dart';
@@ -653,36 +653,5 @@ void main() {
     );
   });
 
-  testWidgets('处理台详情：视频给「播放视频」入口，不当截图解码', (WidgetTester tester) async {
-    tallView(tester);
-    server.details['devvidvid0'] = _detail(
-      'devvidvid0',
-      attachments: <Map<String, dynamic>>[
-        _videoAttachment,
-        <String, dynamic>{
-          'slot': 'log',
-          'kind': 'log',
-          'bytes': 10,
-          'type': 'application/gzip',
-        },
-      ],
-    );
-    final LeaderboardService b = await signedInBoard(tester);
-    final FeedbackService f = feedback(b);
-    await tester.pumpWidget(
-      wrap(b, f, const FeedbackDevDetailPage(feedbackId: 'devvidvid0')),
-    );
-    final Finder play = find.byKey(
-      const ValueKey<String>('feedback-dev-play-video'),
-    );
-    await settleIo(tester, () => play.evaluate().isNotEmpty);
-    expect(play, findsOneWidget);
-    expect(find.text(t.feedback_dev_screenshots), findsNothing);
-    expect(
-      server.requests.where(
-        (http.Request r) => r.url.path.endsWith('/attachments/v0'),
-      ),
-      isEmpty,
-    );
-  });
+  // 处理台视频播放页随 my-comic v1 移除视频模块一并删除。
 }

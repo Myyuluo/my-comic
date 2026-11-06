@@ -102,16 +102,6 @@ class ServerRemoteMiningService implements FushiRemoteMiningService {
   }
 
   @override
-  Future<RemoteMineResult> mineImmersion(ImmersionMinePayload payload) async {
-    engineLog.logDiagnostic('ServerMining.mineImmersion', kServerImmersionMiningUnsupported);
-    return RemoteMineResult(
-      result: MineResult.error.name,
-      message: kServerImmersionMiningUnsupported,
-      detail: 'immersion mining needs the app-side media pipeline',
-    );
-  }
-
-  @override
   Future<bool> isDuplicate({required String expression, required String reading}) async {
     if (expression.isEmpty) return false;
     try {

@@ -77,44 +77,6 @@ void main() {
   }
 
   group('schema 缓存行为', () {
-    testWidgets(
-      'optional feature visibility updates globally and in cached video projection',
-      (WidgetTester tester) async {
-        final SettingsContext sctx = await makeContext(tester);
-        resetSettingsSchemaCache();
-        final List<SettingsDestination> schema = buildSettingsSchema(sctx);
-        final SettingsDestination video = schema.singleWhere(
-          (SettingsDestination d) => d.id == SettingsDestinationId.video,
-        );
-        final Map<VideoGroup, List<SettingsItem>> projection =
-            collectVideoItems(sctx);
-        Set<String> visibleIds(SettingsDestination destination) => destination
-            .visibleSections(sctx)
-            .expand((SettingsSection s) => s.items)
-            .map((SettingsItem item) => item.id)
-            .toSet();
-        for (final bool enabled in <bool>[false, true, false]) {
-          await sctx.appModel.setVideoDanmakuEnabled(enabled);
-          expect(identical(buildSettingsSchema(sctx), schema), isTrue);
-          expect(identical(collectVideoItems(sctx), projection), isTrue);
-          final SettingsDestination panel = buildVideoGroupDestination(
-            sctx,
-            VideoGroup.danmaku,
-            'Danmaku',
-          );
-          for (final SettingsDestination destination in <SettingsDestination>[
-            video,
-            panel,
-          ]) {
-            final Set<String> ids = visibleIds(destination);
-            expect(ids, contains('video.danmaku.enabled'));
-            expect(ids.contains('video.danmaku.online'), enabled);
-            expect(ids.contains('video.danmaku.max_active'), enabled);
-          }
-        }
-      },
-    );
-
     testWidgets('同一 locale 下重复构造命中同一棵树（不再逐次全量重建）', (WidgetTester tester) async {
       final SettingsContext sctx = await makeContext(tester);
       resetSettingsSchemaCache();
@@ -205,9 +167,8 @@ void main() {
         sctx,
       );
       expect(() => reader.remove(ReaderGroup.layout), throwsUnsupportedError);
-      final List<SettingsItem>? layout = reader[ReaderGroup.layout];
-      expect(layout, isNotNull);
-      expect(() => layout!.clear(), throwsUnsupportedError);
+      // my-comic 保留的设置分类没有书内快捷面板条目：空表也必须是只读的。
+      expect(reader, isEmpty);
       expect(() => collectVideoItems(sctx).clear(), throwsUnsupportedError);
     });
   });
@@ -296,7 +257,7 @@ void main() {
       final Iterable<RegExpMatch> matches = call.allMatches(maskComments(body));
       expect(
         matches.length,
-        greaterThanOrEqualTo(12),
+        greaterThanOrEqualTo(5),
         reason: '扫描没抓到分类调用，守卫本身塌了',
       );
       for (final RegExpMatch match in matches) {
@@ -311,7 +272,7 @@ void main() {
       }
     });
 
-    test('这 13 个分类构建函数的定义签名也是零参', () {
+    test('这 5 个分类构建函数的定义签名也是零参', () {
       // 只钉 `_buildDestinations()` 真正调用的那批，不搞「凡 build*Destination
       // 都得零参」的宽扫描——`buildReaderGroupDestination` /
       // `buildVideoGroupDestination` / `buildReaderQuickSettingsDestination` 是
@@ -326,7 +287,7 @@ void main() {
           .toSet();
       expect(
         called.length,
-        greaterThanOrEqualTo(12),
+        greaterThanOrEqualTo(5),
         reason: '扫描没抓到分类调用，守卫本身塌了',
       );
 

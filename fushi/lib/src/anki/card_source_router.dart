@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:fushi/src/media/media_item_factory.dart';
 
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,18 +13,17 @@ import 'package:fushi/src/anki/source_review_navigation.dart';
 import 'package:fushi/src/anki/source_review_session.dart';
 import 'package:fushi/src/anki/source_review_draft_store.dart';
 import 'package:fushi/src/media/manga/reader/manga_fushi_page.dart';
-import 'package:fushi_engine/media/video/video_book_repository.dart';
-import 'package:fushi/src/media/video/video_source_fingerprint.dart';
+
+
 import 'package:fushi/src/models/app_model.dart';
 import 'package:fushi/src/sync/interconnect_sync_backend.dart';
 import 'package:fushi_engine/sync/fushi_library_host_service.dart'
     show RemoteVideoInfo;
 import 'package:fushi/src/sync/remote_library_cache.dart';
 import 'package:fushi/src/sync/sync_repository.dart';
-import 'package:fushi/src/pages/implementations/collections_page.dart'
-    show buildCollectionReaderMediaItem;
+
 import 'package:fushi/src/pages/implementations/reader_fushi_page.dart';
-import 'package:fushi/src/pages/implementations/video_fushi_page.dart';
+
 import 'package:fushi/utils.dart';
 import 'package:fushi_anki/fushi_anki.dart';
 import 'package:fushi_audio/fushi_audio.dart';
@@ -47,47 +47,6 @@ Future<EpubBookRow?> resolveCardSourceBook(
 /// 在互联 host 的视频清单里找卡片链接指向的那条。远端视频的 id 就是 host 库里的
 /// `bookUid`，与卡片链接的 `uid` 同一个键；找不到返回 null。
 ///
-/// 卡片可能制在别的设备上（电脑 / 无头服务端有原文件，本机只有远端占位），本机库里
-/// 没有对应的 VideoBookRow——只查本地库会误报「此设备没有对应来源」，而 host 明明有。
-RemoteVideoInfo? findRemoteVideoForCardSource(
-  Iterable<RemoteVideoInfo> videos,
-  CardSourceLink link,
-) {
-  if (link.kind != CardSourceKind.video) return null;
-  for (final RemoteVideoInfo video in videos) {
-    if (video.id == link.uid) return video;
-  }
-  return null;
-}
-
-/// 本地库没有该视频时，去已配对的互联 host 取它的清单并按 [link] 找条目。互联未启用 /
-/// 未配对 / host 不可达都返回 null（调用方按「没有来源」提示，不吞成别的错）。
-Future<({RemoteVideoInfo info, InterconnectSyncBackend client})?>
-resolveRemoteCardSourceVideo(
-  AppModel app,
-  WidgetRef ref,
-  CardSourceLink link,
-) async {
-  final SyncRepository syncRepo = SyncRepository(app.database);
-  if (!await syncRepo.isInterconnectEnabled()) return null;
-  final InterconnectSyncBackend backend = InterconnectSyncBackend.instance;
-  if (!await backend.restoreAuth(syncRepo)) return null;
-  try {
-    final List<RemoteVideoInfo> videos = await ref
-        .read(remoteLibraryCacheProvider)
-        .read<List<RemoteVideoInfo>>(
-          sourceId: backend.remoteLibrarySourceId,
-          key: RemoteLibraryCacheKeys.videos,
-          fetch: backend.listRemoteVideos,
-        );
-    final RemoteVideoInfo? info = findRemoteVideoForCardSource(videos, link);
-    return info == null ? null : (info: info, client: backend);
-  } on Object catch (error, stack) {
-    ErrorLogService.instance.log('card_source.remoteVideo', error, stack);
-    return null;
-  }
-}
-
 /// Resolve a portable locator through the current library. URLs never supply
 /// paths, remote credentials, or arbitrary routes to the navigation layer.
 Future<void> openCardSource({
@@ -104,19 +63,12 @@ Future<void> _openCardSource({
   final AppModel app = ref.read(appProvider);
   final NavigatorState? navigator = app.navigatorKey.currentState;
   if (navigator == null || app.isMigrationReadonly) return;
-  final EpubBookRow? book = link.kind == CardSourceKind.video
-      ? null
-      : await resolveCardSourceBook(app.database, link);
-  final VideoBookRepository videos = VideoBookRepository(app.database);
-  final VideoBookRow? video = link.kind == CardSourceKind.video
-      ? await videos.getByBookUid(link.uid)
-      : null;
-  final ({RemoteVideoInfo info, InterconnectSyncBackend client})? remote =
-      link.kind == CardSourceKind.video && video == null
-      ? await resolveRemoteCardSourceVideo(app, ref, link)
-      : null;
-  if ((link.kind == CardSourceKind.video && video == null && remote == null) ||
-      (link.kind != CardSourceKind.video && book == null)) {
+  if (link.kind == CardSourceKind.video) {
+    FushiToast.show(msg: t.card_source_review_media_missing);
+    return;
+  }
+  final EpubBookRow? book = await resolveCardSourceBook(app.database, link);
+  if (book == null) {
     FushiToast.show(msg: t.card_source_review_media_missing);
     return;
   }
@@ -134,27 +86,8 @@ Future<void> _openCardSource({
       return;
     }
   }
-  // BUG-3490：无指纹的链接只可能指向在线内容身份（CardSourceLink 校验保证），
-  // 没有本地字节可比，按库身份直接回看在线播放。
-  if (video != null && link.fingerprint != null) {
-    try {
-      if (!await VideoSourceFingerprint.instance.matches(
-        video.videoPath,
-        link.fingerprint!,
-      )) {
-        FushiToast.show(msg: t.card_source_review_fingerprint_mismatch);
-        return;
-      }
-    } catch (_) {
-      FushiToast.show(msg: t.card_source_review_local_required);
-      return;
-    }
-  }
-
   final MediaItem? previousItem = app.currentMediaItem;
   final MediaSource? previousSource = app.currentMediaSource;
-  final String? previousVideoUid =
-      ExternalMediaNavigation.instance.activeVideoUid;
   final Future<void> Function()? previousReturn =
       ExternalMediaNavigation.instance.returnToReading;
   if (!await ExternalMediaNavigation.instance.closeActive()) {
@@ -188,24 +121,7 @@ Future<void> _openCardSource({
           if (!await ExternalMediaNavigation.instance.closeActive()) return;
           await app.audiobookSession.stop();
           if (!navigator.mounted) return;
-          if (previousVideoUid != null) {
-            final VideoBookRow? previous = await videos.getByBookUid(
-              previousVideoUid,
-            );
-            if (previous != null && navigator.mounted) {
-              unawaited(
-                navigator.push<void>(
-                  adaptivePageRoute<void>(
-                    context: navigator.context,
-                    builder: (_) => VideoFushiPage.neutralized(
-                      bookUid: previousVideoUid,
-                      repo: videos,
-                    ),
-                  ),
-                ),
-              );
-            }
-          } else if (previousItem != null && previousSource != null) {
+          if (previousItem != null && previousSource != null) {
             await app.openMedia(
               ref: ref,
               mediaSource: previousSource,
@@ -216,55 +132,6 @@ Future<void> _openCardSource({
           await WidgetsBinding.instance.endOfFrame;
         }),
   );
-  if (remote != null) {
-    // 远端条目：身份是 host 的 bookUid，字节指纹只有 host 的原文件能对，本机无从核验
-    // （播放页对远端复习同样不比指纹）。
-    unawaited(
-      navigator.push<void>(
-        adaptivePageRoute<void>(
-          context: navigator.context,
-          builder: (_) => SourceReviewScope(
-            session: session,
-            child: VideoFushiPage.neutralizedRemote(
-              info: remote.info,
-              repo: videos,
-              client: remote.client,
-              sourceReview: link,
-              sourceReviewSession: session,
-              initialEpisodeIndex: link.episodeIndex,
-            ),
-          ),
-        ),
-      ),
-    );
-    await WidgetsBinding.instance.endOfFrame;
-    return;
-  }
-  if (video != null) {
-    final Map<String, int> collections = await app.database
-        .getPrimaryCollectionIdByEntry();
-    if (!navigator.mounted) return;
-    unawaited(
-      navigator.push<void>(
-        adaptivePageRoute<void>(
-          context: navigator.context,
-          builder: (_) => SourceReviewScope(
-            session: session,
-            child: VideoFushiPage.neutralized(
-              bookUid: video.bookUid,
-              repo: videos,
-              playlistCollectionId:
-                  collections[MediaKind.video.compositeKey(video.bookUid)],
-              sourceReview: link,
-              sourceReviewSession: session,
-            ),
-          ),
-        ),
-      ),
-    );
-    await WidgetsBinding.instance.endOfFrame;
-    return;
-  }
   final EpubBookRow row = book!;
   final BookFormat format = BookFormat.parseOrEpub(row.format);
   final MediaItem item = buildCollectionReaderMediaItem(

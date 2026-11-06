@@ -16,7 +16,7 @@ import 'package:fushi/src/media/manga/mihon/mihon_manager.dart';
 import 'package:fushi/src/media/manga/mihon/mihon_models.dart';
 import 'package:fushi/src/media/manga/mihon/mihon_runtime.dart';
 import 'package:fushi/src/media/online/online_source_browse_page.dart';
-import 'package:fushi/src/media/video/online/anime_source_detail_page.dart';
+
 import 'package:fushi/utils.dart';
 
 /// 浏览页要浏览的那「一个源」从哪来。
@@ -255,11 +255,6 @@ class _MihonCatalog extends OnlineSourceCatalog<MihonCatalogueEntry> {
             manager: manager,
             sourceContext: sourceContext,
             manga: entry,
-          ),
-          MihonAnime() => AnimeSourceDetailPage(
-            manager: manager,
-            sourceContext: sourceContext,
-            anime: entry,
           ),
           _ => throw StateError('Unknown catalogue entry ${entry.runtimeType}'),
         },

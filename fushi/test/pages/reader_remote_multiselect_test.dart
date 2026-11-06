@@ -115,6 +115,7 @@ void main() {
   bool batchButtonEnabled(WidgetTester tester, String key) =>
       tester.widget<FushiIconButton>(find.byKey(ValueKey<String>(key))).enabled;
 
+  // 已移除：my-comic v1 移除同步互联后远端书架 UI 恒不可达，保留源码以备恢复。
   testWidgets('多选态点远端卡 = 勾选，不触发下载；本地动作对纯远端选中集禁用', (WidgetTester tester) async {
     final _CountingRemoteBookClient client =
         _CountingRemoteBookClient(<RemoteBookInfo>[
@@ -164,8 +165,9 @@ void main() {
     await tester.pump();
     expect(find.text(t.batch_selected_count(n: 0)), findsOneWidget);
     expect(client.fetched, isEmpty);
-  });
+  }, skip: true);
 
+  // 已移除：my-comic v1 移除同步互联后远端书架 UI 恒不可达，保留源码以备恢复。
   testWidgets('勾选两本云书 → 批量「下载」把两本都交给下载链并退出多选', (WidgetTester tester) async {
     final _CountingRemoteBookClient client =
         _CountingRemoteBookClient(<RemoteBookInfo>[
@@ -217,7 +219,7 @@ void main() {
     }
     expect(client.fetched, <String>['Cloud One', 'Cloud Three'],
         reason: '只下勾选的两本、按目录序串行，未勾的 Cloud Two 不动');
-  });
+  }, skip: true);
 }
 
 /// 记录被拉取的书名；下载体挂在 [release] 之前不结束，好让断言在任务 running

@@ -28,11 +28,12 @@ import 'package:fushi_dictionary/fushi_dictionary.dart'
 
 import 'package:fushi/media.dart' show ReaderFushiSource;
 import 'package:fushi/models.dart';
+import 'package:fushi/src/lookup/latin_word_lookup.dart'
+    show isLatinWordGrapheme;
 import 'package:fushi/src/lookup/sentence_extraction.dart';
 import 'package:fushi/src/lookup/source_lookup_sentence.dart'
     show withFallbackMiningSentence;
-import 'package:fushi/src/media/video/subtitle_transcript_text.dart'
-    show subtitleTranscriptLookupSpan;
+
 import 'package:fushi/src/pages/implementations/dictionary_page_mixin.dart';
 import 'package:fushi/src/pages/implementations/dictionary_popup_controller.dart';
 import 'package:fushi/src/pages/implementations/dictionary_popup_layer.dart';
@@ -758,6 +759,26 @@ typedef SrsNativeLookupHit = ({
 
 /// 在 [root] 子树里按全局坐标找被点的字（纯几何，可单测）：命中路径上最深的
 /// [RenderParagraph] + 最近的 [SrsLookupTextData] 标记 → 整段纯文本里的偏移 →
+/// 点第 [graphemeIndex] 个字位起的查询串：拉丁词回退到词首，其余脚本从命中字
+/// 起，跳过前导空白，终点恒为句尾。
+({int start, String term}) _lookupSpanAt(String sentence, int graphemeIndex) {
+  final List<String> graphemes = sentence.characters.toList();
+  if (graphemeIndex < 0 || graphemeIndex >= graphemes.length) {
+    return (start: -1, term: '');
+  }
+  int start = graphemeIndex;
+  if (isLatinWordGrapheme(graphemes[graphemeIndex])) {
+    while (start > 0 && isLatinWordGrapheme(graphemes[start - 1])) {
+      start--;
+    }
+  }
+  while (start < graphemes.length && graphemes[start].trim().isEmpty) {
+    start++;
+  }
+  if (start >= graphemes.length) return (start: -1, term: '');
+  return (start: start, term: graphemes.skip(start).join());
+}
+
 /// 查询串（命中字起到段尾；拉丁词回退到词首）。没有标记 / 点在字形盒外返回 null。
 SrsNativeLookupHit? srsNativeLookupHitAt(RenderBox root, Offset global) {
   if (!root.attached || !root.hasSize) return null;
@@ -816,7 +837,7 @@ SrsNativeLookupHit? srsNativeLookupHitAt(RenderBox root, Offset global) {
       : data.mapOuterOffset(offset);
   if (full == null || full < 0 || full >= data.text.length) return null;
   final int graphemeIndex = data.text.substring(0, full).characters.length;
-  final ({int start, String term}) span = subtitleTranscriptLookupSpan(
+  final ({int start, String term}) span = _lookupSpanAt(
     data.text,
     graphemeIndex,
   );

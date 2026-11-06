@@ -1,13 +1,13 @@
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:fushi_engine/media/collections/collection_season_groups.dart'
-    show isMultiSeasonGrouped;
+
+import 'package:fushi_engine/media/metadata/title_normalizer.dart';
 import 'package:fushi_engine/media/tracking/bangumi_api_client.dart';
 import 'package:fushi_engine/media/tracking/media_tracking_repository.dart';
-import 'package:fushi_engine/media/video/scraper/filename_parser.dart';
-import 'package:fushi_engine/media/video/scraper/scraper_types.dart';
-import 'package:fushi_engine/media/video/scraper/title_normalizer.dart';
+
+
+
 import 'package:fushi_engine/foundation/pref_store.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi_engine/foundation/engine_log.dart';
@@ -629,80 +629,6 @@ class MediaTrackingService {
     }
   }
 
-  Future<void> recordVideoCompleted({
-    required String bookUid,
-    int? collectionId,
-    required int episodeIndex,
-    bool seriesCompleted = false,
-  }) async {
-    // 多季合集（分组按各集文件名现场派生，≥2 组即算，存量合集零迁移生效）：
-    // 「整合集 → 单个 Bangumi 条目」结构性失真——Bangumi 一季一条目，合集下标当
-    // 集数会把 S02E01 报成 E13、完结误报给第一季条目。此时绕开合集级映射（保留
-    // 不改写，只不再使用），一律走按集通道（季度感知刮削 subject + 文件名季内
-    // 集号）。
-    bool multiSeason = false;
-    if (collectionId != null) {
-      multiSeason = isMultiSeasonGrouped(
-          await _repository.loadCollectionVideoGroupKeys(collectionId));
-    }
-    // 已有合集映射属于用户显式配置或旧版自动映射，优先沿用且绝不改写。
-    if (collectionId != null && !multiSeason) {
-      final MediaTrackingMappingRow? collectionMapping =
-          await _repository.findMapping(
-        mediaType: TrackingMediaType.videoCollection,
-        mediaKey: collectionId.toString(),
-      );
-      if (collectionMapping != null) {
-        await _enqueueAndSync(
-          mediaType: TrackingMediaType.videoCollection,
-          mediaKey: collectionId.toString(),
-          localProgress: episodeIndex,
-          completed: seriesCompleted,
-        );
-        return;
-      }
-    }
-
-    final AutoVideoTrackingSource? source =
-        await _repository.loadAutoVideoSource(
-      bookUid: bookUid,
-      collectionId: collectionId,
-    );
-    if (source == null) return;
-    final int? parsedEpisode = FilenameParser.parse(source.videoTitle).episode;
-    final int parsedEpisodeNumber = parsedEpisode ?? 0;
-    // 文件名已有明确集数时按单文件建映射，避免一个本地合集混入短篇、PV 或多季后，
-    // 合集 sortIndex 被误当成 Bangumi 正片集数。无集数的电影/整季文件仍走原合集语义。
-    final bool itemScoped = parsedEpisodeNumber > 0;
-    // 分季合集里解析不出集号的成员是 PV/特典：不上报，也不给整个多季合集建
-    // 一条注定错位的合集级映射。
-    if (multiSeason && !itemScoped) return;
-    final TrackingMediaType type = itemScoped || collectionId == null
-        ? TrackingMediaType.video
-        : TrackingMediaType.videoCollection;
-    final String key =
-        type == TrackingMediaType.video ? bookUid : collectionId.toString();
-    final MediaTrackingMappingRow? mapping = await _ensureAutoVideoMapping(
-      source: source,
-      mediaType: type,
-      mediaKey: key,
-      progressOffset: itemScoped ? parsedEpisodeNumber : 1,
-    );
-    if (mapping == null) return;
-    final int knownEpisodeCount = source.bangumiEpisodeCount ?? 0;
-    final bool itemCompletesSeries = itemScoped &&
-        knownEpisodeCount > 0 &&
-        parsedEpisodeNumber >= knownEpisodeCount;
-    await _enqueueAndSync(
-      mediaType: type,
-      mediaKey: key,
-      localProgress: itemScoped || collectionId == null ? 0 : episodeIndex,
-      completed: itemScoped
-          ? itemCompletesSeries
-          : (seriesCompleted || collectionId == null),
-    );
-  }
-
   Future<void> recordBookProgress({
     required String bookKey,
     required int completedChapterCount,
@@ -819,59 +745,6 @@ class MediaTrackingService {
           subjectName: subject.displayName,
           progressMode: TrackingProgressMode.status,
           progressOffset: 0,
-        );
-      },
-    );
-  }
-
-  Future<MediaTrackingMappingRow?> _ensureAutoVideoMapping({
-    required AutoVideoTrackingSource source,
-    required TrackingMediaType mediaType,
-    required String mediaKey,
-    required int progressOffset,
-  }) async {
-    final MediaTrackingMappingRow? existing = await _repository.findMapping(
-      mediaType: mediaType,
-      mediaKey: mediaKey,
-    );
-    if (existing != null) return existing;
-    return _singleFlightAutoMapping(
-      '${mediaType.value}:$mediaKey',
-      () async {
-        final int? scrapedId = source.bangumiSubjectId;
-        if (scrapedId != null && scrapedId > 0) {
-          return _repository.saveMappingIfAbsent(
-            mediaType: mediaType,
-            mediaKey: mediaKey,
-            mediaTitle: source.mediaTitle,
-            kind: TrackingKind.anime,
-            subjectId: scrapedId,
-            subjectName: source.bangumiSubjectName ?? source.mediaTitle,
-            progressMode: TrackingProgressMode.episode,
-            progressOffset: progressOffset,
-          );
-        }
-        if (!isConfigured) return null;
-
-        final ParsedMediaName parsed = FilenameParser.parse(source.mediaTitle);
-        final String query =
-            parsed.title.isEmpty ? source.mediaTitle : parsed.title;
-        final List<BangumiSubject> subjects = await searchSubjects(
-          keyword: query,
-          kind: TrackingKind.anime,
-        );
-        final BangumiSubject? subject =
-            _uniqueHighConfidenceSubject(query, subjects, TrackingKind.anime);
-        if (subject == null) return null;
-        return _repository.saveMappingIfAbsent(
-          mediaType: mediaType,
-          mediaKey: mediaKey,
-          mediaTitle: source.mediaTitle,
-          kind: TrackingKind.anime,
-          subjectId: subject.id,
-          subjectName: subject.displayName,
-          progressMode: TrackingProgressMode.episode,
-          progressOffset: progressOffset,
         );
       },
     );

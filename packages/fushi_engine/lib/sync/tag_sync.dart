@@ -1,5 +1,6 @@
 import 'package:fushi_core/fushi_core.dart';
 
+
 import 'package:fushi_engine/sync/collection_book_identity_index.dart';
 import 'package:fushi_engine/sync/sync_manifest_codec.dart';
 
@@ -279,16 +280,6 @@ Future<TagManifest> loadLocalTagManifest(FushiDatabase db) async {
     },
   );
 
-  final Set<String> gameIds = <String>{
-    for (final GalgameRow g in await db.getAllGalgames()) g.id,
-  };
-  addEntries(
-    TagHostKind.game,
-    await db.allTagClocksForKind(TagHostKind.game),
-    (String gameId) =>
-        gameIds.contains(gameId) ? identities.games.wireIdentity(gameId) : null,
-  );
-
   final Set<String> referenced = <String>{
     for (final TagManifestEntry e in entries) ...e.addedAt.keys,
   };
@@ -355,8 +346,8 @@ Future<int> applyTagManifest(FushiDatabase db, TagManifest remote) async {
         if (row != null) localKey = collectionTagEntryKey(row.id);
       }
     } else if (e.kind == TagHostKind.game.dbValue) {
-      kind = TagHostKind.game;
-      localKey = identities.games.resolve(e.allKeys);
+      // 游戏宿主随 galgame 域移除。
+      continue;
     }
     if (kind == null || localKey == null) continue;
     final bool didChange = await db.mergeRemoteTagClocks(

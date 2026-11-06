@@ -83,15 +83,6 @@ void main() {
     expect(File(calls.single.context.coverPath!).existsSync(), isFalse);
   });
 
-  test('沉浸制卡明确回不支持，不落卡', () async {
-    final RemoteMineResult r = await build().mineImmersion(
-      const ImmersionMinePayload(fields: <String, String>{'expression': 'x'}, sentence: 's'),
-    );
-    expect(r.result, 'error');
-    expect(r.message, kServerImmersionMiningUnsupported);
-    expect(calls, isEmpty);
-  });
-
   test('查重：透传会话结果；后端抛错按不重复；空表记不查', () async {
     final ServerRemoteMiningService svc = build();
     expect(await svc.isDuplicate(expression: '食べる', reading: ''), isTrue);

@@ -121,21 +121,5 @@ void main() {
       expect(list.single.tags, isEmpty);
     });
 
-    test('listVideos 从 video_book_tag_mappings 填充视频标签名', () async {
-      final FushiDatabase db = openDb();
-      await db.upsertVideoBook(VideoBooksCompanion.insert(
-        bookUid: 'vid-uid',
-        title: 'MyVideo',
-        videoPath: '/tmp/v.mp4',
-        importedAt: Value(DateTime.now().millisecondsSinceEpoch),
-      ));
-      final int tagId = await db.getOrCreateTagByName('アニメ');
-      await db.addTagToVideoBook('vid-uid', tagId);
-
-      final List<RemoteVideoInfo> list = await buildSvc(db).listVideos();
-      final RemoteVideoInfo video =
-          list.firstWhere((RemoteVideoInfo v) => v.id == 'vid-uid');
-      expect(video.tags, <String>['アニメ']);
-    });
   });
 }

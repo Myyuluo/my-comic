@@ -1,14 +1,12 @@
 import 'dart:io';
 
-import 'package:fushi_engine/media/video/bluray/bluray_remote_title.dart';
+
 import 'package:fushi_engine/sync/aggregate_snapshot.dart';
-import 'package:fushi_engine/sync/collection_manifest.dart';
+
 import 'package:fushi_engine/sync/tag_sync.dart';
-import 'package:fushi_engine/media/video/metadata/video_metadata_models.dart'
-    show VideoMetadataWork;
-import 'package:fushi_engine/media/video/metadata/video_metadata_provider.dart'
-    show VideoMetadataLookup;
-import 'package:fushi_engine/sync/video_metadata_manifest.dart';
+
+
+
 import 'package:fushi_core/fushi_core.dart';
 import 'package:path/path.dart' as p;
 
@@ -2466,15 +2464,10 @@ class RemoteVideoStreamUrls {
     this.embeddedSubtitleTracks = const <RemoteVideoEmbeddedSubtitleTrack>[],
     this.streamIsOriginalContainer = true,
     this.sourceRequiresDolbyVisionReshape = false,
-    this.discTitle,
   });
 
   final String streamUrl;
 
-  /// 非 null = 这是一条蓝光标题，播放器要用它的段表拼 `edl://`（每段 URL 先过本地
-  /// TLS 中继改写），而不是直接打开 [streamUrl]。只有互联 host 会发；老 host 不发 →
-  /// null，行为与从前一致。
-  final BlurayRemoteTitle? discTitle;
   final String? subtitleUrl;
   final String? subtitleFileName;
 
@@ -2526,7 +2519,6 @@ class RemoteVideoStreamUrls {
       miningVideoHasAudio: miningVideoHasAudio,
       embeddedSubtitleTracks: embeddedSubtitleTracks,
       streamIsOriginalContainer: streamIsOriginalContainer,
-      discTitle: BlurayRemoteTitle.fromJson(json['discTitle']),
     );
   }
 }
@@ -2607,6 +2599,15 @@ abstract class FushiLibraryHostService {
   /// [progress] 严格新于 host 已存时间戳才覆盖，避免旧设备滞后上报回退新进度。
   Future<void> putBookProgress(String bookKey, RemoteBookProgress progress);
 
+  /// 按 [id]（downloadId：bookKey 或 title）单查该书封面的磁盘绝对路径；无封面 /
+  /// 文件不存在 / id 未知时返回 null。封面端点专用的单行查询，不 materialize
+  /// 整份书清单。
+  Future<String?> bookCoverPath(String id);
+
+  /// host 最近 [limit] 条活动事件（`activity_events` 表），供 client 首页活动面板
+  /// 展示（display-only，不落库）。
+  Future<List<RemoteActivityEvent>> listActivityEvents({int limit = 100});
+
   // ── 本地音频 ───────────────────────────────────────────────────────────────
 
   /// host 当前本地音频来源清单（从已注入的 localAudioEntries 取 displayName）。
@@ -2670,126 +2671,6 @@ abstract class FushiLibraryHostService {
     int updatedAtMs,
   );
 
-  // ── 视频 ──────────────────────────────────────────────────────────────────────
-
-  /// host 当前视频清单（从 VideoBooks 表读，按 importedAt DESC 排序）。
-  ///
-  /// 流式播放：视频文件通常数 GB，host→client 只按需流式传输（不走同步管道下发整
-  /// 文件）；client→host 方向由 [importVideo] 接收上传（syncVideoFiles 开关驱动，
-  /// 见 [SyncOrchestrator]._syncVideosLive）。
-  Future<List<RemoteVideoInfo>> listVideos();
-
-  /// 廉价判断 host 库是否已存在 bookUid 为 [id] 的视频（仅一次 DB 查询）。
-  /// 供 client 侧 push 幂等判据（远端已有同 uid+同尺寸则跳过重传）与上传端点用。
-  /// [id] 含路径穿越字符（`..` / `\`）时抛 [ArgumentError]。
-  Future<bool> videoExists(String id);
-
-  /// 接收 client 上传的单文件视频并注册进 host 视频库（client→host，
-  /// syncVideoFiles 开关驱动的 live push）。
-  ///
-  /// [videoFile] 是已落到临时位置的上传字节；实现把它搬进 host 拥有的视频目录，按
-  /// [id]（= client 端 `VideoBooks.bookUid`，跨设备稳定同步键）+ [title] upsert 一行
-  /// `VideoBooks`（`videoPath` = 目录内绝对路径），使上传的视频出现在 host 视频列表、
-  /// 可被其它 client 流式播放。bookUid 稳定 ⇒ upsert，重复上传同一视频只覆盖同一行。
-  /// [originalFileName] 用于保留扩展名（media_kit 依赖），实现须做路径穿越校验。
-  /// 封面为可选增强，best-effort 抽取，绝不挡建行落库。
-  Future<void> importVideo(
-    File videoFile, {
-    required String id,
-    required String title,
-    String? originalFileName,
-  });
-
-  /// 接收 client 上传的视频外挂字幕（sidecar，BUG-964）。
-  ///
-  /// [subtitleFile] 是已落到临时位置的上传字节；实现把它搬到 [id] 视频文件的
-  /// **同目录**，命名为 `<视频文件 stem><suffix>`（[suffix] 形如 `.srt` / `.ja.srt`，
-  /// 由 client 从其本地 sidecar 名裁出、实现须用 [isSidecarSubtitleSuffix] 白名单
-  /// 校验），使 [resolveVideoSubtitle] 的同 stem 匹配天然可见。落盘后按 host 学习
-  /// 语言重解析首选 sidecar，镜像 client 下载路径的行语义（`subtitleSource` /
-  /// `subtitleFormat`、`embeddedSubtitleTrack=null`、解析 cue 落库）。
-  /// [id] 未知视频抛 [StateError]（端点映射 404）；非法 [suffix] 抛 [ArgumentError]
-  /// （端点映射 400）。
-  Future<void> importVideoSubtitle(
-    File subtitleFile, {
-    required String id,
-    required String suffix,
-  });
-
-  /// 按 [id]（即 `VideoBooks.bookUid`）反查真实视频文件。
-  ///
-  /// 实现**只查 DB** 得到 videoPath，然后验证文件存在后返回；文件不存在或 id 未知
-  /// 时返回 null。绝不接受外部任意路径——[id] 只能来自 [listVideos] 返回的条目，
-  /// 防止路径穿越。
-  ///
-  /// [episodeIndex]>0（远端播放列表，TODO-885）时反查 `playlistJson[episodeIndex].path`
-  /// 那一集的文件（仍 DB-only，不接受外部 path）；0 = 当前选中集（`videoPath`）。
-  Future<File?> resolveVideoFile(String id, {int episodeIndex = 0});
-
-  /// host 最近 [limit] 条活动事件（`activity_events` 表，按精确时刻倒序），供
-  /// client 新首页 Activity 面板与本地事件混排展示（display-only，不落库）。
-  Future<List<RemoteActivityEvent>> listActivityEvents({int limit = 100});
-
-  /// 按 [id]（即 `VideoBooks.bookUid`）单查该视频封面的磁盘绝对路径；无封面 /
-  /// 文件不存在 / id 未知时返回 null。
-  ///
-  /// 封面端点的廉价存在判据：**只做一次 DB 单行查询 + 文件 stat**，绝不 materialize
-  /// 整份 [listVideos] 清单（旧实现每张封面请求重跑全量清单——每行一次目录扫描 +
-  /// 多次 DB 查询，N 张封面就是 O(N²)，大库浏览一次封面墙拖成分钟级）。
-  Future<String?> videoCoverPath(String id);
-
-  /// 按 [id]（downloadId：bookKey 或 title）单查该书封面的磁盘绝对路径；无封面 /
-  /// 文件不存在 / id 未知时返回 null。与 [videoCoverPath] 同理——封面端点专用的
-  /// 单行查询，不 materialize 整份 [listBooks]。
-  Future<String?> bookCoverPath(String id);
-
-  /// 按 [id] 查找对应视频的外挂字幕文件（sidecar）。
-  ///
-  /// 用 [langCode] 优先匹配带语言标记的字幕（如 `.ja.srt`）；内封字幕不在此列。
-  /// 找不到外挂字幕或视频未知时返回 null。[episodeIndex]>0（TODO-885）时按
-  /// `playlistJson[episodeIndex]` 那一集的视频路径找 sidecar。
-  Future<File?> resolveVideoSubtitle(
-    String id, {
-    String langCode = '',
-    int episodeIndex = 0,
-  });
-
-  /// BUG-1004：在 host **本地**对视频 [id] 的 `[startMs,endMs)` 段裁出 mining 句子音频，
-  /// 返回临时 aac(adts) 文件（调用方读完负责删其所在临时目录）；无该视频 / 区间非法 /
-  /// ffmpeg 失败时返回 null。host 用本地文件裁、不经网络/TLS，是「client ffmpeg 打不开 host
-  /// 自签 https / token 流」（BUG-891 残余缺口）的根治路径——client 全程不用 ffmpeg 抓远端流。
-  /// [audioStreamIndex]/[audioStreamCount] 选多音轨视频里用户当前听的轨（越界回退默认轨）；
-  /// [audioChannels]/[audioBitrate] 对齐制卡压缩档，使 host 裁出的片段与本地路径同规格。
-  Future<File?> clipVideoAudio(
-    String id, {
-    required int startMs,
-    required int endMs,
-    int episodeIndex = 0,
-    int? audioStreamIndex,
-    int? audioStreamCount,
-    int audioChannels = 1,
-    String audioBitrate = '64k',
-  });
-
-  /// 读 host 端记录的视频 [id] 播放断点（TODO-653）。返回 (位置毫秒, 更新时间毫秒)；
-  /// 无记录时返回 (0, 0)。[episodeIndex]>0（TODO-885）按集隔离读断点。
-  Future<({int positionMs, int updatedAtMs})> getVideoPosition(
-    String id, {
-    int episodeIndex = 0,
-  });
-
-  /// 把 client 上报的视频 [id] 播放断点写入 host（TODO-653）。
-  ///
-  /// 冲突解决「取较新时间戳」（见 [resolvePositionLww]）：仅当 [updatedAtMs]
-  /// 严格新于 host 已存时间戳才覆盖，避免旧设备的滞后上报回退新进度。
-  /// [episodeIndex]>0（TODO-885）按集隔离写断点。
-  Future<void> putVideoPosition(
-    String id,
-    int positionMs,
-    int updatedAtMs, {
-    int episodeIndex = 0,
-  });
-
   // ── 聚合（统计 + 收藏，TODO-1056 phase C）────────────────────────────────────
 
   /// 读 host 端当前聚合快照（四张统计表 + 挖掘计数 + 收藏词 + 收藏句），供 client
@@ -2805,21 +2686,6 @@ abstract class FushiLibraryHostService {
   /// 传播——与云后端 phase B 的 applySnapshotToLocal 完全同语义（复用同一实现）。
   Future<void> applyAggregateSnapshot(AggregateSnapshot snapshot);
 
-  // ── 合集清单（多端库联合视图 §2.3 任务5.2）──────────────────────────────────
-
-  /// 读 host 当前合集全量快照清单（`loadLocalCollectionManifest` 结果）。GET
-  /// `/api/library/collections` 返回其 canonicalJson，供 client 拉取 host 合集真相源
-  /// 做读-合并-写。纯读，无副作用。
-  Future<CollectionManifest> getCollectionManifest();
-
-  /// 把 client 上报的合集清单 [incoming] 并入 host 自己的合集库并返回合并后清单
-  /// （POST `/api/library/collections`）。语义：`CollectionSyncEngine.merge`（host 自身
-  /// 因果基线 `sync_collections_baseline_ms`）→ `applyCollectionLocalChanges` 把变更
-  /// 落 host DB → 推进 host 基线 → 返回合并后清单。与云后端 `__collections__` 通道
-  /// 同一引擎、同一墓碑/LWW 语义，仅通道不同；成员并集 + 移出/删除墓碑防复活 +
-  /// 手动序整合集 LWW。重放同一清单幂等（应用端按目标态调和）。
-  Future<CollectionManifest> mergeCollectionManifest(
-      CollectionManifest incoming);
 }
 
 /// host 端「列删除墓碑」的**可选**能力（显式确认式删除传播，host→client 消费方向）。
@@ -2875,67 +2741,6 @@ abstract interface class TagSyncHost {
 /// 与 [DeletionTombstoneHost] 同范式：主接口有十余个测试 fake 全量 implements，
 /// 新能力不扩大那个面。server 用 `is` 探测，不实现 → `/api/library/metadata*` 404，
 /// 能力位 `liveLibrary.videoMetadata=false`，client 静默跳过。
-abstract interface class VideoMetadataHost {
-  /// 7c：host 全部作品的刮削元数据（`VideoMetadataWorks` + 从属表反向装载）。
-  /// [since] 非 null 时只回 `updatedAt > since` 的作品。纯读。
-  Future<List<VideoMetadataWorkEntry>> listVideoMetadata({int? since});
-
-  /// 7a：在 host 上按 [query] 搜候选（host 自己的 provider 配置 / 主源选择 / 资料
-  /// 语言）。[key] 用来定作品形态（电影 / 剧集）与来源设置；host 无刮削链或作品
-  /// 不在任何本地来源的计划里时返回空列表。
-  Future<List<VideoMetadataCandidateEntry>> searchVideoMetadataCandidates({
-    required VideoMetadataWorkKey key,
-    required String query,
-  });
-
-  /// 7a：让 host 用用户选定的 [lookup] 重刮 [key] 对应作品（等价于 host 用户本地
-  /// 「手动指定身份重刮」），同步等到落库。合集对应多个作品单元时回
-  /// [VideoMetadataConflict.ambiguousWork]。
-  Future<VideoMetadataWriteResult> scrapeVideoMetadata({
-    required VideoMetadataWorkKey key,
-    required VideoMetadataLookup lookup,
-  });
-
-  /// 7b：把客户端本地刮好的 [work] 写进 host（`VideoMetadataDatabaseStore.apply`，
-  /// host 字段锁保留旧值）。host 已有与 [lookup] 不同的主身份且 [replaceIdentity]
-  /// 为 false → [VideoMetadataConflict.identity]，不动库。
-  Future<VideoMetadataWriteResult> putVideoMetadata({
-    required VideoMetadataWorkKey key,
-    required VideoMetadataLookup lookup,
-    required VideoMetadataWork work,
-    bool replaceIdentity = false,
-  });
-}
-
-/// host 端「TMDB 备选排序」的**可选**能力（Shoko `PreferredAlternateOrderingID` 的
-/// 互联面）：客户端列出 host 上某部剧的 episode groups，选定后由 host 写作品行、
-/// 上 `episodeGroup` 锁并按分组重刮。与 [VideoMetadataHost] 同范式：server 用 `is`
-/// 探测，不实现 → `/api/library/metadata/episode-group*` 404，能力位
-/// `liveLibrary.videoMetadataOrdering=false`。
-abstract interface class VideoMetadataOrderingHost {
-  /// [key] 对应作品的全部备选排序 + 当前选定。作品没有 TMDB 剧集身份 / host 无
-  /// 刮削链 → 空 groups；合集对应多个单元 → null（调用方走 ambiguousWork）。
-  Future<VideoMetadataEpisodeGroupListing?> listVideoMetadataEpisodeGroups({
-    required VideoMetadataWorkKey key,
-  });
-
-  /// 选定 [groupId]（null = TMDB 默认排序）：写作品行 + 锁 → 以既有身份重刮，
-  /// 结果与 [VideoMetadataHost.scrapeVideoMetadata] 同形。
-  Future<VideoMetadataWriteResult> setVideoMetadataEpisodeGroup({
-    required VideoMetadataWorkKey key,
-    required String? groupId,
-  });
-}
-
-/// host 端「视频播放偏好跨设备同步」的**可选**能力（BUG-1620 调轴起步，播放偏好
-/// 同步泛化批扩展为统一带戳字段模型：调轴 / 音轨 / 副字幕源 / 副字幕调轴）。
-///
-/// 与 [FushiLibraryHostService] 分开的理由同 [VideoDeletionHost]：主接口有十余个
-/// 测试 fake 用 `implements` 全量实现，往主接口加方法会强制它们全部补桩。
-///
-/// server 用 `is` 探测——host 不实现就让 `GET/PUT /api/library/videos/<id>/playback`
-/// 落 404；client 上报是 best-effort（失败只记日志），本地 prefs 已持久化，对旧
-/// host 优雅降级（Never break userspace）。
 abstract interface class VideoPlaybackSyncHost {
   /// 读 host 端视频 [id] 的播放偏好带戳状态。无带戳记录的字段回退行/系列级基底
   /// （时间戳 0）；id 未知返回全默认。

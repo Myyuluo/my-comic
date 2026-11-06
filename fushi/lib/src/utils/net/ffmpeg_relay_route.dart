@@ -8,13 +8,17 @@ import 'package:flutter/foundation.dart';
 import 'package:fushi/src/utils/misc/error_log_service.dart';
 import 'package:fushi/src/utils/net/app_native_proxy.dart';
 import 'package:fushi/src/utils/net/hls_relay_normalizer.dart';
-import 'package:fushi_engine/media/video/youtube_source_resolver.dart'
-    show kYoutubeStreamReplayUserAgent;
+
 import 'package:fushi_engine/utils/misc/desktop_audio_clipper.dart'
     show
         FfmpegRemoteInputRoute,
         ffmpegSupportsHlsHttpMultipleOption,
         ffmpegSupportsHlsSegmentExtensionOptions;
+
+/// 取远端播放列表 / 分片时的 UA：部分 CDN 对非浏览器 UA 直接 403。
+const String _kRelayUserAgent =
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+    '(KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 
 /// 制卡 ffmpeg 的远端输入改走本机中继的登记表（BUG-2642 残留）。
 ///
@@ -130,7 +134,7 @@ Future<String?> _resolveMasterVariant(
       final HttpClientRequest request = await client.getUrl(Uri.parse(relayed));
       request.headers.set(
         HttpHeaders.userAgentHeader,
-        kYoutubeStreamReplayUserAgent,
+        _kRelayUserAgent,
       );
       headers.forEach(request.headers.set);
       final HttpClientResponse response = await request.close();

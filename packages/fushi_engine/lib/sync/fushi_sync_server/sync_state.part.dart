@@ -66,65 +66,13 @@ extension _FushiSyncServerSyncState on FushiSyncServer {
     }
   }
 
-  /// 合集清单跨设备 live 端点（多端库联合视图 §2.3 任务5.2）。
-  ///
-  /// GET /api/library/collections — 返回 host 当前合集全量快照清单
-  /// （[FushiLibraryHostService.getCollectionManifest] 的 canonicalJson），供 client
-  /// 拉取 host 合集真相源做读-合并-写。
-  /// POST /api/library/collections — client 上报本端合集清单，host 经
-  /// [FushiLibraryHostService.mergeCollectionManifest] 并入自己 DB（成员并集 + 移出/
-  /// 删除墓碑防复活 + 手动序整合集 LWW，语义在 CollectionSyncEngine），返回合并后清单。
-  ///
-  /// 鉴权：不在中间件豁免名单，故自动走 Basic token 全量校验（已配对 peer 才可访问，
-  /// 与 aggregate 端点同纪律）。容错：坏 JSON / 非法/高版本清单 → 400（不静默按旧
-  /// 语义误读新字段污染 host 数据，与 [CollectionManifest.fromJson] 的版本闸门一致）。
-  Future<shelf.Response> _handleLibraryCollections(
-    shelf.Request request,
-    String method,
-    String reqPath,
-  ) async {
-    final FushiLibraryHostService? svc = _libraryService;
-    if (svc == null) return shelf.Response.notFound('Library service off');
-
-    switch (method) {
-      case 'GET':
-        final CollectionManifest manifest = await svc.getCollectionManifest();
-        return shelf.Response.ok(
-          manifest.canonicalJson(),
-          // charset=utf-8 必带：合集名含 CJK，client 用 package:http `.body` 默认按
-          // latin1 解码会乱码（同 aggregate / _jsonResponse）。
-          headers: <String, String>{
-            'Content-Type': 'application/json; charset=utf-8'
-          },
-        );
-      case 'POST':
-        final Map<String, dynamic>? json = await readJsonObjectBody(request);
-        if (json == null) return shelf.Response(400, body: 'Invalid JSON');
-        CollectionManifest incoming;
-        try {
-          incoming = CollectionManifest.fromJson(json);
-        } on FormatException catch (e) {
-          return shelf.Response(400, body: 'Invalid manifest: $e');
-        }
-        final CollectionManifest merged =
-            await svc.mergeCollectionManifest(incoming);
-        return shelf.Response.ok(
-          merged.canonicalJson(),
-          headers: <String, String>{
-            'Content-Type': 'application/json; charset=utf-8'
-          },
-        );
-      default:
-        return shelf.Response(405);
-    }
-  }
 
   /// 标签清单跨设备 live 端点（互联标签同步，`tag_sync.dart`）。
   ///
   /// GET /api/library/tags — host 全部宿主的标签时钟清单；
   /// POST /api/library/tags — client 上报本端清单，host 按 LWW 并入自己 DB，返回
   /// 并入后的 host 清单。host 不实现 [TagSyncHost] → 404（老 host 同形）。
-  /// 鉴权与容错同 [_handleLibraryCollections]：走 Basic token 全量校验；坏 JSON /
+  /// 鉴权与容错同聚合端点：走 Basic token 全量校验；坏 JSON /
   /// 非法或高版本清单 → 400，绝不按旧语义误读新字段污染 host 数据。
   Future<shelf.Response> _handleLibraryTags(
     shelf.Request request,

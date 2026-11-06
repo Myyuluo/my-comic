@@ -9,7 +9,7 @@ import 'package:fushi/i18n/strings.g.dart';
 import 'package:fushi/models.dart';
 import 'package:fushi/src/models/module_id.dart';
 import 'package:fushi/src/models/preferences_repository.dart';
-import 'package:fushi/src/pages/implementations/home_dictionary_page.dart';
+import 'package:fushi/src/media/manga/manga_library_page.dart';
 import 'package:fushi/src/pages/implementations/home_page.dart';
 import 'package:fushi/src/platform/platform_providers.dart';
 import 'package:fushi/src/sync/desktop_lookup_service.dart';
@@ -30,8 +30,8 @@ import '../helpers/test_platform_services.dart';
 /// 随 State 一起丢失（退出视频转回竖屏再丢一次）。
 ///
 /// 本文件挂真的 [HomePage]，只改窗口宽度跨过断点，断言 tab 页面是**同一个** State
-/// （不是被重建出的新 State）。查词 tab 在这套桩里最轻，且它是「非保活」tab——
-/// 连它都不重建，保活 tab（视频 / 书架 / 游戏）更不会。
+/// （不是被重建出的新 State）。设置 tab 是 my-comic 里恒在且「非保活」的 tab——
+/// 连它都不重建，保活 tab（首页 / 书架 / 漫画 / 浏览）更不会。
 
 class _HomeShellAppModel extends AppModel {
   _HomeShellAppModel(this._dir, {required this.dictionariesEnabled})
@@ -163,6 +163,9 @@ Future<_HomeShellAppModel> _pumpHome(
   );
   await tester.pump();
   await tester.pump();
+  // HomePage 启动后台更新检查会挂一个周期 Timer；测试卸载页面后它仍活着，
+  // 命不中「无 pending timer」不变式。挂载完成后显式停掉（幂等）。
+  await appModel.stopUpdateChecks();
   expect(
     HomePage.debugSelectTab,
     isNotNull,
@@ -211,7 +214,8 @@ void main() {
     addTearDown(tester.view.reset);
 
     await _pumpHome(tester, dictionariesEnabled: true);
-    HomePage.debugSelectTab!(HomeTab.dictionaries);
+    // 查词 tab 在 my-comic 中恒不可见；用漫画 tab（恒可见）验证跨断点复用。
+    HomePage.debugSelectTab!(HomeTab.manga);
     await _settle(tester);
 
     expect(
@@ -219,9 +223,7 @@ void main() {
       findsNothing,
       reason: '前置：400 宽是底栏布局。',
     );
-    final State<StatefulWidget> before = tester.state(
-      find.byType(HomeDictionaryPage),
-    );
+    final Element before = tester.element(find.byType(MangaLibraryPage));
 
     // 播放页转横屏：被盖住的首页变宽，跨过 600 断点换成侧栏布局。
     tester.view.physicalSize = const Size(900, 400);
@@ -232,17 +234,17 @@ void main() {
       reason: '前置：900 宽必须真的换成了侧栏布局，否则本测试什么也没测。',
     );
     expect(
-      identical(tester.state(find.byType(HomeDictionaryPage)), before),
+      identical(tester.element(find.byType(MangaLibraryPage)), before),
       isTrue,
       reason: '换布局必须把正文整棵挪到新父节点下，而不是卸载重建。',
     );
 
-    // 退出视频转回竖屏：再换回底栏布局，仍是同一个 State、仍停在原 tab。
+    // 退出视频转回竖屏：再换回底栏布局，仍是同一个 Element、仍停在原 tab。
     tester.view.physicalSize = const Size(400, 900);
     await _settle(tester);
     expect(find.byType(NavRailBrandButton), findsNothing);
     expect(
-      identical(tester.state(find.byType(HomeDictionaryPage)), before),
+      identical(tester.element(find.byType(MangaLibraryPage)), before),
       isTrue,
     );
     await _unmount(tester);

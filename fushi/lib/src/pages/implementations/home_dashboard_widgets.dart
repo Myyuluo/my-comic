@@ -13,7 +13,7 @@ import 'dart:math' as math;
 
 import 'package:material_ui/material_ui.dart';
 
-import 'package:fushi/src/media/video/cover_ui/cover_aspect_probe.dart';
+
 import 'package:fushi/src/utils/components/fushi_m3e_feedback.dart';
 import 'package:fushi/src/utils/components/fushi_press_scale.dart';
 import 'package:fushi/src/utils/components/glass/fushi_icon.dart';
@@ -473,19 +473,75 @@ class _HomeCoverAspectProbe extends StatefulWidget {
   State<_HomeCoverAspectProbe> createState() => _HomeCoverAspectProbeState();
 }
 
-class _HomeCoverAspectProbeState extends State<_HomeCoverAspectProbe>
-    with CoverAspectProbe<_HomeCoverAspectProbe> {
-  @override
-  ImageProvider probedImageOf(_HomeCoverAspectProbe widget) => widget.image;
+class _HomeCoverAspectProbeState extends State<_HomeCoverAspectProbe> {
+  ImageStream? _stream;
+  ImageStreamListener? _listener;
+  double? _aspect;
+  bool _failed = false;
+  bool _started = false;
 
-  /// 只回答横竖，一个像素都不画：不需要主色底采样。
   @override
-  bool needsBackdropSeed(double aspect) => false;
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_started) return;
+    _started = true;
+    _listen();
+  }
+
+  @override
+  void didUpdateWidget(covariant _HomeCoverAspectProbe oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (identical(oldWidget.image, widget.image)) return;
+    _stop();
+    _aspect = null;
+    _failed = false;
+    _listen();
+  }
+
+  @override
+  void dispose() {
+    _stop();
+    super.dispose();
+  }
+
+  void _listen() {
+    final ImageStream stream =
+        widget.image.resolve(createLocalImageConfiguration(context));
+    late final ImageStreamListener listener;
+    listener = ImageStreamListener(
+      (ImageInfo info, bool synchronousCall) {
+        if (!mounted || !identical(_stream, stream)) {
+          info.dispose();
+          return;
+        }
+        final int width = info.image.width;
+        final int height = info.image.height;
+        info.dispose();
+        if (width <= 0 || height <= 0) return;
+        setState(() => _aspect = width / height);
+      },
+      onError: (Object error, StackTrace? stack) {
+        if (mounted && identical(_stream, stream)) {
+          setState(() => _failed = true);
+        }
+      },
+    );
+    _stream = stream;
+    _listener = listener;
+    stream.addListener(listener);
+  }
+
+  void _stop() {
+    final ImageStreamListener? listener = _listener;
+    if (listener != null) _stream?.removeListener(listener);
+    _listener = null;
+    _stream = null;
+  }
 
   @override
   Widget build(BuildContext context) => widget.builder(
     context,
-    !coverFailed && homeCoverIsLandscape(coverAspect),
+    !_failed && homeCoverIsLandscape(_aspect),
   );
 }
 

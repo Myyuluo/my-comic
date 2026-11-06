@@ -3,7 +3,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:fushi/src/pages/implementations/media_item_dialog_page.dart';
-import 'package:fushi/src/utils/components/galgame_poster_card.dart';
+
 import 'package:fushi/src/utils/components/shelf_card_widgets.dart';
 import '../helpers/glass_unwrap.dart';
 
@@ -132,27 +132,6 @@ void main() {
       );
       final Tooltip tooltip = tester.widget<Tooltip>(glassUnwrap<Tooltip>(find.byType(Tooltip)));
       expect(tooltip.message, longTitle);
-    });
-
-    testWidgets('GalgamePosterCard 长名溢出挂 Tooltip 且不吞卡片长按',
-        (WidgetTester tester) async {
-      int longPressed = 0;
-      await tester.pumpWidget(
-        host(
-          width: 140,
-          child: GalgamePosterCard(
-            cover: const ColoredBox(color: Colors.black26),
-            title: longTitle,
-            onLongPress: () => longPressed++,
-          ),
-        ),
-      );
-      final Tooltip tooltip = tester.widget<Tooltip>(glassUnwrap<Tooltip>(find.byType(Tooltip)));
-      expect(tooltip.message, longTitle);
-      // triggerMode=manual 不注册长按识别器：标题区长按仍走卡片长按菜单。
-      await tester.longPress(find.byType(Tooltip), warnIfMissed: false);
-      await tester.pumpAndSettle();
-      expect(longPressed, 1, reason: 'Tooltip 不得吃掉卡片的长按（长按菜单是触屏看全名路径）');
     });
 
     testWidgets('长按菜单 MediaItemDialogFrame 标题不限行显示全名',

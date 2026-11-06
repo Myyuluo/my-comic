@@ -5,22 +5,22 @@ import 'dart:typed_data';
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:fushi/src/media/manga/download/manga_download_auto_ocr.dart';
+
 import 'package:fushi/src/media/manga/download/manga_download_service.dart';
 import 'package:fushi/src/media/manga/library/manga_chapter_storage.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_service.dart';
 import 'package:fushi/src/media/manga/library/online_manga_runtime_adapter.dart';
-import 'package:fushi/src/media/manga/manga_ocr_background_job.dart';
-import 'package:fushi/src/media/manga/manga_ocr_job_stream.dart';
-import 'package:fushi/src/media/manga/manga_ocr_wizard_engines.dart';
-import 'package:fushi/src/media/manga/ocr/manga_ocr_engine.dart';
-import 'package:fushi/src/media/manga/ocr/manga_ocr_job_registry.dart';
+
+
+
+
+
 import 'package:fushi/src/platform/mobile/android_download_keep_alive.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi_engine/epub/epub_storage.dart';
 import 'package:fushi_engine/media/manga/mokuro_payload.dart';
-import 'package:fushi_engine/ocr/manga_ocr_service.dart';
+
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 
@@ -106,34 +106,6 @@ class _RecordingKeepAlive implements DownloadKeepAlive {
   Future<void> stop() async {
     events.add('stop');
   }
-}
-
-class _FakeOcrService implements MangaOcrService {
-  @override
-  bool get isSupportedPlatform => true;
-
-  @override
-  Future<MangaOcrModelStatus> modelStatus() async => const MangaOcrModelStatus(
-        detectorReady: true,
-        recognizerReady: true,
-        diskBytes: 1,
-        totalBytes: 1,
-      );
-
-  @override
-  Stream<MangaOcrDownloadEvent> downloadModels() =>
-      const Stream<MangaOcrDownloadEvent>.empty();
-
-  @override
-  Future<int> deleteModels() async => 0;
-
-  @override
-  Stream<MangaOcrVolumeEvent> ocrFolder({
-    required String imageDirPath,
-    String? volumeTitle,
-    int startPage = 0,
-  }) =>
-      const Stream<MangaOcrVolumeEvent>.empty();
 }
 
 const List<OnlineMangaChapter> _chapters = <OnlineMangaChapter>[
@@ -422,7 +394,6 @@ void main() {
     );
     expect(again.jobId, job.jobId, reason: 'job_id 由身份三元组派生，稳定');
     expect(again.status, MangaDownloadJobStatus.queued);
-    expect(again.autoOcr, isTrue);
     downloads.dispose();
   });
 
@@ -490,76 +461,6 @@ void main() {
     expect((await jobOf('/chapter/1')).status, MangaDownloadJobStatus.done);
     expect(adapter.fetchCounts, <int, int>{0: 2, 1: 2, 2: 2},
         reason: '目录没了就得真的重下');
-    downloads.dispose();
-  });
-
-  test('autoOcr 为真且引擎可用 → 注册表里出现本书的 OCR 任务', () async {
-    final MangaOcrJobRegistry registry = MangaOcrJobRegistry();
-    final StreamController<MangaOcrBackgroundEvent> events =
-        StreamController<MangaOcrBackgroundEvent>();
-    addTearDown(events.close);
-    final List<MangaOcrJobSpec> specs = <MangaOcrJobSpec>[];
-    final MangaDownloadService downloads = build(
-      onChapterDownloaded: (MangaDownloadedChapter chapter) async {
-        await runAutoMangaOcrForDownloadedChapter(
-          chapter: chapter,
-          engines: MangaOcrWizardEngines(service: _FakeOcrService()),
-          registry: registry,
-          preference: MangaOcrEnginePreference.auto,
-          lensLanguage: 'ja',
-          buildEvents: (MangaOcrJobSpec spec) {
-            specs.add(spec);
-            return events.stream;
-          },
-        );
-      },
-    );
-    await downloads.enqueueChapter(
-      entry: _entry(),
-      chapter: _chapters.last,
-      autoOcr: true,
-    );
-    await downloads.start();
-    await downloads.whenIdle;
-
-    final MangaOcrRunningJob? running = registry.running(bookKey);
-    expect(running, isNotNull);
-    expect(running!.job.engine, MangaOcrEngineId.localOnnx);
-    final Directory chapterDir = mangaChapterDirectory(bookDir, '/chapter/1');
-    expect(running.job.managedDirectory, chapterDir.path);
-    expect(running.mangaJsonPath, mangaChapterJsonFile(chapterDir).path);
-    expect(specs.single.imageDirPath, chapterDir.path,
-        reason: '从章目录起算，OCR 产物的 url 才是 images/page-…');
-    downloads.dispose();
-    await registry.cancelAll();
-  });
-
-  test('autoOcr 但偏好是 Google Lens → 跳过（后台不能替用户同意上传）', () async {
-    final MangaOcrJobRegistry registry = MangaOcrJobRegistry();
-    final MangaDownloadService downloads = build(
-      onChapterDownloaded: (MangaDownloadedChapter chapter) async {
-        final MangaOcrRunningJob? job =
-            await runAutoMangaOcrForDownloadedChapter(
-          chapter: chapter,
-          engines: MangaOcrWizardEngines(service: _FakeOcrService()),
-          registry: registry,
-          preference: MangaOcrEnginePreference.googleLens,
-          lensLanguage: 'ja',
-          buildEvents: (_) => const Stream<MangaOcrBackgroundEvent>.empty(),
-        );
-        expect(job, isNull);
-      },
-    );
-    await downloads.enqueueChapter(
-      entry: _entry(),
-      chapter: _chapters.last,
-      autoOcr: true,
-    );
-    await downloads.start();
-    await downloads.whenIdle;
-    expect(registry.running(bookKey), isNull);
-    expect((await jobOf('/chapter/1')).status, MangaDownloadJobStatus.done,
-        reason: 'OCR 跳过不影响下载结果');
     downloads.dispose();
   });
 

@@ -27,7 +27,7 @@ library;
 import 'package:drift/drift.dart' show Value;
 import 'package:fushi_audio/fushi_audio.dart';
 import 'package:fushi_core/fushi_core.dart';
-import 'package:fushi_engine/media/video/video_book_repository.dart';
+
 import 'package:fushi_engine/stats/stat_facts.dart';
 import 'package:fushi_engine/stats/study_sessions.dart';
 
@@ -159,34 +159,5 @@ Future<void> resetBookReadingState({
         title: title,
         mediaKeys: statKeys,
       );
-  }
-}
-
-/// 把一集视频重置为未看：位置 / 播放时刻 / 完成标记 / 当前集清零并写互联 LWW
-/// 镜像键（[VideoBookRepository.clearWatchProgress]），再按 [records] 处理统计。
-Future<void> resetVideoWatchState({
-  required FushiDatabase db,
-  required VideoBookRepository repo,
-  required String bookUid,
-  required String title,
-  StudyRecordResetScope records = StudyRecordResetScope.keep,
-  int? nowMs,
-}) async {
-  if (bookUid.isEmpty) return;
-  await repo.clearWatchProgress(bookUid);
-  switch (records) {
-    case StudyRecordResetScope.keep:
-      break;
-    case StudyRecordResetScope.lastSession:
-      await undoLatestStudySession(
-        db,
-        mediaKind: kActivityMediaVideo,
-        mediaKeys: <String>{bookUid},
-        nowMs: nowMs,
-      );
-    case StudyRecordResetScope.all:
-      // 与删视频时「同时删除统计数据」同一条路径（含「已看过区间」并集，删统计 =
-      // 当没看过）；只删挂在这条 uid 名下的行，不按标题连坐同名视频。
-      await db.deleteVideoStatisticsForIdentity(title: title, bookUid: bookUid);
   }
 }

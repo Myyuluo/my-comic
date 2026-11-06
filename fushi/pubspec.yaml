@@ -86,8 +86,6 @@ dependencies:
     path: ../packages/fushi_audio
   fushi_platform:
     path: ../packages/fushi_platform
-  fushi_torrent:
-    path: ../packages/fushi_torrent
   google_sign_in: ^6.2.2
   extension_google_sign_in_as_googleapis_auth: ^2.0.12
   googleapis: ^13.2.0

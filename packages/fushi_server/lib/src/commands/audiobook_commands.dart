@@ -15,8 +15,10 @@ import 'package:args/args.dart';
 import 'package:fushi_audio/fushi_audio_core.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi_engine/media/audiobook/audiobook_alignment_service.dart';
+import 'package:fushi_engine/media/collections/shelf_sort.dart'
+    show naturalCompare;
 import 'package:fushi_engine/media/discovery/import/discovery_import_plan.dart' show kDiscoverySubtitleExtensions;
-import 'package:fushi_engine/ocr/manga_ocr_folder_job.dart' show naturalCompare;
+
 import 'package:fushi_server/src/commands/cli_module.dart';
 import 'package:fushi_server/src/commands/command_io.dart';
 import 'package:fushi_server/src/server_runtime.dart';

@@ -190,13 +190,9 @@ void main() {
     testWidgets('源行真渲染、搜索真过滤、开关真写穿 DB', (WidgetTester tester) async {
       await pumpSlivers(tester, <Widget>[
         const SliverToBoxAdapter(child: Text('leading-row')),
-        MihonInstalledSourcesSection(
-          manager: manager,
-          leading: const <Widget>[Text('builtin-row')],
-        ),
+        MihonInstalledSourcesSection(manager: manager),
       ]);
       expect(find.text('leading-row'), findsOneWidget);
-      expect(find.text('builtin-row'), findsOneWidget);
       expect(find.text('Alpha source'), findsOneWidget);
       expect(find.text('Beta source'), findsOneWidget);
       // 拖拽把手只在未筛选时出现（同组两行各一个）。

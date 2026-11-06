@@ -39,15 +39,13 @@ import 'package:fushi/src/utils/misc/screen_wakelock.dart';
 import 'package:fushi/creator.dart';
 import 'package:fushi_dictionary/fushi_dictionary.dart';
 import 'package:fushi/media.dart';
-import 'package:fushi/src/media/video/video_hdr_output.dart'
-    show VideoHdrOutputMode;
-import 'package:fushi/src/media/video/video_screenshot_destination.dart';
+
+
 import 'package:fushi/pages.dart';
 import 'package:fushi/utils.dart';
-import 'package:fushi/src/media/collections/collection_ai_order.dart'
-    show installCollectionAiOrderSettings;
+
 import 'package:fushi/src/media/override_thumbnail_migration.dart';
-import 'package:fushi_engine/ai/ai_video_search_assistant.dart';
+
 import 'package:fushi/src/models/dictionary_download_controller.dart';
 import 'package:fushi/src/onboarding/recommended_pack_download_controller.dart';
 import 'package:fushi/src/onboarding/recommended_pack_tutorial_state.dart';
@@ -83,7 +81,7 @@ import 'package:fushi_engine/epub/book_title_conflict.dart';
 import 'package:fushi_engine/srs/ankiconnect/srs_ankiconnect_endpoint.dart';
 import 'package:fushi_engine/srs/srs_backup_retention.dart';
 import 'package:fushi_engine/epub/epub_importer.dart';
-import 'package:fushi/src/diagnostics/video_diag_log.dart';
+
 import 'package:fushi/src/dictionary/dict_resource_materializer.dart';
 import 'package:fushi/src/dictionary/dict_style_rules.dart';
 import 'package:fushi/src/dictionary/transform_description_locale.dart';
@@ -110,38 +108,36 @@ import 'package:fushi/src/media/manga/manga_reader_preferences.dart';
 import 'package:fushi/src/media/manga/interconnect/interconnect_manga_source.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_service.dart';
 import 'package:fushi/src/media/manga/library/online_manga_runtime_adapter.dart';
-import 'package:fushi/src/media/manga/download/manga_download_auto_ocr.dart';
+
 import 'package:fushi/src/media/manga/download/manga_download_service.dart';
-import 'package:fushi/src/media/manga/manga_ocr_provider.dart';
-import 'package:fushi_engine/ocr/manga_ocr_local_model.dart'
-    show deleteRemovedMangaOcrModelDirs;
-import 'package:fushi/src/media/manga/manga_ocr_wizard_engines.dart';
-import 'package:fushi/src/media/manga/ocr/manga_ocr_engine.dart';
+
+
+
+
 import 'package:fushi/src/media/manga/mihon/mihon_extension_store_client.dart';
 import 'package:fushi/src/media/manga/mihon/mihon_manager.dart';
 import 'package:fushi/src/media/manga/mihon/mihon_models.dart';
 import 'package:fushi/src/media/manga/mihon/mihon_runtime.dart';
 import 'package:fushi/src/media/manga/mihon/mihon_runtime_factory.dart';
-import 'package:fushi_engine/media/torrent/anime_download_config.dart';
-import 'package:fushi_engine/media/torrent/download_timeouts.dart';
-import 'package:fushi/src/media/torrent/download_relocate_service.dart';
-import 'package:fushi_engine/media/torrent/download_save_root.dart';
-import 'package:fushi_engine/media/torrent/embedded_torrent_host.dart';
-import 'package:fushi_engine/media/torrent/qb_torrent_backend.dart';
-import 'package:fushi_engine/media/torrent/qbittorrent_client.dart';
-import 'package:fushi_engine/media/torrent/torrent_backend.dart';
-import 'package:fushi_engine/media/torrent/tracker_subscription.dart';
-import 'package:fushi_engine/media/torrent/torrent_network_diagnosis.dart';
-import 'package:fushi_engine/media/torrent/public_trackers.dart';
+
+
+
+
+
+
+
+
+
+
+
 import 'package:fushi_engine/utils/net/fake_ip_dns.dart';
-import 'package:fushi_torrent/fushi_torrent.dart' show FtSessionStatus;
-import 'package:fushi/src/media/torrent/builtin_video_resource_sources.dart';
-import 'package:fushi_engine/media/torrent/nyaa_client.dart';
-import 'package:fushi_engine/media/torrent/torznab_client.dart';
-import 'package:fushi_engine/media/video/download/video_resource_prefs.dart';
-import 'package:fushi/src/media/torrent/video_download_legacy_importer.dart';
-import 'package:fushi_engine/media/torrent/video_resource_provider.dart';
-import 'package:fushi/src/media/torrent/anime_download_importer.dart';
+
+
+
+
+
+
+
 import 'package:fushi_engine/media/audiobook/audiobookshelf/audiobookshelf_models.dart'
     show AudiobookshelfTokens;
 import 'package:fushi_engine/media/discovery/discovery_download_queue.dart';
@@ -152,51 +148,50 @@ import 'package:fushi/src/media/downloads/download_keep_alive_bindings.dart';
 import 'package:fushi/src/media/discovery/import/discovery_import_production.dart';
 import 'package:fushi/src/media/discovery/media_discovery_service.dart';
 import 'package:fushi/src/media/discovery/media_discovery_source.dart';
-import 'package:fushi/src/media/discovery/alist_site_config.dart';
+
 import 'package:fushi/src/media/discovery/audiobookshelf_server_config.dart';
 import 'package:fushi/src/media/discovery/opds_server_config.dart';
-import 'package:fushi/src/media/discovery/sources/alist_discovery_source.dart';
+
 import 'package:fushi/src/media/discovery/sources/audiobookshelf_discovery_source.dart';
-import 'package:fushi/src/media/discovery/sources/core_audio_discovery_source.dart';
-import 'package:fushi/src/media/discovery/sources/nyaa_discovery_source.dart';
+
+
 import 'package:fushi/src/media/discovery/sources/opds_discovery_source.dart';
-import 'package:fushi/src/media/discovery/sources/shinnku_discovery_source.dart';
-import 'package:fushi/src/media/torrent/anime_download_plan.dart';
-import 'package:fushi/src/media/torrent/anime_download_service.dart';
-import 'package:fushi/src/media/torrent/anime_download_subtitle_resolver.dart';
-import 'package:fushi/src/media/torrent/anime_download_subscription.dart';
-import 'package:fushi_engine/media/torrent/torrent_memory.dart';
-import 'package:fushi/src/media/video/browser_video_study_bridge.dart';
-import 'package:fushi/src/media/video/dandanplay_client.dart';
-import 'package:fushi/src/media/video/video_lua_capability.dart';
-import 'package:fushi/src/media/video/video_specs_service.dart';
-import 'package:fushi/src/media/video/metadata/video_scrape_runtime.dart';
-import 'package:fushi_engine/media/video/download/video_download_backend_identity.dart';
-import 'package:fushi_engine/media/video/download/video_download_path_mapping.dart';
-import 'package:fushi_engine/media/video/download/video_download_pipeline_service.dart';
-import 'package:fushi_engine/media/video/download/video_download_subtitle_language.dart';
-import 'package:fushi_engine/media/video/download/video_download_subscription_service.dart';
-import 'package:fushi_engine/media/video/download/video_resource_registry.dart';
-import 'package:fushi_engine/media/video/download/video_subtitle_registry.dart';
-import 'package:fushi/src/media/video/subtitle/scraped_subtitle_targets.dart';
-import 'package:fushi/src/media/video/subtitle/video_subtitle_backfill.dart';
-import 'package:fushi/src/media/video/subtitle/library_video_subtitle_backfill.dart';
-import 'package:fushi_engine/ai/ai_video_identity_assistant.dart';
-import 'package:fushi/src/media/video/scraper/tmdb_default_key.dart';
-import 'package:fushi/src/media/video/subtitle/configured_subtitle_providers.dart';
-import 'package:fushi_engine/media/video/metadata/video_source_scrape_config.dart';
-import 'package:fushi_engine/media/video/metadata/video_source_scrape_coordinator.dart';
-import 'package:fushi_engine/media/video/subtitle/embedded_reference_subtitle_sync.dart';
-import 'package:fushi_engine/media/video/subtitle/video_subtitle_provider.dart';
-import 'package:fushi_engine/media/video/video_book_repository.dart';
-import 'package:fushi/src/media/video/video_danmaku_model.dart';
-import 'package:fushi/src/media/video/video_control_customization.dart';
-import 'package:fushi/src/media/video/video_custom_action_bindings.dart';
-import 'package:fushi/src/media/video/video_subtitle_obscure_mode.dart';
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 import 'package:fushi_engine/media/tracking/media_tracking_repository.dart';
 import 'package:fushi_engine/media/tracking/media_tracking_service.dart';
-import 'package:fushi_engine/media/video/metadata/video_source_scrape_task.dart'
-    show VideoSourceScrapeTaskController;
+
 import 'package:fushi_engine/sync/local_library_host_service.dart';
 import 'package:fushi/src/asr_host/asr_host.dart'
     show createAsrTranscriptionService, isAsrSupported;
@@ -209,8 +204,8 @@ import 'package:fushi_engine/media/discovery/import/discovery_engine_importers.d
         importTranscribedAudiobook,
         isDuplicateDiscoveryAudiobookContent;
 import 'package:fushi_engine/media/discovery/import/discovery_import_plan.dart';
-import 'package:fushi/src/sync/app_download_host.dart';
-import 'package:fushi/src/media/video/acquisition/app_video_acquisition_assembly.dart';
+
+
 import 'package:fushi/src/sync/backup_service.dart';
 import 'package:fushi/src/sync/deletion_prompt.dart';
 import 'package:fushi_engine/asr/asr_host_job_runner.dart';
@@ -218,8 +213,8 @@ import 'package:fushi_engine/sync/host_jobs/host_job_manager.dart';
 import 'package:fushi_engine/sync/host_jobs/host_job_runner.dart';
 import 'package:fushi_engine/sync/deletion_propagation.dart';
 import 'package:fushi/src/sync/fushi_server_controller.dart';
-import 'package:fushi/src/sync/game_stream_library_host.dart';
-import 'package:fushi/src/sync/game_stream_mining.dart';
+
+
 import 'package:fushi_engine/sync/sync_asset_package_service.dart';
 import 'package:fushi/src/sync/sync_auto_trigger.dart';
 import 'package:fushi/src/sync/sync_backend.dart';
@@ -227,7 +222,7 @@ import 'package:fushi/src/sync/sync_conflict_prompter.dart';
 import 'package:fushi/src/sync/sync_orchestrator.dart';
 import 'package:fushi/src/sync/sync_repository.dart';
 import 'package:fushi/src/sync/sync_state_apply_lock.dart';
-import 'package:fushi/src/sync/video_remote_host.dart';
+
 import 'package:fushi/src/models/theme_notifier.dart' as theme_notifier;
 import 'package:fushi/src/models/theme_notifier.dart'
     show ThemeNotifier, CustomThemeEntry, ThemePreset;
@@ -258,21 +253,20 @@ import 'package:fushi/src/sync/interconnect_post_transport.dart'
 import 'package:fushi_engine/sync/fushi_remote_lookup_service.dart';
 import 'package:fushi/src/sync/remote_audio_lookup_bytes.dart';
 import 'package:fushi/src/utils/misc/lookup_audio_playback.dart';
-import 'package:fushi_engine/media/video/video_cover_extractor.dart'
-    show extractVideoCover;
+
 import 'package:fushi_engine/sync/forwarded_mine_payload.dart';
 import 'package:fushi/src/anki/forwarded_mine_codec.dart';
 import 'package:fushi_engine/sync/immersion_mine_payload.dart';
-import 'package:fushi/src/mining/bilibili_clip_miner.dart';
-import 'package:fushi/src/mining/galgame_library.dart';
-import 'package:fushi/src/mining/galgame_repository.dart';
-import 'package:fushi/src/mining/immersion_mining_engine.dart';
+
+
+
+
 import 'package:fushi/src/mining/mining_image_mode_target.dart';
-import 'package:fushi/src/mining/video_online_mining_mode.dart';
-import 'package:fushi/src/media/video/video_pause_ocr_scope.dart';
+
+
 import 'package:fushi_engine/mining/immersion_mining_request.dart';
-import 'package:fushi/src/mining/immersion_capture_channel.dart';
-import 'package:fushi/src/mining/youtube_clip_miner.dart';
+
+
 import 'package:fushi_engine/sync/fushi_sync_server.dart';
 import 'package:fushi_engine/sync/manga_sync_package.dart';
 import 'package:fushi/src/sync/desktop_lookup_service.dart';
@@ -280,8 +274,8 @@ import 'package:fushi/src/models/module_id.dart';
 import 'package:fushi/src/models/store_compliance.dart';
 import 'package:fushi/src/settings/settings_schema.dart'
     show resetSettingsSchemaCache;
-import 'package:fushi/src/sync/texthooker_service.dart';
-import 'package:fushi/src/sync/texthooker_ws_client_manager.dart';
+
+
 import 'package:fushi_engine/sync/fushi_remote_api_handlers.dart'
     show RemotePopupDictionaryCss;
 import 'package:fushi/src/onboarding/onboarding_sample_text.dart';
@@ -664,30 +658,6 @@ class AppModel with ChangeNotifier {
   /// snooze + 单飞）。同步消费到远端删除标记后经 [presentDeletionCandidates] 弹出。
   final DeletionPromptPrompter syncDeletionPrompter = DeletionPromptPrompter();
 
-  /// 7a 远程刮削：host 端需要一个刮削控制器代客户端搜候选 / 重刮。控制器归
-  /// HomePage 持有并按偏好重建（它是唯一持 `VideoScrapeOperationGate` 的实例，
-  /// host 不自造第二个协调器），HomePage 在 initState 登记、dispose 清除；未登记
-  /// （弹窗词典 / 悬浮词典入口没有 HomePage）→ host 报「不支持远程刮削」。
-  Future<VideoSourceScrapeTaskController?> Function()?
-      videoScrapeControllerResolver;
-
-  /// 视频刮削运行时（协调器 + 任务控制器 + 补刮调度器）。归 HomePage 持有，
-  /// initState 登记、dispose 清除——与 [videoScrapeControllerResolver] 同一生命周期；
-  /// 桌面控制通道（`fushi_cli video …`）经它拿待确认作品清单与控制器。null = 没有
-  /// HomePage（弹窗词典 / 悬浮词典入口）。
-  VideoScrapeRuntime? videoScrapeRuntime;
-
-  /// 手机字幕遥控器的播放器适配宿主：当前视频页登记 / 注销播放绑定，互联服务端
-  /// 经 [syncServerController] 把它注入为 `videoRemoteControlV1` 能力。
-  late final VideoRemoteHost videoRemoteHost = VideoRemoteHost(
-    favorites: () => FavoriteSentenceRepository(database),
-    favoriteChanges: () => (database.select(database.preferences)
-          ..where((row) => row.key.equals('favorite_sentences')))
-        .watchSingleOrNull()
-        .map((PreferenceRow? row) => row?.value)
-        .distinct(),
-  );
-
   /// App 级 Fushi LAN 同步服务端宿主：生命周期归 AppModel（整个会话），
   /// 不再绑在设置页 widget 上——否则切出「同步与备份」页就把服务端关了（BUG-085）。
   /// 启动时若用户启用了 host 则自动开，仅在用户关闭开关或退出 app 时停。配对批准
@@ -703,53 +673,25 @@ class AppModel with ChangeNotifier {
     syncDataDir: () => databaseDirectory.path,
     remoteLookupServiceFactory: createRemoteLookupService,
     miningServiceFactory: createRemoteMiningService,
-    videoRemoteServiceFactory: () => videoRemoteHost,
-    videoRemoteStopped: () => videoRemoteHost.releaseController(),
     historyServiceFactory: createRemoteHistoryService,
     // TODO-1356: advertise this device's real per-platform name (hardware model
     // on mobile, hostname on desktop) so peers never see "localhost".
     deviceInfo: platformServices.deviceInfo,
-    // 漫画 P3：互联 host 代跑 OCR（/api/ocr/* + capabilities.mangaOcr）。工厂来自
-    // manga_ocr_provider（唯一引用 MangaOcrServiceImpl 的文件）；不支持内置 OCR 的
-    // 平台（移动端）也接线——capability 会如实报 supported=false，client 据此隐藏。
-    mangaOcrServiceFactory: () =>
-        createSelectedMangaOcrService(() => mangaOcrLocalModel),
-    // 对端（手机）可在引擎下拉里点名本机的某个模型跑，不必跟着本机当前选择走。
-    mangaOcrModelServicesFactory: createMangaOcrHostModelServices,
-    // 通用任务（ASR 转录）/ 代下载 / 内容订阅：此前只有无头 fushi_server 接线，
-    // app 当 host 时这三条端点 404，对端「下载到 <电脑>」的选项因此不出现。
-    // 全部挂在本机既有的服务上（ASR 服务工厂与转录弹层同一份；下载管线 / 订阅
-    // 服务 / registry 经 [appDownloadHost] 每次现取）。
+    // 通用任务（ASR 转录）：此前只有无头 fushi_server 接线，app 当 host 时
+    // 这条端点 404。任务管理器要 load() 磁盘记录才能用，所以是异步工厂。
     hostJobsFactory: () async {
       final HostJobManager jobs = HostJobManager(
         jobRoot: Directory(path.join(databaseDirectory.path, 'host_jobs')),
         runners: <HostJobRunner>[
           AsrHostJobRunner(
             serviceFactory: createAsrTranscriptionService,
-            resolveVideoPath: _resolveHostVideoPath,
           ),
         ],
       );
       await jobs.load();
       return jobs;
     },
-    downloadsFactory: () => appDownloadHost,
-    subscriptionsFactory: () => appDownloadHost.subscriptions,
-    // AI 助手会话：手机经互联把「下载 xxx」交给本机，用本机的 AI 指派 / 资源
-    // 搜索 / 下载管线办（装配与首页对话页入口同一份）。
-    assistantFactory: () => createVideoAcquisitionAssistantHost(this),
-    // 对端点名「给这个视频补字幕」：与刮削后自动补同一个服务（运行时随下载管线
-    // 起停，每次现取）。
-    videoSubtitleBackfill: (String videoId, {String? language}) =>
-        backfillLibraryVideoSubtitle(
-      database: database,
-      service: _videoSubtitleBackfillService,
-      videoId: videoId,
-      language: language,
-      seriesLanguage: _seriesSubtitleLanguage,
-    ),
-    // 引擎按请求实时读的 host 偏好（「允许为对端转码视频」）：给仓库本体而不是
-    // 启动时的快照，用户改完设置不必重启互联服务。
+    // 引擎按请求实时读的 host 偏好
     prefsStore: () => prefsRepo,
     // 已配对设备远程更新本机（反馈 Pp8XPyve0N）。同一个实例跨互联服务重启存活：
     // 在途下载的进度不因用户开关一次互联而丢。
@@ -774,7 +716,6 @@ class AppModel with ChangeNotifier {
       db: database,
       dictionaryResourceRoot: dictionaryResourceDirectory,
       packages: SyncAssetPackageService(db: database),
-      scrapeController: () async => videoScrapeControllerResolver?.call(),
       refreshDictionaryCache: () async {
         // host 侧（互联对端上传/删除词典）直接改 DB，Dart 侧内存 cache 不会自己
         // 跟上：不先 loadFromDb，_rebuildDictPathsCacheAsync 读的还是旧列表，刚被
@@ -867,14 +808,6 @@ class AppModel with ChangeNotifier {
           throw FormatException(e.toString());
         }
       },
-      videoSubtitleLangCode: JapaneseLanguage.instance.languageCode,
-      // client→host 视频上传（syncVideoFiles 开关驱动）：落 <documents>/remote_videos
-      // （与 client 下载远端视频落点一致，AppPaths.remoteVideosDirectory 同目录）。
-      uploadedVideoRoot: Directory('${appDirectory.path}/remote_videos'),
-      // 上传视频封面 best-effort 抽帧（桌面 ffmpeg；移动端无则留空占位）。
-      extractVideoCover: (
-              {required String videoPath, required String bookUid}) =>
-          extractVideoCover(videoPath: videoPath, bookUid: bookUid),
       removeLocalAudioEntry: (String displayName) async {
         // 按 displayName 在 LocalAudioManager 中找到对应 index 并删除。
         // LocalAudioManager.remove(int) 删除 DB 文件 + 从 prefs 移出 + 推 native。
@@ -997,7 +930,6 @@ class AppModel with ChangeNotifier {
   Future<void> _applyConfirmedDeletions(
     List<DeletionPropagationCandidate> confirmed,
   ) async {
-    bool deletedVideoBook = false;
     for (final DeletionPropagationCandidate c in confirmed) {
       try {
         // 命名统一 Phase 3.4：墓碑 mediaType 经 [SyncTombstoneKind.tryParse]
@@ -1012,13 +944,8 @@ class AppModel with ChangeNotifier {
               scope: DeleteScope.keepLocalOnly,
             );
           case SyncTombstoneKind.video:
-            final bool deleted = await VideoBookRepository(database)
-                .deleteVideoBookAndReclaimAssets(
-              c.itemKey,
-              scope: DeleteScope.keepLocalOnly,
-              compactDatabase: false,
-            );
-            deletedVideoBook = deletedVideoBook || deleted;
+            // my-comic：视频域已删除；表保留但不再读写。
+            break;
           case SyncTombstoneKind.audiobook:
             await AudiobookRepository(database)
                 .deleteAudiobook(c.itemKey, propagateDeletion: false);
@@ -1056,10 +983,7 @@ class AppModel with ChangeNotifier {
         debugPrint('[sync] apply deletion ${c.mediaType}/${c.itemKey}: $e');
       }
     }
-    if (deletedVideoBook) {
-      await VideoBookRepository(database).compactAfterVideoDeleteBestEffort();
-    }
-    // 删完刷新受影响的本地库缓存/书架（书 + 视频 + 有声书都可能变）。
+    // 删完刷新受影响的本地库缓存/书架（书 + 有声书都可能变）。
     ReaderMediaType.instance.refreshTab();
     notifyListeners();
   }
@@ -1072,12 +996,6 @@ class AppModel with ChangeNotifier {
 
     if (report.serviceConfigsImported > 0) {
       await refreshPrefCache();
-      // 导入的服务配置不是「静态设置」，它们是 provider runtime 的构造入参：
-      // Jimaku / OpenSubtitles / Torznab / TMDB 的 client 在
-      // [_startVideoDownloadPipeline] 里按当时的 key 一次性建好，key 为空的
-      // provider 干脆不进 registry。不重建 runtime，互联搬过来的字幕/索引器
-      // 凭据要等到下次冷启动才生效（用户视角＝「同步了但还是搜不到字幕」）。
-      await reloadVideoDownloadPipelineRuntime();
       // 追番令牌可能换人：设置页与首页的状态行监听 statusRevision，不 bump 就
       // 一直显示导入前的账号/未连接。
       _mediaTrackingService?.notifyStatusChanged();
@@ -1650,9 +1568,6 @@ class AppModel with ChangeNotifier {
         dictRepo.dispose();
         _dictionaryRepoReady = false;
       }
-      // 仓储绑的是刚被关掉的那个 db 实例，必须丢掉让它重建（否则重试后所有游戏库
-      // 读写都打在已关闭的连接上）。
-      _galgameRepo = null;
     }
     _initError = null;
     _downgradeError = null;
@@ -3216,9 +3131,6 @@ class AppModel with ChangeNotifier {
       /// Prepare all repositories (objects created first, then loaded in
       /// parallel to avoid serial await chains).
       _prefsRepo = PreferencesRepository(_database);
-      // 导入 / 归组后的合集 AI 排序（自动路径）按偏好里的 AI 指派决定发不发请求；
-      // 每次现取，设置页改了立即生效。弹窗进程不装，自动路径在那边是 no-op。
-      installCollectionAiOrderSettings(_prefsRepo);
       final BaseAnkiRepository ankiRepo =
           platformServices.createAnkiRepository();
       final profileRepo = ProfileRepository(
@@ -3244,8 +3156,6 @@ class AppModel with ChangeNotifier {
       ]);
       prefsRepo.addListener(notifyListeners);
       navRailExpandedNotifier.value = prefsRepo.navRailExpanded;
-      // 封面模式默认是音画同步片段：2026-09-28 被钉成 GIF 的存量安装在这里迁一次。
-      await prefsRepo.settleMiningImageModeInstallDefault();
       // 阅读器工具栏样式一次性强制悬浮（含各 Profile 快照），之后尊重用户选择。
       await prefsRepo.settleReaderToolbarStyleFloating();
       // my-comic：SRS/Anki 挖词目标、推荐包回执与查词折叠开关都已随非漫画域移除。
@@ -3259,7 +3169,6 @@ class AppModel with ChangeNotifier {
       appUpdateDownloadSourceReader = () => prefsRepo.updateDownloadSource;
       // 主入口与精简词典入口共用装配，并等系统代理就绪后再启动网络服务。
       await installAppNetworkBindings();
-      _applyEmbeddedTorrentProxy();
       _applyMemoryPolicy();
       // BUG-1647：lazy getter 可能已提前建过实例；替换前先取消其重试定时器，
       // 否则旧定时器会拿着旧 repository 继续同步。
@@ -3444,10 +3353,6 @@ class AppModel with ChangeNotifier {
 
       debugPrint(
           '[Fushi] init: search preload skipped (my-comic: no dictionary domain)');
-      // 已下架的本机 OCR 模型（约 10 GB 的 CUDA 档）留在磁盘上的目录：设置页与
-      // 存储页都没有它的入口了，不清就永远占着空间。幂等、失败只记日志。
-      unawaited(deleteRemovedMangaOcrModelDirs());
-
       debugPrint('[Fushi] init: DONE');
       // TODO-1260：启动正常跑完，清掉启动步进面包屑（否则下次启动会误报上次 hang）。
       ErrorLogService.instance.clearInitStep();
@@ -4201,10 +4106,6 @@ class AppModel with ChangeNotifier {
     // 语法说明译文表即时换掉：不重启的桌面端也要跟着变（BUG-2038）。
     await applyTransformDescriptionLocale(localeTag);
     if (isDesktopPlatform) {
-      // 刮削资料语言默认跟随界面语言，而下载导入那条刮削链的配置在建管线时
-      // 冻结（BUG-2454）：不重建，桌面端换完界面语言后新下载的作品仍按旧语言
-      // 刮削，直到重启。移动端走下面的整 app 重启，不需要。
-      await reloadVideoDownloadPipelineRuntime();
       notifyListeners();
       return;
     }
@@ -4241,557 +4142,15 @@ class AppModel with ChangeNotifier {
   Future<void> setStartupModule(ModuleId? module) =>
       prefsRepo.setStartupModule(module);
 
-  /// 启用的 mpv 着色器（JSON 字符串数组；见 video_shader_manager.dart）。
-  String get videoShadersEnabled => prefsRepo.videoShadersEnabled;
-
-  Future<void> setVideoShadersEnabled(String json) =>
-      prefsRepo.setVideoShadersEnabled(json);
-
-  /// BUG-2032：随包 libmpv 是否编入 Lua（视频页探测后缓存；设置页据此说明）。
-  MpvLuaCapability get videoMpvLuaCapability => prefsRepo.videoMpvLuaCapability;
-
-  Future<void> setVideoMpvLuaCapability(MpvLuaCapability value) =>
-      prefsRepo.setVideoMpvLuaCapability(value);
-
-  /// 用户手动指定的本机 mpv 配置/着色器目录（空=自动）。
-  String get videoMpvShaderDir => prefsRepo.videoMpvShaderDir;
-
-  Future<void> setVideoMpvShaderDir(String dir) =>
-      prefsRepo.setVideoMpvShaderDir(dir);
-
-  /// 视频字幕模糊（听力沉浸）开关；默认关闭。TODO-840 Part B 起这是遮蔽模式三态的
-  /// 历史 bool 投影（blur/hide 都为 true），精确三态读 [videoSubtitleObscureMode]。
-  bool get videoSubtitleBlur => prefsRepo.videoSubtitleBlur;
-
-  Future<void> setVideoSubtitleBlur(bool value) =>
-      prefsRepo.setVideoSubtitleBlur(value);
-
-  /// 视频字幕遮蔽模式三态（TODO-840 Part B）：不遮蔽 / 模糊 / 隐藏。委托 prefsRepo 的
-  /// lazy 投影持久化（见 [PreferencesRepository.videoSubtitleObscureMode]）。
-  VideoSubtitleObscureMode get videoSubtitleObscureMode =>
-      prefsRepo.videoSubtitleObscureMode;
-
-  Future<void> setVideoSubtitleObscureMode(VideoSubtitleObscureMode mode) =>
-      prefsRepo.setVideoSubtitleObscureMode(mode);
-
-  /// 视频**副字幕**遮蔽模式三态（TODO-1382，独立于主字幕）：不遮蔽 / 模糊 / 隐藏。
-  /// 委托 prefsRepo 的 lazy 投影持久化（见
-  /// [PreferencesRepository.videoSecondarySubtitleObscureMode]）。
-  VideoSubtitleObscureMode get videoSecondarySubtitleObscureMode =>
-      prefsRepo.videoSecondarySubtitleObscureMode;
-
-  Future<void> setVideoSecondarySubtitleObscureMode(
-    VideoSubtitleObscureMode mode,
-  ) =>
-      prefsRepo.setVideoSecondarySubtitleObscureMode(mode);
-
-  /// 遮蔽态「悬停 / 点击临时显形」总闸（默认开）：关掉后模糊 / 隐藏不再被悬停或点击
-  /// 临时揭开。见 [PreferencesRepository.videoSubtitleObscureReveal]。
-  bool get videoSubtitleObscureReveal => prefsRepo.videoSubtitleObscureReveal;
-
-  Future<void> setVideoSubtitleObscureReveal(bool value) =>
-      prefsRepo.setVideoSubtitleObscureReveal(value);
-
-  /// 显式全局广播（= 本 model 的 `notifyListeners`，对外可调用）。
-  ///
-  /// 给「写入方**刻意**不广播、但某个调用点确实需要全局刷新」的路径用：遮蔽模式两个
-  /// setter 为了不让高频快捷键重建整个 app 而不广播（见
-  /// [PreferencesRepository.setVideoSubtitleObscureMode]），从全局设置页改时由
-  /// `setVideoSubtitleObscureModeDual` 显式补这一次。不要拿它当「顺手刷一下 UI」的
-  /// 万能锤——每次调用都会重建所有 watch [appProvider] 的 widget。
-  void notifyPreferencesChanged() => notifyListeners();
-
-  /// 视频字幕列表自动滚动开关（TODO-613，落 Drift preferences，默认开）。
-  bool get videoSubtitleListAutoScroll => prefsRepo.videoSubtitleListAutoScroll;
-
-  Future<void> setVideoSubtitleListAutoScroll(bool value) =>
-      prefsRepo.setVideoSubtitleListAutoScroll(value);
-
-  /// 视频字幕列表「点字幕查词」开关（落 Drift preferences，默认开）。
-  bool get videoSubtitleListTapLookup => prefsRepo.videoSubtitleListTapLookup;
-
-  Future<void> setVideoSubtitleListTapLookup(bool value) =>
-      prefsRepo.setVideoSubtitleListTapLookup(value);
-
-  /// 视频字幕列表行字号档位（BUG-878，落 Drift preferences，默认 1=1.0x）。
-  int get videoSubtitleListFontScaleIndex =>
-      prefsRepo.videoSubtitleListFontScaleIndex;
-
-  Future<void> setVideoSubtitleListFontScaleIndex(int value) =>
-      prefsRepo.setVideoSubtitleListFontScaleIndex(value);
-
-  /// 视频字幕列表面板宽度（逻辑像素，BUG-877，落 Drift preferences，0=跟随自适应）。
-  double get videoSubtitleListWidth => prefsRepo.videoSubtitleListWidth;
-
-  Future<void> setVideoSubtitleListWidth(double value) =>
-      prefsRepo.setVideoSubtitleListWidth(value);
-
-  /// 播放列表自动连播开关（TODO-639，落 Drift preferences，默认开）。
-  bool get videoAutoPlayNext => prefsRepo.videoAutoPlayNext;
-
-  Future<void> setVideoAutoPlayNext(bool value) =>
-      prefsRepo.setVideoAutoPlayNext(value);
-
-  /// 底部细进度条开关（落 Drift preferences，默认关）：控制条淡出后在视频最下方
-  /// 留一条主题色细线。小窗档恒显、不受它管，见 `videoSlimProgressBarVisible`。
-  bool get videoSlimProgressBar => prefsRepo.videoSlimProgressBar;
-
-  Future<void> setVideoSlimProgressBar(bool value) =>
-      prefsRepo.setVideoSlimProgressBar(value);
-
-  /// 播放器底栏时间显示剩余时长（默认关，点按底栏时间切换）。
-  bool get videoTimeDisplayRemaining => prefsRepo.videoTimeDisplayRemaining;
-
-  Future<void> setVideoTimeDisplayRemaining(bool value) =>
-      prefsRepo.setVideoTimeDisplayRemaining(value);
-
-  /// 自动下载的外挂字幕按视频内嵌字幕轨对时间轴（默认开）。
-  bool get subtitleReferenceSyncEnabled =>
-      prefsRepo.subtitleReferenceSyncEnabled;
-
-  Future<void> setSubtitleReferenceSyncEnabled(bool value) =>
-      prefsRepo.setSubtitleReferenceSyncEnabled(value);
-
-  /// 各自动下载路径共用的对齐钩子（开关每次调用现读，见
-  /// [gatedAutomaticSubtitleAligner]）。
-  late final AutomaticSubtitleAligner alignDownloadedSubtitle =
-      gatedAutomaticSubtitleAligner(
-    () => isPreferencesReady && prefsRepo.subtitleReferenceSyncEnabled,
-  );
-
-  /// 视频条目自动刮削开关（落 Drift preferences，默认开）。
-  bool get videoAutoScrape => prefsRepo.videoAutoScrape;
-
-  Future<void> setVideoAutoScrape(bool value) =>
-      prefsRepo.setVideoAutoScrape(value);
-
-  /// 库内自动补刮总闸（落 Drift preferences，默认开）。为什么它不能和
-  /// [videoAutoScrape] 合成一个键，见 PreferencesRepository 里的说明。
-  bool get videoLibraryAutoBackfillScrape =>
-      prefsRepo.videoLibraryAutoBackfillScrape;
-
-  Future<void> setVideoLibraryAutoBackfillScrape(bool value) =>
-      prefsRepo.setVideoLibraryAutoBackfillScrape(value);
-
-  bool get videoDanmakuEnabled => prefsRepo.videoDanmakuEnabled;
-
-  Future<void> setVideoDanmakuEnabled(bool value) =>
-      prefsRepo.setVideoDanmakuEnabled(value);
-
-  bool get videoDanmakuOnlineEnabled => prefsRepo.videoDanmakuOnlineEnabled;
-
-  Future<void> setVideoDanmakuOnlineEnabled(bool value) =>
-      prefsRepo.setVideoDanmakuOnlineEnabled(value);
-
-  int get videoDanmakuMaxActive => prefsRepo.videoDanmakuMaxActive;
-
-  Future<void> setVideoDanmakuMaxActive(int value) =>
-      prefsRepo.setVideoDanmakuMaxActive(value);
-
-  /// Dandanplay 弹幕来源配置（自建服务器地址 + 可选 API 凭据）。
-  DandanplayConfig get videoDanmakuConfig => prefsRepo.videoDanmakuConfig;
-
-  Future<void> setVideoDanmakuConfig(DandanplayConfig config) =>
-      prefsRepo.setVideoDanmakuConfig(config);
-
-  int? getVideoDanmakuEpisodeId(String bookUid) =>
-      prefsRepo.getVideoDanmakuEpisodeId(bookUid);
-
-  Future<void> setVideoDanmakuEpisodeId(String bookUid, int episodeId) =>
-      prefsRepo.setVideoDanmakuEpisodeId(bookUid, episodeId);
-
-  /// 弹幕样式（字号/不透明度/速度/显示区域，TODO-1376）。
-  VideoDanmakuStyle get videoDanmakuStyle => prefsRepo.videoDanmakuStyle;
-
-  Future<void> setVideoDanmakuStyle(VideoDanmakuStyle style) =>
-      prefsRepo.setVideoDanmakuStyle(style);
-
-  /// 弹幕屏蔽规则原始多行文本（每行一条，`/pattern/` 为正则，TODO-1376）。
-  String get videoDanmakuBlockRulesText => prefsRepo.videoDanmakuBlockRulesText;
-
-  Future<void> setVideoDanmakuBlockRulesText(String value) =>
-      prefsRepo.setVideoDanmakuBlockRulesText(value);
-
-  /// 桌面视频页按视频原始比例锁定原生窗口；默认开启。
-  bool get videoLockWindowAspectRatio => prefsRepo.videoLockWindowAspectRatio;
-
-  Future<void> setVideoLockWindowAspectRatio(bool value) =>
-      prefsRepo.setVideoLockWindowAspectRatio(value);
-
-  /// YouTube 显式画质目标高度（0=自动；非 0 起播即选 ≤目标 的最高档，可达 1440p/4K）。
-  int get youtubeQualityTargetHeight => prefsRepo.youtubeQualityTargetHeight;
-
-  Future<void> setYoutubeQualityTargetHeight(int height) =>
-      prefsRepo.setYoutubeQualityTargetHeight(height);
-
-  /// [youtubeQualityTargetHeight] 的解析器形参形态（0 → null=默认策略）。
-  int? get youtubeQualityTargetHeightOrNull {
-    final int h = youtubeQualityTargetHeight;
-    return h > 0 ? h : null;
-  }
-
-  /// 视频画面缩放/比例模式（窗口+全屏 Video fit；默认 cover=保持比例占满无黑边）。
-  VideoFitMode get videoFitMode => prefsRepo.videoFitMode;
-
-  Future<void> setVideoFitMode(VideoFitMode mode) =>
-      prefsRepo.setVideoFitMode(mode);
-
-  /// Windows HDR 直通 / 10-bit 输出模式（见 `video_hdr_output.dart`）。
-  VideoHdrOutputMode get videoHdrOutputMode => prefsRepo.videoHdrOutputMode;
-
-  Future<void> setVideoHdrOutputMode(VideoHdrOutputMode mode) =>
-      prefsRepo.setVideoHdrOutputMode(mode);
-
-  String get videoAsbplayerConfig => prefsRepo.videoAsbplayerConfig;
-
-  Future<void> setVideoAsbplayerConfig(String json) =>
-      prefsRepo.setVideoAsbplayerConfig(json);
-
-  /// 视频控制按钮 9-槽位布局（TODO-274/312 phase 2，持久化键沿用旧三档时期键名，v1 自动迁移）。
-  VideoControlLayout get videoControlLayout => prefsRepo.videoControlLayout;
-
-  Future<void> setVideoControlLayout(VideoControlLayout layout) =>
-      prefsRepo.setVideoControlLayout(layout);
-
-  /// 阅读器顶栏 / 底栏按钮布局（ReaderControlLayout，2026-09-13）。
-  ReaderControlLayout get readerControlLayout => prefsRepo.readerControlLayout;
-
-  Future<void> setReaderControlLayout(ReaderControlLayout layout) =>
-      prefsRepo.setReaderControlLayout(layout);
-
-  /// 窄窗（手机竖屏）按钮布局；没存过时沿用存量宽窗自定义（见 prefsRepo）。
-  ReaderControlLayout get readerCompactControlLayout =>
-      prefsRepo.readerCompactControlLayout;
-
-  Future<void> setReaderCompactControlLayout(ReaderControlLayout layout) =>
-      prefsRepo.setReaderCompactControlLayout(layout);
-
-  /// 按窗口宽度取当前生效的按钮布局（< [kReaderControlCompactWidth] 用窄窗那份）。
-  ReaderControlLayout readerControlLayoutFor({required bool compact}) =>
-      compact ? readerCompactControlLayout : readerControlLayout;
-
-  /// 阅读器工具栏样式：`floating`（默认）/ `docked`。
-  String get readerToolbarStyle => prefsRepo.readerToolbarStyle;
-
-  Future<void> setReaderToolbarStyle(String style) =>
-      prefsRepo.setReaderToolbarStyle(style);
-
-  /// 视频「快捷键 1..4」自定义动作按钮的绑定（槽位 → 视频动作）。
-  VideoCustomActionBindings get videoCustomActionBindings =>
-      prefsRepo.videoCustomActionBindings;
-
-  Future<void> setVideoCustomActionBindings(
-    VideoCustomActionBindings bindings,
-  ) =>
-      prefsRepo.setVideoCustomActionBindings(bindings);
-
-  /// 视频字幕外观（JSON；见 VideoSubtitleStyle）。
-  String get videoSubtitleStyle => prefsRepo.videoSubtitleStyle;
-
-  Future<void> setVideoSubtitleStyle(String json) =>
-      prefsRepo.setVideoSubtitleStyle(json);
-
-  /// 是否尊重 .ass 字幕自带样式（TODO-1105；默认 true）。
-  bool get videoRespectAssStyle => prefsRepo.videoRespectAssStyle;
-
-  Future<void> setVideoRespectAssStyle(bool value) =>
-      prefsRepo.setVideoRespectAssStyle(value);
-
-  /// 视频 mpv 配置（JSON；见 VideoMpvConfig）。
-  String get videoMpvConfig => prefsRepo.videoMpvConfig;
-
-  Future<void> setVideoMpvConfig(String json) =>
-      prefsRepo.setVideoMpvConfig(json);
-
-  VideoImmersiveMode get videoImmersiveMode => prefsRepo.videoImmersiveMode;
-
-  Future<void> setVideoImmersiveMode(VideoImmersiveMode mode) =>
-      prefsRepo.setVideoImmersiveMode(mode);
-
-  /// 截图去向（对话框 / 剪贴板 / 指定目录）与目录路径。
-  VideoScreenshotDestination get videoScreenshotDestination =>
-      prefsRepo.videoScreenshotDestination;
-
-  Future<void> setVideoScreenshotDestination(
-          VideoScreenshotDestination destination) =>
-      prefsRepo.setVideoScreenshotDestination(destination);
-
-  String get videoScreenshotDirectory => prefsRepo.videoScreenshotDirectory;
-
-  Future<void> setVideoScreenshotDirectory(String path) =>
-      prefsRepo.setVideoScreenshotDirectory(path);
-
-  /// 片段导出的视频目标码率（kbps）；0 = 跟随源（不为改码率而重编码）。
-  int get videoClipExportVideoBitrateKbps =>
-      prefsRepo.videoClipExportVideoBitrateKbps;
-
-  Future<void> setVideoClipExportVideoBitrateKbps(int kbps) =>
-      prefsRepo.setVideoClipExportVideoBitrateKbps(kbps);
-
-  /// Jimaku API key（自动获取日语字幕）。
-  String get jimakuApiKey => prefsRepo.jimakuApiKey;
-
-  Future<void> setJimakuApiKey(String key) async {
-    await prefsRepo.setJimakuApiKey(key);
-    await reloadVideoDownloadPipelineRuntime();
-  }
-
-  /// Jimaku 是否参与字幕搜索。默认启用（见
-  /// [PreferencesRepository.jimakuEnabled]），与 key 组成双门控。
-  bool get jimakuEnabled => _prefsRepo?.jimakuEnabled ?? true;
-
-  Future<void> setJimakuEnabled(bool value) async {
-    await prefsRepo.setJimakuEnabled(value);
-    await reloadVideoDownloadPipelineRuntime();
-  }
-
-  /// Jimaku 默认字幕语言（`''` = 不限）。见
-  /// [PreferencesRepository.jimakuDefaultLanguage]。
-  ///
-  /// 走 `_prefsRepo?`：几处消费者在 `initState` 里读，偏好仓库尚未就绪（启动早期）
-  /// 时应回退「不限」，而不是崩在一个纯锦上添花的默认值上。
-  String get jimakuDefaultLanguage => _prefsRepo?.jimakuDefaultLanguage ?? '';
-
-  /// 默认内容语言（`''` = 未设置）。见 [PreferencesRepository.defaultContentLanguage]；
-  /// 与 [jimakuDefaultLanguage] 同理走 `_prefsRepo?`，偏好未就绪时不表态。
-  String get defaultContentLanguage =>
-      _prefsRepo?.defaultContentLanguage ?? '';
-
-  Future<void> setJimakuDefaultLanguage(String langCode) async {
-    await prefsRepo.setJimakuDefaultLanguage(langCode);
-    await reloadVideoDownloadPipelineRuntime();
-  }
-
-  /// 刮削后自动为缺字幕的视频补字幕（默认开）。见
-  /// [PreferencesRepository.videoSubtitleBackfillAfterScrape]。
-  bool get videoSubtitleBackfillAfterScrape =>
-      _prefsRepo?.videoSubtitleBackfillAfterScrape ?? true;
-
-  Future<void> setVideoSubtitleBackfillAfterScrape(bool enabled) async {
-    await prefsRepo.setVideoSubtitleBackfillAfterScrape(enabled);
-    notifyListeners();
-  }
-
-  /// 远端视频导入 / 重定时的字幕自动上传 host 并设为默认（默认开）。见
-  /// [PreferencesRepository.videoSubtitleAutoUploadToHost]。
-  bool get videoSubtitleAutoUploadToHost =>
-      _prefsRepo?.videoSubtitleAutoUploadToHost ?? true;
-
-  Future<void> setVideoSubtitleAutoUploadToHost(bool enabled) async {
-    await prefsRepo.setVideoSubtitleAutoUploadToHost(enabled);
-    notifyListeners();
-  }
-
-  /// AJATT 字幕库开关，见 [PreferencesRepository.videoSubtitleAjattEnabled]。
-  bool get videoSubtitleAjattEnabled =>
-      _prefsRepo?.videoSubtitleAjattEnabled ?? true;
-
-  /// 与 [setJimakuEnabled] 同范式：落 pref 后重建下载流水线运行时（字幕 registry
-  /// 按开关注册 provider），不重启即生效。
-  Future<void> setVideoSubtitleAjattEnabled(bool enabled) async {
-    await prefsRepo.setVideoSubtitleAjattEnabled(enabled);
-    await reloadVideoDownloadPipelineRuntime();
-  }
-
-  /// SubDL API key，见 [PreferencesRepository.videoSubtitleSubdlApiKey]。
-  String get videoSubtitleSubdlApiKey =>
-      _prefsRepo?.videoSubtitleSubdlApiKey ?? '';
-
-  /// 与 [setJimakuApiKey] 同范式：落 pref 后重建下载流水线运行时。
-  Future<void> setVideoSubtitleSubdlApiKey(String key) async {
-    await prefsRepo.setVideoSubtitleSubdlApiKey(key);
-    await reloadVideoDownloadPipelineRuntime();
-  }
-
-  /// SubDL 开关，见 [PreferencesRepository.videoSubtitleSubdlEnabled]。
-  bool get videoSubtitleSubdlEnabled =>
-      _prefsRepo?.videoSubtitleSubdlEnabled ?? true;
-
-  Future<void> setVideoSubtitleSubdlEnabled(bool enabled) async {
-    await prefsRepo.setVideoSubtitleSubdlEnabled(enabled);
-    await reloadVideoDownloadPipelineRuntime();
-  }
-
-  /// 默认字幕语言归一成语言选择器用的 `String?`（`''`/空白 → null = 不限）。
-  /// 三个 Jimaku 界面（字幕对话框 / 番剧下载 / 批量匹配）共用同一兜底。
-  ///
-  String? get jimakuDefaultLanguageOrNull {
-    final String code = jimakuDefaultLanguage.trim();
-    return code.isEmpty ? null : code;
-  }
-
-  /// qBittorrent WebUI 连接配置（番剧下载）；null = 未配置未启用。
-  ///
-  /// prefs 还没接上时返回 null 而不是让 [prefsRepo] 的 `!` 抛：本 getter 的契约本来
-  /// 就是「null = 未配置」，而「还没读到偏好」正是未配置的一种。判据必须放在这一层
-  /// 而不是调用方（如 `torrentBackendReady`）——**覆盖了本 getter 的子类根本不经
-  /// prefs**，在调用方判会把它们一起误判成未就绪（实测打翻 6 条下载弹窗用例）。
-  ///
-  /// 起因：下载弹窗的批量多选把 `torrentBackendReady` 拉上了 **build 路径**（每个
-  /// 任务条目算一次 pauseCapable），build 里抛异常等于整块界面炸掉。
-  QbConnectionConfig? get qbConnectionConfig =>
-      isPreferencesReady ? prefsRepo.qbConnectionConfig : null;
-
-  Future<void> setQbConnectionConfig(QbConnectionConfig? config) async {
-    await prefsRepo.setQbConnectionConfig(config);
-    // 内置引擎资源限制即时生效（用户在设置里改限速/连接数后不必重启）。
-    _applyEmbeddedTorrentLimits(config);
-  }
-
-  // galgame 窗口超分**每游戏一档**（BUG-1191），存 `galgames.upscaling_mode`，
-  // 读写走 [galgameRepo]。这里刻意不再有全局 getter/setter —— 留着一个全局值就会
-  // 有人接回去用，然后两份真值慢慢漂开。
-
-  /// 下载发现链路（AniList / Nyaa / Torznab / Jimaku / OpenSubtitles）共用的
-  /// client：全应用同一个代理出口 + 这条链路特有的 10s 建连超时。
-  ///
-  /// 没有独立的代理配置：出口由 `app_proxy.dart` 统一解析，用户手填值就是系统
-  /// 设置里那一项（`update_custom_proxy`），`findProxy` 请求时现读，所以改了
-  /// 代理不需要重建下载管线里持有的长活 client。
-  ///
-  /// 仍返回 `Future` 是为了不动十几个 `await` 调用点和测试替身的签名；构造本身
-  /// 是同步的。
-  Future<http.Client> createDownloadHttpClient() async =>
-      createAppHttpIoClient(connectionTimeout: kDownloadConnectionTimeout);
-
-  /// 把配置里的内置引擎资源限制应用到常驻宿主（宿主不存在则 no-op）。
-  void _applyEmbeddedTorrentLimits(QbConnectionConfig? config) {
-    final EmbeddedTorrentHost? host = _embeddedTorrentHost;
-    if (host == null) return;
-    final QbConnectionConfig effective = effectiveTorrentConfig(config);
-    host.applyLimits(
-      downloadKbps: effective.downloadLimitKbps,
-      uploadKbps: effective.uploadLimitKbps,
-      maxConnections: effective.maxConnections,
-      limitLocalPeers: effective.limitLocalPeers,
-    );
-    // 内存占用上限（按物理内存或用户设定推导；避免 libtorrent 吃满内存）。
-    // 用户显式设了 maxConnections 就不用内存预算的连接数覆盖它（传 0）。
-    final TorrentMemorySettings mem = computeTorrentMemorySettings(
-      memoryLimitMb: effective.memoryLimitMb,
-      totalRamMb: detectTotalMemoryMb() ?? 0,
-    );
-    host.applyMemorySettings(
-      mem,
-      connectionsLimit: effective.maxConnections > 0 ? 0 : mem.connectionsLimit,
-    );
-    // 会话级设置（端口/DHT/LSD/UPnP/NAT-PMP/加密/匿名/活跃数/上传槽）。
-    host.applySessionSettings(effective);
-    // 反吸血开关/阈值（用户可调）。
-    host.applyAntiLeechConfig(effective);
-    // 上传/做种策略（默认关上传；开启后做种时长/分享率上限），即时生效。
-    host.setUploadPolicy(effective);
-    // P2P 代理（默认直连；用户在系统设置里单独开启才跟全局代理）。
-    _applyEmbeddedTorrentProxy();
-  }
-
-  /// 番剧下载：计划存储（选种对话框写计划/暂存字幕，与完成监听服务共用同一实例）。
-  AnimeDownloadPlanStore? _animeDownloadPlanStore;
-  AnimeDownloadPlanStore? get animeDownloadPlanStore => _animeDownloadPlanStore;
-
-  /// 番剧下载：qb 完成监听 + 自动入库服务（app 生命周期常驻；未配置时每 tick 空转）。
-  AnimeDownloadService? _animeDownloadService;
-  AnimeDownloadService? get animeDownloadService => _animeDownloadService;
-
-  AnimeDownloadSubscriptionStore? _animeDownloadSubscriptionStore;
-  AnimeDownloadSubscriptionStore? get animeDownloadSubscriptionStore =>
-      _animeDownloadSubscriptionStore;
-
-  /// 漫画下载服务（懒建，app 生命周期常驻；设计稿 2026-09-12 §4）：在线章节
-  /// 任务表、一个 worker。
-  ///
-  /// 作品页 / 阅读器只负责 enqueue；worker 在 [startMangaDownloads]
-  /// （HomePage 就绪后）才开始消费，之前入队的任务留在表里等着。关库 / 切 Profile
-  /// 时在 [quiesceBackgroundDatabaseWriters] 销毁。
   MangaDownloadService? _mangaDownloadService;
   MangaDownloadService get mangaDownloadService =>
       _mangaDownloadService ??= MangaDownloadService(
         database: database,
         serviceFor: onlineMangaLibraryService,
-        onChapterDownloaded: _autoOcrDownloadedMangaChapter,
       );
 
   /// 启动章节下载 worker：复位上次进程死亡留下的 `running` 行并开始消费。幂等。
   Future<void> startMangaDownloads() => mangaDownloadService.start();
-
-  /// `auto_ocr` 的完成钩子：解析引擎并经注册表排整卷 OCR。
-  ///
-  /// 引擎装配（`MangaOcrWizardEngines.resolve`）要一个能拿到 `ProviderContainer`
-  /// 的 context——注册表和 OCR 服务都是 Riverpod 单例。这里用全局 [navigatorKey]
-  /// 的 context；拿不到（app 还没起完 / 正在拆栈）就跳过并记日志，下载本身不受
-  /// 影响。**刻意不 await 排队**：同书上一章还在识别时 `enqueue` 要等它结束，
-  /// 让下载 worker 卡在这里等一个几分钟的 OCR 毫无道理。
-  Future<void> _autoOcrDownloadedMangaChapter(
-    MangaDownloadedChapter chapter,
-  ) async {
-    final BuildContext? context = navigatorKey.currentContext;
-    if (context == null) {
-      ErrorLogService.instance.log(
-        'MangaDownloadAutoOcr.noContext ${chapter.bookKey}',
-        StateError('No navigator context to assemble OCR engines'),
-        StackTrace.current,
-      );
-      return;
-    }
-    final ProviderContainer container = ProviderScope.containerOf(
-      context,
-      listen: false,
-    );
-    final MangaOcrWizardEngines engines = MangaOcrWizardEngines.resolve(
-      context: context,
-      db: database,
-    );
-    unawaited(
-      runAutoMangaOcrForDownloadedChapter(
-        chapter: chapter,
-        engines: engines,
-        registry: container.read(mangaOcrJobRegistryProvider),
-        preference: MangaOcrEnginePreferenceKey.fromKey(
-          mangaOcrEnginePreference,
-        ),
-        lensLanguage: mangaOcrLensLanguage,
-      ).then<void>(
-        (_) {},
-        onError: (Object error, StackTrace stack) {
-          ErrorLogService.instance.log(
-            'MangaDownloadAutoOcr ${chapter.bookKey}',
-            error,
-            stack,
-          );
-        },
-      ),
-    );
-  }
-
-  /// 视频文件技术规格缓存（v95，懒建）：库页卡片的清晰度/HDR 角标与作品详情页的
-  /// 规格表共用一份，跨页面存活以免来回切页反复 ffprobe。
-  ///
-  /// **刻意不接 `addListener(notifyListeners)`**：它每探完一个文件就通知一次（滚一屏
-  /// 几十次），转发成 AppModel 的全局通知会让每个 `ref.watch(appProvider)` 的页面
-  /// 跟着重建。消费方走 [videoSpecsProvider] 单独订阅，重建面收敛到卡片子树。
-  ///
-  /// 实例与**当时那个 [FushiDatabase] 连接**绑定：getter 每次比对身份，`_database`
-  /// 被换掉（数据根迁移、切 Profile、恢复备份、`retryInitialise` 都会 close/reopen）
-  /// 就地重建一个。
-  ///
-  /// **不能靠「每条关库路径都记得清掉它」**：那是一条要靠人肉枚举维护的不变式，已经
-  /// 漏过一次（`retryInitialise` 里只清了 `_galgameRepo`）。漏掉的后果不是崩溃而是
-  /// 静默退化——服务仍绑着已关闭的连接，读写全被 prime/_probeAndStore 的 try 吞成
-  /// debugPrint，表现为「每次滚动都重探、永远不落库」。身份比对把它变成结构保证。
-  VideoSpecsService? _videoSpecsService;
-
-  /// [_videoSpecsService] 建立时用的那个连接，仅用于身份比对。
-  FushiDatabase? _videoSpecsServiceDb;
-
-  VideoSpecsService get videoSpecsService {
-    final FushiDatabase db = database;
-    if (_videoSpecsService == null || !identical(_videoSpecsServiceDb, db)) {
-      _videoSpecsService?.dispose();
-      _videoSpecsService = VideoSpecsService(db);
-      _videoSpecsServiceDb = db;
-    }
-    return _videoSpecsService!;
-  }
 
   /// Mihon 扩展生态宿主（Android 原生 / Windows、macOS 内置 Java sidecar）。
   ///
@@ -5049,957 +4408,6 @@ class AppModel with ChangeNotifier {
   Directory get aidokuLibraryRoot =>
       Directory(path.join(databaseDirectory.path, 'aidoku'));
 
-  AnimeDownloadSubscriptionService? _animeDownloadSubscriptionService;
-  AnimeDownloadSubscriptionService? get animeDownloadSubscriptionService =>
-      _animeDownloadSubscriptionService;
-
-  /// schema v78 的通用视频下载闭环。旧 JSON service 仅继续兼容本次启动后由旧
-  /// 对话框新写入的计划；启动前已有 JSON 会先迁入这里并归档。
-  VideoDownloadPipelineService? _videoDownloadPipelineService;
-
-  /// BUG-2714：内置引擎有活动任务时挂下载保活（随管线 runtime 起停）。
-  VideoDownloadJobsKeepAliveBinding? _videoDownloadKeepAlive;
-
-  /// 下载管线 runtime「应当活着」的语义位（BUG-1738）。
-  ///
-  /// [reloadVideoDownloadPipelineRuntime] 曾拿 `_videoDownloadPipelineService
-  /// == null` 当门闩，把「还没到启动时机」和「重启中途失败死掉」混成一态：一旦
-  /// `_startVideoDownloadPipeline()` 抛出，service 永久留 null，此后所有设置
-  /// 变更都在门闩上原地返回，管线再也救不回来。改用本位表达意图：
-  /// [startAnimeDownloadService] 置 true，[quiesceBackgroundDatabaseWriters]
-  /// 与 [dispose] 置 false；service 是否存在只是结果，不再当开关用。
-  bool _videoDownloadPipelineRuntimeWanted = false;
-  VideoDownloadPipelineService? get videoDownloadPipelineService =>
-      _videoDownloadPipelineService;
-  VideoDownloadSubscriptionService? _videoDownloadSubscriptionService;
-  VideoDownloadSubscriptionService? get videoDownloadSubscriptionService =>
-      _videoDownloadSubscriptionService;
-  VideoResourceRegistry? _videoResourceRegistry;
-  VideoResourceRegistry? get videoResourceRegistry => _videoResourceRegistry;
-  VideoSubtitleRegistry? _videoSubtitleRegistry;
-  VideoSubtitleRegistry? get videoSubtitleRegistry => _videoSubtitleRegistry;
-
-  // 交互式查字幕（字幕工作台 / 浏览器扩展桥）按需建的字幕来源 registry（下载管线
-  // 没起时才有值）。
-  VideoSubtitleRegistry? _onDemandSubtitleRegistry;
-
-  /// 交互式查字幕用的字幕来源 registry：视频的字幕工作台（单集 / 合集）与浏览器
-  /// 扩展的查字幕桥共用这一个入口。
-  ///
-  /// 优先复用下载管线那一套（同一批 provider 实例、同一份 AJATT 目录缓存）。但
-  /// 管线只在**浏览（下载）模块开着**、且 [startAnimeDownloadService] 跑完前面的
-  /// 旧任务迁移 / torrent 会话恢复之后才启动，而「给一个视频找字幕」跟下不下载种子
-  /// 毫无关系。BUG-3000：字幕工作台曾直接读 [videoSubtitleRegistry]，管线没起来
-  /// （模块关着 / 启动途中 / 启动抛错）时拿到 null，合集页就报「请先填写 Jimaku
-  /// API key」、单集页静默显示「找不到字幕」——哪怕输入框里的 key 好好的。所以管线
-  /// 不在时按同一份工厂现建一套，缓存复用；配置变更由
-  /// [reloadVideoDownloadPipelineRuntime] 统一作废。
-  ///
-  /// 返回 null = 一个来源都没配（全部关闭 / 缺 key）。
-  Future<VideoSubtitleRegistry?> subtitleSearchRegistry() async {
-    final VideoSubtitleRegistry? pipeline = _videoSubtitleRegistry;
-    if (pipeline != null) {
-      // 管线起来了就不再留第二套（多一套 = 多一份 http client + 多一份 9 MB 目录）。
-      _disposeOnDemandSubtitleRegistry();
-      return pipeline.providers.isEmpty ? null : pipeline;
-    }
-    final VideoSubtitleRegistry? cached = _onDemandSubtitleRegistry;
-    if (cached != null) return cached;
-    final List<VideoSubtitleProvider> providers =
-        await createConfiguredVideoSubtitleProviders(
-      prefs: prefsRepo,
-      httpClientFactory: createDownloadHttpClient,
-      supportRootProvider: AppPaths.supportRootDirectory,
-    );
-    if (providers.isEmpty) return null;
-    return _onDemandSubtitleRegistry = VideoSubtitleRegistry(providers);
-  }
-
-  void _disposeOnDemandSubtitleRegistry() {
-    _onDemandSubtitleRegistry?.close();
-    _onDemandSubtitleRegistry = null;
-  }
-
-  /// 刮削后自动补字幕（BUG-1698）。与 [_videoSubtitleRegistry] 同生命周期：
-  /// 用户改了字幕来源/语言后 `reloadVideoDownloadPipelineRuntime` 会一起重建。
-  VideoSubtitleBackfillService? _videoSubtitleBackfillService;
-
-  VideoSourceScrapeCoordinator? _videoDownloadScrapeCoordinator;
-  TorrentBackend? _videoDownloadBackend;
-  String? _videoDownloadBackendCacheKey;
-
-  /// 内置 libtorrent 下载宿主。**懒建**：只在第一次真的要用下载后端时才创建
-  /// （见 [_ensureEmbeddedTorrentHost]）；DLL 缺失/加载失败为 null，服务回退外接
-  /// qb。app 释放时 dispose。
-  ///
-  /// BUG-1053：以前是在 [startAnimeDownloadService] 里对**所有桌面用户无条件**
-  /// 创建——而创建 = 起一个 libtorrent session（绑 6881 TCP+UDP + 默认开 DHT）。
-  /// 于是没有任何下载任务的用户，只要 Fushi 开着就一直在跑全球 DHT，路由器
-  /// NAT/conntrack 被小包撑爆 → 整机网络周期性高延迟，关掉 Fushi 即恢复。
-  EmbeddedTorrentHost? _embeddedTorrentHost;
-  EmbeddedTorrentHost? get embeddedTorrentHost => _embeddedTorrentHost;
-
-  /// BUG-2950：内置引擎会话级网络诊断（fake-ip 掐断 UDP / DHT 不可达）。
-  /// 下载页横幅与种子详情的网络行照此展示；host 未建时恒为 none。
-  final ValueNotifier<TorrentNetworkIssue> torrentNetworkIssue =
-      ValueNotifier<TorrentNetworkIssue>(TorrentNetworkIssue.none);
-
-  TrackerSubscriptionService? _trackerSubscriptionService;
-  TrackerSubscriptionService get _trackers =>
-      _trackerSubscriptionService ??= TrackerSubscriptionService(
-        httpClientFactory: createDownloadHttpClient,
-      );
-
-  Future<List<String>> refreshTrackerSubscription({
-    String? sourceUrl,
-    bool forceRefresh = true,
-  }) {
-    final QbConnectionConfig config =
-        effectiveTorrentConfig(prefsRepo.qbConnectionConfig);
-    return _trackers.fetch(
-      sourceUrl ?? config.trackerSubscriptionUrl,
-      forceRefresh: forceRefresh,
-    );
-  }
-
-  /// 内置下载根集合（懒建 host 时需要）。[startAnimeDownloadService] 里算好存下，
-  /// 避免懒建路径再去 await 一次目录解析。TODO-1961：活动根 = 用户配置目录（未配置
-  /// 或不可用时 = 默认根），历史根让改过目录的旧任务在下载页仍然可见。
-  TorrentSaveRoots? _embeddedTorrentSaveRoots;
-
-  /// 默认下载根 `<documents>/anime_downloads/content`（设置页展示与「恢复默认」用）。
-  String? _downloadDefaultSaveRoot;
-
-  /// TODO-1961-a：resume data 目录 `<documents>/anime_downloads/resume`。
-  /// 与 `plans/` / `subs/` 同级 —— 它是 app 状态（哪些种子该活着），跟数据根走，
-  /// **不**跟用户配置的下载根走。
-  String? _embeddedTorrentResumeDir;
-
-  /// 当前仍存在的计划 id 集合（= infohash）。resume 剪枝的真相源：不在这个集合
-  /// 里的 `.resume` 文件一律删，否则用户删掉的任务会在下次启动复活成一个 UI 里
-  /// 看不见、却在后台做种的种子。每轮 tick 与启动时刷新。
-  ///
-  /// **null = 尚未从计划仓库加载过**，绝不能退化成空集合：空集合是「用户真的
-  /// 一个计划都没有」的合法取值，会让剪枝删光所有 `.resume`。两者混为一谈时，
-  /// 启动竞态里一次早到的剪枝就会把用户全部下载/做种任务永久蒸发
-  /// （见 [pruneResumeFiles] 的哨兵与 [startAnimeDownloadService] 的顺序注释）。
-  Set<String>? _animeDownloadPlanIds;
-
-  /// 启动时用户配置的下载目录不可用（不存在且建不出/写不进）时记下原因与路径，
-  /// 设置页据此显示警告。**不静默**：回退默认根这件事必须让用户看见。
-  DownloadSaveRootIssue? _downloadSaveRootIssue;
-  String? _downloadSaveRootRejectedPath;
-
-  /// 需要真会话时才建（幂等）。不支持的平台 / 无保存路径 / DLL 不可用 → null，
-  /// 调用方自然回退外接 qb。
-  EmbeddedTorrentHost? _ensureEmbeddedTorrentHost() {
-    final EmbeddedTorrentHost? existing = _embeddedTorrentHost;
-    if (existing != null) return existing;
-    final TorrentSaveRoots? roots = _embeddedTorrentSaveRoots;
-    final String? resumeDir = _embeddedTorrentResumeDir;
-    if (roots == null || resumeDir == null || !_supportsEmbeddedTorrent()) {
-      return null;
-    }
-    final EmbeddedTorrentHost? host = EmbeddedTorrentHost.open(
-      baseSavePath: roots.active,
-      legacySavePaths: roots.legacy,
-      resumeDir: resumeDir,
-      restoreIds: _animeDownloadPlanIds,
-      // 恢复阶段先保持 DHT 静默；host 读完 torrent 状态后再按实际下载/
-      // 允许做种工作恢复用户配置，避免仅有历史 resume 时启动即广播。
-      enableDht: false,
-    );
-    if (host == null) return null;
-    _embeddedTorrentHost = host;
-    // 建好即把已保存的资源限制/会话设置铺上（不必等用户改设置）。
-    _applyEmbeddedTorrentLimits(prefsRepo.qbConnectionConfig);
-    _startTorrentNetworkMonitor();
-    return host;
-  }
-
-  // ── BUG-2950：fake-ip 绕行 + 会话级网络诊断 ──────────────────────────────
-  //
-  // DHT 每次从停到跑（host 按有无下载/做种任务启停 DHT）时：重新判一次系统 DNS
-  // 是否 fake-ip；是就经 DoH 拿 DHT 引导点与公共 UDP tracker 的真实 IP，节点灌进
-  // 路由表、tracker 追加到所有任务。诊断按 DHT 实际运行状态算，DHT 闲置时不报。
-
-  Timer? _torrentNetworkTimer;
-  bool _torrentFakeIpDetected = false;
-  FakeIpTorrentBypass _torrentFakeIpBypass = FakeIpTorrentBypass.empty;
-  DateTime? _torrentDhtRunningSince;
-  bool _torrentBypassFed = false;
-  bool _torrentFakeIpProbing = false;
-
-  static const Duration _kTorrentNetworkTick = Duration(seconds: 20);
-
-  void _startTorrentNetworkMonitor() {
-    _torrentNetworkTimer?.cancel();
-    _torrentNetworkTimer = Timer.periodic(
-      _kTorrentNetworkTick,
-      (_) => unawaited(_torrentNetworkTick()),
-    );
-    unawaited(_torrentNetworkTick());
-  }
-
-  void _stopTorrentNetworkMonitor() {
-    _torrentNetworkTimer?.cancel();
-    _torrentNetworkTimer = null;
-    _torrentDhtRunningSince = null;
-    _torrentBypassFed = false;
-    torrentNetworkIssue.value = TorrentNetworkIssue.none;
-  }
-
-  Future<void> _torrentNetworkTick() async {
-    final EmbeddedTorrentHost? host = _embeddedTorrentHost;
-    if (host == null) {
-      torrentNetworkIssue.value = TorrentNetworkIssue.none;
-      return;
-    }
-    final FtSessionStatus? status = host.sessionStatus();
-    if (status == null) return;
-    if (!status.dhtRunning) {
-      _torrentDhtRunningSince = null;
-      _torrentBypassFed = false;
-    } else if (_torrentDhtRunningSince == null) {
-      _torrentDhtRunningSince = DateTime.now();
-      await _refreshTorrentFakeIpBypass(host);
-      // DoH 探测期间 AppModel 可能已 dispose（host 置 null、notifier 已释放）
-      // 或 host 被换掉：此时 host 与通知器都不再归本轮所有，不得再写。
-      if (!identical(host, _embeddedTorrentHost)) return;
-    }
-    if (status.dhtRunning &&
-        !_torrentBypassFed &&
-        _torrentFakeIpBypass.dhtNodes.isNotEmpty) {
-      host.addDhtNodes(_torrentFakeIpBypass.dhtNodes);
-      _torrentBypassFed = true;
-    }
-    final DateTime? since = _torrentDhtRunningSince;
-    torrentNetworkIssue.value = diagnoseTorrentNetwork(
-      dhtEnabled: status.dhtRunning,
-      dhtNodes: status.dhtNodes,
-      sessionAge:
-          since == null ? Duration.zero : DateTime.now().difference(since),
-      fakeIpDetected: _torrentFakeIpDetected,
-    );
-  }
-
-  Future<void> _refreshTorrentFakeIpBypass(EmbeddedTorrentHost host) async {
-    if (_torrentFakeIpProbing) return;
-    _torrentFakeIpProbing = true;
-    try {
-      _torrentFakeIpDetected = await isFakeIpDnsActive();
-      if (!_torrentFakeIpDetected) {
-        _torrentFakeIpBypass = FakeIpTorrentBypass.empty;
-        return;
-      }
-      final http.Client client = createAppHttpIoClient();
-      try {
-        _torrentFakeIpBypass = await resolveFakeIpTorrentBypass(
-          doh: DohResolver(client: client),
-          udpTrackers: kPublicTrackers,
-        );
-      } finally {
-        client.close();
-      }
-      _torrentBypassFed = false;
-      if (identical(host, _embeddedTorrentHost)) {
-        host.setExtraTrackers(_torrentFakeIpBypass.trackers);
-      }
-      debugPrint(
-        '[torrent] fake-ip DNS detected; real-IP bypass: '
-        '${_torrentFakeIpBypass.dhtNodes.length} DHT nodes, '
-        '${_torrentFakeIpBypass.trackers.length} UDP trackers',
-      );
-    } catch (e, stack) {
-      ErrorLogService.instance.log('AppModel.torrentFakeIpBypass', e, stack);
-    } finally {
-      _torrentFakeIpProbing = false;
-    }
-  }
-
-  /// 默认下载根（未解析完成前为空串）。
-  String get downloadDefaultSaveRoot => _downloadDefaultSaveRoot ?? '';
-
-  /// 已保存的下载根配置（空串 = 用默认根）。
-  ///
-  /// 走 `_prefsRepo?`（而非 `prefsRepo` 的 `!`）：设置区块能在 AppModel 尚未
-  /// `initialise()` 的场景下被构建（widget 测试直接 new AppModel 建区块，
-  /// 见 test/pages/torrent_settings_field_width_test.dart），此时 `_prefsRepo`
-  /// 还是 null，用 `!` 会在 build 里抛 TypeError 把整块设置炸掉。
-  String get _configuredDownloadSaveRoot =>
-      _prefsRepo?.downloadSaveRoot.trim() ?? '';
-
-  /// 当前生效的下载根（新任务落点）。未解析完成时回退到已保存的配置值/空串。
-  String get downloadSaveRoot =>
-      _embeddedTorrentSaveRoots?.active ??
-      (_configuredDownloadSaveRoot.isNotEmpty
-          ? _configuredDownloadSaveRoot
-          : downloadDefaultSaveRoot);
-
-  /// 当前是否在用默认下载根（设置页据此禁用「恢复默认」）。
-  bool get downloadSaveRootIsDefault => _configuredDownloadSaveRoot.isEmpty;
-
-  /// 启动时配置目录不可用而回退默认根的原因（null = 没发生过回退）。
-  DownloadSaveRootIssue? get downloadSaveRootIssue => _downloadSaveRootIssue;
-
-  /// 被拒绝的配置目录（配合 [downloadSaveRootIssue] 提示用户具体是哪个目录）。
-  String? get downloadSaveRootRejectedPath => _downloadSaveRootRejectedPath;
-
-  /// TODO-1961：改下载目录。校验通过才落盘，**只影响之后新增的任务**——旧根进历史
-  /// 根列表（下载页仍认得旧任务），已在跑的种子不动（不 move_storage）。
-  /// 返回 null = 成功；非 null = 目录不可用的原因，调用方必须反馈给用户。
-  Future<DownloadSaveRootIssue?> setDownloadSaveRoot(String newRoot) async {
-    final String trimmed = newRoot.trim();
-    if (trimmed.isEmpty) return DownloadSaveRootIssue.notAbsolute;
-    final DownloadSaveRootIssue? issue = await checkDownloadSaveRoot(trimmed);
-    if (issue != null) return issue;
-    await _applyDownloadSaveRoot(trimmed);
-    return null;
-  }
-
-  /// 恢复默认下载根（清空配置 key）。旧根同样降级为历史根，不丢任务。
-  Future<void> resetDownloadSaveRoot() => _applyDownloadSaveRoot('');
-
-  /// 落盘 + 就地换活动根。[newRoot] 空串 = 恢复默认根。
-  Future<void> _applyDownloadSaveRoot(String newRoot) async {
-    final String previousActive =
-        _embeddedTorrentSaveRoots?.active ?? prefsRepo.downloadSaveRoot.trim();
-    await prefsRepo.setDownloadSaveRoot(newRoot);
-    if (previousActive.isNotEmpty) {
-      await prefsRepo.setDownloadSaveRootHistory(encodeSaveRootHistory(<String>[
-        previousActive,
-        ...decodeSaveRootHistory(prefsRepo.downloadSaveRootHistory),
-      ]));
-    }
-    final String active =
-        newRoot.trim().isEmpty ? downloadDefaultSaveRoot : newRoot.trim();
-    final TorrentSaveRoots? existing = _embeddedTorrentSaveRoots;
-    if (existing != null) {
-      _embeddedTorrentSaveRoots = existing.withActive(active);
-    } else if (active.isNotEmpty) {
-      _embeddedTorrentSaveRoots = TorrentSaveRoots(
-        active: active,
-        legacy: <String>[
-          if (previousActive.isNotEmpty) previousActive,
-          ...decodeSaveRootHistory(prefsRepo.downloadSaveRootHistory),
-        ],
-      );
-    }
-    // 会话已在跑：就地换根，绝不重建 session（重建 = 掐断当前下载与做种）。
-    if (active.isNotEmpty) _embeddedTorrentHost?.setActiveSaveRoot(active);
-    // 用户显式改过目录，之前的启动回退警告作废。
-    _downloadSaveRootIssue = null;
-    _downloadSaveRootRejectedPath = null;
-    notifyListeners();
-  }
-
-  /// 启动番剧下载完成监听。幂等（重复调用不重建）；失败由调用方记日志，不破坏 init。
-  Future<void> startAnimeDownloadService() async {
-    if (_animeDownloadService != null) return;
-    final Directory baseDir =
-        await AppPaths.documentsSubdirectory('anime_downloads');
-    final AnimeDownloadPlanStore store =
-        AnimeDownloadPlanStore(baseDir: baseDir);
-    _animeDownloadPlanStore = store;
-
-    // 内置引擎宿主：桌面 + Android（iOS 无内置引擎）。默认下载根就在计划目录旁的
-    // `content/` 子目录（分类再往下分）；TODO-1961 起用户可在设置里改成任意目录。
-    //
-    // BUG-1053：这里**只记路径，不建 session**。真正的 libtorrent session 会绑
-    // 6881 并起 DHT，对没有下载任务的用户是纯粹的网络噪声（整机延迟）。改由
-    // [_ensureEmbeddedTorrentHost] 在第一次真要用后端时懒建；`_tickOnce` 本就
-    // 「没有等待中的计划就不建连接」，所以空闲用户永远不会走到那一步。
-    //
-    // TODO-1961：配置目录不可写/建不出时**回退默认根并记下原因**（设置页显示警告），
-    // 绝不静默把下载丢进一个写不进去的目录。默认根本身不预检——它是既有行为，
-    // 首次 add 时 prepareCategory 会建，失败路径与改动前逐字节一致。
-    final String defaultSaveRoot = path.join(baseDir.path, 'content');
-    _downloadDefaultSaveRoot = defaultSaveRoot;
-    String configuredRoot = prefsRepo.downloadSaveRoot.trim();
-    if (configuredRoot.isNotEmpty) {
-      final DownloadSaveRootIssue? issue =
-          await checkDownloadSaveRoot(configuredRoot);
-      if (issue != null) {
-        _downloadSaveRootIssue = issue;
-        _downloadSaveRootRejectedPath = configuredRoot;
-        configuredRoot = '';
-      }
-    }
-    _embeddedTorrentSaveRoots = resolveTorrentSaveRoots(
-      defaultRoot: defaultSaveRoot,
-      configuredRoot: configuredRoot,
-      history: decodeSaveRootHistory(prefsRepo.downloadSaveRootHistory),
-    );
-    _embeddedTorrentResumeDir = path.join(baseDir.path, 'resume');
-
-    // schema v78 cut-over 必须先于两个 JSON service 的首次 tick。每个 JSON 文件
-    // 事务提交后才归档；崩溃重放依靠稳定 legacy id 幂等，不移动字幕 staging。
-    await _importLegacyVideoDownloads(baseDir);
-
-    // 🔴 顺序不可调换：下面两个 service 的 `..start()` 会**立刻** tick →
-    // `_torrentBackendFor` → `_ensureEmbeddedTorrentHost()` → `open()` →
-    // `restoreFromResume(restoreIds)` → 剪枝。计划 id 还没加载时那次剪枝的
-    // keepIds 会是「空集合」，于是把用户**所有** `.resume` 删光 —— 目标功能
-    // （重启后续传/继续做种）被反向实现成一次静默的数据销毁。
-    // 兜底见 [pruneResumeFiles] 的 null 哨兵：真被后来的重构调乱顺序，剪枝会
-    // 拒绝执行而不是删光；但正确顺序才是第一道防线，别指望兜底。
-    await _refreshAnimeDownloadPlanIds(store);
-
-    _animeDownloadService = AnimeDownloadService(
-      store: store,
-      configProvider: () =>
-          effectiveTorrentConfig(prefsRepo.qbConnectionConfig),
-      importer: buildAnimeDownloadImporter(database),
-      bookImporter: _importDownloadedBooks,
-      // 发现页新内容类型（有声书/游戏）：整包直通发现导入执行器。
-      discoveryImporter: _importDiscoveryDownload,
-      // BUG-1206：字幕在下载完成时按包内真实文件名反查补取，不在选种时预下。
-      subtitleResolver: JimakuPlanSubtitleResolver(
-        apiKeyProvider: () => prefsRepo.jimakuApiKey,
-        httpClientFactory: createDownloadHttpClient,
-        stagingDirFor: store.subsDirFor,
-        defaultContentLanguageProvider: () => prefsRepo.defaultContentLanguage,
-      ).resolve,
-      // 对时间轴在视频真正下完后做（边下边播那一轮视频还残缺）。
-      subtitleAligner: alignDownloadedSubtitle,
-      backendFactory: _torrentBackendFor,
-      onTick: () {
-        _embeddedTorrentHost?.sweepAntiLeech();
-        _embeddedTorrentHost?.sweepUploadPolicy();
-        unawaited(_saveEmbeddedTorrentResume());
-      },
-    )..start();
-    final AnimeDownloadSubscriptionStore subscriptionStore =
-        AnimeDownloadSubscriptionStore(baseDir: baseDir);
-    _animeDownloadSubscriptionStore = subscriptionStore;
-    _animeDownloadSubscriptionService = AnimeDownloadSubscriptionService(
-      store: subscriptionStore,
-      planStore: store,
-      configProvider: () =>
-          effectiveTorrentConfig(prefsRepo.qbConnectionConfig),
-      backendFactory: _torrentBackendFor,
-      jimakuApiKeyProvider: () => prefsRepo.jimakuApiKey,
-      httpClientFactory: createDownloadHttpClient,
-    )..start();
-
-    // TODO-1961-a：上次会话留下的种子在这里接回来（续传 + 继续做种）。
-    //
-    // BUG-1053 的边界必须守住：**只有真的有种子要恢复时才建 session**。
-    // 判据是「resume 目录里有属于现存计划的 .resume 文件」——从没下载过东西的
-    // 用户永远没有这种文件，于是永远不建 session、不绑端口、不起 DHT，与
-    // BUG-1053 修复后的行为逐字节一致。
-    await _restoreEmbeddedTorrentSession(store);
-    _videoDownloadPipelineRuntimeWanted = true;
-    await _startVideoDownloadPipeline();
-  }
-
-  Future<void> _importLegacyVideoDownloads(Directory baseDir) async {
-    final QbConnectionConfig config =
-        effectiveTorrentConfig(prefsRepo.qbConnectionConfig);
-    VideoDownloadBackendIdentity? identity;
-    try {
-      identity = await _currentVideoDownloadBackendIdentity(config);
-    } on VideoDownloadBackendUnavailable {
-      // Release 包缺少内置引擎时也必须完成迁移并继续启动；新旧任务会在
-      // pipeline 中得到可操作的 needsAttention 原因。
-      identity = null;
-    } on ArgumentError {
-      // 未配置可用后端时仍要完成 JSON→Drift 的幂等迁移；任务会保留为
-      // needsAttention，而不是让整个下载 runtime 因身份无法构造而启动失败。
-      identity = null;
-    }
-    final LegacyVideoDownloadImportReport report =
-        await VideoDownloadLegacyImporter(
-      database: database,
-      baseDirectory: baseDir,
-      torrentMatcher: (LegacyTorrentProbe probe) async {
-        final VideoDownloadBackendIdentity? confirmedIdentity = identity;
-        if (confirmedIdentity == null) return null;
-        // 旧记录自己的分类就是它的事实：拿它去后端核对 hash+title 即可。
-        // 不能再要求它等于**当前配置**的分类——用户改一次分类（或升级后默认
-        // 分类漂移）会让全部旧任务无法被认领（BUG-1879）。
-        final TorrentBackend? backend = _createExactTorrentBackend(config);
-        if (backend == null) return null;
-        try {
-          final List<TorrentSnapshot> snapshots =
-              await backend.listTorrents(category: probe.category);
-          for (final TorrentSnapshot snapshot in snapshots) {
-            if (snapshot.hash.toLowerCase() ==
-                    probe.torrentHash.toLowerCase() &&
-                snapshot.name.trim() == probe.title.trim()) {
-              return LegacyTorrentBinding(
-                torrentHash: snapshot.hash.toLowerCase(),
-                title: snapshot.name,
-                category: probe.category,
-                backendKind: confirmedIdentity.kind,
-                backendProfileId: confirmedIdentity.profileId,
-                fingerprint: confirmedIdentity.fingerprint,
-                backendTaskId: snapshot.hash.toLowerCase(),
-                observedSavePath: snapshot.savePath,
-              );
-            }
-          }
-          return null;
-        } finally {
-          backend.close();
-        }
-      },
-      // 旧订阅 JSON 没有可同时核对的 torrent hash/title/category，不能仅因
-      // “当前恰好配置了一个后端”就把它接管。Importer 会保留记录、禁用并标成
-      // needsAttention，等待用户明确重新确认实例与严格版本规则。
-      subscriptionBackendResolver: null,
-    ).importAll();
-    for (final LegacyImportIssue issue in report.issues) {
-      ErrorLogService.instance.log(
-        'AppModel.videoDownloadLegacyImport.${issue.kind.name}',
-        '${issue.fileName}: ${issue.message}',
-        StackTrace.current,
-      );
-    }
-  }
-
-  Future<VideoDownloadBackendIdentity> _currentVideoDownloadBackendIdentity(
-    QbConnectionConfig config,
-  ) async {
-    final String resolved =
-        config.resolveBackend(embeddedSupported: _supportsEmbeddedTorrent());
-    final String installationId =
-        await prefsRepo.ensureVideoDownloadEmbeddedInstallationId();
-    return buildVideoDownloadBackendIdentity(
-      config: config,
-      resolvedBackend: resolved,
-      embeddedInstallationId: installationId,
-      embeddedAvailable: resolved != QbConnectionConfig.backendEmbedded ||
-          isEmbeddedTorrentReady,
-    );
-  }
-
-  /// 当前新任务的落点：后端实例身份 + 此刻设置里的投放分类。UI 只保存此快照，
-  /// 流水线执行时还会再次对比 kind/profile/fingerprint，配置切换后不会被另一
-  /// 实例隐式接管；分类则被快照进任务行，之后该任务始终用自己那一份，不再与
-  /// 当前设置比较（BUG-1879）。
-  ///
-  /// 这里**只暴露落点**：裸身份没有「往哪投」，曾经的
-  /// `currentVideoDownloadBackendIdentity()` 让调用方能拿到一个缺分类的落点，
-  /// 已随 BUG-1879 一并删除，别再加回来。
-  Future<VideoDownloadBackendTarget> currentVideoDownloadBackendTarget() async {
-    final QbConnectionConfig config =
-        effectiveTorrentConfig(prefsRepo.qbConnectionConfig);
-    return VideoDownloadBackendTarget(
-      identity: await _currentVideoDownloadBackendIdentity(config),
-      category: config.category,
-    );
-  }
-
-  /// 就绪的下载后端名（`embedded` / `qbittorrent`），null = 本机没配好。
-  ///
-  /// 下载页「添加任务」、发现页推送与互联 host 的代下载能力位共用这一个判据
-  /// （`torrentBackendReady` 只是它的 bool 视图）。「地址非空」不够：
-  /// [buildVideoDownloadBackendIdentity] 用 [normalizeQbBackendAddress] 解析身份，
-  /// 它要求 http/https scheme + 非空 host，而 qb 用户最常见的手输形式恰恰是
-  /// `127.0.0.1:8080`；两套判据一松一严时「非空」会放行 → 落库 → 身份解析抛
-  /// ArgumentError → 调用方当「未配置」再弹一次配置引导，用户出不去。
-  String? get readyVideoDownloadBackend {
-    final QbConnectionConfig config = effectiveTorrentConfig(qbConnectionConfig);
-    if (isEmbeddedTorrentReady &&
-        config.backend != QbConnectionConfig.backendQbittorrent) {
-      return QbConnectionConfig.backendEmbedded;
-    }
-    return normalizeQbBackendAddress(config.baseUrl).isNotEmpty
-        ? QbConnectionConfig.backendQbittorrent
-        : null;
-  }
-
-  /// 互联 host 的代下载 / 订阅面（设计 §3.3）：对端交来的任务投进本机管线。
-  /// 全部按闭包现取——管线是 fire-and-forget 起来的，host 可能先绑上端口。
-  late final AppDownloadHost appDownloadHost = AppDownloadHost(
-    database: () => database,
-    pipeline: () => _videoDownloadPipelineService,
-    backendTarget: currentVideoDownloadBackendTarget,
-    readyBackend: () => readyVideoDownloadBackend,
-    targetSourceId: _defaultVideoDownloadSourceId,
-    resourceRegistry: () => _videoResourceRegistry,
-    subscriptionService: () => _videoDownloadSubscriptionService,
-  );
-
-  /// 对端代下载的视频落地来源：用户选的默认受管来源，没选就取第一个可用的
-  /// （与手动添加任务对话框的默认值同一规则）；一个都没有 → null。
-  Future<int?> _defaultVideoDownloadSourceId() async {
-    final List<MediaSourceRow> sources = await getManagedVideoDownloadSources();
-    final int? preferred = prefsRepo.videoDownloadTargetSourceId;
-    if (preferred != null &&
-        sources.any((MediaSourceRow s) => s.id == preferred)) {
-      return preferred;
-    }
-    return sources.firstOrNull?.id;
-  }
-
-  /// `/api/jobs` ASR 任务的 `videoId` → 本机视频文件（host 库）。
-  Future<String?> _resolveHostVideoPath(String videoId) async {
-    final VideoBookRow? row =
-        await VideoBookRepository(database).getByBookUid(videoId);
-    if (row == null) return null;
-    final File file = File(row.videoPath);
-    return await file.exists() ? file.path : null;
-  }
-
-  /// 只暴露当前设备可访问的本地受管视频来源，供发现页新任务/订阅选择。
-  Future<List<MediaSourceRow>> getManagedVideoDownloadSources() async {
-    final List<MediaSourceRow> sources =
-        await database.getMediaSourcesByKind('video');
-    return sources
-        .where(
-          (MediaSourceRow source) =>
-              source.transport == 'local' &&
-              path.isAbsolute(source.rootPath) &&
-              Directory(source.rootPath).existsSync(),
-        )
-        .toList(growable: false);
-  }
-
-  TorrentBackend? _createExactTorrentBackend(QbConnectionConfig config) {
-    final String resolved =
-        config.resolveBackend(embeddedSupported: _supportsEmbeddedTorrent());
-    if (resolved == QbConnectionConfig.backendEmbedded) {
-      final EmbeddedTorrentHost? host = _ensureEmbeddedTorrentHost();
-      return host?.backendView(
-        trackerSubscriptionService: _trackers,
-        autoAddTrackerSubscription: config.autoAddTrackerSubscription,
-        trackerSubscriptionUrl: config.trackerSubscriptionUrl,
-      );
-    }
-    if (config.baseUrl.trim().isEmpty) return null;
-    return QbTorrentBackend(
-      QBittorrentClient(
-        baseUrl: config.baseUrl,
-        username: config.username,
-        password: config.password,
-      ),
-      trackerSubscriptionService: _trackers,
-      autoAddTrackerSubscription: config.autoAddTrackerSubscription,
-      trackerSubscriptionUrl: config.trackerSubscriptionUrl,
-    );
-  }
-
-  Future<void> _startVideoDownloadPipeline() async {
-    if (_videoDownloadPipelineService != null) return;
-    final List<TorznabIndexerConfig> torznabIndexers =
-        prefsRepo.videoResourceTorznabConfigs;
-    // 内置索引器一律按 kBuiltinVideoResourceSources 全表注册；「用不用」由 registry
-    // 的停用清单决定，而不是靠这里少建一个对象——否则设置页开关就得重启 app 才生效。
-    // Torznab 不同：没有启用的索引器它就不是一个源（保存索引器配置会重建整条
-    // 运行时），判据见 [torznabHasEnabledIndexer]（BUG-2818）。
-    final List<VideoResourceProvider> resourceProviders =
-        <VideoResourceProvider>[
-      for (final BuiltinVideoResourceSource source
-          in kBuiltinVideoResourceSources)
-        source.create(await createDownloadHttpClient()),
-      if (torznabHasEnabledIndexer(torznabIndexers))
-        TorznabClient(
-          indexers: torznabIndexers,
-          client: await createDownloadHttpClient(),
-          closesClient: true,
-        ),
-    ];
-    // 字幕来源的装配判据在 [createConfiguredVideoSubtitleProviders] 一处（浏览器
-    // 扩展的查字幕桥用的是同一份工厂，不再自己判「哪家算配好了」）。
-    final List<VideoSubtitleProvider> subtitleProviders =
-        await createConfiguredVideoSubtitleProviders(
-      prefs: prefsRepo,
-      httpClientFactory: createDownloadHttpClient,
-      supportRootProvider: AppPaths.supportRootDirectory,
-    );
-    final VideoResourceRegistry resources = VideoResourceRegistry(
-      resourceProviders,
-      disabledProviderIds: videoResourceDisabledSourceIds,
-    );
-    final VideoSubtitleRegistry subtitles =
-        VideoSubtitleRegistry(subtitleProviders);
-    final String configuredTmdbKey = prefsRepo.getPref(
-      kVideoScraperTmdbApiKeyPref,
-      defaultValue: '',
-    ) as String;
-    final String preferredLanguage = prefsRepo.jimakuDefaultLanguage.trim();
-    _videoSubtitleBackfillService = VideoSubtitleBackfillService(
-      registry: subtitles,
-      subtitleAligner: alignDownloadedSubtitle,
-      preferredLanguages: <String>[
-        if (preferredLanguage.isNotEmpty) preferredLanguage,
-      ],
-      defaultContentLanguage: prefsRepo.defaultContentLanguage,
-      // 真下载前由 AI 在候选里挑先下哪几条；提供商每次调用时现解析，未指派 / 失败
-      // 都退回本地顺序（见 aiSubtitleBackfillReorder）。
-      aiReorder: aiSubtitleBackfillReorder(
-        resolveProvider: () => isPreferencesReady
-            ? resolveVideoSearchAiProvider(prefsRepo)
-            : null,
-      ),
-    );
-    final VideoSourceScrapeCoordinator scrape = VideoSourceScrapeCoordinator(
-      database: database,
-      config: VideoSourceScrapeGlobalConfig.fromPreferences(
-        prefsRepo,
-        resolvedTmdbApiKey: resolveTmdbApiKey(configuredTmdbKey),
-        uiLocaleTag: appLocale.toLanguageTag(),
-      ),
-      // 下载导入后的刮削同样走离线标题索引 + Fribb id 接力（默认关是为了单测不联网）。
-      enableOfflineTitleIndex: true,
-      // 歧义 / 查无交 AI 协助；顾问每次现取指派，未指派时完全不问 AI。判定缓存
-      // 按能力键分，这个协调器终身持有也不会沿用换提供商之前的结论。
-      aiIdentityAdvisor: PreferencesAiVideoIdentityAdvisor(prefsRepo),
-      // 刮削完成 → 给仍缺字幕的视频补字幕。刮削是全仓唯一解析出规范身份
-      // （AniDB 主身份 + TMDB/AniList crossref + 原名）的地方，而字幕准确率几乎完全取决于身份准不准
-      // ——不接这一刀，播放页只能拿文件名里的中文译名去 AniList 现猜。
-      onWorkScraped: _backfillSubtitlesForScrapedWork,
-    );
-    _videoResourceRegistry = resources;
-    _videoSubtitleRegistry = subtitles;
-    _videoDownloadScrapeCoordinator = scrape;
-    final VideoDownloadPipelineService pipeline = VideoDownloadPipelineService(
-      database: database,
-      resourceRegistry: resources,
-      subtitleRegistry: subtitles,
-      subtitleAligner: alignDownloadedSubtitle,
-      preferredSubtitleLanguages: <String>[
-        if (preferredLanguage.isNotEmpty) preferredLanguage,
-      ],
-      defaultContentLanguage: prefsRepo.defaultContentLanguage,
-      // 按作品的字幕语言：读字幕工作台 / AI 下载写的每系列记忆，键与导入落库的
-      // 合集名同源；没记过就走上面的全局默认语言链。
-      subtitleLanguageResolver: _resolveVideoDownloadSubtitleLanguage,
-      // 现读偏好：设置里一改，还没拿到文件表的任务就按新值跳过特典。
-      skipDownloadExtras: () => prefsRepo.videoDownloadSkipExtras,
-      backendResolver: _resolveVideoDownloadBackend,
-      scrapeCoordinator: scrape,
-      onBackendTaskAdded: _checkpointEmbeddedVideoDownload,
-      // 手动添加任务（下载页「添加任务」）：非视频内容整包交发现导入执行器
-      // 按域入库；.torrent 元数据落 app 目录随任务持久化。
-      discoveryImporter: (DiscoveryMediaKind kind, List<String> paths) =>
-          discoveryImportExecutor.importPaths(kind, paths),
-      // 「只下载」有声书（CoreAudio/TMW 合集单卷）下完：同样交执行器分类——
-      // 只有音频 → 转录后入库队列（开关关 / 本机无 ASR 时什么也不做，任务
-      // 面板的「配对」入口照旧）。
-      onDownloadOnlyCompleted: _onDownloadOnlyCompleted,
-      manualTorrentDirectory:
-          Directory(path.join(appDirectory.path, 'manual_torrents')),
-      updateFeed: updateFeedService,
-      // 目标来源被删的任务重试时改绑到默认下载来源（BUG-2755）。
-      defaultTargetSourceId: _defaultVideoDownloadSourceId,
-    )..start();
-    _videoDownloadPipelineService = pipeline;
-    // 上次没跑完的「转录后入库」任务从断点续跑（转录进度落在 ASR 服务自己的
-    // 任务目录里）。没有 ASR 的平台不建队列。
-    if (isAsrSupported) unawaited(audiobookTranscribeImportQueue.load());
-    _videoDownloadKeepAlive =
-        VideoDownloadJobsKeepAliveBinding(database.watchVideoDownloadJobs());
-    _videoDownloadSubscriptionService = VideoDownloadSubscriptionService(
-      database: database,
-      resourceRegistry: resources,
-      enqueue: pipeline.enqueue,
-    )..start();
-    // BrowsePage may have rendered while this fire-and-forget runtime was
-    // still starting. Publish the new service identity so its cached resource
-    // dependencies are rebuilt instead of remaining permanently unavailable.
-    notifyListeners();
-  }
-
-  /// 每系列字幕语言记忆（`jimaku_pref_langs`）按键查；空串 / 没记过 → null。
-  ///
-  /// 键的两个来源必须同源：刮削后补字幕用合集行的名字，下载管线用
-  /// [VideoDownloadSubtitleLanguageQuery.seriesKey]（= 导入阶段将要落库的合集名）。
-  String? _seriesSubtitleLanguage(String seriesKey) {
-    final String code =
-        prefsRepo.jimakuPreferredLanguages[seriesKey]?.trim() ?? '';
-    return code.isEmpty ? null : code;
-  }
-
-  /// 下载管线字幕阶段的按作品语言解析器（见 [VideoDownloadPipelineService]）。
-  ///
-  /// 记忆键有两套写入方：字幕工作台按**合集名**写（= [VideoDownloadSubtitleLanguageQuery.seriesKey]），
-  /// 播放页单集字幕对话框按**搜索词**写（`subtitle.part.dart`，下载导入的系列
-  /// 通常就是裸标题）。两把钥匙都试，先合集名再裸标题；都没记过才回 null。
-  String? _resolveVideoDownloadSubtitleLanguage(
-    VideoDownloadSubtitleLanguageQuery query,
-  ) =>
-      _seriesSubtitleLanguage(query.seriesKey) ??
-      _seriesSubtitleLanguage(query.title.trim().toLowerCase());
-
-  /// 刮完一个作品 → 给它仍缺字幕的成员各补一条（BUG-1698）。
-  ///
-  /// 三道自然闸门，任何一道不满足就整个静默跳过（这是刮削的下游增值，不该有
-  /// 存在感）：偏好关了 / 没配任何在线字幕来源 / 该视频已经有字幕。
-  ///
-  /// 逐条串行而不是并发：一次刮削可能带来整季十几集，并发打同一个字幕站是滥用；
-  /// 而且这条路径本来就跑在刮削的后台任务里，没人在等它。
-  Future<void> _backfillSubtitlesForScrapedWork(
-    VideoScrapedWorkNotice notice,
-  ) async {
-    if (!videoSubtitleBackfillAfterScrape) return;
-    final VideoSubtitleBackfillService? service = _videoSubtitleBackfillService;
-    // provider 一个都没配时 registry 是空的，搜了也只会得到空结果——别为此
-    // 探一堆视频时长。
-    if (service == null || service.registry.providers.isEmpty) return;
-
-    final Set<String> withSubtitle = <String>{
-      for (final VideoBookRow book in notice.work.members)
-        if (book.subtitleSource?.trim().isNotEmpty == true) book.bookUid,
-    };
-    final List<SubtitleBackfillTarget> targets = scrapedSubtitleTargets(
-      members: notice.work.members,
-      metadata: notice.metadata,
-      hasExistingSubtitle: withSubtitle.contains,
-      // 单文件作品没有合集，也就没有每系列记忆可查。
-      explicitLanguage: notice.work.collection == null
-          ? null
-          : _seriesSubtitleLanguage(
-              notice.work.collection!.name.trim().toLowerCase(),
-            ),
-    );
-    for (final SubtitleBackfillTarget target in targets) {
-      final SubtitleBackfillResult result = await service.backfill(target);
-      if (result.installed) {
-        debugPrint('[subtitle-backfill] installed ${result.language} for '
-            '${target.bookUid}: ${result.installedPath}');
-      }
-    }
-  }
-
-  /// 外部来源、凭据、字幕语言或网络代理变化后重建 provider runtime。持久任务
-  /// 和订阅均留在 Drift；旧 worker 先释放 lease/连接，再由新配置立即对账恢复。
-  ///
-  /// BUG-1738：门闩看 [_videoDownloadPipelineRuntimeWanted]（意图）而不是
-  /// service 是否存在（结果）——后者会把「上次重启失败」冻结成永久死亡。重启
-  /// 失败记日志后返回，service 留 null，但 wanted 仍为 true，下一次设置变更
-  /// 就能救活。
-  Future<void> reloadVideoDownloadPipelineRuntime() async {
-    // 查字幕（工作台 / 扩展桥）那套按需建的 registry 必须先作废，且**在 wanted
-    // 门闩之前**：关掉下载模块的用户永远不满足门闩，但他改 Jimaku key /
-    // OpenSubtitles 配置时同样得立刻用上新凭据（这里是所有字幕来源设置项的共同
-    // 汇合点）。
-    _disposeOnDemandSubtitleRegistry();
-    if (!_videoDownloadPipelineRuntimeWanted) return;
-    await _disposeVideoDownloadPipelineRuntime();
-    notifyListeners();
-    try {
-      await _startVideoDownloadPipeline();
-    } catch (e, stack) {
-      ErrorLogService.instance
-          .log('AppModel.reloadVideoDownloadPipelineRuntime', e, stack);
-    }
-    notifyListeners();
-  }
-
-  Future<VideoDownloadBackendBinding?> _resolveVideoDownloadBackend(
-    VideoDownloadJobRow job,
-  ) async {
-    final QbConnectionConfig config =
-        effectiveTorrentConfig(prefsRepo.qbConnectionConfig);
-    final VideoDownloadBackendIdentity identity;
-    try {
-      identity = await _currentVideoDownloadBackendIdentity(config);
-    } on VideoDownloadBackendUnavailable catch (error) {
-      throw VideoDownloadPipelineActionRequired(error.message);
-    }
-    final String cacheKey = '${encodeQbConnectionConfig(config)}\u0000'
-        '${identity.fingerprint}';
-    if (_videoDownloadBackend == null ||
-        _videoDownloadBackendCacheKey != cacheKey) {
-      _videoDownloadBackend?.close();
-      _videoDownloadBackend = _createExactTorrentBackend(config);
-      _videoDownloadBackendCacheKey = cacheKey;
-    }
-    final TorrentBackend? backend = _videoDownloadBackend;
-    if (backend == null) return null;
-    final List<VideoDownloadPathMapping> mappings =
-        <VideoDownloadPathMapping>[];
-    for (final VideoDownloadBackendPathMappingConfig value
-        in prefsRepo.videoDownloadBackendPathMappings) {
-      if (value.backendProfileId == identity.profileId) {
-        mappings.add(value.toMapping());
-      }
-    }
-    return VideoDownloadBackendBinding(
-      backend: backend,
-      identity: identity,
-      pathMappings: mappings,
-    );
-  }
-
-  Future<void> _disposeVideoDownloadPipelineRuntime({
-    Duration? pipelineDrainTimeout,
-  }) async {
-    final VideoDownloadJobsKeepAliveBinding? keepAlive =
-        _videoDownloadKeepAlive;
-    _videoDownloadKeepAlive = null;
-    if (keepAlive != null) await keepAlive.dispose();
-    final VideoDownloadSubscriptionService? subscriptions =
-        _videoDownloadSubscriptionService;
-    _videoDownloadSubscriptionService = null;
-    if (subscriptions != null) await subscriptions.dispose();
-    final VideoDownloadPipelineService? pipeline =
-        _videoDownloadPipelineService;
-    _videoDownloadPipelineService = null;
-    if (pipeline != null) {
-      await pipeline.dispose(drainTimeout: pipelineDrainTimeout);
-    }
-    _videoResourceRegistry?.close();
-    _videoResourceRegistry = null;
-    _videoSubtitleRegistry?.close();
-    _videoSubtitleRegistry = null;
-    _videoDownloadScrapeCoordinator?.close();
-    _videoDownloadScrapeCoordinator = null;
-    _videoDownloadBackend?.close();
-    _videoDownloadBackend = null;
-    _videoDownloadBackendCacheKey = null;
-  }
-
-  /// TODO-1961-c+d：下载内容改名 / 移动（引擎侧动，做种不断；库路径同步迁移）。
-  ///
-  /// 后端工厂复用 [_torrentBackendFor]，所以内置引擎与外接 qb 两条路都走得通；
-  /// 库迁移走 [VideoBookRepository.migrateMediaPaths]。两步的原子性由
-  /// [DownloadRelocateService] 保证（引擎失败则库不动）。
-  DownloadRelocateService get downloadRelocateService =>
-      DownloadRelocateService(
-        backendFactory: () => _torrentBackendFor(
-            effectiveTorrentConfig(prefsRepo.qbConnectionConfig)),
-        migrateLibraryPaths: ({
-          required String fromPath,
-          required String toPath,
-        }) =>
-            VideoBookRepository(database)
-                .migrateMediaPaths(fromPath: fromPath, toPath: toPath),
-      );
-
-  /// 刷新 [_animeDownloadPlanIds]（resume 剪枝的真相源）并返回它。
-  /// 返回值非空：调用过一次之后哨兵就不再是 null。
-  Future<Set<String>> _refreshAnimeDownloadPlanIds(
-      AnimeDownloadPlanStore store) async {
-    final List<AnimeDownloadPlan> plans = await store.loadAll();
-    final Set<String> ids = <String>{
-      for (final AnimeDownloadPlan plan in plans) plan.id.toLowerCase(),
-      ...await loadEmbeddedTorrentResumeIds(database),
-    };
-    _animeDownloadPlanIds = ids;
-    return ids;
-  }
-
-  /// 发现页新内容类型（有声书/游戏）种子完成后的入库回调：整包路径交给
-  /// [DiscoveryImportExecutor]（分类 → 解压 → 复用各域既有导入原语）。
-  /// 返回入库结果（条目数 / 移交转录）；分类不出/解压失败抛 [DiscoveryImportBlockedException]，
-  /// service 侧收进 failReason 展示。
-  Future<DiscoveryImportOutcome?> _importDiscoveryDownload(
-    AnimeDownloadPlan plan,
-    List<String> absolutePaths,
-  ) async {
-    final DiscoveryMediaKind? kind = switch (plan.contentKind) {
-      AnimeDownloadPlan.kindAudiobook => DiscoveryMediaKind.audiobook,
-      AnimeDownloadPlan.kindGame => DiscoveryMediaKind.game,
-      _ => null,
-    };
-    if (kind == null) return null;
-    return discoveryImportExecutor.importPaths(kind, absolutePaths);
-  }
-
   /// 发现页自动导入执行器（懒建；域导入器全接生产原语）。
   DiscoveryImportExecutor get discoveryImportExecutor =>
       _discoveryImportExecutor ??= DiscoveryImportExecutor(
@@ -6007,7 +4415,6 @@ class AppModel with ChangeNotifier {
           db: database,
           srtBookRepo: SrtBookRepository(database),
           audiobookRepo: AudiobookRepository(database),
-          galgameRepo: galgameRepo,
           transcribeAudiobook: _transcribeDiscoveryAudiobook,
         ),
       );
@@ -6140,43 +4547,6 @@ class AppModel with ChangeNotifier {
     }
     return _mediaDiscoveryService =
         MediaDiscoveryService(sources: <MediaDiscoverySource>[
-      CoreAudioDiscoverySource(
-        httpClientFactory: createDownloadHttpClient,
-      ),
-      NyaaDiscoverySource(
-        id: 'nyaa',
-        displayName: 'Nyaa',
-        priority: 10,
-        categoryByKind: const <DiscoveryMediaKind, String>{
-          // nyaa.si 分类：Literature=3_0 / Audio=2_0。
-          DiscoveryMediaKind.novel: '3_0',
-          DiscoveryMediaKind.audiobook: '2_0',
-        },
-        client: NyaaClient(),
-        // 每次请求按当前偏好取：源实例常驻，偏好可随时改。偏好未就绪
-        // （早一帧打开发现页）时用默认「全部」。
-        qualityFilter: () => NyaaQualityFilter.fromIndex(
-          isPreferencesReady ? prefsRepo.discoveryNyaaQualityFilter : 0,
-        ),
-      ),
-      NyaaDiscoverySource(
-        id: 'sukebei',
-        displayName: 'Sukebei',
-        priority: 15,
-        categoryByKind: const <DiscoveryMediaKind, String>{
-          // sukebei 分类：Art - Games=1_3（galgame 种子主阵地）。
-          DiscoveryMediaKind.game: '1_3',
-        },
-        client: NyaaClient(baseUrl: 'https://sukebei.nyaa.si'),
-      ),
-      AListDiscoverySource(
-        id: 'alist-erogame',
-        displayName: 'erogame.space',
-        priority: 20,
-        baseUrl: 'https://alist.erogame.space',
-        kinds: const <DiscoveryMediaKind>{DiscoveryMediaKind.game},
-      ),
-      ShinnkuDiscoverySource(),
       // 用户自配的 OPDS 服务器：**运行期**由偏好展开，一条配置 = 一个源
       // 实例。停用的条目直接不进注册表（而不是进了再靠停用清单挡）——
       // 源开关列表遍历的就是本注册表，两套「关掉」的语义并存只会让设置页
@@ -6184,10 +4554,6 @@ class AppModel with ChangeNotifier {
       if (isPreferencesReady)
         for (final OpdsServerConfig server in prefsRepo.discoveryOpdsServers)
           if (server.enabled) OpdsDiscoverySource(config: server),
-      // 用户自配的 AList / OpenList 站点：同上，一条配置 = 一个源实例。
-      if (isPreferencesReady)
-        for (final AListSiteConfig site in prefsRepo.discoveryAListSites)
-          if (site.enabled) AListDiscoverySource.fromConfig(site),
       // 用户自配的 Audiobookshelf 服务器：同上。未登录的不登记——那样的源每次
       // 浏览都必然以「未登录」失败，挂在来源下拉里只是一个必红的徽标。
       if (isPreferencesReady)
@@ -6211,8 +4577,7 @@ class AppModel with ChangeNotifier {
   /// 重建发现源注册表：用户增删改 OPDS 服务器后必须调。
   ///
   /// 注册表是**构造期快照**（懒建后 app 生命周期常驻），不重建的话新加的服务器
-  /// 要等下次冷启动才出现——这正是视频域 [setVideoResourceSourceEnabled] 里
-  /// 「改完必须重建下载流水线运行时」踩过的同一个坑。
+  /// 要等下次冷启动才出现。
   ///
   /// 旧实例先 close 再丢弃，否则每改一次配置就漏一个 HTTP client。
   Future<void> reloadDiscoverySources() async {
@@ -6229,12 +4594,6 @@ class AppModel with ChangeNotifier {
     Iterable<OpdsServerConfig> servers,
   ) async {
     await prefsRepo.setDiscoveryOpdsServers(servers);
-    await reloadDiscoverySources();
-  }
-
-  /// 增删改一个 AList / OpenList 站点后的统一写回口（同 [setDiscoveryOpdsServers]）。
-  Future<void> setDiscoveryAListSites(Iterable<AListSiteConfig> sites) async {
-    await prefsRepo.setDiscoveryAListSites(sites);
     await reloadDiscoverySources();
   }
 
@@ -6269,29 +4628,12 @@ class AppModel with ChangeNotifier {
           if (id.trim().isNotEmpty) id.trim(),
       };
 
-  /// 设置里停用的**内置**视频资源索引器 id（Nyaa / apibay / Knaben）。
-  Set<String> get videoResourceDisabledSourceIds =>
-      readVideoResourceDisabledSourceIds(prefsRepo);
-
   /// 开/关一个发现源。停用清单是逗号分隔的字符串，读写都只经这一个入口，
   /// 免得每个调用点各写一份 split/join。
   Future<void> setDiscoverySourceEnabled(String sourceId, bool enabled) async {
     await prefsRepo.setDiscoveryDisabledSources(
       _toggleDisabledId(discoveryDisabledSourceIds, sourceId, enabled),
     );
-    notifyListeners();
-  }
-
-  /// 开/关一个内置视频资源索引器。改完必须重建下载流水线运行时——registry 的
-  /// 停用清单是构造期快照，不重建的话开关要等下次冷启动才生效。
-  Future<void> setVideoResourceSourceEnabled(
-    String sourceId,
-    bool enabled,
-  ) async {
-    await prefsRepo.setVideoResourceDisabledSources(
-      _toggleDisabledId(videoResourceDisabledSourceIds, sourceId, enabled),
-    );
-    await reloadVideoDownloadPipelineRuntime();
     notifyListeners();
   }
 
@@ -6345,185 +4687,9 @@ class AppModel with ChangeNotifier {
   /// initialise 期唯一计算（UI 可达发现页时必已就绪），这里只消费。
   String discoveryDownloadDirFor(DiscoveryMediaKind kind) {
     String root = prefsRepo.downloadSaveRoot.trim();
-    if (root.isEmpty) root = downloadDefaultSaveRoot;
+    if (root.isEmpty) root = path.join(appDirectory.path, 'downloads');
     return path.join(root, 'discovery', kind.name);
   }
-
-  /// The pipeline persists `stage=download` only after this checkpoint. This
-  /// closes the one-minute periodic-save gap where an unclean app exit could
-  /// leave Drift tracking a torrent that the embedded engine cannot restore.
-  Future<void> _checkpointEmbeddedVideoDownload(
-    VideoDownloadJobRow job,
-  ) async {
-    if (job.backendKind != QbConnectionConfig.backendEmbedded) return;
-    final EmbeddedTorrentHost? host = _embeddedTorrentHost;
-    if (host == null) return;
-    try {
-      final AnimeDownloadPlanStore? store = _animeDownloadPlanStore;
-      final Set<String> keepIds = store == null
-          ? await loadEmbeddedTorrentResumeIds(database)
-          : await _refreshAnimeDownloadPlanIds(store);
-      host.saveResumeSnapshot(keepIds, force: true);
-    } catch (e) {
-      debugPrint('[torrent] post-enqueue resume checkpoint failed: $e');
-    }
-  }
-
-  /// TODO-1961-a：启动时按需恢复上次的内置引擎会话。
-  /// 没有可恢复的种子就**不建 session**（见 BUG-1053）。
-  Future<void> _restoreEmbeddedTorrentSession(
-      AnimeDownloadPlanStore store) async {
-    final String? resumeDir = _embeddedTorrentResumeDir;
-    if (resumeDir == null || !_supportsEmbeddedTorrent()) return;
-    final Set<String> planIds = await _refreshAnimeDownloadPlanIds(store);
-    if (planIds.isEmpty) return;
-    bool hasRestorable = false;
-    try {
-      final Directory dir = Directory(resumeDir);
-      if (!await dir.exists()) return;
-      await for (final FileSystemEntity entity in dir.list()) {
-        if (entity is! File || !entity.path.endsWith('.resume')) continue;
-        final String id =
-            path.basenameWithoutExtension(entity.path).toLowerCase();
-        if (planIds.contains(id)) {
-          hasRestorable = true;
-          break;
-        }
-      }
-    } on FileSystemException {
-      return;
-    }
-    if (!hasRestorable) return;
-    final EmbeddedTorrentHost? host = _ensureEmbeddedTorrentHost();
-    // host 已经被别处（下载服务 tick）先建出来时，那次 open 可能因为计划 id
-    // 还没加载而跳过了恢复（[EmbeddedTorrentHost.hasRestored] = false）。
-    // 真相源到位了就在这里补做一次，别让「本次启动不续传」变成常态。
-    if (host != null && !host.hasRestored) {
-      host.restoreFromResume(planIds);
-      // 这个防御性延迟恢复发生在 host 已应用用户配置之后；恢复出的活跃下载
-      // 需要立即重开 discovery，不能等下一次维护 tick。
-      host.reconcileNetworkDiscoveryState();
-    }
-  }
-
-  /// TODO-1961-a：周期性把 resume data 落盘（host 内部按
-  /// [EmbeddedTorrentHost.resumeSaveInterval] 节流，这里每 tick 调是安全的）。
-  Future<void> _saveEmbeddedTorrentResume() async {
-    final EmbeddedTorrentHost? host = _embeddedTorrentHost;
-    final AnimeDownloadPlanStore? store = _animeDownloadPlanStore;
-    if (host == null || store == null) return;
-    try {
-      host.saveResumeSnapshot(await _refreshAnimeDownloadPlanIds(store));
-    } catch (e) {
-      // 保存失败不打断下载轮询（下轮再试），但必须留痕：resume 长期写不进去
-      // 等于「重启后所有下载蒸发」，静默吞掉用户和开发者都看不见。
-      debugPrint('[torrent] resume snapshot tick failed: $e');
-    }
-  }
-
-  /// 下载完成的书籍（epub）入库回调：逐个走 [EpubImporter] 进阅读库
-  /// （DuplicatePolicy.skip()，重复导入不报错），返回成功入库的书本数。单本失败跳过。
-  Future<int?> _importDownloadedBooks(
-      AnimeDownloadPlan plan, List<String> bookAbsolutePaths) async {
-    int imported = 0;
-    for (final String filePath in bookAbsolutePaths) {
-      try {
-        await EpubImporter.importFromPath(
-          db: database,
-          filePath: filePath,
-          fileName: path.basename(filePath),
-          policy: const DuplicatePolicy.skip(),
-        );
-        imported++;
-      } catch (_) {
-        // 单本导入失败跳过，不影响其它书与计划状态（有成功即算入库）。
-      }
-    }
-    return imported;
-  }
-
-  /// 内置引擎在本机是否可用（桌面 + DLL 能加载）。下载对话框据此判断能否走
-  /// 内置引擎（不必配置外接 qb）。
-  ///
-  /// BUG-1053：这是**能力探测**，不代表已经开了 session。以前它等价于
-  /// `_embeddedTorrentHost != null`，逼得启动就必须建 session（= 绑 6881 + 起
-  /// DHT）才能让下载按钮可用。现在探测只加载 DLL、不碰网络，真会话由
-  /// [_ensureEmbeddedTorrentHost] 在要下载时才建。
-  bool get isEmbeddedTorrentReady =>
-      _embeddedTorrentHost != null ||
-      (_supportsEmbeddedTorrent() &&
-          _embeddedTorrentSaveRoots != null &&
-          EmbeddedTorrentHost.probeAvailable());
-
-  /// 按配置解析出应使用的下载后端（供下载对话框的推送按钮与轮询服务共用
-  /// 同一选择逻辑）。调用方用完须 `close()`（内置引擎的视图 close 是 no-op，
-  /// 不连累常驻 session）。
-  TorrentBackend createTorrentBackend(QbConnectionConfig config) =>
-      _torrentBackendFor(config);
-
-  /// 后端选择：配置选内置且宿主可用 → 内置引擎的共享 session 视图；否则
-  /// 外接 qBittorrent（默认 / 内置不可用时的回退）。
-  TorrentBackend _torrentBackendFor(QbConnectionConfig config) {
-    final String backend =
-        config.resolveBackend(embeddedSupported: _supportsEmbeddedTorrent());
-    // BUG-1053：到这里才是「真的要用下载后端」，session 在此懒建（幂等）。
-    final EmbeddedTorrentHost? host =
-        backend == QbConnectionConfig.backendEmbedded
-            ? _ensureEmbeddedTorrentHost()
-            : _embeddedTorrentHost;
-    if (backend == QbConnectionConfig.backendEmbedded && host != null) {
-      return host.backendView(
-        trackerSubscriptionService: _trackers,
-        autoAddTrackerSubscription: config.autoAddTrackerSubscription,
-        trackerSubscriptionUrl: config.trackerSubscriptionUrl,
-      );
-    }
-    return QbTorrentBackend(
-      QBittorrentClient(
-        baseUrl: config.baseUrl,
-        username: config.username,
-        password: config.password,
-      ),
-      trackerSubscriptionService: _trackers,
-      autoAddTrackerSubscription: config.autoAddTrackerSubscription,
-      trackerSubscriptionUrl: config.trackerSubscriptionUrl,
-    );
-  }
-
-  /// 本平台是否具备内置 libtorrent 引擎。UI（后端选择器 / 配置引导）与运行时
-  /// 后端解析共用同一判据，别再各处手抄一份 `Platform.isXxx` 串。
-  bool get supportsEmbeddedTorrent => _supportsEmbeddedTorrent();
-
-  /// 内置 libtorrent 支持的平台：桌面 + Android（`libfushi_torrent_ffi.so`
-  /// 经 jniLibs 随包）。iOS 不支持：从不构建也从不打包内置引擎产物。
-  bool _supportsEmbeddedTorrent() =>
-      Platform.isWindows ||
-      Platform.isMacOS ||
-      Platform.isLinux ||
-      Platform.isAndroid;
-
-  /// 每系列记住的 Jimaku 字幕语言偏好（TODO-674）。
-  Map<String, String> get jimakuPreferredLanguages =>
-      prefsRepo.jimakuPreferredLanguages;
-
-  Future<void> setJimakuPreferredLanguage(String seriesKey, String langCode) =>
-      prefsRepo.setJimakuPreferredLanguage(seriesKey, langCode);
-
-  /// 远端/流媒体视频用户手选的字幕来源持久化（退出重进恢复；根因见
-  /// [PreferencesRepository.remoteSubtitleSources]）。
-  String? remoteSubtitleSource(String bookUid, {int episodeIndex = 0}) =>
-      prefsRepo.remoteSubtitleSource(bookUid, episodeIndex: episodeIndex);
-
-  Future<void> setRemoteSubtitleSource(
-    String bookUid,
-    int episodeIndex,
-    String? source,
-  ) =>
-      prefsRepo.setRemoteSubtitleSource(bookUid, episodeIndex, source);
-
-  // 注：远端视频播放偏好（调轴/音轨/副字幕源/副字幕调轴）不再走本层门面——统一
-  // 落 `video_remote_*_` prefs 键对（播放偏好同步泛化批，键定义在
-  // fushi_library_host_service.dart，页面直用 prefsRepo.getPref/setPref）。
 
   bool get reverseNavigationBar => prefsRepo.reverseNavigationBar;
 
@@ -8010,22 +6176,6 @@ class AppModel with ChangeNotifier {
   GamesModuleForm get gamesModuleForm =>
       GamesModuleForm.on(isWindows: platformServices.isWindows);
 
-  /// 是否已展示过「上传/做种」首用提示（下载对话框首次推送时弹一次性提醒）。
-  bool get torrentUploadIntroShown => prefsRepo.torrentUploadIntroShown;
-  Future<void> setTorrentUploadIntroShown() =>
-      prefsRepo.setTorrentUploadIntroShown();
-
-  /// BT / 磁力下载前的 P2P 说明是否已勾「不再提示」（见 `p2p_download_notice.dart`）。
-  bool get p2pDownloadNoticeDismissed => prefsRepo.p2pDownloadNoticeDismissed;
-  Future<void> setP2pDownloadNoticeDismissed() =>
-      prefsRepo.setP2pDownloadNoticeDismissed();
-
-  /// 第三方游戏资源站下载前的风险说明是否已勾「不再提示」。
-  bool get gameResourceNoticeDismissed =>
-      prefsRepo.gameResourceNoticeDismissed;
-  Future<void> setGameResourceNoticeDismissed() =>
-      prefsRepo.setGameResourceNoticeDismissed();
-
   /// 「下载」改名「浏览」的一次性搬迁提示是否已处理（见 `browse_moved_notice.dart`）。
   bool get browseMovedNoticeHandled => prefsRepo.browseMovedNoticeHandled;
   Future<void> setBrowseMovedNoticeHandled() =>
@@ -8074,25 +6224,14 @@ class AppModel with ChangeNotifier {
   Future<void> quiesceBackgroundDatabaseWriters({
     Duration? pipelineDrainTimeout,
   }) async {
-    _animeDownloadService?.stop();
-    _animeDownloadSubscriptionService?.stop();
     _mangaDownloadService?.dispose();
     _mangaDownloadService = null;
-    // 服务持有 FushiDatabase 引用，db 关闭/重开时必须一并销毁，否则新库开出来后
-    // 旧实例还拿着已关闭的连接，探测队列一落库就抛。
-    _videoSpecsService?.dispose();
-    _videoSpecsService = null;
-    _videoSpecsServiceDb = null;
     _discoveryDownloadKeepAlive?.dispose();
     _discoveryDownloadKeepAlive = null;
     _discoveryDownloadQueue?.dispose();
     _discoveryDownloadQueue = null;
     _mediaDiscoveryService?.close();
     _mediaDiscoveryService = null;
-    _videoDownloadPipelineRuntimeWanted = false;
-    await _disposeVideoDownloadPipelineRuntime(
-      pipelineDrainTimeout: pipelineDrainTimeout,
-    );
     // 转录后入库队列：入库那一步写库，必须在关库前停下（在跑的入库等它写完；
     // 在跑的转录在下一个检查点暂停，进度留在 ASR 任务目录，任务回到排队、下次
     // 启动续跑）。置空：数据根可能随之迁移，下次按新目录重建。
@@ -8100,10 +6239,6 @@ class AppModel with ChangeNotifier {
         _audiobookTranscribeImportQueue;
     _audiobookTranscribeImportQueue = null;
     await transcribeQueue?.close();
-    // 扩展视频沉浸时间桥持 StudyClock 写链：关库前封段并等写完，否则最后一段丢、
-    // 或 stop 落在已关闭连接上抛「connection was closed」。幂等，可与
-    // stopFushiApiServer 重复调。
-    await _browserVideoStudyBridge?.stopAll();
   }
 
   Future<void> closeDatabase({Duration? pipelineDrainTimeout}) async {
@@ -8112,7 +6247,6 @@ class AppModel with ChangeNotifier {
     // 否则防抖到点后 _runCollectionsSync 会对已关闭的 db 发起查询（drift「connection
     // was closed」异常）。initialise 装载（installCollectionsSyncWatcher），此前只有
     // 测试 teardown 调过 uninstall，生产三条关库路径全都不撤订阅。
-    uninstallCollectionsSyncWatcher();
     databaseCloseNotifier.notifyListeners();
     await quiesceBackgroundDatabaseWriters(
       pipelineDrainTimeout: pipelineDrainTimeout,
@@ -8149,7 +6283,6 @@ class AppModel with ChangeNotifier {
   Future<void> closeForPopup() async {
     // BUG-1569②：与 [closeDatabase] 同理——撤合集观察者，防止防抖 Timer 对已
     // 关闭的 db 跑轻量同步。
-    uninstallCollectionsSyncWatcher();
     _prefsRepo?.removeListener(notifyListeners);
     databaseCloseNotifier.notifyListeners();
     await _drainDictionaryWritesForClose('AppModel.closeForPopup');
@@ -8173,27 +6306,10 @@ class AppModel with ChangeNotifier {
       // 关停在 dispose 之前就开始。
       unawaited(syncServerController.stop());
       syncServerController.dispose();
-      unawaited(videoRemoteHost.dispose());
     }
-    // BUG-1569②：合集观察者是模块级全局（幂等，未装载时 no-op），dispose 路径
-    // 也对称撤掉，防止未决防抖 Timer 在 AppModel 销毁后仍去摸 db。
-    uninstallCollectionsSyncWatcher();
-    // 其余三个 stop 都 null 安全 / 单例安全，未启动也可调，无需 _isInitialised 守卫。
-    unawaited(TexthookerWsClientManager.instance.stop());
     unawaited(stopFushiApiServer());
-    _animeDownloadService?.stop();
-    _animeDownloadSubscriptionService?.stop();
-    _videoDownloadPipelineRuntimeWanted = false;
-    unawaited(_disposeVideoDownloadPipelineRuntime());
-    // 查字幕按需建的那套 registry 不属于下载管线（管线关着时它才存在），得单独收。
-    _disposeOnDemandSubtitleRegistry();
     _mangaDownloadService?.dispose();
     _mangaDownloadService = null;
-    // 服务持有 FushiDatabase 引用，db 关闭/重开时必须一并销毁，否则新库开出来后
-    // 旧实例还拿着已关闭的连接，探测队列一落库就抛。
-    _videoSpecsService?.dispose();
-    _videoSpecsService = null;
-    _videoSpecsServiceDb = null;
     _discoveryDownloadKeepAlive?.dispose();
     _discoveryDownloadKeepAlive = null;
     _discoveryDownloadQueue?.dispose();
@@ -8242,15 +6358,6 @@ class AppModel with ChangeNotifier {
     }
     _remoteLookupHttpClient?.close();
     _remoteLookupHttpClient = null;
-    _animeDownloadService?.stop();
-    // TODO-1961-a：退出前强制存一次 resume（下次启动据此续传/继续做种）。
-    // 用最近一次 tick 缓存的计划 id 集合剪枝 —— dispose 是同步的，不能在这里
-    // await 一次 `store.loadAll()`；缓存最多落后一个 tick（20s），代价只是某个
-    // 刚删掉的计划多留一轮 resume 文件，下次启动的剪枝会立刻清掉它。
-    _stopTorrentNetworkMonitor();
-    _embeddedTorrentHost?.dispose(keepIds: _animeDownloadPlanIds);
-    _embeddedTorrentHost = null;
-    torrentNetworkIssue.dispose();
     super.dispose();
   }
 
@@ -8374,60 +6481,6 @@ class AppModel with ChangeNotifier {
     (all[noteTypeId] ??= <String, String>{})[fieldId] = template;
     return prefsRepo.setSrsMiningFieldMappings(all);
   }
-
-  // 视频制卡封面图片模式（片段 / GIF / 制卡时当前帧 / 字幕开头帧，透传 prefsRepo）。默认：全新安装 videoClip、存量升级 gif。
-  VideoMiningImageMode get videoMiningImageMode =>
-      prefsRepo.videoMiningImageMode;
-  void setVideoMiningImageMode(VideoMiningImageMode mode) =>
-      prefsRepo.setVideoMiningImageMode(mode);
-
-  // 在线视频制卡弹窗等不等（后台 / 看完再制卡 / 等待完成，透传 prefsRepo）。默认后台。
-  VideoOnlineMiningMode get videoOnlineMiningMode =>
-      prefsRepo.videoOnlineMiningMode;
-  Future<void> setVideoOnlineMiningMode(VideoOnlineMiningMode mode) =>
-      prefsRepo.setVideoOnlineMiningMode(mode);
-
-  // 暂停时识别画面文字的范围（透传 prefsRepo）。默认所有视频。
-  VideoPauseOcrScope get videoPauseOcrScope => prefsRepo.videoPauseOcrScope;
-  Future<void> setVideoPauseOcrScope(VideoPauseOcrScope scope) =>
-      prefsRepo.setVideoPauseOcrScope(scope);
-
-  VideoMiningImageMode get galMiningImageMode => prefsRepo.galMiningImageMode;
-  void setGalMiningImageMode(VideoMiningImageMode mode) =>
-      prefsRepo.setGalMiningImageMode(mode);
-
-  // 动图编码格式（AVIF / WebP / GIF，透传 prefsRepo）。默认 avif。与上面的「封面模式」
-  // 正交：模式选用不用动图，格式选动图怎么编码。
-  MiningAnimatedFormat get videoMiningAnimatedFormat =>
-      prefsRepo.videoMiningAnimatedFormat;
-  void setVideoMiningAnimatedFormat(MiningAnimatedFormat format) =>
-      prefsRepo.setVideoMiningAnimatedFormat(format);
-
-  MiningAnimatedFormat get galMiningAnimatedFormat =>
-      prefsRepo.galMiningAnimatedFormat;
-  void setGalMiningAnimatedFormat(MiningAnimatedFormat format) =>
-      prefsRepo.setGalMiningAnimatedFormat(format);
-
-  // 静图（截图）编码格式（JPG / PNG，透传 prefsRepo）。默认 jpg=现状。与上面两轴正交：
-  // 模式选用不用动图与取哪帧，本项只管那帧怎么编码。
-  MiningStillFormat get videoMiningStillFormat =>
-      prefsRepo.videoMiningStillFormat;
-  void setVideoMiningStillFormat(MiningStillFormat format) =>
-      prefsRepo.setVideoMiningStillFormat(format);
-
-  MiningStillFormat get galMiningStillFormat => prefsRepo.galMiningStillFormat;
-  void setGalMiningStillFormat(MiningStillFormat format) =>
-      prefsRepo.setGalMiningStillFormat(format);
-
-  // 音画同步片段格式（WebM VP9 / WebM AV1 / MP4，透传 prefsRepo）。默认由偏好层推导
-  // （老 MP4 片段用户保持 MP4，其余平台默认）。仅封面模式为 videoClip 时生效。
-  MiningClipFormat get videoMiningClipFormat => prefsRepo.videoMiningClipFormat;
-  void setVideoMiningClipFormat(MiningClipFormat format) =>
-      prefsRepo.setVideoMiningClipFormat(format);
-
-  MiningClipFormat get galMiningClipFormat => prefsRepo.galMiningClipFormat;
-  void setGalMiningClipFormat(MiningClipFormat format) =>
-      prefsRepo.setGalMiningClipFormat(format);
 
   /// 制卡句子音频头/尾 padding（毫秒），视频字幕与有声书两条制卡链共用。
   int get miningAudioHeadPadMs => prefsRepo.miningAudioHeadPadMs;
@@ -8588,50 +6641,6 @@ class AppModel with ChangeNotifier {
       prefsRepo.experimentalFocusNavigationEnabled;
   Future<void> setExperimentalFocusNavigationEnabled(bool value) =>
       prefsRepo.setExperimentalFocusNavigationEnabled(value);
-
-  bool get texthookerEnabled => prefsRepo.texthookerEnabled;
-  Future<void> setTexthookerEnabled(bool value) =>
-      prefsRepo.setTexthookerEnabled(value);
-
-  List<String> get texthookerUrls => prefsRepo.texthookerUrls;
-  Future<void> setTexthookerUrls(List<String> urls) =>
-      prefsRepo.setTexthookerUrls(urls);
-
-  /// galgame 游戏库仓储（v55 起真相源是 Drift 表 `galgames`，不再是偏好 JSON）。
-  ///
-  /// 懒建：绑的是 [database]，只有真正用到游戏库的路径才会碰它，冷启动不多跑查询。
-  /// 库页/详情页直接用这个仓储做增删改与会话查询。
-  GalgameRepository get galgameRepo => _galgameRepo ??= GalgameRepository(
-        database,
-        // 游玩状态改动上报媒体记录（Bangumi 收藏 type）。fail-open：同步不可用时
-        // 本地状态照常生效，事件留在 outbox 由后续同步重试。
-        onPlayStatusChanged: (String id, GalgamePlayStatus status) {
-          if (!kMediaTrackingEnabled) return;
-          unawaited(
-            mediaTrackingService.recordGameStatus(
-              gameId: id,
-              status: status.value,
-            ),
-          );
-        },
-      );
-  GalgameRepository? _galgameRepo;
-
-  /// 当前缓存的游戏库列表（同步读，供 widget 首帧渲染）。首次进页面为空表，
-  /// 页面在 initState 里调 [reloadGalgames] 从 DB 拉真值。
-  List<GalgameEntry> get galgames => galgameRepo.games;
-
-  /// 整表覆写游戏库（保持旧签名：调用方组装整列表后写入；缺失的 id 视为删除）。
-  Future<void> setGalgames(List<GalgameEntry> games) =>
-      galgameRepo.setGames(games);
-
-  /// 从 DB 重载游戏库缓存。
-  Future<List<GalgameEntry>> reloadGalgames() => galgameRepo.load();
-
-  /// 游戏库页的排序/筛选视图偏好（JSON 串，空 = 默认视图）。
-  String get galgameLibraryView => prefsRepo.galgameLibraryView;
-  Future<void> setGalgameLibraryView(String encoded) =>
-      prefsRepo.setGalgameLibraryView(encoded);
 
   // TODO-1030 M0 — 全局查词是否抓取选中文本上下文（隐私敏感，默认关）。
   bool get globalContextCaptureEnabled => prefsRepo.globalContextCaptureEnabled;
@@ -8913,39 +6922,6 @@ class AppModel with ChangeNotifier {
     return _AppModelRemoteLookupService(this);
   }
 
-  /// 游戏串流主机侧制卡适配器：游戏工作台「开始串流」与接收端远程启动共用这一份，
-  /// 两个入口读同一组 gal 制卡偏好。
-  FushiGameStreamMiningAdapter createGameStreamMiningAdapter() {
-    return FushiGameStreamMiningAdapter(
-      repository: () => platformServices.createAnkiRepository(),
-      compression: () => MiningMediaCompression.resolve(
-        imageTier: miningImageQuality,
-        audioTier: miningAudioQuality,
-        format: galMiningAnimatedFormat,
-      ),
-      imageMode: galMiningImageMode,
-      animatedFormat: galMiningAnimatedFormat,
-      stillFormat: galMiningStillFormat,
-      addTitleTag: () => autoAddBookNameToTags,
-    );
-  }
-
-  /// Windows 主机：把游戏库挂到互联串流服务上，已配对的接收端才能「从库里启动并串流」。
-  /// 是否真的允许远程启动由 [PreferencesRepository.gameStreamRemoteLaunchEnabled]
-  /// 每次请求实时判定（默认关）。
-  void _configureGameStreamLibrary() {
-    if (!Platform.isWindows) return;
-    syncServerController.configureGameStreamLibrary(
-      FushiGameStreamLibraryHost(
-        loadGames: () => galgameRepo.load(),
-        isLaunchEnabled: () => prefsRepo.gameStreamRemoteLaunchEnabled,
-        service: () => syncServerController.gameStreamService,
-        startStream: syncServerController.startLaunchedGameStream,
-      ),
-      miningFactory: createGameStreamMiningAdapter,
-    );
-  }
-
   FushiRemoteHistoryService createRemoteHistoryService() {
     return _AppModelRemoteLookupService(this);
   }
@@ -9005,14 +6981,6 @@ class AppModel with ChangeNotifier {
       ValueNotifier<int?>(null);
 
   /// 浏览器扩展网页视频沉浸时间 → 学习统计的桥（POST `/api/extension/study` 的
-  /// sink）。与 server manager 同寿命：懒建于 [_ensureYomitanManager]，
-  /// [stopFushiApiServer] / [quiesceBackgroundDatabaseWriters] 时封段等落库。
-  BrowserVideoStudyBridge? _browserVideoStudyBridge;
-
-  BrowserVideoStudyBridge _ensureBrowserVideoStudyBridge() =>
-      _browserVideoStudyBridge ??=
-          BrowserVideoStudyBridge(database: () => database);
-
   /// 复习模块（SRS）的 AnkiConnect v6 兼容端点：模块开着时由 `srs_app_runtime.dart`
   /// 注入，关着时为 null（Fushi API 根路径 404，不暴露）。运行中切换立即作用到在跑的
   /// server，下次启动也带上。
@@ -9061,9 +7029,6 @@ class AppModel with ChangeNotifier {
       // 解锁 + 只写扩展键（下次查词 browserExtensionThemeColors 读新 extensionPopupEffectiveSize
       // 即以新尺寸下发，闭环）。
       onExtensionPopupSize: _applyExtensionPopupSize,
-      // 扩展网页视频沉浸时间：每条播放样本喂给桥 → 每个 mediaKey 一个
-      // VideoWatchTracker + StudyClock（只计首次覆盖，与视频页同口径）。
-      onExtensionStudy: _ensureBrowserVideoStudyBridge().onSample,
       // BUG-3141：扩展查词弹窗 ☆/★ 收藏。浏览器同属「app 外查词表面」，与 app 外浮窗 /
       // 剪贴板面板的 favoriteEntry / favoriteCheck 走同一份读写（跨源判 / 跨源删 / 单源写）。
       onExtensionFavorite: _browserExtensionFavorite,
@@ -9081,10 +7046,6 @@ class AppModel with ChangeNotifier {
         _browserExtensionReportedAt = DateTime.now();
         browserExtensionReportedBuild.value = build;
       },
-      // 「查字幕」扩展桥：Side Panel 搜索/下载字幕经 /api/subtitle/{search,fetch}
-      // 复用**用户在 app 设置里配好的全部在线字幕来源**（Jimaku / OpenSubtitles /
-      // AJATT），与视频页的「找字幕」同一批 provider；一个都没配时端点回 no-provider。
-      subtitleRegistryProvider: subtitleSearchRegistry,
       // 新手引导「试一试」页：GET /onboarding/extension-test 到达时才生成 HTML。
       extensionTestPageProvider: buildBrowserExtensionTestPageHtml,
       // 扩展字幕外观「字体」下拉框：字体真源是 app 字体目录（与「自定义字体」页
@@ -9206,8 +7167,6 @@ class AppModel with ChangeNotifier {
 
   Future<void> stopFushiApiServer() async {
     await _yomitanServerManager?.stop();
-    // server 停了就不会再来样本：把扩展视频正在统计的段封掉、等最后一笔落库。
-    await _browserVideoStudyBridge?.stopAll();
   }
 
   /// TODO-1266：浏览器扩展「安装助手」调用——「装完即用」。确保 yomitan-api server 就绪，
@@ -9466,10 +7425,8 @@ class AppModel with ChangeNotifier {
   // 折叠「同一句台词的多次快照」。TexthookerService 是没有 ref 的进程级单例，
   // 拿不到偏好；真值由这里单向推给它（启动期一次 + 每次改开关一次）。
   bool get galHookFoldProgressiveLines => prefsRepo.galHookFoldProgressiveLines;
-  Future<void> setGalHookFoldProgressiveLines(bool value) async {
-    await prefsRepo.setGalHookFoldProgressiveLines(value);
-    TexthookerService.instance.foldProgressiveLines = value;
-  }
+  Future<void> setGalHookFoldProgressiveLines(bool value) =>
+      prefsRepo.setGalHookFoldProgressiveLines(value);
 
   // TODO-370: 悬浮字幕透明度（按钮底色 / 文字），0..100 百分比，100=保持现观感。
   int get floatingLyricButtonBgOpacity =>
@@ -9568,18 +7525,12 @@ class AppModel with ChangeNotifier {
       prefsRepo.setUpdateDebugChannel(value);
 
   String get updateCustomProxy => prefsRepo.updateCustomProxy;
-  Future<void> setUpdateCustomProxy(String value) async {
-    await prefsRepo.setUpdateCustomProxy(value);
-    // HttpClient 侧的 findProxy 请求时现读，不用通知；libtorrent 是把值
-    // 固化进 session 的，改了就得重新下发。
-    _applyEmbeddedTorrentProxy();
-  }
+  Future<void> setUpdateCustomProxy(String value) =>
+      prefsRepo.setUpdateCustomProxy(value);
 
   String get networkProxyMode => prefsRepo.networkProxyMode;
-  Future<void> setNetworkProxyMode(String value) async {
-    await prefsRepo.setNetworkProxyMode(value);
-    _applyEmbeddedTorrentProxy();
-  }
+  Future<void> setNetworkProxyMode(String value) =>
+      prefsRepo.setNetworkProxyMode(value);
 
   String get networkProxyUsername => prefsRepo.networkProxyUsername;
   Future<void> setNetworkProxyUsername(String value) async {
@@ -9591,54 +7542,37 @@ class AppModel with ChangeNotifier {
     await prefsRepo.setNetworkProxyPassword(value);
   }
 
+  /// 阅读器顶栏 / 底栏按钮布局（ReaderControlLayout，2026-09-13）。
+  ReaderControlLayout get readerControlLayout => prefsRepo.readerControlLayout;
+
+  Future<void> setReaderControlLayout(ReaderControlLayout layout) =>
+      prefsRepo.setReaderControlLayout(layout);
+
+  /// 窄窗（手机竖屏）按钮布局；没存过时沿用存量宽窗自定义（见 prefsRepo）。
+  ReaderControlLayout get readerCompactControlLayout =>
+      prefsRepo.readerCompactControlLayout;
+
+  Future<void> setReaderCompactControlLayout(ReaderControlLayout layout) =>
+      prefsRepo.setReaderCompactControlLayout(layout);
+
+  /// 按窗口宽度取当前生效的按钮布局（< [kReaderControlCompactWidth] 用窄窗那份）。
+  ReaderControlLayout readerControlLayoutFor({required bool compact}) =>
+      compact ? readerCompactControlLayout : readerControlLayout;
+
+  /// 阅读器工具栏样式：`floating`（默认）/ `docked`。
+  String get readerToolbarStyle => prefsRepo.readerToolbarStyle;
+
+  Future<void> setReaderToolbarStyle(String style) =>
+      prefsRepo.setReaderToolbarStyle(style);
+
+  String get defaultContentLanguage => prefsRepo.defaultContentLanguage;
+
+  Future<void> setDefaultContentLanguage(String language) =>
+      prefsRepo.setDefaultContentLanguage(language);
+
   String get updateDownloadSource => prefsRepo.updateDownloadSource;
   Future<void> setUpdateDownloadSource(String value) =>
       prefsRepo.setUpdateDownloadSource(value);
-
-  /// P2P（torrent）传输的代理档位：direct（默认）/ proxy / mixed。
-  String get p2pProxyMode => prefsRepo.p2pProxyMode;
-  Future<void> setP2pProxyMode(String mode) async {
-    await prefsRepo.setP2pProxyMode(mode);
-    _applyEmbeddedTorrentProxy();
-  }
-
-  /// 把「P2P 该不该走代理、走哪个、哪一档」下发给内置引擎（宿主不存在则
-  /// no-op；宿主建好时 [_applyEmbeddedTorrentLimits] 会再调一次）。
-  void _applyEmbeddedTorrentProxy() {
-    final String mode = prefsRepo.p2pProxyMode;
-    _embeddedTorrentHost?.applyProxy(
-      resolveP2pProxyHostPort(enabled: mode != 'direct'),
-      mixed: mode == 'mixed',
-    );
-  }
-
-  /// 外部 mokuro CLI 可执行路径（漫画 OCR 后备；空串=未设，退回 env/PATH 探测）。
-  String get mangaExternalMokuroPath => prefsRepo.mangaExternalMokuroPath;
-  Future<void> setMangaExternalMokuroPath(String value) =>
-      prefsRepo.setMangaExternalMokuroPath(value);
-
-  int get mangaOcrParallelTasks => prefsRepo.mangaOcrParallelTasks;
-  Future<void> setMangaOcrParallelTasks(int value) =>
-      prefsRepo.setMangaOcrParallelTasks(value);
-
-  String get mangaOcrAiMode => prefsRepo.mangaOcrAiMode;
-  Future<void> setMangaOcrAiMode(String value) =>
-      prefsRepo.setMangaOcrAiMode(value);
-  String get mangaOcrLocalModel => prefsRepo.mangaOcrLocalModel;
-  Future<void> setMangaOcrLocalModel(String value) =>
-      prefsRepo.setMangaOcrLocalModel(value);
-
-  String get mangaOcrPairedHostModel => prefsRepo.mangaOcrPairedHostModel;
-  Future<void> setMangaOcrPairedHostModel(String value) =>
-      prefsRepo.setMangaOcrPairedHostModel(value);
-
-  String get mangaOcrEnginePreference => prefsRepo.mangaOcrEnginePreference;
-  Future<void> setMangaOcrEnginePreference(String value) =>
-      prefsRepo.setMangaOcrEnginePreference(value);
-
-  String get mangaOcrLensLanguage => prefsRepo.mangaOcrLensLanguage;
-  Future<void> setMangaOcrLensLanguage(String value) =>
-      prefsRepo.setMangaOcrLensLanguage(value);
 
   String get asrTranscribeLanguage => prefsRepo.asrTranscribeLanguage;
   Future<void> setAsrTranscribeLanguage(String value) =>
@@ -9681,8 +7615,6 @@ class AppModel with ChangeNotifier {
   Future<void> setMangaCoverCacheMaxAgeDays(int value) async {
     await prefsRepo.setMangaCoverCacheMaxAgeDays(value);
     _mihonManager?.coverCache.maxAge =
-        Duration(days: prefsRepo.mangaCoverCacheMaxAgeDays);
-    _animeMihonManager?.coverCache.maxAge =
         Duration(days: prefsRepo.mangaCoverCacheMaxAgeDays);
   }
 
@@ -9799,29 +7731,8 @@ class AppModel with ChangeNotifier {
       imageCache.maximumSize = 1000;
       imageCache.maximumSizeBytes = 100 << 20; // 100 MB
     }
-    // 诊断（2026-09-22）：小内存模式是用户用来换取视频不卡的那个开关，代价落在查词
-    // 上。把它当前的**实际**预算记进时间轴，排查时不必再反推用户开了什么——三级词典
-    // 缓存的预算由 [DictionaryRepository] 按同一个 isLowMemory 闭包决定，热槽与停驻
-    // realm 则由 [DictionaryPopupController] 按同一个标志决定。
-    final String slots = lowMemoryMode ? 'disabled' : 'enabled';
-    videoDiag(
-      VideoDiagCategory.memory,
-      VideoDiagLevel.info,
-      'policy low-memory=$lowMemoryMode '
-      'imageCache=${imageCache.maximumSize}/'
-      '${imageCache.maximumSizeBytes >> 20}MB '
-      'warm-slot=$slots parked-realms=$slots',
-    );
   }
 }
-
-/// 批量 YouTube 制卡的流解析器（进程级：TTL 缓存跨 mineImmersion 调用共享，一场「生成全部」
-/// 同一视频只解析一次流）。放 top-level 而非实例字段，是因 [_AppModelRemoteLookupService]
-/// 是 const 构造，无法挂非 const 的可变缓存字段。
-final YoutubeClipMiner _youtubeClipMiner = YoutubeClipMiner();
-
-/// 同上，bilibili 那条的流解析器（同样是进程级 TTL 缓存）。
-final BilibiliClipMiner _bilibiliClipMiner = BilibiliClipMiner();
 
 /// TODO-1303：把一次 [MineOutcome] 映射成 [RemoteMineResult]，并**把失败写进错误日志**。
 /// 远端挖词（浏览器扩展）此前只回结果名、失败既不回传原因也不记日志 → 「制卡失败报成功 +
@@ -10053,330 +7964,6 @@ class _AppModelRemoteLookupService
       ErrorLogService.instance.log('Anki.openWordInAnki.extension', e, st);
       return AnkiOpenWordOutcome.failed;
     }
-  }
-
-  @override
-  Future<RemoteMineResult> mineImmersion(ImmersionMinePayload payload) async {
-    // BUG-2190：同 [mineEntry]——外字字节先落缓存，三条沉浸分支最终都走 repo 渲染。
-    await writeDictionaryMediaCache(payload.fields['dictionaryMedia'] ?? '');
-    final BaseAnkiRepository repo =
-        _appModel.platformServices.createAnkiRepository();
-    // 远端制卡（浏览器扩展的 YouTube / Netflix）语义上就是视频制卡，读同一条动图格式
-    // 偏好。BUG-1330：这里过去既不传 format 给 resolve、也不传 animatedFormat 给引擎，
-    // 用户拍板的 AVIF 默认在扩展这条链路上完全没落地（恒出 GIF）。
-    final MiningAnimatedFormat animatedFormat =
-        _appModel.videoMiningAnimatedFormat;
-    final MiningMediaCompression compression = MiningMediaCompression.resolve(
-      imageTier: _appModel.miningImageQuality,
-      audioTier: _appModel.miningAudioQuality,
-      // 顶格档的动图参数随格式变（AVIF 24fps/1440px、GIF/WebP 12fps/960px）。format 与
-      // 下面透传给编码侧的格式**必须是同一个值**：只传其一就是「格式与参数不成对」——
-      // 把 AVIF 的顶格档参数喂给 GIF 编码器正是 BUG-1039。
-      format: animatedFormat,
-    );
-    // 优先级 0（YouTube，非 DRM）：有 videoId + 视频时间窗 → 从真实视频流精确裁，不录屏/不回放。
-    // 复用应用内播放器已验证的引擎（mediaSource=挖矿流，audioSource=分离音频流或 null）。
-    if (payload.youtubeVideoId != null &&
-        payload.clipStartMs != null &&
-        payload.clipEndMs != null) {
-      // 零/负长度窗（字幕时间异常）→ 直接失败，不出无声/无 GIF 的静帧卡：服务端 YouTube 路径无
-      // stillFallback，且 requireAudio 在 hasRange=false 时不会中止 → 否则静默降级成坏卡。
-      if (payload.clipEndMs! <= payload.clipStartMs!) {
-        return remoteMineError(
-          'Anki.mineImmersion.youtube',
-          'YouTube 字幕时间窗无效（零/负长度），未制卡',
-          detail: 'clip window <= 0 '
-              '(${payload.clipStartMs}..${payload.clipEndMs})',
-        );
-      }
-      final YoutubeClipRequest yt;
-      try {
-        yt = await _youtubeClipMiner.buildRequest(
-          videoId: payload.youtubeVideoId!,
-          startMs: payload.clipStartMs!,
-          endMs: payload.clipEndMs!,
-          fields: payload.fields,
-          sentence: payload.sentence,
-          cueSentence: payload.cueSentence,
-          documentTitle: payload.documentTitle,
-        );
-      } catch (e, st) {
-        // resolveYoutubeSource 会抛 TimeoutException / 视频不可用等；两个 server 的 /api/mine
-        // 只 catch FormatException，这里不兜住会 500 整张卡。收敛成干净的 MineResult.error。
-        // TODO-1303：不再只 debugPrint 进黑洞——写进错误日志并回带诊断。
-        return remoteMineError(
-          'Anki.mineImmersion.youtube',
-          'YouTube 视频流解析失败，未制卡',
-          detail: 'resolve failed: $e',
-          error: e,
-          stackTrace: st,
-        );
-      }
-      final ImmersionMiningResult ytRes = await ImmersionMiningEngine().mine(
-        ImmersionMiningRequest(
-          fields: yt.fields,
-          mediaSource: yt.mediaSource,
-          audioSource: yt.audioSource,
-          clipStartMs: yt.clipStartMs,
-          clipEndMs: yt.clipEndMs,
-          sentence: yt.sentence,
-          cueSentence: yt.cueSentence,
-          documentTitle: yt.documentTitle ?? 'YouTube',
-          source: AnkiMiningSource.video,
-          // YouTube 有音频源 → 缺音频即失败（与应用内一致），不出无声卡。
-          requireAudio: true,
-          // 与上面 resolve 的 format 同值：引擎按它选编码器 + 输出扩展名 + 降级链。
-          animatedFormat: animatedFormat,
-          // TODO-2519(2a)：动图 vs 静态帧偏好与格式偏好同源同链路，过去只透传了格式，
-          // 用户选「字幕开头截图 / 制卡时截图」在 YouTube 这条路上恒被吞成动图。
-          // 服务端路径无 stillFallback（拿不到当前解码帧），两种静态模式都落到引擎的
-          // tryStartFrame（immersion_mining_engine.dart:311-318 的排列本就互为兜底）
-          // → 静态模式根本不进 extractAnimatedClipWithFallback，不存在 BUG-1039 那种
-          // 「格式与编码参数不成对」的风险：静态帧压根不吃 gifFps/gifWidth。
-          imageMode: _appModel.videoMiningImageMode,
-          // 静图编码格式（默认 JPG）：服务端路径的两种静态档都落到引擎
-          // tryStartFrame，抽帧按它选编码器与扩展名，失败退回 JPG。
-          stillFormat: _appModel.videoMiningStillFormat,
-          // 音画同步片段格式：远端画面流 + 本地裁好的句子音频合成一个片段。
-          clipFormat: _appModel.videoMiningClipFormat,
-        ),
-        compression: compression,
-        tempDir: Directory.systemTemp.path,
-        repo: repo,
-        // GIF/音频抽取失败摘要写日志，便于排查「没 gif / 只有图片」。
-        // TODO-1303：GIF/音频抽取摘要进诊断日志（可导出、不计入用户错误计数）。
-        onFailure: (String s) => ErrorLogService.instance
-            .logDiagnostic('Anki.mineImmersion.youtube.extract', s),
-      );
-      if (ytRes.aborted) {
-        return remoteMineError('Anki.mineImmersion.youtube',
-            'YouTube 制卡失败：${ytRes.abortReason ?? '媒体抽取失败'}',
-            detail: ytRes.abortReason);
-      }
-      return remoteMineResultFromOutcome(ytRes.outcome! as MineOutcome);
-    }
-    // 优先级 0'（通用可裁流，目前 bilibili）：非 DRM 站点，句子音频从**原始音轨**按时间窗裁，
-    // 不录屏、不录音、不回放。与上面 YouTube 那条同一范式，两点不同都已实测：
-    //   · 封面不从流里抽——扩展已经在页面里取到了**当前解码帧**（原始分辨率、无弹幕/UI/字幕层，
-    //     见 `frame-capture.js`），比服务端再解析一路视频轨更准（那还会撞上「未登录只拿得到
-    //     480P 视频轨」），所以这里 mediaSource 留空，只解析音轨。
-    //   · 不需要 range 物化（那是 googlevideo 限速的专属绕行），见
-    //     `audioSourceNeedsRangeMaterialization`。
-    //
-    // 番剧（PGC，`/bangumi/play/ep<id>`）与稿件同一范式，只是**音轨直链由扩展在页面主世界里
-    // 解析**后随请求回传：番剧的 `pgc/player/web/playurl` 大会员内容必须带 SESSDATA，服务端是
-    // 匿名请求拿不到（扩展侧 `fushiResolveBilibiliPgcPlayurl` 有 CORS 实测）。解析不到时扩展连
-    // kind 都不发 → 根本进不到这个分支，行为与改动前逐字一致（照常出卡，无句子音频）。
-    final bool isBilibiliPgc = payload.clipSourceKind == 'bilibili-pgc' &&
-        payload.clipSourcePlayurlBody != null;
-    if ((payload.clipSourceKind == 'bilibili' || isBilibiliPgc) &&
-        payload.clipSourceId != null &&
-        payload.clipStartMs != null &&
-        payload.clipEndMs != null) {
-      // 片段模式（videoClip，默认）在这里拿不到视频轨：浏览器解析器只给音轨、画面是扩展
-      // 截的帧。照常出「截图 + 句子音频」卡，不声称同步——videoClip 成了默认值之后，
-      // 这里若还像过去那样直接报错，bilibili 网页制卡会对所有没改过设置的人全挂。
-      // 零/负长度窗（字幕时间异常）→ 直接失败，不出无声卡：这条路 requireAudio=true，
-      // 而 requireAudio 在 hasRange=false 时不会中止 → 否则静默降级成一张只有图的卡。
-      if (payload.clipEndMs! <= payload.clipStartMs!) {
-        return remoteMineError(
-          'Anki.mineImmersion.bilibili',
-          'bilibili 字幕时间窗无效（零/负长度），未制卡',
-          detail: 'clip window <= 0 '
-              '(${payload.clipStartMs}..${payload.clipEndMs})',
-        );
-      }
-      final BilibiliClipRequest bi;
-      try {
-        // 番剧：音轨是扩展在页面里解析好回传的，这里不发任何网络请求（见 buildPgcRequest）。
-        // 稿件：服务端自己用 bvid 查 cid 再取 playurl（未登录也拿得到最高档音轨）。
-        bi = isBilibiliPgc
-            ? _bilibiliClipMiner.buildPgcRequest(
-                playurlBody: payload.clipSourcePlayurlBody!,
-                startMs: payload.clipStartMs!,
-                endMs: payload.clipEndMs!,
-                fields: payload.fields,
-                sentence: payload.sentence,
-                cueSentence: payload.cueSentence,
-                documentTitle: payload.documentTitle,
-              )
-            : await _bilibiliClipMiner.buildRequest(
-                bvid: payload.clipSourceId!,
-                page: payload.clipSourcePart ?? 1,
-                startMs: payload.clipStartMs!,
-                endMs: payload.clipEndMs!,
-                fields: payload.fields,
-                sentence: payload.sentence,
-                cueSentence: payload.cueSentence,
-                documentTitle: payload.documentTitle,
-              );
-      } catch (e, st) {
-        // 视频不可用 / 无 DASH 音轨 / 网络失败都抛 StateError 或 IO 异常；两个 server 的
-        // /api/mine 只 catch FormatException，这里不兜住会 500 整张卡。
-        return remoteMineError(
-          'Anki.mineImmersion.bilibili',
-          'bilibili 视频流解析失败，未制卡',
-          detail: 'resolve failed: $e',
-          error: e,
-          stackTrace: st,
-        );
-      }
-      final ImmersionMiningResult biRes = await ImmersionMiningEngine().mine(
-        ImmersionMiningRequest(
-          fields: bi.fields,
-          // 只解析音轨：封面走 providedCoverBytes（扩展的解码帧）。
-          mediaSource: null,
-          audioSource: bi.audioSource,
-          // B 站 CDN 防盗链：流解析层声明的 Referer 随请求下发给 ffmpeg，不靠按 host 猜
-          // （PCDN 域名会轮换，白名单漏一个就 403 → required audio missing）。
-          mediaSourceHttpHeaders: bi.httpHeaders,
-          clipStartMs: bi.clipStartMs,
-          clipEndMs: bi.clipEndMs,
-          sentence: bi.sentence,
-          cueSentence: bi.cueSentence,
-          documentTitle: bi.documentTitle,
-          source: AnkiMiningSource.video,
-          providedCoverBytes: payload.screenshotBytes,
-          // 与 buildImmersionRequest 的非 Netflix 来源同名：媒体库里一眼看得出这张图
-          // 是网页解码帧那条路来的。字节由扩展直接给、不经我们编码，恒 JPEG。
-          providedCoverName:
-              payload.screenshotBytes == null ? null : 'web_shot.jpg',
-          // 有真实音频源 → 缺音频即失败（与 YouTube、app 内一致），不出无声卡。
-          requireAudio: true,
-          // 这里**不**下发动图格式与「动图 vs 静态帧」偏好，不是漏了：这条路
-          // mediaSource 恒为 null（封面走扩展的解码帧字节），于是引擎里那三个封面来源
-          // 闭包全部前置守卫失败——抽动图与抽起点帧都要求有 src，抽当前帧要求
-          // stillFallback（服务端路径没有前台播放器）。加上 providedCoverBytes 非空时
-          // 引擎在 `if (coverPath == null)` 之前就已把封面写好，那段阶梯整段不被求值。
-          // 两个参数无论传什么都到不了任何求值点，传了只会稀释按段切片的源码守卫
-          // （守卫用「YouTube 段 → Netflix 锚点」切窗，本段夹在中间，多一份同名字面量
-          // 会让「删掉 YouTube 那份真正生效的」照样绿）。
-          //
-          // stillFormat 相反，**必须**留着：providedCoverBytes 那条短路会按它
-          // 归一化编码（immersion_mining_engine.dart 的 cardScreenshotEncodingFor），
-          // 用户选的静图格式在这条路上是真生效的。
-          stillFormat: _appModel.videoMiningStillFormat,
-        ),
-        compression: compression,
-        tempDir: Directory.systemTemp.path,
-        repo: repo,
-        onFailure: (String s) => ErrorLogService.instance
-            .logDiagnostic('Anki.mineImmersion.bilibili.extract', s),
-      );
-      if (biRes.aborted) {
-        return remoteMineError('Anki.mineImmersion.bilibili',
-            'bilibili 制卡失败：${biRes.abortReason ?? '媒体抽取失败'}',
-            detail: biRes.abortReason);
-      }
-      return remoteMineResultFromOutcome(biRes.outcome! as MineOutcome);
-    }
-    // 捕获来源优先级（Netflix GIF）：① 扩展在播放中录到的字幕片段 webm → ffmpeg 转 GIF+音频
-    // （唯一不回放的 Netflix GIF 路径，需用户关硬件加速才非黑）；② 后台软解 native 实例（未建
-    // 时返 error）；③ 都没有 → 用 2A 截图字节组卡（buildImmersionRequest 内降级）。
-    // 录片段还是录动图由**目标模板**决定（[resolveTargetMiningImageMode]）：模板不原样
-    // 渲染图片字段时同步片段卡什么都显示不出来。必须在下面的转码之前求值；没录到
-    // 片段的来源出不了同步片段，不必问模板。
-    final VideoMiningImageMode imageMode = payload.clipBytes == null
-        ? _appModel.videoMiningImageMode
-        : await resolveTargetMiningImageMode(
-            _appModel.videoMiningImageMode,
-            repo: repo,
-          );
-    ImmersionCaptureResult cap = const ImmersionCaptureResult(error: 'skip');
-    if (payload.clipBytes != null) {
-      // Netflix 批量录制的片段边界即句子边界（seek 到句首 → 录到字幕变化停），整段转码 [0,时长]。
-      // 扩展 mineClip 不发段内窗/gifEnd（批量回放全自动、无查词交互、无鼠标/弹窗）→ 无从也无须裁段内窗（V16#4）。
-      final int clipDurationMs = payload.clipDurationMs ?? 6000;
-      // BUG-1416：动图 vs 静态帧偏好在 Netflix 这条路上过去被结构性吞掉——buildImmersionRequest
-      // 恒给 providedCoverBytes，引擎的 imageMode 阶梯（immersion_mining_engine.dart 的
-      // `if (coverPath == null)`）根本不会被求值。故必须在**产字节这一层**就按偏好分流。
-      final ClipStillTarget? stillTarget = resolveClipStillTarget(
-        imageMode: imageMode,
-        clipAnchorMs: payload.clipAnchorMs,
-        cueStartMs: payload.cueStartMs,
-        mineAtMs: payload.mineAtMs,
-        durationMs: clipDurationMs,
-      );
-      if (stillTarget != null) {
-        // 偏移误差在真机上可观测，而不是靠猜：锚点不确定度由扩展在 beginClip 前后实测下发。
-        ErrorLogService.instance.logDiagnostic(
-          'Anki.mineImmersion.netflix.still',
-          'imageMode=${imageMode.wireName} '
-              'offsetMs=${stillTarget.offsetMs} exact=${stillTarget.exact} '
-              'anchorMs=${payload.clipAnchorMs} '
-              'anchorUncertaintyMs=${payload.clipAnchorUncertaintyMs} '
-              'mineAtMs=${payload.mineAtMs} cueStartMs=${payload.cueStartMs}',
-        );
-      }
-      cap = await transcodeClipToCapture(
-        payload.clipBytes!,
-        imageMode: imageMode,
-        durationMs: clipDurationMs,
-        compression: compression,
-        tempDir: Directory.systemTemp.path,
-        // 与上面 resolve 的 format 同值：转码按它选编码器 + 输出扩展名 + 降级链，
-        // 实际产出格式经 ImmersionCaptureResult.animatedFormat 回传给封面文件名。
-        format: animatedFormat,
-        // 静帧档的编码格式（默认 JPG）：同样选编码器 + 输出扩展名 + 降级链，
-        // 实际产出格式经 ImmersionCaptureResult.stillFormat 回传给封面文件名。
-        stillFormat: _appModel.videoMiningStillFormat,
-        // 音画同步片段格式（片段模式时）：实际产出格式经 ImmersionCaptureResult.clipFormat
-        // 回传给封面文件名，扩展名决定卡片上内嵌还是原生播放。
-        clipFormat: _appModel.videoMiningClipFormat,
-        stillTarget: stillTarget,
-        // BUG-2192：裁掉录屏片段四周的播放器黑底（扩展按 <video> 几何给的比例矩形）。
-        crop: payload.clipCrop,
-      );
-    } else if (payload.netflixVideoId != null &&
-        payload.clipStartMs != null &&
-        payload.clipEndMs != null) {
-      cap = await ImmersionCaptureChannel.capture(
-        netflixVideoId: payload.netflixVideoId!,
-        clipStartMs: payload.clipStartMs!,
-        clipEndMs: payload.clipEndMs!,
-      );
-    }
-    // 片段模式下**录到了**片段却没导出同步视频，才是真失败（录制有声、导出坏了），
-    // 报错而不是悄悄降级成动图。没录到片段的来源（后台软解动图 / 2A 截图）没有视频可
-    // 同步，由 buildImmersionRequest 照常用手上的封面出卡——片段模式是默认值，不能让
-    // 这些来源整体报错。
-    if (imageMode == VideoMiningImageMode.videoClip &&
-        payload.clipBytes != null &&
-        (!cap.ok || !cap.coverIsVideo || cap.gifBytes == null)) {
-      return remoteMineError(
-        'Anki.mineImmersion.video',
-        '同步视频制卡失败：录制片段未能导出为音画同步视频；请重新录制，或在应用内打开视频后制卡',
-        detail: cap.error ?? 'capture did not provide synchronized video',
-      );
-    }
-    // TODO-1303：录制片段（clipBytes）来源本应带音频（Netflix 播放必有音轨）→ audioExpected，
-    // 引擎在最终无音频（转码丢音轨）时中止而非静默出无声卡；2A 截图 / 后台软解不可用 → 不强求
-    // （截图卡本就无音频不算失败）。
-    final bool audioExpected = payload.clipBytes != null;
-    final ImmersionMiningResult res = await ImmersionMiningEngine().mine(
-      buildImmersionRequest(
-        payload,
-        cap,
-        audioExpected: audioExpected,
-        imageMode: imageMode,
-      ),
-      compression: compression,
-      tempDir: Directory.systemTemp.path,
-      repo: repo,
-    );
-    if (res.aborted) {
-      // 来源标签取与封面命名同一个判据（[immersionPayloadFromNetflix]），不再硬编码
-      // Netflix：这条兜底路同时服务 primevideo / hulu.jp / tver.jp / bilibili.tv 等
-      // （manifest 已纳入、无 clipSource → 立即出卡），它们失败时看到「Netflix 制卡失败」
-      // 是错的事实。
-      final bool fromNetflix = immersionPayloadFromNetflix(payload);
-      return remoteMineError(
-          fromNetflix ? 'Anki.mineImmersion.netflix' : 'Anki.mineImmersion.web',
-          '${fromNetflix ? 'Netflix' : '网页视频'} 制卡失败：'
-          '${res.abortReason ?? '媒体抽取失败'}',
-          detail: res.abortReason);
-    }
-    return remoteMineResultFromOutcome(res.outcome! as MineOutcome);
   }
 
   @override

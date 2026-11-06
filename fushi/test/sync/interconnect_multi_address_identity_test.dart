@@ -4,7 +4,7 @@ import 'package:drift/drift.dart' hide isNotNull, isNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi/src/sync/fushi_remote_mining_client.dart';
-import 'package:fushi/src/sync/interconnect_download_client.dart';
+
 import 'package:fushi/src/sync/interconnect_peer_addresses.dart';
 import 'package:fushi/src/sync/interconnect_post_transport.dart';
 import 'package:fushi/src/sync/interconnect_sync_backend.dart';
@@ -139,15 +139,4 @@ void main() {
     ], reason: '同一台 host 的另一条地址顶上；B 绝不被碰');
   });
 
-  test('HostDownloadTarget.isPeer：按 host 认偏好里的那条地址', () {
-    const HostDownloadTarget target = HostDownloadTarget(
-      baseUrl: 'http://[2408::5]:38765',
-      deviceName: 'PC',
-      backend: 'embedded',
-      peerUrls: <String>{'http://[2408::5]:38765', 'http://192.168.1.5:38765'},
-    );
-    expect(target.isPeer('http://192.168.1.5:38765'), isTrue);
-    expect(target.isPeer('http://10.0.0.9:38765'), isFalse);
-    expect(target.isPeer(null), isFalse);
-  });
 }

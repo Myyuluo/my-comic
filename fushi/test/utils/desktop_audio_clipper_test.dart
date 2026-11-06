@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+
 import 'package:fushi_engine/media/video/ffmpeg_backend.dart' as ffmpeg;
 import 'package:fushi_engine/utils/misc/desktop_audio_clipper.dart';
 
@@ -11,7 +12,7 @@ void main() {
   Future<bool> ffmpegAvailable() async {
     try {
       final ProcessResult result = await Process.run(
-        resolveFfmpegExecutable(),
+        ffmpeg.resolveFfmpegExecutable(),
         <String>['-version'],
       );
       return result.exitCode == 0;
@@ -398,7 +399,7 @@ void main() {
 
       // Generate a 3s tone to cut from.
       final ProcessResult gen =
-          await Process.run(resolveFfmpegExecutable(), <String>[
+          await Process.run(ffmpeg.resolveFfmpegExecutable(), <String>[
         '-y',
         '-f',
         'lavfi',
@@ -429,7 +430,7 @@ void main() {
         return;
       }
       final ProcessResult filters = await Process.run(
-        resolveFfmpegExecutable(),
+        ffmpeg.resolveFfmpegExecutable(),
         <String>['-hide_banner', '-filters'],
       );
       if (!filters.stdout.toString().contains(' atempo ')) {
@@ -446,7 +447,7 @@ void main() {
       final String fast = '${dir.path}/fast.aac';
 
       final ProcessResult gen =
-          await Process.run(resolveFfmpegExecutable(), <String>[
+          await Process.run(ffmpeg.resolveFfmpegExecutable(), <String>[
         '-y',
         '-f',
         'lavfi',
@@ -482,7 +483,7 @@ void main() {
       // stderr 的 `time=HH:MM:SS.xx` 读出输出总时长。
       Future<double> decodedSeconds(String path) async {
         final ProcessResult probe = await Process.run(
-          resolveFfmpegExecutable(),
+          ffmpeg.resolveFfmpegExecutable(),
           <String>['-hide_banner', '-i', path, '-f', 'null', '-'],
         );
         final RegExp timeRe = RegExp(r'time=(\d+):(\d+):(\d+\.\d+)');
@@ -555,7 +556,7 @@ void main() {
       final String output = '${dir.path}/sentence.aac';
 
       final ProcessResult gen =
-          await Process.run(resolveFfmpegExecutable(), <String>[
+          await Process.run(ffmpeg.resolveFfmpegExecutable(), <String>[
         '-y',
         '-f',
         'lavfi',
@@ -569,7 +570,7 @@ void main() {
 
       final _InvalidBundledThenPathFfmpegBackend backend =
           _InvalidBundledThenPathFfmpegBackend(
-        pathExecutable: resolveFfmpegExecutable(),
+        pathExecutable: ffmpeg.resolveFfmpegExecutable(),
       );
       ffmpeg.setFfmpegBackendForTesting(backend);
       final List<String> failures = <String>[];
@@ -652,7 +653,7 @@ void main() {
       final String output = '${dir.path}/clip.gif';
 
       final ProcessResult gen =
-          await Process.run(resolveFfmpegExecutable(), <String>[
+          await Process.run(ffmpeg.resolveFfmpegExecutable(), <String>[
         '-y',
         '-f',
         'lavfi',
@@ -673,7 +674,7 @@ void main() {
 
       final _InvalidBundledThenPathFfmpegBackend backend =
           _InvalidBundledThenPathFfmpegBackend(
-        pathExecutable: resolveFfmpegExecutable(),
+        pathExecutable: ffmpeg.resolveFfmpegExecutable(),
       );
       ffmpeg.setFfmpegBackendForTesting(backend);
       final List<String> failures = <String>[];
@@ -821,7 +822,7 @@ void main() {
       bool ffmpegPresent;
       try {
         final ProcessResult v =
-            await Process.run(resolveFfmpegExecutable(), <String>['-version']);
+            await Process.run(ffmpeg.resolveFfmpegExecutable(), <String>['-version']);
         ffmpegPresent = v.exitCode == 0;
       } catch (_) {
         ffmpegPresent = false;
@@ -837,7 +838,7 @@ void main() {
       addTearDown(() => dir.deleteSync(recursive: true));
       final String video = '${dir.path}/clip.mp4';
       final String out = '${dir.path}/thumb.jpg';
-      final String ff = resolveFfmpegExecutable();
+      final String ff = ffmpeg.resolveFfmpegExecutable();
 
       // 生成一段 5s 彩色测试视频。
       final ProcessResult gen = await Process.run(ff, <String>[
@@ -905,7 +906,7 @@ void main() {
       bool ffmpegPresent;
       try {
         final ProcessResult v =
-            await Process.run(resolveFfmpegExecutable(), <String>['-version']);
+            await Process.run(ffmpeg.resolveFfmpegExecutable(), <String>['-version']);
         ffmpegPresent = v.exitCode == 0;
       } catch (_) {
         ffmpegPresent = false;
@@ -922,7 +923,7 @@ void main() {
       final String srt = '${dir.path}/src.srt';
       final String video = '${dir.path}/withsub.mkv';
       final String out = '${dir.path}/extracted.ass';
-      final String ff = resolveFfmpegExecutable();
+      final String ff = ffmpeg.resolveFfmpegExecutable();
 
       // 写一条最小 SRT，再 mux 进 mkv 的字幕轨（ffmpeg 转成 ASS）。
       File(srt).writeAsStringSync(
@@ -1024,7 +1025,7 @@ void main() {
       bool ffmpegPresent;
       try {
         final ProcessResult v =
-            await Process.run(resolveFfmpegExecutable(), <String>['-version']);
+            await Process.run(ffmpeg.resolveFfmpegExecutable(), <String>['-version']);
         ffmpegPresent = v.exitCode == 0;
       } catch (_) {
         ffmpegPresent = false;
@@ -1041,7 +1042,7 @@ void main() {
       final String srtA = '${dir.path}/a.srt';
       final String srtB = '${dir.path}/b.srt';
       final String video = '${dir.path}/twosubs.mkv';
-      final String ff = resolveFfmpegExecutable();
+      final String ff = ffmpeg.resolveFfmpegExecutable();
 
       File(srtA).writeAsStringSync(
         '1\n00:00:00,500 --> 00:00:02,000\n吾輩は猫である。\n',
@@ -1246,7 +1247,7 @@ void main() {
       bool ffmpegPresent;
       try {
         final ProcessResult v =
-            await Process.run(resolveFfmpegExecutable(), <String>['-version']);
+            await Process.run(ffmpeg.resolveFfmpegExecutable(), <String>['-version']);
         ffmpegPresent = v.exitCode == 0;
       } catch (_) {
         ffmpegPresent = false;
@@ -1263,7 +1264,7 @@ void main() {
       final String cover = '${dir.path}/cover.png';
       final String audio = '${dir.path}/withcover.m4a';
       final String out = '${dir.path}/extracted.jpg';
-      final String ff = resolveFfmpegExecutable();
+      final String ff = ffmpeg.resolveFfmpegExecutable();
 
       await Process.run(ff, <String>[
         '-y',

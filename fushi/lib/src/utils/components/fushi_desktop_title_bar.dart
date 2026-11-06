@@ -7,8 +7,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:fushi/i18n/strings.g.dart';
-import 'package:fushi/src/media/video/video_hdr_output.dart'
-    show hdrHostActiveGlobal;
+
 import 'package:fushi/src/platform/desktop/macos_traffic_lights.dart';
 import 'package:fushi/src/platform/macos_fullscreen_state.dart';
 import 'package:fushi/src/utils/adaptive/adaptive_platform.dart'
@@ -371,17 +370,7 @@ class _FushiDesktopTitleBarState extends State<FushiDesktopTitleBar>
       valueListenable: FushiDesktopTitleBar._contentFullscreen,
       builder: (BuildContext context, bool contentFullscreen, Widget? child) {
         final bool hideFrame = contentFullscreen;
-        // HDR 直通（video_hdr_output.dart）：这层 surface 底色盖着整个 Navigator，宿主
-        // 窗激活时必须让开，否则视频洞透不到主窗后方的 libmpv 宿主窗。
-        final Widget frame = ValueListenableBuilder<bool>(
-          valueListenable: hdrHostActiveGlobal,
-          builder: (BuildContext context, bool hdrHost, Widget? column) {
-            return ColoredBox(
-              color: hdrHost ? Colors.transparent : colors.surface,
-              child: column,
-            );
-          },
-          // 叠放而不是竖排（2026-10-06「app 顶栏和主要界面没有融为一体」）：
+        // 叠放而不是竖排（2026-10-06「app 顶栏和主要界面没有融为一体」）：
           // 曾经是 Column[标题行, Expanded(页面)]——页面从 y = 32 才开始画，
           // 标题行是一条独立的带子，详情页的 fanart / 模糊背景在它下沿被一刀
           // 切开，左栏封面顶端也被这条线截掉。
@@ -396,6 +385,8 @@ class _FushiDesktopTitleBarState extends State<FushiDesktopTitleBar>
           // 标题行下沿开始」排：它们的 WebView 分页 / 画面几何按可见视口算，
           // 不能被标题行压住一截。两种排法只差页面的 top 偏移与 padding，
           // 子树结构恒定，不会重挂 Navigator。
+        final Widget frame = ColoredBox(
+          color: colors.surface,
           child: ValueListenableBuilder<FushiTitleBarColors?>(
             valueListenable: FushiDesktopTitleBar._pageColors,
             builder: (BuildContext context, FushiTitleBarColors? page, Widget? _) {

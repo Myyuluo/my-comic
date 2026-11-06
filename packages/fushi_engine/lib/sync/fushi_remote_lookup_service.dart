@@ -132,13 +132,6 @@ abstract class FushiRemoteMiningService {
     required String sentence,
   });
 
-  /// TODO-1000：沉浸制卡（截图/GIF/音频 + 不回放）。实现方持 AnkiRepository，可调后台软解
-  /// 实例（2B）；server 只解析 body 成 [ImmersionMinePayload] 后转发，不 new 引擎、不碰 repo。
-  /// TODO-1303：返回 [RemoteMineResult]——除结果名外还带 [RemoteMineResult.message]/
-  /// [RemoteMineResult.detail]（失败原因 / 音频落空警告），实现方须同时把失败写进错误日志，
-  /// 终结「制卡失败报成功 + 诊断黑洞」。
-  Future<RemoteMineResult> mineImmersion(ImmersionMinePayload payload);
-
   /// 互联「制卡到服务端」：客户端把**未渲染**的制卡请求（rawPayloadJson + context 文本 +
   /// 全部本地媒体字节）转发过来，本机用**自己的** Anki 后端 + 字段映射/牌组渲染并落卡
   /// （服务端拥有制卡配置）。实现方须把 [ForwardedMinePayload] 的媒体字节落成本机临时文件/

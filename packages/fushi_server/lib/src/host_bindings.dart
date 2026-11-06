@@ -17,11 +17,10 @@ import 'package:fushi_engine/foundation/engine_log.dart';
 import 'package:fushi_engine/foundation/engine_paths.dart';
 import 'package:fushi_engine/media/audio/flac_encoder.dart';
 import 'package:fushi_engine/media/video/ffmpeg_backend.dart';
-import 'package:fushi_engine/ocr/ocr_host_bindings.dart';
+
 import 'package:fushi_engine/utils/net/app_http.dart';
 import 'package:fushi_server/src/config/server_config.dart';
 import 'package:fushi_server/src/native_libs.dart';
-import 'package:fushi_server/src/ocr_session_factory.dart';
 import 'package:fushi_server/src/server_log.dart';
 import 'package:fushi_server/src/server_paths.dart';
 
@@ -43,20 +42,15 @@ void installServerHostBindings({
   ffprobePathOverride = config.ffprobePath;
   // AIFF 有声书落盘转 FLAC（Android 播放器不认 AIFF）。
   installAudiobookFlacTranscoder();
-  // 漫画 OCR 整卷任务的后台 isolate：FFI ONNX Runtime 工厂 + ORT 库路径引导。
-  ocrSessionFactoryBuilder = buildServerOcrSessionFactory;
-  ocrIsolateBootstrap = serverOcrIsolateBootstrap;
-  // ORT：配置显式路径 > bundle/lib 随包（CI 放的 CPU 版；换 CUDA 版只需替换文件或
-  // 在配置里指到 GPU 版路径）> asr_onnx_ffi 自己的候选（ASR_ONNXRUNTIME_LIB / 同级 / 裸名）。
-  final String? ortPath = resolveOrtLibraryPath(config);
-  ocrIsolateBootstrapArg = ortPath;
-  serverOrtLibraryPath = ortPath;
   // ASR（asr_core）的三个装配点：数据根 / 出站 HTTP / 日志。
   asr.asrSupportRootResolver = () async => paths.support;
   asr.asrHttpClientFactory = ({Duration? connectionTimeout}) =>
       createAppHttpClient(connectionTimeout: connectionTimeout);
   asr.asrLogSink = (String line) => log.debug(line);
 }
+
+/// ASR 使用的 ORT 库路径（跨 isolate 引导用；null = 走 asr_onnx_ffi 候选链）。
+String? serverOrtLibraryPath;
 
 /// 服务端 ASR 的 ONNX 工厂（顶层函数，供 isolate 后端）。
 asr.OnnxSessionFactory buildServerAsrOnnxFactory() => FfiOnnxSessionFactory(

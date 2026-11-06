@@ -2,18 +2,14 @@ import 'dart:convert';
 
 import 'package:drift/drift.dart' show QueryRow, Variable;
 import 'package:fushi_engine/media/override_title_key.dart';
-import 'package:fushi_engine/media/video/strm_file.dart'
-    show
-        isNetworkOnlyVideoPath,
-        kNetworkStreamSchemes,
-        kSourceLibrarySftpScheme;
+
 import 'package:fushi_engine/sync/aggregate_merge_service.dart';
 import 'package:fushi/src/models/preference_keys.dart'
     show kProfileFallbackIdPrefKey;
 import 'package:fushi/src/sync/sync_repository.dart';
 import 'package:fushi_audio/fushi_audio.dart' show FavoriteSentence;
 import 'package:fushi_core/fushi_core.dart';
-import 'package:fushi_engine/media/video/anime_source_video_path.dart';
+
 import 'package:fushi_engine/srs/srs_backup_merge.dart'
     show SrsBackupSource, mergeSrsFromBackup;
 
@@ -130,9 +126,8 @@ class BackupMergeEngine {
   /// 在线视频源入库集（`anime-source://`，起播时向扩展取流）与来源库 SFTP 条目
   /// （`sftp://`，起播时经回环中继取字节）同属网络行。
   static final String _networkOnlyVideoPathSql = <String>[
-    ...kNetworkStreamSchemes,
-    kAnimeSourceVideoPathScheme,
-    kSourceLibrarySftpScheme,
+    'http',
+    'https',
   ].map((String scheme) => "s.video_path LIKE '$scheme://%'").join(' OR ');
 
   /// Positional args matching the `?` placeholders in [_reachableVideoPredicate]

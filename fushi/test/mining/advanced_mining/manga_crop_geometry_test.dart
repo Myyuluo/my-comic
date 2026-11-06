@@ -3,6 +3,7 @@ import 'dart:ui' show Offset, Rect, Size;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi/src/mining/advanced_mining/manga_crop_geometry.dart';
 
+
 /// 漫画裁切框纯几何（高级制卡 · 漫画图片分区）。控件只把指针 / 按键翻译成这些
 /// 调用，边界情形（翻转、越界、最小尺寸、Tab 越界放行）全在这里钉死。
 void main() {

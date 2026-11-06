@@ -2,8 +2,7 @@ import 'package:fushi/src/utils/components/glass/fushi_icon.dart';
 import 'package:fushi/src/utils/fushi_icons.dart';
 import 'package:fushi/src/utils/net/app_http_image.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:fushi_engine/media/collections/collection_season_groups.dart'
-    show collectionGroupKeyForFilename, isMultiSeasonGrouped;
+
 import 'package:fushi_engine/media/tracking/bangumi_api_client.dart';
 import 'package:fushi/src/media/tracking/media_tracking_labels.dart';
 import 'package:fushi_engine/media/tracking/media_tracking_repository.dart';
@@ -384,45 +383,8 @@ Future<List<MediaTrackingLocalTarget>> loadMediaTrackingLocalTargets(
   FushiDatabase database,
 ) async {
   final List<EpubBookRow> books = await database.getAllEpubBooks();
-  final List<VideoBookRow> videos = await database.allVideoBooks();
   final List<GalgameRow> games = await database.getAllGalgames();
-  final List<MediaCollectionRow> collections =
-      await database.getAllMediaCollections();
-  final List<MediaCollectionItemRow> members =
-      await database.getAllCollectionItems();
-  final Set<int> videoPlaylists = members
-      .where((MediaCollectionItemRow row) => row.mediaType == 'video')
-      .map((MediaCollectionItemRow row) => row.collectionId)
-      .toSet();
-  final Map<String, String> videoPathByUid = <String, String>{
-    for (final VideoBookRow video in videos) video.bookUid: video.videoPath,
-  };
-  final Map<int, List<String>> groupKeysByCollection = <int, List<String>>{};
-  for (final MediaCollectionItemRow row in members) {
-    if (row.mediaType != 'video') continue;
-    final String? path = videoPathByUid[row.entryKey];
-    if (path == null) continue;
-    groupKeysByCollection
-        .putIfAbsent(row.collectionId, () => <String>[])
-        .add(collectionGroupKeyForFilename(path));
-  }
   return <MediaTrackingLocalTarget>[
-    for (final MediaCollectionRow collection in collections)
-      if (collection.collectionType == 'playlist' &&
-          videoPlaylists.contains(collection.id) &&
-          !isMultiSeasonGrouped(
-              groupKeysByCollection[collection.id] ?? const <String>[]))
-        MediaTrackingLocalTarget(
-          type: TrackingMediaType.videoCollection,
-          key: collection.id.toString(),
-          title: collection.name,
-        ),
-    for (final VideoBookRow video in videos)
-      MediaTrackingLocalTarget(
-        type: TrackingMediaType.video,
-        key: video.bookUid,
-        title: video.title,
-      ),
     for (final EpubBookRow book in books)
       MediaTrackingLocalTarget(
         type: TrackingMediaType.book,

@@ -4,7 +4,7 @@ import 'dart:collection';
 import 'package:flutter/widgets.dart';
 import 'package:fushi_dictionary/fushi_dictionary.dart';
 import 'package:fushi/src/diagnostics/lookup_perf_trace.dart';
-import 'package:fushi/src/diagnostics/video_diag_log.dart';
+
 import 'package:fushi/src/pages/implementations/dictionary_popup_webview.dart';
 import 'package:fushi/src/shortcuts/dictionary_popup_gamepad.dart';
 
@@ -301,11 +301,6 @@ class DictionaryPopupController extends ChangeNotifier {
           // 诊断（2026-09-22）：低内存下嵌套层的 WebView 键直接丢弃，不停驻。下一次
           // 嵌套查词必然冷建——这是小内存模式「查词很慢」的第二条来源（第一条是没有
           // 热槽），两者独立，日志里要分得开。
-          videoDiag(
-            VideoDiagCategory.warmSlot,
-            VideoDiagLevel.v,
-            'realm discarded (low-memory) parked=${_parkedRealms.length}',
-          );
         }
         continue;
       }
@@ -414,11 +409,6 @@ class DictionaryPopupController extends ChangeNotifier {
       // 查词都冷建 WebView」，`already-seeded` 只是重复调用的幂等返回。把原因记下来，
       // 别让排查时把两者混为一谈。
       final String reason = lowMemory ? 'low-memory' : 'already-seeded';
-      videoDiag(
-        VideoDiagCategory.warmSlot,
-        VideoDiagLevel.v,
-        'seed skipped reason=$reason',
-      );
       return;
     }
     _entries.add(DictionaryPopupEntry(
@@ -511,13 +501,6 @@ class DictionaryPopupController extends ChangeNotifier {
       )..isSearching = true;
       _entries.add(e);
     }
-    videoDiag(
-      VideoDiagCategory.warmSlot,
-      warmHit ? VideoDiagLevel.v : VideoDiagLevel.info,
-      'beginTop warm=$warmMode low-memory=$lowMemory '
-      'stack=$stackBefore parked=${_parkedRealms.length} '
-      'reuse-requested=$reuseWarmSlot',
-    );
     LookupPerfTrace.current?.mark('warm', detail: 'mode=$warmMode');
     notifyListeners();
     _notifyLookupStackDepth();
@@ -752,13 +735,6 @@ class DictionaryPopupController extends ChangeNotifier {
       // 到达，弹窗被强制翻可见，内容随后才画上去，于是先露一下空壳再重画。冷建
       // WebView（小内存模式的必经之路）正是最容易撞上这个兜底的情形。提级到 warn，
       // grep 一眼可见。
-      videoDiag(
-        VideoDiagCategory.popup,
-        VideoDiagLevel.warn,
-        'forced reveal after ${timeout.inMilliseconds}ms '
-        '(popupRendered never arrived) '
-        'term=${LookupPerfTrace.redactTerm(e.searchTerm)}',
-      );
       LookupPerfTrace.current?.finish('forced-reveal');
       notifyListeners();
       _notifyLookupStackDepth();

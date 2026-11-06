@@ -8,10 +8,8 @@
 /// 通道把它报成错误，而不是吞成一句空原因。
 library;
 
-import 'package:fushi/src/media/discovery/alist_site_config.dart';
 import 'package:fushi/src/media/discovery/audiobookshelf_server_config.dart';
 import 'package:fushi/src/media/discovery/opds_server_config.dart';
-import 'package:fushi/src/media/discovery/sources/alist_discovery_source.dart';
 import 'package:fushi/src/media/discovery/sources/audiobookshelf_discovery_source.dart';
 import 'package:fushi/src/media/discovery/sources/opds_discovery_source.dart';
 import 'package:fushi/utils.dart';
@@ -70,32 +68,6 @@ Future<DiscoveryProbeOutcome> probeOpdsServer(OpdsServerConfig config) async {
   }
 }
 
-/// AList 连接自检：真列一次根目录（游客 / 账号同一条 `fs/list`）。
-Future<DiscoveryProbeOutcome> probeAListSite(AListSiteConfig config) async {
-  final AListDiscoverySource source = AListDiscoverySource.fromConfig(
-    config,
-    client: createAppHttpIoClient(),
-  );
-  try {
-    final ProviderBatchResult<DiscoveryResultPage> page = await source.browse(
-      DiscoveryRequest(kind: config.kinds.first),
-    );
-    final int count = page.items.isEmpty ? 0 : page.items.single.entries.length;
-    return DiscoveryProbeOutcome(
-      ok: true,
-      message: t.discovery_alist_test_ok(count: count),
-      count: count,
-    );
-  } on ExternalProviderFailure catch (failure) {
-    return DiscoveryProbeOutcome(
-      ok: false,
-      message: t.discovery_alist_test_failed(reason: failure.message),
-    );
-  } finally {
-    source.close();
-  }
-}
-
 /// Audiobookshelf 登录 / 测试的结论：成功时带回协议层当前令牌与用户名。
 class AudiobookshelfConnectOutcome extends DiscoveryProbeOutcome {
   const AudiobookshelfConnectOutcome({
@@ -115,6 +87,7 @@ class AudiobookshelfConnectOutcome extends DiscoveryProbeOutcome {
 /// 库（顺带验证令牌还活着）。两条路径都以「列出有声书库」收尾。
 ///
 /// 只返回结论，不落盘：令牌写回由调用方决定（设置页走草稿，控制通道直接写偏好）。
+
 Future<AudiobookshelfConnectOutcome> connectAudiobookshelfServer(
   AudiobookshelfServerConfig config, {
   String username = '',

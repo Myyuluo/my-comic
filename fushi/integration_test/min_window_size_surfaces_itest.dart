@@ -25,7 +25,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'support/test_app_launcher.dart';
 import 'package:fushi/src/models/app_model.dart';
 import 'package:fushi/src/pages/implementations/dictionary_dialog_page.dart';
-import 'package:fushi/src/pages/implementations/media_sources_dialog.dart';
+
 import 'package:fushi/src/pages/implementations/home_page.dart';
 import 'package:fushi/src/startup/desktop_window_placement.dart';
 import 'package:fushi_core/fushi_core.dart';
@@ -156,40 +156,6 @@ void main() {
         tester.state<NavigatorState>(find.byType(Navigator).first).pop();
         await tester.pump(const Duration(seconds: 1));
 
-        // TODO-1389：TODO-1377 未覆盖的弹窗表面——「管理来源库」对话框 body
-        // （FushiReorderableColumn）在最小窗高下若不套滚动视口会 RenderFlex 底部溢出。
-        // 播种 24 条来源（远超受限 body 高度）后打开对话框，扫掠断言无溢出（修后应整体
-        // 滚动而非出框）。种到隔离库（FUSHI_TEST_ROOT），不碰真实数据。
-        for (int i = 0; i < 24; i++) {
-          await appModel.database.insertMediaSource(
-            MediaSourcesCompanion.insert(
-              label: 'itest_src_$i',
-              mediaKind: 'book',
-              rootPath: '/tmp/itest_src_$i',
-              createdAt: i,
-            ),
-          );
-        }
-        // 经根 NavigatorState 推 DialogRoute（State 可跨 await，不触
-        // use_build_context_synchronously；navigator.context 仅用于捕获继承主题，
-        // 与 showDialog 内部一致）。
-        final NavigatorState rootNavigator =
-            tester.state<NavigatorState>(find.byType(Navigator).first);
-        unawaited(rootNavigator.push(DialogRoute<void>(
-          // rootNavigator 是刚从树里取到的活 State（必然 mounted），context 立即被
-          // DialogRoute 同步消费用于捕获继承主题；lint 的跨 await 告警在此为误报。
-          // ignore: use_build_context_synchronously
-          context: rootNavigator.context,
-          builder: (_) => const MediaSourcesDialog(mediaKind: 'book'),
-        )));
-        final Finder mediaSourcesFinder = find.byType(MediaSourcesDialog);
-        for (int i = 0; i < 40 && mediaSourcesFinder.evaluate().isEmpty; i++) {
-          await tester.pump(const Duration(milliseconds: 250));
-        }
-        expect(mediaSourcesFinder, findsOneWidget, reason: '来源库对话框应已打开');
-        await sweepSurface('media-sources');
-        tester.state<NavigatorState>(find.byType(Navigator).first).pop();
-        await tester.pump(const Duration(seconds: 1));
       },
     );
   });

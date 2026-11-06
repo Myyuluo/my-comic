@@ -1,7 +1,6 @@
 import 'package:material_ui/material_ui.dart';
 
-import 'package:fushi/src/lookup/gal_hook_text_overlay_controller.dart'
-    show GalHookToolbarPalette, galHookToolbarPalette, galHookToolbarThemeArgs;
+
 import 'package:fushi/src/media/audiobook/audiobook_session.dart'
     show FloatingLyricStyle;
 import 'package:fushi/src/models/preferences_repository.dart';
@@ -127,12 +126,25 @@ FloatingLyricStyle buildFloatingLyricStyle({
     text,
     settings.textOpacity,
   );
-  // 工具条沿用 galgame 台词浮窗的 M3E 浮动工具条配色（同一个原生窗类、同一套
-  // 槽位渲染），两种浮窗的工具条长得一样。
-  final GalHookToolbarPalette palette = galHookToolbarPalette(
-    theme,
-    textColor: textColor,
-  );
+  // M3E 浮动工具条：与主窗口工具栏同一副长相（tonal surfaceContainer 胶囊、
+  // onSurfaceVariant 图标、secondaryContainer 激活底）。
+  int withAlpha(Color color, int alpha) =>
+      (alpha << 24) | (color.toARGB32() & 0x00FFFFFF);
+  final Color highlightFill =
+      Color(textColor).computeLuminance() > 0.4
+          ? scheme.onPrimaryFixedVariant
+          : scheme.primaryFixed;
+  final int highlightColor = withAlpha(highlightFill, 0xC0);
+  final Map<String, Object?> toolbarArgs = <String, Object?>{
+    'toolbarBgColor': withAlpha(scheme.surfaceContainer, 0xFF),
+    'toolbarIconColor': withAlpha(scheme.onSurfaceVariant, 0xFF),
+    'toolbarHoverColor': withAlpha(scheme.onSurfaceVariant, 0x14),
+    'toolbarActiveBgColor': withAlpha(scheme.secondaryContainer, 0xFF),
+    'toolbarActiveIconColor': withAlpha(scheme.onSecondaryContainer, 0xFF),
+    'toolbarTooltipBgColor': withAlpha(scheme.inverseSurface, 0xFF),
+    'toolbarTooltipTextColor': withAlpha(scheme.onInverseSurface, 0xFF),
+    'highlightColor': highlightColor,
+  };
   return FloatingLyricStyle(
     fontSize: settings.fontSize,
     textColor: textColor,
@@ -144,7 +156,7 @@ FloatingLyricStyle buildFloatingLyricStyle({
       0xFF000000 | (scheme.secondaryContainer.toARGB32() & 0x00FFFFFF),
       settings.buttonBgOpacity,
     ),
-    highlightColor: palette.highlightColor,
+    highlightColor: highlightColor,
     activeColor: 0xFF000000 | (scheme.primary.toARGB32() & 0x00FFFFFF),
     cornerRadius: settings.cornerRadius,
     windowWidth: settings.windowWidth,
@@ -163,6 +175,6 @@ FloatingLyricStyle buildFloatingLyricStyle({
       settings.textOpacity,
     ),
     contextLineOpacity: settings.contextOpacity / 100.0,
-    toolbarArgs: galHookToolbarThemeArgs(palette),
+    toolbarArgs: toolbarArgs,
   );
 }

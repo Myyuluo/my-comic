@@ -9,14 +9,14 @@ import 'package:flutter_test/flutter_test.dart';
 /// 数、点开明细为空 / 首页目标环归零不再涨。修复：窗口存成字段（`_window` /
 /// `_statWindow`），到下一个本地午夜排一次性 Timer 整页重聚合。
 ///
-/// 守卫：四个页面文件里 `StatWindow(DateTime.now())` 只许出现在字段初值与加载入口
-/// （`_loadFromDatabase` / `_load` / `_loadDashboardDataUnsafe`）里；「过去一周」
+/// 守卫：页面文件里 `StatWindow(DateTime.now())` 只许出现在字段初值与加载入口
+/// （`_loadFromDatabase` / `_loadDashboardDataUnsafe`）里；「过去一周」
 /// 与目标卡不得现算，且必须挂 `_midnightReload`。
+///
+/// 视频 / 游戏统计页随 my-comic v1 移除非漫画模块一并删除。
 void main() {
   const Map<String, String> pages = <String, String>{
     'reading_statistics_page.dart': '_loadFromDatabase',
-    'video_statistics_page.dart': '_loadFromDatabase',
-    'game_statistics_page.dart': '_load',
   };
 
   for (final MapEntry<String, String> e in pages.entries) {

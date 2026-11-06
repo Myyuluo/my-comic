@@ -18,6 +18,8 @@ import 'package:fushi/i18n/strings.g.dart';
 import 'package:fushi/src/focus/fushi_focus_controller.dart';
 import 'package:fushi/src/mining/advanced_mining/advanced_mining_capabilities.dart';
 import 'package:fushi/src/mining/advanced_mining/advanced_mining_dialog.dart';
+
+
 import 'package:fushi/src/models/theme_notifier.dart';
 import 'package:fushi/src/utils/components/fushi_design_tokens.dart';
 import 'package:material_ui/material_ui.dart';

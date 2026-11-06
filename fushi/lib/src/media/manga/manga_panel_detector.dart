@@ -7,3 +7,6 @@ import 'package:fushi_engine/media/manga/panel_detection.dart';
 typedef MangaPanelDetectorFactory = Future<PanelDetector?> Function();
 
 MangaPanelDetectorFactory? mangaPanelDetectorFactory;
+
+/// 分镜模型安装代次：宿主重新安装/删除模型时自增，阅读器据此重试检测。
+int mangaPanelModelRevision = 0;

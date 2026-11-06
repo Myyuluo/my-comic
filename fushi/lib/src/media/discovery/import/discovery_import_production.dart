@@ -19,15 +19,14 @@ import 'package:fushi_engine/media/discovery/discovery_download_queue.dart'
 import 'package:fushi_engine/media/discovery/import/discovery_engine_importers.dart';
 import 'package:fushi_engine/media/discovery/import/discovery_import_executor.dart';
 import 'package:fushi_engine/media/discovery/import/discovery_import_plan.dart';
-import 'package:fushi/src/mining/galgame_library.dart';
-import 'package:fushi/src/mining/galgame_repository.dart';
+
+
 import 'package:fushi/src/pdf/pdf_importer.dart';
 
 DiscoveryDomainImporters buildProductionDiscoveryImporters({
   required FushiDatabase db,
   required SrtBookRepository srtBookRepo,
   required AudiobookRepository audiobookRepo,
-  required GalgameRepository galgameRepo,
   required Future<DiscoveryImportOutcome> Function(TranscribeAudiobookPlan plan)
       transcribeAudiobook,
 }) {
@@ -62,21 +61,7 @@ DiscoveryDomainImporters buildProductionDiscoveryImporters({
     transcribeAudiobook: transcribeAudiobook,
     importMangaArchive: (String archivePath) =>
         importDiscoveryMangaArchive(db, archivePath),
-    registerGameExes: (List<String> exePaths) async {
-      final List<String> fresh =
-          filterOutDuplicateGameExes(galgameRepo.games, exePaths);
-      if (fresh.isEmpty) return 0;
-      final DateTime base = DateTime.now();
-      // 批内 id 用微秒错开，防同微秒撞 id（同 games_library_page 拖拽入库）。
-      final List<GalgameEntry> entries = <GalgameEntry>[
-        for (int i = 0; i < fresh.length; i++)
-          newGalgameEntryFromExe(
-            fresh[i],
-            now: base.add(Duration(microseconds: i)),
-          ),
-      ];
-      await galgameRepo.addAll(entries);
-      return entries.length;
-    },
+    // my-comic：游戏域已删除；发现页不再登记游戏可执行文件。
+    registerGameExes: (List<String> exePaths) async => 0,
   );
 }

@@ -40,7 +40,7 @@ import 'package:fushi_engine/mining/immersion_mining_request.dart'
 import 'package:fushi/src/models/module_id.dart';
 import 'package:fushi/src/models/module_registry.dart';
 import 'package:fushi/src/models/preferences_repository.dart';
-import 'package:fushi/src/mining/video_online_mining_mode.dart';
+
 import 'package:fushi/src/platform/platform_providers.dart';
 import 'package:fushi/src/platform/platform_services.dart';
 import 'package:fushi/src/profile/profile_selector.dart';
@@ -144,8 +144,6 @@ class _AnkiSettingsBodyState extends ConsumerState<AnkiSettingsBody> {
   /// 「当前笔记类型能否播放同步视频片段」的探测结果，按 [_clipSupportProbeFor]
   /// （设置对象身份）缓存：换笔记类型 / 改映射 / 适配回来都会产生新设置对象而重探，
   /// 普通重建不重复打 Anki。
-  Future<bool?>? _clipSupportProbe;
-  AnkiSettings? _clipSupportProbeFor;
 
   /// 本平台的原生 Anki 后端是否受限、因而提供「改用 AnkiConnect」这个开关。
   /// 与 [PlatformServices.offersMobileAnkiConnectChoice] 同义：iOS 的 AnkiMobile
@@ -944,25 +942,6 @@ class _AnkiSettingsBodyState extends ConsumerState<AnkiSettingsBody> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        AdaptiveSettingsSection(
-          children: <Widget>[
-            SettingsSearchTarget(
-              id: 'card_creation.anki.video_template',
-              child: FutureBuilder<bool?>(
-                future: _clipSupportProbeOf(settings, vm),
-                builder: (BuildContext context, AsyncSnapshot<bool?> probe) =>
-                    _buildVideoTemplateRow(
-                      settings,
-                      vm,
-                      notAdapted: probe.data == false,
-                    ),
-              ),
-            ),
-            _buildVideoMiningImageModePicker(),
-            if (appModel.videoMiningImageMode.isVideoClip)
-              _buildVideoMiningClipFormatPicker(),
-          ],
-        ),
         SettingsSearchTarget(
           id: 'card_creation.anki.field_mappings',
           child: AdaptiveSettingsSection(
@@ -972,58 +951,6 @@ class _AnkiSettingsBodyState extends ConsumerState<AnkiSettingsBody> {
         ),
       ],
     );
-  }
-
-  /// 视频制卡选了「同步片段」而当前笔记类型确定渲染不了时（[notAdapted]），这一行
-  /// 直接说明制卡会改用 GIF + 音频并引导去适配；无法判定时不打扰，保持原说明。
-  Widget _buildVideoTemplateRow(
-    AnkiSettings settings,
-    AnkiViewModel vm, {
-    required bool notAdapted,
-  }) {
-    final bool editable = vm.videoTemplateService.supportsEditing;
-    return AdaptiveSettingsRow(
-      title: t.anki_video_template_title,
-      subtitle: !editable
-          ? t.anki_video_template_unsupported
-          : notAdapted
-          ? t.anki_video_template_needed_hint
-          : t.anki_video_template_media_hint,
-      icon: notAdapted ? FushiIcons.warning : FushiIcons.video,
-      showIcon: true,
-      trailing: editable ? const FushiIcon(FushiIcons.chevronRight) : null,
-      onTap: editable ? () => _openVideoTemplate(settings, vm) : null,
-    );
-  }
-
-  /// 只有选了同步片段、且后端能读写模板时才探测；其它情况恒「无提示」。
-  Future<bool?>? _clipSupportProbeOf(AnkiSettings settings, AnkiViewModel vm) {
-    if (!appModel.videoMiningImageMode.isVideoClip ||
-        !vm.videoTemplateService.supportsEditing) {
-      return null;
-    }
-    if (_clipSupportProbe == null ||
-        !identical(_clipSupportProbeFor, settings)) {
-      _clipSupportProbeFor = settings;
-      _clipSupportProbe = vm.rendersSynchronizedClip();
-    }
-    return _clipSupportProbe;
-  }
-
-  void _resetClipSupportProbe() {
-    _clipSupportProbe = null;
-    _clipSupportProbeFor = null;
-  }
-
-  Future<void> _openVideoTemplate(
-    AnkiSettings settings,
-    AnkiViewModel vm,
-  ) async {
-    await openAnkiVideoTemplate(context, vm: vm, settings: settings);
-    if (!mounted) return;
-    // 适配可能没改设置对象（只改了模板），身份缓存挡不住旧结论，显式重探。
-    setState(_resetClipSupportProbe);
-    await vm.refreshSettingsFromStore();
   }
 
   Widget _buildMediaPanel(AnkiUiState uiState, AnkiViewModel vm) {
@@ -1072,47 +999,6 @@ class _AnkiSettingsBodyState extends ConsumerState<AnkiSettingsBody> {
             },
           ),
         ),
-        SettingsSearchTarget(
-          id: 'card_creation.anki.video_mining_image_mode',
-          child: _buildVideoMiningImageModePicker(),
-        ),
-        // 非 videoClip 模式下这一行不参与制卡，理由同下面两行照常渲染。
-        SettingsSearchTarget(
-          id: 'card_creation.anki.video_mining_clip_format',
-          child: _buildVideoMiningClipFormatPicker(),
-        ),
-        // videoClip 模式下这两行不参与制卡，但仍渲染：设置行按 item-id 被覆盖守卫
-        // 枚举，按模式从树上抽掉会让焦点驱动的守卫在切换那一刻账目对不上。
-        SettingsSearchTarget(
-          id: 'card_creation.anki.video_mining_animated_format',
-          child: _buildVideoMiningAnimatedFormatPicker(),
-        ),
-        SettingsSearchTarget(
-          id: 'card_creation.anki.video_mining_still_format',
-          child: _buildVideoMiningStillFormatPicker(),
-        ),
-        SettingsSearchTarget(
-          id: 'card_creation.anki.video_online_mining_mode',
-          child: _buildVideoOnlineMiningModePicker(),
-        ),
-        if (Platform.isWindows) ...[
-          SettingsSearchTarget(
-            id: 'card_creation.anki.gal_mining_image_mode',
-            child: _buildGalMiningImageModePicker(),
-          ),
-          SettingsSearchTarget(
-            id: 'card_creation.anki.gal_mining_clip_format',
-            child: _buildGalMiningClipFormatPicker(),
-          ),
-          SettingsSearchTarget(
-            id: 'card_creation.anki.gal_mining_animated_format',
-            child: _buildGalMiningAnimatedFormatPicker(),
-          ),
-          SettingsSearchTarget(
-            id: 'card_creation.anki.gal_mining_still_format',
-            child: _buildGalMiningStillFormatPicker(),
-          ),
-        ],
       ],
     );
   }
@@ -1214,262 +1100,6 @@ class _AnkiSettingsBodyState extends ConsumerState<AnkiSettingsBody> {
   /// （格式见 [_buildVideoMiningClipFormatPicker]）；gif=字幕区间动图；currentFrame=
   /// 制卡那一刻的当前解码帧（点词已自动暂停）；subtitleStart=当前字幕 cue 起始时间点的帧。
   /// 全局设置，透传 [AppModel.videoMiningImageMode]，所有视频制卡生效。
-  Widget _buildVideoMiningImageModePicker() {
-    return AdaptiveSettingsPickerRow<VideoMiningImageMode>(
-      title: t.video_mining_image_mode,
-      subtitle: appModel.videoMiningImageMode.isVideoClip
-          ? t.video_mining_image_mode_video_clip_inline_hint
-          : null,
-      icon: FushiIcons.image,
-      controlBelow: true,
-      selected: appModel.videoMiningImageMode,
-      options: [
-        AdaptiveSettingsPickerOption<VideoMiningImageMode>(
-          value: VideoMiningImageMode.gif,
-          label: t.video_mining_image_mode_gif,
-        ),
-        AdaptiveSettingsPickerOption<VideoMiningImageMode>(
-          value: VideoMiningImageMode.videoClip,
-          label: t.video_mining_image_mode_video_clip,
-        ),
-        AdaptiveSettingsPickerOption<VideoMiningImageMode>(
-          value: VideoMiningImageMode.currentFrame,
-          label: t.video_mining_image_mode_current_frame,
-        ),
-        AdaptiveSettingsPickerOption<VideoMiningImageMode>(
-          value: VideoMiningImageMode.subtitleStart,
-          label: t.video_mining_image_mode_subtitle_start,
-        ),
-      ],
-      onChanged: (VideoMiningImageMode mode) {
-        appModel.setVideoMiningImageMode(mode);
-        setState(_resetClipSupportProbe);
-      },
-    );
-  }
-
-  /// 在线视频（媒体服务器 / 在线源扩展等网络流）点制卡后弹窗等不等：后台（默认）/
-  /// 看完再制卡 / 等待完成。副标题随选中项说明取舍，透传
-  /// [AppModel.videoOnlineMiningMode]。本地视频不受影响（恒等待，本来就秒出）。
-  Widget _buildVideoOnlineMiningModePicker() {
-    final VideoOnlineMiningMode mode = appModel.videoOnlineMiningMode;
-    return AdaptiveSettingsPickerRow<VideoOnlineMiningMode>(
-      title: t.video_online_mining_mode,
-      subtitle: switch (mode) {
-        VideoOnlineMiningMode.background =>
-          t.video_online_mining_mode_background_hint,
-        VideoOnlineMiningMode.deferred =>
-          t.video_online_mining_mode_deferred_hint,
-        VideoOnlineMiningMode.wait => t.video_online_mining_mode_wait_hint,
-      },
-      icon: FushiIcons.cloudDownload,
-      controlBelow: true,
-      selected: mode,
-      options: [
-        AdaptiveSettingsPickerOption<VideoOnlineMiningMode>(
-          value: VideoOnlineMiningMode.background,
-          label: t.video_online_mining_mode_background,
-        ),
-        AdaptiveSettingsPickerOption<VideoOnlineMiningMode>(
-          value: VideoOnlineMiningMode.deferred,
-          label: t.video_online_mining_mode_deferred,
-        ),
-        AdaptiveSettingsPickerOption<VideoOnlineMiningMode>(
-          value: VideoOnlineMiningMode.wait,
-          label: t.video_online_mining_mode_wait,
-        ),
-      ],
-      onChanged: (VideoOnlineMiningMode value) async {
-        await appModel.setVideoOnlineMiningMode(value);
-        if (mounted) setState(() {});
-      },
-    );
-  }
-
-  /// galgame 场景卡封面模式，与视频那项**分开存**（`gal_mining_image_mode`）：视频
-  /// 动图能拍出口型和动作，galgame 一句台词内画面基本静止，动图多半只是把同一帧存
-  /// 二十遍。共用一个开关会逼用户为一边将就另一边。
-  ///
-  /// galgame 没有「字幕区间」，所以给 gif / 静态截图 / 视频片段三档——不渲染
-  /// subtitleStart，免得暗示能选一个对这个场景无意义的模式。这里的视频片段（mp4）
-  /// 来自 hook 会话的窗口录制 + 台词时间戳；普通视频页直接截取源视频。
-  Widget _buildGalMiningImageModePicker() {
-    final VideoMiningImageMode current = appModel.galMiningImageMode;
-    return AdaptiveSettingsPickerRow<VideoMiningImageMode>(
-      title: t.gal_mining_image_mode,
-      icon: FushiIcons.image,
-      controlBelow: true,
-      // 历史值可能是 subtitleStart（与视频项共用枚举）：按 isStill 归到静态截图，
-      // 不让 picker 落在一个没渲染的选项上。
-      selected: current.isVideoClip
-          ? VideoMiningImageMode.videoClip
-          : current.isStill
-          ? VideoMiningImageMode.currentFrame
-          : VideoMiningImageMode.gif,
-      options: [
-        AdaptiveSettingsPickerOption<VideoMiningImageMode>(
-          value: VideoMiningImageMode.gif,
-          label: t.video_mining_image_mode_gif,
-        ),
-        AdaptiveSettingsPickerOption<VideoMiningImageMode>(
-          value: VideoMiningImageMode.currentFrame,
-          label: t.gal_mining_image_mode_screenshot,
-        ),
-        AdaptiveSettingsPickerOption<VideoMiningImageMode>(
-          value: VideoMiningImageMode.videoClip,
-          label: t.gal_mining_image_mode_video_clip,
-        ),
-      ],
-      onChanged: (VideoMiningImageMode mode) {
-        appModel.setGalMiningImageMode(mode);
-        setState(() {});
-      },
-    );
-  }
-
-  /// 动图**编码格式**，与上面两个「封面模式」正交：模式决定用不用动图，格式决定动图
-  /// 怎么编码。视频 / gal 各存一份（同 image mode 的分法）。
-  ///
-  /// 三档共用一套 option 文案（[t.mining_animated_format_avif] 等）——格式本身的含义与
-  /// 场景无关，没必要为两个页面各写一份会漂开的文案。
-  Widget _buildAnimatedFormatPicker({
-    required String title,
-    String? subtitle,
-    required MiningAnimatedFormat selected,
-    required void Function(MiningAnimatedFormat) onChanged,
-  }) {
-    return AdaptiveSettingsPickerRow<MiningAnimatedFormat>(
-      title: title,
-      subtitle: subtitle,
-      icon: FushiIcons.playCircle,
-      controlBelow: true,
-      selected: selected,
-      options: [
-        AdaptiveSettingsPickerOption<MiningAnimatedFormat>(
-          value: MiningAnimatedFormat.avif,
-          label: t.mining_animated_format_avif,
-        ),
-        AdaptiveSettingsPickerOption<MiningAnimatedFormat>(
-          value: MiningAnimatedFormat.webp,
-          label: t.mining_animated_format_webp,
-        ),
-        AdaptiveSettingsPickerOption<MiningAnimatedFormat>(
-          value: MiningAnimatedFormat.gif,
-          label: t.mining_animated_format_gif,
-        ),
-      ],
-      onChanged: (MiningAnimatedFormat format) {
-        onChanged(format);
-        setState(() {});
-      },
-    );
-  }
-
-  Widget _buildVideoMiningAnimatedFormatPicker() => _buildAnimatedFormatPicker(
-    title: t.video_mining_animated_format,
-    selected: appModel.videoMiningAnimatedFormat,
-    onChanged: appModel.setVideoMiningAnimatedFormat,
-  );
-
-  Widget _buildGalMiningAnimatedFormatPicker() => _buildAnimatedFormatPicker(
-    title: t.gal_mining_animated_format,
-    selected: appModel.galMiningAnimatedFormat,
-    onChanged: appModel.setGalMiningAnimatedFormat,
-  );
-
-  /// 静图（截图）**编码格式**，与上面两轴正交：封面模式选「用不用动图 / 静帧取
-  /// 哪一帧」，动图格式选「动图怎么编码」，本项只管「那一帧怎么编码」。
-  ///
-  /// 常显（不按 imageMode 隐藏）：动图抽取失败会降级成静帧，所以即使选着动图，
-  /// 本项也仍然决定那张降级图的格式；时隐时现反而让用户以为它不生效。
-  ///
-  /// 视频 / gal 各存一份（同 image mode、animated format 的分法）：gal 的静图来自
-  /// 窗口抓图（本身就是 PNG），与视频帧的取舍不同，共用一个开关会逼用户将就。
-  /// 三档共用一套 option 文案 —— 格式含义与场景无关。
-  Widget _buildStillFormatPicker({
-    required String title,
-    String? subtitle,
-    required MiningStillFormat selected,
-    required void Function(MiningStillFormat) onChanged,
-  }) {
-    return AdaptiveSettingsPickerRow<MiningStillFormat>(
-      title: title,
-      subtitle: subtitle,
-      icon: FushiIcons.image,
-      controlBelow: true,
-      selected: selected,
-      options: [
-        AdaptiveSettingsPickerOption<MiningStillFormat>(
-          value: MiningStillFormat.jpg,
-          label: t.mining_still_format_jpg,
-        ),
-        AdaptiveSettingsPickerOption<MiningStillFormat>(
-          value: MiningStillFormat.png,
-          label: t.mining_still_format_png,
-        ),
-      ],
-      onChanged: (MiningStillFormat format) {
-        onChanged(format);
-        setState(() {});
-      },
-    );
-  }
-
-  Widget _buildVideoMiningStillFormatPicker() => _buildStillFormatPicker(
-    title: t.video_mining_still_format,
-    subtitle: t.video_mining_still_format_hint,
-    selected: appModel.videoMiningStillFormat,
-    onChanged: appModel.setVideoMiningStillFormat,
-  );
-
-  Widget _buildGalMiningStillFormatPicker() => _buildStillFormatPicker(
-    title: t.gal_mining_still_format,
-    selected: appModel.galMiningStillFormat,
-    onChanged: appModel.setGalMiningStillFormat,
-  );
-
-  /// 音画同步片段**容器 + 编码**（与动图 / 静图两轴正交，只在封面模式为 videoClip 时
-  /// 生效）。视频 / gal 各存一份（同上两轴的分法），共用一套 option 文案。
-  ///
-  /// 默认值不在这里：偏好层按「老用户是不是显式选过 MP4 片段」推导（见
-  /// `PreferencesRepository.videoMiningClipFormat`）。
-  Widget _buildClipFormatPicker({
-    required String title,
-    required MiningClipFormat selected,
-    required void Function(MiningClipFormat) onChanged,
-  }) {
-    return AdaptiveSettingsPickerRow<MiningClipFormat>(
-      title: title,
-      subtitle: t.mining_clip_format_hint,
-      icon: FushiIcons.video,
-      controlBelow: true,
-      selected: selected,
-      options: [
-        for (final MiningClipFormat format in MiningClipFormat.values)
-          AdaptiveSettingsPickerOption<MiningClipFormat>(
-            value: format,
-            label: miningClipFormatLabel(format),
-          ),
-      ],
-      onChanged: (MiningClipFormat format) {
-        onChanged(format);
-        setState(() {});
-      },
-    );
-  }
-
-  Widget _buildVideoMiningClipFormatPicker() => _buildClipFormatPicker(
-    title: t.video_mining_clip_format,
-    selected: appModel.videoMiningClipFormat,
-    onChanged: appModel.setVideoMiningClipFormat,
-  );
-
-  Widget _buildGalMiningClipFormatPicker() => _buildClipFormatPicker(
-    title: t.gal_mining_clip_format,
-    selected: appModel.galMiningClipFormat,
-    onChanged: appModel.setGalMiningClipFormat,
-  );
-
   Widget _buildAnkiBackupImportRow() {
     return AdaptiveSettingsRow(
       icon: FushiIcons.importFile,

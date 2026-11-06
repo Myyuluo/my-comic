@@ -38,9 +38,10 @@ void main() {
       online = _read(<String>['manga_online_sources_view.dart']);
     });
 
-    test('本地扫描根这一节仍是漫画种类的 MediaSourcesView（没接成 book）', () {
-      expect(sources, contains('MediaSourcesView('));
-      expect(sources, contains("mediaKind: 'manga'"));
+    test('本地导入这一节仍挂漫画快速导入（共享扫描根已随非漫画域移除）', () {
+      expect(sources, contains('QuickImportSection('));
+      expect(sources, contains("'MOKURO'"));
+      expect(sources, isNot(contains('MediaSourcesView(')));
     });
 
     test('Mihon 扩展管理内嵌在漫画在线来源面里，不在导入页', () {
@@ -83,20 +84,12 @@ void main() {
     });
 
     // 2026-11-05 用户口径：应用不再内置任何 Source，Mokuro.moe 从在线源移除。
-    test('在线源面不再有内置 mokuro.moe 行，扫描根视图也没有', () {
+    test('在线源面不再有内置 mokuro.moe 行，导入页也没有', () {
       expect(online, isNot(contains('MokuroMoeSourceRow')));
       expect(online, isNot(contains('mokuro_moe')));
       expect(sources, isNot(contains('MokuroMoeSourceRow')));
-      final String localRoots = maskComments(
-        File(p.join('lib', 'src', 'pages', 'implementations',
-                'media_sources_view.dart'))
-            .readAsStringSync(),
-      );
-      expect(
-        localRoots,
-        isNot(contains('Mokuro')),
-        reason: '共享的扫描根视图（书/视频/漫画三域共用）里不得再出现在线站点',
-      );
+      // 共享扫描根视图（media_sources_view.dart）已随非漫画域移除。
+      expect(sources, isNot(contains('media_sources_view')));
     });
   });
 

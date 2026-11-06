@@ -3,8 +3,7 @@ import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
-import 'package:fushi/src/media/video/youtube_range_relay.dart'
-    show parseContentRange;
+
 import 'package:fushi/src/sync/obfuscating_sync_backend.dart';
 import 'package:fushi/src/sync/sync_backend.dart';
 import 'package:fushi/src/sync/sync_obfuscator.dart';
@@ -284,6 +283,20 @@ Stream<List<int>> _withLinkFreeErrors(Stream<List<int>> body) =>
           throw _linkFreeTransportError(error as http.ClientException),
       test: (Object? error) => error is http.ClientException,
     );
+
+/// 纯函数：解析上游 `Content-Range: bytes a-b/total`（total 可为 `*`）。
+({int start, int end, int? total})? parseContentRange(String? header) {
+  if (header == null) return null;
+  final RegExpMatch? m =
+      RegExp(r'^\s*bytes\s+(\d+)-(\d+)/(\d+|\*)\s*$').firstMatch(header);
+  if (m == null) return null;
+  final String totalText = m.group(3)!;
+  return (
+    start: int.parse(m.group(1)!),
+    end: int.parse(m.group(2)!),
+    total: totalText == '*' ? null : int.parse(totalText),
+  );
+}
 
 SyncAssetRange _rangeFromResponse(
   http.StreamedResponse response,

@@ -286,16 +286,6 @@ extension _ReaderHistoryCardWidgets on _ReaderFushiHistoryPageState {
         child: result,
       );
     }
-    // 拖卡进合集：拖拽源包在标签 drop target **外面**——两者方向相反（这张卡既能
-    // 被拖走、也能接住落下的标签），泛型不同互不干扰；Draggable 只加 Listener，
-    // 不改变布局（`book_drag_target_layout_test.dart` 的等尺寸断言仍成立）。
-    if (dragMediaRef != null && !_selectionMode) {
-      result = MediaCardDraggable(
-        mediaRef: dragMediaRef,
-        label: dragLabel ?? '',
-        child: result,
-      );
-    }
     // 长按扫选靠命中测试反查「手指下面是哪一格」，故身份标记包在最外层（
     // [MetaData] 默认 deferToChild，只有真命中卡片时才进命中路径）。不改布局。
     if (slot != null) {

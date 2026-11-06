@@ -19,28 +19,26 @@ import 'package:fushi_engine/epub/epub_importer.dart';
 import 'package:fushi_engine/foundation/engine_log.dart';
 import 'package:fushi_engine/sync/interconnect_host_addresses.dart';
 import 'package:fushi_engine/sync/interconnect_p2p.dart';
-import 'package:fushi_engine/media/video/video_book_repository.dart';
-import 'package:fushi_engine/media/video/video_cover_extractor.dart';
-import 'package:fushi_engine/ocr/manga_ocr_local_model.dart';
-import 'package:fushi_engine/ocr/manga_ocr_service_impl.dart';
-import 'package:fushi_engine/sync/fushi_manga_ocr_host.dart';
+
+
+
+
+
 import 'package:fushi_engine/sync/fushi_sync_server.dart';
 import 'package:fushi_engine/sync/host_jobs/host_job_manager.dart';
 import 'package:fushi_engine/sync/host_jobs/host_job_runner.dart';
-import 'package:fushi_engine/sync/interconnect_graphic_subtitle_export.dart';
+
 import 'package:fushi_engine/sync/local_audio_library_store.dart';
 import 'package:fushi_engine/sync/local_library_host_service.dart';
 import 'package:fushi_engine/sync/manga_sync_package.dart';
 import 'package:fushi_engine/sync/override_title_db.dart';
 import 'package:fushi_engine/sync/pairing/fushi_pairing_protocol.dart';
-import 'package:fushi_engine/sync/subscriptions/host_subscription_host.dart';
+
 import 'package:fushi_engine/sync/sync_asset_package_service.dart';
 import 'package:fushi_engine/sync/tls/fushi_tls_identity.dart';
 import 'package:fushi_server/src/anki_landing.dart';
 import 'package:fushi_server/src/config/server_config.dart';
-import 'package:fushi_server/src/assistant_host.dart';
 import 'package:fushi_server/src/dictionary_host.dart';
-import 'package:fushi_server/src/download_host.dart';
 import 'package:fushi_server/src/host_bindings.dart';
 import 'package:fushi_server/src/lan_advertiser.dart';
 import 'package:fushi_server/src/profile_hub.dart';
@@ -48,7 +46,6 @@ import 'package:fushi_server/src/remote_mining_host.dart';
 import 'package:fushi_server/src/server_identity.dart';
 import 'package:fushi_server/src/server_paths.dart';
 import 'package:fushi_server/src/server_prefs.dart';
-import 'package:fushi_server/src/video_scrape_host.dart';
 import 'package:path/path.dart' as p;
 
 /// 当前待输入的配对 PIN（无头进程的「审批弹窗」：CLI 日志 + WebUI 状态）。
@@ -112,12 +109,8 @@ class HeadlessHost {
   FushiSyncServer? get syncServer => _server;
   LanAdvertiser? _advertiser;
   InterconnectP2pRuntime? _p2p;
-  MangaOcrServiceImpl? _ocrService;
-  Map<String, MangaOcrServiceImpl> _ocrModelServices = const <String, MangaOcrServiceImpl>{};
   HostJobManager? _jobs;
-  ServerDownloadHost? _downloads;
   ServerAnkiLanding? _anki;
-  ServerVideoScrape? _videoScrape;
 
   /// 测试注入的词典引擎（指定原生库 / 变形表目录）；null = [start] 按 bundle 布局建。
   final ServerDictionaryHost? _injectedDictionaryHost;
@@ -151,17 +144,7 @@ class HeadlessHost {
   SecurityContext? get securityContext => _securityContext;
   bool get isRunning => _server != null;
   int get port => _server?.port ?? config.port;
-  MangaOcrServiceImpl? get ocrService => _ocrService;
-
-  /// 对端可点名的漫画 OCR 模型（key → 服务）：本平台列得出的每个本机模型一份。
-  /// WebUI 逐个显示就绪态、逐个下载。
-  Map<String, MangaOcrServiceImpl> get ocrModelServices => _ocrModelServices;
   HostJobManager? get jobs => _jobs;
-  ServerDownloadHost? get downloads => _downloads;
-  HostSubscriptionHost? get subscriptions => _downloads?.subscriptions;
-
-  /// 进程共享的视频刮削（扫描补刮 / 下载导入 / 客户端远程重刮共用）。[start] 之后非空。
-  ServerVideoScrape? get videoScrape => _videoScrape;
 
   /// Anki 落地（手机的待发卡经互联同步进来，这里写进 Anki 并同步）。
   ServerAnkiLanding? get anki => _anki;
@@ -193,54 +176,18 @@ class HeadlessHost {
     }
     _securityContext = securityContext;
 
-    final MangaOcrServiceImpl ocrService = MangaOcrServiceImpl();
-    _ocrService = ocrService;
-    _ocrModelServices = <String, MangaOcrServiceImpl>{
-      for (final MangaOcrLocalModel model in MangaOcrLocalModel.values)
-        if (MangaOcrLocalModel.forPlatform(model.key) == model)
-          // 默认模型复用 [ocrService] 这一个实例（它就是按默认模型建的）。
-          model.key: model == kDefaultMangaOcrLocalModel
-              ? ocrService
-              : MangaOcrServiceImpl(localModel: model),
-    };
-    final MangaOcrHostJobManager ocrJobs = MangaOcrHostJobManager(
-      service: ocrService,
-      modelServices: _ocrModelServices,
-      jobRoot: paths.mangaOcrJobs,
-    );
-
     // 通用任务（第 1 期：ASR）。任务目录持久化，重启可续。
     final HostJobManager jobs = HostJobManager(
       jobRoot: paths.hostJobs,
       runners: <HostJobRunner>[
         AsrHostJobRunner(
           serviceFactory: createServerAsrTranscriptionService,
-          resolveVideoPath: _resolveVideoPath,
+          resolveVideoPath: (String _) async => null,
         ),
       ],
     );
     await jobs.load();
     _jobs = jobs;
-
-    // 视频刮削：一个进程一套，与 app 的 HomePage 同一装配形状（见 video_scrape_host.dart）。
-    final ServerVideoScrape videoScrape = ServerVideoScrape(
-      db: db,
-      prefs: prefs,
-      config: () => config,
-    );
-    _videoScrape = videoScrape;
-
-    // 代下载（第 2 期）：qBittorrent 配了才起管线；没配也挂接口，能力位如实报 supported=false。
-    final ServerDownloadHost downloads = ServerDownloadHost(
-      config: config,
-      paths: paths,
-      db: db,
-      prefs: prefs,
-      identity: identity,
-      scrape: videoScrape,
-    );
-    await downloads.start();
-    _downloads = downloads;
 
     // 词典引擎：原生库随包（bin/../lib/libfushidicts_ffi.so）或 FUSHI_DICTS_LIB 指定；
     // 加载不了只留痕，服务端照常起，词典退回纯存储中转。
@@ -273,19 +220,13 @@ class HeadlessHost {
       token: identity.hostToken,
       allowLan: !_loopbackOnly,
       libraryService: buildLibraryService(),
-      mangaOcrJobs: ocrJobs,
       hostJobs: jobs,
-      downloads: downloads,
-      subscriptions: downloads.subscriptions,
       securityContext: securityContext,
       hostFingerprint: _hostFingerprint,
       deviceName: config.deviceName,
       // 无头服务端的 host 偏好读侧（「允许为对端转码视频」等），与 app 侧同一张
       // `preferences` 表、同一份默认值。
       prefs: prefs,
-      // 「AI 下视频」助手会话：手机把下载执行设备设成服务端时整场在这里跑。没配
-      // `ai:` 段时能力位如实报 no_provider（路由照挂，客户端好区分「不懂」与「没配」）。
-      assistant: createServerAssistantHost(config: () => config, prefs: prefs, db: db, downloads: downloads),
       // 互联查词 / 查词历史 / 词典媒体：装了词典引擎才接线。
       remoteLookupService: dictionaries.available ? ServerRemoteLookupService(dictionaries) : null,
       historyService: dictionaries.available ? ServerRemoteHistoryService(db) : null,
@@ -294,9 +235,6 @@ class HeadlessHost {
       // 互联制卡（/api/mine、/api/mine/forward、/api/duplicate、/api/anki/*）：落到
       // 本机 Anki 同步客户端库，需要随包的 fushi-anki-sync。
       miningService: anki.available ? ServerRemoteMiningService.forLanding(anki, dictionaries: dictionaries) : null,
-      // 游戏串流需要 Windows 桌面 app 与正在跑的游戏，服务端恒不提供：不注入，
-      // 路由回 501 unsupported、capabilities 报 `gameStream: false`。
-      gameStreamService: null,
     )
       ..onPairRequest = _approvePairing
       ..onPairPinGenerated = _generatePin
@@ -307,13 +245,7 @@ class HeadlessHost {
       ..pairedPeerTokensProvider = _loadPairedPeerTokens
       // 地址集：与 LAN 广播同一个设备 id；公网 / 反代地址与 app 同一个偏好键。
       ..hostId = identity.deviceId
-      ..publicUrlsProvider = (() async => config.publicUrls)
-      // 图形字幕（PGS / VobSub / DVB）整轨回传：与 app 当 host 同一份引擎实现（抽轨走
-      // 引擎 ffmpeg 后端解析——配置里的 ffmpeg 路径 / `FUSHI_FFMPEG` / PATH），缓存落
-      // 服务端自己的临时目录。
-      ..graphicSubtitleTrackExporter = InterconnectGraphicSubtitleExporter(
-        cacheDir: Directory(p.join(paths.temp.path, 'graphic_sub_tracks')),
-      ).export;
+      ..publicUrlsProvider = (() async => config.publicUrls);
     try {
       await server.start();
     } catch (_) {
@@ -499,15 +431,8 @@ class HeadlessHost {
     await pairingEvents.close();
   }
 
-  /// 停下载管线（含订阅检查，等在途的一轮落地）再关刮削：正常停机与启动半途失败
-  /// 共用。
+  /// 停机释放进程级资源：正常停机与启动半途失败共用。
   Future<void> _stopPipelines() async {
-    final ServerDownloadHost? downloads = _downloads;
-    _downloads = null;
-    await downloads?.stop();
-    // 下载管线借用它，管线停了再关。
-    _videoScrape?.close();
-    _videoScrape = null;
     // 引擎持有词典文件映射：停机释放（与 app 切数据根同一个出口）。启动半途失败
     // 也走这里——词典引擎在绑端口之前就装好了。
     if (_dictionaries?.available ?? false) FushiDicts.disposeInstance();
@@ -569,14 +494,6 @@ class HeadlessHost {
     return peers.map((FushiPairedPeerRow r) => r.token).toSet();
   }
 
-  /// `asr` 任务的 `videoId` → host 库里的视频文件（分集 0）。
-  Future<String?> _resolveVideoPath(String videoId) async {
-    final VideoBookRow? row = await VideoBookRepository(db).getByBookUid(videoId);
-    if (row == null) return null;
-    final File f = File(row.videoPath);
-    return await f.exists() ? f.path : null;
-  }
-
   // ── 库服务 ────────────────────────────────────────────────────────────
 
   /// 本地音频库的存储中转登记（BUG-2815）：库副本落 `<support>/local_audio_<n>.db`、
@@ -616,14 +533,6 @@ class HeadlessHost {
         onLocalAudioImported: localAudio.importPackage,
         removeLocalAudioEntry: localAudio.remove,
         audioDatabaseRoot: Directory(p.join(paths.documents.path, 'audiobooks')),
-        videoSubtitleLangCode: config.subtitleLanguage,
-        // 客户端经互联发起的重刮 / 手动指定身份 / 分集排序：以前这里没接，
-        // 这些请求在服务端恒返回空结果或 notPlanned。
-        scrapeController: () async => _videoScrape?.controller,
-        uploadedVideoRoot: Directory(p.join(paths.documents.path, 'remote_videos')),
-        extractVideoCover: (
-                {required String videoPath, required String bookUid}) =>
-            extractVideoCover(videoPath: videoPath, bookUid: bookUid),
         // 互联「配置文件」搬运：服务端只寄存、不 apply（见 ServerProfileHub）。开关每次
         // 现读配置（`profile_transfer`，默认关），WebUI 改完即生效；关着时端点回 403。
         isProfileTransferEnabled: () async => config.profileTransfer,

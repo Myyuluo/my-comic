@@ -1129,9 +1129,7 @@ extension _ReaderChrome on _ReaderFushiPageState {
   // [ReaderChromeController.toolbarsHidden]，布局判据经 [_chromeBarsExpanded]，
   // 点词门控经 [_tapGateChrome]。
   //
-  // 出口全在悬浮球上：阅读器场景把返回 / 设置 / 开回栏固定在球上
-  // （[kReaderToolbarsTakeoverItems]），球不给「关闭」键
-  // （[_buildReaderFloatingBallScene]）；返回键（Esc / 系统返回 / 手柄 B）照常退书。
+  // 返回键（Esc / 系统返回 / 手柄 B）照常退书。
 
   /// 按偏好与应用内悬浮球开关同步 [_toolbarsHidden]；没变就什么都不做（偏好仓库
   /// 任一键变化都会调进来）。变了就重下 chrome 预留并重锚（挤压态的栏占位随之
@@ -1141,7 +1139,7 @@ extension _ReaderChrome on _ReaderFushiPageState {
     if (!mounted) return;
     final bool hidden = readerToolbarsHidden(
       hideToolbarsPreference: ReaderFushiSource.instance.hideToolbars,
-      inAppFloatingBallEnabled: appModelNoUpdate.prefsRepo.floatingBallInApp,
+      inAppFloatingBallEnabled: false,
     );
     if (_toolbarsHidden == hidden) return;
     _rebuild(() {
@@ -2125,35 +2123,6 @@ extension _ReaderChrome on _ReaderFushiPageState {
       item.isAudiobookTransport &&
       item != ReaderControlItem.audiobookSeekBack &&
       item != ReaderControlItem.audiobookSeekForward;
-
-  /// 悬浮球的阅读器场景按钮（docs/specs/2026-09-28-floating-ball.md）：按钮布局
-  /// 里的每颗按钮（书名除外）都能放进球，放哪几颗由 设置 → 悬浮球 → 阅读器 决定
-  /// （出厂是有声书的上一句 / 播放暂停 / 下一句），执行体与顶栏 / 底栏同一个
-  /// [_readerControlAction]。首章加载前不给按钮；此刻渲染不了的按钮（例如书没挂
-  /// 有声书时的传输键）不登记，宿主就跳过它。球本身画在根上的应用内悬浮球宿主里。
-  ///
-  /// 顶栏和底栏被关掉时球接管它们：[kReaderToolbarsTakeoverItems]（返回 / 设置 /
-  /// 开回栏）不看勾选固定在球上，歌词模式再加模式切换键（顶栏在歌词模式也强制
-  /// 保留它：那是回正文最直接的入口）；宿主据此不给「关闭悬浮球」。
-  Widget _buildReaderFloatingBallScene() {
-    return FloatingBallScene(
-      scope: FloatingBallScope.reader,
-      pinnedIds: <String>[
-        if (_hasEverLoaded && _toolbarsHidden) ...<String>[
-          for (final ReaderControlItem item in kReaderToolbarsTakeoverItems)
-            item.storageValue,
-          if (_lyricsMode) ReaderControlItem.modeToggle.storageValue,
-        ],
-      ],
-      actions: <String, ReaderHeaderAction>{
-        if (_hasEverLoaded)
-          for (final ReaderControlItem item in ReaderControlItem.values)
-            if (item != ReaderControlItem.title &&
-                _shouldRenderReaderControl(item))
-              item.storageValue: _readerControlAction(item),
-      },
-    );
-  }
 
   /// 小说页的窗口全屏切换（底栏按钮的执行体）。
   ///

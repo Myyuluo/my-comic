@@ -266,7 +266,6 @@ class MangaDownloadService {
         pagesTotal: const Value<int>(0),
         attemptCount: const Value<int>(0),
         lastError: const Value<String?>(null),
-        autoOcr: Value<bool>(autoOcr),
         createdAt: Value<int>(existing?.createdAt ?? _nextCreatedAt()),
         updatedAt: Value<int>(now),
         completedAt: const Value<int?>(null),
@@ -663,48 +662,7 @@ class MangaDownloadService {
       clearLastError: true,
       completedAt: now,
     );
-    final MangaDownloadJobRow? current = await _database.getMangaDownloadJob(
-      job.jobId,
-    );
-    if (current == null || !current.autoOcr) return;
-    try {
-      final MokuroPayload existing = parseMangaJson(
-        await mangaJson.readAsString(),
-      );
-      if (existing.images.isNotEmpty &&
-          existing.images.every(
-            (MokuroImage image) => image.blocks.isNotEmpty,
-          )) {
-        return;
-      }
-    } on Object catch (error, stack) {
-      ErrorLogService.instance.log(
-        'MangaDownloadService.sidecarOcrCheck ${job.jobId}',
-        error,
-        stack,
-      );
-    }
-    final MangaDownloadOcrHook? hook = _onChapterDownloaded;
-    if (hook == null) return;
-    try {
-      await hook(
-        MangaDownloadedChapter(
-          job: current,
-          bookKey: job.bookKey,
-          chapterKey: chapter.key,
-          title: entry.series.title,
-          chapterTitle: mangaChapterDisplayName(chapter),
-          chapterDirectory: chapterDir,
-          mangaJsonPath: mangaJson.path,
-        ),
-      );
-    } on Object catch (error, stack) {
-      ErrorLogService.instance.log(
-        'MangaDownloadService.autoOcr ${job.jobId}',
-        error,
-        stack,
-      );
-    }
+    // OCR 自动钩子已随 OCR 域移除；下载完成只标记任务状态。
   }
 
   Future<_PageFile> _fetchPage(

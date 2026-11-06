@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io' show Platform;
+import 'dart:math';
 import 'package:material_ui/material_ui.dart';
 import 'package:fushi_audio/fushi_audio.dart'
     show kDefaultReadingIdleTimeout, kStudyIdleTimeoutPrefKey;
@@ -8,7 +9,7 @@ import 'package:fushi_engine/ai/ai_settings.dart';
 import 'package:fushi_engine/srs/srs_backup_retention.dart';
 import 'package:fushi_engine/profile/profile_document.dart'
     show kProfileSettingCategoryPref;
-import 'package:fushi_engine/media/video/acquisition/video_acquisition_prefs.dart';
+
 import 'package:fushi_engine/ai/ai_feature.dart';
 import 'package:fushi_engine/ai/ai_provider_config.dart';
 import 'package:fushi_engine/ai/web_knowledge.dart'
@@ -21,8 +22,8 @@ import 'package:fushi_engine/ai/web_knowledge.dart'
         parseWebKnowledgeEnabledIds;
 import 'package:fushi/src/utils/adaptive/nav_bar_style.dart';
 import 'package:fushi/src/dictionary/dict_style_rules.dart';
-import 'package:fushi/src/floating_ball/floating_ball_config.dart';
-import 'package:fushi/src/media/discovery/alist_site_config.dart';
+
+
 import 'package:fushi/src/media/discovery/audiobookshelf_server_config.dart';
 import 'package:fushi/src/media/discovery/opds_server_config.dart';
 import 'package:fushi/src/models/module_id.dart';
@@ -33,44 +34,39 @@ import 'package:fushi/src/media/manga/mihon/mihon_cover_cache.dart'
         kMangaCoverCacheDefaultMaxAgeDays,
         kMangaCoverCacheMaxDays,
         kMangaCoverCacheMinDays;
-import 'package:fushi/src/media/manga/ocr/manga_ocr_engine.dart';
-import 'package:fushi/src/media/manga/ocr/manga_ocr_job_registry.dart'
-    show kMangaOcrMaxSelectableTasks;
-import 'package:fushi_engine/ocr/manga_ocr_local_model.dart'
-    show kDefaultMangaOcrLocalModel, MangaOcrLocalModel;
-import 'package:fushi_engine/media/torrent/anime_download_config.dart';
-import 'package:fushi_engine/media/torrent/torznab_client.dart';
-import 'package:fushi_engine/media/video/download/video_resource_prefs.dart';
-import 'package:fushi_engine/sync/interconnect_transcode_prefs.dart';
-import 'package:fushi_engine/sync/game_stream/game_stream_protocol.dart'
-    show GameStreamVideoSettings;
-import 'package:fushi/src/models/game_stream_lookup_layout.dart';
-import 'package:fushi/src/media/video/dandanplay_client.dart';
-import 'package:fushi/src/media/video/media_server/media_server_browser.dart'
-    show MediaServerVersionMemory, mediaServerVersionMemory;
+
+
+
+
+
+
+
+
+
+
+
 import 'package:fushi_engine/ai/ai_key_rotation.dart'
     show AiKeyHealth, AiKeyHealthStore, AiKeyHealthUpdate, aiKeyHealthStore;
-import 'package:fushi_engine/media/video/download/video_download_path_mapping.dart';
-import 'package:fushi_engine/media/video/download/video_download_backend_identity.dart';
-import 'package:fushi_engine/media/video/subtitle/open_subtitles_client.dart';
-import 'package:fushi/src/media/video/video_danmaku_model.dart';
-import 'package:fushi/src/media/video/video_hdr_output.dart'
-    show VideoHdrOutputMode, kVideoHdrOutputPref;
-import 'package:fushi/src/media/video/video_control_customization.dart';
+
+
+
+
+
+
 import 'package:fushi/src/reader/reader_control_layout.dart';
-import 'package:fushi/src/media/video/video_remote_control_layout.dart';
+
 import 'package:fushi/src/stats/reader_study_clock_start_mode.dart';
-import 'package:fushi/src/media/video/video_custom_action_bindings.dart';
-import 'package:fushi/src/media/video/video_immersive_mode.dart';
-import 'package:fushi/src/media/video/video_lua_capability.dart';
-import 'package:fushi/src/media/video/video_clip_export_preferences.dart';
-import 'package:fushi/src/media/video/video_screenshot_destination.dart';
-import 'package:fushi/src/mining/video_online_mining_mode.dart';
-import 'package:fushi/src/media/video/video_subtitle_obscure_mode.dart';
-import 'package:fushi/src/media/video/video_pause_ocr_scope.dart';
+
+
+
+
+
+
+
+
 import 'package:fushi/src/media/audiobook/mining_audio_clip.dart'
     show kMiningHeadPadMs, kMiningPadMaxMs, kMiningTailPadMs;
-import 'package:fushi/src/mining/galgame_library.dart';
+
 // 迁移判据要用「这个存量代理地址归一得出来吗」，与 applyAppProxy 同一份实现，
 // 不在这里重写一遍（重写就会漂移，而漂移的后果是存量用户升级即断网）。
 import 'package:fushi_engine/utils/net/app_proxy.dart'
@@ -187,19 +183,6 @@ class PreferencesRepository extends ChangeNotifier
     implements PrefStore, AiSettingsSource {
   PreferencesRepository(this._db);
 
-  static const String videoOnlineServicesSetupDismissedKey =
-      'video_online_services_setup_dismissed';
-
-  bool get videoOnlineServicesSetupDismissed =>
-      getPref(videoOnlineServicesSetupDismissedKey, defaultValue: false) as bool;
-
-  Future<void> dismissVideoOnlineServicesSetup() async {
-    await setPref(videoOnlineServicesSetupDismissedKey, true);
-    notifyListeners();
-  }
-
-  static const String videoAnime4kPromptShownKey = 'video_anime4k_prompt_shown';
-
   /// TODO-855: persisted monotonic counter, the cross-process change signal the
   /// separate :popup process reads via [readPrefsVersionFromDb] to decide
   /// whether to reload its warm-reuse pref cache, instead of unconditionally
@@ -220,72 +203,14 @@ class PreferencesRepository extends ChangeNotifier
     _prefCache
       ..clear()
       ..addAll(all);
-    // 启动即把弹幕来源配置推进进程级静态，供播放页里无参构造的 DandanplayClient 读取
-    // （它在 prefs 加载后才会被构造，故此处一次推送即可覆盖首次播放）。
-    DandanplayConfig.current = DandanplayConfig.decode(
-      getPref('video_danmaku_config', defaultValue: '') as String,
-    );
-    await _repairOpenSubtitlesEnabledOnce();
-    // 上面那次修复写会经 setPref 抬高持久化版本号，而缓存是**在它之前**读的。
-    // 不把版本重读回来，loadFromDb 一结束进程内值就比 DB 少一个，
-    // 「版本不同 = 别的进程改过」于是每次启动误报一次、白重载一次。
+    // 把版本重读回来：缓存是**在它之前**读的，任何启动期修复写都会抬高持久化版本号，
+    // 不重读会「版本不同 = 别的进程改过」每次启动误报一次、白重载一次。
     _prefCache[prefsVersionKey] =
         PrefCodec.encode(await readPrefsVersionFromDb());
     _installAppProxyReaders();
-    // 媒体服务器多版本选择的记忆落偏好表（进程级装配点，取流时由 client 读）；
-    // 理由同上：挂在偏好变得可读的那一刻，所有入口都拿到同一份。
-    mediaServerVersionMemory = _PrefsMediaServerVersionMemory(this);
     // AI 多 key 轮换的冷却记录（引擎全局装配点）：落偏好表，app 重启后被拒 /
     // 限流的 key 仍在冷却里，不会一启动就把同一把坏 key 再打一遍。
     aiKeyHealthStore = _PrefsAiKeyHealthStore(this);
-  }
-
-  /// BUG-2429 的存量数据修复标记。跑过一次就再也不跑。
-  static const String openSubtitlesEnabledRepairedKey =
-      'video_subtitle_opensubtitles_enabled_repaired';
-
-  /// 把「空草稿」写下的 `enabled=false` 一次性归一回默认启用。
-  ///
-  /// 设置页的 OpenSubtitles 详情草稿曾把未配置态的开关初值硬写成 false（与
-  /// [OpenSubtitlesConfig] 的构造默认相反），于是用户只要在该页碰过任意一个字段，
-  /// debounce 保存就把这个**没人选过的 false** 落盘，内置应用密钥从此形同虚设，
-  /// 而设置列表还照样显示「已内置」。判据取「一条自有凭据都没有（apiKey /
-  /// username / password 全空）却是关闭态」——这正是空草稿的指纹。真正手动关掉
-  /// 且没填过任何凭据的用户会被打开一次，但标记键保证只发生一次；此后再关就一直
-  /// 是关的。挂在 [loadFromDb]（偏好变得可读的那一刻）而不是某个 entry point 的
-  /// initialise，理由同 [_installAppProxyReaders]。
-  Future<void> _repairOpenSubtitlesEnabledOnce() async {
-    if (getPref(openSubtitlesEnabledRepairedKey, defaultValue: false) as bool) {
-      return;
-    }
-    final String raw = getPref(
-      'video_subtitle_opensubtitles_config',
-      defaultValue: '',
-    ) as String;
-    // 没写过配置的用户没有需要修的东西，但同样打标记：这条修复只针对存量脏数据，
-    // 不该在此后每次启动都重新解析一遍。
-    if (raw.trim().isNotEmpty) {
-      final OpenSubtitlesConfig config = videoSubtitleOpenSubtitlesConfig;
-      final bool hasOwnCredentials = config.apiKey.trim().isNotEmpty ||
-          (config.username?.trim().isNotEmpty ?? false) ||
-          (config.password?.isNotEmpty ?? false);
-      if (!config.enabled && !hasOwnCredentials) {
-        await setPref(
-          'video_subtitle_opensubtitles_config',
-          jsonEncode(OpenSubtitlesConfig(
-            apiKey: config.apiKey,
-            username: config.username,
-            password: config.password,
-            userAgent: config.userAgent,
-            baseUrl: config.baseUrl,
-            enabled: true,
-            priority: config.priority,
-            allowInsecureHttp: config.allowInsecureHttp,
-          ).toJson()),
-        );
-      }
-    }
-    await setPref(openSubtitlesEnabledRepairedKey, true);
   }
 
   /// 把进程级代理读取器接到本仓库上。**绑定点必须是「偏好变得可读的那一刻」**，不是
@@ -680,42 +605,6 @@ class PreferencesRepository extends ChangeNotifier
     notifyListeners();
   }
 
-  /// 媒体服务器多版本选择的记忆上限（按写入先后淘汰最旧的）。
-  static const int kMediaServerVersionChoiceLimit = 500;
-
-  /// 媒体服务器多版本条目「选哪个版本」的记忆（见 [MediaServerVersionMemory]）。
-  /// 单一 JSON map 落 KV 表；解析失败回退空 map。
-  Map<String, String> get mediaServerVersionChoices {
-    final String raw = getPref('video_media_server_version_choices',
-        defaultValue: '') as String;
-    if (raw.isEmpty) return <String, String>{};
-    try {
-      final Object? decoded = jsonDecode(raw);
-      if (decoded is Map) {
-        return <String, String>{
-          for (final MapEntry<dynamic, dynamic> e in decoded.entries)
-            e.key.toString(): e.value.toString(),
-        };
-      }
-    } catch (e, stack) {
-      ErrorLogService.instance.log(
-          'PreferencesRepository.mediaServerVersionChoices.decode', e, stack);
-    }
-    return <String, String>{};
-  }
-
-  /// 记一条版本选择：删后重插让它排到最新，超出 [kMediaServerVersionChoiceLimit]
-  /// 从最旧的开始丢。不 notifyListeners：没有界面监听它，取流时按需读。
-  Future<void> setMediaServerVersionChoice(String key, String value) async {
-    final Map<String, String> map = mediaServerVersionChoices
-      ..remove(key)
-      ..[key] = value;
-    while (map.length > kMediaServerVersionChoiceLimit) {
-      map.remove(map.keys.first);
-    }
-    await setPref('video_media_server_version_choices', jsonEncode(map));
-  }
-
   /// AI 多 key 轮换的冷却记录上限（超出按写入先后丢最旧的）。正常情况下成功一次
   /// 就清掉，留存的只有还在失败的 key，这个上限只防删掉的提供商留下的孤儿无界增长。
   static const int kAiKeyHealthLimit = 200;
@@ -826,31 +715,6 @@ class PreferencesRepository extends ChangeNotifier
                 e.key: e.value.toJson(),
             });
 
-  /// 本机当 host 时是否允许为对端实时转码（弱网降码率播放）。默认开。
-  ///
-  /// 默认值与解码规则收在引擎侧的 [readInterconnectTranscodeEnabled]——无头服务端
-  /// 读的是同一张 `preferences` 表，默认值只能有一份。
-  bool get interconnectTranscodeEnabled =>
-      readInterconnectTranscodeEnabled(this);
-
-  Future<void> setInterconnectTranscodeEnabled(bool enabled) async {
-    await setPref(kInterconnectTranscodeEnabledPref, enabled);
-    notifyListeners();
-  }
-
-  /// 互联远端视频的画质档下标；-1 = 自动（局域网原画、走公网压到中档，判据在
-  /// `interconnect_video_quality.dart`）。
-  ///
-  /// 与媒体服务器那档**分开存**：两边的档位阶梯不同（互联整体更低，因为它要解决的
-  /// 就是人在外面用手机网络），共用一个下标会让同一个数字在两处指向不同画质。
-  int get interconnectQualityPresetIndex =>
-      getPref('video_interconnect_quality_preset', defaultValue: -1) as int;
-
-  Future<void> setInterconnectQualityPresetIndex(int index) async {
-    await setPref('video_interconnect_quality_preset', index);
-    notifyListeners();
-  }
-
   // ── yomitan-api server ───────────────────────────────────────────────
 
   bool get fushiApiServerEnabled =>
@@ -890,61 +754,6 @@ class PreferencesRepository extends ChangeNotifier
     notifyListeners();
   }
 
-  // ── texthooker ───────────────────────────────────────────────────────
-
-  static const String _texthookerDefaultUrls =
-      'ws://localhost:6677\nws://localhost:9001\nws://localhost:2333';
-
-  bool get texthookerEnabled =>
-      getPref('texthooker_enabled', defaultValue: false) as bool;
-
-  Future<void> setTexthookerEnabled(bool value) async {
-    await setPref('texthooker_enabled', value);
-    notifyListeners();
-  }
-
-  List<String> get texthookerUrls {
-    final String raw = getPref(
-      'texthooker_urls',
-      defaultValue: _texthookerDefaultUrls,
-    ) as String;
-    return raw
-        .split('\n')
-        .map((String s) => s.trim())
-        .where((String s) => s.isNotEmpty)
-        .toList();
-  }
-
-  Future<void> setTexthookerUrls(List<String> urls) async {
-    await setPref('texthooker_urls', urls.join('\n'));
-    notifyListeners();
-  }
-
-  // ── galgame 游戏库（首页「游戏」tab）─────────────────────────────────────
-
-  /// legacy：v55 之前用户添加的 galgame 列表（单一 JSON 数组落 KV 表）。
-  ///
-  /// 真相源自 v55 起是 Drift 表 `galgames`（迁移已一次性回填，见契约 §1.7），app 侧
-  /// 读写走 `GalgameRepository`。这两个访问器**只**留作回滚兜底/诊断，新代码别再用。
-  List<GalgameEntry> get legacyGalgames => decodeGalgameLibrary(
-      getPref('galgame_library', defaultValue: '') as String);
-
-  /// 见 [legacyGalgames]。
-  Future<void> setLegacyGalgames(List<GalgameEntry> games) async {
-    await setPref('galgame_library', encodeGalgameLibrary(games));
-    notifyListeners();
-  }
-
-  /// 游戏库页的排序/筛选视图偏好（`GalgameLibraryView.encode()` 的 JSON 串）。
-  /// 空串 = 默认视图。走现有偏好体系，不为一个视图状态新建表。
-  String get galgameLibraryView =>
-      getPref('galgame_library_view', defaultValue: '') as String;
-
-  Future<void> setGalgameLibraryView(String encoded) async {
-    await setPref('galgame_library_view', encoded);
-    notifyListeners();
-  }
-
   // ── desktop global lookup ────────────────────────────────────────────
 
   // TODO-1030 M0 — 全局查词（应用外）是否抓取选中文本周围的上下文句。默认 false：
@@ -970,126 +779,6 @@ class PreferencesRepository extends ChangeNotifier
   Future<void> setLookupImeLanguage(String value) async {
     await setPref('lookup.ime_language', value);
     notifyListeners();
-  }
-
-  /// 应用内悬浮球（设置 → 悬浮球，`docs/specs/2026-09-28-floating-ball.md`）。
-  /// 默认开。旧版三态 `floating_ball.mode` 里显式选过「关」的用户保持关。
-  bool get floatingBallInApp {
-    final Object? value = getPref('floating_ball.in_app', defaultValue: null);
-    if (value is bool) return value;
-    return getPref('floating_ball.mode', defaultValue: '') != 'off';
-  }
-
-  Future<void> setFloatingBallInApp(bool value) async {
-    await setPref('floating_ball.in_app', value);
-    notifyListeners();
-  }
-
-  /// 展开按钮旁的可见文字；tooltip / 无障碍名称不受此偏好影响。
-  bool get floatingBallShowLabels =>
-      getPref('floating_ball.show_labels', defaultValue: true);
-
-  Future<void> setFloatingBallShowLabels(bool value) async {
-    await setPref('floating_ball.show_labels', value);
-    notifyListeners();
-  }
-
-  /// 应用外悬浮球（Android 悬浮窗服务 / Windows、macOS 置顶窗口）。默认关。旧版
-  /// 选过 `system` 的用户保持开。不支持的平台（iOS / Linux）读到 true 也不起球。
-  bool get floatingBallSystem {
-    final Object? value = getPref('floating_ball.system', defaultValue: null);
-    if (value is bool) return value;
-    return getPref('floating_ball.mode', defaultValue: '') == 'system';
-  }
-
-  Future<void> setFloatingBallSystem(bool value) async {
-    await setPref('floating_ball.system', value);
-    notifyListeners();
-  }
-
-  /// 关掉的悬浮球回到 Fushi 时自动恢复哪些（见 [FloatingBallAutoRestore]）。
-  /// 默认「仅应用内」：与引入本设置前的行为一致。
-  FloatingBallAutoRestore get floatingBallAutoRestore =>
-      FloatingBallAutoRestore.fromStorage(
-        getPref('floating_ball.auto_restore', defaultValue: null),
-      );
-
-  Future<void> setFloatingBallAutoRestore(FloatingBallAutoRestore value) async {
-    await setPref('floating_ball.auto_restore', value.storageValue);
-    notifyListeners();
-  }
-
-  /// 某个场景的悬浮球按钮 id（目录顺序）；从没设过 =
-  /// [FloatingBallScope.defaultButtons]。旧版只有一份全局按钮勾选
-  /// （`floating_ball.actions`）：没单独设过的场景沿用它对全局按钮的取舍。
-  List<String> floatingBallButtons(FloatingBallScope scope) {
-    final String raw =
-        getPref(_floatingBallButtonsKey(scope), defaultValue: '') as String;
-    if (raw.isEmpty) {
-      final String legacy =
-          getPref('floating_ball.actions', defaultValue: '') as String;
-      if (legacy.isNotEmpty) {
-        final Set<String> kept = legacy == '-'
-            ? <String>{}
-            : legacy.split(',').map((String s) => s.trim()).toSet();
-        // 专属按钮按出厂，全局按钮完全按旧勾选：它是用户明确选过的，不能被
-        // 按场景收窄的出厂值（[FloatingBallGlobalAction.onByDefaultIn]）筛掉。
-        final Set<String> sceneDefaults = scope.defaultButtons.toSet();
-        return <String>[
-          for (final String id in scope.catalog)
-            if (FloatingBallGlobalAction.fromStorage(id) == null
-                ? sceneDefaults.contains(id)
-                : kept.contains(id))
-              id,
-        ];
-      }
-    }
-    return scope.decodeButtons(raw);
-  }
-
-  Future<void> setFloatingBallButtons(
-      FloatingBallScope scope, Iterable<String> ids) async {
-    await setPref(_floatingBallButtonsKey(scope), scope.encodeButtons(ids));
-    notifyListeners();
-  }
-
-  static String _floatingBallButtonsKey(FloatingBallScope scope) =>
-      switch (scope) {
-        FloatingBallScope.reader => 'floating_ball.buttons.reader',
-        FloatingBallScope.manga => 'floating_ball.buttons.manga',
-        FloatingBallScope.video => 'floating_ball.buttons.video',
-        FloatingBallScope.general => 'floating_ball.buttons.general',
-        FloatingBallScope.system => 'floating_ball.buttons.system',
-      };
-
-  /// 桌面应用外悬浮球的停靠边与纵向比例（与应用内球分开存：两颗球可以同时在）。
-  /// Android 原生球的位置存在原生偏好里，不走这里。
-  String get floatingBallSystemDock =>
-      getPref('floating_ball.system_dock', defaultValue: 'right') as String;
-
-  double get floatingBallSystemVerticalFraction =>
-      (getPref('floating_ball.system_y', defaultValue: 0.35) as num).toDouble();
-
-  Future<void> setFloatingBallSystemPosition(
-      String dock, double fraction) =>
-      // 一个逻辑位置、两个键：同一事务落盘，不会只写进一半。
-      setPrefs(<String, dynamic>{
-        'floating_ball.system_dock': dock,
-        'floating_ball.system_y': fraction,
-      });
-
-  /// 应用内悬浮球停靠边（`left` / `right`）与球心纵向比例。
-  String get floatingBallDock =>
-      getPref('floating_ball.dock', defaultValue: 'right') as String;
-
-  double get floatingBallVerticalFraction =>
-      (getPref('floating_ball.y', defaultValue: 0.62) as num).toDouble();
-
-  Future<void> setFloatingBallPosition(String dock, double fraction) async {
-    await setPref('floating_ball.dock', dock);
-    await setPref('floating_ball.y', fraction);
-    // 不 notifyListeners：位置只在松手时落库，球自己已持有新值，广播只会让
-    // 宿主多重建一次。
   }
 
   /// 防截屏（桌面查词浮窗，Windows）—— 覆盖窗设 SetWindowDisplayAffinity
@@ -1573,333 +1262,6 @@ class PreferencesRepository extends ChangeNotifier
 
   /// 启用的 mpv 着色器（JSON 字符串数组的文件名，相对着色器目录）。空串=未启用。
   /// 解析/编码见 video_shader_manager.dart 的 encode/decodeEnabledShaders。
-  String get videoShadersEnabled =>
-      getPref('video_shaders_enabled', defaultValue: '') as String;
-
-  Future<void> setVideoShadersEnabled(String json) async {
-    await setPref('video_shaders_enabled', json);
-    notifyListeners();
-  }
-
-  /// BUG-2032：随包 libmpv 是否编入 Lua（视频页建 Player 后读 `mpv-configuration`
-  /// 探到的结果缓存，存 [MpvLuaCapability.name]）。全局设置页没有播放器，靠这份
-  /// 缓存如实说明脚本开关在本平台是否可用。默认 unknown = 从未播过视频。
-  MpvLuaCapability get videoMpvLuaCapability => MpvLuaCapability.fromName(
-        getPref('video_mpv_lua_capability', defaultValue: 'unknown') as String,
-      );
-
-  Future<void> setVideoMpvLuaCapability(MpvLuaCapability value) async {
-    if (videoMpvLuaCapability == value) return;
-    await setPref('video_mpv_lua_capability', value.name);
-    notifyListeners();
-  }
-
-  /// 用户手动指定的本机 mpv 配置/着色器目录（「从本机 mpv 导入」自动找不到时指定后
-  /// 记住，下次优先扫它）。空串=未指定，走自动候选目录。
-  String get videoMpvShaderDir =>
-      getPref('video_mpv_shader_dir', defaultValue: '') as String;
-
-  Future<void> setVideoMpvShaderDir(String dir) async {
-    await setPref('video_mpv_shader_dir', dir);
-    notifyListeners();
-  }
-
-  /// 视频字幕模糊（听力沉浸）开关：默认关闭。开启后字幕默认打码，悬停/点击显形。
-  ///
-  /// TODO-840 Part B：这是遮蔽模式三态的**历史 bool 投影**——[VideoSubtitleObscureMode.blur]
-  /// / [VideoSubtitleObscureMode.hide] 都让本 getter 返回 true（旧版本回滚读到的就是
-  /// 「开着遮蔽」、退化成模糊，不丢遮蔽意图）。真正的精确三态请读
-  /// [videoSubtitleObscureMode]；本 getter 只是派生兼容层。
-  bool get videoSubtitleBlur =>
-      getPref('video_subtitle_blur', defaultValue: false) as bool;
-
-  Future<void> setVideoSubtitleBlur(bool value) async {
-    await setPref('video_subtitle_blur', value);
-    notifyListeners();
-  }
-
-  /// 视频字幕「遮蔽模式」三态（TODO-840 Part B）：不遮蔽 / 模糊 / 隐藏。
-  ///
-  /// preferences 层 lazy 投影（非新 Drift schema）：历史键 `video_subtitle_blur`
-  /// （[VideoSubtitleObscureMode.blurFlag]）+ 判别键 `video_subtitle_obscure_hide`
-  /// （[VideoSubtitleObscureMode.hideFlag]）。还原走纯函数
-  /// [VideoSubtitleObscureMode.fromFlags]，是读取与单测的共享真相源；写入两键一并落盘，
-  /// 使旧版本只读历史键时退化成 blur。
-  VideoSubtitleObscureMode get videoSubtitleObscureMode =>
-      VideoSubtitleObscureMode.fromFlags(
-        blurFlag: getPref('video_subtitle_blur', defaultValue: false) as bool,
-        hideFlag:
-            getPref('video_subtitle_obscure_hide', defaultValue: false) as bool,
-      );
-
-  /// 两个 key 是**同一个**三态设置，故走 [setPrefs] 单事务落盘（省一次事务提交，且
-  /// 不留「blur 已落盘、hide 未落盘」的跨进程可观察中间态）。
-  ///
-  /// **刻意不 [notifyListeners]**（与本类多数 setter 不同，这是有意的例外）：遮蔽模式
-  /// 只被视频页字幕层与视频设置面板读取，而 [AppModel] 把本仓库的通知转成全局广播
-  /// （`prefsRepo.addListener(notifyListeners)`，且 `BasePageState.appModel` 是
-  /// `ref.watch(appProvider)`）——每个 watch 者、包括当前路由下方仍挂载的首页/书架整棵
-  /// 树都会跟着重建一次。B / Shift+B / H 是播放中的高频快捷键，为一个字幕开关重建整个
-  /// app 正是「切换遮罩模式好卡」的主要成本。两个读取方各有自己的刷新路径：视频页
-  /// `_setSubtitleObscureMode` 的 setState、设置面板 `_segmented` 的
-  /// `settingsContext.refresh()`。**新增读取方必须自带刷新**，别在这里加回广播。
-  Future<void> setVideoSubtitleObscureMode(
-    VideoSubtitleObscureMode mode,
-  ) async {
-    await setPrefs(<String, dynamic>{
-      'video_subtitle_blur': mode.blurFlag,
-      'video_subtitle_obscure_hide': mode.hideFlag,
-    });
-  }
-
-  /// 视频**副字幕**「遮蔽模式」三态（TODO-1382，镜像主字幕 [videoSubtitleObscureMode]）：
-  /// 不遮蔽 / 模糊 / 隐藏，与主字幕相互独立。preferences 层 lazy 投影（非新 Drift
-  /// schema）：键 `video_secondary_subtitle_blur`（[VideoSubtitleObscureMode.blurFlag]）
-  /// + 判别键 `video_secondary_subtitle_obscure_hide`（[VideoSubtitleObscureMode.hideFlag]），
-  /// 还原走同一纯函数 [VideoSubtitleObscureMode.fromFlags]（读取与单测共享真相源）。
-  /// 默认 none：副字幕历史行为=正常显示、不遮蔽。
-  VideoSubtitleObscureMode get videoSecondarySubtitleObscureMode =>
-      VideoSubtitleObscureMode.fromFlags(
-        blurFlag: getPref('video_secondary_subtitle_blur', defaultValue: false)
-            as bool,
-        hideFlag: getPref('video_secondary_subtitle_obscure_hide',
-            defaultValue: false) as bool,
-      );
-
-  /// 单事务落盘 + 刻意不广播，理由与主字幕 [setVideoSubtitleObscureMode] 完全同构
-  /// （Shift+G / Shift+H 同样是播放中高频快捷键）。
-  Future<void> setVideoSecondarySubtitleObscureMode(
-    VideoSubtitleObscureMode mode,
-  ) async {
-    await setPrefs(<String, dynamic>{
-      'video_secondary_subtitle_blur': mode.blurFlag,
-      'video_secondary_subtitle_obscure_hide': mode.hideFlag,
-    });
-  }
-
-  /// 遮蔽态「悬停 / 点击临时显形」总闸；**默认 true**（历史行为：显形是遮蔽的内建
-  /// 行为、关不掉）。关掉后模糊 / 隐藏在整句期间恒定生效——听力沉浸时鼠标恰好停在
-  /// 字幕上或手指扫过盒面不再破功。主 / 副字幕共用一个开关（用户诉求是「显形这个
-  /// 行为」的总闸，不是逐层设置）。
-  ///
-  /// 与遮蔽模式两个 setter 不同，本 setter **照常广播**：它是设置页 / 面板里的低频
-  /// 开关（没有快捷键路径），一次全局重建换来所有读取方（overlay、面板回显）无条件
-  /// 同步，不必各自补刷新。
-  bool get videoSubtitleObscureReveal =>
-      getPref('video_subtitle_obscure_reveal', defaultValue: true) as bool;
-
-  Future<void> setVideoSubtitleObscureReveal(bool value) async {
-    await setPref('video_subtitle_obscure_reveal', value);
-    notifyListeners();
-  }
-
-  /// 视频字幕列表「自动滚动到当前播放句」开关（TODO-613）：默认开启，与
-  /// [VideoSubtitleJumpPanel] 头部自动滚动按钮一一对应。旧版本这是面板的纯内存状态、
-  /// 每次打开都重置成开；现在落 Drift `preferences`，用户关掉后跨开关 / 跨重启都记住。
-  /// getPref 仅在该 key 从未写过时返回默认 true，已切过开关的用户保留其存值。
-  bool get videoSubtitleListAutoScroll =>
-      getPref('video_subtitle_list_auto_scroll', defaultValue: true) as bool;
-
-  Future<void> setVideoSubtitleListAutoScroll(bool value) async {
-    await setPref('video_subtitle_list_auto_scroll', value);
-    notifyListeners();
-  }
-
-  /// 视频字幕列表「点字幕查词」开关：默认开（与旧行为一致）；关掉后列表行只做跳转，
-  /// 与 [VideoSubtitleJumpPanel] 头部的切换钮一一对应，跨开关 / 跨重启记住。
-  bool get videoSubtitleListTapLookup =>
-      getPref('video_subtitle_list_tap_lookup', defaultValue: true) as bool;
-
-  Future<void> setVideoSubtitleListTapLookup(bool value) async {
-    await setPref('video_subtitle_list_tap_lookup', value);
-    notifyListeners();
-  }
-
-  /// 视频字幕列表**行字号档位**（BUG-878）：档位下标（见 [VideoSubtitleJumpPanel] 的
-  /// `_kFontScaleSteps`），默认 1（1.0x）。旧版本这是面板纯内存 State、每次重开都重置成
-  /// 默认档；现在落 Drift `preferences`，用户放大后跨开关 / 跨重启都记住。仅在该 key 从未
-  /// 写过时返回默认；越界由面板 seed 时 clamp（档位数组扩容后旧存值仍安全）。
-  int get videoSubtitleListFontScaleIndex =>
-      getPref('video_subtitle_list_font_scale_index', defaultValue: 1) as int;
-
-  Future<void> setVideoSubtitleListFontScaleIndex(int value) async {
-    await setPref('video_subtitle_list_font_scale_index', value);
-    notifyListeners();
-  }
-
-  /// 视频字幕列表**面板宽度**（逻辑像素，BUG-877）：默认 0 = 未自定义，页面按屏宽自适应
-  /// （`screenWidth*0.28` 钳制）算宽；用户拖拽面板左边缘把手改宽后存实际像素值，跨开关 /
-  /// 跨重启都记住。0 语义即「跟随自适应」，故清除自定义只需存回 0。页面读取时对存值再做
-  /// 一次 clamp（防跨设备屏宽差异下存值超出合理范围）。
-  double get videoSubtitleListWidth =>
-      (getPref('video_subtitle_list_width', defaultValue: 0) as num).toDouble();
-
-  Future<void> setVideoSubtitleListWidth(double value) async {
-    await setPref('video_subtitle_list_width', value);
-    notifyListeners();
-  }
-
-  /// 播放列表自动连播开关（TODO-639）：默认开启。一集播完后，开则倒计时自动进下一集
-  /// （倒计时期间可点「取消」按钮停在本集），关则停在本集结束不自动推进。
-  /// getPref 仅在该 key 从未写过时返回默认 true，已切过开关的用户保留其存值。
-  bool get videoAutoPlayNext =>
-      getPref('video_auto_play_next', defaultValue: true) as bool;
-
-  Future<void> setVideoAutoPlayNext(bool value) async {
-    await setPref('video_auto_play_next', value);
-    notifyListeners();
-  }
-
-  /// 底部细进度条开关：控制条淡出后，在视频最下方留一条主题色细线
-  /// （B 站 / YouTube 同款）。**默认关**——控制条淡出本身就是「把画面让干净」，
-  /// 再留一条常亮的线等于把这个意图撤回一半；想要的人去设置里开。getPref 仅在
-  /// 该 key 从未写过时返回默认值，已切过的用户保留存值（首版默认开期间手动
-  /// 关掉的人不会因为这次改默认被重新打开）。
-  ///
-  /// 小窗档不受它管：那里完整进度条已被 theme 收起，细线是唯一的进度指示，
-  /// 判据统一在 `videoSlimProgressBarVisible`（video_controls_density.dart）。
-  bool get videoSlimProgressBar =>
-      getPref('video_slim_progress_bar', defaultValue: false) as bool;
-
-  Future<void> setVideoSlimProgressBar(bool value) async {
-    await setPref('video_slim_progress_bar', value);
-    notifyListeners();
-  }
-
-  /// 播放器底栏时间显示「剩余时长」（`-12:34 / 24:00`）而不是已播时长。
-  /// 默认 false；点按底栏时间切换并记住。
-  bool get videoTimeDisplayRemaining =>
-      getPref('video_time_display_remaining', defaultValue: false) as bool;
-
-  Future<void> setVideoTimeDisplayRemaining(bool value) async {
-    await setPref('video_time_display_remaining', value);
-    notifyListeners();
-  }
-
-  /// 旧本地封面补齐开关。现只控制 sidecar / 本地封面 sweep，不会发起元数据
-  /// 网络请求；保留该偏好用于兼容已有设备设置。在线刮削统一由
-  /// `VideoSourceScrapeCoordinator` 管理。
-  bool get videoAutoScrape =>
-      getPref('video_auto_scrape', defaultValue: true) as bool;
-
-  Future<void> setVideoAutoScrape(bool value) async {
-    await setPref('video_auto_scrape', value);
-    notifyListeners();
-  }
-
-  /// 库内自动补刮总闸（默认开）。
-  ///
-  /// 与上面的 [videoAutoScrape] **不是**一件事，也不能复用它：那个键的契约明写
-  /// 「不会发起元数据网络请求」，且早已从设置页撤下、用户无从更改。库内自动补刮
-  /// 会下载 AniDB 每日标题包、并在配了客户端身份时打 AniDB/TMDB，是一项会联网的
-  /// 后台行为，必须有自己的、用户可见可关的开关。
-  bool get videoLibraryAutoBackfillScrape =>
-      getPref('video_library_auto_backfill_scrape', defaultValue: true) as bool;
-
-  Future<void> setVideoLibraryAutoBackfillScrape(bool value) async {
-    await setPref('video_library_auto_backfill_scrape', value);
-    notifyListeners();
-  }
-
-  /// TODO-1119 / BUG-545：用户是否已在「Windows 黑屏闪烁」运行时提示里点了「不再提示」。
-  /// 默认 false = 允许提示。置 true 后播放器不再弹该运行时提示条（静态「已知问题」说明行
-  /// 仍在画质设置里）。getPref 仅在该 key 从未写过时返回默认 false。
-  bool get videoBlackFlickerNoticeSuppressed =>
-      getPref('video_black_flicker_notice_suppressed', defaultValue: false)
-          as bool;
-
-  Future<void> setVideoBlackFlickerNoticeSuppressed(bool value) async {
-    await setPref('video_black_flicker_notice_suppressed', value);
-    notifyListeners();
-  }
-
-  /// 视频弹幕 overlay 开关：**默认关闭**，用户显式开启后才显示（且需有本地/在线弹幕源）。
-  bool get videoDanmakuEnabled =>
-      getPref('video_danmaku_enabled', defaultValue: false) as bool;
-
-  Future<void> setVideoDanmakuEnabled(bool value) async {
-    await setPref('video_danmaku_enabled', value);
-    notifyListeners();
-  }
-
-  /// 是否在本地 sidecar 不可用时尝试在线 Dandanplay 精确匹配。
-  bool get videoDanmakuOnlineEnabled =>
-      getPref('video_danmaku_online_enabled', defaultValue: true) as bool;
-
-  Future<void> setVideoDanmakuOnlineEnabled(bool value) async {
-    await setPref('video_danmaku_online_enabled', value);
-    notifyListeners();
-  }
-
-  int get videoDanmakuMaxActive => normalizeVideoDanmakuMaxActive(
-        getPref(
-          'video_danmaku_max_active',
-          defaultValue: kDefaultVideoDanmakuMaxActive,
-        ) as int,
-      );
-
-  Future<void> setVideoDanmakuMaxActive(int value) async {
-    await setPref(
-      'video_danmaku_max_active',
-      normalizeVideoDanmakuMaxActive(value),
-    );
-    notifyListeners();
-  }
-
-  /// Dandanplay 弹幕来源配置（自建服务器地址 + 可选 API 凭据，JSON；见
-  /// [DandanplayConfig]）。读时同步推送进程级 [DandanplayConfig.current]，使无参
-  /// 构造的 [DandanplayClient]（播放页里）立即吃到配置，无需改播放页的构造调用点。
-  DandanplayConfig get videoDanmakuConfig {
-    final DandanplayConfig config = DandanplayConfig.decode(
-      getPref('video_danmaku_config', defaultValue: '') as String,
-    );
-    DandanplayConfig.current = config;
-    return config;
-  }
-
-  Future<void> setVideoDanmakuConfig(DandanplayConfig config) async {
-    DandanplayConfig.current = config;
-    await setPref('video_danmaku_config', DandanplayConfig.encode(config));
-    notifyListeners();
-  }
-
-  /// qBittorrent WebUI 连接配置（地址/账密/分类，JSON；见 [QbConnectionConfig]）。
-  /// 番剧下载走外部 qb 实例，本配置为空视为功能未启用。
-  QbConnectionConfig? get qbConnectionConfig => decodeQbConnectionConfig(
-        getPref('qb_connection_config', defaultValue: '') as String,
-      );
-
-  Future<void> setQbConnectionConfig(QbConnectionConfig? config) async {
-    await setPref(
-      'qb_connection_config',
-      config == null ? '' : encodeQbConnectionConfig(config),
-    );
-    notifyListeners();
-  }
-
-  /// 多个 Torznab indexer 的设备本地配置。API key 与 endpoint 分栏保存，读取旧
-  /// Jackett/Prowlarr `?apikey=` URL 时由 codec 拆开，避免含密钥 URL 流出本机。
-  List<TorznabIndexerConfig> get videoResourceTorznabConfigs =>
-      readTorznabIndexerConfigs(
-        this,
-        onDecodeError: (Object error, StackTrace stack) =>
-            ErrorLogService.instance.log(
-          'PreferencesRepository.videoResourceTorznabConfigs.decode',
-          error,
-          stack,
-        ),
-      );
-
-  Future<void> setVideoResourceTorznabConfigs(
-    Iterable<TorznabIndexerConfig> configs,
-  ) async {
-    await setPref(
-      kVideoResourceTorznabConfigPref,
-      jsonEncode(encodeTorznabIndexerConfigs(configs)),
-    );
-    notifyListeners();
-  }
-
   /// 用户自配的 OPDS 书目服务器清单（设备本地；含 base64 密码）。
   ///
   /// 逐条容错在 [decodeOpdsServerConfigs] 里：一条记录坏掉只丢那一条，不让
@@ -1924,29 +1286,6 @@ class PreferencesRepository extends ChangeNotifier
     Iterable<OpdsServerConfig> servers,
   ) async {
     await setPref('discovery_opds_servers', encodeOpdsServerConfigs(servers));
-    notifyListeners();
-  }
-
-  /// 用户自配的 AList / OpenList 站点清单（设备本地；含 base64 密码）。
-  /// 逐条容错同 [discoveryOpdsServers]。
-  List<AListSiteConfig> get discoveryAListSites {
-    final String raw =
-        getPref('discovery_alist_sites', defaultValue: '') as String;
-    if (raw.trim().isEmpty) return const <AListSiteConfig>[];
-    try {
-      return decodeAListSiteConfigs(raw);
-    } on Object catch (error, stack) {
-      ErrorLogService.instance.log(
-        'PreferencesRepository.discoveryAListSites.decode',
-        error,
-        stack,
-      );
-      return const <AListSiteConfig>[];
-    }
-  }
-
-  Future<void> setDiscoveryAListSites(Iterable<AListSiteConfig> sites) async {
-    await setPref('discovery_alist_sites', encodeAListSiteConfigs(sites));
     notifyListeners();
   }
 
@@ -2073,90 +1412,6 @@ class PreferencesRepository extends ChangeNotifier
   /// 各自解释一遍，而三处解释互相矛盾——运行时装配当它「不装配」（内置密钥形同虚设），
   /// 设置页列表当它「已内置」（谎报可用），详情页草稿当它「开关关闭」（用户一碰字段
   /// 就把 enabled=false 落盘）。默认值收敛到一处，特殊情况随之消失。
-  OpenSubtitlesConfig get videoSubtitleOpenSubtitlesConfig {
-    final String raw = getPref(
-      'video_subtitle_opensubtitles_config',
-      defaultValue: '',
-    ) as String;
-    if (raw.trim().isEmpty) return OpenSubtitlesConfig.unconfigured();
-    try {
-      final Object? decoded = jsonDecode(raw);
-      if (decoded is! Map<Object?, Object?>) {
-        return OpenSubtitlesConfig.unconfigured();
-      }
-      return OpenSubtitlesConfig.fromJson(<String, Object?>{
-        for (final MapEntry<Object?, Object?> entry in decoded.entries)
-          entry.key.toString(): entry.value,
-      });
-    } on Object catch (error, stack) {
-      ErrorLogService.instance.log(
-        'PreferencesRepository.videoSubtitleOpenSubtitlesConfig.decode',
-        error,
-        stack,
-      );
-      return OpenSubtitlesConfig.unconfigured();
-    }
-  }
-
-  Future<void> setVideoSubtitleOpenSubtitlesConfig(
-    OpenSubtitlesConfig? config,
-  ) async {
-    await setPref(
-      'video_subtitle_opensubtitles_config',
-      config == null ? '' : jsonEncode(config.toJson()),
-    );
-    notifyListeners();
-  }
-
-  /// qB remote path -> 本机可访问路径映射，按 backend profile id 隔离。
-  List<VideoDownloadBackendPathMappingConfig>
-      get videoDownloadBackendPathMappings =>
-          decodeVideoDownloadBackendPathMappings(
-            getPref(
-              'video_download_backend_path_mappings',
-              defaultValue: '',
-            ) as String,
-          );
-
-  Future<void> setVideoDownloadBackendPathMappings(
-    Iterable<VideoDownloadBackendPathMappingConfig> mappings,
-  ) async {
-    await setPref(
-      'video_download_backend_path_mappings',
-      encodeVideoDownloadBackendPathMappings(mappings),
-    );
-    notifyListeners();
-  }
-
-  /// 新任务默认使用的本机受管视频来源；0 表示尚未选择。
-  int? get videoDownloadTargetSourceId {
-    final int value = getPref(
-      'video_download_target_source_id',
-      defaultValue: 0,
-    ) as int;
-    return value > 0 ? value : null;
-  }
-
-  Future<void> setVideoDownloadTargetSourceId(int? sourceId) async {
-    await setPref('video_download_target_source_id', sourceId ?? 0);
-    notifyListeners();
-  }
-
-  /// 内置下载器的本机安装身份。第一次读取时生成并持久化，之后只读复用；旧任务据此
-  /// 判断是否仍由同一个内置实例管理，不能被另一台机器的引擎隐式接管。
-  Future<String> ensureVideoDownloadEmbeddedInstallationId() async {
-    final String existing = getPref(
-      'video_download_embedded_installation_id',
-      defaultValue: '',
-    ) as String;
-    if (existing.trim().isNotEmpty) return existing.trim();
-    final String created = generateVideoDownloadInstallationId();
-    await setPref('video_download_embedded_installation_id', created);
-    return created;
-  }
-
-  /// 安装统计（`updates/usage_heartbeat.dart`）：是否每天发一次心跳。关掉后反馈也不再
-  /// 附带安装 id。设备本地（[SyncRepository.deviceLocalPrefKeys]）：同意只对这台设备成立。
   bool get usageStatsEnabled =>
       getPref('usage_stats_enabled', defaultValue: true) as bool;
 
@@ -2176,7 +1431,7 @@ class PreferencesRepository extends ChangeNotifier
       defaultValue: '',
     ) as String;
     if (existing.trim().isNotEmpty) return existing.trim();
-    final String created = generateVideoDownloadInstallationId();
+    final String created = _randomUuidV4();
     await setPref('usage_stats_install_id', created);
     return created;
   }
@@ -2206,32 +1461,6 @@ class PreferencesRepository extends ChangeNotifier
 
   /// 是否已展示过「上传/做种」首用提示（默认 false = 未展示）。首次下载时弹
   /// 一次性对话框提醒上传默认关并询问是否开启（见下载对话框），之后置真不再弹。
-  bool get torrentUploadIntroShown =>
-      getPref('torrent_upload_intro_shown', defaultValue: false) as bool;
-
-  Future<void> setTorrentUploadIntroShown() async {
-    await setPref('torrent_upload_intro_shown', true);
-  }
-
-  /// BT / 磁力下载前的 P2P 说明是否已被勾选「不再提示」（默认 false = 每次
-  /// 发起 BT 下载前都说明一次，见 `p2p_download_notice.dart`）。
-  bool get p2pDownloadNoticeDismissed =>
-      getPref('p2p_download_notice_dismissed', defaultValue: false) as bool;
-
-  Future<void> setP2pDownloadNoticeDismissed() async {
-    await setPref('p2p_download_notice_dismissed', true);
-  }
-
-  /// 从第三方游戏资源站下载前的风险说明是否已勾「不再提示」（默认 false）。
-  bool get gameResourceNoticeDismissed =>
-      getPref('game_resource_notice_dismissed', defaultValue: false) as bool;
-
-  Future<void> setGameResourceNoticeDismissed() async {
-    await setPref('game_resource_notice_dismissed', true);
-  }
-
-  /// 「下载」改名「浏览」（2026-09-27）的一次性搬迁提示是否已处理：弹过，或首次
-  /// 启动新版时判定本安装不需要弹（全新安装 / 升级前开着下载）。默认 false。
   bool get browseMovedNoticeHandled =>
       getPref('browse_moved_notice_handled', defaultValue: false) as bool;
 
@@ -2239,123 +1468,6 @@ class PreferencesRepository extends ChangeNotifier
     await setPref('browse_moved_notice_handled', true);
   }
 
-  /// 弹幕样式（字号/不透明度/速度/显示区域，JSON；见 [VideoDanmakuStyle]，TODO-1376）。
-  /// 读盘经 [VideoDanmakuStyle.decode] 已 clamp 到合法区间。
-  VideoDanmakuStyle get videoDanmakuStyle => VideoDanmakuStyle.decode(
-        getPref('video_danmaku_style', defaultValue: '') as String,
-      );
-
-  Future<void> setVideoDanmakuStyle(VideoDanmakuStyle style) async {
-    await setPref(
-      'video_danmaku_style',
-      VideoDanmakuStyle.encode(style.normalized()),
-    );
-    notifyListeners();
-  }
-
-  /// 弹幕屏蔽规则原始多行文本（每行一条，`/pattern/` 为正则，其余纯文本子串；
-  /// 解析见 [parseVideoDanmakuBlockRules]，TODO-1376）。原样存文本，编译在消费端做。
-  String get videoDanmakuBlockRulesText =>
-      getPref('video_danmaku_block_rules', defaultValue: '') as String;
-
-  Future<void> setVideoDanmakuBlockRulesText(String value) async {
-    await setPref('video_danmaku_block_rules', value);
-    notifyListeners();
-  }
-
-  int? getVideoDanmakuEpisodeId(String bookUid) {
-    final int value = getPref(
-      'video_danmaku_episode/$bookUid',
-      defaultValue: 0,
-    ) as int;
-    return value > 0 ? value : null;
-  }
-
-  Future<void> setVideoDanmakuEpisodeId(String bookUid, int episodeId) async {
-    await setPref('video_danmaku_episode/$bookUid', episodeId);
-  }
-
-  /// 桌面视频页按视频原始比例锁定原生窗口；移动端窗口不可改尺寸，不使用此项。
-  ///
-  /// 默认 false（回归修复）：用户没要求时不主动把 app 窗口尺寸贴成视频宽高比，
-  /// 视频区适配走 [videoFitMode] 的 BoxFit；想锁窗口比例的用户可在设置里手动开启。
-  bool get videoLockWindowAspectRatio =>
-      getPref('video_lock_window_aspect_ratio', defaultValue: false) as bool;
-
-  Future<void> setVideoLockWindowAspectRatio(bool value) async {
-    await setPref('video_lock_window_aspect_ratio', value);
-    notifyListeners();
-  }
-
-  /// YouTube 显式画质目标高度（如 720/1080/2160）；0 = 自动（默认策略：编码优先、
-  /// ≤1080p，见 pickPlaybackVideoStream）。消费方把 0 换算成 null 传解析器。
-  int get youtubeQualityTargetHeight =>
-      getPref('video_youtube_quality_height', defaultValue: 0) as int;
-
-  Future<void> setYoutubeQualityTargetHeight(int height) async {
-    await setPref('video_youtube_quality_height', height < 0 ? 0 : height);
-    notifyListeners();
-  }
-
-  /// 视频画面缩放/比例模式（窗口模式 + 全屏的 [Video] fit；默认 [VideoFitMode.contain]
-  /// = 保持比例完整适应媒体框；已有 cover/fill 持久化值仍按原值恢复）。
-  VideoFitMode get videoFitMode => VideoFitMode.fromStorage(
-        getPref('video_fit_mode',
-            defaultValue: VideoFitMode.contain.storageValue) as String,
-      );
-
-  Future<void> setVideoFitMode(VideoFitMode mode) async {
-    await setPref('video_fit_mode', mode.storageValue);
-    notifyListeners();
-  }
-
-  /// Windows HDR 直通 / 10-bit 输出模式（默认 auto：显示器 HDR 开着且片源 HDR 时直通）。
-  VideoHdrOutputMode get videoHdrOutputMode => VideoHdrOutputMode.fromStorage(
-        getPref(kVideoHdrOutputPref,
-            defaultValue: VideoHdrOutputMode.auto.storageValue) as String,
-      );
-
-  Future<void> setVideoHdrOutputMode(VideoHdrOutputMode mode) async {
-    await setPref(kVideoHdrOutputPref, mode.storageValue);
-    notifyListeners();
-  }
-
-  String get videoAsbplayerConfig =>
-      getPref('video_asbplayer_config', defaultValue: '') as String;
-
-  Future<void> setVideoAsbplayerConfig(String json) async {
-    await setPref('video_asbplayer_config', json);
-    notifyListeners();
-  }
-
-  /// 视频控制按钮 9-槽位布局（TODO-274/312 phase 2）。持久化键
-  /// `video_control_customization` 沿用旧三档模型时期的键名：
-  /// [VideoControlLayout.decode] 自动识别 v1（旧三档 placements）并迁移成 v2 槽位，
-  /// 故老用户配置无损升级、不需要新 schema。新写入一律是 v2/v3 JSON。
-  VideoControlLayout get videoControlLayout => VideoControlLayout.decode(
-        getPref('video_control_customization', defaultValue: '') as String,
-      );
-
-  Future<void> setVideoControlLayout(VideoControlLayout layout) async {
-    await setPref('video_control_customization', layout.encode());
-    notifyListeners();
-  }
-
-  /// 手机字幕遥控器控制卡的按钮布局（主组 / 次组 / 移出）。持久化键
-  /// `video_remote_control_layout`，空 / 坏值回出厂布局。
-  VideoRemoteControlLayout get videoRemoteControlLayout =>
-      VideoRemoteControlLayout.decode(
-        getPref('video_remote_control_layout', defaultValue: '') as String,
-      );
-
-  Future<void> setVideoRemoteControlLayout(
-      VideoRemoteControlLayout layout) async {
-    await setPref('video_remote_control_layout', layout.encode());
-    notifyListeners();
-  }
-
-  /// 阅读器顶栏 / 底栏按钮布局（与视频页同一套泛型模型，2026-09-13）。持久化键
-  /// `reader_control_layout`，空 / 坏值回出厂布局。
   ReaderControlLayout get readerControlLayout => ReaderControlLayout.decode(
         getPref('reader_control_layout', defaultValue: '') as String,
       );
@@ -2441,235 +1553,6 @@ class PreferencesRepository extends ChangeNotifier
   /// JSON 只会让那个已经在扛 v1→v2→v3 迁移的 payload 再多一层版本。
   /// 空串 = 一个都没绑（[VideoCustomActionBindings.empty]）。此时按钮仍显示在控制条上，
   /// 点它就地弹动作选择器——空槽位是配置入口，不是死按钮。
-  VideoCustomActionBindings get videoCustomActionBindings =>
-      VideoCustomActionBindings.decode(
-        getPref('video_custom_action_bindings', defaultValue: '') as String,
-      );
-
-  Future<void> setVideoCustomActionBindings(
-    VideoCustomActionBindings bindings,
-  ) async {
-    await setPref('video_custom_action_bindings', bindings.encode());
-    notifyListeners();
-  }
-
-  /// 视频字幕外观（JSON；解析见 VideoSubtitleStyle.encode/decode）。空串=默认外观。
-  String get videoSubtitleStyle =>
-      getPref('video_subtitle_style', defaultValue: '') as String;
-
-  Future<void> setVideoSubtitleStyle(String json) async {
-    await setPref('video_subtitle_style', json);
-    notifyListeners();
-  }
-
-  /// 是否尊重 .ass 字幕自带样式（字体 / 主色 / 描边 / 阴影，TODO-1105）。**默认 true**——
-  /// 用户期望「默认尊重字幕自带样式」；关闭时字幕全走用户统一外观设置。
-  bool get videoRespectAssStyle =>
-      getPref('video_respect_ass_style', defaultValue: true) as bool;
-
-  Future<void> setVideoRespectAssStyle(bool value) async {
-    await setPref('video_respect_ass_style', value);
-    notifyListeners();
-  }
-
-  /// 视频 mpv 配置（JSON；解析见 VideoMpvConfig.encode/decode）。空串=默认全 mpv 默认值。
-  String get videoMpvConfig =>
-      getPref('video_mpv_config', defaultValue: '') as String;
-
-  Future<void> setVideoMpvConfig(String json) async {
-    await setPref('video_mpv_config', json);
-    notifyListeners();
-  }
-
-  /// 侧边锁进入后的沉浸交互级别。旧库没有该 key 时默认仅查词，不需要迁移。
-  VideoImmersiveMode get videoImmersiveMode => VideoImmersiveMode.fromStorage(
-        getPref(
-          'video_immersive_mode',
-          defaultValue: VideoImmersiveMode.fallback.storageValue,
-        ) as String,
-      );
-
-  Future<void> setVideoImmersiveMode(VideoImmersiveMode mode) async {
-    await setPref('video_immersive_mode', mode.storageValue);
-    notifyListeners();
-  }
-
-  /// 截图去向：保存对话框 / 剪贴板 / 指定目录。旧库没有该 key 时落到
-  /// [VideoScreenshotDestination.ask]，即这个偏好出现之前的行为，不需要迁移。
-  VideoScreenshotDestination get videoScreenshotDestination =>
-      VideoScreenshotDestination.fromStorage(
-        getPref(
-          kVideoScreenshotDestinationPref,
-          defaultValue: VideoScreenshotDestination.ask.storageValue,
-        ) as String,
-      );
-
-  Future<void> setVideoScreenshotDestination(
-      VideoScreenshotDestination destination) async {
-    await setPref(kVideoScreenshotDestinationPref, destination.storageValue);
-    notifyListeners();
-  }
-
-  /// [VideoScreenshotDestination.directory] 的目标目录；空串 = 未设置。
-  String get videoScreenshotDirectory =>
-      getPref(kVideoScreenshotDirectoryPref, defaultValue: '') as String;
-
-  Future<void> setVideoScreenshotDirectory(String path) async {
-    await setPref(kVideoScreenshotDirectoryPref, path);
-    notifyListeners();
-  }
-
-  /// 片段导出的视频目标码率（kbps）；0 = 跟随源（默认，旧库没有该 key 时的行为，
-  /// 不需要迁移）。写入前夹到 `[0, kVideoClipExportVideoBitrateMaxKbps]`。
-  int get videoClipExportVideoBitrateKbps => getPref(
-        kVideoClipExportVideoBitrateKbpsPref,
-        defaultValue: kVideoClipExportVideoBitrateFollowSource,
-      ) as int;
-
-  Future<void> setVideoClipExportVideoBitrateKbps(int kbps) async {
-    await setPref(
-      kVideoClipExportVideoBitrateKbpsPref,
-      kbps.clamp(
-        kVideoClipExportVideoBitrateFollowSource,
-        kVideoClipExportVideoBitrateMaxKbps,
-      ),
-    );
-    notifyListeners();
-  }
-
-  /// Whether the first-use Anime4K recommendation prompt has been shown.
-  bool get videoAnime4kPromptShown =>
-      getPref(videoAnime4kPromptShownKey, defaultValue: false) as bool;
-
-  Future<void> setVideoAnime4kPromptShown() async {
-    await setPref(videoAnime4kPromptShownKey, true);
-    notifyListeners();
-  }
-
-  /// Jimaku（jimaku.cc）API key：自动获取日语字幕用（用户在视频字幕菜单里填）。
-  String get jimakuApiKey =>
-      getPref('jimaku_api_key', defaultValue: '') as String;
-
-  Future<void> setJimakuApiKey(String key) async {
-    await setPref('jimaku_api_key', key);
-    notifyListeners();
-  }
-
-  /// Jimaku 是否参与字幕搜索。与 [jimakuApiKey] 组成 `enabled && key` 双门控，
-  /// 形状对齐 OpenSubtitles（那家的 `enabled` 长在它的 config JSON 里）。
-  ///
-  /// **默认 true 是兼容性要求**：这个键出现之前，「填了 key」就等于「启用」。
-  /// 默认 false 会让所有已填 key 的存量用户在升级后 Jimaku 突然失效，且他们
-  /// 无从知道是新加了一个开关。默认 true + key 仍为空则不注册，语义与本键出现
-  /// 之前逐字一致，不需要任何迁移写入。
-  bool get jimakuEnabled =>
-      getPref('jimaku_enabled', defaultValue: true) as bool;
-
-  Future<void> setJimakuEnabled(bool value) async {
-    await setPref('jimaku_enabled', value);
-    notifyListeners();
-  }
-
-  /// 自动下载的外挂字幕是否按视频内嵌文本字幕轨对时间轴（见
-  /// embedded_reference_subtitle_sync.dart）。默认开：只在证据足够时才改，
-  /// 其余一律原样，关掉它等于回到此前的行为。
-  bool get subtitleReferenceSyncEnabled =>
-      getPref('subtitle_reference_sync_enabled', defaultValue: true) as bool;
-
-  Future<void> setSubtitleReferenceSyncEnabled(bool value) async {
-    await setPref('subtitle_reference_sync_enabled', value);
-    notifyListeners();
-  }
-
-  /// 每系列（番名）记住的 Jimaku 字幕语言偏好：`{ "<series 小写归一>": "<langCode>" }`。
-  ///
-  /// 单一 JSON map 落 KV 表（避免每系列一个 key 撑爆表）；解析失败回退空 map
-  /// （与 [customDictCSS] 同款容错）。
-  Map<String, String> get jimakuPreferredLanguages {
-    final String raw = getPref('jimaku_pref_langs', defaultValue: '') as String;
-    if (raw.isEmpty) return <String, String>{};
-    try {
-      final dynamic decoded = jsonDecode(raw);
-      if (decoded is Map) {
-        return decoded.map((dynamic k, dynamic v) =>
-            MapEntry<String, String>(k.toString(), v.toString()));
-      }
-    } catch (e, stack) {
-      ErrorLogService.instance.log(
-          'PreferencesRepository.jimakuPreferredLanguages.decode', e, stack);
-    }
-    return <String, String>{};
-  }
-
-  /// 记住某系列（[seriesKey]）选的字幕语言（[langCode]，读改写整 map）。
-  Future<void> setJimakuPreferredLanguage(
-      String seriesKey, String langCode) async {
-    final Map<String, String> map = jimakuPreferredLanguages;
-    map[seriesKey] = langCode;
-    await setPref('jimaku_pref_langs', jsonEncode(map));
-    notifyListeners();
-  }
-
-  /// Jimaku 默认字幕语言（`ja` / `zh` / `en` / `ko`；`''` = 不限，按语言权重默认排序）。
-  ///
-  /// [jimakuPreferredLanguages] 是**每系列**的记忆（用户在某部番里选过就记住那部），
-  /// 本项是没有系列记忆时的全局默认，设置页统一配置，字幕对话框 / 番剧下载 /
-  /// 批量匹配三处共用。
-  String get jimakuDefaultLanguage =>
-      getPref('jimaku_default_language', defaultValue: '') as String;
-
-  Future<void> setJimakuDefaultLanguage(String langCode) async {
-    await setPref('jimaku_default_language', langCode);
-    notifyListeners();
-  }
-
-  /// 「AI 下视频」的默认画质。三态：`''` 未设置（对话里第一次问、按「以后默认」
-  /// 勾选写回）/ `ask` 每次询问 / 固定档（`best` `2160p` `1440p` `1080p` `720p`
-  /// `480p` `any`）。
-  /// 类型化读法见 `ai_video_acquisition_preferences.dart`。
-  String get aiVideoDownloadQuality =>
-      getPref(kAiVideoDownloadQualityPref, defaultValue: '') as String;
-
-  Future<void> setAiVideoDownloadQuality(String value) async {
-    await setPref(kAiVideoDownloadQualityPref, value);
-    notifyListeners();
-  }
-
-  /// 「AI 下视频」的片源偏好（只排序不过滤）：`''` 不限 / `best` / `bluray` / `web`。
-  /// 类型化读法 `VideoAcquisitionSourcePref.parse`。
-  String get aiVideoDownloadSource =>
-      getPref(kAiVideoDownloadSourcePref, defaultValue: '') as String;
-
-  Future<void> setAiVideoDownloadSource(String value) async {
-    await setPref(kAiVideoDownloadSourcePref, value);
-    notifyListeners();
-  }
-
-  /// 「AI 下视频」的码率偏好（只排序不过滤）：`''` 不限 / `high` / `low`。
-  /// 类型化读法 `VideoAcquisitionBitratePref.parse`。
-  String get aiVideoDownloadBitrate =>
-      getPref(kAiVideoDownloadBitratePref, defaultValue: '') as String;
-
-  Future<void> setAiVideoDownloadBitrate(String value) async {
-    await setPref(kAiVideoDownloadBitratePref, value);
-    notifyListeners();
-  }
-
-  /// 「AI 下视频」的字幕语言。取值：`''` 未设置（第一次问、按勾选写回）/ `ask`
-  /// 每次询问 / `original` 跟随作品语言 / 语言码（见
-  /// `kVideoAcquisitionSubtitleLanguageCodes`）/
-  /// `none` 不配字幕。与 [jimakuDefaultLanguage] 分开：那是字幕面板的全局默认，
-  /// 这是 AI 对话流程自己的默认。类型化读法见 `ai_video_acquisition_preferences.dart`。
-  String get aiVideoDownloadSubtitleLanguage =>
-      getPref(kAiVideoDownloadSubtitleLanguagePref, defaultValue: '')
-          as String;
-
-  Future<void> setAiVideoDownloadSubtitleLanguage(String value) async {
-    await setPref(kAiVideoDownloadSubtitleLanguagePref, value);
-    notifyListeners();
-  }
-
-  /// AI 联网资料：用户自加的 MediaWiki 站点（读时逐条校验，坏条目丢弃）。
   List<WebKnowledgeSite> get aiWebKnowledgeCustomSites =>
       parseWebKnowledgeCustomSites(
         getPref('ai_web_knowledge_custom_sites', defaultValue: null) as String?,
@@ -2749,128 +1632,6 @@ class PreferencesRepository extends ChangeNotifier
   ///
   /// 只在配好了在线字幕来源（Jimaku key / OpenSubtitles）时才有任何动作；
   /// 且**绝不覆盖**任何已有字幕。
-  bool get videoSubtitleBackfillAfterScrape =>
-      getPref('video_subtitle_backfill_after_scrape', defaultValue: true)
-          as bool;
-
-  Future<void> setVideoSubtitleBackfillAfterScrape(bool enabled) async {
-    await setPref('video_subtitle_backfill_after_scrape', enabled);
-    notifyListeners();
-  }
-
-  /// 下载进受管视频来源时跳过特典（PV / CM / NCOP / NCED / 菜单…）。默认关：
-  /// 整颗种子全下（旧行为）。下载管线每轮现读，改了对还没拿到文件表的任务生效。
-  bool get videoDownloadSkipExtras =>
-      getPref(kVideoDownloadSkipExtrasPref, defaultValue: false) as bool;
-
-  Future<void> setVideoDownloadSkipExtras(bool enabled) async {
-    await setPref(kVideoDownloadSkipExtrasPref, enabled);
-    notifyListeners();
-  }
-
-  /// 远端（互联 host）视频上导入 / 重定时得到的字幕是否自动上传到 host 并设为该集
-  /// 默认字幕（BUG-2728 的自动上传）。上传会改掉**所有** peer 在这一集看到的默认
-  /// 字幕，所以给用户一个开关；关掉时字幕只在本机应用与记忆，不发任何上传请求。
-  ///
-  /// 为什么默认开：BUG-2728 是所有者本人报的「字幕导入应该自动上传到服务端」，
-  /// PR #1688 按此默认上传后合入；开关是 2026-09-27 所有者追加的「加开关」，没有
-  /// 要求改默认。默认开让已在用的行为不因升级而静默变化。
-  bool get videoSubtitleAutoUploadToHost =>
-      getPref('video_subtitle_auto_upload_to_host', defaultValue: true)
-          as bool;
-
-  Future<void> setVideoSubtitleAutoUploadToHost(bool enabled) async {
-    await setPref('video_subtitle_auto_upload_to_host', enabled);
-    notifyListeners();
-  }
-
-  /// AJATT 日语字幕库（`subtitles.ajatt.top`，kitsunekko 镜像）是否参与字幕搜索。
-  ///
-  /// 零配置：无 API key、无配额，所以只有这一个开关（不像 Jimaku / OpenSubtitles
-  /// 的 `enabled && key` 双门控）。默认 true——它是没填任何 key 的用户唯一能用的源。
-  bool get videoSubtitleAjattEnabled =>
-      getPref('video_subtitle_ajatt_enabled', defaultValue: true) as bool;
-
-  Future<void> setVideoSubtitleAjattEnabled(bool enabled) async {
-    await setPref('video_subtitle_ajatt_enabled', enabled);
-    notifyListeners();
-  }
-
-  /// SubDL（subdl.com）API key：搜索必须带 key（站点 panel 免费生成）。
-  String get videoSubtitleSubdlApiKey =>
-      getPref('video_subtitle_subdl_api_key', defaultValue: '') as String;
-
-  Future<void> setVideoSubtitleSubdlApiKey(String key) async {
-    await setPref('video_subtitle_subdl_api_key', key);
-    notifyListeners();
-  }
-
-  /// SubDL 是否参与字幕搜索。与 [videoSubtitleSubdlApiKey] 组成 `enabled && key`
-  /// 双门控（形状对齐 Jimaku）。默认 true：key 为空即不装配，默认开不产生请求，
-  /// 用户填了 key 就直接生效，不必再找一次开关。
-  bool get videoSubtitleSubdlEnabled =>
-      getPref('video_subtitle_subdl_enabled', defaultValue: true) as bool;
-
-  Future<void> setVideoSubtitleSubdlEnabled(bool enabled) async {
-    await setPref('video_subtitle_subdl_enabled', enabled);
-    notifyListeners();
-  }
-
-  /// 远端/流媒体视频用户手选的字幕来源（按 `<bookUid>#ep<index>` 记忆）：
-  /// `{ "<key>": "<subtitleSource 四态编码>" }`。
-  ///
-  /// 远端视频没有本地 `VideoBooks` 行可写 `subtitleSource` 列，字幕退出即丢（用户报
-  /// 「下载字幕没持久化退出影片就没了」的根因）。这里比照远端播放进度的 prefs 化范式，
-  /// 用稳定的 `bookUid`（= `RemoteVideoInfo.id`）+ 集下标做 key 把选择落 KV，重进
-  /// `_loadRemoteEpisode` 时优先重放。值是 `_currentSubtitleSource` 的四态编码：
-  /// 本地已下载文件绝对路径 / host `subtitleUrl` / `embedded:<n>` / `off:` 哨兵。
-  ///
-  /// 单一 JSON map 落 KV 表；解析失败回退空 map（与 [jimakuPreferredLanguages] 同款容错）。
-  Map<String, String> get remoteSubtitleSources {
-    final String raw =
-        getPref('video_remote_subtitle', defaultValue: '') as String;
-    if (raw.isEmpty) return <String, String>{};
-    try {
-      final dynamic decoded = jsonDecode(raw);
-      if (decoded is Map) {
-        return decoded.map((dynamic k, dynamic v) =>
-            MapEntry<String, String>(k.toString(), v.toString()));
-      }
-    } catch (e, stack) {
-      ErrorLogService.instance
-          .log('PreferencesRepository.remoteSubtitleSources.decode', e, stack);
-    }
-    return <String, String>{};
-  }
-
-  /// 远端字幕来源的记忆 key：`<bookUid>#ep<index>`。集下标 0（单集/整书）省略 `#ep`
-  /// 后缀，与远端播放进度 key 的约定一致，避免单集视频徒增后缀。纯函数，便于单测。
-  static String remoteSubtitleKey(String bookUid, int episodeIndex) =>
-      episodeIndex > 0 ? '$bookUid#ep$episodeIndex' : bookUid;
-
-  /// 读某远端视频（[bookUid] + [episodeIndex]）记住的字幕来源；无记忆返回 null。
-  String? remoteSubtitleSource(String bookUid, {int episodeIndex = 0}) =>
-      remoteSubtitleSources[remoteSubtitleKey(bookUid, episodeIndex)];
-
-  /// 记住/清除某远端视频的字幕来源。[source] 为 null 时删除该 key（读改写整 map）。
-  Future<void> setRemoteSubtitleSource(
-    String bookUid,
-    int episodeIndex,
-    String? source,
-  ) async {
-    final Map<String, String> map = remoteSubtitleSources;
-    final String key = remoteSubtitleKey(bookUid, episodeIndex);
-    if (source == null) {
-      if (!map.containsKey(key)) return;
-      map.remove(key);
-    } else {
-      if (map[key] == source) return;
-      map[key] = source;
-    }
-    await setPref('video_remote_subtitle', jsonEncode(map));
-    notifyListeners();
-  }
-
   // ── tags & card export ───────────────────────────────────────────────
 
   String get savedTags => getPref('saved_tags', defaultValue: '') as String;
@@ -3174,204 +1935,6 @@ class PreferencesRepository extends ChangeNotifier
   ) async {
     await setPref('srs_mining_field_mappings', jsonEncode(mappings));
     notifyListeners();
-  }
-
-  // 视频制卡封面图片模式（音画同步片段 / 动图 / 制卡时当前帧 / 字幕开头帧）。没显式
-  // 设过时取 videoClip（存量安装由 [settleMiningImageModeInstallDefault] 迁过来）。
-  // 存稳定字符串键（[VideoMiningImageMode.wireName]），解析 null / 未知值回退 videoClip
-  // （[VideoMiningImageMode.fromWireName]）。
-  VideoMiningImageMode get videoMiningImageMode =>
-      _miningImageMode('video_mining_image_mode');
-
-  void setVideoMiningImageMode(VideoMiningImageMode mode) async {
-    await _setImageModePinningClipFormat(
-        'video_mining_clip_format', 'video_mining_image_mode', mode);
-    notifyListeners();
-  }
-
-  // 在线视频点制卡后弹窗等不等（见 [VideoOnlineMiningMode]）。默认 background。
-  VideoOnlineMiningMode get videoOnlineMiningMode =>
-      VideoOnlineMiningMode.fromWireName(
-          getPref('video_online_mining_mode', defaultValue: null) as String?);
-
-  Future<void> setVideoOnlineMiningMode(VideoOnlineMiningMode mode) async {
-    await setPref('video_online_mining_mode', mode.wireName);
-    notifyListeners();
-  }
-
-  // 暂停时识别画面文字的范围（见 [VideoPauseOcrScope]）。默认 off（BUG-3342：用户
-  // 手动开启；存过 all / graphic_subtitles 的用户照旧）。
-  VideoPauseOcrScope get videoPauseOcrScope => VideoPauseOcrScope.fromWireName(
-      getPref('video_pause_ocr_scope', defaultValue: null) as String?);
-
-  Future<void> setVideoPauseOcrScope(VideoPauseOcrScope scope) async {
-    await setPref('video_pause_ocr_scope', scope.wireName);
-    notifyListeners();
-  }
-
-  // galgame 场景卡封面模式，与视频**分开存**：视频的动图能拍出口型和动作，galgame
-  // 画面在一句台词内基本静止，动图多半只是把同一帧存二十遍。两者的取舍不同，共用一
-  // 个开关会逼用户为一边将就另一边。默认同视频项（videoClip）；galgame 没有「字幕
-  // 区间」，故只在 gif / currentFrame / videoClip 三档间取值，其余值按
-  // [VideoMiningImageMode.isStill] 归入静态截图。
-  VideoMiningImageMode get galMiningImageMode =>
-      _miningImageMode('gal_mining_image_mode');
-
-  /// 封面模式迁移标记（wireName）。键名是历史名（冻结），现在只当「迁到片段默认」的
-  /// 一次性标记用。
-  ///
-  /// 历史：PR #1717 让片段成为默认时只给全新安装，2026-09-28 的迁移给升级用户记 `gif`
-  /// 并把没设过的视频 / gal 封面模式键**显式写成 gif**。所有者 2026-10-01 改口：老用户
-  /// 也用片段。那次写进去的 gif 和用户自己选的 gif 在数据里分不开，按所有者决定一并迁走。
-  /// 本键不随 Profile 走（`ProfileKeys` 排除），描述的是本安装是否已迁过。
-  static const String miningImageModeInstallDefaultKey =
-      'mining_image_mode_install_default';
-
-  /// 封面模式键（视频 / gal）与各自片段格式键的配对，迁移时一起处理。
-  static const List<(String, String)> _miningImageModeKeys = <(String, String)>[
-    ('video_mining_image_mode', 'video_mining_clip_format'),
-    ('gal_mining_image_mode', 'gal_mining_clip_format'),
-  ];
-
-  VideoMiningImageMode _miningImageMode(String key) =>
-      VideoMiningImageMode.fromWireName(
-          getPref(key, defaultValue: null) as String?);
-
-  /// 启动时（`AppModel.initialise()`）跑一次封面模式迁移；标记已是 videoClip 直接返回。
-  ///
-  /// 标记为 gif（被 2026-09-28 迁移钉过）的安装：仍是 gif 的封面模式改成 videoClip，
-  /// 格式从没设过就把**改模式前**推导出的平台默认一起钉死——否则显式 video_clip 会被
-  /// [_miningClipFormat] 当成 MP4 时代的老用户推成 MP4。其它显式值（当前帧 / 字幕开头帧 /
-  /// 片段）一律不碰。标记缺失（全新安装，或从 09-28 之前的版本直接升上来）只写标记：没设过
-  /// 的模式键本就按 videoClip 取。与标记同一次 [setPrefs] 落盘，此后用户再选 gif 不会被改回。
-  Future<void> settleMiningImageModeInstallDefault() {
-    final Object? marker =
-        getPref(miningImageModeInstallDefaultKey, defaultValue: null);
-    if (marker == VideoMiningImageMode.videoClip.wireName) {
-      return Future<void>.value();
-    }
-    final bool pinnedToGif = marker == VideoMiningImageMode.gif.wireName;
-    final Map<String, dynamic> values = <String, dynamic>{
-      miningImageModeInstallDefaultKey: VideoMiningImageMode.videoClip.wireName,
-      if (pinnedToGif)
-        for (final (String modeKey, String formatKey) in _miningImageModeKeys)
-          if (getPref(modeKey, defaultValue: null) ==
-              VideoMiningImageMode.gif.wireName) ...<String, dynamic>{
-            if (getPref(formatKey, defaultValue: null) == null)
-              formatKey: _miningClipFormat(formatKey, modeKey).wireName,
-            modeKey: VideoMiningImageMode.videoClip.wireName,
-          },
-    };
-    return setPrefs(values);
-  }
-
-  void setGalMiningImageMode(VideoMiningImageMode mode) async {
-    await _setImageModePinningClipFormat(
-        'gal_mining_clip_format', 'gal_mining_image_mode', mode);
-    notifyListeners();
-  }
-
-  // 动图**编码格式**，与上面两个「封面模式」正交：模式选「用不用动图 / 静态帧取哪一帧」，
-  // 格式选「动图用什么编码」。视频与 gal 同样分开存，理由与 image mode 一致（两边画面
-  // 特性不同，共用一个开关会逼用户为一边将就另一边）。
-  //
-  // 默认值不写在这里，由 [MiningAnimatedFormat.fromWireName] 对 null 给出（= avif），
-  // 保证解析未知历史值与「从没设过」走同一条路径。
-  MiningAnimatedFormat get videoMiningAnimatedFormat =>
-      MiningAnimatedFormat.fromWireName(
-          getPref('video_mining_animated_format', defaultValue: null)
-              as String?);
-
-  void setVideoMiningAnimatedFormat(MiningAnimatedFormat format) async {
-    await setPref('video_mining_animated_format', format.wireName);
-    notifyListeners();
-  }
-
-  // 静图（截图）**编码格式**，与上面两轴正交：模式选「用不用动图 / 静态帧取哪一帧」，
-  // 本项选「那帧用什么编码」。默认由 [MiningStillFormat.fromWireName] 对 null 给出（= jpg，
-  // 现状零破坏），不写在这里：解析未知历史值与「从没设过」走同一条路径。
-  //
-  // galgame 侧不取本项：那条链的静图来自窗口抓图（本就是 PNG），不经本格式轴。
-  MiningStillFormat get videoMiningStillFormat =>
-      MiningStillFormat.fromWireName(
-          getPref('video_mining_still_format', defaultValue: null) as String?);
-
-  void setVideoMiningStillFormat(MiningStillFormat format) async {
-    await setPref('video_mining_still_format', format.wireName);
-    notifyListeners();
-  }
-
-  // galgame 侧单存一份（同 image mode / animated format 的分法）：那边的静图来自
-  // 窗口抓图（本身是 PNG），与视频帧的取舍不同，共用一个开关会逼用户为一边将就另一边。
-  // 默认同样是 jpg：BUG-1473 已把 gal 截图接进降采样（原本 1.5~4 MB 的无压缩 PNG），
-  // “小图原样返回 PNG”只是不值得重编码的捐径，不是意图。
-  MiningStillFormat get galMiningStillFormat => MiningStillFormat.fromWireName(
-      getPref('gal_mining_still_format', defaultValue: null) as String?);
-
-  void setGalMiningStillFormat(MiningStillFormat format) async {
-    await setPref('gal_mining_still_format', format.wireName);
-    notifyListeners();
-  }
-
-  MiningAnimatedFormat get galMiningAnimatedFormat =>
-      MiningAnimatedFormat.fromWireName(
-          getPref('gal_mining_animated_format', defaultValue: null) as String?);
-
-  void setGalMiningAnimatedFormat(MiningAnimatedFormat format) async {
-    await setPref('gal_mining_animated_format', format.wireName);
-    notifyListeners();
-  }
-
-  // 音画同步片段的容器/编码（见 [MiningClipFormat]），视频与 gal 分开存（同上两轴）。
-  //
-  // 没显式设过时的默认值**不是常量**，而是从旧偏好推导（同 [miningAudioQuality] 的迁移
-  // 手法）：此前「带声音的视频片段」只有 MP4 一种形态、走 Anki 原生播放器——显式选过它
-  // 的老用户（多为要在 iPhone 上复习的）升级后必须仍是 MP4，否则新卡变成 AnkiMobile 放不了
-  // 的 WebM（Never break userspace）。其余人（含从没设过模式、吃新默认 videoClip 的）取
-  // 平台默认：iOS MP4，其余 WebM VP9。
-  MiningClipFormat get videoMiningClipFormat =>
-      _miningClipFormat('video_mining_clip_format', 'video_mining_image_mode');
-
-  void setVideoMiningClipFormat(MiningClipFormat format) async {
-    await setPref('video_mining_clip_format', format.wireName);
-    notifyListeners();
-  }
-
-  MiningClipFormat get galMiningClipFormat =>
-      _miningClipFormat('gal_mining_clip_format', 'gal_mining_image_mode');
-
-  void setGalMiningClipFormat(MiningClipFormat format) async {
-    await setPref('gal_mining_clip_format', format.wireName);
-    notifyListeners();
-  }
-
-  MiningClipFormat _miningClipFormat(String formatKey, String modeKey) {
-    final String? legacyMode = getPref(modeKey, defaultValue: null) as String?;
-    return MiningClipFormat.fromWireName(
-      getPref(formatKey, defaultValue: null) as String?,
-      fallback: legacyMode == VideoMiningImageMode.videoClip.wireName
-          ? MiningClipFormat.mp4H264
-          : MiningClipFormat.defaultFor(isIOS: Platform.isIOS),
-    );
-  }
-
-  /// 写封面模式；格式从没显式设过时，把**切换前**推导出的格式与新模式一起写死。
-  ///
-  /// - 任何一次切换都钉（不只是切到片段模式）：老 MP4 片段用户先切走再切回来时，推导
-  ///   依据已经不是 video_clip，不钉就会被悄悄换成 WebM。
-  /// - 与模式同一次 [setPrefs]：缓存在第一个 await 之前同步更新，调用方紧接着读到的就是
-  ///   新值；两次快速切换按调用顺序落盘（分两次 await 写会让先发的那次后落盘）。
-  Future<void> _setImageModePinningClipFormat(
-    String formatKey,
-    String modeKey,
-    VideoMiningImageMode mode,
-  ) {
-    final Map<String, dynamic> values = <String, dynamic>{
-      if (getPref(formatKey, defaultValue: null) == null)
-        formatKey: _miningClipFormat(formatKey, modeKey).wireName,
-      modeKey: mode.wireName,
-    };
-    return setPrefs(values);
   }
 
   // 制卡句子音频的头/尾 padding（毫秒）。对齐 asbplayer 的 audio padding：字幕 cue 的
@@ -4443,101 +3006,6 @@ class PreferencesRepository extends ChangeNotifier
   /// 外部 mokuro CLI 可执行路径（漫画 OCR 后备；空串=未设）。内置 ONNX 引擎在本平台不可用
   /// 或用户偏好外部工具时，OCR 导入向导据此调用系统 mokuro（见 [ExternalMokuroRunner]）。
   /// 空串=未指定，运行时退回 `FUSHI_MOKURO` 环境变量 / PATH 探测。
-  String get mangaExternalMokuroPath =>
-      getPref('manga_external_mokuro_path', defaultValue: '') as String;
-
-  Future<void> setMangaExternalMokuroPath(String value) async {
-    await setPref('manga_external_mokuro_path', value);
-    notifyListeners();
-  }
-
-  /// 0 自动；桌面可手动选择跨书 OCR 任务数。存储只按硬顶截断，本机实际上限
-  /// （按核数推导）由 `resolveMangaOcrJobConcurrency` 在排队时再收——偏好会随
-  /// 备份 / 同步到核数更少的机器上，不能在这里按本机核数截掉。
-  int get mangaOcrParallelTasks =>
-      (getPref('manga_ocr_parallel_tasks', defaultValue: 0) as int)
-          .clamp(0, kMangaOcrMaxSelectableTasks);
-
-  Future<void> setMangaOcrParallelTasks(int value) async {
-    await setPref(
-      'manga_ocr_parallel_tasks',
-      value.clamp(0, kMangaOcrMaxSelectableTasks),
-    );
-    notifyListeners();
-  }
-
-  /// 本机 OCR 模型 key。经典 manga-ocr（`'manga_ocr'`）与 Baberu（`'baberu'`）
-  /// 已于 2026-10 删除：存着它们的旧偏好由 [MangaOcrLocalModel.fromKey] 统一映射到
-  /// 默认模型，偏好键与存量值都不改写。
-  String get mangaOcrLocalModel =>
-      getPref(
-            'manga_ocr_local_model',
-            defaultValue: kDefaultMangaOcrLocalModel.key,
-          )
-          as String;
-
-  Future<void> setMangaOcrLocalModel(String value) async {
-    await setPref('manga_ocr_local_model', value);
-    notifyListeners();
-  }
-
-  /// OCR 的大模型纠错档位（`MangaAiOcrMode.storageKey`）：`off` /
-  /// `low_confidence`（只重读没把握的块）/ `all`（全部块），漫画与视频图形字幕
-  /// 共用。用哪家模型走「设置 › 模型 › LLM」的功能指派 `AiFeature.mangaOcr`。
-  /// 设备本地：这是「上传裁图并按量计费」的开关，不能随同步漂到别的设备上。
-  ///
-  /// 空串 = 用户还没选过：默认意图是 `low_confidence`（2026-10-13 用户拍板），但
-  /// 第一次真要发送时先确认一次（`ensureMangaAiOcrDefaultDecided`），确认前按
-  /// `off` 处理、不发任何请求。
-  String get mangaOcrAiMode =>
-      getPref('manga_ocr_ai_mode', defaultValue: '') as String;
-
-  Future<void> setMangaOcrAiMode(String value) async {
-    await setPref('manga_ocr_ai_mode', value);
-    notifyListeners();
-  }
-
-  /// 引擎选「Fushi 互联服务端」时点名服务端跑的模型（`MangaOcrLocalModel.key`）；
-  /// 空串 = 服务端自己当前的选择。
-  String get mangaOcrPairedHostModel =>
-      getPref('manga_ocr_paired_host_model', defaultValue: '') as String;
-
-  Future<void> setMangaOcrPairedHostModel(String value) async {
-    await setPref('manga_ocr_paired_host_model', value);
-    notifyListeners();
-  }
-
-  /// PC 漫画整卷 OCR 默认引擎。稳定字符串而非 enum index，避免重排枚举破坏偏好。
-  /// `auto` 的解析顺序由漫画模块统一控制，且永不自动跨到 Google Lens。
-  ///
-  /// 出厂默认是 `google_lens`：整页识别的版面/竖排质量明显优于本地 ONNX，且不
-  /// 依赖 1GB 级模型下载或桌面 mokuro CLI，是唯一「装完就能用」的引擎。这**不**
-  /// 削弱隐私边界——真正的上传闸门是 [ensureGoogleLensDisclosure] 的逐设备一次性
-  /// 同意弹窗，用户拒绝即不发任何字节；想彻底离线的用户把本偏好改回 `auto`，
-  /// `auto` 的解析链依旧永不跨到 Lens。
-  String get mangaOcrEnginePreference => getPref(
-        'manga_ocr_engine_preference',
-        defaultValue: kDefaultMangaOcrEnginePreference.key,
-      ) as String;
-
-  Future<void> setMangaOcrEnginePreference(String value) async {
-    await setPref('manga_ocr_engine_preference', value);
-    notifyListeners();
-  }
-
-  /// Google Lens 整卷 OCR 的识别语言（本地书/无源语言时的兜底）。在线阅读的
-  /// Lens OCR 优先用源自身声明的语言，本偏好只在源语言未知时回退。存主子标签
-  /// （`ja`/`en`/`zh`…），进请求前统一过 normalizeLensLanguage。
-  String get mangaOcrLensLanguage =>
-      getPref('manga_ocr_lens_language', defaultValue: 'ja') as String;
-
-  Future<void> setMangaOcrLensLanguage(String value) async {
-    await setPref('manga_ocr_lens_language', value);
-    notifyListeners();
-  }
-
-  /// 有声书设备端转录上次选的语音语言（`AsrLanguage.tag`：`ja` / `en`）。
-  /// 只是转录弹层的记忆值；不认识的标签由弹层自己回退日语。
   String get asrTranscribeLanguage =>
       getPref('asr_transcribe_language', defaultValue: 'ja') as String;
 
@@ -4927,86 +3395,6 @@ class PreferencesRepository extends ChangeNotifier
   }
 
   /// 发现页 Nyaa 过滤三态（0 全部 / 1 排除 remake / 2 仅 trusted），透传为
-  /// nyaa `f`。默认 0，与 Nyaa UI / Prowlarr / Flexget 一致。
-  int get discoveryNyaaQualityFilter =>
-      getPref('discovery_nyaa_quality_filter', defaultValue: 0) as int;
-
-  Future<void> setDiscoveryNyaaQualityFilter(int value) async {
-    await setPref('discovery_nyaa_quality_filter', value);
-    notifyListeners();
-  }
-
-  /// 用户停用的**内置**视频资源索引器 id（逗号分隔，默认空 = 全部启用）。
-  ///
-  /// 与 [discoveryDisabledSources] 同形：都是「一组零配置内置源，按 id 记停用」。
-  /// 用户自配的 Torznab 索引器不进这里——它们各自带 `enabled` 字段，那是配置的
-  /// 一部分，不是内置源开关。
-  String get videoResourceDisabledSources =>
-      getPref('video_resource_disabled_sources', defaultValue: '') as String;
-
-  Future<void> setVideoResourceDisabledSources(String value) async {
-    await setPref('video_resource_disabled_sources', value);
-    notifyListeners();
-  }
-
-  /// 新下载任务默认交给哪台设备执行：空 = 本机；否则是已配对互联 host 的地址
-  /// （`FushiClientUrl.url`），任务经 `/api/downloads` 投过去、下到 host 自己的
-  /// 库里。手动添加任务 / 发现页 / 资源搜索页共用这一个默认值（各自仍可当次改）。
-  /// 设备本地键：指向的是「这台设备配的 host」，随备份到别的设备只会指错。
-  String get downloadExecutionHostUrl =>
-      (getPref(kDownloadExecutionHostPrefKey, defaultValue: '') as String)
-          .trim();
-
-  Future<void> setDownloadExecutionHostUrl(String value) async {
-    await setPref(kDownloadExecutionHostPrefKey, value.trim());
-    notifyListeners();
-  }
-
-  bool get gameStreamRemoteLaunchEnabled =>
-      getPref(kGameStreamRemoteLaunchPrefKey, defaultValue: false) as bool;
-
-  Future<void> setGameStreamRemoteLaunchEnabled(bool value) async {
-    await setPref(kGameStreamRemoteLaunchPrefKey, value);
-    notifyListeners();
-  }
-
-  GameStreamVideoSettings get gameStreamVideoSettings {
-    final String raw =
-        getPref(kGameStreamVideoSettingsPrefKey, defaultValue: '') as String;
-    if (raw.isEmpty) return const GameStreamVideoSettings();
-    try {
-      return GameStreamVideoSettings.fromJson(jsonDecode(raw));
-    } on FormatException {
-      return const GameStreamVideoSettings();
-    }
-  }
-
-  Future<void> setGameStreamVideoSettings(
-    GameStreamVideoSettings value,
-  ) async {
-    await setPref(
-      kGameStreamVideoSettingsPrefKey,
-      jsonEncode(value.toOverridesJson()),
-    );
-    notifyListeners();
-  }
-
-  GameStreamLookupLayout get gameStreamLookupLayout {
-    final String raw =
-        getPref(kGameStreamLookupLayoutPrefKey, defaultValue: '') as String;
-    if (raw.isEmpty) return const GameStreamLookupLayout();
-    try {
-      return GameStreamLookupLayout.fromJson(jsonDecode(raw));
-    } on FormatException {
-      return const GameStreamLookupLayout();
-    }
-  }
-
-  Future<void> setGameStreamLookupLayout(GameStreamLookupLayout value) async {
-    await setPref(kGameStreamLookupLayoutPrefKey, jsonEncode(value.toJson()));
-    notifyListeners();
-  }
-
   String get downloadSaveRoot =>
       getPref('download_save_root', defaultValue: '') as String;
 
@@ -5158,22 +3546,14 @@ class _PrefsAiKeyHealthStore implements AiKeyHealthStore {
   }
 }
 
-/// [MediaServerVersionMemory] 的偏好表实现（[PreferencesRepository.loadFromDb]
-/// 装配）。读走偏好缓存；写入是后台落库，失败只记日志——丢一次版本记忆不该
-/// 打断播放。
-class _PrefsMediaServerVersionMemory implements MediaServerVersionMemory {
-  _PrefsMediaServerVersionMemory(this._prefs);
-
-  final PreferencesRepository _prefs;
-
-  @override
-  String? read(String key) => _prefs.mediaServerVersionChoices[key];
-
-  @override
-  void write(String key, String value) {
-    _prefs.setMediaServerVersionChoice(key, value).catchError(
-      (Object e, StackTrace stack) => ErrorLogService.instance
-          .log('PreferencesRepository.setMediaServerVersionChoice', e, stack),
-    );
-  }
+/// 随机 UUID v4（usage stats 安装身份的本地回退种子）。
+String _randomUuidV4() {
+  final Random rng = Random.secure();
+  final List<int> bytes = List<int>.generate(16, (_) => rng.nextInt(256));
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  String hex(int b) => b.toRadixString(16).padLeft(2, '0');
+  String group(int start, int end) =>
+      bytes.sublist(start, end).map(hex).join();
+  return '${group(0, 4)}-${group(4, 6)}-${group(6, 8)}-${group(8, 10)}-${group(10, 16)}';
 }

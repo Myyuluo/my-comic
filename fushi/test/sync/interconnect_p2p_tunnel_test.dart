@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi/src/sync/interconnect_p2p_app.dart';
 import 'package:fushi/src/sync/interconnect_peer_addresses.dart';
-import 'package:fushi/src/sync/interconnect_video_quality.dart';
+
 import 'package:fushi/src/sync/sync_repository.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi_engine/sync/fushi_sync_server.dart';
@@ -275,11 +275,6 @@ void main() {
         final Uri first = Uri.parse(ranked.first.url);
         expect(first.host, '127.0.0.1');
         expect(first.port, isNot(1), reason: '胜出的是隧道本地转发口');
-        expect(
-          isPrivateNetworkHost(ranked.first.url),
-          isFalse,
-          reason: '隧道口字面是回环，画质必须按外网给',
-        );
         expect(
           await pinRequiredVia(first.port),
           isTrue,

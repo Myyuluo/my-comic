@@ -38,7 +38,7 @@ import 'package:fushi/src/srs/srs_providers.dart';
 import 'package:fushi/src/utils/adaptive/adaptive_platform.dart';
 import 'package:fushi/src/utils/components/glass/fushi_glass_scope.dart';
 import 'package:fushi_core/fushi_core.dart';
-import 'package:fushi_engine/media/video/video_book_repository.dart';
+
 import 'package:fushi_engine/srs/srs_builtin.dart';
 import 'package:fushi_engine/srs/srs_db_store.dart';
 import 'package:material_ui/material_ui.dart';
@@ -247,7 +247,7 @@ void main() {
   );
 
   Widget dashboard() =>
-      Scaffold(body: HomeDashboardPage(videoRepo: VideoBookRepository(db)));
+      const Scaffold(body: HomeDashboardPage());
 
   /// 让真实 drift 读与帧都推进（不用 pumpAndSettle：DB + FutureProvider 不会 settle）。
   Future<void> settle(WidgetTester tester, {int rounds = 12}) async {

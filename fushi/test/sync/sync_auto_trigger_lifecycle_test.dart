@@ -116,67 +116,6 @@ void main() {
     });
   });
 
-  group('BUG-1569② 合集观察者生命周期', () {
-    test('uninstall 取消未决防抖 Timer：不再对（已关）库跑轻量同步', () async {
-      final FushiDatabase db = _memDb();
-      installCollectionsSyncWatcher(
-        db: db,
-        debounce: const Duration(milliseconds: 50),
-      );
-      final int scheduledBefore = collectionsSyncScheduledForTest;
-      await db.createMediaCollection('Fav');
-      await _waitFor(
-        () => collectionsSyncScheduledForTest > scheduledBefore,
-        what: 'collections write to schedule a debounced sync',
-      );
-
-      // 关库路径语义：先撤观察者（取消 Timer），再关库。
-      uninstallCollectionsSyncWatcher();
-      lastSyncOutcome.value = null;
-      await db.close();
-      await Future<void>.delayed(const Duration(milliseconds: 200));
-      expect(lastSyncOutcome.value, isNull,
-          reason: '未决防抖 Timer 必须随 uninstall 取消，'
-              '否则会对已关闭的 db 跑 _runCollectionsSync（BUG-1569②）');
-    });
-
-    test('源码守卫：AppModel 三条关库/销毁路径都撤观察者', () {
-      final File f = File('lib/src/models/app_model.dart');
-      expect(f.existsSync(), isTrue,
-          reason: 'run from the fushi/ package root');
-      final String src = f.readAsStringSync();
-
-      String slice(String start, String end) {
-        final int a = src.indexOf(start);
-        expect(a, greaterThan(-1), reason: 'missing: $start');
-        final int b = src.indexOf(end, a);
-        expect(b, greaterThan(a), reason: 'missing end marker after $start');
-        return src.substring(a, b);
-      }
-
-      expect(
-        // 锚点去掉空参数表：退出路径要传 pipelineDrainTimeout（BUG-1505 的
-        // 上界只能给退出链，见 video_download_pipeline_service.stop 的注释），
-        // `closeDatabase()` 这个字面量已不存在。
-        slice('Future<void> closeDatabase(', 'Future<void> shutdown()'),
-        contains('uninstallCollectionsSyncWatcher()'),
-        reason: 'closeDatabase 必须撤合集观察者（BUG-1569②）',
-      );
-      expect(
-        slice('Future<void> closeForPopup()', 'void dispose()'),
-        contains('uninstallCollectionsSyncWatcher()'),
-        reason: 'closeForPopup 必须撤合集观察者（BUG-1569②）',
-      );
-      expect(
-        // 终点用带分号的真调用——dispose 顶部的 doc 注释里也写了「super.dispose()」，
-        // 不带分号的标记会把切片截在注释处。
-        slice('void dispose() {', 'super.dispose();'),
-        contains('uninstallCollectionsSyncWatcher()'),
-        reason: 'dispose 必须对称撤合集观察者（BUG-1569②）',
-      );
-    });
-  });
-
   group('BUG-1569③ sweep 期间的退出书同步记账补跑', () {
     test('sweep 进行中记账（去重），收尾 drain 补跑', () async {
       final FushiDatabase db = _memDb();

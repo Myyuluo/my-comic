@@ -1,4 +1,6 @@
-import 'package:fushi/src/diagnostics/video_diag_log.dart';
+import 'package:flutter/foundation.dart';
+
+
 
 /// 一次查词的分阶段计时（形态对齐 `ReaderOpenTrace`，落点换成 [VideoDiagLog]）。
 ///
@@ -31,7 +33,7 @@ class LookupPerfTrace {
     required this.term,
     required this.host,
     required this.lowMemory,
-  }) : _startedAtMs = VideoDiagLog.instance.uptimeMs;
+  }) : _startedAtMs = DateTime.now().millisecondsSinceEpoch;
 
   /// 当前在途的查词。弹窗 WebView 的阶段（`loadStop` / `push` / `rendered`）发生在
   /// 另一个 State 对象里，拿不到本次 trace 的引用，故走这个进程级游标。
@@ -56,7 +58,7 @@ class LookupPerfTrace {
   bool _finished = false;
 
   /// 相对本次查词起点的毫秒数。
-  int get elapsedMs => VideoDiagLog.instance.uptimeMs - _startedAtMs;
+  int get elapsedMs => DateTime.now().millisecondsSinceEpoch - _startedAtMs;
 
   List<({String stage, int atMs})> get marks => List.unmodifiable(_marks);
 
@@ -68,20 +70,14 @@ class LookupPerfTrace {
     required String host,
     required bool lowMemory,
   }) {
-    if (!videoDiagEnabledFor(VideoDiagCategory.lookup, VideoDiagLevel.v)) {
-      return null;
-    }
     final LookupPerfTrace trace = LookupPerfTrace(
       term: term,
       host: host,
       lowMemory: lowMemory,
     );
     current = trace;
-    videoDiag(
-      VideoDiagCategory.lookup,
-      VideoDiagLevel.v,
-      'begin term=${trace._redactedTerm} host=$host low-memory=$lowMemory',
-    );
+    debugPrint('[lookup] begin term=${trace._redactedTerm} '
+        'host=$host low-memory=$lowMemory');
     return trace;
   }
 
@@ -92,11 +88,8 @@ class LookupPerfTrace {
     if (_marks.any((m) => m.stage == stage)) return;
     final int atMs = elapsedMs;
     _marks.add((stage: stage, atMs: atMs));
-    videoDiag(
-      VideoDiagCategory.lookup,
-      VideoDiagLevel.debug,
-      'stage term=$_redactedTerm $stage@${atMs}ms${detail == null ? '' : ' $detail'}',
-    );
+    debugPrint('[lookup] stage term=$_redactedTerm '
+        '$stage@${atMs}ms${detail == null ? '' : ' $detail'}');
   }
 
   /// 收尾并打一行汇总。[outcome] 形如 `revealed` / `forced-reveal` / `empty` /
@@ -105,12 +98,7 @@ class LookupPerfTrace {
     if (_finished) return;
     _finished = true;
     if (identical(current, this)) current = null;
-    final bool suspicious = outcome.contains('forced');
-    videoDiag(
-      VideoDiagCategory.lookup,
-      suspicious ? VideoDiagLevel.warn : VideoDiagLevel.info,
-      summary(outcome),
-    );
+    debugPrint('[lookup] ${summary(outcome)}');
   }
 
   /// 纯函数化的汇总行：各阶段相对**上一阶段**的增量（找瓶颈看这个），末尾给总时长。

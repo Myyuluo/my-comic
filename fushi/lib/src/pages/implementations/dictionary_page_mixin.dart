@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:fushi/src/mining/advanced_mining/advanced_mining_dialog.dart';
 import 'package:fushi/src/mining/advanced_mining/advanced_mining_capabilities.dart';
+
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fushi_core/fushi_core.dart'
@@ -30,7 +32,7 @@ import 'package:fushi/src/pages/implementations/dictionary_popup_webview.dart'
         QueuedOverwriteReply,
         closePopupAfterAcceptedMine;
 import 'package:fushi/src/anki/advanced_mining_deck_section.dart';
-import 'package:fushi/src/mining/advanced_mining/advanced_mining_dialog.dart';
+
 import 'package:fushi/src/shortcuts/mouse_binding_dispatch.dart';
 import 'package:fushi/src/shortcuts/shortcut_action.dart';
 import 'package:fushi/src/pages/implementations/stat_activity.dart';

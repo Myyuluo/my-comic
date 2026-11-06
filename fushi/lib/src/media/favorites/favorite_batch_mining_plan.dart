@@ -5,7 +5,7 @@ import 'package:fushi_anki/fushi_anki.dart' show AnkiMiningSource;
 import 'package:fushi_audio/fushi_audio.dart';
 import 'package:fushi_core/fushi_core.dart'
     show kStatSourceBook, kStatSourceGame, kStatSourceVideo;
-import 'package:fushi_engine/media/video/m3u8_playlist.dart';
+
 
 /// 收藏夹一键制卡：每一条收藏「该配什么句子媒体」的纯决策层（无 IO，可单测）。
 ///
@@ -143,17 +143,7 @@ FavoriteMiningMediaPlan planVideoFavoriteMedia({
   );
 }
 
-PlaylistEntry? _playlistEntryAt(String playlistJson, int index) {
-  try {
-    final Object? decoded = jsonDecode(playlistJson);
-    if (decoded is! List || index < 0 || index >= decoded.length) return null;
-    final Object? raw = decoded[index];
-    if (raw is! Map<String, dynamic>) return null;
-    return PlaylistEntry.fromJson(raw);
-  } catch (_) {
-    return null;
-  }
-}
+PlaylistEntry? _playlistEntryAt(String playlistJson, int index) => null;
 
 /// 播放列表的卡片标题：「系列名 - 剧集名」，任一为空退化为另一个（与视频页
 /// `composeVideoMiningDocumentTitle` 同口径）。
@@ -332,3 +322,14 @@ List<String> selectAudiobookFilesInRoot(Iterable<String> paths) {
     ..sort(compareAudioFilePath);
   return files;
 }
+
+/// 播放列表条目的最小投影（视频域已移除，保留类型供旧题面解码）。
+class PlaylistEntry {
+  const PlaylistEntry({required this.path, required this.title});
+
+  final String path;
+  final String title;
+}
+
+/// 视频域已移除：旧播放列表 JSON 不再解析集数。
+int playlistEpisodeCount(String? playlistJson) => 0;

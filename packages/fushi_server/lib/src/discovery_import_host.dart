@@ -16,8 +16,7 @@ import 'package:fushi_engine/media/discovery/import/discovery_archive_extractor.
 import 'package:fushi_engine/media/discovery/import/discovery_engine_importers.dart';
 import 'package:fushi_engine/media/discovery/import/discovery_import_executor.dart';
 import 'package:fushi_engine/media/discovery/import/discovery_import_plan.dart';
-import 'package:fushi_engine/media/video/download/video_download_pipeline_service.dart'
-    show VideoDownloadDiscoveryImporter;
+
 
 /// 服务端能按域入库的发现域（`DiscoveryMediaKind.name`）。`game` 不在内：服务端
 /// 没有游戏库（exe 登记只在 app 里有意义，也没有对端能消费的游戏端点）。
@@ -53,7 +52,10 @@ DiscoveryDomainImporters buildServerDiscoveryImporters(FushiDatabase db) => Disc
 ///
 /// [extractor] 是测试缝；默认按 `FUSHI_7ZA` / 可执行文件旁 / PATH 找 7-Zip，
 /// 找不到时 zip 走内置解码，rar / 7z 报 `archiveToolMissing`。
-VideoDownloadDiscoveryImporter serverDiscoveryImporter(
+Future<DiscoveryImportOutcome> Function(
+  DiscoveryMediaKind kind,
+  List<String> paths,
+) serverDiscoveryImporter(
   FushiDatabase db, {
   DiscoveryArchiveExtractor? extractor,
 }) {

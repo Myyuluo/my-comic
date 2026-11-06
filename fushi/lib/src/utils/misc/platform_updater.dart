@@ -2,8 +2,7 @@ import 'dart:io';
 
 import 'package:device_info_plus/device_info_plus.dart';
 
-import 'package:fushi/src/mining/galgame_helper_installer.dart'
-    show kGalgameHelperInstallDirectoryName;
+
 import 'package:fushi/src/platform/desktop/windows_native_pre_exit.dart';
 import 'package:fushi_engine/utils/misc/helper_process_registry.dart';
 import 'package:fushi_engine/platform/desktop/windows_process_query.dart';
@@ -1390,36 +1389,8 @@ Future<List<WindowsProcessInfo>> queryWindowsLibmpvModuleHolders(
 Future<List<WindowsProcessInfo>> queryWindowsGalHookModuleHolders(
   String targetInstallDir,
 ) async {
-  if (!Platform.isWindows || targetInstallDir.isEmpty) {
-    return const <WindowsProcessInfo>[];
-  }
-  try {
-    final Directory root = Directory(
-      '$targetInstallDir${Platform.pathSeparator}'
-      '$kGalgameHelperInstallDirectoryName',
-    );
-    if (!root.existsSync()) return const <WindowsProcessInfo>[];
-    final List<String> binaries = <String>[
-      for (final FileSystemEntity entity
-          in root.listSync(recursive: true, followLinks: false))
-        if (entity is File &&
-            (entity.path.toLowerCase().endsWith('.dll') ||
-                entity.path.toLowerCase().endsWith('.exe')))
-          entity.path,
-    ];
-    // 全部文件登记进同一个 Restart Manager 会话：要的只是占用者集合（一个游戏进程
-    // 通常同时持有 hook DLL 和它加载的 LunaHook DLL，结果已按 pid 去重）。逐文件开
-    // 会话在这 28 个文件上实测 ~1 s 同步 FFI，正卡在下载完成→退出交给安装器之间。
-    return windowsProcessesHoldingFiles(binaries)
-        .map((WindowsProcessEntry entry) => WindowsProcessInfo(
-              pid: entry.pid,
-              name: entry.name,
-              path: entry.path,
-            ))
-        .toList(growable: false);
-  } catch (_) {
-    return const <WindowsProcessInfo>[];
-  }
+  // 语音捕获 helper 已随 galgame 域移除，不再有需要检查的安装目录。
+  return const <WindowsProcessInfo>[];
 }
 
 /// 走 Win32 快照，**不生成 powershell 子进程**（理由同

@@ -25,6 +25,8 @@ import 'package:fushi/utils.dart';
 /// 4. 文字与标识的耦合：设置行同时引用 `about_tmdb_attribution` 与 logo 资源，
 ///    pubspec 也登记了该资源——删一半就红。
 void main() {
+  // 已移除：TMDB 署名资产随 my-comic v1 移除视频/在线元数据域一并删除。
+
   // TMDB 官方直链（来源页 https://www.themoviedb.org/about/logos-attribution）：
   //   /assets/2/v4/logos/v2/blue_square_1-<digest>.svg   （Primary short (blue)）
   const String officialDigest =
@@ -63,7 +65,7 @@ void main() {
     expect(readme, contains('themoviedb.org/about/logos-attribution'));
     // 栅格化配方必须可复现（换人/换机重跑得到同一张图）。
     expect(File('assets/attribution/tmdb/rasterize.html').existsSync(), isTrue);
-  });
+  }, skip: true);
 
   test('pubspec 只打包 PNG，原图与说明留在仓库不进包', () {
     final String pubspec = File('pubspec.yaml').readAsStringSync();
@@ -78,7 +80,7 @@ void main() {
       isNot(contains('- assets/attribution/tmdb/\n')),
       reason: '整目录登记会把 README/配方一起打进包',
     );
-  });
+  }, skip: true);
 
   test('设置行同时挂着署名文字与 logo，且展示尺寸克制（删一半即红）', () {
     final String schema = File(
@@ -116,7 +118,7 @@ void main() {
       lessThanOrEqualTo(32),
       reason: 'TMDB 标识不得比应用自身 logo 更显眼',
     );
-  });
+  }, skip: true);
 
   test('免责声明正文进设置搜索索引（搜条款里的词也能命中这一行）', () {
     final SettingsDestination system = buildSystemDestination();
@@ -150,7 +152,7 @@ void main() {
       ], needle).map((SettingsSearchEntry e) => e.item.id),
       contains('system.tmdb_attribution'),
     );
-  });
+  }, skip: true);
 
   testWidgets('打包的 PNG 是原图的忠实栅格化：比例一致、背景透明、配色零越界', (WidgetTester tester) async {
     final Uint8List bytes = File(pngPath).readAsBytesSync();
@@ -209,5 +211,5 @@ void main() {
           '<style> 里的渐变填充、路径退化成黑色（flutter_svg 就是这样），或有人'
           '把标识改了色。此时展示的已不是 TMDB 官方配色，违反条款。',
     );
-  });
+  }, skip: true);
 }

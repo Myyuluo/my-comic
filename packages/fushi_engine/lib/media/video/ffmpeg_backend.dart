@@ -2,8 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:fushi_engine/media/video/bluray/bluray_ffmpeg_input.dart';
-import 'package:fushi_engine/media/video/bluray/aacs_media_session.dart';
 import 'package:fushi_engine/media/video/ffmpeg_watched_run.dart';
 
 import 'package:fushi_engine/utils/misc/helper_process_registry.dart';
@@ -804,86 +802,7 @@ FfmpegBackend? _cachedBackend;
 ///   （进程内自编 ffmpeg-kit；移动端无系统 ffmpeg 且 iOS 禁 exec 子进程）。
 /// - 桌面（Windows/macOS/Linux）→ 系统 CLI（打包/用户提供 ffmpeg）。
 FfmpegBackend resolveFfmpegBackend() =>
-    _cachedBackend ??= BlurayFfmpegBackend(_selectBackend());
-
-/// Adapts the shared input contract for desktop and platform FFmpeg backends.
-class BlurayFfmpegBackend implements FfmpegBackend, FfmpegWatchedRunner {
-  const BlurayFfmpegBackend(this.delegate);
-
-  final FfmpegBackend delegate;
-
-  /// 观察式运行：与 [run] 同一条蓝光输入改写；底层后端不支持观察式运行时退回它的
-  /// [FfmpegBackend.run]，用 [FfmpegWatch.stallTimeout] 当总预算（测试替身 / 未知后端）。
-  @override
-  Future<FfmpegRunResult> runWatched(List<String> args, FfmpegWatch watch) =>
-      runWithBlurayFfmpegInput(
-        args,
-        (List<String> resolved, AacsMediaSession session) async =>
-            _redactResult(switch (delegate) {
-              final FfmpegWatchedRunner watched =>
-                await watched.runWatched(resolved, watch),
-              final FfmpegBackend other =>
-                await other.run(resolved, watch.stallTimeout),
-            }, session),
-      );
-
-  @override
-  Future<FfmpegRunResult> run(List<String> args, Duration timeout) =>
-      runWithBlurayFfmpegInput(
-        args,
-        (List<String> resolved, AacsMediaSession session) async =>
-            _redactResult(await delegate.run(resolved, timeout), session),
-      );
-
-  @override
-  Future<FfmpegRunResult> runProbe(List<String> args, Duration timeout) =>
-      runWithBlurayFfmpegInput(
-        args,
-        probe: true,
-        (List<String> resolved, AacsMediaSession session) async =>
-            _redactResult(await delegate.runProbe(resolved, timeout), session),
-      );
-
-  /// 查询类命令没有媒体输入，不经蓝光输入改写，直接交给底层后端。
-  @override
-  Future<FfmpegRunResult> runQuery(List<String> args, Duration timeout) =>
-      delegate.runQuery(args, timeout);
-
-  FfmpegRunResult _redactResult(FfmpegRunResult result, AacsMediaSession session) =>
-      FfmpegRunResult(returnCode: result.returnCode,
-          output: session.redact(result.output), executable: result.executable,
-          attemptedExecutables: result.attemptedExecutables,
-          fallbackReason: result.fallbackReason);
-}
-
-/// 一条 ffmpeg 命令的蓝光输入改写生命周期：MPLS 输入改写成 concat 清单、加密段换成
-/// 本命令专属的解密回环 URL，[body] 跑完（无论成败）再删清单、关解密会话。
-///
-/// 所有吃媒体输入的 ffmpeg 命令都必须经过这里：[BlurayFfmpegBackend] 包住进程单例，
-/// 自己起进程的路径（互联转码分段，见 `live_transcode.dart`）直接调它。绕开它的命令
-/// 会把几 KB 的 `.mpls` 当成视频交给 ffmpeg。
-Future<T> runWithBlurayFfmpegInput<T>(
-  List<String> args,
-  Future<T> Function(List<String> resolved, AacsMediaSession session) body, {
-  bool probe = false,
-}) async {
-  final AacsMediaSession session = AacsMediaSession();
-  BlurayFfmpegInput? input;
-  try {
-    input = await prepareBlurayFfmpegArgs(
-      args,
-      probe: probe,
-      resolveStream: session.resolve,
-    );
-    return await body(
-      await session.ffmpegInputs(input.args, probe: probe),
-      session,
-    );
-  } finally {
-    await input?.dispose();
-    await session.close();
-  }
-}
+    _cachedBackend ??= _selectBackend();
 
 @visibleForTesting
 void setFfmpegBackendForTesting(FfmpegBackend? backend) {

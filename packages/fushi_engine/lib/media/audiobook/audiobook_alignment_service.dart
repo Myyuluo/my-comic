@@ -9,10 +9,21 @@ import 'package:fushi_engine/epub/epub_book.dart';
 import 'package:fushi_engine/epub/epub_parser.dart';
 import 'package:fushi_engine/media/audiobook/subtitle_rematch_policy.dart';
 import 'package:fushi_engine/media/import/epub_backed_srt_book.dart';
-import 'package:fushi_engine/media/video/video_clip_subtitle.dart'
-    show formatSrtTimestamp;
+
 import 'package:fushi_engine/foundation/engine_log.dart';
 import 'package:meta/meta.dart';
+
+/// SRT 时间戳：`HH:MM:SS,mmm`。
+String _formatSrtTimestamp(int milliseconds) {
+  final int ms = milliseconds < 0 ? 0 : milliseconds;
+  final int hours = ms ~/ 3600000;
+  final int minutes = (ms ~/ 60000) % 60;
+  final int seconds = (ms ~/ 1000) % 60;
+  final int millis = ms % 1000;
+  String two(int v) => v.toString().padLeft(2, '0');
+  return '${two(hours)}:${two(minutes)}:${two(seconds)},'
+      '${millis.toString().padLeft(3, '0')}';
+}
 
 /// 非 UI 进度回调（替代对话框的 reportProgress）。[fraction] 0..1，[message]
 /// 是给用户看的步骤文案（service 不持有 i18n，文案由调用方喂）。
@@ -234,8 +245,8 @@ String serializeAudioCuesToSrt(List<AudioCue> cues) {
     sb
       ..writeln(index++)
       ..writeln(
-        '${formatSrtTimestamp(cue.startMs)} --> '
-        '${formatSrtTimestamp(cue.endMs)}',
+        '${_formatSrtTimestamp(cue.startMs)} --> '
+        '${_formatSrtTimestamp(cue.endMs)}',
       )
       ..writeln(cue.text.replaceAll('\n', ' '))
       ..writeln();

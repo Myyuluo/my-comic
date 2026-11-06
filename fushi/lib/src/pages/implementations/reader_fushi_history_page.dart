@@ -1,5 +1,6 @@
 import 'package:fushi/src/utils/components/glass/fushi_icon.dart';
 import 'package:fushi_dictionary/fushi_dictionary.dart';
+import 'package:fushi/src/sync/interconnect_download_manager.dart';
 import 'dart:async' show StreamSubscription, Timer, unawaited;
 import 'dart:io';
 
@@ -15,7 +16,7 @@ import 'package:fushi/pages.dart';
 import 'package:fushi_audio/fushi_audio.dart';
 import 'package:fushi/src/epub/book_file_location.dart';
 import 'package:fushi_engine/epub/epub_importer.dart';
-import 'package:fushi_engine/sync/collection_book_identity_index.dart';
+
 import 'package:fushi_engine/sync/epub_repackage.dart';
 import 'package:fushi/src/media/audiobook/audiobook_import_dialog.dart';
 import 'package:fushi/src/media/audiobook/srt_book_reimport_dialog.dart';
@@ -38,11 +39,11 @@ import 'package:fushi/src/media/manga/library/online_manga_library_service.dart'
 import 'package:fushi/src/media/manga/library/online_manga_runtime_adapter.dart'
     show OnlineMangaRefreshResult;
 import 'package:fushi/src/media/manga/manga_import_dialog.dart';
-import 'package:fushi_engine/media/video/video_book_repository.dart';
-import 'package:fushi/src/media/video/video_feature_flags.dart';
-import 'package:fushi/src/media/video/video_import_dialog.dart';
+
+
+
 import 'package:fushi/src/pages/implementations/book_drag_target.dart';
-import 'package:fushi/src/pages/implementations/manual_download_task_dialog.dart';
+
 import 'package:fushi/src/pages/implementations/media_library_shell.dart';
 import 'package:fushi_engine/media/discovery/discovery_models.dart'
     show DiscoveryMediaKind;
@@ -69,9 +70,7 @@ import 'package:fushi/src/media/media_cover_service.dart';
 import 'package:fushi/src/media/metadata/book_cover_scrape_dialog.dart';
 import 'package:fushi_engine/media/collections/shelf_sort.dart';
 import 'package:fushi/src/media/media_search_text.dart';
-import 'package:fushi/src/media/collections/collection_drag.dart';
-import 'package:fushi/src/media/collections/collection_shelf_row.dart'
-    show unifiedShelfCardLayout;
+import 'package:fushi/src/media/shelf_card_layout.dart';
 import 'package:fushi/src/media/selection/media_selection_controller.dart';
 import 'package:fushi/src/media/selection/selection_gestures.dart';
 import 'package:fushi/src/utils/misc/reveal_in_file_manager.dart';
@@ -86,7 +85,7 @@ import 'package:fushi/src/sync/local_file_delete_feedback.dart';
 import 'package:fushi_engine/sync/deletion_propagation.dart';
 import 'package:fushi/src/sync/deletion_propagation_availability.dart';
 import 'package:fushi/src/sync/deletion_prompt_preferences.dart';
-import 'package:fushi/src/sync/interconnect_download_manager.dart';
+
 import 'package:fushi/src/sync/hidden_remote_books.dart';
 import 'package:fushi/src/sync/interconnect_sync_backend.dart';
 import 'package:fushi_engine/sync/fushi_library_host_service.dart';
@@ -111,7 +110,6 @@ import 'package:fushi/src/utils/cover_image.dart';
 
 part 'reader_history/card_widgets.part.dart';
 part 'reader_history/remote.part.dart';
-part 'reader_history/video.part.dart';
 part 'reader_history/books.part.dart';
 part 'reader_history/dialogs.part.dart';
 
@@ -408,8 +406,6 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
       tooltip: t.remote_book_downloading,
     );
   }
-
-  VideoBookRepository get _videoRepo => VideoBookRepository(appModel.database);
 
   double _gridExtent(BuildContext context, BoxConstraints constraints) {
     return readerShelfGridExtentForLayout(
@@ -912,21 +908,6 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
       // 「管理来源」在库页导航壳里已是一等视图（[MediaSourcesPage]），页头再放一个
       // 按钮就是同一件事的两个入口。书架独立使用（无导航条）时才保留书籍来源按钮；
       // 漫画入口由专属导入对话框负责，不复用书籍来源管理。
-      if (_pageWidget.navigation == null && !_mangaOnly)
-        _headerAction(
-          tooltip: t.media_source_manage_title,
-          icon: Icons.folder_copy_outlined,
-          onTap: _openManageSources,
-        ),
-      // 视频导入入口**只属于视频 tab**（HomeVideoPage），书架不放视频导入——
-      // 书架是书的地方。这里保留编译期常量门控（默认关）只为旧调试路径，运行时
-      // 实验开关不再在书架放出视频导入（用户反馈：书架不该有视频导入入口）。
-      if (kVideoImportEnabled)
-        _headerAction(
-          tooltip: t.video_import_action,
-          icon: Icons.movie_outlined,
-          onTap: _openVideoImport,
-        ),
       // 统计入口已收敛到首页 dashboard（用户定案 2026-09-01：各媒体页头不再
       // 各挂一个「xx统计」，统一从首页进统计中心）。收藏夹入口同理（用户定案
       // 2026-10-14）：收藏夹不按模块隔离，各库页都挂一个只会误导，统一从首页进。
@@ -958,19 +939,6 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
       icon: icon,
       onTap: onTap,
     );
-  }
-
-  /// 打开「管理来源」对话框（漫画书架管漫画扫描根，普通书架管书籍来源库）。
-  /// 关闭后失效书架 provider 刷新列表（扫描可能新增 EPUB / 漫画）。
-  Future<void> _openManageSources() async {
-    await showAppDialog<void>(
-      context: context,
-      builder: (_) =>
-          MediaSourcesDialog(mediaKind: _mangaOnly ? 'manga' : 'book'),
-    );
-    if (!mounted) return;
-    ref.invalidate(fushiBooksProvider(JapaneseLanguage.instance));
-    ref.invalidate(srtBooksProvider);
   }
 
   /// 一次性预取书架排序所需映射：epub 导入时间、uid 换算、读完集合，

@@ -246,49 +246,6 @@ void main() {
       if (work.existsSync()) await work.delete(recursive: true);
     });
 
-    test('视频：上报的未来戳被截到 now + 余量，不能永久锁死后续写入', () async {
-      final int now = DateTime.now().millisecondsSinceEpoch;
-      await host.putVideoPosition('video/v', 600000, now + 86400000);
-      final int storedAt = await hostDb.getPrefTyped<int>(
-        videoRemotePositionAtPrefKey('video/v'),
-        0,
-      );
-      expect(
-        storedAt,
-        lessThanOrEqualTo(
-          DateTime.now().millisecondsSinceEpoch + kSyncFutureStampToleranceMs,
-        ),
-      );
-      expect(storedAt, greaterThan(now));
-    });
-
-    test('视频：已存的超限毒戳被下一次正常上报覆盖', () async {
-      final int now = DateTime.now().millisecondsSinceEpoch;
-      await hostDb.setPrefTyped<int>(
-        videoRemotePositionPrefKey('video/v'),
-        100,
-      );
-      await hostDb.setPrefTyped<int>(
-        videoRemotePositionAtPrefKey('video/v'),
-        now + 86400000,
-      );
-      await host.putVideoPosition('video/v', 420000, now);
-      expect(
-        await hostDb.getPrefTyped<int>(
-          videoRemotePositionPrefKey('video/v'),
-          0,
-        ),
-        420000,
-      );
-      expect(
-        await hostDb.getPrefTyped<int>(
-          videoRemotePositionAtPrefKey('video/v'),
-          0,
-        ),
-        now,
-      );
-    });
-
     test('有声书：同样截断未来戳、毒戳可自愈', () async {
       final int now = DateTime.now().millisecondsSinceEpoch;
       await hostDb.setPrefTyped<int>(audiobookPositionPrefKey('AB'), 100);

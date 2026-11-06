@@ -1,7 +1,6 @@
 import 'package:args/args.dart';
 
 import '../ctl_commands.dart';
-import 'collection_commands.dart' show collectionOrderCommandSpecs;
 import 'library_commands.dart' show libraryItemPath;
 
 /// 书架管理命令组：合集 / 标签 / 书签 / 收藏句（app 侧路由见
@@ -10,72 +9,6 @@ import 'library_commands.dart' show libraryItemPath;
 /// 条目键与 `library` 组同一形状（`book:` / `srt:` / `video:` / `game:`，由
 /// `library ls` 给出）；合集 id、标签 id 由各自的 `ls` 给出。
 const List<CtlCommandGroup> shelfCommandGroups = <CtlCommandGroup>[
-  CtlCommandGroup(
-    name: 'collection',
-    summary: '合集：列出、详情、新建、改名、删除、增删成员、封面、定序 / 一键排序（含 AI）',
-    commands: <CtlCommandSpec>[
-      CtlCommandSpec(
-        name: 'ls',
-        summary: '列出合集',
-        configure: _configureCollectionLs,
-        build: _buildCollectionLs,
-        render: _renderCollections,
-      ),
-      CtlCommandSpec(
-        name: 'get',
-        summary: '合集详情（成员与标签）',
-        usage: '<id>',
-        build: _buildCollectionGet,
-        render: _renderCollectionDetail,
-      ),
-      CtlCommandSpec(
-        name: 'create',
-        summary: '新建合集（同名同类型已存在时复用）',
-        usage: '<name...>',
-        configure: _configureCollectionCreate,
-        build: _buildCollectionCreate,
-        render: _renderCollectionLine,
-      ),
-      CtlCommandSpec(
-        name: 'rename',
-        summary: '合集改名',
-        usage: '<id> <name...>',
-        build: _buildCollectionRename,
-        render: _renderCollectionLine,
-      ),
-      CtlCommandSpec(
-        name: 'rm',
-        summary: '删除合集（只删合集，不删条目；需 --yes）',
-        usage: '<id>',
-        configure: _configureYes,
-        build: _buildCollectionRm,
-        render: _renderDeleted,
-      ),
-      CtlCommandSpec(
-        name: 'add',
-        summary: '把条目加进合集',
-        usage: '<id> <key...>',
-        build: _buildCollectionAdd,
-        render: _renderStatusResults,
-      ),
-      CtlCommandSpec(
-        name: 'remove',
-        summary: '把条目移出合集（移空后合集自动删除）',
-        usage: '<id> <key...>',
-        build: _buildCollectionRemove,
-        render: _renderStatusResults,
-      ),
-      CtlCommandSpec(
-        name: 'cover',
-        summary: '设置合集自有封面（本地图片或 URL；--reset 清除）',
-        usage: '<id> [<图片路径|URL>]',
-        configure: _configureCover,
-        build: _buildCollectionCover,
-      ),
-      // 定序：手动 order、一键 sort（名称 / 导入时间 / AI），见 collection_commands.dart。
-      ...collectionOrderCommandSpecs,
-    ],
-  ),
   CtlCommandGroup(
     name: 'tag',
     summary: '标签：列出、新建、改名 / 改色、删除，给条目或合集打 / 摘标签',
@@ -113,16 +46,16 @@ const List<CtlCommandGroup> shelfCommandGroups = <CtlCommandGroup>[
       ),
       CtlCommandSpec(
         name: 'add',
-        summary: '给条目或合集（collection:<id>）打标签',
-        usage: '<key|collection:id> <tag...>',
+        summary: '给条目打标签',
+        usage: '<key> <tag...>',
         configure: _configureTagAdd,
         build: _buildTagAdd,
         render: _renderStatusResults,
       ),
       CtlCommandSpec(
         name: 'remove',
-        summary: '从条目或合集摘标签',
-        usage: '<key|collection:id> <tag...>',
+        summary: '从条目摘标签',
+        usage: '<key> <tag...>',
         build: _buildTagRemove,
         render: _renderStatusResults,
       ),
@@ -254,151 +187,10 @@ String _renderStatusResults(Object? data) {
       message == null ? '[$status] $subject' : '[$status] $subject：$message',
     );
   }
-  if (data['collectionDeleted'] == true) lines.add('（合集已移空，自动删除）');
   return lines.isEmpty ? '（没有任何改动）' : lines.join('\n');
 }
 
-void _configureCover(ArgParser parser) =>
-    parser.addFlag('reset', negatable: false, help: '清除自定义封面');
-
-/// `<图片路径|URL>` → body：URL 原样走 `url`，本地路径转绝对路径走 `path`。
-Map<String, Object?> _coverBody(CtlCommandContext context, int index) {
-  if (context.flag('reset')) {
-    if (context.optionalPositional(index) != null) {
-      throw const CtlUsageError('--reset 不带图片参数');
-    }
-    return <String, Object?>{'reset': true};
-  }
-  final String source = context.positional(index, '图片路径|URL');
-  final Uri? uri = Uri.tryParse(source);
-  if (uri != null && (uri.scheme == 'http' || uri.scheme == 'https')) {
-    return <String, Object?>{'url': source};
-  }
-  return <String, Object?>{'path': ctlAbsolutePath(source)};
-}
-
-// ── collection ─────────────────────────────────────────────────────────
-
-String _collectionPath(int id) => '$_root/collections/$id';
-
-void _configureCollectionLs(ArgParser parser) =>
-    parser.addOption('item', help: '只列包含这个条目（键）的合集');
-
-CtlRequestSpec _buildCollectionLs(CtlCommandContext context) {
-  final String? item = context.option('item');
-  return CtlRequestSpec.get(
-    '$_root/collections',
-    query: <String, String>{if (item != null) 'key': item},
-  );
-}
-
-String _renderCollections(Object? data) => renderCtlTable(
-  data,
-  const <(String, String)>[
-    ('id', 'id'),
-    ('类型', 'type'),
-    ('成员', 'members'),
-    ('手动排过', 'manualOrder'),
-    ('名称', 'name'),
-  ],
-  listKey: 'collections',
-  empty: '（还没有合集）',
-);
-
-CtlRequestSpec _buildCollectionGet(CtlCommandContext context) =>
-    CtlRequestSpec.get(_collectionPath(_idArg(context, 0, 'id')));
-
-String _renderCollectionDetail(Object? data) {
-  if (data is! Map) return renderCtlJson(data);
-  final StringBuffer out = StringBuffer(
-    '#${data['id']} ${data['name']}（${data['type']}，${data['members']} 项）',
-  );
-  final Object? tags = data['tags'];
-  if (tags is List && tags.isNotEmpty) out.write('\n标签：${tags.join(', ')}');
-  final String table = renderCtlTable(data, const <(String, String)>[
-    ('键', 'key'),
-    ('标题', 'title'),
-    ('库页可见', 'visible'),
-  ], listKey: 'items');
-  out.write('\n$table');
-  return out.toString();
-}
-
-void _configureCollectionCreate(ArgParser parser) => parser.addOption(
-  'type',
-  help: 'collection（无序合集）/ playlist（有序播放列表）',
-  allowed: <String>['collection', 'playlist'],
-  defaultsTo: 'collection',
-);
-
-CtlRequestSpec _buildCollectionCreate(CtlCommandContext context) =>
-    CtlRequestSpec.post(
-      '$_root/collections',
-      body: <String, Object?>{
-        'name': context.joinedRest(0, 'name'),
-        'type': context.option('type') ?? 'collection',
-      },
-    );
-
-String _renderCollectionLine(Object? data) {
-  if (data is! Map) return renderCtlJson(data);
-  final String head = '#${data['id']} ${data['name']}（${data['type']}）';
-  return data['existed'] == true ? '$head 已存在，沿用' : head;
-}
-
-CtlRequestSpec _buildCollectionRename(CtlCommandContext context) =>
-    CtlRequestSpec.put(
-      _collectionPath(_idArg(context, 0, 'id')),
-      body: <String, Object?>{'name': context.joinedRest(1, 'name')},
-    );
-
-CtlRequestSpec _buildCollectionRm(CtlCommandContext context) {
-  final int id = _idArg(context, 0, 'id');
-  _requireYes(context);
-  return CtlRequestSpec(
-    'DELETE',
-    _collectionPath(id),
-    body: const <String, Object?>{'confirm': true},
-  );
-}
-
-CtlRequestSpec _buildCollectionAdd(CtlCommandContext context) =>
-    CtlRequestSpec.post(
-      '${_collectionPath(_idArg(context, 0, 'id'))}/members',
-      body: <String, Object?>{'keys': _restFrom(context, 1, 'key')},
-    );
-
-CtlRequestSpec _buildCollectionRemove(CtlCommandContext context) =>
-    CtlRequestSpec(
-      'DELETE',
-      '${_collectionPath(_idArg(context, 0, 'id'))}/members',
-      body: <String, Object?>{'keys': _restFrom(context, 1, 'key')},
-    );
-
-CtlRequestSpec _buildCollectionCover(CtlCommandContext context) =>
-    CtlRequestSpec.put(
-      '${_collectionPath(_idArg(context, 0, 'id'))}/cover',
-      body: _coverBody(context, 1),
-    );
-
-// ── tag ────────────────────────────────────────────────────────────────
-
-/// `collection:<id>` 目标 → 合集 id；否则 null（当条目键）。
-int? _collectionTarget(String target) {
-  if (!target.startsWith('collection:')) return null;
-  final int? id = int.tryParse(target.substring('collection:'.length));
-  if (id == null || id <= 0) {
-    throw CtlUsageError('合集目标写成 collection:<id>，收到「$target」');
-  }
-  return id;
-}
-
-String _tagTargetPath(String target) {
-  final int? collection = _collectionTarget(target);
-  return collection != null
-      ? '${_collectionPath(collection)}/tags'
-      : '${libraryItemPath(target)}/tags';
-}
+String _tagTargetPath(String target) => '${libraryItemPath(target)}/tags';
 
 CtlRequestSpec _buildTagLs(CtlCommandContext context) {
   final String? key = context.optionalPositional(0);
@@ -476,7 +268,7 @@ void _configureTagAdd(ArgParser parser) =>
     parser.addFlag('create', negatable: false, help: '标签不存在时自动新建');
 
 CtlRequestSpec _buildTagAdd(CtlCommandContext context) => CtlRequestSpec.post(
-  _tagTargetPath(context.positional(0, 'key|collection:id')),
+  _tagTargetPath(context.positional(0, 'key')),
   body: <String, Object?>{
     'tags': _restFrom(context, 1, 'tag'),
     'create': context.flag('create'),
@@ -485,7 +277,7 @@ CtlRequestSpec _buildTagAdd(CtlCommandContext context) => CtlRequestSpec.post(
 
 CtlRequestSpec _buildTagRemove(CtlCommandContext context) => CtlRequestSpec(
   'DELETE',
-  _tagTargetPath(context.positional(0, 'key|collection:id')),
+  _tagTargetPath(context.positional(0, 'key')),
   body: <String, Object?>{'tags': _restFrom(context, 1, 'tag')},
 );
 

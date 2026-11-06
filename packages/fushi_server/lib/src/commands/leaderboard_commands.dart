@@ -45,7 +45,7 @@ import 'package:fushi_engine/leaderboard/leaderboard_sync.dart';
 import 'package:fushi_engine/leaderboard/local_shelf.dart';
 import 'package:fushi_engine/utils/net/app_http.dart';
 import 'package:fushi_server/src/commands/cli_module.dart';
-import 'package:fushi_server/src/commands/video_cli_support.dart';
+import 'package:fushi_server/src/commands/cli_support.dart';
 import 'package:fushi_server/src/leaderboard_store.dart';
 import 'package:fushi_server/src/server_runtime.dart';
 import 'package:http/http.dart' as http;

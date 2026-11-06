@@ -4,7 +4,7 @@
 
 **Blocked by:** 21
 
-**Status:** claimed
+**Status:** resolved
 
 ## 背景（2026-11-05 用户口径）
 
@@ -23,6 +23,13 @@ Q16：不升 schema，相关表/列保留但不再使用。
 - `mangaOcrPollDelay` 在删除 interconnect client 前迁到中性 sync helper。
 
 ## Comments
+- 2026-11-06 完成（与 ticket 21 合并收尾）：
+  - 删除视频 / 种子 / 媒体服务器、游戏 / galgame、浮球、OCR 生成/推理/模型层；含 app 页面、AppModel 字段、设置 schema、同步/备份/CTL/CLI、engine OCR/host 服务与 server 视频下载/OCR 路由。
+  - 阅读器不再注入 `.ocr-box` 文本层；保留 `.mokuro` 导入、`manga.json` 图片读取、下载 sidecar 拉取/合并；schema 保持 v1，相关表声明保留。
+  - 非漫画模块的列表/同步/下载/刮削/转码入口与其测试一并移除；部分被非漫画测试引用的中立 helper（ffmpeg、标题归一化、分页枚举、外部端点安全等）迁到中立模块保留。
+  - 验证：app `lib/test/integration_test` 与 engine/server/cli/core 的 `dart analyze` 均 0 error；定向测试修复后 `225 passed / 13 skipped`；`flutter build windows --release` 成功产出 `fushi.exe`。
+  - 已知既存：`manga_overlay_html.dart` 仍留有未使用的 OCR 文本/选择 helper 与 JS（已不再注入页面）；`loadStatFacts` 仍查询 v1 live schema 不含的游戏/视频表（既有 schema 遗留）。
+
 
 - 2026-11-05 尝试记录：先删除 `media/video`、`media/torrent`、`floating_ball`、视频/游戏/galgame 页面与相关 ctl/sync 文件后，analyze 错误从数千到上万分，集中在 `app_model.dart`、`preferences_repository.dart`、`home_page.dart`、设置 schema、sync/backup/CTL 与大量测试；已将这些删除恢复，保持仓库可构建。结论：非漫画模块删除必须与共享层（AppModel / 设置 / 同步 / 备份 / 主页 / 桌面 CTL）和测试一起作为一个独立阶段推进，不能在 ticket 21 的合集删除里顺手做。
 - 2026-11-05 第一阶段完成（OCR 用户可见入口，保留底层引擎）：
@@ -37,6 +44,6 @@ Q16：不升 schema，相关表/列保留但不再使用。
 
 - [x] 无任何 OCR 入口/设置；下载不再触发自动 OCR；sidecar 仍按 Q17 合并。
 - [x] 漫画阅读/下载/`.mokuro` 导入保持正常（release 构建通过）。
-- [ ] 视频/游戏/galgame/浮球模块代码删除后 app 编译通过，相关设置/入口消失（延后）。
-- [ ] OCR 文本层与生成/推理模型代码删除（延后，需与共享层一起做）。
+- [x] 视频 / 游戏 / galgame / 浮球模块代码删除后 app 编译通过，相关设置/入口消失。
+- [x] OCR 生成/推理/模型层删除；阅读器不再注入 `.ocr-box` 文本层（`.mokuro` 导入与 sidecar 合并保留）。
 - [x] 相关入口测试删除或改写；`flutter analyze`、定向测试、release 构建通过（既存失败除外）。

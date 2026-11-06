@@ -128,6 +128,7 @@ void main() {
     await tester.pump();
   }
 
+  // 已移除：my-comic v1 移除同步互联后远端书架 UI 恒不可达，保留源码以备恢复。
   testWidgets('P1：书清单拉取失败 → 下拉刷新弹 remote_book_list_failed（不再静默）',
       (WidgetTester tester) async {
     await tester.pumpWidget(buildApp(_ThrowingListRemoteBookClient()));
@@ -141,8 +142,9 @@ void main() {
         reason: '显式下拉失败必须可见：failed 态此前置了没人消费');
     // 冲掉 SnackBar 定时器。
     await tester.pumpAndSettle();
-  });
+  }, skip: true);
 
+  // 已移除：my-comic v1 移除同步互联后远端书架 UI 恒不可达，保留源码以备恢复。
   testWidgets('P3：SRT 有声书清单单独失败 → 计入失败提示，且不连坐隐藏拉取成功的书占位卡',
       (WidgetTester tester) async {
     final _SrtListFailingInterconnectClient client =
@@ -161,7 +163,7 @@ void main() {
         reason: 'P3：SRT 清单失败此前被降级成空列表，占位卡静默消失、下拉也无任何提示');
     expect(bookCard, findsOneWidget, reason: '失败提示之外，成功拉到的书占位卡仍在场');
     await tester.pumpAndSettle();
-  });
+  }, skip: true);
 }
 
 class _ThrowingListRemoteBookClient implements RemoteBookClient {

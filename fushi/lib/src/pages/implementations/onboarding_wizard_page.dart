@@ -15,7 +15,6 @@ import 'package:fushi/src/models/module_registry.dart'
     show hasAnyNavigationModule;
 import 'package:fushi/src/onboarding/onboarding_sample_text.dart';
 import 'package:fushi/src/onboarding/onboarding_steps.dart';
-import 'package:fushi/src/onboarding/online_services_onboarding_view.dart';
 import 'package:fushi/src/onboarding/recommended_pack_tutorial_state.dart';
 import 'package:fushi/src/onboarding/recommended_pack.dart';
 import 'package:fushi/src/onboarding/recommended_pack_download_controller.dart';
@@ -24,7 +23,7 @@ import 'package:fushi/src/settings/settings_actions.dart'
 import 'package:fushi/src/settings/settings_context.dart';
 import 'package:fushi/src/settings/settings_detail_page.dart';
 import 'package:fushi/src/settings/settings_schema_card_creation.dart';
-import 'package:fushi/src/settings/settings_schema_services.dart';
+
 import 'package:fushi/src/settings/settings_schema_lookup.dart'
     show showAudioSourcesManagerDialog;
 import 'package:fushi/src/shortcuts/input_binding.dart'
@@ -1014,17 +1013,6 @@ class _OnboardingWizardPageState extends BasePageState<OnboardingWizardPage>
               icon: FushiIcons.cloud,
               title: t.onboarding_online_services_title,
               body: t.onboarding_online_services_body,
-            ),
-            SizedBox(height: FushiDesignTokens.of(context).spacing.card),
-            OnlineServicesOnboardingView(
-              showHeader: false,
-              items: onlineServiceOnboardingItems(),
-              onOpenLink: (Uri url) =>
-                  launchUrl(url, mode: LaunchMode.externalApplication),
-              onConfigure: () => _pushPage(
-                (_) =>
-                    SettingsDetailPage(destination: buildServicesDestination()),
-              ),
             ),
           ],
         );

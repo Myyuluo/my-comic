@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:fushi_engine/media/video/video_filename_parser.dart';
+
 import 'package:fushi/src/utils/misc/shelf_ordering.dart';
 
 /// TODO-1125 B：deriveSeriesDefaultName 纯函数守卫（widget/DB-free）。
@@ -118,20 +118,6 @@ void main() {
           fallback: fb,
         ),
         'ある本',
-      );
-    });
-
-    test('视频侧复用 parseVideoFilename 得系列名后再取公共前缀', () {
-      final List<String> series = <String>[
-        for (final String f in const <String>[
-          'SPYxFAMILY S01E01',
-          'SPYxFAMILY S01E02'
-        ])
-          parseVideoFilename(f).series,
-      ];
-      expect(
-        deriveSeriesDefaultName(series, fallback: fb),
-        'SPYxFAMILY',
       );
     });
   });

@@ -16,6 +16,7 @@
 // （[FeedbackTicket.viaAccount]），看详情 / 追加说明 / 标记完成都用账户签名。
 
 import 'dart:async';
+import 'package:fushi/src/feedback/feedback_video.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
@@ -26,7 +27,7 @@ import 'package:fushi/src/feedback/feedback_diagnostics.dart';
 import 'package:fushi/src/feedback/feedback_draft_store.dart';
 import 'package:fushi/src/feedback/feedback_reply_alerts.dart';
 import 'package:fushi/src/feedback/feedback_store.dart';
-import 'package:fushi/src/feedback/feedback_video.dart';
+
 import 'package:fushi/src/leaderboard/leaderboard_service.dart';
 import 'package:fushi/src/models/app_model.dart';
 import 'package:fushi/src/updates/usage_heartbeat.dart';

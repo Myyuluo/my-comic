@@ -26,7 +26,6 @@ extension _FushiSyncServerAuth on FushiSyncServer {
         // to play via a plain URL. Token validation happens inside the handler.
         // Only the /stream sub-path is exempted; /streamurl, /subtitle, and the
         // video list still require Basic auth.
-        if (_isVideoStreamPath(request.url.path)) return innerHandler(request);
         // Remote lookup audio file URLs are handed to platform audio players,
         // which issue a bare GET without Authorization. The lookup endpoint
         // stays authenticated; the file endpoint is guarded by an opaque,
@@ -115,33 +114,6 @@ extension _FushiSyncServerAuth on FushiSyncServer {
 
 // ── 本域私有的顶层 helper（原 FushiSyncServer 的 private static；extension 体内看不到
 //    宿主类的 static，故提到库顶层）。
-
-/// 判断 [urlPath]（即 request.url.path，不含前导 `/`）是否为视频流路径
-/// （`api/library/videos/<id>/<stream|hls.m3u8|hlsseg.ts>`，id 非空，id 可含 `/`）。
-///
-/// 两条 hls 子路径与 `/stream` 同待遇：播放器拿到 playlist 后会自己去取每个分段，
-/// 那些请求同样是裸 GET，不带 Authorization。它们的门是 URL 里的短时 token
-/// （handler 内校验），与 `/stream` 是同一套。
-bool _isVideoStreamPath(String urlPath) {
-  const String prefix = 'api/library/videos/';
-  if (!urlPath.startsWith(prefix)) return false;
-  for (final String suffix in _kVideoStreamSuffixes) {
-    if (!urlPath.endsWith(suffix)) continue;
-    final String idPart =
-        urlPath.substring(prefix.length, urlPath.length - suffix.length);
-    if (idPart.isNotEmpty) return true;
-  }
-  return false;
-}
-
-/// 豁免 Basic 的视频子路径后缀。新增一条就是新开一个「谁拿到 URL 谁能取」的面，
-/// 所以它们的 handler 必须各自校验 token。
-const List<String> _kVideoStreamSuffixes = <String>[
-  '/stream',
-  '/hls.m3u8',
-  '/$kTranscodeSegmentPathSuffix',
-  '/$kBlurayClipPathSuffix',
-];
 
 bool _isLookupAudioFilePath(String urlPath) =>
     urlPath == 'api/lookup/audio/file';

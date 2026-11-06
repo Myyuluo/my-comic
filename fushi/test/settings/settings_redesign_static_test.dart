@@ -30,7 +30,7 @@ const List<String> kSettingsSchemaDomainFiles = <String>[
   'lib/src/settings/settings_schema_reading.dart',
   'lib/src/settings/settings_schema_lookup.dart',
   'lib/src/settings/settings_schema_card_creation.dart',
-  'lib/src/settings/settings_schema_video.dart',
+  // settings_schema_video.dart 随 my-comic v1 移除视频模块一并删除。
   'lib/src/settings/settings_schema_listening.dart',
   'lib/src/settings/settings_schema_system.dart',
   'lib/src/settings/settings_schema_fields.dart',
@@ -63,13 +63,11 @@ void main() {
     'lib/src/settings/settings_schema.dart': <String>[
       'List<SettingsDestination> buildSettingsSchema',
       'SettingsDestination buildReaderQuickSettingsDestination',
+      // my-comic v1 顶层分类：外观 / 漫画 / 下载 / Tracking / 系统。
       'buildAppearanceDestination()',
-      'buildProfilesDestination()',
-      'buildReadingDestination()',
-      'buildLookupDestination()',
-      'buildCardCreationDestination()',
-      'buildVideoDestination()',
-      'buildSyncBackupDestination()',
+      'buildMangaDestination()',
+      'buildDownloadsDestination()',
+      'buildMediaTrackingDestination()',
       'buildSystemDestination()',
     ],
     'lib/src/settings/settings_schema_appearance.dart': <String>[
@@ -92,10 +90,6 @@ void main() {
       'SettingsDestination buildCardCreationDestination()',
       'SettingsDestinationId.cardCreation',
     ],
-    'lib/src/settings/settings_schema_video.dart': <String>[
-      'SettingsDestination buildVideoDestination()',
-      'SettingsDestinationId.video',
-    ],
     // 听书 2026-08-24 并入阅读：不再是 destination，但仍是自己的领域 library
     // （返回分区，由 buildReadingDestination 展开）——「一域一文件」契约不变。
     'lib/src/settings/settings_schema_listening.dart': <String>[
@@ -113,10 +107,7 @@ void main() {
     'lib/src/sync/sync_settings_schema.dart': <String>[
       'SettingsDestination buildSyncBackupDestination',
       'SettingsDestinationId.syncBackup',
-      'sync.sync_now',
-      // 手动同步的实现搬去了 lib/src/sync/manual_sync_ui.dart（媒体页下拉同步共用
-      // 同一入口），设置页这一行现在接的是那个共享入口。
-      'runManualSyncWithFeedback',
+      // 手动同步 / sync.sync_now 行随 my-comic v1 移除云同步入口一并删除。
     ],
     // schema 行的自适应组件收口在共享 settings_schema_widgets（见下条），两个渲染器
     // 只保留各自平台外壳并复用共享 SettingsSchemaSection。
@@ -321,44 +312,25 @@ void main() {
     expect(schemaSource, isNot(contains('DictionarySettingsDialogPage')));
   });
 
-  test('custom fonts are grouped with app appearance typography', () {
-    // TODO-586：appearance/reading destination 各自独立成领域文件，整份文件即对应
-    // 域的源（不再靠同文件相对位置切片）。
+  test('non-manga typography settings are gone from appearance', () {
+    // TODO-586：appearance destination 独立成领域文件，整份文件即对应域的源。
     final String appearanceSource = readNormalizedSource(
       'lib/src/settings/settings_schema_appearance.dart',
-    );
-    final String readingSource = readNormalizedSource(
-      'lib/src/settings/settings_schema_reading.dart',
     );
 
     expect(
       appearanceSource,
       contains('SettingsDestination buildAppearanceDestination()'),
     );
-    expect(
-      readingSource,
-      contains('SettingsDestination buildReadingDestination()'),
-    );
-
-    expect(appearanceSource, contains('CustomFontsPage'));
-    expect(appearanceSource, contains("id: 'appearance.font_catalog'"));
-    expect(appearanceSource, contains('t.custom_fonts_catalog_title'));
+    // 字体目录 / 字体作用域随 EPUB / 词典排版域移除。
+    expect(appearanceSource, isNot(contains('CustomFontsPage')));
+    expect(appearanceSource, isNot(contains("id: 'appearance.font_catalog'")));
     expect(appearanceSource, isNot(contains("id: 'appearance.fonts_app_ui'")));
     expect(appearanceSource, isNot(contains("id: 'appearance.fonts_body'")));
     expect(
       appearanceSource,
       isNot(contains("id: 'appearance.fonts_dictionary'")),
     );
-    // 阅读页只许以「正文」作用域跳进同一个字体库（#2024 正文字体切换），不许
-    // 另起字体目录 / 用途列表。
-    expect(
-      readingSource.replaceAll(
-        'CustomFontsPage(target: FontTarget.body)',
-        '',
-      ),
-      isNot(contains('CustomFontsPage')),
-    );
-    expect(readingSource, isNot(contains('font_catalog')));
   });
 
   test('reader quick settings project from schema reader placements', () {
@@ -483,36 +455,8 @@ void main() {
     );
   });
 
-  test('sync backup settings use standard schema rows for options', () {
-    final String source = maskComments(readSyncSettingsSchemaSource());
-
-    // 旧锚点是 `"SettingsCustomItem(\n            id: 'sync.mode'"`——把 12 个
-    // 空格的缩进和一个换行写进了契约，`dart format` 重排或多包一层就红，而守的
-    // 根本不是格式。契约是「这个 id 属于哪种 schema 行类型」。
-    expect(
-      enclosingCallOf(source, "id: 'sync.mode'").name,
-      'SettingsCustomItem',
-    );
-    expect(
-      enclosingCallOf(source, "id: 'sync.statistics'").name,
-      'SettingsSwitchItem',
-    );
-    // 词典与本地音频源数据库不再是开关：一类一行的显式动作行
-    // （`SettingsCustomItem` + `_AssetTransferMenuRow`），方向在行尾菜单里选。
-    expect(
-      enclosingCallOf(source, "id: 'sync.dictionary_transfer'").name,
-      'SettingsCustomItem',
-    );
-    expect(
-      enclosingCallOf(source, "id: 'sync.local_audio_transfer'").name,
-      'SettingsCustomItem',
-    );
-    expect(source, isNot(contains("id: 'sync.dictionary'")));
-    expect(source, isNot(contains("id: 'sync.local_audio'")));
-    expect(source, isNot(contains("id: 'sync.audiobook'")));
-    expect(source, isNot(contains("id: 'sync.options'")));
-    expect(source, isNot(contains('class _SyncOptionsWidget')));
-  });
+  // 同步与备份设置分类随 my-comic v1 移除云同步/互联一并下线；其 schema 行
+  // 契约（sync.mode 等）不再适用。
 
   test('settings tab does not duplicate schema-level header actions', () {
     final String source = readNormalizedSource(

@@ -12,7 +12,7 @@ import 'package:fushi/src/media/novel/online/lnreader_manager.dart';
 import 'package:fushi/src/media/novel/online/lnreader_models.dart';
 import 'package:fushi/src/media/novel/online/lnreader_source_browse_page.dart';
 import 'package:fushi/src/media/novel/online/novel_online_sources_gate.dart';
-import 'package:fushi/src/media/video/online/video_online_sources_gate.dart';
+
 import 'package:fushi/src/models/app_model.dart';
 import 'package:fushi/src/models/module_id.dart';
 import 'package:fushi/src/models/store_compliance.dart';
@@ -50,7 +50,7 @@ bool isOnlineSourcesDomainAvailable(OnlineSourcesDomain domain) =>
       OnlineSourcesDomain.novel => isNovelOnlineSourcesAvailable,
       OnlineSourcesDomain.manga =>
         StoreRestrictedCapability.onlineMangaSource.isAvailable,
-      OnlineSourcesDomain.video => isVideoOnlineSourcesAvailable,
+      OnlineSourcesDomain.video => false,
     };
 
 /// 在线域 → 所属功能模块（穷尽 switch）：关掉某个库模块，它的在线来源一并不出。
@@ -154,10 +154,8 @@ class _BrowseOnlineSourcesViewState
   /// BUG-513 同款纪律：AppModel 在 initState 捕获，async gap 之后不再 `ref.read`。
   late final AppModel _appModel = ref.read(appProvider);
 
-  /// 视频源扩展（Aniyomi）的管理器：`AppModel.animeMihonManager` 在没有 Mihon
-  /// 宿主的平台会抛 [UnsupportedError]，所以先过门再取。
-  MihonManager? get _animeManager =>
-      isVideoOnlineSourcesAvailable ? _appModel.animeMihonManager : null;
+  /// 视频源扩展（Aniyomi）已随视频域移除。
+  MihonManager? get _animeManager => null;
 
   /// 小说源（LNReader 插件）的管理器：过了合规门 + 运行时平台门才取。
   LnReaderManager? get _novelManager =>

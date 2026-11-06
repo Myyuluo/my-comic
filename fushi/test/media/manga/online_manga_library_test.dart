@@ -138,34 +138,7 @@ void main() {
     expect(File(p.join(row.extractDir, 'cover.png')).existsSync(), isFalse);
   });
 
-  test('互联在线漫画加入书架用实际 UID 收养主合集且重复加入幂等', () async {
-    final OnlineMangaLibraryEntry entry = InterconnectMangaCatalog.entryFor(
-      const RemoteBookInfo(
-        title: 'Remote manga',
-        bookKey: 'host-manga-key',
-        hasContent: false,
-        hasMangaChapters: true,
-        format: 'manga',
-        collection: RemoteCollectionMembership(
-          collectionName: 'Remote series',
-          collectionType: 'collection',
-          sortIndex: 7,
-        ),
-      ),
-    );
-    final EpubBookRow row = await service.add(entry);
-    expect(row.bookKey, isNot('host-manga-key'));
-    final List<MediaCollectionRow> collections =
-        await database.getAllMediaCollections();
-    expect(collections, hasLength(1));
-    final List<MediaCollectionItemRow> members =
-        await database.getCollectionItems(collections.single.id);
-    expect(members.single.entryKey, row.uid);
-    expect(members.single.sortIndex, 7);
-    await service.add(entry);
-    expect(
-      await database.getCollectionItems(collections.single.id), hasLength(1));
-  });
+  // 合集（collection）功能已随 my-comic v1 移除：互联在线漫画不再收养主合集。
 
   test('BUG-3443：重新收下经互联来的漫画撤销此前写的对端键删除墓碑，'
       '不碰无关墓碑', () async {

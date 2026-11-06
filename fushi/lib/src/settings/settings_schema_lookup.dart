@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:material_ui/material_ui.dart';
 import 'package:fushi/models.dart';
 import 'package:fushi/pages.dart';
-import 'package:fushi/src/lookup/gal_hook_text_overlay_controller.dart';
+
 import 'package:fushi/src/lookup/effective_lookup_size.dart'
     show
         kLookupPopupMaxHeight,
@@ -30,7 +30,7 @@ import 'package:fushi/src/sync/fushi_api_port_conflict_notice.dart'
     show fushiApiPortInUseMessage;
 import 'package:fushi_engine/sync/fushi_sync_server.dart';
 import 'package:fushi/src/sync/port_process_terminator.dart';
-import 'package:fushi/src/sync/texthooker_ws_client_manager.dart';
+
 import 'package:fushi/src/utils/fushi_icons.dart';
 import 'package:fushi/utils.dart';
 import 'package:path/path.dart' as p;
@@ -345,11 +345,6 @@ SettingsDestination buildLookupDestination() {
               await settingsContext.readerSource.setHoverAutoLookup(
                 value: value,
               );
-              // galgame Hook 台词浮窗是独立 native 窗口，读不到 Dart 侧偏好：不 live
-              // 推一次，用户得关掉浮窗重开才生效（阅读器 / 视频页由
-              // notifyReaderSettingsChanged 覆盖，浮窗不在那条链路上）。
-              await GalHookTextOverlayController.instance
-                  .applyHoverAutoLookupFromPreferences();
               notifyReaderSettingsChanged(settingsContext);
             },
             defaultValue: false,
@@ -1273,25 +1268,6 @@ SettingsDestination buildLookupDestination() {
               if (seeded) {
                 await _restartFushiApiServerIfEnabled(settingsContext);
               }
-            },
-          ),
-          SettingsSwitchItem(
-            id: 'lookup.texthooker',
-            title: t.texthooker_enabled,
-            subtitle: t.texthooker_enabled_hint,
-            icon: Icons.sensors_outlined,
-            value: (SettingsContext settingsContext) =>
-                settingsContext.appModel.texthookerEnabled,
-            onChanged: (SettingsContext settingsContext, bool value) async {
-              await settingsContext.appModel.setTexthookerEnabled(value);
-              if (value) {
-                TexthookerWsClientManager.instance.start(
-                  settingsContext.appModel.texthookerUrls,
-                );
-              } else {
-                await TexthookerWsClientManager.instance.stop();
-              }
-              settingsContext.refresh();
             },
           ),
           // 窗口超分**故意不在这里**（BUG-1191）。它是每局游戏才有意义的东西，藏在

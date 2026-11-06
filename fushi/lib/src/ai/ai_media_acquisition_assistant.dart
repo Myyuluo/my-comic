@@ -19,8 +19,7 @@ import 'package:fushi_engine/ai/ai_chat_client.dart';
 import 'package:fushi_engine/ai/ai_feature.dart';
 import 'package:fushi_engine/ai/ai_provider_config.dart';
 import 'package:fushi_engine/ai/ai_reply_json.dart';
-import 'package:fushi_engine/ai/ai_video_search_assistant.dart'
-    show AiClientFactory;
+
 import 'package:fushi/src/models/preferences_repository.dart';
 import 'package:fushi/src/utils/misc/error_log_service.dart';
 
@@ -241,7 +240,7 @@ class AiMediaAcquisitionAi {
 /// 只给测试注入假客户端；生产每次新建、用完即关。
 AiMediaAcquisitionAi createPreferencesAiMediaAcquisitionAi(
   PreferencesRepository prefsRepo, {
-  AiClientFactory? clientFactory,
+  AiChatClient Function()? clientFactory,
 }) {
   Future<T?> withClient<T>(
     String op,

@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi/src/anki/advanced_mining_deck_section.dart';
 import 'package:fushi/src/mining/advanced_mining/advanced_mining_capabilities.dart';
+
 import 'package:fushi_anki/fushi_anki.dart';
 
 /// 「高级制卡」卡组分区的组装：可选卡组按名字排序，默认卡组与后端

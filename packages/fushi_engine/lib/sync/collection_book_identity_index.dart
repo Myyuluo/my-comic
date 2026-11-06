@@ -1,5 +1,4 @@
 import 'package:fushi_core/fushi_core.dart';
-import 'package:fushi_engine/sync/game_identity_index.dart';
 
 /// 合集专用双向身份索引；不改变阅读器的本地 bookKey 契约。
 ///
@@ -16,7 +15,6 @@ class CollectionBookIdentityIndex {
     this.uidByKey,
     this.wireKeyByKey, {
     this.bookKeyByUid = const <String, String>{},
-    this.games = GameIdentityIndex.empty,
   });
 
   final Map<String, String> uidByKey;
@@ -24,8 +22,6 @@ class CollectionBookIdentityIndex {
 
   /// 本地书 uid → 本地 bookKey（标签宿主键是 bookKey，不是合集成员用的 uid）。
   final Map<String, String> bookKeyByUid;
-
-  final GameIdentityIndex games;
 
   static Future<CollectionBookIdentityIndex> load(FushiDatabase db) async {
     final List<EpubBookRow> books = await db.getAllEpubBooks();
@@ -60,7 +56,6 @@ class CollectionBookIdentityIndex {
       uidByKey,
       wireKeyByKey,
       bookKeyByUid: bookKeyByUid,
-      games: await GameIdentityIndex.load(db),
     );
   }
 

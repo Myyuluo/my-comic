@@ -45,10 +45,11 @@ void main() {
       'lib/src/media/manga/library/manga_series_page.dart',
     ).readAsStringSync();
     expect(src, contains('await _openReader(bookKey, chapterIndex: index);'));
+    final String flat = src.replaceAll(RegExp(r'\s+'), '');
     expect(
-      src,
+      flat,
       contains(
-        '.buildChapterLaunchPage(item: launchItem, chapterIndex: chapterIndex)',
+        '.buildChapterLaunchPage(item:launchItem,chapterIndex:chapterIndex,',
       ),
     );
   });

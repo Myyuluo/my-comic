@@ -2,8 +2,7 @@ import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:drift/drift.dart';
-import 'package:fushi_engine/media/collections/collection_season_groups.dart'
-    show collectionGroupKeyForFilename, isMultiSeasonGrouped;
+
 import 'package:fushi_engine/mining/metadata/galgame_metadata_source.dart';
 import 'package:fushi_core/fushi_core.dart';
 
@@ -484,26 +483,6 @@ class MediaTrackingRepository {
     );
   }
 
-  /// 合集 video 成员的分组键列——按各集 `videoPath` 文件名**现场派生**（分组是
-  /// 文件名的纯函数、不落库，语义见 collection_season_groups.dart）。service 据此
-  /// 判定「多季合集」并绕开结构性失真的合集级映射；存量合集零迁移即受保护。
-  Future<List<String>> loadCollectionVideoGroupKeys(int collectionId) async {
-    // my-comic：漫画-only schema 没有 video_books。
-    return const <String>[];
-    // ignore: dead_code
-    final List<MediaCollectionItemRow> items =
-        await _db.getCollectionItems(collectionId);
-    final List<String> keys = <String>[];
-    for (final MediaCollectionItemRow item in items) {
-      if (item.mediaType != MediaKind.video.dbValue) continue;
-      final VideoBookRow? video =
-          await _db.getVideoBookByBookUid(item.entryKey);
-      if (video == null) continue;
-      keys.add(collectionGroupKeyForFilename(video.videoPath));
-    }
-    return keys;
-  }
-
   Future<AutoBookTrackingSource?> loadAutoBookSource(String bookKey) async {
     final EpubBookRow? book = await _db.getEpubBook(bookKey);
     if (book == null) return null;
@@ -683,48 +662,10 @@ class MediaTrackingRepository {
         continue;
       }
 
-      if (mapping.mediaType != TrackingMediaType.videoCollection.value) {
+      // 视频合集随视频域移除，不再恢复历史完成事件。
+      if (mapping.mediaType == TrackingMediaType.videoCollection.value) {
         continue;
       }
-      final int? collectionId = int.tryParse(mapping.mediaKey);
-      if (collectionId == null) continue;
-      final List<MediaCollectionItemRow> items =
-          (await _db.getCollectionItems(collectionId))
-              .where((MediaCollectionItemRow item) =>
-                  item.mediaType == MediaKind.video.dbValue)
-              .toList(growable: false);
-      final List<VideoBookRow?> videos = <VideoBookRow?>[
-        for (final MediaCollectionItemRow item in items)
-          await _db.getVideoBookByBookUid(item.entryKey),
-      ];
-      // 多季分组合集（分组按文件名现场派生，不落库）：整合集映射结构性失真
-      // （Bangumi 一季一条目，合集下标当集数会把第二季完结报给第一季 subject）。
-      // 补发跳过合集级映射，按集映射的补发由上面的 video 分支承担。
-      if (isMultiSeasonGrouped(<String>[
-        for (final VideoBookRow? video in videos)
-          if (video != null) collectionGroupKeyForFilename(video.videoPath),
-      ])) {
-        continue;
-      }
-      int highestCompletedIndex = -1;
-      int latestCompletedAt = 0;
-      for (int index = 0; index < videos.length; index++) {
-        final DateTime? completedAt = videos[index]?.completedAt;
-        if (completedAt == null) continue;
-        highestCompletedIndex = index;
-        latestCompletedAt =
-            math.max(latestCompletedAt, completedAt.millisecondsSinceEpoch);
-      }
-      if (highestCompletedIndex < 0) continue;
-      final int evidenceAt = math.max(mapping.updatedAt, latestCompletedAt);
-      if (evidenceAt <= afterMs) continue;
-      result.add((
-        mediaType: TrackingMediaType.videoCollection,
-        mediaKey: mapping.mediaKey,
-        localProgress: highestCompletedIndex,
-        completed: highestCompletedIndex == items.length - 1,
-        evidenceAt: evidenceAt,
-      ));
     }
     return result;
   }

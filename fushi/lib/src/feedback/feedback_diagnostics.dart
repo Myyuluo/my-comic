@@ -15,7 +15,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:fushi/i18n/strings.g.dart';
-import 'package:fushi/src/floating_ball/floating_ball_channel.dart';
+
 import 'package:fushi/src/utils/misc/build_version.dart';
 import 'package:fushi/src/utils/misc/debug_log_service.dart';
 import 'package:fushi/src/utils/misc/error_log_service.dart';
@@ -45,17 +45,22 @@ final ValueNotifier<bool> feedbackWindowCaptureActive = ValueNotifier<bool>(
 typedef FeedbackNativeWindowCapture = Future<Uint8List?> Function();
 
 /// 只有 iOS（`drawHierarchy`）与 Android（PixelCopy，API 26+）有原生窗口快照，
-/// 实现挂在悬浮球通道的 `captureScreen` 上（iOS `FushiFloatingBall.swift`，
-/// Android `FloatingBallChannel.java`；两端都在引擎起来时无条件注册，不依赖悬浮球
-/// 开关）。桌面三端保持 toImage：Windows / Linux 的 WebView 以纹理合成进 Flutter
-/// 场景，toImage 截得到；macOS 的 WKWebView 是原生视图，仍会缺一块。
+/// 实现挂在 `app.fushi.reader/floating_ball` 通道的 `captureScreen` 上（iOS
+/// `FushiFloatingBall.swift`，Android `FloatingBallChannel.java`；两端都在引擎起来时
+/// 无条件注册，不依赖悬浮球开关）。桌面三端保持 toImage：Windows / Linux 的 WebView
+/// 以纹理合成进 Flutter 场景，toImage 截得到；macOS 的 WKWebView 是原生视图，仍会缺
+/// 一块。
 bool get _nativeWindowCaptureSupported => Platform.isIOS || Platform.isAndroid;
+
+const MethodChannel _nativeWindowCaptureChannel = MethodChannel(
+  'app.fushi.reader/floating_ball',
+);
 
 /// 原生侧按 `maxSide` 在合成时就缩到上限内再编码（Android），不把全分辨率
 /// PNG 经通道传过来再由 Dart 解码缩放；iOS 忽略该参数，由
 /// [fitFeedbackScreenshotPng] 兜底缩放。
 Future<Uint8List?> _invokeNativeWindowCapture() =>
-    FloatingBallChannel.channel.invokeMethod<Uint8List>(
+    _nativeWindowCaptureChannel.invokeMethod<Uint8List>(
       'captureScreen',
       nativeWindowCaptureArguments(),
     );

@@ -1,7 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:fushi_engine/media/manga/panel_detection.dart';
-import 'package:fushi_engine/ocr/ocr_inference.dart';
+
 import 'package:image/image.dart' as img;
 import 'package:test/test.dart';
 

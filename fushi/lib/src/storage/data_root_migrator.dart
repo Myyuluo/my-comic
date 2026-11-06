@@ -8,8 +8,7 @@ import 'package:path/path.dart' as p;
 import 'package:drift/drift.dart' show QueryRow, Variable;
 
 import 'package:fushi/src/media/media_source.dart' show dbSourcePrefKey;
-import 'package:fushi_engine/media/video/video_subtitle_source.dart'
-    show SubtitleSource;
+
 import 'package:fushi/src/models/local_audio_manager.dart'
     show LocalAudioManager;
 import 'package:fushi/src/profile/profile_keys.dart' show ProfileKeys;
@@ -1580,8 +1579,8 @@ class DocumentsPathRebaser {
 /// 它们本来也不以旧根开头（作用域谓词天然跳过），但那是巧合——显式判掉才是契约。
 String? rebaseSubtitleSource(String? stored, DocumentsPathRebaser docs) {
   if (stored == null || stored.isEmpty) return stored;
-  if (SubtitleSource.isOff(stored)) return stored;
-  if (SubtitleSource.isEmbeddedPersisted(stored)) return stored;
+  if (stored == 'off:') return stored;
+  if (stored.startsWith('embedded:')) return stored;
   return docs.rebase(stored);
 }
 

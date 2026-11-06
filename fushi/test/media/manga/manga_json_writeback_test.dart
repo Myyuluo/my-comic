@@ -130,10 +130,8 @@ void main() {
     const List<String> consumers = <String>[
       // 2026-09-12 起阅读器不再写任何 manga.json（在线几何回填 / 章节引导重写随
       // 「先下载再读」一起删除）；章 manga.json 由下载服务落盘。
+      // OCR 向导 / 任务注册表随 my-comic v1 移除 OCR 功能一并删除。
       'lib/src/media/manga/download/manga_download_service.dart',
-      'lib/src/media/manga/manga_ocr_wizard_dialog.dart',
-      // BUG-2449：整卷 OCR 的完成落盘随任务所有权搬到了注册表。
-      'lib/src/media/manga/ocr/manga_ocr_job_registry.dart',
     ];
 
     test('每处 writeMangaJsonAtomically 调用都由 runExclusiveOnMangaJson 包住', () {
@@ -178,9 +176,7 @@ void main() {
     });
 
     test('阅读器页不得再自己拼书根 manga.json 的落盘（绕过锁与原子写）', () {
-      // 只钉阅读器页：它对书根 manga.json 的写全部应经本模块。向导那边还留着一处
-      // 合法的 mangaPayloadToJson——写的是 `manga_ocr_out/` 里的 OCR 中间产物，
-      // 与书根 manga.json 不同路径，不在这把锁的语义范围内。
+      // 只钉阅读器页：它对书根 manga.json 的写全部应经本模块。
       final String body =
           File('lib/src/media/manga/reader/manga_fushi_page.dart')
               .readAsStringSync();
@@ -189,19 +185,6 @@ void main() {
         isNot(contains('mangaPayloadToJson(')),
         reason: '直接序列化 payload 就等于绕过 writeMangaJsonAtomically 与 per-path 写锁',
       );
-    });
-
-    test('向导对书根 manga.json 的落盘经本模块（其余 mangaPayloadToJson 是 OCR 中间产物）', () {
-      final String body =
-          File('lib/src/media/manga/manga_ocr_wizard_dialog.dart')
-              .readAsStringSync();
-      final int at = body.indexOf('MangaStorage.kMangaJsonFileName');
-      expect(at, greaterThan(0));
-      // 书根 manga.json 的那处落盘必须紧跟锁 + 原子写，而不是自己拼 .tmp。
-      final String after = body.substring(at, at + 400);
-      expect(after, contains('runExclusiveOnMangaJson'));
-      expect(after, contains('writeMangaJsonAtomically'));
-      expect(after, isNot(contains('.tmp')));
     });
   });
 

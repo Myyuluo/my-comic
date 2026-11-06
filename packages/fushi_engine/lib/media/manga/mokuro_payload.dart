@@ -8,6 +8,10 @@ export 'package:fushi_engine/media/manga/mokuro_geometry.dart';
 /// This is the in-memory shape shared by both producers of manga OCR data
 /// (`.mokuro` file import and the app's own OCR engine) and the single source
 /// of truth the reader overlay renders from. Both [parseMokuro] (raw
+/// 整卷 OCR 过去的产物目录 / 文件名；导入时仍要排除它们，避免把文本层当页图。
+const String kMangaOcrOutDirName = 'manga_ocr_out';
+const String kMangaOcrOutputFileName = 'manga.json';
+
 /// `.mokuro` JSON) and [parseMangaJson] (the internal `manga.json` format)
 /// produce this type; [mangaPayloadToJson] serialises it back to `manga.json`.
 class MokuroPayload {

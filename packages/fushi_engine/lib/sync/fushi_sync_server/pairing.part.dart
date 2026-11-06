@@ -483,71 +483,32 @@ extension _FushiSyncServerPairing on FushiSyncServer {
 
   Future<shelf.Response> _handleCapabilities() async {
     final bool lib = _libraryService != null;
-    // 漫画 P3 能力协商：仅接线了 OCR 任务管理器的 host 带 `mangaOcr` 字段；老
-    // host 响应里没有该字段 → client 隐藏「已配对主机」OCR 选项（零破坏）。
-    final Map<String, Object?>? mangaOcr = await _mangaOcrJobs?.capability();
     final Map<String, Object?>? jobs = await _hostJobs?.capability();
-    final Map<String, Object?>? downloads = await _downloads?.capability();
-    final Map<String, Object?>? subscriptions = await _subscriptions?.capability();
-    final Map<String, Object?>? assistant = await _assistant?.capability();
     return jsonResponse(<String, dynamic>{
-      if (mangaOcr != null) 'mangaOcr': mangaOcr,
       // 通用任务能力位：`jobs.kinds` + 每种 kind 的就绪信息；老 client 读不到也不崩。
       if (jobs != null) 'jobs': jobs,
-      // `deleteFilesParam`：本路由的 DELETE 认 `?deleteFiles=`（BUG-3437）；老 host
-      // 没有这个键，client 据此决定能不能让用户选「同时删除已下载文件」。
-      if (downloads != null)
-        'downloads': <String, Object?>{
-          ...downloads,
-          kHostDownloadDeleteFilesParamCapability: true,
-        },
-      if (subscriptions != null) 'subscriptions': subscriptions,
-      if (assistant != null) 'assistant': assistant,
-      // 查词 / 制卡 / 查词历史 / 游戏串流：这台 host 是否接了对应 service（老 host
-      // 无这些字段，client 照旧以端点 404 判断）。只说「懂不懂这条路由」，不代表此刻
-      // 一定成功——例如制卡还要 host 已登录 Anki、查词还要 host 装了词典。
+      // 查词 / 制卡 / 查词历史：这台 host 是否接了对应 service（老 host 无这些字段，
+      // client 照旧以端点 404 判断）。只说「懂不懂这条路由」，不代表此刻一定成功。
       'lookup': <String, dynamic>{
         'dictionary': _remoteLookupService != null,
         'history': _historyService != null,
       },
       'mining': _miningService != null,
-      'gameStream': _gameStreamService != null,
       // 远程更新 host（反馈 Pp8XPyve0N）：client 据此决定是否显示「主机版本」行。
       'hostUpdate': hostSelfUpdater != null,
       'liveLibrary': <String, dynamic>{
         'dictionaries': lib,
         'books': lib,
         'audio': lib,
-        'videos': lib,
+        // 视频 / 视频元数据 / 字幕能力已随视频域移除。
+        'videos': false,
         // 互联漫画源（按页在线阅读，`/api/library/manga/**`）。老 host 无此字段 →
         // client 的漫画「来源」页把这一行标成「对端版本过低」，而不是让用户点进去
-        // 对着一屏 404 反复重试。与既有 `mangaOcr` 能力位同一范式。
+        // 对着一屏 404 反复重试。
         'manga': _libraryService is MangaLibraryHost,
-        // 视频刮削元数据同步 / 远程刮削 / 代刮回写（`/api/library/metadata*`）。老
-        // host 无此字段 → client 跳过元数据同步并隐藏远程刮削入口。
-        'videoMetadata': _libraryService is VideoMetadataHost,
         // 互联标签同步（`/api/library/tags`）。老 host 无此字段 / false → client
         // 跳过标签维度（下载时搬一次标签的旧行为不受影响）。
         'tags': _libraryService is TagSyncHost,
-        // 弱网实时转码（`/streamurl?maxHeight=&maxBitrate=`）。老 host 无此字段 →
-        // client 不显示画质档，行为与从前一致。字段随用户开关与本机 ffmpeg 可用性
-        // 实时变化，不是启动时的快照；最终真相仍是 `/streamurl` 回的 `transcoded`。
-        'videoTranscode': lib && _videoTranscodeEnabled,
-        // 远端导入 / 重定时字幕「设为这一集的默认字幕」（`PUT .../subtitle` 带
-        // `X-Fushi-Subtitle-Default: 1`，host 按自己的学习语言定后缀、旧 sidecar
-        // 改名 `.fushi-bak` 让位）。老 host 无此字段 → client **不上传**：老 host
-        // 不认那个 header，会走 live push 的旧路径按 client 报的后缀落盘，
-        // `rename` 直接覆盖 host 上同名的旧字幕且不留备份（BUG-2728）。
-        'videoSubtitleDefault': _libraryService is VideoSubtitleDefaultHost,
-        // `DELETE .../subtitle?which=`（清字幕源 + 备份本视频 sidecar）与
-        // `POST .../subtitle/backfill`（立即补字幕）。老 host 无此字段 → 404。
-        'videoSubtitleClear': _libraryService is VideoSubtitleClearHost,
-        'videoSubtitleBackfill': lib && videoSubtitleBackfill != null,
-        // 图形字幕整轨回传（`GET .../graphicsubtitle?embeddedStreamIndex=`）。老 host
-        // 无此字段 / 没注入抽取实现 → false，client 不请求、时间表只靠边播边记。
-        'videoGraphicSubtitleTrack': lib && graphicSubtitleTrackExporter != null,
-        // TMDB 备选排序（`/api/library/metadata/episode-group*`）。
-        'videoMetadataOrdering': _libraryService is VideoMetadataOrderingHost,
         'serviceConfig': _securityContext != null &&
             _libraryService is InterconnectServiceConfigHost,
         // 互联「配置文件」（Profile）双向搬运：与 serviceConfig 同门槛（必须 TLS）。

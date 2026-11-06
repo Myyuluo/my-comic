@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'helpers/fake_inappwebview_platform.dart';
-import 'helpers/fake_video_specs_probe.dart';
 import 'package:fushi/src/engine_bindings.dart';
 
 /// Suite-wide setup for all tests under `test/`.
@@ -33,7 +32,6 @@ Future<void> testExecutable(FutureOr<void> Function() testMain) async {
   installFakeInAppWebViewPlatform();
   installInMemorySharedPreferences();
   installToleranceGoldenComparator();
-  installFakeVideoSpecsProbe();
   await testMain();
 }
 

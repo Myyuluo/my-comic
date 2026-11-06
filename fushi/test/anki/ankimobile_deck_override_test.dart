@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi/src/anki/ankimobile_repository.dart';
-import 'package:fushi/src/mining/web_mine_queue_store.dart';
+
 import 'package:fushi_anki/fushi_anki.dart';
 import 'package:fushi_engine/sync/forwarded_mine_payload.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -93,15 +93,6 @@ void main() {
         omitAudio: true,
       ),
     );
-
-    test('「看完再制卡」暂存：fields JSON 往返不丢键', () {
-      final Map<String, String> back = decodeWebMineFields(jsonEncode(fields));
-      expect(back, fields);
-      expect(
-        MiningRequestOverrides.readFrom(back)?.deckName,
-        'Japanese::Manga',
-      );
-    });
 
     test('互联转发 / 待发队列：ForwardedMinePayload 逐字携带 rawPayloadJson', () {
       final ForwardedMinePayload payload = ForwardedMinePayload(

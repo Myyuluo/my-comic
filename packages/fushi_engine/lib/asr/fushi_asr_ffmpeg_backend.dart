@@ -9,6 +9,7 @@ library;
 import 'package:fushi_asr_core/asr_core.dart' as asr;
 import 'package:fushi_engine/media/video/ffmpeg_backend.dart' as host_ffmpeg;
 
+
 class FushiAsrFfmpegBackend implements asr.FfmpegBackend {
   const FushiAsrFfmpegBackend();
 

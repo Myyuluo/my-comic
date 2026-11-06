@@ -55,9 +55,7 @@ void main() {
       throwsA(isA<SyncServerPortInUseException>()),
     );
     expect(host.isRunning, isFalse);
-    // 管线与订阅检查都已停下（停机会等在途的一轮落地），调用方此后关库是安全的。
-    expect(host.downloads, isNull);
-    expect(host.subscriptions, isNull);
-    expect(host.videoScrape, isNull);
+    // 启动失败后 host 不在运行，调用方此后关库是安全的。
+    expect(host.isRunning, isFalse);
   });
 }

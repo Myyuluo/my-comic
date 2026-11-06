@@ -985,10 +985,7 @@ SettingsDestination buildReadingDestination() {
             title: t.reader_toolbars_hide,
             icon: FushiIcons.webAssetOff,
             subtitleBuilder: (SettingsContext c) =>
-                c.readerSource.hideToolbars &&
-                        !c.appModel.prefsRepo.floatingBallInApp
-                    ? t.reader_toolbars_hide_ball_off
-                    : t.reader_toolbars_hide_subtitle,
+                t.reader_toolbars_hide_subtitle,
             reader: const ReaderPlacement(
               group: ReaderGroup.behavior,
               order: 21,

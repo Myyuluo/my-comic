@@ -22,10 +22,9 @@ import 'dart:ui' as ui;
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/rendering.dart' show SliverConstraints;
 import 'package:fushi/src/focus/fushi_focus_controller.dart';
-import 'package:fushi/src/media/collections/collection_detail_layout.dart'
-    show CollectionHeroBadgeChips;
-import 'package:fushi/src/media/video/cover_ui/landscape_cover_image.dart';
-import 'package:fushi/src/media/video/cover_ui/portrait_cover_image.dart';
+
+
+
 import 'package:fushi/src/utils/components/fushi_carousel.dart';
 import 'package:fushi/src/utils/components/fushi_m3e_feedback.dart';
 import 'package:fushi/src/utils/components/fushi_staggered_entrance.dart';
@@ -137,10 +136,10 @@ class DiscoveryImageCover extends StatelessWidget {
     if (provider == null) {
       return DiscoveryCoverPlaceholder(icon: placeholderIcon);
     }
-    return PortraitCoverImage(
+    return Image(
       image: provider,
-      landscapeSlot: shape == DiscoveryCoverShape.landscape,
-      errorBuilder: (_) =>
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) =>
           const DiscoveryCoverPlaceholder(icon: Icons.broken_image_outlined),
     );
   }
@@ -415,11 +414,17 @@ class DiscoveryHeroBackdrop extends StatelessWidget {
       );
     } else if (poster != null) {
       image = showPoster
-          ? LandscapeCoverImage(
-              image: poster,
-              overlays: overlays,
-              foregroundPadding: foregroundPadding,
-              errorBuilder: (_) => fallback,
+          ? Stack(
+              fit: StackFit.expand,
+              children: <Widget>[
+                Image(
+                  image: poster,
+                  fit: BoxFit.cover,
+                  gaplessPlayback: true,
+                  errorBuilder: (_, __, ___) => fallback,
+                ),
+                ...overlays,
+              ],
             )
           : Stack(
               fit: StackFit.expand,
@@ -450,8 +455,8 @@ class DiscoveryHeroBackdrop extends StatelessWidget {
           ClipRect(
             child: ImageFiltered(
               imageFilter: ui.ImageFilter.blur(
-                sigmaX: LandscapeCoverImage.backdropBlurSigma,
-                sigmaY: LandscapeCoverImage.backdropBlurSigma,
+                sigmaX: 24.0,
+                sigmaY: 24.0,
                 tileMode: TileMode.mirror,
               ),
               child: Transform.scale(scale: 1.3, child: coverWidget),
@@ -616,10 +621,6 @@ class DiscoveryHeroBanner extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: DiscoveryHeroText.meta(context),
                 ),
-              ],
-              if (metaParts.isNotEmpty) ...<Widget>[
-                SizedBox(height: tokens.spacing.gap),
-                CollectionHeroBadgeChips(parts: metaParts),
               ],
               if (summary != null && summary.isNotEmpty) ...<Widget>[
                 SizedBox(height: tokens.spacing.gap),

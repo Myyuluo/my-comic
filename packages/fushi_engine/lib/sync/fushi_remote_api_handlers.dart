@@ -315,9 +315,7 @@ Future<Map<String, dynamic>> resolveRemoteMineWordAudio(
 }
 
 /// `POST /api/mine` 的响应体。[body] 是已解析的 JSON Map，必须含 `fields`（Map）。
-/// 带截图/时间戳/clip 的沉浸挖词走 [FushiRemoteMiningService.mineImmersion]（引擎在实现方，
-/// 这里只转发解析好的 payload）；纯 `{fields,sentence}` 走 [FushiRemoteMiningService.mineEntry]
-/// 回落（向后兼容浏览器扩展纯文本挖词 + 移动端）。
+/// 纯 `{fields,sentence}` 走 [FushiRemoteMiningService.mineEntry]。
 /// fields 缺失/类型错时 [ImmersionMinePayload.fromJson] 抛 [FormatException]，由调用方转 400。
 /// [wordAudio]（BUG-2189）：单词音频短命 token → 自包含引用的解析器，见
 /// [resolveRemoteMineWordAudio]；null（未注入）时 fields 原样透传（旧行为）。
@@ -331,10 +329,8 @@ Future<Map<String, dynamic>> buildRemoteMineResponse(
   // TODO-1303：结果不再是裸字符串——摊开诊断（失败原因 / 音频落空警告）到响应体，
   // 让扩展 content.js 能 toast 显因、区分「真成功」与「卡建了但没音频」。返回类型仍是
   // Map（未改契约），只是多了可选 message/detail 字段（向后兼容：旧扩展忽略即可）。
-  final RemoteMineResult r = payload.isImmersion
-      ? await mining.mineImmersion(payload)
-      : await mining.mineEntry(
-          fields: payload.fields, sentence: payload.sentence);
+  final RemoteMineResult r = await mining.mineEntry(
+      fields: payload.fields, sentence: payload.sentence);
   return <String, dynamic>{
     'result': r.result,
     if (r.message != null) 'message': r.message,

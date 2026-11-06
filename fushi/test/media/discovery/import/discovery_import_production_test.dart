@@ -14,7 +14,7 @@ import 'package:fushi_engine/media/discovery/import/discovery_engine_importers.d
 import 'package:fushi_engine/media/discovery/import/discovery_import_plan.dart';
 import 'package:fushi_engine/media/discovery/import/discovery_import_executor.dart';
 import 'package:fushi/src/media/discovery/import/discovery_import_production.dart';
-import 'package:fushi/src/mining/galgame_repository.dart';
+
 import 'package:path/path.dart' as p;
 
 Uint8List _minimalEpub(String title) {
@@ -73,7 +73,6 @@ void main() {
       db: db,
       srtBookRepo: SrtBookRepository(db),
       audiobookRepo: AudiobookRepository(db),
-      galgameRepo: GalgameRepository(db),
       transcribeAudiobook: (TranscribeAudiobookPlan plan) async =>
           throw const DiscoveryImportBlockedException(
         DiscoveryImportBlocker.audiobookMissingSubtitle,

@@ -3,7 +3,7 @@ import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:flutter/services.dart' show FontLoader;
-import 'package:fushi/src/media/video/ass_font_metrics.dart';
+
 import 'package:fushi/src/models/font_decoder.dart';
 import 'package:fushi/src/models/woff2_decoder.dart';
 import 'package:fushi/src/reader/reader_settings.dart' show ReaderCustomFontCss;
@@ -230,11 +230,6 @@ class AppFontLoader {
             bytes.buffer.asByteData(bytes.offsetInBytes, bytes.lengthInBytes)));
       await loader.load();
       _loadedFamilies.add(family);
-      // BUG-897：自定义字体不在系统字体目录（扫描不到），把字节同步喂进 ASS 字号
-      // 换算索引（OS/2 win cell 语义），别名=本处注册的家族名——视频字幕用自定义
-      // 字体时字号也与 mpv/libass 同源。
-      AssFontCellIndex.instance
-          .registerFontBytes(bytes, aliases: <String>[family]);
     } catch (e, stack) {
       ErrorLogService.instance.log('AppFontLoader.resolveAndLoad', e, stack);
       return null;

@@ -9,10 +9,9 @@ import 'package:fushi/src/models/preferences_repository.dart'
         kGameStreamRemoteLaunchPrefKey,
         PreferencesRepository;
 import 'package:fushi_engine/sync/fushi_sync_server.dart';
-import 'package:fushi/src/media/video/media_server/media_server_config.dart';
-import 'package:fushi/src/media/video/media_server/media_server_registry.dart';
-import 'package:fushi/src/sync/jellyfin_video_client.dart'
-    show JellyfinServerConfig, JellyfinVideoClient;
+
+
+
 import 'package:fushi/src/sync/sync_backend.dart';
 import 'package:fushi_engine/sync/tls/fushi_pinning_http.dart';
 import 'package:fushi_core/fushi_core.dart';
@@ -23,10 +22,10 @@ import 'package:fushi_engine/sync/interconnect_p2p.dart'
         kInterconnectP2pEnabledPref,
         kInterconnectP2pRelayUrlsPref,
         kInterconnectP2pSecretPref;
-import 'package:fushi_engine/sync/interconnect_transcode_prefs.dart';
+
 import 'package:fushi_engine/sync/pairing/interconnect_device_key.dart';
 import 'package:fushi_engine/sync/sync_channel_scope.dart';
-import 'package:fushi_engine/sync/collection_sync_baseline.dart';
+
 export 'package:fushi_engine/sync/sync_channel_scope.dart' show SyncChannelScope;
 
 /// 触达一台 Fushi 同步服务器的一个候选地址。
@@ -438,37 +437,6 @@ class SyncRepository {
 
   Future<void> setLastSyncMs(SyncChannelScope scope, int ms) =>
       _setString(scope.key(_keyLastSyncMs), ms.toString());
-
-  /// 本端上次**成功**合集同步的毫秒戳（多端库联合视图 §2.3：合集同步引擎的
-  /// 因果基线——removedAt/deletedAt 晚于它的墓碑才是「新闻」，早于它的墓碑视为
-  /// 本端已裁决过、成员/合集仍在即代表之后重加/重建）。0 = 从未同步过。
-  /// 设备本地（[deviceLocalPrefKeys]）：它描述「本设备见过共享清单到什么时刻」，
-  /// 随备份跨设备会让新设备把没见过的墓碑误判为旧闻而复活成员。
-  ///
-  /// 按通道分槽（BUG-1579）：云通道、互联 client 通道、以及本机作为互联 host 收到
-  /// 对端 POST 时的合并，三方原先读写**同一个键**。双通道下的具体后果是：互联对端
-  /// 推来的「成员移出墓碑」被云通道刚推进过的基线判成旧闻 → 引擎按「活胜」撤销这
-  /// 次移出 → 再回传给 host，用户的移出操作被自己另一条通道悄悄撤销。因果基线描述
-  /// 的是「本端相对**某一个远端**见过什么」，三条轴必须各记各的。
-  ///
-  /// 迁移：本槽位无值时回落解耦前的全局键作初值（升级后第一轮不会把所有历史墓碑
-  /// 当成新闻重裁一遍）。写侧只写本槽位。
-  Future<int> getCollectionsSyncBaselineMs(SyncChannelScope scope) =>
-      readCollectionsSyncBaselineMs(_db, scope);
-
-  Future<void> setCollectionsSyncBaselineMs(SyncChannelScope scope, int ms) =>
-      writeCollectionsSyncBaselineMs(_db, scope, ms);
-
-  /// 7c 视频刮削元数据增量拉取基线：上次从该通道见过的最大 host `updatedAt`
-  /// （毫秒）。0 = 从未拉过（全量）。设备本地、按通道分槽。
-  Future<int> getVideoMetadataSyncSinceMs(SyncChannelScope scope) async {
-    final String? s =
-        await _getStringOrNull(scope.key(_keyVideoMetadataSyncSinceMs));
-    return s == null ? 0 : int.tryParse(s) ?? 0;
-  }
-
-  Future<void> setVideoMetadataSyncSinceMs(SyncChannelScope scope, int ms) =>
-      _setString(scope.key(_keyVideoMetadataSyncSinceMs), ms.toString());
 
   /// 删除墓碑消费的因果基线（毫秒）。远端删除标记 deletedAt 晚于它才弹逐条确认；
   /// 早于它视为本设备已处理过、不再反复弹。0 = 从未消费过。设备本地
@@ -1241,175 +1209,6 @@ class SyncRepository {
   /// 的一次性迁移里读，此后不再写；常量保留是为了黑名单与迁移代码引用同一字面量。
   static const _keyJellyfinServer = 'sync_jellyfin_server';
 
-  /// v2 多服务器键：JSON 数组，每项 [MediaServerConfig.toJson]。列表顺序 =
-  /// 用户添加顺序（视频页「媒体服务器」栏目一台一张卡片按此排）。键名带
-  /// `jellyfin` 是历史名（冻结）：Plex 等其它类型也落在这个数组里，按 `kind`
-  /// 字段区分，缺字段 = Jellyfin。
-  static const _keyJellyfinServers = 'sync_jellyfin_servers';
-
-  /// 已登录的全部媒体服务器（Jellyfin 家族 + Plex，按添加顺序）；未配置 → 空列表。
-  ///
-  /// 与 Jellyfin 共用 [_keyJellyfinServers]（键名冻结不改）：每项按
-  /// `kind` 字段经 [decodeMediaServerConfig] 分发，**缺字段按 Jellyfin 读**
-  /// （存量数据全是它）。认不出的 `kind` 与脏项逐项丢弃。
-  ///
-  /// **旧单值键迁移在读路径完成**：列表键不存在而 [_keyJellyfinServer] 存在时，把
-  /// 旧值包成单元素列表写进列表键并删旧键。不走 schema migration——这只是 prefs
-  /// 表里一行 JSON 的形状变化，读一次就收敛，且旧键脏 JSON 时同样删旧键（它本来
-  /// 也读成「未配置」，留着只会让每次读都重跑一遍迁移）。
-  ///
-  /// 脏项（非 Map / 缺必填字段）逐项丢弃，不整列表作废：一台服务器的配置坏了
-  /// 不该把其它几台一起登出。
-  Future<List<MediaServerConfig>> getMediaServers() async {
-    final String? raw = await _getStringOrNull(_keyJellyfinServers);
-    if (raw != null) return _decodeMediaServers(raw);
-    final String? legacy = await _getStringOrNull(_keyJellyfinServer);
-    if (legacy == null) return const <MediaServerConfig>[];
-    final JellyfinServerConfig? migrated = _decodeJellyfinServer(legacy);
-    final List<MediaServerConfig> servers = <MediaServerConfig>[
-      if (migrated != null) migrated,
-    ];
-    await setMediaServers(servers);
-    await _deleteKey(_keyJellyfinServer);
-    return servers;
-  }
-
-  /// 整表覆盖；空列表 = 删键（全部登出）。
-  Future<void> setMediaServers(List<MediaServerConfig> servers) async {
-    if (servers.isEmpty) {
-      await _deleteKey(_keyJellyfinServers);
-      return;
-    }
-    await _setString(
-      _keyJellyfinServers,
-      jsonEncode(<Map<String, Object?>>[
-        for (final MediaServerConfig s in servers) s.toJson(),
-      ]),
-    );
-  }
-
-  /// 按 [MediaServerConfig.sourceId] 身份替换（原位，不打乱用户排好的顺序）或追加。
-  Future<void> upsertMediaServer(MediaServerConfig config) async {
-    final List<MediaServerConfig> servers = await getMediaServers();
-    final int index = servers.indexWhere(
-      (MediaServerConfig s) => s.sourceId == config.sourceId,
-    );
-    final List<MediaServerConfig> next = List<MediaServerConfig>.of(servers);
-    if (index < 0) {
-      next.add(config);
-    } else {
-      next[index] = config;
-    }
-    await setMediaServers(next);
-  }
-
-  /// 只登出一台（按 [MediaServerConfig.sourceId]）；不在列表里 = no-op。
-  Future<void> removeMediaServer(String sourceId) async {
-    final List<MediaServerConfig> servers = await getMediaServers();
-    final List<MediaServerConfig> next = <MediaServerConfig>[
-      for (final MediaServerConfig s in servers)
-        if (s.sourceId != sourceId) s,
-    ];
-    if (next.length == servers.length) return;
-    await setMediaServers(next);
-  }
-
-  /// 已登录的全部 Jellyfin/Emby 服务器（按添加顺序）；未配置 → 空列表。
-  /// = [getMediaServers] 里 [MediaServerKind.jellyfin] 的那些（Plex 不在其中）。
-  Future<List<JellyfinServerConfig>> getJellyfinServers() async =>
-      <JellyfinServerConfig>[
-        for (final MediaServerConfig s in await getMediaServers())
-          if (s is JellyfinServerConfig) s,
-      ];
-
-  /// 覆盖全部 Jellyfin 家族服务器；**其它类型（Plex）原样保留**在原位。空列表 =
-  /// 只登出全部 Jellyfin 家族服务器（整表空了才删键）。
-  ///
-  /// 保序口径：旧表里 Jellyfin 项的槽位按顺序由 [servers] 依次填入，多出来的
-  /// 追加到末尾、少了的槽位删掉；非 Jellyfin 项位置不动。
-  Future<void> setJellyfinServers(List<JellyfinServerConfig> servers) async {
-    final List<MediaServerConfig> current = await getMediaServers();
-    final Iterator<JellyfinServerConfig> replacements = servers.iterator;
-    final List<MediaServerConfig> next = <MediaServerConfig>[
-      for (final MediaServerConfig s in current)
-        if (s is! JellyfinServerConfig)
-          s
-        else if (replacements.moveNext())
-          replacements.current,
-    ];
-    while (replacements.moveNext()) {
-      next.add(replacements.current);
-    }
-    await setMediaServers(next);
-  }
-
-  /// 按 `(serverUrl, userId)` 身份替换或追加一台服务器。
-  ///
-  /// 身份键走 [JellyfinVideoClient.sourceIdFor]（= 远端清单缓存槽的身份），同一
-  /// 账号重复登录只是换令牌 / 改库选择，列表里不会出现第二张同服务器卡片；替换
-  /// 保持原位，不把用户排好的顺序打乱。
-  Future<void> upsertJellyfinServer(JellyfinServerConfig config) =>
-      upsertMediaServer(config);
-
-  /// 只登出一台（按 `(serverUrl, userId)` 身份）；不在列表里 = no-op。
-  Future<void> removeJellyfinServer({
-    required String serverUrl,
-    required String userId,
-  }) =>
-      removeMediaServer(
-        JellyfinVideoClient.sourceIdFor(serverUrl: serverUrl, userId: userId),
-      );
-
-  /// 过渡口径：**列表第一项**（多服务器化之前只有一台，「第一台」就是那一台）。
-  /// 单远端源架构的消费端（home_video_page `_resolveJellyfinVideoClient`）在改成
-  /// 逐台解析前先靠它维持旧行为；新代码一律用 [getJellyfinServers]。
-  @Deprecated('Use getJellyfinServers')
-  Future<JellyfinServerConfig?> getJellyfinServer() async {
-    final List<JellyfinServerConfig> servers = await getJellyfinServers();
-    return servers.isEmpty ? null : servers.first;
-  }
-
-  /// 过渡口径：`null` = 清空全部 Jellyfin 家族服务器（旧的「登出 = 删键」语义，
-  /// 多台时等于全部登出；Plex 不受影响）；非 null = [upsertJellyfinServer]。新代码
-  /// 用 [upsertJellyfinServer] / [removeJellyfinServer] 点名操作。
-  @Deprecated('Use upsertJellyfinServer / removeJellyfinServer')
-  Future<void> setJellyfinServer(JellyfinServerConfig? config) => config == null
-      ? setJellyfinServers(const <JellyfinServerConfig>[])
-      : upsertJellyfinServer(config);
-
-  static List<MediaServerConfig> _decodeMediaServers(String raw) {
-    if (raw.isEmpty) return const <MediaServerConfig>[];
-    try {
-      final Object? decoded = jsonDecode(raw);
-      if (decoded is List) {
-        return <MediaServerConfig>[
-          for (final Object? item in decoded)
-            if (item is Map<String, dynamic>)
-              if (decodeMediaServerConfig(item)
-                  case final MediaServerConfig config)
-                config,
-        ];
-      }
-    } catch (_) {
-      // Best-effort: 脏 JSON 一律当「未配置」（下面返回空表），不弹错也不抛——
-      // 这条只是读缓存里的服务器配置，设置页会让用户重新登录。
-    }
-    return const <MediaServerConfig>[];
-  }
-
-  static JellyfinServerConfig? _decodeJellyfinServer(String raw) {
-    if (raw.isEmpty) return null;
-    try {
-      final Object? decoded = jsonDecode(raw);
-      if (decoded is Map<String, dynamic>) {
-        return JellyfinServerConfig.fromJson(decoded);
-      }
-    } catch (_) {
-      // 同上：旧单值键的脏 JSON 当「未配置」。
-    }
-    return null;
-  }
-
   // ── Fushi Client (connect to another Fushi instance) ───────────
 
   static const _keyFushiClientUrl = 'sync_hibiki_client_url';
@@ -1754,16 +1553,11 @@ class SyncRepository {
     _keyFushiClientToken,
     _keyFushiClientUrl,
     _keyVideoRemoteLastHostId,
-    // Jellyfin 服务器绑定含访问令牌，属设备本地凭据，绝不随备份跨设备。旧单值键
-    // 与新列表键都列：旧键在迁移前的备份里仍可能存在。
-    _keyJellyfinServer,
-    _keyJellyfinServers,
     // 「要不要接收 host 的 service-config（外部服务 API key）」是每台设备自己的
     // 信任决策，跨设备携带会把 A 机的选择强加给 B 机。
     _keyInterconnectServiceConfigSync,
     // 「当 host 时愿不愿意为对端转码视频」是本机算力的意愿：一台台式机说「可以」，
     // 不代表那台跑着同一份备份的旧笔记本也愿意被烤。
-    kInterconnectTranscodeEnabledPref,
     // 合集同步因果基线：描述「本设备见过共享清单到什么时刻」，跨设备携带会让
     // 新设备把没见过的墓碑误判成旧闻而复活成员（见 getCollectionsSyncBaselineMs）。
     // 这两条是**解耦前的全局键**：现值仍被 per-channel 读作迁移初值，故照旧不能

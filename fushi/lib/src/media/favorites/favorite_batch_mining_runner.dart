@@ -6,7 +6,7 @@ import 'package:fushi/src/media/display_title.dart';
 import 'package:fushi/src/media/favorites/favorite_batch_mining_plan.dart';
 import 'package:fushi/src/media/favorites/favorite_mining_item.dart';
 import 'package:fushi/src/media/sources/reader_fushi_source.dart';
-import 'package:fushi/src/mining/immersion_mining_engine.dart';
+
 import 'package:fushi/src/models/app_model.dart';
 import 'package:fushi/src/pages/implementations/dictionary_webview_media.dart';
 import 'package:fushi/src/pages/implementations/stat_activity.dart';
@@ -15,7 +15,7 @@ import 'package:fushi/src/utils/misc/tts_channel.dart';
 import 'package:fushi_anki/fushi_anki.dart';
 import 'package:fushi_audio/fushi_audio.dart';
 import 'package:fushi_core/fushi_core.dart';
-import 'package:fushi_engine/media/video/video_book_repository.dart';
+
 import 'package:fushi_engine/mining/immersion_mining_request.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -143,65 +143,11 @@ class FavoriteBatchMiningRunner {
     Map<String, String> fields,
     FavoriteVideoClipPlan plan,
   ) async {
-    final bool tagTitles = appModel.autoAddBookNameToTags;
-    String? audioFailure;
-    final ImmersionMiningResult res = await ImmersionMiningEngine().mine(
-      ImmersionMiningRequest(
-        fields: fields,
-        mediaSource: plan.filePath,
-        clipStartMs: plan.startMs,
-        clipEndMs: plan.endMs,
-        stillFrameAtMs: plan.startMs,
-        sentence: item.sentence,
-        cueSentence: item.sentence.isEmpty ? null : item.sentence,
-        documentTitle: plan.documentTitle.isEmpty ? null : plan.documentTitle,
-        source: AnkiMiningSource.video,
-        bookTitleTag: tagTitles
-            ? BaseAnkiRepository.sanitizeTitleTag(plan.titleTag)
-            : null,
-        imageMode: appModel.videoMiningImageMode,
-        animatedFormat: appModel.videoMiningAnimatedFormat,
-        stillFormat: appModel.videoMiningStillFormat,
+    return const FavoriteBatchMineOutcome(
+      FavoriteBatchItemResult(
+        status: FavoriteBatchItemStatus.failed,
+        message: '视频制卡已移除',
       ),
-      compression: _compression(),
-      tempDir: getTemporaryDirectory().then((Directory d) => d.path),
-      repo: repo,
-      onAudioFailure: (String summary) => audioFailure ??= summary,
-    );
-    if (res.aborted) {
-      // 与视频页同一纪律：应带句子音频却抽不出来 → 不建无音频的卡，如实报原因。
-      final String reason =
-          res.abortReason ??
-          (audioFailure == null
-              ? 'sentence audio export failed'
-              : 'sentence audio export failed: $audioFailure');
-      ErrorLogService.instance.log(
-        'FavoriteBatchMining.video',
-        reason,
-        StackTrace.current,
-      );
-      return FavoriteBatchMineOutcome(
-        FavoriteBatchItemResult(
-          status: FavoriteBatchItemStatus.failed,
-          message: reason,
-        ),
-      );
-    }
-    final Object? outcome = res.outcome;
-    if (outcome is! MineOutcome) {
-      return const FavoriteBatchMineOutcome(
-        FavoriteBatchItemResult(
-          status: FavoriteBatchItemStatus.failed,
-          message: 'mining engine returned no outcome',
-        ),
-      );
-    }
-    return _land(
-      item,
-      fields,
-      outcome,
-      documentTitle: plan.documentTitle,
-      statTitle: plan.titleTag,
     );
   }
 
@@ -444,15 +390,12 @@ class FavoriteBatchMiningRunner {
   MiningMediaCompression _compression() => MiningMediaCompression.resolve(
     imageTier: appModel.miningImageQuality,
     audioTier: appModel.miningAudioQuality,
-    format: appModel.videoMiningAnimatedFormat,
+    format: MiningAnimatedFormat.avif,
   );
 
   // ── 按 bookKey 缓存的查库 ─────────────────────────────────────────────────
 
-  Future<VideoBookRow?> _videoRow(String bookUid) => _videoCache.putIfAbsent(
-    bookUid,
-    () => VideoBookRepository(_db).getByBookUid(bookUid),
-  );
+  Future<VideoBookRow?> _videoRow(String bookUid) async => null;
 
   Future<EpubBookRow?> _epubRow(String bookKey) =>
       _epubCache.putIfAbsent(bookKey, () => _db.getEpubBook(bookKey));

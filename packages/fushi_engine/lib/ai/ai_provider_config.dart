@@ -11,10 +11,10 @@
 library;
 
 import 'dart:convert';
+import 'package:fushi_engine/utils/net/external_endpoint_safety.dart';
 import 'dart:math' as math;
 
-import 'package:fushi_engine/media/torrent/torznab_client.dart'
-    show isSafeExternalProviderEndpoint;
+
 
 /// 请求/响应的 wire 协议。
 enum AiWireProtocol {

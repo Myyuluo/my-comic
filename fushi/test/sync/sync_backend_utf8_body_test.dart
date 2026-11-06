@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi_engine/sync/aggregate_snapshot.dart';
 import 'package:fushi/src/sync/interconnect_sync_backend.dart';
-import 'package:fushi_engine/sync/collection_manifest.dart';
+
 import 'package:fushi_engine/sync/fushi_library_host_service.dart';
 import 'package:fushi_engine/sync/fushi_sync_server.dart';
 import 'package:fushi/src/sync/sync_repository.dart';
@@ -74,14 +74,6 @@ class _CapturingLibraryService implements FushiLibraryHostService {
   Future<void> applyAggregateSnapshot(AggregateSnapshot snapshot) async =>
       applied = snapshot;
 
-  @override
-  Future<CollectionManifest> getCollectionManifest() async =>
-      CollectionManifest.empty;
-
-  @override
-  Future<CollectionManifest> mergeCollectionManifest(
-          CollectionManifest incoming) async =>
-      incoming;
 
   @override
   Future<RemoteBookProgress> getBookProgress(String bookKey) async =>

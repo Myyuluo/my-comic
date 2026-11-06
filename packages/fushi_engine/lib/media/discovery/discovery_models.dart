@@ -9,7 +9,7 @@
 /// 让「目录没有 payload/体积/做种数」在类型上成立，而不是一堆可空字段的运行时约定。
 library;
 
-import 'package:fushi_engine/media/torrent/torrent_metainfo.dart';
+
 
 /// 发现页覆盖的媒体域。各域独立枚举（见根 CLAUDE.md 术语表），与持久化的
 /// `MediaKind` 等值域互不混用；本枚举只活在发现/下载编排层，不落库。
@@ -33,29 +33,6 @@ final class DiscoveryTorrentPayload extends DiscoveryPayload {
   const DiscoveryTorrentPayload({required this.magnetUri});
 
   final String magnetUri;
-}
-
-/// 已在 add 之前解析、并且只允许下载其中一部分文件的 `.torrent` payload。
-///
-/// 普通 Nyaa 搜索仍用 [DiscoveryTorrentPayload]；CoreAudio 的 TMW 合集必须用
-/// 本类型，避免一个“卷”点击退化成整颗合集下载。选择意图与 metainfo 一起交给
-/// durable 下载管线，重启后仍能重新应用文件优先级。
-final class DiscoverySelectedTorrentPayload extends DiscoveryPayload {
-  DiscoverySelectedTorrentPayload({
-    required this.metainfo,
-    required Iterable<int> selectedFileIndexes,
-    required this.resourceTitle,
-    this.importAfterDownload = true,
-  }) : selectedFileIndexes = Set<int>.unmodifiable(selectedFileIndexes);
-
-  final InspectedTorrentMetainfo metainfo;
-  final Set<int> selectedFileIndexes;
-
-  /// 合集自身的展示名（例如 `TMW Part 7`），与条目的目标卷标题分开。
-  final String resourceTitle;
-
-  /// false = 文件完成后只结束下载任务、保留在下载目录，不冒充已自动入书架。
-  final bool importAfterDownload;
 }
 
 /// HTTP 直链：交给 HTTP 下载队列。

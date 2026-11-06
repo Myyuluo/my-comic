@@ -2,15 +2,13 @@ import 'package:flutter/widgets.dart';
 import 'package:fushi/media.dart';
 import 'package:fushi/pages.dart';
 import 'package:fushi_engine/media/discovery/discovery_models.dart';
-import 'package:fushi/src/ai/ai_media_acquisition_assistant.dart'
-    show AiMediaAcquisitionDomain;
 import 'package:fushi/src/models/store_compliance.dart';
+import 'package:fushi/src/pages/implementations/book_sources_page.dart';
 import 'package:fushi/src/pages/implementations/browse_online_sources_view.dart';
-import 'package:fushi/src/pages/implementations/discovery_ai_acquire_action.dart';
 import 'package:fushi/src/pages/implementations/library_online_sources_view.dart';
 import 'package:fushi/src/pages/implementations/media_discovery_page.dart';
 import 'package:fushi/src/pages/implementations/media_library_shell.dart';
-import 'package:fushi/src/pages/implementations/media_sources_page.dart';
+
 import 'package:fushi/src/utils/components/fushi_floating_chrome.dart'
     show FushiFloatingChromeInsetPadding;
 import 'package:fushi/utils.dart';
@@ -71,13 +69,6 @@ class _HomeReaderPageState extends BaseTabPageState<HomeReaderPage> {
                 DiscoveryMediaKind.audiobook,
               ],
               navigation: navigation,
-              onAiAcquire: discoveryAiAcquireAction(
-                context: context,
-                readAppModel: () => appModelNoUpdate,
-                domain: AiMediaAcquisitionDomain.novel,
-                domainLabel: t.books,
-                onlineDomain: OnlineSourcesDomain.novel,
-              ),
             ),
           ),
         if (online)
@@ -112,7 +103,7 @@ class _HomeReaderPageState extends BaseTabPageState<HomeReaderPage> {
           handlesChromeInset: true,
           label: t.library_view_import,
           builder: (BuildContext context, Widget navigation) =>
-              MediaSourcesPage(mediaKind: 'book', navigation: navigation),
+              BookSourcesPage(navigation: navigation),
         ),
       ],
     );

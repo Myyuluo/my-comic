@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi_core/fushi_core.dart';
-import 'package:fushi/src/media/collections/collection_grouping.dart';
+
 import 'package:fushi/src/utils/misc/shelf_ordering.dart';
 
 /// 命名统一 Phase 3.3 守卫：统一媒体身份值对象 [MediaRef] 的值语义 / 序列化
@@ -60,18 +60,5 @@ void main() {
       expect(ref.toString(), 'ShelfEntryRef(MediaKind.epub, k)');
     });
 
-    test('CollectionOrderingItem：字段委托 + 复合键经 ref 生成', () {
-      const CollectionOrderingItem<String> it = CollectionOrderingItem<String>(
-        mediaType: MediaKind.video,
-        entryKey: 'v1',
-        importedAt: 7,
-        payload: 'p',
-      );
-      expect(it.mediaType, MediaKind.video);
-      expect(it.entryKey, 'v1');
-      expect(it.importedAt, 7);
-      expect(it.payload, 'p');
-      expect(it.ref.compositeKey, 'video|v1');
-    });
   });
 }

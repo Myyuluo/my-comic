@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:material_ui/material_ui.dart';
 
 import 'package:fushi/src/media/manga/library/manga_resume_point.dart';
+import 'package:fushi/src/media/manga/mihon/mihon_cover_cache.dart';
 import 'package:fushi/src/media/manga/manga_view_prefs.dart';
 import 'package:fushi/src/media/manga/manga_reader_preferences.dart';
 import 'package:fushi/src/media/manga/manga_reading_mode.dart';
@@ -12,7 +13,7 @@ import 'package:fushi/src/settings/settings_context.dart';
 import 'package:fushi/src/settings/settings_destination.dart';
 import 'package:fushi/src/settings/settings_page_reset.dart'
     show settingsSectionModifiedSummary;
-import 'package:fushi/src/settings/settings_schema_manga_ocr.dart';
+
 import 'package:fushi/src/utils/fushi_icons.dart';
 import 'package:fushi/utils.dart';
 
@@ -437,6 +438,37 @@ SettingsSection _mangaSpreadPanelsSection() {
       ),
       // my-comic：面板模型/面板导航依赖端上 OCR 检测，`mining_crop_to_panel`
       // 属于 Anki 制卡，已经随非漫画域移除。
+    ],
+  );
+}
+
+/// 在线源封面缓存（原「在线目录」段；Mokuro.moe 内置源移除后只剩缓存项）。
+SettingsSection buildMangaCoverCacheSection() {
+  return SettingsSection(
+    id: 'manga.section.catalog',
+    presentation: SettingsSectionPresentation.collapsed,
+    title: t.manga_online_catalog_title,
+    summaryBuilder: (SettingsContext c) =>
+        settingsSectionModifiedSummary(buildMangaCoverCacheSection(), c),
+    items: <SettingsItem>[
+      SettingsSliderItem(
+        id: 'manga.cover_cache_max_age',
+        title: t.manga_cover_cache_max_age,
+        subtitle: t.manga_cover_cache_max_age_subtitle,
+        icon: FushiIcons.image,
+        min: kMangaCoverCacheMinDays.toDouble(),
+        max: kMangaCoverCacheMaxDays.toDouble(),
+        divisions: (kMangaCoverCacheMaxDays - kMangaCoverCacheMinDays) ~/ 30,
+        step: 30,
+        titleReadout: true,
+        commitOnRelease: true,
+        label: (double v) => t.stat_format_days(n: v.round()),
+        value: (SettingsContext c) =>
+            c.appModel.mangaCoverCacheMaxAgeDays.toDouble(),
+        onChanged: (SettingsContext c, double value) =>
+            c.appModel.setMangaCoverCacheMaxAgeDays(value.round()),
+        defaultValue: kMangaCoverCacheDefaultMaxAgeDays.toDouble(),
+      ),
     ],
   );
 }

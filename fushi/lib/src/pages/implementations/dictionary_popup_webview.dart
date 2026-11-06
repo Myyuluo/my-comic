@@ -14,7 +14,7 @@ import 'package:fushi_dictionary/fushi_dictionary.dart';
 import 'package:fushi/src/anki/mined_state_signal.dart';
 import 'package:fushi/src/shortcuts/context_menu_trigger.dart';
 import 'package:fushi/src/diagnostics/lookup_perf_trace.dart';
-import 'package:fushi/src/diagnostics/video_diag_log.dart';
+
 import 'package:fushi/src/models/app_model.dart';
 import 'package:fushi/src/pages/implementations/confirm_mine_round_trip.dart';
 import 'package:fushi/src/pages/implementations/dictionary_popup_controller.dart'
@@ -2626,11 +2626,6 @@ JSON.stringify((function(){
                 if (token != null && token != _renderToken) {
                   // 作废的渲染信号（这一批结果已被更新的一次推送取代）。记一行：
                   // 「渲染了两遍」本身就是一种可感知的慢，且会让第一遍的 reveal 空等。
-                  videoDiag(
-                    VideoDiagCategory.popup,
-                    VideoDiagLevel.v,
-                    'popupRendered stale token=$token current=$_renderToken',
-                  );
                   return null;
                 }
                 // 诊断（2026-09-22）：JS 侧 renderPopup() 画完的时刻。push → rendered
@@ -3297,11 +3292,6 @@ JSON.stringify((function(){
         // 查词根本不会重新 loadStop。它在流水里现身本身就说明这次查词付了整页（约
         // 300KB 内联 HTML/CSS/JS）的解析成本。
         LookupPerfTrace.current?.mark('loadStop');
-        videoDiag(
-          VideoDiagCategory.popup,
-          VideoDiagLevel.info,
-          'webview loadStop (cold page parse completed)',
-        );
         // Inject the same char caret as the reader (selection.js, a head script,
         // has already defined window.fushiSelection by load-stop). It stays
         // dormant until the reader hands it the cursor on lookup.

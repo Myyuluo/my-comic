@@ -1,9 +1,10 @@
 import 'dart:ui' show Rect, Size;
 
-import 'package:fushi/src/mining/advanced_mining/advanced_mining_capabilities.dart'
-    show MangaCropSuggestions;
+
 import 'package:fushi_anki/fushi_anki_core.dart'
     show MiningImageCrop, MiningMosaicRegion, MiningRequestOverrides;
+import 'package:fushi/src/mining/advanced_mining/advanced_mining_capabilities.dart'
+    show MangaCropSuggestions;
 import 'package:fushi_engine/media/manga/panel_detection.dart' show PanelRect;
 
 /// 漫画制卡卡图裁切的纯函数层：预选建议、一键制卡的裁切决策。

@@ -16,7 +16,7 @@ import 'package:fushi/src/platform/mobile/android_download_keep_alive.dart';
 import 'package:fushi/src/platform/mobile/download_keep_alive_hub.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi_engine/media/discovery/discovery_download_queue.dart';
-import 'package:fushi_engine/media/torrent/anime_download_config.dart';
+
 
 /// 保活通知正文：已知百分比时带上。
 String _downloadingText(int? percent) => percent == null
@@ -91,7 +91,7 @@ class DiscoveryDownloadKeepAliveBinding {
 /// 本进程死了不影响，不为它挂前台服务。
 bool videoDownloadJobNeedsKeepAlive(VideoDownloadJobRow job) =>
     job.lifecycle == VideoDownloadJobLifecycle.active &&
-    job.backendKind == QbConnectionConfig.backendEmbedded;
+    job.backendKind == 'embedded';
 
 /// 视频下载管线（torrent）的保活观察者：订阅任务表，按
 /// [videoDownloadJobNeedsKeepAlive] 汇总。

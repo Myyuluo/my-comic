@@ -6,29 +6,29 @@ import 'package:fushi_audio/fushi_audio.dart';
 import 'package:fushi_cli/fushi_cli.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi_dictionary/fushi_dictionary.dart' show JapaneseLanguage;
-import 'package:fushi_engine/media/video/video_book_repository.dart';
+
 import 'package:fushi_engine/sync/deletion_propagation.dart';
 
 import 'package:fushi/src/media/display_title.dart';
 import 'package:fushi/src/media/manga/library/manga_series_page.dart';
 import 'package:fushi/src/media/media_item.dart';
 import 'package:fushi/src/media/media_source.dart';
-import 'package:fushi/src/media/source_library/source_library_scanner.dart';
+
 import 'package:fushi/src/media/sources/manga_fushi_source.dart';
 import 'package:fushi/src/media/sources/reader_fushi_source.dart';
-import 'package:fushi/src/media/video/video_library_delete.dart';
-import 'package:fushi/src/mining/galgame_library.dart';
-import 'package:fushi/src/mining/galgame_repository.dart';
+
+
+
 import 'package:fushi/src/models/app_model.dart';
-import 'package:fushi/src/pages/implementations/galgame_detail_page.dart';
-import 'package:fushi/src/pages/implementations/video_fushi_page.dart';
+
+
 import 'package:fushi/src/asr_host/asr_host.dart' show isAsrSupported;
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi/src/platform/desktop/ctl/ctl_audiobook_routes.dart';
 import 'package:fushi/src/platform/desktop/ctl/ctl_library_entries.dart';
 import 'package:fushi/src/platform/desktop/ctl/ctl_library_import.dart';
 import 'package:fushi/src/platform/desktop/ctl/ctl_library_manage_routes.dart';
-import 'package:fushi/src/platform/desktop/ctl/ctl_manga_ocr_routes.dart';
+
 import 'package:fushi/src/platform/desktop/ctl/ctl_reader_routes.dart';
 import 'package:fushi/src/platform/desktop/ctl/desktop_ctl_context.dart';
 import 'package:fushi/src/utils/misc/error_log_service.dart';
@@ -64,7 +64,6 @@ List<CtlRoute> buildLibraryCtlRoutes(DesktopCtlContext context) {
     ...buildLibraryManageCtlRoutes(context),
     ...buildReaderCtlRoutes(context),
     ...buildAudiobookCtlRoutes(context),
-    ...buildMangaOcrCtlRoutes(context),
   ];
 }
 
@@ -182,8 +181,6 @@ class _LibraryCtlHandlers {
           k == LibraryCtlKind.audiobook,
     );
     if (wantsBooks) out.addAll(await _bookEntries());
-    if (kinds.contains(LibraryCtlKind.video)) out.addAll(await _videoEntries());
-    if (kinds.contains(LibraryCtlKind.game)) out.addAll(await _gameEntries());
     return out;
   }
 
@@ -261,54 +258,6 @@ class _LibraryCtlHandlers {
     return out;
   }
 
-  Future<List<LibraryCtlEntry>> _videoEntries() async {
-    final List<VideoBookRow> rows = await VideoBookRepository(_db).listAll();
-    final List<LibraryCtlEntry> out = <LibraryCtlEntry>[
-      for (final VideoBookRow row in rows) _videoEntry(row),
-    ];
-    out.sort(
-      (LibraryCtlEntry a, LibraryCtlEntry b) =>
-          (b.importedAt ?? 0).compareTo(a.importedAt ?? 0),
-    );
-    return out;
-  }
-
-  LibraryCtlEntry _videoEntry(VideoBookRow row) => LibraryCtlEntry(
-    key: LibraryCtlKey(LibraryCtlStore.video, row.bookUid),
-    kind: LibraryCtlKind.video,
-    title: row.title,
-    positionMs: row.lastPositionMs,
-    completed: row.completedAt != null,
-    importedAt: row.importedAt,
-    recentAt: row.lastPlayedAt,
-  );
-
-  Future<List<GalgameEntry>> _games() async {
-    final GalgameRepository repo = _app.galgameRepo;
-    if (!repo.isLoaded) await repo.load();
-    return repo.games;
-  }
-
-  Future<List<LibraryCtlEntry>> _gameEntries() async => <LibraryCtlEntry>[
-    for (final GalgameEntry game in await _games()) _gameEntry(game),
-  ];
-
-  LibraryCtlEntry _gameEntry(GalgameEntry game) => LibraryCtlEntry(
-    key: LibraryCtlKey(LibraryCtlStore.game, game.id),
-    kind: LibraryCtlKind.game,
-    title: game.displayName,
-    rawTitle: game.name,
-    playSeconds: game.totalPlaySeconds,
-    recentAt: game.lastPlayedMs > 0 ? game.lastPlayedMs : null,
-  );
-
-  Future<GalgameEntry?> _findGame(String id) async {
-    for (final GalgameEntry game in await _games()) {
-      if (game.id == id) return game;
-    }
-    return null;
-  }
-
   Future<Object?> getItem(CtlCall call) async {
     final LibraryCtlKey key = _parseKey(call);
     switch (key.store) {
@@ -368,32 +317,9 @@ class _LibraryCtlHandlers {
           'openable': srt.bookKey.isNotEmpty,
         };
       case LibraryCtlStore.video:
-        _requireKindVisible(LibraryCtlKind.video);
-        final VideoBookRow? row = await VideoBookRepository(
-          _db,
-        ).getByBookUid(key.id);
-        if (row == null) throw CtlFailure.notFound('视频库里没有 ${key.wire}');
-        return <String, Object?>{
-          ..._videoEntry(row).toJson(),
-          'videoPath': row.videoPath,
-          if (row.subtitleSource != null) 'subtitleSource': row.subtitleSource,
-          'currentEpisode': row.currentEpisode,
-          'hasPlaylist': row.playlistJson != null,
-          if (row.sourceId != null) 'sourceId': row.sourceId,
-          if (row.language != null) 'language': row.language,
-        };
+        throw const CtlFailure.unsupported('视频域已移除');
       case LibraryCtlStore.game:
-        _requireKindVisible(LibraryCtlKind.game);
-        final GalgameEntry? game = await _findGame(key.id);
-        if (game == null) throw CtlFailure.notFound('游戏库里没有 ${key.wire}');
-        return <String, Object?>{
-          ..._gameEntry(game).toJson(),
-          'exePath': game.exePath,
-          'workdir': game.workdir,
-          'playStatus': game.playStatus.name,
-          if (game.language != null) 'language': game.language,
-          'exeExists': File(game.exePath).existsSync(),
-        };
+        throw const CtlFailure.unsupported('游戏域已移除');
     }
   }
 
@@ -420,9 +346,9 @@ class _LibraryCtlHandlers {
       case LibraryCtlStore.srt:
         return _removeSrtBook(key, decision);
       case LibraryCtlStore.video:
-        return _removeVideo(key, decision);
+        throw const CtlFailure.unsupported('视频域已移除');
       case LibraryCtlStore.game:
-        return _removeGame(key, decision);
+        throw const CtlFailure.unsupported('游戏域已移除');
     }
   }
 
@@ -502,69 +428,6 @@ class _LibraryCtlHandlers {
     return _deletedJson(key, book.title, decision, localFiles);
   }
 
-  /// 视频页单删（`_confirmDelete` → [deleteVideoBooksWithDecision]）。
-  Future<Object?> _removeVideo(
-    LibraryCtlKey key,
-    DeleteDecision decision,
-  ) async {
-    _requireKindVisible(LibraryCtlKind.video);
-    final VideoBookRepository repo = VideoBookRepository(_db);
-    final VideoBookRow? row = await repo.getByBookUid(key.id);
-    if (row == null) throw CtlFailure.notFound('视频库里没有 ${key.wire}');
-    final VideoLibraryDeleteResult result;
-    try {
-      result = await deleteVideoBooksWithDecision(
-        repo: repo,
-        database: _db,
-        pipeline: _app.videoDownloadPipelineService,
-        bookUids: <String>[key.id],
-        decision: decision,
-      );
-    } on StateError catch (e) {
-      // 刮削资料清理占着操作闸门（视频页同一处会弹「删除失败」toast）：稍后再试。
-      throw CtlFailure.conflict('删除失败：${e.message}');
-    }
-    if (result.deleted == 0) {
-      final String reason = result.failed.isEmpty
-          ? '没有删掉任何行'
-          : '${result.failed.first.error}';
-      throw CtlFailure.conflict('删除失败：$reason');
-    }
-    return _deletedJson(key, row.title, decision, result.localFiles);
-  }
-
-  /// 游戏库「移除」（`_removeGame`）：只从库移除，绝不删磁盘上的游戏文件。
-  Future<Object?> _removeGame(
-    LibraryCtlKey key,
-    DeleteDecision decision,
-  ) async {
-    _requireKindVisible(LibraryCtlKind.game);
-    if (decision.deleteLocalFiles) {
-      throw const CtlFailure.rejected('游戏只从库里移除，不提供删除游戏文件');
-    }
-    final GalgameEntry? game = await _findGame(key.id);
-    if (game == null) throw CtlFailure.notFound('游戏库里没有 ${key.wire}');
-    if (decision.deleteStatistics) {
-      // 与游戏库页同一纪律：统计删除 best-effort，失败只记日志、不拦移除。
-      try {
-        await _db.deleteGameStatisticsForId(game.id);
-      } catch (e, stack) {
-        ErrorLogService.instance.log(
-          'Ctl.library.deleteGameStatistics',
-          e,
-          stack,
-        );
-      }
-    }
-    await _app.galgameRepo.remove(game.id);
-    return _deletedJson(
-      key,
-      game.displayName,
-      decision,
-      const LocalFileDeleteReport(),
-    );
-  }
-
   Map<String, Object?> _deletedJson(
     LibraryCtlKey key,
     String title,
@@ -609,22 +472,9 @@ class _LibraryCtlHandlers {
         }
         return _openBook(key, srt.bookKey, call);
       case LibraryCtlStore.video:
-        return _openVideo(key, navigator, at);
+        throw const CtlFailure.unsupported('视频域已移除');
       case LibraryCtlStore.game:
-        _requireKindVisible(LibraryCtlKind.game);
-        if (at != null) throw const CtlFailure.badRequest('游戏不支持 --at');
-        final GalgameEntry? game = await _findGame(key.id);
-        if (game == null) throw CtlFailure.notFound('游戏库里没有 ${key.wire}');
-        await _context.focusMainWindow();
-        unawaited(
-          navigator.push(
-            MaterialPageRoute<void>(
-              builder: (BuildContext _) =>
-                  GalgameDetailPage(gameId: game.id, initialTab: 0),
-            ),
-          ),
-        );
-        return _openedJson(key, game.displayName, 'game_detail');
+        throw const CtlFailure.unsupported('游戏域已移除');
     }
   }
 
@@ -758,42 +608,6 @@ class _LibraryCtlHandlers {
     return _openedJson(key, title, 'manga_reader');
   }
 
-  Future<Object?> _openVideo(
-    LibraryCtlKey key,
-    NavigatorState navigator,
-    String? at,
-  ) async {
-    _requireKindVisible(LibraryCtlKind.video);
-    final VideoBookRepository repo = VideoBookRepository(_db);
-    final VideoBookRow? row = await repo.getByBookUid(key.id);
-    if (row == null) throw CtlFailure.notFound('视频库里没有 ${key.wire}');
-    int? startMs;
-    if (at != null) {
-      startMs = parseCtlTimestampMs(at);
-      if (startMs == null) {
-        throw CtlFailure.badRequest('--at 对视频是时间点（秒 / m:ss / h:mm:ss），收到「$at」');
-      }
-    }
-    // 与统计页打开视频同一口径：属于合集就作为合集一集打开（剧集面板 / 连播）。
-    final Map<String, int> primary = await _db.getPrimaryCollectionIdByEntry();
-    final int? collectionId =
-        primary[MediaKind.video.compositeKey(row.bookUid)];
-    await _context.focusMainWindow();
-    unawaited(
-      navigator.push(
-        MaterialPageRoute<void>(
-          builder: (_) => VideoFushiPage.neutralized(
-            bookUid: row.bookUid,
-            repo: repo,
-            playlistCollectionId: collectionId,
-            initialCueStartMs: startMs,
-          ),
-        ),
-      ),
-    );
-    return _openedJson(key, row.title, 'video_player');
-  }
-
   Map<String, Object?> _openedJson(
     LibraryCtlKey key,
     String title,
@@ -834,10 +648,8 @@ class _LibraryCtlHandlers {
     }
     final LibraryCtlImporter importer = LibraryCtlImporter(
       db: _db,
-      galgameRepo: _app.galgameRepo,
       isKindEnabled: _kindVisible,
       keepDuplicates: duplicate == 'suffix',
-      ingestVideoFile: _context.ingestExternalVideo,
       // 只有音频的有声书：本机能转录就排进「转录后入库」队列（发现页同一个）。
       enqueueTranscription: isAsrSupported
           ? ({
@@ -901,12 +713,6 @@ class _LibraryCtlHandlers {
         candidates.add(entry.withRecentAt(row.openedAt));
       }
     }
-    if (_kindVisible(LibraryCtlKind.video)) {
-      candidates.addAll(await _videoEntries());
-    }
-    if (_kindVisible(LibraryCtlKind.game)) {
-      candidates.addAll(await _gameEntries());
-    }
     final List<LibraryCtlEntry> merged = mergeLibraryCtlHistory(
       candidates,
       limit: limit,
@@ -964,40 +770,7 @@ class _LibraryCtlHandlers {
   /// 异常并写回 lastScanError）。视频来源扫完**不会**自动刮削——那条编排挂在首页
   /// 的刮削任务控制器上，控制通道拿不到。
   Future<Object?> scan(CtlCall call) async {
-    _requireWritable();
-    final int? sourceId = call.optInt('source');
-    List<MediaSourceRow> targets = await _sources(call);
-    if (sourceId != null) {
-      targets = targets
-          .where((MediaSourceRow r) => r.id == sourceId)
-          .toList(growable: false);
-      if (targets.isEmpty) {
-        throw CtlFailure.notFound('没有 id=$sourceId 的来源（或其模块已关闭）');
-      }
-    }
-    final List<Map<String, Object?>> results = <Map<String, Object?>>[];
-    for (final MediaSourceRow row in targets) {
-      final SourceScanSummary summary = await SourceLibraryScanner(
-        _db,
-      ).scan(row);
-      results.add(<String, Object?>{
-        'id': row.id,
-        'label': row.label,
-        'kind': row.mediaKind,
-        'path': row.rootPath,
-        'ok': summary.succeeded,
-        'discovered': summary.discoveredPaths.length,
-        'imported': summary.importedMediaCount,
-        if (summary.createdVideoUids.isNotEmpty)
-          'createdVideos': summary.createdVideoUids.length,
-        if (summary.error != null) 'error': summary.error,
-      });
-    }
-    _refreshShelf();
-    return <String, Object?>{
-      if (results.any((Map<String, Object?> r) => r['ok'] == false))
-        'ok': false,
-      'results': results,
-    };
+    throw const CtlFailure.unsupported('媒体来源库已移除');
   }
+
 }

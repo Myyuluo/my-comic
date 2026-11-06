@@ -153,22 +153,19 @@ void main() {
     await opening;
   });
 
-  test('BUG-3097 两个入口都经入口闸、根导航挂着转场跟踪', () {
+  test('BUG-3097 现存入口都经入口闸（悬浮球随 my-comic v1 移除）', () {
     final String common = File(
       'lib/src/pages/implementations/feedback/feedback_common.dart',
     ).readAsStringSync();
     expect(common, contains('feedbackEntryGate.open('));
     expect(common, isNot(contains('await captureFeedbackScreenshot()')));
-    final String mainSrc = File('lib/main.dart').readAsStringSync();
-    final int observers = mainSrc.indexOf('navigatorObservers:');
-    expect(observers, greaterThan(0));
-    expect(
-      mainSrc.substring(observers, mainSrc.indexOf(']', observers)),
-      contains('feedbackRouteTransitions'),
-    );
-    final String ball = File(
-      'lib/src/floating_ball/app_floating_ball_host.dart',
+    final String settings = File(
+      'lib/src/settings/settings_schema_system.dart',
     ).readAsStringSync();
-    expect(ball, contains('openFeedbackCenter('));
+    expect(settings, contains('openFeedbackCenter('));
+    final String dashboard = File(
+      'lib/src/pages/implementations/home_dashboard_page.dart',
+    ).readAsStringSync();
+    expect(dashboard, contains('openFeedbackCenter('));
   });
 }

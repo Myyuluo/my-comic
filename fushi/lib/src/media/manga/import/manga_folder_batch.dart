@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
+import 'package:fushi_engine/media/collections/shelf_sort.dart' show naturalCompare;
+import 'package:fushi_engine/media/manga/page_enumeration.dart';
 
 import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi_engine/epub/book_title_conflict.dart';
@@ -8,8 +10,7 @@ import 'package:fushi/src/media/import/import_carrier.dart';
 import 'package:fushi_engine/media/manga/manga_archive_importer.dart';
 import 'package:fushi/src/media/manga/import/manga_pdf_importer.dart';
 import 'package:fushi_engine/media/manga/manga_importer.dart';
-import 'package:fushi_engine/ocr/manga_ocr_folder_job.dart'
-    show enumerateMangaPages, naturalCompare;
+
 import 'package:fushi/src/utils/misc/error_log_service.dart';
 
 /// 一个目录里「每个文件一卷」的整卷载体文件，按文件名自然序。

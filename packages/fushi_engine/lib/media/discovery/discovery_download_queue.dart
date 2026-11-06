@@ -344,9 +344,6 @@ class DiscoveryDownloadQueue extends EngineChangeNotifier {
         DiscoveryTorrentPayload() => throw StateError(
             'source resolved a torrent payload for an httpFile item',
           ),
-        DiscoverySelectedTorrentPayload() => throw StateError(
-            'source resolved a selected torrent payload for an httpFile item',
-          ),
       };
       if (task._cancelRequested) throw const _DiscoveryDownloadCancelled();
 

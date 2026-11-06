@@ -1,5 +1,7 @@
 import 'package:fushi/src/media/audiobook/audiobook_controller.dart';
 import 'package:fushi/src/utils/components/glass/fushi_icon.dart';
+import 'package:fushi/src/mining/advanced_mining/advanced_mining_capabilities.dart';
+import 'package:fushi/src/utils/misc/exit_after_persist.dart';
 import 'package:fushi_dictionary/fushi_dictionary.dart';
 import 'dart:async';
 import 'package:fushi/src/anki/source_review_session.dart';
@@ -22,6 +24,7 @@ import 'package:path/path.dart' as p;
 import 'package:flutter/services.dart' hide ModifierKey;
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:fushi/src/media/media_item.dart';
+import 'package:fushi/src/media/media_item_factory.dart';
 import 'package:fushi/src/media/media_source.dart';
 import 'package:fushi/src/media/novel/online/lnreader_online_book.dart';
 import 'package:fushi/pages.dart';
@@ -79,9 +82,9 @@ import 'package:fushi/src/media/audiobook/asr_transcribe_sheet.dart';
 import 'package:fushi/src/media/audiobook/audiobook_import_dialog.dart';
 import 'package:fushi/src/media/audiobook/srt_book_reimport_dialog.dart';
 import 'package:fushi/src/media/import/srt_book_reimport.dart';
-import 'package:fushi/src/media/video/video_exit_flush.dart';
+
 import 'package:fushi/src/media/audiobook/mining_audio_clip.dart';
-import 'package:fushi/src/mining/advanced_mining/advanced_mining_capabilities.dart';
+
 import 'package:fushi/src/media/audiobook/audiobook_clip_export.dart';
 import 'package:fushi/src/utils/misc/card_screenshot_downsampler.dart';
 import 'package:fushi/src/media/audiobook/audiobook_clip_text_render.dart';
@@ -133,8 +136,8 @@ import 'package:fushi/src/reader/reader_chrome_controller.dart';
 import 'package:fushi/src/reader/reader_control_layout.dart';
 import 'package:fushi/src/reader/reader_desktop_chrome.dart';
 import 'package:fushi/src/reader/reader_settings_side_dialog.dart';
-import 'package:fushi/src/floating_ball/floating_ball_config.dart';
-import 'package:fushi/src/floating_ball/floating_ball_scene.dart';
+
+
 import 'package:fushi/src/reader/reader_collection_volumes.dart';
 import 'package:fushi/src/reader/illustration_zoom_viewer.dart';
 import 'package:fushi/src/reader/reader_gallery_page.dart';
@@ -4150,8 +4153,6 @@ class _ReaderFushiPageState extends BaseSourcePageState<ReaderFushiPage>
                         // 底栏之前，让它们盖在其上。
                         _buildProgressEdgeLine(),
                         _buildStatusFooter(),
-                        // 悬浮球的阅读器场景按钮（零尺寸登记器，球画在根上）。
-                        _buildReaderFloatingBallScene(),
                         // 歌词覆盖层（盖住正文与顶栏 / 状态行；查词弹层仍在它之上）。
                         // 正文 WebView 不卸载，照常跟随音频、照常记统计。
                         _buildLyricsOverlay(),

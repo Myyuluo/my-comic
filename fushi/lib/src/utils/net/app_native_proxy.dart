@@ -8,10 +8,8 @@ import 'package:flutter/foundation.dart';
 
 import 'package:fushi_engine/sync/tls/fushi_pinning_http.dart';
 import 'package:fushi_engine/utils/net/app_http.dart';
-import 'package:fushi_engine/media/video/bluray/aacs_media_session.dart'
-    show redactAacsRelayUrls;
-import 'package:fushi_engine/media/video/bluray/bluray_source.dart'
-    show mapEdlSources;
+
+
 import 'package:fushi_engine/utils/net/app_proxy.dart';
 import 'package:fushi/src/utils/net/hls_relay_normalizer.dart';
 
@@ -103,9 +101,8 @@ void registerTlsNativeOrigin({required String host, required int port}) {
 /// 端口必须显式：`https://h/x`（隐含 443）降成 `http://h/x` 会变成隐含 80，中继就
 /// 查不到登记项。
 String nativePlaybackUri(String uri) {
-  // `edl://` 拼接流（互联 host 的蓝光标题、本地加密盘的解密回环）：逐段改写，
-  // 整串 EDL 不是 URL。非 EDL 原样返回，走下面的单 URL 规则。
-  if (uri.startsWith('edl://')) return mapEdlSources(uri, nativePlaybackUri);
+  // `edl://` 拼接流随视频 / 蓝光域移除；不再有需要逐段改写的播放源。
+  if (uri.startsWith('edl://')) return uri;
   final Uri? parsed = Uri.tryParse(uri);
   if (parsed == null) return uri;
   if (parsed.isScheme('http')) {
@@ -130,7 +127,7 @@ String redactAppNativeProxySecrets(String value) {
   for (final String secret in _nativeProxySecrets) {
     value = value.replaceAll(secret, '[native-proxy]');
   }
-  return redactAacsRelayUrls(value);
+  return value;
 }
 
 /// 中继失败原因的落点。默认 [debugPrint]（被 `DebugLogService` 钩住，进得了

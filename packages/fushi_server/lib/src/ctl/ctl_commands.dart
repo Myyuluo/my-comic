@@ -17,7 +17,7 @@
 ///                                 | downloads cancel|retry|rm <id>
 /// fushi_server ctl subscriptions [ls] | subscriptions add '<json>' | subscriptions check [id]
 ///                                     | subscriptions enable|disable|rm <id>
-/// fushi_server ctl models [ls] | models pull <ja|en|…|ocr|ocr:key>
+/// fushi_server ctl models [ls] | models pull <ja|en|…>
 /// fushi_server ctl settings [get] | settings set '<json>'
 /// fushi_server ctl resource-indexers [get] | resource-indexers set '<json>'
 /// fushi_server ctl anki [status] | anki sync|refresh|run|retry | anki landing on|off
@@ -44,14 +44,12 @@ import 'dart:io';
 import 'package:args/args.dart';
 import 'package:fushi_server/src/config/server_config.dart';
 import 'package:fushi_server/src/ctl/admin_client.dart';
-import 'package:fushi_server/src/ctl/ctl_download_commands.dart';
 import 'package:fushi_server/src/ctl/ctl_host_commands.dart';
 
 /// `ctl` 子命令的参数表；所有动作的选项平铺在这一层（动词在 rest 里）。
 ArgParser buildCtlParser() {
   final ArgParser parser = _buildBaseCtlParser();
   addCtlHostOptions(parser);
-  addCtlDownloadOptions(parser);
   return parser;
 }
 
@@ -108,7 +106,7 @@ fushi_server ctl <action> [args] --interconnect https://127.0.0.1:38765 --passwo
                 [--subtitle-policy none|bestEffort|required]
   downloads add --torrent <路径|URL> --list-files     列出 .torrent 文件（下标 / 大小 / 路径）
   subscriptions [ls] | add '<json>' | check [id] | enable|disable|rm <id>
-  models [ls] | pull <语言 tag|ocr|ocr:key>
+  models [ls] | pull <语言 tag>
   settings [get] | set '<json>'
   resource-indexers [get] | set '<json>'
   anki [status] | sync | refresh | run | retry | landing on|off | config '<json>'
@@ -218,7 +216,6 @@ Future<int> runCtlAction(
   int uploadChunkBytes = kCtlUploadChunkBytes,
   Duration followInterval = const Duration(seconds: 2),
   bool Function()? keepFollowing,
-  CtlTorrentFetcher? fetchTorrent,
 }) async {
   final List<String> rest = command.rest;
   if (rest.isEmpty) {
@@ -232,9 +229,6 @@ Future<int> runCtlAction(
   if (rest.first == 'jobs') {
     final Future<int>? jobs = runCtlJobsAction(client, command, out: out, err: err, exitCodeFor: _exitCodeFor);
     if (jobs != null) return jobs;
-  }
-  if ((_aliases[rest.first] ?? rest.first) == 'downloads' && rest.length > 1 && rest[1] == 'add') {
-    return runCtlDownloadAdd(client, command, out: out, err: err, exitCodeFor: _exitCodeFor, fetch: fetchTorrent);
   }
   if (rest.first == 'logs' && command['follow'] as bool) {
     return _followLogs(client, out: out, err: err, interval: followInterval, keepGoing: keepFollowing ?? () => true);
@@ -522,49 +516,6 @@ _CtlRequest? _parseAction(
       }
       return usage('jobs [ls] | jobs rm <id>');
 
-    case 'downloads':
-      switch (sub) {
-        case '' || 'ls':
-          return _list('GET', '$_api/downloads', 'jobs');
-        case 'subtitles' when arg(0) != null:
-          return _CtlRequest(
-            'GET',
-            '$_api/downloads/${adminPathSegment(arg(0)!)}/subtitles',
-            render: _renderJobSubtitles,
-          );
-        case 'cancel' || 'retry' when arg(0) != null:
-          return _CtlRequest('POST', '$_api/downloads/${adminPathSegment(arg(0)!)}/$sub');
-        case 'rm' when arg(0) != null:
-          return _CtlRequest('DELETE', '$_api/downloads/${adminPathSegment(arg(0)!)}');
-      }
-      return usage('downloads [ls] | downloads add … | downloads cancel|retry|rm|subtitles <id>');
-
-    case 'subscriptions':
-      switch (sub) {
-        case '' || 'ls':
-          return _list('GET', '$_api/subscriptions', 'subscriptions');
-        case 'add' when arg(0) != null:
-          final Object? body = _jsonArg(arg(0)!, err);
-          return body == null ? null : _CtlRequest('POST', '$_api/subscriptions', body: body);
-        case 'check':
-          return _CtlRequest(
-            'POST',
-            arg(0) == null ? '$_api/subscriptions/check' : '$_api/subscriptions/${adminPathSegment(arg(0)!)}/check',
-          );
-        case 'enable' || 'disable' when arg(0) != null:
-          return _CtlRequest(
-            'POST',
-            '$_api/subscriptions/${adminPathSegment(arg(0)!)}/enable',
-            body: <String, Object?>{'enabled': sub == 'enable'},
-          );
-        case 'rm' when arg(0) != null:
-          return _CtlRequest('DELETE', '$_api/subscriptions/${adminPathSegment(arg(0)!)}');
-      }
-      return usage(
-        "subscriptions [ls] | subscriptions add '<json>' | subscriptions check [id] | "
-        'subscriptions enable|disable|rm <id>',
-      );
-
     case 'models':
       switch (sub) {
         case '' || 'ls':
@@ -572,7 +523,7 @@ _CtlRequest? _parseAction(
         case 'pull' when arg(0) != null:
           return _CtlRequest('POST', '$_api/models/pull', body: <String, Object?>{'model': arg(0)});
       }
-      return usage('models [ls] | models pull <语言 tag|ocr|ocr:key>');
+      return usage('models [ls] | models pull <语言 tag>');
 
     case 'settings' || 'resource-indexers':
       switch (sub) {
@@ -781,8 +732,6 @@ void _renderModels(Object? response, StringSink out) {
   if (response is! Map) return _renderGeneric(response, out);
   out.writeln('ASR:');
   _renderRows(response['asr'], out, idKeys: const <String>['tag']);
-  out.writeln('OCR:');
-  _renderRows(response['ocrModels'], out, idKeys: const <String>['key']);
 }
 
 /// 渲染 `{<key>: [...]}` 形状的列表响应；其余字段（capability 之类）不展开，`--json` 可看全量。

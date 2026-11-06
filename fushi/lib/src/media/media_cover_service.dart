@@ -1,20 +1,18 @@
 import 'dart:io';
 import 'package:fushi/src/media/media_item.dart';
 import 'package:fushi/src/media/media_source.dart';
-import 'package:fushi_engine/media/video/metadata/video_scrape_operation_gate.dart';
-import 'package:fushi_engine/media/video/scraper/cover_meta_store.dart';
-import 'package:fushi_engine/media/video/scraper/scraper_types.dart';
-import 'package:fushi_engine/media/video/video_book_repository.dart';
-import 'package:fushi/src/media/video/video_import_dialog.dart'
-    show setVideoCoverFromPickedFile;
-import 'package:fushi_engine/media/video/video_storage.dart';
-import 'package:fushi/src/mining/galgame_cover_resolver.dart';
+
+
+
+
+
+
+
 import 'package:fushi/src/models/app_model.dart';
 import 'package:fushi/src/utils/cover_image.dart';
 import 'package:fushi/src/utils/misc/gallery_image_picker.dart';
 import 'package:fushi_engine/media/cover_file_writer.dart';
-import 'package:fushi_engine/media/video/video_cover_extractor.dart'
-    show videoCoverFileName;
+
 import 'package:fushi_core/fushi_core.dart';
 import 'package:path/path.dart' as p;
 
@@ -108,99 +106,6 @@ class MediaCoverService {
       item: item,
       file: file,
       clearOverrideImage: clearOverrideImage,
-    );
-  }
-
-  /// 视频：用用户手选的图片设置封面，返回落盘路径。
-  ///
-  /// 薄路由到 [setVideoCoverFromPickedFile]（拷盘 + 双键驱逐 + 落库 `coverPath`），
-  /// 先持久化 [CoverOrigin.manual] 保护标记，再覆盖文件与 `coverPath`；标记失败
-  /// 时 fail closed，不把一张尚未受保护的用户文件暴露给自动维护流程。
-  /// [coversDirectory] 是测试接缝：默认生产封面目录 [VideoStorage.coversDir]。
-  static Future<String> applyVideoCoverManual({
-    required VideoBookRepository repo,
-    required String bookUid,
-    required String pickedPath,
-    Directory? coversDirectory,
-  }) async {
-    final VideoScrapeOperationLease? lease =
-        VideoScrapeOperationGate.tryEnterOperation();
-    if (lease == null) throw StateError('视频刮削资料正在清理');
-    try {
-      return await VideoCoverMutationGate.runExclusive(() async {
-        final Directory covers =
-            coversDirectory ?? await VideoStorage.coversDir();
-        await CoverMetaStore(covers)
-            .set(bookUid, const CoverMeta(origin: CoverOrigin.manual));
-        return setVideoCoverFromPickedFile(
-          repo: repo,
-          bookUid: bookUid,
-          pickedPath: pickedPath,
-          coversDirectory: covers,
-        );
-      });
-    } finally {
-      lease.release();
-    }
-  }
-
-  /// 合集：用用户手选的图片设置**合集自有**封面，返回落盘路径。
-  ///
-  /// 落 `video_covers/collections/<collectionId>.jpg`
-  /// （[VideoStorage.collectionCoversDir] + [videoCoverFileName]，与番剧下载导入
-  /// 器写合集海报**同目录同命名**），再写 [MediaCollections.coverPath]。固定文件
-  /// 名意味着换封面就是同路径覆盖，不留孤儿；扩展名恒 `.jpg` 只是沿用视频封面的
-  /// 命名约定（内容按原字节拷贝、不转码，解码不看扩展名）。
-  ///
-  /// 为什么不需要额外的「手动封面」保护标记（对比 [applyVideoCoverManual] 的
-  /// [CoverOrigin.manual]）：合集封面的刮削覆盖判据是
-  /// `coverPath == null || isUnmodifiedGeneratedArtifact(coverPath)` ——后者按
-  /// `video_sidecar_artifacts` 登记表的 sha256 比对，手选图从不进那张表，因而
-  /// **结构性**不会被在线刮削覆盖。
-  ///
-  /// 与刮削并发的互斥沿用视频侧同一对门：[VideoScrapeOperationGate]（清理期禁写）
-  /// + [VideoCoverMutationGate]（封面写互斥），与
-  /// `video_source_scrape_coordinator` 写同一路径时不打架。
-  /// [collectionCoversDirectory] 是测试接缝。
-  static Future<String> applyCollectionCover({
-    required FushiDatabase database,
-    required int collectionId,
-    required String pickedPath,
-    Directory? collectionCoversDirectory,
-  }) async {
-    final VideoScrapeOperationLease? lease =
-        VideoScrapeOperationGate.tryEnterOperation();
-    if (lease == null) throw StateError('视频刮削资料正在清理');
-    try {
-      return await VideoCoverMutationGate.runExclusive(() async {
-        final Directory covers = collectionCoversDirectory ??
-            await VideoStorage.collectionCoversDir();
-        await covers.create(recursive: true);
-        final String destPath =
-            p.join(covers.path, videoCoverFileName('$collectionId'));
-        await applyCoverFile(source: File(pickedPath), destPath: destPath);
-        await database.updateMediaCollectionCoverPath(collectionId, destPath);
-        return destPath;
-      });
-    } finally {
-      lease.release();
-    }
-  }
-
-  /// 游戏：用用户手选的图片设置封面，返回落盘路径；失败返回 null。
-  ///
-  /// 薄路由到 [saveGameCoverFromFile]（`game_covers/<id>.<ext>` 落盘、换扩展名
-  /// 清旧文件；其写盘已走 [applyCoverFile]，双键驱逐结构性内含）。
-  /// [coverDirectory] 是测试接缝。
-  static Future<String?> applyGameCover({
-    required String gameId,
-    required String sourcePath,
-    Directory? coverDirectory,
-  }) {
-    return saveGameCoverFromFile(
-      gameId: gameId,
-      sourcePath: sourcePath,
-      coverDirectory: coverDirectory,
     );
   }
 }

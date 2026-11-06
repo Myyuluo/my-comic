@@ -24,16 +24,16 @@ import 'package:fushi/src/settings/settings_destination.dart';
 import 'package:fushi/src/settings/settings_schema_appearance.dart';
 import 'package:fushi/src/settings/settings_schema_card_creation.dart';
 import 'package:fushi/src/settings/settings_schema_downloads.dart';
-import 'package:fushi/src/settings/settings_schema_game.dart';
+
 import 'package:fushi/src/settings/settings_schema_lookup.dart';
 import 'package:fushi/src/settings/settings_schema_manga.dart';
 import 'package:fushi/src/settings/settings_schema_profiles.dart';
 import 'package:fushi/src/settings/settings_schema_reading.dart';
-import 'package:fushi/src/settings/settings_schema_services.dart';
+
 import 'package:fushi/src/settings/settings_schema_storage.dart';
 import 'package:fushi/src/settings/settings_schema_system.dart';
 import 'package:fushi/src/settings/settings_schema_tracking.dart';
-import 'package:fushi/src/settings/settings_schema_video.dart';
+
 import 'package:fushi/src/sync/sync_settings_schema.dart';
 import 'package:fushi/utils.dart';
 import 'package:integration_test/integration_test.dart';
@@ -95,11 +95,8 @@ Map<SettingsDestinationId, String> destinationTitles() {
     buildReadingDestination(),
     // 听书 2026-08-24 并入阅读，不再是独立一级分类。
     buildMangaDestination(),
-    buildVideoDestination(),
     buildMediaTrackingDestination(),
     buildDownloadsDestination(),
-    buildServicesDestination(),
-    buildGameDestination(),
     buildLookupDestination(),
     buildCardCreationDestination(),
     buildProfilesDestination(),

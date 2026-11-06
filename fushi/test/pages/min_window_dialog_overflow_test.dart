@@ -18,7 +18,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi/models.dart';
-import 'package:fushi/src/pages/implementations/media_sources_dialog.dart';
+
 import 'package:fushi/utils.dart';
 import 'package:fushi_core/fushi_core.dart';
 
@@ -156,74 +156,4 @@ void main() {
     });
   });
 
-  group('MediaSourcesDialog (real widget, BUG-445 shape)', () {
-    Future<FushiDatabase> seededDb(int sourceCount) async {
-      final FushiDatabase db = FushiDatabase.forTesting(
-          DatabaseConnection(NativeDatabase.memory()));
-      for (int i = 0; i < sourceCount; i++) {
-        await db.insertMediaSource(
-          MediaSourcesCompanion.insert(
-            label: 'src_$i',
-            mediaKind: 'book',
-            rootPath: '/tmp/src_$i',
-            createdAt: i,
-          ),
-        );
-      }
-      return db;
-    }
-
-    Future<void> pumpDialog(
-      WidgetTester tester, {
-      required FushiDatabase db,
-      required Size screen,
-    }) async {
-      tester.view.physicalSize = screen;
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
-      final AppModel appModel = _DialogTestAppModel()
-        ..wireDatabaseForTesting(db);
-      await tester.pumpWidget(
-        ProviderScope(
-          overrides: <Override>[
-            appProvider.overrideWith((Ref ref) => appModel),
-          ],
-          child: TranslationProvider(
-            child: MaterialApp(
-              theme: theme(),
-              home: const Scaffold(
-                body: Center(child: MediaSourcesDialog(mediaKind: 'book')),
-              ),
-            ),
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-    }
-
-    testWidgets(
-        'TODO-1389 many sources scroll without overflow under min window cap',
-        (WidgetTester tester) async {
-      final FushiDatabase db = await seededDb(24);
-      addTearDown(db.close);
-      await pumpDialog(tester, db: db, screen: const Size(520, 440));
-
-      expect(tester.takeException(), isNull,
-          reason: 'overflowing sources should scroll, not RenderFlex-overflow');
-
-      final Finder reorderable = find.byType(FushiReorderableColumn);
-      expect(reorderable, findsOneWidget);
-      final Finder outerScrollable = find.ancestor(
-        of: reorderable,
-        matching: find.byType(Scrollable),
-      );
-      expect(outerScrollable, findsWidgets,
-          reason: 'fixed: reorderable wrapped in SingleChildScrollView');
-
-      final ScrollableState state = tester.state(outerScrollable.first);
-      expect(state.position.maxScrollExtent, greaterThan(0.0),
-          reason: 'overflowing content leaves scroll extent');
-    });
-  });
 }

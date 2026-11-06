@@ -9,7 +9,7 @@ import 'package:fushi/media.dart';
 import 'package:fushi/src/media/import/quick_import_section.dart';
 import 'package:fushi/src/media/manga/manga_import_dialog.dart';
 import 'package:fushi/src/models/app_model.dart';
-import 'package:fushi/src/pages/implementations/media_sources_view.dart';
+
 import 'package:fushi/src/utils/components/fushi_floating_chrome.dart';
 import 'package:fushi/src/utils/components/fushi_staggered_entrance.dart';
 import 'package:fushi/src/utils/fushi_icons.dart';
@@ -17,10 +17,7 @@ import 'package:fushi/utils.dart';
 
 /// 「浏览 › 导入」视图：漫画 Local import 的管理处。
 ///
-/// 自上而下：快速导入（单卷 / 单文件 + 导入文件夹）、常驻来源（漫画扫描根，与书 /
-/// 视频共用的 [MediaSourcesView]），以及互联对端的漫画库（读的是用户自己另一台
-/// 设备上的库，与 Plex / Jellyfin 客户端连自己的服务器同类，不受商店合规边界约束，
-/// iOS 上照常提供）。
+/// 快速导入与单卷 / 单文件漫画导入；来源库扫描根已随非漫画域移除。
 ///
 /// 页签文案本身已是标题，本页不再渲染页内大标题。扩展仓库 / 扩展目录 / 在线源
 /// 住在同一「浏览」模块的「在线源」页签（Mihon 的 Browse 形态），本页不挂在线入口。
@@ -43,9 +40,6 @@ class MangaSourcesPage extends ConsumerStatefulWidget {
 }
 
 class _MangaSourcesPageState extends ConsumerState<MangaSourcesPage> {
-  final GlobalKey<MediaSourcesViewState> _localSourcesKey =
-      GlobalKey<MediaSourcesViewState>();
-
   /// 单卷 / 单文件漫画导入：与旧漫画库页头按钮同一个对话框（目录 / `.mokuro` /
   /// `.cbz` / 图片包 + OCR 向导）。落库成功后失效书架 provider 刷新漫画库。
   Future<void> _importManga() async {
@@ -59,9 +53,6 @@ class _MangaSourcesPageState extends ConsumerState<MangaSourcesPage> {
       ref.invalidate(srtBooksProvider);
     }
   }
-
-  Widget _sectionTitle(String title) =>
-      Text(title, style: context.fushiType.titleLargeEmphasized);
 
   /// 页头：导航条存在时占页头主位；独立使用时回退到文字标题。
   Widget _buildHeader() {
@@ -93,41 +84,7 @@ class _MangaSourcesPageState extends ConsumerState<MangaSourcesPage> {
               label: t.manga_import_action,
               onTap: _importManga,
             ),
-            QuickImportAction(
-              icon: FushiIcons.folder,
-              label: t.media_import_folder,
-              onTap: () async => _localSourcesKey.currentState?.importFolder(),
-            ),
           ],
-          // 网络来源也是一种导入方式：与「常驻来源」区头的添加按钮同一个入口。
-          extraActions: <QuickImportAction>[
-            QuickImportAction(
-              icon: FushiIcons.cloud,
-              label: t.media_source_add_network,
-              description: t.media_source_network_subtitle,
-              onTap: () async => _localSourcesKey.currentState?.addSource(),
-            ),
-          ],
-        ),
-        const SizedBox(height: 28),
-        FushiStaggeredEntrance(
-          index: 4,
-          child: Row(
-            children: <Widget>[
-              Expanded(child: _sectionTitle(t.media_source_section_title)),
-              FushiIconButton(
-                tooltip: t.media_source_add,
-                label: t.media_source_add,
-                icon: FushiIcons.add,
-                onTap: () => _localSourcesKey.currentState?.addSource(),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 8),
-        FushiStaggeredEntrance(
-          index: 5,
-          child: MediaSourcesView(key: _localSourcesKey, mediaKind: 'manga'),
         ),
       ],
     );

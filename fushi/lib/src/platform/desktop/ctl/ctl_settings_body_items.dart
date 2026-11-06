@@ -5,17 +5,17 @@ import 'package:fushi/src/platform/desktop/ctl/ctl_settings_body_browser_extensi
 import 'package:fushi/src/platform/desktop/ctl/ctl_settings_body_content_language.dart';
 import 'package:fushi/src/platform/desktop/ctl/ctl_settings_body_dict_style.dart';
 import 'package:fushi/src/platform/desktop/ctl/ctl_settings_body_discovery.dart';
-import 'package:fushi/src/platform/desktop/ctl/ctl_settings_body_downloads.dart';
+
 import 'package:fushi/src/platform/desktop/ctl/ctl_settings_body_fonts.dart';
-import 'package:fushi/src/platform/desktop/ctl/ctl_settings_body_media_server.dart';
+
 import 'package:fushi/src/platform/desktop/ctl/ctl_settings_body_misc.dart';
 import 'package:fushi/src/platform/desktop/ctl/ctl_settings_body_storage.dart';
-import 'package:fushi/src/platform/desktop/ctl/ctl_settings_body_plex.dart';
+
 import 'package:fushi/src/platform/desktop/ctl/ctl_settings_body_sync.dart';
 import 'package:fushi/src/platform/desktop/ctl/ctl_settings_body_tracking.dart';
 import 'package:fushi/src/platform/desktop/ctl/ctl_settings_body_update.dart';
-import 'package:fushi/src/platform/desktop/ctl/ctl_settings_body_video_providers.dart';
-import 'package:fushi/src/platform/desktop/ctl/ctl_settings_body_video_shaders.dart';
+
+
 import 'package:fushi/src/settings/settings_context.dart';
 import 'package:fushi/src/settings/settings_destination.dart';
 
@@ -47,16 +47,11 @@ class CtlBodyPage {
 /// 在这里汇总一行。
 List<CtlBodyPage> buildCtlBodyPages() => <CtlBodyPage>[
   ...buildCtlAnkiBodyPages(),
-  ...buildCtlMediaServerBodyPages(),
   ...buildCtlUpdateBodyPages(),
   ...buildCtlAudioSourcesBodyPages(),
   ...buildCtlSyncBodyPages(),
-  ...buildCtlVideoShaderBodyPages(),
-  ...buildCtlPlexBodyPages(),
   ...buildCtlAnkiSyncBodyPages(),
   ...buildCtlDiscoveryBodyPages(),
-  ...buildCtlDownloadsBodyPages(),
-  ...buildCtlVideoProvidersBodyPages(),
   ...buildCtlTrackingBodyPages(),
   ...buildCtlStorageBodyPages(),
   ...buildCtlFontsBodyPages(),

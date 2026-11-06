@@ -1,7 +1,8 @@
 import 'package:collection/collection.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:fushi/src/anki/anki_view_model.dart';
 import 'package:fushi/src/mining/advanced_mining/advanced_mining_capabilities.dart';
+import 'package:fushi/src/anki/anki_view_model.dart';
+
 import 'package:fushi_anki/fushi_anki.dart';
 
 /// 「高级制卡」对话框的卡组分区：从 Anki 设置组装（纯函数，可单测）。

@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// 分类声明顺序与分组导航一致；平台隐藏后首个可见项仍是默认选择。
 void main() {
   test(
-    '_buildDestinations keeps the six-group top-level destination order',
+    '_buildDestinations keeps the my-comic top-level destination order',
     () {
       final String src = File(
         'lib/src/settings/settings_schema.dart',
@@ -18,24 +18,12 @@ void main() {
       expect(fnEnd, greaterThan(fnStart));
       final String body = src.substring(fnStart, fnEnd);
 
+      // my-comic v1 只保留漫画域设置：外观 / 漫画 / 下载 / Tracking / 系统。
       const List<String> expectedOrder = <String>[
         'buildAppearanceDestination()',
-        // 听书 2026-08-24 并入阅读（buildListeningSections），不再是独立分类。
-        'buildReadingDestination()',
         'buildMangaDestination()',
-        'buildVideoDestination()',
-        'buildGameDestination()',
-        'buildMediaTrackingDestination()',
-        'buildLookupDestination()',
-        'buildCardCreationDestination()',
-        // 「模型」紧随制卡：LLM / OCR / 语音模型服务于查词与制卡（2026-10-13）。
-        'buildModelsDestination()',
         'buildDownloadsDestination()',
-        'buildServicesDestination()',
-        'buildProfilesDestination()',
-        'buildSyncBackupDestination()',
-        'buildInterconnectDestination()',
-        'buildStorageDestination()',
+        'buildMediaTrackingDestination()',
         'buildSystemDestination()',
       ];
 

@@ -9,10 +9,10 @@ import 'package:fushi_engine/media/manga/manga_archive_importer.dart';
 import 'package:fushi/src/media/manga/import/manga_folder_batch.dart';
 import 'package:fushi/src/media/manga/import/manga_pdf_importer.dart';
 import 'package:fushi_engine/media/manga/manga_importer.dart';
-import 'package:fushi/src/media/manga/manga_ocr_background_job.dart';
-import 'package:fushi/src/media/manga/manga_ocr_wizard_dialog.dart';
-import 'package:fushi/src/media/manga/manga_ocr_wizard_engines.dart';
-import 'package:fushi/src/sync/interconnect_manga_ocr_client.dart';
+
+
+
+
 import 'package:fushi/utils.dart';
 
 /// Narrow application-facing facade for the manga feature.
@@ -140,79 +140,4 @@ abstract final class MangaModule {
         onProgress: onProgress,
         sourceId: sourceId,
       );
-
-  /// 未入库的裸图片文件夹 → 选引擎 → 整卷 OCR → 落库，返回新建 bookKey。
-  ///
-  /// [remoteRunnerOverride] / [desktopOverride] 只是测试缝，生产传 null 即可；
-  /// 引擎依赖集由 [MangaOcrWizardEngines.resolve] 统一装配，本入口不再手抄。
-  static Future<String?> openOcrImportWizard({
-    required BuildContext context,
-    required FushiDatabase db,
-    MangaOcrRemoteRunner? remoteRunnerOverride,
-    bool? desktopOverride,
-  }) {
-    final MangaOcrWizardEngines engines = MangaOcrWizardEngines.resolve(
-      context: context,
-      db: db,
-      remoteRunnerOverride: remoteRunnerOverride,
-      desktopOverride: desktopOverride,
-    );
-    return showAppDialog<String>(
-      context: context,
-      builder: (_) => MangaOcrWizardDialog(
-        engines: engines,
-        db: db,
-        resolveEngines: (BuildContext ctx) => MangaOcrWizardEngines.resolve(
-          context: ctx,
-          db: db,
-          remoteRunnerOverride: remoteRunnerOverride,
-          desktopOverride: desktopOverride,
-        ),
-      ),
-    );
-  }
-
-  /// 对已入书架的漫画直接运行整卷 OCR。阅读器从当前页触发时，Lens 会先扫
-  /// 当前页到末页，再从首页补齐；完成后原子替换本书的 `manga.json`。
-  ///
-  /// [onlyMissing] 为 false 是阅读器的「重新识别本卷」：已识别过的卷整卷重跑，
-  /// 向导里可换引擎（逐页缓存按引擎签名分目录，换引擎一定真正重算）。
-  ///
-  /// 引擎依赖集与 [openOcrImportWizard] **共用同一个装配点**：两个入口各自手抄
-  /// 参数表时，本入口漏掉了 `remoteRunner`，「配对主机」引擎在阅读器里永久不可见
-  /// （BUG-1418）。
-  static Future<MangaOcrBackgroundJob?> openBookOcr({
-    required BuildContext context,
-    required FushiDatabase db,
-    required EpubBookRow book,
-    required int startPage,
-    bool onlyMissing = true,
-    MangaOcrRemoteRunner? remoteRunnerOverride,
-    bool? desktopOverride,
-  }) {
-    final MangaOcrWizardEngines engines = MangaOcrWizardEngines.resolve(
-      context: context,
-      db: db,
-      remoteRunnerOverride: remoteRunnerOverride,
-      desktopOverride: desktopOverride,
-    );
-    return showAppDialog<MangaOcrBackgroundJob>(
-      context: context,
-      builder: (_) => MangaOcrWizardDialog(
-        engines: engines,
-        db: db,
-        existingBook: book,
-        startPage: startPage,
-        onlyMissing: onlyMissing,
-        launchInBackground: true,
-        resolveEngines: (BuildContext ctx) => MangaOcrWizardEngines.resolve(
-          context: ctx,
-          db: db,
-          remoteRunnerOverride: remoteRunnerOverride,
-          desktopOverride: desktopOverride,
-        ),
-      ),
-    );
-  }
-
 }
