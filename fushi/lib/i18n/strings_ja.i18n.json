@@ -1254,6 +1254,7 @@
   "batch_delete_success_video": "$n 本の動画を削除しました。",
   "batch_dissolve_confirm": "$m 件のコレクションを解散しますか？グループ分けが削除されますが、メディアは保持されます。",
   "batch_dissolve_success": "$m 件のコレクションを解散しました。",
+  "batch_download_local_volumes_skipped": "Skipped $count local volume(s) without downloadable chapters",
   "batch_hidden_by_filter_note": "選択済みの ${n} 件は現在のフィルターで非表示のため、今回は処理されません。",
   "batch_invert_selection": "選択反転",
   "batch_select": "選択",

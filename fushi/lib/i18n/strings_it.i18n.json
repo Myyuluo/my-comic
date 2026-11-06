@@ -1254,6 +1254,7 @@
   "batch_delete_success_video": "Eliminati $n video.",
   "batch_dissolve_confirm": "Sciogliere $m raccolta/e? Il raggruppamento viene rimosso; i media vengono conservati.",
   "batch_dissolve_success": "Sciolte $m raccolta/e.",
+  "batch_download_local_volumes_skipped": "Skipped $count local volume(s) without downloadable chapters",
   "batch_hidden_by_filter_note": "Altri ${n} elementi selezionati sono nascosti dal filtro corrente e non verranno elaborati.",
   "batch_invert_selection": "Inverti",
   "batch_select": "Seleziona",

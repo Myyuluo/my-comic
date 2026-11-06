@@ -28,6 +28,30 @@ bool isEpubBackedAudiobookSrt(SrtBook book) {
   return hasAudioPaths || hasAudioRoot;
 }
 
+/// 本地 [EpubBookRow] 是否为可批量下载的在线漫画：漫画格式 + `sourceMetadata`
+/// 能解析出带章节列表的在线漫画描述符。本地卷（没有描述符）返回 null。
+///
+/// 判据与作品页「下载全部」同源（`OnlineMangaLibraryEntry.tryParse`），不新增
+/// 身份字段；`chapters.isEmpty` 的条目没有可下载的章，按本地卷处理。
+OnlineMangaLibraryEntry? _onlineMangaEntryFromRow(EpubBookRow? row) {
+  if (row == null) return null;
+  if (BookFormat.parseOrEpub(row.format) != BookFormat.manga) return null;
+  final OnlineMangaLibraryEntry? entry = OnlineMangaLibraryEntry.tryParse(
+    row.sourceMetadata,
+  );
+  if (entry == null || entry.chapters.isEmpty) return null;
+  return entry;
+}
+
+/// 选中集里的本地键 → 在线漫画条目（批量下载按钮可用态的唯一数据源）。
+final _shelfOnlineMangaEntryProvider =
+    FutureProvider.family<OnlineMangaLibraryEntry?, String>(
+  (ref, bookKey) async {
+    final FushiDatabase db = ref.watch(appProvider).database;
+    return _onlineMangaEntryFromRow(await db.getEpubBook(bookKey));
+  },
+);
+
 /// books domain methods extracted via part-of (TODO-587); shared private scope.
 extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
   // v79：srtBookTagMapProvider 键换 uid（String）。泛型 map 索引不受编译器
@@ -392,8 +416,21 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
     // BUG-2458：散卡选中集里混着远端占位键——「已选 N」计全部，但打标签 /
     // 删除两个本地动作只按本地键判可用态与取目标；远端键只喂「下载」。
     // 2026-11-05：合集已删除，选中集只剩散卡。
+    // 2026-11-06（ticket 02）：下载只服务在线漫画——本地卷没有可下载的章节，
+    // 只选中它们时禁用；本地在线漫画条目（带章节列表的在线描述符）同样启用。
     final Set<String> localKeys = _selectedLocalKeys;
     final Set<String> remoteKeys = _selectedRemoteKeys;
+    final List<String> localBookKeys = <String>[
+      for (final String key in localKeys)
+        if (!key.startsWith('srt_'))
+          if (_parseBookKey(key) case final String bookKey) bookKey,
+    ];
+    final bool hasOnlineLocalManga = localBookKeys
+        .map(
+          (String bookKey) =>
+              ref.watch(_shelfOnlineMangaEntryProvider(bookKey)).valueOrNull,
+        )
+        .any((OnlineMangaLibraryEntry? entry) => entry != null);
     return BatchActionBar(
       selectedCount: _selectedKeys.length,
       onSelectAll: _selectAll,
@@ -401,8 +438,8 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
       actions: <Widget>[
         FushiIconButton(
           key: const ValueKey<String>('reader_shelf_batch_download'),
-          enabled: remoteKeys.isNotEmpty,
-          onTap: _batchDownloadSelectedRemote,
+          enabled: remoteKeys.isNotEmpty || hasOnlineLocalManga,
+          onTap: _batchDownloadSelected,
           icon: Icons.download_outlined,
           tooltip: t.remote_book_download,
         ),

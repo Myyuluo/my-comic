@@ -1254,6 +1254,7 @@
   "batch_delete_success_video": "Удалено видео: $n.",
   "batch_dissolve_confirm": "Расформировать коллекций ($m)? Группировка будет убрана; медиа сохранится.",
   "batch_dissolve_success": "Расформировано коллекций: $m.",
+  "batch_download_local_volumes_skipped": "Skipped $count local volume(s) without downloadable chapters",
   "batch_hidden_by_filter_note": "Ещё ${n} выбранных элементов скрыты текущим фильтром и не будут обработаны.",
   "batch_invert_selection": "Инвертировать",
   "batch_select": "Выбрать",

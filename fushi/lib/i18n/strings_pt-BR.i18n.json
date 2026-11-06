@@ -1254,6 +1254,7 @@
   "batch_delete_success_video": "$n vídeo(s) excluído(s).",
   "batch_dissolve_confirm": "Dissolver $m coleção(ões)? O agrupamento é removido; as mídias são mantidas.",
   "batch_dissolve_success": "$m coleção(ões) dissolvida(s).",
+  "batch_download_local_volumes_skipped": "Skipped $count local volume(s) without downloadable chapters",
   "batch_hidden_by_filter_note": "Outros ${n} itens selecionados estão ocultos pelo filtro atual e não serão processados.",
   "batch_invert_selection": "Inverter",
   "batch_select": "Selecionar",

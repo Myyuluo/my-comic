@@ -1254,6 +1254,7 @@
   "batch_delete_success_video": "تم حذف $n فيديو.",
   "batch_dissolve_confirm": "حل $m مجموعة؟ يتم إزالة التجميع؛ يتم الاحتفاظ بالوسائط.",
   "batch_dissolve_success": "تم حل $m مجموعة.",
+  "batch_download_local_volumes_skipped": "Skipped $count local volume(s) without downloadable chapters",
   "batch_hidden_by_filter_note": "هناك ${n} عنصر محدد مخفي بواسطة عامل التصفية الحالي ولن تتم معالجته.",
   "batch_invert_selection": "عكس",
   "batch_select": "تحديد",

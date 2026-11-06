@@ -309,56 +309,206 @@ extension _ReaderHistoryRemote on _ReaderFushiHistoryPageState {
     );
   }
 
-  /// BUG-2458：批量栏「下载」——把选中的远端占位卡（EPUB / 纯 SRT 有声书）逐个
-  /// 交给既有单本下载链（[_downloadRemoteBook] / [_downloadRemoteSrtAudiobook]，
-  /// 任务归 [InterconnectDownloadManager] 所有、与本页生命周期无关），先退出
-  /// 多选态；进度 / 失败落在各卡角标上（[_remoteBookTaskBadge]）。
+  /// 批量栏「下载」（ticket 02）：只服务在线漫画。
   ///
-  /// 选中键只是身份，占位对象要回到最近一次远端目录里找：目录已刷新、该书已
-  /// 下载入库被去重隐藏的键自然找不到，跳过即可。
+  /// - 本地在线漫画条目：按作品页「下载全部」的规则入队全部未下载、未排队、
+  ///   未锁定的 Chapter；本地卷没有可下载内容，跳过并提示数量。
+  /// - 远端章节漫画：先经既有收养链加入本机 Library，再按同一规则入队。
+  /// - 远端整本包 / 纯 SRT 有声书：沿用既有整本下载链
+  ///   （[_downloadRemoteBook] / [_downloadRemoteSrtAudiobook]）。
   ///
   /// **串行**：管理器只按 id 去重、无并发上限，「全选 → 下载」若一帧内扇出 N 个
   /// 并行 HTTP + N 个并行导入落库，对手机端互联 host 是真实压力；逐本 await
-  /// 让批量与用户逐张点的节奏等价。服务不可达在进循环前判一次，只提示一次
-  /// （单本路径每次各弹一条）。
-  ///
-  Future<void> _batchDownloadSelectedRemote() async {
-    final Set<String> keys = _selectedRemoteKeys;
-    if (keys.isEmpty) return;
+  /// 让批量与用户逐张点的节奏等价。
+  Future<void> _batchDownloadSelected() async {
+    if (_selection.isEmpty) return;
+    if (!await _pruneStaleSelection() || !mounted) return;
+    final Set<String> localKeys = _selectedLocalKeys;
+    final Set<String> remoteKeys = _selectedRemoteKeys;
     final _RemoteBookState? state = _lastRemoteState;
+
+    // 本地在线漫画 / 本地卷分流。行读在退出多选态之前完成：之后选中集就空了。
+    final List<({String bookKey, OnlineMangaLibraryEntry entry})> localTargets =
+        <({String bookKey, OnlineMangaLibraryEntry entry})>[];
+    int skippedLocalVolumes = 0;
+    for (final String key in localKeys) {
+      final String? bookKey = key.startsWith('srt_') ? null : _parseBookKey(key);
+      final OnlineMangaLibraryEntry? entry = bookKey == null
+          ? null
+          : _onlineMangaEntryFromRow(
+              await appModel.database.getEpubBook(bookKey),
+            );
+      if (bookKey == null || entry == null) {
+        skippedLocalVolumes++;
+        continue;
+      }
+      localTargets.add((bookKey: bookKey, entry: entry));
+    }
+
+    final List<RemoteBookInfo> remoteBooks = <RemoteBookInfo>[
+      for (final RemoteBookInfo book in state?.books ?? const <RemoteBookInfo>[])
+        if (remoteKeys.contains(_remoteBookSelectionKey(book))) book,
+    ];
+    final List<RemoteAudiobookInfo> remoteSrtBooks = <RemoteAudiobookInfo>[
+      for (final RemoteAudiobookInfo book
+          in state?.srtAudiobooks ?? const <RemoteAudiobookInfo>[])
+        if (remoteKeys.contains(_remoteSrtSelectionKey(book))) book,
+    ];
+
     _exitSelectionMode();
-    if (state == null) return;
-    if (_remoteBookClient == null) {
+    final bool hasOnlineTarget = localTargets.isNotEmpty ||
+        remoteBooks.isNotEmpty ||
+        remoteSrtBooks.isNotEmpty;
+    if (!hasOnlineTarget) return;
+
+    final RemoteBookClient? client = _remoteBookClient;
+    bool remoteUnavailableShown = false;
+    void showRemoteUnavailableOnce() {
+      if (!mounted || remoteUnavailableShown) return;
+      remoteUnavailableShown = true;
       ScaffoldMessenger.of(context).showSnackBar(
         FushiSnackBar(content: Text(t.remote_book_unavailable)),
       );
-      return;
     }
-    final List<_ShelfBookSlot> targets = <_ShelfBookSlot>[
-      for (final RemoteBookInfo book in state.books)
-        if (keys.contains(_remoteBookSelectionKey(book)))
-          _ShelfBookSlot(remote: book),
-      for (final RemoteAudiobookInfo book in state.srtAudiobooks)
-        if (keys.contains(_remoteSrtSelectionKey(book)))
-          _ShelfBookSlot(remoteSrt: book),
-    ];
-    final Set<String> queued = <String>{};
-    // 页面卸载后停止派发：已起的任务归管理器继续跑到底，未起的不再用已 dispose
-    // 的 ref 去起。
-    for (final _ShelfBookSlot slot in targets) {
-      final RemoteBookInfo? book = slot.remote;
-      final RemoteAudiobookInfo? srt = slot.remoteSrt;
-      final String taskId = book != null
-          ? InterconnectDownloadManager.bookTaskId(book.downloadId)
-          : InterconnectDownloadManager.srtAudiobookTaskId(srt!.identity);
-      if (!queued.add(taskId)) continue;
+
+    int queuedChapters = 0;
+    int lockedSkipped = 0;
+    int failures = 0;
+
+    for (final ({String bookKey, OnlineMangaLibraryEntry entry}) target
+        in localTargets) {
       if (!mounted) return;
-      if (book != null) {
-        await _downloadRemoteBook(book);
-      } else {
-        await _downloadRemoteSrtAudiobook(srt!);
+      try {
+        final ({int queued, int lockedSkipped}) summary =
+            await _enqueueAllChaptersForEntry(
+          bookKey: target.bookKey,
+          entry: target.entry,
+        );
+        queuedChapters += summary.queued;
+        lockedSkipped += summary.lockedSkipped;
+      } on Object catch (error, stack) {
+        failures++;
+        ErrorLogService.instance.log(
+          'ReaderFushiHistoryPage.batchDownloadLocalManga',
+          error,
+          stack,
+        );
       }
     }
+
+    for (final RemoteBookInfo book in remoteBooks) {
+      if (!mounted) return;
+      if (client == null) {
+        showRemoteUnavailableOnce();
+        continue;
+      }
+      if (!book.hasMangaChapters) {
+        // 远端无章节的整本漫画包：仍按整本文件下载（自带成功 / 失败提示）。
+        await _downloadRemoteBook(book);
+        continue;
+      }
+      final ({int queued, int lockedSkipped})? summary =
+          await _adoptRemoteChapteredManga(book, client);
+      if (summary == null) {
+        failures++;
+      } else {
+        queuedChapters += summary.queued;
+        lockedSkipped += summary.lockedSkipped;
+      }
+    }
+
+    for (final RemoteAudiobookInfo book in remoteSrtBooks) {
+      if (!mounted) return;
+      if (client == null) {
+        showRemoteUnavailableOnce();
+        continue;
+      }
+      await _downloadRemoteSrtAudiobook(book);
+    }
+
+    if (!mounted) return;
+    // 一次 toast 展示全部结果：FushiToast 同刻只留一条，分多条会被后者顶掉，
+    // 跳过的本地卷 / 锁定章数量就看不见了。
+    final List<String> lines = <String>[
+      if (queuedChapters > 0)
+        t.manga_series_download_all_queued(count: queuedChapters),
+      if (lockedSkipped > 0)
+        t.manga_series_download_all_locked_skipped(count: lockedSkipped),
+      if (skippedLocalVolumes > 0)
+        t.batch_download_local_volumes_skipped(count: skippedLocalVolumes),
+      if (failures > 0) t.manga_online_failed,
+    ];
+    if (lines.isEmpty) {
+      final bool chapterTargetsExist = localTargets.isNotEmpty ||
+          remoteBooks.any((RemoteBookInfo book) => book.hasMangaChapters);
+      final bool wholeBookTargetsExist =
+          remoteBooks.any((RemoteBookInfo book) => !book.hasMangaChapters) ||
+              remoteSrtBooks.isNotEmpty;
+      if (chapterTargetsExist && !wholeBookTargetsExist) {
+        FushiToast.show(msg: t.manga_series_download_all_none);
+      }
+      return;
+    }
+    FushiToast.show(
+      msg: lines.join('\n'),
+      severity: failures > 0 ? ToastSeverity.error : ToastSeverity.success,
+    );
+  }
+
+  /// 按作品页「下载全部」的规则给一个在线漫画条目入队章节：跳过已下载（磁盘
+  /// 判据）、已排队 / 执行中、以及锁定章；返回本批实际入队数与锁定跳过数。
+  Future<({int queued, int lockedSkipped})> _enqueueAllChaptersForEntry({
+    required String bookKey,
+    required OnlineMangaLibraryEntry entry,
+  }) async {
+    final MangaDownloadService downloads = appModel.mangaDownloadService;
+    final Map<String, MangaDownloadJobRow> jobs = await downloads.jobsForBook(
+      bookKey,
+    );
+    final String bookDir = await MangaStorage.bookPath(bookKey);
+    final Set<String> downloaded = await downloadedChapterKeys(
+      bookDir,
+      entry.chapters.map((OnlineMangaChapter chapter) => chapter.key),
+    );
+    final List<OnlineMangaChapter> pending = <OnlineMangaChapter>[];
+    int lockedSkipped = 0;
+    for (final OnlineMangaChapter chapter in entry.chapters.reversed) {
+      if (downloaded.contains(chapter.key)) continue;
+      final String? status = jobs[chapter.key]?.status;
+      if (status == MangaDownloadJobStatus.queued ||
+          status == MangaDownloadJobStatus.running) {
+        continue;
+      }
+      if (chapter.locked) {
+        lockedSkipped++;
+        continue;
+      }
+      pending.add(chapter);
+    }
+    if (pending.isNotEmpty) {
+      await downloads.enqueueChapters(
+        entry: entry,
+        chapters: pending,
+        autoOcr: false,
+      );
+    }
+    return (queued: pending.length, lockedSkipped: lockedSkipped);
+  }
+
+  /// 单卡下载（远端章节漫画）与批量下载共用的队列结果提示。
+  void _showChapterQueueSummary(({int queued, int lockedSkipped}) summary) {
+    final String message = <String>[
+      if (summary.queued > 0)
+        t.manga_series_download_all_queued(count: summary.queued),
+      if (summary.lockedSkipped > 0)
+        t.manga_series_download_all_locked_skipped(
+          count: summary.lockedSkipped,
+        ),
+    ].join('\n');
+    FushiToast.show(
+      msg: message.isEmpty ? t.manga_series_download_all_none : message,
+      severity: ToastSeverity.success,
+    );
   }
 
   /// 远端占位卡右上角的下载态角标（BUG-1561 书侧补齐）：进行中 → 进度环，失败 →
@@ -718,9 +868,12 @@ extension _ReaderHistoryRemote on _ReaderFushiHistoryPageState {
       return;
     }
     // BUG-2474：对端的在线漫画没有可搬的整卷包——「下载」= 以互联运行时加入本机
-    // 漫画书架，之后章节走既有的在线章下载链（先下载再读）从对端逐章拉。
+    // 漫画书架，随后按作品页「下载全部」的规则把全部可下载章入队（ticket 02：
+    // 单卡与批量共用同一套判定）。
     if (book.hasMangaChapters) {
-      await _adoptRemoteChapteredManga(book, client);
+      final ({int queued, int lockedSkipped})? summary =
+          await _adoptRemoteChapteredManga(book, client);
+      if (summary != null) _showChapterQueueSummary(summary);
       return;
     }
     final InterconnectDownloadManager manager =
@@ -770,7 +923,8 @@ extension _ReaderHistoryRemote on _ReaderFushiHistoryPageState {
     );
   }
 
-  /// 把对端的章节式在线漫画收进本机漫画书架（BUG-2474）。
+  /// 把对端的章节式在线漫画收进本机漫画书架（BUG-2474），随后按「下载全部」
+  /// 规则入队全部可下载章（ticket 02）。返回本批入队 / 锁定跳过数；失败返回 null。
   ///
   /// 走 `AppModel.onlineMangaLibraryService(interconnect)` 这条唯一分派点：入库后它
   /// 就是一条普通的在线书架条目，作品页 / 章节下载 / 阅读器对它零特判。加入前先经
@@ -779,41 +933,56 @@ extension _ReaderHistoryRemote on _ReaderFushiHistoryPageState {
   ///
   /// 只有互联对端能端章节（云盘后端的清单不会带 hasMangaChapters），非互联 client
   /// 走不可达提示而不是静默。
-  Future<void> _adoptRemoteChapteredManga(
+  Future<({int queued, int lockedSkipped})?> _adoptRemoteChapteredManga(
     RemoteBookInfo book,
     RemoteBookClient client,
   ) async {
     if (client is! InterconnectSyncBackend) {
-      if (!mounted) return;
+      if (!mounted) return null;
       ScaffoldMessenger.of(context).showSnackBar(
         FushiSnackBar(content: Text(t.remote_book_unavailable)),
       );
-      return;
+      return null;
     }
     final OnlineMangaLibraryService service = appModel
         .onlineMangaLibraryService(OnlineMangaRuntimeKind.interconnect);
     final OnlineMangaLibraryEntry seed =
         InterconnectMangaCatalog.entryFor(book);
+    final OnlineMangaLibraryEntry adopted;
     try {
       final OnlineMangaRefreshResult refreshed =
           await service.adapter.refresh(seed);
-      await service.add(OnlineMangaLibraryEntry(
+      adopted = OnlineMangaLibraryEntry(
         runtime: seed.runtime,
         extensionPackage: seed.extensionPackage,
         sourceId: seed.sourceId,
         series: refreshed.series,
         chapters: refreshed.chapters,
-      ));
+      );
+      await service.add(adopted);
     } catch (e, stack) {
       ErrorLogService.instance
           .log('ReaderFushiHistoryPage.adoptRemoteChapteredManga', e, stack);
-      if (!mounted) return;
+      if (!mounted) return null;
       ScaffoldMessenger.of(context).showSnackBar(
         FushiSnackBar(content: Text(t.remote_book_download_failed)),
       );
-      return;
+      return null;
     }
-    if (!mounted) return;
+    ({int queued, int lockedSkipped})? summary;
+    try {
+      summary = await _enqueueAllChaptersForEntry(
+        bookKey: OnlineMangaLibraryService.bookKeyOf(adopted),
+        entry: adopted,
+      );
+    } on Object catch (error, stack) {
+      ErrorLogService.instance.log(
+        'ReaderFushiHistoryPage.adoptRemoteChapteredManga.enqueue',
+        error,
+        stack,
+      );
+    }
+    if (!mounted) return summary;
     ref.invalidate(fushiBooksProvider(JapaneseLanguage.instance));
     // 远端去重（notAdopted）只在 _loadRemoteBooks 里算：不重载一次，占位卡会与刚
     // 落地的本地卡并排到切 tab 为止（正是上面注释说要避免的）。TTL 内不打网络。
@@ -821,6 +990,7 @@ extension _ReaderHistoryRemote on _ReaderFushiHistoryPageState {
     ScaffoldMessenger.of(context).showSnackBar(
       FushiSnackBar(content: Text(t.remote_manga_added_to_shelf)),
     );
+    return summary;
   }
 
   /// 远端书下载任务本体（在 [InterconnectDownloadManager] 的任务里跑，**不得
