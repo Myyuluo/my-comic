@@ -127,10 +127,6 @@ List<HomeTab> homeActiveTabs(ModuleVisibility visibility) {
   return tabs;
 }
 
-/// 下载页的外壳大标题固定展开、不随滚动收起（2026-11-07 迁移要求）：页面顶部
-/// 只有这一枚标题，内容从标题下方开始，滚动列表时用户始终知道自己在下载页。
-bool homeTabPinsExpandedTitle(HomeTab tab) => tab == HomeTab.downloads;
-
 /// 默认落地 tab：可见列表的第一项。首页开着就是首页；首页被关掉时是第一个
 /// 启用的模块（底栏最左边那一项）；导航模块全关时只剩设置。设置恒在，所以
 /// [tabs]（[homeActiveTabs] 的结果）永不为空。
@@ -1279,24 +1275,23 @@ class _HomePageState extends BasePageState<HomePage>
   Widget _buildShellTitleBar() {
     return FushiShellLargeTitleBar(
       title: _shellTitleFor(_visibleTab),
-      // 下载页的标题固定展开：它不在滚动区内，收起来只会让页面莫名少一行。
       collapsed:
-          !homeTabPinsExpandedTitle(_visibleTab) &&
-          (_largeTitle.collapsed ||
-              (!isGlassDesign(context) && _tabHasFloatingChrome(_visibleTab))),
+          _largeTitle.collapsed ||
+          (!isGlassDesign(context) && _tabHasFloatingChrome(_visibleTab)),
       actions: _shellActions,
     );
   }
 
   /// 内容顶部是叠放浮动工具栏（[FushiFloatingChromeOverlay]）的 tab：这些库页
   /// 的主滚动视图 / 分区都消费 [FushiFloatingChromeInset]，外壳大标题可以叠在
-  /// 它们上面。
+  /// 它们上面。下载页 2026-11-07 起也改用浏览页同款的页内浮动标题胶囊。
   static bool _tabHasFloatingChrome(HomeTab tab) => switch (tab) {
     HomeTab.books ||
     HomeTab.manga ||
     HomeTab.video ||
     HomeTab.games ||
-    HomeTab.browse => true,
+    HomeTab.browse ||
+    HomeTab.downloads => true,
     _ => false,
   };
 

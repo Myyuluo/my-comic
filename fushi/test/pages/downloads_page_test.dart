@@ -11,11 +11,16 @@ import 'package:fushi/src/media/downloads/download_task_card.dart';
 import 'package:fushi/src/media/manga/download/manga_download_service.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi/src/models/preferences_repository.dart';
+import 'package:fushi/src/models/theme_notifier.dart' show buildFushiThemeData;
 import 'package:fushi/src/pages/implementations/downloads_page.dart';
 import 'package:fushi/src/pages/implementations/home_page.dart';
 import 'package:fushi/src/platform/platform_providers.dart';
 import 'package:fushi/src/sync/desktop_lookup_service.dart';
+import 'package:fushi/src/utils/components/fushi_floating_chrome.dart'
+    show FushiFloatingChromeBar;
 import 'package:fushi/src/utils/components/glass/fushi_glass_bars.dart';
+import 'package:fushi/src/utils/components/library_section_tabs.dart'
+    show FushiSectionTabBar;
 import 'package:fushi/src/utils/misc/update_checker.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:material_ui/material_ui.dart';
@@ -27,8 +32,10 @@ import '../helpers/test_platform_services.dart';
 ///
 /// - 内容：现有简单漫画下载任务卡片、没有任务时的空态、没有视图页签（真实页面
 ///   + 真实 37 表数据库）；
-/// - 外壳：挂真 [HomePage] 验证固定展开标题、列表从标题下方开始、切走再回来
-///   保留滚动位置（页面级行为测试，不扫源码）。
+/// - 标题：挂真 [HomePage] 验证下载页标题是浏览页同款的页内浮动标题胶囊——
+///   下滚隐藏、上滚 / 回顶显示，首张卡片从标题下方开始；MD3 窄窗不显示标题，
+///   Apple / 玻璃设计交给外壳大标题收起（页面级行为测试，不扫源码）；
+/// - 保活：切走再回来保留滚动位置。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -120,52 +127,207 @@ void main() {
   });
 
   group('下载页外壳（真 HomePage）', () {
-    testWidgets('标题固定展开：滚动任务列表后仍显示「下载」大标题', (WidgetTester tester) async {
+    testWidgets('标题是浏览页同款浮动标题胶囊：首卡从标题下方开始，页内无视图页签', (
+      WidgetTester tester,
+    ) async {
       await _pumpHome(tester, db);
       await _openDownloads(tester);
 
-      final Finder titleBar = find.byType(FushiShellLargeTitleBar);
-      final Finder shellTitle = find.descendant(
-        of: titleBar,
-        matching: find.text(t.nav_downloads),
+      final Finder page = find.byType(DownloadsPage);
+      final Finder bar = find.descendant(
+        of: page,
+        matching: find.byType(FushiFloatingChromeBar),
       );
-      expect(shellTitle, findsOneWidget, reason: '下载页顶部只有外壳画的「下载」标题');
-      expect(
-        tester.widget<FushiShellLargeTitleBar>(titleBar).collapsed,
-        isFalse,
-        reason: '下载页标题固定展开，不随滚动收起',
-      );
-      expect(
-        find.descendant(
-          of: find.byType(DownloadsPage),
-          matching: find.byType(TabBar),
+      final Finder titleCapsule = find.descendant(
+        of: page,
+        matching: find.byKey(
+          const ValueKey<String>('floating-chrome-shell-title'),
         ),
+      );
+      expect(bar, findsOneWidget, reason: '下载页有自己的页内浮动工具区条');
+      expect(titleCapsule, findsOneWidget, reason: '工具区条里画「下载」标题胶囊');
+      expect(
+        find.descendant(of: titleCapsule, matching: find.text(t.nav_downloads)),
+        findsOneWidget,
+      );
+      expect(
+        find.byType(FushiShellLargeTitleBar),
+        findsNothing,
+        reason: '不再使用外壳固定展开的大标题',
+      );
+      expect(
+        find.descendant(of: page, matching: find.byType(TabBar)),
         findsNothing,
         reason: '下载页不显示任何视图页签',
       );
-
-      // 列表第一张卡片完整位于标题下方（旧遮挡 bug 的回归判据）。
-      final double titleBottom = tester.getBottomLeft(titleBar).dy;
       expect(
-        tester.getTopLeft(find.byType(DownloadTaskCard).first).dy,
+        find.descendant(
+          of: page,
+          matching: find.byWidgetPredicate(
+            (Widget widget) => widget is FushiSectionTabBar,
+            description: 'FushiSectionTabBar',
+          ),
+        ),
+        findsNothing,
+        reason: '浮动工具区里只有标题胶囊，没有视图页签',
+      );
+
+      // 列表第一张卡片完整位于标题（工具区条）下方（旧遮挡 bug 的回归判据）。
+      final double titleBottom = tester.getBottomLeft(titleCapsule).dy;
+      final double barBottom = tester.getBottomLeft(bar).dy;
+      final double cardTop = tester
+          .getTopLeft(find.byType(DownloadTaskCard).first)
+          .dy;
+      expect(
+        cardTop,
         greaterThanOrEqualTo(titleBottom),
         reason: '下载列表从标题下方开始，第一张卡片不被标题遮挡',
       );
+      expect(
+        cardTop,
+        greaterThanOrEqualTo(barBottom),
+        reason: '首卡在浮动工具区条下方，不钻到条底下',
+      );
+      await _unmount(tester);
+    });
 
-      await tester.drag(
+    testWidgets('向下滚动隐藏标题，向上滚动或回到顶部重新显示', (WidgetTester tester) async {
+      await _pumpHome(tester, db);
+      await _openDownloads(tester);
+
+      final Finder list = find
+          .descendant(
+            of: find.byType(DownloadsPage),
+            matching: find.byType(Scrollable),
+          )
+          .first;
+      Finder titleText() => find.descendant(
+        of: find.byKey(const ValueKey<String>('floating-chrome-shell-title')),
+        matching: find.text(t.nav_downloads),
+      );
+      final double cardTopAtRest = tester
+          .getTopLeft(find.byType(DownloadTaskCard).first)
+          .dy;
+
+      expect(titleText().hitTestable(), findsOneWidget, reason: '初始标题可见');
+
+      // 下滚：标题随工具区收起；列表内容继续上移，原来的标题位置不留空白条。
+      await tester.drag(list, const Offset(0, -600));
+      await _settle(tester);
+      expect(titleText().hitTestable(), findsNothing, reason: '向下滚动时标题隐藏');
+      expect(
+        tester.getTopLeft(titleText()).dy,
+        lessThan(0),
+        reason: '标题滑出视口顶部，而不是原地留一条空白',
+      );
+      expect(
+        tester.getTopLeft(find.byType(DownloadTaskCard).first).dy,
+        lessThan(cardTopAtRest),
+        reason: '标题隐藏后列表内容继续上移',
+      );
+      expect(
+        find.byType(DownloadTaskCard).hitTestable(),
+        findsWidgets,
+        reason: '标题原来占据的顶部区域由列表内容覆盖',
+      );
+
+      // 上滚：标题重新出现。
+      await tester.drag(list, const Offset(0, 300));
+      await _settle(tester);
+      expect(titleText().hitTestable(), findsOneWidget, reason: '向上滚动时标题重新显示');
+      expect(tester.getTopLeft(titleText()).dy, greaterThanOrEqualTo(0));
+
+      // 再下滚隐藏，然后回到顶部：标题重新显示。
+      await tester.drag(list, const Offset(0, -600));
+      await _settle(tester);
+      expect(titleText().hitTestable(), findsNothing);
+      await tester.drag(list, const Offset(0, 2000));
+      await _settle(tester);
+      expect(
+        titleText().hitTestable(),
+        findsOneWidget,
+        reason: '回到列表顶部时标题重新显示',
+      );
+      await _unmount(tester);
+    });
+
+    testWidgets('MD3 窄窗口与浏览页一样不显示页面标题', (WidgetTester tester) async {
+      await _pumpHome(
+        tester,
+        db,
+        physicalSize: const Size(500, 900),
+        devicePixelRatio: 1,
+      );
+      await _openDownloads(tester);
+
+      final Finder page = find.byType(DownloadsPage);
+      expect(
+        find.descendant(
+          of: page,
+          matching: find.byKey(
+            const ValueKey<String>('floating-chrome-shell-title'),
+          ),
+        ),
+        findsNothing,
+        reason: '窄窗口没有页面标题胶囊',
+      );
+      expect(
+        find.descendant(of: page, matching: find.text(t.nav_downloads)),
+        findsNothing,
+        reason: '标题只在底部导航里，页内不再画',
+      );
+      expect(find.byType(DownloadTaskCard), findsWidgets);
+      await _unmount(tester);
+    });
+
+    testWidgets('Apple / 玻璃设计：隐藏页内工具区，标题随外壳大标题收起', (WidgetTester tester) async {
+      await _pumpHome(
+        tester,
+        db,
+        theme: buildFushiThemeData(
+          scheme: ColorScheme.fromSeed(seedColor: const Color(0xFF4F5B92)),
+          textTheme: Typography.material2021().black,
+          glassDesign: true,
+        ),
+      );
+      await _openDownloads(tester);
+
+      expect(
         find.descendant(
           of: find.byType(DownloadsPage),
-          matching: find.byType(Scrollable),
+          matching: find.byType(FushiFloatingChromeBar),
         ),
-        const Offset(0, -600),
+        findsNothing,
+        reason: '玻璃设计与浏览页一样不画页内工具区',
       );
-      await _settle(tester);
 
-      expect(shellTitle, findsOneWidget, reason: '向下滚动时标题仍然可见');
+      final Finder titleBar = find.byType(FushiShellLargeTitleBar);
+      expect(titleBar, findsOneWidget);
+      expect(
+        find.descendant(of: titleBar, matching: find.text(t.nav_downloads)),
+        findsOneWidget,
+        reason: '标题交给外壳大标题',
+      );
       expect(
         tester.widget<FushiShellLargeTitleBar>(titleBar).collapsed,
         isFalse,
-        reason: '向下滚动时标题仍保持展开',
+        reason: '初始展开',
+      );
+
+      await tester.drag(
+        find
+            .descendant(
+              of: find.byType(DownloadsPage),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+        const Offset(0, -600),
+      );
+      await _settle(tester);
+      expect(
+        tester.widget<FushiShellLargeTitleBar>(titleBar).collapsed,
+        isTrue,
+        reason: '向下滚动时外壳大标题收起',
       );
       await _unmount(tester);
     });
@@ -252,7 +414,22 @@ class _HostAppModel extends AppModel {
 
 /// 挂真 [HomePage]（与 `srs_module_gating_test` 同一套壳体测试环境），
 /// 向下载页的任务列表预置足够多已完成的章节任务。
-Future<_HostAppModel> _pumpHome(WidgetTester tester, FushiDatabase db) async {
+///
+/// [physicalSize] / [devicePixelRatio] 用来切窗口尺寸档（窄窗验证 MD3 不画页面
+/// 标题）；[theme] 用来切 Apple / 玻璃设计系统。
+Future<_HostAppModel> _pumpHome(
+  WidgetTester tester,
+  FushiDatabase db, {
+  Size? physicalSize,
+  double devicePixelRatio = 1,
+  ThemeData? theme,
+}) async {
+  if (physicalSize != null) {
+    tester.view.physicalSize = physicalSize;
+    tester.view.devicePixelRatio = devicePixelRatio;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+  }
   final PreferencesRepository prefsRepo = PreferencesRepository(db);
   await prefsRepo.loadFromDb();
   final Directory tmpDir = Directory.systemTemp.createTempSync(
@@ -305,6 +482,7 @@ Future<_HostAppModel> _pumpHome(WidgetTester tester, FushiDatabase db) async {
       child: TranslationProvider(
         child: MaterialApp(
           navigatorKey: appModel.navigatorKey,
+          theme: theme,
           home: const HomePage(),
         ),
       ),
