@@ -978,8 +978,8 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
     _rebuild(() {});
   }
 
-  /// 书卡 / 配对字幕书卡「重置阅读状态」：先收起长按菜单，弹确认框（可选只撤最近
-  /// 一次会话 / 全清学习记录，默认都不动），确认后经 [resetBookReadingState] 落库
+  /// 书卡 / 配对字幕书卡「重置阅读状态」：先收起长按菜单，弹确认框（可选撤销最近
+  /// 一次会话，默认不动学习记录），确认后经 [resetBookReadingState] 落库
   /// （位置写回开头而不是删行——删行会被同步通道从对端灌回，见该函数文件头），
   /// 再让书列表 / 最近阅读时刻 / 读完集合三份缓存一起失效。
   Future<void> _resetBookReadingState(

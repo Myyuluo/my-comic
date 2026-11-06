@@ -2004,7 +2004,7 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
         onPressed: () => _toggleBookCompleted(bookKey),
       ),
       // 误点开一本书后把它变回「没读过」：进度归零 + 取消读完 + 离开继续阅读，
-      // 学习记录可选只撤最近一次 / 全清（默认不动），见 [_resetBookReadingState]。
+      // 学习记录可选撤销最近一次（默认不动），见 [_resetBookReadingState]。
       DialogListAction(
         label: t.library_progress_reset_action,
         icon: Icons.restart_alt_outlined,
