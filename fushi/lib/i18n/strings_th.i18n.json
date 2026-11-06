@@ -3575,6 +3575,8 @@
   "import_theme_invalid": "รหัสธีมไม่ถูกต้อง",
   "import_theme_success": "นำเข้าธีมแล้ว",
   "import_unsupported_file_format": "รูปแบบไฟล์ไม่รองรับ: $ext",
+  "incognito_reading": "Incognito reading",
+  "incognito_reading_hint": "Pause recording reading history",
   "increase": "เพิ่ม",
   "info_empty_home_tab": "ประวัติว่างเปล่า",
   "init_error_message": "เริ่มต้นล้มเหลว: $error",

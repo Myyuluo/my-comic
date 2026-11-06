@@ -7,6 +7,7 @@ import 'package:fushi/src/models/preferences_repository.dart'
         kFloatingLyricWindowRectPrefKey,
         kGameStreamLookupLayoutPrefKey,
         kGameStreamRemoteLaunchPrefKey,
+        kIncognitoReadingPrefKey,
         PreferencesRepository;
 import 'package:fushi_engine/sync/fushi_sync_server.dart';
 
@@ -1612,6 +1613,9 @@ class SyncRepository {
     // 书架「仅从本机移除」的远端书：语义就是只对这台设备成立，随备份漂到另一台
     // 设备会让那边的同一份远端书也莫名消失。
     'hidden_remote_books',
+    // 「无痕阅读」是这台设备上的阅读隐私选择：换设备后应由新设备自己决定要不要
+    // 留阅读痕迹，不能随备份 / Profile 把「无痕」强加过去。
+    kIncognitoReadingPrefKey,
     // 朗读声音预设：带 base64 的 API key，地址多是本机 / 局域网的 GPT-SoVITS
     // 服务（`http://127.0.0.1:9880`），跨设备带过去只会指向一台不存在的服务。
     // 当前预设 id 指向的就是这份清单里的条目，一起留在本机。

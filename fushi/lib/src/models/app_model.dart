@@ -7702,6 +7702,14 @@ class AppModel with ChangeNotifier {
   Future<void> setMangaReaderPreferences(MangaReaderPreferences value) =>
       prefsRepo.setMangaReaderPreferences(value);
 
+  /// 无痕阅读（设备本地偏好，默认 false = 记录 History）。阅读器在**每次落库
+  /// 时**现读本值，设置里切换后立即生效。`_prefsRepo` 为空（弹窗进程 / 部分测试
+  /// 壳）时按默认「记录 History」处理。
+  bool get incognitoReading => _prefsRepo?.incognitoReading ?? false;
+
+  Future<void> setIncognitoReading(bool value) =>
+      prefsRepo.setIncognitoReading(value);
+
   /// 作品页「完成后自动识别」chip 的持久值；单章 / 整部入队都读它作 `auto_ocr`。
   bool get mangaDownloadAutoOcr => prefsRepo.mangaDownloadAutoOcr;
   Future<void> setMangaDownloadAutoOcr(bool value) =>

@@ -456,6 +456,23 @@ SettingsDestination buildSystemDestination() {
               settingsContext.refresh();
             },
           ),
+          // 无痕阅读（设备本地偏好，默认关 = 记录 History）：只暂停新增 History
+          // 的可见信号（最近阅读排序 / 章节已读 / 书级完成），续读位置与「继续
+          // 阅读」当前章照常写；Tracking 与统计不受影响。开关值由阅读器每次落库
+          // 时现读，切换后无需重启。
+          SettingsSwitchItem(
+            id: 'system.incognito_reading',
+            title: t.incognito_reading,
+            subtitle: t.incognito_reading_hint,
+            icon: FushiIcons.visibilityOff,
+            defaultValue: false,
+            value: (SettingsContext settingsContext) =>
+                settingsContext.appModel.incognitoReading,
+            onChanged: (SettingsContext settingsContext, bool value) async {
+              await settingsContext.appModel.setIncognitoReading(value);
+              settingsContext.refresh();
+            },
+          ),
         ],
       ),
       SettingsSection(

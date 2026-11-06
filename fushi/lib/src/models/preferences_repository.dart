@@ -134,6 +134,18 @@ BoxFit videoFitModeToBoxFit(VideoFitMode mode) {
   }
 }
 
+/// bool（默认 false = 记录 History）：「无痕阅读」。
+///
+/// 开启后阅读器仍写精确续读位置（`reader_positions` 的章 / 页 / 页内位置、在线
+/// 漫画当前章的 `manga_chapter_states.updatedAt`），但不推进 History 的可见
+/// 信号：冻结 `reader_positions.updatedAt`，不自动写
+/// `manga_chapter_states.readAt`，也不写 `EpubBooks.completedAt`。Tracking 与
+/// 统计不受影响。
+///
+/// 设备本地（见 `SyncRepository.deviceLocalPrefKeys`）：是否在这台设备留阅读
+/// 痕迹不随 Profile 快照 / 备份同步，换设备按新设备自己的设置走。
+const String kIncognitoReadingPrefKey = 'reader_incognito_reading';
+
 /// 「新下载任务交给哪台互联 host 执行」的偏好键（空 = 本机）。
 /// 设备本地（见 `SyncRepository.deviceLocalPrefKeys`）。
 const String kDownloadExecutionHostPrefKey = 'download_execution_host';
@@ -1499,6 +1511,15 @@ class PreferencesRepository extends ChangeNotifier
   Future<void> setReaderCompactControlLayout(ReaderControlLayout layout) async {
     await setPref('reader_control_layout_compact', layout.encode());
     notifyListeners();
+  }
+
+  /// 无痕阅读（默认 false = 记录 History）。读取方在**每次落库时**现读本值，
+  /// 因此在设置里切换后立即生效，不需要重启阅读器。
+  bool get incognitoReading =>
+      getPref(kIncognitoReadingPrefKey, defaultValue: false) as bool;
+
+  Future<void> setIncognitoReading(bool value) async {
+    await setPref(kIncognitoReadingPrefKey, value);
   }
 
   /// 阅读器工具栏样式（2026-10，M3 Expressive toolbars）：`floating`（默认：

@@ -111,13 +111,18 @@ final epubBookUidByKeyProvider =
 /// 换算成 uid 再查，换算不上（非 epub 遗留行 / 空键）退回原键。书架 hero 与
 /// 「最近阅读」排序共用这一跳——BUG-2904：hero 曾直接拿 bookKey 查 uid 键表，
 /// 恒查空、退化成列表序（= 最近导入的在读书），读了新书「继续阅读」也不换。
+///
+/// `updatedAt == 0` 是**无痕阅读新行的哨兵**（首次无痕阅读没有旧时间戳可冻结，
+/// 见 `ReaderPositionRepository.save` 的 `advanceUpdatedAt`）：它不是一次近期
+/// 阅读，按「无阅读历史」返回 null，让排序回落到导入时间。
 int? lastReadAtForBookKey(
   Map<String, int> lastReadAtByUid,
   Map<String, String> epubUidByKey,
   String? bookKey,
 ) {
   if (bookKey == null) return null;
-  return lastReadAtByUid[epubUidByKey[bookKey] ?? bookKey];
+  final int? at = lastReadAtByUid[epubUidByKey[bookKey] ?? bookKey];
+  return at != null && at > 0 ? at : null;
 }
 
 /// 书架阅读进度（position / duration，字符为单位）。TODO-1346：书架进度条以前只按

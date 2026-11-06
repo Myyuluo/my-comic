@@ -3575,6 +3575,8 @@
   "import_theme_invalid": "Geçersiz tema kodu",
   "import_theme_success": "Tema içe aktarıldı",
   "import_unsupported_file_format": "Desteklenmeyen dosya biçimi: $ext",
+  "incognito_reading": "Incognito reading",
+  "incognito_reading_hint": "Pause recording reading history",
   "increase": "Artır",
   "info_empty_home_tab": "Geçmiş boş",
   "init_error_message": "Başlatma başarısız: $error",

@@ -392,6 +392,10 @@ const Set<String> kKnownPreferenceKeys = <String>{
   'reader_control_layout',
   // 窄窗（手机竖屏）按钮布局 JSON（同 reader_control_layout 形；空 = 沿用宽窗那份）。
   'reader_control_layout_compact',
+  // bool（默认 false = 记录 History）：无痕阅读。开启后仍写续读位置，但冻结
+  // reader_positions.updatedAt、不自动写章节已读 / 书级完成。设备本地
+  // （SyncRepository._deviceLocalFixedKeys）：不随 Profile / 备份同步。
+  'reader_incognito_reading',
   // String 'left' | 'right'：小说 / 漫画阅读设置侧边弹窗停靠在哪一侧（与翻页方向无关）。
   'reader_settings_panel_side',
   // String 'floating' | 'docked'：阅读器工具栏样式（M3E 悬浮工具栏 / 贴边实体条）。

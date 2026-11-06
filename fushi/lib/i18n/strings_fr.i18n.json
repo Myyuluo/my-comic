@@ -3575,6 +3575,8 @@
   "import_theme_invalid": "Code de thème invalide",
   "import_theme_success": "Thème importé",
   "import_unsupported_file_format": "Format de fichier non pris en charge : $ext",
+  "incognito_reading": "Incognito reading",
+  "incognito_reading_hint": "Pause recording reading history",
   "increase": "Augmenter",
   "info_empty_home_tab": "L'historique est vide",
   "init_error_message": "Échec de l'initialisation : $error",

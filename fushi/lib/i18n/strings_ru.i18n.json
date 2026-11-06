@@ -3575,6 +3575,8 @@
   "import_theme_invalid": "Недействительный код темы",
   "import_theme_success": "Тема импортирована",
   "import_unsupported_file_format": "Неподдерживаемый формат файла: $ext",
+  "incognito_reading": "Incognito reading",
+  "incognito_reading_hint": "Pause recording reading history",
   "increase": "Увеличить",
   "info_empty_home_tab": "История пуста",
   "init_error_message": "Ошибка инициализации: $error",
