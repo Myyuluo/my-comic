@@ -236,6 +236,49 @@ void main() {
     expect(deleted, 1);
   });
 
+  // 2026-11-05 漫画卡菜单：删除从危险区移进列表末位，但危险样式不能丢——
+  // 否则「末位」看起来和普通管理动作一样，用户更容易误点。
+  testWidgets('a destructive list action keeps red styling at its list position',
+      (WidgetTester tester) async {
+    int deleted = 0;
+    await tester.pumpWidget(
+      buildApp(
+        MediaItemDialogFrame(
+          cover: const SizedBox(width: 260, height: 100),
+          title: 'Test title',
+          listActions: <DialogListAction>[
+            DialogListAction(label: 'Edit info', onPressed: () {}),
+            DialogListAction(label: 'Tag', onPressed: () {}),
+            DialogListAction(
+              label: 'Delete',
+              icon: Icons.delete_outline,
+              destructive: true,
+              onPressed: () => deleted++,
+            ),
+          ],
+        ),
+      ),
+    );
+
+    expect(tester.takeException(), isNull);
+    final BuildContext context = tester.element(find.text('Delete'));
+    final ColorScheme colors = Theme.of(context).colorScheme;
+    final Text deleteText = tester.widget<Text>(find.text('Delete'));
+    expect(
+      deleteText.style?.color,
+      colors.error,
+      reason: '删除是列表项，但仍必须用危险红色',
+    );
+    expect(
+      tester.getTopLeft(find.text('Delete')).dy,
+      greaterThan(tester.getTopLeft(find.text('Tag')).dy),
+      reason: '删除必须排在列表末位',
+    );
+    await tester.tap(find.text('Delete'));
+    await tester.pump();
+    expect(deleted, 1, reason: '红色列表项仍然是可点的删除动作');
+  });
+
   testWidgets('renders the title with no cover and no exceptions',
       (WidgetTester tester) async {
     int launched = 0;
