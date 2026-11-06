@@ -1,10 +1,18 @@
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:fushi_audio/fushi_audio.dart'
+    show AudiobookRepository, AudiobookStorage, SrtBookRepository;
+import 'package:path/path.dart' as p;
 
+import 'package:fushi/src/media/audiobook/audiobook_material_library.dart';
+import 'package:fushi/src/media/audiobook/audiobook_material_service.dart';
 import 'package:fushi/src/media/audiobook/audiobook_transcribe_tasks_section.dart';
+import 'package:fushi/src/media/audiobook/book_import_dialog.dart';
 import 'package:fushi/src/media/drag_drop/drop_classification.dart';
 import 'package:fushi_engine/media/discovery/discovery_models.dart';
+import 'package:fushi_core/fushi_core.dart'
+    show VideoDownloadJobFileRow, VideoDownloadJobRow;
 
 import 'package:fushi/src/media/manga/discovery/manga_discovery_page.dart';
 import 'package:fushi/src/media/manga/manga_sources_page.dart';
@@ -51,22 +59,14 @@ import 'package:fushi/utils.dart';
 ///
 /// 每个页签内先选内容域，再直接复用各域自己的生产组件，不另写第二套 UI。
 class BrowsePage extends ConsumerStatefulWidget {
-  const BrowsePage({super.key, this.initialTab, this.navigationRequest});
-
-  /// 打开时停在哪个页签；null 或此刻不可见 = 第一个可见页签。
-  final BrowseTab? initialTab;
-
-  /// 宿主（首页）把**已挂载**的浏览页切到某页签的请求：首页保活本页，
-  /// 跳转不再靠换 key 整页重建（那会丢掉各页签的搜索词、结果与滚动）。按 identity
-  /// 判新请求；首次挂载时它优先于 [initialTab]。
-  final BrowseNavigationRequest? navigationRequest;
+  const BrowsePage({super.key});
 
   @override
   ConsumerState<BrowsePage> createState() => _BrowsePageState();
 }
 
-/// 「浏览」的页签。**用枚举而不是下标**：页签随平台 / 模块开关增减，跨页跳转
-/// 若按下标就会在页签少一个时静默落错页。
+/// 「浏览」的页签。**用枚举而不是下标**：页签随平台 / 模块开关增减，按位置
+/// 记账会在页签少一个时静默落错页。
 enum BrowseTab { sources, discover, localImport, extensions }
 
 /// 顶层页签接力（二级标签越界横滑）时，目标页签的二级标签要不要按衔接方向
@@ -100,14 +100,6 @@ Widget debugBrowseSwipeSections<T extends Object>({
   trailing: trailing,
 );
 
-/// 一次「切到浏览某页签」的请求（见 [BrowsePage.navigationRequest]）。构造器刻意
-/// 不是 const：每次跳转都是新对象，同一页签连续请求两次也能被识别成两次。
-class BrowseNavigationRequest {
-  BrowseNavigationRequest(this.tab);
-
-  final BrowseTab tab;
-}
-
 class _BrowsePageState extends ConsumerState<BrowsePage>
     with TickerProviderStateMixin {
   /// 页签控制器由本页持有（不用 DefaultTabController）：页签随平台 / 模块开关增减
@@ -118,10 +110,8 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
   /// [_tabController] 对应的页签序列。
   List<BrowseTab> _controllerTabs = const <BrowseTab>[];
 
-  /// 当前选中的页签（按 id 记）；首次挂载时是跳转请求 / [BrowsePage.initialTab]。
-  late BrowseTab? _selectedTab = _onlineSlotOf(
-    widget.navigationRequest?.tab ?? widget.initialTab,
-  );
+  /// 当前选中的页签（按 id 记）；null = 尚未选中，落在第一个可见页签。
+  BrowseTab? _selectedTab;
 
   /// 来源 / 扩展共用的内容域选择（在两者之间来回切不丢选择）。
   OnlineSourcesDomain _onlineDomain = OnlineSourcesDomain.novel;
@@ -129,23 +119,12 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
   /// 「在线源」页签里此刻显示来源还是扩展（2026-10-14 用户：库页顶栏把来源 /
   /// 扩展并成「在线源」后，「浏览模块也可以做」）。两者共用一个顶层页签
   /// （[BrowseTab.sources] 这一槽），由二级行右侧的分段切换。
-  late OnlineSourcesSection _onlineSection = _onlineSectionOf(
-    widget.navigationRequest?.tab ?? widget.initialTab,
-  );
+  OnlineSourcesSection _onlineSection = OnlineSourcesSection.sources;
 
   /// 访问过的在线源分区（惰性构建 + 保活，来回切不丢搜索词与滚动位置）。
   late final Set<OnlineSourcesSection> _onlineVisited = <OnlineSourcesSection>{
     _onlineSection,
   };
-
-  /// [BrowseTab.extensions] 不再单独占顶层页签，跳转请求落到在线源那一槽。
-  static BrowseTab? _onlineSlotOf(BrowseTab? tab) =>
-      tab == BrowseTab.extensions ? BrowseTab.sources : tab;
-
-  static OnlineSourcesSection _onlineSectionOf(BrowseTab? tab) =>
-      tab == BrowseTab.extensions
-      ? OnlineSourcesSection.extensions
-      : OnlineSourcesSection.sources;
 
   _DownloadsResourceDomain _resourceDomain = _DownloadsResourceDomain.books;
 
@@ -173,31 +152,14 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
     // 会挂在一个用户已关掉的模块上）。四个域全关时保持字段原值，此时
     // [_buildResourceHub] 整块不渲染，字段不参与任何渲染判据。
     final AppModel initialAppModel = ref.read(appProvider);
-    final List<_DownloadsResourceDomain> domains =
-        _visibleResourceDomains(initialAppModel.moduleVisibility);
+    final List<_DownloadsResourceDomain> domains = _visibleResourceDomains(
+      initialAppModel.moduleVisibility,
+    );
     if (domains.isNotEmpty) _resourceDomain = domains.first;
     final List<OnlineSourcesDomain> onlineDomains = visibleOnlineSourcesDomains(
       initialAppModel.moduleVisibility,
     );
     if (onlineDomains.isNotEmpty) _onlineDomain = onlineDomains.first;
-  }
-
-  @override
-  void didUpdateWidget(BrowsePage oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    final BrowseNavigationRequest? request = widget.navigationRequest;
-    if (request == null || identical(request, oldWidget.navigationRequest)) {
-      return;
-    }
-    // 已挂载时的跳转：原地切页签，不重建整页。
-    if (request.tab == BrowseTab.sources ||
-        request.tab == BrowseTab.extensions) {
-      _onlineSection = _onlineSectionOf(request.tab);
-      _onlineVisited.add(_onlineSection);
-    }
-    _selectedTab = _onlineSlotOf(request.tab);
-    final int index = _controllerTabs.indexOf(_selectedTab!);
-    if (index >= 0) _tabController?.index = index;
   }
 
   @override
@@ -422,6 +384,72 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
     controller.animateTo(target);
   }
 
+  /// 「补对齐文件」：把已下完的孤立音频直接喂进统一导入对话框。
+  ///
+  /// 本仓有声书是字幕对齐驱动的，`download-only-audiobook` 任务落地的只有音频
+  /// （CoreAudio/TMW 单卷 m4b），自动导入链路进不去。这里把该任务真实落盘的音频
+  /// 预填进 [BookImportDialog]，用户只需再给一个字幕就能成书。
+  ///
+  /// 取不到音频路径（文件被手动删掉/移走）时照常开框、只是不预填——把死路留成
+  /// 用户仍可自选文件的活路，好过弹一句错误后什么也做不了。
+  ///
+  /// 素材库里配得到字幕/正文时一并预填：身份键取任务记的 [externalId]（发现页
+  /// 下载时写的作品主键），没有就退到音频文件名里的键。
+  ///
+  /// 注：my-comic 移除非漫画域后这条入口没有生产者（富任务浏览器未接线），但
+  /// 按 spec「不清理与下载视图迁移无关的其它未接线下载代码」原样保留。
+  // ignore: unused_element
+  Future<void> _pairDownloadedAudiobook(VideoDownloadJobRow job) async {
+    final AppModel appModel = ref.read(appProvider);
+    final List<VideoDownloadJobFileRow> rows = await appModel.database
+        .getVideoDownloadJobFiles(job.jobId);
+    final List<String> audioPaths = <String>[
+      for (final VideoDownloadJobFileRow row in rows)
+        if (row.selected &&
+            (row.finalAbsolutePath?.trim().isNotEmpty ?? false) &&
+            AudiobookStorage.audioExtensions.contains(
+              p.extension(row.finalAbsolutePath!).toLowerCase(),
+            ))
+          row.finalAbsolutePath!,
+    ]..sort();
+    final AudiobookMaterialMatch match = await _matchAudiobookMaterials(
+      appModel,
+      job: job,
+      audioPaths: audioPaths,
+    );
+    if (!mounted) return;
+    await showAppDialog<bool>(
+      context: context,
+      builder: (_) => BookImportDialog(
+        prefs: appModel.prefsRepo,
+        repo: SrtBookRepository(appModel.database),
+        audiobookRepo: AudiobookRepository(appModel.database),
+        db: appModel.database,
+        initialAudioPaths: audioPaths.isEmpty ? null : audioPaths,
+        initialSubtitlePath: match.subtitlePath,
+        initialEpubPath: match.contentPath,
+      ),
+    );
+  }
+
+  /// 从素材库给这条任务配字幕/正文；没配素材库或配不到时返回空匹配。
+  Future<AudiobookMaterialMatch> _matchAudiobookMaterials(
+    AppModel appModel, {
+    required VideoDownloadJobRow job,
+    required List<String> audioPaths,
+  }) async {
+    final AudiobookMaterialScan scan = await appModel.audiobookMaterialService
+        .scan();
+    if (scan.index.isEmpty) return const AudiobookMaterialMatch();
+    final String? externalId = job.externalId?.trim();
+    final String? key = (externalId != null && externalId.isNotEmpty)
+        ? externalId
+        : audioPaths
+              .map(audiobookKeyFromAudioPath)
+              .firstWhere((String? k) => k != null, orElse: () => null);
+    return matchAudiobookMaterial(scan.index, key: key, title: job.title);
+  }
+
   String _resourceDomainLabel(_DownloadsResourceDomain domain) =>
       switch (domain) {
         _DownloadsResourceDomain.books => t.books,
@@ -480,8 +508,9 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
     // 模块门控：四个域分属 books / manga / games / video，关掉的模块不出段，
     // 它的发现页也一并不建（隐藏域不该继续挂在树上跑网络）。
     final AppModel appModel = ref.watch(appProvider);
-    final List<_DownloadsResourceDomain> domains =
-        _visibleResourceDomains(appModel.moduleVisibility);
+    final List<_DownloadsResourceDomain> domains = _visibleResourceDomains(
+      appModel.moduleVisibility,
+    );
     // 四个域全关：整块资源分区不渲染——空的标签条 + 空页面是「渲染出来但点不
     // 出任何东西」，正是要消灭的形态。
     if (domains.isEmpty) return const SizedBox.shrink();
@@ -589,8 +618,7 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
 
   Widget build(BuildContext context) {
     final List<BrowseTab> tabs = _visibleTabs(ref.watch(appProvider));
-    // 初始页签：跳转请求 / initialTab 播种进 [_selectedTab]，此刻不可见就落第一个
-    // 页签（见 [_syncTabController]）。
+    // 初始页签：尚未选中时落在第一个可见页签（见 [_syncTabController]）。
     final TabController controller = _syncTabController(tabs);
     // 作为 home tab 时外层已有 SafeArea，这里的 SafeArea 兜的是独立 push
     // 进来（设置入口）时的状态栏避让，双层无副作用。
@@ -655,7 +683,7 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
 ///   下一个顶层页签。
 ///
 /// 选中值的真相在宿主（[selected] / [onChanged]），本组件的 [TabController] 是它的
-/// 投影：宿主改值（跳转请求、接力落端）时就地跟过去。
+/// 投影：宿主改值（顶层接力落端）时就地跟过去。
 class _BrowseSwipeSections<T extends Object> extends StatefulWidget {
   const _BrowseSwipeSections({
     required this.pickerKey,
@@ -725,7 +753,7 @@ class _BrowseSwipeSectionsState<T extends Object>
     if (current != null && listEquals(values, _controllerValues)) {
       final int index = _selectedIndex;
       if (!current.indexIsChanging && current.index != index) {
-        // 宿主改了选中值（跳转请求 / 顶层接力落端）：此刻多半不在屏上，直接跳。
+        // 宿主改了选中值（顶层接力落端）：此刻多半不在屏上，直接跳。
         current.index = index;
       }
       return current;

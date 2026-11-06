@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi/i18n/strings.g.dart';
 import 'package:fushi/models.dart';
+import 'package:fushi/src/media/detail/media_detail_kit.dart';
 import 'package:fushi/src/media/media_item.dart';
 import 'package:fushi/src/media/media_source.dart';
 import 'package:fushi/src/media/manga/library/manga_series_page.dart';
@@ -29,6 +30,10 @@ import '../../helpers/test_platform_services.dart';
 
 /// Manga 作品页头部（ticket 03）：移除「已入库」「外部来源」两枚 chip，保留
 /// 「扩展源」；书名与作者可点击，跳「搜索全部来源」并自动执行搜索。
+///
+/// 悬停 / 鼠标指针 / 只响应鼠标点击这些交互契约由共享包装层
+/// `MediaDetailMouseHoverTap` 自己的测试覆盖（`media_detail_header_links_test`）；
+/// 这里只验证页面级行为：点哪、用什么词搜、搜哪些源、哪些入口不触发。
 class _FakeAdapter implements OnlineMangaRuntimeAdapter {
   @override
   OnlineMangaRuntimeKind get kind => OnlineMangaRuntimeKind.mihon;
@@ -303,19 +308,55 @@ void main() {
     addTearDown(tester.view.reset);
   }
 
+  /// 建 manager + AppModel、把作品挂上作品页并等首屏 / 进场落定。
+  ///
+  /// [localBookKey] 非 null = 挂本地卷；[platformSupported] false = 当前平台
+  /// 没有在线扩展运行时（取 manager 抛错）。
+  Future<({_FakeMihonRuntime runtime, _TestAppModel appModel})> pumpSeriesPage(
+    WidgetTester tester, {
+    Size size = const Size(800, 1400),
+    bool withEnabledSource = true,
+    _FakeMihonRuntime? runtime,
+    bool platformSupported = true,
+    OnlineMangaRuntimeKind entryRuntime = OnlineMangaRuntimeKind.mihon,
+    String? localBookKey,
+    Finder? waitFor,
+  }) async {
+    sizeView(tester, size);
+    final _FakeMihonRuntime fakeRuntime = runtime ?? _FakeMihonRuntime();
+    final MihonManager manager = await _createManager(
+      db,
+      root,
+      withEnabledSource: withEnabledSource,
+      runtime: fakeRuntime,
+    );
+    addTearDown(manager.dispose);
+    final _TestAppModel appModel = _TestAppModel(
+      db,
+      library,
+      root,
+      mihonManagerOverride: platformSupported ? manager : null,
+    );
+    final String bookKey =
+        localBookKey ??
+        (await library.add(_entry(runtime: entryRuntime))).bookKey;
+    await tester.pumpWidget(
+      _harness(appModel, ShelfMangaSeriesTarget(bookKey)),
+    );
+    await _pumpUntil(tester, waitFor ?? find.byKey(_titleKey));
+    await _settle(tester);
+    return (runtime: fakeRuntime, appModel: appModel);
+  }
+
+  Future<void> openSearchAndSettle(WidgetTester tester) async {
+    await _pumpUntil(tester, find.byType(MangaGlobalSearchPage));
+    // 自动执行搜索：等结果区落定。
+    await _pumpUntil(tester, find.text(t.mihon_source_no_results));
+  }
+
   testWidgets('头部移除「已入库」「外部来源」，保留「扩展源」', (WidgetTester tester) async {
-    sizeView(tester, const Size(1400, 1000));
-    final _TestAppModel appModel = _TestAppModel(db, library, root);
-    late String bookKey;
     await tester.runAsync(() async {
-      bookKey = (await library.add(_entry())).bookKey;
-      await tester.pumpWidget(
-        _harness(appModel, ShelfMangaSeriesTarget(bookKey)),
-      );
-      await _pumpUntil(
-        tester,
-        find.byKey(const ValueKey<String>('online-work-extension-source-chip')),
-      );
+      await pumpSeriesPage(tester, size: const Size(1400, 1000));
     });
 
     expect(
@@ -338,32 +379,36 @@ void main() {
     expect(find.text(t.download_method_extension), findsOneWidget);
   });
 
+  testWidgets('标题与作者接入共享的鼠标悬停 / 点击包装层', (WidgetTester tester) async {
+    await tester.runAsync(() async {
+      await pumpSeriesPage(tester);
+    });
+
+    expect(
+      find.ancestor(
+        of: find.byKey(_titleKey),
+        matching: find.byType(MediaDetailMouseHoverTap),
+      ),
+      findsOneWidget,
+      reason: '书名悬停加下划线、只响应鼠标点击的行为由共享包装层提供',
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(_authorChipKey),
+        matching: find.byType(MediaDetailMouseHoverTap),
+      ),
+      findsOneWidget,
+      reason: '作者 chip 悬停提亮、只响应鼠标点击的行为由共享包装层提供',
+    );
+  });
+
   testWidgets('点击书名：打开「搜索全部来源」，以书名自动搜索全部已启用在线源', (WidgetTester tester) async {
     // 窄窗口：header 在页面顶部（与宽屏左栏是同一个 header）。
-    sizeView(tester, const Size(800, 1400));
-    final _FakeMihonRuntime runtime = _FakeMihonRuntime();
-    late MihonManager manager;
-    late _TestAppModel appModel;
+    late _FakeMihonRuntime runtime;
     await tester.runAsync(() async {
-      manager = await _createManager(db, root, runtime: runtime);
-      addTearDown(manager.dispose);
-      appModel = _TestAppModel(
-        db,
-        library,
-        root,
-        mihonManagerOverride: manager,
-      );
-      final EpubBookRow row = await library.add(_entry());
-      await tester.pumpWidget(
-        _harness(appModel, ShelfMangaSeriesTarget(row.bookKey)),
-      );
-      await _pumpUntil(tester, find.byKey(_titleKey));
-      await _settle(tester);
-
+      runtime = (await pumpSeriesPage(tester)).runtime;
       await tester.tap(find.byKey(_titleKey), kind: PointerDeviceKind.mouse);
-      await _pumpUntil(tester, find.byType(MangaGlobalSearchPage));
-      // 自动执行搜索：等结果区落定。
-      await _pumpUntil(tester, find.text(t.mihon_source_no_results));
+      await openSearchAndSettle(tester);
     });
 
     expect(runtime.searches, <({String sourceName, String query})>[
@@ -374,33 +419,14 @@ void main() {
   });
 
   testWidgets('点击作者 chip：以作者名打开搜索并自动执行', (WidgetTester tester) async {
-    sizeView(tester, const Size(800, 1400));
-    final _FakeMihonRuntime runtime = _FakeMihonRuntime();
+    late _FakeMihonRuntime runtime;
     await tester.runAsync(() async {
-      final MihonManager manager = await _createManager(
-        db,
-        root,
-        runtime: runtime,
-      );
-      addTearDown(manager.dispose);
-      final _TestAppModel appModel = _TestAppModel(
-        db,
-        library,
-        root,
-        mihonManagerOverride: manager,
-      );
-      final EpubBookRow row = await library.add(_entry());
-      await tester.pumpWidget(
-        _harness(appModel, ShelfMangaSeriesTarget(row.bookKey)),
-      );
-      await _pumpUntil(tester, find.byKey(_authorChipKey));
-      await _settle(tester);
+      runtime = (await pumpSeriesPage(tester)).runtime;
       await tester.tap(
         find.byKey(_authorChipKey),
         kind: PointerDeviceKind.mouse,
       );
-      await _pumpUntil(tester, find.byType(MangaGlobalSearchPage));
-      await _pumpUntil(tester, find.text(t.mihon_source_no_results));
+      await openSearchAndSettle(tester);
     });
 
     expect(runtime.searches, <({String sourceName, String query})>[
@@ -409,27 +435,9 @@ void main() {
   });
 
   testWidgets('标题与作者只响应鼠标点击：触摸点击不打开搜索页', (WidgetTester tester) async {
-    sizeView(tester, const Size(800, 1400));
-    final _FakeMihonRuntime runtime = _FakeMihonRuntime();
+    late _FakeMihonRuntime runtime;
     await tester.runAsync(() async {
-      final MihonManager manager = await _createManager(
-        db,
-        root,
-        runtime: runtime,
-      );
-      addTearDown(manager.dispose);
-      final _TestAppModel appModel = _TestAppModel(
-        db,
-        library,
-        root,
-        mihonManagerOverride: manager,
-      );
-      final EpubBookRow row = await library.add(_entry());
-      await tester.pumpWidget(
-        _harness(appModel, ShelfMangaSeriesTarget(row.bookKey)),
-      );
-      await _pumpUntil(tester, find.byKey(_titleKey));
-      await _settle(tester);
+      runtime = (await pumpSeriesPage(tester)).runtime;
 
       // 默认 tester.tap 是触摸指针：不应触发任何跳转。
       await tester.tap(find.byKey(_titleKey));
@@ -442,95 +450,6 @@ void main() {
 
     expect(find.byType(MangaGlobalSearchPage), findsNothing);
     expect(runtime.searches, isEmpty);
-  });
-
-  testWidgets('悬停提示：书名加下划线、作者 chip 提亮；指针保持默认', (WidgetTester tester) async {
-    sizeView(tester, const Size(800, 1400));
-    final _TestAppModel appModel = _TestAppModel(db, library, root);
-    late String bookKey;
-    await tester.runAsync(() async {
-      bookKey = (await library.add(_entry())).bookKey;
-      await tester.pumpWidget(
-        _harness(appModel, ShelfMangaSeriesTarget(bookKey)),
-      );
-      await _pumpUntil(tester, find.byKey(_titleKey));
-      await _pumpUntil(tester, find.byKey(_authorChipKey));
-    });
-
-    TextStyle titleStyle() => tester.widget<Text>(find.byKey(_titleKey)).style!;
-    Color chipFill() =>
-        (tester
-                    .widget<DecoratedBox>(
-                      find
-                          .descendant(
-                            of: find.byKey(_authorChipKey),
-                            matching: find.byType(DecoratedBox),
-                          )
-                          .first,
-                    )
-                    .decoration
-                as BoxDecoration)
-            .color!;
-
-    // 静止外观不变。
-    expect(titleStyle().decoration, isNot(TextDecoration.underline));
-    final Color restingFill = chipFill();
-
-    // 鼠标指针保持默认（MouseRegion 不声明 click 光标）。
-    expect(
-      tester
-          .widget<MouseRegion>(
-            find
-                .ancestor(
-                  of: find.byKey(_titleKey),
-                  matching: find.byType(MouseRegion),
-                )
-                .first,
-          )
-          .cursor,
-      MouseCursor.defer,
-    );
-    expect(
-      tester
-          .widget<MouseRegion>(
-            find
-                .ancestor(
-                  of: find.byKey(_authorChipKey),
-                  matching: find.byType(MouseRegion),
-                )
-                .first,
-          )
-          .cursor,
-      MouseCursor.defer,
-    );
-
-    final TestGesture mouse = await tester.createGesture(
-      kind: PointerDeviceKind.mouse,
-    );
-    await mouse.addPointer(location: Offset.zero);
-    addTearDown(mouse.removePointer);
-    await tester.pump();
-
-    await mouse.moveTo(tester.getCenter(find.byKey(_titleKey)));
-    await tester.pumpAndSettle();
-    expect(
-      titleStyle().decoration,
-      TextDecoration.underline,
-      reason: '书名悬停加下划线',
-    );
-
-    await mouse.moveTo(tester.getCenter(find.byKey(_authorChipKey)));
-    await tester.pumpAndSettle();
-    expect(
-      titleStyle().decoration,
-      isNot(TextDecoration.underline),
-      reason: '移出书名后下划线消失',
-    );
-    expect(chipFill(), isNot(restingFill), reason: '作者 chip 悬停提亮');
-
-    await mouse.moveTo(const Offset(4, 4));
-    await tester.pumpAndSettle();
-    expect(chipFill(), restingFill, reason: '移出后恢复静止外观');
   });
 
   // 本地卷与互联对端没有「在线 Source」上下文，但标题 / 作者仍按当前显示文字去
@@ -550,33 +469,15 @@ void main() {
   );
 
   testWidgets('本地卷：书名与作者同样可点击并自动搜索', (WidgetTester tester) async {
-    sizeView(tester, const Size(800, 1400));
-    final _FakeMihonRuntime runtime = _FakeMihonRuntime();
+    late _FakeMihonRuntime runtime;
     await tester.runAsync(() async {
-      final MihonManager manager = await _createManager(
-        db,
-        root,
-        runtime: runtime,
-      );
-      addTearDown(manager.dispose);
-      final _TestAppModel appModel = _TestAppModel(
-        db,
-        library,
-        root,
-        mihonManagerOverride: manager,
-      );
       final String bookKey = await pumpLocalVolume();
-      await tester.pumpWidget(
-        _harness(appModel, ShelfMangaSeriesTarget(bookKey)),
-      );
-      await _pumpUntil(tester, find.byKey(_titleKey));
-      await _settle(tester);
+      runtime = (await pumpSeriesPage(tester, localBookKey: bookKey)).runtime;
       expect(find.text('Local Volume'), findsWidgets);
       expect(find.text('Local Author'), findsOneWidget);
 
       await tester.tap(find.byKey(_titleKey), kind: PointerDeviceKind.mouse);
-      await _pumpUntil(tester, find.byType(MangaGlobalSearchPage));
-      await _pumpUntil(tester, find.text(t.mihon_source_no_results));
+      await openSearchAndSettle(tester);
 
       tester.state<NavigatorState>(find.byType(Navigator)).pop();
       await _settle(tester);
@@ -586,8 +487,7 @@ void main() {
         find.byKey(_authorChipKey),
         kind: PointerDeviceKind.mouse,
       );
-      await _pumpUntil(tester, find.byType(MangaGlobalSearchPage));
-      await _pumpUntil(tester, find.text(t.mihon_source_no_results));
+      await openSearchAndSettle(tester);
     });
 
     expect(
@@ -597,34 +497,16 @@ void main() {
   });
 
   testWidgets('互联对端作品：书名与作者同样可点击并自动搜索', (WidgetTester tester) async {
-    sizeView(tester, const Size(800, 1400));
-    final _FakeMihonRuntime runtime = _FakeMihonRuntime();
+    late _FakeMihonRuntime runtime;
     await tester.runAsync(() async {
-      final MihonManager manager = await _createManager(
-        db,
-        root,
-        runtime: runtime,
-      );
-      addTearDown(manager.dispose);
-      final _TestAppModel appModel = _TestAppModel(
-        db,
-        library,
-        root,
-        mihonManagerOverride: manager,
-      );
-      final EpubBookRow row = await library.add(
-        _entry(runtime: OnlineMangaRuntimeKind.interconnect),
-      );
-      await tester.pumpWidget(
-        _harness(appModel, ShelfMangaSeriesTarget(row.bookKey)),
-      );
-      await _pumpUntil(tester, find.byKey(_titleKey));
-      await _settle(tester);
+      runtime = (await pumpSeriesPage(
+        tester,
+        entryRuntime: OnlineMangaRuntimeKind.interconnect,
+      )).runtime;
       expect(find.text('Fixture author'), findsOneWidget);
 
       await tester.tap(find.byKey(_titleKey), kind: PointerDeviceKind.mouse);
-      await _pumpUntil(tester, find.byType(MangaGlobalSearchPage));
-      await _pumpUntil(tester, find.text(t.mihon_source_no_results));
+      await openSearchAndSettle(tester);
 
       tester.state<NavigatorState>(find.byType(Navigator)).pop();
       await _settle(tester);
@@ -634,8 +516,7 @@ void main() {
         find.byKey(_authorChipKey),
         kind: PointerDeviceKind.mouse,
       );
-      await _pumpUntil(tester, find.byType(MangaGlobalSearchPage));
-      await _pumpUntil(tester, find.text(t.mihon_source_no_results));
+      await openSearchAndSettle(tester);
     });
 
     expect(
@@ -645,35 +526,16 @@ void main() {
   });
 
   testWidgets('宽窗口左栏（side pane）：书名同样可点击', (WidgetTester tester) async {
-    sizeView(tester, const Size(1400, 1000));
-    final _FakeMihonRuntime runtime = _FakeMihonRuntime();
+    late _FakeMihonRuntime runtime;
     await tester.runAsync(() async {
-      final MihonManager manager = await _createManager(
-        db,
-        root,
-        runtime: runtime,
-      );
-      addTearDown(manager.dispose);
-      final _TestAppModel appModel = _TestAppModel(
-        db,
-        library,
-        root,
-        mihonManagerOverride: manager,
-      );
-      final EpubBookRow row = await library.add(_entry());
-      await tester.pumpWidget(
-        _harness(appModel, ShelfMangaSeriesTarget(row.bookKey)),
-      );
-      await _pumpUntil(
+      runtime = (await pumpSeriesPage(
         tester,
-        find.byKey(const ValueKey<String>('media-detail-side-pane')),
-      );
-      await _pumpUntil(tester, find.byKey(_titleKey));
-      await _settle(tester);
+        size: const Size(1400, 1000),
+        waitFor: find.byKey(const ValueKey<String>('media-detail-side-pane')),
+      )).runtime;
 
       await tester.tap(find.byKey(_titleKey), kind: PointerDeviceKind.mouse);
-      await _pumpUntil(tester, find.byType(MangaGlobalSearchPage));
-      await _pumpUntil(tester, find.text(t.mihon_source_no_results));
+      await openSearchAndSettle(tester);
     });
 
     expect(
@@ -683,26 +545,8 @@ void main() {
   });
 
   testWidgets('没有可用在线源：打开搜索页自己的空态，不出现「去装来源」按钮', (WidgetTester tester) async {
-    sizeView(tester, const Size(800, 1400));
     await tester.runAsync(() async {
-      final MihonManager manager = await _createManager(
-        db,
-        root,
-        withEnabledSource: false,
-      );
-      addTearDown(manager.dispose);
-      final _TestAppModel appModel = _TestAppModel(
-        db,
-        library,
-        root,
-        mihonManagerOverride: manager,
-      );
-      final EpubBookRow row = await library.add(_entry());
-      await tester.pumpWidget(
-        _harness(appModel, ShelfMangaSeriesTarget(row.bookKey)),
-      );
-      await _pumpUntil(tester, find.byKey(_titleKey));
-      await _settle(tester);
+      await pumpSeriesPage(tester, withEnabledSource: false);
 
       await tester.tap(find.byKey(_titleKey), kind: PointerDeviceKind.mouse);
       await _pumpUntil(tester, find.byType(MangaGlobalSearchPage));
@@ -717,16 +561,9 @@ void main() {
   });
 
   testWidgets('平台不支持扩展运行时：点击书名 / 作者安全无操作', (WidgetTester tester) async {
-    sizeView(tester, const Size(800, 1400));
     // 不提供 mihonManagerOverride：模型取 manager 时抛错，模拟不支持扩展运行时的平台。
-    final _TestAppModel appModel = _TestAppModel(db, library, root);
     await tester.runAsync(() async {
-      final EpubBookRow row = await library.add(_entry());
-      await tester.pumpWidget(
-        _harness(appModel, ShelfMangaSeriesTarget(row.bookKey)),
-      );
-      await _pumpUntil(tester, find.byKey(_titleKey));
-      await _settle(tester);
+      await pumpSeriesPage(tester, platformSupported: false);
 
       await tester.tap(find.byKey(_titleKey), kind: PointerDeviceKind.mouse);
       await tester.tap(

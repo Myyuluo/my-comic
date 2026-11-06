@@ -1598,11 +1598,7 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
         // 表达）；小说作品页共用同一 helper，仍保留两枚。
         if (_entry case final OnlineMangaLibraryEntry entry
             when entry.runtime != OnlineMangaRuntimeKind.interconnect)
-          ...extensionSourceDetailChips().where(
-            (MediaDetailChip chip) =>
-                chip.key !=
-                const ValueKey<String>('online-work-external-source-chip'),
-          ),
+          ...extensionSourceDetailChips(includeExternal: false),
       ],
       genres: series?.genreLabels ?? const <String>[],
       description: series?.description,
