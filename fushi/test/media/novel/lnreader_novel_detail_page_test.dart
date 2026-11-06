@@ -2,10 +2,12 @@ import 'dart:io';
 
 import 'package:drift/native.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi/i18n/strings.g.dart';
+import 'package:fushi/src/media/detail/media_detail_kit.dart';
 import 'package:fushi/src/media/media_item.dart';
 import 'package:fushi/src/media/media_source.dart';
 import 'package:fushi/src/media/novel/online/lnreader_manager.dart';
@@ -237,6 +239,82 @@ void main() {
     expect(find.byType(LnReaderChapterRangeDialog), findsNothing);
     expect(await tester.runAsync(() => db.select(db.epubBooks).get()), isEmpty);
     expect(find.byKey(addKey), findsOneWidget);
+  });
+
+  // ticket 03 回归：作品页头部的可点击标题 / 作者 chip 只在漫画侧传回调；小说页
+  // 不传，因此外观、悬停与点击行为都与改动前完全一致（扩展源 / 外部来源两枚
+  // chip 也照旧显示）。
+  testWidgets('小说作品页：标题与作者保持纯展示，扩展源 / 外部来源 chip 不变', (
+    WidgetTester tester,
+  ) async {
+    runtime.novelResult = const LnReaderNovel(
+      name: 'Novel A',
+      path: '/a',
+      author: 'Author A',
+      chapters: chapters,
+      totalPages: 1,
+    );
+    await tester.runAsync(() async {
+      await pumpDetail(tester);
+      await pumpUntil(tester, find.text('Chapter one'));
+    });
+    await tester.pumpAndSettle();
+
+    final Finder heroTitle = find.descendant(
+      of: find.byType(MediaDetailHero),
+      matching: find.text('Novel A'),
+    );
+    expect(heroTitle, findsOneWidget);
+    expect(find.text('Author A'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('online-work-extension-source-chip')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('online-work-external-source-chip')),
+      findsOneWidget,
+    );
+
+    TextStyle titleStyle() => tester.widget<Text>(heroTitle).style!;
+    Color authorFill() =>
+        (tester
+                    .widget<DecoratedBox>(
+                      find
+                          .descendant(
+                            of: find.ancestor(
+                              of: find.text('Author A'),
+                              matching: find.byType(MediaDetailChipView),
+                            ),
+                            matching: find.byType(DecoratedBox),
+                          )
+                          .first,
+                    )
+                    .decoration
+                as BoxDecoration)
+            .color!;
+    final Color restingFill = authorFill();
+
+    final TestGesture mouse = await tester.createGesture(
+      kind: PointerDeviceKind.mouse,
+    );
+    await mouse.addPointer(location: Offset.zero);
+    addTearDown(mouse.removePointer);
+    await mouse.moveTo(tester.getCenter(heroTitle));
+    await tester.pumpAndSettle();
+    expect(
+      titleStyle().decoration,
+      isNot(TextDecoration.underline),
+      reason: '小说页标题不传点击回调，悬停外观不变',
+    );
+    await mouse.moveTo(tester.getCenter(find.text('Author A')));
+    await tester.pumpAndSettle();
+    expect(authorFill(), restingFill, reason: '小说页作者 chip 悬停不提亮');
+
+    await tester.tap(heroTitle, kind: PointerDeviceKind.mouse);
+    await tester.tap(find.text('Author A'), kind: PointerDeviceKind.mouse);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.byType(LnReaderNovelDetailPage), findsOneWidget);
   });
 }
 

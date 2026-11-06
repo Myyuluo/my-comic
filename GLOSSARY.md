@@ -40,6 +40,14 @@ _Avoid_: 授权、白名单
 书架中的一部作品，是 Library、Category、Reading progress 和 Tracking 的归属对象。
 _Avoid_: 条目、书籍
 
+**Manga 作品页（Manga series page）**:
+从 Library 或在线 Source 点击一部 Manga 后打开的详情页；左栏展示封面、书名、作者与状态 chip，并提供章节列表与阅读入口。书名与作者可点击，以当前显示的文字去「Manga 全局搜索」检索全部已启用的在线 Source。
+_Avoid_: 详情页（与小说 / 视频作品页混淆时）、书页
+
+**Manga 全局搜索（搜索全部来源）**:
+在全部已启用的在线 Source 中按关键词执行搜索的页面；Source 自身与提供它的 Extension 都启用才参与搜索。从 Manga 作品页点击书名或作者会带着该关键词进入并自动执行搜索。
+_Avoid_: 聚合搜索、全源搜索（口语；正式术语用本名）
+
 **Chapter（章节）**:
 Manga 的一个章节，包含一组 Page。
 _Avoid_: 话
