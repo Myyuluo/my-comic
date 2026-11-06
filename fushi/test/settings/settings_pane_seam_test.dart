@@ -24,6 +24,7 @@ import 'package:fushi/models.dart';
 import 'package:fushi/src/models/preferences_repository.dart';
 import 'package:fushi/src/models/theme_notifier.dart';
 import 'package:fushi/src/settings/material_settings_renderer.dart';
+import 'package:fushi/src/settings/settings_destination.dart';
 import 'package:fushi/src/settings/settings_home_page.dart';
 import 'package:fushi/utils.dart';
 import 'package:fushi_core/fushi_core.dart';
@@ -173,4 +174,80 @@ void main() {
       expect(insets.left, tokens.spacing.page);
     },
   );
+
+  for (final (String layout, Size viewport) in <(String, Size)>[
+    ('narrow', const Size(600, 1000)),
+    ('wide', const Size(1200, 1000)),
+  ]) {
+    testWidgets(
+      'settings home keeps one flat group without first-level headings in '
+      '$layout layout',
+      (WidgetTester tester) async {
+        final AppModel appModel = await _buildAppModel();
+        tester.view.devicePixelRatio = 1.0;
+        tester.view.physicalSize = viewport;
+        addTearDown(() {
+          tester.view.resetDevicePixelRatio();
+          tester.view.resetPhysicalSize();
+        });
+
+        await tester.pumpWidget(
+          _wideSettings(appModel, appModel.themeNotifier),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byType(MaterialSupportingPaneLayout),
+          layout == 'wide' ? findsOneWidget : findsNothing,
+        );
+
+        // 窄屏分组卡与宽屏左侧导航共用同一个分组 key：首页只有一个连续分组。
+        final Finder group = find.byKey(
+          const ValueKey<String>('settings-home-group'),
+        );
+        expect(group, findsOneWidget, reason: '$layout 设置首页只能有一个连续分组');
+
+        // 「界面 / 内容 / 连接 / 应用」四个一级分组标题全部移除。只看导航分组：
+        // 宽屏右侧详情窗格里的二级分组标题（如 section_interface 也叫
+        // 「Interface」）必须保持不变，不能拿来当一级标题的证据。
+        for (final String heading in <String>[
+          t.settings_group_interface,
+          t.settings_group_content,
+          t.settings_group_learning,
+          t.settings_group_connections,
+          t.settings_group_data,
+          t.settings_group_app,
+        ]) {
+          expect(
+            find.descendant(of: group, matching: find.text(heading)),
+            findsNothing,
+            reason: '$layout 设置首页导航不应出现一级分组标题「$heading」',
+          );
+        }
+
+        // 两种布局使用同一套扁平顺序：外观与交互 → 漫画 → 下载 → 系统与关于。
+        final List<double> rowTops = <double>[];
+        for (final SettingsDestinationId id in <SettingsDestinationId>[
+          SettingsDestinationId.appearance,
+          SettingsDestinationId.manga,
+          SettingsDestinationId.downloads,
+          SettingsDestinationId.system,
+        ]) {
+          final Finder row = find.descendant(
+            of: group,
+            matching: find.byKey(ValueKey<SettingsDestinationId>(id)),
+          );
+          expect(row, findsOneWidget, reason: '$layout 缺少分类 ${id.name}');
+          rowTops.add(tester.getTopLeft(row).dy);
+        }
+        for (int i = 1; i < rowTops.length; i++) {
+          expect(
+            rowTops[i],
+            greaterThan(rowTops[i - 1]),
+            reason: '$layout 分类顺序必须是 外观与交互 → 漫画 → 下载 → 系统与关于',
+          );
+        }
+      },
+    );
+  }
 }

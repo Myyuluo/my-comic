@@ -7,10 +7,13 @@ import 'package:fushi/utils.dart';
 
 /// 「重置阅读状态 / 清除观看进度」确认框（书架、漫画库、视频库共用，单卡与批量同一份）。
 ///
-/// 正文说清会发生什么（进度归零、改为未读 / 未看、离开「继续」区）；下面两条互斥的
-/// 可选勾选决定学习记录怎么处理，**默认都不勾**——统计是用户的学习数据，误删代价高：
-///  * 「同时撤销最近一次打开的记录」：误点场景专用，只撤最近那一次会话；
-///  * 「同时清除它的全部学习记录」：破坏性最强，红色勾选。
+/// 正文说清会发生什么（进度归零、改为未读 / 未看、离开「继续」区）；下面唯一一条
+/// 可选勾选决定学习记录怎么处理，**默认不勾**——统计是用户的学习数据，误删代价高：
+///  * 「同时撤销最近一次打开的记录」：误点场景专用，只撤最近那一次会话。
+///
+/// ticket 04（漫画 UI 修正）：不再提供「同时清除它的全部学习记录」。底层
+/// [StudyRecordResetScope.all] 与 `resetBookReadingState` 的全清路径保留给非 UI
+/// 调用方（如桌面 ctl），这里只是不把它摆到确认框里。
 ///
 /// 结构与删除确认框（`ReaderHistoryDeleteDialog` / `StatDeleteConfirmDialog`）一致：
 /// [FushiDialogFrame] + [FushiModalSheetFrame] + 破坏性确认动作。
@@ -94,14 +97,6 @@ class _LibraryProgressResetDialogState
                 value: _records == StudyRecordResetScope.lastSession,
                 onChanged: (bool v) =>
                     _toggle(StudyRecordResetScope.lastSession, v),
-              ),
-              DeleteConfirmCheckboxRow(
-                key: const ValueKey<String>('library-progress-reset-all'),
-                title: t.library_progress_reset_records_all,
-                subtitle: t.library_progress_reset_records_all_desc,
-                value: _records == StudyRecordResetScope.all,
-                onChanged: (bool v) => _toggle(StudyRecordResetScope.all, v),
-                destructive: true,
               ),
             ],
           ],

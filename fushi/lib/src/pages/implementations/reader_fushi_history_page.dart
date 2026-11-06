@@ -552,6 +552,7 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
 
   @override
   void dispose() {
+    _claimedChromeTabs?.release(this);
     _headerSearch.dispose();
     _searchController.dispose();
     _shelfScrollController.dispose();
@@ -605,6 +606,14 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
     final AsyncValue<Set<String>?> filteredIds =
         ref.watch(filteredBookIdsProvider);
     final allTags = ref.watch(allTagsProvider);
+    final List<BookTagRow> allTagRows =
+        allTags.valueOrNull ?? const <BookTagRow>[];
+    // 漫画页在库页壳里时，视图页签位由 Tag chips 取代（ticket 06）：页签位是壳画
+    // 的，标签数据与交互在本书架里，所以像页头动作一样把标签行登记给壳。
+    final MediaLibraryChromeTabsSlot? chromeTabs = _mangaOnly
+        ? MediaLibraryShellScope.maybeOf(context)?.chromeTabsSlot
+        : null;
+    _syncChromeTabsClaim(chromeTabs, allTagRows);
 
     // BUG-250: 书架批量选择模式（[_selectionMode]）活在本 tab 内容里，不是独立
     // route。顶层 HomePage 的 PopScope 对它无感，返回键会直接弹掉 root route 退
@@ -637,14 +646,19 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: <Widget>[
                         // 单行页头（2026-10-14）：页签 + 右侧 🔍 / 多选 / 排序 /
-                        // 管理标签，搜索点开整行换成搜索栏；标签 chip 只在有
-                        // 标签时在下面占一行。Cupertino 旧版面保留常驻搜索行。
+                        // 管理标签，搜索点开整行换成搜索栏。漫画页的页签位已换成
+                        // 漂浮 chrome 行里的 Tag chips（ticket 06），标题下不再
+                        // 单独占一行；其余库页照旧在页头下画标签行。Cupertino
+                        // 旧版面保留常驻搜索行，标签 chip 不再重复嵌进工具栏。
                         if (!isCupertinoPlatform(context)) ...<Widget>[
                           _buildPageHeader(),
-                          _buildSortMenuAnchor(allTags.valueOrNull ?? const []),
-                          _buildTagBar(allTags.valueOrNull ?? const []),
+                          _buildSortMenuAnchor(allTagRows),
+                          if (chromeTabs == null) _buildTagBar(allTagRows),
                         ] else
-                          _buildSearchBar(allTags.valueOrNull ?? const []),
+                          _buildSearchBar(
+                            allTagRows,
+                            hideTagChips: chromeTabs != null,
+                          ),
                         // 下拉同步可能跑几十秒，光一个转圈看不出进展；没同步在飞时
                         // 零高度。
                         SyncProgressBanner(compact: _compactLibraryToolbar),
@@ -771,6 +785,30 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
 
   /// 最近一次画出的批量栏：退出多选后沉下动画期间继续画它。
   Widget? _lastBatchActionBar;
+
+  /// 上次登记页签位内容的壳槽（换槽 / 卸载时先撤回旧登记）。
+  MediaLibraryChromeTabsSlot? _claimedChromeTabs;
+
+  /// 把 Tag chips 登记到壳的视图页签位（漫画页，ticket 06）。独立使用（无壳）
+  /// 时不登记，标签行仍在标题下自成一行。`inlineTags` 去掉行内页边，让 chip
+  /// 从页签原来的左缘开始、高度与浮动 chrome 行一致（没有标签时零高度，位置留空）。
+  void _syncChromeTabsClaim(
+    MediaLibraryChromeTabsSlot? slot,
+    List<BookTagRow> allTags,
+  ) {
+    if (!identical(_claimedChromeTabs, slot)) {
+      _claimedChromeTabs?.release(this);
+      _claimedChromeTabs = slot;
+    }
+    if (slot == null) return;
+    slot.claim(
+      this,
+      // 可见 = 没被保活外壳停帧且所在分区在台上（与页头动作登记同一判据）。
+      visible:
+          TickerMode.valuesOf(context).enabled && SectionVisibility.of(context),
+      content: _buildTagBar(allTags, inlineTags: true),
+    );
+  }
 
   bool get _compactLibraryToolbar =>
       windowSizeClassReal(
@@ -978,24 +1016,35 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
   /// 搜索框与行尾工具之间（[LibraryToolbar.wideMiddle]），窄屏放不下就收进
   /// 排序菜单（多选组）。两种布局下工具条都只有一行。宽窄判据与
   /// [LibraryToolbar] 自己的同一个（同一宽度、同一断点）。
-  Widget _buildSearchBar(List<BookTagRow> allTags) {
+  Widget _buildSearchBar(
+    List<BookTagRow> allTags, {
+    bool hideTagChips = false,
+  }) {
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
         final bool wide =
             constraints.maxWidth >= LibraryToolbar.wideBreakpoint;
-        return _buildToolbar(allTags, wide: wide);
+        return _buildToolbar(
+          allTags,
+          wide: wide,
+          hideTagChips: hideTagChips,
+        );
       },
     );
   }
 
-  Widget _buildToolbar(List<BookTagRow> allTags, {required bool wide}) {
+  Widget _buildToolbar(
+    List<BookTagRow> allTags, {
+    required bool wide,
+    bool hideTagChips = false,
+  }) {
     final Widget actions = _buildTagBar(
       allTags,
       part: FushiTagFilterBarPart.actions,
-      tagsInMenu: !wide,
+      tagsInMenu: !wide && !hideTagChips,
     );
     return LibraryToolbar(
-      wideMiddle: wide && allTags.isNotEmpty
+      wideMiddle: wide && !hideTagChips && allTags.isNotEmpty
           ? _buildTagBar(allTags, inlineTags: true)
           : null,
       search: LibrarySearchField(
@@ -2007,7 +2056,7 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
         onPressed: () => _toggleBookCompleted(bookKey),
       ),
       // 误点开一本书后把它变回「没读过」：进度归零 + 取消读完 + 离开继续阅读，
-      // 学习记录可选只撤最近一次 / 全清（默认不动），见 [_resetBookReadingState]。
+      // 学习记录可选撤销最近一次（默认不动），见 [_resetBookReadingState]。
       DialogListAction(
         label: t.library_progress_reset_action,
         icon: Icons.restart_alt_outlined,
@@ -2138,12 +2187,34 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
   /// 手动切换书 / 有声书「已读完」状态：写 EpubBooks.completedAt（单一真值，按
   /// bookKey），有声书 SRT 卡也调它（传其配对 bookKey）。已完成 → 清除；未完成 →
   /// 置当前时间。切换后重取完成集合并重绘，概览统计与卡片视觉下一帧即同步。
+  ///
+  /// 在线漫画（描述符里带 Chapter 列表）额外级联章状态：标记时把本书所有 Chapter
+  /// 的已读时刻置为已读，取消时清空；两种情况都不碰每章上次页码，也不碰描述符里
+  /// 的当前章位置（`currentChapterIndex`），下次仍从原页继续。本地卷没有 Chapter，
+  /// 只切换书级完成标记，阅读位置与页进度保持真实。
   /// [bookKey] 为空（无 EPUB 正文的纯字幕书）时静默忽略——该书无进度维度、也无
   /// 完成真值载体，与 [_openSrtBook] 的 `srt_epub_not_ready` 门控一致。
   Future<void> _toggleBookCompleted(String bookKey) async {
     Navigator.pop(context);
     if (bookKey.isEmpty) return;
     final bool wasCompleted = _completedBookKeys.contains(bookKey);
+    final EpubBookRow? row = await appModel.database.getEpubBook(bookKey);
+    final OnlineMangaLibraryEntry? entry = row == null
+        ? null
+        : OnlineMangaLibraryEntry.tryParse(row.sourceMetadata);
+    if (entry != null && entry.chapters.isNotEmpty && row!.uid.isNotEmpty) {
+      if (wasCompleted) {
+        await appModel.database.clearMangaChaptersRead(row.uid);
+      } else {
+        await appModel.database.markMangaChaptersRead(
+          bookUid: row.uid,
+          chapterKeys: <String>[
+            for (final OnlineMangaChapter chapter in entry.chapters)
+              chapter.key,
+          ],
+        );
+      }
+    }
     await appModel.database.setEpubBookCompleted(
       bookKey,
       wasCompleted ? null : DateTime.now(),
