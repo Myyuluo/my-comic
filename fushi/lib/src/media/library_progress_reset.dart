@@ -28,7 +28,6 @@ import 'package:drift/drift.dart' show Value;
 import 'package:fushi_audio/fushi_audio.dart';
 import 'package:fushi_core/fushi_core.dart';
 
-import 'package:fushi_engine/stats/stat_facts.dart';
 import 'package:fushi_engine/stats/study_sessions.dart';
 
 import 'package:fushi/src/media/sources/reader_fushi_source.dart';
@@ -67,7 +66,8 @@ const Duration kUndoLatestStudySessionWindow = Duration(hours: 24);
 
 /// 撤销 ([mediaKind], [mediaKeys]) 最近一次会话；返回是否真的撤了一次。
 ///
-/// 会话只从统一事实面 [loadStatFacts] 派生（当前 Profile），删除走引擎唯一入口
+/// 会话从当前 Profile 的 `study_segments` 直接派生——my-comic 的 37 表 live schema
+/// 没有 legacy / 游戏统计表，不能走会读那些表的 `loadStatFacts`。删除走引擎唯一入口
 /// [deleteStudySession]（退役在跑时钟的 uid → 按 uid 写零，同步安全、不立碑）。
 /// 只撤结束于 [kUndoLatestStudySessionWindow] 之内的会话；[nowMs] 仅供测试注入。
 Future<bool> undoLatestStudySession(
@@ -81,9 +81,11 @@ Future<bool> undoLatestStudySession(
       if (k.isNotEmpty) k,
   };
   if (keys.isEmpty) return false;
-  final StatFacts facts = await loadStatFacts(db, activityLimit: 0);
+  final int scope = await db.resolveActiveProfileId();
+  final List<StudySegmentRow> segments =
+      await db.getStudySegments(profileId: scope);
   final StudySession? latest = latestStudySessionFor(
-    facts.sessions,
+    deriveStudySessions(segments: segments),
     mediaKind: mediaKind,
     mediaKeys: keys,
   );
@@ -133,9 +135,15 @@ Future<void> resetBookReadingState({
   await db.setEpubBookCompleted(bookKey, null);
   // 带有声书时首次按播放正文会跟到音频位置（BUG-3430），只回写阅读位置会被音频位置
   // 原样拉回去、再被阅读器落库成「在读」；音频位置一并归零（带时间戳，互联 LWW 随之推送）。
-  final AudiobookRepository audiobooks = AudiobookRepository(db);
-  if (await audiobooks.findByBookKey(bookKey) != null) {
-    await audiobooks.updatePositionMs(bookKey: bookKey, positionMs: 0);
+  //
+  // my-comic 的漫画-only live schema（37 表）没有 audiobooks 这张非漫画表：
+  // 表不存在 = 本书没有有声书记录，跳过位置归零；完整 schema 行为不变。
+  // 单卡菜单与批量栏共用本函数，守卫放在这里两处入口同时生效。
+  if (await db.hasTable('audiobooks')) {
+    final AudiobookRepository audiobooks = AudiobookRepository(db);
+    if (await audiobooks.findByBookKey(bookKey) != null) {
+      await audiobooks.updatePositionMs(bookKey: bookKey, positionMs: 0);
+    }
   }
 
   final Set<String> statKeys = <String>{

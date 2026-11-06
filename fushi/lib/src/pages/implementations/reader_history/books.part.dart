@@ -602,6 +602,9 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
     LocalFileDeleteReport localFiles = const LocalFileDeleteReport();
     // 目标集在确认框弹出前就定死（[targetKeys]），不重新读 `_selectedKeys`。
     final Set<String> toDelete = targetKeys;
+    // my-comic 的漫画-only live schema（37 表）没有 srt_books：表不存在时选中集
+    // 里不可能有本地字幕卡（卡片本就渲染不出来），跳过 srt 分支而不是撞缺表异常。
+    final bool hasSrtBooks = await appModel.database.hasTable('srt_books');
     if (deleteLocalFiles) {
       // 先停止引用再销毁实体：正在播的那本若在本批里，句柄不放掉删除必然失败。
       // 会话身份对 EPUB 有声书是 bookKey、对纯字幕书是 srt uid，两种都塞进去。
@@ -618,6 +621,8 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
     }
     for (final key in toDelete) {
       if (key.startsWith('srt_')) {
+        // 缺表守卫（见上面 [hasSrtBooks]）：不查询不存在的 srt_books。
+        if (!hasSrtBooks) continue;
         final String uid = key.substring(4);
         final SrtBookRepository repo = SrtBookRepository(appModel.database);
         final SrtBook? book = await repo.findByUid(uid);
@@ -973,8 +978,8 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
     _rebuild(() {});
   }
 
-  /// 书卡 / 配对字幕书卡「重置阅读状态」：先收起长按菜单，弹确认框（可选只撤最近
-  /// 一次会话 / 全清学习记录，默认都不动），确认后经 [resetBookReadingState] 落库
+  /// 书卡 / 配对字幕书卡「重置阅读状态」：先收起长按菜单，弹确认框（可选撤销最近
+  /// 一次会话，默认不动学习记录），确认后经 [resetBookReadingState] 落库
   /// （位置写回开头而不是删行——删行会被同步通道从对端灌回，见该函数文件头），
   /// 再让书列表 / 最近阅读时刻 / 读完集合三份缓存一起失效。
   Future<void> _resetBookReadingState(

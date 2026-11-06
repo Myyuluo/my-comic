@@ -2,6 +2,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi/src/models/app_model.dart';
 import 'package:fushi/src/pages/implementations/home_page.dart';
+import 'package:fushi/src/settings/material_settings_renderer.dart';
 import 'package:fushi/src/settings/settings_detail_page.dart';
 import 'package:fushi/src/settings/settings_destination.dart';
 import 'package:fushi/src/settings/settings_home_page.dart';
@@ -52,7 +53,6 @@ void main() {
           if (!context.mounted) {
             throw StateError('Settings home was unmounted before inspection');
           }
-          final String interfaceTitle = context.t.settings_group_interface;
           final String appearanceTitle =
               context.t.settings_destination_appearance_interaction;
           final String scaleTitle = context.t.app_ui_scale;
@@ -66,12 +66,25 @@ void main() {
                 SettingsDestinationId.video:
                     context.t.settings_destination_video,
               };
-          final List<String> groupTitles = SettingsNavigationGroupId.values
-              .map((SettingsNavigationGroupId id) => id.title(context))
-              .toList(growable: false);
-          // All bounded navigation groups must stay mounted, including those
-          // outside the viewport, so keyboard navigation can wrap back to them.
-          final List<AdaptiveSettingsSection> groups = tester
+          // 设置首页扁平化：不再有「界面 / 内容 / 连接 / 应用」一级分组标题，
+          // 所有二级分类在同一个连续分组里（窄屏是分组卡、宽屏是导航列表）。
+          final Finder homeGroup = find.byKey(settingsHomeGroupKey);
+          expect(homeGroup, findsOneWidget);
+          for (final String groupTitle in <String>[
+            context.t.settings_group_interface,
+            context.t.settings_group_content,
+            context.t.settings_group_learning,
+            context.t.settings_group_connections,
+            context.t.settings_group_data,
+            context.t.settings_group_app,
+          ]) {
+            expect(
+              find.descendant(of: homeGroup, matching: find.text(groupTitle)),
+              findsNothing,
+              reason: '一级分组标题「$groupTitle」必须移除',
+            );
+          }
+          final List<AdaptiveSettingsSection> sections = tester
               .widgetList<AdaptiveSettingsSection>(
                 find.descendant(
                   of: home,
@@ -80,20 +93,16 @@ void main() {
               )
               .where(
                 (AdaptiveSettingsSection section) =>
-                    section.key is ValueKey<SettingsNavigationGroupId>,
+                    section.key == settingsHomeGroupKey,
               )
               .toList(growable: false);
-          expect(
-            groups.map((AdaptiveSettingsSection section) => section.title),
-            groupTitles,
-          );
-          expect(
-            groups.every(
-              (AdaptiveSettingsSection section) => !section.collapsible,
-            ),
-            isTrue,
-          );
-          expect(find.text(interfaceTitle), findsWidgets);
+          // 窄屏的首页分组是一张 AdaptiveSettingsSection 卡；宽屏左栏是导航
+          // 列表，不再是分组卡。
+          expect(sections, wide ? isEmpty : hasLength(1));
+          if (!wide) {
+            expect(sections.single.title, isNull);
+            expect(sections.single.collapsible, isFalse);
+          }
           await _capture(tester, 'settings-groups-$layout');
 
           final FocusDriver driver = FocusDriver(tester);
@@ -161,10 +170,7 @@ void main() {
           }
           for (final MapEntry<SettingsDestinationId, String> destination
               in smokeDestinations.entries) {
-            final Finder navigationRow = _destinationRow(
-              destination.key,
-              destination.value,
-            );
+            final Finder navigationRow = _destinationRow(destination.value);
             expect(
               await driver.focusWidget(navigationRow, maxSteps: 200),
               isTrue,
@@ -193,10 +199,7 @@ void main() {
             if (wide) {
               expect(
                 await driver.focusWidget(
-                  _destinationRow(
-                    SettingsDestinationId.appearance,
-                    appearanceTitle,
-                  ),
+                  _destinationRow(appearanceTitle),
                   maxSteps: 200,
                 ),
                 isTrue,
@@ -241,14 +244,15 @@ Future<void> _capture(WidgetTester tester, String name) async {
   debugPrint('[settings-organization] screenshot=${shot.path}');
 }
 
-Finder _destinationRow(SettingsDestinationId id, String title) {
-  final Finder group = find.byKey(
-    ValueKey<SettingsNavigationGroupId>(settingsNavigationGroupFor(id)),
-  );
-  // The navigation list lazily unmounts offscreen groups. An empty finder is
-  // expected until Tab brings the group back; .first would throw prematurely.
+Finder _destinationRow(String title) {
+  // 全部二级分类都在同一个连续分组里：窄屏是分组卡里的 FushiListItem，
+  // 宽屏是导航列表里的 Md3SettingsNavRow。
+  final Finder group = find.byKey(settingsHomeGroupKey);
   return find.ancestor(
     of: find.descendant(of: group, matching: find.text(title)),
-    matching: find.byType(FushiListItem),
+    matching: find.byWidgetPredicate(
+      (Widget widget) =>
+          widget is FushiListItem || widget is Md3SettingsNavRow,
+    ),
   );
 }

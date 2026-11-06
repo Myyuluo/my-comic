@@ -57,6 +57,9 @@ class CupertinoSettingsRenderer implements SettingsRenderer {
     ).primaryColor;
     final BuildContext context = settingsContext.context;
     final FushiDesignTokens tokens = FushiDesignTokens.of(context);
+    final List<SettingsNavigationGroup> groups = groupSettingsDestinations(
+      destinations,
+    );
     return SingleChildScrollView(
       padding: EdgeInsets.only(
         bottom: tokens.spacing.page + MediaQuery.of(context).padding.bottom,
@@ -64,18 +67,17 @@ class CupertinoSettingsRenderer implements SettingsRenderer {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
-          for (final SettingsNavigationGroup group in groupSettingsDestinations(
-            destinations,
-          ))
+          // 设置首页扁平化：一级分组标题（界面 / 内容 / 连接 / 应用）已移除，
+          // 所有二级分类收进同一个连续 section，顺序完全跟随 schema。
+          for (final SettingsNavigationGroup group in groups)
             CupertinoListSection.insetGrouped(
-              key: ValueKey<SettingsNavigationGroupId>(group.id),
-              header: Text(group.id.title(context)),
+              key: settingsHomeGroupKey,
               backgroundColor: CupertinoColors.systemGroupedBackground
                   .resolveFrom(context),
               children: <Widget>[
-                for (final SettingsDestination destination
-                    in group.destinations)
+                for (final SettingsDestination destination in group.destinations)
                   CupertinoListTile(
+                    key: ValueKey<SettingsDestinationId>(destination.id),
                     leading: FushiIcon(destination.icon, color: primaryColor),
                     title: Text(destination.title, maxLines: 2),
                     subtitle: destination.summary != null
