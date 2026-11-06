@@ -205,10 +205,44 @@ void main() {
     expect(await repo.findAllByBookUid(), isEmpty);
   });
 
-  // 无痕阅读（ticket 04）：续读位置照常写，但 reader_positions.updatedAt 是
-  // History 的可见信号（书架「最近阅读」排序 / 继续阅读 hero / 互联 LWW），
-  // 必须冻结。已有行保留原值；新行用哨兵 0（不是“现在”），不得冒充刚读过。
-  group('advanceUpdatedAt: false（无痕阅读冻结 History 时间戳）', () {
+  // 阅读历史策略（ticket 04）：策略是纯值对象，三个阅读器共用同一份判定。
+  group('ReaderHistoryPolicy（无痕阅读的 History 信号判定）', () {
+    test('recording：所有 History 信号照写', () {
+      const ReaderHistoryPolicy policy = ReaderHistoryPolicy.recording;
+      expect(policy.advanceUpdatedAt, isTrue);
+      expect(policy.autoMarkChapterRead, isTrue);
+      expect(policy.autoMarkBookCompleted, isTrue);
+      expect(policy.updatedAtFor(existing: 1000, now: 2000), 2000);
+      expect(policy.updatedAtFor(existing: null, now: 2000), 2000);
+    });
+
+    test('incognito：冻结 updatedAt、不自动写 readAt / 完成标记', () {
+      const ReaderHistoryPolicy policy = ReaderHistoryPolicy.incognito;
+      expect(policy.advanceUpdatedAt, isFalse);
+      expect(policy.autoMarkChapterRead, isFalse);
+      expect(policy.autoMarkBookCompleted, isFalse);
+      expect(policy.updatedAtFor(existing: 1000, now: 2000), 1000,
+          reason: '已有行保留旧时间戳');
+      expect(policy.updatedAtFor(existing: null, now: 2000),
+          ReaderHistoryPolicy.noRecency,
+          reason: '新行写非近期哨兵，不冒充刚读过');
+    });
+
+    test('forIncognito 按开关值取策略', () {
+      expect(ReaderHistoryPolicy.forIncognito(false),
+          same(ReaderHistoryPolicy.recording));
+      expect(ReaderHistoryPolicy.forIncognito(true),
+          same(ReaderHistoryPolicy.incognito));
+    });
+
+    test('hasRecency：0 / null 都不算近期阅读', () {
+      expect(ReaderHistoryPolicy.hasRecency(null), isFalse);
+      expect(ReaderHistoryPolicy.hasRecency(0), isFalse);
+      expect(ReaderHistoryPolicy.hasRecency(1), isTrue);
+    });
+  });
+
+  group('无痕阅读（ReaderHistoryPolicy.incognito）落库', () {
     test('existing row keeps updatedAt while all position fields advance',
         () async {
       await db.upsertReaderPosition(const ReaderPositionsCompanion(
@@ -223,7 +257,7 @@ void main() {
         sectionIndex: 4,
         normCharOffset: 4200,
         charOffset: 1234,
-        advanceUpdatedAt: false,
+        history: ReaderHistoryPolicy.incognito,
       );
 
       final pos = await repo.findByBookUid('book-incognito');
@@ -240,7 +274,7 @@ void main() {
         bookUid: 'book-new-incognito',
         sectionIndex: 2,
         normCharOffset: 700,
-        advanceUpdatedAt: false,
+        history: ReaderHistoryPolicy.incognito,
       );
 
       final pos = await repo.findByBookUid('book-new-incognito');

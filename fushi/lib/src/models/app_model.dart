@@ -7710,6 +7710,12 @@ class AppModel with ChangeNotifier {
   /// 壳）时按默认「记录 History」处理。
   bool get incognitoReading => _prefsRepo?.incognitoReading ?? false;
 
+  /// 阅读器落库时的 History 写入策略（无痕开关 → 冻结 `updatedAt` / 跳过自动
+  /// `readAt` 与书级完成标记）。三个阅读器共用这一份判定，不再各自 `if
+  /// (incognito)`。
+  ReaderHistoryPolicy get readerHistoryPolicy =>
+      ReaderHistoryPolicy.forIncognito(incognitoReading);
+
   Future<void> setIncognitoReading(bool value) =>
       prefsRepo.setIncognitoReading(value);
 

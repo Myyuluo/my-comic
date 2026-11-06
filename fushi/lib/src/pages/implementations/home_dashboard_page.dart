@@ -14,6 +14,7 @@ import 'package:transparent_image/transparent_image.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:fushi/media.dart';
 import 'package:fushi/utils.dart';
+import 'package:fushi_audio/fushi_audio.dart' show ReaderHistoryPolicy;
 import 'package:fushi/src/models/app_model.dart';
 import 'package:fushi/src/models/module_id.dart';
 import 'package:fushi/src/models/module_registry.dart';
@@ -100,6 +101,22 @@ bool isDashboardContinueBook(MediaItem item, Set<String> completedBookKeys) {
       ) ==
       ShelfReadStatus.reading;
 }
+
+/// 首页「继续」区是否收这本本地书：在读（[isDashboardContinueBook]）**且**
+/// 有可用的最近阅读时间。
+///
+/// [recentMs] 来自 `reader_positions.updatedAt`（经 uid 换算）。无痕阅读首次
+/// 读一本从没读过的书时写 [ReaderHistoryPolicy.noRecency] 哨兵：它不是一次近期
+/// 阅读，不能因为这次阅读让「继续」多出一张卡或换掉 hero。与书架 hero 的
+/// `pickShelfContinueHero` 用同一条判据。
+@visibleForTesting
+bool isDashboardContinueEntry(
+  MediaItem item,
+  Set<String> completedBookKeys,
+  int recentMs,
+) =>
+    isDashboardContinueBook(item, completedBookKeys) &&
+    ReaderHistoryPolicy.hasRecency(recentMs);
 
 /// 首页是否用双栏版式：横屏（宽 > 高，且至少 600 宽）或宽屏（≥ 840，平板竖屏
 /// 以上的桌面窗口）。竖屏手机 / 平板竖屏走单栏。
@@ -1188,7 +1205,9 @@ class _HomeDashboardPageState
     }
 
     for (final MediaItem item in books) {
-      if (!isDashboardContinueBook(item, completedBookKeys)) continue;
+      final int recentMs = bookRecentMs(item);
+      // 无痕首次阅读的哨兵 0 = 没有近期阅读：不能让它成为「继续」项。
+      if (!isDashboardContinueEntry(item, completedBookKeys, recentMs)) continue;
       final int percent = item.duration > 0
           ? ((item.position / item.duration) * 100).clamp(0, 100).round()
           : 0;
@@ -1197,16 +1216,18 @@ class _HomeDashboardPageState
           kind: _bookMediaKind(item),
           // 书名走与书架卡同一 override 通道（编辑对话框改名后首页同步显示新名）。
           title: ReaderFushiSource.instance.getDisplayTitleFromMediaItem(item),
-          recentMs: bookRecentMs(item),
+          recentMs: recentMs,
           progress: percent / 100,
           badgeLabel: '$percent%',
           book: item,
         ),
       );
     }
-    // 互联 host 的远端补位（本地无同 key/uid 的在读书）。
+    // 互联 host 的远端补位（本地无同 key/uid 的在读书）。远端 recency 为 0
+    // （缺时间戳）时同样不算「继续」，与本地书一条判据。
     for (final RemoteContinueCandidate c in _remoteContinue) {
       if (c.isVideo) continue;
+      if (!ReaderHistoryPolicy.hasRecency(c.recentMs)) continue;
       entries.add(
         _ContinueEntry(
           kind: c.kind,

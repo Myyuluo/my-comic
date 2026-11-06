@@ -27,6 +27,8 @@ import 'package:fushi/src/utils/components/fushi_floating_page_chrome.dart'
         fushiChromeRevealFadeSpring,
         fushiChromeRevealSpring,
         kFushiPageChromeExtent;
+import 'package:fushi/src/utils/components/glass/fushi_apple_scroll_chrome.dart'
+    show fushiNotificationFromVisibleSubtree;
 import 'package:fushi/src/utils/components/glass/fushi_glass_bars.dart'
     show FushiShellActionsSlot, FushiShellTitleScope;
 import 'package:fushi/src/utils/misc/smooth_wheel_scroll.dart'
@@ -868,6 +870,75 @@ class _FushiFloatingChromeOverlayState extends State<FushiFloatingChromeOverlay>
           },
         ),
       ],
+    );
+  }
+}
+
+/// 页面级浮动工具区骨架：浏览页与下载页共用的接线。
+///
+/// 两页的差异只在「工具区里画什么」——浏览页画一级视图页签 + 标题胶囊 + 动作
+/// 组，下载页只画标题胶囊。共同的接线是：持有 [FushiFloatingChromeController]
+/// 与 [FushiShellActionsSlot]、把主滚动区（只认可见子树）的通知喂给 controller、
+/// 在内容上叠一层 [FushiFloatingChromeOverlay]、卸载时释放两者。
+///
+/// [chromeBuilder] 每次构建拿到 controller 与动作槽（浏览页的页签行要随 controller
+/// 重建），自己决定玻璃设计下是否画页内工具区。
+///
+/// [controller] 由调用方持有（浏览页要在换页签 / 换内容域时 `resetToTop()`）；
+/// 为 null 时本组件自建。自建的才由本组件 dispose——外部传入的生命周期归调用方，
+/// 避免两边都 dispose。
+class FushiFloatingChromeHost extends StatefulWidget {
+  const FushiFloatingChromeHost({
+    required this.chromeBuilder,
+    required this.child,
+    this.controller,
+    super.key,
+  });
+
+  final Widget Function(
+    BuildContext context,
+    FushiFloatingChromeController controller,
+    FushiShellActionsSlot actionsSlot,
+  )
+  chromeBuilder;
+  final Widget child;
+  final FushiFloatingChromeController? controller;
+
+  @override
+  State<FushiFloatingChromeHost> createState() =>
+      _FushiFloatingChromeHostState();
+}
+
+class _FushiFloatingChromeHostState extends State<FushiFloatingChromeHost> {
+  late final FushiFloatingChromeController _controller =
+      widget.controller ?? FushiFloatingChromeController();
+  final FushiShellActionsSlot _actionsSlot = FushiShellActionsSlot();
+
+  bool _onScroll(ScrollNotification notification) {
+    // 保活的离屏 tab（TickerMode 关着）发来的通知不算；横向滚动在 controller
+    // 内按轴过滤。
+    if (!fushiNotificationFromVisibleSubtree(notification)) return false;
+    return _controller.handleScrollNotification(notification);
+  }
+
+  @override
+  void dispose() {
+    if (widget.controller == null) _controller.dispose();
+    _actionsSlot.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FushiFloatingChromeScope(
+      controller: _controller,
+      child: FushiFloatingChromeOverlay(
+        chrome: widget.chromeBuilder(context, _controller, _actionsSlot),
+        child: NotificationListener<ScrollNotification>(
+          onNotification: _onScroll,
+          child: widget.child,
+        ),
+      ),
     );
   }
 }

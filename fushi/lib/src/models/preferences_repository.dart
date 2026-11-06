@@ -1544,30 +1544,36 @@ class PreferencesRepository extends ChangeNotifier
   static const String readerToolbarStyleFloatingMigratedKey =
       'reader_toolbar_style_floating_migrated';
 
-  /// 启动时（`AppModel.initialise()`）跑一次：所有者 2026-10-06「工具栏样式默认
-  /// 悬浮，老用户更新也强制先悬浮」。把 live 偏好**和每个 Profile 快照里**的
-  /// `reader_toolbar_style` 一起改成 `floating`——只改 live 的话，切一次 Profile
-  /// 快照就把旧的 `docked` 带回来。标记与新值同一次 [setPrefs] 落盘；此后用户
-  /// 再手动选贴边，标记已在，不会被改回。快照先改、标记后写：中途中断下次重跑
-  /// 也只是把同一个值再写一遍。
-  Future<void> settleReaderToolbarStyleFloating() async {
-    if (getPref(readerToolbarStyleFloatingMigratedKey, defaultValue: false) ==
-        true) {
+  /// 一次性偏好迁移的公共形状：把 live 偏好**和每个 Profile 快照里**的 [key]
+  /// 一起覆盖成 [value]，随后写 [markerKey]（与值同一次 `setPrefs` 落盘）。
+  ///
+  /// 只改 live 的话，切一次 Profile 快照就把旧值带回来；标记进快照的话，切到老
+  /// Profile 会把标记删掉、迁移重跑。快照先改、标记后写：中途中断下次重跑也只是
+  /// 把同一个值再写一遍。标记已落下时直接返回，之后用户的选择正常持久化。
+  Future<void> _settlePrefAcrossProfiles(
+    String key,
+    Object value,
+    String markerKey,
+  ) async {
+    if (getPref(markerKey, defaultValue: false) == true) {
       return;
     }
     await _db.customStatement(
       'UPDATE profile_settings SET value = ? WHERE category = ? AND key = ?',
-      <Object>[
-        PrefCodec.encode('floating'),
-        kProfileSettingCategoryPref,
-        'reader_toolbar_style',
-      ],
+      <Object>[PrefCodec.encode(value), kProfileSettingCategoryPref, key],
     );
-    await setPrefs(<String, dynamic>{
-      'reader_toolbar_style': 'floating',
-      readerToolbarStyleFloatingMigratedKey: true,
-    });
+    await setPrefs(<String, dynamic>{key: value, markerKey: true});
   }
+
+  /// 启动时（`AppModel.initialise()`）跑一次：所有者 2026-10-06「工具栏样式默认
+  /// 悬浮，老用户更新也强制先悬浮」。把 live 偏好**和每个 Profile 快照里**的
+  /// `reader_toolbar_style` 一起改成 `floating`。标记与新值同一次 [setPrefs]
+  /// 落盘；此后用户再手动选贴边，标记已在，不会被改回。
+  Future<void> settleReaderToolbarStyleFloating() => _settlePrefAcrossProfiles(
+    'reader_toolbar_style',
+    'floating',
+    readerToolbarStyleFloatingMigratedKey,
+  );
 
   /// 「漫画新章提醒默认关闭」一次性重置的已跑标记（bool）。本键不随 Profile 走
   /// （`ProfileKeys` 排除）：描述的是本安装是否迁过；进快照的话切到老 Profile 会
@@ -1578,33 +1584,14 @@ class PreferencesRepository extends ChangeNotifier
   /// 启动时（`AppModel.initialise()`）跑一次：2026-11 用户要求「漫画新章提醒」
   /// 默认关闭，并且升级后把已有安装保存的开关值强制重置为关闭一次。
   ///
-  /// 与 [settleReaderToolbarStyleFloating] 同一形状：live 偏好**和每个 Profile
-  /// 快照里**的值一起改成 `false`——只改 live 的话，切一次 Profile 快照就把旧的
-  /// `true` 带回来。扩展更新提醒的已存值不动。标记与新值同一次 [setPrefs] 落盘；
-  /// 此后用户再手动开启，标记已在，不会被改回。快照先改、标记后写：中途中断下次
-  /// 重跑也只是把同一个值再写一遍。
-  Future<void> settleUpdatesNotifyMangaChapterDefaultOff() async {
-    if (getPref(
-          updatesNotifyMangaChapterDefaultOffMigratedKey,
-          defaultValue: false,
-        ) ==
-        true) {
-      return;
-    }
-    final String key = UpdateFeedKind.mangaChapter.enabledPrefKey;
-    await _db.customStatement(
-      'UPDATE profile_settings SET value = ? WHERE category = ? AND key = ?',
-      <Object>[
-        PrefCodec.encode(false),
-        kProfileSettingCategoryPref,
-        key,
-      ],
-    );
-    await setPrefs(<String, dynamic>{
-      key: false,
-      updatesNotifyMangaChapterDefaultOffMigratedKey: true,
-    });
-  }
+  /// 与 [settleReaderToolbarStyleFloating] 共用 [_settlePrefAcrossProfiles]：
+  /// 扩展更新提醒的已存值不动。此后用户再手动开启，标记已在，不会被改回。
+  Future<void> settleUpdatesNotifyMangaChapterDefaultOff() =>
+      _settlePrefAcrossProfiles(
+        UpdateFeedKind.mangaChapter.enabledPrefKey,
+        false,
+        updatesNotifyMangaChapterDefaultOffMigratedKey,
+      );
 
   /// 视频「快捷键 1..4」自定义动作按钮的绑定（用户请求）：槽位序号 → 视频动作。
   ///

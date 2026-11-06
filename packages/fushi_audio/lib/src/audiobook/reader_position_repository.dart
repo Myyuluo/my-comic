@@ -1,5 +1,6 @@
 import 'package:drift/drift.dart';
 import 'package:fushi_core/fushi_core.dart';
+import 'reader_history_policy.dart';
 import 'reader_position_model.dart';
 
 /// 阅读位置持久化。键为书稳定身份（v82 起 = EpubBooks.uid；非 epub 域沿用其
@@ -25,19 +26,20 @@ class ReaderPositionRepository {
 
   /// 写入一次阅读位置。
   ///
-  /// [advanceUpdatedAt] = false（无痕阅读）：位置字段照常写入，但
-  /// `reader_positions.updatedAt` **冻结**——它是 History 的可见信号（书架
-  /// 「最近阅读」排序 / 继续阅读 hero / 互联 LWW），无痕期间不得推进。已有行
-  /// 原样保留旧值；新行用哨兵 0（非近期），不冒充「刚读过」。默认 true = 现有
-  /// 行为（每次保存都刷新时间戳）。
+  /// [history] 决定 `reader_positions.updatedAt`（History 的 recency 信号：
+  /// 书架「最近阅读」排序 / 继续阅读 hero / 互联 LWW）怎么写：普通阅读每次
+  /// 刷新；无痕阅读冻结已有行的旧值，新行写 [ReaderHistoryPolicy.noRecency]
+  /// 哨兵（不是「现在」），不冒充「刚读过」。位置字段本身照常写入。默认
+  /// [ReaderHistoryPolicy.recording] = 现有行为。
   Future<void> save({
     required String bookUid,
     required int sectionIndex,
     required int normCharOffset,
     int? charOffset,
-    bool advanceUpdatedAt = true,
+    ReaderHistoryPolicy history = ReaderHistoryPolicy.recording,
   }) async {
-    final ReaderPositionRow? existing = (!advanceUpdatedAt || charOffset == null)
+    final ReaderPositionRow? existing =
+        (!history.advanceUpdatedAt || charOffset == null)
         ? await _db.getReaderPosition(bookUid)
         : null;
     // TODO-1292 / BUG（退出图1重进图2）：char_offset（精确锚）与 norm_char_offset（分数）
@@ -63,18 +65,20 @@ class ReaderPositionRepository {
     } else {
       charOffsetValue = const Value.absent();
     }
-    await _db.upsertReaderPosition(ReaderPositionsCompanion(
-      bookUid: Value(bookUid),
-      sectionIndex: Value(sectionIndex),
-      normCharOffset: Value(normCharOffset),
-      charOffset: charOffsetValue,
-      updatedAt: Value(
-        advanceUpdatedAt
-            ? DateTime.now().millisecondsSinceEpoch
-            // 新行没有旧值可冻结：哨兵 0 明确表示「不是一次近期阅读」。
-            : existing?.updatedAt ?? 0,
+    await _db.upsertReaderPosition(
+      ReaderPositionsCompanion(
+        bookUid: Value(bookUid),
+        sectionIndex: Value(sectionIndex),
+        normCharOffset: Value(normCharOffset),
+        charOffset: charOffsetValue,
+        updatedAt: Value(
+          history.updatedAtFor(
+            existing: existing?.updatedAt,
+            now: DateTime.now().millisecondsSinceEpoch,
+          ),
+        ),
       ),
-    ));
+    );
   }
 
   Future<void> delete(String bookUid) => _db.deleteReaderPosition(bookUid);

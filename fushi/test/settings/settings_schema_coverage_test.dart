@@ -94,7 +94,8 @@ const Map<String, String> kCoveredElsewhere = <String, String>{
   'system/Incognito reading':
       'test/pages/manga_incognito_reading_test.dart（漫画：续读位置照写、'
       '最近阅读时间冻结、章节已读/书级完成不写、页内切换立即生效） + '
-      'test/pages/incognito_reading_wiring_guard_test.dart（EPUB / PDF / 漫画落库接线）',
+      'test/media/audiobook/reader_position_repository_test.dart（ReaderHistoryPolicy 判定） + '
+      'test/pages/incognito_reading_wiring_guard_test.dart（EPUB / PDF 落库接线）',
   // 「反馈有新回复时通知我」：写 prefsRepo（changed=true），生效点是移动端后台任务
   // 的排 / 撤与桌面定时 tick 的系统通知——harness 里没有 workmanager 与本机反馈。
   // 行为由服务层用例咬住：「开 + 有未结案 → 排；关 → 撤」「关着 → 不发请求」。

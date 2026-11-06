@@ -465,8 +465,8 @@ SettingsDestination buildSystemDestination() {
           // 时现读，切换后无需重启。
           SettingsSwitchItem(
             id: 'system.incognito_reading',
-            title: t.incognito_reading,
-            subtitle: t.incognito_reading_hint,
+            title: t.reader_incognito_reading,
+            subtitle: t.reader_incognito_reading_hint,
             icon: FushiIcons.visibilityOff,
             defaultValue: false,
             value: (SettingsContext settingsContext) =>

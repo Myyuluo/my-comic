@@ -113,8 +113,9 @@ final epubBookUidByKeyProvider =
 /// 恒查空、退化成列表序（= 最近导入的在读书），读了新书「继续阅读」也不换。
 ///
 /// `updatedAt == 0` 是**无痕阅读新行的哨兵**（首次无痕阅读没有旧时间戳可冻结，
-/// 见 `ReaderPositionRepository.save` 的 `advanceUpdatedAt`）：它不是一次近期
-/// 阅读，按「无阅读历史」返回 null，让排序回落到导入时间。
+/// 见 [ReaderHistoryPolicy]）：它不是一次近期阅读，按「无阅读历史」返回 null，
+/// 让排序回落到导入时间。continue 表面（首页「继续」/ 书架 hero）也必须用
+/// [ReaderHistoryPolicy.hasRecency] 做同一判断。
 int? lastReadAtForBookKey(
   Map<String, int> lastReadAtByUid,
   Map<String, String> epubUidByKey,
@@ -122,7 +123,7 @@ int? lastReadAtForBookKey(
 ) {
   if (bookKey == null) return null;
   final int? at = lastReadAtByUid[epubUidByKey[bookKey] ?? bookKey];
-  return at != null && at > 0 ? at : null;
+  return ReaderHistoryPolicy.hasRecency(at) ? at : null;
 }
 
 /// 书架阅读进度（position / duration，字符为单位）。TODO-1346：书架进度条以前只按

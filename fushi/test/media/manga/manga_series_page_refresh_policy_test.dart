@@ -20,6 +20,7 @@ import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi_engine/epub/epub_storage.dart';
 import 'package:path/path.dart' as p;
 
+import '../../helpers/pump_until.dart';
 import '../../helpers/test_platform_services.dart';
 
 /// 作品页刷新策略（ticket 02）：已入库的在线漫画打开时只读本地缓存，不自动
@@ -87,7 +88,6 @@ class _TestAppModel extends AppModel {
 
   final FushiDatabase _db;
   final OnlineMangaLibraryService _library;
-  final List<MediaItem?> opened = <MediaItem?>[];
 
   @override
   FushiDatabase get database => _db;
@@ -109,7 +109,7 @@ class _TestAppModel extends AppModel {
     bool waitUntilClosed = true,
     Widget Function()? launchPageBuilder,
   }) async {
-    opened.add(item);
+    // 本测试只验证作品页的刷新策略，不让它真的 push 阅读页。
   }
 }
 
@@ -162,15 +162,6 @@ OnlineMangaLibraryEntry _entry({
   chapters: chapters,
 );
 
-Future<void> _pumpUntil(WidgetTester tester, Finder finder) async {
-  for (int i = 0; i < 200; i++) {
-    await Future<void>.delayed(const Duration(milliseconds: 20));
-    await tester.pump();
-    if (finder.evaluate().isNotEmpty) return;
-  }
-  fail('never found $finder');
-}
-
 /// 等页面首屏与所有后台尾活（下载状态、来源名解析）落定。
 Future<void> _settle(WidgetTester tester) async {
   for (int i = 0; i < 20; i++) {
@@ -217,7 +208,7 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(_harness(appModel, target));
-    await _pumpUntil(
+    await pumpUntilFound(
       tester,
       find.byKey(const ValueKey<String>('manga_series_title')),
     );
@@ -278,7 +269,7 @@ void main() {
           service: library,
         ),
       );
-      await _pumpUntil(tester, find.text('Chapter 3'));
+      await pumpUntilFound(tester, find.text('Chapter 3'));
     });
 
     expect(adapter.refreshCalls, 1, reason: '未入库作品仍自动拉一次');
@@ -341,7 +332,7 @@ void main() {
         _entry(chapters: const <OnlineMangaChapter>[]),
       );
       await pumpPage(tester, appModel, ShelfMangaSeriesTarget(row.bookKey));
-      await _pumpUntil(tester, find.text('Chapter 3'));
+      await pumpUntilFound(tester, find.text('Chapter 3'));
       final EpubBookRow? updated = await db.getEpubBook(row.bookKey);
       stored =
           OnlineMangaLibraryEntry.tryParse(updated?.sourceMetadata)?.chapters ??
@@ -379,10 +370,10 @@ void main() {
         await tester.tap(
           find.byKey(const ValueKey<String>('online_work_more')),
         );
-        await _pumpUntil(tester, refresh);
+        await pumpUntilFound(tester, refresh);
       }
       await tester.tap(refresh);
-      await _pumpUntil(tester, find.text('Chapter 3'));
+      await pumpUntilFound(tester, find.text('Chapter 3'));
     });
 
     expect(adapter.refreshCalls, 1, reason: '手动刷新仍可用且只发一次');

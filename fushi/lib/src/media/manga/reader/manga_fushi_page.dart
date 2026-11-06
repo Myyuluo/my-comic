@@ -3017,7 +3017,7 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
     // 无痕阅读：翻到章尾自动写「已读」属于 History 的可见信号，跳过。显式
     // 「标记已读 / 取消已读」是用户动作（作品页 / 书架级联的 DB 调用），不经过
     // 这里，照常生效。
-    if (appModel.incognitoReading) return;
+    if (!appModel.readerHistoryPolicy.autoMarkChapterRead) return;
     await _saveCurrentChapterState(
       readAt: DateTime.now().millisecondsSinceEpoch,
     );
@@ -3584,10 +3584,10 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
     _lastSavedPage = page;
     _lastSavedFraction = fraction;
     final FushiDatabase db = appModel.database;
-    // 无痕阅读：在**落库时**现读开关，设置里切完下一次保存立即生效。开启时
-    // 续读位置与在线漫画当前章时间戳照写，但不推进 History 的可见信号
-    //（reader_positions.updatedAt / readAt / 书级完成标记）。
-    final bool incognito = appModel.incognitoReading;
+    // 无痕阅读：在**落库时**现取策略，设置里切完下一次保存立即生效。续读位置
+    // 与在线漫画当前章时间戳照写，History 的可见信号（reader_positions.updatedAt
+    // / readAt / 书级完成标记）由策略统一决定。
+    final ReaderHistoryPolicy history = appModel.readerHistoryPolicy;
     final bool isWebtoon = _mode.isContinuous;
     // v82：uid 缺失 = 库里没有这本书的持久行（内存兜底行不算），位置与「已读完」
     // 都无处可落，整段跳过——不拿 bookKey / 现造 uid 兜底写孤儿行。
@@ -3604,7 +3604,7 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
         charOffset: isWebtoon
             ? MangaFushiPage.webtoonFractionToCharOffset(fraction)
             : 0,
-        advanceUpdatedAt: !incognito,
+        history: history,
       );
     } catch (e, stack) {
       ErrorLogService.instance.log('MangaFushiPage._persistPosition', e, stack);
@@ -3613,7 +3613,7 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
     // 书级完成标记是 History 的可见信号。
     final int pageCount = _payload?.images.length ?? 0;
     final bool atLastPage = pageCount > 0 && page >= pageCount - 1;
-    if (atLastPage && !incognito) {
+    if (atLastPage && history.autoMarkBookCompleted) {
       try {
         await db.markEpubBookCompletedIfUnset(widget.bookKey, DateTime.now());
       } catch (e, stack) {
@@ -3636,7 +3636,7 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
         // 无痕期间不自动写章节已读；既有 readAt 由 saveMangaChapterState
         // 回填保留（已有历史不清空）。章节 updatedAt 仍推进，保证在线漫画
         // 「继续阅读」指向当前章。
-        readAt: atLastPage && !incognito
+        readAt: atLastPage && history.autoMarkChapterRead
             ? DateTime.now().millisecondsSinceEpoch
             : null,
       );

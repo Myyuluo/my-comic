@@ -14,7 +14,6 @@ import 'package:fushi/src/settings/settings_context.dart';
 import 'package:fushi/src/settings/settings_destination.dart';
 import 'package:fushi/src/settings/settings_schema.dart';
 import 'package:fushi/src/settings/settings_schema_system.dart';
-import 'package:fushi/src/settings/settings_search_synonyms.dart';
 import 'package:fushi/src/sync/pref_redaction_policy.dart';
 import 'package:fushi/src/sync/sync_repository.dart';
 import 'package:fushi/src/utils/fushi_icons.dart';
@@ -131,10 +130,5 @@ void main() {
       isTrue,
       reason: 'Profile 快照不得复制这个设备本地选择',
     );
-  });
-
-  test('设置搜索：无痕与 incognito 互相召回', () {
-    expect(settingsSearchSynonymsOf('无痕'), contains('incognito'));
-    expect(settingsSearchSynonymsOf('incognito'), contains('无痕'));
   });
 }
