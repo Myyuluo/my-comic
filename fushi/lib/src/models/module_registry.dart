@@ -23,10 +23,12 @@ import 'package:fushi_core/fushi_core.dart' show MediaKind;
 // ── HomeTab ────────────────────────────────────────────────────────────────
 
 /// 顶层 tab → 所属模块。`settings` 恒在（全部模块关光后的安全回退面），故返回
-/// `null`；首页 2026-10-09 起是可关的 [ModuleId.home]。
+/// `null`；下载页同样不绑定模块（常驻，平台门禁在 `homeActiveTabs` 里跟随浏览）；
+/// 首页 2026-10-09 起是可关的 [ModuleId.home]。
 ModuleId? moduleOfHomeTab(HomeTab tab) => switch (tab) {
   HomeTab.home => ModuleId.home,
   HomeTab.settings => null,
+  HomeTab.downloads => null,
   HomeTab.books => ModuleId.books,
   HomeTab.manga => ModuleId.manga,
   HomeTab.video => ModuleId.video,

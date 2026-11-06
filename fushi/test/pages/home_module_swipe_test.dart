@@ -21,6 +21,7 @@ const List<HomeTab> _tabs = <HomeTab>[
   HomeTab.video,
   HomeTab.games,
   HomeTab.browse,
+  HomeTab.downloads,
   HomeTab.dictionaries,
   HomeTab.settings,
 ];
@@ -35,6 +36,7 @@ void main() {
         HomeTab.video,
         HomeTab.games,
         HomeTab.browse,
+        HomeTab.downloads,
         HomeTab.settings,
       ]);
     });
@@ -52,8 +54,8 @@ void main() {
       expect(target(HomeTab.home, left: false), isNull);
       expect(target(HomeTab.settings, left: true), isNull);
       // BUG-3351：设置是最后一站，进得去也出得来。
-      expect(target(HomeTab.browse, left: true), HomeTab.settings);
-      expect(target(HomeTab.settings, left: false), HomeTab.browse);
+      expect(target(HomeTab.downloads, left: true), HomeTab.settings);
+      expect(target(HomeTab.settings, left: false), HomeTab.downloads);
       // 不参与横滑的 tab 上不切。
       expect(target(HomeTab.dictionaries, left: false), isNull);
     });
@@ -323,13 +325,13 @@ void main() {
       );
       await tester.fling(content(), const Offset(200, 0), 1000);
       await tester.pumpAndSettle();
-      expect(host.current, HomeTab.browse);
+      expect(host.current, HomeTab.downloads);
     });
 
     testWidgets('BUG-3351：最后一个模块左滑进设置，再右滑原路回来', (WidgetTester tester) async {
       final _SwipeHostState host = await pumpHost(
         tester,
-        initial: HomeTab.browse,
+        initial: HomeTab.downloads,
         gateByOrder: true,
       );
       await tester.fling(content(), const Offset(-200, 0), 1000);
@@ -342,7 +344,7 @@ void main() {
       expect(host.current, HomeTab.settings);
       await tester.fling(content(), const Offset(200, 0), 1000);
       await tester.pumpAndSettle();
-      expect(host.current, HomeTab.browse);
+      expect(host.current, HomeTab.downloads);
     });
 
     testWidgets('enabled=false（桌面布局 / Apple 玻璃底栏）不挂识别器', (

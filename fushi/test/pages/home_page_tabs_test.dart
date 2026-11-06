@@ -9,6 +9,9 @@ import 'package:fushi/src/utils/fushi_icons.dart';
 /// 这串具名 bool（`videoEnabled` 必填，books/manga/downloads/lookup 默认开，
 /// games/browserExtension 默认关），默认值在这里逐字保留，用例语义不变。
 ///
+/// `downloads` 指的是「浏览 / 下载能力」（[ModuleId.browse]）：一级导航的「浏览」
+/// 与「下载」两页共用同一条平台 / 合规门禁，所以一个布尔同时决定两页的出现与消失。
+///
 /// games/browserExtension 的平台判据在这里**显式给出**（[ModuleVisibility] 直接收
 /// 最终可见集合），与生产的 [ModuleVisibility.resolve] 同语义——生产侧平台判据在
 /// [ModuleId.availableOn]。
@@ -40,7 +43,7 @@ void main() {
   group('startup module', () {
     test('未选启动页（null）时落默认：可见列表第一项', () {
       final List<HomeTab> tabs = homeActiveTabs(_visibility(video: true));
-      // 固定导航 Manga → 浏览打头，默认落点因此是漫画。
+      // 固定导航 Manga → 浏览 → 下载打头，默认落点因此是漫画。
       expect(homeInitialTab(startupModule: null, tabs: tabs), HomeTab.manga);
       final List<HomeTab> noManga = homeActiveTabs(
         const ModuleVisibility(<ModuleId>{ModuleId.video, ModuleId.browse}),
@@ -156,31 +159,28 @@ void main() {
   });
 
   group('downloads home tab', () {
-    test('HomeTab 枚举包含 downloads', () {
-      expect(HomeTab.values, contains(HomeTab.browse));
+    test('HomeTab 枚举包含独立的 downloads 一级导航项', () {
+      expect(HomeTab.values, contains(HomeTab.downloads));
     });
 
-    test('下载 tab 恒在（统一下载中心）：视频关也出现', () {
-      expect(
-        homeActiveTabs(_visibility(video: false)),
-        contains(HomeTab.browse),
-      );
-    });
-
-    test('浏览 tab 固定在 Manga 之后（不再跟随视频位置）', () {
+    test('下载固定排在浏览之后、设置之前，与浏览共用平台门禁', () {
       final List<HomeTab> tabs = homeActiveTabs(_visibility(video: true));
-      expect(tabs.indexOf(HomeTab.manga), isNonNegative);
-      expect(
-        tabs.indexOf(HomeTab.browse),
-        equals(tabs.indexOf(HomeTab.manga) + 1),
+      expect(tabs.indexOf(HomeTab.downloads), tabs.indexOf(HomeTab.browse) + 1);
+      expect(tabs.last, HomeTab.settings);
+
+      // 浏览 / 下载能力不可用（如 iOS 合规限制）时两页一起消失。
+      final List<HomeTab> withoutBrowse = homeActiveTabs(
+        _visibility(video: true, downloads: false),
       );
+      expect(withoutBrowse, isNot(contains(HomeTab.browse)));
+      expect(withoutBrowse, isNot(contains(HomeTab.downloads)));
     });
 
-    test('每个可见 tab 都有导航项（图标+标签），含 downloads', () {
-      for (final HomeTab tab in homeActiveTabs(_visibility(video: true))) {
-        final AdaptiveNavItem item = homeNavItemFor(tab);
-        expect(item.label, isNotEmpty);
-      }
+    test('下载导航项标签来自字符串资源，图标复用下载图标', () {
+      final AdaptiveNavItem item = homeNavItemFor(HomeTab.downloads);
+      expect(item.label, t.nav_downloads);
+      expect(item.icon, FushiIcons.download);
+      expect(item.selectedIcon, FushiIcons.filled(FushiIcons.download));
     });
   });
 
@@ -249,17 +249,19 @@ void main() {
       );
       expect(tabs, <HomeTab>[
         HomeTab.browse,
+        HomeTab.downloads,
         HomeTab.home,
         HomeTab.dictionaries,
         HomeTab.settings,
       ]);
     });
 
-    test('downloads=false 只隐藏下载 tab，词典仍紧随最后一个媒体库页', () {
+    test('downloads=false 同时隐藏浏览与下载，词典仍紧随最后一个媒体库页', () {
       final List<HomeTab> tabs = homeActiveTabs(
         _visibility(video: true, games: true, downloads: false),
       );
       expect(tabs, isNot(contains(HomeTab.browse)));
+      expect(tabs, isNot(contains(HomeTab.downloads)));
       expect(
         tabs.indexOf(HomeTab.dictionaries),
         tabs.indexOf(HomeTab.games) + 1,
@@ -349,8 +351,8 @@ void main() {
     });
   });
 
-  group('固定导航（Manga / 浏览常驻）', () {
-    test('旧的模块开关偏好全关，导航仍是 Manga → 浏览 → 设置', () {
+  group('固定导航（Manga / 浏览 / 下载常驻）', () {
+    test('旧的模块开关偏好全关，导航仍是 Manga → 浏览 → 下载 → 设置', () {
       final List<HomeTab> tabs = homeActiveTabs(
         ModuleVisibility.resolve(
           prefOf: (ModuleId _) => false,
@@ -360,10 +362,15 @@ void main() {
           isAndroid: false,
         ),
       );
-      expect(tabs, <HomeTab>[HomeTab.manga, HomeTab.browse, HomeTab.settings]);
+      expect(tabs, <HomeTab>[
+        HomeTab.manga,
+        HomeTab.browse,
+        HomeTab.downloads,
+        HomeTab.settings,
+      ]);
     });
 
-    test('iOS 上浏览按合规门禁不出现，漫画不受影响', () {
+    test('iOS 上浏览与下载按合规门禁一起不出现，漫画不受影响', () {
       final List<HomeTab> tabs = homeActiveTabs(
         ModuleVisibility.resolve(
           prefOf: (ModuleId _) => true,

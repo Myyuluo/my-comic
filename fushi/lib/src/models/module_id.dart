@@ -121,7 +121,8 @@ enum ModuleId {
   bool get isInMyComicScope =>
       this == ModuleId.manga || this == ModuleId.browse;
 
-  /// 一级导航常驻模块，按固定顺序 Manga → 浏览。设置恒在最后，不属于本枚举。
+  /// 一级导航常驻模块，按固定顺序 Manga → 浏览。设置恒在最后，不属于本枚举；
+  /// 「下载」不是模块（无开关、无排序），固定跟在浏览之后，见 `homeActiveTabs`。
   ///
   /// 它们**不吃**旧的模块开关偏好（[ModuleVisibility.resolve] 在平台可用性检查
   /// 之后强制启用）与旧的拖拽排序偏好（[ModuleVisibility.ordered] 固定前置）。
@@ -319,7 +320,7 @@ class ModuleVisibility {
   ///
   /// 常驻项**不吃** [order]：旧的拖拽排序偏好不能再把 Manga / 浏览挪走或互换
   /// （设置里的排序 UI 已随 my-comic 收起，但旧偏好仍可能留在库里）。设置恒在
-  /// 最后，由 `homeActiveTabs` 追加，不在本列表里。
+  /// 最后、「下载」紧跟浏览，二者都由 `homeActiveTabs` 追加，不在本列表里。
   List<ModuleId> get ordered => <ModuleId>[
     for (final ModuleId id in ModuleId.fixedNavigationOrder) id,
     for (final ModuleId id in orderModules(order))

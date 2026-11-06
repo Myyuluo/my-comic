@@ -44,52 +44,13 @@ import 'package:fushi/src/leaderboard/leaderboard_service.dart';
 import 'package:fushi/src/sync/sync_auto_trigger.dart';
 import 'package:fushi_engine/media/external_provider.dart';
 
-
 import 'package:fushi/src/media/import/real_path_directory_picker.dart';
-
-
-
-
 
 import 'package:fushi/src/sync/sync_repository.dart';
 
-import 'package:fushi/src/media/downloads/download_task_entry.dart';
-
-
-
-
-
-
-
-
-
 import 'package:fushi/src/models/store_compliance.dart';
 
-
-
-
 import 'package:fushi/src/media/drag_drop/drop_surface_scope.dart';
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 import 'package:fushi/src/sync/remote_library_cache.dart'
     show remoteLibraryCacheProvider;
@@ -140,24 +101,35 @@ export 'package:fushi/src/models/home_tab.dart';
 /// 索引由此列表导出，提取成顶层函数便于单测，不必实例化整个 [HomePage]。
 ///
 /// 一级导航常驻项（Manga → 浏览，见 [ModuleId.fixedNavigationOrder]）固定打头，
-/// 旧的模块排序偏好不能改变它们的位置；设置恒在最后，是全部模块关光后的安全回退
-/// 面（故 [ModuleId] 里没有它，也不参与排序）。其余模块按 [ModuleVisibility.order]
-/// 打头、未排到的按枚举顺序接后（my-comic 只保留漫画域，生产里通常只剩常驻项与
-/// 设置）。平台不可用 / 被平台门禁剔除的模块不出现——浏览在下载能力不可用的平台
-/// （iOS）上仍缺席。
+/// 旧的模块排序偏好不能改变它们的位置；「下载」不绑定模块，固定跟在「浏览」之后
+/// （浏览 / 下载能力共享同一条平台门禁，浏览缺席时下载也不出现）；设置恒在最后，
+/// 是全部模块关光后的安全回退面（故 [ModuleId] 里没有它，也不参与排序）。其余模块
+/// 按 [ModuleVisibility.order] 打头、未排到的按枚举顺序接后（my-comic 只保留漫画域，
+/// 生产里通常只剩常驻项与设置）。平台不可用 / 被平台门禁剔除的模块不出现——浏览与
+/// 下载在下载能力不可用的平台（iOS）上一起缺席。
 ///
 /// 形参是**一个** [ModuleVisibility] 而不是一串 bool：此前这里收七个具名 bool，
 /// 调用方（`_activeTabs()` 与 main.dart 的 macOS 根侧栏）各手抄一份实参表，两份
 /// 已经漂移——macOS 那份漏传 `gamesEnabled`，靠缺省 false 恰好蒙对，注释还把漏写
 /// 说成「macOS 恒 false」。收成一个快照后平台判据只在 [ModuleId.availableOn] 判
 /// 一次，顺序也随快照一起走，所有调用点不可能再漏配。
-List<HomeTab> homeActiveTabs(ModuleVisibility visibility) => <HomeTab>[
-  for (final ModuleId module in visibility.ordered)
-    if (homeTabOfModule(module) case final HomeTab tab
-        when visibility.isEnabled(module))
-      tab,
-  HomeTab.settings,
-];
+List<HomeTab> homeActiveTabs(ModuleVisibility visibility) {
+  final List<HomeTab> tabs = <HomeTab>[];
+  for (final ModuleId module in visibility.ordered) {
+    final HomeTab? tab = homeTabOfModule(module);
+    if (tab == null || !visibility.isEnabled(module)) continue;
+    tabs.add(tab);
+    // 下载没有自己的 ModuleId：它固定挂在「浏览」后面，并跟随浏览的平台门禁
+    // （downloads 能力）一起出现 / 消失。
+    if (module == ModuleId.browse) tabs.add(HomeTab.downloads);
+  }
+  tabs.add(HomeTab.settings);
+  return tabs;
+}
+
+/// 下载页的外壳大标题固定展开、不随滚动收起（2026-11-07 迁移要求）：页面顶部
+/// 只有这一枚标题，内容从标题下方开始，滚动列表时用户始终知道自己在下载页。
+bool homeTabPinsExpandedTitle(HomeTab tab) => tab == HomeTab.downloads;
 
 /// 默认落地 tab：可见列表的第一项。首页开着就是首页；首页被关掉时是第一个
 /// 启用的模块（底栏最左边那一项）；导航模块全关时只剩设置。设置恒在，所以
@@ -246,11 +218,17 @@ AdaptiveNavItem homeNavItemFor(HomeTab tab) {
         label: t.nav_video,
       );
     case HomeTab.browse:
-      // Mihon 的 Browse：来源 / 扩展 / 发现 / 下载（2026-09-27 由「下载」改名）。
+      // Mihon 的 Browse：来源 / 扩展 / 发现 / 导入（2026-09-27 由「下载」改名）。
       return AdaptiveNavItem(
         icon: FushiIcons.browse,
         selectedIcon: FushiIcons.filled(FushiIcons.browse),
         label: t.nav_browse,
+      );
+    case HomeTab.downloads:
+      return AdaptiveNavItem(
+        icon: FushiIcons.download,
+        selectedIcon: FushiIcons.filled(FushiIcons.download),
+        label: t.nav_downloads,
       );
     case HomeTab.dictionaries:
       return AdaptiveNavItem(
@@ -377,9 +355,6 @@ class _HomePageState extends BasePageState<HomePage>
       ValueNotifier<DictionaryFocusRequest?>(null);
   final Map<HomeTab, ScrollController> _tabScrollControllers =
       <HomeTab, ScrollController>{};
-
-  /// 待送达浏览页的跳转请求：只在跳转那一帧非空，送达后即清（见 [_openBrowseTab]）。
-  BrowseNavigationRequest? _browseRequest;
 
   /// 定时后台同步：app 存活期每隔 [_periodicSyncInterval] 重跑一次 app-open 语义的全量
   /// sweep，让「手机一直开着、电脑那边改了数据」这种没有任何事件触发的场景也能自动拉到
@@ -808,7 +783,7 @@ class _HomePageState extends BasePageState<HomePage>
     return KeyEventResult.ignored;
   }
 
-  /// 当前可见的顶层 tab：一级导航固定 Manga → 浏览（my-comic）→ … → 设置。
+  /// 当前可见的顶层 tab：一级导航固定 Manga → 浏览 → 下载（my-comic）→ … → 设置。
   /// 模块可见性 / 平台门禁由 [AppModel.moduleVisibility] 一次合成（见
   /// [homeActiveTabs]），这里不再叠第二遍。
   List<HomeTab> _activeTabs() => homeActiveTabs(appModel.moduleVisibility);
@@ -1304,9 +1279,11 @@ class _HomePageState extends BasePageState<HomePage>
   Widget _buildShellTitleBar() {
     return FushiShellLargeTitleBar(
       title: _shellTitleFor(_visibleTab),
+      // 下载页的标题固定展开：它不在滚动区内，收起来只会让页面莫名少一行。
       collapsed:
-          _largeTitle.collapsed ||
-          (!isGlassDesign(context) && _tabHasFloatingChrome(_visibleTab)),
+          !homeTabPinsExpandedTitle(_visibleTab) &&
+          (_largeTitle.collapsed ||
+              (!isGlassDesign(context) && _tabHasFloatingChrome(_visibleTab))),
       actions: _shellActions,
     );
   }
@@ -1410,7 +1387,7 @@ class _HomePageState extends BasePageState<HomePage>
   }
 
   /// 外壳为 [tab] 显示的页面大标题：有自己分区页签行、却没有页面名的库页
-  /// （书架 / 漫画 / 视频 / 游戏）与浏览、查词。桌面自绘控制条已不再显示
+  /// （书架 / 漫画 / 视频 / 游戏）与浏览、下载、查词。桌面自绘控制条已不再显示
   /// 页面标题，这里是这些页面唯一的页面名。首页（仪表盘）、浏览器扩展与设置
   /// 自带标题或不需要，返回 null。
   String? _shellTitleFor(HomeTab tab) => switch (tab) {
@@ -1419,6 +1396,7 @@ class _HomePageState extends BasePageState<HomePage>
     HomeTab.video ||
     HomeTab.games ||
     HomeTab.browse ||
+    HomeTab.downloads ||
     HomeTab.dictionaries => homeNavItemFor(tab).label,
     // 复习页自己画页头（标题 + 牌组动作），同浏览器扩展。
     HomeTab.home ||
@@ -1785,8 +1763,10 @@ class _HomePageState extends BasePageState<HomePage>
   /// 只能隐藏，不能因 dispose 停止正在进行的 Hook。
   ///
   /// 浏览页也保活：它的来源 / 发现页签每次挂载都要对全部来源联网拉一遍（热门 /
-  /// 发现列表），切去别的 tab 再回来不该丢掉搜索词、结果与滚动再重拉；跨页跳转
-  /// 改走 [BrowsePage.navigationRequest] 原地切页签。
+  /// 发现列表），切去别的 tab 再回来不该丢掉搜索词、结果与滚动再重拉。
+  ///
+  /// 下载页也保活：切去别的 tab 再回来要保留任务列表的滚动位置与
+  /// `watchJobs` 订阅，不重新订阅 / 重取任务行。
   ///
   /// 首页 dashboard 也保活（2026-10 切 tab 卡顿）：不保活时每切回一次就整页
   /// dispose → 重挂载——整棵子树从零 inflate、`initState` 重跑整批统计聚合（全表
@@ -1806,6 +1786,7 @@ class _HomePageState extends BasePageState<HomePage>
     HomeTab.video,
     HomeTab.games,
     HomeTab.browse,
+    HomeTab.downloads,
   };
 
   /// 用户已实际打开过至少一次的保活 tab。惰性构建：没进过的 tab 不预建，
@@ -1817,26 +1798,6 @@ class _HomePageState extends BasePageState<HomePage>
 
   Future<void> _pushAiSettings(BuildContext context) =>
       pushAiSettingsPage(context);
-
-  void _openBrowseTab(
-    BrowseTab tab, {
-    BrowseDownloadsSection downloadsSection = BrowseDownloadsSection.tasks,
-    DownloadTaskWorkFocus? downloadsWorkFocus,
-  }) {
-    // 浏览页是保活 tab：跳转是一条送给已挂载页面的请求（它原地切页签），不再换
-    // key 整页重建——那会丢掉来源 / 发现 / 下载各页签的搜索词、结果与滚动。
-    setState(() {
-      _browseRequest = BrowseNavigationRequest(
-        tab,
-        downloadsSection: downloadsSection,
-        downloadsWorkFocus: downloadsWorkFocus,
-      );
-    });
-    _selectTab(HomeTab.browse);
-    // 用后即清：请求随本帧送达一次；之后的无关重建传 null，不会把用户已切走的
-    // 页签拽回来，模块开关重建出的新浏览页也不会落在这次过期的页签上。
-    WidgetsBinding.instance.addPostFrameCallback((_) => _browseRequest = null);
-  }
 
   Widget buildBody() {
     final HomeTab visible = _visibleTab;
@@ -1917,7 +1878,8 @@ class _HomePageState extends BasePageState<HomePage>
       HomeTab.home => const HomeDashboardPage(),
       // my-comic：视频模块已删除；保留枚举值以兼容旧偏好/旧数据。
       HomeTab.video => const SizedBox.shrink(),
-      HomeTab.browse => BrowsePage(navigationRequest: _browseRequest),
+      HomeTab.browse => const BrowsePage(),
+      HomeTab.downloads => const DownloadsPage(),
       HomeTab.dictionaries => HomeDictionaryPage(focusSignal: _dictFocusSignal),
       // my-comic：游戏模块已删除。
       HomeTab.games => const SizedBox.shrink(),

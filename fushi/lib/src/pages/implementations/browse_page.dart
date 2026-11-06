@@ -1,27 +1,13 @@
-import 'dart:async';
-
-import 'package:fushi/src/media/downloads/download_task_entry.dart';
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:fushi_audio/fushi_audio.dart'
-    show AudiobookRepository, AudiobookStorage, SrtBookRepository;
-import 'package:path/path.dart' as p;
 
 import 'package:fushi/src/media/audiobook/audiobook_transcribe_tasks_section.dart';
-import 'package:fushi/src/media/audiobook/audiobook_material_library.dart';
-import 'package:fushi/src/media/audiobook/audiobook_material_service.dart';
-import 'package:fushi/src/media/audiobook/book_import_dialog.dart';
-import 'package:fushi/src/media/discovery/discovery_download_tasks_section.dart';
 import 'package:fushi/src/media/drag_drop/drop_classification.dart';
 import 'package:fushi_engine/media/discovery/discovery_models.dart';
 
 import 'package:fushi/src/media/manga/discovery/manga_discovery_page.dart';
 import 'package:fushi/src/media/manga/manga_sources_page.dart';
-
-import 'package:fushi/src/media/downloads/manga_download_tasks_section.dart';
-
-
 
 import 'package:fushi/src/models/app_model.dart';
 import 'package:fushi/src/models/module_id.dart';
@@ -32,11 +18,6 @@ import 'package:fushi/src/ai/ai_media_acquisition_assistant.dart'
 import 'package:fushi/src/pages/implementations/browse_online_sources_view.dart';
 
 import 'package:fushi/src/pages/implementations/media_discovery_page.dart';
-
-
-
-
-
 
 import 'package:fushi/src/settings/settings_detail_page.dart';
 import 'package:fushi/src/sync/interconnect_peer_addresses.dart';
@@ -53,10 +34,8 @@ import 'package:fushi/src/utils/components/fushi_floating_chrome.dart'
 import 'package:fushi/src/utils/components/glass/fushi_apple_scroll_chrome.dart'
     show fushiNotificationFromVisibleSubtree;
 import 'package:fushi/utils.dart';
-import 'package:fushi_core/fushi_core.dart'
-    show VideoDownloadJobFileRow, VideoDownloadJobRow;
 
-/// 「浏览」页签（Mihon 的 Browse 形态）：在线源 / 发现 / 导入 / 下载。
+/// 「浏览」页签（Mihon 的 Browse 形态）：在线源 / 发现 / 导入。
 ///
 /// 2026-09-27 由「下载」模块改名而来（持久化键 `module_downloads_enabled` 冻结），
 /// 同时把散在各库页与导入页的在线入口收拢到这里：
@@ -65,37 +44,30 @@ import 'package:fushi_core/fushi_core.dart'
 ///   动作上（Mihon 把 repo 放在 Extensions 的工具栏）；
 /// - **发现**：书 / 漫画 / 游戏 / 视频四域的生产发现页（原「资源」页签）；
 /// - **导入**：漫画的 Local import（快速导入、常驻扫描根、互联对端），2026-11-05
-///   从漫画页搬来；
-/// - **下载**：统一下载中心的任务与订阅，下载设置在页头齿轮里。
+///   从漫画页搬来。
+///
+/// 下载任务列表 2026-11-07 迁出为一级「下载」页（`HomeTab.downloads`），这里不再
+/// 有「下载」视图页签。
 ///
 /// 每个页签内先选内容域，再直接复用各域自己的生产组件，不另写第二套 UI。
 class BrowsePage extends ConsumerStatefulWidget {
-  const BrowsePage({
-    super.key,
-    this.initialTab,
-    this.initialDownloadsSection = BrowseDownloadsSection.tasks,
-    this.navigationRequest,
-  });
+  const BrowsePage({super.key, this.initialTab, this.navigationRequest});
 
   /// 打开时停在哪个页签；null 或此刻不可见 = 第一个可见页签。
   final BrowseTab? initialTab;
 
-  /// 「下载」页签里先显示任务还是订阅（发现详情「管理订阅」等入口直落订阅）。
-  final BrowseDownloadsSection initialDownloadsSection;
-
-  /// 宿主（首页）把**已挂载**的浏览页切到某页签 / 下载段的请求：首页保活本页，
+  /// 宿主（首页）把**已挂载**的浏览页切到某页签的请求：首页保活本页，
   /// 跳转不再靠换 key 整页重建（那会丢掉各页签的搜索词、结果与滚动）。按 identity
   /// 判新请求；首次挂载时它优先于 [initialTab]。
   final BrowseNavigationRequest? navigationRequest;
-
 
   @override
   ConsumerState<BrowsePage> createState() => _BrowsePageState();
 }
 
 /// 「浏览」的页签。**用枚举而不是下标**：页签随平台 / 模块开关增减，跨页跳转
-/// （视频发现详情「管理订阅」等）若按下标就会在页签少一个时静默落错页。
-enum BrowseTab { sources, discover, localImport, downloads, extensions }
+/// 若按下标就会在页签少一个时静默落错页。
+enum BrowseTab { sources, discover, localImport, extensions }
 
 /// 顶层页签接力（二级标签越界横滑）时，目标页签的二级标签要不要按衔接方向
 /// 重新落端（往后落首段、往前落末段）。
@@ -128,23 +100,12 @@ Widget debugBrowseSwipeSections<T extends Object>({
   trailing: trailing,
 );
 
-/// 「下载」页签里的两段。
-enum BrowseDownloadsSection { tasks, subscriptions }
-
 /// 一次「切到浏览某页签」的请求（见 [BrowsePage.navigationRequest]）。构造器刻意
 /// 不是 const：每次跳转都是新对象，同一页签连续请求两次也能被识别成两次。
 class BrowseNavigationRequest {
-  BrowseNavigationRequest(
-    this.tab, {
-    this.downloadsSection = BrowseDownloadsSection.tasks,
-    this.downloadsWorkFocus,
-  });
+  BrowseNavigationRequest(this.tab);
 
   final BrowseTab tab;
-  final BrowseDownloadsSection downloadsSection;
-
-  /// 落到下载任务时只看某部作品（发现详情页「任务」）；null = 看全部。
-  final DownloadTaskWorkFocus? downloadsWorkFocus;
 }
 
 class _BrowsePageState extends ConsumerState<BrowsePage>
@@ -186,19 +147,10 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
       ? OnlineSourcesSection.extensions
       : OnlineSourcesSection.sources;
 
-  late BrowseDownloadsSection _downloadsSection =
-      widget.navigationRequest?.downloadsSection ??
-      widget.initialDownloadsSection;
-
-  /// 下载任务列表当前只看的作品。由本页持有（跳转请求用后即清，任务页签可能
-  /// 晚于请求才建出来）；每次跳转请求覆盖它，用户点「显示全部任务」清空。
-  late DownloadTaskWorkFocus? _downloadsWorkFocus =
-      widget.navigationRequest?.downloadsWorkFocus;
-
   _DownloadsResourceDomain _resourceDomain = _DownloadsResourceDomain.books;
 
-  /// 页头动作（下载页签的「添加任务」+ 下载设置）登记的槽：由页签行右侧的
-  /// 悬浮按钮组胶囊画出（与库页壳 [MediaLibraryShell] 同构）。
+  /// 页头动作（扩展的「仓库」等）登记的槽：由页签行右侧的悬浮按钮组胶囊画出
+  /// （与库页壳 [MediaLibraryShell] 同构）。
   final FushiShellActionsSlot _actionsSlot = FushiShellActionsSlot();
 
   /// 头部（一级页签行 + 各页签的二级页签行）随滚动收放的状态：与四个库页
@@ -237,9 +189,7 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
     if (request == null || identical(request, oldWidget.navigationRequest)) {
       return;
     }
-    // 已挂载时的跳转：原地切页签 / 下载段，不重建整页。
-    _downloadsSection = request.downloadsSection;
-    _downloadsWorkFocus = request.downloadsWorkFocus;
+    // 已挂载时的跳转：原地切页签，不重建整页。
     if (request.tab == BrowseTab.sources ||
         request.tab == BrowseTab.extensions) {
       _onlineSection = _onlineSectionOf(request.tab);
@@ -292,10 +242,10 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
     return next;
   }
 
-  /// 此刻可见的页签，顺序即页头顺序：在线源 → 发现 → 导入 → 下载。
+  /// 此刻可见的页签，顺序即页头顺序：在线源 → 发现 → 导入。
   ///
   /// 在线源页签只在至少一个域有在线来源时出现；发现页签跟四个库模块走；
-  /// 导入跟随浏览模块恒在；下载恒在。
+  /// 导入跟随浏览模块恒在。
   List<BrowseTab> _visibleTabs(AppModel appModel) {
     final bool online = visibleOnlineSourcesDomains(
       appModel.moduleVisibility,
@@ -306,15 +256,14 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
     final bool discover =
         StoreRestrictedCapability.externalDiscovery.isAvailable &&
         _visibleResourceDomains(appModel.moduleVisibility).isNotEmpty;
-    // 2026-11-05 用户口径：浏览页签顺序 在线源 → 发现 → 导入 → 下载；
-    // 默认落地沿用「第一个可见页签」，因此打开浏览落在在线源。
+    // 用户口径：浏览页签顺序 在线源 → 发现 → 导入；默认落地沿用「第一个可见
+    // 页签」，因此打开浏览落在在线源。
     return <BrowseTab>[
       // 来源 / 扩展并成一个「在线源」页签（见 [_onlineSection]）。
       if (online) BrowseTab.sources,
       if (discover) BrowseTab.discover,
       // 导入跟着浏览页走，不额外看漫画模块开关。
       BrowseTab.localImport,
-      BrowseTab.downloads,
     ];
   }
 
@@ -323,7 +272,6 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
     BrowseTab.extensions => t.media_import_segment_extensions,
     BrowseTab.discover => t.library_view_discover,
     BrowseTab.localImport => t.library_view_import,
-    BrowseTab.downloads => t.nav_downloads,
   };
 
   void _selectOnlineDomain(OnlineSourcesDomain domain) {
@@ -430,7 +378,7 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
 
   /// 二级标签横滑越过首 / 尾段时，把手势交给相邻的顶层页签：从 [from] 往 [delta]
   /// 方向（+1 下一个 / -1 上一个）切过去，并让目标页签的二级标签落在衔接的那一端
-  /// （往后落首段、往前落末段）——四个页签的二级标签连成一条可一路滑过去的带子。
+  /// （往后落首段、往前落末段）——三个页签的二级标签连成一条可一路滑过去的带子。
   void _handOffFrom(BrowseTab from, int delta) {
     final TabController? controller = _tabController;
     if (controller == null || controller.indexIsChanging) return;
@@ -466,78 +414,12 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
           if (domains.isNotEmpty) {
             _resourceDomain = toFirst ? domains.first : domains.last;
           }
-        case BrowseTab.downloads:
-          _downloadsSection = toFirst
-              ? BrowseDownloadsSection.values.first
-              : BrowseDownloadsSection.values.last;
         case BrowseTab.localImport:
           // 导入页没有二级分区，无须落端。
           break;
       }
     });
     controller.animateTo(target);
-  }
-
-  /// 「补对齐文件」：把已下完的孤立音频直接喂进统一导入对话框。
-  ///
-  /// 本仓有声书是字幕对齐驱动的，`download-only-audiobook` 任务落地的只有音频
-  /// （CoreAudio/TMW 单卷 m4b），自动导入链路进不去。这里把该任务真实落盘的音频
-  /// 预填进 [BookImportDialog]，用户只需再给一个字幕就能成书。
-  ///
-  /// 取不到音频路径（文件被手动删掉/移走）时照常开框、只是不预填——把死路留成
-  /// 用户仍可自选文件的活路，好过弹一句错误后什么也做不了。
-  ///
-  /// 素材库里配得到字幕/正文时一并预填：身份键取任务记的 [externalId]（发现页
-  /// 下载时写的作品主键），没有就退到音频文件名里的键。
-  Future<void> _pairDownloadedAudiobook(VideoDownloadJobRow job) async {
-    final AppModel appModel = ref.read(appProvider);
-    final List<VideoDownloadJobFileRow> rows = await appModel.database
-        .getVideoDownloadJobFiles(job.jobId);
-    final List<String> audioPaths = <String>[
-      for (final VideoDownloadJobFileRow row in rows)
-        if (row.selected &&
-            (row.finalAbsolutePath?.trim().isNotEmpty ?? false) &&
-            AudiobookStorage.audioExtensions.contains(
-              p.extension(row.finalAbsolutePath!).toLowerCase(),
-            ))
-          row.finalAbsolutePath!,
-    ]..sort();
-    final AudiobookMaterialMatch match = await _matchAudiobookMaterials(
-      appModel,
-      job: job,
-      audioPaths: audioPaths,
-    );
-    if (!mounted) return;
-    await showAppDialog<bool>(
-      context: context,
-      builder: (_) => BookImportDialog(
-        prefs: appModel.prefsRepo,
-        repo: SrtBookRepository(appModel.database),
-        audiobookRepo: AudiobookRepository(appModel.database),
-        db: appModel.database,
-        initialAudioPaths: audioPaths.isEmpty ? null : audioPaths,
-        initialSubtitlePath: match.subtitlePath,
-        initialEpubPath: match.contentPath,
-      ),
-    );
-  }
-
-  /// 从素材库给这条任务配字幕/正文；没配素材库或配不到时返回空匹配。
-  Future<AudiobookMaterialMatch> _matchAudiobookMaterials(
-    AppModel appModel, {
-    required VideoDownloadJobRow job,
-    required List<String> audioPaths,
-  }) async {
-    final AudiobookMaterialScan scan = await appModel.audiobookMaterialService
-        .scan();
-    if (scan.index.isEmpty) return const AudiobookMaterialMatch();
-    final String? externalId = job.externalId?.trim();
-    final String? key = (externalId != null && externalId.isNotEmpty)
-        ? externalId
-        : audioPaths
-              .map(audiobookKeyFromAudioPath)
-              .firstWhere((String? k) => k != null, orElse: () => null);
-    return matchAudiobookMaterial(scan.index, key: key, title: job.title);
   }
 
   String _resourceDomainLabel(_DownloadsResourceDomain domain) =>
@@ -588,7 +470,6 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
           embedded: true,
           onOpenSources: _mangaSourcesAction(),
         ),
-
       };
 
   /// 二级标签页只负责选择内容域；域内筛选、搜索与结果展示全部沿用各模块
@@ -642,9 +523,6 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
     return AnimatedBuilder(
       animation: controller,
       builder: (BuildContext context, Widget? child) {
-        final bool onDownloads =
-            tabs[controller.index.clamp(0, tabs.length - 1)] ==
-            BrowseTab.downloads;
         final BrowseTab current =
             tabs[controller.index.clamp(0, tabs.length - 1)];
         final OnlineSourcesDomain? storesDomain =
@@ -709,48 +587,15 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
   /// 「导入」页签：复用漫画的 Local import 页（快速导入 + 常驻来源 + 互联对端）。
   Widget _buildLocalImportTab() => const MangaSourcesPage(embedded: true);
 
-  /// 「下载」页签：my-comic 只保留漫画章节下载任务。
-  /// torrent / 磁力 / 直链 / 视频订阅等统一下载中心入口已随非漫画域移除。
-  Widget _buildDownloadsTab() {
-    final FushiDesignTokens tokens = FushiDesignTokens.of(context);
-    return ListView(
-      padding: EdgeInsets.fromLTRB(
-        tokens.spacing.page,
-        FushiFloatingChromeInset.of(context) + tokens.spacing.gap,
-        tokens.spacing.page,
-        tokens.spacing.page,
-      ),
-      children: const <Widget>[MangaDownloadTasksSection()],
-    );
-  }
-
   Widget build(BuildContext context) {
     final List<BrowseTab> tabs = _visibleTabs(ref.watch(appProvider));
     // 初始页签：跳转请求 / initialTab 播种进 [_selectedTab]，此刻不可见就落第一个
     // 页签（见 [_syncTabController]）。
     final TabController controller = _syncTabController(tabs);
-    // my-comic：torrent / 磁力拖放入口已移除，下载页只承载漫画章节下载任务。
-    // 2026-10 体验优化：BUG-1003 的 inset 关闭原先对整页生效，来源 / 扩展 /
-    // 发现页签里的搜索框在手机上会被软键盘直接盖住、列表也滚不到底。只在
-    // 「下载」页签（贴底任务区）关 inset，其它页签恢复默认让键盘顶起 body。
-    return AnimatedBuilder(
-      animation: controller,
-      builder: (BuildContext context, Widget? body) {
-        final bool onDownloads =
-            tabs[controller.index.clamp(0, tabs.length - 1)] ==
-            BrowseTab.downloads;
-        return Scaffold(
-          // BUG-1003：下载页签把输入框放在上半部、任务折叠区贴底、中段列表是
-          // 唯一的 Expanded。默认 resizeToAvoidBottomInset:true 时，手机软键盘
-          // 弹出会压掉 body 高度、顶掉贴底任务区。在该页签关掉 inset 让键盘
-          // 只覆盖下半部（打字时本就不看），顶部输入框保持可见、布局不反流。
-          resizeToAvoidBottomInset: !onDownloads,
-          body: body,
-        );
-      },
-      // 作为 home tab 时外层已有 SafeArea，这里的 SafeArea 兜的是独立 push
-      // 进来（设置入口）时的状态栏避让，双层无副作用。
-      child: SafeArea(
+    // 作为 home tab 时外层已有 SafeArea，这里的 SafeArea 兜的是独立 push
+    // 进来（设置入口）时的状态栏避让，双层无副作用。
+    return Scaffold(
+      body: SafeArea(
         bottom: false,
         // 头部（一级页签行）叠在正文上、随滚动收放（与库页同一套，见
         // [FushiFloatingChromeOverlay]）；各页签的二级页签行在 [_BrowseSwipeSections]
@@ -785,7 +630,6 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
                           BrowseTab.extensions => _buildOnlineTab(),
                           BrowseTab.discover => _buildResourceHub(),
                           BrowseTab.localImport => _buildLocalImportTab(),
-                          BrowseTab.downloads => _buildDownloadsTab(),
                         },
                       ),
                   ],
@@ -800,7 +644,7 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
 }
 
 /// 页面内一排二级标签 + 可横滑的对应页面（MD3 secondary tabs + [TabBarView]），
-/// 「浏览」四个页签共用：来源 / 扩展的内容域、发现的内容域、下载的任务 / 订阅。
+/// 「浏览」各页签共用：来源 / 扩展的内容域、发现的内容域。
 ///
 /// * 标签条是贴合内容宽的紧凑分段胶囊（`floating` + `secondary`），摆不下时
 ///   在胶囊里横滑。
@@ -1054,7 +898,6 @@ ModuleId _moduleOfResourceDomain(_DownloadsResourceDomain domain) =>
     switch (domain) {
       _DownloadsResourceDomain.books => ModuleId.books,
       _DownloadsResourceDomain.manga => ModuleId.manga,
-
     };
 
 /// 此刻可见的资源域，顺序即标签顺序（枚举声明序）。
