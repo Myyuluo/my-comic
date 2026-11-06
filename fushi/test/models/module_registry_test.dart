@@ -196,6 +196,17 @@ void main() {
       expect(isHomeTabVisible(HomeTab.settings, none), isTrue);
     });
 
+    test('下载是恒在的一级导航项，不绑定任何模块（同设置）', () {
+      // 下载页由 homeActiveTabs 跟在「浏览」之后、受同一条平台门禁约束；
+      // 它自己不是模块，不能被模块开关隐藏（见 home_page_tabs_test 的顺序用例）。
+      expect(moduleOfHomeTab(HomeTab.downloads), isNull);
+      for (final ModuleId id in ModuleId.values) {
+        expect(homeTabOfModule(id), isNot(HomeTab.downloads));
+      }
+      const ModuleVisibility none = ModuleVisibility(<ModuleId>{});
+      expect(isHomeTabVisible(HomeTab.downloads, none), isTrue);
+    });
+
     test('首页是可关模块（2026-10-09 用户反馈「首页没用但偏偏不给关」）', () {
       expect(moduleOfHomeTab(HomeTab.home), ModuleId.home);
       expect(homeTabOfModule(ModuleId.home), HomeTab.home);

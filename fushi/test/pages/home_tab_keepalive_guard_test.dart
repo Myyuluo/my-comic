@@ -43,6 +43,9 @@ void main() {
     expect(literal.contains('HomeTab.browse'), isTrue,
         reason: '浏览 tab 必须保活（来源 / 发现页签挂载即对全部来源联网，'
             '切回不能丢搜索与结果再重拉；PR #1707 审查）');
+    expect(literal.contains('HomeTab.downloads'), isTrue,
+        reason: '下载 tab 必须保活（切走再回来保留任务列表滚动位置与 watchJobs '
+            '订阅，不重新订阅 / 重取任务行）');
     expect(literal.contains('HomeTab.home'), isTrue,
         reason: '首页 dashboard 必须保活（2026-10 切 tab 卡顿：不保活时每次切回都整页'
             '重挂载、重跑整批统计聚合、重放进场动画）');

@@ -135,14 +135,14 @@ void main() {
     }
   });
 
-  testWidgets('Apple 设计下窄屏四段不被渐隐截断（浏览页「在线源」）', (
+  testWidgets('Apple 设计下窄屏四段标签不被渐隐截断', (
     WidgetTester tester,
   ) async {
     addTearDown(() => tester.binding.setSurfaceSize(null));
-    // 2026-10-05 用户截图：手机上浏览页顶部「发现 / 在线源 / 扩展 / 下载」放得下，
-    // 「在线源」却被 Tab 自带的渐隐切掉。根因：Apple 文字页签在 label 内边距
-    // 之内文字两侧各还有一圈内衬（kFushiAppleTabContentInset），铺满判据漏算，
-    // 判「等分放得下」，实际每格比文字窄。扫一段宽度，凡画出来的段都必须完整。
+    // 2026-10-05 用户截图：手机上浏览页顶部的四个中文标签放得下，「在线源」却被
+    // Tab 自带的渐隐切掉。根因：Apple 文字页签在 label 内边距之内文字两侧各还有
+    // 一圈内衬（kFushiAppleTabContentInset），铺满判据漏算，判「等分放得下」，
+    // 实际每格比文字窄。扫一段宽度，凡画出来的段都必须完整。
     const List<String> labels = <String>['发现', '在线源', '扩展', '下载'];
     for (double width = 240; width <= 420; width += 6) {
       await tester.binding.setSurfaceSize(Size(width, 400));
@@ -265,7 +265,7 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.binding.setSurfaceSize(const Size(1600, 900));
 
-    // 宿主（下载页）自己持有 controller 驱动 TabBarView。导航组件必须共用**那一个**：
+    // 宿主（浏览页）自己持有 controller 驱动 TabBarView。导航组件必须共用**那一个**：
     // 镜像出第二个 controller 时，横滑 TabBarView 的连续进度传不到指示器上，指示器
     // 只能在宿主 index 越过一半跳变时跟着跳一下。
     final TabController host = TabController(length: 4, vsync: const TestVSync());
@@ -358,15 +358,16 @@ void main() {
     const Map<String, String> topBarSources = <String, String>{
       '书架/漫画': 'lib/src/pages/implementations/media_library_shell.dart',
       // 视频 / 游戏顶层壳随 my-comic v1 移除非漫画模块一并删除。
-      // 下载页也是顶层 tab、也切四个独立目的地，同属这条收敛（它页内还有
+      // 浏览页也是顶层 tab、页内切多个独立目的地，同属这条收敛（它页内还有
       // TabBarView，走 controlled 形态共用同一个 TabController）。
-      '下载': 'lib/src/pages/implementations/browse_page.dart',
+      // 「下载」一级页只有任务列表、没有视图页签，不参与这条收敛。
+      '浏览': 'lib/src/pages/implementations/browse_page.dart',
     };
     for (final MapEntry<String, String> entry in topBarSources.entries) {
       final String src = File(entry.value).readAsStringSync();
-      // 下载页的资源子页另有一个合法的 section 级内容域分段条；这里只检查
+      // 浏览页的发现子页另有一个合法的 section 级内容域分段条；这里只检查
       // 顶层门头，防止把“顶层导航不得用分段按钮”误扩成整文件禁用。
-      final String topBarSource = entry.key == '下载'
+      final String topBarSource = entry.key == '浏览'
           ? methodBody(src, 'Widget _buildHeader(')
           : src;
       expect(

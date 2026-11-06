@@ -51,10 +51,11 @@ void main() {
   });
 
   group('homeActiveTabs 固定导航 + 用户顺序', () {
-    test('没排过 = 固定导航 Manga → 浏览在前，其余按枚举顺序接后', () {
+    test('没排过 = 固定导航 Manga → 浏览 → 下载在前，其余按枚举顺序接后', () {
       expect(homeActiveTabs(const ModuleVisibility(allNav)), <HomeTab>[
         HomeTab.manga,
         HomeTab.browse,
+        HomeTab.downloads,
         HomeTab.home,
         HomeTab.books,
         HomeTab.video,
@@ -75,6 +76,7 @@ void main() {
       expect(tabs, <HomeTab>[
         HomeTab.manga,
         HomeTab.browse,
+        HomeTab.downloads,
         HomeTab.dictionaries,
         HomeTab.video,
         HomeTab.home,
@@ -153,9 +155,9 @@ void main() {
         full.indexOf(ModuleId.browserExtension),
       );
       expect(result.indexOf(ModuleId.sync), full.indexOf(ModuleId.sync));
-      // 固定导航（Manga → 浏览）不吃拖拽；重排只影响它们之后的模块。
+      // 固定导航（Manga → 浏览 → 下载）不吃拖拽；重排只影响它们之后的模块。
       expect(
-        homeActiveTabs(ModuleVisibility(allNav, order: result)).skip(2).take(3),
+        homeActiveTabs(ModuleVisibility(allNav, order: result)).skip(3).take(3),
         <HomeTab>[HomeTab.dictionaries, HomeTab.home, HomeTab.books],
       );
     });

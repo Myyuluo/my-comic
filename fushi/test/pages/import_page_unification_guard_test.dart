@@ -195,10 +195,10 @@ void main() {
       expect(browse, isNot(contains('ButtonSegment<')));
       expect(
         RegExp(
-          r'_BrowseSwipeSections<(?:OnlineSourcesDomain|_DownloadsResourceDomain|BrowseDownloadsSection)>\(',
+          r'_BrowseSwipeSections<(?:OnlineSourcesDomain|_DownloadsResourceDomain)>\(',
         ).allMatches(browse),
         hasLength(2),
-        reason: '来源 / 扩展共用一处 + 发现，共两处二级标签条（下载页只有任务列表）',
+        reason: '来源 / 扩展共用一处 + 发现，共两处二级标签条（下载是独立一级页，无视图页签）',
       );
       // One additional generic constructor belongs only to the explicit
       // widget-test seam. Keep a total budget so new production domains cannot

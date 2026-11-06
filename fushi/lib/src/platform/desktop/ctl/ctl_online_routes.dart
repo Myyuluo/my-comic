@@ -1663,8 +1663,8 @@ class _OnlineCtl {
     return <String, Object?>{
       'current': ctlNavigationName(homeShellTabNotifier.value),
       'covered': context.navigator?.canPop() ?? false,
-      // 可用页按一级导航固定顺序（Manga → 浏览 → 设置）排在前面；旧的模块
-      // 排序偏好不再改变这里的顺序（见 [ctlNavigationPages]）。
+      // 可用页按一级导航固定顺序（Manga → 浏览 → 下载 → 设置）排在前面；旧的
+      // 模块排序偏好不再改变这里的顺序（见 [ctlNavigationPages]）。
       'pages': <Map<String, Object?>>[
         for (final HomeTab tab in ctlNavigationPages(active: active))
           <String, Object?>{

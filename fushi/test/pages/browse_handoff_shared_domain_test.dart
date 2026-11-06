@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi/src/pages/implementations/browse_page.dart';
 
+import '../helpers/source_guard.dart';
+
 /// PR #1735：来源 ↔ 扩展共用一份内容域（`_onlineDomain`）。二级标签越界横滑接力
 /// 时若按「往后首段 / 往前末段」改这份共享域，被拖那一页的二级 TabController 会
 /// 在拖动途中被改下标，而 TabBarView 拖动中不跟随跳页，标签条与页面就此错位。
@@ -25,10 +27,10 @@ void main() {
     const List<(BrowseTab, BrowseTab)> pairs = <(BrowseTab, BrowseTab)>[
       (BrowseTab.extensions, BrowseTab.discover),
       (BrowseTab.discover, BrowseTab.extensions),
-      (BrowseTab.discover, BrowseTab.downloads),
-      (BrowseTab.downloads, BrowseTab.discover),
-      (BrowseTab.extensions, BrowseTab.downloads),
-      (BrowseTab.downloads, BrowseTab.extensions),
+      (BrowseTab.discover, BrowseTab.localImport),
+      (BrowseTab.localImport, BrowseTab.discover),
+      (BrowseTab.extensions, BrowseTab.localImport),
+      (BrowseTab.localImport, BrowseTab.extensions),
     ];
     for (final (BrowseTab from, BrowseTab to) in pairs) {
       expect(
@@ -36,6 +38,32 @@ void main() {
         isTrue,
         reason: '$from -> $to',
       );
+    }
+  });
+
+  test('浏览页不再有「下载」视图页签：只剩在线源 / 发现 / 导入', () {
+    expect(BrowseTab.values.map((BrowseTab tab) => tab.name), <String>[
+      'sources',
+      'discover',
+      'localImport',
+      'extensions',
+    ]);
+  });
+
+  test('浏览页删掉下载页签的标签、内容、状态与页头特例', () {
+    final String source = maskComments(
+      File('lib/src/pages/implementations/browse_page.dart').readAsStringSync(),
+    );
+    for (final String removed in <String>[
+      'BrowseTab.downloads',
+      'BrowseDownloadsSection',
+      '_buildDownloadsTab',
+      'MangaDownloadTasksSection',
+      'resizeToAvoidBottomInset',
+      '_downloadsSection',
+      '_downloadsWorkFocus',
+    ]) {
+      expect(source, isNot(contains(removed)), reason: removed);
     }
   });
 

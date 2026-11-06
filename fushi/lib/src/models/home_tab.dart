@@ -12,8 +12,13 @@ enum HomeTab {
   manga,
   video,
 
-  /// 浏览（Mihon 的 Browse：来源 / 扩展 / 发现 / 下载），2026-09-27 由「下载」改名。
+  /// 浏览（Mihon 的 Browse：来源 / 扩展 / 发现 / 导入），2026-09-27 由「下载」改名。
   browse,
+
+  /// 下载：一级导航页，只显示漫画章节下载任务列表。2026-11-07 从浏览页的
+  /// 「下载」视图页签迁出。不绑定 [ModuleId]（同设置），由 `homeActiveTabs`
+  /// 跟在「浏览」之后，并跟随浏览 / 下载能力的平台门禁一起出现或消失。
+  downloads,
   dictionaries,
 
   /// 复习（Fushi 内置 SRS）。模块默认关闭，见 `ModuleId.srs`。
