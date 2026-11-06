@@ -746,7 +746,11 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
       for (final EpubBookMeta row in epubBooks)
         if (row.uid.isNotEmpty) row.bookKey: row.uid,
     };
-    final List<SrtBook> srtBooks = await SrtBookRepository(db).listAll();
+    // my-comic 的 37 表 live schema 没有 srt_books（听书模块已移除）：表不存在时
+    // 选中集里不可能有本地 SRT 条目，按空集合处理，不让整批动作静默失败。
+    final List<SrtBook> srtBooks = await db.hasTable('srt_books')
+        ? await SrtBookRepository(db).listAll()
+        : const <SrtBook>[];
     if (!mounted) return false;
     // BUG-2458：远端占位键的存在性真值是最近一次拉到的远端目录（占位卡就是从它
     // 渲染的），不在本地表里；不纳入就会被当幽灵键整批剔光。
@@ -973,8 +977,8 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
     _rebuild(() {});
   }
 
-  /// 书卡 / 配对字幕书卡「重置阅读状态」：先收起长按菜单，弹确认框（可选只撤最近
-  /// 一次会话 / 全清学习记录，默认都不动），确认后经 [resetBookReadingState] 落库
+  /// 书卡 / 配对字幕书卡「重置阅读状态」：先收起长按菜单，弹确认框（可选撤销最近
+  /// 一次会话，默认不动学习记录），确认后经 [resetBookReadingState] 落库
   /// （位置写回开头而不是删行——删行会被同步通道从对端灌回，见该函数文件头），
   /// 再让书列表 / 最近阅读时刻 / 读完集合三份缓存一起失效。
   Future<void> _resetBookReadingState(
