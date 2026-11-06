@@ -42,6 +42,23 @@ enum UpdateFeedKind {
         UpdateFeedKind.appRelease => 'updates_notify_app_release',
       };
 
+  /// 从未存过开关时这个域是否提醒。
+  ///
+  /// 漫画新章是**唯一**默认关闭的域（2026-11 用户要求：不在未经开启的情况下后台
+  /// 检查书架里的在线漫画）；其余域维持原来的默认开启。设置页与
+  /// `UpdateFeedService.isKindEnabled` 都读这一份——两处各写一个 defaultValue
+  /// 迟早会漂开，而这个漂移直接表现为「开关显示关着，后台却照查」。
+  ///
+  /// 穷举 switch（无 `_` 分支）：新增域必须在这里明确表态，而不是静默继承某个
+  /// 别的域的默认值。
+  bool get defaultEnabled => switch (this) {
+        UpdateFeedKind.videoEpisode => true,
+        UpdateFeedKind.mangaChapter => false,
+        UpdateFeedKind.mangaExtension => true,
+        UpdateFeedKind.animeExtension => true,
+        UpdateFeedKind.appRelease => true,
+      };
+
   /// 未登记的 [dbValue] 返回 null（旧版本写下的、本版本已删的域，读回来不该崩）。
   static UpdateFeedKind? fromDbValue(String value) {
     for (final UpdateFeedKind kind in UpdateFeedKind.values) {
