@@ -26,7 +26,9 @@ import 'package:fushi/utils.dart';
 // placement / weight in the below-cover action column:
 //   * [DialogQuickAction]  -> equal-width quick action (MD3 tonal button /
 //                             Apple glass round button + caption).
-//   * [DialogListAction]   -> a labelled row (MD3 segmented card / Apple menu).
+//   * [DialogListAction]   -> a labelled row (MD3 segmented card / Apple menu);
+//                             `destructive: true` keeps the danger red while
+//                             staying in the list (manga card delete).
 //   * [DialogDangerAction] -> a destructive action at the bottom.
 
 sealed class DialogAction {
@@ -53,7 +55,13 @@ final class DialogListAction extends DialogAction {
     required super.label,
     required super.onPressed,
     super.icon = FushiIcons.settings,
+    this.destructive = false,
   });
+
+  /// 危险动作（例如删除）也可以留在列表末位，而不是单独落在列表下方的危险区。
+  /// 为 true 时图标与文字仍用错误色，是「红色危险样式」的唯一判据——位置变了，
+  /// 用户对危险的识别不能变。
+  final bool destructive;
 }
 
 final class DialogDangerAction extends DialogAction {
@@ -76,6 +84,7 @@ class MediaItemDialogPage extends BasePage {
     required this.isHistory,
     this.extraActions,
     this.showLaunchAction = true,
+    this.editInfoFirst = false,
     this.coverFallbackIcon,
     super.key,
   });
@@ -84,6 +93,10 @@ class MediaItemDialogPage extends BasePage {
   final bool isHistory;
   final List<DialogAction> Function(MediaItem)? extraActions;
   final bool showLaunchAction;
+
+  /// 内置的「编辑信息」默认追加在调用方列表动作之后（历史行为）。漫画卡菜单要求
+  /// 它排第一，因此由漫画页显式打开；其它入口不传，行为不变。
+  final bool editInfoFirst;
 
   /// TODO-1094：当条目没有任何可显示封面（无 override 缩略图 / imageUrl /
   /// base64Image / extraUrl）时，用它作占位图标渲染封面块，而不是整块隐藏封面区。
@@ -106,15 +119,24 @@ class _MediaItemDialogPageState extends BasePageState<MediaItemDialogPage> {
   List<DialogQuickAction> get _quickActions =>
       _externalActions.whereType<DialogQuickAction>().toList();
 
-  List<DialogListAction> get _listActions => [
-        ..._externalActions.whereType<DialogListAction>(),
-        if (widget.item.canEdit && widget.isHistory)
-          DialogListAction(
-            label: t.dialog_edit_info,
-            icon: FushiIcons.edit,
-            onPressed: _executeEdit,
-          ),
-      ];
+  /// 内置「编辑信息」；不可编辑 / 非历史条目时为 null。
+  DialogListAction? get _builtInEditAction =>
+      widget.item.canEdit && widget.isHistory
+          ? DialogListAction(
+              label: t.dialog_edit_info,
+              icon: FushiIcons.edit,
+              onPressed: _executeEdit,
+            )
+          : null;
+
+  List<DialogListAction> get _listActions {
+    final DialogListAction? edit = _builtInEditAction;
+    return <DialogListAction>[
+      if (widget.editInfoFirst && edit != null) edit,
+      ..._externalActions.whereType<DialogListAction>(),
+      if (!widget.editInfoFirst && edit != null) edit,
+    ];
+  }
 
   List<DialogDangerAction> get _dangerActions => [
         ..._externalActions.whereType<DialogDangerAction>(),
@@ -954,6 +976,7 @@ class MediaItemDialogFrame extends StatelessWidget {
                     onPressed: actions[first + c].onPressed,
                     foreground: switch (actions[first + c]) {
                       DialogDangerAction(muted: false) => colors.error,
+                      DialogListAction(destructive: true) => colors.error,
                       _ => null,
                     },
                     borderRadius: BorderRadiusDirectional.only(
@@ -1026,6 +1049,10 @@ class MediaItemDialogFrame extends StatelessWidget {
                         icon: action.icon,
                         label: action.label,
                         onPressed: action.onPressed,
+                        destructive: switch (action) {
+                          DialogListAction(destructive: true) => true,
+                          _ => false,
+                        },
                       );
                     },
                   ),
