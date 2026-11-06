@@ -95,6 +95,8 @@ import 'package:fushi/src/media/manga/library/manga_resume_point.dart';
 import 'package:fushi/src/media/manga/manga_reader_preferences.dart';
 import 'package:fushi/src/media/manga/manga_reading_mode.dart';
 import 'package:fushi_engine/foundation/pref_store.dart';
+import 'package:fushi_engine/updates/update_feed_kind.dart'
+    show UpdateFeedKind;
 
 /// 视频画面缩放/比例模式（作用于 Flutter 层 [Video] widget 的 [BoxFit]，TODO-152 子B）。
 ///
@@ -1564,6 +1566,43 @@ class PreferencesRepository extends ChangeNotifier
     await setPrefs(<String, dynamic>{
       'reader_toolbar_style': 'floating',
       readerToolbarStyleFloatingMigratedKey: true,
+    });
+  }
+
+  /// 「漫画新章提醒默认关闭」一次性重置的已跑标记（bool）。本键不随 Profile 走
+  /// （`ProfileKeys` 排除）：描述的是本安装是否迁过；进快照的话切到老 Profile 会
+  /// 把它删掉、迁移重跑，用户此后手动开启的提醒又被改回关闭。
+  static const String updatesNotifyMangaChapterDefaultOffMigratedKey =
+      'updates_notify_manga_chapter_default_off_migrated';
+
+  /// 启动时（`AppModel.initialise()`）跑一次：2026-11 用户要求「漫画新章提醒」
+  /// 默认关闭，并且升级后把已有安装保存的开关值强制重置为关闭一次。
+  ///
+  /// 与 [settleReaderToolbarStyleFloating] 同一形状：live 偏好**和每个 Profile
+  /// 快照里**的值一起改成 `false`——只改 live 的话，切一次 Profile 快照就把旧的
+  /// `true` 带回来。扩展更新提醒的已存值不动。标记与新值同一次 [setPrefs] 落盘；
+  /// 此后用户再手动开启，标记已在，不会被改回。快照先改、标记后写：中途中断下次
+  /// 重跑也只是把同一个值再写一遍。
+  Future<void> settleUpdatesNotifyMangaChapterDefaultOff() async {
+    if (getPref(
+          updatesNotifyMangaChapterDefaultOffMigratedKey,
+          defaultValue: false,
+        ) ==
+        true) {
+      return;
+    }
+    final String key = UpdateFeedKind.mangaChapter.enabledPrefKey;
+    await _db.customStatement(
+      'UPDATE profile_settings SET value = ? WHERE category = ? AND key = ?',
+      <Object>[
+        PrefCodec.encode(false),
+        kProfileSettingCategoryPref,
+        key,
+      ],
+    );
+    await setPrefs(<String, dynamic>{
+      key: false,
+      updatesNotifyMangaChapterDefaultOffMigratedKey: true,
     });
   }
 

@@ -74,6 +74,9 @@ class ProfileKeys {
     // 「工具栏样式强制悬浮」一次性迁移标记：同族（迁移本身会改写各 Profile 快照
     // 里的 reader_toolbar_style，标记只描述本安装）。
     PreferencesRepository.readerToolbarStyleFloatingMigratedKey,
+    // 「漫画新章提醒默认关闭」一次性重置标记：同族（重置会改写各 Profile 快照里
+    // 的 updates_notify_manga_chapter；标记只描述本安装是否迁过）。
+    PreferencesRepository.updatesNotifyMangaChapterDefaultOffMigratedKey,
     'current_home_tab_index',
     // 宽屏导航 rail 的展开 / 收起记的是本机窗口布局，与 current_home_tab_index
     // 同族；进快照的话切 Profile 会把侧栏忽宽忽窄地翻过去。

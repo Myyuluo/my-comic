@@ -401,10 +401,13 @@ SettingsDestination buildSystemDestination() {
               title: title,
               subtitle: hint,
               icon: icon,
+              // 默认值按域（漫画新章关、扩展开），与
+              // `UpdateFeedService.isKindEnabled` 读同一份 [UpdateFeedKind.defaultEnabled]。
+              defaultValue: kind.defaultEnabled,
               value: (SettingsContext settingsContext) =>
                   settingsContext.appModel.prefsRepo.getPref(
                         kind.enabledPrefKey,
-                        defaultValue: true,
+                        defaultValue: kind.defaultEnabled,
                       )
                       as bool,
               onChanged: (SettingsContext settingsContext, bool value) async {

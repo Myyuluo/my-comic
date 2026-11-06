@@ -101,6 +101,41 @@ void main() {
     expect(await service.unseenTotal(), 1);
   });
 
+  test('漫画新章提醒默认关闭；扩展提醒维持默认开启', () async {
+    final UpdateFeedService service = await makeService();
+
+    expect(service.isKindEnabled(UpdateFeedKind.mangaChapter), isFalse,
+        reason: '用户没动过开关时漫画新章默认关闭');
+    expect(service.isKindEnabled(UpdateFeedKind.mangaExtension), isTrue,
+        reason: '漫画扩展更新提醒保持原来的默认开启');
+    expect(service.isKindEnabled(UpdateFeedKind.videoEpisode), isTrue,
+        reason: '其它域不受这次默认值调整影响');
+    expect(prefs.containsKey('updates_notify_manga_chapter'), isFalse,
+        reason: '读默认值不该顺手把偏好写进去');
+
+    const UpdateFeedDraft chapter = UpdateFeedDraft(
+      kind: UpdateFeedKind.mangaChapter,
+      targetKey: 'uid|ch-1',
+      title: '葬送的芙莉莲',
+      subtitle: '第 1 话',
+    );
+    final UpdateFeedPublishResult result =
+        await service.publishBatch(UpdateFeedKind.mangaChapter, <UpdateFeedDraft>[
+      chapter,
+    ]);
+    expect(result.hasNew, isFalse, reason: '默认关闭的域整批丢弃');
+    expect(await service.entries(), isEmpty);
+    expect(notifier.sent, isEmpty);
+
+    // 默认值只在键缺省时生效：用户显式开启后照常投递。
+    await service.setKindEnabled(UpdateFeedKind.mangaChapter, true);
+    final UpdateFeedPublishResult enabled =
+        await service.publishBatch(UpdateFeedKind.mangaChapter, <UpdateFeedDraft>[
+      chapter,
+    ]);
+    expect(enabled.hasNew, isTrue);
+  });
+
   test('一批多条只发一条汇总通知；系统通知总开关只关通知不关红点', () async {
     final UpdateFeedService service = await makeService();
 

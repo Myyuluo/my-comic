@@ -3158,6 +3158,9 @@ class AppModel with ChangeNotifier {
       navRailExpandedNotifier.value = prefsRepo.navRailExpanded;
       // 阅读器工具栏样式一次性强制悬浮（含各 Profile 快照），之后尊重用户选择。
       await prefsRepo.settleReaderToolbarStyleFloating();
+      // 「漫画新章提醒」一次性重置为关闭（含各 Profile 快照），之后尊重用户选择。
+      // 扩展更新提醒的已存值不动。
+      await prefsRepo.settleUpdatesNotifyMangaChapterDefaultOff();
       // my-comic：SRS/Anki 挖词目标、推荐包回执与查词折叠开关都已随非漫画域移除。
       // settleSrsMiningTargetInstallDefault 会读 mined_sentences / pending_mine_queue，
       // 这两张表不在漫画-only schema 里，启动期不得调用。
