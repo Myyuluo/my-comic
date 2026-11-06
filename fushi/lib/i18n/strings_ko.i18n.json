@@ -1254,6 +1254,7 @@
   "batch_delete_success_video": "동영상 $n개 삭제됨.",
   "batch_dissolve_confirm": "컬렉션 $m개를 해체하시겠습니까? 그룹화가 제거되며 미디어는 유지됩니다.",
   "batch_dissolve_success": "컬렉션 $m개 해체됨.",
+  "batch_download_local_volumes_skipped": "Skipped $count local volume(s) without downloadable chapters",
   "batch_hidden_by_filter_note": "선택한 항목 중 ${n}개는 현재 필터로 숨겨져 있어 처리되지 않습니다.",
   "batch_invert_selection": "선택 반전",
   "batch_select": "선택",
