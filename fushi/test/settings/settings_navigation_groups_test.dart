@@ -16,7 +16,7 @@ void main() {
     final List<SettingsDestination> visible = <SettingsDestination>[
       destination(SettingsDestinationId.appearance, '外观与交互'),
       destination(SettingsDestinationId.manga, '漫画'),
-      destination(SettingsDestinationId.downloads, '下载'),
+      destination(SettingsDestinationId.downloads, '存储与下载'),
       destination(SettingsDestinationId.system, '系统与关于'),
     ];
 

@@ -92,6 +92,8 @@ bool hasAnyNavigationModule(ModuleVisibility visibility) =>
 ///   导入管理与音频来源是阅读器划词弹窗的配置面，藏了等于把弹窗锁死成空壳。
 /// - `storage` / `system` / `appearance` / `profiles`：设备级，不属任何模块
 ///   （storage 正文里按模块分的**条目**另行过滤，见 `storage_usage_view.dart`）。
+/// - `downloads`：只承载设备级的数据存储位置；下载能力是常驻导航页，分类名已改
+///   为「存储与下载」，不随浏览模块的显隐消失。
 /// - 四个 synthetic 分类（`readerQuickSettings` / `appIcon` /
 ///   `videoQuickSettings` / `shortcuts`）不是设置主页上的一级分类，藏它们只会
 ///   让对应的合成面板整个消失。
@@ -112,7 +114,8 @@ ModuleId? moduleOfSettingsDestination(SettingsDestinationId id) => switch (id) {
   SettingsDestinationId.manga => ModuleId.manga,
   SettingsDestinationId.video => ModuleId.video,
   SettingsDestinationId.cardCreation => ModuleId.cardCreation,
-  SettingsDestinationId.downloads => ModuleId.browse,
+  // 「存储与下载」只承载设备级的数据存储位置，与浏览模块拆绑：始终可见。
+  SettingsDestinationId.downloads => null,
   SettingsDestinationId.game => ModuleId.games,
   // 在线服务与媒体追踪同属「第三方服务」一个开关：追踪本就是靠在线服务的
   // 凭据跑的，分成两个开关只会让用户关了一半还留着另一半。

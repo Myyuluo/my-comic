@@ -117,6 +117,33 @@ void main() {
     expect(visible, contains(SettingsDestinationId.downloads));
   });
 
+  testWidgets('「存储与下载」始终可见：不随浏览模块或任意模块关闭而消失', (WidgetTester tester) async {
+    await pumpContext(tester);
+
+    // 它只承载设备级的数据存储位置，不属任何模块：关掉浏览模块不能把它带走。
+    appModel.enabled = ModuleId.values.toSet()..remove(ModuleId.browse);
+    expect(
+      visibleIds(),
+      contains(SettingsDestinationId.downloads),
+      reason: '关掉浏览模块后「存储与下载」也消失了——分类仍在按浏览模块门控',
+    );
+
+    // 全部模块都关着（只剩恒在的分类）时也必须在。
+    appModel.enabled = <ModuleId>{};
+    expect(
+      visibleIds(),
+      contains(SettingsDestinationId.downloads),
+      reason: '全部模块关闭后「存储与下载」仍应可见',
+    );
+
+    // 归属真值同样钉死：把它挂回任何模块都会让上面的路径重新变成可隐藏的。
+    expect(
+      moduleOfSettingsDestination(SettingsDestinationId.downloads),
+      isNull,
+      reason: '「存储与下载」是设备级分类，不属任何模块',
+    );
+  });
+
   testWidgets('关掉的模块在设置搜索索引里一条都不剩（看不见也到不了）', (WidgetTester tester) async {
     await pumpContext(tester);
     appModel.enabled = ModuleId.values.toSet();
