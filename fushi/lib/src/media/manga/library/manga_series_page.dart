@@ -16,6 +16,10 @@ import 'package:fushi/src/media/manga/library/manga_chapter_list.dart';
 import 'package:fushi/src/media/manga/library/manga_download_planner.dart';
 import 'package:fushi/src/media/manga/library/manga_resume_point.dart';
 import 'package:fushi/src/media/manga/library/manga_chapter_storage.dart';
+import 'package:fushi/src/media/manga/manga_global_search_page.dart';
+import 'package:fushi/src/media/manga/mihon/mihon_enabled_sources.dart';
+import 'package:fushi/src/media/manga/mihon/mihon_manager.dart';
+import 'package:fushi/src/media/manga/mihon/mihon_runtime_factory.dart';
 import 'package:fushi/src/utils/misc/reveal_in_file_manager.dart'
     show currentRevealHost, revealFirstOf;
 import 'package:fushi/src/media/display_title.dart';
@@ -124,11 +128,7 @@ class SourceMangaSeriesTarget extends MangaSeriesTarget {
 /// - **本地卷也进这里**（用户明确要求的一致性）：本地 mokuro 卷没有章节，
 ///   章节区换成页数/进度，不假装有章节列表。
 class MangaSeriesPage extends ConsumerStatefulWidget {
-  const MangaSeriesPage({
-    required this.target,
-    super.key,
-    this.openExternal,
-  });
+  const MangaSeriesPage({required this.target, super.key, this.openExternal});
 
   final MangaSeriesTarget target;
 
@@ -247,6 +247,16 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     final EpubBookRow? row = _row;
     if (row == null) return t.manga_library;
     return displayTitleForBook(bookKey: row.bookKey, rawTitle: row.title);
+  }
+
+  /// 作者 chip 的文案：在线作品取 [OnlineMangaSeries.byline]（作者优先、画师
+  /// 兜底），本地卷取书架行的作者。本地卷与互联对端与在线漫画同一口径。
+  String? get _authorLine {
+    final String? byline = _entry?.series.byline?.trim();
+    if (byline != null && byline.isNotEmpty) return byline;
+    if (!_isLocal) return null;
+    final String? author = _row?.author?.trim();
+    return author == null || author.isEmpty ? null : author;
   }
 
   @override
@@ -399,10 +409,10 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     // [planMangaChapterDownload]（review D2）。
     final ({List<OnlineMangaChapter> pending, int lockedSkipped}) plan =
         planMangaChapterDownload(
-      entry: entry,
-      downloadedChapterKeys: _downloaded,
-      jobsByChapterKey: _jobs,
-    );
+          entry: entry,
+          downloadedChapterKeys: _downloaded,
+          jobsByChapterKey: _jobs,
+        );
     final int lockedSkipped = plan.lockedSkipped;
     final List<OnlineMangaChapter> pending = plan.pending;
     if (lockedSkipped > 0) {
@@ -604,6 +614,45 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     await launchUrl(url, mode: LaunchMode.externalApplication);
   }
 
+  /// 书名 / 作者点击的去处：以当前显示的文字为关键词打开「搜索全部来源」，并自动
+  /// 检索全部已启用的在线 Source（Source 自身启用且提供它的 Extension 也启用）。
+  ///
+  /// 平台没有扩展运行时（如 iOS）时 `mihonManager` 取不到，这里安全地什么都不做；
+  /// 没有可用来源时仍打开搜索页，由页面自己的空态说明原因（不接「去装来源」回调）。
+  void _openGlobalSearch(String rawQuery) {
+    final String query = rawQuery.trim();
+    if (query.isEmpty) return;
+    if (!MihonRuntimeFactory.isSupported) return;
+    final AppModel? appModel = _appModelOrNull;
+    if (appModel == null) return;
+    try {
+      final MihonManager manager = appModel.mihonManager;
+      final List<MangaOnlineSourceRow> sources = enabledMangaOnlineSources(
+        manager,
+      );
+      if (!mounted) return;
+      unawaited(
+        Navigator.of(context).push(
+          adaptivePageRoute<void>(
+            context: context,
+            builder: (BuildContext context) => MangaGlobalSearchPage(
+              mihonManager: manager,
+              mihonSources: sources,
+              initialQuery: query,
+            ),
+          ),
+        ),
+      );
+    } on Object catch (error, stack) {
+      // 运行时不可用不是用户的错，也不该让页面崩掉：静默无操作即可。
+      ErrorLogService.instance.log(
+        'MangaSeriesPage.globalSearch',
+        error,
+        stack,
+      );
+    }
+  }
+
   Future<void> _loginToSource(OnlineMangaLoginTarget target) async {
     final bool saved = await openMihonWebLogin(
       context,
@@ -714,7 +763,7 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     // 本地卷没有下载任务表，[_refreshDownloadState] 在它身上第一行就返回——注册表
     // 只能在这里挂，否则「识别本卷」排上了作品页也看不见进度。
     if (entry == null) {
-        _watchLocalVolume(row.bookKey);
+      _watchLocalVolume(row.bookKey);
     }
     unawaited(_refreshDownloadState());
   }
@@ -1525,30 +1574,35 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
   Widget _buildHeader(BuildContext context) {
     final OnlineMangaSeries? series = _entry?.series;
     final OnlineMangaUnavailable? refreshError = _refreshError;
+    final String title = _displayTitle;
+    final String? authorLine = _authorLine;
     return OnlineWorkHeader(
       cover: _buildCover(context),
       backdrop: _coverImageProvider(),
       overline: _subtitle(),
-      title: _displayTitle,
+      title: title,
+      titleKey: const ValueKey<String>('manga_series_title'),
+      // 书名 / 作者点击 = 以当前显示的文字去全部已启用在线 Source 搜索。
+      onTitleTap: () => _openGlobalSearch(title),
       chips: <MediaDetailChip>[
-        for (final String? line in <String?>[
-          series?.byline,
-          if (_isLocal) _row?.author,
-        ])
-          if (line != null && line.trim().isNotEmpty)
-            MediaDetailChip(line.trim(), icon: FushiIcons.person),
-        if (_row != null && !_isLocal)
+        if (authorLine != null)
           MediaDetailChip(
-            t.video_discovery_in_library,
-            icon: FushiIcons.check,
-            tone: MediaDetailChipTone.primary,
-            key: const ValueKey<String>('manga_series_in_library_chip'),
+            authorLine,
+            icon: FushiIcons.person,
+            key: const ValueKey<String>('manga_series_author_chip'),
+            onTap: () => _openGlobalSearch(authorLine),
           ),
         // 扩展源的作品来自第三方站点（10-09 所有者「外部来源」提示）；互联对端
-        // 是用户自己的设备，本地卷没有在线来源，都不标。
+        // 是用户自己的设备，本地卷没有在线来源，都不标。漫画作品页只保留「扩展源」
+        // 一枚：用户明确要求移除「外部来源」（「已入库」同样移除，状态已由书架按钮
+        // 表达）；小说作品页共用同一 helper，仍保留两枚。
         if (_entry case final OnlineMangaLibraryEntry entry
             when entry.runtime != OnlineMangaRuntimeKind.interconnect)
-          ...extensionSourceDetailChips(),
+          ...extensionSourceDetailChips().where(
+            (MediaDetailChip chip) =>
+                chip.key !=
+                const ValueKey<String>('online-work-external-source-chip'),
+          ),
       ],
       genres: series?.genreLabels ?? const <String>[],
       description: series?.description,
