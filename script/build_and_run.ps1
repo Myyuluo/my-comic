@@ -215,13 +215,19 @@ function Invoke-Dart {
     }
 }
 
-function Test-RuntimeDirectory {
+function Test-RuntimeLayout {
     param([string] $Path)
     if ([string]::IsNullOrWhiteSpace($Path)) { return $false }
-    $jar = Join-Path $Path 'm-extension-server.jar'
-    if (-not (Test-Path -LiteralPath $jar -PathType Leaf)) { return $false }
+    if (-not (Test-Path -LiteralPath (Join-Path $Path 'm-extension-server.jar') -PathType Leaf)) { return $false }
     if (-not (Test-Path -LiteralPath (Join-Path $Path 'runtime\bin\java.exe') -PathType Leaf)) { return $false }
     if (-not (Test-Path -LiteralPath (Join-Path $Path 'checksums.json') -PathType Leaf)) { return $false }
+    return $true
+}
+
+function Test-RuntimeDirectory {
+    param([string] $Path)
+    if (-not (Test-RuntimeLayout $Path)) { return $false }
+    $jar = Join-Path $Path 'm-extension-server.jar'
     $actual = (Get-FileHash -LiteralPath $jar -Algorithm SHA256).Hash.ToLowerInvariant()
     return ($actual -eq $OfficialRuntimeSha256)
 }
@@ -248,18 +254,37 @@ function Install-RuntimeBundle {
     $staging = "$BundleDir.staging-$([Guid]::NewGuid().ToString('N'))"
     $backup = $null
     try {
+        # 校验**源缓存**（含 jar 哈希），不要在 staging 上做哈希：Get-FileHash
+        # 读取会触发 Windows Defender / 搜索索引对新拷贝 jar 的扫描，随后重命名
+        # staging 目录会因文件句柄被占用而报「访问被拒绝」。staging 只查结构，
+        # 然后立刻换入；换入成功后再对正式目录做哈希校验。
+        if (-not (Test-RuntimeDirectory $CacheDir)) {
+            throw "Runtime cache is incomplete: $CacheDir"
+        }
+        Assert-RuntimeChecksum -Path $CacheDir
         [IO.Directory]::CreateDirectory((Split-Path -Parent $BundleDir)) | Out-Null
         Copy-Item -LiteralPath $CacheDir -Destination $staging -Recurse -Force
-        if (-not (Test-RuntimeDirectory $staging)) {
+        if (-not (Test-RuntimeLayout $staging)) {
             throw "Staged runtime is incomplete: $staging"
         }
-        Assert-RuntimeChecksum -Path $staging
         if (Test-Path -LiteralPath $BundleDir) {
             $backup = "$BundleDir.backup-$([Guid]::NewGuid().ToString('N'))"
             Move-Item -LiteralPath $BundleDir -Destination $backup
         }
         try {
-            Move-Item -LiteralPath $staging -Destination $BundleDir
+            # 扫描器/索引器可能短暂持有 staging 里的文件；立即重试几次，而不是
+            # 第一次 Rename 失败就把整个启动流程判死。
+            $moved = $false
+            for ($attempt = 0; $attempt -lt 5 -and -not $moved; $attempt++) {
+                try {
+                    Move-Item -LiteralPath $staging -Destination $BundleDir -ErrorAction Stop
+                    $moved = $true
+                } catch {
+                    if ($attempt -ge 4) { throw }
+                    Start-Sleep -Milliseconds 400
+                }
+            }
+            Assert-RuntimeChecksum -Path $BundleDir
             if ($backup) {
                 Remove-Item -LiteralPath $backup -Recurse -Force
                 $backup = $null
@@ -402,8 +427,12 @@ if (-not (Test-RuntimeDirectory $CacheDir)) {
     throw "Runtime cache is incomplete: $CacheDir"
 }
 
-Write-Host "[my-comic] bundling runtime into $BundleDir"
-Install-RuntimeBundle
+if (Test-RuntimeDirectory $BundleDir) {
+    Write-Host "[my-comic] runtime bundle is current"
+} else {
+    Write-Host "[my-comic] bundling runtime into $BundleDir"
+    Install-RuntimeBundle
+}
 
 if (-not $NoLaunch) {
     Write-Host "[my-comic] launching $Exe"
