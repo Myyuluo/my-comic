@@ -40,12 +40,15 @@ void main() {
   group('startup module', () {
     test('未选启动页（null）时落默认：可见列表第一项', () {
       final List<HomeTab> tabs = homeActiveTabs(_visibility(video: true));
-      expect(homeInitialTab(startupModule: null, tabs: tabs), HomeTab.home);
-      // 首页关掉时默认 = 底栏第一个启用模块。
-      final List<HomeTab> noHome = homeActiveTabs(
-        const ModuleVisibility(<ModuleId>{ModuleId.video, ModuleId.manga}),
+      // 固定导航 Manga → 浏览打头，默认落点因此是漫画。
+      expect(homeInitialTab(startupModule: null, tabs: tabs), HomeTab.manga);
+      final List<HomeTab> noManga = homeActiveTabs(
+        const ModuleVisibility(<ModuleId>{ModuleId.video, ModuleId.browse}),
       );
-      expect(homeInitialTab(startupModule: null, tabs: noHome), HomeTab.manga);
+      expect(
+        homeInitialTab(startupModule: null, tabs: noManga),
+        HomeTab.browse,
+      );
     });
 
     test('选了可见模块就冷启动进入它（查词 / 视频 / 漫画）', () {
@@ -74,19 +77,19 @@ void main() {
         startupModule: ModuleId.lookup,
         tabs: tabs,
       );
-      expect(lookupOff, HomeTab.home);
+      expect(lookupOff, HomeTab.manga);
       expect(tabs, contains(lookupOff));
       expect(
         homeInitialTab(startupModule: ModuleId.video, tabs: tabs),
-        HomeTab.home,
+        HomeTab.manga,
       );
-      // 首页也关掉：回退到底栏第一个启用模块。
-      final List<HomeTab> noHome = homeActiveTabs(
+      // 首页也关掉：回退到底栏第一个启用模块（固定导航的 Manga）。
+      final List<HomeTab> withoutHome = homeActiveTabs(
         const ModuleVisibility(<ModuleId>{ModuleId.books, ModuleId.manga}),
       );
       expect(
-        homeInitialTab(startupModule: ModuleId.video, tabs: noHome),
-        HomeTab.books,
+        homeInitialTab(startupModule: ModuleId.video, tabs: withoutHome),
+        HomeTab.manga,
       );
     });
 
@@ -107,7 +110,7 @@ void main() {
       final List<HomeTab> tabs = homeActiveTabs(_visibility(video: true));
       expect(
         homeInitialTab(startupModule: ModuleId.sync, tabs: tabs),
-        HomeTab.home,
+        HomeTab.manga,
       );
     });
 
@@ -135,19 +138,19 @@ void main() {
   });
 
   group('home dashboard tab', () {
-    test('HomeTab 枚举包含 home，且是可见 tab 列表的第一个', () {
+    test('HomeTab 枚举包含 home；固定导航让 Manga 排在可见列表首位', () {
       expect(HomeTab.values, contains(HomeTab.home));
-      expect(homeActiveTabs(_visibility(video: false)).first, HomeTab.home);
-      expect(homeActiveTabs(_visibility(video: true)).first, HomeTab.home);
+      expect(homeActiveTabs(_visibility(video: false)).first, HomeTab.manga);
+      expect(homeActiveTabs(_visibility(video: true)).first, HomeTab.manga);
     });
 
-    test('冷启动（未选启动页）落在首页 home', () {
+    test('冷启动（未选启动页）落在固定导航首项 Manga', () {
       expect(
         homeInitialTab(
           startupModule: null,
           tabs: homeActiveTabs(_visibility(video: true)),
         ),
-        HomeTab.home,
+        HomeTab.manga,
       );
     });
   });
@@ -164,12 +167,13 @@ void main() {
       );
     });
 
-    test('视频开启时下载 tab 出现且紧随视频', () {
+    test('浏览 tab 固定在 Manga 之后（不再跟随视频位置）', () {
       final List<HomeTab> tabs = homeActiveTabs(_visibility(video: true));
-      final int video = tabs.indexOf(HomeTab.video);
-      final int downloads = tabs.indexOf(HomeTab.browse);
-      expect(video, isNonNegative);
-      expect(downloads, equals(video + 1));
+      expect(tabs.indexOf(HomeTab.manga), isNonNegative);
+      expect(
+        tabs.indexOf(HomeTab.browse),
+        equals(tabs.indexOf(HomeTab.manga) + 1),
+      );
     });
 
     test('每个可见 tab 都有导航项（图标+标签），含 downloads', () {
@@ -181,9 +185,10 @@ void main() {
   });
 
   group('manga home tab', () {
-    test('漫画固定紧随普通书架，且有独立导航项', () {
+    test('漫画是固定导航首项，浏览紧随其后，且有独立导航项', () {
       final List<HomeTab> tabs = homeActiveTabs(_visibility(video: true));
-      expect(tabs.indexOf(HomeTab.manga), tabs.indexOf(HomeTab.books) + 1);
+      expect(tabs.first, HomeTab.manga);
+      expect(tabs.indexOf(HomeTab.browse), 1);
 
       final AdaptiveNavItem item = homeNavItemFor(HomeTab.manga);
       expect(item.icon, FushiIcons.manga);
@@ -243,8 +248,8 @@ void main() {
         ),
       );
       expect(tabs, <HomeTab>[
-        HomeTab.home,
         HomeTab.browse,
+        HomeTab.home,
         HomeTab.dictionaries,
         HomeTab.settings,
       ]);
@@ -262,16 +267,14 @@ void main() {
       expect(tabs, contains(HomeTab.settings));
     });
 
-    test('lookup=false 只隐藏查词 tab，下载仍在', () {
+    test('lookup=false 只隐藏查词 tab，固定导航与扩展顺序不变', () {
       final List<HomeTab> tabs = homeActiveTabs(
         _visibility(video: true, browserExtension: true, lookup: false),
       );
       expect(tabs, isNot(contains(HomeTab.dictionaries)));
-      expect(tabs, contains(HomeTab.browse));
-      expect(
-        tabs.indexOf(HomeTab.browserExtension),
-        tabs.indexOf(HomeTab.browse) + 1,
-      );
+      expect(tabs.take(2), <HomeTab>[HomeTab.manga, HomeTab.browse]);
+      expect(tabs.last, HomeTab.settings);
+      expect(tabs[tabs.length - 2], HomeTab.browserExtension);
     });
 
     test('七个模块全关时只剩首页/设置（安全回退面）', () {
@@ -289,13 +292,13 @@ void main() {
       expect(tabs, <HomeTab>[HomeTab.home, HomeTab.settings]);
     });
 
-    test('隐藏 tab 后越界视觉索引回退到恒在的 home（不再是可隐藏的书架）', () {
+    test('隐藏 tab 后越界视觉索引回退到第一个可见页（浏览）', () {
       final List<HomeTab> tabs = homeActiveTabs(
         _visibility(video: false, books: false, manga: false),
       );
       expect(
         homeTabForVisualIndex(tabs: tabs, visualIndex: 99, reversed: false),
-        HomeTab.home,
+        HomeTab.browse,
       );
     });
   });
@@ -310,7 +313,7 @@ void main() {
         }),
       );
       expect(withoutHome, isNot(contains(HomeTab.home)));
-      expect(homeLandingTab(withoutHome), HomeTab.books);
+      expect(homeLandingTab(withoutHome), HomeTab.manga);
       expect(
         homeLandingTab(
           homeActiveTabs(
@@ -326,14 +329,14 @@ void main() {
           visualIndex: 99,
           reversed: false,
         ),
-        HomeTab.books,
+        HomeTab.manga,
       );
     });
 
-    test('首页开着：默认落地仍是首页', () {
+    test('首页开着：默认落地是固定导航首项 Manga', () {
       expect(
         homeLandingTab(homeActiveTabs(_visibility(video: true))),
-        HomeTab.home,
+        HomeTab.manga,
       );
     });
 
@@ -343,6 +346,34 @@ void main() {
       );
       expect(tabs, <HomeTab>[HomeTab.settings]);
       expect(homeLandingTab(tabs), HomeTab.settings);
+    });
+  });
+
+  group('固定导航（Manga / 浏览常驻）', () {
+    test('旧的模块开关偏好全关，导航仍是 Manga → 浏览 → 设置', () {
+      final List<HomeTab> tabs = homeActiveTabs(
+        ModuleVisibility.resolve(
+          prefOf: (ModuleId _) => false,
+          isWindows: true,
+          isDesktop: true,
+          isIOS: false,
+          isAndroid: false,
+        ),
+      );
+      expect(tabs, <HomeTab>[HomeTab.manga, HomeTab.browse, HomeTab.settings]);
+    });
+
+    test('iOS 上浏览按合规门禁不出现，漫画不受影响', () {
+      final List<HomeTab> tabs = homeActiveTabs(
+        ModuleVisibility.resolve(
+          prefOf: (ModuleId _) => true,
+          isWindows: false,
+          isDesktop: false,
+          isIOS: true,
+          isAndroid: false,
+        ),
+      );
+      expect(tabs, <HomeTab>[HomeTab.manga, HomeTab.settings]);
     });
   });
 

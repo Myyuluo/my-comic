@@ -102,6 +102,21 @@ void main() {
     }
   });
 
+  testWidgets('Manga 与浏览的旧关闭偏好不再藏掉它们的设置分类', (WidgetTester tester) async {
+    await pumpContext(tester);
+    // 走生产的可见性合成：库里可能存着旧版写下的 module_*_enabled=false。
+    appModel.visibilityOverride = ModuleVisibility.resolve(
+      prefOf: (ModuleId _) => false,
+      isWindows: true,
+      isDesktop: true,
+      isIOS: false,
+      isAndroid: false,
+    );
+    final Set<SettingsDestinationId> visible = visibleIds();
+    expect(visible, contains(SettingsDestinationId.manga));
+    expect(visible, contains(SettingsDestinationId.downloads));
+  });
+
   testWidgets('关掉的模块在设置搜索索引里一条都不剩（看不见也到不了）', (WidgetTester tester) async {
     await pumpContext(tester);
     appModel.enabled = ModuleId.values.toSet();
@@ -126,7 +141,6 @@ void main() {
       );
     }
   });
-
 }
 
 class _ModuleGatingAppModel extends AppModel {
@@ -136,6 +150,10 @@ class _ModuleGatingAppModel extends AppModel {
   /// 按可见性收缩」，pref 读取与平台剔除各有自己的用例（`module_registry_test`）。
   Set<ModuleId> enabled = ModuleId.values.toSet();
 
+  /// 需要走真实 [ModuleVisibility.resolve] 合成时使用（常驻导航 / 平台门禁用例）。
+  ModuleVisibility? visibilityOverride;
+
   @override
-  ModuleVisibility get moduleVisibility => ModuleVisibility(enabled);
+  ModuleVisibility get moduleVisibility =>
+      visibilityOverride ?? ModuleVisibility(enabled);
 }

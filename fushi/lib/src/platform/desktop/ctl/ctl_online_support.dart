@@ -267,6 +267,16 @@ String ctlNavigationName(HomeTab tab) => switch (tab) {
   HomeTab.settings => 'settings',
 };
 
+/// `nav list`（`/api/admin/navigation`）的 `pages` 顺序：可用页按一级导航的固定
+/// 顺序（Manga → 浏览 → 设置）排在前面，其余页面按 [HomeTab] 枚举顺序接后。
+/// `available` 标记与 [active] 同源，调用方不再另算。常驻项不受旧排序偏好影响，
+/// 因此 ctl 的 `module order` 写入不会改变这里的可用页顺序。
+List<HomeTab> ctlNavigationPages({required List<HomeTab> active}) => <HomeTab>[
+  ...active,
+  for (final HomeTab tab in HomeTab.values)
+    if (!active.contains(tab)) tab,
+];
+
 /// 解析 `nav go` 的页面名；未知名抛 400 并列出可用名。
 HomeTab homeTabFromCtlName(String raw) {
   final HomeTab? tab = kCtlNavigationNames[raw.trim().toLowerCase()];

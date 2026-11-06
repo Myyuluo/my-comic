@@ -142,7 +142,20 @@ void main() {
   });
 
   group('ModuleVisibility', () {
-    test('resolve 把平台不可用的模块直接剔除，与 pref 真值无关', () {
+    test('Manga 与浏览常驻：旧的模块开关偏好（引导 / ctl 写入）不再隐藏它们', () {
+      // 升级上来的库里可能存着 module_manga_enabled=false（旧版功能模块开关 /
+      // 新手引导 / ctl 写入的）。一级导航常驻后这些偏好不再参与可见性合成。
+      final ModuleVisibility legacyOff = ModuleVisibility.resolve(
+        prefOf: (ModuleId _) => false,
+        isWindows: true,
+        isDesktop: true,
+        isIOS: false,
+        isAndroid: false,
+      );
+      expect(legacyOff.enabled, <ModuleId>{ModuleId.manga, ModuleId.browse});
+    });
+
+    test('平台 / 合规门禁仍在：iOS 上浏览不出现，Manga 不受影响', () {
       final ModuleVisibility ios = ModuleVisibility.resolve(
         prefOf: (ModuleId _) => true,
         isWindows: false,
@@ -150,29 +163,23 @@ void main() {
         isIOS: true,
         isAndroid: false,
       );
-      expect(ios.isEnabled(ModuleId.browserExtension), isFalse);
-      expect(ios.isEnabled(ModuleId.books), isTrue);
-
-      final ModuleVisibility android = ModuleVisibility.resolve(
-        prefOf: (ModuleId _) => true,
-        isWindows: false,
-        isDesktop: false,
-        isIOS: false,
-        isAndroid: true,
+      expect(ios.isEnabled(ModuleId.manga), isTrue);
+      expect(
+        ios.isEnabled(ModuleId.browse),
+        isFalse,
+        reason: 'App Store 合规：下载能力不可用的平台上浏览必须随之缺席',
       );
-      expect(android.isEnabled(ModuleId.games), isTrue);
-      expect(android.isEnabled(ModuleId.browserExtension), isFalse);
+      expect(ios.enabled, <ModuleId>{ModuleId.manga});
     });
 
-    test('resolve 尊重 pref：平台可用但用户关掉的不出现', () {
-      final ModuleVisibility only = ModuleVisibility.resolve(
-        prefOf: (ModuleId id) => id == ModuleId.books,
+    test('非漫画域模块即使 pref 开着也不进入可见集合（my-comic 范围）', () {
+      final ModuleVisibility all = ModuleVisibility.all(
         isWindows: true,
         isDesktop: true,
         isIOS: false,
         isAndroid: false,
       );
-      expect(only.enabled, <ModuleId>{ModuleId.books});
+      expect(all.enabled, <ModuleId>{ModuleId.manga, ModuleId.browse});
     });
 
     test('isEnabledOrUngated：null 表示恒在', () {
@@ -266,14 +273,12 @@ void main() {
   group('SettingsDestinationId 映射', () {
     test('全部模块关光时，恒在分类仍然可见', () {
       const ModuleVisibility none = ModuleVisibility(<ModuleId>{});
-      // 每一条都是一个具体的产品决定，不是「还没写」：
-      // appearance/system/storage/profiles 是设备级；reading 是 books 与 manga
-      // 共用（漫画库页内嵌的就是它）；lookup 是「关页面入口但留查词能力」的例外。
+      // 每一条都是一个具体的产品决定，不是「还没写」：appearance/system/
+      // storage/profiles 是设备级，恒在。reading / lookup 在 my-comic 仍分别挂
+      // books / lookup（随已移除的模块一起不可见），不再是恒在项。
       for (final SettingsDestinationId id in <SettingsDestinationId>[
         SettingsDestinationId.appearance,
         SettingsDestinationId.profiles,
-        SettingsDestinationId.reading,
-        SettingsDestinationId.lookup,
         SettingsDestinationId.storage,
         SettingsDestinationId.system,
       ]) {
@@ -283,6 +288,37 @@ void main() {
           reason: '$id 必须恒在——它不属于任何模块',
         );
       }
+      expect(
+        moduleOfSettingsDestination(SettingsDestinationId.reading),
+        ModuleId.books,
+      );
+      expect(
+        moduleOfSettingsDestination(SettingsDestinationId.lookup),
+        ModuleId.lookup,
+      );
+    });
+
+    test('Manga 与浏览拥有的设置分类不因旧开关偏好消失', () {
+      // ticket 01：设置里由 Manga / 浏览拥有的分类跟随常驻导航，旧偏好不再
+      // 把它们藏掉（「下载」分类的更名留给 ticket 04）。
+      final ModuleVisibility legacyOff = ModuleVisibility.resolve(
+        prefOf: (ModuleId _) => false,
+        isWindows: true,
+        isDesktop: true,
+        isIOS: false,
+        isAndroid: false,
+      );
+      expect(
+        isSettingsDestinationVisible(SettingsDestinationId.manga, legacyOff),
+        isTrue,
+      );
+      expect(
+        isSettingsDestinationVisible(
+          SettingsDestinationId.downloads,
+          legacyOff,
+        ),
+        isTrue,
+      );
     });
 
     test('四个 synthetic 分类不受模块门控（它们不是设置主页上的一级分类）', () {
@@ -302,16 +338,24 @@ void main() {
       }
     });
 
-    test('成对分类挂同一个模块（关一半比不关更糟）', () {
+    test('my-comic 移除在线服务 / 同步后：追踪与本地备份恒在，互联仍挂同步模块', () {
+      // 原 Fushi 里 mediaTracking 与 services、interconnect 与 syncBackup 成对
+      // 共享模块；my-comic 移除在线服务与云端同步后，追踪（漫画阅读进度发布）
+      // 和本地备份导入/导出都属于漫画域，恒在。
       expect(
         moduleOfSettingsDestination(SettingsDestinationId.mediaTracking),
-        moduleOfSettingsDestination(SettingsDestinationId.services),
-        reason: '媒体追踪靠在线服务的凭据跑，分成两个开关只会让用户关了一半',
+        isNull,
+        reason: 'my-comic 保留 Tracking（漫画阅读进度发布），它不再依赖在线服务模块',
+      );
+      expect(
+        moduleOfSettingsDestination(SettingsDestinationId.syncBackup),
+        isNull,
+        reason: '本地备份导入/导出属于漫画域，恒在',
       );
       expect(
         moduleOfSettingsDestination(SettingsDestinationId.interconnect),
-        moduleOfSettingsDestination(SettingsDestinationId.syncBackup),
-        reason: '互联是从同步备份拆出去的分类，共享同一套后端',
+        ModuleId.sync,
+        reason: '设备互联仍挂同步模块（my-comic 中该模块不在可见集合里）',
       );
     });
 
