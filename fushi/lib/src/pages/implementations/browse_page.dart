@@ -35,12 +35,10 @@ import 'package:fushi/src/utils/components/fushi_floating_chrome.dart'
     show
         FushiFloatingChromeBar,
         FushiFloatingChromeController,
+        FushiFloatingChromeHost,
         FushiFloatingChromeInset,
         FushiFloatingChromeInsetPadding,
-        FushiFloatingChromeOverlay,
-        FushiFloatingChromeScope;
-import 'package:fushi/src/utils/components/glass/fushi_apple_scroll_chrome.dart'
-    show fushiNotificationFromVisibleSubtree;
+        FushiFloatingChromeOverlay;
 import 'package:fushi/utils.dart';
 
 /// 「浏览」页签（Mihon 的 Browse 形态）：在线源 / 发现 / 导入。
@@ -128,21 +126,12 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
 
   _DownloadsResourceDomain _resourceDomain = _DownloadsResourceDomain.books;
 
-  /// 页头动作（扩展的「仓库」等）登记的槽：由页签行右侧的悬浮按钮组胶囊画出
-  /// （与库页壳 [MediaLibraryShell] 同构）。
-  final FushiShellActionsSlot _actionsSlot = FushiShellActionsSlot();
-
   /// 头部（一级页签行 + 各页签的二级页签行）随滚动收放的状态：与四个库页
   /// 同一套规则（下滚收起、上滚弹回、只认主滚动区、平滑滚轮拉回不算）。头部
-  /// 叠在正文上，收放不改正文视口（BUG-2975）。
+  /// 叠在正文上，收放不改正文视口（BUG-2975）。换页签 / 换内容域时本页要主动
+  /// `resetToTop()`，所以 controller 由本页持有、交给 [FushiFloatingChromeHost]
+  /// 接线（动作槽与滚动监听由 host 统一管理）。
   final FushiFloatingChromeController _chrome = FushiFloatingChromeController();
-
-  bool _onScroll(ScrollNotification notification) {
-    // 保活的离屏页签 / 内容域（TickerMode 关着）发来的通知不算；横向翻页在
-    // controller 内按轴过滤。
-    if (!fushiNotificationFromVisibleSubtree(notification)) return false;
-    return _chrome.handleScrollNotification(notification);
-  }
 
   @override
   void initState() {
@@ -164,8 +153,6 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
 
   @override
   void dispose() {
-    _actionsSlot.release(this);
-    _actionsSlot.dispose();
     _tabController?.dispose();
     _chrome.dispose();
     super.dispose();
@@ -542,7 +529,11 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
     );
   }
 
-  Widget _buildHeader(TabController controller, List<BrowseTab> tabs) {
+  Widget _buildHeader(
+    TabController controller,
+    List<BrowseTab> tabs,
+    FushiShellActionsSlot actionsSlot,
+  ) {
     // 下拉框会临时 push PopupRoute；只看本页自己的 PageRoute，避免展开菜单时
     // 左上角凭空出现返回键。
     final bool showBackButton = ModalRoute.of(context)?.isFirst == false;
@@ -572,16 +563,16 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
             ),
         ];
         if (actions.isEmpty) {
-          _actionsSlot.release(this);
+          actionsSlot.release(this);
         } else {
-          _actionsSlot.claimActions(
+          actionsSlot.claimActions(
             this,
             visible: true,
             actions: FushiShellHeaderActions(actions: actions),
           );
         }
         return FushiFloatingChromeBar(
-          slot: _actionsSlot,
+          slot: actionsSlot,
           padding: shellTitle
               ? null
               : EdgeInsets.fromLTRB(page, page / 2, page, 4),
@@ -616,6 +607,7 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
   /// 「导入」页签：复用漫画的 Local import 页（快速导入 + 常驻来源 + 互联对端）。
   Widget _buildLocalImportTab() => const MangaSourcesPage(embedded: true);
 
+  @override
   Widget build(BuildContext context) {
     final List<BrowseTab> tabs = _visibleTabs(ref.watch(appProvider));
     // 初始页签：尚未选中时落在第一个可见页签（见 [_syncTabController]）。
@@ -626,43 +618,40 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
       body: SafeArea(
         bottom: false,
         // 头部（一级页签行）叠在正文上、随滚动收放（与库页同一套，见
-        // [FushiFloatingChromeOverlay]）；各页签的二级页签行在 [_BrowseSwipeSections]
+        // [FushiFloatingChromeHost]）；各页签的二级页签行在 [_BrowseSwipeSections]
         // 里同样叠放，排在这一行下面、一起收。
-        child: FushiFloatingChromeScope(
+        child: FushiFloatingChromeHost(
           controller: _chrome,
-          child: FushiFloatingChromeOverlay(
-            chrome: isCupertinoPlatform(context)
-                ? const SizedBox.shrink()
-                : _buildHeader(controller, tabs),
-            child: NotificationListener<ScrollNotification>(
-              onNotification: _onScroll,
-              // 只在选中页签变化时重建（controller 的 notifyListeners 只在下标
-              // 变化时触发），用来给隐藏页签关焦点。
-              child: AnimatedBuilder(
-                animation: controller,
-                builder: (BuildContext context, Widget? _) => TabBarView(
-                  // 页签序列一变就整个换新：旧 TabBarView 的 PageController 停在
-                  // 旧下标上，换绑新控制器的那一帧会先把旧下标处（多半是新插进来
-                  // 的「来源」）建出来再跳走——白建一个页签还被保活。
-                  key: ValueKey<String>(
-                    tabs.map((BrowseTab tab) => tab.name).join(','),
-                  ),
-                  controller: controller,
-                  children: <Widget>[
-                    for (final BrowseTab tab in tabs)
-                      _BrowseTabKeepAlive(
-                        key: ValueKey<BrowseTab>(tab),
-                        active: tabs[controller.index] == tab,
-                        child: switch (tab) {
-                          BrowseTab.sources ||
-                          BrowseTab.extensions => _buildOnlineTab(),
-                          BrowseTab.discover => _buildResourceHub(),
-                          BrowseTab.localImport => _buildLocalImportTab(),
-                        },
-                      ),
-                  ],
-                ),
+          chromeBuilder:
+              (BuildContext context, _, FushiShellActionsSlot actionsSlot) =>
+                  isCupertinoPlatform(context)
+                  ? const SizedBox.shrink()
+                  : _buildHeader(controller, tabs, actionsSlot),
+          // 只在选中页签变化时重建（controller 的 notifyListeners 只在下标
+          // 变化时触发），用来给隐藏页签关焦点。
+          child: AnimatedBuilder(
+            animation: controller,
+            builder: (BuildContext context, Widget? _) => TabBarView(
+              // 页签序列一变就整个换新：旧 TabBarView 的 PageController 停在
+              // 旧下标上，换绑新控制器的那一帧会先把旧下标处（多半是新插进来
+              // 的「来源」）建出来再跳走——白建一个页签还被保活。
+              key: ValueKey<String>(
+                tabs.map((BrowseTab tab) => tab.name).join(','),
               ),
+              controller: controller,
+              children: <Widget>[
+                for (final BrowseTab tab in tabs)
+                  _BrowseTabKeepAlive(
+                    key: ValueKey<BrowseTab>(tab),
+                    active: tabs[controller.index] == tab,
+                    child: switch (tab) {
+                      BrowseTab.sources ||
+                      BrowseTab.extensions => _buildOnlineTab(),
+                      BrowseTab.discover => _buildResourceHub(),
+                      BrowseTab.localImport => _buildLocalImportTab(),
+                    },
+                  ),
+              ],
             ),
           ),
         ),

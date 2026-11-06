@@ -30,6 +30,7 @@ export 'src/audiobook/audiobook_position_rebase.dart';
 export 'src/audiobook/audio_file_sort.dart';
 export 'src/audiobook/srt_book_model.dart';
 export 'src/audiobook/srt_book_repository.dart';
+export 'src/audiobook/reader_history_policy.dart';
 export 'src/audiobook/reader_position_model.dart';
 export 'src/audiobook/reader_position_repository.dart';
 export 'src/audiobook/reading_statistic_model.dart';

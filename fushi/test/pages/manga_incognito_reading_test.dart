@@ -23,6 +23,7 @@ import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi_engine/epub/epub_storage.dart';
 import 'package:path/path.dart' as p;
 
+import '../helpers/pump_until.dart';
 import '../helpers/test_platform_services.dart';
 
 /// ticket 04 的页面级证据（真实 37 表内存库 + 真实偏好库 + 真实漫画阅读页）：
@@ -85,14 +86,6 @@ String _mangaJson() => jsonEncode(<String, Object?>{
       },
   ],
 });
-
-Future<void> _pumpUntil(WidgetTester tester, Finder finder) async {
-  for (int i = 0; i < 60; i++) {
-    await Future<void>.delayed(const Duration(milliseconds: 50));
-    await tester.pump();
-    if (finder.evaluate().isNotEmpty) return;
-  }
-}
 
 // ── 在线漫画（书架条目 + 章目录）────────────────────────────────────────
 
@@ -290,7 +283,7 @@ void main() {
       );
 
       await tester.pumpWidget(_harness(appModel, bookKey));
-      await _pumpUntil(
+      await pumpUntilFound(
         tester,
         find.byKey(const ValueKey<String>('manga_content_ready')),
       );
@@ -392,7 +385,7 @@ void main() {
         ),
       );
       await tester.pumpWidget(_harness(appModel, bookKey));
-      await _pumpUntil(
+      await pumpUntilFound(
         tester,
         find.byKey(const ValueKey<String>('manga_content_ready')),
       );
@@ -488,7 +481,7 @@ void main() {
         ),
       );
       await tester.pumpWidget(_harness(appModel, bookKey));
-      await _pumpUntil(
+      await pumpUntilFound(
         tester,
         find.byKey(const ValueKey<String>('manga_content_ready')),
       );

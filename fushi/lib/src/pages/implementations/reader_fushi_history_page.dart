@@ -1272,13 +1272,14 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
       isCompleted: (MediaItem item) =>
           _completedBookKeys.contains(_parseBookKey(item.mediaIdentifier)),
     );
-    final MediaItem? hero = mostRecentlyReadCandidate(
+    final MediaItem? hero = pickShelfContinueHero(
       tally.inProgress,
       // BUG-2904：映射键是 uid，bookKey 必须经换算表一跳（与「最近阅读」排序同）。
-      (MediaItem item) =>
-          lastReadAtForBookKey(_lastReadAtByBookKey, _epubUidByKey,
-              _parseBookKey(item.mediaIdentifier)) ??
-          0,
+      (MediaItem item) => lastReadAtForBookKey(
+        _lastReadAtByBookKey,
+        _epubUidByKey,
+        _parseBookKey(item.mediaIdentifier),
+      ),
     );
     if (hero == null) return const SizedBox.shrink();
     return Padding(
@@ -2267,6 +2268,31 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
       ReaderFushiSource.parseBookKey(mediaIdentifier);
 
   // ── 拖拽导入（books 表面） ──────────────────────────────────────────────────
+}
+
+/// 书架「继续阅读」hero 的候选选择：只有带**可用**最近阅读时间
+/// （[ReaderHistoryPolicy.hasRecency]）的在读书才参与。
+///
+/// 无痕阅读首次读一本从没读过的书时，`reader_positions` 新行写
+/// [ReaderHistoryPolicy.noRecency] 哨兵（没有旧时间戳可冻结）。它不是一次近期
+/// 阅读：若参与选择，这次阅读就会让 hero 多出 / 换成本书。哨兵因此与「没有阅读
+/// 历史」一样排除。排序仍选时间戳最大者（BUG-777）。
+@visibleForTesting
+MediaItem? pickShelfContinueHero(
+  Iterable<MediaItem> inProgress,
+  int? Function(MediaItem item) lastReadAtOf,
+) {
+  final List<({MediaItem item, int at})> candidates =
+      <({MediaItem item, int at})>[
+    for (final MediaItem item in inProgress)
+      if (lastReadAtOf(item) case final int at
+          when ReaderHistoryPolicy.hasRecency(at))
+        (item: item, at: at),
+  ];
+  return mostRecentlyReadCandidate(
+    candidates,
+    (({MediaItem item, int at}) candidate) => candidate.at,
+  )?.item;
 }
 
 /// 书架混排网格的单个排序槽（SRT / EPUB / 远端占位三类卡片到一个有序列表）。

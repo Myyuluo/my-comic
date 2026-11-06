@@ -84,6 +84,10 @@ _Avoid_: 书签、位置
 用户阅读 Manga 的时间记录。
 _Avoid_: 记录
 
+**Incognito reading（无痕阅读）**:
+「设置 → 系统与关于 → 更新提醒」里的设备本地开关，默认关闭。开启后阅读仍保留 Reading progress（下次能接着读，「继续阅读」指向当前 Chapter），但不新增 History 的可见信号（书架「最近阅读」排序与继续阅读 hero、Chapter 已读标记、完成标记）；已有 History 保留，Tracking 与统计照常。开关不随 Profile / Backup 同步，换设备按新设备的选择。
+_Avoid_: 隐身模式、隐私浏览、无痕模式（浏览器同名词会让人误以为会清除已有记录）
+
 **Download（下载）**:
 通过 Source 的 HTTP 接口把 Chapter 的 Page 保存到本地。
 _Avoid_: 缓存、BT 下载
