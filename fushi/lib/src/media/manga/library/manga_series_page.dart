@@ -121,7 +121,9 @@ class SourceMangaSeriesTarget extends MangaSeriesTarget {
 /// 发现→来源→搜索→详情 的深处，而那个页面构造需要源上下文，书架够不着。
 ///
 /// 设计要点：
-/// - **先离线渲染，再后台刷新**。首屏只读库里的描述符，一次网络调用都不发；
+/// - **已入库作品手动刷新**。首屏只读库里的描述符与章节缓存，一次网络调用都
+///   不发；用户通过「⋯ → 刷新章节」在本页手动拉取。未入库的来源作品仍自动
+///   拉取一次详情与章节；已入库但缓存章节为空时兜底拉取一次，避免空页。
 ///   刷新失败只在顶部挂一条可重试的提示条，不遮挡任何已有内容。
 /// - **与运行时无关**。只跟 [OnlineMangaLibraryService] 打交道，Mihon 与
 ///   互联对端走同一条路径。
@@ -758,7 +760,11 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     });
     if (entry != null && service != null) {
       unawaited(_resolveSourceLabel(service.adapter, entry));
-      unawaited(_refreshFromSource(silent: true));
+      // 已入库作品的刷新交给用户（「⋯ → 刷新章节」）：首屏只读缓存。唯一的
+      // 例外是缓存里一章都没有——空页没法用，兜底拉一次。
+      if (entry.chapters.isEmpty) {
+        unawaited(_refreshFromSource(silent: true));
+      }
     }
     // 本地卷没有下载任务表，[_refreshDownloadState] 在它身上第一行就返回——注册表
     // 只能在这里挂，否则「识别本卷」排上了作品页也看不见进度。
@@ -812,7 +818,11 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
       _sourceLabel = sourceLabel;
       _states = states;
     });
-    unawaited(_refreshFromSource(silent: true));
+    // 未入库的来源作品首屏是空的，自动拉一次；已入库则与书架路径同一规则：
+    // 有缓存就不联网，缓存章节为空才兜底。
+    if (existing == null || entry.chapters.isEmpty) {
+      unawaited(_refreshFromSource(silent: true));
+    }
     unawaited(_refreshDownloadState());
   }
 
