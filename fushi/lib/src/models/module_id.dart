@@ -121,6 +121,19 @@ enum ModuleId {
   bool get isInMyComicScope =>
       this == ModuleId.manga || this == ModuleId.browse;
 
+  /// 一级导航常驻模块，按固定顺序 Manga → 浏览。设置恒在最后，不属于本枚举。
+  ///
+  /// 它们**不吃**旧的模块开关偏好（[ModuleVisibility.resolve] 在平台可用性检查
+  /// 之后强制启用）与旧的拖拽排序偏好（[ModuleVisibility.ordered] 固定前置）。
+  /// 平台 / 合规门禁仍由 [availableOn] 判一次：iOS 上浏览依旧不出现。
+  static const List<ModuleId> fixedNavigationOrder = <ModuleId>[
+    ModuleId.manga,
+    ModuleId.browse,
+  ];
+
+  /// 是否属于一级导航的常驻项（见 [fixedNavigationOrder]）。
+  bool get isFixedNavigation => fixedNavigationOrder.contains(this);
+
   /// 本模块在当前平台上**是否存在**（与用户意愿无关）。
   ///
   /// 平台判据只在这里写一次。此前它散在 `home_page.dart`（games 判
@@ -214,6 +227,9 @@ enum ModuleId {
   /// 用户排过的模块顺序（设置 → 外观 → 功能模块 里拖拽排序；底栏 / 侧栏 tab
   /// 按它排）。值是逗号分隔的 [prefKey]——用冻结的持久化键而不是 `.name`，枚举
   /// 改名（如 downloads → browse）不会把用户排好的顺序打乱。
+  ///
+  /// 一级导航常驻项（[fixedNavigationOrder]）不读这份顺序：旧偏好里把它们排到
+  /// 哪都不会改变导航（见 [ModuleVisibility.ordered]）。
   static const String orderPrefKey = 'module_nav_order';
 
   /// 启动页：打开 app 时落在哪个模块的 tab（设置 → 系统 → 启动页）。值是该模块的
@@ -297,9 +313,18 @@ class ModuleVisibility {
   /// 消费端读补全后的 [ordered]，不直接读本字段。
   final List<ModuleId> order;
 
-  /// 全部模块的展示顺序（[order] 打头，余下按枚举顺序），底栏 / 侧栏 tab 顺序由
-  /// 它导出（`homeActiveTabs`）。
-  List<ModuleId> get ordered => orderModules(order);
+  /// 全部模块的展示顺序：一级导航常驻项（[ModuleId.fixedNavigationOrder]，即
+  /// Manga → 浏览）固定打头，其余模块按 [order] 打头、未排到的按枚举顺序接后。
+  /// 底栏 / 侧栏 tab 顺序由它导出（`homeActiveTabs`）。
+  ///
+  /// 常驻项**不吃** [order]：旧的拖拽排序偏好不能再把 Manga / 浏览挪走或互换
+  /// （设置里的排序 UI 已随 my-comic 收起，但旧偏好仍可能留在库里）。设置恒在
+  /// 最后，由 `homeActiveTabs` 追加，不在本列表里。
+  List<ModuleId> get ordered => <ModuleId>[
+    for (final ModuleId id in ModuleId.fixedNavigationOrder) id,
+    for (final ModuleId id in orderModules(order))
+      if (!id.isFixedNavigation) id,
+  ];
 
   /// 全部模块都可见（平台可用的那些）。仅供测试与默认值使用。
   factory ModuleVisibility.all({
@@ -324,6 +349,10 @@ class ModuleVisibility {
   /// 旧实现里 `Platform.isWindows && appModel.moduleGamesEnabled` 抄两遍、
   /// 漏一遍的成因。构建通道同理（正式版里复习不存在，即使 pref 开着）：
   /// [buildVersionDefine] 缺省取本构建常量，原样转给 [ModuleId.availableOn]。
+  ///
+  /// 一级导航常驻项（[ModuleId.fixedNavigationOrder]）在平台可用性检查**之后**
+  /// 强制启用：[prefOf] 对它们不生效，旧的模块开关偏好与新手引导 / ctl 写入都
+  /// 无法再隐藏 Manga / 浏览。平台 / 合规门禁优先于常驻——iOS 上浏览仍缺席。
   factory ModuleVisibility.resolve({
     required bool Function(ModuleId id) prefOf,
     required bool isWindows,
@@ -348,7 +377,10 @@ class ModuleVisibility {
       )) {
         continue;
       }
-      if (!prefOf(id)) continue;
+      // 一级导航常驻：平台可用即启用，旧开关偏好（升级安装 / 新手引导 / ctl
+      // 写入的 module_*_enabled=false）不再能隐藏 Manga / 浏览。平台门禁仍在上
+      // 一步判过——iOS 上浏览照样不出现。
+      if (!id.isFixedNavigation && !prefOf(id)) continue;
       enabled.add(id);
     }
     return ModuleVisibility(enabled, order: order);

@@ -139,11 +139,12 @@ export 'package:fushi/src/models/home_tab.dart';
 /// 纯函数：给定模块可见性快照，返回可见顶层 tab 的**视觉顺序**。底栏/侧栏的位置
 /// 索引由此列表导出，提取成顶层函数便于单测，不必实例化整个 [HomePage]。
 ///
-/// 顺序是**用户自己排的**（设置 → 外观 → 功能模块 拖拽排序，存在
-/// [ModuleVisibility.order]）；没排过时按 [ModuleId] 枚举顺序，即首页 → 书架 →
-/// 漫画 → 视频 → 游戏 → 浏览 → 查词 → 浏览器扩展（与排序功能上线前写死的顺序
-/// 一致，升级上来不变）。被关掉或平台上不存在的模块跳过但保留位置意愿；设置恒在
-/// 且恒在最后，是全部模块关光后的安全回退面（故 [ModuleId] 里没有它，也不参与排序）。
+/// 一级导航常驻项（Manga → 浏览，见 [ModuleId.fixedNavigationOrder]）固定打头，
+/// 旧的模块排序偏好不能改变它们的位置；设置恒在最后，是全部模块关光后的安全回退
+/// 面（故 [ModuleId] 里没有它，也不参与排序）。其余模块按 [ModuleVisibility.order]
+/// 打头、未排到的按枚举顺序接后（my-comic 只保留漫画域，生产里通常只剩常驻项与
+/// 设置）。平台不可用 / 被平台门禁剔除的模块不出现——浏览在下载能力不可用的平台
+/// （iOS）上仍缺席。
 ///
 /// 形参是**一个** [ModuleVisibility] 而不是一串 bool：此前这里收七个具名 bool，
 /// 调用方（`_activeTabs()` 与 main.dart 的 macOS 根侧栏）各手抄一份实参表，两份
@@ -807,13 +808,9 @@ class _HomePageState extends BasePageState<HomePage>
     return KeyEventResult.ignored;
   }
 
-  /// 当前可见的顶层 tab：首页 → 书架 → 漫画 → 视频 → 游戏 → 下载 → 词典 → 设置。
-  /// 漫画/视频/游戏三个媒体库 tab 按「功能模块」偏好显隐（默认全开，行为与旧版一致）；
-  /// games（galgame 库）额外叠加 Windows 平台门控（galgame 引擎-hook 注入本就
-  /// Windows-only），紧跟视频之后。底栏/侧栏的位置索引由此列表导出。
-  /// 按「功能模块」偏好显隐（偏好默认全开，行为与旧版一致）。平台门控——games
-  /// 的 Windows-only、扩展的桌面-only——已由 [AppModel.moduleVisibility] 合成，
-  /// 这里不再叠第二遍。
+  /// 当前可见的顶层 tab：一级导航固定 Manga → 浏览（my-comic）→ … → 设置。
+  /// 模块可见性 / 平台门禁由 [AppModel.moduleVisibility] 一次合成（见
+  /// [homeActiveTabs]），这里不再叠第二遍。
   List<HomeTab> _activeTabs() => homeActiveTabs(appModel.moduleVisibility);
 
   /// 渲染用的当前 tab：若 `_currentTab` 已不在可见列表（例如刚在「功能模块」里
