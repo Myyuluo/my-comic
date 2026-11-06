@@ -66,6 +66,57 @@ class MediaLibraryViewSpec {
   final bool handlesChromeInset;
 }
 
+/// 视图页签位置的自定义内容槽。
+///
+/// 漫画页只剩书架一个视图，用户口径（2026-11-05）：不再画只有「书架」一项的视图
+/// 页签，Tag chips 放到页签原来的位置，与「漫画」标题、右上角动作同一行。Tag 的
+/// 数据与交互在视图 State 里（共享的 [FushiTagFilterBar]），壳只负责那个位置，
+/// 所以视图像页头登记动作（[FushiShellActionsSlot]）一样，把要画的内容登记到本槽。
+/// 壳取「最后登记的可见内容」；没有登记时该位置留空。
+class MediaLibraryChromeTabsSlot extends ChangeNotifier {
+  final Map<Object, ({bool visible, Widget content})> _claims =
+      <Object, ({bool visible, Widget content})>{};
+  bool _notifyScheduled = false;
+  bool _disposed = false;
+
+  /// 当前应显示的自定义内容；没有可见登记时为 null。
+  Widget? get content {
+    Widget? result;
+    for (final ({bool visible, Widget content}) claim in _claims.values) {
+      if (claim.visible) result = claim.content;
+    }
+    return result;
+  }
+
+  /// [owner]（通常是视图 State）登记 / 更新自己的页签位内容。
+  void claim(Object owner, {required bool visible, required Widget content}) {
+    _claims[owner] = (visible: visible, content: content);
+    _scheduleNotify();
+  }
+
+  /// [owner] 撤回登记（视图卸载、或不再需要壳代画）。
+  void release(Object owner) {
+    if (_claims.remove(owner) != null) _scheduleNotify();
+  }
+
+  void _scheduleNotify() {
+    if (_notifyScheduled || _disposed) return;
+    _notifyScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((Duration _) {
+      _notifyScheduled = false;
+      if (!_disposed) notifyListeners();
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _claims.clear();
+    super.dispose();
+  }
+}
+
 /// 向壳内子树暴露「切到某个视图」的能力（[InheritedWidget]，不改 builder 签名）。
 ///
 /// 动因：库页空态的引导按钮要能把用户带到「导入」视图（[MediaLibraryViewKind.sources]），
@@ -77,12 +128,16 @@ class MediaLibraryShellScope extends InheritedWidget {
     required this.kinds,
     required this.select,
     required super.child,
+    this.chromeTabsSlot,
     super.key,
   });
 
   /// 本壳**真正声明了**哪些视图。各域只声明自己有的东西（见 [MediaLibraryViewKind]），
   /// 所以「壳在」不等于「这个视图在」——判据必须是后者，见 [actionFor]。
   final Set<MediaLibraryViewKind> kinds;
+
+  /// 壳开启 [MediaLibraryShell.chromeTabsFromView] 时的页签位内容槽；否则 null。
+  final MediaLibraryChromeTabsSlot? chromeTabsSlot;
 
   /// 切到指定视图；壳没有该视图时静默忽略。
   ///
@@ -104,7 +159,9 @@ class MediaLibraryShellScope extends InheritedWidget {
 
   @override
   bool updateShouldNotify(MediaLibraryShellScope oldWidget) =>
-      select != oldWidget.select || !setEquals(kinds, oldWidget.kinds);
+      select != oldWidget.select ||
+      !setEquals(kinds, oldWidget.kinds) ||
+      !identical(chromeTabsSlot, oldWidget.chromeTabsSlot);
 }
 
 /// 库页视图导航壳：在一个顶层 tab 内切换 [MediaLibraryViewSpec] 声明的若干视图。
@@ -126,6 +183,7 @@ class MediaLibraryShell extends StatefulWidget {
     required this.views,
     required this.focusIdPrefix,
     this.alwaysShowChrome = false,
+    this.chromeTabsFromView = false,
     super.key,
   });
 
@@ -139,6 +197,14 @@ class MediaLibraryShell extends StatefulWidget {
   /// 默认 false：单视图域的页面自己负责页头，不额外放一条空壳 tab。
   /// 漫画页只剩书架后仍要靠壳画「漫画」标题、书架页签和右上角动作。
   final bool alwaysShowChrome;
+
+  /// 视图页签位改由视图自己画（漫画页用 Tag chips 取代只剩「书架」一项的视图页签）。
+  ///
+  /// true 时壳不画 [views] 的视图页签，改画视图登记到
+  /// [MediaLibraryShellScope.chromeTabsSlot] 的内容；没有登记时该位置留空。仅用于
+  /// 「单视图 + [alwaysShowChrome]」的壳（漫画页）；其它形态忽略本开关，页签照旧由
+  /// 壳画，避免多视图壳没有视图切换入口。
+  final bool chromeTabsFromView;
 
   @override
   State<MediaLibraryShell> createState() => _MediaLibraryShellState();
@@ -172,10 +238,15 @@ class _MediaLibraryShellState extends State<MediaLibraryShell> {
   /// 视图页头登记动作的槽：由浮动动作组画出（见类注释）。
   final FushiShellActionsSlot _actionsSlot = FushiShellActionsSlot();
 
+  /// 当前视图登记页签位内容的槽（[MediaLibraryShell.chromeTabsFromView]）。
+  final MediaLibraryChromeTabsSlot _chromeTabsSlot =
+      MediaLibraryChromeTabsSlot();
+
   @override
   void dispose() {
     _chrome.dispose();
     _actionsSlot.dispose();
+    _chromeTabsSlot.dispose();
     super.dispose();
   }
 
@@ -232,7 +303,18 @@ class _MediaLibraryShellState extends State<MediaLibraryShell> {
         child: views.first.builder(context, const SizedBox.shrink()),
       );
     }
-    final Widget navigation = _buildNavigation(views);
+    // 页签位自定义内容只用于单视图壳（漫画页）；多视图壳必须保留视图切换入口。
+    final bool customChromeTabs =
+        widget.chromeTabsFromView &&
+        views.length == 1 &&
+        widget.alwaysShowChrome;
+    final Widget navigation = customChromeTabs
+        ? ListenableBuilder(
+            listenable: _chromeTabsSlot,
+            builder: (BuildContext context, Widget? _) =>
+                _chromeTabsSlot.content ?? const SizedBox.shrink(),
+          )
+        : _buildNavigation(views);
     final Widget sections = SectionSwipeNavigator<MediaLibraryViewKind>(
       // 触屏横滑切到相邻视图，序即 [views] 声明序（与分段条同一份真相）。
       sections: <MediaLibraryViewKind>[
@@ -283,6 +365,7 @@ class _MediaLibraryShellState extends State<MediaLibraryShell> {
     return MediaLibraryShellScope(
       kinds: kinds,
       select: _select,
+      chromeTabsSlot: customChromeTabs ? _chromeTabsSlot : null,
       child: FushiShellTitleScope(
         title: FushiShellTitleScope.maybeTitleOf(context) ?? '',
         actionsSlot: _actionsSlot,

@@ -53,8 +53,16 @@ _Avoid_: 图片
 _Avoid_: 收藏、书库
 
 **Category（分类）**:
-Library 内用户自定义的分组。
-_Avoid_: 标签、文件夹
+Mihon 备份中的 Library 内用户自定义分组。仅为 Mihon 备份兼容而保留；my-comic v1 已无分类 UI，书架不再按分类分组。
+_Avoid_: 标签、文件夹、视图页签
+
+**Tag（标签）**:
+Library 条目的用户自定义标记，存放在 `book_tags` 标签池及条目映射中，以书架顶部的筛选 chips 呈现（点选筛选、长按拖动排序）。
+_Avoid_: 分类、合集、文件夹
+
+**View tab（视图页签）**:
+库页顶部用来切换平级视图的页签（例如书页的「书架 / 发现」）。漫画页只剩书架一个视图后不再显示视图页签，Tag chips 占据该位置。
+_Avoid_: 子标签、标签页、分类页签
 
 **Reading progress（阅读进度）**:
 某部 Manga 最后阅读到的 Chapter/Page。
