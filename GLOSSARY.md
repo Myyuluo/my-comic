@@ -52,6 +52,10 @@ _Avoid_: 聚合搜索、全源搜索（口语；正式术语用本名）
 Manga 的一个章节，包含一组 Page。
 _Avoid_: 话
 
+**Chapter container（章节载体）**:
+Chapter 的磁盘形态：平铺页图的文件夹，或包含页图的 CBZ 压缩包。
+_Avoid_: 章节文件夹（只指一种）、压缩包（泛指）
+
 **Page（页）**:
 Chapter 中的一页图片。
 _Avoid_: 图片
@@ -59,6 +63,10 @@ _Avoid_: 图片
 **Library（书架）**:
 用户保存的 Manga 集合。
 _Avoid_: 收藏、书库
+
+**Remove from Library（移出书架）**:
+把 Manga 从 Library 移除。Local source 的 Manga 移出后不删除磁盘文件；在线 Manga 可另行选择是否删除已下载文件。
+_Avoid_: 删除（删除文件是另一个动作）
 
 **Category（分类）**:
 Mihon 备份中的 Library 内用户自定义分组。仅为 Mihon 备份兼容而保留；my-comic v1 已无分类 UI，书架不再按分类分组。
@@ -92,13 +100,49 @@ _Avoid_: 隐身模式、隐私浏览、无痕模式（浏览器同名词会让�
 通过 Source 的 HTTP 接口把 Chapter 的 Page 保存到本地。
 _Avoid_: 缓存、BT 下载
 
+**Download library（在线下载库）**:
+由应用管理的已下载在线 Chapter 集合，按 Source → Manga → Chapter 组织在 Content root 下。
+_Avoid_: 下载文件夹、下载目录（与「下载页」混淆）
+
+**Download index（下载索引）**:
+Library 中的 Manga/Chapter 与磁盘上已下载文件及其状态之间的映射。
+_Avoid_: 漫画索引、书库、缓存
+
+**Rebuild download index（重建下载索引）**:
+用户触发的恢复扫描：从 Content root 重建 Download index，补建缺失的 Library 条目并更新下载状态；只增改、不删记录或文件。
+_Avoid_: 导入、恢复备份、同步
+
+**Not downloaded（未下载）**:
+下载状态：该 Chapter 从未下载到本地。
+_Avoid_: 文件缺失
+
+**Missing（文件缺失）**:
+下载状态：Download index 认为该 Chapter 已下载，但文件在预期位置不存在。
+_Avoid_: 未下载
+
+**Unindexed（未索引）**:
+磁盘上存在 Chapter 内容，但还没有对应的 Library/Download index 条目。
+_Avoid_: 未下载、孤儿
+
 **Tracking（追踪）**:
 把阅读状态发布到外部服务（Bangumi、MAL、AniList、Kitsu、Shikimori 等）。
 _Avoid_: 同步
 
 **Backup（备份）**:
 Mihon 或 my-comic 生成的 `.tachibk` 快照。
-_Avoid_: 存档、导出文件
+_Avoid_: 存档、导出文件、应用快照（`.fushi.zip` 是另一种东西）
+
+**App snapshot（应用快照）**:
+my-comic 旧版生成的 `.fushi.zip` 全量应用导出；不是 Backup，计划弃用。
+_Avoid_: 备份、Backup、导出
+
+**Backup directory（备份目录）**:
+Content root 下存放 Backup 的目录；my-comic 的目录名是 `autobackup`，也是导入/导出 `.tachibk` 的默认位置。
+_Avoid_: 自动备份、应用快照
+
+**Automatic backup（自动备份）**:
+无需用户操作、按计划生成 Backup 的任务；v1 不实现。
+_Avoid_: 备份目录、autobackup（那是目录名）
 
 **Import（导入）**:
 把 Backup 读入 my-comic 的 Library。
@@ -113,8 +157,12 @@ _Avoid_: 同步、上传
 _Avoid_: 追踪、导入
 
 **Local source（本地源）**:
-从本地 CBZ/ZIP/文件夹读取 Manga；`.mokuro` 覆盖层属于本地源。
+从 Local source root 内的 CBZ/ZIP/文件夹读取 Manga；`.mokuro` 覆盖层属于本地源。
 _Avoid_: 本地文件、离线模式
+
+**Local source root（本地源根）**:
+承载 Local source 的目录；用户把 Manga/Chapter 文件夹或 CBZ 放在这里，my-comic 原地读取、不复制。
+_Avoid_: 本地库、离线库
 
 **OCR**:
 在设备上从图片识别文字。本项目不包含端上 OCR/AI 生成。
@@ -133,8 +181,16 @@ _Avoid_: 插件引擎
 _Avoid_: 外部运行时、系统 Java
 
 **Mihon-compatible**:
-本项目在四个轴上的兼容承诺：Extension、Backup、Manga 功能、数据映射。它不表示 UI 与 Mihon 相同，也不表示代码是 Mihon 的移植。
+本项目在四个轴上的兼容承诺：Extension、Backup、Manga 功能、数据映射。它不表示 UI 与 Mihon 相同，也不表示代码是 Mihon 的移植，也不表示 Storage layout 可由 Mihon 直接读取；见 Mihon-style layout。
 _Avoid_: Mihon 移植、Mihon 分支
+
+**Mihon-style layout（Mihon 风格布局）**:
+沿用 Mihon 的 Source → Manga → Chapter 目录习惯的布局；只表示目录形状，不承诺 Mihon 能读取。
+_Avoid_: Mihon 兼容、数据结构统一
+
+**Mihon local-source layout（Mihon 本地源布局）**:
+按 Mihon 本地源的习惯组织 Local source root（章节文件夹平铺图片或 `.cbz`）；不承诺跨设备拷贝后 Mihon 能直接扫描。
+_Avoid_: Mihon 本地源兼容
 
 **Extension compatibility（扩展兼容）**:
 my-comic 的扩展行为以 Fushi v3.0.0 为基准：Fushi 能安装/运行的 Extension，my-comic 也必须能；不承诺超出 Fushi 的兼容范围。
@@ -142,4 +198,26 @@ _Avoid_: 全扩展兼容、100% 插件支持
 
 **Snapshot（快照）**:
 锁定在 Fushi v3.0.0 的代码基线；不包含上游后续提交。
-_Avoid_: 分支、fork
+_Avoid_: 分支、fork、应用快照（那是 `.fushi.zip`）
+
+### Storage and portability
+
+**Content root（内容根）**:
+用户可见的漫画内容根，包含 Download library、Backup 文件与 Local source；卸载应用不会删除它。
+_Avoid_: 数据根、数据目录、数据存储位置（未限定是哪一类时）
+
+**Program state root（程序状态根）**:
+随程序目录存放应用状态的根：数据库、设置、扩展、字体、WebView 数据和缓存；卸载应用会删除它。
+_Avoid_: 用户数据、appdata、%APPDATA%
+
+**Content root switch（切换内容根）**:
+把 Content root 改到另一个目录的操作；只创建新的空目录，不搬移旧文件；旧路径下的下载变为 Missing，直到用户搬移文件并运行 Rebuild download index。
+_Avoid_: 数据迁移、搬移（暗示自动移动文件）
+
+**Portable state（便携状态）**:
+把程序目录连同 Program state root 一起拷贝到另一台机器后仍保留 Library、设置和扩展的状态；不包含 Content root，也不是 Backup。
+_Avoid_: 便携版（发行物）、备份
+
+**Portable build（便携版）**:
+不经过 Windows 安装器、以 ZIP 分发的程序形态；v1 不发行，只作为未来发行物。
+_Avoid_: 便携状态（这是数据属性）、绿色版
