@@ -283,25 +283,8 @@ void main() {
     expect(bootstrap.existsSync(), isFalse);
   });
 
-  test(
-    'adopted root is what AppPaths.resolve derives documents/support from',
-    () async {
-      final String picked = p.join(tmp.path, 'Adopted');
-      await writeBootstrap(picked);
-      await consume();
-
-      final AppPaths paths = await AppPaths.resolve();
-
-      expect(
-        paths.documentsRoot.path,
-        p.join(picked, AppPaths.dataRootDocumentsChild),
-      );
-      expect(
-        paths.supportRoot.path,
-        p.join(picked, AppPaths.dataRootSupportChild),
-      );
-    },
-  );
+  // Ticket 01：旧安装器 bootstrap 不再参与根解析（fresh start），这条端到端
+  // 断言随旧数据根语义一起移除；bootstrap 本身在票 03 删除。
 
   // 生产落点这条腿：上面所有用例都注入 bootstrapFile:，`_productionBootstrapFile()`
   // 一次都没被执行过。写错目录与写错文件名后果完全等价——安装器写了没人读，且全程

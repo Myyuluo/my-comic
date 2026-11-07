@@ -56,7 +56,6 @@ import 'package:fushi/src/models/home_dashboard_panel.dart';
 import 'package:fushi/src/storage/app_paths.dart';
 import 'package:fushi/src/storage/books_directory.dart';
 import 'package:fushi/src/storage/export_directory.dart';
-import 'package:fushi/src/storage/installer_data_root_bootstrap.dart';
 import 'package:fushi/src/storage/sandbox_relocation.dart';
 import 'package:fushi/src/startup/exit_flush_registry.dart';
 import 'package:fushi/src/utils/misc/channel_constants.dart';
@@ -3050,19 +3049,17 @@ class AppModel with ChangeNotifier {
   /// the application. [AppModel] is initialised in the main function before
   /// [runApp] is executed.
   Future<void> _prepareRuntimeDirectories() async {
-    // Windows 安装向导里选的「数据存储位置」经一次性引导文件送达，必须在 resolve
-    // 读 data_root pref 之前消费（全新安装才生效，见该函数契约）。
-    await consumeInstallerDataRootBootstrap();
-    // TODO-935 E0：三个数据根经唯一入口 [AppPaths] 解析（内部已honor测试分支
-    // [fushiTestDirectory]，故行为与旧的 test/production 双分支逐字节等价）。
+    // Ticket 01：根解析只剩 Content root / Program state root 两个新根。
+    // 旧 data_root 偏好、安装向导 bootstrap 与布局锚点都不再参与解析。
     _appPaths = await AppPaths.resolve();
     // TODO-1236：把上游 `fushi_audio` 的有声书持久根解析接到 `AppPaths`（它无法 import
-    // AppPaths）。这样桌面自定义数据根生效后，有声书新导入落数据根下的 `audiobooks/`
-    // （与 TODO-1226 迁移白名单一致），而不是落回平台 Documents。
-    AudiobookStorage.documentsRootResolver = AppPaths.documentsRootDirectory;
-    _temporaryDirectory = _appPaths.tempRoot;
-    _appDirectory = _appPaths.documentsRoot;
-    _databaseDirectory = _appPaths.supportRoot;
+    // AppPaths）。有声书属于用户可见内容，跟随 Content root。
+    AudiobookStorage.documentsRootResolver = AppPaths.contentRootDirectory;
+    // 旧 getter 暂作 alias（票 12 删除）：temp → cache、documents → content、
+    // support → state。DB / prefs / Mihon runtime / 更新包都落在 state 下。
+    _temporaryDirectory = _appPaths.cacheRoot;
+    _appDirectory = _appPaths.contentRoot;
+    _databaseDirectory = _appPaths.stateRoot;
   }
 
   /// Public entry point for app initialisation.
@@ -3195,7 +3192,7 @@ class AppModel with ChangeNotifier {
       debugPrint('[Fushi] init: directories + system palette (parallel)');
       _browserDirectory = Directory(path.join(appDirectory.path, 'browser'));
       _thumbnailsDirectory =
-          Directory(path.join(appDirectory.path, 'thumbnails'));
+          Directory(path.join(_appPaths.cacheRoot.path, 'thumbnails'));
 
       _dictionaryResourceDirectory =
           Directory(path.join(appDirectory.path, 'dictionaryResources'));
@@ -3526,7 +3523,7 @@ class AppModel with ChangeNotifier {
 
       _browserDirectory = Directory(path.join(appDirectory.path, 'browser'));
       _thumbnailsDirectory =
-          Directory(path.join(appDirectory.path, 'thumbnails'));
+          Directory(path.join(_appPaths.cacheRoot.path, 'thumbnails'));
       _dictionaryResourceDirectory =
           Directory(path.join(appDirectory.path, 'dictionaryResources'));
       _dictionaryImportWorkingDirectory = Directory(

@@ -96,29 +96,8 @@ void main() {
       );
     });
 
-    test('Dart startup restores bookmark before data root existence check', () {
-      final String src = read('lib/src/storage/app_paths.dart');
-      final int restoreIdx =
-          src.indexOf('MacOSDataRootAccess.startAccessingStoredBookmark');
-      // TODO-1260：existsSync() 已换成带超时的异步 exists() 探测（掉线盘不 hang）。
-      // BUG-815 后探测收敛进 _probeDataRootExists，且 resolve() 预检的探测入参
-      // configured 只能来自 _configuredDataRootPath()——bookmark 恢复就在该函数
-      // 内部完成，所以顺序契约改由数据依赖表达：先 await _configuredDataRootPath()
-      // 拿到 configured，再把它喂给 _probeDataRootExists。
-      final int configuredIdx = src.indexOf('await _configuredDataRootPath()');
-      final int probeCallIdx =
-          src.indexOf('_probeDataRootExists(Directory(configured))');
-      expect(restoreIdx, greaterThan(0));
-      expect(configuredIdx, greaterThan(0));
-      expect(probeCallIdx, greaterThan(0));
-      expect(configuredIdx, lessThan(probeCallIdx),
-          reason: 'resolve() must obtain configured via '
-              '_configuredDataRootPath() (which restores the bookmark) before '
-              'probing data-root existence');
-      expect(src, contains('_configuredDataRootPath'),
-          reason:
-              'sandbox permission must be restored before touching dataRoot');
-    });
+    // Ticket 01：旧 data_root 已退出根解析，macOS 安全域书签恢复只保留在旧迁移
+    // helper 里（票 12 删除）。Content root 切换所需的书签接线由票 08 负责。
 
     test('migration stores bookmark before data_root path', () {
       final String src =
