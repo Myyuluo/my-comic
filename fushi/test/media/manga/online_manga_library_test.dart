@@ -113,6 +113,187 @@ void main() {
     expect(await database.getAllEpubBooks(), hasLength(1));
   });
 
+  OnlineMangaLibraryEntry entryVariant({
+    required String sourceId,
+    required String seriesKey,
+    required String title,
+  }) =>
+      OnlineMangaLibraryEntry(
+        runtime: OnlineMangaRuntimeKind.mihon,
+        extensionPackage: 'org.example.fixture',
+        sourceId: sourceId,
+        series: OnlineMangaSeries(
+          key: seriesKey,
+          title: title,
+          raw: <String, Object?>{'url': seriesKey},
+        ),
+        chapters: chapters,
+      );
+
+  test('两个同名 Source 的下载落在不同目录，第二个带短源 ID 后缀', () async {
+    final EpubBookRow first = await service.add(
+      entryVariant(
+        sourceId: '1001',
+        seriesKey: '/series/first',
+        title: 'Fixture series',
+      ),
+    );
+    final EpubBookRow second = await service.add(
+      entryVariant(
+        sourceId: '2002',
+        seriesKey: '/series/second',
+        title: 'Fixture series',
+      ),
+    );
+
+    expect(
+      first.extractDir,
+      p.join(root.path, 'downloads', 'Fixture', 'Fixture series'),
+    );
+    expect(second.extractDir, isNot(first.extractDir));
+    expect(
+      p.dirname(second.extractDir),
+      matches(RegExp(r'[/\\]Fixture \[[0-9a-f]{8}\]$')),
+      reason: '同名 Source 用短源 ID 后缀区分，仍然可读',
+    );
+    expect(p.basename(second.extractDir), 'Fixture series');
+    expect(Directory(second.extractDir).existsSync(), isTrue);
+  });
+
+  test('不同 Source 的同名 Manga 不互相覆盖', () async {
+    adapter.sourceLabelText = 'Alpha';
+    final EpubBookRow alpha = await service.add(
+      entryVariant(
+        sourceId: '1',
+        seriesKey: '/series/same',
+        title: 'Same title',
+      ),
+    );
+    adapter.sourceLabelText = 'Beta';
+    final EpubBookRow beta = await service.add(
+      entryVariant(
+        sourceId: '2',
+        seriesKey: '/series/same',
+        title: 'Same title',
+      ),
+    );
+
+    expect(
+      alpha.extractDir,
+      p.join(root.path, 'downloads', 'Alpha', 'Same title'),
+    );
+    expect(
+      beta.extractDir,
+      p.join(root.path, 'downloads', 'Beta', 'Same title'),
+    );
+    expect(Directory(alpha.extractDir).existsSync(), isTrue);
+    expect(Directory(beta.extractDir).existsSync(), isTrue);
+  });
+
+  test('同一 Source 下同名 Manga 用确定 (2) 后缀', () async {
+    final EpubBookRow first = await service.add(
+      entryVariant(
+        sourceId: '1',
+        seriesKey: '/series/a',
+        title: 'Same title',
+      ),
+    );
+    final EpubBookRow second = await service.add(
+      entryVariant(
+        sourceId: '1',
+        seriesKey: '/series/b',
+        title: 'Same title',
+      ),
+    );
+
+    expect(
+      first.extractDir,
+      p.join(root.path, 'downloads', 'Fixture', 'Same title'),
+    );
+    expect(
+      second.extractDir,
+      p.join(root.path, 'downloads', 'Fixture', 'Same title (2)'),
+    );
+  });
+
+  test('大小写不敏感冲突：同名 Manga 与同名 Source 都加后缀', () async {
+    final EpubBookRow upper = await service.add(
+      entryVariant(
+        sourceId: '1',
+        seriesKey: '/series/a',
+        title: 'Series',
+      ),
+    );
+    final EpubBookRow lower = await service.add(
+      entryVariant(
+        sourceId: '1',
+        seriesKey: '/series/b',
+        title: 'series',
+      ),
+    );
+    expect(
+      upper.extractDir,
+      p.join(root.path, 'downloads', 'Fixture', 'Series'),
+    );
+    expect(
+      lower.extractDir,
+      p.join(root.path, 'downloads', 'Fixture', 'series (2)'),
+      reason: 'Windows 文件系统大小写不敏感，Series 与 series 不能共存',
+    );
+
+    adapter.sourceLabelText = 'fixture';
+    final EpubBookRow otherSource = await service.add(
+      entryVariant(
+        sourceId: '2',
+        seriesKey: '/series/c',
+        title: 'Other',
+      ),
+    );
+    expect(
+      p.dirname(otherSource.extractDir),
+      matches(RegExp(r'[/\\]fixture \[[0-9a-f]{8}\]$')),
+      reason: 'Source 显示名只有大小写不同也算同名冲突',
+    );
+  });
+
+  test('磁盘上已有未入库的非空 manga 目录：不覆盖，改用 (2)', () async {
+    final Directory existing = Directory(
+      p.join(root.path, 'downloads', 'Fixture', 'Same title'),
+    );
+    await existing.create(recursive: true);
+    final File sentinel = File(p.join(existing.path, 'keep.txt'));
+    await sentinel.writeAsString('do not touch');
+
+    final EpubBookRow row = await service.add(
+      entryVariant(
+        sourceId: '1',
+        seriesKey: '/series/a',
+        title: 'Same title',
+      ),
+    );
+
+    expect(await sentinel.readAsString(), 'do not touch');
+    expect(
+      row.extractDir,
+      p.join(root.path, 'downloads', 'Fixture', 'Same title (2)'),
+    );
+  });
+
+  test('保留名与结尾空格/点：source 与 manga 目录名都被净化', () async {
+    adapter.sourceLabelText = 'CON';
+    final EpubBookRow row = await service.add(
+      entryVariant(
+        sourceId: '1',
+        seriesKey: '/series/con',
+        title: 'NUL. ',
+      ),
+    );
+    expect(
+      row.extractDir,
+      p.join(root.path, 'downloads', '_CON', '_NUL'),
+    );
+  });
+
   test('BUG-2496：源返回 HTML 错误页当封面 → 不落盘、coverPath 为空、入库照常', () async {
     adapter.coverBytes = utf8.encode('<html><body>403 Forbidden</body></html>');
 
@@ -579,8 +760,12 @@ class _FixtureAdapter implements OnlineMangaRuntimeAdapter {
   @override
   bool get isSupportedOnThisPlatform => true;
 
+  /// Source 显示名；同名 Source / 大小写冲突用例会改它。
+  String sourceLabelText = 'Fixture';
+
   @override
-  Future<String?> sourceLabel(OnlineMangaLibraryEntry entry) async => 'Fixture';
+  Future<String?> sourceLabel(OnlineMangaLibraryEntry entry) async =>
+      sourceLabelText;
 
   @override
   Future<OnlineMangaRefreshResult> refresh(OnlineMangaLibraryEntry entry) async =>

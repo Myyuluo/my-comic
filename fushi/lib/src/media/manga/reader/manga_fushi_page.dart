@@ -2043,8 +2043,9 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
     final Directory chapterDir = container?.directory ??
         downloadChapterDirectory(
           row.extractDir,
-          sanitizeDownloadLibrarySegment(
-            chapter.name.trim().isEmpty ? chapter.key : chapter.name,
+          downloadChapterFolderName(
+            mangaDirPath: row.extractDir,
+            raw: chapter.name.trim().isEmpty ? chapter.key : chapter.name,
           ),
         );
     // 每章进度：切回读过一半的旧章要落回原页，而不是从头开始（v88 前
