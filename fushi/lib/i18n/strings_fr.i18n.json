@@ -1181,6 +1181,8 @@
   "backup_export_dictionaries_skipped": "Exporté, mais $n dictionnaire(s) ignoré(s) : leurs fichiers sont absents de cet appareil ($names)",
   "backup_export_failed": "Échec de l'export de la sauvegarde : $message",
   "backup_export_hint": "Choisissez ce qu’il faut inclure ; la base de données (livres, progression, statistiques) est toujours incluse. Décochez les éléments volumineux (audio local, vidéos) pour réduire la sauvegarde.",
+  "backup_export_mihon_subtitle": "Not available yet. Exporting .tachibk backups is planned for v1.5.",
+  "backup_export_mihon_title": "Export Mihon backup",
   "backup_export_no_books": "Aucun livre à choisir",
   "backup_export_no_videos": "Aucune vidéo à choisir",
   "backup_export_select_all": "Tout sélectionner",

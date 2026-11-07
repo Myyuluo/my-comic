@@ -454,6 +454,7 @@ class SettingsActionItem extends SettingsItem {
     required super.title,
     required this.onTap,
     this.destructive = false,
+    this.enabled,
     this.cli,
     super.subtitle,
     super.subtitleBuilder,
@@ -464,6 +465,13 @@ class SettingsActionItem extends SettingsItem {
   });
 
   final SettingsItemAction onTap;
+
+  /// 渲染时求值的可交互性；null / 返回 true = 可点，false = 置灰禁用
+  /// （行不可聚焦、不会触发 [onTap]）。用于入口已展示但功能尚未交付的占位动作
+  /// （如 v1 的 `.tachibk` 导出），原因写进 [subtitle] / [subtitleBuilder]。
+  final SettingsVisibility? enabled;
+
+  bool isEnabled(SettingsContext context) => enabled?.call(context) ?? true;
 
   /// true = 不可撤销的危险动作（清空 / 删除 / 重置），渲染成 error 色调的
   /// 危险操作行（settings_kit 的 SettingsDangerRow）。只影响外观，确认框仍由
