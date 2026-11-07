@@ -77,6 +77,7 @@ void main() {
     service = OnlineMangaLibraryService(
       database: database,
       rootDirectory: root,
+      downloadsRootDirectory: Directory(p.join(root.path, 'downloads')),
       adapter: adapter,
     );
   });
@@ -356,20 +357,67 @@ void main() {
     );
   });
 
-  test('新条目直接落 <fushi_books>/<bookKey>，带 chapters/ 与占位 manga.json', () async {
+  test('新条目落 Download library：downloads/{source}/{manga}，无占位 manga.json',
+      () async {
     final EpubBookRow row = await service.add(entryFor(chapters: chapters));
-    expect(row.extractDir, p.join(root.path, 'fushi_books', row.bookKey));
-    expect(Directory(p.join(row.extractDir, 'chapters')).existsSync(), isTrue);
+
     expect(
-      File(p.join(row.extractDir, 'manga.json')).readAsStringSync(),
-      '{"pages":[]}',
+      row.extractDir,
+      p.join(root.path, 'downloads', 'Fixture', 'Fixture series'),
     );
-    expect(await service.ensureBookDirectory(row), row, reason: '已在标准位置：零改动');
+    expect(
+      Directory(p.join(root.path, 'downloads', 'Fixture')).existsSync(),
+      isTrue,
+      reason: 'source 层必须存在',
+    );
+    expect(
+      Directory(p.join(row.extractDir, 'chapters')).existsSync(),
+      isFalse,
+      reason: '新布局章节是 manga 目录的直接子目录，不再有 chapters/ 中转层',
+    );
+    expect(
+      File(p.join(row.extractDir, 'manga.json')).existsSync(),
+      isFalse,
+      reason: '章节身份在各自 pages.json，不再写书根占位',
+    );
+    expect(await service.ensureBookDirectory(row), row,
+        reason: '已在标准位置：零改动');
   });
 
-  test('ensureBookDirectory 把旧 <runtimeRoot>/library 目录整个搬进 fushi_books', () async {
+  test('漫画改名不自动重命名或重指向已建立的下载目录', () async {
     final EpubBookRow added = await service.add(entryFor(chapters: chapters));
-    // 造一条 2026-09-12 前的旧行：目录住在 <runtimeRoot>/library/<bookKey>。
+    final String originalDir = added.extractDir;
+    final OnlineMangaLibraryEntry renamed = OnlineMangaLibraryEntry(
+      runtime: OnlineMangaRuntimeKind.mihon,
+      extensionPackage: 'org.example.fixture',
+      sourceId: entryFor().sourceId,
+      series: const OnlineMangaSeries(
+        key: '/series/fixture',
+        title: 'Renamed series',
+        raw: <String, Object?>{'url': '/series/fixture'},
+      ),
+      chapters: chapters,
+    );
+    await database.updateEpubBookMihonState(
+      added.bookKey,
+      sourceMetadata: renamed.encode(),
+      chapterCount: chapters.length,
+      chaptersJson: '[]',
+    );
+
+    final EpubBookRow ensured = await service.ensureBookDirectory(
+      (await database.getEpubBook(added.bookKey))!,
+    );
+
+    expect(ensured.extractDir, originalDir,
+        reason: '目录名不是身份，改名不重命名/重指向目录');
+    expect(Directory(originalDir).existsSync(), isTrue);
+  });
+
+  test('ensureBookDirectory 把旧行重指向 Download library，不搬旧目录（fresh start）',
+      () async {
+    final EpubBookRow added = await service.add(entryFor(chapters: chapters));
+    // 造一条旧行：目录住在 <runtimeRoot>/library/<bookKey>。
     final Directory legacy = Directory(
       p.join(root.path, 'library', added.bookKey),
     );
@@ -380,30 +428,26 @@ void main() {
       added.bookKey,
       extractDir: legacy.path,
     );
-    final Directory staleCache = Directory(
-      p.join(root.path, 'reader-cache', 'chapters', added.bookKey, 'x'),
-    )..createSync(recursive: true);
 
-    final EpubBookRow migrated = await service.ensureBookDirectory(
+    final EpubBookRow ensured = await service.ensureBookDirectory(
       (await database.getEpubBook(added.bookKey))!,
     );
 
-    expect(migrated.extractDir, p.join(root.path, 'fushi_books', added.bookKey));
-    expect(migrated.uid, added.uid, reason: '身份不变，进度零迁移');
-    expect(legacy.existsSync(), isFalse, reason: '旧目录搬走，不是复制一份');
-    expect(File(p.join(migrated.extractDir, 'cover.png')).existsSync(), isTrue);
     expect(
-      File(p.join(migrated.extractDir, 'note.txt')).readAsStringSync(),
-      'keep me',
+      ensured.extractDir,
+      p.join(root.path, 'downloads', 'Fixture', 'Fixture series'),
     );
-    expect(Directory(p.join(migrated.extractDir, 'chapters')).existsSync(),
-        isTrue);
+    expect(ensured.uid, added.uid, reason: '身份不变，进度零迁移');
+    expect(
+      legacy.existsSync(),
+      isTrue,
+      reason: 'fresh-start：不自动迁移旧目录，旧文件留给用户自己处理',
+    );
     expect(
       (await database.getEpubBook(added.bookKey))!.extractDir,
-      migrated.extractDir,
+      ensured.extractDir,
       reason: '行必须真的改了 extractDir',
     );
-    expect(staleCache.existsSync(), isFalse, reason: '旧阅读期页缓存顺手清掉');
   });
 
   group('resumeChapterIndex', () {

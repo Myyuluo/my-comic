@@ -1713,6 +1713,7 @@
   "delete_in_progress": "删除中",
   "delete_local_files": "同时删除本地文件",
   "delete_local_files_audio_desc": "原始音频文件将从本设备删除；书籍与字幕原件保留，无法恢复",
+  "delete_local_files_download_desc": "已下载的章节文件会从本机删除，且无法恢复。",
   "delete_local_files_failed": "有 $n 个本地文件删除失败，可能正在被使用",
   "delete_local_files_video_desc": "视频文件与紧邻的外挂字幕将从本设备删除，下载任务一并清除，无法恢复",
   "delete_prompt_delete_selected": "删除选中",

@@ -1713,6 +1713,7 @@
   "delete_in_progress": "Sedang menghapus",
   "delete_local_files": "Hapus juga berkas lokal",
   "delete_local_files_audio_desc": "Berkas audio asli dihapus dari perangkat ini; berkas buku dan takarir asli tetap disimpan. Tindakan ini tidak dapat dibatalkan.",
+  "delete_local_files_download_desc": "Downloaded chapter files are removed from this device. This cannot be undone.",
   "delete_local_files_failed": "Gagal menghapus $n berkas lokal; mungkin masih digunakan",
   "delete_local_files_video_desc": "Berkas video, berkas subtitle di sebelahnya, dan tugas unduhannya dihapus dari perangkat ini. Tindakan ini tidak dapat dibatalkan.",
   "delete_prompt_delete_selected": "Hapus yang dipilih",

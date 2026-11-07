@@ -1713,6 +1713,7 @@
   "delete_in_progress": "กำลังลบ",
   "delete_local_files": "ลบไฟล์ในเครื่องด้วย",
   "delete_local_files_audio_desc": "ไฟล์เสียงต้นฉบับจะถูกลบออกจากอุปกรณ์นี้ ส่วนไฟล์หนังสือและคำบรรยายต้นฉบับจะยังอยู่ และไม่สามารถกู้คืนได้",
+  "delete_local_files_download_desc": "Downloaded chapter files are removed from this device. This cannot be undone.",
   "delete_local_files_failed": "ลบไฟล์ในเครื่องไม่สำเร็จ $n ไฟล์ อาจกำลังถูกใช้งานอยู่",
   "delete_local_files_video_desc": "ไฟล์วิดีโอ ไฟล์คำบรรยายที่อยู่ข้าง ๆ และงานดาวน์โหลดจะถูกลบออกจากอุปกรณ์นี้ และไม่สามารถกู้คืนได้",
   "delete_prompt_delete_selected": "ลบรายการที่เลือก",

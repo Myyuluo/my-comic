@@ -1713,6 +1713,7 @@
   "delete_in_progress": "Выполняется удаление",
   "delete_local_files": "Также удалить локальные файлы",
   "delete_local_files_audio_desc": "Исходные аудиофайлы будут удалены с этого устройства; исходные файлы книги и субтитров останутся. Отменить это нельзя.",
+  "delete_local_files_download_desc": "Downloaded chapter files are removed from this device. This cannot be undone.",
   "delete_local_files_failed": "Не удалось удалить локальные файлы ($n); возможно, они ещё используются",
   "delete_local_files_video_desc": "Видеофайл, лежащие рядом субтитры и задача загрузки будут удалены с этого устройства. Отменить это нельзя.",
   "delete_prompt_delete_selected": "Удалить выбранные",

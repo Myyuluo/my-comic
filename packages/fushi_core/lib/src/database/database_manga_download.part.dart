@@ -160,4 +160,55 @@ mixin _FushiDbMangaDownload on _$FushiDatabase {
           updatedAt: updatedAt,
         );
       });
+
+  // ── Download library 章目录映射（票 04） ──────────────────────────
+
+  /// 记录/更新 `(bookKey, chapterKey)` 的实际章目录名。
+  ///
+  /// 下载完成后、目录 rename 成功后才写；重建索引按 `pages.json` 的稳定 ID 重新
+  /// 关联时也走这里。
+  Future<void> upsertMangaChapterDir({
+    required String bookKey,
+    required String chapterKey,
+    required String folderName,
+    required int updatedAt,
+  }) =>
+      into(mangaChapterDirs).insertOnConflictUpdate(
+        MangaChapterDirsCompanion.insert(
+          bookKey: bookKey,
+          chapterKey: chapterKey,
+          folderName: folderName,
+          updatedAt: updatedAt,
+        ),
+      );
+
+  Future<MangaChapterDirRow?> getMangaChapterDir(
+    String bookKey,
+    String chapterKey,
+  ) =>
+      (select(mangaChapterDirs)
+            ..where((t) =>
+                t.bookKey.equals(bookKey) & t.chapterKey.equals(chapterKey)))
+          .getSingleOrNull();
+
+  /// 一本书的全部映射（chapterKey → folderName）。
+  Future<Map<String, String>> getMangaChapterDirNamesForBook(
+    String bookKey,
+  ) async {
+    final List<MangaChapterDirRow> rows = await (select(mangaChapterDirs)
+          ..where((t) => t.bookKey.equals(bookKey)))
+        .get();
+    return <String, String>{
+      for (final MangaChapterDirRow row in rows) row.chapterKey: row.folderName,
+    };
+  }
+
+  Future<int> deleteMangaChapterDir(String bookKey, String chapterKey) =>
+      (delete(mangaChapterDirs)
+            ..where((t) =>
+                t.bookKey.equals(bookKey) & t.chapterKey.equals(chapterKey)))
+          .go();
+
+  Future<int> deleteMangaChapterDirsForBook(String bookKey) =>
+      (delete(mangaChapterDirs)..where((t) => t.bookKey.equals(bookKey))).go();
 }

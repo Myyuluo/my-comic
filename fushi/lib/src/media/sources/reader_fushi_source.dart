@@ -1031,10 +1031,10 @@ class ReaderFushiSource extends ReaderMediaSource {
   /// 复活墓碑（[FushiDatabase.deleteEpubBook] 的 tombstone:true）与 scope 无关，永远记
   /// （用户在本机删的东西，导入自己的旧备份不该复活）。
   /// [deleteLocalFiles]（默认 false，对应删除弹窗「同时删除本地文件」）：true 时连
-  /// 这本书附带的有声书 / 配对字幕书**显式登记的原始音频文件**一起删。书本体
-  /// （EPUB / PDF / 漫画）导入即拷贝进 app 目录、原件路径根本没入库，没有可删的
-  /// 原件——这就是 [hasLocalFiles] 只看音频列的原因，也是「同时删除本地文件」这条
-  /// 披露只讲音频的原因。
+  /// 这本书附带的有声书 / 配对字幕书**显式登记的原始音频文件**一起删；对在线漫画
+  /// 还表示删除 Download library 里的已下载章节（默认保留，让文件成为未索引内容）。
+  /// 书本体（EPUB / PDF / 本地漫画）导入即拷贝进 app 目录、原件路径根本没入库，
+  /// 没有可删的原件。
   /// [deleteStatistics]（默认 false，对应删除弹窗「同时删除统计数据」）：true 时在删
   /// 行**之前**把这本书攒下的统计一并删掉（[deleteBookStatistics]）——标题与 srt uid
   /// 都住在即将被删的行上，行一删就无从定位。
@@ -1134,8 +1134,17 @@ class ReaderFushiSource extends ReaderMediaSource {
         }
         // Locate the extracted dir by the stored extract_dir column (the on-disk
         // folder name may still be the legacy int id; the column is the truth).
+        //
+        // 在线漫画的 extractDir 是 Download library 的漫画目录
+        // （`downloads/{source}/{manga}`）：只有用户勾选「同时删除已下载文件」
+        // 才删；否则保留文件（DB 记录已删 → 未索引，重建索引可找回）。本地卷 /
+        // 导入漫画的 extractDir 仍是应用管理的副本，随书删除。
         if (bookRow != null) {
-          await EpubStorage.deleteBookDir(bookRow.extractDir);
+          final bool onlineManga =
+              OnlineMangaLibraryEntry.tryParse(bookRow.sourceMetadata) != null;
+          if (!onlineManga || deleteLocalFiles) {
+            await EpubStorage.deleteBookDir(bookRow.extractDir);
+          }
         }
         // 用户明确勾选后才删原始音频；两条记录可能指向同一批文件，第二次删到的
         // 已不存在，[deleteLocalFiles] 既不计入 removed 也不计入 failures。

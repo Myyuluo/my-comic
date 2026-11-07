@@ -1713,6 +1713,7 @@
   "delete_in_progress": "삭제 진행 중",
   "delete_local_files": "로컬 파일도 삭제",
   "delete_local_files_audio_desc": "이 기기에서 원본 오디오 파일을 삭제합니다. 책과 자막 원본 파일은 그대로 둡니다. 되돌릴 수 없습니다.",
+  "delete_local_files_download_desc": "Downloaded chapter files are removed from this device. This cannot be undone.",
   "delete_local_files_failed": "로컬 파일 $n 개를 삭제하지 못했습니다. 아직 사용 중일 수 있습니다",
   "delete_local_files_video_desc": "이 기기에서 동영상 파일과 옆의 자막 파일을 삭제하고 다운로드 작업도 지웁니다. 되돌릴 수 없습니다.",
   "delete_prompt_delete_selected": "선택 항목 삭제",

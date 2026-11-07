@@ -1713,6 +1713,7 @@
   "delete_in_progress": "Silme devam ediyor",
   "delete_local_files": "Yerel dosyaları da sil",
   "delete_local_files_audio_desc": "Özgün ses dosyaları bu cihazdan silinir; kitap ve altyazı asılları korunur. Bu geri alınamaz.",
+  "delete_local_files_download_desc": "Downloaded chapter files are removed from this device. This cannot be undone.",
   "delete_local_files_failed": "$n yerel dosya silinemedi; hâlâ kullanımda olabilir",
   "delete_local_files_video_desc": "Video dosyası, yanındaki altyazı dosyaları ve indirme görevi bu cihazdan silinir. Bu geri alınamaz.",
   "delete_prompt_delete_selected": "Seçilenleri sil",

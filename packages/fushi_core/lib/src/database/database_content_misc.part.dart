@@ -1292,6 +1292,11 @@ mixin _FushiDbContentMisc
         // 排在本 mixin 之后，`on` 不到。）
         await (delete(mangaDownloadJobs)..where((t) => t.bookKey.equals(bookKey)))
             .go();
+        // 票 04：Download library 的章目录映射同属这本书，随书一起清；否则
+        // 重新加入同一本书会捡到上一次的目录名（可能指向已删的目录）。
+        await (delete(mangaChapterDirs)
+              ..where((t) => t.bookKey.equals(bookKey)))
+            .go();
         await deleteTagAssignmentsForHost(TagHostKind.epub, bookKey);
         // TODO-616：同事务清 shelf_entry。v83 起 epub 域 entryKey = uid。
         // 若该书还登记过 'srt' 行（EPUB 附属有声书），deleteAudiobookByBookKey 已

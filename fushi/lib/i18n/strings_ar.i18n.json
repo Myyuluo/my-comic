@@ -1713,6 +1713,7 @@
   "delete_in_progress": "جارٍ الحذف",
   "delete_local_files": "حذف الملفات المحلية أيضًا",
   "delete_local_files_audio_desc": "ستُحذف ملفات الصوت الأصلية من هذا الجهاز، بينما تبقى ملفات الكتاب والترجمة الأصلية. لا يمكن التراجع عن ذلك.",
+  "delete_local_files_download_desc": "Downloaded chapter files are removed from this device. This cannot be undone.",
   "delete_local_files_failed": "تعذّر حذف $n من الملفات المحلية؛ قد تكون قيد الاستخدام",
   "delete_local_files_video_desc": "يُحذف ملف الفيديو وملفات الترجمة المجاورة له ومهمة التنزيل من هذا الجهاز. لا يمكن التراجع عن ذلك.",
   "delete_prompt_delete_selected": "حذف المحدد",

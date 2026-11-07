@@ -1713,6 +1713,7 @@
   "delete_in_progress": "Đang xóa",
   "delete_local_files": "Xoá cả tệp trên máy",
   "delete_local_files_audio_desc": "Các tệp âm thanh gốc sẽ bị xoá khỏi thiết bị này; tệp sách và phụ đề gốc vẫn được giữ. Không thể hoàn tác.",
+  "delete_local_files_download_desc": "Downloaded chapter files are removed from this device. This cannot be undone.",
   "delete_local_files_failed": "Không thể xoá $n tệp trên máy; có thể chúng vẫn đang được sử dụng",
   "delete_local_files_video_desc": "Tệp video, các tệp phụ đề nằm cạnh nó và tác vụ tải xuống sẽ bị xoá khỏi thiết bị này. Không thể hoàn tác.",
   "delete_prompt_delete_selected": "Xóa mục đã chọn",

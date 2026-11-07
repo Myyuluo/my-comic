@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:drift/native.dart';
@@ -8,7 +7,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi/i18n/strings.g.dart';
 import 'package:fushi/models.dart';
-import 'package:fushi/src/media/manga/library/manga_chapter_storage.dart';
 import 'package:fushi/src/media/manga/library/manga_series_page.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_service.dart';
@@ -20,6 +18,8 @@ import 'package:fushi/src/platform/platform_providers.dart';
 import 'package:fushi_audio/fushi_audio.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi_engine/epub/epub_storage.dart';
+import 'package:fushi_engine/media/manga/download_library_storage.dart';
+import 'package:fushi_engine/media/manga/mokuro_payload.dart';
 import 'package:path/path.dart' as p;
 
 import '../../helpers/test_platform_services.dart';
@@ -140,23 +140,45 @@ OnlineMangaLibraryEntry _entry() => const OnlineMangaLibraryEntry(
   chapters: _chapters,
 );
 
-Future<void> _writeDownloadedChapter(String bookDir, String chapterKey) async {
-  final Directory chapterDir = mangaChapterDirectory(bookDir, chapterKey);
-  final Directory images = mangaChapterImagesDirectory(chapterDir);
-  await images.create(recursive: true);
-  await File(p.join(images.path, 'page-000001.jpg')).writeAsBytes(<int>[1]);
-  await mangaChapterJsonFile(chapterDir).writeAsString(
-    jsonEncode(<String, Object?>{
-      'pages': <Map<String, Object?>>[
-        <String, Object?>{
-          'url': 'images/page-000001.jpg',
-          'width': 100,
-          'height': 150,
-          'blocks': <Object?>[],
-        },
-      ],
-    }),
+Future<Directory> _writeDownloadedChapter(
+  FushiDatabase db,
+  String bookKey,
+  String bookDir,
+  String chapterKey,
+) async {
+  final Directory chapterDir = downloadChapterDirectory(bookDir, 'Chapter 1');
+  await chapterDir.create(recursive: true);
+  await File(p.join(chapterDir.path, '001.jpg')).writeAsBytes(<int>[1]);
+  await writePagesManifestAtomically(
+    chapterDir,
+    MangaPagesManifest(
+      sourceRuntime: 'mihon',
+      sourceId: '1',
+      sourceName: 'Fake',
+      extensionPackage: 'org.example.fixture',
+      mangaKey: '/series/fixture',
+      mangaTitle: 'Fixture series',
+      chapterKey: chapterKey,
+      chapterName: 'Chapter 1',
+      payload: const MokuroPayload(
+        images: <MokuroImage>[
+          MokuroImage(
+            url: '001.jpg',
+            size: MokuroSize(100, 150),
+            blocks: <MokuroBlock>[],
+          ),
+        ],
+      ),
+      downloadedAt: DateTime.utc(2026, 11, 7),
+    ),
   );
+  await db.upsertMangaChapterDir(
+    bookKey: bookKey,
+    chapterKey: chapterKey,
+    folderName: 'Chapter 1',
+    updatedAt: 1,
+  );
+  return chapterDir;
 }
 
 Future<void> _pumpUntil(WidgetTester tester, Finder finder) async {
@@ -189,6 +211,7 @@ void main() {
     library = OnlineMangaLibraryService(
       database: db,
       rootDirectory: Directory(p.join(root.path, 'legacy')),
+      downloadsRootDirectory: Directory(p.join(root.path, 'downloads')),
       adapter: _FakeAdapter(),
     );
   });
@@ -207,7 +230,7 @@ void main() {
   testWidgets('在库态按钮是「移出」；确认后书、下载目录、章节状态一起删，页面退回未入库', (
     WidgetTester tester,
   ) async {
-    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.physicalSize = const Size(900, 1800);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
     final _TestAppModel appModel = _TestAppModel(db, library, root);
@@ -215,12 +238,18 @@ void main() {
     late String bookKey;
     late String bookUid;
     late String extractDir;
+    late Directory chapterDir;
     await tester.runAsync(() async {
       final EpubBookRow row = await library.add(_entry());
       bookKey = row.bookKey;
       bookUid = row.uid;
       extractDir = row.extractDir;
-      await _writeDownloadedChapter(row.extractDir, '/chapter/1');
+      chapterDir = await _writeDownloadedChapter(
+        db,
+        row.bookKey,
+        row.extractDir,
+        '/chapter/1',
+      );
       await db.saveMangaChapterState(
         bookUid: row.uid,
         chapterKey: '/chapter/1',
@@ -276,11 +305,19 @@ void main() {
       isEmpty,
       reason: '章节状态随书级联删',
     );
+    // 票 04：默认不勾「同时删除已下载文件」→ 文件保留，DB 记录删掉。
+    expect(
+      extractDir,
+      p.join(root.path, 'downloads', 'Fake', 'Fixture series'),
+    );
     expect(
       Directory(extractDir).existsSync(),
-      isFalse,
-      reason: '解压目录（含已下载章节）已删',
+      isTrue,
+      reason: '未勾选删除文件时 Download library 内容保留',
     );
+    expect(chapterDir.existsSync(), isTrue);
+    expect(await db.getMangaChapterDir(bookKey, '/chapter/1'), isNull,
+        reason: '映射随书级联删除');
     expect(
       find.byKey(const ValueKey<String>('manga_series_add_to_bookshelf')),
       findsOneWidget,
@@ -295,8 +332,58 @@ void main() {
     );
   });
 
+  testWidgets('确认框勾选「同时删除本地文件」→ 已下载章节文件一起删', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(900, 1800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final _TestAppModel appModel = _TestAppModel(db, library, root);
+
+    late String bookKey;
+    late String extractDir;
+    late Directory chapterDir;
+    await tester.runAsync(() async {
+      final EpubBookRow row = await library.add(_entry());
+      bookKey = row.bookKey;
+      extractDir = row.extractDir;
+      chapterDir = await _writeDownloadedChapter(
+        db,
+        row.bookKey,
+        row.extractDir,
+        '/chapter/1',
+      );
+      await tester.pumpWidget(_harness(appModel, bookKey));
+      await _pumpUntil(
+        tester,
+        find.byKey(
+          const ValueKey<String>('manga_series_remove_from_bookshelf'),
+        ),
+      );
+      await tester.tap(
+        find.byKey(
+          const ValueKey<String>('manga_series_remove_from_bookshelf'),
+        ),
+      );
+      await _pumpUntil(tester, find.text(t.delete_local_files));
+      // 在线漫画必须询问是否删除已下载文件（票 04）。
+      expect(find.text(t.delete_local_files), findsOneWidget);
+      await tester.tap(find.text(t.delete_local_files));
+      await tester.pump();
+      await tester.tap(find.text(t.dialog_delete));
+      await _pumpUntil(
+        tester,
+        find.byKey(const ValueKey<String>('manga_series_add_to_bookshelf')),
+      );
+    });
+
+    expect(await db.getEpubBook(bookKey), isNull, reason: 'DB 行已删');
+    expect(chapterDir.existsSync(), isFalse, reason: '勾选后章节目录删除');
+    expect(Directory(extractDir).existsSync(), isFalse, reason: '漫画目录删除');
+  });
+
   testWidgets('确认框点取消：什么都不删', (WidgetTester tester) async {
-    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.physicalSize = const Size(900, 1800);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
     final _TestAppModel appModel = _TestAppModel(db, library, root);

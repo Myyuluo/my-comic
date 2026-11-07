@@ -1713,6 +1713,7 @@
   "delete_in_progress": "Verwijderen bezig",
   "delete_local_files": "Ook lokale bestanden verwijderen",
   "delete_local_files_audio_desc": "De oorspronkelijke audiobestanden worden van dit apparaat verwijderd; de originele boek- en ondertitelbestanden blijven staan. Dit kan niet ongedaan worden gemaakt.",
+  "delete_local_files_download_desc": "Downloaded chapter files are removed from this device. This cannot be undone.",
   "delete_local_files_failed": "$n lokale bestand(en) konden niet worden verwijderd; ze zijn mogelijk nog in gebruik",
   "delete_local_files_video_desc": "Het videobestand, de ondertitels ernaast en de downloadtaak worden van dit apparaat verwijderd. Dit kan niet ongedaan worden gemaakt.",
   "delete_prompt_delete_selected": "Geselecteerde verwijderen",

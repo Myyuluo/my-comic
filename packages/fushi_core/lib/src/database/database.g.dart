@@ -53388,13 +53388,13 @@ class MangaDownloadJobRow extends DataClass
   /// 取 [MangaDownloadJobKind]。
   final String kind;
 
-  /// 在线条目 bookKey；mokuro 卷为 `mokuro:<seriesName>`。
+  /// 在线条目 bookKey；旧 mokuro 卷为 `mokuro:<seriesName>`（遗留值，启动时清理）。
   final String bookKey;
 
-  /// 章 key；mokuro 卷为卷名。
+  /// 章 key；旧 mokuro 卷为卷名（遗留值）。
   final String chapterKey;
 
-  /// `mihon` / `aidoku` / `interconnect` / `mokuro_moe`。
+  /// `mihon` / `aidoku` / `interconnect`；旧 mokuro 卷的 `mokuro_moe` 是遗留值。
   final String runtime;
 
   /// 展示用作品名 / 章名。落快照而不是 join 回源表：源条目可能已被移出书架。
@@ -53406,7 +53406,7 @@ class MangaDownloadJobRow extends DataClass
   final int pagesDone;
   final int pagesTotal;
 
-  /// 自动重试次数（退避 2s/8s/20s，与 mokuro 队列既有语义一致）。
+  /// 自动重试次数（退避 2s/8s/20s）。
   final int attemptCount;
   final String? lastError;
 
@@ -53883,6 +53883,336 @@ class MangaDownloadJobsCompanion extends UpdateCompanion<MangaDownloadJobRow> {
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('completedAt: $completedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $MangaChapterDirsTable extends MangaChapterDirs
+    with TableInfo<$MangaChapterDirsTable, MangaChapterDirRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $MangaChapterDirsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _bookKeyMeta = const VerificationMeta(
+    'bookKey',
+  );
+  @override
+  late final GeneratedColumn<String> bookKey = GeneratedColumn<String>(
+    'book_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _chapterKeyMeta = const VerificationMeta(
+    'chapterKey',
+  );
+  @override
+  late final GeneratedColumn<String> chapterKey = GeneratedColumn<String>(
+    'chapter_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _folderNameMeta = const VerificationMeta(
+    'folderName',
+  );
+  @override
+  late final GeneratedColumn<String> folderName = GeneratedColumn<String>(
+    'folder_name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<int> updatedAt = GeneratedColumn<int>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    bookKey,
+    chapterKey,
+    folderName,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'manga_chapter_dirs';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<MangaChapterDirRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('book_key')) {
+      context.handle(
+        _bookKeyMeta,
+        bookKey.isAcceptableOrUnknown(data['book_key']!, _bookKeyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_bookKeyMeta);
+    }
+    if (data.containsKey('chapter_key')) {
+      context.handle(
+        _chapterKeyMeta,
+        chapterKey.isAcceptableOrUnknown(data['chapter_key']!, _chapterKeyMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_chapterKeyMeta);
+    }
+    if (data.containsKey('folder_name')) {
+      context.handle(
+        _folderNameMeta,
+        folderName.isAcceptableOrUnknown(data['folder_name']!, _folderNameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_folderNameMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {bookKey, chapterKey};
+  @override
+  MangaChapterDirRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return MangaChapterDirRow(
+      bookKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}book_key'],
+      )!,
+      chapterKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}chapter_key'],
+      )!,
+      folderName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}folder_name'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $MangaChapterDirsTable createAlias(String alias) {
+    return $MangaChapterDirsTable(attachedDatabase, alias);
+  }
+}
+
+class MangaChapterDirRow extends DataClass
+    implements Insertable<MangaChapterDirRow> {
+  /// 在线书架条目的稳定键（`epub_books.bookKey`）。
+  final String bookKey;
+
+  /// 章内稳定键（`manga_chapter_states.chapter_key` 同源）。
+  final String chapterKey;
+
+  /// 实际章目录名（相对 manga 目录，单段）。
+  final String folderName;
+  final int updatedAt;
+  const MangaChapterDirRow({
+    required this.bookKey,
+    required this.chapterKey,
+    required this.folderName,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['book_key'] = Variable<String>(bookKey);
+    map['chapter_key'] = Variable<String>(chapterKey);
+    map['folder_name'] = Variable<String>(folderName);
+    map['updated_at'] = Variable<int>(updatedAt);
+    return map;
+  }
+
+  MangaChapterDirsCompanion toCompanion(bool nullToAbsent) {
+    return MangaChapterDirsCompanion(
+      bookKey: Value(bookKey),
+      chapterKey: Value(chapterKey),
+      folderName: Value(folderName),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory MangaChapterDirRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return MangaChapterDirRow(
+      bookKey: serializer.fromJson<String>(json['bookKey']),
+      chapterKey: serializer.fromJson<String>(json['chapterKey']),
+      folderName: serializer.fromJson<String>(json['folderName']),
+      updatedAt: serializer.fromJson<int>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'bookKey': serializer.toJson<String>(bookKey),
+      'chapterKey': serializer.toJson<String>(chapterKey),
+      'folderName': serializer.toJson<String>(folderName),
+      'updatedAt': serializer.toJson<int>(updatedAt),
+    };
+  }
+
+  MangaChapterDirRow copyWith({
+    String? bookKey,
+    String? chapterKey,
+    String? folderName,
+    int? updatedAt,
+  }) => MangaChapterDirRow(
+    bookKey: bookKey ?? this.bookKey,
+    chapterKey: chapterKey ?? this.chapterKey,
+    folderName: folderName ?? this.folderName,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  MangaChapterDirRow copyWithCompanion(MangaChapterDirsCompanion data) {
+    return MangaChapterDirRow(
+      bookKey: data.bookKey.present ? data.bookKey.value : this.bookKey,
+      chapterKey: data.chapterKey.present
+          ? data.chapterKey.value
+          : this.chapterKey,
+      folderName: data.folderName.present
+          ? data.folderName.value
+          : this.folderName,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MangaChapterDirRow(')
+          ..write('bookKey: $bookKey, ')
+          ..write('chapterKey: $chapterKey, ')
+          ..write('folderName: $folderName, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(bookKey, chapterKey, folderName, updatedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is MangaChapterDirRow &&
+          other.bookKey == this.bookKey &&
+          other.chapterKey == this.chapterKey &&
+          other.folderName == this.folderName &&
+          other.updatedAt == this.updatedAt);
+}
+
+class MangaChapterDirsCompanion extends UpdateCompanion<MangaChapterDirRow> {
+  final Value<String> bookKey;
+  final Value<String> chapterKey;
+  final Value<String> folderName;
+  final Value<int> updatedAt;
+  final Value<int> rowid;
+  const MangaChapterDirsCompanion({
+    this.bookKey = const Value.absent(),
+    this.chapterKey = const Value.absent(),
+    this.folderName = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  MangaChapterDirsCompanion.insert({
+    required String bookKey,
+    required String chapterKey,
+    required String folderName,
+    required int updatedAt,
+    this.rowid = const Value.absent(),
+  }) : bookKey = Value(bookKey),
+       chapterKey = Value(chapterKey),
+       folderName = Value(folderName),
+       updatedAt = Value(updatedAt);
+  static Insertable<MangaChapterDirRow> custom({
+    Expression<String>? bookKey,
+    Expression<String>? chapterKey,
+    Expression<String>? folderName,
+    Expression<int>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (bookKey != null) 'book_key': bookKey,
+      if (chapterKey != null) 'chapter_key': chapterKey,
+      if (folderName != null) 'folder_name': folderName,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  MangaChapterDirsCompanion copyWith({
+    Value<String>? bookKey,
+    Value<String>? chapterKey,
+    Value<String>? folderName,
+    Value<int>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return MangaChapterDirsCompanion(
+      bookKey: bookKey ?? this.bookKey,
+      chapterKey: chapterKey ?? this.chapterKey,
+      folderName: folderName ?? this.folderName,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (bookKey.present) {
+      map['book_key'] = Variable<String>(bookKey.value);
+    }
+    if (chapterKey.present) {
+      map['chapter_key'] = Variable<String>(chapterKey.value);
+    }
+    if (folderName.present) {
+      map['folder_name'] = Variable<String>(folderName.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<int>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('MangaChapterDirsCompanion(')
+          ..write('bookKey: $bookKey, ')
+          ..write('chapterKey: $chapterKey, ')
+          ..write('folderName: $folderName, ')
+          ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -60607,6 +60937,9 @@ abstract class _$FushiDatabase extends GeneratedDatabase {
       $UpdateFeedEntriesTable(this);
   late final $MangaDownloadJobsTable mangaDownloadJobs =
       $MangaDownloadJobsTable(this);
+  late final $MangaChapterDirsTable mangaChapterDirs = $MangaChapterDirsTable(
+    this,
+  );
   late final $AnidbFileIdentitiesTable anidbFileIdentities =
       $AnidbFileIdentitiesTable(this);
   late final $VideoEpisodeBindingOverridesTable videoEpisodeBindingOverrides =
@@ -60716,6 +61049,7 @@ abstract class _$FushiDatabase extends GeneratedDatabase {
     videoFileSpecs,
     updateFeedEntries,
     mangaDownloadJobs,
+    mangaChapterDirs,
     anidbFileIdentities,
     videoEpisodeBindingOverrides,
     pendingMineQueue,
@@ -100063,6 +100397,201 @@ typedef $$MangaDownloadJobsTableProcessedTableManager =
       MangaDownloadJobRow,
       PrefetchHooks Function()
     >;
+typedef $$MangaChapterDirsTableCreateCompanionBuilder =
+    MangaChapterDirsCompanion Function({
+      required String bookKey,
+      required String chapterKey,
+      required String folderName,
+      required int updatedAt,
+      Value<int> rowid,
+    });
+typedef $$MangaChapterDirsTableUpdateCompanionBuilder =
+    MangaChapterDirsCompanion Function({
+      Value<String> bookKey,
+      Value<String> chapterKey,
+      Value<String> folderName,
+      Value<int> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$MangaChapterDirsTableFilterComposer
+    extends Composer<_$FushiDatabase, $MangaChapterDirsTable> {
+  $$MangaChapterDirsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get bookKey => $composableBuilder(
+    column: $table.bookKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get chapterKey => $composableBuilder(
+    column: $table.chapterKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get folderName => $composableBuilder(
+    column: $table.folderName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$MangaChapterDirsTableOrderingComposer
+    extends Composer<_$FushiDatabase, $MangaChapterDirsTable> {
+  $$MangaChapterDirsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get bookKey => $composableBuilder(
+    column: $table.bookKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get chapterKey => $composableBuilder(
+    column: $table.chapterKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get folderName => $composableBuilder(
+    column: $table.folderName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$MangaChapterDirsTableAnnotationComposer
+    extends Composer<_$FushiDatabase, $MangaChapterDirsTable> {
+  $$MangaChapterDirsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get bookKey =>
+      $composableBuilder(column: $table.bookKey, builder: (column) => column);
+
+  GeneratedColumn<String> get chapterKey => $composableBuilder(
+    column: $table.chapterKey,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get folderName => $composableBuilder(
+    column: $table.folderName,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$MangaChapterDirsTableTableManager
+    extends
+        RootTableManager<
+          _$FushiDatabase,
+          $MangaChapterDirsTable,
+          MangaChapterDirRow,
+          $$MangaChapterDirsTableFilterComposer,
+          $$MangaChapterDirsTableOrderingComposer,
+          $$MangaChapterDirsTableAnnotationComposer,
+          $$MangaChapterDirsTableCreateCompanionBuilder,
+          $$MangaChapterDirsTableUpdateCompanionBuilder,
+          (
+            MangaChapterDirRow,
+            BaseReferences<
+              _$FushiDatabase,
+              $MangaChapterDirsTable,
+              MangaChapterDirRow
+            >,
+          ),
+          MangaChapterDirRow,
+          PrefetchHooks Function()
+        > {
+  $$MangaChapterDirsTableTableManager(
+    _$FushiDatabase db,
+    $MangaChapterDirsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$MangaChapterDirsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$MangaChapterDirsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$MangaChapterDirsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> bookKey = const Value.absent(),
+                Value<String> chapterKey = const Value.absent(),
+                Value<String> folderName = const Value.absent(),
+                Value<int> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => MangaChapterDirsCompanion(
+                bookKey: bookKey,
+                chapterKey: chapterKey,
+                folderName: folderName,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String bookKey,
+                required String chapterKey,
+                required String folderName,
+                required int updatedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => MangaChapterDirsCompanion.insert(
+                bookKey: bookKey,
+                chapterKey: chapterKey,
+                folderName: folderName,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$MangaChapterDirsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$FushiDatabase,
+      $MangaChapterDirsTable,
+      MangaChapterDirRow,
+      $$MangaChapterDirsTableFilterComposer,
+      $$MangaChapterDirsTableOrderingComposer,
+      $$MangaChapterDirsTableAnnotationComposer,
+      $$MangaChapterDirsTableCreateCompanionBuilder,
+      $$MangaChapterDirsTableUpdateCompanionBuilder,
+      (
+        MangaChapterDirRow,
+        BaseReferences<
+          _$FushiDatabase,
+          $MangaChapterDirsTable,
+          MangaChapterDirRow
+        >,
+      ),
+      MangaChapterDirRow,
+      PrefetchHooks Function()
+    >;
 typedef $$AnidbFileIdentitiesTableCreateCompanionBuilder =
     AnidbFileIdentitiesCompanion Function({
       required String ed2k,
@@ -103721,6 +104250,8 @@ class $FushiDatabaseManager {
       $$UpdateFeedEntriesTableTableManager(_db, _db.updateFeedEntries);
   $$MangaDownloadJobsTableTableManager get mangaDownloadJobs =>
       $$MangaDownloadJobsTableTableManager(_db, _db.mangaDownloadJobs);
+  $$MangaChapterDirsTableTableManager get mangaChapterDirs =>
+      $$MangaChapterDirsTableTableManager(_db, _db.mangaChapterDirs);
   $$AnidbFileIdentitiesTableTableManager get anidbFileIdentities =>
       $$AnidbFileIdentitiesTableTableManager(_db, _db.anidbFileIdentities);
   $$VideoEpisodeBindingOverridesTableTableManager

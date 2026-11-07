@@ -1713,6 +1713,7 @@
   "delete_in_progress": "Exclusão em andamento",
   "delete_local_files": "Excluir também os arquivos locais",
   "delete_local_files_audio_desc": "Os arquivos de áudio originais são removidos deste dispositivo; os arquivos originais do livro e das legendas são mantidos. Isso não pode ser desfeito.",
+  "delete_local_files_download_desc": "Downloaded chapter files are removed from this device. This cannot be undone.",
   "delete_local_files_failed": "Não foi possível excluir $n arquivo(s) local(is); eles podem estar em uso",
   "delete_local_files_video_desc": "O vídeo, as legendas ao lado dele e a tarefa de download são removidos deste dispositivo. Isso não pode ser desfeito.",
   "delete_prompt_delete_selected": "Excluir selecionados",

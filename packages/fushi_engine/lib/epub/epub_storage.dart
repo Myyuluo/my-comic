@@ -30,6 +30,10 @@ class EpubStorage {
     _cachedBaseDir = path == null ? null : p.join(path, 'fushi_books');
   }
 
+  /// 当前测试注入的书根（null = 生产解析）。供需要在同一临时根下派生兄弟目录
+  /// （如 Download library）的测试缝使用。
+  static String? get debugBaseDirectoryOverridePath => _cachedBaseDir;
+
   /// Base directory for all extracted books.
   static Future<String> baseDirectory() async {
     if (_cachedBaseDir != null) return _cachedBaseDir!;

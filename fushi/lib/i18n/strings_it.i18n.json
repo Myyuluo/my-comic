@@ -1713,6 +1713,7 @@
   "delete_in_progress": "Eliminazione in corso",
   "delete_local_files": "Elimina anche i file locali",
   "delete_local_files_audio_desc": "I file audio originali vengono rimossi da questo dispositivo; i file originali del libro e dei sottotitoli restano. L'operazione non è reversibile.",
+  "delete_local_files_download_desc": "Downloaded chapter files are removed from this device. This cannot be undone.",
   "delete_local_files_failed": "Impossibile eliminare $n file locali; potrebbero essere ancora in uso",
   "delete_local_files_video_desc": "Il video, i sottotitoli che si trovano accanto e il processo di download vengono rimossi da questo dispositivo. L'operazione non è reversibile.",
   "delete_prompt_delete_selected": "Elimina selezionati",
