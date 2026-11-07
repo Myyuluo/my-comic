@@ -5238,6 +5238,8 @@
   "profile_media_video": "视频",
   "profile_name_hint": "配置名称",
   "profile_rename": "重命名",
+  "program_state_fallback_notice_message": "安装目录不可写，MyComic 已将程序数据保存在 $path。书库、设置和扩展不会随安装目录一起拷贝。若希望便携状态跟着程序目录走，请把 MyComic 重装到可写目录。",
+  "program_state_fallback_notice_title": "程序数据不可便携",
   "quick_import_title": "快速导入",
   "reader_audiobook_current_chapter": "当前章节",
   "reader_audiobook_empty_hint": "导入音频，边听边读这本书",
