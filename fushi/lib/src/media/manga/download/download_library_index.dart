@@ -39,7 +39,7 @@ class MangaChapterContainer {
       imagesDirectory = null;
 
   /// 取 [MangaChapterContainerKind]。
-  final String kind;
+  final MangaChapterContainerKind kind;
 
   /// 章节目录（`downloads/{source}/{manga}/{chapter}`）；archive 为 null。
   final Directory? directory;
@@ -92,7 +92,7 @@ class DownloadLibraryIndex {
         mangaDir,
       );
       if (!withinMangaDir) return null;
-      if (mapping.containerKind == MangaChapterContainerKind.archive) {
+      if (mapping.containerKindEnum == MangaChapterContainerKind.archive) {
         final File file = downloadChapterArchiveFile(
           row.extractDir,
           mapping.folderName,

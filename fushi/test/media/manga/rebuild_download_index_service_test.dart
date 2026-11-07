@@ -1332,7 +1332,7 @@ void main() {
       '/c/1',
     ))!;
     expect(mapping.folderName, 'Chapter 1.cbz');
-    expect(mapping.containerKind, MangaChapterContainerKind.archive);
+    expect(mapping.containerKindEnum, MangaChapterContainerKind.archive);
 
     final DownloadLibraryIndex index = DownloadLibraryIndex(db);
     final MangaChapterContainer? container = await index.resolveChapter(
@@ -1386,7 +1386,7 @@ void main() {
 
     expect(first.chaptersRelinked, 2);
     expect(
-      (await db.getMangaChapterDir(bookKey, '/c/1'))!.containerKind,
+      (await db.getMangaChapterDir(bookKey, '/c/1'))!.containerKindEnum,
       MangaChapterContainerKind.folder,
     );
     final MangaChapterDirRow archiveRow = (await db.getMangaChapterDir(
@@ -1394,7 +1394,7 @@ void main() {
       '/c/2',
     ))!;
     expect(archiveRow.folderName, 'Chapter 2.cbz');
-    expect(archiveRow.containerKind, MangaChapterContainerKind.archive);
+    expect(archiveRow.containerKindEnum, MangaChapterContainerKind.archive);
     expect(
       await DownloadLibraryIndex(
         db,
@@ -1441,7 +1441,7 @@ void main() {
       seriesKey: entry.series.key,
     );
     expect(
-      (await db.getMangaChapterDir(bookKey, '/c/1'))!.containerKind,
+      (await db.getMangaChapterDir(bookKey, '/c/1'))!.containerKindEnum,
       MangaChapterContainerKind.archive,
     );
     expect(
@@ -1449,7 +1449,7 @@ void main() {
       'Chapter 1.cbz',
     );
     expect(
-      (await db.getMangaChapterDir(bookKey, '/c/2'))!.containerKind,
+      (await db.getMangaChapterDir(bookKey, '/c/2'))!.containerKindEnum,
       MangaChapterContainerKind.archive,
     );
     final DownloadLibraryIndex index = DownloadLibraryIndex(db);

@@ -3245,10 +3245,26 @@ class MangaDownloadJobs extends Table {
 /// - [folder]：`downloads/{source}/{manga}/{chapter}/` 平铺页图目录；
 /// - [archive]：`downloads/{source}/{manga}/{chapter}.cbz` 压缩包。
 ///
-/// v2 及更早的映射没有这一列，迁移时一律视为 [folder]。
-abstract final class MangaChapterContainerKind {
-  static const String folder = 'folder';
-  static const String archive = 'archive';
+/// 数据库列是 TEXT，存 [storageValue]；读取时用 [fromStorage] 在边界转换，
+/// 写入时由 `upsertMangaChapterDir` 统一写 [storageValue]。v2 及更早的映射没有
+/// 这一列，迁移时一律视为 [folder]。
+enum MangaChapterContainerKind {
+  folder('folder'),
+  archive('archive');
+
+  const MangaChapterContainerKind(this.storageValue);
+
+  /// 持久化字符串。**不要改**：已有库行靠它区分容器类型。
+  final String storageValue;
+
+  /// 数据库值 → 枚举。未知值按 [folder] 处理（v2 行只有 folder 语义，且旧的
+  /// 解析路径对非 archive 值同样按 folder 处理）。
+  static MangaChapterContainerKind fromStorage(String value) {
+    for (final MangaChapterContainerKind kind in values) {
+      if (kind.storageValue == value) return kind;
+    }
+    return folder;
+  }
 }
 
 /// Download library 的章节容器映射（storage-layout 票 04；CBZ 票 06）。
@@ -3269,12 +3285,17 @@ class MangaChapterDirs extends Table {
   /// 章内稳定键（`manga_chapter_states.chapter_key` 同源）。
   TextColumn get chapterKey => text()();
 
-  /// 实际容器名（相对 manga 目录，单段）。
+  /// 实际容器名（相对 manga 目录，单段）：章节目录名，或 archive 的 `.cbz`
+  /// 文件名。**不是**严格意义上的目录名——列名 `folder_name` 是既有 schema
+  /// 决策，值域见 [MangaChapterContainerKind]。
   TextColumn get folderName => text()();
 
   /// 取 [MangaChapterContainerKind]；默认 folder 保持 v2 行的语义。
+  ///
+  /// 默认值必须写成字面量 `'folder'`（generated 列是 TEXT，不能引用枚举值），
+  /// 与 [MangaChapterContainerKind.folder.storageValue] 保持一致。
   TextColumn get containerKind =>
-      text().withDefault(const Constant(MangaChapterContainerKind.folder))();
+      text().withDefault(const Constant('folder'))();
 
   IntColumn get updatedAt => integer()();
 
@@ -3284,7 +3305,9 @@ class MangaChapterDirs extends Table {
   @override
   List<String> get customConstraints => <String>[
         "CHECK (book_key != '' AND chapter_key != '' AND folder_name != '')",
-        "CHECK (container_kind IN ('folder', 'archive'))",
+        // 刻意不写 `container_kind` 的 CHECK：v2→v3 用 ALTER TABLE ADD COLUMN
+        // 迁移，SQLite 不会把表级 CHECK 补到已有表上。fresh v3 与升级后的 v2
+        // 必须保持同一套有效 schema，类型约束由上面的 Dart enum 在边界保证。
         'CHECK (updated_at >= 0)',
       ];
 }

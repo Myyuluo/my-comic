@@ -237,6 +237,49 @@ void main() {
     expect(opened, <String>[content.path]);
   });
 
+  testWidgets('打开文件夹创建目录失败时显示失败提示且不调用打开器', (WidgetTester tester) async {
+    final GlobalKey<NavigatorState> navKey = GlobalKey<NavigatorState>();
+    FushiToast.navigatorKey = navKey;
+    final SettingsContext settings = await captureContext(
+      tester,
+      navigatorKey: navKey,
+    );
+    // 父路径是文件：directory.create(recursive: true) 必然失败（只读盘 / 权限 /
+    // 断链之外的确定性复现，不依赖运行环境）。
+    final File blocker = File(p.join(tmp.path, 'blocker'))
+      ..writeAsStringSync('not a directory');
+    final Directory content = Directory(p.join(blocker.path, 'CustomContent'));
+    expect(content.existsSync(), isFalse);
+    SharedPreferences.setMockInitialValues(<String, Object>{
+      AppPaths.contentRootPrefKey: content.path,
+    });
+
+    final List<String> opened = <String>[];
+    debugOpenContentRootDirectory = (String path) async {
+      opened.add(path);
+      return true;
+    };
+
+    final SettingsStatusItem item =
+        itemNamed(locationSection(), 'storage.content_root')
+            as SettingsStatusItem;
+    await tester.runAsync(() async {
+      await item.secondaryOnAction!(settings);
+    });
+    await tester.pump(); // insert the toast overlay entry
+    await tester.pump(const Duration(milliseconds: 250)); // fade-in
+
+    expect(
+      find.text(t.data_storage_open_failed),
+      findsOneWidget,
+      reason: '创建目录失败也必须给用户可见的失败提示，异常不能逃出设置页',
+    );
+    expect(opened, isEmpty, reason: '目录都没建出来，不应再调用文件管理器');
+
+    // 让自动消失计时器跑完，避免 pending-timer。
+    await tester.pump(const Duration(seconds: 3));
+  });
+
   testWidgets('打开文件夹失败时复用现有失败提示', (WidgetTester tester) async {
     final GlobalKey<NavigatorState> navKey = GlobalKey<NavigatorState>();
     FushiToast.navigatorKey = navKey;

@@ -210,6 +210,16 @@ void main() {
       find.byKey(const ValueKey<String>('manga_series_add_to_bookshelf')),
       findsOneWidget,
     );
+    // 未入库的扫描作品没有可续读的书架条目：不得渲染（禁用的）主按钮。
+    expect(
+      find.byKey(const ValueKey<String>('manga_series_continue')),
+      findsNothing,
+      reason: '未入库本地作品不得显示「继续阅读」',
+    );
+    expect(
+      find.byKey(const ValueKey<String>('manga_series_open_local')),
+      findsNothing,
+    );
     expect(
       await db.getAllEpubBooks(),
       isEmpty,

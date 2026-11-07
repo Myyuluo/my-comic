@@ -1375,7 +1375,7 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
             root: appModel.appPaths.localComicRoot,
             sourcePath: path,
           );
-          final LocalSourceImportReport? report = result.report;
+          final LocalSourceRegistrationReport? report = result.report;
           if (report != null) {
             imported += report.added + report.refreshed;
             skipped += report.skippedTombstoned;

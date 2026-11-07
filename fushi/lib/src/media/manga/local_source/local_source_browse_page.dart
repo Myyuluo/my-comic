@@ -5,11 +5,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
 import 'package:fushi/src/media/manga/library/manga_series_page.dart';
+import 'package:fushi/src/media/manga/manga_cover_placeholder.dart';
 import 'package:fushi/src/media/media_search_text.dart';
 import 'package:fushi/src/media/online/online_source_browse_page.dart';
 import 'package:fushi/src/media/online/online_source_error_text.dart';
 import 'package:fushi/src/models/app_model.dart';
-import 'package:fushi/src/utils/components/glass/fushi_icon.dart';
 import 'package:fushi/src/utils/fushi_icons.dart';
 import 'package:fushi/utils.dart';
 import 'package:fushi_engine/media/collections/shelf_sort.dart' show naturalCompare;
@@ -22,7 +22,7 @@ import 'package:fushi_engine/media/manga/local_source/local_source_layout.dart';
 /// [LocalSourceMangaSeriesTarget]），用户在作品页显式「加入书架」才写 Library。
 ///
 /// 外壳完全复用在线源浏览页（[OnlineSourceBrowsePage]）：返回键、浮动标题胶囊、
-/// 搜索框、封面网格、加载骨架与错误占位都是同一套；本地源没有「热门 / 最新」
+/// 搜索框、封面网格、加载骨架与错误占位都是同一套；本地图源没有「热门 / 最新」
 /// 列表与筛选，适配器返回空列表 / `hasFilters = false` 即可。
 class LocalSourceBrowsePage extends ConsumerStatefulWidget {
   const LocalSourceBrowsePage({super.key});
@@ -136,28 +136,14 @@ class LocalSourceBrowseCatalog extends OnlineSourceCatalog<LocalSourceManga> {
     // 封面沿用 `cover.jpg/jpeg/png` 约定；缺失时用现有占位封面（扫描时不假装
     // 某一页是封面）。
     final String? relative = item.coverRelativePath;
-    if (relative == null) return _coverPlaceholder(context);
+    if (relative == null) return const MangaCoverPlaceholder();
     final String path = p.join(item.directoryPath, relative);
     return Image.file(
       File(path),
       fit: BoxFit.cover,
       // 坏封面 / 扫描后被移走的文件退回占位，不让网格解码报错。
-      errorBuilder: (_, Object error, __) => _coverPlaceholder(context),
-    );
-  }
-
-  /// 无封面占位，与作品页封面占位同一形态（中性底 + 漫画图标）。
-  Widget _coverPlaceholder(BuildContext context) {
-    final ColorScheme cs = Theme.of(context).colorScheme;
-    return ColoredBox(
-      color: cs.surfaceContainerHighest,
-      child: Center(
-        child: FushiIcon(
-          FushiIcons.manga,
-          size: 40,
-          color: cs.onSurfaceVariant,
-        ),
-      ),
+      errorBuilder: (_, Object error, __) =>
+          const MangaCoverPlaceholder(),
     );
   }
 

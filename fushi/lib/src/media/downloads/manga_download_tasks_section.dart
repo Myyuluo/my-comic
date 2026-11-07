@@ -156,20 +156,19 @@ DownloadTaskEntry mangaDownloadTaskEntry(
       // 简化卡片的行尾直接操作（不再藏在展开面板里）：排队 / 下载中可取消，
       // 失败 / 已取消可重试，已完成保持安静。图标、tooltip 与调用的 service
       // 方法沿用原展开面板。
-      final DownloadTaskQuickAction? quickAction = switch (job.status) {
-        MangaDownloadJobStatus.failed ||
-        MangaDownloadJobStatus.cancelled => DownloadTaskQuickAction(
-          icon: Icons.refresh,
-          tooltip: t.retry,
-          onPressed: () => unawaited(downloads.retry(job.jobId)),
-        ),
-        MangaDownloadJobStatus.done => null,
-        _ => DownloadTaskQuickAction(
-          icon: Icons.close,
-          tooltip: t.dialog_cancel,
-          onPressed: () => unawaited(downloads.cancel(job.jobId)),
-        ),
-      };
+      final DownloadTaskQuickAction? quickAction = retryable
+          ? DownloadTaskQuickAction(
+              icon: Icons.refresh,
+              tooltip: t.retry,
+              onPressed: () => unawaited(downloads.retry(job.jobId)),
+            )
+          : finished
+              ? null
+              : DownloadTaskQuickAction(
+                  icon: Icons.close,
+                  tooltip: t.dialog_cancel,
+                  onPressed: () => unawaited(downloads.cancel(job.jobId)),
+                );
       return DownloadTaskCard(
         key: ValueKey<String>(id),
         taskId: id,
@@ -186,6 +185,7 @@ DownloadTaskEntry mangaDownloadTaskEntry(
         details: _MangaDownloadTaskRow(
           job: job,
           status: status,
+          retryable: retryable,
           downloads: downloads,
         ),
       );
@@ -235,11 +235,15 @@ class _MangaDownloadTaskRow extends StatelessWidget {
   const _MangaDownloadTaskRow({
     required this.job,
     required this.status,
+    required this.retryable,
     required this.downloads,
   });
 
   final MangaDownloadJobRow job;
   final String status;
+
+  /// failed / cancelled 可重试（与卡片 actions / quickAction 同一判据）。
+  final bool retryable;
   final MangaDownloadService downloads;
 
   /// 2026-10 体验优化：20 号图标 + 默认 8 内边距只有 36dp 命中区，低于触摸
@@ -280,8 +284,6 @@ class _MangaDownloadTaskRow extends StatelessWidget {
             ),
     };
     final bool errorTone = job.status == MangaDownloadJobStatus.failed;
-    final bool retryable = job.status == MangaDownloadJobStatus.failed ||
-        job.status == MangaDownloadJobStatus.cancelled;
     return FushiListItem(
       density: FushiListDensity.compact,
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),

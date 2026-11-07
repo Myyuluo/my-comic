@@ -304,7 +304,7 @@ void main() {
       '/chapter/1',
     );
     expect(mapping?.folderName, 'Chapter 1');
-    expect(mapping?.containerKind, MangaChapterContainerKind.folder);
+    expect(mapping?.containerKindEnum, MangaChapterContainerKind.folder);
     final DownloadLibraryIndex index = DownloadLibraryIndex(db);
     expect(
       await index.isChapterDownloaded(
@@ -438,7 +438,7 @@ void main() {
       '/chapter/1',
     );
     expect(mapping?.folderName, 'Chapter 1.cbz');
-    expect(mapping?.containerKind, MangaChapterContainerKind.archive);
+    expect(mapping?.containerKindEnum, MangaChapterContainerKind.archive);
 
     final DownloadLibraryIndex index = DownloadLibraryIndex(db);
     expect(
@@ -499,7 +499,7 @@ void main() {
       '/chapter/1',
     );
     expect(mapping?.folderName, 'Chapter 1');
-    expect(mapping?.containerKind, MangaChapterContainerKind.folder);
+    expect(mapping?.containerKindEnum, MangaChapterContainerKind.folder);
     expect(
       adapter.fetchCounts,
       fetchedBefore,
@@ -569,7 +569,7 @@ void main() {
       '/chapter/1',
     );
     expect(mapping?.folderName, 'Chapter 1 (2).cbz');
-    expect(mapping?.containerKind, MangaChapterContainerKind.archive);
+    expect(mapping?.containerKindEnum, MangaChapterContainerKind.archive);
     expect(
       File(p.join(bookDir, 'Chapter 1 (2).cbz')).existsSync(),
       isTrue,

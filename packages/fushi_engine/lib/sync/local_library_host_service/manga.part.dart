@@ -120,7 +120,7 @@ mixin _LocalLibraryHostManga on _LocalLibraryHostBase, _LocalLibraryHostShared {
         chapterKey,
       );
       if (mapping == null) break;
-      if (mapping.containerKind == MangaChapterContainerKind.archive) {
+      if (mapping.containerKindEnum == MangaChapterContainerKind.archive) {
         throw StateError(
           'manga chapter is a CBZ archive (host page service unsupported): '
           '${row.bookKey}/$chapterDigest',
@@ -217,7 +217,7 @@ mixin _LocalLibraryHostManga on _LocalLibraryHostBase, _LocalLibraryHostShared {
       final MangaChapterDirRow? mapping = mappings[key];
       if (mapping == null) continue;
       // 压缩包章节不经本协议供页：安全跳过而不是拼出不存在的目录。
-      if (mapping.containerKind == MangaChapterContainerKind.archive) continue;
+      if (mapping.containerKindEnum == MangaChapterContainerKind.archive) continue;
       final MokuroPayload? payload = await readDownloadLibraryChapterPayload(
         downloadChapterDirectory(row.extractDir, mapping.folderName),
       );

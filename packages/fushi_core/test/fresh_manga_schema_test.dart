@@ -128,7 +128,7 @@ void main() {
         'chapter-1',
       );
       expect(row?.folderName, 'Chapter 1');
-      expect(row?.containerKind, MangaChapterContainerKind.folder);
+      expect(row?.containerKindEnum, MangaChapterContainerKind.folder);
     },
   );
 
@@ -179,7 +179,7 @@ void main() {
       );
       expect(migrated?.folderName, 'Chapter 1');
       expect(
-        migrated?.containerKind,
+        migrated?.containerKindEnum,
         MangaChapterContainerKind.folder,
         reason: '升级前已存在的映射都是章节目录，迁移为 folder',
       );
@@ -196,8 +196,55 @@ void main() {
         (await upgraded.getMangaChapterDir(
           'old-book',
           'chapter-2',
-        ))?.containerKind,
+        ))?.containerKindEnum,
         MangaChapterContainerKind.archive,
+      );
+    },
+  );
+
+  test(
+    'fresh v3 与 v2→v3 升级后的 manga_chapter_dirs 有效 schema 一致',
+    () async {
+      // fresh v3：drift 按当前表定义建表。
+      final FushiDatabase fresh = await open();
+      final Map<String, String> freshColumns = await _columnShape(fresh);
+      final Set<String> freshChecks = await _tableChecks(fresh);
+
+      // 同一文件降级成票 04 的 v2 表（没有 container_kind，也没有它的 CHECK），
+      // 再重新打开走真实的 v2 → v3 迁移。
+      await fresh.customStatement('DROP TABLE manga_chapter_dirs');
+      await fresh.customStatement(
+        'CREATE TABLE manga_chapter_dirs ('
+        'book_key TEXT NOT NULL, '
+        'chapter_key TEXT NOT NULL, '
+        'folder_name TEXT NOT NULL, '
+        'updated_at INTEGER NOT NULL, '
+        'PRIMARY KEY (book_key, chapter_key), '
+        "CHECK (book_key != '' AND chapter_key != '' AND folder_name != ''), "
+        'CHECK (updated_at >= 0))',
+      );
+      await fresh.customStatement('PRAGMA user_version = 2');
+      await fresh.close();
+
+      final FushiDatabase upgraded = await open();
+      addTearDown(upgraded.close);
+      final Map<String, String> upgradedColumns = await _columnShape(upgraded);
+      final Set<String> upgradedChecks = await _tableChecks(upgraded);
+
+      expect(
+        upgradedColumns,
+        freshColumns,
+        reason: '列名 / 类型 / NOT NULL / 默认值 / 主键必须一致（列序可不同）',
+      );
+      expect(
+        upgradedChecks,
+        freshChecks,
+        reason: '表级 CHECK 必须一致：ALTER TABLE ADD COLUMN 不会补上 fresh 表的 CHECK',
+      );
+      expect(
+        freshChecks.any((String check) => check.contains('container_kind')),
+        isFalse,
+        reason: '容器类型由 Dart enum 在数据库边界约束，不能只写在 fresh 表上',
       );
     },
   );
@@ -336,3 +383,54 @@ void main() {
 
 /// Fushi 旧库文件名：只允许出现在“不被读取”的测试里。
 const String fushiDatabaseFileName_legacy = 'fushi.db';
+
+/// `manga_chapter_dirs` 的列形状（顺序不敏感）：name → type / notnull / 默认值 / pk。
+Future<Map<String, String>> _columnShape(FushiDatabase db) async {
+  final List<QueryRow> rows = await db
+      .customSelect('PRAGMA table_info(manga_chapter_dirs)')
+      .get();
+  return <String, String>{
+    for (final QueryRow row in rows)
+      row.read<String>('name'): <String>[
+        row.read<String>('type'),
+        row.read<int>('notnull').toString(),
+        row.data['dflt_value']?.toString() ?? '',
+        row.read<int>('pk').toString(),
+      ].join('|'),
+  };
+}
+
+/// 表级 CHECK 约束集合（按括号配对提取，空白归一化）。
+Future<Set<String>> _tableChecks(FushiDatabase db) async {
+  final QueryRow row = await db
+      .customSelect(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' "
+        "AND name = 'manga_chapter_dirs'",
+      )
+      .getSingle();
+  final String sql = row.read<String>('sql');
+  final Set<String> checks = <String>{};
+  int index = 0;
+  while (true) {
+    final int start = sql.indexOf('CHECK', index);
+    if (start < 0) break;
+    final int open = sql.indexOf('(', start);
+    if (open < 0) break;
+    int depth = 0;
+    int end = open;
+    for (; end < sql.length; end++) {
+      final String char = sql[end];
+      if (char == '(') {
+        depth++;
+      } else if (char == ')') {
+        depth--;
+        if (depth == 0) break;
+      }
+    }
+    checks.add(
+      sql.substring(start, end + 1).replaceAll(RegExp(r'\s+'), ' ').trim(),
+    );
+    index = end + 1;
+  }
+  return checks;
+}

@@ -53938,7 +53938,7 @@ class $MangaChapterDirsTable extends MangaChapterDirs
     false,
     type: DriftSqlType.string,
     requiredDuringInsert: false,
-    defaultValue: const Constant(MangaChapterContainerKind.folder),
+    defaultValue: const Constant('folder'),
   );
   static const VerificationMeta _updatedAtMeta = const VerificationMeta(
     'updatedAt',

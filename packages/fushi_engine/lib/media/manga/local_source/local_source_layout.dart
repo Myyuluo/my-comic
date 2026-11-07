@@ -204,7 +204,7 @@ Future<List<LocalSourceManga>> scanLocalSourceRoot(Directory root) async {
 Future<LocalSourceManga?> _scanManga(Directory root, Directory mangaDir) =>
     scanLocalSourceMangaDirectory(
       mangaDir,
-      relativePath: _relativeForward(mangaDir.path, from: root.path),
+      relativePath: localSourceRelativePath(mangaDir.path, from: root.path),
     );
 
 /// 扫描**单个** Manga 目录（第一层目录 = 章节 / CBZ；目录直接含页图 = 单章）。
@@ -250,7 +250,7 @@ Future<LocalSourceManga?> scanLocalSourceMangaDirectory(
         sources.add(
           _ChapterSource(
             name: name,
-            relativePath: _relativeForward(entity.path, from: mangaDir.path),
+            relativePath: localSourceRelativePath(entity.path, from: mangaDir.path),
             directory: entity,
           ),
         );
@@ -260,7 +260,7 @@ Future<LocalSourceManga?> scanLocalSourceMangaDirectory(
         sources.add(
           _ChapterSource(
             name: p.basenameWithoutExtension(fileName),
-            relativePath: _relativeForward(entity.path, from: mangaDir.path),
+            relativePath: localSourceRelativePath(entity.path, from: mangaDir.path),
             archive: entity,
           ),
         );
@@ -452,5 +452,9 @@ bool _isCoverRelativePath(String relativePath) =>
 bool _hasDotSegment(String relativePath) =>
     relativePath.split('/').any((String s) => s.startsWith('.'));
 
-String _relativeForward(String path, {required String from}) =>
+/// [path] 相对 [from] 的正斜杠路径（`.` = 同一路径）。
+///
+/// Local source 的 `relativePath` 一律用 `/`，跨平台持久化与 `p.posix` 拼接
+/// 不因 Windows 的反斜杠而分叉。扫描、拖入登记与重建恢复共用这一处。
+String localSourceRelativePath(String path, {required String from}) =>
     p.relative(path, from: from).replaceAll('\\', '/');
