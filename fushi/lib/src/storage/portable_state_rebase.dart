@@ -433,7 +433,9 @@ class PortableStateRebase {
           AppPaths.customFontsDirName.toLowerCase()) {
         continue;
       }
-      final String root = segments.sublist(0, i).join('/');
+      // 返回的根必须包含 `state` 段（与台账里 lastStateRootPrefKey 同义），
+      // 否则 rebase 到当前 state 根时会多套一层 `state/state`。
+      final String root = segments.sublist(0, i + 1).join('/');
       if (root.isEmpty) return null;
       return root;
     }

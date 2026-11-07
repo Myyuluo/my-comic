@@ -358,6 +358,49 @@ void main() {
     );
   });
 
+  test('没有 ledger 时也能从字体路径反推旧 state 根并 rebase', () async {
+    final AppPaths paths = await AppPaths.resolve();
+    final FushiDatabase db = FushiDatabase(paths.stateRoot.path);
+    addTearDown(db.close);
+    final Directory oldState =
+        Directory(p.join(tmp.path, 'OldProgram', 'userdata', 'state'))
+          ..createSync(recursive: true);
+    final String fontPrefKey = dbSourcePrefKey(
+      kReaderSourcePersistedKey,
+      'font_catalog',
+    );
+    await db.setPref(
+      fontPrefKey,
+      jsonEncode(<String, Object?>{
+        'version': 1,
+        'fonts': <Object?>[
+          <String, Object?>{
+            'id': 'font_1',
+            'name': 'Klee',
+            'path': p.join(oldState.path, 'custom_fonts', 'Klee.ttf'),
+          },
+        ],
+      }),
+    );
+
+    await PortableStateRebase.reconcile(
+      db: db,
+      paths: paths,
+      staleContentRoot: null,
+    );
+
+    final Map<String, dynamic> catalog =
+        jsonDecode((await db.getPref(fontPrefKey))!) as Map<String, dynamic>;
+    final String fontPath =
+        ((catalog['fonts'] as List<dynamic>).first as Map<String, dynamic>)['path']
+            as String;
+    expect(
+      fontPath,
+      p.join(paths.customFontsRoot.path, 'Klee.ttf'),
+      reason: '反推出的旧根必须包含 state 段，不能多套一层 state/state',
+    );
+  });
+
   test('reconcile 失败不抛出（启动可继续），并报告 error', () async {
     final AppPaths paths = await AppPaths.resolve();
     final FushiDatabase db = FushiDatabase(paths.stateRoot.path);
