@@ -178,7 +178,10 @@ class SettingsSchemaItem extends StatefulWidget
         status.resolveSubtitle(ctx),
         status.resolveAction(ctx) != null,
       ],
-      SettingsActionItem action => <Object?>[action.resolveSubtitle(ctx)],
+      SettingsActionItem action => <Object?>[
+        action.resolveSubtitle(ctx),
+        action.isEnabled(ctx),
+      ],
       SettingsSwitchItem toggle => <Object?>[
         toggle.value(ctx),
         toggle.resolveSubtitle(ctx),
@@ -592,6 +595,21 @@ class _SettingsActionRowState extends State<_SettingsActionRow> {
   @override
   Widget build(BuildContext context) {
     final SettingsActionItem action = widget.action;
+    if (!action.isEnabled(widget.settingsContext)) {
+      // 占位动作：入口可见但置灰，不可点、不可聚焦；原因写在副标题里。
+      // 0.38 与禁用开关（glassSettingsSwitch）共用同一档置灰透明度。
+      return ExcludeFocus(
+        child: Opacity(
+          opacity: 0.38,
+          child: AdaptiveSettingsRow(
+            title: action.title,
+            subtitle: action.resolveSubtitle(widget.settingsContext),
+            icon: action.icon,
+            showIcon: widget.showIcons,
+          ),
+        ),
+      );
+    }
     if (action.destructive) {
       return SettingsDangerRow(
         title: action.title,
