@@ -4,10 +4,10 @@
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `.tachibk` 导入选择器默认定位到 `autobackup`，其中的文件可直接选择
-- [ ] 设置里能看到「导出 `.tachibk`」入口，但处于未完成/置灰状态
-- [ ] `.fushi.zip` 行为不变，且不写入 `autobackup`
-- [ ] 没有定时自动备份任务
-- [ ] 有测试覆盖默认目录、入口状态与文件格式区分
+- [x] `.tachibk` 导入选择器默认定位到 `autobackup`，其中的文件可直接选择
+- [x] 设置里能看到「导出 `.tachibk`」入口，但处于未完成/置灰状态
+- [x] `.fushi.zip` 行为不变，且不写入 `autobackup`
+- [x] 没有定时自动备份任务
+- [x] 有测试覆盖默认目录、入口状态与文件格式区分

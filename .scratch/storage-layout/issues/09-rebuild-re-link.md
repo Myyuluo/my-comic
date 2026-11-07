@@ -4,11 +4,11 @@
 
 **Blocked by:** 04, 06, 07, 08
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] 用户把文件手动搬到新 Content root 后，点击重建索引，已有 Library Manga 的下载/本地章节恢复可用
-- [ ] 匹配优先使用 `pages.json` 稳定 ID，名称只作为回退
-- [ ] 找不到文件的记录显示 Missing，记录和文件都不被删除
-- [ ] 有进度、可取消、可重复运行；结束后有结果摘要
-- [ ] 不移动文件、不读取旧 Content root、不扫描 `autobackup`
-- [ ] 有自动化测试覆盖 ID 匹配、名称回退、Missing、重复运行
+- [x] 用户把文件手动搬到新 Content root 后，点击重建索引，已有 Library Manga 的下载/本地章节恢复可用
+- [x] 匹配优先使用 `pages.json` 稳定 ID，名称只作为回退
+- [x] 找不到文件的记录显示 Missing，记录和文件都不被删除
+- [x] 有进度、可取消、可重复运行；结束后有结果摘要
+- [x] 不移动文件、不读取旧 Content root、不扫描 `autobackup`
+- [x] 有自动化测试覆盖 ID 匹配、名称回退、Missing、重复运行

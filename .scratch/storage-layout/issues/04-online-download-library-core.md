@@ -4,12 +4,12 @@
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] 下载在线章节后，资源管理器里能看到 `downloads/{source}/{manga}/{chapter}/001.jpg…` 和 `pages.json`
-- [ ] `pages.json` 包含 Source/Manga/Chapter 稳定 ID、页表与下载时间；页图平铺、无 `images/` 前缀
-- [ ] source 层存在；名称经过基础 Windows 净化；不存在覆盖已有目录的情况
-- [ ] 下载写入 staging，完成后整章 rename；半成品不出现在已下载索引里
-- [ ] 阅读器能打开新布局的章节；删除章节/整部漫画使用数据库映射而非标题推导
-- [ ] 在线漫画移出书架时询问是否删除已下载文件
-- [ ] 下载写入、阅读、映射、删除均有自动化测试
+- [x] 下载在线章节后，资源管理器里能看到 `downloads/{source}/{manga}/{chapter}/001.jpg…` 和 `pages.json`
+- [x] `pages.json` 包含 Source/Manga/Chapter 稳定 ID、页表与下载时间；页图平铺、无 `images/` 前缀
+- [x] source 层存在；名称经过基础 Windows 净化；不存在覆盖已有目录的情况
+- [x] 下载写入 staging，完成后整章 rename；半成品不出现在已下载索引里
+- [x] 阅读器能打开新布局的章节；删除章节/整部漫画使用数据库映射而非标题推导
+- [x] 在线漫画移出书架时询问是否删除已下载文件
+- [x] 下载写入、阅读、映射、删除均有自动化测试

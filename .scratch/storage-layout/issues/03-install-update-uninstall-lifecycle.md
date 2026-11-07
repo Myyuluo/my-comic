@@ -4,11 +4,11 @@
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] 安装器仍显示标准安装位置选择页，并能拦截/警告不可写目录
-- [ ] 自定义数据位置页与 `data_root.bootstrap` 不再出现，首启也不再消费该文件
-- [ ] 升级/原地覆盖安装后 `userdata` 中的数据库、设置、扩展保留
-- [ ] 卸载删除 `userdata`（含回退位置），Content root 的 `downloads`/`autobackup`/`localcomic` 保留
-- [ ] 打包与安装脚本守卫测试确认 `userdata` 不在 `[Files]`/`[InstallDelete]`，且在 `[UninstallDelete]`
-- [ ] 不可写安装目录下回退到 `%LOCALAPPDATA%\MyComic\userdata` 并有可见提示
+- [x] 安装器仍显示标准安装位置选择页，并能拦截/警告不可写目录
+- [x] 自定义数据位置页与 `data_root.bootstrap` 不再出现，首启也不再消费该文件
+- [x] 升级/原地覆盖安装后 `userdata` 中的数据库、设置、扩展保留
+- [x] 卸载删除 `userdata`（含回退位置），Content root 的 `downloads`/`autobackup`/`localcomic` 保留
+- [x] 打包与安装脚本守卫测试确认 `userdata` 不在 `[Files]`/`[InstallDelete]`，且在 `[UninstallDelete]`
+- [x] 不可写安装目录下回退到 `%LOCALAPPDATA%\MyComic\userdata` 并有可见提示

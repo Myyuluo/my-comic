@@ -4,11 +4,11 @@
 
 **Blocked by:** None（can start immediately）
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] 全新启动创建 Content root 下 `downloads`、`autobackup`、`localcomic`，以及 Program state root 下 `state`、`cache`
-- [ ] 数据库、`shared_preferences`、Mihon runtime、更新包位于 `state`；缓存位于 `cache`
-- [ ] 现有下载、导入、阅读流程仍可用（临时旧的哈希布局挂在 Content root 下），且不再读取旧 `Documents/Fushi/data` 或 `%APPDATA%` 数据
-- [ ] 旧 data-root 设置、迁移器和布局锚点不再影响根解析
-- [ ] 新 root API 可被调用方使用，旧 root getter 以 alias 形式保留；有测试/源码守卫
-- [ ] 全仓构建与测试保持 green
+- [x] 全新启动创建 Content root 下 `downloads`、`autobackup`、`localcomic`，以及 Program state root 下 `state`、`cache`
+- [x] 数据库、`shared_preferences`、Mihon runtime、更新包位于 `state`；缓存位于 `cache`
+- [x] 现有下载、导入、阅读流程仍可用（临时旧的哈希布局挂在 Content root 下），且不再读取旧 `Documents/Fushi/data` 或 `%APPDATA%` 数据
+- [x] 旧 data-root 设置、迁移器和布局锚点不再影响根解析
+- [x] 新 root API 可被调用方使用，旧 root getter 以 alias 形式保留；有测试/源码守卫
+- [x] 全仓构建与测试保持 green

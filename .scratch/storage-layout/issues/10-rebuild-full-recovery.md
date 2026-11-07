@@ -4,11 +4,11 @@
 
 **Blocked by:** 05, 07, 09
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] 只在 `downloads`/`localcomic` 中存在、书架没有的 Manga，重建后出现在 Library
-- [ ] 有 tombstone 的作品不会被重新加入
-- [ ] 源已安装时创建在线条目并标记已下载章节；源未安装时创建本地条目并报告
-- [ ] 没有 `pages.json` 的目录通过图片扫描创建本地条目
-- [ ] 报告新增/更新/缺失/跳过数量；只增改、不删记录或文件；幂等
-- [ ] 有自动化测试覆盖每种恢复分支与 tombstone
+- [x] 只在 `downloads`/`localcomic` 中存在、书架没有的 Manga，重建后出现在 Library
+- [x] 有 tombstone 的作品不会被重新加入
+- [x] 源已安装时创建在线条目并标记已下载章节；源未安装时创建本地条目并报告
+- [x] 没有 `pages.json` 的目录通过图片扫描创建本地条目
+- [x] 报告新增/更新/缺失/跳过数量；只增改、不删记录或文件；幂等
+- [x] 有自动化测试覆盖每种恢复分支与 tombstone
