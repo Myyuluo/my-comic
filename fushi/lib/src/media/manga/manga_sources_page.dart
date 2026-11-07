@@ -3,21 +3,23 @@ import 'dart:async';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi_dictionary/fushi_dictionary.dart';
 import 'package:fushi/media.dart';
 import 'package:fushi/src/media/import/quick_import_section.dart';
-import 'package:fushi/src/media/manga/manga_import_dialog.dart';
 import 'package:fushi/src/models/app_model.dart';
+import 'package:fushi_engine/media/manga/local_source/local_source_library.dart';
 
 import 'package:fushi/src/utils/components/fushi_floating_chrome.dart';
 import 'package:fushi/src/utils/components/fushi_staggered_entrance.dart';
 import 'package:fushi/src/utils/fushi_icons.dart';
 import 'package:fushi/utils.dart';
 
-/// 「浏览 › 导入」视图：漫画 Local import 的管理处。
+/// 「浏览 › 导入」视图：漫画 Local import 的入口。
 ///
-/// 快速导入与单卷 / 单文件漫画导入；来源库扫描根已随非漫画域移除。
+/// 2026-11-07 storage-layout：这里的「导入本地漫画」只扫描当前 Content root 的
+/// `localcomic` 并原地登记（ADR 0013），**不再**把文件夹 / 压缩包复制进受管
+/// `fushi_books`。旧的 `MangaImportDialog` 受管导入保留给拖入的 `.mokuro` / PDF
+/// 与其它既有入口，不再是本页的导入路径。来源库扫描根已随非漫画域移除。
 ///
 /// 页签文案本身已是标题，本页不再渲染页内大标题。扩展仓库 / 扩展目录 / 在线源
 /// 住在同一「浏览」模块的「在线源」页签（Mihon 的 Browse 形态），本页不挂在线入口。
@@ -40,17 +42,37 @@ class MangaSourcesPage extends ConsumerStatefulWidget {
 }
 
 class _MangaSourcesPageState extends ConsumerState<MangaSourcesPage> {
-  /// 单卷 / 单文件漫画导入：与旧漫画库页头按钮同一个对话框（目录 / `.mokuro` /
-  /// `.cbz` / 图片包 + OCR 向导）。落库成功后失效书架 provider 刷新漫画库。
-  Future<void> _importManga() async {
-    final FushiDatabase db = ref.read(appProvider).database;
-    final bool? imported = await showAppDialog<bool>(
-      context: context,
-      builder: (_) => MangaImportDialog(db: db),
-    );
-    if (imported == true && mounted) {
-      ref.invalidate(fushiBooksProvider(JapaneseLanguage.instance));
-      ref.invalidate(srtBooksProvider);
+  /// 手动「导入本地漫画」：扫描 `localcomic`，原地登记，不复制任何文件。
+  ///
+  /// 这是 spec 故事 26 的入口；旧的受管导入对话框不从这里进入（见类注释）。
+  Future<void> _importLocalComics() async {
+    final AppModel appModel = ref.read(appProvider);
+    try {
+      final LocalSourceImportReport report = await LocalSourceLibrary(
+        db: appModel.database,
+        root: appModel.appPaths.localComicRoot,
+      ).importFromRoot();
+      if (!mounted) return;
+      if (report.added + report.refreshed > 0) {
+        ref.invalidate(fushiBooksProvider(JapaneseLanguage.instance));
+        ref.invalidate(srtBooksProvider);
+      }
+      FushiToast.show(
+        msg: t.manga_import_batch_done(
+          imported: report.added + report.refreshed,
+          skipped: report.skippedTombstoned,
+          failed: report.failed,
+        ),
+        severity: report.failed > 0
+            ? ToastSeverity.warning
+            : ToastSeverity.success,
+      );
+    } on Object catch (error) {
+      if (!mounted) return;
+      FushiToast.show(
+        msg: t.data_storage_import_local_comics_failed(message: '$error'),
+        severity: ToastSeverity.error,
+      );
     }
   }
 
@@ -77,12 +99,12 @@ class _MangaSourcesPageState extends ConsumerState<MangaSourcesPage> {
         // 对话框内含文件 / 文件夹 / OCR 向导）。
         QuickImportSection(
           heroIcon: FushiIcons.manga,
-          formats: const <String>['CBZ', 'ZIP', 'MOKURO', 'JPG', 'PNG'],
+          formats: const <String>['CBZ', 'JPG', 'PNG'],
           actions: <QuickImportAction>[
             QuickImportAction(
               icon: FushiIcons.manga,
-              label: t.manga_import_action,
-              onTap: _importManga,
+              label: t.data_storage_import_local_comics_title,
+              onTap: _importLocalComics,
             ),
           ],
         ),

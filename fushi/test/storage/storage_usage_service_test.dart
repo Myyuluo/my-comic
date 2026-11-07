@@ -42,8 +42,8 @@ void main() {
   }
 
   StorageUsageService service() => StorageUsageService(
-        documentsRoot: () async => docs,
-        supportRoot: () async => support,
+        contentRoot: () async => docs,
+        stateRoot: () async => support,
         cacheRoots: () async => <Directory>[cache],
       );
 
@@ -69,7 +69,7 @@ void main() {
   test('类目清单全覆盖 documents 白名单：每个顶层目录归属且只归属一个类目', () {
     final List<String> assigned = <String>[
       for (final List<String> children
-          in kStorageCategoryDocumentsChildren.values)
+          in kStorageCategoryContentRootChildren.values)
         ...children,
     ];
     // 无重复归属。
@@ -78,8 +78,8 @@ void main() {
     // 存储类目——否则存储页总量会漏账）。
     expect(
       assigned.toSet(),
-      kStorageCategoryDocumentsEntries,
-      reason: '存储类目清单必须与 kStorageCategoryDocumentsEntries 全覆盖对齐',
+      kStorageCategoryContentRootEntries,
+      reason: '存储类目清单必须与 kStorageCategoryContentRootEntries 全覆盖对齐',
     );
   });
 
@@ -504,7 +504,7 @@ void main() {
     test('database 类目 = support 根整体减去 OCR 模型；ocrModels 单列', () async {
       writeFile(p.join(support.path, 'fushi.sqlite'), 1000);
       writeFile(
-        p.join(support.path, kOcrModelsSupportChild, 'manga', 'a.onnx'),
+        p.join(support.path, kOcrModelsStateChild, 'manga', 'a.onnx'),
         300,
       );
 
@@ -578,7 +578,7 @@ void main() {
       writeFile(p.join(support.path, 'fushi.sqlite'), 1000);
       writeFile(p.join(support.path, 'local_audio_1.db'), 20);
       writeFile(
-        p.join(support.path, kOcrModelsSupportChild, 'manga', 'a.onnx'),
+        p.join(support.path, kOcrModelsStateChild, 'manga', 'a.onnx'),
         300,
       );
 
@@ -824,8 +824,8 @@ void main() {
       // 双倍耗时——所以「问了几次根」正是「扫了几遍树」的忠实代理。
       int cacheRootsCalls = 0;
       final StorageUsageService svc = StorageUsageService(
-        documentsRoot: () async => docs,
-        supportRoot: () async => support,
+        contentRoot: () async => docs,
+        stateRoot: () async => support,
         cacheRoots: () async {
           cacheRootsCalls++;
           return <Directory>[cache];

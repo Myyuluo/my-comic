@@ -40,8 +40,8 @@ void main() {
 
   /// FakeAsync 区里真 isolate 永不完成：注同步执行版 runner。
   StorageUsageService service() => StorageUsageService(
-    documentsRoot: () async => docs,
-    supportRoot: () async => support,
+    contentRoot: () async => docs,
+    stateRoot: () async => support,
     isolateRunner: <R>(R Function() computation) async => computation(),
   );
 
@@ -549,7 +549,7 @@ void main() {
 
   testWidgets('可选模块区已移除：OCR 模型只剩占用行，没有下载/删除按钮', (WidgetTester tester) async {
     writeFile(
-      p.join(support.path, kOcrModelsSupportChild, 'manga', 'a.onnx'),
+      p.join(support.path, kOcrModelsStateChild, 'manga', 'a.onnx'),
       300,
     );
 

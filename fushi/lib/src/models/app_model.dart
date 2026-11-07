@@ -1816,6 +1816,12 @@ class AppModel with ChangeNotifier {
   AppPaths get appPaths => _appPaths;
   late AppPaths _appPaths;
 
+  /// [appPaths] 是否已经解析。设置页副标题在极端早期 / 测试壳里可据此降级，
+  /// 而不是用 `on Error` 吞掉 `late` 未初始化的异常（那会连真正的编程错误一起
+  /// 掩盖）。
+  AppPaths? get appPathsOrNull => _appPathsReady ? _appPaths : null;
+  bool _appPathsReady = false;
+
   /// These directories are prepared at startup in order to reduce redundancy
   /// in actual runtime.
   /// Directory where data that may be dumped is stored.
@@ -3009,6 +3015,7 @@ class AppModel with ChangeNotifier {
     // Ticket 01：根解析只剩 Content root / Program state root 两个新根。
     // 旧 data_root 偏好、安装向导 bootstrap 与布局锚点都不再参与解析。
     _appPaths = await AppPaths.resolve();
+    _appPathsReady = true;
     // TODO-1236：把上游 `fushi_audio` 的有声书持久根解析接到 `AppPaths`（它无法 import
     // AppPaths）。有声书属于用户可见内容，跟随 Content root。
     AudiobookStorage.documentsRootResolver = AppPaths.contentRootDirectory;

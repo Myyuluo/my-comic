@@ -588,13 +588,10 @@ class RebuildDownloadIndexService {
       } else {
         // 只有「下载索引认为已下载」的章才算 Missing；从未下载的章不是缺失。
         if (indexedChapterKeys.contains(chapter.key)) chaptersMissing++;
-        // 映射指向的目录已属于别的章（ID 证明）：清掉这条错误的名称映射，
-        // 否则会把别的章的内容误判成这一章已下载。只清映射，不删记录/文件。
-        if (mappedName != null &&
-            idClaimedFolderNames.contains(mappedName.toLowerCase()) &&
-            !byId.containsKey(chapter.key)) {
-          await database.deleteMangaChapterDir(row.bookKey, chapter.key);
-        }
+        // 映射指向的目录已被 pages.json 证明属于别的章：原样保留这条映射，
+        // 不删除。上面的 `claimedByOther` 已保证本轮的匹配不会用它，所以留着
+        // 只会让这一章继续显示 Missing；下次重建若目录/ID 变化还可能自愈。
+        // Rebuild 的契约是只增改，绝不删记录（spec 规则 4）。
       }
     }
 
@@ -687,7 +684,7 @@ class RebuildDownloadIndexService {
     final LocalSourceMetadata updatedMetadata = LocalSourceMetadata(
       relativePath: found.relativePath,
     );
-    final String? coverPath = _localCoverPath(found);
+    final String? coverPath = localSourceCoverRelativePath(found);
     final bool moved = !_samePath(row.extractDir, found.directoryPath);
     final bool changed =
         moved ||
@@ -740,9 +737,8 @@ class RebuildDownloadIndexService {
     }
 
     // 2) 库里的 extractDir 仍是**当前**根内的有效目录：沿用应用自己写下的映射。
-    final String downloadsRootPath = p.canonicalize(downloadsRoot.path);
     final String recordedPath = p.normalize(row.extractDir);
-    if (p.isWithin(downloadsRootPath, p.canonicalize(recordedPath))) {
+    if (isLocalSourcePathWithinRoot(recordedPath, downloadsRoot)) {
       for (final _DownloadMangaFolder folder in scan.folders) {
         if (_samePath(folder.directory.path, recordedPath)) {
           return _MangaFolderMatch(folder);
@@ -766,11 +762,8 @@ class RebuildDownloadIndexService {
   }
 
   /// 记录路径是否在当前 Download library 根内（源未安装的降级条目）。
-  bool _isWithinDownloadsRoot(String path) {
-    final String root = p.canonicalize(downloadsRoot.path);
-    final String candidate = p.canonicalize(p.normalize(path));
-    return p.equals(root, candidate) || p.isWithin(root, candidate);
-  }
+  bool _isWithinDownloadsRoot(String path) =>
+      isLocalSourcePathWithinRoot(path, downloadsRoot);
 
   _LocalMangaMatch _matchLocalManga(
     EpubBookRow row,
@@ -1379,16 +1372,3 @@ String _normalizeRelative(String value) =>
 
 /// Local source 的文件夹名比较：只做大小写折叠（用户目录名按原样保留）。
 String _localFolderName(String value) => value.trim().toLowerCase();
-
-String? _localCoverPath(LocalSourceManga manga) {
-  if (manga.coverRelativePath != null) return manga.coverRelativePath;
-  for (final LocalSourceChapter chapter in manga.chapters) {
-    if (chapter.isArchive) continue;
-    if (chapter.pages.isEmpty) continue;
-    final String page = chapter.pages.first.relativePath;
-    return chapter.relativePath.isEmpty
-        ? page
-        : '${chapter.relativePath}/$page';
-  }
-  return null;
-}

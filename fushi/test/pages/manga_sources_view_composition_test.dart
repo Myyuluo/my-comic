@@ -38,9 +38,23 @@ void main() {
       online = _read(<String>['manga_online_sources_view.dart']);
     });
 
-    test('本地导入这一节仍挂漫画快速导入（共享扫描根已随非漫画域移除）', () {
+    test('本地导入这一节扫描 localcomic，不再把文件复制进受管书库', () {
       expect(sources, contains('QuickImportSection('));
-      expect(sources, contains("'MOKURO'"));
+      expect(
+        sources,
+        contains('t.data_storage_import_local_comics_title'),
+        reason: '入口文案必须是「导入本地漫画」',
+      );
+      expect(
+        sources,
+        contains('LocalSourceLibrary('),
+        reason: '点击入口只扫描 localcomic 原地登记（ADR 0013）',
+      );
+      expect(
+        sources,
+        isNot(contains('MangaImportDialog(')),
+        reason: '浏览 › 导入不得再走复制进 fushi_books 的旧受管导入对话框',
+      );
       expect(sources, isNot(contains('MediaSourcesView(')));
     });
 

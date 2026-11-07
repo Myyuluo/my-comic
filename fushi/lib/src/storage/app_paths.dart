@@ -6,6 +6,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:fushi/src/startup/test_environment.dart';
+import 'package:fushi/src/storage/content_root_validation.dart';
 import 'package:fushi/src/utils/misc/platform_utils.dart';
 
 /// 应用存储根的**唯一入口**。
@@ -185,9 +186,28 @@ class AppPaths {
       await _clearConfiguredContentRootPreference();
     }
 
+    // Program state root 不依赖 Content root，先解析出来——启动期 Content root
+    // 校验需要它判断「不得位于 Program state root 内」。
+    final ({Directory root, bool usedFallback}) programState =
+        await _resolveProgramStateRoot();
+
     if (configured != null) {
       final Directory configuredDir = Directory(configured);
+      // 先判可达：配置的根掉线/不存在时走「数据位置未响应」逃生屏，绝不在
+      // 校验阶段把它新建出来，更不能静默退回默认根建空库。
       if (!await _probeDataRootExists(configuredDir)) {
+        throw DataRootUnavailableException(configuredPath: configured);
+      }
+      // 启动期与切换共用同一套校验（绝对、可写、不碰安装目录与 Program state
+      // root）。只校验切换会把「拷来的/手改的 content_root」带进一个不该用的
+      // 位置；这里拒绝后交给同一个逃生屏，让用户显式选择默认位置或修正偏好。
+      final ContentRootValidationFailure? invalid =
+          await ContentRootTargetValidator(
+            programStateRoot: programState.root,
+            executablePath:
+                debugExecutablePathOverride ?? Platform.resolvedExecutable,
+          ).validate(configured);
+      if (invalid != null) {
         throw DataRootUnavailableException(configuredPath: configured);
       }
       content = configuredDir;
@@ -195,8 +215,6 @@ class AppPaths {
       content = currentDefault;
     }
 
-    final ({Directory root, bool usedFallback}) programState =
-        await _resolveProgramStateRoot();
     final Directory state = Directory(
       p.join(programState.root.path, stateDirName),
     );

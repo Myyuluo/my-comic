@@ -49,8 +49,8 @@ void main() {
   }
 
   StorageUsageService service() => StorageUsageService(
-    documentsRoot: () async => docs,
-    supportRoot: () async => support,
+    contentRoot: () async => docs,
+    stateRoot: () async => support,
     cacheRoots: () async => const <Directory>[],
     isolateRunner: <R>(R Function() computation) async => computation(),
   );

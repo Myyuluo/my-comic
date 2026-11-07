@@ -14,6 +14,8 @@ import 'package:fushi/src/media/manga/interconnect/interconnect_manga_source.dar
 import 'package:fushi_engine/sync/fushi_library_host_service.dart';
 import 'package:fushi/src/media/manga/mihon/mihon_models.dart';
 import 'package:fushi_engine/epub/epub_storage.dart';
+import 'package:fushi_engine/media/manga/download_library_storage.dart';
+import 'package:fushi_engine/media/manga/mokuro_payload.dart';
 import 'package:path/path.dart' as p;
 import 'package:transparent_image/transparent_image.dart';
 
@@ -158,6 +160,110 @@ void main() {
     );
     expect(p.basename(second.extractDir), 'Fixture series');
     expect(Directory(second.extractDir).existsSync(), isTrue);
+  });
+
+  /// 在漫画目录里写一章带稳定身份的 `pages.json`：模拟「作品已移出书架但
+  /// 下载文件仍在磁盘上」。目录归属由 pages.json 证明，不依赖 epub_books 行。
+  Future<void> writeSourceManifest(
+    String mangaDir, {
+    required String sourceId,
+    required String seriesKey,
+  }) async {
+    final Directory chapterDir = downloadChapterDirectory(
+      mangaDir,
+      'Chapter 1',
+    );
+    await chapterDir.create(recursive: true);
+    await writePagesManifestAtomically(
+      chapterDir,
+      MangaPagesManifest(
+        sourceRuntime: 'mihon',
+        sourceId: sourceId,
+        sourceName: 'Fixture',
+        extensionPackage: 'org.example.fixture',
+        mangaKey: seriesKey,
+        mangaTitle: 'Fixture series',
+        chapterKey: '/chapter/1',
+        chapterName: 'Chapter 1',
+        payload: const MokuroPayload(
+          images: <MokuroImage>[
+            MokuroImage(
+              url: '001.jpg',
+              size: MokuroSize(100, 150),
+              blocks: <MokuroBlock>[],
+            ),
+          ],
+        ),
+        downloadedAt: DateTime.utc(2026, 11, 7),
+      ),
+    );
+  }
+
+  test('源已移出书架但 downloads/<source> 仍在：同名新源仍加短源 ID 后缀', () async {
+    final EpubBookRow first = await service.add(
+      entryVariant(
+        sourceId: '1001',
+        seriesKey: '/series/first',
+        title: 'Fixture series',
+      ),
+    );
+    await writeSourceManifest(
+      first.extractDir,
+      sourceId: '1001',
+      seriesKey: '/series/first',
+    );
+    // 「移出书架」：只删记录，文件保留。
+    await database.deleteEpubBook(first.bookKey);
+    expect(await database.getAllEpubBooks(), isEmpty);
+
+    final EpubBookRow second = await service.add(
+      entryVariant(
+        sourceId: '2002',
+        seriesKey: '/series/second',
+        title: 'Fixture series',
+      ),
+    );
+
+    expect(
+      p.dirname(second.extractDir),
+      matches(RegExp(r'[/\\]Fixture \[[0-9a-f]{8}\]$')),
+      reason: '磁盘上的 Fixture 目录已由 pages.json 证明属于 Source 1001',
+    );
+    expect(
+      Directory(first.extractDir).existsSync(),
+      isTrue,
+      reason: '新源不得占用/覆盖旧源的目录',
+    );
+  });
+
+  test('同一 Source 移出书架后再加新作品：仍复用它在磁盘上的目录', () async {
+    final EpubBookRow first = await service.add(
+      entryVariant(
+        sourceId: '1001',
+        seriesKey: '/series/first',
+        title: 'Fixture series',
+      ),
+    );
+    await writeSourceManifest(
+      first.extractDir,
+      sourceId: '1001',
+      seriesKey: '/series/first',
+    );
+    await database.deleteEpubBook(first.bookKey);
+
+    final EpubBookRow again = await service.add(
+      entryVariant(
+        sourceId: '1001',
+        seriesKey: '/series/another',
+        title: 'Another series',
+      ),
+    );
+
+    expect(
+      p.dirname(again.extractDir),
+      p.join(root.path, 'downloads', 'Fixture'),
+      reason: '同一 Source 的 pages.json 身份命中，应继续用同一个源目录',
+    );
   });
 
   test('不同 Source 的同名 Manga 不互相覆盖', () async {

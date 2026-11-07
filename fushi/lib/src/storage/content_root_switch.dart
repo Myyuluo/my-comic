@@ -4,11 +4,13 @@ import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:fushi/src/storage/app_paths.dart';
+import 'package:fushi/src/storage/content_root_validation.dart';
 
 /// Content root switch 的拒绝原因（storage-layout 票 08）。
 ///
 /// spec 的校验口径：绝对路径、可写、不是安装目录 / 不在安装目录内 / 不是安装目录的
-/// 祖先、不在 Program state root 内。
+/// 祖先、不在 Program state root 内。校验实现见 [ContentRootTargetValidator]，
+/// 与启动期校验共用同一份规则。
 enum ContentRootSwitchFailure {
   notAbsolute,
   installDirectory,
@@ -46,14 +48,10 @@ class ContentRootSwitchResult {
 /// Rebuild download index。
 class ContentRootSwitch {
   const ContentRootSwitch({
-    required this.currentContentRoot,
     required this.programStateRoot,
     required this.defaultContentRoot,
     required this.executablePath,
   });
-
-  /// 当前生效的 Content root（用于同位置幂等切换）。
-  final Directory currentContentRoot;
 
   /// Program state root：目标不得位于其中。
   final Directory programStateRoot;
@@ -66,37 +64,15 @@ class ContentRootSwitch {
   final String executablePath;
 
   Future<ContentRootSwitchResult> switchTo(String targetPath) async {
-    final String raw = targetPath.trim();
-    if (raw.isEmpty || !p.isAbsolute(raw)) {
-      return const ContentRootSwitchResult.failure(
-        ContentRootSwitchFailure.notAbsolute,
-      );
+    final ContentRootValidationFailure? invalid =
+        await ContentRootTargetValidator(
+          programStateRoot: programStateRoot,
+          executablePath: executablePath,
+        ).validate(targetPath);
+    if (invalid != null) {
+      return ContentRootSwitchResult.failure(_switchFailureFor(invalid));
     }
-    final String target = p.canonicalize(raw);
-
-    if (executablePath.trim().isNotEmpty) {
-      final String installDirectory = p.canonicalize(p.dirname(executablePath));
-      // 目标 = 安装目录、在安装目录内部、或是安装目录的祖先都不行。
-      if (_sameOrWithin(installDirectory, target) ||
-          _sameOrWithin(target, installDirectory)) {
-        return const ContentRootSwitchResult.failure(
-          ContentRootSwitchFailure.installDirectory,
-        );
-      }
-    }
-
-    final String programState = p.canonicalize(programStateRoot.path);
-    if (_sameOrWithin(programState, target)) {
-      return const ContentRootSwitchResult.failure(
-        ContentRootSwitchFailure.insideProgramStateRoot,
-      );
-    }
-
-    if (!await _probeWritable(target)) {
-      return const ContentRootSwitchResult.failure(
-        ContentRootSwitchFailure.notWritable,
-      );
-    }
+    final String target = p.canonicalize(targetPath.trim());
 
     try {
       for (final String name in <String>[
@@ -138,27 +114,16 @@ class ContentRootSwitch {
     return ContentRootSwitchResult.success(Directory(target));
   }
 
-  /// [candidate] 是否等于 [root] 或位于 [root] 之下（大小写按平台语义）。
-  static bool _sameOrWithin(String root, String candidate) {
-    final String canonicalRoot = p.canonicalize(root);
-    final String canonicalCandidate = p.canonicalize(candidate);
-    return p.equals(canonicalRoot, canonicalCandidate) ||
-        p.isWithin(canonicalRoot, canonicalCandidate);
-  }
-
-  /// 真实建目录并写一个探针文件确认可写；探针用完即删。
-  static Future<bool> _probeWritable(String target) async {
-    try {
-      final Directory dir = Directory(target);
-      await dir.create(recursive: true);
-      final File probe = File(
-        p.join(target, '.my_comic_content_root_probe_$pid'),
-      );
-      await probe.writeAsString('', flush: true);
-      await probe.delete();
-      return true;
-    } on FileSystemException {
-      return false;
-    }
-  }
+  static ContentRootSwitchFailure _switchFailureFor(
+    ContentRootValidationFailure failure,
+  ) => switch (failure) {
+    ContentRootValidationFailure.notAbsolute =>
+      ContentRootSwitchFailure.notAbsolute,
+    ContentRootValidationFailure.installDirectory =>
+      ContentRootSwitchFailure.installDirectory,
+    ContentRootValidationFailure.insideProgramStateRoot =>
+      ContentRootSwitchFailure.insideProgramStateRoot,
+    ContentRootValidationFailure.notWritable =>
+      ContentRootSwitchFailure.notWritable,
+  };
 }

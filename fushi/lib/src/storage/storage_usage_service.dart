@@ -25,7 +25,7 @@ import 'package:fushi/src/sync/backup_service.dart' show isBackupArchiveName;
 /// （见 `video_storage.dart` 头注释的共享资产误删坑）。每条明细带
 /// [StorageEntryKind] 说明它接哪条原语（或只读）。
 ///
-/// 类目清单是 [kStorageCategoryDocumentsChildren] 的**全覆盖分组**：Content root
+/// 类目清单是 [kStorageCategoryContentRootChildren] 的**全覆盖分组**：Content root
 /// 下白名单顶层目录每一个都归属且只归属一个类目（守卫见
 /// `storage_usage_service_test.dart`），Program state root 整体归「数据库与内部
 /// 数据」，其中 OCR 模型子目录单独拆出（它是唯一可删可恢复的 state 子项）。
@@ -357,13 +357,13 @@ List<String> _dedupeNestedPaths(final List<String> paths) {
 
 /// 把一条 [book] 拆成「计入体积的路径」与「外部引用路径」两组。
 ///
-/// [categoryRoots] 是书籍类目的 documents 子根（`fushi_books` / 旧名 /
+/// [categoryRoots] 是书籍类目的 Content root 子根（`fushi_books` / 旧名 /
 /// `audiobooks`）。音频路径只有落在这些根之内才计入——落在外面的是桌面
 /// 「引用原文件」导入，本来就不占应用空间、也删不掉，计进去就是假账（而类目
 /// 总量同样扫不到它，明细之和就会大于类目总量）。
 /// [StorageBookRef.extractDir] 无条件计入（它是 app 自己解压出来的正文）。
 StorageBookPaths resolveBookStoragePaths({
-  required final Directory documentsRoot,
+  required final Directory contentRoot,
   required final StorageBookRef book,
   required final List<String> categoryRoots,
 }) {
@@ -371,7 +371,7 @@ StorageBookPaths resolveBookStoragePaths({
   final List<String> external = <String>[];
   for (final String candidate in <String>[
     for (final String key in book.persistKeys)
-      if (key.isNotEmpty) audiobookPersistDirPath(documentsRoot, key),
+      if (key.isNotEmpty) audiobookPersistDirPath(contentRoot, key),
     for (final String path in book.audioPaths)
       if (path.isNotEmpty) path,
   ]) {
@@ -442,7 +442,7 @@ class BundledComponentUsage {
 
 /// 每类目 → Content root 下归属的顶层目录名。完整覆盖「其他未归类」的差集
 /// （守卫测试咬住）。
-const Map<StorageCategoryId, List<String>> kStorageCategoryDocumentsChildren =
+const Map<StorageCategoryId, List<String>> kStorageCategoryContentRootChildren =
     <StorageCategoryId, List<String>>{
       StorageCategoryId.books: <String>[
         // Ticket 12：Content root 的 Download library 与 Local source 也属于
@@ -499,18 +499,18 @@ const Map<StorageCategoryId, List<String>> kStorageCategoryDocumentsChildren =
       StorageCategoryId.ocrModels: <String>[],
     };
 
-/// [kStorageCategoryDocumentsChildren] 的全部顶层目录名并集。
+/// [kStorageCategoryContentRootChildren] 的全部顶层目录名并集。
 ///
 /// 「其他未归类」用 Content root 的直接子项减去它：类目表漏了哪个目录，该目录
 /// 就会作为未归类项自己冒出来，而不是静默少算。
-final Set<String> kStorageCategoryDocumentsEntries = <String>{
-  for (final List<String> children in kStorageCategoryDocumentsChildren.values)
+final Set<String> kStorageCategoryContentRootEntries = <String>{
+  for (final List<String> children in kStorageCategoryContentRootChildren.values)
     ...children,
 };
 
 /// `<state>/ocr_models`（[StorageCategoryId.ocrModels] 的根；
 /// 各本机模型落在它下面的兄弟目录，见 `MangaOcrLocalModel.modelsDirectory`）。
-const String kOcrModelsSupportChild = 'ocr_models';
+const String kOcrModelsStateChild = 'ocr_models';
 
 /// 同步递归求目录字节数（isolate 入口；每个 entry 单独容错——扫描中途被删/
 /// 无权限的文件跳过不炸整树）。
@@ -590,10 +590,10 @@ List<Map<String, Object>> _childEntriesSync(final List<String> roots) {
 /// 该口径已固化进持久目录名，不得漂移——上游金标在 fushi_core
 /// `stable_hash_test.dart`）。[persistKey] 的取值见 [StorageBookRef.persistKeys]。
 String audiobookPersistDirPath(
-  final Directory documentsRoot,
+  final Directory contentRoot,
   final String persistKey,
 ) => p.join(
-  documentsRoot.path,
+  contentRoot.path,
   'audiobooks',
   fnv1a32Hex(utf8.encode(persistKey)),
 );
@@ -604,17 +604,17 @@ typedef StorageIsolateRunner = Future<R> Function<R>(R Function() computation);
 
 class StorageUsageService {
   StorageUsageService({
-    Future<Directory> Function()? documentsRoot,
-    Future<Directory> Function()? supportRoot,
+    Future<Directory> Function()? contentRoot,
+    Future<Directory> Function()? stateRoot,
     Future<List<Directory>> Function()? cacheRoots,
     StorageIsolateRunner? isolateRunner,
-  }) : _documentsRoot = documentsRoot ?? AppPaths.contentRootDirectory,
-       _supportRoot = supportRoot ?? AppPaths.stateRootDirectory,
+  }) : _contentRoot = contentRoot ?? AppPaths.contentRootDirectory,
+       _stateRoot = stateRoot ?? AppPaths.stateRootDirectory,
        _cacheRoots = cacheRoots ?? _defaultCacheRoots,
        _run = isolateRunner ?? Isolate.run;
 
-  final Future<Directory> Function() _documentsRoot;
-  final Future<Directory> Function() _supportRoot;
+  final Future<Directory> Function() _contentRoot;
+  final Future<Directory> Function() _stateRoot;
 
   /// BUG-1905：此前完全没被扫过的第三类根（缓存/临时）。见 [_defaultCacheRoots]。
   final Future<List<Directory>> Function() _cacheRoots;
@@ -638,8 +638,8 @@ class StorageUsageService {
     /// 视频库行（只有文件落在「视频下载」类目根之内的才成为可删明细）。
     final List<StorageVideoRef> videos = const <StorageVideoRef>[],
   }) async* {
-    final Directory docs = await _documentsRoot();
-    final Directory support = await _supportRoot();
+    final Directory docs = await _contentRoot();
+    final Directory support = await _stateRoot();
     // 缓存/临时根的一次性列举结果，cache 与 backups 两个类目共用（见下方分流）。
     List<Map<String, Object>>? cacheRootEntries;
 
@@ -657,7 +657,7 @@ class StorageUsageService {
           yield await _scanDatabase(support, docs);
         case StorageCategoryId.ocrModels:
           yield await _scanGeneric(id, <String>[
-            p.join(support.path, kOcrModelsSupportChild),
+            p.join(support.path, kOcrModelsStateChild),
           ]);
         case StorageCategoryId.cache || StorageCategoryId.backups:
           // 两个类目住在**同一棵**缓存/临时树上，扫一次再按谓词分流。各扫各的就是
@@ -673,7 +673,7 @@ class StorageUsageService {
           yield await _scanVideoDownloads(docs, videos);
         default:
           final List<String> children =
-              kStorageCategoryDocumentsChildren[id] ?? const <String>[];
+              kStorageCategoryContentRootChildren[id] ?? const <String>[];
           yield await _scanGeneric(id, <String>[
             for (final String child in children) p.join(docs.path, child),
           ]);
@@ -689,7 +689,7 @@ class StorageUsageService {
     // isolate 调用，避免几百本书起几百个 isolate。
     final List<String> categoryRoots = <String>[
       for (final String child
-          in kStorageCategoryDocumentsChildren[StorageCategoryId.books]!)
+          in kStorageCategoryContentRootChildren[StorageCategoryId.books]!)
         p.join(docs.path, child),
     ];
     // BUG-1893：明细口径 = DB 里记的真实音频路径（`audioRoot`/`audioPathsJson`）
@@ -698,7 +698,7 @@ class StorageUsageService {
     final List<StorageBookPaths> perBook = <StorageBookPaths>[
       for (final StorageBookRef b in books)
         resolveBookStoragePaths(
-          documentsRoot: docs,
+          contentRoot: docs,
           book: b,
           categoryRoots: categoryRoots,
         ),
@@ -762,7 +762,7 @@ class StorageUsageService {
   ) async {
     final List<String> categoryRoots = <String>[
       for (final String child
-          in kStorageCategoryDocumentsChildren[StorageCategoryId.dictionaries]!)
+          in kStorageCategoryContentRootChildren[StorageCategoryId.dictionaries]!)
         p.join(docs.path, child),
     ];
     final String resourcesRoot = p.join(docs.path, 'dictionaryResources');
@@ -826,7 +826,7 @@ class StorageUsageService {
   ) async {
     final List<String> categoryRoots = <String>[
       for (final String child
-          in kStorageCategoryDocumentsChildren[StorageCategoryId
+          in kStorageCategoryContentRootChildren[StorageCategoryId
               .videoDownloads]!)
         p.join(docs.path, child),
     ];
@@ -941,7 +941,7 @@ class StorageUsageService {
     final StorageCategoryUsage localState =
         await _scanGeneric(StorageCategoryId.database, <String>[
           for (final String child
-              in kStorageCategoryDocumentsChildren[StorageCategoryId.database]!)
+              in kStorageCategoryContentRootChildren[StorageCategoryId.database]!)
             p.join(docs.path, child),
         ]);
     final List<StorageEntryUsage> entries =
@@ -950,7 +950,7 @@ class StorageUsageService {
           ..._childEntries(
             raw,
             excludePaths: <String>{
-              p.join(support.path, kOcrModelsSupportChild),
+              p.join(support.path, kOcrModelsStateChild),
               ...snapshotPaths,
             },
           ),
@@ -1127,7 +1127,7 @@ class StorageUsageService {
     final List<Map<String, Object>> raw = await _run(
       () => _childEntriesSync(<String>[docs.path]),
     );
-    final Set<String> known = kStorageCategoryDocumentsEntries;
+    final Set<String> known = kStorageCategoryContentRootEntries;
     final List<StorageEntryUsage> entries =
         <StorageEntryUsage>[
           for (final StorageEntryUsage e in _childEntries(raw))
