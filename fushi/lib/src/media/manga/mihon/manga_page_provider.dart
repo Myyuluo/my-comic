@@ -9,6 +9,7 @@ import 'package:path/path.dart' as p;
 import 'package:fushi/src/media/manga/mihon/mihon_models.dart';
 import 'package:fushi_engine/media/manga/import/image_size_probe.dart'
     show probeOrientedImageSize;
+import 'package:fushi_engine/media/manga/local_source/local_source_archive.dart';
 
 abstract interface class MangaPageProvider {
   Future<MangaReaderSession> open();
@@ -63,9 +64,9 @@ class LocalMangaPageProvider implements MangaPageProvider {
 
   @override
   Future<MangaReaderSession> open() async => LocalMangaReaderSession(
-        imagesRoot: imagesRoot,
-        relativePaths: List<String>.unmodifiable(relativePaths),
-      );
+    imagesRoot: imagesRoot,
+    relativePaths: List<String>.unmodifiable(relativePaths),
+  );
 }
 
 class LocalMangaReaderSession implements MangaReaderSession {
@@ -85,8 +86,9 @@ class LocalMangaReaderSession implements MangaReaderSession {
   Future<MangaPageBytes> page(int index) async {
     final File file = await _validatedFile(index);
     final Uint8List bytes = await file.readAsBytes();
-    final ({int width, int height})? dimensions =
-        await mangaImageDimensions(bytes);
+    final ({int width, int height})? dimensions = await mangaImageDimensions(
+      bytes,
+    );
     return MangaPageBytes(
       bytes: bytes,
       contentType: mangaImageContentType(bytes),
@@ -144,6 +146,202 @@ class LocalMangaReaderSession implements MangaReaderSession {
   }
 }
 
+/// Local source CBZ 章节的页缓存根名（app cache root 下）。
+const String kLocalSourceArchiveCacheDirName = 'local_source_archive_cache';
+
+/// Local source CBZ 章节的页会话：按需把正在读的页从压缩包解到 app cache，
+/// [close] 时删掉整个会话目录。`localcomic` 里的原包始终只读、不复制。
+class LocalSourceArchivePageProvider implements MangaPageProvider {
+  const LocalSourceArchivePageProvider({
+    required this.archivePath,
+    required this.cacheRoot,
+    required this.relativePaths,
+  });
+
+  /// CBZ 绝对路径。
+  final String archivePath;
+
+  /// 会话页缓存根（`<cache>/local_source_archive_cache`）。
+  final Directory cacheRoot;
+
+  /// 页在包内的条目名（顺序即页序）。
+  final List<String> relativePaths;
+
+  @override
+  Future<MangaReaderSession> open() => LocalSourceArchiveReaderSession.open(
+    archivePath: archivePath,
+    cacheRoot: cacheRoot,
+    relativePaths: relativePaths,
+  );
+}
+
+class LocalSourceArchiveReaderSession implements MangaReaderSession {
+  LocalSourceArchiveReaderSession._({
+    required this.directory,
+    required LocalSourceArchive archive,
+    required List<String> relativePaths,
+  }) : _archive = archive,
+       _relativePaths = List<String>.unmodifiable(relativePaths);
+
+  /// 开一个会话：页缓存目录 = `<cacheRoot>/session-<seq>`。
+  ///
+  /// 打开前清掉 [cacheRoot] 下不属于活会话的残目录（上次崩溃 / 被杀的残留）。
+  static Future<LocalSourceArchiveReaderSession> open({
+    required String archivePath,
+    required Directory cacheRoot,
+    required List<String> relativePaths,
+  }) async {
+    final Directory directory = Directory(
+      p.join(cacheRoot.path, 'session-${_sessionSequence++}'),
+    );
+    _activeDirectories.add(p.canonicalize(directory.path));
+    try {
+      await pruneStaleLocalSourceArchiveCaches(cacheRoot);
+      await directory.create(recursive: true);
+      return LocalSourceArchiveReaderSession._(
+        directory: directory,
+        archive: LocalSourceArchive.open(archivePath),
+        relativePaths: relativePaths,
+      );
+    } on Object {
+      _activeDirectories.remove(p.canonicalize(directory.path));
+      try {
+        if (await directory.exists()) await directory.delete(recursive: true);
+      } on Object {
+        // 缓存清理 best effort。
+      }
+      rethrow;
+    }
+  }
+
+  /// 删掉 [cacheRoot] 下所有不属于活会话的条目（残目录 / 散落文件）。
+  static Future<void> pruneStaleLocalSourceArchiveCaches(
+    Directory cacheRoot,
+  ) async {
+    if (!await cacheRoot.exists()) return;
+    await for (final FileSystemEntity entity in cacheRoot.list()) {
+      if (entity is Directory &&
+          _activeDirectories.contains(p.canonicalize(entity.path))) {
+        continue;
+      }
+      try {
+        await entity.delete(recursive: true);
+      } on Object {
+        // 缓存清理 best effort：个别文件被占用不影响阅读。
+      }
+    }
+  }
+
+  static final Set<String> _activeDirectories = <String>{};
+  static int _sessionSequence = 0;
+
+  /// 本会话的页缓存目录。
+  final Directory directory;
+
+  final LocalSourceArchive _archive;
+  final List<String> _relativePaths;
+  final Map<int, File> _extracted = <int, File>{};
+  final Map<int, Future<File>> _pending = <int, Future<File>>{};
+  bool _closed = false;
+
+  bool get isClosed => _closed;
+
+  @override
+  int get pageCount => _relativePaths.length;
+
+  @override
+  Future<MangaPageBytes> page(int index) async {
+    final File file = await _file(index);
+    final Uint8List bytes = await file.readAsBytes();
+    final ({int width, int height})? dimensions = await mangaImageDimensions(
+      bytes,
+    );
+    return MangaPageBytes(
+      bytes: bytes,
+      contentType: mangaImageContentType(bytes),
+      width: dimensions?.width,
+      height: dimensions?.height,
+    );
+  }
+
+  @override
+  Future<File?> localFile(int index) => _file(index);
+
+  /// 稳定身份供 OCR / 卡图缓存：包路径 + 条目名，跨会话一致。
+  @override
+  String cacheIdentity(int index) {
+    _validate(index);
+    return 'local-cbz\u001f'
+        '${p.canonicalize(_archive.path).toLowerCase()}\u001f'
+        '${_relativePaths[index]}';
+  }
+
+  Future<File> _file(int index) {
+    _validate(index);
+    final File? cached = _extracted[index];
+    if (cached != null) return Future<File>.value(cached);
+    final Future<File>? pending = _pending[index];
+    if (pending != null) return pending;
+    late final Future<File> tracked;
+    tracked = _extract(index)
+        .then((File file) {
+          _extracted[index] = file;
+          return file;
+        })
+        .whenComplete(() {
+          if (identical(_pending[index], tracked)) _pending.remove(index);
+        });
+    _pending[index] = tracked;
+    return tracked;
+  }
+
+  Future<File> _extract(int index) async {
+    final Uint8List? bytes = _archive.readEntry(_relativePaths[index]);
+    if (bytes == null) {
+      throw MihonRuntimeException(
+        'PAGE_MISSING',
+        'Local source archive page is missing: ${_relativePaths[index]}',
+      );
+    }
+    String extension = p.extension(_relativePaths[index]).toLowerCase();
+    if (extension.isEmpty) extension = '.jpg';
+    final File file = File(
+      p.join(
+        directory.path,
+        'page_${index.toString().padLeft(6, '0')}$extension',
+      ),
+    );
+    await file.writeAsBytes(bytes, flush: true);
+    return file;
+  }
+
+  void _validate(int index) {
+    if (_closed) {
+      throw const MihonRuntimeException(
+        'SESSION_CLOSED',
+        'The local source archive reader session is closed',
+      );
+    }
+    if (index < 0 || index >= _relativePaths.length) {
+      throw RangeError.index(index, _relativePaths, 'index');
+    }
+  }
+
+  @override
+  Future<void> close() async {
+    if (_closed) return;
+    _closed = true;
+    _archive.close();
+    _activeDirectories.remove(p.canonicalize(directory.path));
+    try {
+      if (await directory.exists()) await directory.delete(recursive: true);
+    } on Object {
+      // Windows 上被杀软 / WebView 占用时删不掉：缓存目录可丢弃，下次 open
+      // 会 prune 掉。
+    }
+  }
+}
+
 /// 页图（按 EXIF 方向摆正后的）宽高。
 ///
 /// BUG-3041：阅读器每个页图请求（WebView 拦截 `/img/`、面板检测、在线直读首页）
@@ -153,9 +351,7 @@ class LocalMangaReaderSession implements MangaReaderSession {
 /// 宽高只需文件头：先走与导入同一口径的 [probeOrientedImageSize]（JPEG 读到
 /// SOF + EXIF 方向、PNG 读 IHDR、WebP 读 VP8 头，零像素解码），认不出的格式
 /// （GIF / 损坏头）才回退后台 isolate 整张解码，结果与从前一致。
-Future<({int width, int height})?> mangaImageDimensions(
-  Uint8List bytes,
-) async {
+Future<({int width, int height})?> mangaImageDimensions(Uint8List bytes) async {
   if (bytes.isEmpty) return null;
   final ({int width, int height})? probed = probeOrientedImageSize(bytes);
   if (probed != null) return probed;

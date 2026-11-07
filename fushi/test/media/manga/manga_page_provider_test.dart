@@ -1,10 +1,12 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:archive/archive_io.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi/src/media/manga/mihon/manga_page_provider.dart';
 import 'package:fushi/src/media/manga/mihon/mihon_models.dart';
 import 'package:image/image.dart' as img;
+import 'package:path/path.dart' as p;
 
 void main() {
   test('local reader session serves managed pages and blocks traversal',
@@ -50,6 +52,99 @@ void main() {
           (MihonRuntimeException error) => error.code,
           'code',
           'SESSION_CLOSED',
+        ),
+      ),
+    );
+  });
+
+  test('local source archive session extracts pages on demand and cleans up',
+      () async {
+    final Directory root = await Directory.systemTemp.createTemp(
+      'fushi-local-source-cbz-',
+    );
+    addTearDown(() async {
+      if (await root.exists()) await root.delete(recursive: true);
+    });
+    final Uint8List first = Uint8List.fromList(
+      img.encodePng(img.Image(width: 100, height: 150)),
+    );
+    final Uint8List second = Uint8List.fromList(
+      img.encodePng(img.Image(width: 200, height: 300)),
+    );
+    final Archive archive = Archive()
+      ..addFile(ArchiveFile('002.png', second.length, second))
+      ..addFile(ArchiveFile('001.png', first.length, first));
+    final File cbz = File(p.join(root.path, 'book.cbz'))
+      ..writeAsBytesSync(ZipEncoder().encode(archive)!);
+    final Directory cacheRoot = Directory(p.join(root.path, 'cache'));
+
+    final LocalSourceArchiveReaderSession session =
+        await LocalSourceArchivePageProvider(
+              archivePath: cbz.path,
+              cacheRoot: cacheRoot,
+              relativePaths: const <String>['002.png', '001.png'],
+            ).open()
+            as LocalSourceArchiveReaderSession;
+    addTearDown(session.close);
+
+    expect(session.pageCount, 2);
+    expect(session.directory.listSync(), isEmpty,
+        reason: '打开会话不得预解压整包');
+
+    final MangaPageBytes page = await session.page(0);
+    expect(page.contentType, 'image/png');
+    expect((page.width, page.height), (200, 300));
+    final File? extracted = await session.localFile(0);
+    expect(extracted?.existsSync(), isTrue);
+    expect(p.isWithin(session.directory.path, extracted!.path), isTrue);
+    expect(cbz.existsSync(), isTrue, reason: '原包只读');
+
+    final File? secondFile = await session.localFile(1);
+    expect(await secondFile!.readAsBytes(), first);
+
+    await session.close();
+    expect(await session.directory.exists(), isFalse);
+    await expectLater(
+      session.page(0),
+      throwsA(
+        isA<MihonRuntimeException>().having(
+          (MihonRuntimeException error) => error.code,
+          'code',
+          'SESSION_CLOSED',
+        ),
+      ),
+    );
+  });
+
+  test('local source archive session reports a missing page entry', () async {
+    final Directory root = await Directory.systemTemp.createTemp(
+      'fushi-local-source-cbz-missing-',
+    );
+    addTearDown(() async {
+      if (await root.exists()) await root.delete(recursive: true);
+    });
+    final Uint8List page = Uint8List.fromList(
+      img.encodePng(img.Image(width: 80, height: 120)),
+    );
+    final Archive archive = Archive()
+      ..addFile(ArchiveFile('001.png', page.length, page));
+    final File cbz = File(p.join(root.path, 'book.cbz'))
+      ..writeAsBytesSync(ZipEncoder().encode(archive)!);
+
+    final MangaReaderSession session = await LocalSourceArchivePageProvider(
+      archivePath: cbz.path,
+      cacheRoot: Directory(p.join(root.path, 'cache')),
+      relativePaths: const <String>['missing.png'],
+    ).open();
+    addTearDown(session.close);
+
+    await expectLater(
+      session.page(0),
+      throwsA(
+        isA<MihonRuntimeException>().having(
+          (MihonRuntimeException error) => error.code,
+          'code',
+          'PAGE_MISSING',
         ),
       ),
     );

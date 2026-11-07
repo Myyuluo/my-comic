@@ -3,10 +3,12 @@
 /// `localcomic/{manga}/{chapter}/` 是 Mihon local-source layout：
 /// - 第一层目录 = 一部 Manga；
 /// - Manga 目录下的每个含页图的直接子目录 = 一个 Chapter；
-/// - Manga 目录**直接**含页图时，整本目录算单章（不再拆子目录）；
+/// - Manga 目录下的每个 `.cbz` 文件 = 一个 CBZ Chapter（包根 `pages.json`
+///   优先，缺失/损坏时回退图片扫描）；
+/// - Manga 目录**直接**含页图时，整本目录算单章（不再拆子目录、不看 CBZ）；
 /// - `cover.jpg`（也接受 jpeg/png）只作封面，不算页；
-/// - 章节目录里可选的 `pages.json` 决定页序；缺失、损坏或缺页时回退到按
-///   自然序扫描图片。
+/// - 章节目录 / CBZ 里可选的 `pages.json` 决定页序；缺失、损坏或缺页时回退到
+///   按自然序扫描图片。
 ///
 /// 扫描只读文件系统，不写任何文件——Local source 原地读取、不复制（ADR 0013）。
 library;
@@ -18,6 +20,7 @@ import 'package:path/path.dart' as p;
 
 import 'package:fushi_engine/media/collections/shelf_sort.dart'
     show naturalCompare;
+import 'package:fushi_engine/media/manga/local_source/local_source_archive.dart';
 import 'package:fushi_engine/media/manga/manga_importer.dart'
     show kMangaImageExtensions;
 import 'package:fushi_engine/media/manga/page_enumeration.dart';
@@ -36,18 +39,32 @@ const Set<String> kLocalSourceCoverFileNames = <String>{
 /// 单章（manga 目录直接含页图）的章节 key。真实子目录名不可能等于 `.`。
 const String kLocalSourceRootChapterKey = '.';
 
+/// 章节容器的形态。
+enum LocalSourceChapterKind {
+  /// `{chapter}/` 文件夹（页图平铺或分卷子目录）。
+  folder,
+
+  /// `{chapter}.cbz` 压缩包。
+  archive,
+}
+
 /// 一张页图：磁盘文件 + 相对章节目录的正斜杠路径。
+///
+/// CBZ 章节的页在压缩包里，没有独立磁盘文件（[file] 为 null）；阅读时按
+/// [relativePath]（包内条目名）按需从包里取。
 class LocalSourcePage {
   const LocalSourcePage({
-    required this.file,
+    this.file,
     required this.relativePath,
     this.width,
     this.height,
   });
 
-  final File file;
+  /// 文件夹章节的页文件；CBZ 章节为 null。
+  final File? file;
 
-  /// 相对章节目录的正斜杠路径（`001.jpg` / `vol1/001.jpg`）。
+  /// 相对章节目录的正斜杠路径（`001.jpg` / `vol1/001.jpg`）；CBZ 章节为
+  /// 包内归一化条目名。
   final String relativePath;
 
   /// `pages.json` 声明的宽高；扫描回退时未知（阅读器按文件头探测）。
@@ -55,20 +72,22 @@ class LocalSourcePage {
   final int? height;
 }
 
-/// 一个章节目录。
+/// 一个章节：文件夹或 CBZ。
 class LocalSourceChapter {
   const LocalSourceChapter({
     required this.key,
     required this.name,
     required this.relativePath,
     required this.pages,
+    this.kind = LocalSourceChapterKind.folder,
+    this.archiveFile,
   });
 
   /// 章节身份 = 相对 Manga 目录的路径（单章为 [kLocalSourceRootChapterKey]）。
-  /// 目录改名/移动 = 新 key（ADR 0013：作品身份按文件夹路径认）。
+  /// 目录/文件改名或移动 = 新 key（ADR 0013：作品身份按文件夹路径认）。
   final String key;
 
-  /// 展示名（章节目录名；单章为 Manga 目录名）。
+  /// 展示名（章节目录名 / CBZ 去掉扩展名的文件名；单章为 Manga 目录名）。
   final String name;
 
   /// 相对 Manga 目录的正斜杠路径；单章为空串。
@@ -76,6 +95,12 @@ class LocalSourceChapter {
 
   final List<LocalSourcePage> pages;
 
+  final LocalSourceChapterKind kind;
+
+  /// CBZ 章节的压缩包文件；文件夹章节为 null。
+  final File? archiveFile;
+
+  bool get isArchive => kind == LocalSourceChapterKind.archive;
   bool get isRootChapter => relativePath.isEmpty;
 }
 
@@ -172,33 +197,61 @@ Future<LocalSourceManga?> _scanManga(Directory root, Directory mangaDir) async {
       );
     }
   } else {
-    final List<Directory> chapterDirs =
-        <Directory>[
-          for (final FileSystemEntity entity in entries)
-            if (entity is Directory &&
-                !p.basename(entity.path).startsWith('.') &&
-                p.basename(entity.path) != 'manga_ocr_out')
-              entity,
-        ]..sort(
-          (Directory a, Directory b) =>
-              naturalCompare(p.basename(a.path), p.basename(b.path)),
+    final List<_ChapterSource> sources = <_ChapterSource>[];
+    for (final FileSystemEntity entity in entries) {
+      if (entity is Directory) {
+        final String name = p.basename(entity.path);
+        if (name.startsWith('.') || name == 'manga_ocr_out') continue;
+        sources.add(
+          _ChapterSource(
+            name: name,
+            relativePath: _relativeForward(entity.path, from: mangaDir.path),
+            directory: entity,
+          ),
         );
-    for (final Directory chapterDir in chapterDirs) {
-      final List<LocalSourcePage> pages = await readLocalSourceChapterPages(
-        chapterDir.path,
-        isRootChapter: false,
-      );
+      } else if (entity is File && _isCbzFile(entity.path)) {
+        final String fileName = p.basename(entity.path);
+        if (fileName.startsWith('.')) continue;
+        sources.add(
+          _ChapterSource(
+            name: p.basenameWithoutExtension(fileName),
+            relativePath: _relativeForward(entity.path, from: mangaDir.path),
+            archive: entity,
+          ),
+        );
+      }
+    }
+    sources.sort((_ChapterSource a, _ChapterSource b) {
+      final int byName = naturalCompare(a.name, b.name);
+      if (byName != 0) return byName;
+      return naturalCompare(a.relativePath, b.relativePath);
+    });
+    for (final _ChapterSource source in sources) {
+      final List<LocalSourcePage> pages;
+      try {
+        if (source.archive != null) {
+          pages = readLocalSourceArchiveChapterPages(source.archive!.path);
+        } else {
+          pages = await readLocalSourceChapterPages(
+            source.directory!.path,
+            isRootChapter: false,
+          );
+        }
+      } on Object {
+        // 坏包 / 读不了的章节目录：跳过这一章，其余章节照常回来。
+        continue;
+      }
       if (pages.isEmpty) continue;
-      final String relative = _relativeForward(
-        chapterDir.path,
-        from: mangaDir.path,
-      );
       chapters.add(
         LocalSourceChapter(
-          key: relative,
-          name: p.basename(chapterDir.path),
-          relativePath: relative,
+          key: source.relativePath,
+          name: source.name,
+          relativePath: source.relativePath,
           pages: pages,
+          kind: source.archive == null
+              ? LocalSourceChapterKind.folder
+              : LocalSourceChapterKind.archive,
+          archiveFile: source.archive,
         ),
       );
     }
@@ -233,6 +286,44 @@ Future<List<LocalSourcePage>> readLocalSourceChapterPages(
   }
   return pages;
 }
+
+/// CBZ 章节的页表：包根 `pages.json` 优先，缺失/损坏/缺页时回退图片扫描。
+///
+/// 打开、读完条目表即关闭，不把包内容解压到磁盘。
+List<LocalSourcePage> readLocalSourceArchiveChapterPages(String archivePath) {
+  final LocalSourceArchive archive = LocalSourceArchive.open(archivePath);
+  try {
+    return <LocalSourcePage>[
+      for (final LocalSourceArchivePage page in readLocalSourceArchivePages(
+        archive,
+      ))
+        LocalSourcePage(
+          relativePath: page.relativePath,
+          width: page.width,
+          height: page.height,
+        ),
+    ];
+  } finally {
+    archive.close();
+  }
+}
+
+/// 扫描时的一个章节候选：目录或 CBZ。
+class _ChapterSource {
+  const _ChapterSource({
+    required this.name,
+    required this.relativePath,
+    this.directory,
+    this.archive,
+  });
+
+  final String name;
+  final String relativePath;
+  final Directory? directory;
+  final File? archive;
+}
+
+bool _isCbzFile(String path) => p.extension(path).toLowerCase() == '.cbz';
 
 Future<List<LocalSourcePage>?> _readPagesJson(String chapterDirPath) async {
   final File jsonFile = File(

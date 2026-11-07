@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:archive/archive_io.dart';
 import 'package:drift/native.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi_engine/epub/epub_storage.dart';
@@ -45,6 +46,20 @@ void main() {
     return file;
   }
 
+  File writeCbz(String relative, Map<String, List<int>> entries) {
+    final Archive archive = Archive();
+    entries.forEach((String name, List<int> bytes) {
+      archive.addFile(ArchiveFile(name, bytes.length, bytes));
+    });
+    final File file = File(p.join(root.path, relative));
+    file.parent.createSync(recursive: true);
+    file.writeAsBytesSync(ZipEncoder().encode(archive)!);
+    return file;
+  }
+
+  List<int> pngBytes({int width = 80, int height = 120}) =>
+      img.encodePng(img.Image(width: width, height: height));
+
   Future<String> importAndGetKey() async {
     final LocalSourceLibrary library = LocalSourceLibrary(db: db, root: root);
     await library.importFromRoot();
@@ -73,8 +88,9 @@ void main() {
       <String>['2.png', '10.png'],
     );
     for (final LocalSourcePage page in resolved.pages) {
-      expect(page.file.existsSync(), isTrue);
-      expect(p.isWithin(root.path, page.file.path), isTrue);
+      expect(page.file, isNotNull, reason: '文件夹章节的页有独立文件');
+      expect(page.file!.existsSync(), isTrue);
+      expect(p.isWithin(root.path, page.file!.path), isTrue);
     }
     expect(
       resolved.payload.images.map((MokuroImage image) => image.url),
@@ -166,6 +182,89 @@ void main() {
       await LocalSourceReader.resolveChapter(
         db: db,
         bookKey: 'missing-book',
+        chapterIndex: 0,
+      ),
+      isNull,
+    );
+  });
+
+  test('CBZ 章节原地解析：页表来自包内条目，宽高来自真实图片', () async {
+    final File cbz = writeCbz('Manga/Ch 1.cbz', <String, List<int>>{
+      '10.png': pngBytes(width: 100, height: 150),
+      '2.png': pngBytes(width: 200, height: 300),
+    });
+    final String bookKey = await importAndGetKey();
+
+    final LocalSourceResolvedChapter? resolved =
+        await LocalSourceReader.resolveChapter(
+          db: db,
+          bookKey: bookKey,
+          chapterIndex: 0,
+        );
+
+    expect(resolved, isNotNull);
+    expect(resolved!.isArchive, isTrue);
+    expect(resolved.archiveFile?.path, p.join(root.path, 'Manga', 'Ch 1.cbz'));
+    expect(resolved.chapter.name, 'Ch 1');
+    expect(resolved.chapter.relativePath, 'Ch 1.cbz');
+    expect(
+      resolved.pages.map((LocalSourcePage page) => page.relativePath),
+      <String>['2.png', '10.png'],
+    );
+    expect(
+      resolved.pages.every((LocalSourcePage page) => page.file == null),
+      isTrue,
+    );
+    expect(
+      resolved.payload.images.map((MokuroImage image) => image.url),
+      <String>['2.png', '10.png'],
+    );
+    expect(resolved.payload.images.first.size.width, 200);
+    expect(resolved.payload.images.first.size.height, 300);
+    expect(cbz.existsSync(), isTrue, reason: '读取不得删改原包');
+    expect(managedRoot.listSync(), isEmpty, reason: '读取不得复制文件');
+  });
+
+  test('CBZ 包根 pages.json 的页序与声明宽高在阅读时生效', () async {
+    writeCbz('Manga/Ch 1.cbz', <String, List<int>>{
+      'a.png': pngBytes(),
+      'b.png': pngBytes(),
+      'pages.json': utf8.encode(
+        jsonEncode(<String, Object?>{
+          'pages': <Object?>[
+            <String, Object?>{'url': 'b.png', 'width': 333, 'height': 444},
+            <String, Object?>{'url': 'a.png'},
+          ],
+        }),
+      ),
+    });
+    final String bookKey = await importAndGetKey();
+
+    final LocalSourceResolvedChapter resolved =
+        (await LocalSourceReader.resolveChapter(
+          db: db,
+          bookKey: bookKey,
+          chapterIndex: 0,
+        ))!;
+
+    expect(resolved.payload.images.first.url, 'b.png');
+    expect(resolved.payload.images.first.size.width, 333);
+    expect(resolved.payload.images.first.size.height, 444);
+    expect(resolved.payload.images.last.url, 'a.png');
+  });
+
+  test('CBZ 文件被移走后解析返回 null', () async {
+    final File cbz = writeCbz('Manga/Ch 1.cbz', <String, List<int>>{
+      '001.png': pngBytes(),
+    });
+    final String bookKey = await importAndGetKey();
+
+    await cbz.delete();
+
+    expect(
+      await LocalSourceReader.resolveChapter(
+        db: db,
+        bookKey: bookKey,
         chapterIndex: 0,
       ),
       isNull,

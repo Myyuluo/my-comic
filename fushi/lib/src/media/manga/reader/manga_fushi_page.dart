@@ -45,6 +45,7 @@ import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_service.dart';
 import 'package:fushi/src/media/manga/library/online_manga_runtime_adapter.dart';
 import 'package:fushi/src/media/online/online_source_error_text.dart';
+import 'package:fushi_engine/media/manga/local_source/local_source_layout.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_metadata.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_reader.dart';
 import 'package:fushi_engine/media/manga/mokuro_payload.dart';
@@ -1545,7 +1546,7 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
   }
 
   /// Local source 章节：按 `sourceMetadata` 标记分流，页图从 `localcomic` 的
-  /// 章节目录原地读取（不复制、不要求 manga.json）。
+  /// 章节目录 / CBZ 原地读取（不复制、不要求 manga.json）。
   ///
   /// 多章作品从点名的章（或第 1 章）开始；单章作品保留书级断点续读。第一章之后
   /// 的章级进度由章节列表重新打开时从第 1 页开始——与 ticket 06 的最小阅读闭环
@@ -1570,6 +1571,16 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
     final int chapterCount = decodeLocalSourceChapters(row.chaptersJson).length;
     final int? initialPage =
         widget.initialPage ?? (chapterCount <= 1 ? null : 0);
+    final File? archiveFile = resolved.archiveFile;
+    if (archiveFile != null) {
+      await _loadLocalSourceArchiveChapter(
+        row: row,
+        resolved: resolved,
+        archiveFile: archiveFile,
+        initialPage: initialPage,
+      );
+      return;
+    }
     final String chapterDir = resolved.chapterDirectory.path;
     await _presentPayload(
       row: row.copyWith(extractDir: chapterDir, epubPath: ''),
@@ -1581,6 +1592,48 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
       ).open(),
       initialPage: initialPage,
     );
+  }
+
+  /// CBZ 章节：页缓存由页会话按需解到 app cache，`localcomic` 里的原包只读。
+  Future<void> _loadLocalSourceArchiveChapter({
+    required EpubBookRow row,
+    required LocalSourceResolvedChapter resolved,
+    required File archiveFile,
+    required int? initialPage,
+  }) async {
+    final LocalSourceArchiveReaderSession session =
+        await LocalSourceArchiveReaderSession.open(
+          archivePath: archiveFile.path,
+          cacheRoot: Directory(
+            p.join(
+              appModel.temporaryDirectory.path,
+              kLocalSourceArchiveCacheDirName,
+            ),
+          ),
+          relativePaths: resolved.pages
+              .map((LocalSourcePage page) => page.relativePath)
+              .toList(growable: false),
+        );
+    if (!mounted) {
+      await session.close();
+      return;
+    }
+    try {
+      await _presentPayload(
+        row: row.copyWith(
+          extractDir: resolved.chapterDirectory.path,
+          epubPath: '',
+        ),
+        payload: resolved.payload,
+        imagesDir: session.directory.path,
+        openSession: (List<String> _) async => session,
+        initialPage: initialPage,
+      );
+    } on Object {
+      // _presentPayload 在挂上页会话之前抛错时，会话还没人接管。
+      if (!identical(_pageSession, session)) unawaited(session.close());
+      rethrow;
+    }
   }
 
   /// 从一份本地 `manga.json + images/` 装载正文。

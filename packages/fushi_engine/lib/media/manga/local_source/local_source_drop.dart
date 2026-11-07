@@ -2,8 +2,7 @@
 /// `localcomic`，再登记；原始文件保持不动（ADR 0013 / storage-layout spec）。
 ///
 /// 未来的「源」里的 Local source 入口会取代拖入；本条是当前版本的过渡行为。
-/// CBZ 的章节扫描/登记属于 ticket 07，本文件只负责把包复制到
-/// `localcomic/{manga}/{chapter}.cbz` 的位置。
+/// CBZ 复制成 `localcomic/{manga}/{chapter}.cbz` 后按 CBZ 章节扫描登记。
 library;
 
 import 'dart:io';
@@ -35,7 +34,7 @@ class LocalSourceDropResult {
     this.report,
   });
 
-  /// 复制后（或本来就在 root 里）的作品目录；CBZ 尚未登记时为 null。
+  /// 复制后（或本来就在 root 里）的作品目录；复制失败 / 未登记时为 null。
   final Directory? mangaDirectory;
 
   /// 实际复制出的文件 / 目录路径；目录拖入且无需复制时为空。
@@ -106,7 +105,13 @@ abstract final class LocalSourceDrop {
       final File copied = await source.copy(
         p.join(destination.path, p.basename(source.path)),
       );
-      return LocalSourceDropResult(copiedPath: copied.path, registered: false);
+      final LocalSourceImportReport report = await library.importFromRoot();
+      return _registeredResult(
+        db: db,
+        directory: destination,
+        copiedPath: copied.path,
+        report: report,
+      );
     }
     throw LocalSourceDropException(
       'Local source only accepts folders or .cbz files: $sourcePath',
