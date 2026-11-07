@@ -48,6 +48,32 @@ void main() {
     });
   });
 
+  group('Storage location labels', () {
+    test('zh-CN renames 漫画数据位置 to 存储位置 and its buttons', () {
+      final strings = AppLocale.zhCn.translations;
+
+      expect(strings.data_storage_content_root_title, '存储位置');
+      expect(strings.data_storage_change_button, '变更文件夹');
+      expect(strings.data_storage_open_button, '打开文件夹');
+    });
+
+    test('zh-HK uses the same shorter wording', () {
+      final strings = AppLocale.zhHk.translations;
+
+      expect(strings.data_storage_content_root_title, '儲存位置');
+      expect(strings.data_storage_change_button, '變更資料夾');
+      expect(strings.data_storage_open_button, '開啟資料夾');
+    });
+
+    test('the English baseline follows the shorter wording', () {
+      final strings = AppLocale.en.translations;
+
+      expect(strings.data_storage_content_root_title, 'Storage location');
+      expect(strings.data_storage_change_button, 'Change folder');
+      expect(strings.data_storage_open_button, 'Open folder');
+    });
+  });
+
   group('Chinese video clip export labels', () {
     test('uses clip export wording consistently', () {
       final strings = AppLocale.zhCn.translations;

@@ -142,6 +142,14 @@ abstract class OnlineSourceCatalog<T> {
 
   String get emptyText => t.mihon_source_no_results;
 
+  /// 空结果占位图标；[searching] = 当前显示的是搜索无命中（而不是这个源本身
+  /// 什么都没有）。默认放大镜，与既有源一致。
+  IconData emptyIcon({required bool searching}) => FushiIcons.searchOff;
+
+  /// 空结果占位文案；默认沿用 [emptyText]（既有源的文案不变）。本地图源用它
+  /// 区分「localcomic 里还没有漫画」与「搜索没命中」。
+  String emptyTextFor({required bool searching}) => emptyText;
+
   /// 筛选按钮的提示（各源沿用自己原来的叫法：Mihon 叫「来源偏好」，LNReader 叫
   /// 「筛选」）。
   String get filtersTooltip => t.mihon_source_preferences;
@@ -461,11 +469,14 @@ class _OnlineSourceBrowsePageState<T> extends State<OnlineSourceBrowsePage<T>> {
       );
     }
     if (_items.isEmpty) {
+      // 列表分段全空时，搜索词非空就是「搜索没命中」；否则是这个源本身为空。
+      final bool searching =
+          _listingId == null && _searchController.text.trim().isNotEmpty;
       return SafeArea(
         bottom: false,
         child: FushiPlaceholderMessage(
-          icon: FushiIcons.searchOff,
-          message: _catalog.emptyText,
+          icon: _catalog.emptyIcon(searching: searching),
+          message: _catalog.emptyTextFor(searching: searching),
           action: _catalog.verifyOnEmpty
               ? _catalog.buildVerifyAction(
                   context,

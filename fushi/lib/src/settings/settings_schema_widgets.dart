@@ -177,6 +177,7 @@ class SettingsSchemaItem extends StatefulWidget
         status.resolveTitle(ctx),
         status.resolveSubtitle(ctx),
         status.resolveAction(ctx) != null,
+        status.secondaryOnAction != null,
       ],
       SettingsActionItem action => <Object?>[
         action.resolveSubtitle(ctx),
@@ -277,6 +278,7 @@ class SettingsSchemaItem extends StatefulWidget
   Widget _status(BuildContext context, SettingsStatusItem status) {
     // actionVisible 判否时按纯状态行渲染（无按钮、不进焦点）。
     final SettingsItemAction? onAction = status.resolveAction(settingsContext);
+    final SettingsItemAction? onSecondaryAction = status.secondaryOnAction;
     // 行级 onTap 让本行注册成 FushiFocusTarget，方向导航 / 手柄 A 才到得了
     // （BUG-016）。`AdaptiveSettingsRow` 里 `if (onTap == null) return content;`
     // ——没有 onTap 的行根本不包 _SettingsRowFocusTarget、不进 FushiFocusController
@@ -286,11 +288,22 @@ class SettingsSchemaItem extends StatefulWidget
     //
     // 纯状态行（onAction == null）**故意**不给 onTap：它没有可执行的动作，不该
     // 成为焦点停靠点。
+    //
+    // Ticket 03：声明了第二个动作时不挂行级 onTap——「点这一行」没有唯一语义，
+    // 存储位置整行保持只读，只有两个按钮可点。
     Future<void> runAction() async {
       await onAction!(settingsContext);
       settingsContext.refresh();
     }
 
+    Future<void> runSecondaryAction() async {
+      await onSecondaryAction!(settingsContext);
+      settingsContext.refresh();
+    }
+
+    final bool hasAnyAction = onAction != null || onSecondaryAction != null;
+    final bool hasSecondaryAction = onSecondaryAction != null;
+    final FushiDesignTokens tokens = FushiDesignTokens.of(context);
     final bool glassDesktop =
         isGlassDesign(context) &&
         !isCupertinoPlatform(context) &&
@@ -306,12 +319,29 @@ class SettingsSchemaItem extends StatefulWidget
       // 行右侧的胶囊，不换到标题下方；窄到放不下时行自己会堆叠。Cupertino 与
       // Apple 触屏维持按钮在下。
       controlBelow:
-          onAction != null &&
+          hasAnyAction &&
           (isCupertinoPlatform(context) ||
               (isGlassDesign(context) && !glassDesktop)),
-      onTap: onAction == null ? null : runAction,
-      trailing: onAction == null
+      onTap: onAction == null || hasSecondaryAction ? null : runAction,
+      trailing: !hasAnyAction
           ? null
+          : hasSecondaryAction
+          ? Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                if (onAction != null) ...<Widget>[
+                  FushiFilledButton.tonal(
+                    onPressed: runAction,
+                    child: Text(status.actionLabel!),
+                  ),
+                  SizedBox(width: tokens.spacing.gap),
+                ],
+                FushiFilledButton.tonal(
+                  onPressed: runSecondaryAction,
+                  child: Text(status.secondaryActionLabel!),
+                ),
+              ],
+            )
           : FushiFilledButton.tonal(
               onPressed: runAction,
               child: Text(status.actionLabel!),
