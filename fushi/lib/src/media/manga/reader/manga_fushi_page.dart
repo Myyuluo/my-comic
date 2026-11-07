@@ -1560,6 +1560,7 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
           bookKey: row.bookKey,
           chapterIndex: chapterIndex,
           localSourceRoot: appModel.appPaths.localComicRoot,
+          downloadsRoot: appModel.appPaths.downloadsRoot,
         );
     if (!mounted) return;
     if (resolved == null) {

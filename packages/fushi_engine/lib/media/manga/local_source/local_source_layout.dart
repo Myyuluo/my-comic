@@ -182,7 +182,21 @@ Future<List<LocalSourceManga>> scanLocalSourceRoot(Directory root) async {
   return mangas;
 }
 
-Future<LocalSourceManga?> _scanManga(Directory root, Directory mangaDir) async {
+Future<LocalSourceManga?> _scanManga(Directory root, Directory mangaDir) =>
+    scanLocalSourceMangaDirectory(
+      mangaDir,
+      relativePath: _relativeForward(mangaDir.path, from: root.path),
+    );
+
+/// 扫描**单个** Manga 目录（第一层目录 = 章节 / CBZ；目录直接含页图 = 单章）。
+///
+/// [relativePath] 是这部作品相对调用方所认定根目录的正斜杠路径（用于
+/// `LocalSourceMetadata` 的重新定位）；Local source root 扫描与 Rebuild download
+/// index 的恢复分支共用这一处。只读，不写任何文件。
+Future<LocalSourceManga?> scanLocalSourceMangaDirectory(
+  Directory mangaDir, {
+  required String relativePath,
+}) async {
   final String title = p.basename(mangaDir.path);
   final String? cover = _findCover(mangaDir.path);
   final List<FileSystemEntity> entries = _list(mangaDir);
@@ -272,7 +286,7 @@ Future<LocalSourceManga?> _scanManga(Directory root, Directory mangaDir) async {
   return LocalSourceManga(
     title: title,
     directoryPath: mangaDir.path,
-    relativePath: _relativeForward(mangaDir.path, from: root.path),
+    relativePath: relativePath,
     chapters: List<LocalSourceChapter>.unmodifiable(chapters),
     coverRelativePath: cover,
   );

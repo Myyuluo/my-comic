@@ -53,6 +53,7 @@ abstract final class LocalSourceReader {
     required String bookKey,
     required int chapterIndex,
     Directory? localSourceRoot,
+    Directory? downloadsRoot,
   }) async {
     final EpubBookRow? row = await db.getEpubBook(bookKey);
     if (row == null) return null;
@@ -60,9 +61,18 @@ abstract final class LocalSourceReader {
     // Ticket 08：切换 Content root 后库里的 extractDir 仍指向旧根（switch 不重基
     // 路径）。调用方给了当前 Local source root 时，旧根下的作品一律视为 Missing，
     // 绝不回读旧路径。
-    if (localSourceRoot != null &&
-        !isLocalSourcePathWithinRoot(row.extractDir, localSourceRoot)) {
-      return null;
+    //
+    // Ticket 10：源未安装时 Rebuild download index 会把 `downloads/{source}/{manga}`
+    // 降级成指向该文件夹的本地条目；它仍在当前 Download library 根内，所以
+    // 恢复条目也能原地读取。
+    if (localSourceRoot != null || downloadsRoot != null) {
+      final bool withinLocal =
+          localSourceRoot != null &&
+          isLocalSourcePathWithinRoot(row.extractDir, localSourceRoot);
+      final bool withinDownloads =
+          downloadsRoot != null &&
+          isLocalSourcePathWithinRoot(row.extractDir, downloadsRoot);
+      if (!withinLocal && !withinDownloads) return null;
     }
     final List<LocalSourceChapterRecord> chapters = decodeLocalSourceChapters(
       row.chaptersJson,

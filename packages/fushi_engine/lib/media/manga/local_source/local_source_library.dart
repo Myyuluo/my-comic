@@ -161,6 +161,13 @@ class LocalSourceLibrary {
     return const LocalSourceDeleteResult(LocalSourceDeleteReason.deleted);
   }
 
+  /// 登记或刷新一部**已扫描**的作品（Rebuild download index 的恢复分支复用
+  /// 同一写入形状）。返回 true = 新建，false = 刷新。
+  ///
+  /// 调用方负责 tombstone 判断与「是否已经存在」的短路；这里只写 Library 行。
+  Future<bool> registerScannedManga(LocalSourceManga manga) =>
+      _registerManga(localSourceBookKeyFor(manga.directoryPath), manga);
+
   /// 登记或刷新一部已扫描的作品。返回 true = 新建，false = 刷新。
   Future<bool> _registerManga(String bookKey, LocalSourceManga manga) async {
     final EpubBookRow? existing = await db.getEpubBook(bookKey);
