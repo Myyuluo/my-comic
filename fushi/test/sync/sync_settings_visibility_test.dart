@@ -7,6 +7,7 @@ import 'package:fushi/src/settings/settings_schema_card_creation.dart';
 import 'package:fushi/src/settings/settings_schema_lookup.dart'
     show buildLookupDestination;
 import 'package:fushi/src/settings/settings_schema_storage.dart';
+import 'package:fushi/src/settings/settings_schema_storage_locations.dart';
 import 'package:fushi/src/settings/settings_schema_system.dart';
 import 'package:fushi/src/sync/sync_backend.dart';
 import 'package:fushi/src/sync/sync_settings_schema.dart';
@@ -42,17 +43,17 @@ void main() {
 
     test('regroups into five intent-based sections', () {
       // 互联（client 配置 / LAN 发现 / host 模式）已拆到独立的
-      // buildInterconnectDestination（见下方 group），「数据存储位置」已挪到
-      // 「存储」大类展示（buildDataStorageLocationSection，见下方 group），
+      // buildInterconnectDestination（见下方 group），存储位置小节已挪到
+      // 「存储与下载」页展示（buildContentRootsSection，见下方 group），
       // 同步分类剩：method / what / when / assets / backup（C1：开关、时机、
       // 动作各自成节，不再混排）。
       expect(dest.sections, hasLength(5));
       expect(
         dest.sections
             .expand((SettingsSection s) => s.items)
-            .where((SettingsItem i) => i.id == 'sync.data_storage_location'),
+            .where((SettingsItem i) => i.id == 'storage.content_root'),
         isEmpty,
-        reason: '数据存储位置不再挂在同步备份大类',
+        reason: '存储位置不再挂在同步备份大类',
       );
     });
 
@@ -374,37 +375,36 @@ void main() {
     });
   });
 
-  group('buildDataStorageLocationSection placement', () {
-    test('the data-storage section now lives in the storage destination', () {
-      // 用户拍板：数据根是设备级存储配置，与备份无关（2026-07-26 从同步备份挪到
-      // 「系统」），「存储」大类落地后再挪进「存储」（2026-08-22）——「数据放哪」
-      // 与「占了多少」同页；item id 'sync.data_storage_location' 保持不变
-      // （历史命名前缀，搜索/导航锚点）。
-      final SettingsSection section = buildDataStorageLocationSection();
-      expect(
-        section.visible,
-        isNotNull,
-        reason: 'data-storage section must be desktop-only gated',
-      );
+  group('buildContentRootsSection placement', () {
+    test('the storage-location section lives in storage & downloads', () {
+      // Ticket 08：存储位置（Content root / Program state root / 三个文件夹入口）
+      // 是设备级存储配置，与备份无关；「存储与下载」页承载它，SRS 备份页复用的
+      // 「存储」destination 共用同一小节。
+      final SettingsSection section = buildContentRootsSection();
+      expect(section.visible, isNotNull, reason: '存储位置小节必须 desktop-only 门控');
       expect(section.items.map((SettingsItem i) => i.id), <String>[
-        'sync.data_storage_location',
+        'storage.content_root',
+        'storage.program_state_root',
+        'storage.open_downloads',
+        'storage.open_local_comic',
+        'storage.open_autobackup',
       ]);
       final SettingsDestination storage = buildStorageDestination();
       expect(
         storage.sections
             .expand((SettingsSection s) => s.items)
-            .where((SettingsItem i) => i.id == 'sync.data_storage_location'),
+            .where((SettingsItem i) => i.id == 'storage.content_root'),
         hasLength(1),
-        reason: '存储大类必须恰好承载一份数据存储位置行',
+        reason: '存储大类必须恰好承载一份 Content root 行',
       );
-      // 系统大类不得再残留一份（两处都挂 = 搜索出双份、改一处另一处不动）。
+      // 系统大类不得残留（两处都挂 = 搜索出双份、改一处另一处不动）。
       final SettingsDestination system = buildSystemDestination();
       expect(
         system.sections
             .expand((SettingsSection s) => s.items)
-            .where((SettingsItem i) => i.id == 'sync.data_storage_location'),
+            .where((SettingsItem i) => i.id == 'storage.content_root'),
         isEmpty,
-        reason: '数据存储位置不再挂在系统大类',
+        reason: '存储位置不再挂在系统大类',
       );
     });
   });

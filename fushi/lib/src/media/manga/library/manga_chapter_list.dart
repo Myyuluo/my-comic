@@ -56,6 +56,7 @@ class MangaChapterList extends StatelessWidget {
     this.onMarkUpToRead,
     this.showHeader = true,
     this.downloadedChapterKeys = const <String>{},
+    this.missingChapterKeys = const <String>{},
     this.jobsByChapterKey = const <String, MangaDownloadJobRow>{},
     this.onDownload,
     this.onDeleteDownload,
@@ -97,6 +98,12 @@ class MangaChapterList extends StatelessWidget {
   /// [jobsByChapterKey] 是任务表里的行；下载中 / 排队 / 失败看任务行，已下载看
   /// 磁盘。默认都空 = 每章都显示成「未下载」（阅读器内的章节选择器只给磁盘那份）。
   final Set<String> downloadedChapterKeys;
+
+  /// 宿主明确判定为 Missing 的章（ticket 08：Local source 作品切到新 Content
+  /// root 后仍留在书架里，旧目录不再属于当前 `localcomic`）。命中时覆盖普通
+  /// 下载状态合成——那些章没有下载任务行，光靠任务表表达不出 Missing。
+  final Set<String> missingChapterKeys;
+
   final Map<String, MangaDownloadJobRow> jobsByChapterKey;
 
   /// 溢出菜单里的下载动作；null = 不出现对应项。
@@ -124,11 +131,15 @@ class MangaChapterList extends StatelessWidget {
 
   /// 一章的下载状态：磁盘判据优先（真正决定能不能读），其次看任务行；
   /// `done` 任务 + 磁盘缺文件 = Missing（Ticket 02）。
-  MangaChapterDownloadState _downloadStateOf(OnlineMangaChapter chapter) =>
-      mangaChapterDownloadState(
-        downloaded: downloadedChapterKeys.contains(chapter.key),
-        job: jobsByChapterKey[chapter.key],
-      );
+  MangaChapterDownloadState _downloadStateOf(OnlineMangaChapter chapter) {
+    if (missingChapterKeys.contains(chapter.key)) {
+      return MangaChapterDownloadState.missing;
+    }
+    return mangaChapterDownloadState(
+      downloaded: downloadedChapterKeys.contains(chapter.key),
+      job: jobsByChapterKey[chapter.key],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -355,7 +366,8 @@ class MangaChapterList extends StatelessWidget {
       if (chapter.scanlator?.isNotEmpty == true) chapter.scanlator!,
       if (chapter.uploadedAt != null) _formatDate(chapter.uploadedAt!),
       switch (download) {
-        MangaChapterDownloadState.queued => t.manga_chapter_download_status_queued,
+        MangaChapterDownloadState.queued =>
+          t.manga_chapter_download_status_queued,
         MangaChapterDownloadState.downloading =>
           t.manga_chapter_download_status_downloading(
             done: '${job?.pagesDone ?? 0}',

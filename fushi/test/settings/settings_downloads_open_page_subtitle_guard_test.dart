@@ -4,8 +4,8 @@ import 'package:fushi/src/settings/settings_destination.dart';
 import 'package:fushi/src/settings/settings_schema_downloads.dart';
 
 /// 设置里的「下载」分类已更名为「存储与下载」：名称来自专用字符串资源，不写死
-/// 在 schema 里。分类内容仍只有数据存储位置，不新增跳转到下载页的入口；副标题
-/// 保留原有 summary。
+/// 在 schema 里。Ticket 08 起内容为存储位置小节（Content root / Program state
+/// root / 三个文件夹入口），不新增跳转到下载页的入口；副标题保留原有 summary。
 void main() {
   AppLocale currentLocale() => LocaleSettings.currentLocale;
 
@@ -33,7 +33,7 @@ void main() {
     );
   });
 
-  testWidgets('分类内容保持不变：只有数据存储位置，没有打开下载页的入口', (WidgetTester tester) async {
+  testWidgets('分类内容为存储位置小节，没有打开下载页的入口', (WidgetTester tester) async {
     final AppLocale original = currentLocale();
     addTearDown(() => LocaleSettings.setLocale(original));
     LocaleSettings.setLocale(AppLocale.zhCn);
@@ -47,11 +47,17 @@ void main() {
     expect(
       destination.sections.map((SettingsSection section) => section.id),
       <String?>['storage.location.section'],
-      reason: '分类内容仍只有数据存储位置',
+      reason: '分类内容为存储位置小节',
     );
     expect(
       destination.sections.single.items.map((SettingsItem item) => item.id),
-      <String>['sync.data_storage_location'],
+      <String>[
+        'storage.content_root',
+        'storage.program_state_root',
+        'storage.open_downloads',
+        'storage.open_local_comic',
+        'storage.open_autobackup',
+      ],
     );
     expect(
       destination.sections

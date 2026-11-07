@@ -37,7 +37,8 @@ DataRootTargetRejection? validateDataRootTarget({
   final String canonNew = p.canonicalize(target.pickedPath);
   final String canonDocs = p.canonicalize(oldDocumentsRoot);
   final String canonSupport = p.canonicalize(oldSupportRoot);
-  final bool nestedInSharedDocuments = sharedDocumentsRoot &&
+  final bool nestedInSharedDocuments =
+      sharedDocumentsRoot &&
       AppPaths.isSafeNestedTargetInSharedDocuments(
         sharedDocumentsRoot: oldDocumentsRoot,
         newDataRoot: target.pickedPath,
@@ -181,7 +182,11 @@ Future<DataRootMigrationPlan> planDataRootMigration({
       platformSupportRoot: platformSupport.path,
     );
   } catch (e, stack) {
-    ErrorLogService.instance.logFatal('DataRootMigration.resolveTarget', e, stack);
+    ErrorLogService.instance.logFatal(
+      'DataRootMigration.resolveTarget',
+      e,
+      stack,
+    );
     throw DataRootMigrationPrecheckFailure(
       t.data_storage_migrate_failed(message: e.toString()),
     );
@@ -192,13 +197,13 @@ Future<DataRootMigrationPlan> planDataRootMigration({
     target: target,
     oldDocumentsRoot: oldDocs,
     oldSupportRoot: oldSupport,
-    existsAndHasFiles: _DataRootWidgetState._dirExistsAndHasFiles,
+    existsAndHasFiles: _dirExistsAndHasFiles,
     executablePath: Platform.resolvedExecutable,
     sharedDocumentsRoot: sharedDocumentsRoot,
   );
   if (rejection != null) {
     throw DataRootMigrationPrecheckFailure(
-      _DataRootWidgetState._rejectionMessage(rejection),
+      _rejectionMessage(rejection),
       rejection: rejection,
     );
   }
@@ -231,8 +236,11 @@ Future<DataRootMigrationRunOutcome> runDataRootMigration({
         ? null
         : await MacOSDataRootAccess.createBookmarkForPath(picked);
   } catch (e, stack) {
-    ErrorLogService.instance
-        .logFatal('DataRootMigration.createBookmark', e, stack);
+    ErrorLogService.instance.logFatal(
+      'DataRootMigration.createBookmark',
+      e,
+      stack,
+    );
     throw DataRootMigrationPrecheckFailure(
       t.data_storage_migrate_failed(message: e.toString()),
     );
@@ -249,19 +257,14 @@ Future<DataRootMigrationRunOutcome> runDataRootMigration({
       oldDocumentsRoot: Directory(plan.oldDocumentsRoot),
       oldSupportRoot: Directory(plan.oldSupportRoot),
       target: target,
-      closeResources: () =>
-          _DataRootWidgetState._closeRuntimeResources(appModel),
+      closeResources: () => _closeRuntimeResources(appModel),
       commitLocation: (DataRootMigrationTarget t) async {
         final SharedPreferences sp = await SharedPreferences.getInstance();
         if (t.isDefaultLocation) {
-          await _DataRootWidgetState._commitDefaultLocation(sp);
+          await _commitDefaultLocation(sp);
           return;
         }
-        await _DataRootWidgetState._commitCustomRoot(
-          sp,
-          t.dataRootPrefValue!,
-          macOSBookmark,
-        );
+        await _commitCustomRoot(sp, t.dataRootPrefValue!, macOSBookmark);
       },
       // 跨盘复制进度回灌到遮罩进度条（同盘 rename 不触发，遮罩显示不确定进度）。
       onProgress: (int copied, int total) =>
@@ -270,8 +273,9 @@ Future<DataRootMigrationRunOutcome> runDataRootMigration({
       resolvedExecutablePath: Platform.resolvedExecutable,
       // TODO-1226：默认根 = 共享用户 Documents → 只搬 Fushi 自有顶层项白名单，
       // 且迁移引擎绝不删除 Documents 本体；自定义专属根（<root>/documents）→ 整树。
-      documentsTopLevelIncludeNames:
-          sharedDocumentsRoot ? AppPaths.fushiOwnedDocumentsEntries : null,
+      documentsTopLevelIncludeNames: sharedDocumentsRoot
+          ? AppPaths.fushiOwnedDocumentsEntries
+          : null,
     );
     await const DataRootMigrator().migrate(req);
   } on DataRootMigrationException catch (e, stack) {
@@ -298,9 +302,7 @@ Future<DataRootMigrationRunOutcome> runDataRootMigration({
   // 降级提示。
   onMigrated?.call();
   bool restartFailed = false;
-  await _DataRootWidgetState._restartOrPromptManualImpl(appModel, (
-    String message,
-  ) {
+  await _restartOrPromptManualImpl(appModel, (String message) {
     // TODO-1324：迁移已成功，只是自动重启失败。**绝不**依赖 `if (mounted) _showSnackBar`
     // ——迁移一开始 beginDataRootMigration 就把根 widget 换成遮罩、设置页 State 已
     // unmount（mounted==false），snackbar 静默丢失 → 遮罩永远停在转圈（用户报的「转圈
@@ -324,444 +326,232 @@ void _recoverAfterFailedMigration(AppModel appModel, String failureMessage) {
   appModel.failDataRootMigration(failureMessage);
 }
 
-/// 设置行：显示当前数据根 + 更改位置按钮。仅桌面构造（section 已门控）。
-class _DataRootWidget extends StatefulWidget {
-  const _DataRootWidget({required this.settingsContext});
-  final SettingsContext settingsContext;
-
-  @override
-  State<_DataRootWidget> createState() => _DataRootWidgetState();
+/// 自定义数据根的提交：存 macOS 安全域书签 + 写 `data_root`。任一步失败复原旧书签并抛错
+/// （引擎据此整次回滚）。行为与 BUG-1188 之前逐字节一致。
+Future<void> _commitCustomRoot(
+  SharedPreferences sp,
+  String newRoot,
+  String? macOSBookmark,
+) async {
+  final String? previousBookmark = sp.getString(
+    MacOSDataRootAccess.dataRootBookmarkPrefKey,
+  );
+  final bool bookmarkStored = await MacOSDataRootAccess.storeBookmark(
+    sp,
+    macOSBookmark,
+  );
+  if (!bookmarkStored) {
+    throw const DataRootMigrationException('写入 macOS 数据根授权失败');
+  }
+  try {
+    final bool rootStored = await sp.setString(
+      AppPaths.dataRootPrefKey,
+      newRoot,
+    );
+    if (!rootStored) {
+      throw const DataRootMigrationException('写入新数据根设置失败');
+    }
+  } catch (e) {
+    final bool bookmarkRestored = await MacOSDataRootAccess.restoreBookmark(
+      sp,
+      previousBookmark,
+    );
+    if (!bookmarkRestored) {
+      throw DataRootMigrationException('写入新数据根设置失败，且恢复旧授权失败', cause: e);
+    }
+    throw DataRootMigrationException('写入新数据根设置失败', cause: e);
+  }
 }
 
-class _DataRootWidgetState extends State<_DataRootWidget> {
-  bool _migrating = false;
-  SharedPreferences? _prefs;
-
-  @override
-  void initState() {
-    super.initState();
-    SharedPreferences.getInstance().then((SharedPreferences sp) {
-      if (mounted) setState(() => _prefs = sp);
-    });
+/// BUG-1188：归一化到**默认位置**的提交：把 `documents_layout` 锚成 nested、清掉
+/// `data_root` 与 macOS 书签。
+///
+/// 两个键必须**同时**生效，否则下次启动必然解析到错误的根：
+///  - 只锚 nested、`data_root` 还在 ⇒ 仍走自定义根分支，指向已经搬空的旧根。
+///  - 只清 `data_root`、锚点还是 `flat` ⇒ documents 根解析回共享 `Documents`，而数据
+///    已经在 `Fushi/data` 里 = 书库/有声书/词典资源在 UI 上集体消失。
+/// 故任一步失败就把已改的键全部复原并抛错，由引擎回滚整次迁移。
+Future<void> _commitDefaultLocation(SharedPreferences sp) async {
+  final String? previousLayout = sp.getString(AppPaths.documentsLayoutPrefKey);
+  final String? previousRoot = sp.getString(AppPaths.dataRootPrefKey);
+  final String? previousBookmark = sp.getString(
+    MacOSDataRootAccess.dataRootBookmarkPrefKey,
+  );
+  if (!await sp.setString(
+    AppPaths.documentsLayoutPrefKey,
+    AppPaths.documentsLayoutNested,
+  )) {
+    throw const DataRootMigrationException('写入数据位置布局设置失败');
   }
-
-  /// 当前数据根展示串：有自定义 data_root（存在）显示其绝对路径，否则直接显示默认根的
-  /// 真实路径（不再加「默认位置」前缀）。data_root pref 是 DB 外通道，启动早期即可读，
-  /// 故优先用它判定；只有展示默认根真实路径时才去读 appDirectory（late 字段），并对其未
-  /// 初始化兜底（早期设置页 / 测试夹具里 AppModel 可能尚未跑完 _prepareRuntimeDirectories），
-  /// 兜底时才回退到「默认位置」标签。
-  String _currentLocationLabel() {
-    final String? custom = _prefs?.getString(AppPaths.dataRootPrefKey);
-    if (custom != null && custom.trim().isNotEmpty) {
-      return custom;
+  try {
+    if (!await sp.remove(AppPaths.dataRootPrefKey)) {
+      throw const DataRootMigrationException('清除自定义数据根设置失败');
     }
-    final AppModel appModel = widget.settingsContext.appModel;
-    String? defaultRootPath;
-    try {
-      // BUG-1115：显示 documents 根**本身**（内容真正落的地方）。旧实现显示它的父目录，
-      // 那在扁平老布局下是用户主目录（`C:\Users\<name>`，根本不是数据位置），在
-      // `<Documents>/Fushi/data` 新布局下则是容器目录 `Fushi` —— 两种都误导。
-      defaultRootPath = appModel.appDirectory.path;
-    } on Error {
-      defaultRootPath = null; // late 未初始化 → 只显示「默认位置」不带路径。
+    if (!await MacOSDataRootAccess.restoreBookmark(sp, null)) {
+      throw const DataRootMigrationException('清除 macOS 数据根授权失败');
     }
-    // TODO-1211：直接显示实际路径，不再加「默认位置」前缀；仅 late 未初始化的
-    // 罕见边界回退到标签。
-    return defaultRootPath ?? t.data_storage_location_default;
-  }
-
-  Future<void> _changeLocation() async {
-    // 再入保护：行 Activate（A/Enter）和 trailing 按钮都进这里，迁移中忽略二次触发。
-    if (_migrating) return;
-
-    // 数据根是整个 app 长期读写的落点，必须是真实文件系统路径（见
-    // pickRealDirectoryPath）。这一项今天只对桌面可见（`sync_settings_schema.dart`
-    // 里 section 与 item 双重 `isDesktopPlatform` gate），桌面上统一入口就是原样
-    // `getDirectoryPath()`，故此处是**纯口径统一、行为零变化**；改统一入口是为了
-    // 哪天这项对安卓开放时不会踩到「路径串读不回来」。
-    final String? picked = await pickRealDirectoryPath(
-      context: context,
-      appModel: widget.settingsContext.appModel,
-      dialogTitle: t.data_storage_change_button,
+  } catch (e) {
+    await _restorePrefString(
+      sp,
+      AppPaths.documentsLayoutPrefKey,
+      previousLayout,
     );
-    if (picked == null || picked.isEmpty || !mounted) return;
+    await _restorePrefString(sp, AppPaths.dataRootPrefKey, previousRoot);
+    await MacOSDataRootAccess.restoreBookmark(sp, previousBookmark);
+    if (e is DataRootMigrationException) rethrow;
+    throw DataRootMigrationException('写入默认数据位置设置失败', cause: e);
+  }
+}
 
-    final AppModel appModel = widget.settingsContext.appModel;
-    // 解析 + 触发前纯校验（自我迁移 / 目标非空 / 安装目录）：不合法直接报错，不进
-    // 确认弹窗。与控制通道 `storage migrate` 同一入口 [planDataRootMigration]。
-    final DataRootMigrationPlan plan;
-    try {
-      plan = await planDataRootMigration(appModel: appModel, picked: picked);
-    } on DataRootMigrationPrecheckFailure catch (e) {
-      if (mounted) _showSnackBar(context, e.message);
-      return;
+/// 把一个字符串 pref 复原到 [previous]（null 表示原本就没有这个键 → 删掉）。
+/// 提交失败回退用，尽力而为：复原本身失败只记日志（外层已在抛错回滚整次迁移）。
+Future<void> _restorePrefString(
+  SharedPreferences sp,
+  String key,
+  String? previous,
+) async {
+  try {
+    if (previous == null) {
+      await sp.remove(key);
+    } else {
+      await sp.setString(key, previous);
     }
-    if (!mounted) return;
+  } catch (e) {
+    debugPrint('DataRoot migrate: 复原 pref $key 失败: $e');
+  }
+}
 
-    final bool confirmed = await _confirmMigrate(plan.target);
-    if (!confirmed || !mounted) return;
+/// 注入给迁移引擎的真实资源关闭：停音频（含 media_kit/libmpv 对数据根内音频文件的
+/// 句柄）、清 Flutter 图片缓存、关词典 FFI、checkpoint+关 DB，确保 Windows 上数据根
+/// 子树里的文件句柄尽量释放、整目录可被 rename/搬移。顺序与 main.dart 退出闸门一致，
+/// 额外补上音频、图片缓存与 FFI（退出闸门没做这几步）。
+///
+/// 关于 WebView2：常驻热 WebView2 的 user-data 目录在数据根**之外**（进程默认基于
+/// exe 名的目录 + 应用外查词覆盖窗的 `%LOCALAPPDATA%\Fushi\GlobalLookupWebView2`，
+/// 见 `windows/runner/global_lookup_window.cpp`），不落在被迁移的 documents/support
+/// 子树里，故 dispose 它对释放数据根文件锁无意义、此处不做（避免无效的连带拆引擎）。
+/// 真正压在数据根子树上的句柄是：正在播放的音频/视频文件（media_kit/libmpv）、封面/
+/// 缩略图解码、词典索引/资源、DB 及 local_audio_*.db。
+Future<void> _closeRuntimeResources(AppModel appModel) async {
+  // 1) 停音频句柄（just_audio / AudiobookPlayerController；桌面经 just_audio_media_kit
+  //    → libmpv 打开数据根内的音频文件，未停会锁住 rename/删源）。
+  try {
+    await appModel.audiobookSession.stop().timeout(_closeResourceTimeout);
+  } catch (e) {
+    debugPrint(
+      'DataRoot migrate: audiobookSession.stop failed/timeout (best-effort): $e',
+    );
+  }
+  try {
+    final Future<void>? stopFuture = appModel.audioHandler?.stop();
+    if (stopFuture != null) await stopFuture.timeout(_closeResourceTimeout);
+  } catch (e) {
+    debugPrint(
+      'DataRoot migrate: audioHandler.stop failed/timeout (best-effort): $e',
+    );
+  }
+  // 1.5) TODO-1212：释放页面级媒体播放器的文件句柄（视频主播放器 / 离屏缩略图
+  //    取帧 Player）。有声书会话上面 stop() 已直接 await disposeAndRelease 释放；
+  //    这些视频侧 leaf 播放器是页面级、没有进程级持有者，迁移路径够不到——经
+  //    全局 [MediaHandleRegistry] 触达并逐个 await，确保 rename 数据根前底层
+  //    libmpv 视频/字幕文件句柄真放掉（收尾 TODO-935 的「无全局 registry 触达
+  //    页面级播放器」残余）。best-effort：释放失败不阻止迁移（引擎有锁重试 +
+  //    跨盘降级兜底）。
+  try {
+    await MediaHandleRegistry.instance.releaseAll();
+  } catch (e) {
+    debugPrint(
+      'DataRoot migrate: media handle release failed (best-effort): $e',
+    );
+  }
+  // 2) 清 Flutter 图片缓存：释放封面/缩略图解码持有的解码资源。FileImage 通常读完
+  //    即关句柄，此处更多是防御性清理（活图连带 clearLiveImages），成本极低。
+  try {
+    PaintingBinding.instance.imageCache
+      ..clear()
+      ..clearLiveImages();
+  } catch (e) {
+    debugPrint('DataRoot migrate: imageCache clear failed (best-effort): $e');
+  }
+  // 3) 释放词典 FFI 原生句柄（静态单例；打开数据根内的词典索引/资源文件）。
+  FushiDicts.disposeInstance();
+  // 4) WAL checkpoint(TRUNCATE) 落盘 + 关 DB（释放文件锁）。
+  try {
+    await appModel.database
+        .customStatement('PRAGMA wal_checkpoint(TRUNCATE)')
+        .timeout(_closeResourceTimeout);
+  } catch (e) {
+    // best-effort：checkpoint 失败/超时不致命，下面的 closeDatabase 仍会落盘+关库。
+    debugPrint(
+      'DataRoot migrate: wal_checkpoint failed/timeout (best-effort): $e',
+    );
+  }
+  // TODO-1324：closeDatabase 过去**无 try/catch 无超时**——若 Drift close 因某个未取消
+  // 的 stream/挂起操作永不完成，整个迁移就永远卡在这里（遮罩转圈永不结束）。加超时 +
+  // 兜底：超时则放行继续搬文件（真被占用会在 rename 阶段以「文件被占用」失败态醒目提示，
+  // 而不是静默永久挂起）。
+  try {
+    await appModel.closeDatabase().timeout(_closeDatabaseTimeout);
+  } catch (e) {
+    debugPrint(
+      'DataRoot migrate: closeDatabase failed/timeout (best-effort): $e',
+    );
+  }
+}
 
-    try {
-      await runDataRootMigration(
-        appModel: appModel,
-        plan: plan,
-        onStarted: () {
-          if (mounted) setState(() => _migrating = true);
-        },
-        onMigrated: () {
-          if (mounted) {
-            _showSnackBar(context, t.data_storage_migrate_success);
-          }
-        },
+/// TODO-1324：迁移前关运行时句柄的单步硬上限。任一步（停音频 / checkpoint）卡住都不得
+/// 无限拖住迁移——超时即放行，把「永久挂起」降级为「可恢复的失败/继续」。
+const Duration _closeResourceTimeout = Duration(seconds: 5);
+
+/// 关 DB 单独给更长上限（checkpoint 落盘可能较慢），但仍有界，绝不永久挂起。
+const Duration _closeDatabaseTimeout = Duration(seconds: 10);
+
+/// 迁移成功后自动重启；不支持或失败提示用户手动重开。
+Future<void> _restartOrPromptManualImpl(
+  AppModel appModel,
+  void Function(String message) onRestartFailed,
+) async {
+  final PlatformLifecycleService lifecycle =
+      appModel.platformServices.lifecycle;
+  if (!lifecycle.supportsRestart) {
+    onRestartFailed(t.data_storage_restart_failed);
+    return;
+  }
+  try {
+    await lifecycle.restartApp();
+  } catch (e) {
+    // 重启起新进程失败（Process.start 抛错）→ 降级提示用户手动重开。
+    debugPrint('DataRoot migrate: restartApp failed: $e');
+    onRestartFailed(t.data_storage_restart_failed);
+  }
+}
+
+String _rejectionMessage(DataRootTargetRejection rejection) {
+  // 两种拒绝都是目标不合法，复用迁移失败文案承载具体原因（引擎也会再拒一次）。
+  switch (rejection) {
+    case DataRootTargetRejection.insideCurrentRoot:
+      return t.data_storage_migrate_failed(
+        message: t.data_storage_change_confirm_title,
       );
-    } on DataRootMigrationPrecheckFailure catch (e) {
-      if (mounted) _showSnackBar(context, e.message);
-    } finally {
-      if (mounted) setState(() => _migrating = false);
-    }
+    case DataRootTargetRejection.targetNotEmpty:
+      return t.data_storage_migrate_failed(
+        message: t.data_storage_location_title,
+      );
+    case DataRootTargetRejection.containsExecutable:
+      return t.data_storage_reject_install_dir;
   }
+}
 
-  /// 自定义数据根的提交：存 macOS 安全域书签 + 写 `data_root`。任一步失败复原旧书签并抛错
-  /// （引擎据此整次回滚）。行为与 BUG-1188 之前逐字节一致。
-  static Future<void> _commitCustomRoot(
-    SharedPreferences sp,
-    String newRoot,
-    String? macOSBookmark,
-  ) async {
-    final String? previousBookmark =
-        sp.getString(MacOSDataRootAccess.dataRootBookmarkPrefKey);
-    final bool bookmarkStored =
-        await MacOSDataRootAccess.storeBookmark(sp, macOSBookmark);
-    if (!bookmarkStored) {
-      throw const DataRootMigrationException('写入 macOS 数据根授权失败');
-    }
-    try {
-      final bool rootStored =
-          await sp.setString(AppPaths.dataRootPrefKey, newRoot);
-      if (!rootStored) {
-        throw const DataRootMigrationException('写入新数据根设置失败');
-      }
-    } catch (e) {
-      final bool bookmarkRestored =
-          await MacOSDataRootAccess.restoreBookmark(sp, previousBookmark);
-      if (!bookmarkRestored) {
-        throw DataRootMigrationException(
-          '写入新数据根设置失败，且恢复旧授权失败',
-          cause: e,
-        );
-      }
-      throw DataRootMigrationException('写入新数据根设置失败', cause: e);
-    }
+bool _dirExistsAndHasFiles(String absolutePath) {
+  final Directory dir = Directory(absolutePath);
+  if (!dir.existsSync()) return false;
+  // followLinks: false —— 用户挑的目录可能含 shell junction（ACL 全拒），追进去
+  // listSync 直接 errno 5 硬炸（TODO-1226）。
+  for (final FileSystemEntity e in dir.listSync(
+    recursive: true,
+    followLinks: false,
+  )) {
+    if (e is File) return true;
   }
-
-  /// BUG-1188：归一化到**默认位置**的提交：把 `documents_layout` 锚成 nested、清掉
-  /// `data_root` 与 macOS 书签。
-  ///
-  /// 两个键必须**同时**生效，否则下次启动必然解析到错误的根：
-  ///  - 只锚 nested、`data_root` 还在 ⇒ 仍走自定义根分支，指向已经搬空的旧根。
-  ///  - 只清 `data_root`、锚点还是 `flat` ⇒ documents 根解析回共享 `Documents`，而数据
-  ///    已经在 `Fushi/data` 里 = 书库/有声书/词典资源在 UI 上集体消失。
-  /// 故任一步失败就把已改的键全部复原并抛错，由引擎回滚整次迁移。
-  static Future<void> _commitDefaultLocation(SharedPreferences sp) async {
-    final String? previousLayout =
-        sp.getString(AppPaths.documentsLayoutPrefKey);
-    final String? previousRoot = sp.getString(AppPaths.dataRootPrefKey);
-    final String? previousBookmark =
-        sp.getString(MacOSDataRootAccess.dataRootBookmarkPrefKey);
-    if (!await sp.setString(
-        AppPaths.documentsLayoutPrefKey, AppPaths.documentsLayoutNested)) {
-      throw const DataRootMigrationException('写入数据位置布局设置失败');
-    }
-    try {
-      if (!await sp.remove(AppPaths.dataRootPrefKey)) {
-        throw const DataRootMigrationException('清除自定义数据根设置失败');
-      }
-      if (!await MacOSDataRootAccess.restoreBookmark(sp, null)) {
-        throw const DataRootMigrationException('清除 macOS 数据根授权失败');
-      }
-    } catch (e) {
-      await _restorePrefString(
-          sp, AppPaths.documentsLayoutPrefKey, previousLayout);
-      await _restorePrefString(sp, AppPaths.dataRootPrefKey, previousRoot);
-      await MacOSDataRootAccess.restoreBookmark(sp, previousBookmark);
-      if (e is DataRootMigrationException) rethrow;
-      throw DataRootMigrationException('写入默认数据位置设置失败', cause: e);
-    }
-  }
-
-  /// 把一个字符串 pref 复原到 [previous]（null 表示原本就没有这个键 → 删掉）。
-  /// 提交失败回退用，尽力而为：复原本身失败只记日志（外层已在抛错回滚整次迁移）。
-  static Future<void> _restorePrefString(
-    SharedPreferences sp,
-    String key,
-    String? previous,
-  ) async {
-    try {
-      if (previous == null) {
-        await sp.remove(key);
-      } else {
-        await sp.setString(key, previous);
-      }
-    } catch (e) {
-      debugPrint('DataRoot migrate: 复原 pref $key 失败: $e');
-    }
-  }
-
-  /// 注入给迁移引擎的真实资源关闭：停音频（含 media_kit/libmpv 对数据根内音频文件的
-  /// 句柄）、清 Flutter 图片缓存、关词典 FFI、checkpoint+关 DB，确保 Windows 上数据根
-  /// 子树里的文件句柄尽量释放、整目录可被 rename/搬移。顺序与 main.dart 退出闸门一致，
-  /// 额外补上音频、图片缓存与 FFI（退出闸门没做这几步）。
-  ///
-  /// 关于 WebView2：常驻热 WebView2 的 user-data 目录在数据根**之外**（进程默认基于
-  /// exe 名的目录 + 应用外查词覆盖窗的 `%LOCALAPPDATA%\Fushi\GlobalLookupWebView2`，
-  /// 见 `windows/runner/global_lookup_window.cpp`），不落在被迁移的 documents/support
-  /// 子树里，故 dispose 它对释放数据根文件锁无意义、此处不做（避免无效的连带拆引擎）。
-  /// 真正压在数据根子树上的句柄是：正在播放的音频/视频文件（media_kit/libmpv）、封面/
-  /// 缩略图解码、词典索引/资源、DB 及 local_audio_*.db。
-  static Future<void> _closeRuntimeResources(AppModel appModel) async {
-    // 1) 停音频句柄（just_audio / AudiobookPlayerController；桌面经 just_audio_media_kit
-    //    → libmpv 打开数据根内的音频文件，未停会锁住 rename/删源）。
-    try {
-      await appModel.audiobookSession.stop().timeout(_closeResourceTimeout);
-    } catch (e) {
-      debugPrint(
-          'DataRoot migrate: audiobookSession.stop failed/timeout (best-effort): $e');
-    }
-    try {
-      final Future<void>? stopFuture = appModel.audioHandler?.stop();
-      if (stopFuture != null) await stopFuture.timeout(_closeResourceTimeout);
-    } catch (e) {
-      debugPrint(
-          'DataRoot migrate: audioHandler.stop failed/timeout (best-effort): $e');
-    }
-    // 1.5) TODO-1212：释放页面级媒体播放器的文件句柄（视频主播放器 / 离屏缩略图
-    //    取帧 Player）。有声书会话上面 stop() 已直接 await disposeAndRelease 释放；
-    //    这些视频侧 leaf 播放器是页面级、没有进程级持有者，迁移路径够不到——经
-    //    全局 [MediaHandleRegistry] 触达并逐个 await，确保 rename 数据根前底层
-    //    libmpv 视频/字幕文件句柄真放掉（收尾 TODO-935 的「无全局 registry 触达
-    //    页面级播放器」残余）。best-effort：释放失败不阻止迁移（引擎有锁重试 +
-    //    跨盘降级兜底）。
-    try {
-      await MediaHandleRegistry.instance.releaseAll();
-    } catch (e) {
-      debugPrint(
-          'DataRoot migrate: media handle release failed (best-effort): $e');
-    }
-    // 2) 清 Flutter 图片缓存：释放封面/缩略图解码持有的解码资源。FileImage 通常读完
-    //    即关句柄，此处更多是防御性清理（活图连带 clearLiveImages），成本极低。
-    try {
-      PaintingBinding.instance.imageCache
-        ..clear()
-        ..clearLiveImages();
-    } catch (e) {
-      debugPrint('DataRoot migrate: imageCache clear failed (best-effort): $e');
-    }
-    // 3) 释放词典 FFI 原生句柄（静态单例；打开数据根内的词典索引/资源文件）。
-    FushiDicts.disposeInstance();
-    // 4) WAL checkpoint(TRUNCATE) 落盘 + 关 DB（释放文件锁）。
-    try {
-      await appModel.database
-          .customStatement('PRAGMA wal_checkpoint(TRUNCATE)')
-          .timeout(_closeResourceTimeout);
-    } catch (e) {
-      // best-effort：checkpoint 失败/超时不致命，下面的 closeDatabase 仍会落盘+关库。
-      debugPrint(
-          'DataRoot migrate: wal_checkpoint failed/timeout (best-effort): $e');
-    }
-    // TODO-1324：closeDatabase 过去**无 try/catch 无超时**——若 Drift close 因某个未取消
-    // 的 stream/挂起操作永不完成，整个迁移就永远卡在这里（遮罩转圈永不结束）。加超时 +
-    // 兜底：超时则放行继续搬文件（真被占用会在 rename 阶段以「文件被占用」失败态醒目提示，
-    // 而不是静默永久挂起）。
-    try {
-      await appModel.closeDatabase().timeout(_closeDatabaseTimeout);
-    } catch (e) {
-      debugPrint(
-          'DataRoot migrate: closeDatabase failed/timeout (best-effort): $e');
-    }
-  }
-
-  /// TODO-1324：迁移前关运行时句柄的单步硬上限。任一步（停音频 / checkpoint）卡住都不得
-  /// 无限拖住迁移——超时即放行，把「永久挂起」降级为「可恢复的失败/继续」。
-  static const Duration _closeResourceTimeout = Duration(seconds: 5);
-
-  /// 关 DB 单独给更长上限（checkpoint 落盘可能较慢），但仍有界，绝不永久挂起。
-  static const Duration _closeDatabaseTimeout = Duration(seconds: 10);
-
-  /// 迁移成功后自动重启；不支持或失败提示用户手动重开。
-  static Future<void> _restartOrPromptManualImpl(
-    AppModel appModel,
-    void Function(String message) onRestartFailed,
-  ) async {
-    final PlatformLifecycleService lifecycle =
-        appModel.platformServices.lifecycle;
-    if (!lifecycle.supportsRestart) {
-      onRestartFailed(t.data_storage_restart_failed);
-      return;
-    }
-    try {
-      await lifecycle.restartApp();
-    } catch (e) {
-      // 重启起新进程失败（Process.start 抛错）→ 降级提示用户手动重开。
-      debugPrint('DataRoot migrate: restartApp failed: $e');
-      onRestartFailed(t.data_storage_restart_failed);
-    }
-  }
-
-  /// BUG-1188：确认弹窗里把**解析后的**两个根原样列出来。挑中默认位置时目标会被归一化
-  /// （`<Documents>\Fushi` → 内容落 `<Documents>\Fushi\data`、DB 留在平台固定落点），
-  /// 用户必须在按下确认前就看到数据到底会去哪，而不是重启后自己找。
-  Future<bool> _confirmMigrate(DataRootMigrationTarget target) async {
-    final List<String> roots = <String>[
-      target.documentsRoot.path,
-      target.supportRoot.path,
-    ];
-    final bool? confirmed = await showAppDialog<bool>(
-      context: context,
-      builder: (BuildContext ctx) {
-        final FushiDesignTokens tokens = FushiDesignTokens.of(ctx);
-        return FushiDialogFrame(
-          maxWidth: 420,
-          insetPadding: EdgeInsets.symmetric(
-            horizontal: tokens.spacing.card,
-            vertical: tokens.spacing.card,
-          ),
-          scrollable: false,
-          child: FushiModalSheetFrame(
-            title: t.data_storage_change_confirm_title,
-            leadingIcon: FushiIcons.moveFile,
-            scrollable: true,
-            bodyPadding: EdgeInsets.fromLTRB(
-              tokens.spacing.card,
-              0,
-              tokens.spacing.card,
-              tokens.spacing.gap,
-            ),
-            footerPadding: EdgeInsets.fromLTRB(
-              tokens.spacing.card,
-              tokens.spacing.gap,
-              tokens.spacing.card,
-              tokens.spacing.card,
-            ),
-            // 说明 + 两个解析后的落点（M3E 分段卡片：首尾大圆角、行间 2，
-            // 等宽数字便于逐字核对路径）。
-            body: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                Text(t.data_storage_change_confirm_body),
-                SizedBox(height: tokens.spacing.gap),
-                for (int i = 0; i < roots.length; i++)
-                  FushiGroupedListItem(
-                    index: i,
-                    count: roots.length,
-                    child: Padding(
-                      padding: EdgeInsets.all(tokens.spacing.gap),
-                      child: Row(
-                        children: <Widget>[
-                          const FushiListLeadingIcon(
-                            FushiIcons.folder,
-                            shape: FushiLeadingShape.square,
-                            size: 36,
-                          ),
-                          SizedBox(width: tokens.spacing.gap),
-                          Expanded(
-                            child: SelectableText(
-                              roots[i],
-                              style: ctx.fushiType.bodyMedium.tabular,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-            footer: Wrap(
-              alignment: WrapAlignment.end,
-              spacing: tokens.spacing.gap,
-              children: <Widget>[
-                adaptiveDialogAction(
-                  context: ctx,
-                  onPressed: () => Navigator.pop(ctx, false),
-                  child: Text(t.dialog_cancel),
-                ),
-                adaptiveDialogAction(
-                  context: ctx,
-                  isDefaultAction: true,
-                  isDestructiveAction: true,
-                  onPressed: () => Navigator.pop(ctx, true),
-                  child: Text(t.dialog_ok),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-    return confirmed == true;
-  }
-
-  static String _rejectionMessage(DataRootTargetRejection rejection) {
-    // 两种拒绝都是目标不合法，复用迁移失败文案承载具体原因（引擎也会再拒一次）。
-    switch (rejection) {
-      case DataRootTargetRejection.insideCurrentRoot:
-        return t.data_storage_migrate_failed(
-            message: t.data_storage_change_confirm_title);
-      case DataRootTargetRejection.targetNotEmpty:
-        return t.data_storage_migrate_failed(
-            message: t.data_storage_location_title);
-      case DataRootTargetRejection.containsExecutable:
-        return t.data_storage_reject_install_dir;
-    }
-  }
-
-  static bool _dirExistsAndHasFiles(String absolutePath) {
-    final Directory dir = Directory(absolutePath);
-    if (!dir.existsSync()) return false;
-    // followLinks: false —— 用户挑的目录可能含 shell junction（ACL 全拒），追进去
-    // listSync 直接 errno 5 硬炸（TODO-1226）。
-    for (final FileSystemEntity e
-        in dir.listSync(recursive: true, followLinks: false)) {
-      if (e is File) return true;
-    }
-    return false;
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AdaptiveSettingsRow(
-      title: t.data_storage_location_title,
-      subtitle: _migrating
-          ? t.data_storage_migrating
-          : _currentLocationLabel(),
-      icon: FushiIcons.folder,
-      controlBelow: true,
-      // 行 onTap 注册焦点目标（方向导航可达）；trailing 按钮是视觉入口。
-      onTap: _changeLocation,
-      trailing: _migrating
-          ? Row(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: adaptiveIndicator(context: context, strokeWidth: 2),
-                ),
-                const SizedBox(width: 8),
-                Text(t.data_storage_migrating),
-              ],
-            )
-          : FushiFilledButton.tonal(
-              onPressed: _changeLocation,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: <Widget>[
-                  const FushiIcon(FushiIcons.moveFile, size: 18),
-                  const SizedBox(width: 8),
-                  Text(t.data_storage_change_button),
-                ],
-              ),
-            ),
-    );
-  }
+  return false;
 }

@@ -445,7 +445,7 @@ class _SrsBackupsPageState extends ConsumerState<SrsBackupsPage> {
             title: t.srs_backup_change_location,
             icon: FushiIcons.moveFile,
             onTap: () {
-              SettingsSearchReveal.pendingItemId = 'sync.data_storage_location';
+              SettingsSearchReveal.pendingItemId = 'storage.content_root';
               unawaited(
                 Navigator.of(context).push<void>(
                   adaptivePageRoute<void>(

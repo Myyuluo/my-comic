@@ -184,8 +184,9 @@ class AppPaths {
   static Future<AppPaths> resolve() async {
     final Directory currentDefault = await _defaultContentRoot();
     final Directory content;
-    String? configured =
-        forceDefaultRootForSession ? null : await _configuredContentRootPath();
+    String? configured = forceDefaultRootForSession
+        ? null
+        : await _configuredContentRootPath();
     String? contentRootRebaseFrom;
     // Ticket 02：便携拷贝到另一个 Windows 用户后，偏好里可能还记着**旧用户**的
     // 默认 `Documents\MyComic`。它不是用户挑的自定义根，而是默认根的绝对化记录；
@@ -213,10 +214,12 @@ class AppPaths {
 
     final ({Directory root, bool usedFallback}) programState =
         await _resolveProgramStateRoot();
-    final Directory state =
-        Directory(p.join(programState.root.path, stateDirName));
-    final Directory cache =
-        Directory(p.join(programState.root.path, cacheDirName));
+    final Directory state = Directory(
+      p.join(programState.root.path, stateDirName),
+    );
+    final Directory cache = Directory(
+      p.join(programState.root.path, cacheDirName),
+    );
 
     final AppPaths paths = AppPaths._(
       contentRoot: content,
@@ -335,7 +338,7 @@ class AppPaths {
   /// 解析 Program state root。测试根优先；桌面走 `<exeDir>/userdata`，不可写时
   /// 回退 `%LOCALAPPDATA%/MyComic/userdata`；移动端用 app 私有 support 目录。
   static Future<({Directory root, bool usedFallback})>
-      _resolveProgramStateRoot() async {
+  _resolveProgramStateRoot() async {
     final Directory? test = _testDirectory(programStateRootDirName);
     if (test != null) return (root: test, usedFallback: false);
 
@@ -383,8 +386,9 @@ class AppPaths {
 
   /// `%LOCALAPPDATA%/MyComic/userdata`。
   static Directory fallbackProgramStateRootFor(String localAppDataRoot) =>
-      Directory(p.join(localAppDataRoot, contentRootDirName,
-          programStateRootDirName));
+      Directory(
+        p.join(localAppDataRoot, contentRootDirName, programStateRootDirName),
+      );
 
   /// 同步版本，供 `main()` 在第一次 SharedPreferences 读取之前安装 prefs store。
   ///
@@ -397,7 +401,8 @@ class AppPaths {
     if (debugExecutablePathOverride == null && _isFlutterTestHost) return null;
     try {
       return resolveProgramStateRootSync(
-        executablePath: debugExecutablePathOverride ?? Platform.resolvedExecutable,
+        executablePath:
+            debugExecutablePathOverride ?? Platform.resolvedExecutable,
         localAppDataRoot:
             debugLocalAppDataOverride ?? _defaultLocalAppDataRoot(),
       ).root;
@@ -423,8 +428,7 @@ class AppPaths {
   static bool _ensureDirectorySync(Directory dir) {
     try {
       dir.createSync(recursive: true);
-      final File probe =
-          File(p.join(dir.path, '.my_comic_write_probe_$pid'));
+      final File probe = File(p.join(dir.path, '.my_comic_write_probe_$pid'));
       probe.writeAsStringSync('', flush: true);
       probe.deleteSync();
       return true;
@@ -438,9 +442,10 @@ class AppPaths {
   /// 只准 `exists().timeout(...)`，永不 `existsSync()`。
   static Future<bool> _probeDataRootExists(Directory dir) async {
     try {
-      return await dir
-          .exists()
-          .timeout(const Duration(seconds: 2), onTimeout: () => false);
+      return await dir.exists().timeout(
+        const Duration(seconds: 2),
+        onTimeout: () => false,
+      );
     } catch (_) {
       return false;
     }
@@ -472,9 +477,9 @@ class AppPaths {
 
   /// 旧 nested 容器名候选（`Fushi` / `Hibiki`）。
   static List<String> get defaultDocumentsChildSegments => <String>[
-        _documentsContainerName ?? 'Fushi',
-        'data',
-      ];
+    _documentsContainerName ?? 'Fushi',
+    'data',
+  ];
 
   /// 旧嵌套容器名锚点键。
   static const String documentsContainerPrefKey = 'documents_container';
@@ -515,7 +520,8 @@ class AppPaths {
         final SharedPreferences prefs = await SharedPreferences.getInstance();
         raw = prefs.getString(dataRootPrefKey);
         if (raw != null && raw.trim().isNotEmpty && Platform.isMacOS) {
-          raw = await MacOSDataRootAccess.startAccessingStoredBookmark(prefs) ??
+          raw =
+              await MacOSDataRootAccess.startAccessingStoredBookmark(prefs) ??
               raw;
         }
       } catch (_) {
@@ -546,10 +552,12 @@ class AppPaths {
     if (test != null) return test;
     final Directory platformDocuments =
         await getApplicationDocumentsDirectory();
-    return Directory(p.joinAll(<String>[
-      platformDocuments.path,
-      ...defaultDocumentsChildSegments,
-    ]));
+    return Directory(
+      p.joinAll(<String>[
+        platformDocuments.path,
+        ...defaultDocumentsChildSegments,
+      ]),
+    );
   }
 
   /// 旧布局判定。**纯读取、绝不探测文件系统**。
@@ -572,7 +580,8 @@ class AppPaths {
       _ensureDocumentsContainerDecided(await _prefsOrNull());
 
   static Future<void> _ensureDocumentsContainerDecided(
-      SharedPreferences? prefs) async {
+    SharedPreferences? prefs,
+  ) async {
     if (_documentsContainerName != null) return;
     final String? stored = prefs?.getString(documentsContainerPrefKey);
     if (stored == 'Hibiki' || stored == 'Fushi') {
@@ -584,13 +593,11 @@ class AppPaths {
       final Directory platformDocuments =
           await getApplicationDocumentsDirectory();
       final bool legacyExists = await Directory(
-              p.join(platformDocuments.path, 'Hibiki', 'data'))
-          .exists()
-          .timeout(const Duration(seconds: 2), onTimeout: () => true);
+        p.join(platformDocuments.path, 'Hibiki', 'data'),
+      ).exists().timeout(const Duration(seconds: 2), onTimeout: () => true);
       final bool newExists = await Directory(
-              p.join(platformDocuments.path, 'Fushi', 'data'))
-          .exists()
-          .timeout(const Duration(seconds: 2), onTimeout: () => false);
+        p.join(platformDocuments.path, 'Fushi', 'data'),
+      ).exists().timeout(const Duration(seconds: 2), onTimeout: () => false);
       decided = (legacyExists && !newExists) ? 'Hibiki' : 'Fushi';
     } catch (_) {
       decided = 'Hibiki';
@@ -618,10 +625,9 @@ class AppPaths {
   static Future<bool> existingInstallHasDatabase() async {
     try {
       final Directory support = await _resolveSupportRoot();
-      Future<bool> dbExists(String fileName) =>
-          File(p.join(support.path, fileName))
-              .exists()
-              .timeout(const Duration(seconds: 2), onTimeout: () => true);
+      Future<bool> dbExists(String fileName) => File(
+        p.join(support.path, fileName),
+      ).exists().timeout(const Duration(seconds: 2), onTimeout: () => true);
       return await dbExists(fushiDatabaseFileName) ||
           await dbExists(fushiLegacyDatabaseFileName) ||
           await dbExists(legacyHibikiDatabaseFileName);
@@ -642,11 +648,10 @@ class AppPaths {
   /// 旧迁移器的纯派生（`<dataRoot>/documents` + `<dataRoot>/support`）。
   static (Directory documents, Directory support) rootsForDataRoot(
     String dataRootPath,
-  ) =>
-      (
-        Directory(p.join(dataRootPath, dataRootDocumentsChild)),
-        Directory(p.join(dataRootPath, dataRootSupportChild)),
-      );
+  ) => (
+    Directory(p.join(dataRootPath, dataRootDocumentsChild)),
+    Directory(p.join(dataRootPath, dataRootSupportChild)),
+  );
 
   /// 旧 documents 根顶层白名单（仅旧迁移器使用；票 12 删除）。
   static const Set<String> fushiOwnedDocumentsEntries = <String>{
@@ -686,16 +691,26 @@ class AppPaths {
     final String canonRoot = p.canonicalize(sharedDocumentsRoot);
     final String canonNew = p.canonicalize(newDataRoot);
     if (!p.isWithin(canonRoot, canonNew)) return false;
-    final String firstSegment =
-        p.split(p.relative(canonNew, from: canonRoot)).first.toLowerCase();
-    return !ownedEntries
-        .any((String owned) => owned.toLowerCase() == firstSegment);
+    final String firstSegment = p
+        .split(p.relative(canonNew, from: canonRoot))
+        .first
+        .toLowerCase();
+    return !ownedEntries.any(
+      (String owned) => owned.toLowerCase() == firstSegment,
+    );
   }
 
   // ---- 静态便捷层（给无 AppModel 实例的 static 存储助手） ----
 
   /// Content root 目录（不创建）。
   static Future<Directory> contentRootDirectory() => _resolveContentRoot();
+
+  /// 当前用户的默认 Content root（`<Documents>/MyComic`，不创建）。
+  ///
+  /// Ticket 08：切换 Content root 时，目标等于默认根就清除 `content_root` 偏好，
+  /// 让 portable copy 的默认根 rebase 语义保持成立。
+  static Future<Directory> defaultContentRootDirectory() =>
+      _defaultContentRoot();
 
   /// `<content>/downloads`（不创建）。
   static Future<Directory> downloadsRootDirectory() async =>
@@ -715,11 +730,13 @@ class AppPaths {
 
   /// `<programState>/state`（不创建）。
   static Future<Directory> stateRootDirectory() async => Directory(
-      p.join((await _resolveProgramStateRoot()).root.path, stateDirName));
+    p.join((await _resolveProgramStateRoot()).root.path, stateDirName),
+  );
 
   /// `<programState>/cache`（不创建）。
   static Future<Directory> cacheRootDirectory() async => Directory(
-      p.join((await _resolveProgramStateRoot()).root.path, cacheDirName));
+    p.join((await _resolveProgramStateRoot()).root.path, cacheDirName),
+  );
 
   /// `<programState>/state/custom_fonts`（不创建）。
   static Future<Directory> customFontsRootDirectory() async =>

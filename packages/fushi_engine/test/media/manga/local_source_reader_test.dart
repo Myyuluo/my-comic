@@ -270,4 +270,61 @@ void main() {
       isNull,
     );
   });
+
+  test('给定当前 Local source root 时，root 内的作品正常解析', () async {
+    writePng('Manga/Ch 1/001.png');
+    final String bookKey = await importAndGetKey();
+
+    final LocalSourceResolvedChapter? resolved =
+        await LocalSourceReader.resolveChapter(
+          db: db,
+          bookKey: bookKey,
+          chapterIndex: 0,
+          localSourceRoot: root,
+        );
+
+    expect(resolved, isNotNull);
+    expect(resolved!.chapterDirectory.path, p.join(root.path, 'Manga', 'Ch 1'));
+  });
+
+  test('切换 Content root 后旧 root 下的本地漫画不再被读取', () async {
+    writePng('Manga/Ch 1/001.png');
+    final String bookKey = await importAndGetKey();
+    final Directory newRoot = await Directory.systemTemp.createTemp(
+      'local_source_new_root_',
+    );
+    addTearDown(() async {
+      if (newRoot.existsSync()) await newRoot.delete(recursive: true);
+    });
+
+    // 旧根的文件还在（switch 不搬移/删除），但它不是当前 Local source root。
+    final LocalSourceResolvedChapter? resolved =
+        await LocalSourceReader.resolveChapter(
+          db: db,
+          bookKey: bookKey,
+          chapterIndex: 0,
+          localSourceRoot: newRoot,
+        );
+
+    expect(resolved, isNull, reason: '不得回读旧 Content root 下的 localcomic');
+    expect(
+      File(p.join(root.path, 'Manga', 'Ch 1', '001.png')).existsSync(),
+      isTrue,
+      reason: '旧文件原地保留',
+    );
+  });
+
+  test('Local source 路径边界判定按目录段、大小写不敏感', () {
+    expect(isLocalSourcePathWithinRoot(root.path, root), isTrue);
+    expect(
+      isLocalSourcePathWithinRoot(p.join(root.path, 'Manga', 'Ch 1'), root),
+      isTrue,
+    );
+    expect(isLocalSourcePathWithinRoot('/another/root/Manga', root), isFalse);
+    expect(
+      isLocalSourcePathWithinRoot('${root.path}_sibling/Manga', root),
+      isFalse,
+      reason: '前缀相似但不是子目录',
+    );
+  });
 }
