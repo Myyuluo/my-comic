@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:archive/archive.dart';
 import 'package:fushi_engine/media/manga/download_library_storage.dart';
 import 'package:fushi_engine/media/manga/mokuro_payload.dart';
 import 'package:path/path.dart' as p;
@@ -274,5 +275,127 @@ void main() {
     await downloadPagesManifestFile(chapterDir).writeAsString('{not json');
     expect(await readPagesManifest(chapterDir), isNull);
     expect(await isDownloadLibraryChapterComplete(chapterDir), isFalse);
+  });
+
+  // ── CBZ 容器（票 06） ────────────────────────────────────────────────
+
+  /// 写一个 CBZ：包根平铺页图 + `pages.json`。[writePages] / [writeManifest]
+  /// 控制是否写入对应条目（模拟半成品包）。
+  Future<File> writeArchive({
+    required String fileName,
+    required MangaPagesManifest manifest,
+    bool writePages = true,
+    bool writeManifest = true,
+    String rawManifest = '',
+  }) async {
+    final Archive archive = Archive();
+    if (writePages) {
+      for (final MokuroImage image in manifest.payload.images) {
+        final List<int> bytes = utf8.encode('page:${image.url}');
+        archive.addFile(ArchiveFile(image.url, bytes.length, bytes));
+      }
+    }
+    if (writeManifest) {
+      final List<int> bytes = utf8.encode(
+        rawManifest.isEmpty ? jsonEncode(manifest.toJson()) : rawManifest,
+      );
+      archive.addFile(
+        ArchiveFile(kDownloadPagesFileName, bytes.length, bytes),
+      );
+    }
+    final File file = File(p.join(root.path, fileName));
+    await file.parent.create(recursive: true);
+    await file.writeAsBytes(ZipEncoder().encode(archive)!);
+    return file;
+  }
+
+  test('压缩包路径与扩展名判据', () {
+    expect(kDownloadArchiveExtension, '.cbz');
+    expect(
+      downloadChapterArchiveFile(root.path, 'Chapter 1.cbz').path,
+      p.join(root.path, 'Chapter 1.cbz'),
+    );
+    expect(isDownloadChapterArchiveName('Chapter 1.cbz'), isTrue);
+    expect(isDownloadChapterArchiveName('Chapter 1.CBZ'), isTrue);
+    expect(isDownloadChapterArchiveName('Chapter 1'), isFalse);
+    expect(
+      downloadChapterArchiveName('Chapter 1'),
+      'Chapter 1.cbz',
+      reason: '容器名统一带 .cbz，数据库只存单段名字',
+    );
+  });
+
+  test('压缩包包根 pages.json 可读，完整性判据接受齐页、拒绝缺页/坏包/空页表', () async {
+    final MokuroPayload payload = payloadOf(<String>['001.jpg', '002.jpg']);
+    final MangaPagesManifest manifest = manifestOf(payload);
+
+    final File complete = await writeArchive(
+      fileName: 'Chapter 1.cbz',
+      manifest: manifest,
+    );
+    final MangaPagesManifest? read = await readDownloadLibraryArchiveManifest(
+      complete,
+    );
+    expect(read, isNotNull);
+    expect(read!.chapterKey, '/chapter/1');
+    expect(read.sourceId, '42');
+    expect(await isDownloadLibraryArchiveComplete(complete), isTrue);
+    final MokuroPayload? archivePayload = await readDownloadLibraryArchivePayload(
+      complete,
+    );
+    expect(
+      archivePayload?.images.map((MokuroImage image) => image.url),
+      <String>['001.jpg', '002.jpg'],
+    );
+
+    // 半成品：pages.json 存在，页图不在包里。
+    final File missingPage = await writeArchive(
+      fileName: 'Chapter 2.cbz',
+      manifest: manifest,
+      writePages: false,
+    );
+    expect(await readDownloadLibraryArchiveManifest(missingPage), isNotNull);
+    expect(await isDownloadLibraryArchiveComplete(missingPage), isFalse);
+
+    // 没有 pages.json 的包不算已下载（与文件夹章节同一口径）。
+    final File noManifest = await writeArchive(
+      fileName: 'Chapter 3.cbz',
+      manifest: manifest,
+      writeManifest: false,
+    );
+    expect(await readDownloadLibraryArchiveManifest(noManifest), isNull);
+    expect(await isDownloadLibraryArchiveComplete(noManifest), isFalse);
+
+    // 坏 JSON / 空页表。
+    final File broken = await writeArchive(
+      fileName: 'Chapter 4.cbz',
+      manifest: manifest,
+      rawManifest: '{not json',
+    );
+    expect(await readDownloadLibraryArchiveManifest(broken), isNull);
+    final File emptyPages = await writeArchive(
+      fileName: 'Chapter 5.cbz',
+      manifest: manifestOf(payloadOf(const <String>[])),
+    );
+    expect(await isDownloadLibraryArchiveComplete(emptyPages), isFalse);
+
+    // url 穿越 / 不存在。
+    final File traversal = await writeArchive(
+      fileName: 'Chapter 6.cbz',
+      manifest: manifestOf(payloadOf(<String>['../outside.jpg'])),
+    );
+    expect(await isDownloadLibraryArchiveComplete(traversal), isFalse);
+
+    // 根本不是 ZIP。
+    final File notZip = File(p.join(root.path, 'Chapter 7.cbz'));
+    await notZip.writeAsString('not a zip');
+    expect(await readDownloadLibraryArchiveManifest(notZip), isNull);
+    expect(await isDownloadLibraryArchiveComplete(notZip), isFalse);
+    expect(
+      await readDownloadLibraryArchiveManifest(
+        File(p.join(root.path, 'missing.cbz')),
+      ),
+      isNull,
+    );
   });
 }

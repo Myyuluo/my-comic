@@ -110,4 +110,50 @@ void main() {
       'ch-2': 'Chapter 2',
     });
   });
+
+  test('容器类型：默认 folder，可记录 archive；整本映射带出类型', () async {
+    await db.upsertMangaChapterDir(
+      bookKey: 'book-1',
+      chapterKey: 'ch-1',
+      folderName: 'Chapter 1',
+      updatedAt: 1,
+    );
+    expect(
+      (await db.getMangaChapterDir('book-1', 'ch-1'))!.containerKind,
+      MangaChapterContainerKind.folder,
+      reason: '不传容器类型时的默认值必须保持既有 folder 语义',
+    );
+
+    await db.upsertMangaChapterDir(
+      bookKey: 'book-1',
+      chapterKey: 'ch-2',
+      folderName: 'Chapter 2.cbz',
+      containerKind: MangaChapterContainerKind.archive,
+      updatedAt: 1,
+    );
+    final MangaChapterDirRow archive = (await db.getMangaChapterDir(
+      'book-1',
+      'ch-2',
+    ))!;
+    expect(archive.containerKind, MangaChapterContainerKind.archive);
+    expect(archive.folderName, 'Chapter 2.cbz');
+
+    // 同键改类型 / 改名 = 更新（重建 re-link 与切换下载格式后可能发生）。
+    await db.upsertMangaChapterDir(
+      bookKey: 'book-1',
+      chapterKey: 'ch-1',
+      folderName: 'Chapter 1 (2)',
+      containerKind: MangaChapterContainerKind.folder,
+      updatedAt: 2,
+    );
+    expect(
+      (await db.getMangaChapterDir('book-1', 'ch-1'))!.folderName,
+      'Chapter 1 (2)',
+    );
+
+    final Map<String, MangaChapterDirRow> rows = await db
+        .getMangaChapterDirRowsForBook('book-1');
+    expect(rows['ch-1']!.containerKind, MangaChapterContainerKind.folder);
+    expect(rows['ch-2']!.containerKind, MangaChapterContainerKind.archive);
+  });
 }

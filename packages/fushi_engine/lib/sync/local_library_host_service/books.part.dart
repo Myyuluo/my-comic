@@ -25,10 +25,17 @@ mixin _LocalLibraryHostBooks on _LocalLibraryHostBase, _LocalLibraryHostShared {
     final List<EpubBookRow> rows = await _db.getAllEpubBooks();
     // Ticket 12：章节式在线漫画的「有已下载章」判据改为查 `manga_chapter_dirs`
     // 映射（旧布局 `<extractDir>/chapters/` 目录列举已随哈希布局删除）。
+    // 票 06：host 的页服务只支持文件夹章节；CBZ 映射安全跳过，不计入可读章节，
+    // 与 `mangaChapterManifest` 的 404 保持同源（BUG-2400 的「清单说有、翻页说没有」）。
     final Set<String> chapteredMangaKeys = <String>{};
     for (final EpubBookRow r in rows) {
       if (BookFormat.parseOrEpub(r.format) != BookFormat.manga) continue;
-      if ((await _db.getMangaChapterDirNamesForBook(r.bookKey)).isNotEmpty) {
+      final Map<String, MangaChapterDirRow> mappings = await _db
+          .getMangaChapterDirRowsForBook(r.bookKey);
+      if (mappings.values.any(
+        (MangaChapterDirRow row) =>
+            row.containerKind == MangaChapterContainerKind.folder,
+      )) {
         chapteredMangaKeys.add(r.bookKey);
       }
     }

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:archive/archive_io.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -212,6 +213,7 @@ void main() {
     required List<String> chapterKeys,
     required Set<String> downloaded,
     Set<String> halfDownloaded = const <String>{},
+    Set<String> archiveChapters = const <String>{},
   }) async {
     final Directory dir = Directory(p.join(tmp.path, bookKey))
       ..createSync(recursive: true);
@@ -220,49 +222,79 @@ void main() {
     ).writeAsStringSync('{"pages":[]}');
     for (int index = 0; index < chapterKeys.length; index++) {
       final String key = chapterKeys[index];
-      if (!downloaded.contains(key) && !halfDownloaded.contains(key)) continue;
-      final String folderName = 'Chapter ${index + 1}';
-      final Directory chapterDir = downloadChapterDirectory(
-        dir.path,
-        folderName,
-      )..createSync(recursive: true);
-      final List<MokuroImage> images = <MokuroImage>[];
-      for (int i = 0; i < 2; i++) {
-        final String url = downloadPageFileName(i, '.jpg');
-        if (downloaded.contains(key)) {
-          final File image = File(p.join(chapterDir.path, url))
-            ..parent.createSync(recursive: true);
-          image.writeAsBytesSync(<int>[0xFF, 0xD8, key.length, i]);
-        }
-        images.add(
+      if (!downloaded.contains(key) &&
+          !halfDownloaded.contains(key) &&
+          !archiveChapters.contains(key)) {
+        continue;
+      }
+      final bool archive = archiveChapters.contains(key);
+      final String folderName = archive
+          ? 'Chapter ${index + 1}.cbz'
+          : 'Chapter ${index + 1}';
+      final List<MokuroImage> images = <MokuroImage>[
+        for (int i = 0; i < 2; i++)
           MokuroImage(
-            url: url,
+            url: downloadPageFileName(i, '.jpg'),
             size: const MokuroSize(700, 1000),
             blocks: const <MokuroBlock>[],
           ),
+      ];
+      final MangaPagesManifest manifest = MangaPagesManifest(
+        sourceRuntime: 'mihon',
+        sourceId: '1',
+        sourceName: 'Source',
+        extensionPackage: 'org.example',
+        mangaKey: bookKey,
+        mangaTitle: bookKey,
+        chapterKey: key,
+        chapterName: 'Chapter ${index + 1}',
+        payload: MokuroPayload(images: images),
+        downloadedAt: DateTime.utc(2026, 11, 7),
+      );
+      if (archive) {
+        // 完整 CBZ：包根平铺页图 + pages.json。
+        final Archive zip = Archive();
+        for (final MokuroImage image in images) {
+          final List<int> bytes = <int>[0xFF, 0xD8, key.length, 0];
+          zip.addFile(ArchiveFile(image.url, bytes.length, bytes));
+        }
+        final List<int> manifestBytes = utf8.encode(
+          jsonEncode(manifest.toJson()),
         );
-      }
-      if (downloaded.contains(key)) {
-        await writePagesManifestAtomically(
-          chapterDir,
-          MangaPagesManifest(
-            sourceRuntime: 'mihon',
-            sourceId: '1',
-            sourceName: 'Source',
-            extensionPackage: 'org.example',
-            mangaKey: bookKey,
-            mangaTitle: bookKey,
-            chapterKey: key,
-            chapterName: 'Chapter ${index + 1}',
-            payload: MokuroPayload(images: images),
-            downloadedAt: DateTime.utc(2026, 11, 7),
+        zip.addFile(
+          ArchiveFile(
+            kDownloadPagesFileName,
+            manifestBytes.length,
+            manifestBytes,
           ),
         );
+        File(
+          p.join(dir.path, folderName),
+        ).writeAsBytesSync(ZipEncoder().encode(zip)!);
+      } else {
+        final Directory chapterDir = downloadChapterDirectory(
+          dir.path,
+          folderName,
+        )..createSync(recursive: true);
+        for (int i = 0; i < images.length; i++) {
+          final String url = images[i].url;
+          if (downloaded.contains(key)) {
+            final File image = File(p.join(chapterDir.path, url))
+              ..parent.createSync(recursive: true);
+            image.writeAsBytesSync(<int>[0xFF, 0xD8, key.length, i]);
+          }
+        }
+        if (downloaded.contains(key)) {
+          await writePagesManifestAtomically(chapterDir, manifest);
+        }
       }
       await db.upsertMangaChapterDir(
         bookKey: bookKey,
         chapterKey: key,
         folderName: folderName,
+        containerKind: archive
+            ? MangaChapterContainerKind.archive
+            : MangaChapterContainerKind.folder,
         updatedAt: 1,
       );
     }
@@ -412,6 +444,75 @@ void main() {
           reason: digest,
         );
       }
+    });
+  });
+
+  group('CBZ 容器（票 06）', () {
+    test('压缩包章节被安全跳过：清单不列，按章取页是 404 形状而非崩溃', () async {
+      await insertOnlineManga(
+        bookKey: 'mihon-cbz',
+        chapterKeys: const <String>['/c/1', '/c/2'],
+        downloaded: const <String>{'/c/1'},
+        archiveChapters: const <String>{'/c/2'},
+      );
+
+      // 文件夹章照常列出；压缩包章跳过（host 不提供 CBZ 页服务）。
+      final RemoteMangaManifest manifest = await svc.mangaManifest('mihon-cbz');
+      expect(
+        manifest.chapters.map((RemoteMangaChapterInfo c) => c.key),
+        <String>['/c/1'],
+      );
+      // 压缩包章经 digest 访问是受控 StateError（端点 → 404），不是文件系统崩。
+      await expectLater(
+        svc.mangaChapterManifest('mihon-cbz', mangaChapterDigest('/c/2')),
+        throwsA(isA<StateError>()),
+      );
+      await expectLater(
+        svc.mangaChapterPageFile('mihon-cbz', mangaChapterDigest('/c/2'), 0),
+        throwsA(isA<StateError>()),
+      );
+      // 文件夹章不受影响。
+      final RemoteMangaManifest chapter = await svc.mangaChapterManifest(
+        'mihon-cbz',
+        mangaChapterDigest('/c/1'),
+      );
+      expect(chapter.pages, hasLength(2));
+    });
+
+    test('只有压缩包章节的书：清单不声称 hasMangaChapters（与页表同源）', () async {
+      await insertOnlineManga(
+        bookKey: 'mihon-only-cbz',
+        chapterKeys: const <String>['/c/1'],
+        downloaded: const <String>{},
+        archiveChapters: const <String>{'/c/1'},
+      );
+
+      final RemoteBookInfo row = (await svc.listBooks()).firstWhere(
+        (RemoteBookInfo b) => b.bookKey == 'mihon-only-cbz',
+      );
+      expect(
+        row.hasMangaChapters,
+        isFalse,
+        reason: 'host 无法为压缩包章供页，清单不得声称可读',
+      );
+      await expectLater(
+        svc.mangaManifest('mihon-only-cbz'),
+        throwsA(isA<StateError>()),
+      );
+    });
+
+    test('文件夹 + 压缩包混排：hasMangaChapters 仍为 true', () async {
+      await insertOnlineManga(
+        bookKey: 'mihon-mixed',
+        chapterKeys: const <String>['/c/1', '/c/2'],
+        downloaded: const <String>{'/c/1'},
+        archiveChapters: const <String>{'/c/2'},
+      );
+
+      final RemoteBookInfo row = (await svc.listBooks()).firstWhere(
+        (RemoteBookInfo b) => b.bookKey == 'mihon-mixed',
+      );
+      expect(row.hasMangaChapters, isTrue);
     });
   });
 }
