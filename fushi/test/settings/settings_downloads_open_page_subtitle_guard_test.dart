@@ -33,7 +33,7 @@ void main() {
     );
   });
 
-  testWidgets('分类内容为存储位置小节（ticket 09 起追加重建下载索引小节），'
+  testWidgets('分类内容为存储位置 + 导入本地漫画 + 重建下载索引小节，'
       '没有打开下载页的入口', (WidgetTester tester) async {
     final AppLocale original = currentLocale();
     addTearDown(() => LocaleSettings.setLocale(original));
@@ -47,8 +47,23 @@ void main() {
     );
     expect(
       destination.sections.map((SettingsSection section) => section.id),
-      <String?>['storage.location.section', 'storage.rebuild.section'],
-      reason: '分类内容为存储位置 + 重建下载索引小节',
+      <String?>[
+        'storage.location.section',
+        'storage.local_import.section',
+        'storage.rebuild.section',
+      ],
+      reason: '分类内容为存储位置 + 导入本地漫画 + 重建下载索引小节',
+    );
+    expect(
+      destination.sections
+          .firstWhere(
+            (SettingsSection section) =>
+                section.id == 'storage.local_import.section',
+          )
+          .items
+          .map((SettingsItem item) => item.id),
+      <String>['storage.import_local_comics'],
+      reason: '导入本地漫画小节只包含一次显式扫描入口',
     );
     expect(
       destination.sections.first.items.map((SettingsItem item) => item.id),
