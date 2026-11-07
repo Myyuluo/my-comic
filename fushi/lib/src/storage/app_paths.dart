@@ -21,8 +21,8 @@ import 'package:fushi/src/utils/misc/platform_utils.dart';
 ///     `<Documents>/MyComic`，下设 `downloads`、`autobackup`、`localcomic`。
 ///     卸载/更新不触碰它。
 ///   - **Program state root（程序状态根）**：随程序目录存放的应用状态。默认
-///     `<exeDir>/userdata`，下设 `state`（DB、prefs、Mihon runtime、更新包、日志等）
-///     与 `cache`（可丢弃缓存）。安装目录不可写时回退到
+///     `<exeDir>/userdata`，下设 `state`（DB、prefs、Mihon runtime、更新包、自定义
+///     字体、WebView2 数据、日志等）与 `cache`（可丢弃缓存）。安装目录不可写时回退到
 ///     `%LOCALAPPDATA%/MyComic/userdata`（见 [resolveProgramStateRootSync]）。
 ///
 /// 本类还保留旧的 root getter 作为 **alias**（票 12 才删除）：
@@ -56,7 +56,12 @@ class AppPaths {
     required this.programStateRoot,
     required this.stateRoot,
     required this.cacheRoot,
+    required this.customFontsRoot,
+    required this.webView2Root,
+    required this.logsRoot,
     required this.programStateRootIsFallback,
+    required this.contentRootIsDefault,
+    this.contentRootRebaseFrom,
   });
 
   /// 用户可见的内容根（默认 `<Documents>/MyComic`，可配置）。
@@ -80,8 +85,30 @@ class AppPaths {
   /// 程序状态中的可丢弃缓存根 `<programState>/cache`。
   final Directory cacheRoot;
 
+  /// 程序状态中的自定义字体根 `<programState>/state/custom_fonts`。
+  ///
+  /// Ticket 02：字体是 Portable state 的一部分，必须随程序目录 + `userdata` 走，
+  /// 不再落在 Content root（用户可见的漫画内容根）下。
+  final Directory customFontsRoot;
+
+  /// 程序状态中的 WebView2 user data folder `<programState>/state/webview2`。
+  final Directory webView2Root;
+
+  /// 程序状态中的日志根 `<programState>/state/logs`。
+  final Directory logsRoot;
+
   /// 程序状态是否使用了安装目录不可写时的回退位置。
   final bool programStateRootIsFallback;
+
+  /// 本次解析是否使用默认 Content root（`<Documents>/MyComic`）。
+  final bool contentRootIsDefault;
+
+  /// 本次启动从哪个**旧用户的默认 Content root** 自动 rebase 过来；null = 没发生。
+  ///
+  /// Ticket 02：程序目录连同 `userdata` 拷到另一个 Windows 用户后，偏好里仍可能记着
+  /// `C:\Users\<oldUser>\Documents\MyComic`。启动时自动改用当前用户默认根，并把旧根
+  /// 交给启动期路径 rebase（[contentRootIsDefault] 仍为 true）。
+  final String? contentRootRebaseFrom;
 
   /// 旧 root getter alias：内容根。票 12 删除。
   Directory get documentsRoot => contentRoot;
@@ -105,6 +132,15 @@ class AppPaths {
 
   /// Program state root 下的可丢弃缓存子目录名。
   static const String cacheDirName = 'cache';
+
+  /// Program state root 下 `state/` 内的自定义字体子目录名。
+  static const String customFontsDirName = 'custom_fonts';
+
+  /// Program state root 下 `state/` 内的 WebView2 user data folder 子目录名。
+  static const String webView2DirName = 'webview2';
+
+  /// Program state root 下 `state/` 内的日志子目录名。
+  static const String logsDirName = 'logs';
 
   /// Content root 下在线下载库的子目录名。
   static const String downloadsDirName = 'downloads';
@@ -146,9 +182,25 @@ class AppPaths {
   /// 配置的 Content root 不可达时抛 [DataRootUnavailableException]（除非用户显式
   /// 选择本次用默认位置启动 [forceDefaultRootForSession]），绝不静默建空库。
   static Future<AppPaths> resolve() async {
+    final Directory currentDefault = await _defaultContentRoot();
     final Directory content;
-    final String? configured =
+    String? configured =
         forceDefaultRootForSession ? null : await _configuredContentRootPath();
+    String? contentRootRebaseFrom;
+    // Ticket 02：便携拷贝到另一个 Windows 用户后，偏好里可能还记着**旧用户**的
+    // 默认 `Documents\MyComic`。它不是用户挑的自定义根，而是默认根的绝对化记录；
+    // 自动改用当前用户默认根，并让启动期 rebase 把库里记录的路径一起改过去。
+    // 只有默认根形状（`.../Documents/MyComic`）才这么做；自定义根缺失仍走逃生屏。
+    if (configured != null &&
+        isForeignDefaultContentRootPath(
+          candidatePath: configured,
+          currentDefaultPath: currentDefault.path,
+        )) {
+      contentRootRebaseFrom = configured;
+      configured = null;
+      await _clearConfiguredContentRootPreference();
+    }
+
     if (configured != null) {
       final Directory configuredDir = Directory(configured);
       if (!await _probeDataRootExists(configuredDir)) {
@@ -156,7 +208,7 @@ class AppPaths {
       }
       content = configuredDir;
     } else {
-      content = await _defaultContentRoot();
+      content = currentDefault;
     }
 
     final ({Directory root, bool usedFallback}) programState =
@@ -174,13 +226,38 @@ class AppPaths {
       programStateRoot: programState.root,
       stateRoot: state,
       cacheRoot: cache,
+      customFontsRoot: Directory(p.join(state.path, customFontsDirName)),
+      webView2Root: Directory(p.join(state.path, webView2DirName)),
+      logsRoot: Directory(p.join(state.path, logsDirName)),
       programStateRootIsFallback: programState.usedFallback,
+      contentRootIsDefault: configured == null,
+      contentRootRebaseFrom: contentRootRebaseFrom,
     );
     await paths._ensureRootsExist();
     return paths;
   }
 
-  /// 创建 Content root 的四个目录与 Program state root 的两个目录。
+  /// [candidatePath] 是否形如**另一个 Windows 用户**的默认 Content root
+  /// （`...\Documents\MyComic`），且不是当前默认根。
+  ///
+  /// 用途见 [resolve]：只有这种「默认根被绝对化后跟着 userdata 走」的情况才自动
+  /// rebase；用户自己挑的自定义根（即便也叫 MyComic）不可达时必须逃生屏。
+  static bool isForeignDefaultContentRootPath({
+    required String candidatePath,
+    required String currentDefaultPath,
+  }) {
+    if (!p.isAbsolute(candidatePath)) return false;
+    final String candidate = p.normalize(candidatePath);
+    final String current = p.normalize(currentDefaultPath);
+    if (candidate.toLowerCase() == current.toLowerCase()) return false;
+    final List<String> segments = p.split(candidate);
+    if (segments.length < 2) return false;
+    return segments.last.toLowerCase() == contentRootDirName.toLowerCase() &&
+        segments[segments.length - 2].toLowerCase() == 'documents';
+  }
+
+  /// 创建 Content root 的四个目录与 Program state root 的 state/cache 及其
+  /// Portable state 子目录（custom_fonts / webview2 / logs）。
   ///
   /// 建不出来 = 该位置真的不可用（无权限 / 只读介质 / 盘断链），抛
   /// [DataRootUnavailableException]，由 UI 走「数据位置未响应」逃生屏。
@@ -193,6 +270,9 @@ class AppPaths {
       programStateRoot,
       stateRoot,
       cacheRoot,
+      customFontsRoot,
+      webView2Root,
+      logsRoot,
     ]) {
       try {
         if (await dir.exists()) continue;
@@ -237,6 +317,18 @@ class AppPaths {
     } catch (_) {
       // 无插件注册的纯 Dart 测试 / 极端启动早期：按「未设置」处理。
       return null;
+    }
+  }
+
+  /// Ticket 02：自动 rebase 旧用户默认根后，清掉那条绝对化记录，避免每次启动都
+  /// 再忽略一遍；下次便携拷贝由当前默认根重新绝对化。best-effort。
+  static Future<void> _clearConfiguredContentRootPreference() async {
+    if (!isDesktopPlatform) return;
+    try {
+      final SharedPreferences prefs = await SharedPreferences.getInstance();
+      await prefs.remove(contentRootPrefKey);
+    } catch (_) {
+      // prefs 通道不可用（纯 Dart 测试）：本次解析已经忽略该偏好，无副作用。
     }
   }
 
@@ -628,6 +720,30 @@ class AppPaths {
   /// `<programState>/cache`（不创建）。
   static Future<Directory> cacheRootDirectory() async => Directory(
       p.join((await _resolveProgramStateRoot()).root.path, cacheDirName));
+
+  /// `<programState>/state/custom_fonts`（不创建）。
+  static Future<Directory> customFontsRootDirectory() async =>
+      Directory(p.join(await _stateRootPath(), customFontsDirName));
+
+  /// `<programState>/state/webview2`（不创建）。
+  static Future<Directory> webView2RootDirectory() async =>
+      Directory(p.join(await _stateRootPath(), webView2DirName));
+
+  /// `<programState>/state/logs`（不创建）。
+  static Future<Directory> logsRootDirectory() async =>
+      Directory(p.join(await _stateRootPath(), logsDirName));
+
+  static Future<String> _stateRootPath() async =>
+      p.join((await _resolveProgramStateRoot()).root.path, stateDirName);
+
+  /// 同步解析 `state/` 根（不创建）；WebView2 必须在任何 WebView 创建前设置
+  /// user data folder，而那时还没有异步入口。测试根 / 桌面 exe 覆盖与
+  /// [programStateRootDirectorySync] 同一套规则。
+  static Directory? stateRootDirectorySync() {
+    final Directory? root = programStateRootDirectorySync();
+    if (root == null) return null;
+    return Directory(p.join(root.path, stateDirName));
+  }
 
   /// 旧 root getter alias：等价于 [contentRootDirectory]。票 12 删除。
   static Future<Directory> documentsRootDirectory() => contentRootDirectory();

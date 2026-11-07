@@ -4033,6 +4033,7 @@
   "manga_chapter_download_status_downloaded": "İndirildi",
   "manga_chapter_download_status_downloading": "İndiriliyor $done/$total",
   "manga_chapter_download_status_failed": "İndirme başarısız oldu",
+  "manga_chapter_download_status_missing": "File missing",
   "manga_chapter_download_status_queued": "Sırada",
   "manga_chapter_list_jump_bottom": "Jump to bottom",
   "manga_chapter_list_jump_current": "Jump to current chapter",

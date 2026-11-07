@@ -805,10 +805,9 @@ class DictionaryPopupWebViewState extends ConsumerState<DictionaryPopupWebView>
     if (cached != null) return cached;
     if (!mounted) return null;
     try {
-      final String appDir = ref.read(appProvider).appDirectory.path;
-      return _dictionaryFontRootsCache = <String>[
-        p.join(appDir, 'custom_fonts'),
-      ];
+      final String fontsDir =
+          ref.read(appProvider).customFontsDirectory.path;
+      return _dictionaryFontRootsCache = <String>[fontsDir];
     } catch (_) {
       return null;
     }

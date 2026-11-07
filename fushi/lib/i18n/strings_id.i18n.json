@@ -4033,6 +4033,7 @@
   "manga_chapter_download_status_downloaded": "Diunduh",
   "manga_chapter_download_status_downloading": "Mengunduh $done/$total",
   "manga_chapter_download_status_failed": "Unduhan gagal",
+  "manga_chapter_download_status_missing": "File missing",
   "manga_chapter_download_status_queued": "Dalam antrean",
   "manga_chapter_list_jump_bottom": "Jump to bottom",
   "manga_chapter_list_jump_current": "Jump to current chapter",

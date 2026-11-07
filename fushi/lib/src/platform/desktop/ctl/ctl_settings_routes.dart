@@ -1303,10 +1303,7 @@ Future<Object?> _exportProfile(DesktopCtlContext context, CtlCall call) async {
   // 与配置管理页的导出同参：字体根用于把本机字体绝对路径剥成相对。
   final String content = await viewModel.exportProfile(
     target.id,
-    fontsRootDirectory: p.join(
-      context.appModel.appDirectory.path,
-      'custom_fonts',
-    ),
+    fontsRootDirectory: context.appModel.customFontsDirectory.path,
   );
   return <String, Object?>{
     ...await _writeExport(call, path, content),

@@ -16,7 +16,6 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart' show ValueNotifier;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:path/path.dart' as p;
 import 'package:fushi_engine/srs/srs_db_store.dart';
 import 'package:fushi_engine/srs/srs_style_store.dart';
 import 'package:fushi_srs/fushi_srs.dart';
@@ -119,7 +118,7 @@ final Provider<double> srsReviewZoomProvider = Provider<double>(
 final Provider<String?> srsCardFontRootProvider = Provider<String?>((Ref ref) {
   try {
     // 与字体库页 customFontsDirectory 同一个目录（`<appDirectory>/custom_fonts`）。
-    return p.join(ref.read(appProvider).appDirectory.path, 'custom_fonts');
+    return ref.read(appProvider).customFontsDirectory.path;
   } catch (_) {
     return null;
   }

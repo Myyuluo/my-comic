@@ -37,7 +37,7 @@ class BrowserExtensionFontCatalog implements ExtensionFontApi {
   FontDownloadService? _service;
 
   FontDownloadService get _fontService => _service ??= FontDownloadService(
-        fontsDir: customFontsDirectory(_appModel.appDirectory),
+        fontsDir: customFontsDirectory(_appModel.stateDirectory),
       );
 
   Future<ReaderSettings> _settings() async {
@@ -165,7 +165,9 @@ class BrowserExtensionFontCatalog implements ExtensionFontApi {
   Future<ExtensionFontEntry?> findDictionaryFont(String path) async {
     final String? safePath = ReaderCustomFontCss.safeFontPath(
       path,
-      allowedRoots: <String>[customFontsDirectory(_appModel.appDirectory).path],
+      allowedRoots: <String>[
+        customFontsDirectory(_appModel.stateDirectory).path
+      ],
     );
     if (safePath == null) return null;
     if (!configuredDictionaryFontPaths(_appModel)

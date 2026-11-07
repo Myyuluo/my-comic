@@ -54,6 +54,7 @@ import 'package:fushi/src/srs/srs_card_appearance.dart';
 import 'package:fushi/src/srs/srs_mining_target.dart';
 import 'package:fushi/src/models/home_dashboard_panel.dart';
 import 'package:fushi/src/storage/app_paths.dart';
+import 'package:fushi/src/storage/portable_state_rebase.dart';
 import 'package:fushi/src/storage/books_directory.dart';
 import 'package:fushi/src/storage/export_directory.dart';
 import 'package:fushi/src/storage/sandbox_relocation.dart';
@@ -777,7 +778,7 @@ class AppModel with ChangeNotifier {
           activeId,
           // 与「配置管理」页导出同参：把指向本机 custom_fonts/ 的绝对路径剥成相对，
           // 免得对端拿到一堆指向不存在目录的字体路径。
-          fontsRootDirectory: path.join(appDirectory.path, 'custom_fonts'),
+          fontsRootDirectory: customFontsDirectory.path,
         );
       },
       // 推送方随书带来的显示名：走 ReaderFushiSource（写穿 MediaSource 内存缓存，
@@ -1876,8 +1877,18 @@ class AppModel with ChangeNotifier {
   late Directory _temporaryDirectory;
 
   /// Directory where data may be persisted.
+  ///
+  /// Ticket 02 起它的含义仍是 Content root（用户可见漫画内容）；Portable state
+  /// 的落点（DB / prefs / 字体 / WebView2 / 日志）见 [stateDirectory]。
   Directory get appDirectory => _appDirectory;
   late Directory _appDirectory;
+
+  /// Portable state 的持久状态根（`<programState>/state`）：DB、prefs、扩展、
+  /// 自定义字体、WebView2 数据、日志都住在这里，随程序目录 + `userdata` 拷贝。
+  Directory get stateDirectory => _appPaths.stateRoot;
+
+  /// 自定义字体落地根（`<state>/custom_fonts`）。
+  Directory get customFontsDirectory => _appPaths.customFontsRoot;
 
   /// Directory where database data is persisted.
   Directory get databaseDirectory => _databaseDirectory;
@@ -3116,6 +3127,26 @@ class AppModel with ChangeNotifier {
       _database = FushiDatabase(_databaseDirectory.path);
       _databaseOpened = true;
 
+      // Ticket 02：Portable copy（程序目录 + userdata）到另一个 Windows 用户 /
+      // 机器后，把库内绝对路径从旧默认 Content root / 旧 Program state root 重基
+      // 到本次解析出的根。必须在任何消费路径的仓库读库之前跑；失败只记录不阻塞
+      // 启动（下次启动重试），自定义 Content root 不可达仍由 AppPaths.resolve 的
+      // 逃生屏处理，不在这里静默降级。
+      final PortableStateRebaseOutcome portableOutcome =
+          await PortableStateRebase.reconcile(
+        db: _database,
+        paths: _appPaths,
+        staleContentRoot: _appPaths.contentRootRebaseFrom,
+      );
+      if (portableOutcome.error != null) {
+        ErrorLogService.instance.log(
+          'AppModel.portableStateRebase',
+          portableOutcome.error!,
+        );
+      } else if (portableOutcome.rebased) {
+        debugPrint('[Fushi] portable state rebased: $portableOutcome');
+      }
+
       // my-comic：Fushi 的备份恢复（`.fushi.zip` / 旧库导入）与互联/云同步已移除。
       // 全新 schema 从 `my_comic.db` 起步，不恢复、不迁移任何 Fushi 旧数据。
       //
@@ -3286,7 +3317,7 @@ class AppModel with ChangeNotifier {
       // (a no-op DB touch when every path already resolves).
       try {
         final int relocated = await readerSettings.healMissingFontFilePaths(
-          path.join(appDirectory.path, 'custom_fonts'),
+          customFontsDirectory.path,
         );
         if (relocated > 0) {
           debugPrint(
@@ -5855,9 +5886,7 @@ class AppModel with ChangeNotifier {
     final ReaderSettings? settings = ReaderFushiSource.readerSettings;
     if (settings == null) return null;
     return AppFontLoader.resolveForNativeOverlay(settings.floatingLyricFonts,
-        allowedDirectories: <String>[
-          path.join(appDirectory.path, 'custom_fonts')
-        ]);
+        allowedDirectories: <String>[customFontsDirectory.path]);
   }
 
   FloatingLyricWindowRect? _floatingLyricWindowRect() {

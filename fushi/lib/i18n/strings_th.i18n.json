@@ -4033,6 +4033,7 @@
   "manga_chapter_download_status_downloaded": "ดาวน์โหลดแล้ว",
   "manga_chapter_download_status_downloading": "กำลังดาวน์โหลด $done/$total",
   "manga_chapter_download_status_failed": "ดาวน์โหลดไม่สำเร็จ",
+  "manga_chapter_download_status_missing": "File missing",
   "manga_chapter_download_status_queued": "อยู่ในคิว",
   "manga_chapter_list_jump_bottom": "Jump to bottom",
   "manga_chapter_list_jump_current": "Jump to current chapter",

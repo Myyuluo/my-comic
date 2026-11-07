@@ -107,7 +107,7 @@ class _MigrationPageState extends State<MigrationPage> {
         booksRootDirectory: p.join(appModel.appDirectory.path, 'fushi_books'),
         audiobooksRootDirectory:
             p.join(appModel.appDirectory.path, 'audiobooks'),
-        fontsRootDirectory: p.join(appModel.appDirectory.path, 'custom_fonts'),
+        fontsRootDirectory: appModel.customFontsDirectory.path,
         gameCoversRootDirectory:
             p.join(appModel.appDirectory.path, 'game_covers'),
       );

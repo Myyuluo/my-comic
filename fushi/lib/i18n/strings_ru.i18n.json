@@ -4033,6 +4033,7 @@
   "manga_chapter_download_status_downloaded": "Скачано",
   "manga_chapter_download_status_downloading": "Загрузка $done/$total",
   "manga_chapter_download_status_failed": "Не удалось скачать",
+  "manga_chapter_download_status_missing": "File missing",
   "manga_chapter_download_status_queued": "В очереди",
   "manga_chapter_list_jump_bottom": "Jump to bottom",
   "manga_chapter_list_jump_current": "Jump to current chapter",

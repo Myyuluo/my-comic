@@ -201,8 +201,7 @@ class _MigrationImportPageState extends State<MigrationImportPage>
           p.join(appModel.appDirectory.path, 'fushi_books');
       final String audiobooksRoot =
           p.join(appModel.appDirectory.path, 'audiobooks');
-      final String fontsRoot =
-          p.join(appModel.appDirectory.path, 'custom_fonts');
+      final String fontsRoot = appModel.customFontsDirectory.path;
       final String videosRoot = p.join(appModel.appDirectory.path, 'videos');
       final String gameCoversRoot =
           p.join(appModel.appDirectory.path, 'game_covers');

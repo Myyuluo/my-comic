@@ -511,9 +511,12 @@ Future<void> persistCustomFontState({
   ReaderFushiSource.onSettingsChangedLive?.call();
 }
 
-/// 字体落地目录：`<appDirectory>/custom_fonts`。不存在时创建。
-Directory customFontsDirectory(Directory appDirectory) {
-  final Directory dir = Directory(p.join(appDirectory.path, 'custom_fonts'));
+/// 字体落地目录：`<stateDirectory>/custom_fonts`。不存在时创建。
+///
+/// Ticket 02：自定义字体属于 Portable state，传入 [AppModel.stateDirectory]
+/// （`<programState>/state`），不再是 Content root。
+Directory customFontsDirectory(Directory stateDirectory) {
+  final Directory dir = Directory(p.join(stateDirectory.path, 'custom_fonts'));
   if (!dir.existsSync()) dir.createSync(recursive: true);
   return dir;
 }
@@ -605,7 +608,7 @@ class _CustomFontsPageState extends BasePageState<CustomFontsPage> {
 
   /// 文件层执行体（复制 / 解包 / 多源下载），与浏览器扩展字体端点共用同一份。
   late final FontDownloadService _fontService = FontDownloadService(
-    fontsDir: customFontsDirectory(appModel.appDirectory),
+    fontsDir: customFontsDirectory(appModel.stateDirectory),
   );
 
   /// 把服务落好的文件登记成目录行，挂到本次进入页面的作用域用途。
