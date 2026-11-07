@@ -3,9 +3,6 @@ import 'dart:io';
 
 import 'package:fushi_asr_core/asr_core.dart';
 import 'package:fushi_cli/fushi_cli.dart';
-import 'package:fushi_engine/foundation/engine_paths.dart';
-
-
 import 'package:fushi_engine/tts/local/gpt_sovits_local_engine.dart';
 import 'package:fushi_engine/tts/local/gpt_sovits_local_package.dart';
 import 'package:fushi_engine/tts/local/irodori_local_engine.dart';
@@ -36,6 +33,7 @@ import 'package:fushi/src/media/audiobook/tts/tts_voice_settings_page.dart'
 
 import 'package:fushi/src/platform/desktop/ctl/ctl_settings_wire.dart';
 import 'package:fushi/src/platform/desktop/ctl/desktop_ctl_context.dart';
+import 'package:fushi/src/storage/app_paths.dart';
 import 'package:fushi/src/utils/misc/error_log_service.dart';
 
 /// 「设置 › 模型」里 OCR / 语音转录 / 语音合成的模型文件与朗读声音的控制通道路由
@@ -530,7 +528,7 @@ class _CtlModelState {
     final String installDir =
         dirRaw ??
         GptSovitsLocalEngine.defaultInstallDir(
-          await enginePaths.supportRootDirectory(),
+          await AppPaths.stateRootDirectory(),
         );
     _gptSovitsLastError = null;
     // 安装是十几 GB 的长任务：后台跑，进度 / 失败原因经 models status 查。
@@ -688,7 +686,7 @@ class _CtlModelState {
         (recorded != null
             ? p.dirname(recorded)
             : IrodoriLocalEngine.defaultInstallDir(
-                await enginePaths.supportRootDirectory(),
+                await AppPaths.stateRootDirectory(),
               ));
     _irodoriLastError = null;
     // 安装是数 GB 的长任务：后台跑，进度 / 失败原因经 models status 查。

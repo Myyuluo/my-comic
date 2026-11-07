@@ -24,7 +24,7 @@ class EpubStorage {
   /// (e.g. the interconnect orchestrator tests that download over a real HTTP
   /// server, where installing `TestWidgetsFlutterBinding` would break the
   /// socket). Production never sets this — it stays null and resolution falls
-  /// through to [AppPaths.documentsRootDirectory].
+  /// through to the host's Content root (`AppPaths.contentRootDirectory`).
   @visibleForTesting
   static set debugBaseDirectoryOverride(String? path) {
     _cachedBaseDir = path == null ? null : p.join(path, 'fushi_books');

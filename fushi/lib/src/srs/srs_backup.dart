@@ -18,6 +18,7 @@ import 'package:fushi_engine/srs/srs_backup_retention.dart';
 import 'package:fushi_engine/srs/srs_backup_store.dart';
 import 'package:fushi_engine/srs/srs_db_store.dart';
 import 'package:fushi_engine/srs/srs_point_in_time_restore.dart';
+import 'package:path/path.dart' as p;
 
 import 'package:fushi/src/models/app_model.dart';
 import 'package:fushi/src/srs/srs_media_store.dart';
@@ -26,11 +27,17 @@ import 'package:fushi/src/storage/app_paths.dart';
 import 'package:fushi/src/sync/sync_repository.dart';
 import 'package:fushi/src/utils/misc/error_log_service.dart';
 
-/// 复习备份根（`<documents>/srs_backups`，[AppPaths.srsBackupsDirectory]；测试覆写成临时目录）。
+/// 复习备份根（`<content>/srs_backups`；测试覆写成临时目录）。
+///
+/// SRS 不属于 my-comic 的漫画域（模块不可见），但代码保持可编译；路径仍派生自
+/// Content root，避免再引入 AppPaths 的非漫画专用 getter（ticket 12）。
 final Provider<Future<Directory> Function()> srsBackupsRootProvider =
-    Provider<Future<Directory> Function()>(
-      (Ref ref) => AppPaths.srsBackupsDirectory,
-    );
+    Provider<Future<Directory> Function()>((Ref ref) => _srsBackupsRoot);
+
+Future<Directory> _srsBackupsRoot() async {
+  final Directory content = await AppPaths.contentRootDirectory();
+  return Directory(p.join(content.path, kSrsBackupsDirName));
+}
 
 /// 当前 profile 的本机复习备份库；模块关着时为 null。
 ///

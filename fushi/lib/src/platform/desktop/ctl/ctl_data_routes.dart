@@ -61,13 +61,8 @@ import 'package:fushi/src/sync/sync_settings_schema.dart'
         defaultBackupExportCategories,
         BackupImportMode,
         BackupImportPreset,
-        DataRootMigrationPlan,
-        DataRootMigrationPrecheckFailure,
-        DataRootMigrationRunOutcome,
         interconnectPairFailureMessage,
-        planDataRootMigration,
         runBackupImportFlowForFile,
-        runDataRootMigration,
         runInterconnectLinkPairingFlow;
 
 /// data 域控制通道路由（CLI 侧命令见 `packages/fushi_cli/lib/src/commands/data_commands.dart`）。
@@ -79,21 +74,12 @@ import 'package:fushi/src/sync/sync_settings_schema.dart'
 /// 服务器 [MediaServerConfig.buildBrowser]、互联 [FushiSyncServerController]、存储
 /// [StorageUsageService]。
 List<CtlRoute> buildDataCtlRoutes(DesktopCtlContext context) {
-  final _CtlDataTasks tasks = _CtlDataTasks();
   return <CtlRoute>[
     // my-comic：`.fushi.zip` 备份导入/导出路由已移除（ticket 05）。
     ..._syncRoutes(context),
     ..._peerRoutes(context),
-    ..._storageRoutes(context, tasks),
+    ..._storageRoutes(context),
   ];
-}
-
-/// 控制通道发起、在后台跑的长任务的最近一次结局（`backup status` /
-/// `storage migrate-status` 读）。进度本身在 [AppModel] 上（与 app 内遮罩 / 进度条同一
-/// 真相源），这里只补「终端发起的那一次最后怎样了」——任务结束后 app 侧状态会被清掉。
-class _CtlDataTasks {
-  Map<String, Object?>? lastBackup;
-  Map<String, Object?>? lastMigration;
 }
 
 /// 破坏性动作在 app 侧的第二道门：body / query 必须带 `confirm: true`。
@@ -441,99 +427,20 @@ List<CtlRoute> _peerRoutes(DesktopCtlContext context) => <CtlRoute>[
 
 // ── 存储 ─────────────────────────────────────────────────────────────
 
-List<CtlRoute> _storageRoutes(DesktopCtlContext context, _CtlDataTasks tasks) =>
-    <CtlRoute>[
-      // 数据目录迁移：与设置 › 存储「更改位置」同一套 [planDataRootMigration]（解析 +
-      // 触发前校验）→ [runDataRootMigration]（关库 → 搬移 → 写位置 → 自动重启）。
-      // `dryRun` 只出解析后的两个落点（= 设置页确认框里列的那两行），不动任何东西。
-      // 真迁移要 `confirm: true`；它会关掉数据库并在成功后重启 app，所以在后台跑、
-      // 立即返回，进度用 GET 查（重启后控制通道换成新进程的）。
-      CtlRoute.post('/api/admin/storage/migrate', (CtlCall call) async {
-        final String path = call.requireString('path');
-        if (!p.isAbsolute(path)) {
-          throw CtlFailure.badRequest('目标目录必须是绝对路径：$path');
-        }
-        final bool dryRun = call.optBool('dryRun') ?? false;
-        if (!dryRun) _requireConfirm(call, '迁移数据目录');
-        final AppModel appModel = context.appModel;
-        if (appModel.dataRootMigrationActive) {
-          throw const CtlFailure.conflict('数据目录迁移已在进行中');
-        }
-        if (appModel.backupExportActive) {
-          throw const CtlFailure.conflict('备份导出进行中，先等它结束');
-        }
-        final DataRootMigrationPlan plan;
-        try {
-          plan = await planDataRootMigration(appModel: appModel, picked: path);
-        } on DataRootMigrationPrecheckFailure catch (e) {
-          throw CtlFailure.rejected(e.message);
-        }
-        final Map<String, Object?> planWire = <String, Object?>{
-          'path': path,
-          'documentsRoot': plan.target.documentsRoot.path,
-          'supportRoot': plan.target.supportRoot.path,
-          'defaultLocation': plan.target.isDefaultLocation,
-          'fromDocumentsRoot': plan.oldDocumentsRoot,
-          'fromSupportRoot': plan.oldSupportRoot,
-        };
-        if (dryRun) return <String, Object?>{...planWire, 'dryRun': true};
-        tasks.lastMigration = <String, Object?>{
-          ...planWire,
-          'state': 'running',
-          'startedAt': DateTime.now().millisecondsSinceEpoch,
-        };
-        _runDetached('storage.migrate', () async {
-          try {
-            final DataRootMigrationRunOutcome outcome =
-                await runDataRootMigration(appModel: appModel, plan: plan);
-            tasks.lastMigration = <String, Object?>{
-              ...planWire,
-              'state': outcome.name,
-              if (appModel.dataRootMigrationFailure != null)
-                'message': appModel.dataRootMigrationFailure,
-            };
-          } on DataRootMigrationPrecheckFailure catch (e) {
-            tasks.lastMigration = <String, Object?>{
-              ...planWire,
-              'state': 'failed',
-              'message': e.message,
-            };
-          }
-          return null;
-        });
-        return <String, Object?>{
-          ...planWire,
-          'ok': true,
-          'started': true,
-          'message':
-              '已开始迁移（app 显示迁移遮罩，数据库已关闭）；成功后 app 会自动重启。'
-              '用 storage migrate-status 查进度，重启后 storage root 确认新位置',
-        };
-      }),
-      CtlRoute.get('/api/admin/storage/migrate', (CtlCall call) async {
-        final AppModel appModel = context.appModel;
-        final ({int copied, int total})? progress =
-            appModel.dataRootMigrationProgress;
-        return <String, Object?>{
-          'active': appModel.dataRootMigrationActive,
-          // 跨盘逐文件复制时才有（已复制文件数 / 总文件数）；同盘 rename 瞬时完成、无进度。
-          if (progress != null) 'copiedFiles': progress.copied,
-          if (progress != null) 'totalFiles': progress.total,
-          'failure': ?appModel.dataRootMigrationFailure,
-          'last': ?tasks.lastMigration,
-        };
-      }),
+List<CtlRoute> _storageRoutes(DesktopCtlContext context) => <CtlRoute>[
+      // 旧 data-root 整目录迁移路由已删除（ticket 12）；Content root 切换只在设置
+      // 页内创建新目录，不再经控制通道搬移数据。
       CtlRoute.get('/api/admin/storage/root', (CtlCall call) async {
         final AppModel appModel = context.appModel;
-        final Directory documents = await AppPaths.documentsRootDirectory();
-        final Directory defaultDocuments =
-            await AppPaths.defaultLocationDocumentsRoot();
+        final Directory content = await AppPaths.contentRootDirectory();
+        final Directory defaultContent =
+            await AppPaths.defaultContentRootDirectory();
         return <String, Object?>{
-          'documents': documents.path,
-          'support': (await AppPaths.supportRootDirectory()).path,
-          'temp': (await AppPaths.tempRootDirectory()).path,
+          'content': content.path,
+          'state': (await AppPaths.stateRootDirectory()).path,
+          'cache': (await AppPaths.cacheRootDirectory()).path,
           'database': appModel.databaseDirectory.path,
-          'customDataRoot': !p.equals(documents.path, defaultDocuments.path),
+          'customContentRoot': !p.equals(content.path, defaultContent.path),
         };
       }),
       // 与设置 › 存储页同一个扫描器，只出类目合计（明细行要书目清单，存储页那份

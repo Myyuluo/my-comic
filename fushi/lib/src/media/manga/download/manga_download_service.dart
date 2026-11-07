@@ -302,7 +302,7 @@ class MangaDownloadService {
   }
 
   /// 删任务行（正在飞的先取消）。不删已下载的章目录——那是内容，走
-  /// [deleteChapterDownload]。
+  /// [DownloadLibraryIndex.deleteChapter]。
   Future<void> remove(String jobId) async {
     final _ActiveJob? active = _active;
     if (active != null && active.jobId == jobId) {

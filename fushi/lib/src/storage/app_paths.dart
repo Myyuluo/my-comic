@@ -1,17 +1,11 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:fushi_core/fushi_core.dart'
-    show
-        fushiDatabaseFileName,
-        fushiLegacyDatabaseFileName,
-        legacyHibikiDatabaseFileName;
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:fushi/src/startup/test_environment.dart';
-import 'package:fushi/src/storage/macos_data_root_access.dart';
 import 'package:fushi/src/utils/misc/platform_utils.dart';
 
 /// 应用存储根的**唯一入口**。
@@ -25,10 +19,8 @@ import 'package:fushi/src/utils/misc/platform_utils.dart';
 ///     字体、WebView2 数据、日志等）与 `cache`（可丢弃缓存）。安装目录不可写时回退到
 ///     `%LOCALAPPDATA%/MyComic/userdata`（见 [resolveProgramStateRootSync]）。
 ///
-/// 本类还保留旧的 root getter 作为 **alias**（票 12 才删除）：
-///   - [documentsRoot] / [documentsRootDirectory] → [contentRoot]
-///   - [supportRoot] / [supportRootDirectory] → [stateRoot]
-///   - [tempRoot] / [tempRootDirectory] → [cacheRoot]
+/// Ticket 12 起旧 root getter / alias / 布局锚点全部删除：新 root API 是唯一的
+/// 路径解析入口。
 ///
 /// fresh-start 语义：旧版 Fushi / my-comic 的 `<Documents>/Fushi/data`、
 /// `%APPDATA%` 数据、`data_root` / `documents_layout` / `documents_container`
@@ -109,15 +101,6 @@ class AppPaths {
   /// `C:\Users\<oldUser>\Documents\MyComic`。启动时自动改用当前用户默认根，并把旧根
   /// 交给启动期路径 rebase（[contentRootIsDefault] 仍为 true）。
   final String? contentRootRebaseFrom;
-
-  /// 旧 root getter alias：内容根。票 12 删除。
-  Directory get documentsRoot => contentRoot;
-
-  /// 旧 root getter alias：程序状态根。票 12 删除。
-  Directory get supportRoot => stateRoot;
-
-  /// 旧 root getter alias：可丢弃缓存根。票 12 删除。
-  Directory get tempRoot => cacheRoot;
 
   // ---- 根目录名与偏好键 ----
 
@@ -451,254 +434,9 @@ class AppPaths {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // 旧数据根 / 布局锚点：保留给尚未迁移的旧设置页与迁移器（票 12 删除）。
-  // **不参与** [resolve] 的根解析——fresh-start 语义下旧数据一律忽略。
-  // ---------------------------------------------------------------------------
-
-  /// 旧版「自定义数据根」偏好键。保留常量仅供尚未删除的迁移代码编译；
-  /// 根解析不再读取它。
-  static const String dataRootPrefKey = 'data_root';
-
-  /// 旧 dataRoot 下的内容子目录名。
-  static const String dataRootDocumentsChild = 'documents';
-
-  /// 旧 dataRoot 下的支持子目录名。
-  static const String dataRootSupportChild = 'support';
-
-  /// 旧 documents 布局锚点键（不再参与根解析）。
-  static const String documentsLayoutPrefKey = 'documents_layout';
-
-  /// 旧扁平布局值。
-  static const String documentsLayoutFlat = 'flat';
-
-  /// 旧 nested 布局值。
-  static const String documentsLayoutNested = 'nested';
-
-  /// 旧 nested 容器名候选（`Fushi` / `Hibiki`）。
-  static List<String> get defaultDocumentsChildSegments => <String>[
-    _documentsContainerName ?? 'Fushi',
-    'data',
-  ];
-
-  /// 旧嵌套容器名锚点键。
-  static const String documentsContainerPrefKey = 'documents_container';
-
-  static String? _documentsContainerName;
-
-  /// 旧布局判定缓存（保留给 [debugResetDocumentsLayoutCache] 与旧迁移器）。
-  static bool? _legacyFlatDocumentsRoot;
-
-  /// 仅供测试：清掉旧的布局判定缓存。
-  @visibleForTesting
-  static void debugResetDocumentsLayoutCache() {
-    _legacyFlatDocumentsRoot = null;
-    _documentsContainerName = null;
-  }
-
-  /// 仅供测试：直接注入旧 nested 容器名锚点。
-  @visibleForTesting
-  static void debugSetDocumentsContainer(String? name) =>
-      _documentsContainerName = name;
-
-  /// 测试注入钩子：旧 data_root 读取（保留常量兼容旧测试；不再影响根解析）。
-  static Future<String?> Function()? debugDataRootReader;
-
   /// 用户在「数据位置未响应」逃生屏选择「仍用默认位置启动」时置真。置真后本次
   /// 启动忽略配置的 Content root（`content_root`），走默认根。
   static bool forceDefaultRootForSession = false;
-
-  /// 旧 data_root 读取（仅供保留的旧迁移代码 / 测试使用）。
-  static Future<String?> _configuredDataRootPath() async {
-    if (!isDesktopPlatform) return null;
-    final Future<String?> Function()? reader = debugDataRootReader;
-    String? raw;
-    if (reader != null) {
-      raw = await reader();
-    } else {
-      try {
-        final SharedPreferences prefs = await SharedPreferences.getInstance();
-        raw = prefs.getString(dataRootPrefKey);
-        if (raw != null && raw.trim().isNotEmpty && Platform.isMacOS) {
-          raw =
-              await MacOSDataRootAccess.startAccessingStoredBookmark(prefs) ??
-              raw;
-        }
-      } catch (_) {
-        return null;
-      }
-    }
-    if (raw == null || raw.trim().isEmpty) return null;
-    return raw;
-  }
-
-  /// 旧 data_root 解析（仅供 [documentsRootIsFushiOwned] 等旧 helper）。
-  static Future<Directory?> _resolveDataRoot() async {
-    if (!isDesktopPlatform) return null;
-    if (forceDefaultRootForSession) return null;
-    final String? raw = await _configuredDataRootPath();
-    if (raw == null) return null;
-    final Directory dir = Directory(raw);
-    if (!await _probeDataRootExists(dir)) return null;
-    return dir;
-  }
-
-  /// 旧「默认位置」定义（`<Documents>/Fushi/data`）。仅旧迁移器 / 安装引导使用。
-  ///
-  /// [resolve] 的默认 Content root 已改为 `<Documents>/MyComic`，两者**不同**；
-  /// 新代码不得用它推导 Content root。
-  static Future<Directory> defaultLocationDocumentsRoot() async {
-    final Directory? test = _testDirectory('app-documents');
-    if (test != null) return test;
-    final Directory platformDocuments =
-        await getApplicationDocumentsDirectory();
-    return Directory(
-      p.joinAll(<String>[
-        platformDocuments.path,
-        ...defaultDocumentsChildSegments,
-      ]),
-    );
-  }
-
-  /// 旧布局判定。**纯读取、绝不探测文件系统**。
-  static Future<bool> _useLegacyFlatDocumentsRoot() async {
-    final bool? decided = _legacyFlatDocumentsRoot;
-    if (decided != null) return decided;
-    final SharedPreferences? prefs = await _prefsOrNull();
-    return prefs?.getString(documentsLayoutPrefKey) != documentsLayoutNested;
-  }
-
-  /// 旧存储统计 helper（内容根现在总是 app 专属，保留 API 兼容旧调用）。
-  static Future<bool> documentsRootIsFushiOwned() async {
-    if (!isDesktopPlatform) return true;
-    if (await _resolveDataRoot() != null) return true;
-    return !await _useLegacyFlatDocumentsRoot();
-  }
-
-  /// 旧安装器引导 helper：提前定下 nested 容器名（保留 API 兼容）。
-  static Future<void> ensureDocumentsContainerDecided() async =>
-      _ensureDocumentsContainerDecided(await _prefsOrNull());
-
-  static Future<void> _ensureDocumentsContainerDecided(
-    SharedPreferences? prefs,
-  ) async {
-    if (_documentsContainerName != null) return;
-    final String? stored = prefs?.getString(documentsContainerPrefKey);
-    if (stored == 'Hibiki' || stored == 'Fushi') {
-      _documentsContainerName = stored;
-      return;
-    }
-    String decided;
-    try {
-      final Directory platformDocuments =
-          await getApplicationDocumentsDirectory();
-      final bool legacyExists = await Directory(
-        p.join(platformDocuments.path, 'Hibiki', 'data'),
-      ).exists().timeout(const Duration(seconds: 2), onTimeout: () => true);
-      final bool newExists = await Directory(
-        p.join(platformDocuments.path, 'Fushi', 'data'),
-      ).exists().timeout(const Duration(seconds: 2), onTimeout: () => false);
-      decided = (legacyExists && !newExists) ? 'Hibiki' : 'Fushi';
-    } catch (_) {
-      decided = 'Hibiki';
-    }
-    _documentsContainerName = decided;
-    try {
-      await prefs?.setString(documentsContainerPrefKey, decided);
-    } catch (e) {
-      debugPrint('AppPaths: 固化 documents 容器名失败（下次启动重新判定）: $e');
-    }
-  }
-
-  /// 旧 support 根（仅供保留的旧引导 / 测试 helper 使用；根解析已不用它）。
-  static Future<Directory> _resolveSupportRoot() async {
-    final Directory? test = _testDirectory('app-support');
-    if (test != null) return test;
-    final Directory? dataRoot = await _resolveDataRoot();
-    if (dataRoot != null) {
-      return Directory(p.join(dataRoot.path, dataRootSupportChild));
-    }
-    return getApplicationSupportDirectory();
-  }
-
-  /// 旧 helper：本机旧 support 根下是否已有主库文件（仅供旧安装引导使用）。
-  static Future<bool> existingInstallHasDatabase() async {
-    try {
-      final Directory support = await _resolveSupportRoot();
-      Future<bool> dbExists(String fileName) => File(
-        p.join(support.path, fileName),
-      ).exists().timeout(const Duration(seconds: 2), onTimeout: () => true);
-      return await dbExists(fushiDatabaseFileName) ||
-          await dbExists(fushiLegacyDatabaseFileName) ||
-          await dbExists(legacyHibikiDatabaseFileName);
-    } catch (_) {
-      return true;
-    }
-  }
-
-  /// SharedPreferences 实例；平台通道不可用返回 null。
-  static Future<SharedPreferences?> _prefsOrNull() async {
-    try {
-      return await SharedPreferences.getInstance();
-    } catch (_) {
-      return null;
-    }
-  }
-
-  /// 旧迁移器的纯派生（`<dataRoot>/documents` + `<dataRoot>/support`）。
-  static (Directory documents, Directory support) rootsForDataRoot(
-    String dataRootPath,
-  ) => (
-    Directory(p.join(dataRootPath, dataRootDocumentsChild)),
-    Directory(p.join(dataRootPath, dataRootSupportChild)),
-  );
-
-  /// 旧 documents 根顶层白名单（仅旧迁移器使用；票 12 删除）。
-  static const Set<String> fushiOwnedDocumentsEntries = <String>{
-    'audiobooks',
-    'fushi_books',
-    'hoshi_books',
-    'video_covers',
-    'game_covers',
-    'video_subtitles',
-    'mpv_shaders',
-    'mpv_scripts',
-    'remote_videos',
-    'videos',
-    'anime_downloads',
-    'custom_fonts',
-    'fushiExport',
-    'hibikiExport',
-    'browser',
-    'thumbnails',
-    'dictionaryResources',
-    'dictionaryImportWorkingDirectory',
-    'webArchive',
-    'recommended_pack',
-    'onboarding_tutorial',
-    'manual_torrents',
-    'card_source_drafts',
-    'audio_cd',
-    'srs_backups',
-  };
-
-  /// 旧迁移器安全目标判定（仅旧迁移器使用；票 12 删除）。
-  static bool isSafeNestedTargetInSharedDocuments({
-    required String sharedDocumentsRoot,
-    required String newDataRoot,
-    Set<String> ownedEntries = fushiOwnedDocumentsEntries,
-  }) {
-    final String canonRoot = p.canonicalize(sharedDocumentsRoot);
-    final String canonNew = p.canonicalize(newDataRoot);
-    if (!p.isWithin(canonRoot, canonNew)) return false;
-    final String firstSegment = p
-        .split(p.relative(canonNew, from: canonRoot))
-        .first
-        .toLowerCase();
-    return !ownedEntries.any(
-      (String owned) => owned.toLowerCase() == firstSegment,
-    );
-  }
 
   // ---- 静态便捷层（给无 AppModel 实例的 static 存储助手） ----
 
@@ -761,55 +499,4 @@ class AppPaths {
     if (root == null) return null;
     return Directory(p.join(root.path, stateDirName));
   }
-
-  /// 旧 root getter alias：等价于 [contentRootDirectory]。票 12 删除。
-  static Future<Directory> documentsRootDirectory() => contentRootDirectory();
-
-  /// 旧 root getter alias：等价于 [stateRootDirectory]。票 12 删除。
-  static Future<Directory> supportRootDirectory() => stateRootDirectory();
-
-  /// 旧 root getter alias：等价于 [cacheRootDirectory]。票 12 删除。
-  static Future<Directory> tempRootDirectory() => cacheRootDirectory();
-
-  /// `<content>/<child>` 的绝对路径目录（不创建）。旧 alias，票 12 删除。
-  static Future<Directory> documentsSubdirectory(String child) async {
-    final Directory root = await _resolveContentRoot();
-    return Directory(p.join(root.path, child));
-  }
-
-  /// 有声书音频持久根 `<content>/audiobooks`（旧 alias）。
-  static Future<Directory> audiobooksDirectory() =>
-      documentsSubdirectory('audiobooks');
-
-  /// EPUB 解压正文根 `<content>/fushi_books`（旧 alias）。
-  static Future<Directory> epubBooksDirectory() =>
-      documentsSubdirectory('fushi_books');
-
-  /// 视频封面目录 `<content>/video_covers`（旧 alias）。
-  static Future<Directory> videoCoversDirectory() =>
-      documentsSubdirectory('video_covers');
-
-  /// 游戏库封面目录 `<content>/game_covers`（旧 alias）。
-  static Future<Directory> gameCoversDirectory() =>
-      documentsSubdirectory('game_covers');
-
-  /// 视频外挂字幕副本目录 `<content>/video_subtitles`（旧 alias）。
-  static Future<Directory> videoSubtitlesDirectory() =>
-      documentsSubdirectory('video_subtitles');
-
-  /// mpv 着色器目录 `<content>/mpv_shaders`（旧 alias）。
-  static Future<Directory> mpvShadersDirectory() =>
-      documentsSubdirectory('mpv_shaders');
-
-  /// mpv Lua 脚本目录 `<content>/mpv_scripts`（旧 alias）。
-  static Future<Directory> mpvLuaScriptsDirectory() =>
-      documentsSubdirectory('mpv_scripts');
-
-  /// 远程视频下载目录 `<content>/remote_videos`（旧 alias）。
-  static Future<Directory> remoteVideosDirectory() =>
-      documentsSubdirectory('remote_videos');
-
-  /// 复习自动备份根 `<content>/srs_backups`（旧 alias）。
-  static Future<Directory> srsBackupsDirectory() =>
-      documentsSubdirectory('srs_backups');
 }

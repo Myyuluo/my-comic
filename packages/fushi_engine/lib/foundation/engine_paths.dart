@@ -13,8 +13,6 @@ library;
 
 import 'dart:io';
 
-import 'package:path/path.dart' as p;
-
 abstract class EnginePaths {
   const EnginePaths();
 
@@ -26,28 +24,6 @@ abstract class EnginePaths {
 
   /// 临时目录（等价 `getTemporaryDirectory()`）。
   Future<Directory> tempRootDirectory();
-
-  /// `<documents>/<child>` 的绝对路径目录（不创建）。与 `AppPaths.documentsSubdirectory`
-  /// 同派生规则，保证两边对同一子目录名拿到逐字节一致的路径。
-  Future<Directory> documentsSubdirectory(String child) async {
-    final Directory root = await documentsRootDirectory();
-    return Directory(p.join(root.path, child));
-  }
-
-  /// 视频封面目录 `<documents>/video_covers`。
-  Future<Directory> videoCoversDirectory() =>
-      documentsSubdirectory('video_covers');
-
-  /// 视频外挂字幕副本目录 `<documents>/video_subtitles`。
-  Future<Directory> videoSubtitlesDirectory() =>
-      documentsSubdirectory('video_subtitles');
-
-  /// EPUB 解压正文根 `<documents>/fushi_books`。
-  Future<Directory> epubBooksDirectory() => documentsSubdirectory('fushi_books');
-
-  /// 有声书音频持久根 `<documents>/audiobooks`。
-  Future<Directory> audiobooksDirectory() =>
-      documentsSubdirectory('audiobooks');
 
   /// 系统文件选择器把用户选中的文件**拷进** app 沙盒时落盘的目录（BUG-2863）。
   ///

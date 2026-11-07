@@ -34,7 +34,6 @@ void main() {
 
   setUp(() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
-    AppPaths.debugResetDocumentsLayoutCache();
     tmp = Directory.systemTemp.createTempSync('fushi_backup_dir_');
     platformDocuments = Directory(p.join(tmp.path, 'Documents'))
       ..createSync(recursive: true);
@@ -64,7 +63,6 @@ void main() {
   tearDown(() {
     AppPaths.debugExecutablePathOverride = null;
     AppPaths.debugLocalAppDataOverride = null;
-    AppPaths.debugResetDocumentsLayoutCache();
     SharedPreferences.setMockInitialValues(<String, Object>{});
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(

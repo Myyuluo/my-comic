@@ -4,7 +4,10 @@ import 'dart:io';
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:fushi_engine/media/manga/manga_chapter_storage.dart';
+import 'package:fushi_engine/media/manga/download_library_storage.dart';
+import 'package:fushi_engine/media/manga/manga_chapter_storage.dart'
+    show mangaChapterDigest;
+import 'package:fushi_engine/media/manga/mokuro_payload.dart';
 import 'package:fushi_engine/sync/fushi_library_host_service.dart';
 import 'package:fushi_engine/sync/local_library_host_service.dart';
 import 'package:fushi_engine/sync/manga_sync_package.dart';
@@ -137,17 +140,16 @@ void main() {
       writeImages: false,
     );
     File(p.join(tmp.path, 'secret.txt')).writeAsStringSync('nope');
-    await expectLater(
-      svc.mangaPageFile('vol1', 0),
-      throwsA(isA<StateError>()),
-    );
+    await expectLater(svc.mangaPageFile('vol1', 0), throwsA(isA<StateError>()));
   });
 
   test('越界页 StateError', () async {
     await insertManga(bookKey: 'vol1');
     await expectLater(svc.mangaPageFile('vol1', 5), throwsA(isA<StateError>()));
     await expectLater(
-        svc.mangaPageFile('vol1', -1), throwsA(isA<StateError>()));
+      svc.mangaPageFile('vol1', -1),
+      throwsA(isA<StateError>()),
+    );
   });
 
   test('非漫画的书不给页表（EPUB 行不该经漫画通道泄出内容）', () async {
@@ -164,10 +166,7 @@ void main() {
         importedAt: DateTime.now().millisecondsSinceEpoch,
       ),
     );
-    await expectLater(
-      svc.mangaManifest('novel'),
-      throwsA(isA<StateError>()),
-    );
+    await expectLater(svc.mangaManifest('novel'), throwsA(isA<StateError>()));
   });
 
   test('占位空合集不给页表——与清单的 hasMangaContent 判据同源（BUG-2400）', () async {
@@ -176,10 +175,7 @@ void main() {
       pageUrls: const <String>[],
       writeImages: false,
     );
-    await expectLater(
-      svc.mangaManifest('empty'),
-      throwsA(isA<StateError>()),
-    );
+    await expectLater(svc.mangaManifest('empty'), throwsA(isA<StateError>()));
     // 清单侧对同一本的结论必须一致，否则就是「列表说有、点开说没有」。
     final RemoteBookInfo row = (await svc.listBooks()).firstWhere(
       (RemoteBookInfo b) => b.bookKey == 'empty',
@@ -189,10 +185,7 @@ void main() {
 
   test('缺页图的书不给页表（清单也不会声称有内容）', () async {
     await insertManga(bookKey: 'missing', writeImages: false);
-    await expectLater(
-      svc.mangaManifest('missing'),
-      throwsA(isA<StateError>()),
-    );
+    await expectLater(svc.mangaManifest('missing'), throwsA(isA<StateError>()));
     final RemoteBookInfo row = (await svc.listBooks()).firstWhere(
       (RemoteBookInfo b) => b.bookKey == 'missing',
     );
@@ -211,7 +204,9 @@ void main() {
   });
 
   /// 一条在线书架条目（Mihon / Aidoku 加入书架的形状）：根 `manga.json` 是占位
-  /// `{"pages":[]}`，章表在 `chaptersJson`，已下载的章在 `chapters/<digest>/`。
+  /// `{"pages":[]}`，章表在 `chaptersJson`，已下载的章在 Download library 的
+  /// `<extractDir>/<folderName>/`（页图平铺 + `pages.json`），映射在
+  /// `manga_chapter_dirs`。
   Future<String> insertOnlineManga({
     required String bookKey,
     required List<String> chapterKeys,
@@ -220,30 +215,56 @@ void main() {
   }) async {
     final Directory dir = Directory(p.join(tmp.path, bookKey))
       ..createSync(recursive: true);
-    File(p.join(dir.path, kMangaPackageMarker))
-        .writeAsStringSync('{"pages":[]}');
-    for (final String key in chapterKeys) {
+    File(
+      p.join(dir.path, kMangaPackageMarker),
+    ).writeAsStringSync('{"pages":[]}');
+    for (int index = 0; index < chapterKeys.length; index++) {
+      final String key = chapterKeys[index];
       if (!downloaded.contains(key) && !halfDownloaded.contains(key)) continue;
-      final Directory chapterDir = mangaChapterDirectory(dir.path, key)
-        ..createSync(recursive: true);
-      final List<Map<String, Object?>> pages = <Map<String, Object?>>[];
+      final String folderName = 'Chapter ${index + 1}';
+      final Directory chapterDir = downloadChapterDirectory(
+        dir.path,
+        folderName,
+      )..createSync(recursive: true);
+      final List<MokuroImage> images = <MokuroImage>[];
       for (int i = 0; i < 2; i++) {
-        final String url = 'images/page-00000${i + 1}.jpg';
+        final String url = downloadPageFileName(i, '.jpg');
         if (downloaded.contains(key)) {
-          final File image = File(
-            p.join(chapterDir.path, 'images', 'page-00000${i + 1}.jpg'),
-          )..parent.createSync(recursive: true);
+          final File image = File(p.join(chapterDir.path, url))
+            ..parent.createSync(recursive: true);
           image.writeAsBytesSync(<int>[0xFF, 0xD8, key.length, i]);
         }
-        pages.add(<String, Object?>{
-          'url': url,
-          'width': 700,
-          'height': 1000,
-          'blocks': <Object?>[],
-        });
+        images.add(
+          MokuroImage(
+            url: url,
+            size: const MokuroSize(700, 1000),
+            blocks: const <MokuroBlock>[],
+          ),
+        );
       }
-      mangaChapterJsonFile(chapterDir)
-          .writeAsStringSync(jsonEncode(<String, Object?>{'pages': pages}));
+      if (downloaded.contains(key)) {
+        await writePagesManifestAtomically(
+          chapterDir,
+          MangaPagesManifest(
+            sourceRuntime: 'mihon',
+            sourceId: '1',
+            sourceName: 'Source',
+            extensionPackage: 'org.example',
+            mangaKey: bookKey,
+            mangaTitle: bookKey,
+            chapterKey: key,
+            chapterName: 'Chapter ${index + 1}',
+            payload: MokuroPayload(images: images),
+            downloadedAt: DateTime.utc(2026, 11, 7),
+          ),
+        );
+      }
+      await db.upsertMangaChapterDir(
+        bookKey: bookKey,
+        chapterKey: key,
+        folderName: folderName,
+        updatedAt: 1,
+      );
     }
     await db.insertEpubBook(
       EpubBooksCompanion.insert(
@@ -271,8 +292,7 @@ void main() {
   }
 
   group('章节式在线漫画（BUG-2474）', () {
-    test('清单：占位根目录不算 hasMangaContent，但有已下载的章即 hasMangaChapters',
-        () async {
+    test('清单：占位根目录不算 hasMangaContent，但有已下载的章即 hasMangaChapters', () async {
       await insertOnlineManga(
         bookKey: 'mihon-abc',
         chapterKeys: const <String>['/c/1', '/c/2'],
@@ -284,28 +304,28 @@ void main() {
         downloaded: const <String>{},
       );
       final List<RemoteBookInfo> books = await svc.listBooks();
-      final RemoteBookInfo withChapters =
-          books.firstWhere((RemoteBookInfo b) => b.bookKey == 'mihon-abc');
+      final RemoteBookInfo withChapters = books.firstWhere(
+        (RemoteBookInfo b) => b.bookKey == 'mihon-abc',
+      );
       expect(withChapters.hasMangaContent, isFalse);
       expect(withChapters.hasMangaChapters, isTrue);
       expect(withChapters.toJson()['hasMangaChapters'], isTrue);
-      final RemoteBookInfo none =
-          books.firstWhere((RemoteBookInfo b) => b.bookKey == 'mihon-none');
+      final RemoteBookInfo none = books.firstWhere(
+        (RemoteBookInfo b) => b.bookKey == 'mihon-none',
+      );
       expect(none.hasMangaChapters, isFalse);
       // 旧 wire 字节不变：没下载任何章的行不写这个键。
       expect(none.toJson().containsKey('hasMangaChapters'), isFalse);
     });
 
-    test('页表：只列**完整**下载的章（半成品与未下载都不出现），页表为空',
-        () async {
+    test('页表：只列**完整**下载的章（半成品与未下载都不出现），页表为空', () async {
       await insertOnlineManga(
         bookKey: 'mihon-abc',
         chapterKeys: const <String>['/c/1', '/c/2', '/c/3'],
         downloaded: const <String>{'/c/1', '/c/3'},
         halfDownloaded: const <String>{'/c/2'},
       );
-      final RemoteMangaManifest manifest =
-          await svc.mangaManifest('mihon-abc');
+      final RemoteMangaManifest manifest = await svc.mangaManifest('mihon-abc');
       expect(manifest.pages, isEmpty);
       expect(manifest.hasChapters, isTrue);
       expect(
@@ -318,15 +338,15 @@ void main() {
       expect(first.scanlator, 'group');
       expect(first.pageCount, 2);
       // 经 wire 往返不丢字段。
-      final RemoteMangaManifest roundTrip =
-          RemoteMangaManifest.fromJson(manifest.toJson());
+      final RemoteMangaManifest roundTrip = RemoteMangaManifest.fromJson(
+        manifest.toJson(),
+      );
       expect(roundTrip.chapters.length, 2);
       expect(roundTrip.chapters.last.key, '/c/3');
       expect(roundTrip.chapters.last.scanlator, isNull);
     });
 
-    test('一章都没完整下载 → 页表 StateError（与清单 hasMangaChapters 同源）',
-        () async {
+    test('一章都没完整下载 → 页表 StateError（与清单 hasMangaChapters 同源）', () async {
       await insertOnlineManga(
         bookKey: 'mihon-half',
         chapterKeys: const <String>['/c/1'],
@@ -346,16 +366,17 @@ void main() {
         downloaded: const <String>{'/c/1'},
       );
       final String digest = mangaChapterDigest('/c/1');
-      final RemoteMangaManifest chapter =
-          await svc.mangaChapterManifest('mihon-abc', digest);
-      expect(chapter.bookKey, 'mihon-abc');
-      expect(
-        chapter.pages.map((RemoteMangaPageInfo e) => e.index),
-        <int>[0, 1],
+      final RemoteMangaManifest chapter = await svc.mangaChapterManifest(
+        'mihon-abc',
+        digest,
       );
-      expect(chapter.pages.first.name, 'page-000001.jpg');
-      final File page =
-          await svc.mangaChapterPageFile('mihon-abc', digest, 1);
+      expect(chapter.bookKey, 'mihon-abc');
+      expect(chapter.pages.map((RemoteMangaPageInfo e) => e.index), <int>[
+        0,
+        1,
+      ]);
+      expect(chapter.pages.first.name, '001.jpg');
+      final File page = await svc.mangaChapterPageFile('mihon-abc', digest, 1);
       expect(page.readAsBytesSync(), <int>[0xFF, 0xD8, 4, 1]);
       await expectLater(
         svc.mangaChapterPageFile('mihon-abc', digest, 2),

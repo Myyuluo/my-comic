@@ -542,27 +542,12 @@ void main() {
       expect((usage.method, usage.path), ('GET', '/api/admin/storage/usage'));
     });
 
-    test('migrate：真迁移要 --yes，--dry-run 不要；目录转绝对路径', () {
-      expect(() => build('storage', 'migrate', <String>['d']), usageError());
-      expect(() => build('storage', 'migrate', <String>[]), usageError());
-      final CtlRequestSpec dry = build('storage', 'migrate', <String>[
-        'd',
-        '--dry-run',
-      ]);
-      expect((dry.method, dry.path), ('POST', '/api/admin/storage/migrate'));
-      expect(dry.body, <String, Object?>{
-        'path': p.normalize(p.absolute('d')),
-        'dryRun': true,
-      });
-      expect(
-        build('storage', 'migrate', <String>['d', '-y']).body,
-        <String, Object?>{
-          'path': p.normalize(p.absolute('d')),
-          'confirm': true,
-        },
+    test('旧 data-root 迁移命令已删除', () {
+      final CtlCommandGroup storage = dataCommandGroups.firstWhere(
+        (CtlCommandGroup g) => g.name == 'storage',
       );
-      final CtlRequestSpec st = build('storage', 'migrate-status', <String>[]);
-      expect((st.method, st.path), ('GET', '/api/admin/storage/migrate'));
+      expect(storage.find('migrate'), isNull);
+      expect(storage.find('migrate-status'), isNull);
     });
   });
 
@@ -645,7 +630,7 @@ void main() {
       expect(text, contains('interconnect（fushiServer）'));
     });
 
-    test('dl add 远端 / dl detail / dl targets / pair-link / migrate', () {
+    test('dl add 远端 / dl detail / dl targets / pair-link / storage root', () {
       expect(
         render('dl', 'add', <String, Object?>{
           'jobId': 'r1',
@@ -710,12 +695,17 @@ void main() {
         startsWith('fushi://pair?h=x'),
       );
       expect(
-        render('storage', 'migrate-status', <String, Object?>{
-          'active': true,
-          'copiedFiles': 3,
-          'totalFiles': 10,
+        render('storage', 'root', <String, Object?>{
+          'content': '/content',
+          'state': '/state',
+          'cache': '/cache',
+          'database': '/state/fushi.db',
+          'customContentRoot': false,
         }),
-        '正在迁移：3 / 10 个文件',
+        '漫画数据位置（Content root）：/content\n'
+        '程序数据位置（Program state root）：/state\n'
+        '缓存目录：/cache\n'
+        '数据库目录：/state/fushi.db',
       );
       expect(
         render('backup', 'status', <String, Object?>{

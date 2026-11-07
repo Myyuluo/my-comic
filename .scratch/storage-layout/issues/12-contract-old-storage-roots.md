@@ -4,10 +4,10 @@
 
 **Blocked by:** 02, 03, 04, 05, 06, 07, 08, 09, 10, 11
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] 代码中不再引用旧的 documents/support/temp root 或旧布局锚点
-- [ ] 死掉的非漫画存储 getter/目录规划被删除
-- [ ] 不再通过 Manga/Chapter 标题推导磁盘路径
-- [ ] 新 root API 是唯一的路径解析入口
-- [ ] 全仓构建、存储/下载/导入/设置测试与源码守卫保持 green
+- [x] 代码中不再引用旧的 documents/support/temp root 或旧布局锚点
+- [x] 死掉的非漫画存储 getter/目录规划被删除
+- [x] 不再通过 Manga/Chapter 标题推导磁盘路径
+- [x] 新 root API 是唯一的路径解析入口
+- [x] 全仓构建、存储/下载/导入/设置测试与源码守卫保持 green

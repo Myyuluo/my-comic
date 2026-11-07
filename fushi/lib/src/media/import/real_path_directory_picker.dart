@@ -160,7 +160,7 @@ Future<PickedImportDirectory?> pickImportDirectory({
     return path == null ? null : PickedImportDirectory(path: path);
   }
 
-  final Directory tempRoot = await AppPaths.tempRootDirectory();
+  final Directory tempRoot = await AppPaths.cacheRootDirectory();
   final Directory staging = Directory(
     p.join(tempRoot.path, kImportStagingDirName, stagingName),
   );

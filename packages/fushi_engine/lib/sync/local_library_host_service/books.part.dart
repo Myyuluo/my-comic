@@ -23,6 +23,15 @@ mixin _LocalLibraryHostBooks on _LocalLibraryHostBase, _LocalLibraryHostShared {
     // 状态窄锁（与合集清单落库同表同锁）而非 _runExclusive：后者在 app 里罩着整个
     // 自动同步轮，清单请求会被卡到对端超时。归组失败不挡清单，照旧按已有归属出。
     final List<EpubBookRow> rows = await _db.getAllEpubBooks();
+    // Ticket 12：章节式在线漫画的「有已下载章」判据改为查 `manga_chapter_dirs`
+    // 映射（旧布局 `<extractDir>/chapters/` 目录列举已随哈希布局删除）。
+    final Set<String> chapteredMangaKeys = <String>{};
+    for (final EpubBookRow r in rows) {
+      if (BookFormat.parseOrEpub(r.format) != BookFormat.manga) continue;
+      if ((await _db.getMangaChapterDirNamesForBook(r.bookKey)).isNotEmpty) {
+        chapteredMangaKeys.add(r.bookKey);
+      }
+    }
     // 该书是否已配「可经 live-sync 导出」的有声书。判据必须与 [listAudiobooks] /
     // [exportAudiobook] 完全同源——仅 Audiobooks 行还不够，导出格式需 srtBookUid，
     // 故只有同时具备 SrtBooks 行的 bookKey 才算可下载（TODO-778）。否则 EPUB 对齐
@@ -59,10 +68,17 @@ mixin _LocalLibraryHostBooks on _LocalLibraryHostBase, _LocalLibraryHostShared {
     // 会 miss → RemoteBookInfo.collection=null → 有声书不折进合集。这里补一趟
     // bookKey→srtUid 映射，供下面按 srt 成员键兜底查归属，让有声书 EPUB 卡也带上
     // collection（client 经现有注入循环折进合集，与本地书架对称、不依赖后台 sweep）。
-    final Map<String, String> srtUidByBookKey = <String, String>{
-      for (final SrtBookRow s in await _db.getAllSrtBooks())
-        if (s.bookKey.isNotEmpty) s.bookKey: s.uid,
-    };
+    // Ticket 12：漫画-only schema 没有 srt_books 表；休眠的互联路径缺表时按空
+    // 映射处理，不让清单端点崩。
+    Map<String, String> srtUidByBookKey = const <String, String>{};
+    try {
+      srtUidByBookKey = <String, String>{
+        for (final SrtBookRow s in await _db.getAllSrtBooks())
+          if (s.bookKey.isNotEmpty) s.bookKey: s.uid,
+      };
+    } on Object {
+      // 缺表 → 没有 SRT 有声书可折叠。
+    }
     return rows.map((EpubBookRow r) {
       // EPUB 行的 coverPath 是 EPUB 内部相对 href，必须拼 extractDir 才是磁盘真
       // 路径；直接 _existingFilePath(相对href) 恒 false → 远端书卡没封面（#4）。
@@ -92,12 +108,11 @@ mixin _LocalLibraryHostBooks on _LocalLibraryHostBase, _LocalLibraryHostShared {
         hasMangaContent: format == BookFormat.manga &&
             hasExportableMangaContent(r.extractDir),
         // BUG-2474：在线书架条目（Mihon / Aidoku）根目录只有占位 manga.json，
-        // hasMangaContent 恒 false，但它按章下载的页图就在 <extractDir>/chapters/
-        // 下——标 hasMangaChapters，对端以多章在线作品收下、逐章从这里拉。清单级
-        // 只做一次目录列举（廉价判据），逐章完整性在按章端点上把关。
+        // hasMangaContent 恒 false，但它按章下载的页图在 Download library 的章目录
+        // 里——标 hasMangaChapters，对端以多章在线作品收下、逐章从这里拉。判据查
+        // `manga_chapter_dirs` 映射；逐章完整性在按章端点上把关。
         hasMangaChapters: format == BookFormat.manga &&
-            r.extractDir.isNotEmpty &&
-            hasAnyChapterDirSync(r.extractDir),
+            chapteredMangaKeys.contains(r.bookKey),
         mangaReadingMode: r.mangaReadingMode,
         mangaReaderOverrides: _readerOverrideMap(readerOverridesByUid[r.uid]),
         mangaReaderOverrideUpdatedAt:

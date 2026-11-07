@@ -142,7 +142,7 @@ class AnkiDeckRepositionRunner {
   bool get isSupported => _repository.supportsDeckReposition;
 
   static Future<Directory> _defaultSnapshotDirectory() async {
-    final Directory support = await AppPaths.supportRootDirectory();
+    final Directory support = await AppPaths.stateRootDirectory();
     final Directory dir =
         Directory(p.join(support.path, 'backups', 'anki_reposition'));
     if (!await dir.exists()) await dir.create(recursive: true);

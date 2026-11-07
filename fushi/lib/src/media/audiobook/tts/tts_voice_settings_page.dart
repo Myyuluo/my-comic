@@ -12,7 +12,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'dart:math';
 
-import 'package:fushi_engine/foundation/engine_paths.dart';
+import 'package:fushi/src/storage/app_paths.dart';
 import 'package:fushi_engine/tts/local/gpt_sovits_local_engine.dart';
 import 'package:fushi_engine/tts/local/gpt_sovits_local_server.dart';
 import 'package:fushi_engine/tts/local/irodori_local_engine.dart';
@@ -147,7 +147,7 @@ Future<void> deleteOrphanedTtsReferenceAudio(
   Iterable<TtsVoicePreset> remaining,
 ) async {
   try {
-    final Directory support = await enginePaths.supportRootDirectory();
+    final Directory support = await AppPaths.stateRootDirectory();
     final String? orphan = ttsOrphanedReferenceAudio(
       removed: removed,
       remaining: remaining,
@@ -872,7 +872,7 @@ class _TtsVoiceEditorPageState extends State<_TtsVoiceEditorPage> {
     if (picked == null || !mounted) return;
     final String stored;
     try {
-      final Directory support = await enginePaths.supportRootDirectory();
+      final Directory support = await AppPaths.stateRootDirectory();
       final Directory dir = Directory(
         p.join(support.path, kTtsReferenceAudioDirName),
       );

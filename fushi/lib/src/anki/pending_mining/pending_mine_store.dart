@@ -9,4 +9,4 @@ export 'package:fushi_engine/anki_sync/pending_mine_store.dart';
 /// 本机的待发队列：载荷在 `<support>/pending_mine_queue`。制卡链路（仓库 provider）
 /// 与跨设备中转（同步触发器）共用这一处定位。
 PendingMineStore pendingMineStoreAtSupportRoot(FushiDatabase Function() db) =>
-    PendingMineStore.inSupportDir(db, AppPaths.supportRootDirectory);
+    PendingMineStore.inSupportDir(db, AppPaths.stateRootDirectory);

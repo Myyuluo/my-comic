@@ -90,8 +90,8 @@ class ToleranceGoldenComparator extends LocalFileComparator {
 ///
 /// 为什么这必须是套件级默认，而不是「受影响的测试各自补 `setUp`」：
 ///
-/// `AppPaths` 的路径解析（`lib/src/storage/app_paths.dart` 的 `_configuredDataRootPath` /
-/// `_prefsOrNull`）每次都要 await `SharedPreferences.getInstance()`，而 `AppPaths` 是运行时
+/// `AppPaths` 的路径解析（`lib/src/storage/app_paths.dart` 的 `_configuredContentRootPath`）
+/// 每次都要 await `SharedPreferences.getInstance()`，而 `AppPaths` 是运行时
 /// 静态便捷层——封面抽取、字幕落点、缩略图、着色器列举等**页面级 fire-and-forget 链**全从它
 /// 派生，因此任何 pump 起真实页面的 widget 测试都可能在 `pump()` 的 **fake async 相位**里
 /// 发起它。没装 mock 时这次调用穿到**真实平台通道**，应答只能由真实事件循环投递，fake async

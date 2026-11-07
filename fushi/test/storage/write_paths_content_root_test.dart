@@ -59,34 +59,36 @@ void main() {
     if (tmp.existsSync()) tmp.deleteSync(recursive: true);
   });
 
-  test('默认 Content root → 三个写路径落 <Documents>/MyComic/<child>', () async {
+  test('默认 Content root → 写路径落 <Documents>/MyComic/<child>', () async {
     final AppPaths paths = await AppPaths.resolve();
     final String content = paths.contentRoot.path;
     expect(content, p.join(defaultDocs.path, 'MyComic'));
 
-    expect((await AppPaths.videoSubtitlesDirectory()).path,
-        p.join(content, 'video_subtitles'));
-    expect((await AppPaths.videoCoversDirectory()).path,
-        p.join(content, 'video_covers'));
+    expect((await AppPaths.downloadsRootDirectory()).path,
+        p.join(content, 'downloads'));
+    expect((await AppPaths.autobackupRootDirectory()).path,
+        p.join(content, 'autobackup'));
+    expect((await AppPaths.localComicRootDirectory()).path,
+        p.join(content, 'localcomic'));
     expect(p.equals(await AudiobookStorage.audiobooksRootDir(),
         p.join(content, 'audiobooks')), isTrue);
 
     // 不再散落在共享 Documents 根。
-    expect((await AppPaths.videoCoversDirectory()).path,
-        isNot(equals(p.join(defaultDocs.path, 'video_covers'))));
+    expect((await AppPaths.downloadsRootDirectory()).path,
+        isNot(equals(p.join(defaultDocs.path, 'downloads'))));
   });
 
-  test('content_root 生效 → 三个写路径落新 Content root', () async {
+  test('content_root 生效 → 写路径落新 Content root', () async {
     final Directory content = Directory(p.join(tmp.path, 'CustomContent'))
       ..createSync(recursive: true);
     SharedPreferences.setMockInitialValues(<String, Object>{
       'content_root': content.path,
     });
 
-    expect((await AppPaths.videoSubtitlesDirectory()).path,
-        p.join(content.path, 'video_subtitles'));
-    expect((await AppPaths.videoCoversDirectory()).path,
-        p.join(content.path, 'video_covers'));
+    expect((await AppPaths.downloadsRootDirectory()).path,
+        p.join(content.path, 'downloads'));
+    expect((await AppPaths.localComicRootDirectory()).path,
+        p.join(content.path, 'localcomic'));
     expect(p.equals(await AudiobookStorage.audiobooksRootDir(),
         p.join(content.path, 'audiobooks')), isTrue);
   });
@@ -98,7 +100,7 @@ void main() {
       'data_root': oldRoot.path,
     });
 
-    expect((await AppPaths.videoCoversDirectory()).path,
-        p.join(defaultDocs.path, 'MyComic', 'video_covers'));
+    expect((await AppPaths.downloadsRootDirectory()).path,
+        p.join(defaultDocs.path, 'MyComic', 'downloads'));
   });
 }

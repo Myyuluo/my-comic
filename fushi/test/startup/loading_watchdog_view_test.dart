@@ -59,7 +59,7 @@ void main() {
     expect(retried, isTrue, reason: '点重试须触发 onRetry（复位看门狗 + retryInitialise）');
   });
 
-  // BUG-815：移动端没有自定义数据根（AppPaths._resolveDataRoot 非桌面恒 null），
+  // BUG-815：移动端没有自定义 Content root（非桌面不读 content_root 偏好），
   // 桌面那套「数据存储位置设在未连接网络盘 / 用默认位置启动」文案在手机上既不适用
   // 又吓人（重试根本不换位置）。移动端必须改显不提「默认位置」的安心文案。
   testWidgets('超时(移动端) → 显示移动端安心文案，不含桌面『默认位置』说明 (BUG-815)', (

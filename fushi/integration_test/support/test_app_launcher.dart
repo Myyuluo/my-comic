@@ -15,7 +15,7 @@ Future<void> launchFushiTestApp() async {
   WidgetsFlutterBinding.ensureInitialized();
   isolateSharedPreferencesUnderTestRoot();
   final AppPaths paths = await AppPaths.resolve();
-  final FushiDatabase db = FushiDatabase(paths.supportRoot.path);
+  final FushiDatabase db = FushiDatabase(paths.stateRoot.path);
   try {
     await db.setPrefTyped<bool>('first_time_setup', false);
     await db.setPrefTyped<bool>('onboarding_completed', true);

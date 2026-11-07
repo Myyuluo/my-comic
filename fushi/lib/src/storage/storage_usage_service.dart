@@ -25,10 +25,10 @@ import 'package:fushi/src/sync/backup_service.dart' show isBackupArchiveName;
 /// （见 `video_storage.dart` 头注释的共享资产误删坑）。每条明细带
 /// [StorageEntryKind] 说明它接哪条原语（或只读）。
 ///
-/// 类目清单是 [AppPaths.fushiOwnedDocumentsEntries] 的**全覆盖分组**：documents
-/// 根下白名单顶层目录每一个都归属且只归属一个类目（守卫见
-/// `storage_usage_service_test.dart`），support 根整体归「数据库与内部数据」，
-/// 其中 OCR 模型子目录单独拆出（它是唯一可删可恢复的 support 子项）。
+/// 类目清单是 [kStorageCategoryDocumentsChildren] 的**全覆盖分组**：Content root
+/// 下白名单顶层目录每一个都归属且只归属一个类目（守卫见
+/// `storage_usage_service_test.dart`），Program state root 整体归「数据库与内部
+/// 数据」，其中 OCR 模型子目录单独拆出（它是唯一可删可恢复的 state 子项）。
 ///
 /// 每个类目都出明细：书籍/词典的条目来自 DB（有标题、接既有删除原语），其余
 /// 类目的条目就是类目根下的直接子项（`_childEntriesSync`，只读展示）。
@@ -440,11 +440,15 @@ class BundledComponentUsage {
   final String path;
 }
 
-/// 每类目 → documents 根下归属的顶层目录名。与
-/// [AppPaths.fushiOwnedDocumentsEntries] 保持全覆盖（守卫测试咬住）。
+/// 每类目 → Content root 下归属的顶层目录名。完整覆盖「其他未归类」的差集
+/// （守卫测试咬住）。
 const Map<StorageCategoryId, List<String>> kStorageCategoryDocumentsChildren =
     <StorageCategoryId, List<String>>{
       StorageCategoryId.books: <String>[
+        // Ticket 12：Content root 的 Download library 与 Local source 也属于
+        // 用户可见的漫画内容，不能落进「其他未归类」。
+        'downloads',
+        'localcomic',
         'fushi_books',
         // 旧名存量目录（启动就地改名失败时仍可能在磁盘上）：引用迁移常量，
         // 不重复旧代号字面量（fushi_rename_guard 禁模式）。
@@ -476,6 +480,8 @@ const Map<StorageCategoryId, List<String>> kStorageCategoryDocumentsChildren =
       StorageCategoryId.customFonts: <String>['custom_fonts'],
       StorageCategoryId.web: <String>['webArchive', 'browser'],
       StorageCategoryId.exports: <String>[
+        // Ticket 12：Backup directory（`.tachibk`）也是导出产物。
+        'autobackup',
         'fushiExport',
         // 同上：旧名存量目录走迁移常量。
         kLegacyExportDirectoryName,
@@ -493,7 +499,16 @@ const Map<StorageCategoryId, List<String>> kStorageCategoryDocumentsChildren =
       StorageCategoryId.ocrModels: <String>[],
     };
 
-/// `<support>/ocr_models`（[StorageCategoryId.ocrModels] 的根；
+/// [kStorageCategoryDocumentsChildren] 的全部顶层目录名并集。
+///
+/// 「其他未归类」用 Content root 的直接子项减去它：类目表漏了哪个目录，该目录
+/// 就会作为未归类项自己冒出来，而不是静默少算。
+final Set<String> kStorageCategoryDocumentsEntries = <String>{
+  for (final List<String> children in kStorageCategoryDocumentsChildren.values)
+    ...children,
+};
+
+/// `<state>/ocr_models`（[StorageCategoryId.ocrModels] 的根；
 /// 各本机模型落在它下面的兄弟目录，见 `MangaOcrLocalModel.modelsDirectory`）。
 const String kOcrModelsSupportChild = 'ocr_models';
 
@@ -592,13 +607,10 @@ class StorageUsageService {
     Future<Directory> Function()? documentsRoot,
     Future<Directory> Function()? supportRoot,
     Future<List<Directory>> Function()? cacheRoots,
-    Future<bool> Function()? documentsRootIsFushiOwned,
     StorageIsolateRunner? isolateRunner,
-  }) : _documentsRoot = documentsRoot ?? AppPaths.documentsRootDirectory,
-       _supportRoot = supportRoot ?? AppPaths.supportRootDirectory,
+  }) : _documentsRoot = documentsRoot ?? AppPaths.contentRootDirectory,
+       _supportRoot = supportRoot ?? AppPaths.stateRootDirectory,
        _cacheRoots = cacheRoots ?? _defaultCacheRoots,
-       _documentsRootIsFushiOwned =
-           documentsRootIsFushiOwned ?? AppPaths.documentsRootIsFushiOwned,
        _run = isolateRunner ?? Isolate.run;
 
   final Future<Directory> Function() _documentsRoot;
@@ -606,9 +618,6 @@ class StorageUsageService {
 
   /// BUG-1905：此前完全没被扫过的第三类根（缓存/临时）。见 [_defaultCacheRoots]。
   final Future<List<Directory>> Function() _cacheRoots;
-
-  /// BUG-1905：见 [AppPaths.documentsRootIsFushiOwned]——决定「其他未归类」敢不敢算。
-  final Future<bool> Function() _documentsRootIsFushiOwned;
 
   final StorageIsolateRunner _run;
 
@@ -1023,7 +1032,7 @@ class StorageUsageService {
   static Future<List<Directory>> _defaultCacheRoots() async {
     final bool sandboxed = Platform.isIOS || Platform.isAndroid;
     if (!sandboxed && !Platform.isMacOS) return const <Directory>[];
-    final Directory temp = await AppPaths.tempRootDirectory();
+    final Directory temp = await AppPaths.cacheRootDirectory();
     if (!sandboxed) return <Directory>[temp];
     final Directory system = Directory.systemTemp;
     return <Directory>[
@@ -1107,21 +1116,18 @@ class StorageUsageService {
 
   /// BUG-1905：documents 根下**白名单之外**的顶层项。
   ///
-  /// 让漏算无法隐藏：白名单是手写的，漏了什么就静默少算多少，而总计恰恰是各类目
+  /// 让漏算无法隐藏：类目表是手写的，漏了什么就静默少算多少，而总计恰恰是各类目
   /// 之和，页面自己永远发现不了。已知的两个既有漏点就落在这里——剪辑导出
-  /// `video_clips`（`clip_export.part.dart`，`fushiOwnedDocumentsEntries` 明确「刻意
-  /// 不收」）与错误日志 `.txt`。
+  /// `video_clips`（`clip_export.part.dart`，类目表明确「刻意不收」）与错误日志
+  /// `.txt`。
   ///
-  /// 桌面老扁平安装下 documents 根就是用户自己的文档文件夹，那里的东西不是 app 的
-  /// 占用，本类目直接返回 0（见 [AppPaths.documentsRootIsFushiOwned]）。
+  /// Content root 现在恒为 app 专属目录（`<Documents>/MyComic`），不再存在
+  /// 「documents 根其实是用户共享文件夹」的老扁平布局，所以这里总是敢算。
   Future<StorageCategoryUsage> _scanOther(final Directory docs) async {
-    if (!await _documentsRootIsFushiOwned()) {
-      return const StorageCategoryUsage(id: StorageCategoryId.other, bytes: 0);
-    }
     final List<Map<String, Object>> raw = await _run(
       () => _childEntriesSync(<String>[docs.path]),
     );
-    const Set<String> known = AppPaths.fushiOwnedDocumentsEntries;
+    final Set<String> known = kStorageCategoryDocumentsEntries;
     final List<StorageEntryUsage> entries =
         <StorageEntryUsage>[
           for (final StorageEntryUsage e in _childEntries(raw))

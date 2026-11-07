@@ -200,7 +200,7 @@ final FutureProvider<SrsDbStore?> srsStoreProvider =
 /// SRS 媒体根所在的支持目录（测试覆写成临时目录）。
 final Provider<Future<Directory> Function()> srsSupportRootProvider =
     Provider<Future<Directory> Function()>(
-      (Ref ref) => AppPaths.supportRootDirectory,
+      (Ref ref) => AppPaths.stateRootDirectory,
     );
 
 /// 当前 profile 的 SRS 媒体目录（`<support>/srs_media/<profileUid>/`）；模块关着时为 null。

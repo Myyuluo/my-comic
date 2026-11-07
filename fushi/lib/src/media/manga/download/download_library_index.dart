@@ -5,8 +5,8 @@
 /// `bookKey + chapterKey → folderName`，阅读器、作品页与删除都问这个索引，
 /// 不再用章 key / 标题自行拼路径。
 ///
-/// 旧版哈希布局（`<content>/fushi_books/<bookKey>/chapters/<digest>/`）只作为
-/// **只读回退**保留：票 01 保留旧布局直到后续票清理，fresh-start 不迁移旧数据。
+/// Ticket 12 删除了票 01 的旧哈希布局只读回退：fresh-start 语义下旧
+/// `<content>/fushi_books/<bookKey>/chapters/<digest>/` 不再读取。
 library;
 
 import 'dart:io';
@@ -14,8 +14,6 @@ import 'dart:io';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi_engine/epub/epub_storage.dart';
 import 'package:fushi_engine/media/manga/download_library_storage.dart';
-import 'package:fushi_engine/media/manga/manga_chapter_storage.dart';
-import 'package:fushi_engine/media/manga/manga_storage.dart';
 import 'package:path/path.dart' as p;
 
 import 'package:fushi/src/storage/app_paths.dart';
@@ -26,21 +24,16 @@ class MangaChapterContainer {
     required this.directory,
     required this.manifestFile,
     required this.imagesDirectory,
-    required this.legacyLayout,
   });
 
-  /// 章节目录（新布局：`downloads/{source}/{manga}/{chapter}`；
-  /// 旧布局：`chapters/<digest>`）。
+  /// 章节目录（`downloads/{source}/{manga}/{chapter}`）。
   final Directory directory;
 
-  /// 章元数据文件（新布局 `pages.json`；旧布局 `manga.json`）。
+  /// 章元数据文件（`pages.json`）。
   final File manifestFile;
 
-  /// 页图根：新布局就是章目录本身（页图平铺），旧布局是 `images/`。
+  /// 页图根：新布局就是章目录本身（页图平铺）。
   final Directory imagesDirectory;
-
-  /// 是否旧哈希布局（`chapterDir/manga.json + images/`）。
-  final bool legacyLayout;
 }
 
 /// 按数据库映射解析章节载体与「已下载」判据。
@@ -51,8 +44,8 @@ class DownloadLibraryIndex {
 
   /// 定位 [chapterKey] 的章目录。
   ///
-  /// 优先映射指向的新布局；映射缺失/目录不在时回退旧哈希布局（只读兼容）。
-  /// 返回 null = 磁盘上没有这章的容器（未下载或已被删）。
+  /// 只认数据库映射指向的新布局；返回 null = 磁盘上没有这章的容器
+  /// （未下载或已被删）。
   Future<MangaChapterContainer?> resolveChapter({
     required String bookKey,
     required String chapterKey,
@@ -85,23 +78,8 @@ class DownloadLibraryIndex {
           directory: directory,
           manifestFile: downloadPagesManifestFile(directory),
           imagesDirectory: directory,
-          legacyLayout: false,
         );
       }
-    }
-    // 票 01 的旧哈希布局：`<content>/fushi_books/<bookKey>/chapters/<digest>`。
-    // 路径由 EpubStorage 解析，天然只指向**当前** Content root。
-    final Directory legacyDirectory = mangaChapterDirectory(
-      await MangaStorage.bookPath(bookKey),
-      chapterKey,
-    );
-    if (await legacyDirectory.exists()) {
-      return MangaChapterContainer(
-        directory: legacyDirectory,
-        manifestFile: mangaChapterJsonFile(legacyDirectory),
-        imagesDirectory: mangaChapterImagesDirectory(legacyDirectory),
-        legacyLayout: true,
-      );
     }
     return null;
   }
@@ -128,9 +106,6 @@ class DownloadLibraryIndex {
       chapterKey: chapterKey,
     );
     if (container == null) return false;
-    if (container.legacyLayout) {
-      return await readDownloadedChapterPayload(container.directory) != null;
-    }
     return await readDownloadLibraryChapterPayload(container.directory) != null;
   }
 

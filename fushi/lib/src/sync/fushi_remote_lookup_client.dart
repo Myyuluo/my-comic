@@ -95,7 +95,7 @@ class FushiRemoteLookupClient {
   String? get dictionaryStylesRevision => _dictionaryStylesRevision;
 
   static Future<Directory> _defaultPinnedAudioCacheDirectory() async {
-    final Directory supportRoot = await AppPaths.supportRootDirectory();
+    final Directory supportRoot = await AppPaths.stateRootDirectory();
     return Directory(p.join(supportRoot.path, 'remote_lookup_audio_cache'));
   }
 

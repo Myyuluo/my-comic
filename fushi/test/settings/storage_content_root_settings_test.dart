@@ -240,13 +240,17 @@ void main() {
       isFalse,
       reason: '切换 Content root 不弹迁移/重建提示',
     );
-    final String dataRootPart = File(
-      'lib/src/sync/sync_settings_schema/data_root.part.dart',
-    ).readAsStringSync();
     expect(
-      dataRootPart.contains('_DataRootWidget'),
+      File(
+        'lib/src/sync/sync_settings_schema/data_root.part.dart',
+      ).existsSync(),
       isFalse,
-      reason: '旧的数据位置设置 widget 已移除',
+      reason: '旧的数据位置设置/迁移 part 已随整目录迁移器删除（ticket 12）',
+    );
+    expect(
+      File('lib/src/storage/data_root_migrator.dart').existsSync(),
+      isFalse,
+      reason: '旧整目录迁移器已删除（ticket 12）',
     );
   });
 }

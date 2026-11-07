@@ -68,7 +68,7 @@ class AnkiMediaDedupRunner {
   static void resetAutoSessionGate() => _autoRanThisSession = false;
 
   Future<Directory> journalDirectory() async {
-    final Directory support = await AppPaths.supportRootDirectory();
+    final Directory support = await AppPaths.stateRootDirectory();
     final Directory dir =
         Directory(p.join(support.path, 'backups', 'media_dedup'));
     if (!await dir.exists()) await dir.create(recursive: true);

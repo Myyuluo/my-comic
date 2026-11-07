@@ -164,9 +164,9 @@ Future<void> _assertIsolatedDataRoots(AppModel appModel) async {
     isNotEmpty,
     reason: 'FUSHI_TEST_ROOT 未注入：必须经 tool/run_windows_itest.ps1 运行（隔离数据根）',
   );
-  final String docs = (await AppPaths.documentsRootDirectory()).path;
-  final String support = (await AppPaths.supportRootDirectory()).path;
-  final String temp = (await AppPaths.tempRootDirectory()).path;
+  final String docs = (await AppPaths.contentRootDirectory()).path;
+  final String support = (await AppPaths.stateRootDirectory()).path;
+  final String temp = (await AppPaths.cacheRootDirectory()).path;
   final List<String> dbFiles = <String>[];
   final List<dynamic> rows = await appModel.database
       .customSelect('PRAGMA database_list')

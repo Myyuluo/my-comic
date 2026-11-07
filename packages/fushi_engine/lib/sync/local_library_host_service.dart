@@ -54,14 +54,10 @@ import 'package:fushi_engine/foundation/engine_log.dart';
 
 import 'package:fushi_engine/dictionary/dictionary_engine_hooks.dart';
 import 'package:fushi_engine/sync/override_title_db.dart';
+import 'package:fushi_engine/media/manga/download_library_storage.dart'
+    show downloadChapterDirectory, readDownloadLibraryChapterPayload;
 import 'package:fushi_engine/media/manga/manga_chapter_storage.dart'
-    show
-        hasAnyChapterDirSync,
-        isMangaChapterDigest,
-        mangaChapterDigest,
-        mangaChapterDirectoryByDigest,
-        mangaChapterImagesDirectory,
-        readDownloadedChapterPayload;
+    show isMangaChapterDigest, mangaChapterDigest;
 import 'package:fushi_engine/media/manga/manga_storage.dart'
     show MangaStorage;
 import 'package:fushi_engine/media/manga/mokuro_payload.dart'
@@ -323,13 +319,21 @@ mixin _LocalLibraryHostShared on _LocalLibraryHostBase {
   /// [listBooks] 的 `hasAudiobook` 徽章、[listAudiobooks] 清单、orchestrator
   /// sweep 三处判据全部走此单一派生逻辑，确保徽章/清单/导出契约完全同源（TODO-778）。
   Future<Set<String>> _srtBackedAudiobookKeys() async {
-    final List<AudiobookRow> rows = await _db.getAllAudiobooks();
-    final Set<String> keys = <String>{};
-    for (final AudiobookRow r in rows) {
-      if (await _db.getSrtBookByBookKey(r.bookKey) != null) {
-        keys.add(r.bookKey);
+    // Ticket 12：my-comic 的漫画-only schema 里没有 audiobooks / srt_books 表，
+    // 而互联/同步只是保留的休眠代码。缺表时按「没有有声书」处理，不让清单端点
+    // 在漫画-only 库里抛 SqliteException（休眠路径必须安全隔离，不能编译通过却在
+    // 运行时崩）。
+    try {
+      final List<AudiobookRow> rows = await _db.getAllAudiobooks();
+      final Set<String> keys = <String>{};
+      for (final AudiobookRow r in rows) {
+        if (await _db.getSrtBookByBookKey(r.bookKey) != null) {
+          keys.add(r.bookKey);
+        }
       }
+      return keys;
+    } on Object {
+      return const <String>{};
     }
-    return keys;
   }
 }

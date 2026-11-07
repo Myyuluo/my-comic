@@ -8,7 +8,6 @@ import 'package:path/path.dart' as p;
 
 import 'package:fushi/src/media/sources/reader_fushi_source.dart';
 
-
 import 'package:fushi_engine/sync/deletion_propagation.dart'
     show DeleteDecision, DeleteScope;
 
@@ -79,7 +78,7 @@ class StorageUsageActions {
       return null;
     },
     deleteDatabaseSnapshots: () async =>
-        deleteDatabaseSnapshotFiles(await AppPaths.supportRootDirectory()),
+        deleteDatabaseSnapshotFiles(await AppPaths.stateRootDirectory()),
     deleteFiles: deleteStorageDerivedFiles,
     deleteDictionary: (String name) async {
       // AppModel.deleteDictionary 内部 catch-all 不上抛，「无异常」不等于成功——

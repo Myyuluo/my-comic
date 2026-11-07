@@ -6,7 +6,6 @@ import 'package:fushi_audio/fushi_audio.dart' show AudiobookStorage;
 import 'package:fushi_core/fushi_core.dart' show fnv1a32Hex;
 import 'package:path/path.dart' as p;
 
-import 'package:fushi/src/storage/app_paths.dart';
 import 'package:fushi/src/storage/storage_usage_service.dart';
 import 'package:fushi/src/sync/backup_service.dart' show isBackupArchiveName;
 
@@ -15,7 +14,7 @@ void main() {
   late Directory docs;
   late Directory support;
 
-  /// BUG-1905：app 的**缓存根**（`AppPaths.tempRoot`，iOS 上是 `Library/Caches`）。
+  /// BUG-1905：app 的**缓存根**（`AppPaths.cacheRoot`，iOS 上是 `Library/Caches`）。
   /// 它是新增的第三个扫描根，与上面那个仅仅是本测试沙箱容器的 [tempRoot] 无关，
   /// 必须像 docs/support 一样注入——否则默认实现会打真 path_provider，
   /// 在无 binding 的纯 `test()` 里直接抛。
@@ -42,12 +41,10 @@ void main() {
     f.writeAsBytesSync(List<int>.filled(bytes, 0x61));
   }
 
-  StorageUsageService service({bool documentsRootIsFushiOwned = true}) =>
-      StorageUsageService(
+  StorageUsageService service() => StorageUsageService(
         documentsRoot: () async => docs,
         supportRoot: () async => support,
         cacheRoots: () async => <Directory>[cache],
-        documentsRootIsFushiOwned: () async => documentsRootIsFushiOwned,
       );
 
   group('directorySizeSync', () {
@@ -77,12 +74,12 @@ void main() {
     ];
     // 无重复归属。
     expect(assigned.toSet().length, assigned.length, reason: '同一顶层目录被分进了多个类目');
-    // 与白名单互为全集（新目录加进 fushiOwnedDocumentsEntries 时，这里逼着
-    // 给它选一个存储类目——否则存储页总量会漏账）。
+    // 与「其他未归类」的差集互为全集（新目录加进类目表时，这里逼着给它选一个
+    // 存储类目——否则存储页总量会漏账）。
     expect(
       assigned.toSet(),
-      AppPaths.fushiOwnedDocumentsEntries,
-      reason: '存储类目清单必须与 AppPaths.fushiOwnedDocumentsEntries 全覆盖对齐',
+      kStorageCategoryDocumentsEntries,
+      reason: '存储类目清单必须与 kStorageCategoryDocumentsEntries 全覆盖对齐',
     );
   });
 
@@ -765,20 +762,14 @@ void main() {
     //
     // 用户 2026-08-28 报 iOS 上 app 内总计 6.9 GB、系统「文稿与数据」13.68 GB。
     // 根因是 scanCategories 只取 documents + support 两个根，而 iOS 的
-    // Library/Caches（= AppPaths.tempRoot）与 <沙盒>/tmp 一个都没扫；再加上
+    // Library/Caches（= AppPaths.cacheRoot）与 <沙盒>/tmp 一个都没扫；再加上
     // 「总计 = 各类目之和」这个口径，漏了多少都没人发现得了。
 
-    Future<StorageCategoryUsage> categoryOf(
-      StorageCategoryId id, {
-      bool documentsRootIsFushiOwned = true,
-    }) async {
-      final List<StorageCategoryUsage> all =
-          await service(documentsRootIsFushiOwned: documentsRootIsFushiOwned)
-              .scanCategories(
-                books: const <StorageBookRef>[],
-                dictionaryNames: const <String>[],
-              )
-              .toList();
+    Future<StorageCategoryUsage> categoryOf(StorageCategoryId id) async {
+      final List<StorageCategoryUsage> all = await service().scanCategories(
+        books: const <StorageBookRef>[],
+        dictionaryNames: const <String>[],
+      ).toList();
       return all.firstWhere((StorageCategoryUsage u) => u.id == id);
     }
 
@@ -839,7 +830,6 @@ void main() {
           cacheRootsCalls++;
           return <Directory>[cache];
         },
-        documentsRootIsFushiOwned: () async => true,
       );
       final List<StorageCategoryUsage> all = await svc
           .scanCategories(
@@ -941,16 +931,15 @@ void main() {
       );
     });
 
-    test('documents 根不是 Fushi 专属容器时 other 恒为 0（不把用户自己的文件算进来）', () async {
+    test('Content root 恒为 app 专属目录：未归类项总是计入 other', () async {
       writeFile(p.join(docs.path, '我的简历.docx'), 5000);
 
       final StorageCategoryUsage usage = await categoryOf(
         StorageCategoryId.other,
-        documentsRootIsFushiOwned: false,
       );
 
-      expect(usage.bytes, 0);
-      expect(usage.entries, isEmpty);
+      expect(usage.bytes, 5000);
+      expect(usage.entries, hasLength(1));
     });
   });
 

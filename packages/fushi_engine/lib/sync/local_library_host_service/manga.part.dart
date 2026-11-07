@@ -10,10 +10,11 @@ part of '../local_library_host_service.dart';
 /// 两种漫画行、同一个域（BUG-2474）：
 ///   · **单卷本地漫画**（mokuro 导入 / EPUB 转化）：`<extractDir>/{manga.json, images/…}`，
 ///     一本 = 一卷 = 一章，页表就是根 `manga.json` 的 `pages`。
-///   · **章节式在线漫画**（Mihon / Aidoku 书架条目）：根 `manga.json` 是占位（pages 空），
-///     真正的页在 `<extractDir>/chapters/<digest>/{manga.json, images/…}`，每章一份。
-///     `mangaManifest` 对它返回**已完整下载**的章表（`chapters`，pages 为空），页表按章
-///     走 [mangaChapterManifest] / [mangaChapterPageFile]。
+///   · **章节式在线漫画**（Mihon / Aidoku 书架条目）：ticket 12 起由 Download library
+///     （`manga_chapter_dirs` 映射 → `downloads/{source}/{manga}/{chapter}/pages.json`）
+///     定位；`mangaManifest` 对它返回**已完整下载**的章表（`chapters`，pages 为空），
+///     页表按章走 [mangaChapterManifest] / [mangaChapterPageFile]。协议仍用
+///     `sha256(chapterKey)[:24]` 作为路径段，由章 key 现算，不再把 dig 当磁盘目录名。
 mixin _LocalLibraryHostManga on _LocalLibraryHostBase, _LocalLibraryHostShared {
   @override
   Future<RemoteMangaManifest> mangaManifest(String bookKey) async {
@@ -60,11 +61,11 @@ mixin _LocalLibraryHostManga on _LocalLibraryHostBase, _LocalLibraryHostShared {
     _assertSafeName(bookKey);
     _assertChapterDigest(chapterDigest);
     final EpubBookRow row = await _requireMangaRow(bookKey);
-    final Directory chapterDir = mangaChapterDirectoryByDigest(
-      row.extractDir,
+    final Directory chapterDir = await _resolveChapterDirectory(
+      row,
       chapterDigest,
     );
-    final MokuroPayload? payload = await readDownloadedChapterPayload(
+    final MokuroPayload? payload = await readDownloadLibraryChapterPayload(
       chapterDir,
     );
     if (payload == null) {
@@ -82,11 +83,11 @@ mixin _LocalLibraryHostManga on _LocalLibraryHostBase, _LocalLibraryHostShared {
     _assertSafeName(bookKey);
     _assertChapterDigest(chapterDigest);
     final EpubBookRow row = await _requireMangaRow(bookKey);
-    final Directory chapterDir = mangaChapterDirectoryByDigest(
-      row.extractDir,
+    final Directory chapterDir = await _resolveChapterDirectory(
+      row,
       chapterDigest,
     );
-    final MokuroPayload? payload = await readDownloadedChapterPayload(
+    final MokuroPayload? payload = await readDownloadLibraryChapterPayload(
       chapterDir,
     );
     if (payload == null) {
@@ -94,10 +95,51 @@ mixin _LocalLibraryHostManga on _LocalLibraryHostBase, _LocalLibraryHostShared {
     }
     return _pageFile(
       payload: payload,
-      imagesRoot: mangaChapterImagesDirectory(chapterDir).path,
+      // Ticket 12：Download library 的页图平铺在章目录本身。
+      imagesRoot: chapterDir.path,
       index: index,
       label: '$bookKey/$chapterDigest',
     );
+  }
+
+  /// 协议里的 [chapterDigest] → 磁盘章目录。
+  ///
+  /// 协议段仍是 `sha256(chapterKey)[:24]`：在 `chaptersJson` 里找 digest 相同的
+  /// 章 key，再经 `manga_chapter_dirs` 映射取实际目录名。找不到映射 = 未下载。
+  Future<Directory> _resolveChapterDirectory(
+    EpubBookRow row,
+    String chapterDigest,
+  ) async {
+    for (final String chapterKey in _chapterKeys(row)) {
+      if (mangaChapterDigest(chapterKey) != chapterDigest) continue;
+      final String? folderName = (await _db.getMangaChapterDir(
+        row.bookKey,
+        chapterKey,
+      ))?.folderName;
+      if (folderName == null) break;
+      return downloadChapterDirectory(row.extractDir, folderName);
+    }
+    throw StateError(
+      'manga chapter not downloaded: ${row.bookKey}/$chapterDigest',
+    );
+  }
+
+  /// `chaptersJson` 里的章 key（源给的顺序）。解析失败返回空表。
+  List<String> _chapterKeys(EpubBookRow row) {
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(row.chaptersJson);
+    } on Object {
+      return const <String>[];
+    }
+    if (decoded is! List<Object?>) return const <String>[];
+    final List<String> keys = <String>[];
+    for (final Object? item in decoded) {
+      if (item is! Map<Object?, Object?>) continue;
+      final String key = item['key']?.toString() ?? '';
+      if (key.isNotEmpty) keys.add(key);
+    }
+    return keys;
   }
 
   /// 单卷 / 单章的页表：payload 的 `pages` 顺序，带 OCR 生产者报告的尺寸。
@@ -140,7 +182,7 @@ mixin _LocalLibraryHostManga on _LocalLibraryHostBase, _LocalLibraryHostShared {
   }
 
   /// 章节式在线漫画在 host 上已完整下载的章，按 `chaptersJson`（书架条目的章表，
-  /// 源给的顺序）逐章问 [readDownloadedChapterPayload]。
+  /// 源给的顺序）逐章经 `manga_chapter_dirs` 映射问 Download library。
   ///
   /// 章表从 `epub_books.chaptersJson` 读而不是 `sourceMetadata`：前者就是一列
   /// `{key,name,number,scanlator,uploadedAt,raw}`，引擎不必认识 app 侧的书架条目
@@ -155,14 +197,18 @@ mixin _LocalLibraryHostManga on _LocalLibraryHostBase, _LocalLibraryHostShared {
       return const <RemoteMangaChapterInfo>[];
     }
     if (decoded is! List<Object?>) return const <RemoteMangaChapterInfo>[];
+    final Map<String, String> folderNames = await _db
+        .getMangaChapterDirNamesForBook(row.bookKey);
     final List<RemoteMangaChapterInfo> chapters = <RemoteMangaChapterInfo>[];
     for (final Object? item in decoded) {
       if (item is! Map<Object?, Object?>) continue;
       final Map<String, Object?> json = item.cast<String, Object?>();
       final String key = json['key']?.toString() ?? '';
       if (key.isEmpty) continue;
-      final MokuroPayload? payload = await readDownloadedChapterPayload(
-        mangaChapterDirectoryByDigest(row.extractDir, mangaChapterDigest(key)),
+      final String? folderName = folderNames[key];
+      if (folderName == null) continue;
+      final MokuroPayload? payload = await readDownloadLibraryChapterPayload(
+        downloadChapterDirectory(row.extractDir, folderName),
       );
       if (payload == null) continue;
       final int uploadedAt = (json['uploadedAt'] as num?)?.toInt() ?? 0;

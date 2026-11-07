@@ -2,8 +2,7 @@ import 'package:args/args.dart';
 import 'package:path/path.dart' as p;
 
 import '../ctl_commands.dart';
-import 'settings_ops_commands.dart'
-    show plexLoginCommands, syncCompareCommands;
+import 'settings_ops_commands.dart' show plexLoginCommands, syncCompareCommands;
 
 /// data 域命令（app 侧路由见 `fushi/lib/src/platform/desktop/ctl/ctl_data_routes.dart`）：
 /// 备份、云同步、下载中心、媒体服务器、互联对端、存储。
@@ -251,20 +250,6 @@ const List<CtlCommandGroup> dataCommandGroups = <CtlCommandGroup>[
         summary: '各类目占用（同设置 › 存储）',
         build: _storageUsage,
         render: _renderStorageUsage,
-      ),
-      CtlCommandSpec(
-        name: 'migrate',
-        summary: '把数据目录迁到新位置（同设置 › 存储「更改位置」；成功后 app 自动重启）',
-        usage: '<dir>',
-        configure: _configureStorageMigrate,
-        build: _storageMigrate,
-        render: _renderStorageMigrate,
-      ),
-      CtlCommandSpec(
-        name: 'migrate-status',
-        summary: '数据目录迁移进度与结果',
-        build: _storageMigrateStatus,
-        render: _renderStorageMigrateStatus,
       ),
     ],
   ),
@@ -982,11 +967,11 @@ CtlRequestSpec _storageRoot(CtlCommandContext c) =>
 String _renderStorageRoot(Object? data) {
   if (data is! Map) return renderCtlJson(data);
   return <String>[
-    '数据根（documents）：${data['documents']}'
-        '${data['customDataRoot'] == true ? '（自定义位置）' : ''}',
-    '应用支持目录：${data['support']}',
+    '漫画数据位置（Content root）：${data['content']}'
+        '${data['customContentRoot'] == true ? '（自定义位置）' : ''}',
+    '程序数据位置（Program state root）：${data['state']}',
+    '缓存目录：${data['cache']}',
     '数据库目录：${data['database']}',
-    '临时目录：${data['temp']}',
   ].join('\n');
 }
 
@@ -1002,54 +987,4 @@ String _renderStorageUsage(Object? data) {
   ];
   return '${renderCtlTable(rows, const <(String, String)>[('类目', 'id'), ('占用', 'size')])}\n'
       '合计：${_bytes(data['totalBytes'])}';
-}
-
-void _configureStorageMigrate(ArgParser parser) {
-  _configureYes(parser);
-  parser.addFlag(
-    'dry-run',
-    negatable: false,
-    help: '只解析并校验目标、列出数据会落到哪两个目录，不迁移',
-  );
-}
-
-CtlRequestSpec _storageMigrate(CtlCommandContext c) {
-  final String dir = ctlAbsolutePath(c.positional(0, 'dir'));
-  final bool dryRun = c.flag('dry-run');
-  if (!dryRun) _requireYes(c, '迁移数据目录（会关闭数据库并重启 app）');
-  return CtlRequestSpec.post(
-    '/api/admin/storage/migrate',
-    body: <String, Object?>{
-      'path': dir,
-      if (dryRun) 'dryRun': true,
-      if (!dryRun) 'confirm': true,
-    },
-  );
-}
-
-String _renderStorageMigrate(Object? data) {
-  if (data is! Map) return renderCtlJson(data);
-  return <String>[
-    if (data['dryRun'] == true) '迁移计划（未执行）：' else '${data['message']}',
-    '  数据（documents）：${data['fromDocumentsRoot']} → ${data['documentsRoot']}',
-    '  数据库（support）：${data['fromSupportRoot']} → ${data['supportRoot']}',
-  ].join('\n');
-}
-
-CtlRequestSpec _storageMigrateStatus(CtlCommandContext c) =>
-    const CtlRequestSpec.get('/api/admin/storage/migrate');
-
-String _renderStorageMigrateStatus(Object? data) {
-  if (data is! Map) return renderCtlJson(data);
-  final Object? last = data['last'];
-  return <String>[
-    if (data['failure'] != null)
-      '迁移已结束但需要处理：${data['failure']}'
-    else if (data['active'] == true)
-      '正在迁移'
-          '${data['totalFiles'] != null ? '：${data['copiedFiles']} / ${data['totalFiles']} 个文件' : ''}'
-    else
-      '没有进行中的迁移',
-    if (last is Map) '终端发起的最近一次：${last['state']} → ${last['documentsRoot']}',
-  ].join('\n');
 }

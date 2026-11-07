@@ -19,7 +19,7 @@ extension _SyncOrchestratorAggregate on SyncOrchestrator {
         localApplyLock: runExclusiveWithSyncStateApply,
         peerSnapshotCache: DirectoryAggregatePeerSnapshotCache(
           () async => Directory(p.join(
-            (await enginePaths.supportRootDirectory()).path,
+            (await AppPaths.stateRootDirectory()).path,
             'sync_cache',
             'aggregate',
           )),

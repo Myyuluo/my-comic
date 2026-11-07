@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:drift/drift.dart' show Value;
@@ -7,16 +6,14 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:fushi/src/media/manga/download/download_library_index.dart';
 import 'package:fushi/src/media/manga/library/manga_chapter_download_state.dart';
-import 'package:fushi/src/media/manga/library/manga_chapter_storage.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi_engine/epub/epub_storage.dart';
 import 'package:fushi_engine/media/manga/download_library_storage.dart';
-import 'package:fushi_engine/media/manga/manga_storage.dart';
 import 'package:fushi_engine/media/manga/mokuro_payload.dart';
 import 'package:path/path.dart' as p;
 
-/// Download library 的映射解析（票 04）：阅读/删除按数据库映射定位章目录，
-/// 不再用章 key 的标题/摘要推导新布局路径；旧哈希布局仍可只读回退。
+/// Download library 的映射解析（票 04/12）：阅读/删除按数据库映射定位章目录，
+/// 不再用章 key / 标题推导路径；旧哈希布局回退已删除。
 void main() {
   late Directory root;
   late FushiDatabase db;
@@ -98,8 +95,7 @@ void main() {
       chapterKey: '/c/1',
     );
     expect(container, isNotNull);
-    expect(container!.legacyLayout, isFalse);
-    expect(container.directory.path, chapterDir.path);
+    expect(container!.directory.path, chapterDir.path);
     expect(
       container.manifestFile.path,
       downloadPagesManifestFile(chapterDir).path,
@@ -141,41 +137,29 @@ void main() {
     );
   });
 
-  test('没有映射时只读回退旧哈希布局（manga.json + images/）', () async {
-    final Directory legacyChapter = mangaChapterDirectory(
-      await MangaStorage.bookPath(bookKey),
-      '/c/1',
+  test('没有映射时不回退旧哈希布局（ticket 12 删除只读回退）', () async {
+    // 旧布局：<content>/fushi_books/<bookKey>/chapters/<digest>/。
+    final Directory legacyChapter = Directory(
+      p.join(root.path, 'fushi_books', bookKey, 'chapters', 'deadbeef'),
     );
-    await mangaChapterImagesDirectory(legacyChapter).create(recursive: true);
-    await File(
+    final File legacyPage = File(
       p.join(legacyChapter.path, 'images', 'page-000001.jpg'),
-    ).writeAsBytes(<int>[1]);
-    await mangaChapterJsonFile(legacyChapter).writeAsString(
-      jsonEncode(<String, Object?>{
-        'pages': <Map<String, Object?>>[
-          <String, Object?>{
-            'url': 'images/page-000001.jpg',
-            'width': 100,
-            'height': 150,
-            'blocks': <Object?>[],
-          },
-        ],
-      }),
+    );
+    await legacyPage.parent.create(recursive: true);
+    await legacyPage.writeAsBytes(<int>[1]);
+    await File(p.join(legacyChapter.path, 'manga.json')).writeAsString(
+      '{"pages":[{"url":"images/page-000001.jpg","width":100,'
+      '"height":150,"blocks":[]}]}',
     );
     final DownloadLibraryIndex index = DownloadLibraryIndex(db);
-    final MangaChapterContainer? container = await index.resolveChapter(
-      bookKey: bookKey,
-      chapterKey: '/c/1',
-    );
-    expect(container, isNotNull);
-    expect(container!.legacyLayout, isTrue);
     expect(
-      container.imagesDirectory.path,
-      mangaChapterImagesDirectory(legacyChapter).path,
+      await index.resolveChapter(bookKey: bookKey, chapterKey: '/c/1'),
+      isNull,
+      reason: '旧哈希布局不再读取',
     );
     expect(
       await index.isChapterDownloaded(bookKey: bookKey, chapterKey: '/c/1'),
-      isTrue,
+      isFalse,
     );
   });
 

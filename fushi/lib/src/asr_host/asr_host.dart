@@ -91,7 +91,7 @@ asr.AsrIsolateBackend fushiAsrBackend() => asr.AsrIsolateBackend(
 /// [fushiAsrBackend] 经 `AsrIsolateBackend` 送过去，不是靠这里。
 void installAsrHostBindings() {
   // 模型缓存与转录任务目录仍落在本应用的数据根下，与抽包前逐字一致。
-  asr.asrSupportRootResolver = AppPaths.supportRootDirectory;
+  asr.asrSupportRootResolver = AppPaths.stateRootDirectory;
 
   // 模型下载必须经全应用统一的出站装配点（代理策略 + 局域网直连闸门 +
   // 连接超时）。装的是**工厂**不是已建好的 client：代理表要等

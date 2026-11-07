@@ -9,7 +9,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:fushi_engine/foundation/engine_paths.dart';
+import 'package:fushi/src/storage/app_paths.dart';
 import 'package:fushi_engine/tts/local/irodori_local_engine.dart';
 import 'package:fushi_engine/tts/local/irodori_local_package.dart';
 import 'package:fushi_engine/tts/local/local_service_process.dart';
@@ -120,7 +120,7 @@ class _IrodoriLocalPageState extends State<IrodoriLocalPage> {
   }
 
   Future<void> _init() async {
-    final Directory support = await enginePaths.supportRootDirectory();
+    final Directory support = await AppPaths.stateRootDirectory();
     final String? gpu = Platform.isMacOS ? null : await detectNvidiaGpuName();
     if (!mounted) return;
     setState(() {

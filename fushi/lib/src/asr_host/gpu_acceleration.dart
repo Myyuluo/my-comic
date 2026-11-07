@@ -126,7 +126,7 @@ Future<GpuRuntimeKind?> _effective() async => effectiveGpuRuntime(
 
 /// `<数据根>/gpu_runtime`。
 Future<Directory> _gpuRuntimeRoot() async {
-  final Directory support = await AppPaths.supportRootDirectory();
+  final Directory support = await AppPaths.stateRootDirectory();
   return Directory(p.join(support.path, 'gpu_runtime'));
 }
 

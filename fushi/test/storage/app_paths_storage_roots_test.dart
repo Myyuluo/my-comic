@@ -1,17 +1,15 @@
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi_core/fushi_core.dart' show FushiDatabase, fushiDatabaseFileName;
 import 'package:fushi_engine/epub/epub_storage.dart';
-import 'package:fushi_engine/media/manga/manga_chapter_storage.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:fushi/src/storage/app_paths.dart';
 
-/// Ticket 01：Content root / Program state root 的解析与创建。
+/// Ticket 01/12：Content root / Program state root 的解析与创建；旧 root API 已删除。
 ///
 /// 生产默认形态：
 ///  - Content root = `<Documents>/MyComic`，首启创建 `downloads` / `autobackup` /
@@ -30,7 +28,6 @@ void main() {
 
   setUp(() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
-    AppPaths.debugResetDocumentsLayoutCache();
     tmp = Directory.systemTemp.createTempSync('fushi_storage_roots_');
     platformDocuments = Directory(p.join(tmp.path, 'Documents'))
       ..createSync(recursive: true);
@@ -63,8 +60,6 @@ void main() {
   tearDown(() {
     AppPaths.debugExecutablePathOverride = null;
     AppPaths.debugLocalAppDataOverride = null;
-    AppPaths.debugDataRootReader = null;
-    AppPaths.debugResetDocumentsLayoutCache();
     EpubStorage.debugBaseDirectoryOverride = null;
     SharedPreferences.setMockInitialValues(<String, Object>{});
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -106,12 +101,8 @@ void main() {
     }
   });
 
-  test('旧 root getter 以 alias 指向新根，静态便捷层同源', () async {
+  test('静态便捷层与实例根同源', () async {
     final AppPaths paths = await AppPaths.resolve();
-
-    expect(paths.documentsRoot.path, paths.contentRoot.path);
-    expect(paths.supportRoot.path, paths.stateRoot.path);
-    expect(paths.tempRoot.path, paths.cacheRoot.path);
 
     expect((await AppPaths.contentRootDirectory()).path,
         paths.contentRoot.path);
@@ -125,11 +116,6 @@ void main() {
         paths.programStateRoot.path);
     expect((await AppPaths.stateRootDirectory()).path, paths.stateRoot.path);
     expect((await AppPaths.cacheRootDirectory()).path, paths.cacheRoot.path);
-
-    expect((await AppPaths.documentsRootDirectory()).path,
-        paths.contentRoot.path);
-    expect((await AppPaths.supportRootDirectory()).path, paths.stateRoot.path);
-    expect((await AppPaths.tempRootDirectory()).path, paths.cacheRoot.path);
   });
 
   test('content_root 偏好决定 Content root，并在新位置创建三个空目录', () async {
@@ -158,7 +144,7 @@ void main() {
         p.join(installDir.path, 'userdata'));
   });
 
-  test('旧 data_root 与布局锚点不再影响根解析，也不读取旧根', () async {
+  test('旧 data_root 与布局锚点偏好不再影响根解析，也不读取旧根', () async {
     final Directory oldRoot = Directory(p.join(tmp.path, 'OldFushiData'))
       ..createSync(recursive: true);
     File(p.join(oldRoot.path, 'support', 'my_comic.db'))
@@ -169,9 +155,6 @@ void main() {
       'documents_layout': 'flat',
       'documents_container': 'Hibiki',
     });
-    AppPaths.debugDataRootReader = () async {
-      throw StateError('根解析读取了旧 data_root');
-    };
 
     final AppPaths paths = await AppPaths.resolve();
 
@@ -181,27 +164,6 @@ void main() {
         p.join(installDir.path, 'userdata'));
     expect(p.isWithin(oldRoot.path, paths.contentRoot.path), isFalse);
     expect(p.isWithin(oldRoot.path, paths.stateRoot.path), isFalse);
-  });
-
-  test('根解析源码不再引用旧 data_root / 布局锚点', () {
-    final String src =
-        File('lib/src/storage/app_paths.dart').readAsStringSync();
-    final int resolveStart = src.indexOf('static Future<AppPaths> resolve()');
-    final int legacyStart = src.indexOf('// 旧数据根 / 布局锚点');
-    expect(resolveStart, greaterThanOrEqualTo(0));
-    expect(legacyStart, greaterThan(resolveStart));
-    final String resolution = src.substring(resolveStart, legacyStart);
-    for (final String forbidden in <String>[
-      'dataRootPrefKey',
-      'documentsLayoutPrefKey',
-      'documentsContainerPrefKey',
-      '_resolveDataRoot',
-      '_resolveSupportRoot',
-      'defaultLocationDocumentsRoot',
-    ]) {
-      expect(resolution.contains(forbidden), isFalse,
-          reason: '根解析不得再使用旧锚点 $forbidden');
-    }
   });
 
   test('安装目录不可写 → Program state root 回退 LOCALAPPDATA/MyComic/userdata',
@@ -246,39 +208,4 @@ void main() {
     );
   });
 
-  test('旧哈希下载布局仍挂在 Content root 下，下载/阅读判据可用', () async {
-    final AppPaths paths = await AppPaths.resolve();
-    EpubStorage.debugBaseDirectoryOverride = null;
-
-    const String bookKey = 'book-fixture';
-    const String chapterKey = '/chapter/1';
-    final String bookDir = await EpubStorage.bookDirectory(bookKey);
-
-    // 与旧版一致的落盘形态：<content>/fushi_books/<book>/chapters/<digest>/。
-    expect(
-      p.equals(bookDir, p.join(paths.contentRoot.path, 'fushi_books', bookKey)),
-      isTrue,
-    );
-    expect((await AppPaths.epubBooksDirectory()).path,
-        p.join(paths.contentRoot.path, 'fushi_books'));
-
-    final Directory chapterDir = mangaChapterDirectory(bookDir, chapterKey);
-    await mangaChapterImagesDirectory(chapterDir).create(recursive: true);
-    await File(p.join(chapterDir.path, 'images', 'page-000001.jpg'))
-        .writeAsBytes(<int>[0xff, 0xd8, 0xff, 1]);
-    await mangaChapterJsonFile(chapterDir).writeAsString(jsonEncode(
-      <String, Object?>{
-        'pages': <Map<String, Object?>>[
-          <String, Object?>{
-            'url': 'images/page-000001.jpg',
-            'width': 1,
-            'height': 1,
-            'blocks': <Object?>[],
-          },
-        ],
-      },
-    ));
-
-    expect(await isChapterDownloaded(bookDir, chapterKey), isTrue);
-  });
 }

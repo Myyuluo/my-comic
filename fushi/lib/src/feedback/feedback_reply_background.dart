@@ -75,7 +75,7 @@ Future<bool> runFeedbackReplyBackgroundTask({
 }) async {
   try {
     final Directory root =
-        await (supportRoot ?? AppPaths.supportRootDirectory)();
+        await (supportRoot ?? AppPaths.stateRootDirectory)();
     final List<FeedbackReplyAlert> alerts =
         await pollFeedbackRepliesInBackground(
           supportRoot: root,

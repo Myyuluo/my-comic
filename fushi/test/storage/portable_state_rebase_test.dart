@@ -5,7 +5,6 @@ import 'package:drift/drift.dart' show Value;
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi_core/fushi_core.dart';
-import 'package:fushi_engine/media/manga/manga_chapter_storage.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -36,7 +35,6 @@ void main() {
 
   setUp(() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
-    AppPaths.debugResetDocumentsLayoutCache();
     tmp = Directory.systemTemp.createTempSync('fushi_portable_rebase_');
     platformDocuments = Directory(p.join(tmp.path, 'Users', 'bob', 'Documents'))
       ..createSync(recursive: true);
@@ -70,7 +68,6 @@ void main() {
     AppPaths.debugExecutablePathOverride = null;
     AppPaths.debugLocalAppDataOverride = null;
     AppPaths.forceDefaultRootForSession = false;
-    AppPaths.debugResetDocumentsLayoutCache();
     SharedPreferences.setMockInitialValues(<String, Object>{});
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
@@ -139,7 +136,9 @@ void main() {
       'fushi_books',
       bookKey,
     );
-    final Directory chapterDir = mangaChapterDirectory(newBookDir, chapterKey);
+    final Directory chapterDir = Directory(
+      p.join(newBookDir, 'chapters', 'fixture-chapter'),
+    );
     Directory(p.join(chapterDir.path, 'images')).createSync(recursive: true);
     File(p.join(chapterDir.path, 'manga.json')).writeAsStringSync(
       jsonEncode(<String, Object?>{
@@ -170,7 +169,9 @@ void main() {
       reason: 'Content root 绝对路径必须改到当前用户默认根',
     );
     expect(
-      await isChapterDownloaded(book.extractDir, chapterKey),
+      File(
+        p.join(book.extractDir, 'chapters', 'fixture-chapter', 'manga.json'),
+      ).existsSync(),
       isTrue,
       reason: '文件在 → 下载恢复',
     );
@@ -257,7 +258,7 @@ void main() {
       p.join(currentDefaultContentRoot(), 'fushi_books', bookKey),
       reason: '即使文件不在也 rebase 路径；缺失显示 Missing，不偷偷回读旧根',
     );
-    expect(await isChapterDownloaded(book.extractDir, chapterKey), isFalse);
+    expect(Directory(book.extractDir).existsSync(), isFalse);
     final MangaDownloadJobRow job = (await db.getMangaDownloadJob(
       'job-missing',
     ))!;
@@ -362,9 +363,9 @@ void main() {
     final AppPaths paths = await AppPaths.resolve();
     final FushiDatabase db = FushiDatabase(paths.stateRoot.path);
     addTearDown(db.close);
-    final Directory oldState =
-        Directory(p.join(tmp.path, 'OldProgram', 'userdata', 'state'))
-          ..createSync(recursive: true);
+    final Directory oldState = Directory(
+      p.join(tmp.path, 'OldProgram', 'userdata', 'state'),
+    )..createSync(recursive: true);
     final String fontPrefKey = dbSourcePrefKey(
       kReaderSourcePersistedKey,
       'font_catalog',
@@ -392,7 +393,8 @@ void main() {
     final Map<String, dynamic> catalog =
         jsonDecode((await db.getPref(fontPrefKey))!) as Map<String, dynamic>;
     final String fontPath =
-        ((catalog['fonts'] as List<dynamic>).first as Map<String, dynamic>)['path']
+        ((catalog['fonts'] as List<dynamic>).first
+                as Map<String, dynamic>)['path']
             as String;
     expect(
       fontPath,

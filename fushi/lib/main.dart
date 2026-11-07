@@ -56,10 +56,9 @@ import 'package:fushi/src/stats/study_diag_log.dart';
 import 'package:fushi_audio/fushi_audio.dart' show StudyClock;
 import 'package:fushi/src/settings/settings_schema.dart'
     show resetSettingsSchemaCache;
-import 'package:fushi/src/storage/data_root_migration_view.dart';
 import 'package:fushi/src/startup/loading_watchdog_view.dart';
 import 'package:fushi/src/sync/sync_settings_schema.dart'
-    show dataRootMigrationRestart, runInterconnectLinkPairingFlow;
+    show runInterconnectLinkPairingFlow;
 import 'package:fushi/src/startup/webview_prewarm.dart';
 import 'package:fushi/src/startup/exit_flush_registry.dart';
 import 'package:fushi/src/startup/android_view_lifecycle.dart';
@@ -716,8 +715,7 @@ class _FushiReaderAppState extends ConsumerState<FushiReaderApp>
   /// 关停（~1.8s）与关书同步 drain（5s 上界，实际多为 0），外加 checkpoint 余量。
   static const Duration _exitWatchdogTimeout = Duration(seconds: 6);
 
-  /// 关库上界。数据根迁移路径（`data_root.part.dart`）早就有这层保护，退出路径一直
-  /// 缺；WAL 崩溃安全，超时放行只损失一次 checkpoint，不损失已提交的数据。
+  /// 关库上界。WAL 崩溃安全，超时放行只损失一次 checkpoint，不损失已提交的数据。
   static const Duration _closeDatabaseOnExitTimeout = Duration(seconds: 3);
 
   final AndroidViewLifecycle _androidViewLifecycle = AndroidViewLifecycle();
@@ -1817,7 +1815,6 @@ class _FushiReaderAppState extends ConsumerState<FushiReaderApp>
     // 的进度遮罩），就撤掉加载看门狗，避免它在这些态里事后空转触发一次无用重建。
     if (appModel.isInitialised ||
         appModel.initError != null ||
-        appModel.dataRootMigrationActive ||
         appModel.backupImportActive) {
       _cancelLoadingWatchdog();
       // BUG-772：启动已推进（首帧早已 rasterize）→ 撤 present-watchdog 并清自动重启
@@ -2135,31 +2132,8 @@ class _FushiReaderAppState extends ConsumerState<FushiReaderApp>
         ),
       );
     }
-    // TODO-959: 桌面「数据存储位置」整目录迁移期间，迁移引擎会 closeDatabase()（置
-    // isInitialised=false）以释放 Windows 文件锁。若直接落到下面的裸 loading 分支，背景
-    // _savedSplashColor 可能为 null/深色 → 近黑 + 转圈，搬大库数秒~数分钟被误判死机。
-    // 这里在 loading 分支之前拦截：改显一个带「请勿关闭」文案 + 进度条的迁移遮罩（明确
-    // 主题色背景），并保证「遮罩已上屏 → closeDatabase → 搬文件」的顺序（见控制通道
-    // `storage migrate` 先调 beginDataRootMigration 再 migrate；设置页切换 Content
-    // root 已改为只建空目录，不再走整目录迁移）。
-    if (appModel.dataRootMigrationActive) {
-      final brightness =
-          WidgetsBinding.instance.platformDispatcher.platformBrightness;
-      final ThemeData fallbackTheme = buildFushiFallbackTheme(brightness);
-      return TranslationProvider(
-        child: MaterialApp(
-          debugShowCheckedModeBanner: false,
-          theme: fallbackTheme,
-          home: DataRootMigrationView(
-            progress: appModel.dataRootMigrationProgress,
-            background: _savedSplashColor,
-            // TODO-1182：失败态在同一遮罩上改显「原因 + 建议 + 重启」，用户点重启回旧根。
-            failure: appModel.dataRootMigrationFailure,
-            onRestart: () => dataRootMigrationRestart(appModel),
-          ),
-        ),
-      );
-    }
+    // 旧 data-root 整目录迁移遮罩已随迁移器删除（ticket 12）；切换 Content root
+    // 只创建空目录并在设置页提示，不再进入全局迁移态。
     // my-comic：Fushi `.fushi.zip` 备份导入/恢复路径已移除（ticket 05）。
     if (!appModel.isInitialised) {
       // TODO-1260：进入裸加载态即挂看门狗；超时前显示转圈，超时后显示逃生 UI。

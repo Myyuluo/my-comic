@@ -22,10 +22,6 @@ import 'package:fushi/src/settings/settings_schema_lookup.dart'
     show buildLookupDestination;
 import 'package:fushi/src/settings/settings_search.dart'
     show SettingsSearchReveal;
-import 'package:fushi/src/startup/media_handle_registry.dart';
-import 'package:fushi/src/storage/app_paths.dart';
-import 'package:fushi/src/storage/data_root_migrator.dart';
-import 'package:fushi/src/storage/macos_data_root_access.dart';
 import 'package:fushi/src/sync/backup_merge_engine.dart'
     show BackupMergePreview;
 import 'package:fushi/src/sync/backup_service.dart';
@@ -81,10 +77,8 @@ import 'package:fushi/src/sync/webdav_ops.dart';
 import 'package:fushi/src/sync/webdav_sync_backend.dart';
 import 'package:fushi/utils.dart';
 import 'package:fushi_core/fushi_core.dart';
-import 'package:fushi_dictionary/fushi_dictionary.dart';
 import 'package:fushi_platform/fushi_platform.dart';
 import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -102,7 +96,6 @@ part 'sync_settings_schema/interconnect.part.dart';
 part 'sync_settings_schema/interconnect_link.part.dart';
 part 'sync_settings_schema/actions.part.dart';
 part 'sync_settings_schema/backup.part.dart';
-part 'sync_settings_schema/data_root.part.dart';
 
 SettingsDestination buildSyncBackupDestination() {
   return SettingsDestination(
