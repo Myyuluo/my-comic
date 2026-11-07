@@ -318,8 +318,8 @@ class _MangaDiscoveryPageState extends ConsumerState<MangaDiscoveryPage> {
     );
   }
 
-  /// 页头。与 `MangaSourcesPage` 同一范式：导航条存在时即页头主位，不再另渲染一个
-  /// 页面大标题。全源搜索不在这里——它是下面的搜索框。
+  /// 页头。导航条存在时即页头主位，不再另渲染一个页面大标题。全源搜索不在
+  /// 这里——它是下面的搜索框。
   Widget _buildHeader() {
     // 刷新不放页头：它和 ✨ AI 下载同属搜索行行尾，两颗按钮右对齐成一列
     // （放页头时它被收进外壳的悬浮动作组，与搜索行的 AI 按钮横坐标对不齐）。

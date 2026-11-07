@@ -62,7 +62,8 @@ void main() {
 
   Future<String> importAndGetKey() async {
     final LocalSourceLibrary library = LocalSourceLibrary(db: db, root: root);
-    await library.importFromRoot();
+    final LocalSourceManga manga = (await scanLocalSourceRoot(root)).single;
+    await library.registerScannedManga(manga);
     return (await db.getAllEpubBooks()).single.bookKey;
   }
 

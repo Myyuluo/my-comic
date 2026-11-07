@@ -5,6 +5,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi_engine/epub/epub_storage.dart';
+import 'package:fushi_engine/media/manga/local_source/local_source_layout.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_library.dart';
 import 'package:fushi/src/media/sources/reader_fushi_source.dart';
 import 'package:image/image.dart' as img;
@@ -41,7 +42,9 @@ void main() {
       ..parent.createSync(recursive: true)
       ..writeAsBytesSync(<int>[1, 2, 3]);
     final LocalSourceLibrary library = LocalSourceLibrary(db: db, root: root);
-    await library.importFromRoot();
+    await library.registerScannedManga(
+      (await scanLocalSourceRoot(root)).single,
+    );
     final String bookKey = (await db.getAllEpubBooks()).single.bookKey;
 
     final DeleteBookResult result = await ReaderFushiSource.instance.deleteBook(
@@ -67,7 +70,9 @@ void main() {
       ..parent.createSync(recursive: true)
       ..writeAsBytesSync(ZipEncoder().encode(archive)!);
     final LocalSourceLibrary library = LocalSourceLibrary(db: db, root: root);
-    await library.importFromRoot();
+    await library.registerScannedManga(
+      (await scanLocalSourceRoot(root)).single,
+    );
     final String bookKey = (await db.getAllEpubBooks()).single.bookKey;
 
     final DeleteBookResult result = await ReaderFushiSource.instance.deleteBook(

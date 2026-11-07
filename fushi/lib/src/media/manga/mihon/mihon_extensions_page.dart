@@ -35,7 +35,7 @@ enum MihonExtensionsSection {
 /// Mihon 扩展仓库与安装管理。
 ///
 /// **没有自己的顶层 tab**：用户口径是「漫画扩展不就是来源吗」，所以它作为
-/// `MangaSourcesPage`（漫画库「来源」视图）里的一节存在，用 [embedded] 打开。
+/// 漫画在线来源面（`MangaOnlineSourcesView`）里的一节存在，用 [embedded] 打开。
 /// 独立页形态（[embedded] 为 false）只剩测试和将来可能的 push 路由在用。
 ///
 /// [embedded] 为 true 时：

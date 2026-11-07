@@ -14,6 +14,7 @@ import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi_engine/epub/epub_storage.dart';
 import 'package:fushi_engine/media/manga/download_library_storage.dart';
+import 'package:fushi_engine/media/manga/local_source/local_source_layout.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_library.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_reader.dart';
 import 'package:fushi_engine/media/manga/mokuro_payload.dart';
@@ -574,11 +575,13 @@ void main() {
     final Directory oldLocalRoot = Directory(
       p.join(oldContent.path, 'localcomic'),
     );
-    final File oldPage =
-        File(p.join(oldLocalRoot.path, 'Local Manga', 'Ch 1', '001.jpg'))
-          ..createSync(recursive: true)
-          ..writeAsStringSync('old page');
-    await LocalSourceLibrary(db: db, root: oldLocalRoot).importFromRoot();
+    final File oldPage = File(
+      p.join(oldLocalRoot.path, 'Local Manga', 'Ch 1', '001.jpg'),
+    )..createSync(recursive: true)
+      ..writeAsStringSync('old page');
+    await LocalSourceLibrary(db: db, root: oldLocalRoot).registerScannedManga(
+      (await scanLocalSourceRoot(oldLocalRoot)).single,
+    );
     final EpubBookRow before = (await db.getAllEpubBooks()).single;
 
     // 用户把整个作品目录搬到新 Content root 的 localcomic 下。
@@ -623,7 +626,9 @@ void main() {
     );
     oldLocalPage.parent.createSync(recursive: true);
     oldLocalPage.writeAsStringSync('page');
-    await LocalSourceLibrary(db: db, root: oldLocalRoot).importFromRoot();
+    await LocalSourceLibrary(db: db, root: oldLocalRoot).registerScannedManga(
+      (await scanLocalSourceRoot(oldLocalRoot)).single,
+    );
     final EpubBookRow before = (await db.getAllEpubBooks()).single;
     // 用户在新根里把作品文件夹改了名，并把书架标题也改成了新名字。
     await (db.update(db.epubBooks)
@@ -1107,7 +1112,9 @@ void main() {
     File(p.join(oldLocalRoot.path, 'Moved local', 'Ch 1', '001.jpg'))
       ..createSync(recursive: true)
       ..writeAsStringSync('old local page');
-    await LocalSourceLibrary(db: db, root: oldLocalRoot).importFromRoot();
+    await LocalSourceLibrary(db: db, root: oldLocalRoot).registerScannedManga(
+      (await scanLocalSourceRoot(oldLocalRoot)).single,
+    );
     final String movedLocalKey = (await db.getAllEpubBooks())
         .singleWhere((EpubBookRow row) => row.title == 'Moved local')
         .bookKey;

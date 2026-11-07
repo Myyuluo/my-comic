@@ -128,9 +128,9 @@ class BrowseSubPage extends StatelessWidget {
 
 /// 一个内容域的一节在线来源面。
 ///
-/// 书 / 视频两域的实现此前住在 `MediaSourcesPage`（书 / 视频「导入」视图的后三段），
-/// 漫画在 `MangaSourcesPage`；2026-09-27 起三域统一搬进「浏览」，导入页只剩本地
-/// 来源。漫画域原样委托给 [MangaOnlineSourcesView]。
+/// 三域的实现 2026-09-27 起统一搬进「浏览」的在线来源页签；书 / 视频的独立导入页
+/// 随后随非漫画模块移除，漫画的批量导入子视图也于 2026-11-08 退役——在线来源只
+/// 住在顶层的「图源」页签里。漫画域原样委托给 [MangaOnlineSourcesView]。
 ///
 /// 🔴 滚动容器是 [CustomScrollView]：扩展目录是按仓库分组懒建的 sliver
 /// （1400+ 条不能一次全建，BUG-1441）。
