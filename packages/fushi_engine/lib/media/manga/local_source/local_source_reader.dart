@@ -44,8 +44,59 @@ class LocalSourceResolvedChapter {
   bool get isArchive => archiveFile != null;
 }
 
+/// 一个 CBZ 章解出的阅读内容：页表（包内条目名，顺序即页序）与阅读器 payload。
+class LocalSourceArchiveChapterContent {
+  const LocalSourceArchiveChapterContent({
+    required this.pages,
+    required this.payload,
+  });
+
+  final List<LocalSourcePage> pages;
+  final MokuroPayload payload;
+}
+
 /// Local source 阅读入口。
 abstract final class LocalSourceReader {
+  /// 打开 [archivePath] 这份 CBZ 的阅读内容。
+  ///
+  /// 页序与 Local source 阅读同一口径：包根 `pages.json` 优先（顺序 + 声明宽高），
+  /// 缺失 / 损坏 / 引用了包内不存在的条目时回退到图片条目自然序。包不存在、不是
+  /// 合法 ZIP 或没有页图时返回 null（调用方按「文件缺失」处理）。
+  ///
+  /// 下载库 CBZ 章节复用这条路径（票 07）：只读中央目录与页头，不解压整包、不
+  /// 复制、不改原包。
+  static Future<LocalSourceArchiveChapterContent?> readArchiveContent(
+    String archivePath,
+  ) async {
+    final LocalSourceArchive archive;
+    try {
+      archive = LocalSourceArchive.open(archivePath);
+    } on Object {
+      return null;
+    }
+    try {
+      final List<LocalSourcePage> pages = <LocalSourcePage>[
+        for (final LocalSourceArchivePage page in readLocalSourceArchivePages(
+          archive,
+        ))
+          LocalSourcePage(
+            relativePath: page.relativePath,
+            width: page.width,
+            height: page.height,
+          ),
+      ];
+      if (pages.isEmpty) return null;
+      final MokuroPayload payload = await localSourcePayloadForPages(
+        pages,
+        readBytes: (LocalSourcePage page) async =>
+            archive.readEntry(page.relativePath),
+      );
+      return LocalSourceArchiveChapterContent(pages: pages, payload: payload);
+    } finally {
+      archive.close();
+    }
+  }
+
   /// 解析 [bookKey] 的第 [chapterIndex] 章；不是 Local source 条目 / 下标越界 /
   /// 章节目录没有页图时返回 null。
   static Future<LocalSourceResolvedChapter?> resolveChapter({
@@ -123,42 +174,20 @@ abstract final class LocalSourceReader {
     required LocalSourceChapterRecord chapter,
     required String archivePath,
   }) async {
-    final LocalSourceArchive archive;
-    try {
-      archive = LocalSourceArchive.open(archivePath);
-    } on Object {
-      // 包不存在 / 损坏：按「文件缺失」处理，让阅读器显示失败态。
-      return null;
-    }
-    try {
-      final List<LocalSourcePage> pages = <LocalSourcePage>[
-        for (final LocalSourceArchivePage page in readLocalSourceArchivePages(
-          archive,
-        ))
-          LocalSourcePage(
-            relativePath: page.relativePath,
-            width: page.width,
-            height: page.height,
-          ),
-      ];
-      if (pages.isEmpty) return null;
-      final MokuroPayload payload = await localSourcePayloadForPages(
-        pages,
-        readBytes: (LocalSourcePage page) async =>
-            archive.readEntry(page.relativePath),
-      );
-      return LocalSourceResolvedChapter(
-        row: row,
-        chapterIndex: chapterIndex,
-        chapter: chapter,
-        chapterDirectory: Directory(p.dirname(archivePath)),
-        pages: pages,
-        payload: payload,
-        archiveFile: File(archivePath),
-      );
-    } finally {
-      archive.close();
-    }
+    // 包不存在 / 损坏：按「文件缺失」处理，让阅读器显示失败态。
+    final LocalSourceArchiveChapterContent? content = await readArchiveContent(
+      archivePath,
+    );
+    if (content == null) return null;
+    return LocalSourceResolvedChapter(
+      row: row,
+      chapterIndex: chapterIndex,
+      chapter: chapter,
+      chapterDirectory: Directory(p.dirname(archivePath)),
+      pages: content.pages,
+      payload: content.payload,
+      archiveFile: File(archivePath),
+    );
   }
 }
 

@@ -59,6 +59,7 @@ import 'package:fushi/src/utils/components/fushi_desktop_title_bar.dart'
     show FushiTitleBarColorScope, FushiTitleBarColors, fushiTitleBarColorsOn;
 import 'package:fushi/src/media/manga/reader/manga_reader_settings_sheet.dart';
 import 'package:fushi/src/media/manga/reader/manga_reader_page_grid.dart';
+import 'package:fushi/src/media/manga/reader/manga_session_page_image.dart';
 import 'package:fushi/src/media/manga/reader/manga_reader_quick_settings_sheet.dart';
 import 'package:fushi/src/media/manga/reader/manga_volume_key_paging_controller.dart';
 import 'package:fushi/src/focus/page_focus_ownership.dart';
@@ -2075,6 +2076,20 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
       );
     }
     if (!mounted) return;
+    // 下载库 CBZ 章节（票 07）：走 Local source 的压缩包阅读路径。放在「未下载
+    // 直读」之前——页序按包根 `pages.json`，缺失/损坏时与 Local source 同口径回退
+    // 图片条目自然序，因此手工放置的 CBZ 也能读；包本身打不开才退回既有直读 /
+    // 「本章未下载」态。
+    if (container != null && container.isArchive) {
+      if (await _openArchiveShelfChapter(
+        row: row,
+        archiveFile: container.archiveFile!,
+        initialPage: initialPage,
+      )) {
+        return;
+      }
+      if (!mounted) return;
+    }
     if (!downloaded) {
       if (await _openStreamingChapter(
         row: row,
@@ -2098,9 +2113,8 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
       return;
     }
     if (container == null || container.isArchive) {
-      // 票 07 负责 CBZ 章节的阅读路径；本票只保证容器可被识别/列出/删除。
-      // 在阅读器接上压缩包会话前，压缩包章节按「暂不可读」处理，避免把
-      // 文件路径当成章节目录读。
+      // 压缩包存在但打不开（损坏 / 空包）：显示既有失败态，不把文件路径当成
+      // 章节目录读。
       setState(() {
         _payload = null;
         _chapterNotDownloaded = true;
@@ -2117,6 +2131,80 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
       imagesDirectory: container.imagesDirectory!.path,
       initialPage: initialPage,
     );
+  }
+
+  /// 下载库 CBZ 章节：复用 Local source 的压缩包阅读路径。
+  ///
+  /// 页表按包根 `pages.json`（顺序 + 声明宽高），缺失/损坏时与 Local source 同口径
+  /// 回退图片条目自然序。页只在需要时由页会话解到 app 临时目录的会话私有缓存；
+  /// 原包只读、不复制、不展开进受管目录。返回 false = 包打不开或没有可读页，
+  /// 调用方退回既有直读 / 「本章未下载」态。
+  Future<bool> _openArchiveShelfChapter({
+    required EpubBookRow row,
+    required File archiveFile,
+    required int initialPage,
+  }) async {
+    final LocalSourceArchiveChapterContent? content;
+    try {
+      content = await LocalSourceReader.readArchiveContent(archiveFile.path);
+    } on Object catch (error, stack) {
+      ErrorLogService.instance.log(
+        'MangaFushiPage.openArchiveChapter',
+        error,
+        stack,
+      );
+      return false;
+    }
+    if (!mounted || content == null) return false;
+    final LocalSourceArchiveReaderSession session;
+    try {
+      session = await LocalSourceArchiveReaderSession.open(
+        archivePath: archiveFile.path,
+        cacheRoot: Directory(
+          p.join(
+            appModel.temporaryDirectory.path,
+            kLocalSourceArchiveCacheDirName,
+          ),
+        ),
+        relativePaths: content.pages
+            .map((LocalSourcePage page) => page.relativePath)
+            .toList(growable: false),
+      );
+    } on Object catch (error, stack) {
+      ErrorLogService.instance.log(
+        'MangaFushiPage.openArchiveChapter',
+        error,
+        stack,
+      );
+      return false;
+    }
+    if (!mounted) {
+      await session.close();
+      return false;
+    }
+    try {
+      await _presentPayload(
+        // 压缩包在作品目录里：extractDir 仍是漫画根（存图 / 进度归属不变）。
+        row: row.copyWith(
+          extractDir: p.dirname(archiveFile.path),
+          epubPath: '',
+        ),
+        payload: content.payload,
+        imagesDir: session.directory.path,
+        openSession: (List<String> _) async => session,
+        initialPage: initialPage,
+      );
+      return true;
+    } on Object catch (error, stack) {
+      ErrorLogService.instance.log(
+        'MangaFushiPage.openArchiveChapter',
+        error,
+        stack,
+      );
+      // _presentPayload 在挂上页会话之前抛错时，会话还没人接管。
+      if (!identical(_pageSession, session)) unawaited(session.close());
+      return false;
+    }
   }
 
   /// 在线直读 [chapter]：解析页表 → 开 [OnlineMangaReaderSession] → 先取落点页量
@@ -4289,6 +4377,10 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
   /// 第 [pageIndex] 页的本地缩略图（拖动气泡 / 页面一览）。只认已经在盘上的页图
   /// （本地卷 / 已下载章）：在线直读的页不为了缩略图去发请求，取不到就返回
   /// null，调用方画页码占位。
+  ///
+  /// 下载库 CBZ 章（票 07）的页在会话缓存里按需解压：盘上还没有这一页时交给
+  /// [MangaSessionPageImage]，只在真正解码该格子时才向会话要文件——打开页面一览
+  /// 不会预解整包。
   ImageProvider? _pageThumbnail(int pageIndex) {
     final MokuroPayload? payload = _payload;
     final String? imagesDir = _imagesDir;
@@ -4298,9 +4390,22 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
       imagesDir,
       pageIndex,
     );
-    if (path == null || !File(path).existsSync()) return null;
+    if (path != null && File(path).existsSync()) {
+      return ResizeImage(
+        FileImage(File(path)),
+        width: 240,
+        policy: ResizeImagePolicy.fit,
+      );
+    }
+    final MangaReaderSession? session = _pageSession;
+    if (_streamingChapter ||
+        session == null ||
+        pageIndex < 0 ||
+        pageIndex >= session.pageCount) {
+      return null;
+    }
     return ResizeImage(
-      FileImage(File(path)),
+      MangaSessionPageImage(session: session, pageIndex: pageIndex),
       width: 240,
       policy: ResizeImagePolicy.fit,
     );

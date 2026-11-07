@@ -254,6 +254,70 @@ void main() {
     expect(resolved.payload.images.last.url, 'a.png');
   });
 
+  test('CBZ 阅读内容：包根 pages.json 的页序与声明宽高优先', () async {
+    final File cbz = writeCbz('Ch 1.cbz', <String, List<int>>{
+      'a.png': pngBytes(width: 80, height: 120),
+      'b.png': pngBytes(width: 90, height: 130),
+      'pages.json': utf8.encode(
+        jsonEncode(<String, Object?>{
+          'pages': <Object?>[
+            <String, Object?>{'url': 'b.png', 'width': 333, 'height': 444},
+            <String, Object?>{'url': 'a.png', 'width': 55, 'height': 66},
+          ],
+        }),
+      ),
+    });
+
+    final LocalSourceArchiveChapterContent? content =
+        await LocalSourceReader.readArchiveContent(cbz.path);
+
+    expect(content, isNotNull);
+    expect(
+      content!.pages.map((LocalSourcePage page) => page.relativePath),
+      <String>['b.png', 'a.png'],
+    );
+    expect(
+      content.payload.images.map((MokuroImage image) => image.url),
+      <String>['b.png', 'a.png'],
+    );
+    expect(content.payload.images.first.size.width, 333);
+    expect(content.payload.images.first.size.height, 444);
+    expect(content.payload.images.last.size.width, 55);
+    expect(cbz.existsSync(), isTrue, reason: '读取不得删改原包');
+    expect(managedRoot.listSync(), isEmpty, reason: '读取不得复制文件');
+  });
+
+  test('CBZ 阅读内容：pages.json 缺失或损坏时按图片条目自然序回退', () async {
+    final File cbz = writeCbz('Ch 1.cbz', <String, List<int>>{
+      '10.png': pngBytes(width: 100, height: 150),
+      '2.png': pngBytes(width: 200, height: 300),
+      'pages.json': utf8.encode('{not json'),
+    });
+
+    final LocalSourceArchiveChapterContent? content =
+        await LocalSourceReader.readArchiveContent(cbz.path);
+
+    expect(content, isNotNull);
+    expect(
+      content!.pages.map((LocalSourcePage page) => page.relativePath),
+      <String>['2.png', '10.png'],
+    );
+    expect(content.payload.images.first.size.width, 200);
+    expect(content.payload.images.first.size.height, 300);
+  });
+
+  test('CBZ 阅读内容：包缺失或不是合法 ZIP 时返回 null', () async {
+    expect(
+      await LocalSourceReader.readArchiveContent(
+        p.join(root.path, 'missing.cbz'),
+      ),
+      isNull,
+    );
+    final File broken = File(p.join(root.path, 'broken.cbz'))
+      ..writeAsStringSync('not a zip');
+    expect(await LocalSourceReader.readArchiveContent(broken.path), isNull);
+  });
+
   test('CBZ 文件被移走后解析返回 null', () async {
     final File cbz = writeCbz('Manga/Ch 1.cbz', <String, List<int>>{
       '001.png': pngBytes(),
