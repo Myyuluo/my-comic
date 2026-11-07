@@ -40,11 +40,11 @@ Future<Directory> _isolatedAudioCache() async {
 }
 
 void main() {
-  test('default pinned audio cache is under the app-private support root', () {
+  test('default pinned audio cache is under the Program state state/ root', () {
     final String source = File(
       'lib/src/sync/fushi_remote_lookup_client.dart',
     ).readAsStringSync();
-    expect(source, contains('AppPaths.supportRootDirectory()'));
+    expect(source, contains('AppPaths.stateRootDirectory()'));
     expect(source, isNot(contains('Directory.systemTemp.path')));
   });
 

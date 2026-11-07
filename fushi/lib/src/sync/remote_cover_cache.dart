@@ -14,7 +14,7 @@ import 'package:fushi/src/storage/app_paths.dart';
 /// book identifier，而非易变的 `coverUrl`——换 IP / http↔https 会让 URL 变但封面不变）键控：
 /// 命中直接读盘（跨重启存活），未命中才拉网并落盘。
 ///
-/// 用 [AppPaths.tempRootDirectory]（系统临时目录）而非 documents 根：封面是纯 fetch 缓存、
+/// 用 [AppPaths.cacheRootDirectory]（系统临时目录）而非 documents 根：封面是纯 fetch 缓存、
 /// 重下即可，不属用户数据，不进数据根迁移白名单，OS 清理临时目录也无副作用。
 class RemoteCoverCache {
   RemoteCoverCache._();
@@ -24,7 +24,7 @@ class RemoteCoverCache {
   static Future<Directory> Function() _dirResolver = _defaultDir;
 
   static Future<Directory> _defaultDir() async {
-    final Directory base = await AppPaths.tempRootDirectory();
+    final Directory base = await AppPaths.cacheRootDirectory();
     return Directory(p.join(base.path, 'remote_cover_cache'));
   }
 

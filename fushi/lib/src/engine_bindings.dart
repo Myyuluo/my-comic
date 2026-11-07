@@ -21,7 +21,6 @@ import 'package:fushi/src/utils/cover_image.dart';
 
 import 'package:fushi/src/models/store_compliance.dart';
 
-
 import 'package:fushi/src/storage/app_paths.dart';
 import 'package:fushi/src/utils/misc/error_log_service.dart';
 import 'package:fushi_core/fushi_core.dart';
@@ -32,29 +31,23 @@ import 'package:fushi_engine/dictionary/dictionary_engine_hooks.dart';
 import 'package:fushi_engine/foundation/engine_platform_hooks.dart';
 import 'package:fushi_engine/media/audio/flac_encoder.dart';
 
-
-
-
 import 'package:fushi_engine/utils/misc/desktop_audio_clipper.dart'
     show ffmpegRemoteInputRouteResolver;
 import 'package:fushi/src/utils/net/ffmpeg_relay_route.dart';
 
-
-
-/// `AppPaths` 静态便捷层 → 引擎 [EnginePaths]。三个根逐一委派，子目录派生规则
-/// 在引擎基类里与 `AppPaths.documentsSubdirectory` 同构。
+/// `AppPaths` 静态便捷层 → 引擎 [EnginePaths]。三个引擎根逐一委派到新的
+/// Content root / Program state `state/` / `cache/`，子目录名契约留在引擎基类。
 class AppPathsEngineBridge extends EnginePaths {
   const AppPathsEngineBridge();
 
   @override
-  Future<Directory> documentsRootDirectory() =>
-      AppPaths.documentsRootDirectory();
+  Future<Directory> documentsRootDirectory() => AppPaths.contentRootDirectory();
 
   @override
-  Future<Directory> supportRootDirectory() => AppPaths.supportRootDirectory();
+  Future<Directory> supportRootDirectory() => AppPaths.stateRootDirectory();
 
   @override
-  Future<Directory> tempRootDirectory() => AppPaths.tempRootDirectory();
+  Future<Directory> tempRootDirectory() => AppPaths.cacheRootDirectory();
 
   /// iOS：file_picker 把选中文件搬进 `NSTemporaryDirectory()`（容器 `tmp/`，iOS
   /// 把 `TMPDIR` 设成它，即 [Directory.systemTemp]）。注意它**不是**

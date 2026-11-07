@@ -10,7 +10,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:fushi_engine/foundation/engine_paths.dart';
+import 'package:fushi/src/storage/app_paths.dart';
 import 'package:fushi_engine/tts/local/gpt_sovits_local_engine.dart';
 import 'package:fushi_engine/tts/local/gpt_sovits_local_package.dart';
 import 'package:fushi_engine/tts/local/gpt_sovits_local_server.dart';
@@ -85,7 +85,7 @@ class _GptSovitsLocalPageState extends State<GptSovitsLocalPage> {
   }
 
   Future<void> _init() async {
-    final Directory support = await enginePaths.supportRootDirectory();
+    final Directory support = await AppPaths.stateRootDirectory();
     final String? gpu = await detectNvidiaGpuName();
     if (!mounted) return;
     setState(() {

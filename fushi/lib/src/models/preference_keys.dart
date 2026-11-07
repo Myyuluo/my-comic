@@ -409,8 +409,8 @@ const Set<String> kKnownPreferenceKeys = <String>{
   'remote_lookup_enabled',
   'reverse_navigation_bar',
   'reverse_reader_bottom_bar',
-  // BUG-2100 沙箱重定位台账：上次启动时的两个数据根。根变了（iOS 每次更新都会换
-  // app 容器 UUID）就据此把全库绝对路径重基过去，见 storage/sandbox_relocation.dart。
+  // BUG-2100 沙箱重定位台账键：功能已随 ticket 12 删除（便携拷贝改由
+  // PortableStateRebase 用 `portable_last_*` 台账）。键名冻结，避免被别的功能复用。
   'sandbox_last_documents_root',
   'sandbox_last_support_root',
   'saved_tags',

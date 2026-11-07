@@ -86,7 +86,7 @@ class MihonCookieJar extends MangaCookieJar {
   /// 进程级共享实例，落在 Mihon sidecar 数据目录旁的 `cookies.json`。
   ///
   /// 路径与 `AppModel.mihonManager` 传给 sidecar 的 root 一致：那里用的是
-  /// `databaseDirectory/mihon`，而 `databaseDirectory` 就是 `AppPaths.supportRoot`
+  /// `databaseDirectory/mihon`，而 `databaseDirectory` 就是 `AppPaths.stateRoot`
   /// （`app_model.dart` 的 `_databaseDirectory = _appPaths.supportRoot`）。
   static MihonCookieJar get shared =>
       _shared ??= MihonCookieJar.lazy(_sharedFile);
@@ -96,7 +96,7 @@ class MihonCookieJar extends MangaCookieJar {
   static set shared(MihonCookieJar? value) => _shared = value;
 
   static Future<File> _sharedFile() async {
-    final Directory supportRoot = await AppPaths.supportRootDirectory();
+    final Directory supportRoot = await AppPaths.stateRootDirectory();
     return File(p.join(supportRoot.path, 'mihon', 'cookies.json'));
   }
 }

@@ -20,7 +20,7 @@ void main() {
     docs = await Directory.systemTemp.createTemp('srtrelo_');
     root = Directory(p.join(docs.path, 'audiobooks'))
       ..createSync(recursive: true);
-    // 生产接线：AppModel 启动期把这个钩子接到 AppPaths.documentsRootDirectory
+    // 生产接线：AppModel 启动期把这个钩子接到 AppPaths.contentRootDirectory
     // （app_model.dart 的 _prepareRuntimeDirectories），这里照接，好让 listAll()
     // 的自愈走与真机同一条根解析路径。
     AudiobookStorage.documentsRootResolver = () async => docs;

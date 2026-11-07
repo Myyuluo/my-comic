@@ -2031,8 +2031,8 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
     _shelfEntry = entry;
     _shelfChapterIndex = chapterIndex;
     _edgeToastShown = false;
-    // 章目录通过数据库映射解析（新布局），旧哈希布局只读回退；未下载的章用
-    // 目标路径的纯派生当直读会话的页名作用域（不会创建目录）。
+    // 章目录通过数据库映射解析（新布局）；未下载的章用 chapterKey 的纯派生当
+    // 直读会话的页名作用域（不会创建目录，也不按标题推导路径）。
     final DownloadLibraryIndex index = DownloadLibraryIndex(appModel.database);
     final MangaChapterContainer? container = await index.resolveChapter(
       bookKey: row.bookKey,
@@ -2048,7 +2048,7 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
           row.extractDir,
           downloadChapterFolderName(
             mangaDirPath: row.extractDir,
-            raw: chapter.name.trim().isEmpty ? chapter.key : chapter.name,
+            raw: chapter.key,
           ),
         );
     // 每章进度：切回读过一半的旧章要落回原页，而不是从头开始（v88 前

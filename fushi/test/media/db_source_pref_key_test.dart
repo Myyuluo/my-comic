@@ -50,7 +50,7 @@ void main() {
     });
 
     // G-硬编码去重：reader_settings / custom_fonts_page / profile_repository /
-    // data_root_migrator 的 `src:reader_fushi:` 字面量已改经编码器（值不变）。
+    // 路径覆盖表的 `src:reader_fushi:` 字面量已改经编码器（值不变）。
     // backup_service 因 const 上下文保留字面量，由上面的 parity 用例锁一致。
     test('reader_settings / custom_fonts_page / profile / migrator 字面量已转编码器',
         () {
@@ -63,7 +63,7 @@ void main() {
           File('lib/src/profile/profile_repository.dart').readAsStringSync();
       final String dm =
           // BUG-1174：字体 key 组连同其余承载路径的 pref 一起搬进了声明式覆盖表；
-          // data_root_migrator 现在只消费 kPathRebasePrefs，不再自持 key 常量。
+          // 声明式覆盖表是唯一真相源，不再自持 key 常量。
           File('lib/src/storage/path_rebase_coverage.dart').readAsStringSync();
       expect(rs, contains("dbSourcePrefKey(kReaderSourcePersistedKey, '')"),
           reason: 'ReaderSettings._prefix 应转调编码器');

@@ -1246,7 +1246,7 @@ class BackupService {
       _countRowsWhere('srs_entities', _srsUserNoteSql);
 
   /// 复习媒体根（`<support>/srs_media`）。支持目录即 [_dbDirectory]（活库所在目录，
-  /// 与 `AppPaths.supportRootDirectory` 同一个根），规则与
+  /// 与 `AppPaths.stateRootDirectory` 同一个根），规则与
   /// [SrsMediaStore.directoryFor] 共用 [SrsMediaStore.mediaRootFor]。
   Directory get _srsMediaRoot =>
       SrsMediaStore.mediaRootFor(Directory(_dbDirectory));

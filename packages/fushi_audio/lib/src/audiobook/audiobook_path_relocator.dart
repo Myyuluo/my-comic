@@ -43,8 +43,8 @@ class AudiobookPathRelocator {
   })  : _exists = exists ?? defaultExists,
         _listEntries = listEntries ?? _defaultListEntries;
 
-  /// 数据根内有声书子目录名（`AppPaths.audiobooksDirectory` / `app_model` 的
-  /// `audioDatabaseRoot` 同名，两处都是 `<documents>/audiobooks`）。
+  /// 数据根内有声书子目录名（Content root 下的 `audiobooks`，与 `app_model` 的
+  /// `audioDatabaseRoot` 同名）。
   static const String rootSegment = 'audiobooks';
 
   /// 当前设备的 `<documents>/audiobooks` 绝对路径。

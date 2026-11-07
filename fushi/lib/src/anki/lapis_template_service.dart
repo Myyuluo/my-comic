@@ -61,7 +61,7 @@ class LapisTemplateService {
       _autoMigrateRanThisSession = false;
 
   Future<Directory> backupDirectory() async {
-    final Directory support = await AppPaths.supportRootDirectory();
+    final Directory support = await AppPaths.stateRootDirectory();
     final Directory dir = Directory(p.join(support.path, 'backups', 'lapis'));
     if (!await dir.exists()) await dir.create(recursive: true);
     return dir;

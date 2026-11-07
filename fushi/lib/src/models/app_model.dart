@@ -57,7 +57,6 @@ import 'package:fushi/src/storage/app_paths.dart';
 import 'package:fushi/src/storage/portable_state_rebase.dart';
 import 'package:fushi/src/storage/books_directory.dart';
 import 'package:fushi/src/storage/export_directory.dart';
-import 'package:fushi/src/storage/sandbox_relocation.dart';
 import 'package:fushi/src/startup/exit_flush_registry.dart';
 import 'package:fushi/src/utils/misc/channel_constants.dart';
 import 'package:fushi/src/utils/misc/error_details_dialog.dart';
@@ -1632,59 +1631,6 @@ class AppModel with ChangeNotifier {
   /// Notifies app to stop showing any screens.
   final ChangeNotifier databaseCloseNotifier = ChangeNotifier();
 
-  /// TODO-959：桌面「数据存储位置」整目录迁移期间为 true。迁移会 [closeDatabase]
-  /// （置 `_isInitialised=false`）以释放 Windows 文件锁，否则根 widget 会回退到裸
-  /// loading 分支（近黑底 + 转圈，搬大库数秒~数分钟被误判死机）。该标志让根 widget 在
-  /// loading 分支**之前**改显一个带「正在迁移数据，请勿关闭」文案 + 进度条的迁移遮罩。
-  bool _dataRootMigrationActive = false;
-  bool get dataRootMigrationActive => _dataRootMigrationActive;
-
-  /// 迁移进度（跨盘复制时 (已复制文件数, 总文件数)）。同盘 rename 瞬时完成不产生进度，
-  /// 此时保持 null → UI 显示不确定进度条。
-  ({int copied, int total})? _dataRootMigrationProgress;
-  ({int copied, int total})? get dataRootMigrationProgress =>
-      _dataRootMigrationProgress;
-
-  /// TODO-1182：迁移失败原因文案。非 null 时根 widget 在迁移遮罩上改显「失败」态
-  /// （原因 + 建议 + 重启按钮），而不是像旧实现那样立刻重启导致用户永远看不到失败。
-  /// closeResources 已在搬移前关闭 DB（`_isInitialised=false`），本进程无法原地恢复，
-  /// 故失败态不撤遮罩（撤了会落到裸 loading）；由用户在失败视图点「重启」回到干净旧根。
-  String? _dataRootMigrationFailure;
-  String? get dataRootMigrationFailure => _dataRootMigrationFailure;
-
-  /// 进入迁移态：先于 [closeDatabase] 调用，确保「遮罩已上屏 → 关库 → 搬文件」的顺序，
-  /// 这样根 widget 在 DB 关闭引发的 rebuild 里看到的是迁移遮罩而非裸 loading。
-  void beginDataRootMigration() {
-    _dataRootMigrationActive = true;
-    _dataRootMigrationProgress = null;
-    _dataRootMigrationFailure = null;
-    notifyListeners();
-  }
-
-  /// 更新迁移进度（跨盘复制每完成一个文件调一次）。无副作用，仅刷进度条。
-  void updateDataRootMigrationProgress(int copied, int total) {
-    _dataRootMigrationProgress = (copied: copied, total: total);
-    notifyListeners();
-  }
-
-  /// TODO-1182：迁移失败 → 切到失败态。**保持**遮罩激活（DB 已关，撤遮罩会落到裸 loading），
-  /// 让根 widget 在同一遮罩上渲染「失败原因 + 建议 + 重启按钮」，确保用户醒目看到失败。
-  void failDataRootMigration(String message) {
-    _dataRootMigrationActive = true;
-    _dataRootMigrationProgress = null;
-    _dataRootMigrationFailure = message;
-    notifyListeners();
-  }
-
-  /// 退出迁移态。用户在失败视图点「重启」但重启不受支持时兜底回到（受限的）设置页。
-  /// 成功路径会重启进程，不会执行到这里。
-  void endDataRootMigration() {
-    _dataRootMigrationActive = false;
-    _dataRootMigrationProgress = null;
-    _dataRootMigrationFailure = null;
-    notifyListeners();
-  }
-
   /// TODO-1151：本地备份「导入/恢复」期间的全屏遮罩状态。导入同样会
   /// [closeDatabase]（释放数据库句柄以便整体替换 DB + 内容树），流程结束后必须
   /// 重启进程重新载入数据。旧实现只在设置行显示一个 24px 小圈、成功后延迟 500ms
@@ -3066,8 +3012,8 @@ class AppModel with ChangeNotifier {
     // TODO-1236：把上游 `fushi_audio` 的有声书持久根解析接到 `AppPaths`（它无法 import
     // AppPaths）。有声书属于用户可见内容，跟随 Content root。
     AudiobookStorage.documentsRootResolver = AppPaths.contentRootDirectory;
-    // 旧 getter 暂作 alias（票 12 删除）：temp → cache、documents → content、
-    // support → state。DB / prefs / Mihon runtime / 更新包都落在 state 下。
+    // Program state 的 DB / prefs / Mihon runtime / 更新包都落在 state 下；
+    // 可丢弃缓存落在 cache 下；用户可见内容落在 Content root 下。
     _temporaryDirectory = _appPaths.cacheRoot;
     _appDirectory = _appPaths.contentRoot;
     _databaseDirectory = _appPaths.stateRoot;

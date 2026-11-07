@@ -23,7 +23,7 @@ AnkiSyncSession? get sharedAnkiSyncSession {
   if (exe == null) return null;
   return _session = AnkiSyncSession(
     root: () async => Directory(
-      p.join((await AppPaths.supportRootDirectory()).path, kAnkiSyncDirName),
+      p.join((await AppPaths.stateRootDirectory()).path, kAnkiSyncDirName),
     ),
     startClient: () => FushiAnkiSyncClient.start(exe),
   );

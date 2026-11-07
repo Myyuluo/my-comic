@@ -20,8 +20,9 @@ import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi/src/media/manga/reader/manga_fushi_page.dart';
 import 'package:fushi/utils.dart';
 import 'package:fushi_core/fushi_core.dart';
-import 'package:fushi_engine/media/manga/manga_chapter_storage.dart';
+import 'package:fushi_engine/media/manga/download_library_storage.dart';
 import 'package:fushi_engine/media/manga/manga_storage.dart';
+import 'package:fushi_engine/media/manga/mokuro_payload.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:path/path.dart' as p;
 
@@ -44,33 +45,56 @@ const OnlineMangaChapter _chapter2 = OnlineMangaChapter(
 );
 
 Future<void> _writeChapter(
+  FushiDatabase db,
+  String bookKey,
   String bookDir,
   String chapterKey, {
+  required String folderName,
   required int pages,
   required int width,
   required int height,
   required int seed,
 }) async {
-  final Directory chapterDir = mangaChapterDirectory(bookDir, chapterKey);
-  final Directory images = mangaChapterImagesDirectory(chapterDir);
-  await images.create(recursive: true);
+  // Ticket 12：按 Download library 的真实落盘形态播种（页图平铺 + pages.json +
+  // manga_chapter_dirs 映射），旧哈希布局已删除。
+  final Directory chapterDir = downloadChapterDirectory(bookDir, folderName);
+  await chapterDir.create(recursive: true);
   const TestImageGenerator generator = TestImageGenerator();
-  final List<Map<String, Object?>> entries = <Map<String, Object?>>[];
+  final List<MokuroImage> images = <MokuroImage>[];
   for (int index = 0; index < pages; index++) {
-    final String name = 'page-${(index + 1).toString().padLeft(6, '0')}.png';
-    await File(p.join(images.path, name)).writeAsBytes(
+    final String name = downloadPageFileName(index, '.png');
+    await File(p.join(chapterDir.path, name)).writeAsBytes(
       generator.pngBytes(width: width, height: height, seed: seed + index),
     );
-    entries.add(<String, Object?>{
-      'url': '${MangaStorage.kImagesDirName}/$name',
-      'width': width,
-      'height': height,
-      'blocks': <Object?>[],
-    });
+    images.add(
+      MokuroImage(
+        url: name,
+        size: MokuroSize(width.toDouble(), height.toDouble()),
+        blocks: const <MokuroBlock>[],
+      ),
+    );
   }
-  await mangaChapterJsonFile(
+  await writePagesManifestAtomically(
     chapterDir,
-  ).writeAsString(jsonEncode(<String, Object?>{'pages': entries}));
+    MangaPagesManifest(
+      sourceRuntime: 'mihon',
+      sourceId: '1',
+      sourceName: 'Cross chapter',
+      extensionPackage: 'org.example.crosschapter',
+      mangaKey: '/series/cross-chapter',
+      mangaTitle: 'Cross chapter fixture',
+      chapterKey: chapterKey,
+      chapterName: chapterKey,
+      payload: MokuroPayload(images: images),
+      downloadedAt: DateTime.utc(2026, 11, 7),
+    ),
+  );
+  await db.upsertMangaChapterDir(
+    bookKey: bookKey,
+    chapterKey: chapterKey,
+    folderName: folderName,
+    updatedAt: DateTime.now().millisecondsSinceEpoch,
+  );
 }
 
 void main() {
@@ -92,16 +116,22 @@ void main() {
       p.join(bookDir, MangaStorage.kMangaJsonFileName),
     ).writeAsString('{"pages":[]}');
     await _writeChapter(
+      appModel.database,
+      bookKey,
       bookDir,
       _chapter1.key,
+      folderName: 'Chapter 1',
       pages: 4,
       width: 800,
       height: 1200,
       seed: 1,
     );
     await _writeChapter(
+      appModel.database,
+      bookKey,
       bookDir,
       _chapter2.key,
+      folderName: 'Chapter 2',
       pages: 3,
       width: 600,
       height: 1000,

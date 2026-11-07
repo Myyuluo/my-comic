@@ -14,7 +14,7 @@
 ///
 ///    全仓写/删 manga.json 的调用点（改动这张表时同步改
 ///    `manga_json_writeback_test.dart` 的锁覆盖守卫）：
-///    - `library/manga_chapter_storage.dart` 的 `deleteChapterDownload`（删旧布局章目录）
+///    - 旧 `library/manga_chapter_storage.dart` 的旧布局章目录删除 helper（ticket 12 已删）
 ///
 ///    票 04 起在线下载写的是 `pages.json`（`download_library_storage.dart`，整章
 ///    staging + rename），不再有生产写者；阅读器也不再写任何 manga.json。

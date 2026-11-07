@@ -1040,7 +1040,7 @@ class MediaCollections extends Table {
 
   /// **合集自己的**封面图绝对路径（schema v61，BUG-1211）。与 [coverSource] 正交：
   /// 后者是「借哪个成员的封面」，本列是「合集自有一张图」，落在
-  /// `<documents>/video_covers/collections/<id>.jpg`（[AppPaths.videoCoversDirectory]
+  /// `<documents>/video_covers/collections/<id>.jpg`（旧 AppPaths 非漫画 getter 已删除，
   /// 的子目录 —— 与成员封面同池不同目录，文件名不可能与 `videoCoverFileName(bookUid)`
   /// 撞车）。
   ///
@@ -1053,7 +1053,7 @@ class MediaCollections extends Table {
   /// 的成员借用链（首个有本地封面的成员 → 远端成员 → 占位），老合集封面逐像素不变
   /// （Never break userspace）。
   ///
-  /// 机器本地绝对路径：随数据根迁移改写（`data_root_migrator.dart`，与
+  /// 机器本地绝对路径：随便携拷贝 rebase 改写（`portable_state_rebase.dart`，与
   /// [VideoBooks].coverPath / [Galgames].coverPath 同型），且**不跨端同步**。
   TextColumn get coverPath => text().nullable()();
 

@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:fushi/src/storage/app_paths.dart';
 
 /// iOS 刻意**不开**「文件」App 共享（PR #2298 审查，2026-10-17）。
 ///
@@ -38,18 +37,22 @@ void main() {
     expect(page, contains("ValueKey<String>('srs_backup_restore_file')"));
   });
 
-  test('复习备份目录在 documents 根下、并随数据根迁移', () {
-    expect(AppPaths.fushiOwnedDocumentsEntries, contains('srs_backups'));
+  test('复习备份目录派生自 Content root（不再有 AppPaths 非漫画 getter）', () {
+    final String backups = File(
+      'lib/src/srs/srs_backup.dart',
+    ).readAsStringSync();
+    expect(backups, contains('AppPaths.contentRootDirectory()'));
+    expect(backups, contains('kSrsBackupsDirName'));
     final String paths = File(
       'lib/src/storage/app_paths.dart',
     ).readAsStringSync();
-    expect(paths, contains("documentsSubdirectory('srs_backups')"));
+    expect(paths, isNot(contains('srsBackupsDirectory')));
   });
 
-  test('数据库目录是 support 根（不在会被「文件」App 共享的 Documents 里）', () {
+  test('数据库目录是 Program state 的 state/（不在会被「文件」App 共享的 Documents 里）', () {
     final String app = File('lib/src/models/app_model.dart').readAsStringSync();
     expect(
-      RegExp(r'_databaseDirectory\s*=\s*_appPaths\.supportRoot').hasMatch(app),
+      RegExp(r'_databaseDirectory\s*=\s*_appPaths\.stateRoot').hasMatch(app),
       isTrue,
     );
   });

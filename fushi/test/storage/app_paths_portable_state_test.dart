@@ -25,7 +25,6 @@ void main() {
 
   setUp(() {
     SharedPreferences.setMockInitialValues(<String, Object>{});
-    AppPaths.debugResetDocumentsLayoutCache();
     WebView2StateRoot.debugReset();
     tmp = Directory.systemTemp.createTempSync('fushi_portable_state_');
     platformDocuments = Directory(p.join(tmp.path, 'Users', 'bob', 'Documents'))
@@ -60,7 +59,6 @@ void main() {
     AppPaths.debugExecutablePathOverride = null;
     AppPaths.debugLocalAppDataOverride = null;
     AppPaths.forceDefaultRootForSession = false;
-    AppPaths.debugResetDocumentsLayoutCache();
     WebView2StateRoot.debugReset();
     SharedPreferences.setMockInitialValues(<String, Object>{});
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger

@@ -330,7 +330,7 @@ class AnkiVideoTemplateService {
     final Directory directory = _backupDirectoryResolver == null
         ? Directory(
             p.join(
-              (await AppPaths.supportRootDirectory()).path,
+              (await AppPaths.stateRootDirectory()).path,
               'backups',
               'video-templates',
             ),

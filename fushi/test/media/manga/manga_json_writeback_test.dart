@@ -136,20 +136,18 @@ void main() {
       expect(body, isNot(contains('writeMangaJsonAtomically(')));
     });
 
-    test('删章目录（连带其 manga.json）也在锁内', () {
-      final String body =
-          File('lib/src/media/manga/library/manga_chapter_storage.dart')
-              .readAsStringSync();
-      final int start =
-          body.indexOf('Future<void> deleteChapterDownload(');
-      expect(start, greaterThan(0));
-      final int end = body.indexOf('\nFuture<', start + 1);
-      final String fn = body.substring(start, end > start ? end : body.length);
+    test('旧章目录删除 helper 已删除；删除走 Download library 映射', () {
       expect(
-        fn,
-        contains('runExclusiveOnMangaJson'),
-        reason: '无锁 delete 会落在整卷 OCR 落盘的读-改-写之间，让删掉的目录被写回一半',
+        File('lib/src/media/manga/library/manga_chapter_storage.dart')
+            .existsSync(),
+        isFalse,
+        reason: '旧哈希章目录 helper 已随 ticket 12 删除',
       );
+      final String body = File(
+        'lib/src/media/manga/download/download_library_index.dart',
+      ).readAsStringSync();
+      expect(body, contains('Future<void> deleteChapter('));
+      expect(body, contains('deleteMangaChapterDir('));
     });
 
     test('阅读器页不再写书根 manga.json（写侧只剩下载服务 / 向导 / 注册表）', () {

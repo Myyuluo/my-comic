@@ -52,7 +52,6 @@ void main() {
     documentsRoot: () async => docs,
     supportRoot: () async => support,
     cacheRoots: () async => const <Directory>[],
-    documentsRootIsFushiOwned: () async => true,
     isolateRunner: <R>(R Function() computation) async => computation(),
   );
 

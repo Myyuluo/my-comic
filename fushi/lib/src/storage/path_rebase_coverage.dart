@@ -1,6 +1,6 @@
 /// BUG-1174：数据根迁移「哪些持久化字段承载绝对路径、迁移要不要改写」的**单一真相源**。
 ///
-/// 历史上这份知识只活在 [DataRootMigrator] 的一串 UPDATE 语句里，于是每加一列存路径的
+/// 历史上这份知识只活在已删除的整目录迁移器的一串 UPDATE 语句里，于是每加一列存路径的
 /// 字段就漏一次：TODO-1255 漏了 video_books.cover_path（迁移后视频封面全占位），
 /// BUG-1174 又一次性发现漏了 galgames.cover_path、video_books.subtitle_source ×2、
 /// media_items.image_url、整张 profile_settings 和 5 个 pref key。注释拦不住这种遗漏
@@ -19,11 +19,11 @@ import 'package:fushi/src/media/sources/reader_fushi_source.dart';
 /// 一个持久化字段在数据根迁移里的处置。
 enum PathRebaseKind {
   /// 落在 **documents（内容/书库）根**下的绝对路径 —— 迁移必须 rebase 到新 documents 根。
-  documentsRooted,
+  contentRooted,
 
   /// 落在 **support（数据库）根**下的绝对路径 —— 迁移必须重挂到新 support 根
   /// （按文件名，见 LocalAudioManager.resolveInternalPath）。
-  supportRooted,
+  stateRooted,
 
   /// 用户自选的**外部**绝对路径（外部素材目录 / 游戏安装位置 / 系统工具 / 文件选择器
   /// 上次目录）—— 不在数据根内，迁移**绝不能**动它，动了就让外部资源失联。
@@ -57,8 +57,8 @@ class PathRebaseColumn {
 
   /// 迁移是否必须改写这一列。
   bool get mustRebase =>
-      kind == PathRebaseKind.documentsRooted ||
-      kind == PathRebaseKind.supportRooted;
+      kind == PathRebaseKind.contentRooted ||
+      kind == PathRebaseKind.stateRooted;
 
   /// drift 默认的 snake_case SQL 列名。守卫据此断言 must-rebase 列真的出现在迁移器里。
   String get sqlColumn => column.replaceAllMapped(
@@ -112,8 +112,8 @@ class PathRebasePref {
   final String reason;
 
   bool get mustRebase =>
-      kind == PathRebaseKind.documentsRooted ||
-      kind == PathRebaseKind.supportRooted;
+      kind == PathRebaseKind.contentRooted ||
+      kind == PathRebaseKind.stateRooted;
 
   @override
   String toString() => '$key($kind/$shape)';
@@ -132,7 +132,7 @@ const List<PathRebaseColumn> kPathRebaseColumns = <PathRebaseColumn>[
   PathRebaseColumn(
       'MediaOpenHistory',
       'snapshotJson',
-      PathRebaseKind.documentsRooted,
+      PathRebaseKind.contentRooted,
       '展示/重开载荷 JSON；其中 imageUrl 键可能是本地书封面的 '
           'file://<绝对路径> URI（候选全在 <documents>/fushi_books 下），由 '
           '_rebaseMediaOpenHistory 逐行解码改写；其余键（audioUrl/extraUrl 等）为远端 '
@@ -153,12 +153,12 @@ const List<PathRebaseColumn> kPathRebaseColumns = <PathRebaseColumn>[
       '快捷操作 key 列表 JSON，无路径。'),
 
   // ── preferences / profile_settings（KV 承载列）──────────────────────
-  PathRebaseColumn('Preferences', 'value', PathRebaseKind.documentsRooted,
+  PathRebaseColumn('Preferences', 'value', PathRebaseKind.contentRooted,
       'KV 承载列：逐 key 的处置见 [kPathRebasePrefs]。documents / support 两族都有。'),
   PathRebaseColumn(
       'ProfileSettings',
       'value',
-      PathRebaseKind.documentsRooted,
+      PathRebaseKind.contentRooted,
       'BUG-1174 最阴的一处：ProfileRepository.snapshotCurrentSettings 把**每一条**非'
           '排除 Drift pref 原样复制进来（category=pref），applyProfile 再原样写回 '
           'preferences。迁移只改 preferences 的话，用户切一次 Profile 就把刚 rebase 好的'
@@ -169,28 +169,28 @@ const List<PathRebaseColumn> kPathRebaseColumns = <PathRebaseColumn>[
   PathRebaseColumn(
       'Audiobooks',
       'audioRoot',
-      PathRebaseKind.documentsRooted,
+      PathRebaseKind.contentRooted,
       '复制导入模式 = <documents>/audiobooks/<hash>；folder 模式的外部目录（遗留、当前'
           '无写入点）不以旧根开头 → 天然跳过。'),
   PathRebaseColumn(
       'Audiobooks',
       'audioPathsJson',
-      PathRebaseKind.documentsRooted,
+      PathRebaseKind.contentRooted,
       'JSON 字符串数组；复制模式是持久目录内绝对路径，「引用原文件」模式是外部路径（天然跳过）。'),
   PathRebaseColumn(
       'Audiobooks',
       'alignmentPath',
-      PathRebaseKind.documentsRooted,
+      PathRebaseKind.contentRooted,
       '<documents>/audiobooks/<hash>/ 下的字幕副本绝对路径。'),
 
   // ── srt_books ─────────────────────────────────────────────────────
-  PathRebaseColumn('SrtBooks', 'audioRoot', PathRebaseKind.documentsRooted,
+  PathRebaseColumn('SrtBooks', 'audioRoot', PathRebaseKind.contentRooted,
       '同 Audiobooks.audioRoot。'),
-  PathRebaseColumn('SrtBooks', 'audioPathsJson', PathRebaseKind.documentsRooted,
+  PathRebaseColumn('SrtBooks', 'audioPathsJson', PathRebaseKind.contentRooted,
       '同 Audiobooks.audioPathsJson。'),
-  PathRebaseColumn('SrtBooks', 'srtPath', PathRebaseKind.documentsRooted,
+  PathRebaseColumn('SrtBooks', 'srtPath', PathRebaseKind.contentRooted,
       '持久目录内 SRT 副本绝对路径。'),
-  PathRebaseColumn('SrtBooks', 'coverPath', PathRebaseKind.documentsRooted,
+  PathRebaseColumn('SrtBooks', 'coverPath', PathRebaseKind.contentRooted,
       '<documents>/audiobooks/<hash>/cover.<ext> 绝对路径。'),
 
   // ── dictionary_metadata / dictionary_history ──────────────────────
@@ -219,7 +219,7 @@ const List<PathRebaseColumn> kPathRebaseColumns = <PathRebaseColumn>[
       '多语义：普通导入 = 裸 basename / PDF = document.pdf / 漫画 = manga.json / '
           '来源库扫描 = **外部**绝对路径。四种都不是数据根内路径，改写恒 no-op；调用'
           '保留作防御。'),
-  PathRebaseColumn('EpubBooks', 'extractDir', PathRebaseKind.documentsRooted,
+  PathRebaseColumn('EpubBooks', 'extractDir', PathRebaseKind.contentRooted,
       '<documents>/fushi_books/<bookKey> 绝对目录。'),
   PathRebaseColumn('EpubBooks', 'chaptersJson', PathRebaseKind.notAPath,
       '书内相对 href 列表，无绝对路径。'),
@@ -232,13 +232,13 @@ const List<PathRebaseColumn> kPathRebaseColumns = <PathRebaseColumn>[
   PathRebaseColumn(
       'VideoBooks',
       'videoPath',
-      PathRebaseKind.documentsRooted,
+      PathRebaseKind.contentRooted,
       '三态：数据根内下载副本（<documents>/remote_videos、videos）/ 用户原位外部视频 / '
           'http(s) 流 URL。后两态不以旧根开头 → 天然跳过。'),
   PathRebaseColumn(
       'VideoBooks',
       'subtitleSource',
-      PathRebaseKind.documentsRooted,
+      PathRebaseKind.contentRooted,
       'BUG-1174 漏项。四态编码（video_subtitle_source.dart:362-430）：外挂 = 裸绝对'
           '路径（多为 <documents>/video_subtitles/<basename> 内部副本）/ 内嵌 = '
           'embedded:<n> / 关闭 = off: / 无偏好 = null。**只有绝对路径态**参与改写，'
@@ -247,11 +247,11 @@ const List<PathRebaseColumn> kPathRebaseColumns = <PathRebaseColumn>[
   PathRebaseColumn(
       'VideoBooks',
       'secondarySubtitleSource',
-      PathRebaseKind.documentsRooted,
+      PathRebaseKind.contentRooted,
       'BUG-1174 漏项，与 subtitleSource 同款四态编码，处置相同。'),
-  PathRebaseColumn('VideoBooks', 'coverPath', PathRebaseKind.documentsRooted,
+  PathRebaseColumn('VideoBooks', 'coverPath', PathRebaseKind.contentRooted,
       '<documents>/video_covers/<sanitize(bookUid)>.jpg（TODO-1255 补的漏项）。'),
-  PathRebaseColumn('VideoBooks', 'playlistJson', PathRebaseKind.documentsRooted,
+  PathRebaseColumn('VideoBooks', 'playlistJson', PathRebaseKind.contentRooted,
       'JSON 对象数组 [{title,path}]，path 与 videoPath 同语义。'),
   PathRebaseColumn(
       'VideoBooks',
@@ -264,7 +264,7 @@ const List<PathRebaseColumn> kPathRebaseColumns = <PathRebaseColumn>[
   PathRebaseColumn(
       'VideoFileSpecs',
       'filePath',
-      PathRebaseKind.documentsRooted,
+      PathRebaseKind.contentRooted,
       '本表的**主键**，与 video_books.video_path 同语义（数据根内下载副本 / 用户原位'
           '外部文件）。不改写 = 数据根搬家后整张规格缓存的键全部指向旧路径，永远命不中，'
           '每个条目都要重探一遍（几百个文件的 ffprobe）。虽是可重建的缓存，但改写成本'
@@ -286,7 +286,7 @@ const List<PathRebaseColumn> kPathRebaseColumns = <PathRebaseColumn>[
   PathRebaseColumn(
       'AnidbFileIdentities',
       'filePath',
-      PathRebaseKind.documentsRooted,
+      PathRebaseKind.contentRooted,
       '与 video_books.video_path 同语义的「最近一次看到这份内容的路径」，不是主键'
           '（主键是 ed2k + file_size），只用于「路径 + 大小 + mtime 命中就免重算哈希」。'
           '不改写 = 数据根搬家后每个文件都要重算一遍 ED2K（几十 GB 的顺序读）才能'
@@ -330,7 +330,7 @@ const List<PathRebaseColumn> kPathRebaseColumns = <PathRebaseColumn>[
   PathRebaseColumn(
       'MediaCollections',
       'coverPath',
-      PathRebaseKind.documentsRooted,
+      PathRebaseKind.contentRooted,
       'BUG-1211 合集自有封面：<documents>/video_covers/collections/<id>.jpg'
           '（VideoStorage.collectionCoversDir；现有下载导入与历史刮削记录均可能写入）。与 '
           'video_books.cover_path / galgames.cover_path 完全同型 → 不改写 = '
@@ -362,7 +362,7 @@ const List<PathRebaseColumn> kPathRebaseColumns = <PathRebaseColumn>[
   PathRebaseColumn(
       'CollectionScrapeMeta',
       'backdropPath',
-      PathRebaseKind.documentsRooted,
+      PathRebaseKind.contentRooted,
       'BUG-1310 合集横版背景：<documents>/video_covers/collections/'
           '<id>_backdrop.jpg（与同表兄弟 media_collections.cover_path 同目录、'
           '现仅作为历史本地刮削资产继续读取）。'
@@ -377,7 +377,7 @@ const List<PathRebaseColumn> kPathRebaseColumns = <PathRebaseColumn>[
   PathRebaseColumn(
       'MediaImages',
       'path',
-      PathRebaseKind.documentsRooted,
+      PathRebaseKind.contentRooted,
       'v68 附加图组落盘位：<documents>/video_covers/collections/（合集归属）与 '
           '<documents>/video_covers/images/（视频归属）两个目录族，与合集封面'
           '完全同型 → 不改写 = 换数据根后 hero 背景/logo、续播横卡全部死链，'
@@ -393,7 +393,7 @@ const List<PathRebaseColumn> kPathRebaseColumns = <PathRebaseColumn>[
   PathRebaseColumn(
       'CollectionRelations',
       'coverPath',
-      PathRebaseKind.documentsRooted,
+      PathRebaseKind.contentRooted,
       '关联条目封面下载后的本地落盘位（<documents>/video_covers/ 目录族，与'
           '合集封面同型）。当前尚无写入方（下载归 UI 接力线程），但列语义即'
           '文档根内路径 —— 不改写 = 换数据根后相关作品卡封面变死链。'),
@@ -442,7 +442,7 @@ const List<PathRebaseColumn> kPathRebaseColumns = <PathRebaseColumn>[
   PathRebaseColumn(
       'VideoMetadataExtras',
       'thumbnailPath',
-      PathRebaseKind.documentsRooted,
+      PathRebaseKind.contentRooted,
       '本地 NCOP/NCED 等附加视频复用 VideoBook.coverPath，位于 '
           '<documents>/video_covers；必须与原视频封面一起重挂。'),
 
@@ -567,8 +567,8 @@ const List<PathRebaseColumn> kPathRebaseColumns = <PathRebaseColumn>[
   PathRebaseColumn(
       'Galgames',
       'coverPath',
-      PathRebaseKind.documentsRooted,
-      'BUG-1174 漏项：<documents>/game_covers/<id>.<ext>（AppPaths.gameCoversDirectory，'
+      PathRebaseKind.contentRooted,
+      'BUG-1174 漏项：Content root 下 game_covers/<id>.<ext>（旧 AppPaths getter 已删除，'
           '落盘唯一入口 galgame_cover_resolver.dart:300-320）。与 TODO-1255 的 '
           'video_books.cover_path 完全同型 → 不改写 = 整个游戏库封面退化成默认手柄图标。'),
   PathRebaseColumn('Galgames', 'primarySource', PathRebaseKind.notAPath,
@@ -587,8 +587,8 @@ const List<PathRebaseColumn> kPathRebaseColumns = <PathRebaseColumn>[
   //     （`MihonManager` 写库时是 `p.join('extensions', '<pkg>.apk')`，读时由
   //     `resolveApkPath` 现场 join `rootDirectory`）。数据根一动，`rootDirectory`
   //     跟着 `databaseDirectory` 自然变，相对段无需改写——这正是相对存储的意义。
-  //     谁要是把它改回绝对路径，就必须同时改成 supportRooted 并在
-  //     DataRootMigrator 里补改写，否则换数据根后全部已装扩展当场失效。
+  //     谁要是把它改回绝对路径，就必须同时登记为 stateRooted 并在
+  //     PortableStateRebase 里补改写，否则便携拷贝后全部已装扩展当场失效。
   PathRebaseColumn('MangaExtensionStores', 'indexUrl', PathRebaseKind.notAPath,
       '扩展仓库的远端 https 索引地址（同时是主键），不是本机路径。'),
   PathRebaseColumn('MangaExtensionStores', 'extensionListUrl',
@@ -603,7 +603,7 @@ const List<PathRebaseColumn> kPathRebaseColumns = <PathRebaseColumn>[
       PathRebaseKind.notAPath,
       '**相对** mihon 根的相对路径（`extensions/<pkg>.apk`），读时由 '
           'MihonManager.resolveApkPath 现场 join rootDirectory；数据根移动后相对段'
-          '不变，无需 rebase。改成绝对路径就必须改判 supportRooted。'),
+          '不变，无需 rebase。改成绝对路径就必须改判 stateRooted。'),
   PathRebaseColumn('MangaOnlineSources', 'sourceId', PathRebaseKind.notAPath,
       '扩展内的来源数字 ID（字符串化），不是路径。'),
   PathRebaseColumn('MangaOnlineSources', 'baseUrl', PathRebaseKind.notAPath,
@@ -661,70 +661,70 @@ const List<PathRebaseColumn> kPathRebaseColumns = <PathRebaseColumn>[
 final List<PathRebasePref> kPathRebasePrefs = <PathRebasePref>[
   PathRebasePref(
       dbSourcePrefKey(kReaderSourcePersistedKey, 'font_catalog'),
-      PathRebaseKind.documentsRooted,
+      PathRebaseKind.contentRooted,
       PathValueShape.fontCatalogJson,
       '自定义字体 catalog，path 落 <documents>/custom_fonts。无 PrefCodec tag。'),
   PathRebasePref(
       dbSourcePrefKey(kReaderSourcePersistedKey, 'custom_fonts'),
-      PathRebaseKind.documentsRooted,
+      PathRebaseKind.contentRooted,
       PathValueShape.fontListJson,
       '旧影子字体列表，path 落 <documents>/custom_fonts。'),
   PathRebasePref(
       dbSourcePrefKey(kReaderSourcePersistedKey, 'app_ui_fonts'),
-      PathRebaseKind.documentsRooted,
+      PathRebaseKind.contentRooted,
       PathValueShape.fontListJson,
       '同上（App UI 字体）。'),
   PathRebasePref(dbSourcePrefKey(kReaderSourcePersistedKey, 'dict_fonts'),
-      PathRebaseKind.documentsRooted, PathValueShape.fontListJson, '同上（词典字体）。'),
+      PathRebaseKind.contentRooted, PathValueShape.fontListJson, '同上（词典字体）。'),
   PathRebasePref(
       dbSourcePrefKey(kReaderSourcePersistedKey, 'video_sub_fonts'),
-      PathRebaseKind.documentsRooted,
+      PathRebaseKind.contentRooted,
       PathValueShape.fontListJson,
       '同上（视频字幕字体）。'),
   PathRebasePref(
       dbSourcePrefKey(kReaderSourcePersistedKey, 'game_lookup_fonts'),
-      PathRebaseKind.documentsRooted,
+      PathRebaseKind.contentRooted,
       PathValueShape.fontListJson,
       '同上（游戏查词窗口字体）。'),
   PathRebasePref(
       dbSourcePrefKey(kReaderSourcePersistedKey, 'floating_lyric_fonts'),
-      PathRebaseKind.documentsRooted,
+      PathRebaseKind.contentRooted,
       PathValueShape.fontListJson,
       '同上（有声书悬浮字幕字体）。'),
   PathRebasePref(
       dbSourcePrefKey(kReaderSourcePersistedKey, 'srs_card_fonts'),
-      PathRebaseKind.documentsRooted,
+      PathRebaseKind.contentRooted,
       PathValueShape.fontListJson,
       '同上（复习 Fushi 卡片卡面字体）。'),
   PathRebasePref(
       'local_audio_dbs',
-      PathRebaseKind.supportRooted,
+      PathRebaseKind.stateRooted,
       PathValueShape.localAudioDbsJson,
       '内部副本 local_audio_<ts>.db 落 support 根；按**文件名**重挂（天然幂等），外部'
           '引用（BUG-483）原样保留。'),
   PathRebasePref(
       'audio_source_configs',
-      PathRebaseKind.supportRooted,
+      PathRebaseKind.stateRooted,
       PathValueShape.audioSourceConfigsJson,
       'typed 音频来源配置，仅 localAudio 条目带 path；必须与 local_audio_dbs 同步重挂，'
           '否则 AppModel 的 path 相等匹配会断（TODO-1171）。'),
   PathRebasePref(
       'local_audio_db_path',
-      PathRebaseKind.supportRooted,
+      PathRebaseKind.stateRooted,
       PathValueShape.bare,
       'BUG-1174 漏项：旧单库绝对路径。只要用户从未调过 setEntries，local_audio_dbs 为空'
           '时它仍被当回退读（local_audio_manager.dart:140-146）。与 local_audio_dbs 同款'
           '按文件名重挂。'),
   PathRebasePref(
       'galgame_library',
-      PathRebaseKind.documentsRooted,
+      PathRebaseKind.contentRooted,
       PathValueShape.legacyGalgameLibraryJson,
       'BUG-1174 漏项：v55 legacy 游戏库 JSON，其中 coverPath 指 <documents>/game_covers。'
           'v55 迁移刻意只读不删（回滚兜底，database.dart:1523-1526），所以存量数据里它'
           '还在。同条目的 exePath / workdir 是外部路径，作用域谓词天然跳过。'),
   PathRebasePref(
       'video_remote_subtitle',
-      PathRebaseKind.documentsRooted,
+      PathRebaseKind.contentRooted,
       PathValueShape.subtitleSourceMapJson,
       'BUG-1174 漏项（原调研清单未列出，实查补入）：远端/流媒体视频手选字幕来源 map，'
           'value 是 subtitleSource 四态编码，本地已下载态是 <documents>/video_subtitles '
@@ -732,7 +732,7 @@ final List<PathRebasePref> kPathRebasePrefs = <PathRebasePref>[
           '同型，只是落在 KV 而非列上。'),
   PathRebasePref(
       'download_save_root',
-      PathRebaseKind.documentsRooted,
+      PathRebaseKind.contentRooted,
       PathValueShape.bare,
       'BUG-1174 漏项：下载保存根。空串 = 用默认 <documents>/anime_downloads/content；'
           '用户第一次改设置时那个 documents 派生的默认值会被显式写进来。anime_downloads '
@@ -740,7 +740,7 @@ final List<PathRebasePref> kPathRebasePrefs = <PathRebasePref>[
           '旧根下 → 作用域谓词天然跳过。'),
   PathRebasePref(
       'download_save_root_history',
-      PathRebaseKind.documentsRooted,
+      PathRebaseKind.contentRooted,
       PathValueShape.jsonStringList,
       'BUG-1174 漏项：下载根历史（JSON 字符串数组），含被压栈的旧默认根；不改写 → 迁移后'
           '这些历史根下的老任务在下载页整批失认。'),

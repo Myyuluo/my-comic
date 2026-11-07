@@ -5,7 +5,7 @@ library;
 
 import 'dart:io';
 
-import 'package:fushi_engine/foundation/engine_paths.dart';
+import 'package:fushi/src/storage/app_paths.dart';
 import 'package:fushi_engine/foundation/pref_store.dart';
 import 'package:fushi_engine/tts/local/gpt_sovits_local_engine.dart';
 import 'package:fushi_engine/tts/local/irodori_local_engine.dart';
@@ -88,7 +88,7 @@ class TtsServices {
   Future<TtsAudioCache> cache() async {
     final TtsAudioCache? existing = _cache;
     if (existing != null) return existing;
-    final Directory support = await enginePaths.supportRootDirectory();
+    final Directory support = await AppPaths.stateRootDirectory();
     return _cache ??= TtsAudioCache(
       root: Directory(p.join(support.path, 'tts_cache')),
     );

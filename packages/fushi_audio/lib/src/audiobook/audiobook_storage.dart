@@ -49,7 +49,7 @@ abstract final class AudiobookStorage {
   /// 本包是 `fushi` 的上游依赖（`fushi_audio` 不依赖 `fushi`），故**无法**导入 app
   /// 层的 `AppPaths`。为让有声书持久写入随桌面「自定义数据根」走（否则新导入会落回平台
   /// Documents，与 TODO-1226 迁移白名单里的 `audiobooks` 分家），app 启动期
-  /// (`AppModel._prepareRuntimeDirectories`) 把此钩子接到 `AppPaths.documentsRootDirectory`
+  /// (`AppModel._prepareRuntimeDirectories`) 把此钩子接到 `AppPaths.contentRootDirectory`
   /// ——单一真相源、自动跟随数据根、不在本包重复 SharedPreferences 解析逻辑。
   ///
   /// 平台默认值（`getApplicationDocumentsDirectory()`）由重文件
