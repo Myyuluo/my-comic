@@ -24,6 +24,7 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 
 import 'package:fushi_engine/media/manga/mokuro_payload.dart';
@@ -52,34 +53,216 @@ const List<String> kDownloadPageExtensions = <String>[
   '.gif',
 ];
 
-/// 把一个任意的 source / manga / chapter 展示名净化成**基础**可用的 Windows
-/// 目录名。
+/// 单个目录段（source / manga / chapter）的最大长度。
 ///
-/// 票 04 只做基础净化：非法字符替换为 `_`、去掉结尾空格/点、空串退化为 `_`。
-/// 保留设备名（CON/NUL…）、大小写冲突、超长截断、同名后缀（`[扫译组]` / `(2)`）
-/// 属于票 05，这里刻意不做，免得两套规则漂移。
-String sanitizeDownloadLibrarySegment(String raw) {
+/// 远小于 NTFS 的 255：段本身再叠加 `(2)`/`[扫译组]` 后缀后仍然安全，也给
+/// 完整路径预算留出余量。
+const int kDownloadLibraryMaxSegmentLength = 96;
+
+/// Download library 章节路径的目标上限（Windows 传统 MAX_PATH 是 260）。
+const int kDownloadLibraryMaxPathLength = 240;
+
+/// 为 `<manga>/.staging/<jobId>/<page>.tmp` 预留的路径长度。
+///
+/// 下载先写 staging 再整章 rename；staging 比正式章目录多出 `.staging/` 与
+/// 32 位 jobId，manga 目录太长时 staging 页路径会先撞上 MAX_PATH。
+const int kDownloadLibraryStagingPathReserve = 56;
+
+/// 给子目录预留的最小名字预算（只用于 source/manga 的路径预算分配）。
+const int kDownloadLibraryMinChildPathBudget = 16;
+
+/// 把一个任意的 source / manga / chapter 展示名净化成可用的 Windows 目录名。
+///
+/// 规则（票 04 基础 + 票 05 边界）：
+/// - Windows 非法字符逐个替换为 `_`；
+/// - 去掉首尾空白、结尾的点与空格；
+/// - 空串（或只剩点/空格）退化为 `_`；
+/// - 保留设备名（`CON`/`NUL`/`COM1`…）前缀 `_`；
+/// - 超过 [maxLength] 时截断并追加 `~<8 位内容哈希>`，保证确定且不同全名不撞。
+///
+/// 大小写冲突、同名后缀（`[扫译组]` / `(2)`）需要看磁盘/数据库里已有什么，
+/// 由调用方用 [uniqueDownloadLibraryFolderName] 解决，不在纯净化里猜。
+String sanitizeDownloadLibrarySegment(
+  String raw, {
+  int maxLength = kDownloadLibraryMaxSegmentLength,
+}) {
   String name = safeWindowsFileName(raw).trim();
   while (name.isNotEmpty && (name.endsWith('.') || name.endsWith(' '))) {
     name = name.substring(0, name.length - 1);
   }
   if (name.isEmpty) return '_';
-  return name;
+  // 点号开头的目录会被扫描/重建忽略（`.staging` 同规则）；用户内容不能躲进去。
+  if (name.startsWith('.')) name = '_$name';
+  if (isWindowsReservedFileName(name)) name = '_$name';
+  return _truncateDownloadLibrarySegment(name, maxLength);
 }
 
+/// 截断到 [maxLength]，保留尾部 `~<8 位哈希>` 以便区分共享前缀的长名字。
+String _truncateDownloadLibrarySegment(String name, int maxLength) {
+  if (maxLength <= 0 || name.length <= maxLength) return name;
+  final String hash = sha256.convert(utf8.encode(name)).toString();
+  final String suffix = '~${hash.substring(0, 8)}';
+  if (maxLength <= suffix.length) return suffix;
+  int cut = maxLength - suffix.length;
+  // 不把 UTF-16 代理对切成两半（Windows 文件名长度按 UTF-16 计）。
+  final int last = name.codeUnitAt(cut - 1);
+  if (last >= 0xD800 && last <= 0xDBFF && cut > 1) cut -= 1;
+  final String stem = name
+      .substring(0, cut)
+      .replaceFirst(RegExp(r'[ .]+$'), '');
+  return '$stem$suffix';
+}
+
+/// 在 [parentPath] 下再放一个目录时，该目录名允许的最大长度。
+///
+/// [pathReserve] 是留给后续子路径（如 `.staging/<jobId>/<page>`）的长度。
+/// 父路径本身已经很长时返回不小于 1 的值；此时只能保证段合法，无法保证
+/// 完整路径仍在上限内（Content root 极端深的情况）。
+int downloadLibrarySegmentBudget(
+  String parentPath, {
+  int pathReserve = 0,
+}) {
+  final int available =
+      kDownloadLibraryMaxPathLength - parentPath.length - 1 - pathReserve;
+  if (available < 1) return 1;
+  return available < kDownloadLibraryMaxSegmentLength
+      ? available
+      : kDownloadLibraryMaxSegmentLength;
+}
+
+/// Source 目录段名（未处理同名冲突；冲突由调用方加后缀）。
+String downloadSourceFolderName({
+  required String downloadsRoot,
+  required String sourceName,
+}) => sanitizeDownloadLibrarySegment(
+  sourceName,
+  maxLength: downloadLibrarySegmentBudget(
+    downloadsRoot,
+    pathReserve:
+        1 +
+        kDownloadLibraryStagingPathReserve +
+        kDownloadLibraryMinChildPathBudget,
+  ),
+);
+
+/// Manga 目录段名（未处理同名冲突；冲突由调用方加后缀）。
+String downloadMangaFolderName({
+  required String sourceDirPath,
+  required String title,
+}) => sanitizeDownloadLibrarySegment(
+  title,
+  maxLength: downloadLibrarySegmentBudget(
+    sourceDirPath,
+    pathReserve: kDownloadLibraryStagingPathReserve,
+  ),
+);
+
+/// Chapter 目录段名（未处理同名冲突；冲突由调用方加后缀）。
+String downloadChapterFolderName({
+  required String mangaDirPath,
+  required String raw,
+}) => sanitizeDownloadLibrarySegment(
+  raw,
+  maxLength: downloadLibrarySegmentBudget(mangaDirPath),
+);
+
+/// `<downloadsRoot>/<source>`（不创建目录）。
+Directory downloadSourceDirectory({
+  required String downloadsRoot,
+  required String sourceName,
+  String? folderName,
+}) => Directory(
+  p.join(
+    downloadsRoot,
+    folderName ?? downloadSourceFolderName(
+      downloadsRoot: downloadsRoot,
+      sourceName: sourceName,
+    ),
+  ),
+);
+
 /// `<downloadsRoot>/<source>/<manga>`（不创建目录）。
+///
+/// [sourceFolderName] / [mangaFolderName] 允许调用方传入已经解决冲突（同名
+/// Source、同名 Manga）的目录段；不传则按净化 + 路径预算派生。
 Directory downloadMangaDirectory({
   required String downloadsRoot,
   required String sourceName,
   required String mangaTitle,
-}) =>
-    Directory(
-      p.join(
-        downloadsRoot,
-        sanitizeDownloadLibrarySegment(sourceName),
-        sanitizeDownloadLibrarySegment(mangaTitle),
+  String? sourceFolderName,
+  String? mangaFolderName,
+}) {
+  final String sourceDirPath = downloadSourceDirectory(
+    downloadsRoot: downloadsRoot,
+    sourceName: sourceName,
+    folderName: sourceFolderName,
+  ).path;
+  return Directory(
+    p.join(
+      sourceDirPath,
+      mangaFolderName ?? downloadMangaFolderName(
+        sourceDirPath: sourceDirPath,
+        title: mangaTitle,
       ),
+    ),
+  );
+}
+
+/// 稳定身份的短哈希（8 位十六进制）：同名 Source 的目录后缀等。
+String downloadLibraryShortHash(String value) =>
+    sha256.convert(utf8.encode(value)).toString().substring(0, 8);
+
+/// 在 [base] 后追加 [suffix]；超长时截断 base 并保留 `~<8 位哈希>` 与后缀。
+String fitDownloadLibrarySegmentWithSuffix({
+  required String base,
+  required String suffix,
+  int maxLength = kDownloadLibraryMaxSegmentLength,
+}) {
+  final String candidate = '$base$suffix';
+  if (maxLength <= 0 || candidate.length <= maxLength) return candidate;
+  final String hash = sha256.convert(utf8.encode(base)).toString();
+  final String tail = '~${hash.substring(0, 8)}$suffix';
+  if (maxLength <= tail.length) return candidate;
+  int cut = maxLength - tail.length;
+  if (cut > 1) {
+    final int last = base.codeUnitAt(cut - 1);
+    if (last >= 0xD800 && last <= 0xDBFF) cut -= 1;
+  }
+  final String stem = base
+      .substring(0, cut)
+      .replaceFirst(RegExp(r'[ .]+$'), '');
+  return '$stem$tail';
+}
+
+/// 取第一个未被占用的目录名。
+///
+/// 首选 [base]；被占时若有 [qualifier]（扫译组）先试 `base [qualifier]`，
+/// 再退到 `base [qualifier] (2)…` / `base (2)…`。比较是否占用由 [isTaken]
+/// 决定（调用方负责大小写不敏感）。
+Future<String> uniqueDownloadLibraryFolderName({
+  required String base,
+  String? qualifier,
+  required Future<bool> Function(String candidate) isTaken,
+  int maxLength = kDownloadLibraryMaxSegmentLength,
+}) async {
+  if (!await isTaken(base)) return base;
+  final String preferred = qualifier == null || qualifier.isEmpty
+      ? base
+      : fitDownloadLibrarySegmentWithSuffix(
+          base: base,
+          suffix: ' [$qualifier]',
+          maxLength: maxLength,
+        );
+  if (preferred != base && !await isTaken(preferred)) return preferred;
+  for (int index = 2; ; index++) {
+    final String candidate = fitDownloadLibrarySegmentWithSuffix(
+      base: preferred,
+      suffix: ' ($index)',
+      maxLength: maxLength,
     );
+    if (!await isTaken(candidate)) return candidate;
+  }
+}
 
 /// `<mangaDir>/.staging/<jobId>`（不创建目录）。
 Directory downloadStagingDirectory(String mangaDir, String jobId) =>

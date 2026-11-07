@@ -396,7 +396,8 @@ void main() {
     final OnlineMangaLibraryEntry entry = OnlineMangaLibraryEntry(
       runtime: _entry().runtime,
       extensionPackage: _entry().extensionPackage,
-      sourceId: _entry().sourceId,
+      // 独立 Source：setUp 里已入库的 'Fake' 源目录按「同源复用」不会改名。
+      sourceId: '2',
       series: const OnlineMangaSeries(
         key: '/series/bad-names',
         title: 'Fixture: Series?',
@@ -429,6 +430,361 @@ void main() {
       '/chapter/1',
     );
     expect(mapping?.folderName, 'Chapter_ 1_');
+    downloads.dispose();
+  });
+
+  OnlineMangaLibraryEntry entryWith({
+    String sourceId = '1',
+    String seriesKey = '/series/fixture',
+    String title = 'Fixture series',
+    required List<OnlineMangaChapter> chapters,
+  }) =>
+      OnlineMangaLibraryEntry(
+        runtime: OnlineMangaRuntimeKind.mihon,
+        extensionPackage: 'org.example.fixture',
+        sourceId: sourceId,
+        series: OnlineMangaSeries(
+          key: seriesKey,
+          title: title,
+          raw: <String, Object?>{'url': seriesKey},
+        ),
+        chapters: chapters,
+      );
+
+  test('同章不同扫译组：第二个落 [扫译组] 后缀目录，两个都能打开', () async {
+    const OnlineMangaChapter groupA = OnlineMangaChapter(
+      key: '/chapter/a',
+      name: 'Chapter 1',
+      number: 1,
+      scanlator: 'Group A',
+      raw: <String, Object?>{'url': '/chapter/a'},
+    );
+    const OnlineMangaChapter groupB = OnlineMangaChapter(
+      key: '/chapter/b',
+      name: 'Chapter 1',
+      number: 1,
+      scanlator: 'Group B',
+      raw: <String, Object?>{'url': '/chapter/b'},
+    );
+    final OnlineMangaLibraryEntry entry = entryWith(
+      chapters: const <OnlineMangaChapter>[groupA, groupB],
+    );
+    final EpubBookRow row = await library.add(entry);
+    final MangaDownloadService downloads = build();
+    await downloads.enqueueChapter(
+      entry: entry,
+      chapter: groupA,
+      autoOcr: false,
+    );
+    await downloads.enqueueChapter(
+      entry: entry,
+      chapter: groupB,
+      autoOcr: false,
+    );
+    await downloads.start();
+    await downloads.whenIdle;
+
+    final MangaChapterDirRow? a = await db.getMangaChapterDir(
+      row.bookKey,
+      groupA.key,
+    );
+    final MangaChapterDirRow? b = await db.getMangaChapterDir(
+      row.bookKey,
+      groupB.key,
+    );
+    expect(a?.folderName, 'Chapter 1');
+    expect(
+      b?.folderName,
+      'Chapter 1 [Group B]',
+      reason: '同名章用扫译组后缀区分，不能覆盖第一组',
+    );
+    for (final (String key, String folder) in <(String, String)>[
+      (groupA.key, a!.folderName),
+      (groupB.key, b!.folderName),
+    ]) {
+      final Directory dir = downloadChapterDirectory(
+        row.extractDir,
+        folder,
+      );
+      final MangaPagesManifest? manifest = await readPagesManifest(dir);
+      expect(manifest?.chapterKey, key, reason: '目录内容必须属于对应章节');
+      expect(manifest?.payload.images, isNotEmpty);
+      expect(
+        await DownloadLibraryIndex(db).isChapterDownloaded(
+          bookKey: row.bookKey,
+          chapterKey: key,
+        ),
+        isTrue,
+      );
+    }
+    downloads.dispose();
+  });
+
+  test('重复章节名且无扫译组：确定 (2) 后缀', () async {
+    const OnlineMangaChapter first = OnlineMangaChapter(
+      key: '/chapter/a',
+      name: 'Chapter 1',
+      number: 1,
+      raw: <String, Object?>{'url': '/chapter/a'},
+    );
+    const OnlineMangaChapter second = OnlineMangaChapter(
+      key: '/chapter/b',
+      name: 'Chapter 1',
+      number: 1,
+      raw: <String, Object?>{'url': '/chapter/b'},
+    );
+    final OnlineMangaLibraryEntry entry = entryWith(
+      chapters: const <OnlineMangaChapter>[first, second],
+    );
+    final EpubBookRow row = await library.add(entry);
+    final MangaDownloadService downloads = build();
+    await downloads.enqueueChapters(
+      entry: entry,
+      chapters: const <OnlineMangaChapter>[first, second],
+      autoOcr: false,
+    );
+    await downloads.start();
+    await downloads.whenIdle;
+
+    expect(
+      (await db.getMangaChapterDir(row.bookKey, first.key))?.folderName,
+      'Chapter 1',
+    );
+    expect(
+      (await db.getMangaChapterDir(row.bookKey, second.key))?.folderName,
+      'Chapter 1 (2)',
+    );
+    downloads.dispose();
+  });
+
+  test('已有章目录属于另一章（大小写不同）：不认领、不覆盖，改用 (2)', () async {
+    const OnlineMangaChapter other = OnlineMangaChapter(
+      key: '/chapter/other',
+      name: 'Chapter 1',
+      number: 1,
+      raw: <String, Object?>{'url': '/chapter/other'},
+    );
+    final MangaPagesManifest foreign = MangaPagesManifest(
+      sourceRuntime: 'mihon',
+      sourceId: '1',
+      sourceName: 'Fake',
+      extensionPackage: 'org.example.fixture',
+      mangaKey: '/series/fixture',
+      mangaTitle: 'Fixture series',
+      chapterKey: other.key,
+      chapterName: other.name,
+      payload: const MokuroPayload(
+        images: <MokuroImage>[
+          MokuroImage(
+            url: '001.png',
+            size: MokuroSize(100, 150),
+            blocks: <MokuroBlock>[],
+          ),
+        ],
+      ),
+      downloadedAt: DateTime.utc(2026, 11, 7),
+    );
+    final Directory foreignDir = downloadChapterDirectory(
+      bookDir,
+      'chapter 1',
+    );
+    await foreignDir.create(recursive: true);
+    await File(
+      p.join(foreignDir.path, '001.png'),
+    ).writeAsBytes(_FakeAdapter.pngOf(0));
+    await writePagesManifestAtomically(foreignDir, foreign);
+    final List<int> before = await File(
+      p.join(foreignDir.path, '001.png'),
+    ).readAsBytes();
+
+    final MangaDownloadService downloads = build();
+    await downloads.enqueueChapter(
+      entry: _entry(),
+      chapter: _chapters.last,
+      autoOcr: false,
+    );
+    await downloads.start();
+    await downloads.whenIdle;
+
+    expect(
+      (await db.getMangaChapterDir(bookKey, '/chapter/1'))?.folderName,
+      'Chapter 1 (2)',
+      reason: '大小写不同且属于另一章：不得认领为本章内容',
+    );
+    expect(
+      (await readPagesManifest(foreignDir))?.chapterKey,
+      other.key,
+      reason: '已有目录的 pages.json 不得被改写',
+    );
+    expect(
+      await File(p.join(foreignDir.path, '001.png')).readAsBytes(),
+      before,
+      reason: '已有页图不得被覆盖',
+    );
+    expect(
+      await DownloadLibraryIndex(db).isChapterDownloaded(
+        bookKey: bookKey,
+        chapterKey: '/chapter/1',
+      ),
+      isTrue,
+    );
+    downloads.dispose();
+  });
+
+  test('不同 Source 的同名 Manga 下载互不覆盖', () async {
+    adapter.sourceLabelText = 'Shared';
+    const OnlineMangaChapter chapter = OnlineMangaChapter(
+      key: '/chapter/1',
+      name: 'Chapter 1',
+      number: 1,
+      raw: <String, Object?>{'url': '/chapter/1'},
+    );
+    final OnlineMangaLibraryEntry firstEntry = entryWith(
+      sourceId: '9',
+      seriesKey: '/series/same',
+      title: 'Same title',
+      chapters: const <OnlineMangaChapter>[chapter],
+    );
+    final OnlineMangaLibraryEntry secondEntry = entryWith(
+      sourceId: '10',
+      seriesKey: '/series/same',
+      title: 'Same title',
+      chapters: const <OnlineMangaChapter>[chapter],
+    );
+    final EpubBookRow firstRow = await library.add(firstEntry);
+    final EpubBookRow secondRow = await library.add(secondEntry);
+    expect(firstRow.extractDir, isNot(secondRow.extractDir));
+
+    final MangaDownloadService downloads = build();
+    await downloads.enqueueChapter(
+      entry: firstEntry,
+      chapter: chapter,
+      autoOcr: false,
+    );
+    await downloads.enqueueChapter(
+      entry: secondEntry,
+      chapter: chapter,
+      autoOcr: false,
+    );
+    await downloads.start();
+    await downloads.whenIdle;
+
+    final DownloadLibraryIndex index = DownloadLibraryIndex(db);
+    for (final (EpubBookRow row, String sourceId) in <(EpubBookRow, String)>[
+      (firstRow, '9'),
+      (secondRow, '10'),
+    ]) {
+      final MangaChapterDirRow? mapping = await db.getMangaChapterDir(
+        row.bookKey,
+        chapter.key,
+      );
+      expect(mapping, isNotNull);
+      final Directory dir = downloadChapterDirectory(
+        row.extractDir,
+        mapping!.folderName,
+      );
+      final MangaPagesManifest? manifest = await readPagesManifest(dir);
+      expect(manifest?.sourceId, sourceId);
+      expect(
+        await index.isChapterDownloaded(
+          bookKey: row.bookKey,
+          chapterKey: chapter.key,
+        ),
+        isTrue,
+      );
+    }
+    expect(
+      firstRow.extractDir,
+      isNot(secondRow.extractDir),
+      reason: '同名 Source + 同名 Manga 必须落在不同目录',
+    );
+    downloads.dispose();
+  });
+
+  test('保留名与超长章节名：净化、路径受限、下载仍完成', () async {
+    adapter.sourceLabelText = 'CON';
+    const OnlineMangaChapter reserved = OnlineMangaChapter(
+      key: '/chapter/con',
+      name: 'CON',
+      number: 1,
+      raw: <String, Object?>{'url': '/chapter/con'},
+    );
+    final OnlineMangaLibraryEntry reservedEntry = entryWith(
+      sourceId: '77',
+      seriesKey: '/series/con',
+      title: 'NUL. ',
+      chapters: const <OnlineMangaChapter>[reserved],
+    );
+    final EpubBookRow reservedRow = await library.add(reservedEntry);
+
+    final String longName = 'L' * 300;
+    final OnlineMangaChapter longChapter = OnlineMangaChapter(
+      key: '/chapter/long',
+      name: longName,
+      number: 1,
+      raw: const <String, Object?>{'url': '/chapter/long'},
+    );
+    final OnlineMangaLibraryEntry longEntry = entryWith(
+      sourceId: '78',
+      seriesKey: '/series/long',
+      title: 'M' * 300,
+      chapters: <OnlineMangaChapter>[longChapter],
+    );
+    final EpubBookRow longRow = await library.add(longEntry);
+
+    final MangaDownloadService downloads = build();
+    await downloads.enqueueChapter(
+      entry: reservedEntry,
+      chapter: reserved,
+      autoOcr: false,
+    );
+    await downloads.enqueueChapter(
+      entry: longEntry,
+      chapter: longChapter,
+      autoOcr: false,
+    );
+    await downloads.start();
+    await downloads.whenIdle;
+
+    expect(
+      (await db.getMangaChapterDir(reservedRow.bookKey, reserved.key))
+          ?.folderName,
+      '_CON',
+    );
+    expect(p.basename(reservedRow.extractDir), '_NUL');
+    expect(p.basename(p.dirname(reservedRow.extractDir)), '_CON');
+
+    final MangaChapterDirRow? longMapping = await db.getMangaChapterDir(
+      longRow.bookKey,
+      longChapter.key,
+    );
+    expect(longMapping, isNotNull);
+    expect(
+      longRow.extractDir.length,
+      lessThanOrEqualTo(
+        kDownloadLibraryMaxPathLength - kDownloadLibraryStagingPathReserve,
+      ),
+    );
+    final String longChapterPath = downloadChapterDirectory(
+      longRow.extractDir,
+      longMapping!.folderName,
+    ).path;
+    expect(
+      longChapterPath.length,
+      lessThanOrEqualTo(kDownloadLibraryMaxPathLength),
+    );
+    expect(
+      await readPagesManifest(Directory(longChapterPath)),
+      isNotNull,
+      reason: '超长名称也要能正常下载完成',
+    );
+    expect(
+      await DownloadLibraryIndex(db).isChapterDownloaded(
+        bookKey: longRow.bookKey,
+        chapterKey: longChapter.key,
+      ),
+      isTrue,
+    );
     downloads.dispose();
   });
 
