@@ -405,12 +405,16 @@ class SettingsNavigationItem extends SettingsItem {
   final bool showIcon;
 }
 
-/// 只读状态行：图标 + 标题 + 状态文本 + 可选一个行尾动作按钮。
+/// 只读状态行：图标 + 标题 + 状态文本 + 可选的行尾动作按钮（至多两个）。
 ///
 /// 存在的理由：设置页里「当前账号 / 服务在跑在哪个端口 / 此项已挪到别处」这类
 /// 指路与状态行此前只能用 [SettingsCustomItem] 手拼 `AdaptiveSettingsRow`——四处
 /// 各写一份、且默认进不了搜索。收成一等 item 后渲染、搜索、焦点遍历都走框架。
 /// 状态文本随运行期变化时用 [subtitleBuilder]；无动作时整行不可点。
+///
+/// 2026-11-08（ticket 03）：存储位置行需要并排的「变更文件夹」+「打开文件夹」两个
+/// 动作。声明了 [secondaryActionLabel] 时行本体不再响应点击（两个动作没有唯一的
+/// 「点这一行」语义），只有两个按钮可点。
 class SettingsStatusItem extends SettingsItem {
   const SettingsStatusItem({
     required super.id,
@@ -425,9 +429,15 @@ class SettingsStatusItem extends SettingsItem {
     this.actionLabel,
     this.onAction,
     this.actionVisible,
+    this.secondaryActionLabel,
+    this.secondaryOnAction,
   }) : assert(
          (actionLabel == null) == (onAction == null),
          'actionLabel 与 onAction 必须同时给或同时不给',
+       ),
+       assert(
+         (secondaryActionLabel == null) == (secondaryOnAction == null),
+         'secondaryActionLabel 与 secondaryOnAction 必须同时给或同时不给',
        ),
        assert(
          actionVisible == null || onAction != null,
@@ -442,6 +452,12 @@ class SettingsStatusItem extends SettingsItem {
   /// null = 有动作就恒显示。用于「只在某状态下才有意义」的动作（如空 key 才给
   /// 「生成密钥」）。
   final SettingsVisibility? actionVisible;
+
+  /// 第二个行尾动作按钮（排在 [actionLabel] 之后）；null = 只有一个动作。
+  ///
+  /// 出现第二个动作时整行不再挂行级 onTap——见类注释。
+  final String? secondaryActionLabel;
+  final SettingsItemAction? secondaryOnAction;
 
   /// 当前上下文下实际生效的动作；[actionVisible] 判否时为 null。
   SettingsItemAction? resolveAction(SettingsContext context) =>

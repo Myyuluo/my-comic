@@ -30,8 +30,8 @@ void main() {
     LocaleSettings.setLocale(AppLocale.en);
   });
 
-  SettingsSection rebuildSection() => buildDownloadsDestination().sections
-      .singleWhere(
+  SettingsSection rebuildSection() =>
+      buildDownloadsDestination().sections.singleWhere(
         (SettingsSection section) => section.id == 'storage.rebuild.section',
       );
 
@@ -100,8 +100,7 @@ void main() {
 
     expect(section.isVisible(settings), isTrue);
     expect(section.title, '下载索引');
-    final SettingsStatusItem item =
-        section.items.single as SettingsStatusItem;
+    final SettingsStatusItem item = section.items.single as SettingsStatusItem;
     expect(item.id, 'storage.rebuild_index');
     expect(item.title, '重建下载索引');
     expect(item.actionLabel, '重建');
@@ -110,7 +109,11 @@ void main() {
       buildDownloadsDestination().sections.map(
         (SettingsSection section) => section.id,
       ),
-      <String>['storage.location.section', 'storage.rebuild.section'],
+      <String>[
+        'storage.location.section',
+        'system.section.backup',
+        'storage.rebuild.section',
+      ],
     );
   });
 
@@ -215,7 +218,9 @@ void main() {
     pending.complete(report(cancelled: true));
     await tester.pumpAndSettle();
     expect(
-      find.text('已取消，以下是已完成的部分：\n\n${expectedReportText(report(cancelled: true))}'),
+      find.text(
+        '已取消，以下是已完成的部分：\n\n${expectedReportText(report(cancelled: true))}',
+      ),
       findsOneWidget,
     );
     await tester.tap(find.text(t.dialog_done));
