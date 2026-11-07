@@ -7,10 +7,12 @@ import 'package:fushi/src/settings/settings_schema_downloads.dart';
 
 /// 设置里的「下载」分类已更名为「存储与下载」：名称来自专用字符串资源，不写死
 /// 在 schema 里。Ticket 08 起内容为存储位置小节（Content root / Program state
-/// root / 三个文件夹入口），不新增跳转到下载页的入口；副标题保留原有 summary。
+/// root），不新增跳转到下载页的入口；副标题保留原有 summary。
 ///
 /// 2026-11-08：「导入本地漫画」段随批量导入退役删除；本地漫画改由图源列表里的
-/// 「本地图源」承担。
+/// 「本地图源」承担。Ticket 03：三个文件夹入口移除，备份分组搬入本页——最终
+/// 顺序为 数据存储位置 → 备份 → 下载索引（Ticket 08 的「下载」段将插在存储与
+/// 备份之间）。
 void main() {
   AppLocale currentLocale() => LocaleSettings.currentLocale;
 
@@ -38,7 +40,7 @@ void main() {
     );
   });
 
-  testWidgets('分类内容为存储位置 + 重建下载索引小节，没有导入本地漫画，'
+  testWidgets('分类内容为存储位置 + 备份 + 重建下载索引小节，没有导入本地漫画，'
       '没有打开下载页的入口', (WidgetTester tester) async {
     final AppLocale original = currentLocale();
     addTearDown(() => LocaleSettings.setLocale(original));
@@ -52,8 +54,12 @@ void main() {
     );
     expect(
       destination.sections.map((SettingsSection section) => section.id),
-      <String?>['storage.location.section', 'storage.rebuild.section'],
-      reason: '批量导入退役后只剩存储位置 + 重建下载索引小节',
+      <String?>[
+        'storage.location.section',
+        'system.section.backup',
+        'storage.rebuild.section',
+      ],
+      reason: '批量导入退役 + 备份分组搬入后：存储位置 → 备份 → 下载索引',
     );
     expect(
       destination.sections.expand((SettingsSection section) => section.items),
@@ -75,13 +81,12 @@ void main() {
     );
     expect(
       destination.sections.first.items.map((SettingsItem item) => item.id),
-      <String>[
-        'storage.content_root',
-        'storage.program_state_root',
-        'storage.open_downloads',
-        'storage.open_local_comic',
-        'storage.open_autobackup',
-      ],
+      <String>['storage.content_root', 'storage.program_state_root'],
+    );
+    expect(
+      destination.sections[1].items.map((SettingsItem item) => item.id),
+      <String>['system.import_mihon_backup', 'system.export_mihon_backup'],
+      reason: '备份分组整组搬入「存储与下载」',
     );
     expect(
       destination.sections.last.items.map((SettingsItem item) => item.id),

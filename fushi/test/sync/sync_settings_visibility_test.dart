@@ -377,18 +377,26 @@ void main() {
 
   group('buildContentRootsSection placement', () {
     test('the storage-location section lives in storage & downloads', () {
-      // Ticket 08：存储位置（Content root / Program state root / 三个文件夹入口）
-      // 是设备级存储配置，与备份无关；「存储与下载」页承载它，SRS 备份页复用的
-      // 「存储」destination 共用同一小节。
+      // Ticket 08：存储位置（Content root / Program state root）是设备级存储配置，
+      // 与备份无关；「存储与下载」页承载它，SRS 备份页复用的「存储」destination
+      // 共用同一小节。Ticket 03：三个子文件夹入口已移除，SRS 页同步消失。
       final SettingsSection section = buildContentRootsSection();
       expect(section.visible, isNotNull, reason: '存储位置小节必须 desktop-only 门控');
       expect(section.items.map((SettingsItem i) => i.id), <String>[
         'storage.content_root',
         'storage.program_state_root',
+      ]);
+      for (final String removed in <String>[
         'storage.open_downloads',
         'storage.open_local_comic',
         'storage.open_autobackup',
-      ]);
+      ]) {
+        expect(
+          section.items.where((SettingsItem i) => i.id == removed),
+          isEmpty,
+          reason: '$removed 必须从共享 Content root 段移除（SRS 页同步消失）',
+        );
+      }
       final SettingsDestination storage = buildStorageDestination();
       expect(
         storage.sections
