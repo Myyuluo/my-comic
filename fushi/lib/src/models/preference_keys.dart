@@ -258,6 +258,9 @@ const Set<String> kKnownPreferenceKeys = <String>{
   'local_audio_db_display_name',
   'local_audio_db_path',
   'local_audio_dbs',
+  // bool（默认 true）：「本地图源」伪源是否启用。只控制图源列表里这一行的可
+  // 进入状态，不影响磁盘扫描或已登记作品。见 PreferencesRepository.localSourceEnabled。
+  'local_source_enabled',
   'lookup.global_context_capture',
   'lookup.ime_language',
   // bool（默认 false）：已删除的「查词时让 AI 按句意挑词条」开关（2026-10-09

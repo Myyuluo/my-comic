@@ -119,7 +119,7 @@ void main() {
       updatedAt: 1,
     );
     expect(
-      (await db.getMangaChapterDir('book-1', 'ch-1'))!.containerKind,
+      (await db.getMangaChapterDir('book-1', 'ch-1'))!.containerKindEnum,
       MangaChapterContainerKind.folder,
       reason: '不传容器类型时的默认值必须保持既有 folder 语义',
     );
@@ -135,7 +135,7 @@ void main() {
       'book-1',
       'ch-2',
     ))!;
-    expect(archive.containerKind, MangaChapterContainerKind.archive);
+    expect(archive.containerKindEnum, MangaChapterContainerKind.archive);
     expect(archive.folderName, 'Chapter 2.cbz');
 
     // 同键改类型 / 改名 = 更新（重建 re-link 与切换下载格式后可能发生）。
@@ -153,7 +153,7 @@ void main() {
 
     final Map<String, MangaChapterDirRow> rows = await db
         .getMangaChapterDirRowsForBook('book-1');
-    expect(rows['ch-1']!.containerKind, MangaChapterContainerKind.folder);
-    expect(rows['ch-2']!.containerKind, MangaChapterContainerKind.archive);
+    expect(rows['ch-1']!.containerKindEnum, MangaChapterContainerKind.folder);
+    expect(rows['ch-2']!.containerKindEnum, MangaChapterContainerKind.archive);
   });
 }

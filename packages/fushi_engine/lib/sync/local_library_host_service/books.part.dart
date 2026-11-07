@@ -34,7 +34,7 @@ mixin _LocalLibraryHostBooks on _LocalLibraryHostBase, _LocalLibraryHostShared {
           .getMangaChapterDirRowsForBook(r.bookKey);
       if (mappings.values.any(
         (MangaChapterDirRow row) =>
-            row.containerKind == MangaChapterContainerKind.folder,
+            row.containerKindEnum == MangaChapterContainerKind.folder,
       )) {
         chapteredMangaKeys.add(r.bookKey);
       }

@@ -16,6 +16,7 @@ import 'package:fushi/src/media/manga/download/manga_download_service.dart';
 import 'package:fushi/src/media/manga/library/manga_chapter_list.dart';
 import 'package:fushi/src/media/manga/library/manga_download_planner.dart';
 import 'package:fushi/src/media/manga/library/manga_resume_point.dart';
+import 'package:fushi/src/media/manga/manga_cover_placeholder.dart';
 import 'package:fushi/src/media/manga/manga_global_search_page.dart';
 import 'package:fushi/src/media/manga/mihon/mihon_enabled_sources.dart';
 import 'package:fushi/src/media/manga/mihon/mihon_manager.dart';
@@ -112,7 +113,7 @@ class SourceMangaSeriesTarget extends MangaSeriesTarget {
   final Widget Function(BuildContext context)? remoteCoverBuilder;
 }
 
-/// 还没入库的本地源作品，来自「本地图源」的扫描网格（[LocalSourceManga]）。
+/// 还没入库的本地图源作品，来自「本地图源」的扫描网格（[LocalSourceManga]）。
 ///
 /// 与 [SourceMangaSeriesTarget] 的差别：没有在线运行时，封面与章节描述都在
 /// 扫描结果里，页面不联网、也不要求数据库行。显式「加入书架」才调用单部作品
@@ -266,14 +267,14 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
   /// 本地卷（无在线描述符）。
   bool get _isLocal => _entry == null && _row != null;
 
-  /// `localcomic` 里原地读取的本地源作品（有章节表）：已在书架的条目，或刚从
+  /// `localcomic` 里原地读取的本地图源作品（有章节表）：已在书架的条目，或刚从
   /// 「本地图源」网格打开、还没登记的扫描结果。
   bool get _isLocalSource => _localSource != null || _scannedLocal != null;
 
-  /// 未入库的本地源扫描结果（本地图源网格 → 作品页，尚未登记）。
+  /// 未入库的本地图源扫描结果（本地图源网格 → 作品页，尚未登记）。
   bool get _isScannedLocal => _scannedLocal != null;
 
-  /// 本地源下一章：优先第一个未读完的章，全读完则停在最后一章。
+  /// 本地图源下一章：优先第一个未读完的章，全读完则停在最后一章。
   int get _localResumeIndex {
     if (_localChapters.isEmpty) return -1;
     final int unread = _localChapters.indexWhere(
@@ -283,7 +284,7 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     return unread >= 0 ? unread : _localChapters.length - 1;
   }
 
-  /// 借给共享 [MangaChapterList] 的展示条目。只在本地源上使用，不落库、
+  /// 借给共享 [MangaChapterList] 的展示条目。只在本地图源上使用，不落库、
   /// 不参与在线 service 分派。
   OnlineMangaLibraryEntry? get _localDisplayEntry {
     if (_localChapters.isEmpty) return null;
@@ -2099,7 +2100,7 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
             'MangaSeriesPage.coverDecode',
             '$resolved: $error',
           );
-          return _coverPlaceholder(context);
+          return const MangaCoverPlaceholder();
         },
       );
     }
@@ -2108,23 +2109,7 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
       final Widget Function(BuildContext)? builder = target.remoteCoverBuilder;
       if (builder != null) return builder(context);
     }
-    return _coverPlaceholder(context);
-  }
-
-  /// 无封面 / 封面解码失败的占位块：跟随主题的中性底（深浅色都可读），
-  /// 不再是写死的深灰 #303030（浅色主题下是突兀的黑块、图标也看不清）。
-  Widget _coverPlaceholder(BuildContext context) {
-    final ColorScheme cs = Theme.of(context).colorScheme;
-    return ColoredBox(
-      color: cs.surfaceContainerHighest,
-      child: Center(
-        child: FushiIcon(
-          FushiIcons.manga,
-          size: 40,
-          color: cs.onSurfaceVariant,
-        ),
-      ),
-    );
+    return const MangaCoverPlaceholder();
   }
 
   /// 在飞下载（排队 / 执行中）的整体页进度：主按钮下挂波浪条。没有在飞任务 =
@@ -2149,7 +2134,22 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
 
   /// 主按钮：本地卷「继续阅读」；在线作品「继续阅读 · 第 N 话」（未入库点了会
   /// 先入库再读，见 [_openChapterAt]）。
-  Widget _buildPrimaryAction() {
+  ///
+  /// 未入库的本地扫描结果还不是可续读的书架条目：动作区只放「加入书架」，
+  /// 不渲染一个永远禁用的「继续阅读」死控件（见 [_buildSecondaryActions] 的
+  /// 同款短路）。按钮沿用原有 tonal 次按钮视觉（ADR 0008：不新增样式）。
+  Widget? _buildPrimaryAction() {
+    final LocalSourceManga? scanned = _scannedLocal;
+    if (scanned != null) {
+      return MediaDetailSecondaryButton(
+        buttonKey: const ValueKey<String>('manga_series_add_to_bookshelf'),
+        icon: FushiIcons.libraryAdd,
+        label: t.mihon_add_to_bookshelf,
+        onPressed: _busy
+            ? null
+            : () => unawaited(_addScannedLocalToLibrary(scanned)),
+      );
+    }
     if (_isLocal) {
       if (_isLocalSource) {
         final int resumeIndex = _localResumeIndex;
@@ -2191,6 +2191,8 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
   /// 次按钮（tonal）：加入 ↔ 移出书架（同一位置，在库时 selected）、下载全部；
   /// 订阅（书签）与登录是图标钮。本地卷只有「OCR 设置」。
   List<Widget> _buildSecondaryActions() {
+    // 未入库的本地扫描结果只有「加入书架」，且已作为主按钮渲染（唯一动作）。
+    if (_scannedLocal != null) return <Widget>[];
     if (_isLocal) {
       // my-comic：端上 OCR 已移除，本地卷详情页不再提供识别 / OCR 设置入口。
       // Local source 作品必须能「移出书架」且不删文件（ADR 0013）；受管本地卷

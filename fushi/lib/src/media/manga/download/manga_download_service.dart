@@ -27,6 +27,7 @@ import 'package:crypto/crypto.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:path/path.dart' as p;
 
+import 'package:fushi/src/media/manga/download/chapter_container_on_disk.dart';
 import 'package:fushi/src/media/manga/download/download_library_index.dart';
 import 'package:fushi/src/media/manga/library/online_manga_chapter_updates.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
@@ -105,26 +106,8 @@ class _ChapterTarget {
   final String containerName;
 
   /// [MangaChapterContainerKind]（folder / archive）。
-  final String containerKind;
+  final MangaChapterContainerKind containerKind;
   final bool adoptedComplete;
-}
-
-/// manga 目录下已有的章节容器（文件夹或 `.cbz` 文件）。
-class _ExistingChapterContainer {
-  const _ExistingChapterContainer.folder(Directory this.directory)
-    : archiveFile = null;
-
-  const _ExistingChapterContainer.archive(File this.archiveFile)
-    : directory = null;
-
-  final Directory? directory;
-  final File? archiveFile;
-
-  String get name => p.basename((directory ?? archiveFile)!.path);
-
-  String get kind => directory != null
-      ? MangaChapterContainerKind.folder
-      : MangaChapterContainerKind.archive;
 }
 
 class MangaDownloadService {
@@ -765,7 +748,7 @@ class MangaDownloadService {
     required String mangaDir,
     required bool saveAsCbz,
   }) async {
-    final Map<String, _ExistingChapterContainer> existing =
+    final Map<String, ChapterContainerOnDisk> existing =
         await _existingChapterContainers(mangaDir);
     final MangaChapterDirRow? mapping = await _database.getMangaChapterDir(
       job.bookKey,
@@ -774,12 +757,12 @@ class MangaDownloadService {
     final String? qualifier = _chapterScanlatorQualifier(chapter);
 
     if (mapping != null && mapping.folderName.isNotEmpty) {
-      final _ExistingChapterContainer? mapped =
+      final ChapterContainerOnDisk? mapped =
           existing[mapping.folderName.toLowerCase()];
-      if (mapped != null && mapped.kind == mapping.containerKind) {
+      if (mapped != null && mapped.kind == mapping.containerKindEnum) {
         if (await _chapterContainerAdoptable(mapped, entry, chapter)) {
           return _ChapterTarget(
-            containerName: mapped.name,
+            containerName: mapped.containerName,
             containerKind: mapped.kind,
             adoptedComplete: true,
           );
@@ -791,10 +774,10 @@ class MangaDownloadService {
 
     final List<String> names = existing.keys.toList()..sort();
     for (final String name in names) {
-      final _ExistingChapterContainer container = existing[name]!;
+      final ChapterContainerOnDisk container = existing[name]!;
       if (await _chapterContainerAdoptable(container, entry, chapter)) {
         return _ChapterTarget(
-          containerName: container.name,
+          containerName: container.containerName,
           containerKind: container.kind,
           adoptedComplete: true,
         );
@@ -802,24 +785,15 @@ class MangaDownloadService {
     }
 
     if (saveAsCbz) {
-      final int budget = downloadLibrarySegmentBudget(mangaDir);
-      final int baseBudget = budget > kDownloadArchiveExtension.length
-          ? budget - kDownloadArchiveExtension.length
-          : 1;
-      final String base = sanitizeDownloadLibrarySegment(
-        _chapterRawName(chapter),
-        maxLength: baseBudget,
-      );
-      final String unique = await uniqueDownloadLibraryFolderName(
-        base: base,
+      // `.cbz` 文件名与文件夹一样参与同名冲突判定。
+      final String containerName = await uniqueDownloadChapterArchiveName(
+        mangaDir: mangaDir,
+        base: _chapterRawName(chapter),
         qualifier: qualifier,
-        // `.cbz` 文件名与文件夹一样参与同名冲突判定。
-        isTaken: (String candidate) =>
-            _chapterNameTaken(mangaDir, '$candidate$kDownloadArchiveExtension'),
-        maxLength: baseBudget,
+        isTaken: (String name) => _chapterNameTaken(mangaDir, name),
       );
       return _ChapterTarget(
-        containerName: '$unique$kDownloadArchiveExtension',
+        containerName: containerName,
         containerKind: MangaChapterContainerKind.archive,
         adoptedComplete: false,
       );
@@ -857,23 +831,27 @@ class MangaDownloadService {
 
   /// manga 目录下已有的章容器：文件夹（任意名）与 `.cbz` 文件；忽略点号目录
   /// （`.staging`）与其他文件。键是小写名（大小写不敏感契约）。
-  static Future<Map<String, _ExistingChapterContainer>>
+  static Future<Map<String, ChapterContainerOnDisk>>
   _existingChapterContainers(String mangaDir) async {
     final Directory parent = Directory(mangaDir);
-    if (!await parent.exists()) return <String, _ExistingChapterContainer>{};
-    final Map<String, _ExistingChapterContainer> byLowerName =
-        <String, _ExistingChapterContainer>{};
+    if (!await parent.exists()) return <String, ChapterContainerOnDisk>{};
+    final Map<String, ChapterContainerOnDisk> byLowerName =
+        <String, ChapterContainerOnDisk>{};
     await for (final FileSystemEntity entity in parent.list(
       followLinks: false,
     )) {
       final String name = p.basename(entity.path);
       if (name.startsWith('.')) continue;
       if (entity is Directory) {
-        byLowerName[name.toLowerCase()] =
-            _ExistingChapterContainer.folder(entity);
+        byLowerName[name.toLowerCase()] = ChapterContainerOnDisk.folder(
+          containerName: name,
+          directory: entity,
+        );
       } else if (entity is File && isDownloadChapterArchiveName(name)) {
-        byLowerName[name.toLowerCase()] =
-            _ExistingChapterContainer.archive(entity);
+        byLowerName[name.toLowerCase()] = ChapterContainerOnDisk.archive(
+          containerName: name,
+          archiveFile: entity,
+        );
       }
     }
     return byLowerName;
@@ -897,7 +875,7 @@ class MangaDownloadService {
 
   /// 容器里的 `pages.json` 是否就是这一章（Source/Manga/Chapter 全匹配）且完整。
   static Future<bool> _chapterContainerAdoptable(
-    _ExistingChapterContainer container,
+    ChapterContainerOnDisk container,
     OnlineMangaLibraryEntry entry,
     OnlineMangaChapter chapter,
   ) async {
@@ -972,10 +950,6 @@ class MangaDownloadService {
     required _CancelToken token,
     String? qualifier,
   }) async {
-    final int budget = downloadLibrarySegmentBudget(mangaDir);
-    final int baseBudget = budget > kDownloadArchiveExtension.length
-        ? budget - kDownloadArchiveExtension.length
-        : 1;
     final String desiredBase =
         isDownloadChapterArchiveName(desiredContainerName)
         ? desiredContainerName.substring(
@@ -984,14 +958,12 @@ class MangaDownloadService {
           )
         : desiredContainerName;
     while (true) {
-      final String candidateBase = await uniqueDownloadLibraryFolderName(
+      final String candidateName = await uniqueDownloadChapterArchiveName(
+        mangaDir: mangaDir,
         base: desiredBase,
         qualifier: qualifier,
-        isTaken: (String name) =>
-            _chapterNameTaken(mangaDir, '$name$kDownloadArchiveExtension'),
-        maxLength: baseBudget,
+        isTaken: (String name) => _chapterNameTaken(mangaDir, name),
       );
-      final String candidateName = '$candidateBase$kDownloadArchiveExtension';
       final File target = downloadChapterArchiveFile(mangaDir, candidateName);
       if (await target.exists()) continue;
       final File temporary = File('${target.path}.tmp');
@@ -1048,7 +1020,7 @@ class MangaDownloadService {
     required String bookKey,
     required String chapterKey,
     required String containerName,
-    required String containerKind,
+    required MangaChapterContainerKind containerKind,
   }) =>
       _database.upsertMangaChapterDir(
         bookKey: bookKey,

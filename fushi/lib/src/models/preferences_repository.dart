@@ -158,6 +158,11 @@ const String kDownloadExecutionHostPrefKey = 'download_execution_host';
 /// 已有章节不转换。见 `MangaDownloadService`。
 const String kDownloadSaveAsCbzPrefKey = 'download_save_as_cbz';
 
+/// bool（默认 true）：「本地图源」伪源是否启用。只控制图源列表里这一行的可进入
+/// 状态；关闭不停止磁盘扫描，也不隐藏已登记作品。见
+/// `PreferencesRepository.localSourceEnabled`。
+const String kLocalSourceEnabledPrefKey = 'local_source_enabled';
+
 /// 主机侧「允许已配对设备从游戏库远程启动游戏并串流」。默认关：开启即允许配对
 /// 设备在本机起进程。设备本地（见 `SyncRepository.deviceLocalPrefKeys`），不能随
 /// 备份把这扇门带到另一台电脑上。
@@ -3383,10 +3388,10 @@ class PreferencesRepository extends ChangeNotifier
   /// 内置「本地图源」是否启用（默认开）。它是图源列表里的伪源，不是
   /// `manga_online_sources` 行；开关只影响这一行的可进入状态，不影响磁盘扫描。
   bool get localSourceEnabled =>
-      getPref('local_source_enabled', defaultValue: true) as bool;
+      getPref(kLocalSourceEnabledPrefKey, defaultValue: true) as bool;
 
   Future<void> setLocalSourceEnabled(bool value) async {
-    await setPref('local_source_enabled', value);
+    await setPref(kLocalSourceEnabledPrefKey, value);
     notifyListeners();
   }
 

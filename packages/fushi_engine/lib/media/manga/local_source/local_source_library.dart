@@ -5,7 +5,9 @@
 ///   `localcomic` 里的作品目录；不碰受管书库（`fushi_books`）。
 /// - **移出书架不删文件**：[removeFromLibrary] 只删行并立 `book_tombstones`；
 ///   删除本地文件是单独的 [deleteLocalFiles]，且必须显式 `confirmed: true`。
-/// - **墓碑防复活**：普通扫描遇到已立碑的 bookKey 直接跳过，绝不重新加回。
+/// - **墓碑防复活由调用方执行**：本类登记入口不查墓碑；拖入（LocalSourceDrop）
+///   与 Rebuild download index 必须在调用前跳过 `book_tombstones` 里的 bookKey，
+///   绝不把主动移出书架的作品重新加回。
 /// - 作品身份 = 绝对文件夹路径（大小写不敏感）；目录改名/移动 = 新作品，旧行
 ///   保持不动（由重建索引 / 缺失状态负责展示）。
 library;
@@ -23,12 +25,14 @@ import 'package:fushi_engine/media/manga/local_source/local_source_metadata.dart
 
 export 'package:fushi_engine/media/manga/local_source/local_source_metadata.dart';
 
-/// 一次登记动作的结局计数（拖入等单部登记路径复用）。
+/// 一次**登记**动作的结局计数（拖入与 Rebuild download index 的单部登记路径
+/// 复用）。
 ///
-/// 批量扫描登记入口已随「导入」子视图退役；Library 只保留按单部作品登记的
-/// [LocalSourceLibrary.registerScannedManga]。
-class LocalSourceImportReport {
-  LocalSourceImportReport({
+/// 批量导入入口已随「导入」子视图退役；Library 只保留按单部作品登记的
+/// [LocalSourceLibrary.registerScannedManga]，所以计数描述的是登记结果而不是
+/// 批量导入。
+class LocalSourceRegistrationReport {
+  LocalSourceRegistrationReport({
     this.added = 0,
     this.refreshed = 0,
     this.skippedTombstoned = 0,

@@ -83,13 +83,20 @@ Future<Directory> _contentRootDirectory(SettingsContext ctx) async {
 }
 
 /// 打开 Content root 本身；目录不存在时先创建（否则文件管理器会报错）。
-/// 打开失败复用现有失败提示。
+/// 创建或打开任一步失败（只读盘、断链、权限）都复用现有失败提示——异常不能
+/// 逃出设置页，否则用户只看到「点了没反应」。
 Future<void> _openContentRoot(SettingsContext ctx) async {
-  final Directory directory = await _contentRootDirectory(ctx);
-  await directory.create(recursive: true);
   final Future<bool> Function(String path) opener =
       debugOpenContentRootDirectory ?? openDirectoryInFileManager;
-  final bool opened = await opener(directory.path);
+  bool opened = false;
+  try {
+    final Directory directory = await _contentRootDirectory(ctx);
+    await directory.create(recursive: true);
+    opened = await opener(directory.path);
+  } on Object catch (error, stack) {
+    ErrorLogService.instance.log('ContentRoot.open', error, stack);
+    opened = false;
+  }
   if (!opened && ctx.context.mounted) {
     FushiToast.show(
       msg: t.data_storage_open_failed,

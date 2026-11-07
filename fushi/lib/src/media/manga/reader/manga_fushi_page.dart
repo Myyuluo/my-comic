@@ -1552,7 +1552,7 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
   ///
   /// 多章作品从点名的章（或第 1 章）开始；单章作品保留书级断点续读。第一章之后
   /// 的章级进度由章节列表重新打开时从第 1 页开始——与 ticket 06 的最小阅读闭环
-  /// 一致，完整的章级断点续读留给重建索引/本地源条目后续扩展。
+  /// 一致，完整的章级断点续读留给重建索引/本地图源条目后续扩展。
   Future<void> _loadLocalSourceChapter(EpubBookRow row) async {
     final int chapterIndex = widget.initialChapterIndex ?? 0;
     final LocalSourceResolvedChapter? resolved =

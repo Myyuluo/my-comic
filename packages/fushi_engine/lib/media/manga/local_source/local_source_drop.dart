@@ -17,7 +17,7 @@ import 'package:fushi_engine/media/manga/local_source/local_source_layout.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_library.dart';
 
 export 'package:fushi_engine/media/manga/local_source/local_source_library.dart'
-    show LocalSourceImportReport;
+    show LocalSourceRegistrationReport;
 
 /// 拖入内容无法作为 Local source 载体时抛出。
 class LocalSourceDropException implements Exception {
@@ -47,7 +47,7 @@ class LocalSourceDropResult {
   /// 本次拖入后是否在 Library 里找到了对应条目。
   final bool registered;
 
-  final LocalSourceImportReport? report;
+  final LocalSourceRegistrationReport? report;
 }
 
 /// 拖入文件夹或 CBZ 的落地入口。
@@ -73,7 +73,7 @@ abstract final class LocalSourceDrop {
       final String sourceCanon = p.canonicalize(source.path);
       if (p.equals(rootCanon, sourceCanon)) {
         // 拖入 root 本身：按 root 的第一层作品逐一登记（不会把 root 当成一部作品）。
-        final LocalSourceImportReport report = await _registerAll(
+        final LocalSourceRegistrationReport report = await _registerAll(
           db: db,
           library: library,
           mangas: await scanLocalSourceRoot(root),
@@ -86,7 +86,7 @@ abstract final class LocalSourceDrop {
         );
       }
       if (p.isWithin(rootCanon, sourceCanon)) {
-        final LocalSourceImportReport report = await _registerDirectory(
+        final LocalSourceRegistrationReport report = await _registerDirectory(
           db: db,
           library: library,
           directory: source,
@@ -103,7 +103,7 @@ abstract final class LocalSourceDrop {
         p.basename(source.path),
       );
       await _copyDirectory(source, destination);
-      final LocalSourceImportReport report = await _registerDirectory(
+      final LocalSourceRegistrationReport report = await _registerDirectory(
         db: db,
         library: library,
         directory: destination,
@@ -129,7 +129,7 @@ abstract final class LocalSourceDrop {
       final File copied = await source.copy(
         p.join(destination.path, p.basename(source.path)),
       );
-      final LocalSourceImportReport report = await _registerDirectory(
+      final LocalSourceRegistrationReport report = await _registerDirectory(
         db: db,
         library: library,
         directory: destination,
@@ -147,13 +147,13 @@ abstract final class LocalSourceDrop {
   }
 
   /// 扫描 [directory] 这一部作品并登记；不碰 root 里的其它作品。
-  static Future<LocalSourceImportReport> _registerDirectory({
+  static Future<LocalSourceRegistrationReport> _registerDirectory({
     required FushiDatabase db,
     required LocalSourceLibrary library,
     required Directory directory,
   }) async {
     final LocalSourceManga? manga = await _scanManga(library, directory);
-    if (manga == null) return LocalSourceImportReport();
+    if (manga == null) return LocalSourceRegistrationReport();
     return _registerManga(db: db, library: library, manga: manga);
   }
 
@@ -161,15 +161,18 @@ abstract final class LocalSourceDrop {
     LocalSourceLibrary library,
     Directory directory,
   ) async {
-    final String relative = p.relative(directory.path, from: library.root.path);
+    final String relative = localSourceRelativePath(
+      directory.path,
+      from: library.root.path,
+    );
     return scanLocalSourceMangaDirectory(
       directory,
-      relativePath: relative == '.' ? '' : relative.replaceAll('\\', '/'),
+      relativePath: relative == '.' ? '' : relative,
     );
   }
 
   /// 逐部登记（root 本身被拖入时用）。
-  static Future<LocalSourceImportReport> _registerAll({
+  static Future<LocalSourceRegistrationReport> _registerAll({
     required FushiDatabase db,
     required LocalSourceLibrary library,
     required List<LocalSourceManga> mangas,
@@ -179,7 +182,7 @@ abstract final class LocalSourceDrop {
     int skippedTombstoned = 0;
     final List<Object> failures = <Object>[];
     for (final LocalSourceManga manga in mangas) {
-      final LocalSourceImportReport report = await _registerManga(
+      final LocalSourceRegistrationReport report = await _registerManga(
         db: db,
         library: library,
         manga: manga,
@@ -189,7 +192,7 @@ abstract final class LocalSourceDrop {
       skippedTombstoned += report.skippedTombstoned;
       failures.addAll(report.failures);
     }
-    return LocalSourceImportReport(
+    return LocalSourceRegistrationReport(
       added: added,
       refreshed: refreshed,
       skippedTombstoned: skippedTombstoned,
@@ -199,7 +202,7 @@ abstract final class LocalSourceDrop {
   }
 
   /// 登记一部已扫描作品：墓碑跳过（拖入不能复活主动移出书架的作品）。
-  static Future<LocalSourceImportReport> _registerManga({
+  static Future<LocalSourceRegistrationReport> _registerManga({
     required FushiDatabase db,
     required LocalSourceLibrary library,
     required LocalSourceManga manga,
@@ -207,15 +210,18 @@ abstract final class LocalSourceDrop {
     try {
       final Set<String> tombstones = await db.getBookTombstoneKeys();
       if (tombstones.contains(localSourceBookKeyFor(manga.directoryPath))) {
-        return LocalSourceImportReport(skippedTombstoned: 1);
+        return LocalSourceRegistrationReport(skippedTombstoned: 1);
       }
       final bool added = await library.registerScannedManga(manga);
-      return LocalSourceImportReport(
+      return LocalSourceRegistrationReport(
         added: added ? 1 : 0,
         refreshed: added ? 0 : 1,
       );
     } on Object catch (error) {
-      return LocalSourceImportReport(failed: 1, failures: <Object>[error]);
+      return LocalSourceRegistrationReport(
+        failed: 1,
+        failures: <Object>[error],
+      );
     }
   }
 
@@ -223,7 +229,7 @@ abstract final class LocalSourceDrop {
     required FushiDatabase db,
     required Directory directory,
     required String? copiedPath,
-    required LocalSourceImportReport report,
+    required LocalSourceRegistrationReport report,
   }) async {
     final String bookKey = localSourceBookKeyFor(directory.path);
     final EpubBookRow? row = await db.getEpubBook(bookKey);

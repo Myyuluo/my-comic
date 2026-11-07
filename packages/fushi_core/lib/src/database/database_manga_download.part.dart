@@ -167,12 +167,14 @@ mixin _FushiDbMangaDownload on _$FushiDatabase {
   ///
   /// 下载完成后、目录 rename / 压缩包落位成功后才写；重建索引按 `pages.json`
   /// 的稳定 ID 重新关联时也走这里。[containerKind] 取
-  /// [MangaChapterContainerKind]，默认 folder 保持旧调用点语义。
+  /// [MangaChapterContainerKind]，默认 folder 保持旧调用点语义；写库时在这里
+  /// 统一转成持久化字符串（TEXT 列）。
   Future<void> upsertMangaChapterDir({
     required String bookKey,
     required String chapterKey,
     required String folderName,
-    String containerKind = MangaChapterContainerKind.folder,
+    MangaChapterContainerKind containerKind =
+        MangaChapterContainerKind.folder,
     required int updatedAt,
   }) =>
       into(mangaChapterDirs).insertOnConflictUpdate(
@@ -180,7 +182,7 @@ mixin _FushiDbMangaDownload on _$FushiDatabase {
           bookKey: bookKey,
           chapterKey: chapterKey,
           folderName: folderName,
-          containerKind: Value<String>(containerKind),
+          containerKind: Value<String>(containerKind.storageValue),
           updatedAt: updatedAt,
         ),
       );
@@ -227,4 +229,11 @@ mixin _FushiDbMangaDownload on _$FushiDatabase {
 
   Future<int> deleteMangaChapterDirsForBook(String bookKey) =>
       (delete(mangaChapterDirs)..where((t) => t.bookKey.equals(bookKey))).go();
+}
+
+/// `manga_chapter_dirs.container_kind` 以 TEXT 持久化；读取时在数据库边界转成
+/// [MangaChapterContainerKind]，调用方不再直接比较裸字符串。
+extension MangaChapterDirRowContainerKind on MangaChapterDirRow {
+  MangaChapterContainerKind get containerKindEnum =>
+      MangaChapterContainerKind.fromStorage(containerKind);
 }

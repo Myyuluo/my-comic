@@ -299,6 +299,31 @@ String downloadChapterArchiveName(String raw) {
 File downloadChapterArchiveFile(String mangaDir, String containerName) =>
     File(p.join(mangaDir, containerName));
 
+/// 选一个未占用的 CBZ 章节容器名（含 `.cbz`）。
+///
+/// 与文件夹命名共用同一套冲突消解：净化 [base]（长度预算先减去扩展名）后按
+/// `[扫译组]` / `(2)` 递增；[isTaken] 收到的候选名**已带扩展名**，调用方按
+/// 完整文件名（大小写不敏感）判断占用。
+Future<String> uniqueDownloadChapterArchiveName({
+  required String mangaDir,
+  required String base,
+  String? qualifier,
+  required Future<bool> Function(String name) isTaken,
+}) async {
+  final int budget = downloadLibrarySegmentBudget(mangaDir);
+  final int baseBudget = budget > kDownloadArchiveExtension.length
+      ? budget - kDownloadArchiveExtension.length
+      : 1;
+  final String unique = await uniqueDownloadLibraryFolderName(
+    base: sanitizeDownloadLibrarySegment(base, maxLength: baseBudget),
+    qualifier: qualifier,
+    isTaken: (String candidate) =>
+        isTaken(downloadChapterArchiveName(candidate)),
+    maxLength: baseBudget,
+  );
+  return downloadChapterArchiveName(unique);
+}
+
 /// 章元数据文件 `<chapterDir>/pages.json`。
 File downloadPagesManifestFile(Directory chapterDir) =>
     File(p.join(chapterDir.path, kDownloadPagesFileName));
