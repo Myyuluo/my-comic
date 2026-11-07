@@ -33,7 +33,8 @@ void main() {
     );
   });
 
-  testWidgets('分类内容为存储位置小节，没有打开下载页的入口', (WidgetTester tester) async {
+  testWidgets('分类内容为存储位置小节（ticket 09 起追加重建下载索引小节），'
+      '没有打开下载页的入口', (WidgetTester tester) async {
     final AppLocale original = currentLocale();
     addTearDown(() => LocaleSettings.setLocale(original));
     LocaleSettings.setLocale(AppLocale.zhCn);
@@ -46,11 +47,11 @@ void main() {
     );
     expect(
       destination.sections.map((SettingsSection section) => section.id),
-      <String?>['storage.location.section'],
-      reason: '分类内容为存储位置小节',
+      <String?>['storage.location.section', 'storage.rebuild.section'],
+      reason: '分类内容为存储位置 + 重建下载索引小节',
     );
     expect(
-      destination.sections.single.items.map((SettingsItem item) => item.id),
+      destination.sections.first.items.map((SettingsItem item) => item.id),
       <String>[
         'storage.content_root',
         'storage.program_state_root',
@@ -58,6 +59,10 @@ void main() {
         'storage.open_local_comic',
         'storage.open_autobackup',
       ],
+    );
+    expect(
+      destination.sections.last.items.map((SettingsItem item) => item.id),
+      <String>['storage.rebuild_index'],
     );
     expect(
       destination.sections
