@@ -16,6 +16,33 @@ import 'package:fushi/src/utils/components/fushi_search.dart';
 import 'package:fushi/src/utils/components/fushi_staggered_entrance.dart';
 import 'package:fushi/src/utils/fushi_icons.dart';
 
+/// 图源列表里排在扩展源之前的一枚内置伪源行（漫画：「本地图源」）。
+///
+/// 它不来自 `manga_online_sources`、没有置顶 / 排序 / 清数据 / 卸载菜单；但仍
+/// 参与本节的搜索与状态 / 语言筛选——筛选依据 [searchTerms] / [enabled] /
+/// [language]，命中才渲染 [child]。
+class BuiltInSourceListRow {
+  const BuiltInSourceListRow({
+    required this.child,
+    required this.searchTerms,
+    required this.enabled,
+    this.language,
+  });
+
+  /// 行本体（通常是一个 ConsumerWidget，自己读偏好）。
+  final Widget child;
+
+  /// 搜索框匹配的文案（名称 / 别名 / 路径…），与扩展源同一归一化口径。
+  final List<String> searchTerms;
+
+  /// 当前是否启用（状态筛选用）。用回调而不是布尔快照：偏好变化后筛选仍然
+  /// 按最新值判断，不依赖外层因为一次设置变更重建整节。
+  final bool Function() enabled;
+
+  /// 语言码；null = 没有语言标签，语言筛选生效时不显示。
+  final String? language;
+}
+
 /// 扩展提供的在线源列表：「导入」视图「在线源」段的正文，漫画与视频共用。
 ///
 /// 一行一个源（M3E 分段列表行，见 [InstalledOnlineSourceRow]）：启停开关、名称、
@@ -33,9 +60,14 @@ class MihonInstalledSourcesSection extends StatefulWidget {
     super.key,
     this.onOpenSource,
     this.emptyLabel,
+    this.builtInRows = const <BuiltInSourceListRow>[],
   });
 
   final MihonManager manager;
+
+  /// 排在扩展源（含「已置顶」分组）之前的内置伪源行。为空 = 该域没有内置源
+  /// （视频 / 小说）。
+  final List<BuiltInSourceListRow> builtInRows;
 
   /// 点行进该源的浏览页；为 null 时行不可点。小说 / 漫画 / 视频三域都传。
   final void Function(MangaOnlineSourceRow source)? onOpenSource;
@@ -278,6 +310,19 @@ class _MihonInstalledSourcesSectionState
   bool get _filtering =>
       _status != OnlineSourceStatusFilter.all || _language != null;
 
+  /// 内置伪源行是否通过当前搜索 / 状态 / 语言筛选（与扩展源同一口径）。
+  bool _matchesBuiltIn(BuiltInSourceListRow row) {
+    if (!matchesMediaSearch(query: _searchQuery, titles: row.searchTerms)) {
+      return false;
+    }
+    return matchesOnlineSourceFilter(
+      enabled: row.enabled(),
+      language: row.language ?? '',
+      status: _status,
+      languageFilter: _language,
+    );
+  }
+
   /// 搜索按名称 / 语言 / 扩展名 / 扩展包名匹配，走全应用统一的归一化（不用裸 contains）；
   /// 再叠状态 / 语言筛选。只影响显示。
   List<MangaOnlineSourceRow> _visible(List<MangaOnlineSourceRow> rows) =>
@@ -341,14 +386,19 @@ class _MihonInstalledSourcesSectionState
     final List<MangaOnlineSourceRow> rest = narrowed
         ? _visible(restAll)
         : restAll;
+    // 内置伪源行参与搜索 / 筛选；固定排在扩展源与置顶分组之前。
+    final List<BuiltInSourceListRow> builtIns = <BuiltInSourceListRow>[
+      for (final BuiltInSourceListRow row in widget.builtInRows)
+        if (_matchesBuiltIn(row)) row,
+    ];
     // 筛选后的顺序不是真实顺序：不可拖、菜单里不出上移 / 下移。
     final bool reorderable = !narrowed;
     final String? emptyLabel = widget.emptyLabel;
     final List<String> languages = onlineSourceLanguages(
       all.map((MangaOnlineSourceRow row) => row.language),
     );
-    // 无置顶时整段只有一组，不必再挂「全部来源」小标题。
-    final bool showAllHeader = pinned.isNotEmpty;
+    // 无置顶、也没有内置行时整段只有一组，不必再挂「全部来源」小标题。
+    final bool showAllHeader = pinned.isNotEmpty || builtIns.isNotEmpty;
     return FushiEntranceScope(
       replayKey: '${_status.name}|$_language',
       child: SliverMainAxisGroup(
@@ -375,10 +425,13 @@ class _MihonInstalledSourcesSectionState
                     const OnlineSourcesReorderDisabledHint(),
                 ],
                 const SizedBox(height: 12),
+                // 内置伪源固定第一位：在「已置顶」分组之上，随搜索 / 筛选隐藏。
+                for (final BuiltInSourceListRow row in builtIns) row.child,
+                if (builtIns.isNotEmpty) const SizedBox(height: 12),
               ],
             ),
           ),
-          if (all.isEmpty && emptyLabel != null)
+          if (all.isEmpty && emptyLabel != null && builtIns.isEmpty)
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 16),
@@ -388,7 +441,10 @@ class _MihonInstalledSourcesSectionState
                 ),
               ),
             )
-          else if (narrowed && all.isNotEmpty && pinned.isEmpty && rest.isEmpty)
+          else if (narrowed &&
+              builtIns.isEmpty &&
+              pinned.isEmpty &&
+              rest.isEmpty)
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: 16),
@@ -407,6 +463,7 @@ class _MihonInstalledSourcesSectionState
                   items: pinned,
                   keyOf: _keyOf,
                   reorderable: reorderable,
+                  entranceOffset: builtIns.length,
                   onReorder: (List<MangaOnlineSourceRow> reordered) =>
                       unawaited(_reorderGroup(reordered, pinned: true)),
                   rowBuilder: _rowBuilder(pinned, reorderable: reorderable),
@@ -420,7 +477,7 @@ class _MihonInstalledSourcesSectionState
                   items: rest,
                   keyOf: _keyOf,
                   reorderable: reorderable,
-                  entranceOffset: pinned.length,
+                  entranceOffset: builtIns.length + pinned.length,
                   onReorder: (List<MangaOnlineSourceRow> reordered) =>
                       unawaited(_reorderGroup(reordered, pinned: false)),
                   rowBuilder: _rowBuilder(rest, reorderable: reorderable),
