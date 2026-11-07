@@ -59,16 +59,22 @@ void main() {
   }
 
   RebuildDownloadIndexReport report({
+    int booksAdded = 1,
+    int booksAddedLocal = 1,
     int booksRelinked = 1,
+    int chaptersAdded = 1,
     int chaptersRelinked = 2,
     int booksMissing = 1,
     int chaptersMissing = 3,
     bool cancelled = false,
   }) => RebuildDownloadIndexReport(
-    booksScanned: booksRelinked + booksMissing,
+    booksScanned: booksAdded + booksRelinked + booksMissing,
+    booksAdded: booksAdded,
+    booksAddedLocal: booksAddedLocal,
     booksRelinked: booksRelinked,
     booksMissing: booksMissing,
     booksSkipped: 0,
+    chaptersAdded: chaptersAdded,
     chaptersRelinked: chaptersRelinked,
     chaptersMissing: chaptersMissing,
     chaptersSkipped: 0,
@@ -78,8 +84,10 @@ void main() {
 
   String expectedReportText(RebuildDownloadIndexReport value) =>
       t.rebuild_download_index_report_body(
+        added: value.booksAdded,
+        local: value.booksAddedLocal,
         books: value.booksRelinked,
-        chapters: value.chaptersRelinked,
+        chapters: value.chaptersAdded + value.chaptersRelinked,
         missingBooks: value.booksMissing,
         missingChapters: value.chaptersMissing,
         skippedBooks: value.booksSkipped,

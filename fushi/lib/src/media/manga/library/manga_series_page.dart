@@ -337,12 +337,20 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     // Local source（ADR 0013）：作品目录必须仍在**当前** `localcomic` 根内。
     // 切换 Content root 后库里的旧路径不重基，这里把整部作品的章标成 Missing，
     // 不再从旧根读取。
+    //
+    // Ticket 10：源未安装时恢复出来的本地条目指向当前 `downloads` 根里的漫画
+    // 目录，同样算「在当前内容根内」，不能整本标 Missing。
     if (_isLocalSource) {
+      final bool withinLocal = isLocalSourcePathWithinRoot(
+        row.extractDir,
+        appModel.appPaths.localComicRoot,
+      );
+      final bool withinDownloads = isLocalSourcePathWithinRoot(
+        row.extractDir,
+        appModel.appPaths.downloadsRoot,
+      );
       final bool missing =
-          !isLocalSourcePathWithinRoot(
-            row.extractDir,
-            appModel.appPaths.localComicRoot,
-          ) ||
+          (!withinLocal && !withinDownloads) ||
           !await Directory(row.extractDir).exists();
       final Set<String> next = missing
           ? _localChapters.map((LocalSourceChapterRecord c) => c.key).toSet()

@@ -156,8 +156,10 @@ Future<void> _showRebuildReport(
             <String>[
               if (report.cancelled) t.rebuild_download_index_report_cancelled,
               t.rebuild_download_index_report_body(
+                added: report.booksAdded,
+                local: report.booksAddedLocal,
                 books: report.booksRelinked,
-                chapters: report.chaptersRelinked,
+                chapters: report.chaptersAdded + report.chaptersRelinked,
                 missingBooks: report.booksMissing,
                 missingChapters: report.chaptersMissing,
                 skippedBooks: report.booksSkipped,
