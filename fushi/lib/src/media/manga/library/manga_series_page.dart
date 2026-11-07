@@ -40,8 +40,8 @@ import 'package:fushi/src/utils/components/fushi_staggered_entrance.dart';
 import 'package:fushi/src/utils/fushi_icons.dart';
 import 'package:fushi/src/utils/misc/error_details_dialog.dart';
 import 'package:fushi/utils.dart';
+import 'package:fushi_engine/media/manga/local_source/local_source_library.dart';
 import 'package:fushi_engine/sync/deletion_propagation.dart';
-import 'package:path/path.dart' as p;
 import 'package:url_launcher/url_launcher.dart';
 
 /// 作品页要显示**哪一部**作品。
@@ -143,6 +143,13 @@ class MangaSeriesPage extends ConsumerStatefulWidget {
 class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
   EpubBookRow? _row;
   OnlineMangaLibraryEntry? _entry;
+
+  /// Local source（`localcomic`）条目：`sourceMetadata` 标记 + 章节表。
+  /// 有它时章节区按共享章节列表渲染，`_entry` 保持 null（不是在线条目）。
+  LocalSourceMetadata? _localSource;
+  List<LocalSourceChapterRecord> _localChapters =
+      const <LocalSourceChapterRecord>[];
+
   OnlineMangaLibraryService? _service;
   OnlineMangaRuntimeAdapter? _adapter;
   Map<String, MangaChapterStateRow> _states =
@@ -237,6 +244,46 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
 
   /// 本地卷（无在线描述符）。
   bool get _isLocal => _entry == null && _row != null;
+
+  /// `localcomic` 里原地读取的本地源作品（有章节表）。
+  bool get _isLocalSource => _localSource != null;
+
+  /// 本地源下一章：优先第一个未读完的章，全读完则停在最后一章。
+  int get _localResumeIndex {
+    if (_localChapters.isEmpty) return -1;
+    final int unread = _localChapters.indexWhere(
+      (LocalSourceChapterRecord chapter) =>
+          _states[chapter.key]?.readAt == null,
+    );
+    return unread >= 0 ? unread : _localChapters.length - 1;
+  }
+
+  /// 借给共享 [MangaChapterList] 的展示条目。只在本地源上使用，不落库、
+  /// 不参与在线 service 分派。
+  OnlineMangaLibraryEntry? get _localDisplayEntry {
+    final EpubBookRow? row = _row;
+    if (_localSource == null || row == null || _localChapters.isEmpty) {
+      return null;
+    }
+    return OnlineMangaLibraryEntry(
+      runtime: OnlineMangaRuntimeKind.local,
+      extensionPackage: '',
+      sourceId: '',
+      series: OnlineMangaSeries(
+        key: row.bookKey,
+        title: row.title,
+        raw: const <String, Object?>{},
+      ),
+      chapters: <OnlineMangaChapter>[
+        for (final LocalSourceChapterRecord chapter in _localChapters)
+          OnlineMangaChapter(
+            key: chapter.key,
+            name: chapter.name,
+            raw: const <String, Object?>{},
+          ),
+      ],
+    );
+  }
 
   /// 页头 / 识别横幅上的标题。本地卷走书架同一个显示名门面（改名是覆盖层，
   /// 不写 `epub_books.title`），否则从这里「管理本卷 › 重命名」之后页头不变。
@@ -391,6 +438,13 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
         bookKey: row.bookKey,
         chapterKey: chapter.key,
       );
+      // Ticket 02：done 任务行是「这章曾经下载过」的持久标记。用户主动删除
+      // 下载时必须一起清掉，否则磁盘判据变 false、任务仍 done → 被误显示成
+      // Missing。缺失文件本身（便携拷贝没带 content）不走这里，保留 Missing。
+      final MangaDownloadJobRow? job = _jobs[chapter.key];
+      if (job != null) {
+        await appModel.mangaDownloadService.remove(job.jobId);
+      }
       if (mounted) FushiToast.show(msg: t.storage_entry_delete_done);
     } on Object catch (error, stack) {
       ErrorLogService.instance.log(
@@ -748,6 +802,13 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     final OnlineMangaLibraryEntry? entry = OnlineMangaLibraryEntry.tryParse(
       row.sourceMetadata,
     );
+    // Local source 条目的标记不是在线描述符；章节表住在 chaptersJson。
+    final LocalSourceMetadata? localSource = LocalSourceMetadata.tryParse(
+      row.sourceMetadata,
+    );
+    final List<LocalSourceChapterRecord> localChapters = localSource == null
+        ? const <LocalSourceChapterRecord>[]
+        : decodeLocalSourceChapters(row.chaptersJson);
     // 服务解析失败（平台不支持等）不该挡住离线渲染——章节列表已经在描述符里
     // 了，用户至少要能看见自己书架里有什么。
     final OnlineMangaLibraryService? service = entry == null
@@ -761,6 +822,8 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     setState(() {
       _row = row;
       _entry = entry;
+      _localSource = localSource;
+      _localChapters = localChapters;
       _service = service;
       _adapter = service?.adapter;
       _states = states;
@@ -977,7 +1040,12 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     final EpubBookRow? row = _row;
     final OnlineMangaLibraryEntry? entry = _entry;
     final AppModel? appModel = _appModelOrNull;
-    if (row == null || entry == null || appModel == null || _busy) return;
+    if (row == null || appModel == null || _busy) return;
+    if (_isLocalSource) {
+      await _removeLocalSourceFromLibrary(row, appModel);
+      return;
+    }
+    if (entry == null) return;
     final DeleteDecision? decision = await _confirmRemoveFromLibrary(appModel);
     if (decision == null || !mounted) return;
     setState(() => _busy = true);
@@ -1040,6 +1108,104 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     }
   }
 
+  /// Local source 的「移出书架」：只删 Library 记录并立墓碑，**不删文件**
+  /// （ADR 0013）。删除本地文件是设置/作品页之外的单独动作（ticket 06 只提供
+  /// [LocalSourceLibrary.deleteLocalFiles] 的显式确认入口）。
+  Future<void> _removeLocalSourceFromLibrary(
+    EpubBookRow row,
+    AppModel appModel,
+  ) async {
+    final bool confirmed = await showFushiConfirmDialog(
+      context: context,
+      title: t.manga_series_remove_from_bookshelf,
+      message: t.manga_series_remove_local_confirm,
+      cancelLabel: t.dialog_cancel,
+      confirmLabel: t.dialog_ok,
+      destructive: true,
+    );
+    if (!confirmed || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      final bool removed = await LocalSourceLibrary(
+        db: appModel.database,
+        root: appModel.appPaths.localComicRoot,
+      ).removeFromLibrary(row.bookKey);
+      if (!mounted) return;
+      if (!removed) {
+        FushiToast.show(
+          msg: t.epub_delete_error,
+          severity: ToastSeverity.error,
+        );
+        return;
+      }
+      // Local source 的章节表住在刚删掉的行里；回书架，磁盘文件原样保留。
+      final NavigatorState navigator = Navigator.of(context);
+      if (navigator.canPop()) navigator.pop();
+    } on Object catch (error, stack) {
+      ErrorLogService.instance.log(
+        'MangaSeriesPage.removeLocalSource',
+        error,
+        stack,
+      );
+      if (mounted) {
+        FushiToast.show(
+          msg: t.epub_delete_error,
+          severity: ToastSeverity.error,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// 「删除本地文件」：与「移出书架」分开的破坏性动作，二次确认后删除
+  /// `localcomic` 里的作品目录。路径越界 / 非 Local source 条目由 service 拒绝。
+  Future<void> _deleteLocalSourceFiles(
+    EpubBookRow row,
+    AppModel appModel,
+  ) async {
+    final bool confirmed = await showFushiConfirmDialog(
+      context: context,
+      title: t.manga_series_delete_local_files,
+      message: t.manga_series_delete_local_files_confirm,
+      cancelLabel: t.dialog_cancel,
+      confirmLabel: t.dialog_delete,
+      destructive: true,
+    );
+    if (!confirmed || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      final LocalSourceDeleteResult result = await LocalSourceLibrary(
+        db: appModel.database,
+        root: appModel.appPaths.localComicRoot,
+      ).deleteLocalFiles(row.bookKey, confirmed: true);
+      if (!mounted) return;
+      if (!result.deleted) {
+        FushiToast.show(
+          msg: t.epub_delete_error,
+          severity: ToastSeverity.error,
+        );
+        return;
+      }
+      final NavigatorState navigator = Navigator.of(context);
+      if (navigator.canPop()) navigator.pop();
+    } on Object catch (error, stack) {
+      ErrorLogService.instance.log(
+        'MangaSeriesPage.deleteLocalSourceFiles',
+        error,
+        stack,
+      );
+      if (mounted) {
+        FushiToast.show(
+          msg: t.epub_delete_error,
+          severity: ToastSeverity.error,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   /// 与书架长按删除同一个确认框（[confirmRemoveOnlineWorkFromShelf]）。
   Future<DeleteDecision?> _confirmRemoveFromLibrary(AppModel appModel) =>
       confirmRemoveOnlineWorkFromShelf(
@@ -1068,6 +1234,24 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
   /// 2026-09-12 §1.1「先下载再读」；下载入口不变，走章节行溢出菜单 / 下载全部）。
   /// 未入库的先入库——进度、已读标记、下载任务都按 bookKey 记，没有行就无处可落。
   Future<void> _openChapterAt(int index) async {
+    // Local source：章节原地读取，不经过在线 service / 下载状态机。
+    if (_isLocalSource) {
+      final String? localBookKey = _bookKey;
+      if (_busy ||
+          localBookKey == null ||
+          index < 0 ||
+          index >= _localChapters.length) {
+        return;
+      }
+      setState(() => _busy = true);
+      try {
+        await _openReader(localBookKey, chapterIndex: index);
+        await _reloadAfterReading();
+      } finally {
+        if (mounted) setState(() => _busy = false);
+      }
+      return;
+    }
     final OnlineMangaLibraryService? service = _service;
     OnlineMangaLibraryEntry? entry = _entry;
     if (service == null || entry == null || _busy) return;
@@ -1207,6 +1391,8 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     setState(() {
       _row = row;
       _entry = entry;
+      _localSource = LocalSourceMetadata.tryParse(row.sourceMetadata);
+      _localChapters = decodeLocalSourceChapters(row.chaptersJson);
       _states = states;
       _localPosition = position;
     });
@@ -1328,7 +1514,7 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: <Widget>[
-                    if (_isLocal)
+                    if (_isLocal && !_isLocalSource)
                       FushiStaggeredEntrance(
                         index: 1,
                         child: _buildLocalDetails(context),
@@ -1348,6 +1534,10 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
   /// 章节区：刷新中顶一条波浪进度（原 AppBar 刷新钮的转圈挪进了「⋯」菜单，
   /// 进行中的反馈落在被刷新的列表上）+ 共享的 [MangaChapterList]。
   Widget _buildChapterList(BuildContext context) {
+    // Local source 条目没有在线描述符，但共享章节列表只消费 `entry.chapters`；
+    // 借一个展示用条目，回调仍走本地分支（[_openChapterAt] 不碰在线 service）。
+    final OnlineMangaLibraryEntry? displayEntry = _entry ?? _localDisplayEntry;
+    final bool online = _entry != null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
@@ -1358,7 +1548,7 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
             child: FushiLinearProgressIndicator(),
           ),
         MangaChapterList(
-          entry: _entry,
+          entry: displayEntry,
           states: _states,
           newestFirst: _newestFirst,
           unreadOnly: _unreadOnly,
@@ -1373,7 +1563,11 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
                 ),
           onUnreadOnlyToggled: () => setState(() => _unreadOnly = !_unreadOnly),
           onChapterTap: (OnlineMangaChapter chapter) {
-            final int index = _entry?.indexOfChapterKey(chapter.key) ?? -1;
+            final int index =
+                (_entry ?? _localDisplayEntry)?.indexOfChapterKey(
+                  chapter.key,
+                ) ??
+                -1;
             if (index >= 0) unawaited(_openChapterAt(index));
           },
           onToggleRead: _bookUid == null
@@ -1384,24 +1578,31 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
               ? null
               : (OnlineMangaChapter chapter) =>
                     unawaited(_markUpToRead(chapter)),
-          downloadedChapterKeys: _downloaded,
+          // Local source 的章节就在磁盘上原地可读：不显示「未下载」，也不给
+          // 下载/删除下载/定位文件等在线动作。
+          downloadedChapterKeys: _isLocalSource
+              ? _localChapters
+                    .map((LocalSourceChapterRecord chapter) => chapter.key)
+                    .toSet()
+              : _downloaded,
           jobsByChapterKey: _jobs,
           languageScope: _languageScope,
           onSiblingSourceTap: (OnlineMangaSiblingSource sibling) =>
               unawaited(_openSiblingSource(sibling)),
-          onDownload: _bookKey == null
+          onDownload: !online || _bookKey == null
               ? null
               : (OnlineMangaChapter chapter) =>
                     unawaited(_enqueueChapter(chapter)),
-          onRetryDownload: _bookKey == null
+          onRetryDownload: !online || _bookKey == null
               ? null
               : (OnlineMangaChapter chapter) =>
                     unawaited(_retryChapterDownload(chapter)),
-          onDeleteDownload: _bookKey == null
+          onDeleteDownload: !online || _bookKey == null
               ? null
               : (OnlineMangaChapter chapter) =>
                     unawaited(_deleteChapterDownload(chapter)),
-          onRevealDownload: _bookKey == null || currentRevealHost() == null
+          onRevealDownload:
+              !online || _bookKey == null || currentRevealHost() == null
               ? null
               : (OnlineMangaChapter chapter) =>
                     unawaited(_revealChapterDownload(chapter)),
@@ -1726,6 +1927,17 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
   /// 先入库再读，见 [_openChapterAt]）。
   Widget _buildPrimaryAction() {
     if (_isLocal) {
+      if (_isLocalSource) {
+        final int resumeIndex = _localResumeIndex;
+        return MediaDetailPrimaryButton(
+          buttonKey: const ValueKey<String>('manga_series_open_local'),
+          icon: FushiIcons.play,
+          label: t.book_continue_reading,
+          onPressed: _busy || resumeIndex < 0
+              ? null
+              : () => unawaited(_openChapterAt(resumeIndex)),
+        );
+      }
       return MediaDetailPrimaryButton(
         buttonKey: const ValueKey<String>('manga_series_open_local'),
         icon: FushiIcons.play,
@@ -1757,6 +1969,21 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
   List<Widget> _buildSecondaryActions() {
     if (_isLocal) {
       // my-comic：端上 OCR 已移除，本地卷详情页不再提供识别 / OCR 设置入口。
+      // Local source 作品必须能「移出书架」且不删文件（ADR 0013）；受管本地卷
+      // （mokuro/PDF 转漫画）沿用书架长按菜单的删除路径，这里不加按钮。
+      if (_isLocalSource && _row != null) {
+        return <Widget>[
+          MediaDetailSecondaryButton(
+            buttonKey: const ValueKey<String>(
+              'manga_series_remove_from_bookshelf',
+            ),
+            icon: FushiIcons.libraryAdd,
+            label: t.manga_series_remove_from_bookshelf,
+            selected: true,
+            onPressed: _busy ? null : () => unawaited(_removeFromLibrary()),
+          ),
+        ];
+      }
       return <Widget>[];
     }
     final OnlineMangaLibraryEntry? entry = _entry;
@@ -1832,6 +2059,16 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
             label: t.manga_series_manage_volume,
             enabled: !_busy,
             onSelected: () => unawaited(_openShelfMenu(showShelfMenu)),
+          ),
+        // 删除本地文件是**单独**且二次确认的动作；「移出书架」只删记录。
+        if (_isLocalSource && _row != null)
+          MediaDetailMenuItem(
+            key: const ValueKey<String>('manga_series_delete_local_files'),
+            icon: FushiIcons.delete,
+            label: t.manga_series_delete_local_files,
+            enabled: !_busy,
+            onSelected: () =>
+                unawaited(_deleteLocalSourceFiles(_row!, _appModel)),
           ),
       ];
     }
@@ -1910,6 +2147,8 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     setState(() {
       _row = row;
       _localPosition = position;
+      _localSource = LocalSourceMetadata.tryParse(row.sourceMetadata);
+      _localChapters = decodeLocalSourceChapters(row.chaptersJson);
     });
   }
 

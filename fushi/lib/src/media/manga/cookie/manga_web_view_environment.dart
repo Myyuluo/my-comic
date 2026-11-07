@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 
+import 'package:fushi/src/storage/app_paths.dart';
+import 'package:fushi/src/storage/webview2_state_root.dart';
 import 'package:fushi/src/utils/misc/error_log_service.dart';
 import 'package:fushi_engine/utils/net/app_proxy.dart';
 
@@ -64,6 +66,17 @@ abstract final class MangaWebViewEnvironment {
         Platform.environment['FUSHI_WEBVIEW2_USER_DATA_FOLDER'];
     if (testFolder != null && testFolder.isNotEmpty) {
       return '$testFolder-manga$suffix';
+    }
+    // Ticket 02：WebView2 数据属于 Portable state。默认 environment 由
+    // `WebView2StateRoot.install()` 指到 `<state>/webview2`；Dart 侧
+    // `Platform.environment` 是启动快照、看不到那次进程内设置，所以这里直接按
+    // AppPaths 解析 state 根，用同根的独立兄弟目录。
+    final Directory? stateRoot = AppPaths.stateRootDirectorySync();
+    if (stateRoot != null) {
+      return WebView2StateRoot.mangaUserDataFolderFor(
+        stateRoot.path,
+        suffix: suffix,
+      );
     }
     final String base = Platform.environment['LOCALAPPDATA'] ?? '.';
     return '$base\\Fushi\\MangaWebView2$suffix';

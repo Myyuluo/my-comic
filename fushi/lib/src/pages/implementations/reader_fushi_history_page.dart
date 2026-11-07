@@ -42,6 +42,8 @@ import 'package:fushi/src/media/manga/library/online_manga_library_service.dart'
 import 'package:fushi/src/media/manga/library/online_manga_runtime_adapter.dart'
     show OnlineMangaRefreshResult;
 import 'package:fushi/src/media/manga/manga_import_dialog.dart';
+import 'package:fushi/src/media/manga/manga_module.dart';
+import 'package:fushi_engine/media/manga/local_source/local_source_drop.dart';
 
 
 

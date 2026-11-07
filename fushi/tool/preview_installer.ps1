@@ -24,12 +24,8 @@
 .PARAMETER Install
     显式保留安装器原有的应用关闭和安装流程，允许安装占位 payload；不受外观预览保护。
 
-.PARAMETER ForceFreshInstall
-    让 IsFreshInstall 恒真，好让「选择数据存储位置」页出现 —— 那页只在全新安装时
-    显示，本机 %APPDATA%\Fushi 存在就会被 ShouldSkipPage 跳过。
-
 .PARAMETER SkipDirPage
-    禁掉「选择目标位置」页，让它后面的自定义页成为第一页。用于单独盯某一页。
+    禁掉「选择目标位置」页，让后面的向导页成为第一页。用于单独盯某一页。
 
 .PARAMETER StyleOverride
     覆盖 [Setup] 的 WizardStyle 整行，用来对比 Inno 内置样式
@@ -42,8 +38,8 @@
     这个模式会短暂置顶窗口。客户区的验证一律用默认的离屏模式。
 
 .EXAMPLE
-    pwsh -File fushi/tool/preview_installer.ps1 -CompileOnly -Tag 0.0.0 -ForceFreshInstall
-    pwsh -File fushi/tool/preview_installer.ps1 -Pages 4 -ForceFreshInstall
+    pwsh -File fushi/tool/preview_installer.ps1 -CompileOnly -Tag 0.0.0
+    pwsh -File fushi/tool/preview_installer.ps1 -Pages 4
     pwsh -File fushi/tool/preview_installer.ps1 -StyleOverride 'modern light windows11 hidebevels'
     pwsh -File fushi/tool/preview_installer.ps1 -RealScreen -Pages 1   # 验标题栏配色
 #>
@@ -54,7 +50,6 @@ param(
   [string]$OutDir = "$env:TEMP\fushi-installer-preview",
   [string]$Iss,
   [string]$StyleOverride = '',
-  [switch]$ForceFreshInstall,
   [switch]$SkipDirPage,
   [switch]$Install,
   [switch]$CompileOnly,
@@ -192,12 +187,6 @@ if (-not $Install) {
 if ($SkipDirPage) {
   $text = $text -replace '(?m)^PrivilegesRequired=lowest\r?$', "PrivilegesRequired=lowest`r`nDisableDirPage=yes"
 }
-if ($ForceFreshInstall) {
-  # 文件是 CRLF，pattern 里必须 \r?\n；写字面换行会匹配不到（踩过：补丁静默不生效，
-  # 但编译照样成功，白截了好几轮图）。
-  $text = $text -replace '(?s)function IsFreshInstall\(\): Boolean;\r?\n\s*begin.*?\r?\nend;',
-    "function IsFreshInstall(): Boolean;`r`nbegin`r`n  Result := True;`r`nend;"
-}
 if ($StyleOverride) {
   $text = $text -replace '(?m)^WizardStyle=.*$', "WizardStyle=$StyleOverride"
 }
@@ -207,7 +196,6 @@ Set-Content -LiteralPath $stagedIss -Value $text -Encoding UTF8 -NoNewline
 if ($text -notmatch [regex]::Escape($appIdSetting)) { throw 'AppId 隔离补丁未命中' }
 if ($text -notmatch [regex]::Escape($defaultDirSetting)) { throw 'DefaultDirName 隔离补丁未命中' }
 if ($SkipDirPage -and ($text -notmatch 'DisableDirPage=yes')) { throw 'SkipDirPage 补丁未命中' }
-if ($ForceFreshInstall -and ($text -notmatch 'Result := True;')) { throw 'ForceFreshInstall 补丁未命中' }
 if ($StyleOverride -and ($text -notmatch [regex]::Escape($StyleOverride))) { throw 'StyleOverride 补丁未命中' }
 
 # ── 4. 编译 ───────────────────────────────────────────────────────────────────

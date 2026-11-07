@@ -15,7 +15,6 @@ import 'package:fushi/src/settings/settings_schema_widgets.dart'
     show SettingsSectionFooter;
 import 'package:fushi/src/utils/misc/collection_exporter.dart';
 import 'package:fushi/src/media/import/real_path_directory_picker.dart';
-import 'package:path/path.dart' as p;
 
 /// Full-screen page for managing profiles, media-type bindings,
 /// and per-profile settings.
@@ -418,7 +417,7 @@ class _ProfileManagementBodyState extends ConsumerState<ProfileManagementBody> {
     String profileName,
   ) async {
     final AppModel appModel = ref.read(appProvider);
-    final String fontsRoot = p.join(appModel.appDirectory.path, 'custom_fonts');
+    final String fontsRoot = appModel.customFontsDirectory.path;
     String content;
     try {
       content = await vm.exportProfile(
