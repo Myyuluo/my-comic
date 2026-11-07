@@ -21,7 +21,7 @@ _Avoid_: Tachiyomi（历史前身，除非讨论历史格式）
 _Avoid_: 插件、addon
 
 **Source（源）**:
-由 Extension 提供的一个内容站点或来源，是搜索、详情、章节和页面的实际提供者。
+内容站点或来源，是搜索、详情、章节和页面的实际提供者，通常由 Extension 提供。图源列表也包含不由 Extension 提供的内置伪源，例如「本地图源」；这类源不进入扩展源枚举。
 _Avoid_: 扩展、插件
 
 **Extension store（扩展仓库）**:
@@ -41,11 +41,11 @@ _Avoid_: 授权、白名单
 _Avoid_: 条目、书籍
 
 **Manga 作品页（Manga series page）**:
-从 Library 或在线 Source 点击一部 Manga 后打开的详情页；左栏展示封面、书名、作者与状态 chip，并提供章节列表与阅读入口。书名与作者可点击，以当前显示的文字去「Manga 全局搜索」检索全部已启用的在线 Source。
+从 Library、在线 Source 或「本地图源」点击一部 Manga 后打开的详情页；左栏展示封面、书名、作者与状态 chip，并提供章节列表与阅读入口。书名与作者可点击，以当前显示的文字去「Manga 全局搜索」检索全部已启用的在线 Source。
 _Avoid_: 详情页（与小说 / 视频作品页混淆时）、书页
 
 **Manga 全局搜索（搜索全部来源）**:
-在全部已启用的在线 Source 中按关键词执行搜索的页面；Source 自身与提供它的 Extension 都启用才参与搜索。从 Manga 作品页点击书名或作者会带着该关键词进入并自动执行搜索。
+在全部已启用的在线 Source 中按关键词执行搜索的页面；Source 自身与提供它的 Extension 都启用才参与搜索。从 Manga 作品页点击书名或作者会带着该关键词进入并自动执行搜索。本地图源不是在线 Source，不参与该搜索。
 _Avoid_: 聚合搜索、全源搜索（口语；正式术语用本名）
 
 **Chapter（章节）**:
@@ -53,7 +53,7 @@ Manga 的一个章节，包含一组 Page。
 _Avoid_: 话
 
 **Chapter container（章节载体）**:
-Chapter 的磁盘形态：平铺页图的文件夹，或包含页图的 CBZ 压缩包。
+Chapter 的磁盘形态：平铺页图的文件夹，或包含页图的 CBZ 压缩包。在线下载默认生成 CBZ；既有文件夹章节继续以文件夹存在，两种形态共存。
 _Avoid_: 章节文件夹（只指一种）、压缩包（泛指）
 
 **Page（页）**:
@@ -68,6 +68,10 @@ _Avoid_: 收藏、书库
 把 Manga 从 Library 移除。Local source 的 Manga 移出后不删除磁盘文件；在线 Manga 可另行选择是否删除已下载文件。
 _Avoid_: 删除（删除文件是另一个动作）
 
+**Add to Library（加入书架）**:
+把一部在「本地图源」里扫描到但尚未入库的 Manga 显式登记进 Library 的动作；点开该作品某一章阅读时也会先静默执行同一登记。已移出书架但文件仍在的本地 Manga 可由此重新加入。
+_Avoid_: 导入（批量导入已退役）、自动入库
+
 **Category（分类）**:
 Mihon 备份中的 Library 内用户自定义分组。仅为 Mihon 备份兼容而保留；my-comic v1 已无分类 UI，书架不再按分类分组。
 _Avoid_: 标签、文件夹、视图页签
@@ -77,11 +81,11 @@ Library 条目的用户自定义标记，存放在 `book_tags` 标签池及条�
 _Avoid_: 分类、合集、文件夹
 
 **View tab（视图页签）**:
-页面顶部用来切换平级视图的页签（例如浏览页的「在线源 / 发现 / 导入」）。它属于页面内部切换项，不是一级导航项——「下载」是一级导航页（见「下载页」），不是视图页签。漫画页只剩书架一个视图后不再显示视图页签，Tag chips 占据该位置。
+页面顶部用来切换平级视图的页签（例如浏览页的「图源 / 发现」；「导入」子视图已移除）。它属于页面内部切换项，不是一级导航项——「下载」是一级导航页（见「下载页」），不是视图页签。漫画页只剩书架一个视图后不再显示视图页签，Tag chips 占据该位置。
 _Avoid_: 子标签、标签页、分类页签
 
 **下载页（Downloads page）**:
-一级导航中的「下载」页，位于「浏览」之后、「设置」之前。标题使用与浏览页一致的页内浮动标题胶囊（向下滚动收起、向上滚动或回到顶部重新显示），不显示视图页签；内容为漫画章节下载任务列表与空态提示。它不是「视图页签」，也不绑定任何功能模块。
+一级导航中的「下载」页，位于「浏览」之后、「设置」之前。标题使用与浏览页一致的页内浮动标题胶囊（向下滚动收起、向上滚动或回到顶部重新显示），不显示视图页签；内容为漫画章节下载任务列表与空态提示。任务行不显示来源标签、不可展开、整行不可点；排队中/下载中的任务在行尾直接取消，失败/已取消的在行尾直接重试，已完成的不显示行尾操作。它不是「视图页签」，也不绑定任何功能模块。
 _Avoid_: 下载视图、下载页签、子标签
 
 **Reading progress（阅读进度）**:
@@ -100,8 +104,12 @@ _Avoid_: 隐身模式、隐私浏览、无痕模式（浏览器同名词会让�
 通过 Source 的 HTTP 接口把 Chapter 的 Page 保存到本地。
 _Avoid_: 缓存、BT 下载
 
+**Save as CBZ（保存为CBZ压缩包）**:
+「设置 → 存储与下载 → 下载」里的开关，默认开启。开启时新开始的在线 Chapter 下载保存为 `.cbz` 压缩包，关闭时保存为文件夹；只影响任务开始运行时的新下载，运行中的任务与已有章节保持原形态。
+_Avoid_: 批量转换、自动压缩、打包下载
+
 **Download library（在线下载库）**:
-由应用管理的已下载在线 Chapter 集合，按 Source → Manga → Chapter 组织在 Content root 下。
+由应用管理的已下载在线 Chapter 集合，按 Source → Manga → Chapter 组织在 Content root 下。新开始的下载默认把 Chapter 保存为 `.cbz` 压缩包（见 Save as CBZ）；已有的文件夹章节保持原样，两种 Chapter container 共存。
 _Avoid_: 下载文件夹、下载目录（与「下载页」混淆）
 
 **Download index（下载索引）**:
@@ -156,17 +164,17 @@ _Avoid_: 同步、上传
 设备之间的实时数据交换。本项目明确不做。
 _Avoid_: 追踪、导入
 
-**Local source（本地源）**:
-从 Local source root 内的 CBZ/ZIP/文件夹读取 Manga；`.mokuro` 覆盖层属于本地源。
-_Avoid_: 本地文件、离线模式
+**Local source（本地图源）**:
+图源列表第一位的内置伪源，从 Local source root 原地读取 Manga 与 Chapter；不由 Extension 提供，也不走扩展的启用与安装检查。进入「本地图源」时自动扫描并展示封面网格，只展示、不自动登记；用户对单部作品执行 Add to Library 才进入 Library。它不参与 Manga 全局搜索、发现页来源磁贴或热门行。`.mokuro` 覆盖层属于本地图源。
+_Avoid_: 本地文件、离线模式、本地源
 
-**Local source root（本地源根）**:
-承载 Local source 的目录；用户把 Manga/Chapter 文件夹或 CBZ 放在这里，my-comic 原地读取、不复制。
+**Local source root（本地图源根）**:
+承载 Local source 的目录；用户把 Manga/Chapter 文件夹或 CBZ 放在这里，my-comic 原地读取、不复制。扫描时机只有两种：进入「本地图源」时自动扫描，或运行 Rebuild download index。
 _Avoid_: 本地库、离线库
 
 **OCR**:
 在设备上从图片识别文字。本项目不包含端上 OCR/AI 生成。
-_Avoid_: 本地源
+_Avoid_: 本地图源
 
 **Sidecar（伴生进程）**:
 随应用启动的 JVM 进程，负责运行 Extension 和解析/生成 Backup。
@@ -203,7 +211,7 @@ _Avoid_: 分支、fork、应用快照（那是 `.fushi.zip`）
 ### Storage and portability
 
 **Content root（内容根）**:
-用户可见的漫画内容根，包含 Download library、Backup 文件与 Local source；卸载应用不会删除它。
+用户可见的漫画内容根，包含 Download library、Backup 文件与 Local source；卸载应用不会删除它。设置里的 UI 文案为「存储位置」。
 _Avoid_: 数据根、数据目录、数据存储位置（未限定是哪一类时）
 
 **Program state root（程序状态根）**:
