@@ -110,11 +110,7 @@ void main() {
       buildDownloadsDestination().sections.map(
         (SettingsSection section) => section.id,
       ),
-      <String>[
-        'storage.location.section',
-        'storage.local_import.section',
-        'storage.rebuild.section',
-      ],
+      <String>['storage.location.section', 'storage.rebuild.section'],
     );
   });
 

@@ -15,7 +15,6 @@ import 'package:fushi_core/fushi_core.dart'
     show VideoDownloadJobFileRow, VideoDownloadJobRow;
 
 import 'package:fushi/src/media/manga/discovery/manga_discovery_page.dart';
-import 'package:fushi/src/media/manga/manga_sources_page.dart';
 
 import 'package:fushi/src/models/app_model.dart';
 import 'package:fushi/src/models/module_id.dart';
@@ -41,19 +40,18 @@ import 'package:fushi/src/utils/components/fushi_floating_chrome.dart'
         FushiFloatingChromeOverlay;
 import 'package:fushi/utils.dart';
 
-/// 「浏览」页签（Mihon 的 Browse 形态）：在线源 / 发现 / 导入。
+/// 「浏览」页签（Mihon 的 Browse 形态）：图源 / 发现。
 ///
 /// 2026-09-27 由「下载」模块改名而来（持久化键 `module_downloads_enabled` 冻结），
 /// 同时把散在各库页与导入页的在线入口收拢到这里：
-/// - **在线源**：小说（LNReader）/ 漫画（Mihon）/ 视频（Aniyomi）三域已装扩展
-///   提供的在线源；「来源 / 扩展」在页签内由二级胶囊切换，扩展仓库挂在「仓库」
+/// - **图源**：小说（LNReader）/ 漫画（Mihon）/ 视频（Aniyomi）三域已装扩展
+///   提供的来源；「来源 / 扩展」在页签内由二级胶囊切换，扩展仓库挂在「仓库」
 ///   动作上（Mihon 把 repo 放在 Extensions 的工具栏）；
-/// - **发现**：书 / 漫画 / 游戏 / 视频四域的生产发现页（原「资源」页签）；
-/// - **导入**：漫画的 Local import（快速导入、常驻扫描根、互联对端），2026-11-05
-///   从漫画页搬来。
+/// - **发现**：书 / 漫画 / 游戏 / 视频四域的生产发现页（原「资源」页签）。
 ///
-/// 下载任务列表 2026-11-07 迁出为一级「下载」页（`HomeTab.downloads`），这里不再
-/// 有「下载」视图页签。
+/// 2026-11-08：「在线源」页签改名为「图源」；批量导入子视图退役（本地漫画改由
+/// 图源列表里的「本地图源」承担）。下载任务列表 2026-11-07 迁出为一级「下载」页
+/// （`HomeTab.downloads`），这里不再有「下载」视图页签。
 ///
 /// 每个页签内先选内容域，再直接复用各域自己的生产组件，不另写第二套 UI。
 class BrowsePage extends ConsumerStatefulWidget {
@@ -65,19 +63,7 @@ class BrowsePage extends ConsumerStatefulWidget {
 
 /// 「浏览」的页签。**用枚举而不是下标**：页签随平台 / 模块开关增减，按位置
 /// 记账会在页签少一个时静默落错页。
-enum BrowseTab { sources, discover, localImport, extensions }
-
-/// 顶层页签接力（二级标签越界横滑）时，目标页签的二级标签要不要按衔接方向
-/// 重新落端（往后落首段、往前落末段）。
-///
-/// 来源 ↔ 扩展之间**不**落端：两者共用同一份内容域选择（来回切不丢选择），
-/// 改它就等于在拖动途中改被拖那一页的二级下标，标签条与页面错位（PR #1735）。
-/// 其余页签各持自己的二级状态，照常落端。
-bool browseHandOffRealignsSections(BrowseTab from, BrowseTab to) {
-  bool isOnline(BrowseTab tab) =>
-      tab == BrowseTab.sources || tab == BrowseTab.extensions;
-  return !(isOnline(from) && isOnline(to));
-}
+enum BrowseTab { sources, discover }
 
 /// 测试入口：直接挂一份浏览页的「二级标签 + 横滑页面」（真页面要起 Mihon /
 /// LNReader manager，widget 测试挂不起来）。
@@ -114,8 +100,8 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
   /// 来源 / 扩展共用的内容域选择（在两者之间来回切不丢选择）。
   OnlineSourcesDomain _onlineDomain = OnlineSourcesDomain.novel;
 
-  /// 「在线源」页签里此刻显示来源还是扩展（2026-10-14 用户：库页顶栏把来源 /
-  /// 扩展并成「在线源」后，「浏览模块也可以做」）。两者共用一个顶层页签
+  /// 「图源」页签里此刻显示来源还是扩展（2026-10-14 用户：库页顶栏把来源 /
+  /// 扩展并在一个页签后，「浏览模块也可以做」）。两者共用一个顶层页签
   /// （[BrowseTab.sources] 这一槽），由二级行右侧的分段切换。
   OnlineSourcesSection _onlineSection = OnlineSourcesSection.sources;
 
@@ -191,10 +177,9 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
     return next;
   }
 
-  /// 此刻可见的页签，顺序即页头顺序：在线源 → 发现 → 导入。
+  /// 此刻可见的页签，顺序即页头顺序：图源 → 发现。
   ///
-  /// 在线源页签只在至少一个域有在线来源时出现；发现页签跟四个库模块走；
-  /// 导入跟随浏览模块恒在。
+  /// 图源页签只在至少一个域有来源时出现；发现页签跟四个库模块走。
   List<BrowseTab> _visibleTabs(AppModel appModel) {
     final bool online = visibleOnlineSourcesDomains(
       appModel.moduleVisibility,
@@ -205,22 +190,18 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
     final bool discover =
         StoreRestrictedCapability.externalDiscovery.isAvailable &&
         _visibleResourceDomains(appModel.moduleVisibility).isNotEmpty;
-    // 用户口径：浏览页签顺序 在线源 → 发现 → 导入；默认落地沿用「第一个可见
-    // 页签」，因此打开浏览落在在线源。
+    // 用户口径：浏览页签顺序 图源 → 发现；默认落地沿用「第一个可见页签」，
+    // 因此打开浏览落在图源。
     return <BrowseTab>[
-      // 来源 / 扩展并成一个「在线源」页签（见 [_onlineSection]）。
+      // 来源 / 扩展并成一个「图源」页签（见 [_onlineSection]）。
       if (online) BrowseTab.sources,
       if (discover) BrowseTab.discover,
-      // 导入跟着浏览页走，不额外看漫画模块开关。
-      BrowseTab.localImport,
     ];
   }
 
   String _tabLabel(BrowseTab tab) => switch (tab) {
     BrowseTab.sources => t.media_import_segment_sources,
-    BrowseTab.extensions => t.media_import_segment_extensions,
     BrowseTab.discover => t.library_view_discover,
-    BrowseTab.localImport => t.library_view_import,
   };
 
   void _selectOnlineDomain(OnlineSourcesDomain domain) {
@@ -238,7 +219,7 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
     });
   }
 
-  /// 在线源此刻选中的内容域（当前域已被模块开关关掉时回落第一个可见域）；
+  /// 图源此刻选中的内容域（当前域已被模块开关关掉时回落第一个可见域）；
   /// 没有可见域时为 null。
   OnlineSourcesDomain? _selectedOnlineDomain() {
     final List<OnlineSourcesDomain> domains = visibleOnlineSourcesDomains(
@@ -248,7 +229,7 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
     return domains.contains(_onlineDomain) ? _onlineDomain : domains.first;
   }
 
-  /// 「在线源」页签：内容域选择条 + 来源 / 扩展切换 + 各域可横滑、保活的
+  /// 「图源」页签：内容域选择条 + 来源 / 扩展切换 + 各域可横滑、保活的
   /// 在线来源面。
   Widget _buildOnlineTab() {
     final AppModel appModel = ref.watch(appProvider);
@@ -327,7 +308,7 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
 
   /// 二级标签横滑越过首 / 尾段时，把手势交给相邻的顶层页签：从 [from] 往 [delta]
   /// 方向（+1 下一个 / -1 上一个）切过去，并让目标页签的二级标签落在衔接的那一端
-  /// （往后落首段、往前落末段）——三个页签的二级标签连成一条可一路滑过去的带子。
+  /// （往后落首段、往前落末段）——两个页签的二级标签连成一条可一路滑过去的带子。
   void _handOffFrom(BrowseTab from, int delta) {
     final TabController? controller = _tabController;
     if (controller == null || controller.indexIsChanging) return;
@@ -339,18 +320,13 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
       SectionSwipeOverflowScope.maybeOf(context)?.call(forward: delta > 0);
       return;
     }
-    // 来源 / 扩展共用同一份内容域：两者之间接力只切顶层页签、落在同一个域上。
-    // 若按「往后首段 / 往前末段」去改共享域，被拖的那一页的二级控制器会在拖动
-    // 途中被改下标（TabBarView 拖动中不跟随跳页），标签条与页面就此错位。
-    if (!browseHandOffRealignsSections(from, _controllerTabs[target])) {
-      controller.animateTo(target);
-      return;
-    }
+    // 目标页签各持自己的二级状态：按衔接方向落端（往后落首段、往前落末段），
+    // 这样二级标签连成一条可一路滑过去的带子。
     final bool toFirst = delta > 0;
     final AppModel appModel = ref.read(appProvider);
     setState(() {
       switch (_controllerTabs[target]) {
-        case BrowseTab.sources || BrowseTab.extensions:
+        case BrowseTab.sources:
           final List<OnlineSourcesDomain> domains = visibleOnlineSourcesDomains(
             appModel.moduleVisibility,
           );
@@ -363,9 +339,6 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
           if (domains.isNotEmpty) {
             _resourceDomain = toFirst ? domains.first : domains.last;
           }
-        case BrowseTab.localImport:
-          // 导入页没有二级分区，无须落端。
-          break;
       }
     });
     controller.animateTo(target);
@@ -604,9 +577,6 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
     );
   }
 
-  /// 「导入」页签：复用漫画的 Local import 页（快速导入 + 常驻来源 + 互联对端）。
-  Widget _buildLocalImportTab() => const MangaSourcesPage(embedded: true);
-
   @override
   Widget build(BuildContext context) {
     final List<BrowseTab> tabs = _visibleTabs(ref.watch(appProvider));
@@ -645,10 +615,8 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
                     key: ValueKey<BrowseTab>(tab),
                     active: tabs[controller.index] == tab,
                     child: switch (tab) {
-                      BrowseTab.sources ||
-                      BrowseTab.extensions => _buildOnlineTab(),
+                      BrowseTab.sources => _buildOnlineTab(),
                       BrowseTab.discover => _buildResourceHub(),
-                      BrowseTab.localImport => _buildLocalImportTab(),
                     },
                   ),
               ],
