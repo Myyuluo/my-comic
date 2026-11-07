@@ -1,6 +1,8 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:archive/archive_io.dart';
 import 'package:drift/native.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -13,6 +15,7 @@ import 'package:fushi/src/media/manga/library/online_manga_library_service.dart'
 import 'package:fushi/src/media/manga/library/online_manga_runtime_adapter.dart';
 import 'package:fushi/src/media/manga/manga_reader_preferences.dart';
 import 'package:fushi/src/media/manga/manga_view_prefs.dart';
+import 'package:fushi/src/media/manga/reader/manga_session_page_image.dart';
 import 'package:fushi/src/media/media_item.dart';
 import 'package:fushi/src/pages/implementations/manga_fushi_page.dart';
 import 'package:fushi/src/platform/platform_providers.dart';
@@ -261,6 +264,62 @@ Future<Directory> _writeDownloadedChapter(
   return chapterDir;
 }
 
+/// 在 Download library 写一个 CBZ 章节：`downloads/{source}/{manga}/{chapter}.cbz`
+/// + 数据库映射（containerKind = archive）。`pages.json` 的页序故意与文件名自然序
+/// 相反，阅读器必须按包根页表翻页。
+Future<File> _writeDownloadedArchiveChapter(
+  FushiDatabase db, {
+  required String bookKey,
+  required String bookDir,
+  required String chapterKey,
+  String containerName = 'Chapter 1.cbz',
+  String chapterName = 'Chapter 1',
+  bool withManifest = true,
+}) async {
+  final Uint8List first = Uint8List.fromList(
+    img.encodePng(img.Image(width: 100, height: 150)),
+  );
+  final Uint8List second = Uint8List.fromList(
+    img.encodePng(img.Image(width: 120, height: 180)),
+  );
+  final Archive archive = Archive()
+    ..addFile(ArchiveFile('001.png', first.length, first))
+    ..addFile(ArchiveFile('002.png', second.length, second));
+  if (withManifest) {
+    final List<int> manifest = utf8.encode(
+      jsonEncode(<String, Object?>{
+        'source': <String, Object?>{
+          'runtime': 'mihon',
+          'id': '1',
+          'name': 'Fake',
+          'extensionPackage': 'org.example.fixture',
+        },
+        'manga': <String, Object?>{
+          'key': '/series/fixture',
+          'title': 'Fixture series',
+        },
+        'chapter': <String, Object?>{'key': chapterKey, 'name': chapterName},
+        'pages': <Object?>[
+          <String, Object?>{'url': '002.png', 'width': 120, 'height': 180},
+          <String, Object?>{'url': '001.png', 'width': 100, 'height': 150},
+        ],
+        'downloadedAt': DateTime.utc(2026, 11, 7).toIso8601String(),
+      }),
+    );
+    archive.addFile(ArchiveFile('pages.json', manifest.length, manifest));
+  }
+  final File file = downloadChapterArchiveFile(bookDir, containerName);
+  await file.writeAsBytes(ZipEncoder().encode(archive)!);
+  await db.upsertMangaChapterDir(
+    bookKey: bookKey,
+    chapterKey: chapterKey,
+    folderName: containerName,
+    containerKind: MangaChapterContainerKind.archive,
+    updatedAt: 1,
+  );
+  return file;
+}
+
 Future<void> _pumpUntil(WidgetTester tester, Finder finder) async {
   for (int i = 0; i < 60; i++) {
     await Future<void>.delayed(const Duration(milliseconds: 50));
@@ -372,6 +431,221 @@ void main() {
           ?.key,
       '/chapter/1',
     );
+  });
+
+  testWidgets('在线条目 + 当前章是 CBZ 下载章 → 从压缩包按需装载，正常渲染', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(600, 1000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final _MangaTestAppModel appModel = _MangaTestAppModel(db, library, root);
+
+    late String bookKey;
+    late String bookDir;
+    await tester.runAsync(() async {
+      final EpubBookRow row = await library.add(_entry());
+      bookKey = row.bookKey;
+      bookDir = row.extractDir;
+      await _writeDownloadedArchiveChapter(
+        db,
+        bookKey: bookKey,
+        bookDir: bookDir,
+        chapterKey: '/chapter/1',
+      );
+
+      await tester.pumpWidget(_harness(appModel, bookKey));
+      await _pumpUntil(
+        tester,
+        find.byKey(const ValueKey<String>('manga_content_ready')),
+      );
+    });
+    await tester.pump();
+
+    expect(
+      find.byKey(const ValueKey<String>('manga_content_ready')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('manga_chapter_not_downloaded')),
+      findsNothing,
+    );
+    expect(adapter.resolveCalls, 0, reason: '已下载的 CBZ 章不打源');
+    // 页缓存落在 app 临时目录的会话私有目录里；压缩包本身留在 Download library，
+    // 不被复制、也不展开成章节目录。
+    expect(
+      Directory(p.join(root.path, 'local_source_archive_cache')).existsSync(),
+      isTrue,
+    );
+    expect(
+      downloadChapterDirectory(bookDir, 'Chapter 1').existsSync(),
+      isFalse,
+      reason: '不得把整包解压进受管目录',
+    );
+
+    // 关闭阅读器：页会话清理临时解压目录（缓存可丢，原包不动）。
+    final File archive = downloadChapterArchiveFile(bookDir, 'Chapter 1.cbz');
+    await tester.runAsync(() async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      await tester.pump();
+    });
+    final Directory cacheRoot = Directory(
+      p.join(root.path, 'local_source_archive_cache'),
+    );
+    expect(
+      cacheRoot.existsSync()
+          ? cacheRoot.listSync()
+          : const <FileSystemEntity>[],
+      isEmpty,
+      reason: '会话关闭后临时解压目录应被清理',
+    );
+    expect(archive.existsSync(), isTrue, reason: '原包只读，关闭阅读器不得删改');
+  });
+
+  testWidgets('CBZ 下载章的页面一览用会话缩略图（不预解整包）', (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(600, 1000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final _MangaTestAppModel appModel = _MangaTestAppModel(db, library, root);
+
+    late String bookKey;
+    await tester.runAsync(() async {
+      final EpubBookRow row = await library.add(_entry());
+      bookKey = row.bookKey;
+      await _writeDownloadedArchiveChapter(
+        db,
+        bookKey: bookKey,
+        bookDir: row.extractDir,
+        chapterKey: '/chapter/1',
+      );
+      await tester.pumpWidget(_harness(appModel, bookKey));
+      await _pumpUntil(
+        tester,
+        find.byKey(const ValueKey<String>('manga_content_ready')),
+      );
+      await tester.tap(
+        find.byKey(const ValueKey<String>('manga_reader_page_grid_button')),
+      );
+      await _pumpUntil(
+        tester,
+        find.byKey(const ValueKey<String>('manga_page_grid')),
+      );
+    });
+    await tester.pump();
+
+    expect(
+      find.byKey(const ValueKey<String>('manga_page_grid')),
+      findsOneWidget,
+    );
+    final Finder images = find.descendant(
+      of: find.byKey(const ValueKey<String>('manga_page_grid')),
+      matching: find.byType(Image),
+    );
+    expect(images, findsWidgets);
+    for (final Image image in tester.widgetList<Image>(images)) {
+      expect(image.image, isA<ResizeImage>());
+      expect(
+        (image.image as ResizeImage).imageProvider,
+        isA<MangaSessionPageImage>(),
+        reason: 'CBZ 页的缩略图由页会话按需解压，不读不存在的盘上文件',
+      );
+    }
+
+    // 关阅读器让压缩包句柄释放，tearDown 才能删测试根目录。
+    await tester.runAsync(() async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      await tester.pump();
+    });
+  });
+
+  testWidgets('手工放置的 CBZ（无 pages.json）按图片自然序阅读', (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(600, 1000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final _MangaTestAppModel appModel = _MangaTestAppModel(db, library, root);
+
+    late String bookKey;
+    await tester.runAsync(() async {
+      final EpubBookRow row = await library.add(_entry());
+      bookKey = row.bookKey;
+      // 只有页图、没有包根 pages.json：完整性判据不算「已下载」，但阅读器仍应
+      // 按 Local source 的口径回退图片条目自然序把包读出来。
+      await _writeDownloadedArchiveChapter(
+        db,
+        bookKey: bookKey,
+        bookDir: row.extractDir,
+        chapterKey: '/chapter/1',
+        withManifest: false,
+      );
+
+      await tester.pumpWidget(_harness(appModel, bookKey));
+      await _pumpUntil(
+        tester,
+        find.byKey(const ValueKey<String>('manga_content_ready')),
+      );
+    });
+    await tester.pump();
+
+    expect(
+      find.byKey(const ValueKey<String>('manga_content_ready')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('manga_chapter_not_downloaded')),
+      findsNothing,
+    );
+    expect(adapter.resolveCalls, 0, reason: '能读包就不去打源');
+
+    // 关阅读器让压缩包句柄释放，tearDown 才能删测试根目录。
+    await tester.runAsync(() async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await Future<void>.delayed(const Duration(milliseconds: 200));
+      await tester.pump();
+    });
+  });
+
+  testWidgets('损坏的 CBZ 章 → 既有失败态，不崩溃', (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(600, 1000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final _MangaTestAppModel appModel = _MangaTestAppModel(db, library, root);
+
+    late String bookKey;
+    await tester.runAsync(() async {
+      final EpubBookRow row = await library.add(_entry());
+      bookKey = row.bookKey;
+      final File broken = downloadChapterArchiveFile(
+        row.extractDir,
+        'Chapter 1.cbz',
+      );
+      await broken.writeAsString('not a zip');
+      await db.upsertMangaChapterDir(
+        bookKey: bookKey,
+        chapterKey: '/chapter/1',
+        folderName: 'Chapter 1.cbz',
+        containerKind: MangaChapterContainerKind.archive,
+        updatedAt: 1,
+      );
+
+      await tester.pumpWidget(_harness(appModel, bookKey));
+      await _pumpUntil(
+        tester,
+        find.byKey(const ValueKey<String>('manga_chapter_not_downloaded')),
+      );
+    });
+    await tester.pump();
+
+    expect(
+      find.byKey(const ValueKey<String>('manga_chapter_not_downloaded')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('manga_content_ready')),
+      findsNothing,
+    );
+    expect(tester.takeException(), isNull, reason: '坏包不得把异常掀翻阅读器');
   });
 
   testWidgets('在线条目 + 当前章未下载且直读失败 → 「本章未下载」态：入队按钮在、返回键在',
