@@ -7,23 +7,48 @@ import 'package:fushi/i18n/strings.g.dart';
 import 'package:fushi/src/backup_import/mihon_backup_import_service.dart';
 import 'package:fushi/src/backup_import/mihon_backup_parser.dart';
 import 'package:fushi/src/settings/settings_context.dart';
+import 'package:fushi/src/storage/app_paths.dart';
 import 'package:fushi/src/utils/adaptive/adaptive_widgets.dart';
 import 'package:fushi/src/utils/components/fushi_design_tokens.dart';
 import 'package:fushi/src/utils/components/fushi_material_components.dart';
 import 'package:fushi/src/utils/misc/show_app_dialog.dart';
 
+/// The Backup directory's path: `<Content root>/autobackup` (ADR 0011,
+/// ADR 0005 update). `.tachibk` import/export pickers start here.
+String mihonBackupPickerInitialDirectory(AppPaths paths) =>
+    paths.autobackupRoot.path;
+
+/// Picks one `.tachibk` Backup file, starting in [initialDirectory].
+///
+/// [picker] is injectable so tests can assert the picker request (default
+/// directory and allowed extension) without opening a native dialog.
+Future<String?> pickMihonBackupFile({
+  required String initialDirectory,
+  FilePicker? picker,
+}) async {
+  final FilePickerResult? picked = await (picker ?? FilePicker.platform)
+      .pickFiles(
+        type: FileType.custom,
+        allowedExtensions: const <String>['tachibk'],
+        allowMultiple: false,
+        initialDirectory: initialDirectory,
+        dialogTitle: t.backup_import_mihon_title,
+      );
+  return picked?.files.single.path;
+}
+
 /// Settings → System → Backup: pick a `.tachibk` file and import it.
 ///
 /// The backup is read from local disk and written into the local Library only.
-/// There is no network path in this flow.
+/// There is no network path in this flow. The picker opens in the Backup
+/// directory (`<Content root>/autobackup`); `.fushi.zip` App snapshots are a
+/// different format and are deliberately not offered here.
 Future<void> runMihonBackupImport(SettingsContext settings) async {
-  final FilePickerResult? picked = await FilePicker.platform.pickFiles(
-    type: FileType.custom,
-    allowedExtensions: const <String>['tachibk'],
-    allowMultiple: false,
-    dialogTitle: t.backup_import_mihon_title,
+  final String? path = await pickMihonBackupFile(
+    initialDirectory: mihonBackupPickerInitialDirectory(
+      settings.appModel.appPaths,
+    ),
   );
-  final String? path = picked?.files.single.path;
   if (path == null) return;
   final BuildContext context = settings.context;
   if (!context.mounted) return;

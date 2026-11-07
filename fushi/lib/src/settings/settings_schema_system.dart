@@ -261,6 +261,20 @@ SettingsDestination buildSystemDestination() {
             ),
             onTap: runMihonBackupImport,
           ),
+          // `.tachibk` 导出在 v1.5 交付（ADR 0005）；入口先展示但置灰，
+          // 让用户知道 Backup 会从这里走，同时不给出半成品动作。
+          SettingsActionItem(
+            id: 'system.export_mihon_backup',
+            title: t.backup_export_mihon_title,
+            subtitle: t.backup_export_mihon_subtitle,
+            icon: FushiIcons.upload,
+            enabled: (SettingsContext _) => false,
+            cli: const SettingsCliAction.unsupported(
+              'Exporting .tachibk backups is not implemented yet '
+              '(planned for v1.5).',
+            ),
+            onTap: (SettingsContext _) {},
+          ),
         ],
       ),
       SettingsSection(
