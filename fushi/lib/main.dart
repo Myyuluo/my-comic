@@ -66,6 +66,7 @@ import 'package:fushi/src/sync/sync_settings_schema.dart'
 import 'package:fushi/src/startup/webview_prewarm.dart';
 import 'package:fushi/src/startup/exit_flush_registry.dart';
 import 'package:fushi/src/startup/android_view_lifecycle.dart';
+import 'package:fushi/src/startup/program_state_shared_preferences.dart';
 import 'package:fushi/src/startup/test_root_shared_preferences.dart';
 import 'package:fushi/src/anki/anki_view_model.dart';
 import 'package:fushi/src/anki/ankimobile_mined_ledger.dart';
@@ -120,7 +121,6 @@ import 'package:fushi/src/media/media_item.dart';
 import 'package:path/path.dart' as p;
 import 'package:url_launcher/url_launcher.dart' show LaunchMode, launchUrl;
 import 'package:fushi/src/utils/misc/fushi_share.dart';
-import 'package:fushi/src/storage/legacy_support_dir_migration.dart';
 import 'package:fushi/src/engine_bindings.dart';
 import 'package:fushi/src/media/manga/mihon/mihon_cloudflare_challenge.dart';
 import 'package:fushi/src/media/manga/mihon/mihon_runtime_factory.dart';
@@ -194,19 +194,14 @@ void main([List<String> args = const <String>[]]) {
     _deferStartupFrame = !hiddenTestMode;
     if (_deferStartupFrame) binding.deferFirstFrame();
     // 测试根（FUSHI_TEST_ROOT）下 SharedPreferences 也要隔离，且必须抢在下面第一次
-    // 读 prefs 之前：否则集成测试写的 Anki 设置会落进用户真实的 prefs 文件。
+    // 读 prefs 之前：否则集成测试写的设置会落进用户真实的 prefs 文件。
     isolateSharedPreferencesUnderTestRoot();
-    // Fushi 改名：app-support 根一次性搬迁（Windows
-    // %APPDATA%\Hibiki\Hibiki -> %APPDATA%\Fushi\Fushi；macOS
-    // ~/Library/Application Support/com.example.hibiki -> app.fushi.reader）。
-    // 必须先于进程内**第一次** SharedPreferences 读取（下面的
-    // applyInitialPlacement 就会读）——插件会在新路径缓存空 prefs，数据根配置
-    // 与 documents 布局锚点全在里面，晚了就等于丢配置。
-    await migrateLegacySupportDir();
-    // macOS 的 prefs 走 NSUserDefaults（域名 = bundle id），不在上面搬走的
-    // app-support 根里。bundle id 从 com.example.hibiki 改成 app.fushi.reader
-    // 后旧域整份不可见，其中就有用户自选的数据根路径——只捞回那几个锚点键。
-    await recoverLegacyMacosPrefsFromSharedPreferences();
+    // Ticket 01：prefs 与数据库、Mihon runtime 一起住在 Program state root 的
+    // `state/`（`<exeDir>/userdata/state/shared_preferences.json`），不再落在
+    // `%APPDATA%`。测试根生效时上一步已装好隔离 store，这里是幂等 no-op。
+    isolateSharedPreferencesUnderProgramStateRoot();
+    // Ticket 01 / fresh start：不搬、也不读旧 Fushi / Hibiki 的 app-support 数据
+    // （`%APPDATA%` / NSUserDefaults 旧域）。旧目录由用户自行删除。
     // ASR 算法层住在独立包（fushi_asr_core），它的数据根 / 出站 HTTP / 日志三个装配点
     // 由宿主装上。放在这里而不是 `AppModel.initialise()`：装的全是同步工厂，没有
     // 时序前置条件，而 `initialise()` 有两个 entry point 绕开它（弹窗词典与悬浮

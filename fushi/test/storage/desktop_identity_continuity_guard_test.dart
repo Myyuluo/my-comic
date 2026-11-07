@@ -27,8 +27,6 @@ void main() {
   final File linuxCMake = File('linux/CMakeLists.txt');
   final File migration =
       File('lib/src/storage/legacy_support_dir_migration.dart');
-  final File coreDatabase =
-      File('../packages/fushi_core/lib/src/database/database.dart');
   final File mainDart = File('lib/main.dart');
 
   /// Runner.rc 的 VERSIONINFO 字段（形如 VALUE "Key", "Value" 后跟 NUL 串）。
@@ -133,56 +131,26 @@ void main() {
     );
   });
 
-  test('改名前旧主库的拒绝判定是开库路径上的第一件事', () {
-    final String source = coreDatabase.readAsStringSync();
-    expect(dartStringConst(source, 'legacyHibikiDatabaseFileName'),
-        isNot(dartStringConst(source, 'fushiDatabaseFileName')),
-        reason: '新旧主库文件名必须不同，否则「只有旧库」的判据永远不成立。');
-
-    final int openDbIndex = source.indexOf('LazyDatabase _openDb(');
-    expect(openDbIndex, greaterThan(0), reason: '找不到 _openDb —— 守卫已失效。');
-    const String callbackHead = 'LazyDatabase(() async {';
-    final int bodyStart = source.indexOf(callbackHead, openDbIndex);
-    expect(bodyStart, greaterThan(0));
-    final String firstStatement = source
-        .substring(bodyStart + callbackHead.length)
-        .trimLeft()
-        .split(';')
-        .first
-        .trim();
-    expect(
-      firstStatement,
-      'await _rejectPreRenameDatabase(dbDirectory)',
-      reason: '只有改名前 hibiki.db 的目录必须在任何 SQLite 连接打开之前被拒绝'
-          '（UnsupportedLegacySchemaException）：一旦先走到开库，SQLite 会在旁边'
-          '建一个空 fushi.db，用户看到的是数据全没了，且下次启动判据不再命中。'
-          '所以它必须是 _openDb 的 LazyDatabase 回调里的第一句。',
-    );
-  });
-
-  test('app-support 根搬迁跑在第一次读 SharedPreferences 之前', () {
+  test('fresh start：main() 不搬、不读旧 app-support / prefs 域', () {
     final String source = mainDart.readAsStringSync();
-    final int migrateIndex = source.indexOf('await migrateLegacySupportDir();');
-    expect(migrateIndex, greaterThan(0),
-        reason: 'main() 必须调用 migrateLegacySupportDir()——它是桌面改名升级里'
-            '唯一防止「打开一个空 app」的东西。');
+    expect(source.contains('migrateLegacySupportDir'), isFalse,
+        reason: 'Ticket 01 起旧 Fushi/Hibiki 数据一律忽略，启动不得再搬旧根。');
+    expect(source.contains('recoverLegacyMacosPrefs'), isFalse,
+        reason: '旧 NSUserDefaults 域里的数据根锚点同样不得再被捞回。');
 
-    // applyInitialPlacement 读窗口几何偏好，是 main() 里第一个碰
-    // SharedPreferences 的调用；prefs 插件一旦在新根建出空文件并缓存，
-    // 之后再搬目录也救不回 data_root / documents 布局锚点。
-    // 匹配**调用**而不是裸名字：上面那段注释里也写着 applyInitialPlacement，
-    // 只找名字会命中注释、把顺序判反。
+    // prefs store 必须抢在任何 SharedPreferences 读取之前装好（Ticket 01 起
+    // 落 Program state root 的 state/）。
+    final int storeInstallIndex =
+        source.indexOf('isolateSharedPreferencesUnderProgramStateRoot();');
     final int firstPrefsUse =
         source.indexOf('DesktopWindowPlacement.applyInitialPlacement(');
+    expect(storeInstallIndex, greaterThan(0),
+        reason: 'main() 必须安装 Program state root 的 prefs store。');
     expect(firstPrefsUse, greaterThan(0),
         reason: '找不到 DesktopWindowPlacement.applyInitialPlacement( —— 守卫已'
             '失效，请重新确定 main() 里第一个读 SharedPreferences 的调用。');
-    expect(
-      migrateIndex,
-      lessThan(firstPrefsUse),
-      reason: 'migrateLegacySupportDir() 必须排在任何 SharedPreferences 读取'
-          '之前。晚一步，插件就会在新根缓存一份空 prefs，用户的自定义数据根'
-          '指针与 documents 布局锚点当场作废。',
-    );
+    expect(storeInstallIndex, lessThan(firstPrefsUse),
+        reason: 'prefs store 必须早于第一次 SharedPreferences 读取，否则会先在'
+            '平台默认位置缓存一份。');
   });
 }

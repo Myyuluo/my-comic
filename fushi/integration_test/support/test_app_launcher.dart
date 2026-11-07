@@ -2,7 +2,6 @@ import 'package:flutter/widgets.dart';
 import 'package:fushi/main.dart' as app;
 import 'package:fushi/src/startup/test_root_shared_preferences.dart';
 import 'package:fushi/src/storage/app_paths.dart';
-import 'package:fushi/src/storage/legacy_support_dir_migration.dart';
 import 'package:fushi_core/fushi_core.dart' show FushiDatabase;
 
 /// Starts the real app after marking the fixture database as an existing,
@@ -15,8 +14,6 @@ import 'package:fushi_core/fushi_core.dart' show FushiDatabase;
 Future<void> launchFushiTestApp() async {
   WidgetsFlutterBinding.ensureInitialized();
   isolateSharedPreferencesUnderTestRoot();
-  await migrateLegacySupportDir();
-  await recoverLegacyMacosPrefsFromSharedPreferences();
   final AppPaths paths = await AppPaths.resolve();
   final FushiDatabase db = FushiDatabase(paths.supportRoot.path);
   try {

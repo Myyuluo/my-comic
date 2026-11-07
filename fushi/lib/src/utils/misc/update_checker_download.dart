@@ -1288,7 +1288,8 @@ Future<UpdateDownloadResponse> _openHttpDownload(
 
 Future<Directory> _updatesDirectoryForCurrentPlatform() async {
   if (Platform.isWindows) {
-    final Directory base = await getApplicationSupportDirectory();
+    // Ticket 01：更新包属于 Program state（随程序目录走、卸载删除）。
+    final Directory base = await AppPaths.stateRootDirectory();
     return Directory('${base.path}${Platform.pathSeparator}updates');
   }
   return getTemporaryDirectory();

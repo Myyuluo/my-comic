@@ -29,10 +29,15 @@ void main() {
   });
 
   File prefsFile() => File(
-    p.join(root.path, 'app-support', kTestRootSharedPreferencesFileName),
+    p.join(
+      root.path,
+      'userdata',
+      'state',
+      kTestRootSharedPreferencesFileName,
+    ),
   );
 
-  test('测试根生效：写入落在 <根>/app-support，且跨实例读回', () async {
+  test('测试根生效：写入落在 <根>/userdata/state，且跨实例读回', () async {
     expect(
       isolateSharedPreferencesUnderTestRoot(
         environment: <String, String>{'FUSHI_TEST_ROOT': root.path},

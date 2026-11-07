@@ -164,20 +164,25 @@ void main() {
     });
 
     test('app startup honors the isolated test root for app data and logs', () {
-      // TODO-935 E0：三个数据根的 fushiTestDirectory 隔离判定收敛到唯一入口
-      // AppPaths（lib/src/storage/app_paths.dart）；app_model 不再各自直连，改在启动期
-      // 经 AppPaths.resolve() 委托解析。守卫据此校验「隔离契约仍在、且走单一入口」。
+      // Ticket 01：Content root / Program state root 的测试隔离经 AppPaths 单一
+      // 入口；prefs 隔离落 `<testRoot>/userdata/state/`。
       final String appPaths =
           File('lib/src/storage/app_paths.dart').readAsStringSync();
       final String appModel =
           File('lib/src/models/app_model.dart').readAsStringSync();
       final String errorLog =
           File('lib/src/utils/misc/error_log_service.dart').readAsStringSync();
+      final String testPrefs =
+          File('lib/src/startup/test_root_shared_preferences.dart')
+              .readAsStringSync();
 
-      // 三根的测试隔离判定落在 AppPaths 单一入口。
-      expect(appPaths, contains("fushiTestDirectory('temp'"));
-      expect(appPaths, contains("fushiTestDirectory('app-documents'"));
-      expect(appPaths, contains("fushiTestDirectory('app-support'"));
+      // 新根的测试隔离判定落在 AppPaths 单一入口。
+      expect(appPaths, contains('fushiTestDirectory('));
+      expect(appPaths, contains("_testDirectory('content')"));
+      expect(appPaths, contains('programStateRootDirName'));
+      // prefs 与数据库同住 Program state root 的 state/。
+      expect(testPrefs, contains("'userdata'"));
+      expect(testPrefs, contains('AppPaths.stateDirName'));
       // 启动期 app_model 经 AppPaths.resolve() 接上隔离根（不绕过单一入口）。
       expect(appModel, contains('AppPaths.resolve('));
       // 日志服务仍独立 honor 隔离的 documents 根。
