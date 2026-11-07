@@ -483,10 +483,11 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
       }
       return;
     }
-    final bool revealed = await revealFirstOf(<String>[
-      container.manifestFile.path,
-      container.directory.path,
-    ]);
+    final bool revealed = await revealFirstOf(
+      container.isArchive
+          ? <String>[container.archiveFile!.path]
+          : <String>[container.manifestFile!.path, container.directory!.path],
+    );
     if (revealed || !mounted) return;
     FushiToast.show(
       msg: t.media_file_location_failed,

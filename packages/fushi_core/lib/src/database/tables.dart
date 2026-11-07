@@ -3240,14 +3240,27 @@ class MangaDownloadJobs extends Table {
       ];
 }
 
-/// Download library 的章目录映射（storage-layout 票 04）。
+/// Download library 的章节容器形态（`manga_chapter_dirs.container_kind`）。
 ///
-/// 目录名不是身份：`downloads/{source}/{manga}/{chapter}` 里的 source/manga/
-/// chapter 都是可读展示名，标题或源改名不自动重命名目录。阅读器、删除、重建
-/// 都通过这张表把稳定的 `(bookKey, chapterKey)` 映射到**实际**章目录名。
+/// - [folder]：`downloads/{source}/{manga}/{chapter}/` 平铺页图目录；
+/// - [archive]：`downloads/{source}/{manga}/{chapter}.cbz` 压缩包。
 ///
-/// 值 `folderName` 是相对 manga 目录（`epub_books.extractDir`）的单段目录名；
-/// 不含路径分隔符。`deleteEpubBook` 在同一事务里级联删掉本书的行。
+/// v2 及更早的映射没有这一列，迁移时一律视为 [folder]。
+abstract final class MangaChapterContainerKind {
+  static const String folder = 'folder';
+  static const String archive = 'archive';
+}
+
+/// Download library 的章节容器映射（storage-layout 票 04；CBZ 票 06）。
+///
+/// 目录/文件名不是身份：`downloads/{source}/{manga}/{chapter}` 里的 source/manga/
+/// chapter 都是可读展示名，标题或源改名不自动重命名。阅读器、删除、重建
+/// 都通过这张表把稳定的 `(bookKey, chapterKey)` 映射到**实际**容器名。
+///
+/// 值 `folderName` 是相对 manga 目录（`epub_books.extractDir`）的单段**容器名**：
+/// 章节目录名（`containerKind = folder`）或压缩包文件名（`containerKind = archive`，
+/// 含 `.cbz` 扩展名）；不含路径分隔符。`deleteEpubBook` 在同一事务里级联删掉
+/// 本书的行。
 @DataClassName('MangaChapterDirRow')
 class MangaChapterDirs extends Table {
   /// 在线书架条目的稳定键（`epub_books.bookKey`）。
@@ -3256,8 +3269,12 @@ class MangaChapterDirs extends Table {
   /// 章内稳定键（`manga_chapter_states.chapter_key` 同源）。
   TextColumn get chapterKey => text()();
 
-  /// 实际章目录名（相对 manga 目录，单段）。
+  /// 实际容器名（相对 manga 目录，单段）。
   TextColumn get folderName => text()();
+
+  /// 取 [MangaChapterContainerKind]；默认 folder 保持 v2 行的语义。
+  TextColumn get containerKind =>
+      text().withDefault(const Constant(MangaChapterContainerKind.folder))();
 
   IntColumn get updatedAt => integer()();
 
@@ -3267,6 +3284,7 @@ class MangaChapterDirs extends Table {
   @override
   List<String> get customConstraints => <String>[
         "CHECK (book_key != '' AND chapter_key != '' AND folder_name != '')",
+        "CHECK (container_kind IN ('folder', 'archive'))",
         'CHECK (updated_at >= 0)',
       ];
 }

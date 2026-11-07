@@ -108,6 +108,7 @@ class DownloadTaskCard extends StatefulWidget {
     this.menuActions = const <DownloadTaskMenuAction>[],
     this.method,
     this.externalSource = false,
+    this.simplified = false,
     super.key,
   });
 
@@ -132,6 +133,15 @@ class DownloadTaskCard extends StatefulWidget {
   /// 内容来自第三方站点：方式标签旁多一枚「外部来源」。
   final bool externalSource;
 
+  /// 简化模式（下载页专用）：不画来源标签，也不提供展开——无展开箭头、整行
+  /// 不可点、不渲染详情，也不读写 [PageStorage] 里的展开状态。默认 false，其它
+  /// 调用点（发现页直链任务、通知对话框、详情页 chips）的完整卡片行为不变。
+  final bool simplified;
+
+  /// 简化模式把来源标签视为不存在（[simplified] 为 true 时返回 null）。
+  DownloadTransferMethod? get _effectiveMethod =>
+      simplified ? null : method;
+
   @override
   State<DownloadTaskCard> createState() => _DownloadTaskCardState();
 }
@@ -143,6 +153,9 @@ class _DownloadTaskCardState extends State<DownloadTaskCard> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    // 简化模式没有展开态，既不恢复也不写入 PageStorage：即使同一 taskId 在其它
+    // 调用点留下过展开状态，下载页也不会被它撑开。
+    if (widget.simplified) return;
     if (!_restored) {
       _expanded =
           PageStorage.maybeOf(context)?.readState(
@@ -156,6 +169,7 @@ class _DownloadTaskCardState extends State<DownloadTaskCard> {
   }
 
   void _toggle() {
+    if (widget.simplified) return;
     setState(() => _expanded = !_expanded);
     PageStorage.maybeOf(context)?.writeState(
       context,
@@ -221,7 +235,7 @@ class _DownloadTaskCardState extends State<DownloadTaskCard> {
     final TextStyle style = context.fushiType.labelMedium.tabular.copyWith(
       color: theme.colorScheme.onSurfaceVariant,
     );
-    final DownloadTransferMethod? method = widget.method;
+    final DownloadTransferMethod? method = widget._effectiveMethod;
     return Wrap(
       spacing: 6,
       runSpacing: 6,
@@ -275,16 +289,19 @@ class _DownloadTaskCardState extends State<DownloadTaskCard> {
               ),
           ],
         ),
-      Semantics(
-        expanded: _expanded,
-        child: AnimatedRotation(
-          turns: _expanded ? 0.5 : 0,
-          duration: context.fushiMotion.spatialFast.duration,
-          curve: context.fushiMotion.spatialFast.curve,
-          child: const FushiIcon(FushiIcons.expandMore),
+      // 简化模式没有展开态，不画展开箭头。
+      if (!widget.simplified)
+        Semantics(
+          expanded: _expanded,
+          child: AnimatedRotation(
+            turns: _expanded ? 0.5 : 0,
+            duration: context.fushiMotion.spatialFast.duration,
+            curve: context.fushiMotion.spatialFast.curve,
+            child: const FushiIcon(FushiIcons.expandMore),
+          ),
         ),
-      ),
     ];
+    if (children.isEmpty) return null;
     return Row(mainAxisSize: MainAxisSize.min, spacing: 4, children: children);
   }
 
@@ -296,7 +313,8 @@ class _DownloadTaskCardState extends State<DownloadTaskCard> {
     final FushiDesignTokens tokens = FushiDesignTokens.of(context);
     final FushiMotionScheme motion = context.fushiMotion;
     final Duration expandDuration = motion.spatialDefault.duration;
-    final Widget disclosure = _expanded
+    final bool expandable = !widget.simplified;
+    final Widget disclosure = expandable && _expanded
         ? Padding(
             padding: EdgeInsets.fromLTRB(
               tokens.spacing.card,
@@ -317,7 +335,7 @@ class _DownloadTaskCardState extends State<DownloadTaskCard> {
         children: <Widget>[
           FushiListItem(
             key: ValueKey<String>('download-task-toggle-${widget.taskId}'),
-            onTap: _toggle,
+            onTap: expandable ? _toggle : null,
             leading: _buildBadge(context, tone),
             title: Text(widget.title),
             titleMaxLines: 2,
@@ -331,7 +349,7 @@ class _DownloadTaskCardState extends State<DownloadTaskCard> {
             ),
             trailing: _buildTrailing(context),
           ),
-          if (widget.metrics.isNotEmpty || widget.method != null)
+          if (widget.metrics.isNotEmpty || widget._effectiveMethod != null)
             Padding(
               padding: EdgeInsets.fromLTRB(
                 tokens.spacing.card,
@@ -355,15 +373,16 @@ class _DownloadTaskCardState extends State<DownloadTaskCard> {
           // 降级时 duration 为零，直接换子树、不经 AnimatedSize：零时长下
           // RenderAnimatedSize 在自己的 performLayout 里 forward() 会同步走完
           // 动画并 markNeedsLayout 自己（"mutated in its own performLayout"）。
-          if (expandDuration == Duration.zero)
-            disclosure
-          else
-            AnimatedSize(
-              duration: expandDuration,
-              curve: motion.spatialDefault.curve,
-              alignment: Alignment.topCenter,
-              child: disclosure,
-            ),
+          if (expandable)
+            if (expandDuration == Duration.zero)
+              disclosure
+            else
+              AnimatedSize(
+                duration: expandDuration,
+                curve: motion.spatialDefault.curve,
+                alignment: Alignment.topCenter,
+                child: disclosure,
+              ),
         ],
       ),
     );

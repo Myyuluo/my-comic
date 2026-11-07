@@ -23,7 +23,10 @@ import 'package:fushi_engine/media/manga/local_source/local_source_metadata.dart
 
 export 'package:fushi_engine/media/manga/local_source/local_source_metadata.dart';
 
-/// 一次扫描导入的结局计数。
+/// 一次登记动作的结局计数（拖入等单部登记路径复用）。
+///
+/// 批量扫描登记入口已随「导入」子视图退役；Library 只保留按单部作品登记的
+/// [LocalSourceLibrary.registerScannedManga]。
 class LocalSourceImportReport {
   LocalSourceImportReport({
     this.added = 0,
@@ -76,42 +79,6 @@ class LocalSourceLibrary {
 
   /// Local source root（`<Content root>/localcomic`）。
   final Directory root;
-
-  /// 扫描 [root] 的第一层目录并把每部作品登记/刷新进 Library。
-  ///
-  /// 已立墓碑的作品跳过（主动移出书架后不会被普通扫描复活）；单部作品失败不
-  /// 中断整次扫描。只增改，不删除任何记录。
-  Future<LocalSourceImportReport> importFromRoot() async {
-    final List<LocalSourceManga> mangas = await scanLocalSourceRoot(root);
-    final Set<String> tombstones = await db.getBookTombstoneKeys();
-    int added = 0;
-    int refreshed = 0;
-    int skippedTombstoned = 0;
-    final List<Object> failures = <Object>[];
-    for (final LocalSourceManga manga in mangas) {
-      final String bookKey = localSourceBookKeyFor(manga.directoryPath);
-      if (tombstones.contains(bookKey)) {
-        skippedTombstoned++;
-        continue;
-      }
-      try {
-        if (await _registerManga(bookKey, manga)) {
-          added++;
-        } else {
-          refreshed++;
-        }
-      } on Object catch (error) {
-        failures.add(error);
-      }
-    }
-    return LocalSourceImportReport(
-      added: added,
-      refreshed: refreshed,
-      skippedTombstoned: skippedTombstoned,
-      failed: failures.length,
-      failures: failures,
-    );
-  }
 
   /// 移出书架：删记录 + 立墓碑，**不删磁盘文件**。
   ///

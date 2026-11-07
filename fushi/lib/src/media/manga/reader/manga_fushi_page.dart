@@ -2097,13 +2097,24 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
       _watchDownloadsForCurrentChapter();
       return;
     }
+    if (container == null || container.isArchive) {
+      // 票 07 负责 CBZ 章节的阅读路径；本票只保证容器可被识别/列出/删除。
+      // 在阅读器接上压缩包会话前，压缩包章节按「暂不可读」处理，避免把
+      // 文件路径当成章节目录读。
+      setState(() {
+        _payload = null;
+        _chapterNotDownloaded = true;
+      });
+      _watchDownloadsForCurrentChapter();
+      return;
+    }
     await _loadLocalPayload(
       row: row.copyWith(
-        epubPath: p.basename(container!.manifestFile.path),
-        extractDir: container.directory.path,
+        epubPath: p.basename(container.manifestFile!.path),
+        extractDir: container.directory!.path,
       ),
-      mangaJsonPath: container.manifestFile.path,
-      imagesDirectory: container.imagesDirectory.path,
+      mangaJsonPath: container.manifestFile!.path,
+      imagesDirectory: container.imagesDirectory!.path,
       initialPage: initialPage,
     );
   }

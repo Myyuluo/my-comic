@@ -5,6 +5,7 @@ import 'package:drift/native.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi_engine/epub/epub_storage.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_drop.dart';
+import 'package:fushi_engine/media/manga/local_source/local_source_layout.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_library.dart';
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
@@ -192,6 +193,30 @@ void main() {
     expect(result.registered, isTrue);
     final EpubBookRow row = (await db.getAllEpubBooks()).single;
     expect(row.extractDir, source.path);
+  });
+
+  test('拖入已移出书架的作品不会因拖入而复活（墓碑跳过）', () async {
+    final Directory source = Directory(p.join(root.path, 'InPlace'))
+      ..createSync(recursive: true);
+    writeFile(source, '001.jpg');
+    final LocalSourceLibrary library = LocalSourceLibrary(db: db, root: root);
+    await library.registerScannedManga(
+      (await scanLocalSourceRoot(root)).single,
+    );
+    final EpubBookRow row = (await db.getAllEpubBooks()).single;
+    expect(await library.removeFromLibrary(row.bookKey), isTrue);
+
+    final LocalSourceDropResult result =
+        await LocalSourceDrop.importDroppedPath(
+          db: db,
+          root: root,
+          sourcePath: source.path,
+        );
+
+    expect(result.registered, isFalse);
+    expect(result.report?.skippedTombstoned, 1);
+    expect(await db.getAllEpubBooks(), isEmpty);
+    expect(await db.getBookTombstoneKeys(), contains(row.bookKey));
   });
 
   test('不支持的文件类型被明确拒绝', () async {

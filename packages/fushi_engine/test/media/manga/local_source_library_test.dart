@@ -56,6 +56,19 @@ void main() {
 
   List<int> pngBytes() => img.encodePng(img.Image(width: 80, height: 120));
 
+  /// 按单部作品登记整棵树。批量导入入口（`importFromRoot`）退役后，这是
+  /// Local source 唯一的公共写入形状（本地图源 / 拖入 / 重建索引共用）。
+  Future<List<LocalSourceManga>> registerAll(
+    LocalSourceLibrary library,
+    Directory root,
+  ) async {
+    final List<LocalSourceManga> mangas = await scanLocalSourceRoot(root);
+    for (final LocalSourceManga manga in mangas) {
+      await library.registerScannedManga(manga);
+    }
+    return mangas;
+  }
+
   test('扫描后登记为 manga 行：extractDir 原地指向、cover 与章节元数据落库', () async {
     writeFile(p.join('Manga A', 'cover.jpg'));
     writeFile(p.join('Manga A', 'Ch 1', '001.jpg'));
@@ -65,12 +78,15 @@ void main() {
     writeFile(p.join('Single', '002.png'));
 
     final LocalSourceLibrary library = LocalSourceLibrary(db: db, root: root);
-    final LocalSourceImportReport report = await library.importFromRoot();
-
-    expect(report.added, 2);
-    expect(report.refreshed, 0);
-    expect(report.skippedTombstoned, 0);
-    expect(report.failed, 0);
+    final List<LocalSourceManga> mangas = await scanLocalSourceRoot(root);
+    expect(mangas, hasLength(2), reason: '两部作品都被扫描到');
+    for (final LocalSourceManga manga in mangas) {
+      expect(
+        await library.registerScannedManga(manga),
+        isTrue,
+        reason: '首次登记必须新建行',
+      );
+    }
 
     final List<EpubBookRow> rows = await db.getAllEpubBooks();
     final EpubBookRow mangaA = rows.singleWhere(
@@ -112,13 +128,17 @@ void main() {
     writeFile(p.join('Manga', 'Ch 1', '001.jpg'));
     final LocalSourceLibrary library = LocalSourceLibrary(db: db, root: root);
 
-    await library.importFromRoot();
+    await registerAll(library, root);
     writeFile(p.join('Manga', 'Ch 1', '002.jpg'));
     writeFile(p.join('Manga', 'Ch 2', '001.jpg'));
-    final LocalSourceImportReport second = await library.importFromRoot();
+    final LocalSourceManga rescanned =
+        (await scanLocalSourceRoot(root)).single;
 
-    expect(second.added, 0);
-    expect(second.refreshed, 1);
+    expect(
+      await library.registerScannedManga(rescanned),
+      isFalse,
+      reason: '已有条目是刷新，不是新登记',
+    );
 
     final List<EpubBookRow> rows = await db.getAllEpubBooks();
     expect(rows, hasLength(1));
@@ -135,10 +155,10 @@ void main() {
     );
   });
 
-  test('移出书架只删记录并立墓碑，磁盘文件原样保留；再扫描不会复活', () async {
+  test('移出书架只删记录并立墓碑，磁盘文件原样保留', () async {
     writeFile(p.join('Manga', 'Ch 1', '001.jpg'));
     final LocalSourceLibrary library = LocalSourceLibrary(db: db, root: root);
-    await library.importFromRoot();
+    await registerAll(library, root);
     final EpubBookRow row = (await db.getAllEpubBooks()).single;
 
     expect(await library.removeFromLibrary(row.bookKey), isTrue);
@@ -148,18 +168,12 @@ void main() {
       File(p.join(root.path, 'Manga', 'Ch 1', '001.jpg')).existsSync(),
       isTrue,
     );
-
-    final LocalSourceImportReport again = await library.importFromRoot();
-    expect(again.added, 0);
-    expect(again.skippedTombstoned, 1);
-    expect(await db.getAllEpubBooks(), isEmpty);
-    expect(await db.getBookTombstoneKeys(), contains(row.bookKey));
   });
 
   test('删除本地文件必须显式确认；未确认不动文件，确认后删目录并留墓碑', () async {
     writeFile(p.join('Manga', 'Ch 1', '001.jpg'));
     final LocalSourceLibrary library = LocalSourceLibrary(db: db, root: root);
-    await library.importFromRoot();
+    await registerAll(library, root);
     final EpubBookRow row = (await db.getAllEpubBooks()).single;
 
     final LocalSourceDeleteResult notConfirmed = await library.deleteLocalFiles(
@@ -243,7 +257,7 @@ void main() {
     writeFile(p.join('Single', 'cover.jpg'));
     writeFile(p.join('Single', '001.jpg'));
     final LocalSourceLibrary library = LocalSourceLibrary(db: db, root: root);
-    await library.importFromRoot();
+    await registerAll(library, root);
 
     final EpubBookRow row = (await db.getAllEpubBooks()).single;
     final List<LocalSourceChapterRecord> chapters = decodeLocalSourceChapters(
@@ -262,9 +276,8 @@ void main() {
     });
 
     final LocalSourceLibrary library = LocalSourceLibrary(db: db, root: root);
-    final LocalSourceImportReport report = await library.importFromRoot();
+    await registerAll(library, root);
 
-    expect(report.added, 1);
     final EpubBookRow row = (await db.getAllEpubBooks()).single;
     expect(row.title, 'Vol 1');
     expect(row.format, 'manga');
@@ -289,29 +302,24 @@ void main() {
     writeFile(p.join('Vol 1', 'cover.jpg'));
     writeCbz('Vol 1/Vol 1.cbz', <String, List<int>>{'001.png': pngBytes()});
 
-    await LocalSourceLibrary(db: db, root: root).importFromRoot();
+    await registerAll(LocalSourceLibrary(db: db, root: root), root);
 
     final EpubBookRow row = (await db.getAllEpubBooks()).single;
     expect(row.coverPath, 'cover.jpg');
   });
 
-  test('移出书架只删记录并立墓碑，CBZ 原样保留且不会被扫描复活', () async {
+  test('移出书架只删记录并立墓碑，CBZ 原样保留', () async {
     final File cbz = writeCbz('Vol 1/Vol 1.cbz', <String, List<int>>{
       '001.png': pngBytes(),
     });
     final LocalSourceLibrary library = LocalSourceLibrary(db: db, root: root);
-    await library.importFromRoot();
+    await registerAll(library, root);
     final EpubBookRow row = (await db.getAllEpubBooks()).single;
 
     expect(await library.removeFromLibrary(row.bookKey), isTrue);
     expect(await db.getAllEpubBooks(), isEmpty);
     expect(await db.getBookTombstoneKeys(), contains(row.bookKey));
     expect(cbz.existsSync(), isTrue, reason: '移出书架不得删除 CBZ');
-
-    final LocalSourceImportReport again = await library.importFromRoot();
-    expect(again.added, 0);
-    expect(again.skippedTombstoned, 1);
-    expect(await db.getAllEpubBooks(), isEmpty);
   });
 
   test('删除 CBZ 本地文件必须显式确认；确认后删作品目录与包', () async {
@@ -319,7 +327,7 @@ void main() {
       '001.png': pngBytes(),
     });
     final LocalSourceLibrary library = LocalSourceLibrary(db: db, root: root);
-    await library.importFromRoot();
+    await registerAll(library, root);
     final EpubBookRow row = (await db.getAllEpubBooks()).single;
 
     final LocalSourceDeleteResult notConfirmed = await library.deleteLocalFiles(
@@ -340,5 +348,16 @@ void main() {
     expect(cbz.existsSync(), isFalse);
     expect(await db.getAllEpubBooks(), isEmpty);
     expect(await db.getBookTombstoneKeys(), contains(row.bookKey));
+  });
+
+  test('批量导入入口已退役：只保留单部作品登记', () {
+    final String source = File(
+      'lib/media/manga/local_source/local_source_library.dart',
+    ).readAsStringSync();
+    expect(
+      source,
+      isNot(contains('importFromRoot')),
+      reason: '批量扫描登记入口必须删除；本地图源 / 重建索引都走 registerScannedManga',
+    );
   });
 }

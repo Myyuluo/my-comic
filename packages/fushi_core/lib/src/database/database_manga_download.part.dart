@@ -163,14 +163,16 @@ mixin _FushiDbMangaDownload on _$FushiDatabase {
 
   // ── Download library 章目录映射（票 04） ──────────────────────────
 
-  /// 记录/更新 `(bookKey, chapterKey)` 的实际章目录名。
+  /// 记录/更新 `(bookKey, chapterKey)` 的实际容器名与容器类型。
   ///
-  /// 下载完成后、目录 rename 成功后才写；重建索引按 `pages.json` 的稳定 ID 重新
-  /// 关联时也走这里。
+  /// 下载完成后、目录 rename / 压缩包落位成功后才写；重建索引按 `pages.json`
+  /// 的稳定 ID 重新关联时也走这里。[containerKind] 取
+  /// [MangaChapterContainerKind]，默认 folder 保持旧调用点语义。
   Future<void> upsertMangaChapterDir({
     required String bookKey,
     required String chapterKey,
     required String folderName,
+    String containerKind = MangaChapterContainerKind.folder,
     required int updatedAt,
   }) =>
       into(mangaChapterDirs).insertOnConflictUpdate(
@@ -178,6 +180,7 @@ mixin _FushiDbMangaDownload on _$FushiDatabase {
           bookKey: bookKey,
           chapterKey: chapterKey,
           folderName: folderName,
+          containerKind: Value<String>(containerKind),
           updatedAt: updatedAt,
         ),
       );
@@ -200,6 +203,19 @@ mixin _FushiDbMangaDownload on _$FushiDatabase {
         .get();
     return <String, String>{
       for (final MangaChapterDirRow row in rows) row.chapterKey: row.folderName,
+    };
+  }
+
+  /// 一本书的全部映射行（chapterKey → 行；含 `containerKind`，供重建/互联区分
+  /// 文件夹与压缩包）。
+  Future<Map<String, MangaChapterDirRow>> getMangaChapterDirRowsForBook(
+    String bookKey,
+  ) async {
+    final List<MangaChapterDirRow> rows = await (select(mangaChapterDirs)
+          ..where((t) => t.bookKey.equals(bookKey)))
+        .get();
+    return <String, MangaChapterDirRow>{
+      for (final MangaChapterDirRow row in rows) row.chapterKey: row,
     };
   }
 

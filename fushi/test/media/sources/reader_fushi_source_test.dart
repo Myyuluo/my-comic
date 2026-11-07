@@ -15,6 +15,12 @@ import 'package:fushi/src/utils/misc/platform_utils.dart';
 import 'package:fushi_engine/sync/deletion_propagation.dart' show DeleteScope;
 import 'package:fushi_engine/sync/fushi_library_host_service.dart'
     show RemoteBookInfo;
+import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart'
+    show
+        OnlineMangaChapter,
+        OnlineMangaLibraryEntry,
+        OnlineMangaRuntimeKind,
+        OnlineMangaSeries;
 import 'package:fushi/src/media/manga/interconnect/interconnect_manga_source.dart'
     show InterconnectMangaCatalog;
 import 'package:fushi_engine/sync/ttu_filename.dart';
@@ -690,6 +696,71 @@ void main() {
       expect(result.deleted, isTrue);
       expect(result.failureReason, isNull);
       expect(await db.getEpubBook('manga1'), isNull);
+    });
+
+    test('删除在线漫画并勾选删除本地文件：漫画目录（含多个 CBZ）整目录删除', () async {
+      final db = FushiDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(db.close);
+      MediaSource.setDatabase(db);
+      final Directory mangaDir = Directory(
+        p.join(ppDir.path, 'downloads', 'Example Source', 'CBZ series'),
+      )..createSync(recursive: true);
+      for (final String name in <String>['Chapter 1.cbz', 'Chapter 2.cbz']) {
+        File(p.join(mangaDir.path, name)).writeAsBytesSync(<int>[1, 2, 3]);
+      }
+      const OnlineMangaLibraryEntry entry = OnlineMangaLibraryEntry(
+        runtime: OnlineMangaRuntimeKind.mihon,
+        extensionPackage: 'org.example.fixture',
+        sourceId: '1',
+        series: OnlineMangaSeries(
+          key: '/series/cbz',
+          title: 'CBZ series',
+          raw: <String, Object?>{},
+        ),
+        chapters: <OnlineMangaChapter>[
+          OnlineMangaChapter(
+            key: '/c/1',
+            name: 'Chapter 1',
+            raw: <String, Object?>{},
+          ),
+          OnlineMangaChapter(
+            key: '/c/2',
+            name: 'Chapter 2',
+            raw: <String, Object?>{},
+          ),
+        ],
+      );
+      await db.insertEpubBook(
+        EpubBooksCompanion.insert(
+          bookKey: 'mihon-cbz-series',
+          title: 'CBZ series',
+          epubPath: 'pages.json',
+          extractDir: mangaDir.path,
+          chapterCount: 2,
+          chaptersJson: '[]',
+          sourceMetadata: Value<String?>(entry.encode()),
+          importedAt: 1,
+          format: Value<String>(BookFormat.manga.dbValue),
+        ),
+      );
+      addTearDown(() {
+        if (mangaDir.existsSync()) mangaDir.deleteSync(recursive: true);
+      });
+
+      final DeleteBookResult result =
+          await ReaderFushiSource.instance.deleteBook(
+        db: db,
+        bookKey: 'mihon-cbz-series',
+        deleteLocalFiles: true,
+      );
+
+      expect(result.deleted, isTrue);
+      expect(
+        mangaDir.existsSync(),
+        isFalse,
+        reason: '删除在线漫画目录时，目录里的多个 CBZ 章节一起删除',
+      );
+      expect(await db.getEpubBook('mihon-cbz-series'), isNull);
     });
 
     test(

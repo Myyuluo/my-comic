@@ -23,6 +23,31 @@ void main() {
     });
   });
 
+  group('Sources view tab labels', () {
+    test('zh-CN renames the sources tab to 图源 and the search hint to 搜索图源',
+        () {
+      final strings = AppLocale.zhCn.translations;
+
+      expect(strings.media_import_segment_sources, '图源');
+      expect(strings.mihon_sources_search_hint, '搜索图源');
+    });
+
+    test('zh-HK renames the sources tab to 圖源 and the search hint to 搜尋圖源',
+        () {
+      final strings = AppLocale.zhHk.translations;
+
+      expect(strings.media_import_segment_sources, '圖源');
+      expect(strings.mihon_sources_search_hint, '搜尋圖源');
+    });
+
+    test('the English baseline stays the neutral Sources', () {
+      final strings = AppLocale.en.translations;
+
+      expect(strings.media_import_segment_sources, 'Sources');
+      expect(strings.mihon_sources_search_hint, 'Search sources');
+    });
+  });
+
   group('Chinese video clip export labels', () {
     test('uses clip export wording consistently', () {
       final strings = AppLocale.zhCn.translations;

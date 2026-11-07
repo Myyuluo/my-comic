@@ -20,9 +20,9 @@ import 'package:fushi/src/utils/components/fushi_floating_chrome.dart';
 /// 「浏览」模块里漫画域的在线来源面：扩展仓库 / 扩展目录 / 在线源三节之一
 /// （由 [section] 选）。
 ///
-/// 2026-09-27 前这三节是漫画库「导入」视图（`MangaSourcesPage`）的后三段；
-/// 按 Mihon 的 Browse 形态（Sources / Extensions）它们搬进顶层「浏览」，导入页只剩
-/// 本地来源。代码随之原样迁来，与原页面同一套交互。
+/// 2026-09-27 前这三节是漫画库「导入」视图的后三段；按 Mihon 的 Browse 形态
+/// （Sources / Extensions）它们搬进顶层「浏览」。该导入子视图已于 2026-11-08
+/// 退役（本地漫画改由图源列表里的「本地图源」承担）。代码随迁移原样保留。
 ///
 /// - [OnlineSourcesSection.stores]：Mihon 扩展仓库；
 /// - [OnlineSourcesSection.extensions]：可装扩展目录 + 已装扩展启停 / 卸载 +

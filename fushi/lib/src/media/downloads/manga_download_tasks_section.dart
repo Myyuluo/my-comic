@@ -152,21 +152,44 @@ DownloadTaskEntry mangaDownloadTaskEntry(
       clear: finished ? () => downloads.remove(job.jobId) : null,
       cancel: finished ? null : () => downloads.cancel(job.jobId),
     ),
-    builder: (BuildContext context) => DownloadTaskCard(
-      key: ValueKey<String>(id),
-      taskId: id,
-      method: source.method,
-      externalSource: source.external,
-      title: job.chapterTitle,
-      status: status,
-      subtitle: collectionTitle,
-      progress: progress,
-      details: _MangaDownloadTaskRow(
-        job: job,
+    builder: (BuildContext context) {
+      // 简化卡片的行尾直接操作（不再藏在展开面板里）：排队 / 下载中可取消，
+      // 失败 / 已取消可重试，已完成保持安静。图标、tooltip 与调用的 service
+      // 方法沿用原展开面板。
+      final DownloadTaskQuickAction? quickAction = switch (job.status) {
+        MangaDownloadJobStatus.failed ||
+        MangaDownloadJobStatus.cancelled => DownloadTaskQuickAction(
+          icon: Icons.refresh,
+          tooltip: t.retry,
+          onPressed: () => unawaited(downloads.retry(job.jobId)),
+        ),
+        MangaDownloadJobStatus.done => null,
+        _ => DownloadTaskQuickAction(
+          icon: Icons.close,
+          tooltip: t.dialog_cancel,
+          onPressed: () => unawaited(downloads.cancel(job.jobId)),
+        ),
+      };
+      return DownloadTaskCard(
+        key: ValueKey<String>(id),
+        taskId: id,
+        // 下载页采用简化卡片：不显示来源标签、不可展开（ADR 0008 保真约束下只做
+        // 减法，不新增视觉风格）。
+        simplified: true,
+        method: source.method,
+        externalSource: source.external,
+        title: job.chapterTitle,
         status: status,
-        downloads: downloads,
-      ),
-    ),
+        subtitle: collectionTitle,
+        progress: progress,
+        quickAction: quickAction,
+        details: _MangaDownloadTaskRow(
+          job: job,
+          status: status,
+          downloads: downloads,
+        ),
+      );
+    },
   );
 }
 
