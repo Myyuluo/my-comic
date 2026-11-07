@@ -57,6 +57,7 @@ import 'package:fushi/src/sync/remote_library_cache.dart'
 import 'package:fushi/src/media/audiobook/now_listening_mini_bar.dart';
 import 'package:fushi/src/models/module_id.dart';
 import 'package:fushi/src/models/module_registry.dart';
+import 'package:fushi/src/storage/program_state_fallback_notice.dart';
 import 'package:fushi/src/sync/desktop_lookup_service.dart';
 import 'package:fushi/pages.dart';
 import 'package:fushi/src/utils/components/section_visibility.dart';
@@ -406,6 +407,15 @@ class _HomePageState extends BasePageState<HomePage>
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
+      // Ticket 03：安装目录不可写时 Program state root 回退到
+      // %LOCALAPPDATA%\MyComic\userdata，需明确告知便携状态不随安装目录走。
+      unawaited(
+        maybeShowProgramStateFallbackNotice(
+          context: context,
+          fallbackInUse: appModel.appPaths.programStateRootIsFallback,
+          fallbackPath: appModel.appPaths.programStateRoot.path,
+        ),
+      );
       // v101 后台更新检查（漫画新章 / 漫画扩展）。与上面的 app 版本检查并列放在
       // 启动期：用户最想知道「我不在的时候更新了什么」的时刻就是刚打开应用。
       // 各域自己的到期判据挡住频繁重启造成的重复请求。

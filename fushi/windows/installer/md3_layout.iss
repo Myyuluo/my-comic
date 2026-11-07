@@ -73,17 +73,6 @@ begin
   Md3PrepareButton(Browse);
 end;
 
-procedure Md3LayoutDataRootPage();
-begin
-  DataRootPage.Surface.StyleElements := [];
-  DataRootPage.Surface.Color := Md3Surface;
-  Md3Text(DataRootPage.SubCaptionLabel, 10, True);
-  DataRootPage.SubCaptionLabel.SetBounds(0, 0, DataRootPage.SurfaceWidth, ScaleY(60));
-  DataRootPage.PromptLabels[0].Caption := '数据存储位置';
-  Md3PathField(DataRootPage.Edits[0], DataRootPage.Buttons[0],
-    DataRootPage.PromptLabels[0], ScaleY(84));
-end;
-
 procedure Md3FitPathField(Edit: TEdit; Browse: TNewButton);
 begin
   { Notebook pages acquire their final client width when activated. Fit both
@@ -177,22 +166,12 @@ end;
 procedure CurPageChanged(CurPageID: Integer);
 var
   Summary: String;
-  DataPageID: Integer;
 begin
-  DataPageID := -1;
-  if DataRootPage <> nil then
-    DataPageID := DataRootPage.ID;
   if CurPageID = wpSelectDir then
   begin
     Md3StepLabel.Caption := 'FUSHI  /  程序位置';
     Md3FitPathField(WizardForm.DirEdit, WizardForm.DirBrowseButton);
     Md3StyleButton(WizardForm.DirBrowseButton, False);
-  end
-  else if CurPageID = DataPageID then
-  begin
-    Md3StepLabel.Caption := 'FUSHI  /  数据位置';
-    Md3FitPathField(DataRootPage.Edits[0], DataRootPage.Buttons[0]);
-    Md3StyleButton(DataRootPage.Buttons[0], False);
   end
   else if CurPageID = wpSelectTasks then
   begin
