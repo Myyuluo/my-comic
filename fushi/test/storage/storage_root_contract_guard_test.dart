@@ -271,7 +271,9 @@ void main() {
     final String books = File(
       '../packages/fushi_engine/lib/sync/local_library_host_service/books.part.dart',
     ).readAsStringSync();
-    expect(books, contains('getMangaChapterDirNamesForBook'));
+    // 票 06：清单按容器类型区分可读章节（host 页服务只支持 folder）。
+    expect(books, contains('getMangaChapterDirRowsForBook'));
+    expect(books, contains('MangaChapterContainerKind.folder'));
     expect(books, isNot(contains('hasAnyChapterDirSync')));
   });
 

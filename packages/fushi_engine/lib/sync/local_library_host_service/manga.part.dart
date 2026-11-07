@@ -106,18 +106,27 @@ mixin _LocalLibraryHostManga on _LocalLibraryHostBase, _LocalLibraryHostShared {
   ///
   /// 协议段仍是 `sha256(chapterKey)[:24]`：在 `chaptersJson` 里找 digest 相同的
   /// 章 key，再经 `manga_chapter_dirs` 映射取实际目录名。找不到映射 = 未下载。
+  ///
+  /// 票 06：host 页服务只支持文件夹章节；CBZ 容器显式抛 [StateError]（端点 →
+  /// 404），不把压缩包路径当目录去读，也不留下运行时会崩的分支。
   Future<Directory> _resolveChapterDirectory(
     EpubBookRow row,
     String chapterDigest,
   ) async {
     for (final String chapterKey in _chapterKeys(row)) {
       if (mangaChapterDigest(chapterKey) != chapterDigest) continue;
-      final String? folderName = (await _db.getMangaChapterDir(
+      final MangaChapterDirRow? mapping = await _db.getMangaChapterDir(
         row.bookKey,
         chapterKey,
-      ))?.folderName;
-      if (folderName == null) break;
-      return downloadChapterDirectory(row.extractDir, folderName);
+      );
+      if (mapping == null) break;
+      if (mapping.containerKind == MangaChapterContainerKind.archive) {
+        throw StateError(
+          'manga chapter is a CBZ archive (host page service unsupported): '
+          '${row.bookKey}/$chapterDigest',
+        );
+      }
+      return downloadChapterDirectory(row.extractDir, mapping.folderName);
     }
     throw StateError(
       'manga chapter not downloaded: ${row.bookKey}/$chapterDigest',
@@ -197,18 +206,20 @@ mixin _LocalLibraryHostManga on _LocalLibraryHostBase, _LocalLibraryHostShared {
       return const <RemoteMangaChapterInfo>[];
     }
     if (decoded is! List<Object?>) return const <RemoteMangaChapterInfo>[];
-    final Map<String, String> folderNames = await _db
-        .getMangaChapterDirNamesForBook(row.bookKey);
+    final Map<String, MangaChapterDirRow> mappings = await _db
+        .getMangaChapterDirRowsForBook(row.bookKey);
     final List<RemoteMangaChapterInfo> chapters = <RemoteMangaChapterInfo>[];
     for (final Object? item in decoded) {
       if (item is! Map<Object?, Object?>) continue;
       final Map<String, Object?> json = item.cast<String, Object?>();
       final String key = json['key']?.toString() ?? '';
       if (key.isEmpty) continue;
-      final String? folderName = folderNames[key];
-      if (folderName == null) continue;
+      final MangaChapterDirRow? mapping = mappings[key];
+      if (mapping == null) continue;
+      // 压缩包章节不经本协议供页：安全跳过而不是拼出不存在的目录。
+      if (mapping.containerKind == MangaChapterContainerKind.archive) continue;
       final MokuroPayload? payload = await readDownloadLibraryChapterPayload(
-        downloadChapterDirectory(row.extractDir, folderName),
+        downloadChapterDirectory(row.extractDir, mapping.folderName),
       );
       if (payload == null) continue;
       final int uploadedAt = (json['uploadedAt'] as num?)?.toInt() ?? 0;

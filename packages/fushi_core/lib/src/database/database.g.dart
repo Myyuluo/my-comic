@@ -53928,6 +53928,18 @@ class $MangaChapterDirsTable extends MangaChapterDirs
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _containerKindMeta = const VerificationMeta(
+    'containerKind',
+  );
+  @override
+  late final GeneratedColumn<String> containerKind = GeneratedColumn<String>(
+    'container_kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(MangaChapterContainerKind.folder),
+  );
   static const VerificationMeta _updatedAtMeta = const VerificationMeta(
     'updatedAt',
   );
@@ -53944,6 +53956,7 @@ class $MangaChapterDirsTable extends MangaChapterDirs
     bookKey,
     chapterKey,
     folderName,
+    containerKind,
     updatedAt,
   ];
   @override
@@ -53982,6 +53995,15 @@ class $MangaChapterDirsTable extends MangaChapterDirs
     } else if (isInserting) {
       context.missing(_folderNameMeta);
     }
+    if (data.containsKey('container_kind')) {
+      context.handle(
+        _containerKindMeta,
+        containerKind.isAcceptableOrUnknown(
+          data['container_kind']!,
+          _containerKindMeta,
+        ),
+      );
+    }
     if (data.containsKey('updated_at')) {
       context.handle(
         _updatedAtMeta,
@@ -54011,6 +54033,10 @@ class $MangaChapterDirsTable extends MangaChapterDirs
         DriftSqlType.string,
         data['${effectivePrefix}folder_name'],
       )!,
+      containerKind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}container_kind'],
+      )!,
       updatedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}updated_at'],
@@ -54032,13 +54058,17 @@ class MangaChapterDirRow extends DataClass
   /// 章内稳定键（`manga_chapter_states.chapter_key` 同源）。
   final String chapterKey;
 
-  /// 实际章目录名（相对 manga 目录，单段）。
+  /// 实际容器名（相对 manga 目录，单段）。
   final String folderName;
+
+  /// 取 [MangaChapterContainerKind]；默认 folder 保持 v2 行的语义。
+  final String containerKind;
   final int updatedAt;
   const MangaChapterDirRow({
     required this.bookKey,
     required this.chapterKey,
     required this.folderName,
+    required this.containerKind,
     required this.updatedAt,
   });
   @override
@@ -54047,6 +54077,7 @@ class MangaChapterDirRow extends DataClass
     map['book_key'] = Variable<String>(bookKey);
     map['chapter_key'] = Variable<String>(chapterKey);
     map['folder_name'] = Variable<String>(folderName);
+    map['container_kind'] = Variable<String>(containerKind);
     map['updated_at'] = Variable<int>(updatedAt);
     return map;
   }
@@ -54056,6 +54087,7 @@ class MangaChapterDirRow extends DataClass
       bookKey: Value(bookKey),
       chapterKey: Value(chapterKey),
       folderName: Value(folderName),
+      containerKind: Value(containerKind),
       updatedAt: Value(updatedAt),
     );
   }
@@ -54069,6 +54101,7 @@ class MangaChapterDirRow extends DataClass
       bookKey: serializer.fromJson<String>(json['bookKey']),
       chapterKey: serializer.fromJson<String>(json['chapterKey']),
       folderName: serializer.fromJson<String>(json['folderName']),
+      containerKind: serializer.fromJson<String>(json['containerKind']),
       updatedAt: serializer.fromJson<int>(json['updatedAt']),
     );
   }
@@ -54079,6 +54112,7 @@ class MangaChapterDirRow extends DataClass
       'bookKey': serializer.toJson<String>(bookKey),
       'chapterKey': serializer.toJson<String>(chapterKey),
       'folderName': serializer.toJson<String>(folderName),
+      'containerKind': serializer.toJson<String>(containerKind),
       'updatedAt': serializer.toJson<int>(updatedAt),
     };
   }
@@ -54087,11 +54121,13 @@ class MangaChapterDirRow extends DataClass
     String? bookKey,
     String? chapterKey,
     String? folderName,
+    String? containerKind,
     int? updatedAt,
   }) => MangaChapterDirRow(
     bookKey: bookKey ?? this.bookKey,
     chapterKey: chapterKey ?? this.chapterKey,
     folderName: folderName ?? this.folderName,
+    containerKind: containerKind ?? this.containerKind,
     updatedAt: updatedAt ?? this.updatedAt,
   );
   MangaChapterDirRow copyWithCompanion(MangaChapterDirsCompanion data) {
@@ -54103,6 +54139,9 @@ class MangaChapterDirRow extends DataClass
       folderName: data.folderName.present
           ? data.folderName.value
           : this.folderName,
+      containerKind: data.containerKind.present
+          ? data.containerKind.value
+          : this.containerKind,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
   }
@@ -54113,13 +54152,15 @@ class MangaChapterDirRow extends DataClass
           ..write('bookKey: $bookKey, ')
           ..write('chapterKey: $chapterKey, ')
           ..write('folderName: $folderName, ')
+          ..write('containerKind: $containerKind, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(bookKey, chapterKey, folderName, updatedAt);
+  int get hashCode =>
+      Object.hash(bookKey, chapterKey, folderName, containerKind, updatedAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -54127,6 +54168,7 @@ class MangaChapterDirRow extends DataClass
           other.bookKey == this.bookKey &&
           other.chapterKey == this.chapterKey &&
           other.folderName == this.folderName &&
+          other.containerKind == this.containerKind &&
           other.updatedAt == this.updatedAt);
 }
 
@@ -54134,12 +54176,14 @@ class MangaChapterDirsCompanion extends UpdateCompanion<MangaChapterDirRow> {
   final Value<String> bookKey;
   final Value<String> chapterKey;
   final Value<String> folderName;
+  final Value<String> containerKind;
   final Value<int> updatedAt;
   final Value<int> rowid;
   const MangaChapterDirsCompanion({
     this.bookKey = const Value.absent(),
     this.chapterKey = const Value.absent(),
     this.folderName = const Value.absent(),
+    this.containerKind = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -54147,6 +54191,7 @@ class MangaChapterDirsCompanion extends UpdateCompanion<MangaChapterDirRow> {
     required String bookKey,
     required String chapterKey,
     required String folderName,
+    this.containerKind = const Value.absent(),
     required int updatedAt,
     this.rowid = const Value.absent(),
   }) : bookKey = Value(bookKey),
@@ -54157,6 +54202,7 @@ class MangaChapterDirsCompanion extends UpdateCompanion<MangaChapterDirRow> {
     Expression<String>? bookKey,
     Expression<String>? chapterKey,
     Expression<String>? folderName,
+    Expression<String>? containerKind,
     Expression<int>? updatedAt,
     Expression<int>? rowid,
   }) {
@@ -54164,6 +54210,7 @@ class MangaChapterDirsCompanion extends UpdateCompanion<MangaChapterDirRow> {
       if (bookKey != null) 'book_key': bookKey,
       if (chapterKey != null) 'chapter_key': chapterKey,
       if (folderName != null) 'folder_name': folderName,
+      if (containerKind != null) 'container_kind': containerKind,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -54173,6 +54220,7 @@ class MangaChapterDirsCompanion extends UpdateCompanion<MangaChapterDirRow> {
     Value<String>? bookKey,
     Value<String>? chapterKey,
     Value<String>? folderName,
+    Value<String>? containerKind,
     Value<int>? updatedAt,
     Value<int>? rowid,
   }) {
@@ -54180,6 +54228,7 @@ class MangaChapterDirsCompanion extends UpdateCompanion<MangaChapterDirRow> {
       bookKey: bookKey ?? this.bookKey,
       chapterKey: chapterKey ?? this.chapterKey,
       folderName: folderName ?? this.folderName,
+      containerKind: containerKind ?? this.containerKind,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
     );
@@ -54197,6 +54246,9 @@ class MangaChapterDirsCompanion extends UpdateCompanion<MangaChapterDirRow> {
     if (folderName.present) {
       map['folder_name'] = Variable<String>(folderName.value);
     }
+    if (containerKind.present) {
+      map['container_kind'] = Variable<String>(containerKind.value);
+    }
     if (updatedAt.present) {
       map['updated_at'] = Variable<int>(updatedAt.value);
     }
@@ -54212,6 +54264,7 @@ class MangaChapterDirsCompanion extends UpdateCompanion<MangaChapterDirRow> {
           ..write('bookKey: $bookKey, ')
           ..write('chapterKey: $chapterKey, ')
           ..write('folderName: $folderName, ')
+          ..write('containerKind: $containerKind, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -100402,6 +100455,7 @@ typedef $$MangaChapterDirsTableCreateCompanionBuilder =
       required String bookKey,
       required String chapterKey,
       required String folderName,
+      Value<String> containerKind,
       required int updatedAt,
       Value<int> rowid,
     });
@@ -100410,6 +100464,7 @@ typedef $$MangaChapterDirsTableUpdateCompanionBuilder =
       Value<String> bookKey,
       Value<String> chapterKey,
       Value<String> folderName,
+      Value<String> containerKind,
       Value<int> updatedAt,
       Value<int> rowid,
     });
@@ -100435,6 +100490,11 @@ class $$MangaChapterDirsTableFilterComposer
 
   ColumnFilters<String> get folderName => $composableBuilder(
     column: $table.folderName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get containerKind => $composableBuilder(
+    column: $table.containerKind,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -100468,6 +100528,11 @@ class $$MangaChapterDirsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get containerKind => $composableBuilder(
+    column: $table.containerKind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get updatedAt => $composableBuilder(
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
@@ -100493,6 +100558,11 @@ class $$MangaChapterDirsTableAnnotationComposer
 
   GeneratedColumn<String> get folderName => $composableBuilder(
     column: $table.folderName,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get containerKind => $composableBuilder(
+    column: $table.containerKind,
     builder: (column) => column,
   );
 
@@ -100540,12 +100610,14 @@ class $$MangaChapterDirsTableTableManager
                 Value<String> bookKey = const Value.absent(),
                 Value<String> chapterKey = const Value.absent(),
                 Value<String> folderName = const Value.absent(),
+                Value<String> containerKind = const Value.absent(),
                 Value<int> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => MangaChapterDirsCompanion(
                 bookKey: bookKey,
                 chapterKey: chapterKey,
                 folderName: folderName,
+                containerKind: containerKind,
                 updatedAt: updatedAt,
                 rowid: rowid,
               ),
@@ -100554,12 +100626,14 @@ class $$MangaChapterDirsTableTableManager
                 required String bookKey,
                 required String chapterKey,
                 required String folderName,
+                Value<String> containerKind = const Value.absent(),
                 required int updatedAt,
                 Value<int> rowid = const Value.absent(),
               }) => MangaChapterDirsCompanion.insert(
                 bookKey: bookKey,
                 chapterKey: chapterKey,
                 folderName: folderName,
+                containerKind: containerKind,
                 updatedAt: updatedAt,
                 rowid: rowid,
               ),

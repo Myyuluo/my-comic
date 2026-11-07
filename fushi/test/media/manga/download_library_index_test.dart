@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:archive/archive.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -95,12 +97,13 @@ void main() {
       chapterKey: '/c/1',
     );
     expect(container, isNotNull);
-    expect(container!.directory.path, chapterDir.path);
+    expect(container!.kind, MangaChapterContainerKind.folder);
+    expect(container.directory!.path, chapterDir.path);
     expect(
-      container.manifestFile.path,
+      container.manifestFile!.path,
       downloadPagesManifestFile(chapterDir).path,
     );
-    expect(container.imagesDirectory.path, chapterDir.path);
+    expect(container.imagesDirectory!.path, chapterDir.path);
     expect(
       await index.isChapterDownloaded(bookKey: bookKey, chapterKey: '/c/1'),
       isTrue,
@@ -248,5 +251,114 @@ void main() {
       index.deleteChapter(bookKey: bookKey, chapterKey: '/c/1'),
       completes,
     );
+  });
+
+  // ── CBZ 章节容器（票 06） ────────────────────────────────────────────
+
+  /// 手工制作一个 CBZ 章节：包根平铺 `001.jpg` + `pages.json`。
+  Future<File> writeArchiveChapter(
+    String containerName, {
+    String chapterKey = '/c/1',
+    bool writePage = true,
+  }) async {
+    final Archive archive = Archive();
+    if (writePage) {
+      final List<int> page = utf8.encode('page');
+      archive.addFile(ArchiveFile('001.jpg', page.length, page));
+    }
+    final List<int> manifest = utf8.encode(
+      jsonEncode(manifestFor(chapterKey).toJson()),
+    );
+    archive.addFile(
+      ArchiveFile(kDownloadPagesFileName, manifest.length, manifest),
+    );
+    await Directory(mangaDir).create(recursive: true);
+    final File file = downloadChapterArchiveFile(mangaDir, containerName);
+    await file.writeAsBytes(ZipEncoder().encode(archive)!);
+    await db.upsertMangaChapterDir(
+      bookKey: bookKey,
+      chapterKey: chapterKey,
+      folderName: containerName,
+      containerKind: MangaChapterContainerKind.archive,
+      updatedAt: 1,
+    );
+    return file;
+  }
+
+  test('archive 映射解析为 CBZ 容器；完整性读包根 pages.json 与页条目', () async {
+    final File archiveFile = await writeArchiveChapter('Chapter 1.cbz');
+    final DownloadLibraryIndex index = DownloadLibraryIndex(db);
+
+    final MangaChapterContainer? container = await index.resolveChapter(
+      bookKey: bookKey,
+      chapterKey: '/c/1',
+    );
+    expect(container, isNotNull);
+    expect(container!.kind, MangaChapterContainerKind.archive);
+    expect(container.archiveFile!.path, archiveFile.path);
+    expect(container.directory, isNull);
+    expect(container.manifestFile, isNull);
+    expect(
+      await index.isChapterDownloaded(bookKey: bookKey, chapterKey: '/c/1'),
+      isTrue,
+    );
+    expect(
+      await index.downloadedChapterKeys(bookKey, <String>['/c/1', '/c/2']),
+      <String>{'/c/1'},
+    );
+  });
+
+  test('archive 半成品：容器可定位但缺页不算已下载', () async {
+    final File archiveFile = await writeArchiveChapter(
+      'Chapter 1.cbz',
+      writePage: false,
+    );
+    final DownloadLibraryIndex index = DownloadLibraryIndex(db);
+    expect(
+      await index.resolveChapter(bookKey: bookKey, chapterKey: '/c/1'),
+      isNotNull,
+      reason: '容器文件存在就应能定位；完整性由 isChapterDownloaded 判',
+    );
+    expect(
+      await index.isChapterDownloaded(bookKey: bookKey, chapterKey: '/c/1'),
+      isFalse,
+    );
+    expect(archiveFile.existsSync(), isTrue);
+  });
+
+  test('删压缩包章节删对应文件并清映射；重复删除静默', () async {
+    final File archiveFile = await writeArchiveChapter('Chapter 1.cbz');
+    final DownloadLibraryIndex index = DownloadLibraryIndex(db);
+
+    await index.deleteChapter(bookKey: bookKey, chapterKey: '/c/1');
+    expect(archiveFile.existsSync(), isFalse);
+    expect(await db.getMangaChapterDir(bookKey, '/c/1'), isNull);
+
+    await expectLater(
+      index.deleteChapter(bookKey: bookKey, chapterKey: '/c/1'),
+      completes,
+    );
+  });
+
+  test('文件夹与压缩包混排各走各的删除路径', () async {
+    final Directory folder = await writeNewLayoutChapter('Chapter 1');
+    await writeArchiveChapter('Chapter 2.cbz', chapterKey: '/c/2');
+    final DownloadLibraryIndex index = DownloadLibraryIndex(db);
+
+    expect(
+      await index.downloadedChapterKeys(bookKey, <String>['/c/1', '/c/2']),
+      <String>{'/c/1', '/c/2'},
+    );
+
+    await index.deleteChapter(bookKey: bookKey, chapterKey: '/c/1');
+    expect(folder.existsSync(), isFalse);
+    expect(
+      File(p.join(mangaDir, 'Chapter 2.cbz')).existsSync(),
+      isTrue,
+      reason: '删一章不得碰相邻的压缩包章节',
+    );
+
+    await index.deleteChapter(bookKey: bookKey, chapterKey: '/c/2');
+    expect(File(p.join(mangaDir, 'Chapter 2.cbz')).existsSync(), isFalse);
   });
 }
