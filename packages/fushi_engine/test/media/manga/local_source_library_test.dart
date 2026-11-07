@@ -1,12 +1,14 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:archive/archive_io.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi_engine/epub/epub_storage.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_layout.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_library.dart';
+import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
@@ -40,6 +42,19 @@ void main() {
     file.writeAsBytesSync(bytes);
     return file;
   }
+
+  File writeCbz(String relative, Map<String, List<int>> entries) {
+    final Archive archive = Archive();
+    entries.forEach((String name, List<int> bytes) {
+      archive.addFile(ArchiveFile(name, bytes.length, bytes));
+    });
+    final File file = File(p.join(root.path, relative));
+    file.parent.createSync(recursive: true);
+    file.writeAsBytesSync(ZipEncoder().encode(archive)!);
+    return file;
+  }
+
+  List<int> pngBytes() => img.encodePng(img.Image(width: 80, height: 120));
 
   test('扫描后登记为 manga 行：extractDir 原地指向、cover 与章节元数据落库', () async {
     writeFile(p.join('Manga A', 'cover.jpg'));
@@ -238,5 +253,92 @@ void main() {
     final Map<String, Object?> metadata =
         jsonDecode(row.sourceMetadata!) as Map<String, Object?>;
     expect(metadata['kind'], LocalSourceMetadata.marker);
+  });
+
+  test('CBZ 章节登记为 manga 行：原地指向作品目录，章节记录 .cbz', () async {
+    writeCbz('Vol 1/Vol 1.cbz', <String, List<int>>{
+      '001.png': pngBytes(),
+      '002.png': pngBytes(),
+    });
+
+    final LocalSourceLibrary library = LocalSourceLibrary(db: db, root: root);
+    final LocalSourceImportReport report = await library.importFromRoot();
+
+    expect(report.added, 1);
+    final EpubBookRow row = (await db.getAllEpubBooks()).single;
+    expect(row.title, 'Vol 1');
+    expect(row.format, 'manga');
+    expect(row.extractDir, p.join(root.path, 'Vol 1'));
+    expect(row.chapterCount, 2);
+    expect(row.coverPath, isNull, reason: 'CBZ 页不是独立封面文件');
+    expect(
+      LocalSourceMetadata.tryParse(row.sourceMetadata)?.relativePath,
+      'Vol 1',
+    );
+    final List<LocalSourceChapterRecord> chapters = decodeLocalSourceChapters(
+      row.chaptersJson,
+    );
+    expect(chapters, hasLength(1));
+    expect(chapters.single.key, 'Vol 1.cbz');
+    expect(chapters.single.name, 'Vol 1');
+    expect(chapters.single.relativePath, 'Vol 1.cbz');
+    expect(managedRoot.listSync(), isEmpty, reason: '登记不得复制 CBZ 或页图');
+  });
+
+  test('CBZ 旁边的 cover.jpg 用作封面', () async {
+    writeFile(p.join('Vol 1', 'cover.jpg'));
+    writeCbz('Vol 1/Vol 1.cbz', <String, List<int>>{'001.png': pngBytes()});
+
+    await LocalSourceLibrary(db: db, root: root).importFromRoot();
+
+    final EpubBookRow row = (await db.getAllEpubBooks()).single;
+    expect(row.coverPath, 'cover.jpg');
+  });
+
+  test('移出书架只删记录并立墓碑，CBZ 原样保留且不会被扫描复活', () async {
+    final File cbz = writeCbz('Vol 1/Vol 1.cbz', <String, List<int>>{
+      '001.png': pngBytes(),
+    });
+    final LocalSourceLibrary library = LocalSourceLibrary(db: db, root: root);
+    await library.importFromRoot();
+    final EpubBookRow row = (await db.getAllEpubBooks()).single;
+
+    expect(await library.removeFromLibrary(row.bookKey), isTrue);
+    expect(await db.getAllEpubBooks(), isEmpty);
+    expect(await db.getBookTombstoneKeys(), contains(row.bookKey));
+    expect(cbz.existsSync(), isTrue, reason: '移出书架不得删除 CBZ');
+
+    final LocalSourceImportReport again = await library.importFromRoot();
+    expect(again.added, 0);
+    expect(again.skippedTombstoned, 1);
+    expect(await db.getAllEpubBooks(), isEmpty);
+  });
+
+  test('删除 CBZ 本地文件必须显式确认；确认后删作品目录与包', () async {
+    final File cbz = writeCbz('Vol 1/Vol 1.cbz', <String, List<int>>{
+      '001.png': pngBytes(),
+    });
+    final LocalSourceLibrary library = LocalSourceLibrary(db: db, root: root);
+    await library.importFromRoot();
+    final EpubBookRow row = (await db.getAllEpubBooks()).single;
+
+    final LocalSourceDeleteResult notConfirmed = await library.deleteLocalFiles(
+      row.bookKey,
+      confirmed: false,
+    );
+    expect(notConfirmed.deleted, isFalse);
+    expect(notConfirmed.reason, LocalSourceDeleteReason.notConfirmed);
+    expect(cbz.existsSync(), isTrue);
+    expect(await db.getAllEpubBooks(), hasLength(1));
+
+    final LocalSourceDeleteResult confirmed = await library.deleteLocalFiles(
+      row.bookKey,
+      confirmed: true,
+    );
+    expect(confirmed.deleted, isTrue);
+    expect(Directory(p.join(root.path, 'Vol 1')).existsSync(), isFalse);
+    expect(cbz.existsSync(), isFalse);
+    expect(await db.getAllEpubBooks(), isEmpty);
+    expect(await db.getBookTombstoneKeys(), contains(row.bookKey));
   });
 }

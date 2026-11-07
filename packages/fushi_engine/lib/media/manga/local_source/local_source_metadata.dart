@@ -47,8 +47,8 @@ class LocalSourceMetadata {
 
 /// 存进 `epub_books.chaptersJson` 的一章。
 ///
-/// [key] 是章节身份 = 相对 Manga 目录的路径（单章为 `.`）。目录改名 = 新 key，
-/// 与「作品身份是文件夹路径」同一规则。
+/// [key] 是章节身份 = 相对 Manga 目录的路径（单章为 `.`）。目录/CBZ 改名 =
+/// 新 key，与「作品身份是文件夹路径」同一规则。
 class LocalSourceChapterRecord {
   const LocalSourceChapterRecord({
     required this.key,
@@ -59,7 +59,7 @@ class LocalSourceChapterRecord {
   final String key;
   final String name;
 
-  /// 相对 Manga 目录的正斜杠路径；单章为空串。
+  /// 相对 Manga 目录的正斜杠路径：章节目录或 `.cbz` 文件；单章为空串。
   final String relativePath;
 
   Map<String, Object?> toJson() => <String, Object?>{

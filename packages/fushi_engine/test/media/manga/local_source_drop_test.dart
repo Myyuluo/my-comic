@@ -1,10 +1,12 @@
 import 'dart:io';
 
+import 'package:archive/archive_io.dart';
 import 'package:drift/native.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi_engine/epub/epub_storage.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_drop.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_library.dart';
+import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
@@ -40,6 +42,16 @@ void main() {
     final File file = File(p.join(base.path, relative));
     file.parent.createSync(recursive: true);
     file.writeAsBytesSync(<int>[1, 2, 3]);
+    return file;
+  }
+
+  File writeCbz(String path) {
+    final List<int> page = img.encodePng(img.Image(width: 80, height: 120));
+    final Archive archive = Archive()
+      ..addFile(ArchiveFile('001.png', page.length, page));
+    final File file = File(path);
+    file.parent.createSync(recursive: true);
+    file.writeAsBytesSync(ZipEncoder().encode(archive)!);
     return file;
   }
 
@@ -135,9 +147,8 @@ void main() {
     );
   });
 
-  test('拖入 CBZ：复制到 {manga}/{chapter}.cbz，原文件保留（章节登记归 ticket 07）', () async {
-    final File cbz = File(p.join(outside.path, 'Vol 1.cbz'))
-      ..writeAsBytesSync(<int>[1, 2, 3]);
+  test('拖入 CBZ：复制到 {manga}/{chapter}.cbz 并登记，原文件保留', () async {
+    final File cbz = writeCbz(p.join(outside.path, 'Vol 1.cbz'));
 
     final LocalSourceDropResult result =
         await LocalSourceDrop.importDroppedPath(
@@ -150,8 +161,19 @@ void main() {
     expect(result.copiedPath, copied);
     expect(File(copied).existsSync(), isTrue);
     expect(cbz.existsSync(), isTrue);
-    expect(result.registered, isFalse);
-    expect(await db.getAllEpubBooks(), isEmpty);
+    expect(result.registered, isTrue);
+    expect(result.mangaDirectory?.path, p.join(root.path, 'Vol 1'));
+
+    final EpubBookRow row = (await db.getAllEpubBooks()).single;
+    expect(row.title, 'Vol 1');
+    expect(row.extractDir, p.join(root.path, 'Vol 1'));
+    expect(row.coverPath, isNull);
+    final List<LocalSourceChapterRecord> chapters = decodeLocalSourceChapters(
+      row.chaptersJson,
+    );
+    expect(chapters, hasLength(1));
+    expect(chapters.single.key, 'Vol 1.cbz');
+    expect(chapters.single.name, 'Vol 1');
   });
 
   test('拖入已在 localcomic 里的文件夹：不复制、直接登记', () async {
