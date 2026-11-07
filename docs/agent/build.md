@@ -122,7 +122,7 @@ Android / Windows / macOS / iOS debug/beta workflow 必须使用跨 workflow 统
 
 应用内反馈的状态挂在**修复 commit** 上：`.github/workflows/feedback-link.yml` 只挂 push develop/main，由 `tool/feedback_link.mjs` 逐个 commit 解析 message，并用 `GITHUB_TOKEN` 查 `GET /repos/{repo}/commits/{sha}/pulls` 取关联 PR（只认已合并、base 是本分支的）解析其描述，把 `Feedback: <id>[, <id>…]` / `Feedback-NoApp: <id>…` 行（行首、不区分大小写）登记到反馈服务 `POST /v1/ci/feedback/fixed`（幂等：sha 与 scope 不变的重登记不重置发布记录）。commit message 里的 id 归该 commit，PR 描述里的 id 归该 PR 在这次 push 里最后一个 commit，同一 id 多次出现取 push 顺序最后的那个；main 上只处理 distinct 的 commit（正式版后 develop 同步进 main 不重登记）。不用 `pull_request_target`：它取默认分支 main 上的定义，main 落后 develop 一个发布周期，且要在有 secret 的上下文里处理外部 PR。两条发布 workflow 在「Publish mirror update manifest」之后各有回填步骤（`release.yml` = android；`release-desktop.yml` 的 publish job 按本次真实存在的产物分别回填 windows / macos / ios），跑 `tool/feedback_mark_released.sh`：GET `pending?channel&platform` → 本地 `git cat-file -e` + `git merge-base --is-ancestor <fix> <github.sha>` → POST `released`，把「这个通道 / 平台的这个版本已包含修复」记下（`manifest_channel` 的 `formal` 映射成 `stable`）。回填与登记**都不会让 workflow 变红**：步骤 `continue-on-error: true`，脚本任何失败只打 `::warning`。需要仓库 **secret `FEEDBACK_CI_TOKEN`**（与反馈 Worker 的同名 secret 一致；未配置时两个脚本 `::notice` 后直接跳过）与可选的仓库 **variable `FEEDBACK_API_BASE`**（接口根，缺省 `https://rank.fushi.moe`）。守卫 `fushi/test/build/feedback_workflow_guard_test.dart`，脚本离线测试 `fushi/test/tools/feedback_{mark_released,link}_script_test.dart`。
 
-### Windows 安装器：原地升级与「数据存储位置」页
+### Windows 安装器：原地升级与 Program state
 
 （历史备注：2.0 改名那一轮，formal 通道曾有「先发 Android 迁移桥包 `bridge-<version>-<abi>.apk`
 再发本体」的 CI 硬门，让已出货的 Hibiki v1.2.0 先命中桥包。该硬门与 `bridge/*` 分支已随
@@ -131,27 +131,29 @@ Android / Windows / macOS / iOS debug/beta workflow 必须使用跨 workflow 统
 「产品族前缀 + ABI 全名」的命名契约，别再按桥包顺序发版。）
 
 - 改名前的 Windows 老用户按 `-windows-setup.exe` 后缀直接拿
-  `fushi-<version>-windows-setup.exe`，Inno `AppId` 未变 → 原地升级，数据由
-  `legacy_support_dir_migration.dart` 自动搬迁。
-- Windows 安装器的「数据存储位置」页（`fushi/windows/installer/fushi.iss`）**只在全新
-  安装出现**。`IsFreshInstall` 是**三个**条件的 and：无卸载键、`%APPDATA%\Fushi\Fushi`
-  不存在、`%APPDATA%\Hibiki\Hibiki` 也不存在（第三条兜改名前的老用户「卸载留数据后
-  重装」——首启 `migrateLegacySupportDir` 会把旧名搬成新名并认出旧库，那台机器不该被
-  再问一次）。用户的选择写进 `{app}\data_root.bootstrap`，app 首启在 `AppPaths.resolve()`
-  之前由 `lib/src/storage/installer_data_root_bootstrap.dart` 一次性消费**后删除**。
-  「消费」不等于「采纳」：app 侧还会独立否决安装器的选择——已有 `data_root` 偏好、平台
-  support 根下已有主库、路径不是绝对路径、与安装目录相同或互相包含、目标下已有非空
-  `documents`/`support` 子树，任何一条命中都只删文件不写偏好；**选中默认位置**
-  （`<Documents>\Fushi`）同样**不写** pref，按全新安装的固定落点走。升级 / 保留数据重装 /
-  静默自更新都不弹这页、不写这个文件；安装器是一次性写者，数据根的唯一真相源仍是 app 的
-  `data_root` 偏好（要搬走走设置里的迁移）。
-  改 iss 后本机可用 `ISCC.exe /DAppVersion=0.0.0 /DSourceDir=<任意含一个文件的目录>
+  `fushi-<version>-windows-setup.exe`，Inno `AppId` 未变 → 原地升级。旧 Fushi 数据不再
+  迁移（storage-layout 是 fresh start），但安装器本身的升级路径保持不变。
+- 安装器只保留 Inno 标准「选择安装位置」页与可写性预检（`InstallDirWritable` 用探针
+  文件实测）；**没有**自定义「数据存储位置」页，也不再写/读 `data_root.bootstrap`。
+  Content root（默认 `<Documents>\MyComic`）与 Program state root（默认
+  `<exeDir>\userdata`）由 app 自己的存储层解析，见 ADR 0011。
+- **更新保留 Program state**：`[Files]` 的整目录收包带 `Excludes: "userdata\*"`，
+  `[InstallDelete]` 绝不列 `userdata`；Inno 原地覆盖只替换程序文件，数据库、设置、扩展
+  和日志留在 `{app}\userdata`。
+- **卸载删除 Program state**：`[UninstallDelete]` 删除 `{app}\userdata`，以及安装目录
+  不可写时 app 回退到的 `%LOCALAPPDATA%\MyComic\userdata`。Content root 的
+  `downloads` / `autobackup` / `localcomic` 一条都不能出现在卸载段。
+- 安装目录不可写时 app 回退到 `%LOCALAPPDATA%\MyComic\userdata`，并在首页首帧弹一次
+  可见提示：便携状态不随安装目录走（`program_state_fallback_notice.dart`）。
+  安装器预检也会在用户硬要装进不可写目录时把这条后果写进提示。
+- 改 iss 后本机可用 `ISCC.exe /DAppVersion=0.0.0 /DSourceDir=<任意含一个文件的目录>
   /DOutputDir=<临时目录> fushi.iss` 验编译，但**别运行**产物——同 AppId 会覆盖本机真实
   安装的卸载键。**CI 不编译这个 iss**：`build-multiplatform.yml` 的 `windows` 检查根本
   不碰它，真正跑 ISCC 的 `release-desktop.yml` 没有 `pull_request` 触发。所以 Pascal 侧
-  的唯一门是源码守卫 `test/build/windows_installer_data_root_page_guard_test.dart`——
-  它钉的是**效果**（整式比对、每条校验后必须 `Result := False;`、`if ... then Exit;`
-  成对、跨语句顺序），改动 iss 后新增断言必须做变异实测再提交。
+  的唯一门是源码守卫
+  `test/tools/windows_installer_lifecycle_guard_test.dart`（另见
+  `test/tools/bug_1483_webview2_userdata_fallback_guard_test.dart` 的选目录预检守卫）——
+  改动 iss 后新增断言必须做变异实测再提交。
 
 ### 快速发版（跳测试）
 
