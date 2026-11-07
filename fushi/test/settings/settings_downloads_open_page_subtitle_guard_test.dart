@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi/i18n/strings.g.dart';
 import 'package:fushi/src/settings/settings_destination.dart';
@@ -6,6 +8,9 @@ import 'package:fushi/src/settings/settings_schema_downloads.dart';
 /// 设置里的「下载」分类已更名为「存储与下载」：名称来自专用字符串资源，不写死
 /// 在 schema 里。Ticket 08 起内容为存储位置小节（Content root / Program state
 /// root / 三个文件夹入口），不新增跳转到下载页的入口；副标题保留原有 summary。
+///
+/// 2026-11-08：「导入本地漫画」段随批量导入退役删除；本地漫画改由图源列表里的
+/// 「本地图源」承担。
 void main() {
   AppLocale currentLocale() => LocaleSettings.currentLocale;
 
@@ -33,7 +38,7 @@ void main() {
     );
   });
 
-  testWidgets('分类内容为存储位置 + 导入本地漫画 + 重建下载索引小节，'
+  testWidgets('分类内容为存储位置 + 重建下载索引小节，没有导入本地漫画，'
       '没有打开下载页的入口', (WidgetTester tester) async {
     final AppLocale original = currentLocale();
     addTearDown(() => LocaleSettings.setLocale(original));
@@ -47,23 +52,26 @@ void main() {
     );
     expect(
       destination.sections.map((SettingsSection section) => section.id),
-      <String?>[
-        'storage.location.section',
-        'storage.local_import.section',
-        'storage.rebuild.section',
-      ],
-      reason: '分类内容为存储位置 + 导入本地漫画 + 重建下载索引小节',
+      <String?>['storage.location.section', 'storage.rebuild.section'],
+      reason: '批量导入退役后只剩存储位置 + 重建下载索引小节',
     );
     expect(
-      destination.sections
-          .firstWhere(
-            (SettingsSection section) =>
-                section.id == 'storage.local_import.section',
-          )
-          .items
-          .map((SettingsItem item) => item.id),
-      <String>['storage.import_local_comics'],
-      reason: '导入本地漫画小节只包含一次显式扫描入口',
+      destination.sections.expand((SettingsSection section) => section.items),
+      isNot(
+        contains(
+          isA<SettingsItem>().having(
+            (SettingsItem item) => item.id,
+            'id',
+            'storage.import_local_comics',
+          ),
+        ),
+      ),
+      reason: '设置里不得再有「导入本地漫画」入口',
+    );
+    expect(
+      File('lib/src/settings/settings_schema_local_import.dart').existsSync(),
+      isFalse,
+      reason: '导入本地漫画段落的 schema 文件必须删除',
     );
     expect(
       destination.sections.first.items.map((SettingsItem item) => item.id),

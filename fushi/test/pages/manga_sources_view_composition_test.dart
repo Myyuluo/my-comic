@@ -10,16 +10,15 @@ import '../helpers/source_guard.dart';
 /// 1. 漫画库顶层**恒为三视图**，Mihon 扩展不占 tab —— 由
 ///    `manga_library_page_split_test.dart` 守；
 /// 2. **扩展管理挂在漫画在线来源面里**（本文件）——2026-09-27 起这张面
-///    （`MangaOnlineSourcesView`）只由顶层「浏览」模块挂载，「来源」导入视图只剩
-///    本地来源 + 互联；
+///    （`MangaOnlineSourcesView`）只由顶层「浏览」模块挂载；2026-11-08 起漫画
+///    批量导入子视图退役，本地漫画改由图源列表里的「本地图源」承担；
 /// 3. **iOS / Linux 与其它平台导航结构相同**，差异只在各视图内部内容（本文件）。
 ///
-/// 第 2、3 条为什么用源码扫描而不是 widget 测试：`MangaSourcesPage` /
-/// `MangaDiscoveryPage` 都从 `appProvider` 拿 `AppModel`（整库 + WebView + 一堆
-/// provider），挂起来测的是环境不是接线；而这两条要守的恰恰是**接线本身**。
-/// 内嵌节真能在外层 ListView 里渲染这件事，由
-/// `test/media/manga/mihon_extensions_page_test.dart` 的 embedded 用例真 pump 守。
-/// 读源码并**掩掉注释**（共享 `maskComments`，等长掩码不打乱下标）。
+/// 第 2、3 条为什么用源码扫描而不是 widget 测试：`MangaDiscoveryPage` 从
+/// `appProvider` 拿 `AppModel`（整库 + WebView + 一堆 provider），挂起来测的是
+/// 环境不是接线；而这两条要守的恰恰是**接线本身**。内嵌节真能在外层 ListView 里
+/// 渲染这件事，由 `test/media/manga/mihon_extensions_page_test.dart` 的 embedded
+/// 用例真 pump 守。读源码并**掩掉注释**（共享 `maskComments`，等长掩码不打乱下标）。
 ///
 /// 本文件全是「必须包含 X」型断言，不掩注释的话，把实现删光、只在注释里留下那串
 /// 字面量就能骗绿——这是本仓真实抓到过的假绿形态。
@@ -29,36 +28,14 @@ String _read(List<String> parts) => maskComments(
     );
 
 void main() {
-  group('漫画「来源」视图与在线来源面组成', () {
-    late String sources;
+  group('漫画在线来源面组成', () {
     late String online;
 
     setUp(() {
-      sources = _read(<String>['manga_sources_page.dart']);
       online = _read(<String>['manga_online_sources_view.dart']);
     });
 
-    test('本地导入这一节扫描 localcomic，不再把文件复制进受管书库', () {
-      expect(sources, contains('QuickImportSection('));
-      expect(
-        sources,
-        contains('t.data_storage_import_local_comics_title'),
-        reason: '入口文案必须是「导入本地漫画」',
-      );
-      expect(
-        sources,
-        contains('LocalSourceLibrary('),
-        reason: '点击入口只扫描 localcomic 原地登记（ADR 0013）',
-      );
-      expect(
-        sources,
-        isNot(contains('MangaImportDialog(')),
-        reason: '浏览 › 导入不得再走复制进 fushi_books 的旧受管导入对话框',
-      );
-      expect(sources, isNot(contains('MediaSourcesView(')));
-    });
-
-    test('Mihon 扩展管理内嵌在漫画在线来源面里，不在导入页', () {
+    test('Mihon 扩展管理内嵌在漫画在线来源面里', () {
       expect(
         online,
         contains('MihonExtensionsPage('),
@@ -71,8 +48,6 @@ void main() {
         online,
         contains(r"ValueKey<String>('manga_mihon_extensions_${section.name}')"),
       );
-      expect(sources, isNot(contains('MihonExtensionsPage(')));
-      expect(sources, isNot(contains('ImportPageSegmentBar(')));
     });
 
     test('在线来源面按与视频 / 小说同构的三节（来源 / 扩展 / 仓库）渲染', () {
@@ -94,16 +69,12 @@ void main() {
     test('扩展提供的在线来源设置也在同一张面内（「来源」节）', () {
       expect(online, contains('MihonInstalledSourcesSection('));
       expect(online, contains('if (section == OnlineSourcesSection.sources)'));
-      expect(sources, isNot(contains('MihonInstalledSourcesSection(')));
     });
 
     // 2026-11-05 用户口径：应用不再内置任何 Source，Mokuro.moe 从在线源移除。
-    test('在线源面不再有内置 mokuro.moe 行，导入页也没有', () {
+    test('在线源面不再有内置 mokuro.moe 行', () {
       expect(online, isNot(contains('MokuroMoeSourceRow')));
       expect(online, isNot(contains('mokuro_moe')));
-      expect(sources, isNot(contains('MokuroMoeSourceRow')));
-      // 共享扫描根视图（media_sources_view.dart）已随非漫画域移除。
-      expect(sources, isNot(contains('media_sources_view')));
     });
   });
 
@@ -165,17 +136,17 @@ void main() {
 
   /// 用户口径：「删掉漫画里面的标题，管理来源、浏览这两个」。
   ///
-  /// 这两个页面此前用的是 `FushiPageHeader(title: ..., bottom: navigation)`
+  /// 页面此前用的是 `FushiPageHeader(title: ..., bottom: navigation)`
   /// ——页头先渲染一行页面大标题，再把库页视图导航条挂在它下面。可导航条本身就
   /// 标明了当前在哪个视图，那行标题纯属重复占一行高度。通用媒体来源页
   /// (`MediaSourcesPage._buildHeader`) 早已迁到 `customTitle` 范式（导航条直接占
-  /// 页头主位），漫画这两个页是漏迁的，所以比别处多出一行。
+  /// 页头主位），漫画页是漏迁的，所以比别处多出一行。
   ///
   /// 守的是**形态**不是文案：只要还有 `bottom: widget.navigation`，就说明又退回
   /// 了「标题在上、导航条在下」的两行结构。
-  group('漫画来源 / 发现页头不再渲染重复的页面大标题', () {
-    for (final (String label, List<String> file) in <(String, List<String>)>[
-      ('来源', <String>['manga_sources_page.dart']),
+  group('漫画发现页头不再渲染重复的页面大标题', () {
+    for (final (String label, List<String> file)
+        in <(String, List<String>)>[
       ('发现', <String>['discovery', 'manga_discovery_page.dart']),
     ]) {
       test('$label 页：有导航条时它占页头主位（customTitle）', () {
