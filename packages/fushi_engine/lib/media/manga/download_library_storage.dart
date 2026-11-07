@@ -27,6 +27,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 
+import 'package:fushi_engine/media/manga/local_source/local_source_archive.dart';
 import 'package:fushi_engine/media/manga/mokuro_payload.dart';
 import 'package:fushi_engine/utils/misc/safe_file_name.dart';
 
@@ -272,6 +273,28 @@ Directory downloadStagingDirectory(String mangaDir, String jobId) =>
 Directory downloadChapterDirectory(String mangaDir, String folderName) =>
     Directory(p.join(mangaDir, folderName));
 
+/// CBZ 章节容器的扩展名（比较前统一小写）。
+const String kDownloadArchiveExtension = '.cbz';
+
+/// [name]（单段容器名）是否表示一个 CBZ 压缩包。
+bool isDownloadChapterArchiveName(String name) =>
+    p.extension(name).toLowerCase() == kDownloadArchiveExtension;
+
+/// 规范压缩包容器名：纯章名补 `.cbz`，已带扩展名原样返回。
+///
+/// 数据库 `manga_chapter_dirs.folder_name` 对 archive 存的是**含扩展名的
+/// 完整文件名**，因此下载写入与重建扫描用同一口径。
+String downloadChapterArchiveName(String raw) {
+  final String trimmed = raw.trim();
+  return isDownloadChapterArchiveName(trimmed)
+      ? trimmed
+      : '$trimmed$kDownloadArchiveExtension';
+}
+
+/// 一个 CBZ 章节容器 `<mangaDir>/<containerName>`（不创建文件）。
+File downloadChapterArchiveFile(String mangaDir, String containerName) =>
+    File(p.join(mangaDir, containerName));
+
 /// 章元数据文件 `<chapterDir>/pages.json`。
 File downloadPagesManifestFile(Directory chapterDir) =>
     File(p.join(chapterDir.path, kDownloadPagesFileName));
@@ -456,3 +479,80 @@ Future<MokuroPayload?> readDownloadLibraryChapterPayload(
   }
   return manifest.payload;
 }
+
+// ── CBZ 章节容器（票 06） ──────────────────────────────────────────────
+
+/// 读取 CBZ 章节包根 `pages.json`；文件不存在 / 不是 ZIP / JSON 损坏 → null。
+///
+/// 只看中央目录 + 解压这一个条目，不把整包解压到磁盘。
+Future<MangaPagesManifest?> readDownloadLibraryArchiveManifest(
+  File archiveFile,
+) async {
+  if (!await archiveFile.exists()) return null;
+  final LocalSourceArchive archive;
+  try {
+    archive = LocalSourceArchive.open(archiveFile.path);
+  } on Object {
+    return null;
+  }
+  try {
+    final List<int>? bytes = archive.readEntry(kDownloadPagesFileName);
+    if (bytes == null) return null;
+    return MangaPagesManifest.tryParse(utf8.decode(bytes));
+  } on Object {
+    return null;
+  } finally {
+    archive.close();
+  }
+}
+
+/// 一个 CBZ 章节是否**完整**：包根 `pages.json` 可解析、页表非空、每页条目
+/// 都在包里。判据与文件夹章节的 [readDownloadLibraryChapterPayload] 同口径。
+Future<MokuroPayload?> readDownloadLibraryArchivePayload(
+  File archiveFile,
+) async {
+  final MangaPagesManifest? manifest = await readDownloadLibraryArchiveManifest(
+    archiveFile,
+  );
+  if (manifest == null) return null;
+  if (manifest.payload.images.isEmpty) return null;
+  final LocalSourceArchive archive;
+  try {
+    archive = LocalSourceArchive.open(archiveFile.path);
+  } on Object {
+    return null;
+  }
+  try {
+    final Set<String> exact = <String>{
+      for (final LocalSourceArchiveEntry entry in archive.entries) entry.name,
+    };
+    final Set<String> folded = <String>{
+      for (final LocalSourceArchiveEntry entry in archive.entries)
+        entry.name.toLowerCase(),
+    };
+    for (final MokuroImage image in manifest.payload.images) {
+      final String relative = normalizeMangaUrl(image.url);
+      final List<String> segments = relative
+          .split('/')
+          .where((String segment) => segment.isNotEmpty && segment != '.')
+          .toList();
+      if (segments.isEmpty ||
+          segments.any((String segment) => segment == '..')) {
+        return null;
+      }
+      final String name = segments.join('/');
+      if (!exact.contains(name) && !folded.contains(name.toLowerCase())) {
+        return null;
+      }
+    }
+    return manifest.payload;
+  } on Object {
+    return null;
+  } finally {
+    archive.close();
+  }
+}
+
+/// 一章（CBZ 容器）是否完整下载。
+Future<bool> isDownloadLibraryArchiveComplete(File archiveFile) async =>
+    await readDownloadLibraryArchivePayload(archiveFile) != null;

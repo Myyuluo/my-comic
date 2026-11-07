@@ -45,16 +45,16 @@ void main() {
   }
 
   test(
-    'fresh DB creates exactly the manga-only table set at schema v2',
+    'fresh DB creates exactly the manga-only table set at schema v3',
     () async {
       final FushiDatabase db = await open();
       addTearDown(db.close);
 
-      expect(db.schemaVersion, 2);
+      expect(db.schemaVersion, 3);
       final QueryRow version = await db
           .customSelect('PRAGMA user_version')
           .getSingle();
-      expect(version.data['user_version'], 2);
+      expect(version.data['user_version'], 3);
 
       final Set<String> tables = await userTables(db);
       expect(
@@ -92,7 +92,7 @@ void main() {
   );
 
   test(
-    'v1 my-comic 库升级到 v2：补建 manga_chapter_dirs，旧数据保留',
+    'v1 my-comic 库升级到当前 schema：补建 manga_chapter_dirs（含容器类型），旧数据保留',
     () async {
       final FushiDatabase db = await open();
       await db.insertEpubBook(
@@ -115,7 +115,7 @@ void main() {
       final FushiDatabase upgraded = await open();
       addTearDown(upgraded.close);
 
-      expect(upgraded.schemaVersion, 2);
+      expect(upgraded.schemaVersion, 3);
       expect((await upgraded.getEpubBook('old-book'))?.title, 'Old Manga');
       await upgraded.upsertMangaChapterDir(
         bookKey: 'old-book',
@@ -123,9 +123,81 @@ void main() {
         folderName: 'Chapter 1',
         updatedAt: 1700000001000,
       );
+      final MangaChapterDirRow? row = await upgraded.getMangaChapterDir(
+        'old-book',
+        'chapter-1',
+      );
+      expect(row?.folderName, 'Chapter 1');
+      expect(row?.containerKind, MangaChapterContainerKind.folder);
+    },
+  );
+
+  test(
+    'v2 my-comic 库升级到 v3：manga_chapter_dirs 增加 container_kind，已有行 = folder',
+    () async {
+      final FushiDatabase db = await open();
+      await db.insertEpubBook(
+        EpubBooksCompanion.insert(
+          bookKey: 'old-book',
+          title: 'Old Manga',
+          epubPath: 'manga.json',
+          extractDir: p.join(tmp.path, 'books', 'old-book'),
+          chapterCount: 1,
+          chaptersJson: '[]',
+          importedAt: 1700000000000,
+          format: const Value('manga'),
+        ),
+      );
+      // 模拟票 04 的 v2 库：manga_chapter_dirs 没有 container_kind 列，
+      // 且已经有一条线上用户的目录映射。
+      await db.customStatement('DROP TABLE manga_chapter_dirs');
+      await db.customStatement(
+        'CREATE TABLE manga_chapter_dirs ('
+        'book_key TEXT NOT NULL, '
+        'chapter_key TEXT NOT NULL, '
+        'folder_name TEXT NOT NULL, '
+        'updated_at INTEGER NOT NULL, '
+        'PRIMARY KEY (book_key, chapter_key), '
+        "CHECK (book_key != '' AND chapter_key != '' AND folder_name != ''), "
+        'CHECK (updated_at >= 0))',
+      );
+      await db.customStatement(
+        'INSERT INTO manga_chapter_dirs '
+        '(book_key, chapter_key, folder_name, updated_at) '
+        "VALUES ('old-book', 'chapter-1', 'Chapter 1', 1700000001000)",
+      );
+      await db.customStatement('PRAGMA user_version = 2');
+      await db.close();
+
+      final FushiDatabase upgraded = await open();
+      addTearDown(upgraded.close);
+
+      expect(upgraded.schemaVersion, 3);
+      final MangaChapterDirRow? migrated = await upgraded.getMangaChapterDir(
+        'old-book',
+        'chapter-1',
+      );
+      expect(migrated?.folderName, 'Chapter 1');
       expect(
-        (await upgraded.getMangaChapterDir('old-book', 'chapter-1'))?.folderName,
-        'Chapter 1',
+        migrated?.containerKind,
+        MangaChapterContainerKind.folder,
+        reason: '升级前已存在的映射都是章节目录，迁移为 folder',
+      );
+
+      // 升级后可以记录压缩包容器。
+      await upgraded.upsertMangaChapterDir(
+        bookKey: 'old-book',
+        chapterKey: 'chapter-2',
+        folderName: 'Chapter 2.cbz',
+        containerKind: MangaChapterContainerKind.archive,
+        updatedAt: 1700000002000,
+      );
+      expect(
+        (await upgraded.getMangaChapterDir(
+          'old-book',
+          'chapter-2',
+        ))?.containerKind,
+        MangaChapterContainerKind.archive,
       );
     },
   );

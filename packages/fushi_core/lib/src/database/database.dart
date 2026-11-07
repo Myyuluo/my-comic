@@ -422,7 +422,10 @@ Future<void> _rebuildSidecar(File dbFile) async {
 ///
 /// my-comic 不迁移、不读取、不兼容 Fushi 的旧库（ADR-0002）。版本号从 1 重新起算，
 /// 维护自己的迁移链；Fushi 的 v1-v118 阶梯已从本代码库删除。
-const int kMyComicSchemaVersion = 2;
+///
+/// - v2：Download library 的章节映射表（storage-layout 票 04）。
+/// - v3：章节映射表增加 `container_kind`（folder / archive；CBZ 票 06）。
+const int kMyComicSchemaVersion = 3;
 
 /// my-comic 主库文件名（与 Fushi 的 `fushi.db` 不同）。
 ///
@@ -923,9 +926,16 @@ class FushiDatabase extends _$FushiDatabase
               appSchemaVersion: to,
             );
           }
-          if (from == 1 && to == 2) {
-            // v2：Download library 的章目录映射（票 04）。纯新增表。
+          if (from == 1) {
+            // v1 → 当前：Download library 的章节映射（票 04）。表定义按当前
+            // 版本创建，因此 v3 起同时包含 `container_kind` 列。
             await m.createTable(mangaChapterDirs);
+            return;
+          }
+          if (from == 2) {
+            // v2 → v3：章节映射增加显式容器类型（CBZ 票 06）。已有行都是
+            // 章节目录；列默认值 `folder` 使它们无需数据回填。
+            await m.addColumn(mangaChapterDirs, mangaChapterDirs.containerKind);
             return;
           }
           throw StateError(

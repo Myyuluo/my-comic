@@ -1,9 +1,10 @@
-/// Download library 的读取/删除索引（storage-layout 票 04）。
+/// Download library 的读取/删除索引（storage-layout 票 04；CBZ 票 06）。
 ///
-/// 磁盘布局是 `downloads/{source}/{manga}/{chapter}/`（页图平铺 + `pages.json`）。
-/// 目录名不是身份：数据库的 `manga_chapter_dirs` 保存
-/// `bookKey + chapterKey → folderName`，阅读器、作品页与删除都问这个索引，
-/// 不再用章 key / 标题自行拼路径。
+/// 磁盘布局是 `downloads/{source}/{manga}/{chapter}/`（页图平铺 + `pages.json`）
+/// 或 `downloads/{source}/{manga}/{chapter}.cbz`（包根页图 + `pages.json`）。
+/// 容器名不是身份：数据库的 `manga_chapter_dirs` 保存
+/// `bookKey + chapterKey → 容器名 + 容器类型`，阅读器、作品页、完整性检查与删除
+/// 都问这个索引，不再用章 key / 标题自行拼路径。
 ///
 /// Ticket 12 删除了票 01 的旧哈希布局只读回退：fresh-start 语义下旧
 /// `<content>/fushi_books/<bookKey>/chapters/<digest>/` 不再读取。
@@ -19,22 +20,40 @@ import 'package:path/path.dart' as p;
 
 import 'package:fushi/src/storage/app_paths.dart';
 
-/// 一个已定位的章节载体。
+/// 一个已定位的章节载体：文件夹章节或 CBZ 压缩包章节。
+///
+/// 两种形态互斥：folder 容器有 [directory] / [manifestFile] /
+/// [imagesDirectory]；archive 容器只有 [archiveFile]。
 class MangaChapterContainer {
-  const MangaChapterContainer({
+  const MangaChapterContainer.folder({
     required this.directory,
     required this.manifestFile,
     required this.imagesDirectory,
-  });
+  }) : kind = MangaChapterContainerKind.folder,
+       archiveFile = null;
 
-  /// 章节目录（`downloads/{source}/{manga}/{chapter}`）。
-  final Directory directory;
+  const MangaChapterContainer.archive({required this.archiveFile})
+    : kind = MangaChapterContainerKind.archive,
+      directory = null,
+      manifestFile = null,
+      imagesDirectory = null;
 
-  /// 章元数据文件（`pages.json`）。
-  final File manifestFile;
+  /// 取 [MangaChapterContainerKind]。
+  final String kind;
 
-  /// 页图根：新布局就是章目录本身（页图平铺）。
-  final Directory imagesDirectory;
+  /// 章节目录（`downloads/{source}/{manga}/{chapter}`）；archive 为 null。
+  final Directory? directory;
+
+  /// CBZ 压缩包（`downloads/{source}/{manga}/{chapter}.cbz`）；folder 为 null。
+  final File? archiveFile;
+
+  /// 章元数据文件（`pages.json`）；archive 为 null（页表在包根）。
+  final File? manifestFile;
+
+  /// 页图根：folder 容器就是章目录本身（页图平铺）；archive 为 null。
+  final Directory? imagesDirectory;
+
+  bool get isArchive => kind == MangaChapterContainerKind.archive;
 }
 
 /// 按数据库映射解析章节载体与「已下载」判据。
@@ -66,20 +85,33 @@ class DownloadLibraryIndex {
       chapterKey,
     );
     if (mapping != null && withinCurrentRoot) {
-      final Directory directory = downloadChapterDirectory(
-        row.extractDir,
-        mapping.folderName,
-      );
+      final Directory mangaDir = Directory(row.extractDir);
+      final String containerPath = p.join(row.extractDir, mapping.folderName);
       final bool withinMangaDir = isLocalSourcePathWithinRoot(
-        directory.path,
-        Directory(row.extractDir),
+        containerPath,
+        mangaDir,
       );
-      if (withinMangaDir && await directory.exists()) {
-        return MangaChapterContainer(
-          directory: directory,
-          manifestFile: downloadPagesManifestFile(directory),
-          imagesDirectory: directory,
+      if (!withinMangaDir) return null;
+      if (mapping.containerKind == MangaChapterContainerKind.archive) {
+        final File file = downloadChapterArchiveFile(
+          row.extractDir,
+          mapping.folderName,
         );
+        if (await file.exists()) {
+          return MangaChapterContainer.archive(archiveFile: file);
+        }
+      } else {
+        final Directory directory = downloadChapterDirectory(
+          row.extractDir,
+          mapping.folderName,
+        );
+        if (await directory.exists()) {
+          return MangaChapterContainer.folder(
+            directory: directory,
+            manifestFile: downloadPagesManifestFile(directory),
+            imagesDirectory: directory,
+          );
+        }
       }
     }
     return null;
@@ -97,7 +129,9 @@ class DownloadLibraryIndex {
     return AppPaths.downloadsRootDirectory();
   }
 
-  /// 这一章是否**完整**下载（容器存在且 manifest + 全部页文件齐）。
+  /// 这一章是否**完整**下载（容器存在且 manifest + 全部页齐）。
+  ///
+  /// 文件夹章节检查章目录里的页文件；CBZ 章节检查包内条目。
   Future<bool> isChapterDownloaded({
     required String bookKey,
     required String chapterKey,
@@ -107,7 +141,11 @@ class DownloadLibraryIndex {
       chapterKey: chapterKey,
     );
     if (container == null) return false;
-    return await readDownloadLibraryChapterPayload(container.directory) != null;
+    if (container.isArchive) {
+      return await isDownloadLibraryArchiveComplete(container.archiveFile!);
+    }
+    return await readDownloadLibraryChapterPayload(container.directory!) !=
+        null;
   }
 
   /// 一批章里哪些已完整下载（作品页 / 章节选择器一次算全量）。
@@ -126,8 +164,9 @@ class DownloadLibraryIndex {
 
   /// 删除一章的磁盘内容，并清掉它的映射。
   ///
-  /// 目录不存在时静默（任务取消 / 重复删除）。旧哈希布局已不再解析，
-  /// 映射行仍清掉，避免留下指向不存在容器的记录。
+  /// 文件夹章节删章节目录；CBZ 章节删压缩包文件。容器不存在时静默
+  /// （任务取消 / 重复删除）。旧哈希布局已不再解析，映射行仍清掉，避免留下
+  /// 指向不存在容器的记录。
   Future<void> deleteChapter({
     required String bookKey,
     required String chapterKey,
@@ -136,8 +175,14 @@ class DownloadLibraryIndex {
       bookKey: bookKey,
       chapterKey: chapterKey,
     );
-    if (container != null && await container.directory.exists()) {
-      await container.directory.delete(recursive: true);
+    if (container != null) {
+      if (container.isArchive) {
+        final File file = container.archiveFile!;
+        if (await file.exists()) await file.delete();
+      } else {
+        final Directory directory = container.directory!;
+        if (await directory.exists()) await directory.delete(recursive: true);
+      }
     }
     await database.deleteMangaChapterDir(bookKey, chapterKey);
   }
