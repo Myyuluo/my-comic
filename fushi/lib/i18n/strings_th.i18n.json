@@ -1181,6 +1181,8 @@
   "backup_export_dictionaries_skipped": "ส่งออกแล้ว แต่ข้ามพจนานุกรม $n รายการ: ไม่พบไฟล์ในอุปกรณ์นี้ ($names)",
   "backup_export_failed": "ส่งออกข้อมูลสำรองไม่สำเร็จ: $message",
   "backup_export_hint": "เลือกสิ่งที่จะรวมไว้ ฐานข้อมูล (หนังสือ ความคืบหน้า สถิติ) จะถูกรวมไว้เสมอ ยกเลิกการเลือกรายการขนาดใหญ่ (เสียงในเครื่อง วิดีโอ) เพื่อลดขนาดข้อมูลสำรอง",
+  "backup_export_mihon_subtitle": "Not available yet. Exporting .tachibk backups is planned for v1.5.",
+  "backup_export_mihon_title": "Export Mihon backup",
   "backup_export_no_books": "ไม่มีหนังสือให้เลือก",
   "backup_export_no_videos": "ไม่มีวิดีโอให้เลือก",
   "backup_export_select_all": "เลือกทั้งหมด",

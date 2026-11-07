@@ -1181,6 +1181,8 @@
   "backup_export_dictionaries_skipped": "내보냈지만 사전 $n개는 이 기기에 파일이 없어 건너뛰었습니다($names)",
   "backup_export_failed": "백업 내보내기 실패: $message",
   "backup_export_hint": "포함할 항목을 선택하세요. 데이터베이스(도서, 진행 상황, 통계)는 항상 포함됩니다. 큰 항목(로컬 오디오, 동영상)의 선택을 해제하면 백업 크기를 줄일 수 있습니다.",
+  "backup_export_mihon_subtitle": "Not available yet. Exporting .tachibk backups is planned for v1.5.",
+  "backup_export_mihon_title": "Export Mihon backup",
   "backup_export_no_books": "선택할 도서가 없습니다",
   "backup_export_no_videos": "선택할 동영상이 없습니다",
   "backup_export_select_all": "모두 선택",

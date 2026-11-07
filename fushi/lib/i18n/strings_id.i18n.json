@@ -1181,6 +1181,8 @@
   "backup_export_dictionaries_skipped": "Diekspor, tetapi $n kamus dilewati: file-nya tidak ada di perangkat ini ($names)",
   "backup_export_failed": "Ekspor cadangan gagal: $message",
   "backup_export_hint": "Pilih apa yang disertakan; basis data (buku, progres, statistik) selalu disertakan. Hapus centang item besar (audio lokal, video) untuk memperkecil cadangan.",
+  "backup_export_mihon_subtitle": "Not available yet. Exporting .tachibk backups is planned for v1.5.",
+  "backup_export_mihon_title": "Export Mihon backup",
   "backup_export_no_books": "Tidak ada buku untuk dipilih",
   "backup_export_no_videos": "Tidak ada video untuk dipilih",
   "backup_export_select_all": "Pilih semua",

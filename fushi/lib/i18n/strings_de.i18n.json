@@ -1181,6 +1181,8 @@
   "backup_export_dictionaries_skipped": "Exportiert, aber $n Wörterbuch/-bücher wurden übersprungen: Ihre Dateien fehlen auf diesem Gerät ($names)",
   "backup_export_failed": "Backup-Export fehlgeschlagen: $message",
   "backup_export_hint": "Wähle aus, was enthalten sein soll; die Datenbank (Bücher, Fortschritt, Statistiken) ist immer enthalten. Deaktiviere große Elemente (lokale Audios, Videos), um das Backup zu verkleinern.",
+  "backup_export_mihon_subtitle": "Not available yet. Exporting .tachibk backups is planned for v1.5.",
+  "backup_export_mihon_title": "Export Mihon backup",
   "backup_export_no_books": "Keine Bücher zur Auswahl",
   "backup_export_no_videos": "Keine Videos zur Auswahl",
   "backup_export_select_all": "Alle auswählen",

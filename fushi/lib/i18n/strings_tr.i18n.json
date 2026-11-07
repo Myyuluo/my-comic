@@ -1181,6 +1181,8 @@
   "backup_export_dictionaries_skipped": "Dışa aktarıldı, ancak $n sözlük atlandı: dosyaları bu cihazda eksik ($names)",
   "backup_export_failed": "Yedek dışa aktarılamadı: $message",
   "backup_export_hint": "Nelerin dâhil edileceğini seçin; veritabanı (kitaplar, ilerleme, istatistikler) her zaman dâhildir. Yedeği küçültmek için büyük öğelerin (yerel ses, videolar) işaretini kaldırın.",
+  "backup_export_mihon_subtitle": "Not available yet. Exporting .tachibk backups is planned for v1.5.",
+  "backup_export_mihon_title": "Export Mihon backup",
   "backup_export_no_books": "Seçilecek kitap yok",
   "backup_export_no_videos": "Seçilecek video yok",
   "backup_export_select_all": "Tümünü seç",

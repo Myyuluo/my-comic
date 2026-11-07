@@ -1181,6 +1181,8 @@
   "backup_export_dictionaries_skipped": "エクスポートしました。ただし $n 個の辞書はスキップされました。このデバイスにファイルがありません（$names）",
   "backup_export_failed": "バックアップの書き出しに失敗しました: $message",
   "backup_export_hint": "含める内容を選べます。データベース（書籍・進捗・統計）は常に含まれます。大きな項目（ローカル音声・動画）のチェックを外すとバックアップを小さくできます。",
+  "backup_export_mihon_subtitle": "Not available yet. Exporting .tachibk backups is planned for v1.5.",
+  "backup_export_mihon_title": "Export Mihon backup",
   "backup_export_no_books": "選択できる書籍がありません",
   "backup_export_no_videos": "選択できる動画がありません",
   "backup_export_select_all": "すべて選択",
