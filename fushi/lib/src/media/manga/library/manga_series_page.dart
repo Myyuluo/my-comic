@@ -431,6 +431,14 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
         await MangaStorage.bookPath(row.bookKey),
         chapter.key,
       );
+      // Ticket 02：done 任务行是「这章曾经下载过」的持久标记。用户主动删除
+      // 下载时必须一起清掉，否则磁盘判据变 false、任务仍 done → 被误显示成
+      // Missing。缺失文件本身（便携拷贝没带 content）不走这里，保留 Missing。
+      final MangaDownloadJobRow? job = _jobs[chapter.key];
+      final AppModel? appModel = _appModelOrNull;
+      if (job != null && appModel != null) {
+        await appModel.mangaDownloadService.remove(job.jobId);
+      }
       if (mounted) FushiToast.show(msg: t.storage_entry_delete_done);
     } on Object catch (error, stack) {
       ErrorLogService.instance.log(

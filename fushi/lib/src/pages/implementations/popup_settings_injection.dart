@@ -34,7 +34,6 @@ import 'package:fushi/src/reader/dictionary_font_css.dart';
 import 'package:fushi/src/reader/dictionary_language_css.dart';
 import 'package:fushi/src/reader/reader_settings.dart';
 import 'package:fushi_dictionary/fushi_dictionary.dart';
-import 'package:path/path.dart' as p;
 
 /// Call-site-specific knobs for [buildPopupSettingsJs]. Everything that must be
 /// IDENTICAL between the in-app popup and the app-outside global-lookup window
@@ -261,7 +260,7 @@ _DictionaryFontInputs _resolveDictionaryFontInputs(
 ) {
   final List<Map<String, dynamic>> fonts = settings.dictionaryFonts;
   final List<String> allowedDirectories = <String>[
-    p.join(appModel.appDirectory.path, 'custom_fonts'),
+    appModel.customFontsDirectory.path,
   ];
   // 全局默认内容语言（设置 · 外观 · 排版）。前两档真值都缺时的兜底语言。
   // 与词典语言一样必须进 memo 键。

@@ -4035,6 +4035,7 @@
   "manga_chapter_download_status_downloaded": "تم التنزيل",
   "manga_chapter_download_status_downloading": "جارٍ التنزيل $done/$total",
   "manga_chapter_download_status_failed": "فشل التنزيل",
+  "manga_chapter_download_status_missing": "File missing",
   "manga_chapter_download_status_queued": "في الانتظار",
   "manga_chapter_list_jump_bottom": "Jump to bottom",
   "manga_chapter_list_jump_current": "Jump to current chapter",

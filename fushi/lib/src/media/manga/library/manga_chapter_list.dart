@@ -8,20 +8,12 @@ import 'package:fushi/src/utils/components/fushi_staggered_entrance.dart';
 import 'package:fushi/src/utils/components/glass/fushi_icon.dart';
 import 'package:fushi/src/utils/fushi_icons.dart';
 import 'package:fushi_core/fushi_core.dart';
+import 'package:fushi/src/media/manga/library/manga_chapter_download_state.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi/src/media/manga/library/online_manga_runtime_adapter.dart'
     show OnlineMangaSiblingSource, OnlineMangaSourceLanguageScope;
 import 'package:fushi/src/media/online/online_source_error_text.dart';
 import 'package:fushi/utils.dart';
-
-/// 一章在「先下载再读」语义下的状态（设计稿 2026-09-12 §5）。
-enum _ChapterDownloadState {
-  notDownloaded,
-  queued,
-  downloading,
-  downloaded,
-  failed,
-}
 
 /// 章节下载失败文案：原因为空时只给「失败」，否则「失败 · 原因」。
 ///
@@ -130,23 +122,13 @@ class MangaChapterList extends StatelessWidget {
   final OnlineMangaSourceLanguageScope? languageScope;
   final void Function(OnlineMangaSiblingSource sibling)? onSiblingSourceTap;
 
-  /// 一章的下载状态：磁盘判据优先（真正决定能不能读），其次看任务行。
-  _ChapterDownloadState _downloadStateOf(OnlineMangaChapter chapter) {
-    if (downloadedChapterKeys.contains(chapter.key)) {
-      return _ChapterDownloadState.downloaded;
-    }
-    final MangaDownloadJobRow? job = jobsByChapterKey[chapter.key];
-    switch (job?.status) {
-      case MangaDownloadJobStatus.queued:
-        return _ChapterDownloadState.queued;
-      case MangaDownloadJobStatus.running:
-        return _ChapterDownloadState.downloading;
-      case MangaDownloadJobStatus.failed:
-        return _ChapterDownloadState.failed;
-      default:
-        return _ChapterDownloadState.notDownloaded;
-    }
-  }
+  /// 一章的下载状态：磁盘判据优先（真正决定能不能读），其次看任务行；
+  /// `done` 任务 + 磁盘缺文件 = Missing（Ticket 02）。
+  MangaChapterDownloadState _downloadStateOf(OnlineMangaChapter chapter) =>
+      mangaChapterDownloadState(
+        downloaded: downloadedChapterKeys.contains(chapter.key),
+        job: jobsByChapterKey[chapter.key],
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -299,7 +281,7 @@ class MangaChapterList extends StatelessWidget {
     final int lastPage = state?.lastPage ?? 0;
     final bool partial = !read && state != null && lastPage > 0;
     final int? pageCount = state?.pageCount;
-    final _ChapterDownloadState download = _downloadStateOf(chapter);
+    final MangaChapterDownloadState download = _downloadStateOf(chapter);
     final MangaDownloadJobRow? job = jobsByChapterKey[chapter.key];
     final int pagesTotal = job?.pagesTotal ?? 0;
     // 相邻章节常有相同下载状态，列表身份必须取章节 key；状态探针放在每章内部，
@@ -325,17 +307,22 @@ class MangaChapterList extends StatelessWidget {
                 ? (lastPage + 1) / pageCount
                 : null,
             downloadState: switch (download) {
-              _ChapterDownloadState.notDownloaded =>
+              MangaChapterDownloadState.notDownloaded =>
                 MediaDetailDownloadState.none,
-              _ChapterDownloadState.queued => MediaDetailDownloadState.queued,
-              _ChapterDownloadState.downloading =>
+              MangaChapterDownloadState.queued =>
+                MediaDetailDownloadState.queued,
+              MangaChapterDownloadState.downloading =>
                 MediaDetailDownloadState.downloading,
-              _ChapterDownloadState.downloaded =>
+              MangaChapterDownloadState.downloaded =>
                 MediaDetailDownloadState.downloaded,
-              _ChapterDownloadState.failed => MediaDetailDownloadState.failed,
+              MangaChapterDownloadState.failed =>
+                MediaDetailDownloadState.failed,
+              MangaChapterDownloadState.missing =>
+                MediaDetailDownloadState.missing,
             },
             downloadProgress:
-                download == _ChapterDownloadState.downloading && pagesTotal > 0
+                download == MangaChapterDownloadState.downloading &&
+                    pagesTotal > 0
                 ? ((job?.pagesDone ?? 0) / pagesTotal).clamp(0.0, 1.0)
                 : null,
             trailing: _buildMenu(chapter, download),
@@ -363,25 +350,28 @@ class MangaChapterList extends StatelessWidget {
     bool partial,
   ) {
     final MangaDownloadJobRow? job = jobsByChapterKey[chapter.key];
-    final _ChapterDownloadState download = _downloadStateOf(chapter);
+    final MangaChapterDownloadState download = _downloadStateOf(chapter);
     final List<String> parts = <String>[
       if (chapter.scanlator?.isNotEmpty == true) chapter.scanlator!,
       if (chapter.uploadedAt != null) _formatDate(chapter.uploadedAt!),
       switch (download) {
-        _ChapterDownloadState.queued => t.manga_chapter_download_status_queued,
-        _ChapterDownloadState.downloading =>
+        MangaChapterDownloadState.queued => t.manga_chapter_download_status_queued,
+        MangaChapterDownloadState.downloading =>
           t.manga_chapter_download_status_downloading(
             done: '${job?.pagesDone ?? 0}',
             total: '${job?.pagesTotal ?? 0}',
           ),
-        _ChapterDownloadState.downloaded =>
+        MangaChapterDownloadState.downloaded =>
           t.manga_chapter_download_status_downloaded,
         // 失败原因原样露出来：扩展抛的 `Log in via WebView ...` 之类正是用户要
         // 知道的下一步；只写「下载失败」等于把答案藏起来（BUG-2479）。
-        _ChapterDownloadState.failed => mangaChapterDownloadFailedLabel(
+        MangaChapterDownloadState.failed => mangaChapterDownloadFailedLabel(
           job?.lastError,
         ),
-        _ChapterDownloadState.notDownloaded => t.manga_chapter_not_downloaded,
+        MangaChapterDownloadState.notDownloaded =>
+          t.manga_chapter_not_downloaded,
+        MangaChapterDownloadState.missing =>
+          t.manga_chapter_download_status_missing,
       },
       if (chapter.key == ocrRunningChapterKey)
         t.manga_chapter_ocr_status_running(
@@ -407,7 +397,7 @@ class MangaChapterList extends StatelessWidget {
   /// 行尾溢出菜单（已读 / 下载 / 识别）；一个动作都没接（阅读器章节弹层）时不画。
   Widget? _buildMenu(
     OnlineMangaChapter chapter,
-    _ChapterDownloadState download,
+    MangaChapterDownloadState download,
   ) {
     final bool hasMenu =
         onToggleRead != null ||
@@ -433,18 +423,20 @@ class MangaChapterList extends StatelessWidget {
             label: t.manga_series_mark_previous_read,
           ),
         if (onDownload != null &&
-            download == _ChapterDownloadState.notDownloaded)
+            (download == MangaChapterDownloadState.notDownloaded ||
+                download == MangaChapterDownloadState.missing))
           FushiPopupMenuItem<String>(
             value: 'download',
             label: t.manga_chapter_download_action,
           ),
-        if (onRetryDownload != null && download == _ChapterDownloadState.failed)
+        if (onRetryDownload != null &&
+            download == MangaChapterDownloadState.failed)
           FushiPopupMenuItem<String>(
             value: 'retry-download',
             label: t.manga_chapter_download_retry_action,
           ),
         if (onOcr != null &&
-            download == _ChapterDownloadState.downloaded &&
+            download == MangaChapterDownloadState.downloaded &&
             chapter.key != ocrRunningChapterKey &&
             !ocrQueuedChapterKeys.contains(chapter.key))
           FushiPopupMenuItem<String>(
@@ -453,14 +445,15 @@ class MangaChapterList extends StatelessWidget {
             label: t.manga_chapter_ocr_action,
           ),
         if (onRevealDownload != null &&
-            download == _ChapterDownloadState.downloaded)
+            download == MangaChapterDownloadState.downloaded)
           FushiPopupMenuItem<String>(
             key: const ValueKey<String>('manga_chapter_reveal'),
             value: 'reveal-download',
             label: t.media_file_location_open,
           ),
         if (onDeleteDownload != null &&
-            download == _ChapterDownloadState.downloaded)
+            (download == MangaChapterDownloadState.downloaded ||
+                download == MangaChapterDownloadState.missing))
           FushiPopupMenuItem<String>(
             value: 'delete-download',
             label: t.manga_chapter_download_delete_action,

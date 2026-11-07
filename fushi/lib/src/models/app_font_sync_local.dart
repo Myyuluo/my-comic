@@ -16,7 +16,7 @@ class AppFontSyncLocal implements FontSyncLocal {
   final AppModel _appModel;
 
   @override
-  String get fontsRoot => customFontsDirectory(_appModel.appDirectory).path;
+  String get fontsRoot => customFontsDirectory(_appModel.stateDirectory).path;
 
   Future<ReaderSettings> _settings() async {
     ReaderSettings? settings = ReaderFushiSource.readerSettings;

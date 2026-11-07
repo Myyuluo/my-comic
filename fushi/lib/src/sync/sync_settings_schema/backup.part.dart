@@ -213,7 +213,7 @@ class _BackupExportWidgetState extends State<_BackupExportWidget> {
       // BUG-183: pack the imported custom fonts so they travel with their
       // config; otherwise the restored config points at files that never
       // crossed over and the fonts silently never apply.
-      fontsRootDirectory: p.join(appModel.appDirectory.path, 'custom_fonts'),
+      fontsRootDirectory: appModel.customFontsDirectory.path,
       // Game covers travel with the `games` category (rows + cover files).
       gameCoversRootDirectory: p.join(
         appModel.appDirectory.path,
@@ -1142,7 +1142,7 @@ Future<void> runBackupImportFlowForFile({
     appModel.appDirectory.path,
     'audiobooks',
   );
-  final String fontsRoot = p.join(appModel.appDirectory.path, 'custom_fonts');
+  final String fontsRoot = appModel.customFontsDirectory.path;
   final String videosRoot = p.join(appModel.appDirectory.path, 'videos');
   final String gameCoversRoot = p.join(
     appModel.appDirectory.path,
