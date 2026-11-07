@@ -289,8 +289,9 @@ String? _findCover(String mangaDirPath) {
   for (final FileSystemEntity entity in _list(Directory(mangaDirPath))) {
     if (entity is! File) continue;
     final String name = p.basename(entity.path).toLowerCase();
-    if (kLocalSourceCoverFileNames.contains(name))
+    if (kLocalSourceCoverFileNames.contains(name)) {
       return p.basename(entity.path);
+    }
   }
   return null;
 }
