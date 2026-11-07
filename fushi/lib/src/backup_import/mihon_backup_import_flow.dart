@@ -37,7 +37,7 @@ Future<String?> pickMihonBackupFile({
   return picked?.files.single.path;
 }
 
-/// Settings → System → Backup: pick a `.tachibk` file and import it.
+/// Settings → Storage & downloads → Backup: pick a `.tachibk` file and import it.
 ///
 /// The backup is read from local disk and written into the local Library only.
 /// There is no network path in this flow. The picker opens in the Backup
