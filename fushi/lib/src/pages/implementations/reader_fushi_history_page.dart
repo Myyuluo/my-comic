@@ -34,7 +34,7 @@ import 'package:fushi/src/media/drag_drop/fushi_file_drop_target.dart';
 import 'package:fushi/src/media/import/real_path_directory_picker.dart';
 import 'package:fushi/src/media/manga/download/manga_download_service.dart';
 import 'package:fushi/src/media/manga/interconnect/interconnect_manga_source.dart';
-import 'package:fushi/src/media/manga/library/manga_chapter_storage.dart';
+import 'package:fushi/src/media/manga/download/download_library_index.dart';
 import 'package:fushi/src/media/manga/library/manga_download_planner.dart';
 import 'package:fushi/src/media/manga/library/manga_series_page.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
@@ -50,7 +50,6 @@ import 'package:fushi_engine/media/manga/local_source/local_source_drop.dart';
 import 'package:fushi/src/pages/implementations/book_drag_target.dart';
 
 import 'package:fushi/src/pages/implementations/media_library_shell.dart';
-import 'package:fushi_engine/media/manga/manga_storage.dart';
 import 'package:fushi_engine/media/discovery/discovery_models.dart'
     show DiscoveryMediaKind;
 import 'package:fushi/src/pages/implementations/name_input_dialog.dart';

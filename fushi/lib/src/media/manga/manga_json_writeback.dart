@@ -14,15 +14,10 @@
 ///
 ///    全仓写/删 manga.json 的调用点（改动这张表时同步改
 ///    `manga_json_writeback_test.dart` 的锁覆盖守卫）：
-///    - `ocr/manga_ocr_job_registry.dart` 的 `_ingest`（整卷 OCR 完成落盘；BUG-2449 起
-///      任务归 app 级注册表，落盘随所有权一起离开阅读页）
-///    - `download/manga_download_service.dart` 的 `_download`（章下载完成后写章
-///      `manga.json`；2026-09-12 起阅读器不再写任何 manga.json——在线几何回填与
-///      章节引导重写随「先下载再读」一起删除）
-///    - `library/manga_chapter_storage.dart` 的 `deleteChapterDownload`（删章目录）
-///    - `manga_ocr_wizard_dialog.dart` 的 `_writeManagedMangaJson`（向导对已入库书落盘）
+///    - `library/manga_chapter_storage.dart` 的 `deleteChapterDownload`（删旧布局章目录）
 ///
-///    其中向导那条是**整份覆写**：不进锁就会整段吞掉几何回填刚落盘的改动。
+///    票 04 起在线下载写的是 `pages.json`（`download_library_storage.dart`，整章
+///    staging + rename），不再有生产写者；阅读器也不再写任何 manga.json。
 /// 2. **原子落盘**：先写 `<path>.tmp` 再 rename **直接覆盖**（不 delete），崩溃/断电
 ///    不会留下截断的 manga.json，也不会留下「目标暂时不存在」的窗口。
 library;

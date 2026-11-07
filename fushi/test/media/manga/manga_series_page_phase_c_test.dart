@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -9,7 +8,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi/models.dart';
 import 'package:fushi/src/media/detail/media_detail_kit.dart';
-import 'package:fushi/src/media/manga/library/manga_chapter_storage.dart';
 import 'package:fushi/src/media/manga/library/manga_series_page.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_service.dart';
@@ -23,6 +21,8 @@ import 'package:fushi/utils.dart';
 import 'package:fushi_audio/fushi_audio.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi_engine/epub/epub_storage.dart';
+import 'package:fushi_engine/media/manga/download_library_storage.dart';
+import 'package:fushi_engine/media/manga/mokuro_payload.dart';
 import 'package:path/path.dart' as p;
 
 import '../../helpers/test_platform_services.dart';
@@ -144,35 +144,55 @@ OnlineMangaLibraryEntry _entry() => const OnlineMangaLibraryEntry(
   chapters: _chapters,
 );
 
-/// 造一章「已下载」：页图 + manga.json。[withBlocks] = 这章已经识别过（blocks 非空）。
+/// 造一章「已下载」：Download library 平铺页图 + pages.json。
+/// [withBlocks] = 这章已经识别过（blocks 非空）。
 Future<void> _writeDownloadedChapter(
+  FushiDatabase db,
+  String bookKey,
   String bookDir,
   String chapterKey, {
   bool withBlocks = false,
 }) async {
-  final Directory chapterDir = mangaChapterDirectory(bookDir, chapterKey);
-  final Directory images = mangaChapterImagesDirectory(chapterDir);
-  await images.create(recursive: true);
-  await File(p.join(images.path, 'page-000001.jpg')).writeAsBytes(<int>[1]);
-  await mangaChapterJsonFile(chapterDir).writeAsString(
-    jsonEncode(<String, Object?>{
-      'pages': <Map<String, Object?>>[
-        <String, Object?>{
-          'url': 'images/page-000001.jpg',
-          'width': 100,
-          'height': 150,
-          'blocks': <Object?>[
-            if (withBlocks)
-              <String, Object?>{
-                'box': <int>[0, 0, 10, 10],
-                'vertical': false,
-                'font_size': 12,
-                'lines': <String>['x'],
-              },
-          ],
-        },
-      ],
-    }),
+  final Directory chapterDir = downloadChapterDirectory(bookDir, 'Chapter 1');
+  await chapterDir.create(recursive: true);
+  await File(p.join(chapterDir.path, '001.jpg')).writeAsBytes(<int>[1]);
+  await writePagesManifestAtomically(
+    chapterDir,
+    MangaPagesManifest(
+      sourceRuntime: 'mihon',
+      sourceId: '1',
+      sourceName: 'Fake',
+      extensionPackage: 'org.example.fixture',
+      mangaKey: '/series/fixture',
+      mangaTitle: 'Fixture series',
+      chapterKey: chapterKey,
+      chapterName: 'Chapter 1',
+      payload: MokuroPayload(
+        images: <MokuroImage>[
+          MokuroImage(
+            url: '001.jpg',
+            size: const MokuroSize(100, 150),
+            blocks: <MokuroBlock>[
+              if (withBlocks)
+                const MokuroBlock(
+                  rectangle: MokuroRect.fromLTRB(0, 0, 10, 10),
+                  isVertical: false,
+                  fontSize: 12,
+                  zIndex: 0,
+                  lines: <String>['x'],
+                ),
+            ],
+          ),
+        ],
+      ),
+      downloadedAt: DateTime.utc(2026, 11, 7),
+    ),
+  );
+  await db.upsertMangaChapterDir(
+    bookKey: bookKey,
+    chapterKey: chapterKey,
+    folderName: 'Chapter 1',
+    updatedAt: 1,
   );
 }
 
@@ -242,7 +262,12 @@ void main() {
     await tester.runAsync(() async {
       final EpubBookRow row = await library.add(_entry());
       bookKey = row.bookKey;
-      await _writeDownloadedChapter(row.extractDir, '/chapter/1');
+      await _writeDownloadedChapter(
+        db,
+        row.bookKey,
+        row.extractDir,
+        '/chapter/1',
+      );
       await tester.pumpWidget(_harness(appModel, bookKey));
       await _pumpUntil(
         tester,

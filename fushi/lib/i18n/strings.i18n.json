@@ -1715,6 +1715,7 @@
   "delete_in_progress": "Delete in progress",
   "delete_local_files": "Also delete local files",
   "delete_local_files_audio_desc": "The original audio files are removed from this device; book and subtitle originals are kept. This cannot be undone.",
+  "delete_local_files_download_desc": "Downloaded chapter files are removed from this device. This cannot be undone.",
   "delete_local_files_failed": "Could not delete $n local file(s); they may still be in use",
   "delete_local_files_video_desc": "The video, its sidecar subtitles and its download task are removed from this device. This cannot be undone.",
   "delete_prompt_delete_selected": "Delete selected",

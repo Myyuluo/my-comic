@@ -468,9 +468,9 @@ extension _ReaderHistoryRemote on _ReaderFushiHistoryPageState {
     final Map<String, MangaDownloadJobRow> jobs = await downloads.jobsForBook(
       bookKey,
     );
-    final String bookDir = await MangaStorage.bookPath(bookKey);
-    final Set<String> downloaded = await downloadedChapterKeys(
-      bookDir,
+    final Set<String> downloaded =
+        await DownloadLibraryIndex(appModel.database).downloadedChapterKeys(
+      bookKey,
       entry.chapters.map((OnlineMangaChapter chapter) => chapter.key),
     );
     // 与作品页「下载全部」共用同一条纯规划（review D2）。

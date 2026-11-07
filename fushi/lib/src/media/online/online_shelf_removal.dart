@@ -14,12 +14,14 @@ import 'package:fushi_engine/sync/deletion_propagation.dart';
 /// 删除」范围 + 记住选择），删除传播语义因此一致——用户选了同步删除，对端也跟着删。
 ///
 /// 漫画作品页与小说作品页共用（2026-09-27「浏览」阶段 2 从 `MangaSeriesPage` 抽出）。
-/// 返回 null = 用户取消。
+/// [localFilesSubtitle] 非 null 时渲染「同时删除本地文件」勾选框：在线漫画用它
+/// 询问是否删除已下载章节；小说不传。返回 null = 用户取消。
 Future<DeleteDecision?> confirmRemoveOnlineWorkFromShelf({
   required BuildContext context,
   required AppModel appModel,
   required String title,
   required String message,
+  String? localFilesSubtitle,
   String? statisticsSubtitle,
 }) async {
   final bool canSyncEverywhere = await hasDeletionPropagationChannel(
@@ -39,6 +41,7 @@ Future<DeleteDecision?> confirmRemoveOnlineWorkFromShelf({
         target: DeletionDisclosureTarget.shelfBook,
       ),
       showSyncScope: canSyncEverywhere,
+      localFilesSubtitle: localFilesSubtitle,
       statisticsSubtitle: statisticsSubtitle,
       rememberedChoices: rememberedChoices,
       onPersistChoices: preferenceStore.write,

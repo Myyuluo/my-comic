@@ -2,14 +2,11 @@
 ///
 /// 下载是在线直读之外的离线入口（2026-09-26 起点章即在线直读，设计稿 §1 补记）：
 /// 单 worker 串行取 `manga_download_jobs`
-/// 里最早的 `queued` 任务，任务内 4 并发取页落到章目录，全部齐后写章 `manga.json`
-/// → `done`。失败按 2s / 8s / 20s 退避重试三次，再失败留 `failed` + `last_error`；
-/// 取消真中止并删半成品目录。进程重启后 `running` 行复位为 `queued` 续跑，已落地的
-/// 页按磁盘现状跳过。
-///
-/// 完成钩子 [onChapterDownloaded]：`auto_ocr` 为真时由装配方（AppModel）解析引擎
-/// 并经 `MangaOcrJobRegistry.enqueue` 起整卷 OCR。钩子抛错只记日志，不影响任务
-/// 状态——下载已经成功，OCR 失败是另一件事。
+/// 里最早的 `queued` 任务，任务内 4 并发取页落到 `<manga>/.staging/<jobId>/`，
+/// 全部齐后写 `pages.json`（最后写），再把整个 staging 目录 rename 成
+/// `downloads/{source}/{manga}/{chapter}/` → `done`。失败按 2s / 8s / 20s 退避
+/// 重试三次，再失败留 `failed` + `last_error`；取消真中止并删半成品 staging。
+/// 进程重启后 `running` 行复位为 `queued` 续跑，staging 里已落地的页按磁盘现状跳过。
 ///
 /// **合规**：本服务**不**挂 `StoreRestrictedCapability.downloads`——互联对端漫画
 /// 在 iOS 是保留的在线源，改成必须下载后读，若下载被门挡住就是死路。Mihon
@@ -25,48 +22,20 @@ import 'package:crypto/crypto.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:path/path.dart' as p;
 
-import 'package:fushi/src/media/manga/library/manga_chapter_storage.dart';
+import 'package:fushi/src/media/manga/download/download_library_index.dart';
 import 'package:fushi/src/media/manga/library/online_manga_chapter_updates.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_service.dart';
 import 'package:fushi/src/media/manga/library/online_manga_runtime_adapter.dart';
 import 'package:fushi/src/media/manga/download/manga_download_sidecar.dart';
-import 'package:fushi/src/media/manga/manga_json_writeback.dart';
 import 'package:fushi/src/media/manga/mihon/manga_page_provider.dart';
 import 'package:fushi/src/platform/mobile/android_download_keep_alive.dart';
 import 'package:fushi/src/platform/mobile/download_keep_alive_hub.dart';
 import 'package:fushi/src/utils/misc/error_log_service.dart';
 import 'package:fushi_core/fushi_core.dart';
-import 'package:fushi_engine/media/manga/manga_storage.dart';
+import 'package:fushi_engine/media/manga/download_library_storage.dart';
 import 'package:fushi_engine/media/manga/mokuro_payload.dart';
 import 'package:fushi_engine/media/manga/mokuro_sidecar.dart';
-
-/// 一章下载完成后交给钩子的上下文。
-class MangaDownloadedChapter {
-  const MangaDownloadedChapter({
-    required this.job,
-    required this.bookKey,
-    required this.chapterKey,
-    required this.title,
-    required this.chapterTitle,
-    required this.chapterDirectory,
-    required this.mangaJsonPath,
-  });
-
-  final MangaDownloadJobRow job;
-  final String bookKey;
-  final String chapterKey;
-  final String title;
-  final String chapterTitle;
-
-  /// 章目录（含 `manga.json` + `images/`）。
-  final Directory chapterDirectory;
-  final String mangaJsonPath;
-}
-
-/// `auto_ocr` 为真的任务完成后调用；装配方负责解析引擎并起任务。
-typedef MangaDownloadOcrHook =
-    Future<void> Function(MangaDownloadedChapter chapter);
 
 /// 三次自动重试之间的退避。
 const List<Duration> kMangaDownloadRetryBackoff = <Duration>[
@@ -117,12 +86,23 @@ class _PageFile {
   final File file;
 }
 
+/// 本章目录的落点。`adoptedComplete` = 正式目录已存在且完整（上次崩溃在
+/// rename 与映射落库之间），直接认领，不重下。
+class _ChapterTarget {
+  const _ChapterTarget({
+    required this.folderName,
+    required this.adoptedComplete,
+  });
+
+  final String folderName;
+  final bool adoptedComplete;
+}
+
 class MangaDownloadService {
   MangaDownloadService({
     required FushiDatabase database,
     required OnlineMangaLibraryService Function(OnlineMangaRuntimeKind runtime)
     serviceFor,
-    MangaDownloadOcrHook? onChapterDownloaded,
     MangaDownloadSidecarFetcher? sidecarFetcher,
     DateTime Function()? clock,
     Future<void> Function(Duration duration)? wait,
@@ -130,7 +110,6 @@ class MangaDownloadService {
     this.pageConcurrency = 4,
   }) : _database = database,
        _serviceFor = serviceFor,
-       _onChapterDownloaded = onChapterDownloaded,
        _sidecarFetcher = sidecarFetcher,
        _clock = clock ?? DateTime.now,
        _wait = wait ?? ((Duration duration) => Future<void>.delayed(duration)),
@@ -139,7 +118,6 @@ class MangaDownloadService {
   final FushiDatabase _database;
   final OnlineMangaLibraryService Function(OnlineMangaRuntimeKind runtime)
   _serviceFor;
-  final MangaDownloadOcrHook? _onChapterDownloaded;
   final MangaDownloadSidecarFetcher? _sidecarFetcher;
   final DateTime Function() _clock;
   final Future<void> Function(Duration duration) _wait;
@@ -203,7 +181,8 @@ class MangaDownloadService {
 
   Future<List<MangaDownloadJobRow>> listJobs({
     Set<String> statuses = const <String>{},
-  }) => _database.listMangaDownloadJobs(statuses: statuses);
+  }) =>
+      _database.listMangaDownloadJobs(statuses: statuses);
 
   /// 一本书的任务，按 chapterKey 索引（作品页 / 章节选择器一次取全量）。
   Future<Map<String, MangaDownloadJobRow>> jobsForBook(String bookKey) async {
@@ -241,12 +220,10 @@ class MangaDownloadService {
         case MangaDownloadJobStatus.running:
           return existing;
         case MangaDownloadJobStatus.done:
-          final EpubBookRow? row = await _database.getEpubBook(bookKey);
-          if (row != null &&
-              await isChapterDownloaded(
-                await MangaStorage.bookPath(row.bookKey),
-                chapter.key,
-              )) {
+          if (await DownloadLibraryIndex(_database).isChapterDownloaded(
+            bookKey: bookKey,
+            chapterKey: chapter.key,
+          )) {
             return existing;
           }
       }
@@ -516,12 +493,16 @@ class MangaDownloadService {
       throw StateError('The chapter is no longer listed: ${job.chapterKey}');
     }
     final OnlineMangaChapter chapter = entry.chapters[chapterIndex];
+    // 新布局的漫画根：`downloads/{source}/{manga}`。旧行在这里被重指向新根
+    // （不搬文件）；旧布局的已下载章仍由 DownloadLibraryIndex 只读回退打开。
     row = await service.ensureBookDirectory(row);
-    final String bookDir = row.extractDir;
-    final Directory chapterDir = mangaChapterDirectory(bookDir, chapter.key);
-    final File mangaJson = mangaChapterJsonFile(chapterDir);
-    if (await isChapterDownloaded(bookDir, chapter.key)) {
-      await _markDone(job, chapterDir, mangaJson, entry, chapter);
+    final String mangaDir = row.extractDir;
+    final DownloadLibraryIndex index = DownloadLibraryIndex(_database);
+    if (await index.isChapterDownloaded(
+      bookKey: job.bookKey,
+      chapterKey: chapter.key,
+    )) {
+      await _markDone(job);
       return;
     }
     _throwIfCancelled(token);
@@ -531,13 +512,32 @@ class MangaDownloadService {
       throw StateError('The chapter has no pages');
     }
     _throwIfCancelled(token);
-    final Directory images = mangaChapterImagesDirectory(chapterDir);
-    await images.create(recursive: true);
+
+    final _ChapterTarget target = await _prepareChapterTarget(
+      job: job,
+      chapter: chapter,
+      mangaDir: mangaDir,
+    );
+    if (target.adoptedComplete) {
+      // 上次崩溃在 rename 与映射落库之间：目录已经完整，认领它而不是重下。
+      await _persistMapping(
+        bookKey: job.bookKey,
+        chapterKey: chapter.key,
+        folderName: target.folderName,
+      );
+      await _markDone(job);
+      return;
+    }
+
+    // 整章先写 `<manga>/.staging/<jobId>/`，pages.json 最后写，完成后整目录
+    // rename 到正式位置。半成品永远不在正式章目录里，也不进映射/索引。
+    final Directory staging = downloadStagingDirectory(mangaDir, job.jobId);
+    await staging.create(recursive: true);
     final List<_PageFile?> files = List<_PageFile?>.filled(pages.length, null);
     int done = 0;
-    // 续跑：磁盘上已完整落地的页直接认（`.tmp` 不算）。
+    // 续跑：staging 里已完整落地的页直接认（`.tmp` 不算）。
     for (int index = 0; index < pages.length; index++) {
-      final _PageFile? existing = await _existingPageFile(images, index);
+      final _PageFile? existing = await _existingPageFile(staging, index);
       if (existing != null) {
         files[index] = existing;
         done += 1;
@@ -564,7 +564,7 @@ class MangaDownloadService {
           files[index] = await _fetchPage(
             service.adapter,
             pages[index],
-            images,
+            staging,
             index,
           );
           done += 1;
@@ -590,7 +590,7 @@ class MangaDownloadService {
     if (firstError != null) {
       Error.throwWithStackTrace(firstError!, firstStack!);
     }
-    // 全部页齐 → 用真实字节尺寸写章 manga.json。
+    // 全部页齐 → 用真实字节尺寸写 pages.json（含稳定身份）。
     final List<MokuroImage> payloadImages = <MokuroImage>[];
     for (final _PageFile? file in files) {
       if (file == null) throw StateError('A page is missing after download');
@@ -640,20 +640,124 @@ class MangaDownloadService {
       }
     }
     _throwIfCancelled(token);
-    await runExclusiveOnMangaJson<void>(
-      mangaJson.path,
-      () => writeMangaJsonAtomically(mangaJson.path, payload),
+    final MangaPagesManifest manifest = MangaPagesManifest(
+      sourceRuntime: entry.runtime.wireValue,
+      sourceId: entry.sourceId,
+      sourceName: await service.downloadSourceName(entry),
+      extensionPackage: entry.extensionPackage,
+      mangaKey: entry.series.key,
+      mangaTitle: entry.series.title,
+      chapterKey: chapter.key,
+      chapterName: chapter.name,
+      chapterNumber: chapter.number,
+      scanlator: chapter.scanlator,
+      chapterUrl: chapter.raw['url']?.toString() ?? chapter.key,
+      payload: payload,
+      downloadedAt: _clock().toUtc(),
     );
-    await _markDone(job, chapterDir, mangaJson, entry, chapter);
+    // pages.json 最后写：它存在即代表整章页图已经齐了。
+    await writePagesManifestAtomically(staging, manifest);
+    _throwIfCancelled(token);
+    final String folderName = await _renameStagingIntoPlace(
+      staging: staging,
+      mangaDir: mangaDir,
+      desiredFolderName: target.folderName,
+    );
+    // rename 成功后立刻落映射（中间没有取消检查：取消路径按映射删目录）。
+    await _persistMapping(
+      bookKey: job.bookKey,
+      chapterKey: chapter.key,
+      folderName: folderName,
+    );
+    await _markDone(job);
   }
 
-  Future<void> _markDone(
-    MangaDownloadJobRow job,
-    Directory chapterDir,
-    File mangaJson,
-    OnlineMangaLibraryEntry entry,
-    OnlineMangaChapter chapter,
-  ) async {
+  Future<_ChapterTarget> _prepareChapterTarget({
+    required MangaDownloadJobRow job,
+    required OnlineMangaChapter chapter,
+    required String mangaDir,
+  }) async {
+    final MangaChapterDirRow? mapping = await _database.getMangaChapterDir(
+      job.bookKey,
+      job.chapterKey,
+    );
+    final String base = _chapterFolderName(chapter);
+    final Set<String> tried = <String>{};
+    String desired = mapping?.folderName ?? base;
+    int suffix = 2;
+    while (true) {
+      if (!tried.add(desired)) {
+        desired = '$base ($suffix)';
+        suffix += 1;
+        continue;
+      }
+      final Directory directory = downloadChapterDirectory(mangaDir, desired);
+      if (!await directory.exists()) {
+        return _ChapterTarget(folderName: desired, adoptedComplete: false);
+      }
+      if (await isDownloadLibraryChapterComplete(directory)) {
+        return _ChapterTarget(folderName: desired, adoptedComplete: true);
+      }
+      desired = '$base ($suffix)';
+      suffix += 1;
+    }
+  }
+
+  /// 章目录名：章展示名；空名退回章 key。票 05 再补扫译组/序号后缀。
+  static String _chapterFolderName(OnlineMangaChapter chapter) {
+    final String name = chapter.name.trim();
+    return sanitizeDownloadLibrarySegment(name.isEmpty ? chapter.key : name);
+  }
+
+  /// 把 staging 目录整章 rename 到正式章目录；目标被占时用确定后缀，绝不覆盖。
+  Future<String> _renameStagingIntoPlace({
+    required Directory staging,
+    required String mangaDir,
+    required String desiredFolderName,
+  }) async {
+    String candidate = desiredFolderName;
+    int suffix = 2;
+    while (true) {
+      final Directory target = downloadChapterDirectory(mangaDir, candidate);
+      if (!await target.exists()) {
+        try {
+          await staging.rename(target.path);
+          await _cleanupStagingParent(staging);
+          return candidate;
+        } on FileSystemException {
+          if (!await target.exists()) rethrow;
+        }
+      }
+      candidate = '$desiredFolderName ($suffix)';
+      suffix += 1;
+    }
+  }
+
+  Future<void> _persistMapping({
+    required String bookKey,
+    required String chapterKey,
+    required String folderName,
+  }) =>
+      _database.upsertMangaChapterDir(
+        bookKey: bookKey,
+        chapterKey: chapterKey,
+        folderName: folderName,
+        updatedAt: _now,
+      );
+
+  /// staging 的父目录（`<manga>/.staging`）空了就删掉；非致命。
+  static Future<void> _cleanupStagingParent(Directory staging) async {
+    try {
+      final Directory parent = staging.parent;
+      if (await parent.exists() && await parent.list().isEmpty) {
+        await parent.delete();
+      }
+    } on FileSystemException {
+      // 目录被占用等：留着空 `.staging` 无害，扫描本来就会忽略点号目录。
+    }
+  }
+
+  Future<void> _markDone(MangaDownloadJobRow job) async {
     final int now = _now;
     await _database.updateMangaDownloadJobStatus(
       job.jobId,
@@ -668,64 +772,52 @@ class MangaDownloadService {
   Future<_PageFile> _fetchPage(
     OnlineMangaRuntimeAdapter adapter,
     OnlineMangaPageRef page,
-    Directory images,
+    Directory staging,
     int index,
   ) async {
     final Uint8List bytes = await adapter.fetchChapterPage(page);
     if (bytes.isEmpty) {
       throw StateError('Empty page image at index $index');
     }
-    final String name = '${_pageStem(index)}${_extensionFor(bytes)}';
-    final File target = File(p.join(images.path, name));
+    final String name = downloadPageFileName(
+      index,
+      downloadPageExtensionFor(bytes),
+    );
+    final File target = File(p.join(staging.path, name));
     // 先写 .tmp 再 rename：半截文件被续跑当成有效页就是一页永久坏图。
     final File staged = File('${target.path}.tmp');
     await staged.writeAsBytes(bytes, flush: true);
     await staged.rename(target.path);
-    return _PageFile(
-      relativeUrl: '${MangaStorage.kImagesDirName}/$name',
-      file: target,
-    );
+    return _PageFile(relativeUrl: name, file: target);
   }
 
-  static String _pageStem(int index) =>
-      'page-${(index + 1).toString().padLeft(6, '0')}';
-
-  /// 续跑时找磁盘上已落地的第 [index] 页（任意扩展名，`.tmp` 除外，空文件不算）。
-  Future<_PageFile?> _existingPageFile(Directory images, int index) async {
-    final String stem = _pageStem(index);
-    for (final String ext in const <String>['.jpg', '.png', '.webp', '.gif']) {
-      final File file = File(p.join(images.path, '$stem$ext'));
+  /// 续跑时找 staging 里已落地的第 [index] 页（任意扩展名，`.tmp` 除外，空文件不算）。
+  Future<_PageFile?> _existingPageFile(Directory staging, int index) async {
+    for (final String ext in kDownloadPageExtensions) {
+      final String name = downloadPageFileName(index, ext);
+      final File file = File(p.join(staging.path, name));
       if (await file.exists() && await file.length() > 0) {
-        return _PageFile(
-          relativeUrl: '${MangaStorage.kImagesDirName}/$stem$ext',
-          file: file,
-        );
+        return _PageFile(relativeUrl: name, file: file);
       }
     }
     return null;
-  }
-
-  static String _extensionFor(Uint8List bytes) {
-    switch (mangaImageContentType(bytes)) {
-      case 'image/png':
-        return '.png';
-      case 'image/webp':
-        return '.webp';
-      case 'image/gif':
-        return '.gif';
-      default:
-        return '.jpg';
-    }
   }
 
   Future<void> _deleteChapterDirectory(MangaDownloadJobRow job) async {
     try {
       final EpubBookRow? row = await _database.getEpubBook(job.bookKey);
       if (row == null) return;
-      await deleteChapterDownload(
-        await MangaStorage.bookPath(row.bookKey),
-        job.chapterKey,
+      await DownloadLibraryIndex(
+        _database,
+      ).deleteChapter(bookKey: job.bookKey, chapterKey: job.chapterKey);
+      final Directory staging = downloadStagingDirectory(
+        row.extractDir,
+        job.jobId,
       );
+      if (await staging.exists()) {
+        await staging.delete(recursive: true);
+        await _cleanupStagingParent(staging);
+      }
     } on Object catch (error, stack) {
       ErrorLogService.instance.log(
         'MangaDownloadService.deleteChapter ${job.jobId}',

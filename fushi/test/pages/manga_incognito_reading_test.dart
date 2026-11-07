@@ -9,7 +9,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi/i18n/strings.g.dart';
 import 'package:fushi/models.dart';
-import 'package:fushi/src/media/manga/library/manga_chapter_storage.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_service.dart';
 import 'package:fushi/src/media/manga/library/online_manga_runtime_adapter.dart';
@@ -21,6 +20,8 @@ import 'package:fushi/src/platform/platform_providers.dart';
 import 'package:fushi/src/reader/reader_session_remote.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi_engine/epub/epub_storage.dart';
+import 'package:fushi_engine/media/manga/download_library_storage.dart';
+import 'package:fushi_engine/media/manga/mokuro_payload.dart';
 import 'package:path/path.dart' as p;
 
 import '../helpers/pump_until.dart';
@@ -186,29 +187,49 @@ OnlineMangaLibraryEntry _onlineEntry() => const OnlineMangaLibraryEntry(
   chapters: _onlineChapters,
 );
 
-Future<void> _writeDownloadedChapter(String bookDir, String chapterKey) async {
-  final Directory chapterDir = mangaChapterDirectory(bookDir, chapterKey);
-  final Directory images = mangaChapterImagesDirectory(chapterDir);
-  await images.create(recursive: true);
-  await File(p.join(images.path, 'page-000001.jpg')).writeAsBytes(<int>[1]);
-  await File(p.join(images.path, 'page-000002.jpg')).writeAsBytes(<int>[2]);
-  await mangaChapterJsonFile(chapterDir).writeAsString(
-    jsonEncode(<String, Object?>{
-      'pages': <Map<String, Object?>>[
-        <String, Object?>{
-          'url': 'images/page-000001.jpg',
-          'width': 100,
-          'height': 150,
-          'blocks': <Object?>[],
-        },
-        <String, Object?>{
-          'url': 'images/page-000002.jpg',
-          'width': 100,
-          'height': 150,
-          'blocks': <Object?>[],
-        },
-      ],
-    }),
+Future<void> _writeDownloadedChapter(
+  FushiDatabase db,
+  String bookKey,
+  String bookDir,
+  String chapterKey,
+) async {
+  final Directory chapterDir = downloadChapterDirectory(bookDir, 'Chapter 1');
+  await chapterDir.create(recursive: true);
+  await File(p.join(chapterDir.path, '001.jpg')).writeAsBytes(<int>[1]);
+  await File(p.join(chapterDir.path, '002.jpg')).writeAsBytes(<int>[2]);
+  await writePagesManifestAtomically(
+    chapterDir,
+    MangaPagesManifest(
+      sourceRuntime: 'mihon',
+      sourceId: '1',
+      sourceName: 'Fake',
+      extensionPackage: 'org.example.fixture',
+      mangaKey: '/series/fixture',
+      mangaTitle: 'Fixture series',
+      chapterKey: chapterKey,
+      chapterName: 'Chapter 1',
+      payload: const MokuroPayload(
+        images: <MokuroImage>[
+          MokuroImage(
+            url: '001.jpg',
+            size: MokuroSize(100, 150),
+            blocks: <MokuroBlock>[],
+          ),
+          MokuroImage(
+            url: '002.jpg',
+            size: MokuroSize(100, 150),
+            blocks: <MokuroBlock>[],
+          ),
+        ],
+      ),
+      downloadedAt: DateTime.utc(2026, 11, 7),
+    ),
+  );
+  await db.upsertMangaChapterDir(
+    bookKey: bookKey,
+    chapterKey: chapterKey,
+    folderName: 'Chapter 1',
+    updatedAt: 1,
   );
 }
 
@@ -374,7 +395,12 @@ void main() {
       bookKey = row.bookKey;
       bookUid = row.uid;
       // 新读者从最旧一话（列表末尾 = Chapter 1）开始。
-      await _writeDownloadedChapter(row.extractDir, '/chapter/1');
+      await _writeDownloadedChapter(
+        db,
+        row.bookKey,
+        row.extractDir,
+        '/chapter/1',
+      );
       await db.upsertReaderPosition(
         ReaderPositionsCompanion(
           bookUid: Value<String>(bookUid),
@@ -470,7 +496,12 @@ void main() {
       final EpubBookRow row = await library.add(_onlineEntry());
       bookKey = row.bookKey;
       bookUid = row.uid;
-      await _writeDownloadedChapter(row.extractDir, '/chapter/1');
+      await _writeDownloadedChapter(
+        db,
+        row.bookKey,
+        row.extractDir,
+        '/chapter/1',
+      );
       await db.upsertReaderPosition(
         ReaderPositionsCompanion(
           bookUid: Value<String>(bookUid),

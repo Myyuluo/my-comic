@@ -3240,6 +3240,37 @@ class MangaDownloadJobs extends Table {
       ];
 }
 
+/// Download library 的章目录映射（storage-layout 票 04）。
+///
+/// 目录名不是身份：`downloads/{source}/{manga}/{chapter}` 里的 source/manga/
+/// chapter 都是可读展示名，标题或源改名不自动重命名目录。阅读器、删除、重建
+/// 都通过这张表把稳定的 `(bookKey, chapterKey)` 映射到**实际**章目录名。
+///
+/// 值 `folderName` 是相对 manga 目录（`epub_books.extractDir`）的单段目录名；
+/// 不含路径分隔符。`deleteEpubBook` 在同一事务里级联删掉本书的行。
+@DataClassName('MangaChapterDirRow')
+class MangaChapterDirs extends Table {
+  /// 在线书架条目的稳定键（`epub_books.bookKey`）。
+  TextColumn get bookKey => text()();
+
+  /// 章内稳定键（`manga_chapter_states.chapter_key` 同源）。
+  TextColumn get chapterKey => text()();
+
+  /// 实际章目录名（相对 manga 目录，单段）。
+  TextColumn get folderName => text()();
+
+  IntColumn get updatedAt => integer()();
+
+  @override
+  Set<Column> get primaryKey => <Column>{bookKey, chapterKey};
+
+  @override
+  List<String> get customConstraints => <String>[
+        "CHECK (book_key != '' AND chapter_key != '' AND folder_name != '')",
+        'CHECK (updated_at >= 0)',
+      ];
+}
+
 /// v104：合集域远端书键与实际导入 UID 的持久一对一关系。
 /// uid 父表索引是 partial，不能作为 SQLite FK；deleteEpubBook 显式级联。
 @DataClassName('CollectionBookAliasRow')

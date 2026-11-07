@@ -11,11 +11,12 @@ import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi/src/media/manga/library/online_manga_runtime_adapter.dart';
 import 'package:fushi/src/media/media_cover_service.dart';
 import 'package:fushi/src/media/manga/mihon/mihon_manager.dart';
+import 'package:fushi/src/storage/app_paths.dart';
 import 'package:fushi/src/utils/misc/error_log_service.dart';
+import 'package:fushi_engine/epub/epub_storage.dart';
 import 'package:fushi_engine/media/cover_file_writer.dart'
     show CoverImageInvalidException;
-import 'package:fushi_engine/media/manga/manga_storage.dart';
-import 'package:fushi_engine/sync/fushi_library_host_service.dart';
+import 'package:fushi_engine/media/manga/download_library_storage.dart';
 
 import 'package:fushi_engine/updates/update_feed_kind.dart';
 import 'package:fushi/src/updates/update_feed_service.dart';
@@ -42,6 +43,7 @@ class OnlineMangaLibraryService {
     required this.database,
     required this.rootDirectory,
     required this.adapter,
+    this.downloadsRootDirectory,
     this.updateFeed,
   });
 
@@ -49,10 +51,14 @@ class OnlineMangaLibraryService {
 
   /// **旧**落盘根（`<runtimeRoot>/library/<bookKey>` 与 `reader-cache/`）。
   ///
-  /// 2026-09-12 起在线条目统一住进 `<fushi_books>/<bookKey>`（设计稿 §2.1），这个根
-  /// 只剩两个用途：[ensureBookDirectory] 识别还没迁走的旧目录，以及顺手清掉该书的
-  /// 旧 `reader-cache/`。新条目不再往这里写任何东西。
+  /// 票 04 起在线条目住 Download library（`<content>/downloads/{source}/{manga}`），
+  /// 这个根只剩「顺手清掉旧 `reader-cache/`」一个用途。
   final Directory rootDirectory;
+
+  /// Content root 下的 Download library 根（`<content>/downloads`）。
+  ///
+  /// null = 生产解析 [AppPaths.downloadsRootDirectory]；测试注入临时目录。
+  final Directory? downloadsRootDirectory;
 
   final OnlineMangaRuntimeAdapter adapter;
 
@@ -108,14 +114,14 @@ class OnlineMangaLibraryService {
       return row;
     }
 
-    final Directory directory = Directory(
-      await MangaStorage.bookDirectory(bookKey),
+    // Download library：`downloads/{source}/{manga}`。章节是它的直接子目录，
+    // 每章自己的 `pages.json` 才是身份；书根不再写占位 manga.json。
+    final Directory directory = downloadMangaDirectory(
+      downloadsRoot: (await _downloadsRoot()).path,
+      sourceName: await downloadSourceName(entry),
+      mangaTitle: entry.series.title,
     );
-    await Directory(p.join(directory.path, 'chapters')).create(recursive: true);
-    final File placeholder = File(
-      p.join(directory.path, MangaStorage.kMangaJsonFileName),
-    );
-    await _writeAtomic(placeholder, '{"pages":[]}');
+    await directory.create(recursive: true);
 
     String? coverPath;
     final String? coverUrl = entry.series.coverUrl;
@@ -153,7 +159,7 @@ class OnlineMangaLibraryService {
         title: entry.series.title,
         author: Value<String?>(entry.series.byline),
         coverPath: Value<String?>(coverPath),
-        epubPath: p.basename(placeholder.path),
+        epubPath: kDownloadPagesFileName,
         extractDir: directory.path,
         chapterCount: entry.chapters.length,
         chaptersJson: _chaptersJson(entry.chapters),
@@ -334,33 +340,42 @@ class OnlineMangaLibraryService {
     return updated;
   }
 
-  /// 保证这条在线条目的书目录住在 `<fushi_books>/<bookKey>`，返回**当前**行。
+  /// 保证这条在线条目的漫画目录住在 Download library：
+  /// `<content>/downloads/{source}/{manga}`，返回**当前**行。
   ///
-  /// 2026-09-12 前在线条目落在 `<runtimeRoot>/library/<bookKey>`；章节页图只是
-  /// `reader-cache/` 里的临时缓存。改成「先下载再读」后章目录成了正式内容，必须
-  /// 和封面、占位 manga.json 一起住进标准书根，删书 / 备份 / 数据根迁移才能
-  /// 按 `extractDir` 一并处理。首次访问时把旧目录整个搬过去（跨卷用复制 + 删除），
-  /// 再改 `extractDir`；`bookKey` / `uid` 不变，进度零迁移。
+  /// fresh-start：旧布局（`<runtimeRoot>/library` / `<content>/fushi_books`）
+  /// **不搬移、不复制**，只把 `extractDir` 重指向新布局。旧章仍可由
+  /// `DownloadLibraryIndex` 的只读回退打开，直到清理旧 root 的票删除它。
   ///
   /// 已在标准位置的行原样返回（零 IO 之外的一次路径比较）。
   Future<EpubBookRow> ensureBookDirectory(EpubBookRow row) async {
-    final String target = await MangaStorage.bookPath(row.bookKey);
-    if (p.equals(row.extractDir, target)) return row;
-    final Directory source = Directory(row.extractDir);
-    final Directory destination = Directory(target);
-    if (await source.exists()) {
-      await _moveDirectory(source, destination);
-    } else {
-      await destination.create(recursive: true);
-    }
-    await Directory(p.join(target, 'chapters')).create(recursive: true);
-    final File placeholder = File(
-      p.join(target, MangaStorage.kMangaJsonFileName),
+    final OnlineMangaLibraryEntry? entry = OnlineMangaLibraryEntry.tryParse(
+      row.sourceMetadata,
     );
-    if (!await placeholder.exists()) {
-      await _writeAtomic(placeholder, '{"pages":[]}');
+    if (entry == null) {
+      throw StateError('The library row has no online descriptor');
     }
-    await database.updateEpubBookContentPaths(row.bookKey, extractDir: target);
+    final Directory downloadsRoot = await _downloadsRoot();
+    // 目录名不是身份：一旦漫画目录已在 Download library 里，源/漫画改名**不**
+    // 重命名或重指向目录（映射与 pages.json 才是身份）。只补建丢失的空目录。
+    if (p.isWithin(
+      p.canonicalize(downloadsRoot.path),
+      p.canonicalize(row.extractDir),
+    )) {
+      final Directory existing = Directory(row.extractDir);
+      if (!await existing.exists()) await existing.create(recursive: true);
+      return row;
+    }
+    final Directory target = downloadMangaDirectory(
+      downloadsRoot: downloadsRoot.path,
+      sourceName: await downloadSourceName(entry),
+      mangaTitle: entry.series.title,
+    );
+    await target.create(recursive: true);
+    await database.updateEpubBookContentPaths(
+      row.bookKey,
+      extractDir: target.path,
+    );
     // 旧的阅读期页缓存对新布局毫无价值，顺手清掉——失败只记日志，不挡打开。
     final Directory staleCache = Directory(
       p.join(rootDirectory.path, 'reader-cache', 'chapters', row.bookKey),
@@ -375,43 +390,30 @@ class OnlineMangaLibraryService {
       );
     }
     return (await database.getEpubBook(row.bookKey)) ??
-        row.copyWith(extractDir: target);
+        row.copyWith(extractDir: target.path);
   }
 
-  /// 目录搬家：同卷直接 rename，跨卷（`rename` 抛 `FileSystemException`）退回
-  /// 递归复制 + 删源。
-  static Future<void> _moveDirectory(
-    Directory source,
-    Directory destination,
-  ) async {
-    await destination.parent.create(recursive: true);
-    if (await destination.exists()) {
-      // 目标已有东西（半次迁移中断过）：合并进去而不是覆盖。
-      await _copyTree(source, destination);
-      await source.delete(recursive: true);
-      return;
+  Future<Directory> _downloadsRoot() async {
+    final Directory? injected = downloadsRootDirectory;
+    if (injected != null) return injected;
+    // 测试缝：大量既有测试用 `EpubStorage.debugBaseDirectoryOverride` 把书根钉在
+    // 临时目录；没有 path_provider 插件时 AppPaths 解不出 Content root。把
+    // Download library 派生到同一临时根的兄弟目录，测试之间仍然隔离。
+    final String? legacyBase = EpubStorage.debugBaseDirectoryOverridePath;
+    if (legacyBase != null) {
+      return Directory(p.join(p.dirname(legacyBase), 'downloads'));
     }
-    try {
-      await source.rename(destination.path);
-    } on FileSystemException {
-      await _copyTree(source, destination);
-      await source.delete(recursive: true);
-    }
+    return AppPaths.downloadsRootDirectory();
   }
 
-  static Future<void> _copyTree(Directory source, Directory destination) async {
-    await destination.create(recursive: true);
-    await for (final FileSystemEntity entity in source.list(
-      followLinks: false,
-    )) {
-      final String name = p.basename(entity.path);
-      final String targetPath = p.join(destination.path, name);
-      if (entity is Directory) {
-        await _copyTree(entity, Directory(targetPath));
-      } else if (entity is File) {
-        await entity.copy(targetPath);
-      }
-    }
+  /// Source 目录名：Source 显示名优先；没有显示名时退回 sourceId / runtime，
+  /// 保证永远有可读且非空的目录段（同名冲突由票 05 处理）。
+  Future<String> downloadSourceName(OnlineMangaLibraryEntry entry) async {
+    final String? label = (await adapter.sourceLabel(entry))?.trim();
+    if (label != null && label.isNotEmpty) return label;
+    final String sourceId = entry.sourceId.trim();
+    if (sourceId.isNotEmpty) return sourceId;
+    return entry.runtime.wireValue;
   }
 
   /// 新读者从哪一章开始（[mangaInitialChapterIndex]）。
@@ -431,14 +433,6 @@ class OnlineMangaLibraryService {
       jsonEncode(<Map<String, Object?>>[
         for (final OnlineMangaChapter chapter in chapters) chapter.toJson(),
       ]);
-
-  static Future<void> _writeAtomic(File target, String contents) async {
-    await target.parent.create(recursive: true);
-    final File temporary = File('${target.path}.tmp');
-    await temporary.writeAsString(contents, flush: true);
-    if (await target.exists()) await target.delete();
-    await temporary.rename(target.path);
-  }
 
   /// 按魔数定封面扩展名；不是 PNG / WebP / GIF / JPEG 返回 null（调用方不落盘）。
   static String? _imageExtension(List<int> bytes) {

@@ -127,29 +127,13 @@ void main() {
   // 锁的价值全在「一个写者都不许漏」。行为测试只能验已经进锁的那些；漏进锁的
   // 调用点必须靠源码扫描抓——这条守卫与文件头的调用点清单是同一份真相。
   group('锁覆盖守卫：书根 manga.json 的每个写/删都在锁内', () {
-    const List<String> consumers = <String>[
-      // 2026-09-12 起阅读器不再写任何 manga.json（在线几何回填 / 章节引导重写随
-      // 「先下载再读」一起删除）；章 manga.json 由下载服务落盘。
-      // OCR 向导 / 任务注册表随 my-comic v1 移除 OCR 功能一并删除。
-      'lib/src/media/manga/download/manga_download_service.dart',
-    ];
-
-    test('每处 writeMangaJsonAtomically 调用都由 runExclusiveOnMangaJson 包住', () {
-      for (final String path in consumers) {
-        final String body = File(path).readAsStringSync();
-        int at = body.indexOf('writeMangaJsonAtomically(');
-        expect(at, greaterThan(0), reason: '$path 应当经本模块落盘');
-        while (at >= 0) {
-          final String preceding = body.substring(at < 400 ? 0 : at - 400, at);
-          expect(
-            preceding,
-            contains('runExclusiveOnMangaJson'),
-            reason: '$path 偏移 $at 处的落盘不在 per-path 写锁内：'
-                '与另一写者交叠会整份覆写、吞掉对方刚落盘的改动',
-          );
-          at = body.indexOf('writeMangaJsonAtomically(', at + 1);
-        }
-      }
+    test('下载服务不再写 manga.json（票 04 起章元数据是 pages.json）', () {
+      // 票 04：在线下载把稳定身份 + 页表写进 `pages.json`，整章 rename 落位；
+      // `manga.json` 写侧已随 OCR 移除，不得回流。
+      final String body = File(
+        'lib/src/media/manga/download/manga_download_service.dart',
+      ).readAsStringSync();
+      expect(body, isNot(contains('writeMangaJsonAtomically(')));
     });
 
     test('删章目录（连带其 manga.json）也在锁内', () {

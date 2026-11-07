@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -8,7 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi/i18n/strings.g.dart';
 import 'package:fushi/models.dart';
-import 'package:fushi/src/media/manga/library/manga_chapter_storage.dart';
+import 'package:fushi/src/media/manga/download/download_library_index.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_service.dart';
 import 'package:fushi/src/media/manga/library/online_manga_runtime_adapter.dart';
@@ -20,6 +19,8 @@ import 'package:fushi/src/platform/platform_providers.dart';
 import 'package:fushi/src/utils/components/fushi_motion_tokens.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi_engine/epub/epub_storage.dart';
+import 'package:fushi_engine/media/manga/download_library_storage.dart';
+import 'package:fushi_engine/media/manga/mokuro_payload.dart';
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 
@@ -209,30 +210,55 @@ OnlineMangaLibraryEntry _entry() => const OnlineMangaLibraryEntry(
       chapters: _chapters,
     );
 
-Future<void> _writeDownloadedChapter(String bookDir, String chapterKey) async {
-  final Directory chapterDir = mangaChapterDirectory(bookDir, chapterKey);
-  final Directory images = mangaChapterImagesDirectory(chapterDir);
-  await images.create(recursive: true);
-  await File(p.join(images.path, 'page-000001.jpg')).writeAsBytes(<int>[1]);
-  await File(p.join(images.path, 'page-000002.jpg')).writeAsBytes(<int>[2]);
-  await mangaChapterJsonFile(chapterDir).writeAsString(jsonEncode(
-    <String, Object?>{
-      'pages': <Map<String, Object?>>[
-        <String, Object?>{
-          'url': 'images/page-000001.jpg',
-          'width': 100,
-          'height': 150,
-          'blocks': <Object?>[],
-        },
-        <String, Object?>{
-          'url': 'images/page-000002.jpg',
-          'width': 100,
-          'height': 150,
-          'blocks': <Object?>[],
-        },
-      ],
-    },
-  ));
+/// 在 Download library 写一章：`downloads/{source}/{manga}/{chapter}/` 平铺页图
+/// + `pages.json` + 数据库映射。
+Future<Directory> _writeDownloadedChapter(
+  FushiDatabase db, {
+  required String bookKey,
+  required String bookDir,
+  required String chapterKey,
+  String folderName = 'Chapter 1',
+  String chapterName = 'Chapter 1',
+}) async {
+  final Directory chapterDir = downloadChapterDirectory(bookDir, folderName);
+  await chapterDir.create(recursive: true);
+  await File(p.join(chapterDir.path, '001.jpg')).writeAsBytes(<int>[1]);
+  await File(p.join(chapterDir.path, '002.jpg')).writeAsBytes(<int>[2]);
+  await writePagesManifestAtomically(
+    chapterDir,
+    MangaPagesManifest(
+      sourceRuntime: 'mihon',
+      sourceId: '1',
+      sourceName: 'Fake',
+      extensionPackage: 'org.example.fixture',
+      mangaKey: '/series/fixture',
+      mangaTitle: 'Fixture series',
+      chapterKey: chapterKey,
+      chapterName: chapterName,
+      payload: const MokuroPayload(
+        images: <MokuroImage>[
+          MokuroImage(
+            url: '001.jpg',
+            size: MokuroSize(100, 150),
+            blocks: <MokuroBlock>[],
+          ),
+          MokuroImage(
+            url: '002.jpg',
+            size: MokuroSize(100, 150),
+            blocks: <MokuroBlock>[],
+          ),
+        ],
+      ),
+      downloadedAt: DateTime.utc(2026, 11, 7),
+    ),
+  );
+  await db.upsertMangaChapterDir(
+    bookKey: bookKey,
+    chapterKey: chapterKey,
+    folderName: folderName,
+    updatedAt: 1,
+  );
+  return chapterDir;
 }
 
 Future<void> _pumpUntil(WidgetTester tester, Finder finder) async {
@@ -258,6 +284,7 @@ void main() {
     library = OnlineMangaLibraryService(
       database: db,
       rootDirectory: Directory(p.join(root.path, 'legacy')),
+      downloadsRootDirectory: Directory(p.join(root.path, 'downloads')),
       adapter: adapter,
     );
   });
@@ -280,7 +307,12 @@ void main() {
       final EpubBookRow row = await library.add(_entry());
       bookKey = row.bookKey;
       // 新读者从最旧一话（列表末尾 = Chapter 1）开始。
-      await _writeDownloadedChapter(row.extractDir, '/chapter/1');
+      await _writeDownloadedChapter(
+        db,
+        bookKey: bookKey,
+        bookDir: row.extractDir,
+        chapterKey: '/chapter/1',
+      );
 
       await tester.pumpWidget(_harness(appModel, bookKey));
       await _pumpUntil(
@@ -429,16 +461,18 @@ void main() {
     // runAsync 里跑，FakeAsync 区里 await 它会永远挂住。
     final EpubBookRow after = (await db.getEpubBook(bookKey))!;
     final bool downloaded = (await tester.runAsync(
-      () => isChapterDownloaded(after.extractDir, '/chapter/1'),
+      () => DownloadLibraryIndex(db).isChapterDownloaded(
+        bookKey: bookKey,
+        chapterKey: '/chapter/1',
+      ),
     ))!;
     expect(downloaded, isFalse);
     expect(
-      Directory(p.join(bookDir, 'chapters')).existsSync()
-          ? Directory(p.join(bookDir, 'chapters')).listSync()
-          : const <FileSystemEntity>[],
-      isEmpty,
-      reason: '直读页只进临时缓存，不碰章下载目录',
+      downloadChapterDirectory(bookDir, 'Chapter 1').existsSync(),
+      isFalse,
+      reason: '直读页只进临时缓存，不碰下载章目录',
     );
+    expect(Directory(p.join(bookDir, '.staging')).existsSync(), isFalse);
     expect(await db.listMangaDownloadJobs(), isEmpty);
     // 页缓存在 app 临时目录下。
     expect(

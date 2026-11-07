@@ -6,19 +6,16 @@ import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:fushi/src/media/manga/download/download_library_index.dart';
 import 'package:fushi/src/media/manga/download/manga_download_service.dart';
-import 'package:fushi/src/media/manga/library/manga_chapter_storage.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_service.dart';
 import 'package:fushi/src/media/manga/library/online_manga_runtime_adapter.dart';
 
-
-
-
-
 import 'package:fushi/src/platform/mobile/android_download_keep_alive.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi_engine/epub/epub_storage.dart';
+import 'package:fushi_engine/media/manga/download_library_storage.dart';
 import 'package:fushi_engine/media/manga/mokuro_payload.dart';
 
 import 'package:image/image.dart' as img;
@@ -50,8 +47,12 @@ class _FakeAdapter implements OnlineMangaRuntimeAdapter {
   @override
   bool get isSupportedOnThisPlatform => true;
 
+  /// Source 显示名（路径净化测试会改它）。
+  String sourceLabelText = 'Fake';
+
   @override
-  Future<String?> sourceLabel(OnlineMangaLibraryEntry entry) async => 'Fake';
+  Future<String?> sourceLabel(OnlineMangaLibraryEntry entry) async =>
+      sourceLabelText;
 
   @override
   Future<OnlineMangaRefreshResult> refresh(
@@ -144,14 +145,10 @@ void main() {
   late String bookKey;
   late String bookDir;
 
-  MangaDownloadService build({
-    MangaDownloadOcrHook? onChapterDownloaded,
-    DownloadKeepAlive? keepAlive,
-  }) =>
+  MangaDownloadService build({DownloadKeepAlive? keepAlive}) =>
       MangaDownloadService(
         database: db,
         serviceFor: (OnlineMangaRuntimeKind runtime) => library,
-        onChapterDownloaded: onChapterDownloaded,
         keepAlive: keepAlive,
         wait: (Duration duration) async {
           waits.add(duration);
@@ -166,6 +163,7 @@ void main() {
     library = OnlineMangaLibraryService(
       database: db,
       rootDirectory: Directory(p.join(root.path, 'legacy')),
+      downloadsRootDirectory: Directory(p.join(root.path, 'downloads')),
       adapter: adapter,
     );
     waits = <Duration>[];
@@ -233,7 +231,7 @@ void main() {
     expect((await db.listMangaDownloadJobs()).single.jobId, 'chapter-01');
   });
 
-  test('入队 → worker 跑完：三张图落盘、manga.json 尺寸真实、行 done', () async {
+  test('入队 → worker 跑完：页图平铺 + pages.json、映射落库、行 done', () async {
     final MangaDownloadService downloads = build();
     final MangaDownloadJobRow queued = await downloads.enqueueChapter(
       entry: _entry(),
@@ -254,29 +252,183 @@ void main() {
     expect(done.completedAt, isNotNull);
     expect(done.lastError, isNull);
 
-    final Directory chapterDir = mangaChapterDirectory(bookDir, '/chapter/1');
+    // Download library：downloads/{source}/{manga}/{chapter}/001.png…
+    expect(bookDir, p.join(root.path, 'downloads', 'Fake', 'Fixture series'));
+    final Directory chapterDir = downloadChapterDirectory(bookDir, 'Chapter 1');
     for (int i = 1; i <= 3; i++) {
       final File page = File(
-        p.join(chapterDir.path, 'images', 'page-00000$i.png'),
+        p.join(chapterDir.path, downloadPageFileName(i - 1, '.png')),
       );
-      expect(page.existsSync(), isTrue, reason: 'page $i 必须落盘');
+      expect(page.existsSync(), isTrue, reason: 'page $i 必须平铺落盘');
       expect(File('${page.path}.tmp').existsSync(), isFalse);
     }
-    final MokuroPayload payload = parseMangaJson(
-      mangaChapterJsonFile(chapterDir).readAsStringSync(),
+    expect(
+      Directory(p.join(chapterDir.path, 'images')).existsSync(),
+      isFalse,
+      reason: '新布局页图平铺，不再有 images/ 前缀',
     );
     expect(
-        payload.images.map((MokuroImage image) => image.url).toList(), <String>[
-      'images/page-000001.png',
-      'images/page-000002.png',
-      'images/page-000003.png',
-    ]);
-    expect(payload.images[0].size.width, 100);
-    expect(payload.images[0].size.height, 150);
-    expect(payload.images[2].size.width, 102);
-    expect(payload.images[2].size.height, 152);
-    expect(await isChapterDownloaded(bookDir, '/chapter/1'), isTrue);
+      Directory(p.join(bookDir, '.staging')).existsSync(),
+      isFalse,
+      reason: '完成后 staging 应已 rename 走',
+    );
+
+    final MangaPagesManifest? manifest = await readPagesManifest(chapterDir);
+    expect(manifest, isNotNull);
+    expect(manifest!.sourceRuntime, 'mihon');
+    expect(manifest.sourceId, '1');
+    expect(manifest.sourceName, 'Fake');
+    expect(manifest.extensionPackage, 'org.example.fixture');
+    expect(manifest.mangaKey, '/series/fixture');
+    expect(manifest.mangaTitle, 'Fixture series');
+    expect(manifest.chapterKey, '/chapter/1');
+    expect(manifest.chapterName, 'Chapter 1');
+    expect(manifest.chapterNumber, 1);
+    expect(manifest.chapterUrl, '/chapter/1');
+    expect(
+      manifest.payload.images.map((MokuroImage image) => image.url).toList(),
+      <String>['001.png', '002.png', '003.png'],
+    );
+    expect(manifest.payload.images[0].size.width, 100);
+    expect(manifest.payload.images[0].size.height, 150);
+    expect(manifest.payload.images[2].size.width, 102);
+    expect(manifest.payload.images[2].size.height, 152);
+
+    // 数据库映射：bookKey + chapterKey → 实际目录名。
+    final MangaChapterDirRow? mapping = await db.getMangaChapterDir(
+      bookKey,
+      '/chapter/1',
+    );
+    expect(mapping?.folderName, 'Chapter 1');
+    final DownloadLibraryIndex index = DownloadLibraryIndex(db);
+    expect(
+      await index.isChapterDownloaded(
+        bookKey: bookKey,
+        chapterKey: '/chapter/1',
+      ),
+      isTrue,
+    );
     expect(waits, isEmpty);
+    downloads.dispose();
+  });
+
+  test('下载中只有 .staging 有内容：正式章目录与索引要等整章 rename 后才出现', () async {
+    adapter.gate = Completer<void>();
+    final MangaDownloadService downloads = build();
+    final MangaDownloadJobRow job = await downloads.enqueueChapter(
+      entry: _entry(),
+      chapter: _chapters.last,
+      autoOcr: false,
+    );
+    await downloads.start();
+    while ((adapter.fetchCounts[0] ?? 0) == 0) {
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+    }
+    final Directory staging = downloadStagingDirectory(bookDir, job.jobId);
+    expect(staging.existsSync(), isTrue, reason: '下载中的页只在 staging 里');
+    final Directory chapterDir = downloadChapterDirectory(bookDir, 'Chapter 1');
+    expect(chapterDir.existsSync(), isFalse, reason: '半成品不得出现在正式位置');
+    expect(await db.getMangaChapterDir(bookKey, '/chapter/1'), isNull);
+    expect(
+      await DownloadLibraryIndex(
+        db,
+      ).isChapterDownloaded(bookKey: bookKey, chapterKey: '/chapter/1'),
+      isFalse,
+      reason: '半成品不进已下载索引',
+    );
+
+    adapter.gate!.complete();
+    await downloads.whenIdle;
+    expect(staging.existsSync(), isFalse);
+    expect(chapterDir.existsSync(), isTrue);
+    expect(
+      await DownloadLibraryIndex(
+        db,
+      ).isChapterDownloaded(bookKey: bookKey, chapterKey: '/chapter/1'),
+      isTrue,
+    );
+    downloads.dispose();
+  });
+
+  test('目标章目录已存在时不覆盖：内容进确定后缀，映射指向实际目录', () async {
+    final Directory existing = downloadChapterDirectory(bookDir, 'Chapter 1');
+    await existing.create(recursive: true);
+    final File sentinel = File(p.join(existing.path, 'keep.txt'));
+    await sentinel.writeAsString('do not touch');
+
+    final MangaDownloadService downloads = build();
+    await downloads.enqueueChapter(
+      entry: _entry(),
+      chapter: _chapters.last,
+      autoOcr: false,
+    );
+    await downloads.start();
+    await downloads.whenIdle;
+
+    expect(await sentinel.readAsString(), 'do not touch');
+    expect(existing.listSync(), hasLength(1), reason: '已有目录内容不得被覆盖');
+    final MangaChapterDirRow? mapping = await db.getMangaChapterDir(
+      bookKey,
+      '/chapter/1',
+    );
+    expect(mapping?.folderName, 'Chapter 1 (2)');
+    expect(
+      downloadChapterDirectory(bookDir, 'Chapter 1 (2)').existsSync(),
+      isTrue,
+    );
+    expect(
+      await DownloadLibraryIndex(
+        db,
+      ).isChapterDownloaded(bookKey: bookKey, chapterKey: '/chapter/1'),
+      isTrue,
+    );
+    downloads.dispose();
+  });
+
+  test('source / manga / chapter 目录段经过基础净化', () async {
+    adapter.sourceLabelText = 'Bad:Source';
+    const OnlineMangaChapter chapter = OnlineMangaChapter(
+      key: '/chapter/1',
+      name: 'Chapter: 1?',
+      number: 1,
+      raw: <String, Object?>{'url': '/chapter/1'},
+    );
+    final OnlineMangaLibraryEntry entry = OnlineMangaLibraryEntry(
+      runtime: _entry().runtime,
+      extensionPackage: _entry().extensionPackage,
+      sourceId: _entry().sourceId,
+      series: const OnlineMangaSeries(
+        key: '/series/bad-names',
+        title: 'Fixture: Series?',
+        raw: <String, Object?>{'url': '/series/bad-names'},
+      ),
+      chapters: const <OnlineMangaChapter>[chapter],
+    );
+    // 入库就会按净化后的 source / manga 建目录；下载章节名同样要净化。
+    final EpubBookRow badRow = await library.add(entry);
+    final MangaDownloadService downloads = build();
+    await downloads.enqueueChapter(
+      entry: entry,
+      chapter: chapter,
+      autoOcr: false,
+    );
+    await downloads.start();
+    await downloads.whenIdle;
+
+    expect(
+      badRow.extractDir,
+      p.join(root.path, 'downloads', 'Bad_Source', 'Fixture_ Series_'),
+    );
+    expect(
+      downloadChapterDirectory(badRow.extractDir, 'Chapter_ 1_').existsSync(),
+      isTrue,
+      reason: '目录名按 Windows 非法字符净化',
+    );
+    final MangaChapterDirRow? mapping = await db.getMangaChapterDir(
+      badRow.bookKey,
+      '/chapter/1',
+    );
+    expect(mapping?.folderName, 'Chapter_ 1_');
     downloads.dispose();
   });
 
@@ -299,7 +451,28 @@ void main() {
       kMangaDownloadRetryBackoff[0],
       kMangaDownloadRetryBackoff[1],
     ]);
-    expect(await isChapterDownloaded(bookDir, '/chapter/1'), isFalse);
+    final DownloadLibraryIndex index = DownloadLibraryIndex(db);
+    expect(
+      await index.isChapterDownloaded(
+        bookKey: bookKey,
+        chapterKey: '/chapter/1',
+      ),
+      isFalse,
+      reason: '失败的半成品不得被当成已下载',
+    );
+    expect(
+      downloadChapterDirectory(bookDir, 'Chapter 1').existsSync(),
+      isFalse,
+      reason: '正式章目录只在整章完成后才出现',
+    );
+    expect(await db.getMangaChapterDir(bookKey, '/chapter/1'), isNull);
+    // 半成品留在 .staging，供重试续跑。
+    final Directory staging = downloadStagingDirectory(bookDir, failed.jobId);
+    expect(staging.existsSync(), isTrue);
+    expect(
+      File(p.join(staging.path, downloadPageFileName(0, '.png'))).existsSync(),
+      isTrue,
+    );
     // 其余页只取一次：续跑认磁盘上已落地的页，不重下。
     expect(adapter.fetchCounts[0], 1);
     expect(adapter.fetchCounts[2], 1);
@@ -364,16 +537,36 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 5));
     }
     expect((await jobOf('/chapter/1')).status, MangaDownloadJobStatus.running);
-    final Directory chapterDir = mangaChapterDirectory(bookDir, '/chapter/1');
-    expect(chapterDir.existsSync(), isTrue, reason: 'images/ 已建好');
+    final Directory staging = downloadStagingDirectory(bookDir, job.jobId);
+    expect(staging.existsSync(), isTrue, reason: '页图先写 staging');
+    expect(
+      downloadChapterDirectory(bookDir, 'Chapter 1').existsSync(),
+      isFalse,
+      reason: '完成前正式章目录不存在',
+    );
+    final DownloadLibraryIndex index = DownloadLibraryIndex(db);
+    expect(
+      await index.isChapterDownloaded(
+        bookKey: bookKey,
+        chapterKey: '/chapter/1',
+      ),
+      isFalse,
+    );
 
     await downloads.cancel(job.jobId);
     adapter.gate!.complete();
     await downloads.whenIdle;
 
     expect(
-        (await jobOf('/chapter/1')).status, MangaDownloadJobStatus.cancelled);
-    expect(chapterDir.existsSync(), isFalse, reason: '半成品目录必须删掉');
+      (await jobOf('/chapter/1')).status,
+      MangaDownloadJobStatus.cancelled,
+    );
+    expect(staging.existsSync(), isFalse, reason: '取消要删半成品 staging');
+    expect(
+      downloadChapterDirectory(bookDir, 'Chapter 1').existsSync(),
+      isFalse,
+    );
+    expect(await db.getMangaChapterDir(bookKey, '/chapter/1'), isNull);
     downloads.dispose();
   });
 
@@ -386,7 +579,9 @@ void main() {
     );
     await downloads.cancel(job.jobId);
     expect(
-        (await jobOf('/chapter/2')).status, MangaDownloadJobStatus.cancelled);
+      (await jobOf('/chapter/2')).status,
+      MangaDownloadJobStatus.cancelled,
+    );
     final MangaDownloadJobRow again = await downloads.enqueueChapter(
       entry: _entry(),
       chapter: _chapters.first,
@@ -443,11 +638,19 @@ void main() {
     );
     expect(again.status, MangaDownloadJobStatus.done);
     await downloads.whenIdle;
-    expect(adapter.fetchCounts, <int, int>{0: 1, 1: 1, 2: 1},
+    expect(
+        adapter.fetchCounts,
+        <int, int>{
+          0: 1,
+          1: 1,
+          2: 1,
+        },
         reason: '已下载的章不该再打源');
 
     // 目录被删 → 判据失效 → 重新排队（worker 在跑，行可能已被立刻领走）。
-    await deleteChapterDownload(bookDir, '/chapter/1');
+    await DownloadLibraryIndex(
+      db,
+    ).deleteChapter(bookKey: bookKey, chapterKey: '/chapter/1');
     final MangaDownloadJobRow requeued = await downloads.enqueueChapter(
       entry: _entry(),
       chapter: _chapters.last,
@@ -459,7 +662,13 @@ void main() {
     );
     await downloads.whenIdle;
     expect((await jobOf('/chapter/1')).status, MangaDownloadJobStatus.done);
-    expect(adapter.fetchCounts, <int, int>{0: 2, 1: 2, 2: 2},
+    expect(
+        adapter.fetchCounts,
+        <int, int>{
+          0: 2,
+          1: 2,
+          2: 2,
+        },
         reason: '目录没了就得真的重下');
     downloads.dispose();
   });
@@ -480,12 +689,18 @@ void main() {
 
       expect(keepAlive.events.first, 'update:Fixture series');
       expect(keepAlive.events.last, 'stop');
-      expect(keepAlive.events.where((String e) => e == 'stop'), hasLength(1),
-          reason: '队列没排空之前不能撤（后台里撤了就再也拉不起前台服务）');
+      expect(
+        keepAlive.events.where((String e) => e == 'stop'),
+        hasLength(1),
+        reason: '队列没排空之前不能撤（后台里撤了就再也拉不起前台服务）',
+      );
       expect(keepAlive.percents, contains(100));
       downloads.dispose();
-      expect(keepAlive.events.where((String e) => e == 'stop'), hasLength(1),
-          reason: '已撤过，dispose 不重复 stop');
+      expect(
+        keepAlive.events.where((String e) => e == 'stop'),
+        hasLength(1),
+        reason: '已撤过，dispose 不重复 stop',
+      );
     });
 
     test('跑到一半 dispose → 撤保活', () async {

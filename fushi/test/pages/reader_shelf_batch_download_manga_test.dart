@@ -4,7 +4,6 @@
 // 描述符（带章节列表）；本地卷 = 没有在线描述符的漫画行。批量下载遇到本地卷跳过
 // 并提示数量；在线条目按作品页「下载全部」的规则入队——已下载、已排队、锁定的
 // 章节都不重复入队。
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:drift/drift.dart' show Value;
@@ -17,7 +16,6 @@ import 'package:fushi/i18n/strings.g.dart';
 import 'package:fushi/media.dart';
 import 'package:fushi/models.dart';
 import 'package:fushi/src/media/manga/interconnect/interconnect_manga_source.dart';
-import 'package:fushi/src/media/manga/library/manga_chapter_storage.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_service.dart';
 import 'package:fushi/src/media/manga/library/online_manga_runtime_adapter.dart';
@@ -32,7 +30,8 @@ import 'package:fushi/src/utils/components/fushi_icon_button.dart';
 import 'package:fushi/src/utils/fushi_icons.dart';
 import 'package:fushi/src/utils/misc/fushi_toast.dart';
 import 'package:fushi_engine/epub/epub_storage.dart';
-import 'package:fushi_engine/media/manga/manga_storage.dart';
+import 'package:fushi_engine/media/manga/download_library_storage.dart';
+import 'package:fushi_engine/media/manga/mokuro_payload.dart';
 import 'package:fushi_engine/sync/fushi_library_host_service.dart';
 import 'package:fushi_engine/sync/sync_asset_store.dart' show SyncTransferProgress;
 import 'package:fushi_engine/sync/ttu_filename.dart';
@@ -266,22 +265,43 @@ class _FakeInterconnectClient extends InterconnectSyncBackend {
   ) async {}
 }
 
-void _writeDownloadedChapter(String bookDir, String chapterKey) {
-  final Directory chapterDir = mangaChapterDirectory(bookDir, chapterKey);
-  final Directory images = mangaChapterImagesDirectory(chapterDir);
-  images.createSync(recursive: true);
-  File(p.join(images.path, 'page-000001.jpg')).writeAsBytesSync(<int>[1]);
-  mangaChapterJsonFile(chapterDir).writeAsStringSync(
-    jsonEncode(<String, Object?>{
-      'pages': <Map<String, Object?>>[
-        <String, Object?>{
-          'url': 'images/page-000001.jpg',
-          'width': 100,
-          'height': 150,
-          'blocks': <Object?>[],
-        },
-      ],
-    }),
+Future<void> _writeDownloadedChapter(
+  FushiDatabase db,
+  String bookKey,
+  String bookDir,
+  String chapterKey,
+) async {
+  final Directory chapterDir = downloadChapterDirectory(bookDir, 'Chapter 2');
+  await chapterDir.create(recursive: true);
+  await File(p.join(chapterDir.path, '001.jpg')).writeAsBytes(<int>[1]);
+  await writePagesManifestAtomically(
+    chapterDir,
+    MangaPagesManifest(
+      sourceRuntime: 'mihon',
+      sourceId: '1',
+      sourceName: 'Remote',
+      extensionPackage: 'org.example.fixture',
+      mangaKey: '/series/fixture',
+      mangaTitle: 'Remote series',
+      chapterKey: chapterKey,
+      chapterName: 'Chapter 2',
+      payload: const MokuroPayload(
+        images: <MokuroImage>[
+          MokuroImage(
+            url: '001.jpg',
+            size: MokuroSize(100, 150),
+            blocks: <MokuroBlock>[],
+          ),
+        ],
+      ),
+      downloadedAt: DateTime.utc(2026, 11, 7),
+    ),
+  );
+  await db.upsertMangaChapterDir(
+    bookKey: bookKey,
+    chapterKey: chapterKey,
+    folderName: 'Chapter 2',
+    updatedAt: 1,
   );
 }
 
@@ -484,9 +504,16 @@ void main() {
       autoOcr: false,
     );
     // 已下载：第 2 章完整落盘。
-    _writeDownloadedChapter(
-      await MangaStorage.bookPath(onlineKey),
-      '/chapter/2',
+    final EpubBookRow onlineRow =
+        (await appModel.database.getEpubBook(onlineKey))!;
+    // 真实文件 IO 必须放进 runAsync：fake async 区里的磁盘 future 不会自己完成。
+    await tester.runAsync(
+      () => _writeDownloadedChapter(
+        appModel.database,
+        onlineKey,
+        onlineRow.extractDir,
+        '/chapter/2',
+      ),
     );
 
     await pumpPage(tester);

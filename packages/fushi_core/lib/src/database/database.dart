@@ -422,7 +422,7 @@ Future<void> _rebuildSidecar(File dbFile) async {
 ///
 /// my-comic 不迁移、不读取、不兼容 Fushi 的旧库（ADR-0002）。版本号从 1 重新起算，
 /// 维护自己的迁移链；Fushi 的 v1-v118 阶梯已从本代码库删除。
-const int kMyComicSchemaVersion = 1;
+const int kMyComicSchemaVersion = 2;
 
 /// my-comic 主库文件名（与 Fushi 的 `fushi.db` 不同）。
 ///
@@ -487,6 +487,7 @@ const Set<String> kMyComicSchemaTableNames = <String>{
   'update_feed_entries',
   // Download
   'manga_download_jobs',
+  'manga_chapter_dirs',
   // Reader 每作品覆盖与每章状态
   'manga_chapter_states',
   'manga_reader_overrides',
@@ -860,6 +861,7 @@ void _requireOneVideoMetadataOwner({
   VideoFileSpecs,
   UpdateFeedEntries,
   MangaDownloadJobs,
+  MangaChapterDirs,
   AnidbFileIdentities,
   VideoEpisodeBindingOverrides,
   PendingMineQueue,
@@ -912,13 +914,19 @@ class FushiDatabase extends _$FushiDatabase
           await _createMyComicSchema(m);
         },
         onUpgrade: (m, from, to) async {
-          // my-comic 使用全新 schema（v1），不提供任何 Fushi v1-v118 的迁移路径。
-          // 唯一可能进入这里的是比本构建更新的库（from > to）——拒绝打开、绝不改库。
+          // my-comic 不提供任何 Fushi v1-v118 的迁移路径；这里只维护 my-comic
+          // 自己的小版本阶梯。
+          // 比本构建更新的库（from > to）拒绝打开、绝不改库。
           if (from > to) {
             throw FushiDatabaseDowngradeException(
               dbVersion: from,
               appSchemaVersion: to,
             );
+          }
+          if (from == 1 && to == 2) {
+            // v2：Download library 的章目录映射（票 04）。纯新增表。
+            await m.createTable(mangaChapterDirs);
+            return;
           }
           throw StateError(
             'Unsupported my-comic schema upgrade path: $from -> $to',
@@ -984,6 +992,7 @@ class FushiDatabase extends _$FushiDatabase
       updateFeedEntries,
       // Download / Reader
       mangaDownloadJobs,
+      mangaChapterDirs,
       mangaChapterStates,
       mangaReaderOverrides,
       // 删除传播墓碑

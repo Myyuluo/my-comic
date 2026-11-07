@@ -27,6 +27,7 @@ import 'package:fushi/src/utils/misc/screen_wakelock.dart';
 
 import 'package:fushi/src/media/manga/manga_overlay_html.dart';
 import 'package:fushi/src/media/manga/manga_reading_mode.dart';
+import 'package:fushi_engine/media/manga/download_library_storage.dart';
 import 'package:fushi_engine/media/manga/manga_storage.dart';
 import 'package:fushi/src/media/manga/manga_reading_stats.dart';
 import 'package:fushi/src/media/manga/manga_view_prefs.dart';
@@ -39,8 +40,8 @@ import 'package:fushi/src/utils/adaptive/fushi_fold_posture.dart';
 import 'package:fushi/src/media/manga/mihon/manga_page_provider.dart';
 import 'package:fushi/src/media/manga/library/manga_adjacent_chapter.dart';
 import 'package:fushi/src/media/manga/mihon/online_manga_reader_session.dart';
+import 'package:fushi/src/media/manga/download/download_library_index.dart';
 import 'package:fushi/src/media/manga/library/manga_chapter_list.dart';
-import 'package:fushi/src/media/manga/library/manga_chapter_storage.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_service.dart';
 import 'package:fushi/src/media/manga/library/online_manga_runtime_adapter.dart';
@@ -1649,6 +1650,7 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
   Future<void> _loadLocalPayload({
     required EpubBookRow row,
     required String mangaJsonPath,
+    String? imagesDirectory,
     int? initialPage,
   }) async {
     final File jsonFile = File(mangaJsonPath);
@@ -1660,7 +1662,10 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
       });
       return;
     }
-    final String imagesDir = p.join(p.dirname(mangaJsonPath), 'images');
+    // 本地卷 / 旧哈希章：页图在 `images/` 子目录；Download library 章：页图
+    // 平铺在章目录本身（`pages.json` 的 url 是裸文件名）。
+    final String imagesDir =
+        imagesDirectory ?? p.join(p.dirname(mangaJsonPath), 'images');
 
     final String jsonStr = await jsonFile.readAsString();
     final MokuroPayload payload = await MangaFushiPage.parseMangaJsonOffUi(
@@ -2000,7 +2005,8 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
   /// 首次进入和「换章」共用这一条路径，所以换章不会走出任何首次进入没走过的
   /// 分支——OCR 接回、进度恢复全部一致。
   ///
-  /// 已下载的章（判据只问 [isChapterDownloaded]）从章目录按本地卷装载；未下载的章
+  /// 已下载的章（判据只问 [DownloadLibraryIndex.isChapterDownloaded]）从章目录
+  /// 按本地卷装载；未下载的章
   /// 在线直读（[_openStreamingChapter]，2026-09-26 用户撤回设计稿 §1.1「必须先下载
   /// 再读」）。直读失败（源不可用 / 页表为空 / 首屏页取不到）才退到「本章未下载」态，
   /// 由用户入队或换章，下载表一变就复核。
@@ -2023,14 +2029,24 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
     _shelfEntry = entry;
     _shelfChapterIndex = chapterIndex;
     _edgeToastShown = false;
-    final Directory chapterDir = mangaChapterDirectory(
-      row.extractDir,
-      chapter.key,
+    // 章目录通过数据库映射解析（新布局），旧哈希布局只读回退；未下载的章用
+    // 目标路径的纯派生当直读会话的页名作用域（不会创建目录）。
+    final DownloadLibraryIndex index = DownloadLibraryIndex(appModel.database);
+    final MangaChapterContainer? container = await index.resolveChapter(
+      bookKey: row.bookKey,
+      chapterKey: chapter.key,
     );
-    final bool downloaded = await isChapterDownloaded(
-      row.extractDir,
-      chapter.key,
+    final bool downloaded = await index.isChapterDownloaded(
+      bookKey: row.bookKey,
+      chapterKey: chapter.key,
     );
+    final Directory chapterDir = container?.directory ??
+        downloadChapterDirectory(
+          row.extractDir,
+          sanitizeDownloadLibrarySegment(
+            chapter.name.trim().isEmpty ? chapter.key : chapter.name,
+          ),
+        );
     // 每章进度：切回读过一半的旧章要落回原页，而不是从头开始（v88 前
     // selectChapter 会把唯一那行 reader_positions 清零，上一章位置永久丢失）。
     //
@@ -2077,13 +2093,13 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
       _watchDownloadsForCurrentChapter();
       return;
     }
-    final File mangaJson = mangaChapterJsonFile(chapterDir);
     await _loadLocalPayload(
       row: row.copyWith(
-        epubPath: p.basename(mangaJson.path),
-        extractDir: chapterDir.path,
+        epubPath: p.basename(container!.manifestFile.path),
+        extractDir: container.directory.path,
       ),
-      mangaJsonPath: mangaJson.path,
+      mangaJsonPath: container.manifestFile.path,
+      imagesDirectory: container.imagesDirectory.path,
       initialPage: initialPage,
     );
   }
@@ -2166,7 +2182,7 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
       pendingSession = null;
       await _presentPayload(
         row: row.copyWith(
-          epubPath: p.basename(mangaChapterJsonFile(chapterDir).path),
+          epubPath: p.basename(downloadPagesManifestFile(chapterDir).path),
           extractDir: chapterDir.path,
         ),
         payload: payload,
@@ -2278,7 +2294,12 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
         chapterKey == null) {
       return;
     }
-    if (!await isChapterDownloaded(row.extractDir, chapterKey)) return;
+    if (!await DownloadLibraryIndex(appModel.database).isChapterDownloaded(
+      bookKey: row.bookKey,
+      chapterKey: chapterKey,
+    )) {
+      return;
+    }
     if (!mounted || !_chapterNotDownloaded) return;
     await _openShelfChapter(
       row: row,
@@ -2964,9 +2985,9 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
       final OnlineMangaChapter next = entry.chapters[target];
       // 锁定章入队必败（要登录购买），预下载不替用户去撞。
       if (next.locked) return;
-      if (await isChapterDownloaded(
-        await MangaStorage.bookPath(row.bookKey),
-        next.key,
+      if (await DownloadLibraryIndex(appModel.database).isChapterDownloaded(
+        bookKey: row.bookKey,
+        chapterKey: next.key,
       )) {
         return;
       }
@@ -3046,8 +3067,9 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
     try {
       // 目标章下没下载都能换：已下载从章目录读，未下载在线直读（2026-09-26 用户
       // 撤回设计稿 §1.1），分流在 [_openShelfChapter] 里只做一次。
-      // 注意 [_bookRow] 在读章时指向**章目录**副本，书根要从 bookKey 重新解析。
-      final String bookDir = await MangaStorage.bookPath(row.bookKey);
+      // 注意 [_bookRow] 在读章时指向**章目录**副本，漫画根要从数据库行重新解析。
+      final EpubBookRow bookRow =
+          (await appModel.database.getEpubBook(row.bookKey)) ?? row;
       // 换章前把当前章的进度落库，否则「翻到下一章再翻回来」会丢掉刚读的位置。
       await _saveCurrentChapterState();
       final OnlineMangaLibraryEntry selected = _sourceReviewActive
@@ -3058,7 +3080,7 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
               chapterIndex: index,
             );
       await _openShelfChapter(
-        row: row.copyWith(extractDir: bookDir),
+        row: bookRow,
         service: service,
         entry: selected,
         chapterIndex: index,
@@ -3930,8 +3952,9 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
     final Map<String, MangaChapterStateRow> states = row.uid.isEmpty
         ? const <String, MangaChapterStateRow>{}
         : await appModel.database.getMangaChapterStates(row.uid);
-    final Set<String> downloaded = await downloadedChapterKeys(
-      await MangaStorage.bookPath(row.bookKey),
+    final Set<String> downloaded =
+        await DownloadLibraryIndex(appModel.database).downloadedChapterKeys(
+      row.bookKey,
       entry.chapters.map((OnlineMangaChapter chapter) => chapter.key),
     );
     if (!mounted) return;
@@ -4395,7 +4418,10 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
     final File? source = await _currentMangaPageFile();
     final EpubBookRow? row = _bookRow;
     if (source == null || row == null || !await source.exists()) return;
-    final String root = await MangaStorage.bookPath(row.bookKey);
+    // 读章时 [_bookRow] 指向章目录副本；存图仍落在漫画根（数据库行是权威）。
+    final String root =
+        (await appModel.database.getEpubBook(row.bookKey))?.extractDir ??
+            row.extractDir;
     final String chapter = _shelfChapterKey ?? 'chapter';
     final String book = safeWindowsFileName(row.title);
     final String savePath = switch (_saveDirectory) {

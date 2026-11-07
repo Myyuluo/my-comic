@@ -45,16 +45,16 @@ void main() {
   }
 
   test(
-    'fresh DB creates exactly the manga-only table set at schema v1',
+    'fresh DB creates exactly the manga-only table set at schema v2',
     () async {
       final FushiDatabase db = await open();
       addTearDown(db.close);
 
-      expect(db.schemaVersion, 1);
+      expect(db.schemaVersion, 2);
       final QueryRow version = await db
           .customSelect('PRAGMA user_version')
           .getSingle();
-      expect(version.data['user_version'], 1);
+      expect(version.data['user_version'], 2);
 
       final Set<String> tables = await userTables(db);
       expect(
@@ -88,6 +88,45 @@ void main() {
       ]) {
         expect(tables, isNot(contains(legacy)), reason: '旧表 $legacy 不得被创建');
       }
+    },
+  );
+
+  test(
+    'v1 my-comic 库升级到 v2：补建 manga_chapter_dirs，旧数据保留',
+    () async {
+      final FushiDatabase db = await open();
+      await db.insertEpubBook(
+        EpubBooksCompanion.insert(
+          bookKey: 'old-book',
+          title: 'Old Manga',
+          epubPath: 'manga.json',
+          extractDir: p.join(tmp.path, 'books', 'old-book'),
+          chapterCount: 1,
+          chaptersJson: '[]',
+          importedAt: 1700000000000,
+          format: const Value('manga'),
+        ),
+      );
+      // 模拟票 04 之前创建的 v1 库：没有 mapping 表。
+      await db.customStatement('DROP TABLE manga_chapter_dirs');
+      await db.customStatement('PRAGMA user_version = 1');
+      await db.close();
+
+      final FushiDatabase upgraded = await open();
+      addTearDown(upgraded.close);
+
+      expect(upgraded.schemaVersion, 2);
+      expect((await upgraded.getEpubBook('old-book'))?.title, 'Old Manga');
+      await upgraded.upsertMangaChapterDir(
+        bookKey: 'old-book',
+        chapterKey: 'chapter-1',
+        folderName: 'Chapter 1',
+        updatedAt: 1700000001000,
+      );
+      expect(
+        (await upgraded.getMangaChapterDir('old-book', 'chapter-1'))?.folderName,
+        'Chapter 1',
+      );
     },
   );
 
