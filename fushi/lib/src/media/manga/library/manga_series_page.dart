@@ -112,6 +112,18 @@ class SourceMangaSeriesTarget extends MangaSeriesTarget {
   final Widget Function(BuildContext context)? remoteCoverBuilder;
 }
 
+/// 还没入库的本地源作品，来自「本地图源」的扫描网格（[LocalSourceManga]）。
+///
+/// 与 [SourceMangaSeriesTarget] 的差别：没有在线运行时，封面与章节描述都在
+/// 扫描结果里，页面不联网、也不要求数据库行。显式「加入书架」才调用单部作品
+/// 登记入口原地登记（ADR 0013）；已移出书架（tombstone）但文件仍在的作品同样
+/// 从这里打开，显式加入会清墓碑重新登记。
+class LocalSourceMangaSeriesTarget extends MangaSeriesTarget {
+  const LocalSourceMangaSeriesTarget(this.manga);
+
+  final LocalSourceManga manga;
+}
+
 /// 漫画作品页。
 ///
 /// 这一层在 v88 前**根本不存在**：书架点开漫画直接钻进 `MangaFushiPage` 的某一
@@ -150,6 +162,10 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
   LocalSourceMetadata? _localSource;
   List<LocalSourceChapterRecord> _localChapters =
       const <LocalSourceChapterRecord>[];
+
+  /// 从「本地图源」网格点开的**未入库**作品（扫描结果）。为空表示这次打开
+  /// 不是那种状态；显式加入书架后清空并切换成正常书架条目。
+  LocalSourceManga? _scannedLocal;
 
   /// Local source 作品目录已不在当前 `localcomic` 根内（典型：切换 Content root
   /// 后库里仍记着旧根）。这些章显示为 Missing，阅读入口拒绝回读旧路径。
@@ -250,8 +266,12 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
   /// 本地卷（无在线描述符）。
   bool get _isLocal => _entry == null && _row != null;
 
-  /// `localcomic` 里原地读取的本地源作品（有章节表）。
-  bool get _isLocalSource => _localSource != null;
+  /// `localcomic` 里原地读取的本地源作品（有章节表）：已在书架的条目，或刚从
+  /// 「本地图源」网格打开、还没登记的扫描结果。
+  bool get _isLocalSource => _localSource != null || _scannedLocal != null;
+
+  /// 未入库的本地源扫描结果（本地图源网格 → 作品页，尚未登记）。
+  bool get _isScannedLocal => _scannedLocal != null;
 
   /// 本地源下一章：优先第一个未读完的章，全读完则停在最后一章。
   int get _localResumeIndex {
@@ -266,10 +286,30 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
   /// 借给共享 [MangaChapterList] 的展示条目。只在本地源上使用，不落库、
   /// 不参与在线 service 分派。
   OnlineMangaLibraryEntry? get _localDisplayEntry {
-    final EpubBookRow? row = _row;
-    if (_localSource == null || row == null || _localChapters.isEmpty) {
-      return null;
+    if (_localChapters.isEmpty) return null;
+    final LocalSourceManga? scanned = _scannedLocal;
+    if (scanned != null) {
+      return OnlineMangaLibraryEntry(
+        runtime: OnlineMangaRuntimeKind.local,
+        extensionPackage: '',
+        sourceId: '',
+        series: OnlineMangaSeries(
+          key: localSourceBookKeyFor(scanned.directoryPath),
+          title: scanned.title,
+          raw: const <String, Object?>{},
+        ),
+        chapters: <OnlineMangaChapter>[
+          for (final LocalSourceChapterRecord chapter in _localChapters)
+            OnlineMangaChapter(
+              key: chapter.key,
+              name: chapter.name,
+              raw: const <String, Object?>{},
+            ),
+        ],
+      );
     }
+    final EpubBookRow? row = _row;
+    if (_localSource == null || row == null) return null;
     return OnlineMangaLibraryEntry(
       runtime: OnlineMangaRuntimeKind.local,
       extensionPackage: '',
@@ -295,6 +335,8 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
   String get _displayTitle {
     final OnlineMangaLibraryEntry? entry = _entry;
     if (entry != null) return entry.series.title;
+    final LocalSourceManga? scanned = _scannedLocal;
+    if (scanned != null) return scanned.title;
     final EpubBookRow? row = _row;
     if (row == null) return t.manga_library;
     return displayTitleForBook(bookKey: row.bookKey, rawTitle: row.title);
@@ -820,6 +862,8 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
           :final String? sourceLabel,
         ):
           await _loadFromSource(adapter, service, seed, sourceLabel);
+        case LocalSourceMangaSeriesTarget(:final LocalSourceManga manga):
+          await _loadFromScannedLocalSource(manga);
       }
     } on Object catch (error, stack) {
       ErrorLogService.instance.log('MangaSeriesPage.load', error, stack);
@@ -878,6 +922,44 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
       _watchLocalVolume(row.bookKey);
     }
     unawaited(_refreshDownloadState());
+  }
+
+  /// 从「本地图源」网格打开的扫描结果。
+  ///
+  /// 扫描结果不保证还没入库（网格里已入库的作品也照常出现）——先查库：有行就
+  /// 走正常书架作品页，没有才进入「未入库」展示态。tombstoned 的作品没有行，
+  /// 因此照常按未入库态展示；显式「加入书架」时插入路径会清墓碑（
+  /// [LocalSourceLibrary.registerScannedManga]）。
+  Future<void> _loadFromScannedLocalSource(LocalSourceManga manga) async {
+    final AppModel? appModel = _appModelOrNull;
+    if (appModel != null) {
+      final String bookKey = localSourceBookKeyFor(manga.directoryPath);
+      final EpubBookRow? existing = await appModel.database.getEpubBook(bookKey);
+      if (existing != null) {
+        await _loadFromShelf(bookKey);
+        return;
+      }
+    }
+    final List<LocalSourceChapterRecord> chapters = <LocalSourceChapterRecord>[
+      for (final LocalSourceChapter chapter in manga.chapters)
+        LocalSourceChapterRecord(
+          key: chapter.key,
+          name: chapter.name,
+          relativePath: chapter.relativePath,
+        ),
+    ];
+    if (!mounted) return;
+    setState(() {
+      _row = null;
+      _entry = null;
+      _localSource = null;
+      _scannedLocal = manga;
+      _localChapters = chapters;
+      _states = const <String, MangaChapterStateRow>{};
+      _service = null;
+      _adapter = null;
+      _sourceLabel = null;
+    });
   }
 
   /// 本地卷才读：在线作品的进度按章记在 `manga_chapter_states`。
@@ -1039,6 +1121,11 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
   }
 
   Future<void> _addToLibrary() async {
+    final LocalSourceManga? scanned = _scannedLocal;
+    if (scanned != null) {
+      await _addScannedLocalToLibrary(scanned);
+      return;
+    }
     final OnlineMangaLibraryService? service = _service;
     final OnlineMangaLibraryEntry? entry = _entry;
     if (service == null || entry == null || _busy || _row != null) return;
@@ -1053,6 +1140,49 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
       unawaited(_refreshDownloadState());
     } on Object catch (error, stack) {
       ErrorLogService.instance.log('MangaSeriesPage.add', error, stack);
+      if (mounted) {
+        FushiToast.show(
+          msg: describeOnlineSourceError(error),
+          severity: ToastSeverity.error,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// 未入库本地作品显式「加入书架」：扫描结果原样交给单部作品登记入口
+  /// （`registerScannedManga`，与 Rebuild download index 同一条写入路径），
+  /// 原地登记、不复制文件。插入行本身会清 tombstone（`insertEpubBook`）。
+  Future<void> _addScannedLocalToLibrary(LocalSourceManga manga) async {
+    final AppModel? appModel = _appModelOrNull;
+    if (appModel == null || _busy) return;
+    setState(() => _busy = true);
+    try {
+      await LocalSourceLibrary(
+        db: appModel.database,
+        root: appModel.appPaths.localComicRoot,
+      ).registerScannedManga(manga);
+      final String bookKey = localSourceBookKeyFor(manga.directoryPath);
+      final EpubBookRow? row = await appModel.database.getEpubBook(bookKey);
+      if (!mounted || row == null) return;
+      setState(() {
+        _row = row;
+        _entry = null;
+        _scannedLocal = null;
+        _localSource = LocalSourceMetadata.tryParse(row.sourceMetadata);
+        _localChapters = decodeLocalSourceChapters(row.chaptersJson);
+        _states = const <String, MangaChapterStateRow>{};
+        _localMissingChapterKeys = const <String>{};
+      });
+      _watchLocalVolume(row.bookKey);
+      unawaited(_refreshDownloadState());
+    } on Object catch (error, stack) {
+      ErrorLogService.instance.log(
+        'MangaSeriesPage.addScannedLocal',
+        error,
+        stack,
+      );
       if (mounted) {
         FushiToast.show(
           msg: describeOnlineSourceError(error),
@@ -1284,6 +1414,9 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
   /// 2026-09-12 §1.1「先下载再读」；下载入口不变，走章节行溢出菜单 / 下载全部）。
   /// 未入库的先入库——进度、已读标记、下载任务都按 bookKey 记，没有行就无处可落。
   Future<void> _openChapterAt(int index) async {
+    // 未入库的本地扫描结果：ticket 04 只提供显式「加入书架」；点章节静默登记
+    // 并开读属于 ticket 05。
+    if (_isScannedLocal) return;
     // Local source：章节原地读取，不经过在线 service / 下载状态机。
     if (_isLocalSource) {
       final String? localBookKey = _bookKey;
@@ -1394,6 +1527,7 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     MediaItem? item = switch (widget.target) {
       ShelfMangaSeriesTarget(:final MediaItem? item) => item,
       SourceMangaSeriesTarget() => null,
+      LocalSourceMangaSeriesTarget() => null,
     };
     item ??= await ReaderFushiSource.instance.mediaItemForBookKey(bookKey);
     if (!mounted) return;
@@ -1517,6 +1651,7 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
 
   /// hero 标题上方的来源名（本地卷 / 源名 / 扩展包名）。
   String? _subtitle() {
+    if (_isScannedLocal) return t.local_source_title;
     if (_isLocal) return t.manga_series_local_volume;
     final String? label = _sourceLabel;
     if (label != null && label.isNotEmpty) return label;
@@ -1893,6 +2028,15 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
 
   /// 本地已落盘封面的路径；未入库 / 无封面为 null。
   String? _localCoverPath() {
+    final LocalSourceManga? scanned = _scannedLocal;
+    if (scanned != null) {
+      // 未入库作品仍按 Local source 的封面约定解析（cover.jpg/jpeg/png，
+      // 大小写不敏感），缺失时作品页用占位块。
+      return ReaderFushiSource.resolveCoverFilePath(
+        extractDir: scanned.directoryPath,
+        coverPath: scanned.coverRelativePath,
+      );
+    }
     final EpubBookRow? row = _row;
     if (row == null) return null;
     // 复用书架/制卡那份解析（TODO-1388 / BUG-703），别自己拼路径：coverPath 可能
@@ -2103,6 +2247,7 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
       final Future<void> Function()? showShelfMenu = switch (widget.target) {
         ShelfMangaSeriesTarget(:final showShelfMenu) => showShelfMenu,
         SourceMangaSeriesTarget() => null,
+        LocalSourceMangaSeriesTarget() => null,
       };
       return <MediaDetailMenuItem>[
         if (showShelfMenu != null)

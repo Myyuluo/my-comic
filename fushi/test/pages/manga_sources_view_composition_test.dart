@@ -105,6 +105,31 @@ void main() {
       // 共享扫描根视图（media_sources_view.dart）已随非漫画域移除。
       expect(sources, isNot(contains('media_sources_view')));
     });
+
+    // 2026-11-08 local-source-cbz-downloads：内置「本地图源」是图源列表里的
+    // 伪源行（照旧 Mokuro.moe 的做法），固定第一位且不写 manga_online_sources。
+    test('图源列表第一位是内置「本地图源」，点进本地封面网格', () {
+      expect(
+        online,
+        contains('LocalSourceEntryRow('),
+        reason: '内置伪源行由漫画在线来源面提供',
+      );
+      expect(
+        online,
+        contains('BuiltInSourceListRow('),
+        reason: '内置行排在扩展源（含已置顶分组）之前',
+      );
+      expect(
+        online,
+        contains('builtInRows:'),
+        reason: '内置行仍参与图源列表自身的搜索 / 筛选',
+      );
+      expect(
+        online,
+        contains('LocalSourceBrowsePage('),
+        reason: '点本地图源行进它的封面网格',
+      );
+    });
   });
 
   group('iOS / Linux 导航结构与其它平台相同', () {

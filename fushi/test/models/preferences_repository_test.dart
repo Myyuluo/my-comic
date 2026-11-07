@@ -966,6 +966,23 @@ void main() {
     });
   });
 
+  // ── local source (local-source-cbz-downloads) ────────────────────────
+  group('local source', () {
+    test('built-in local source is enabled by default', () {
+      expect(repo.localSourceEnabled, isTrue);
+    });
+
+    test('setLocalSourceEnabled round-trips through DB', () async {
+      await repo.setLocalSourceEnabled(false);
+      expect(repo.localSourceEnabled, isFalse);
+
+      final PreferencesRepository repo2 = PreferencesRepository(db);
+      await repo2.loadFromDb();
+      addTearDown(repo2.dispose);
+      expect(repo2.localSourceEnabled, isFalse);
+    });
+  });
+
   // ── reading goals (TODO-1046) ─────────────────────────────────────────
   group('reading goals (TODO-1046)', () {
     test('daily goal defaults to 0 (unset/off)', () {

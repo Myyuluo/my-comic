@@ -7683,6 +7683,12 @@ class AppModel with ChangeNotifier {
   Future<void> setMangaChapterListNewestFirst(bool value) =>
       prefsRepo.setMangaChapterListNewestFirst(value);
 
+  /// 内置「本地图源」是否启用。偏好未就绪时按默认开处理（与仓库默认一致）。
+  bool get localSourceEnabled => _prefsRepo?.localSourceEnabled ?? true;
+
+  Future<void> setLocalSourceEnabled(bool value) =>
+      prefsRepo.setLocalSourceEnabled(value);
+
   MangaReaderPreferences get mangaReaderPreferences =>
       _prefsRepo?.mangaReaderPreferences ?? const MangaReaderPreferences();
 

@@ -1,6 +1,8 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:fushi/src/media/manga/local_source/local_source_browse_page.dart';
+import 'package:fushi/src/media/manga/local_source/local_source_entry_row.dart';
 import 'package:fushi/src/media/manga/mihon/mihon_extensions_page.dart';
 import 'package:fushi/src/media/manga/mihon/mihon_installed_sources_section.dart';
 import 'package:fushi/src/media/manga/mihon/mihon_manager.dart';
@@ -71,6 +73,17 @@ class _MangaOnlineSourcesViewState
     if (mounted) setState(() {});
   }
 
+  /// 点内置「本地图源」行进它的封面网格。进页即扫描 `localcomic`（不复制、
+  /// 不移动文件）；扫描结果只展示，用户逐部点开作品页再加入书架。
+  void _openLocalSource() {
+    Navigator.of(context).push(
+      adaptivePageRoute<void>(
+        context: context,
+        builder: (BuildContext context) => const LocalSourceBrowsePage(),
+      ),
+    );
+  }
+
   /// 点已启用的漫画源进它的浏览页（热门 / 最新 / 搜索），与小说 / 视频源同一
   /// 交互：来源页签的一行就是进源的入口，不必绕到「发现」。
   void _openMihonSource(MangaOnlineSourceRow source) {
@@ -99,6 +112,10 @@ class _MangaOnlineSourcesViewState
     final bool onlineSourcesAvailable =
         StoreRestrictedCapability.onlineMangaSource.isAvailable;
     final OnlineSourcesSection section = widget.section;
+    // 内置「本地图源」不依赖扩展宿主：没有扩展也能进 localcomic 的封面网格。
+    final Widget localSourceRow = LocalSourceEntryRow(
+      onOpen: _openLocalSource,
+    );
     final List<Widget> slivers = <Widget>[
       if (section == OnlineSourcesSection.sources)
         if (onlineSourcesAvailable && manager != null)
@@ -107,11 +124,29 @@ class _MangaOnlineSourcesViewState
             manager: manager,
             emptyLabel: t.mihon_source_empty,
             onOpenSource: _openMihonSource,
+            // 固定排在图源列表第一位（含「已置顶」分组之上）；参与本节的
+            // 搜索 / 状态筛选，但没有任何排序 / 清数据 / 卸载菜单。
+            builtInRows: <BuiltInSourceListRow>[
+              BuiltInSourceListRow(
+                child: localSourceRow,
+                searchTerms: <String>[t.local_source_title],
+                enabled: () => ref.read(appProvider).localSourceEnabled,
+              ),
+            ],
           )
-        else if (onlineSourcesAvailable)
-          SliverToBoxAdapter(child: _unavailableNote())
         else
-          const SliverToBoxAdapter(child: SizedBox.shrink())
+          SliverToBoxAdapter(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                localSourceRow,
+                if (onlineSourcesAvailable) ...<Widget>[
+                  const SizedBox(height: 12),
+                  _unavailableNote(),
+                ],
+              ],
+            ),
+          )
       else if (onlineSourcesAvailable && manager != null)
         MihonExtensionsPage(
           key: ValueKey<String>('manga_mihon_extensions_${section.name}'),
