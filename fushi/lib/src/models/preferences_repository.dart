@@ -152,6 +152,12 @@ const String kIncognitoReadingPrefKey = 'reader_incognito_reading';
 /// 设备本地（见 `SyncRepository.deviceLocalPrefKeys`）。
 const String kDownloadExecutionHostPrefKey = 'download_execution_host';
 
+/// 「保存为CBZ压缩包」：开启时新开始的在线章节下载写成
+/// `downloads/{source}/{manga}/{chapter}.cbz`，关闭时沿用文件夹载体。
+/// 默认 true（新安装与升级后的存量用户都开启）；只在任务开始运行时读取，
+/// 已有章节不转换。见 `MangaDownloadService`。
+const String kDownloadSaveAsCbzPrefKey = 'download_save_as_cbz';
+
 /// 主机侧「允许已配对设备从游戏库远程启动游戏并串流」。默认关：开启即允许配对
 /// 设备在本机起进程。设备本地（见 `SyncRepository.deviceLocalPrefKeys`），不能随
 /// 备份把这扇门带到另一台电脑上。
@@ -3392,6 +3398,16 @@ class PreferencesRepository extends ChangeNotifier
 
   Future<void> setMangaDownloadAutoOcr(bool value) async {
     await setPref('manga_download_auto_ocr', value);
+    notifyListeners();
+  }
+
+  /// 「保存为CBZ压缩包」开关（默认 true）。下载服务在任务**开始运行时**现读本值：
+  /// 排队任务按真正开始那一刻的格式落盘，运行中的任务保持开始时的格式。
+  bool get downloadSaveAsCbz =>
+      getPref(kDownloadSaveAsCbzPrefKey, defaultValue: true) as bool;
+
+  Future<void> setDownloadSaveAsCbz(bool value) async {
+    await setPref(kDownloadSaveAsCbzPrefKey, value);
     notifyListeners();
   }
 

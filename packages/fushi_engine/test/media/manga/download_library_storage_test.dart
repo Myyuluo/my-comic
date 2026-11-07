@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:archive/archive.dart';
 import 'package:fushi_engine/media/manga/download_library_storage.dart';
+import 'package:fushi_engine/media/manga/local_source/local_source_archive.dart';
 import 'package:fushi_engine/media/manga/mokuro_payload.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
@@ -397,5 +398,53 @@ void main() {
       ),
       isNull,
     );
+  });
+
+  test('把 staging 压成 CBZ：包根平铺页图与 pages.json，跳过 .tmp/隐藏文件', () async {
+    final Directory staging = Directory(p.join(root.path, 'staging'));
+    await staging.create();
+    await File(p.join(staging.path, '001.jpg')).writeAsBytes(<int>[1, 2, 3]);
+    await File(p.join(staging.path, '002.png')).writeAsBytes(<int>[4, 5, 6]);
+    // 半截写坏的页与点号文件都不该进包。
+    await File(p.join(staging.path, '003.jpg.tmp')).writeAsBytes(<int>[7, 8]);
+    await File(p.join(staging.path, '.hidden')).writeAsString('junk');
+    final MokuroPayload payload = payloadOf(<String>['001.jpg', '002.png']);
+    await writePagesManifestAtomically(staging, manifestOf(payload));
+
+    final File temporary = File(p.join(root.path, 'Chapter 1.cbz.tmp'));
+    await writeDownloadChapterArchive(
+      staging: staging,
+      temporaryArchive: temporary,
+    );
+    expect(await temporary.exists(), isTrue);
+
+    final File finalFile = await temporary.rename(
+      p.join(root.path, 'Chapter 1.cbz'),
+    );
+    final LocalSourceArchive archive = LocalSourceArchive.open(finalFile.path);
+    addTearDown(archive.close);
+    expect(
+      archive.entries.map((LocalSourceArchiveEntry entry) => entry.name),
+      unorderedEquals(<String>['001.jpg', '002.png', 'pages.json']),
+      reason: '页图与 pages.json 都在包根，没有 staging/ 前缀；.tmp 与点号文件被跳过',
+    );
+    expect(archive.readEntry(kDownloadPagesFileName), isNotNull);
+    expect(await isDownloadLibraryArchiveComplete(finalFile), isTrue);
+  });
+
+  test('staging 缺 pages.json 时拒绝写 CBZ（不把未完成的章标成已下载）', () async {
+    final Directory staging = Directory(p.join(root.path, 'staging'));
+    await staging.create();
+    await File(p.join(staging.path, '001.jpg')).writeAsBytes(<int>[1, 2, 3]);
+
+    final File temporary = File(p.join(root.path, 'Chapter 1.cbz.tmp'));
+    await expectLater(
+      writeDownloadChapterArchive(
+        staging: staging,
+        temporaryArchive: temporary,
+      ),
+      throwsStateError,
+    );
+    expect(await temporary.exists(), isFalse);
   });
 }

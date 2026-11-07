@@ -111,6 +111,7 @@ void main() {
       ),
       <String>[
         'storage.location.section',
+        'downloads.section.download',
         'system.section.backup',
         'storage.rebuild.section',
       ],

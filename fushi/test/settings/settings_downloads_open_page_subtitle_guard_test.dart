@@ -10,9 +10,9 @@ import 'package:fushi/src/settings/settings_schema_downloads.dart';
 /// root），不新增跳转到下载页的入口；副标题保留原有 summary。
 ///
 /// 2026-11-08：「导入本地漫画」段随批量导入退役删除；本地漫画改由图源列表里的
-/// 「本地图源」承担。Ticket 03：三个文件夹入口移除，备份分组搬入本页——最终
-/// 顺序为 数据存储位置 → 备份 → 下载索引（Ticket 08 的「下载」段将插在存储与
-/// 备份之间）。
+/// 「本地图源」承担。Ticket 03：三个文件夹入口移除，备份分组搬入本页。Ticket 08：
+/// 「下载」段（保存为CBZ压缩包）插在数据存储位置与备份之间——最终顺序为
+/// 数据存储位置 → 下载 → 备份 → 下载索引。
 void main() {
   AppLocale currentLocale() => LocaleSettings.currentLocale;
 
@@ -40,7 +40,7 @@ void main() {
     );
   });
 
-  testWidgets('分类内容为存储位置 + 备份 + 重建下载索引小节，没有导入本地漫画，'
+  testWidgets('分类内容为存储位置 + 下载 + 备份 + 重建下载索引小节，没有导入本地漫画，'
       '没有打开下载页的入口', (WidgetTester tester) async {
     final AppLocale original = currentLocale();
     addTearDown(() => LocaleSettings.setLocale(original));
@@ -56,10 +56,12 @@ void main() {
       destination.sections.map((SettingsSection section) => section.id),
       <String?>[
         'storage.location.section',
+        'downloads.section.download',
         'system.section.backup',
         'storage.rebuild.section',
       ],
-      reason: '批量导入退役 + 备份分组搬入后：存储位置 → 备份 → 下载索引',
+      reason: '批量导入退役 + 备份分组搬入 + 下载开关后：'
+          '存储位置 → 下载 → 备份 → 下载索引',
     );
     expect(
       destination.sections.expand((SettingsSection section) => section.items),
@@ -84,7 +86,7 @@ void main() {
       <String>['storage.content_root', 'storage.program_state_root'],
     );
     expect(
-      destination.sections[1].items.map((SettingsItem item) => item.id),
+      destination.sections[2].items.map((SettingsItem item) => item.id),
       <String>['system.import_mihon_backup', 'system.export_mihon_backup'],
       reason: '备份分组整组搬入「存储与下载」',
     );

@@ -8,6 +8,11 @@
 /// 重试三次，再失败留 `failed` + `last_error`；取消真中止并删半成品 staging。
 /// 进程重启后 `running` 行复位为 `queued` 续跑，staging 里已落地的页按磁盘现状跳过。
 ///
+/// Ticket 08 起「保存为CBZ压缩包」开启（默认）时，任务开始运行的那一刻被捕获，
+/// staging 里的页图与 `pages.json` 压成同漫画目录的 `{chapter}.cbz.tmp`，完成后
+/// 原子改名为 `{chapter}.cbz`（映射 `containerKind = archive`）；关闭时沿用文件夹。
+/// 已有完整章节（文件夹或 `.cbz`）原样认领，开关不转换既有内容。
+///
 /// **合规**：本服务**不**挂 `StoreRestrictedCapability.downloads`——互联对端漫画
 /// 在 iOS 是保留的在线源，改成必须下载后读，若下载被门挡住就是死路。Mihon
 /// 入口继续受 `onlineMangaSource` 门控（iOS 无入口）。
@@ -86,16 +91,40 @@ class _PageFile {
   final File file;
 }
 
-/// 本章目录的落点。`adoptedComplete` = 正式目录已存在且完整（上次崩溃在
-/// rename 与映射落库之间），直接认领，不重下。
+/// 本章容器的落点（文件夹或 CBZ）。`adoptedComplete` = 正式容器已存在且完整
+/// （上次崩溃在 rename 与映射落库之间，或升级前遗留的文件夹章），直接认领，
+/// 不重下、不转换格式。
 class _ChapterTarget {
   const _ChapterTarget({
-    required this.folderName,
+    required this.containerName,
+    required this.containerKind,
     required this.adoptedComplete,
   });
 
-  final String folderName;
+  /// 单段容器名：章节目录名或含 `.cbz` 的文件名。
+  final String containerName;
+
+  /// [MangaChapterContainerKind]（folder / archive）。
+  final String containerKind;
   final bool adoptedComplete;
+}
+
+/// manga 目录下已有的章节容器（文件夹或 `.cbz` 文件）。
+class _ExistingChapterContainer {
+  const _ExistingChapterContainer.folder(Directory this.directory)
+    : archiveFile = null;
+
+  const _ExistingChapterContainer.archive(File this.archiveFile)
+    : directory = null;
+
+  final Directory? directory;
+  final File? archiveFile;
+
+  String get name => p.basename((directory ?? archiveFile)!.path);
+
+  String get kind => directory != null
+      ? MangaChapterContainerKind.folder
+      : MangaChapterContainerKind.archive;
 }
 
 class MangaDownloadService {
@@ -103,6 +132,7 @@ class MangaDownloadService {
     required FushiDatabase database,
     required OnlineMangaLibraryService Function(OnlineMangaRuntimeKind runtime)
     serviceFor,
+    required bool Function() saveAsCbz,
     MangaDownloadSidecarFetcher? sidecarFetcher,
     DateTime Function()? clock,
     Future<void> Function(Duration duration)? wait,
@@ -110,6 +140,7 @@ class MangaDownloadService {
     this.pageConcurrency = 4,
   }) : _database = database,
        _serviceFor = serviceFor,
+       _saveAsCbz = saveAsCbz,
        _sidecarFetcher = sidecarFetcher,
        _clock = clock ?? DateTime.now,
        _wait = wait ?? ((Duration duration) => Future<void>.delayed(duration)),
@@ -118,9 +149,19 @@ class MangaDownloadService {
   final FushiDatabase _database;
   final OnlineMangaLibraryService Function(OnlineMangaRuntimeKind runtime)
   _serviceFor;
+
+  /// 「保存为CBZ压缩包」的运行时读取器（ticket 08）。**在任务开始运行时调用
+  /// 一次**：排队任务在真正被领取时读取当时的值；运行中的任务（含自动重试）
+  /// 保持开始时的格式。生产实现读偏好 `download_save_as_cbz`。
+  final bool Function() _saveAsCbz;
   final MangaDownloadSidecarFetcher? _sidecarFetcher;
   final DateTime Function() _clock;
   final Future<void> Function(Duration duration) _wait;
+
+  /// 正在写的 CBZ 临时包（`{chapter}.cbz.tmp`）。取消/失败时按 jobId 定点
+  /// 删除：临时包不是可见章节，但取消路径仍要把它清掉。
+  String? _archiveTempPath;
+  String? _archiveTempJobId;
 
   /// BUG-2714：worker 有任务在跑就挂下载保活（Android 前台服务），队列排空 /
   /// 服务停止时撤。与其它下载来源经 [downloadKeepAliveHub] 汇总，互不撤对方。
@@ -415,13 +456,17 @@ class MangaDownloadService {
 
   Future<void> _run(MangaDownloadJobRow job, _ActiveJob active) async {
     final _CancelToken token = active.token;
+    // 格式在任务开始运行时确定一次：排队任务在真正被领取的这一刻读取偏好；
+    // 运行中的任务（含 2s/8s/20s 自动重试）保持同一种格式。
+    final bool saveAsCbz = _saveAsCbz();
     int attempt = job.attemptCount;
     while (true) {
       try {
-        await _download(job, token);
+        await _download(job, token, saveAsCbz: saveAsCbz);
         return;
       } on _Stopped {
         // 服务停止：行保持 running，下次 start() 复位成 queued 续跑。
+        await _deleteArchiveTemp(job);
         return;
       } on _Cancelled {
         await _database.updateMangaDownloadJobStatus(
@@ -437,6 +482,7 @@ class MangaDownloadService {
           error,
           stack,
         );
+        await _deleteArchiveTemp(job);
         attempt += 1;
         if (attempt >= kMangaDownloadMaxAttempts || _disposed) {
           await _database.updateMangaDownloadJobStatus(
@@ -475,7 +521,11 @@ class MangaDownloadService {
     }
   }
 
-  Future<void> _download(MangaDownloadJobRow job, _CancelToken token) async {
+  Future<void> _download(
+    MangaDownloadJobRow job,
+    _CancelToken token, {
+    required bool saveAsCbz,
+  }) async {
     final OnlineMangaRuntimeKind? runtime = OnlineMangaRuntimeKind.fromWire(
       job.runtime,
     );
@@ -524,13 +574,16 @@ class MangaDownloadService {
       entry: entry,
       chapter: chapter,
       mangaDir: mangaDir,
+      saveAsCbz: saveAsCbz,
     );
     if (target.adoptedComplete) {
-      // 上次崩溃在 rename 与映射落库之间：目录已经完整，认领它而不是重下。
+      // 上次崩溃在 rename 与映射落库之间，或是升级前已有的完整文件夹章：
+      // 容器已经完整，认领它而不是重下（格式保持原样）。
       await _persistMapping(
         bookKey: job.bookKey,
         chapterKey: chapter.key,
-        folderName: target.folderName,
+        containerName: target.containerName,
+        containerKind: target.containerKind,
       );
       await _markDone(job);
       return;
@@ -665,97 +718,134 @@ class MangaDownloadService {
     // pages.json 最后写：它存在即代表整章页图已经齐了。
     await writePagesManifestAtomically(staging, manifest);
     _throwIfCancelled(token);
-    final String folderName = await _renameStagingIntoPlace(
-      staging: staging,
-      mangaDir: mangaDir,
-      desiredFolderName: target.folderName,
-      qualifier: _chapterScanlatorQualifier(chapter),
-    );
-    // rename 成功后立刻落映射（中间没有取消检查：取消路径按映射删目录）。
+    final String containerName;
+    if (target.containerKind == MangaChapterContainerKind.archive) {
+      containerName = await _writeStagingArchiveIntoPlace(
+        job: job,
+        staging: staging,
+        mangaDir: mangaDir,
+        desiredContainerName: target.containerName,
+        qualifier: _chapterScanlatorQualifier(chapter),
+        token: token,
+      );
+    } else {
+      containerName = await _renameStagingIntoPlace(
+        staging: staging,
+        mangaDir: mangaDir,
+        desiredFolderName: target.containerName,
+        qualifier: _chapterScanlatorQualifier(chapter),
+      );
+    }
+    // 落位成功后立刻落映射（中间没有取消检查：取消路径按映射删容器）。
     await _persistMapping(
       bookKey: job.bookKey,
       chapterKey: chapter.key,
-      folderName: folderName,
+      containerName: containerName,
+      containerKind: target.containerKind,
     );
     await _markDone(job);
   }
 
-  /// 选一个章节目录名（不创建），并把「可认领的完整目录」与「必须避开」分开。
+  /// 选一个章节容器名（不创建），并把「可认领的完整容器」与「必须避开」分开。
   ///
   /// 判定顺序：
-  /// 1. 数据库映射指向的目录若存在且**身份匹配**（pages.json 的 Source/Manga/
-  ///    Chapter 全对上）且完整 → 认领（进程在 rename 与落映射之间崩溃的续跑）。
-  /// 2. 否则扫描 manga 目录：任一同身份的完整目录也可认领。
-  /// 3. 其余一律视为已占用：同名不同章（哪怕大小写不同）、半成品、外来目录——
-  ///    绝不覆盖，按 `[扫译组]` / `(2)` 后缀另起目录。
+  /// 1. 数据库映射指向的容器若存在、类型一致且**身份匹配**（pages.json 的
+  ///    Source/Manga/Chapter 全对上）且完整 → 认领（进程在落位与落映射之间
+  ///    崩溃的续跑）。
+  /// 2. 否则扫描 manga 目录：任一同身份的完整容器（文件夹或 `.cbz`）也可认领
+  ///    ——升级前已有的文件夹章节原样采纳，绝不因开关而转换。
+  /// 3. 其余一律视为已占用：同名不同章（哪怕大小写不同）、半成品、外来目录/
+  ///    文件——绝不覆盖，按 `[扫译组]` / `(2)` 后缀另起名字。
+  ///
+  /// 新下载的容器类型由任务开始运行时捕获的 [saveAsCbz] 决定。
   Future<_ChapterTarget> _prepareChapterTarget({
     required MangaDownloadJobRow job,
     required OnlineMangaLibraryEntry entry,
     required OnlineMangaChapter chapter,
     required String mangaDir,
+    required bool saveAsCbz,
   }) async {
-    final Map<String, Directory> existing = await _existingChapterDirectories(
-      mangaDir,
-    );
+    final Map<String, _ExistingChapterContainer> existing =
+        await _existingChapterContainers(mangaDir);
     final MangaChapterDirRow? mapping = await _database.getMangaChapterDir(
       job.bookKey,
       job.chapterKey,
     );
-    final String base = _chapterBaseFolderName(chapter, mangaDir);
     final String? qualifier = _chapterScanlatorQualifier(chapter);
 
     if (mapping != null && mapping.folderName.isNotEmpty) {
-      final Directory? mapped = _findChapterDirectory(
-        existing,
-        mapping.folderName,
-      );
-      if (mapped == null) {
-        return _ChapterTarget(
-          folderName: mapping.folderName,
-          adoptedComplete: false,
-        );
+      final _ExistingChapterContainer? mapped =
+          existing[mapping.folderName.toLowerCase()];
+      if (mapped != null && mapped.kind == mapping.containerKind) {
+        if (await _chapterContainerAdoptable(mapped, entry, chapter)) {
+          return _ChapterTarget(
+            containerName: mapped.name,
+            containerKind: mapped.kind,
+            adoptedComplete: true,
+          );
+        }
+        // 映射指向的容器是半成品或属于别的章：不动它，另起后缀。
       }
-      if (await _chapterDirectoryBelongsTo(mapped, entry, chapter) &&
-          await isDownloadLibraryChapterComplete(mapped)) {
-        return _ChapterTarget(
-          folderName: p.basename(mapped.path),
-          adoptedComplete: true,
-        );
-      }
-      // 映射指向的目录是半成品或属于别的章：不动它，另起后缀目录。
+      // 映射指向的容器已不存在：当作新下载，按当前格式重新选名字。
     }
 
     final List<String> names = existing.keys.toList()..sort();
     for (final String name in names) {
-      final Directory directory = existing[name]!;
-      if (await _chapterDirectoryBelongsTo(directory, entry, chapter) &&
-          await isDownloadLibraryChapterComplete(directory)) {
+      final _ExistingChapterContainer container = existing[name]!;
+      if (await _chapterContainerAdoptable(container, entry, chapter)) {
         return _ChapterTarget(
-          folderName: p.basename(directory.path),
+          containerName: container.name,
+          containerKind: container.kind,
           adoptedComplete: true,
         );
       }
     }
 
+    if (saveAsCbz) {
+      final int budget = downloadLibrarySegmentBudget(mangaDir);
+      final int baseBudget = budget > kDownloadArchiveExtension.length
+          ? budget - kDownloadArchiveExtension.length
+          : 1;
+      final String base = sanitizeDownloadLibrarySegment(
+        _chapterRawName(chapter),
+        maxLength: baseBudget,
+      );
+      final String unique = await uniqueDownloadLibraryFolderName(
+        base: base,
+        qualifier: qualifier,
+        // `.cbz` 文件名与文件夹一样参与同名冲突判定。
+        isTaken: (String candidate) =>
+            _chapterNameTaken(mangaDir, '$candidate$kDownloadArchiveExtension'),
+        maxLength: baseBudget,
+      );
+      return _ChapterTarget(
+        containerName: '$unique$kDownloadArchiveExtension',
+        containerKind: MangaChapterContainerKind.archive,
+        adoptedComplete: false,
+      );
+    }
+
+    final String base = downloadChapterFolderName(
+      mangaDirPath: mangaDir,
+      raw: _chapterRawName(chapter),
+    );
     final String folderName = await uniqueDownloadLibraryFolderName(
       base: base,
       qualifier: qualifier,
       isTaken: (String candidate) => _chapterNameTaken(mangaDir, candidate),
       maxLength: downloadLibrarySegmentBudget(mangaDir),
     );
-    return _ChapterTarget(folderName: folderName, adoptedComplete: false);
+    return _ChapterTarget(
+      containerName: folderName,
+      containerKind: MangaChapterContainerKind.folder,
+      adoptedComplete: false,
+    );
   }
 
-  /// 章目录基础名：章展示名（空名退回章 key），按剩余路径预算净化。
-  static String _chapterBaseFolderName(
-    OnlineMangaChapter chapter,
-    String mangaDir,
-  ) {
+  /// 章容器基础名：章展示名（空名退回章 key）。
+  static String _chapterRawName(OnlineMangaChapter chapter) {
     final String name = chapter.name.trim();
-    return downloadChapterFolderName(
-      mangaDirPath: mangaDir,
-      raw: name.isEmpty ? chapter.key : name,
-    );
+    return name.isEmpty ? chapter.key : name;
   }
 
   /// 同名章的优先区分后缀：扫译组；无扫译组时退回 `(2)` 序号。
@@ -765,28 +855,29 @@ class MangaDownloadService {
     return sanitizeDownloadLibrarySegment(scanlator, maxLength: 32);
   }
 
-  /// 章目录 `<mangaDir>/<name>`；只认目录，且忽略点号目录（`.staging`）。
-  static Future<Map<String, Directory>> _existingChapterDirectories(
-    String mangaDir,
-  ) async {
+  /// manga 目录下已有的章容器：文件夹（任意名）与 `.cbz` 文件；忽略点号目录
+  /// （`.staging`）与其他文件。键是小写名（大小写不敏感契约）。
+  static Future<Map<String, _ExistingChapterContainer>>
+  _existingChapterContainers(String mangaDir) async {
     final Directory parent = Directory(mangaDir);
-    if (!await parent.exists()) return <String, Directory>{};
-    final Map<String, Directory> byLowerName = <String, Directory>{};
+    if (!await parent.exists()) return <String, _ExistingChapterContainer>{};
+    final Map<String, _ExistingChapterContainer> byLowerName =
+        <String, _ExistingChapterContainer>{};
     await for (final FileSystemEntity entity in parent.list(
       followLinks: false,
     )) {
-      if (entity is! Directory) continue;
       final String name = p.basename(entity.path);
       if (name.startsWith('.')) continue;
-      byLowerName[name.toLowerCase()] = entity;
+      if (entity is Directory) {
+        byLowerName[name.toLowerCase()] =
+            _ExistingChapterContainer.folder(entity);
+      } else if (entity is File && isDownloadChapterArchiveName(name)) {
+        byLowerName[name.toLowerCase()] =
+            _ExistingChapterContainer.archive(entity);
+      }
     }
     return byLowerName;
   }
-
-  static Directory? _findChapterDirectory(
-    Map<String, Directory> existing,
-    String name,
-  ) => existing[name.toLowerCase()];
 
   /// 这个名字在 manga 目录里是否已被**任何条目**占用（文件也算，大小写不敏感）。
   ///
@@ -804,20 +895,41 @@ class MangaDownloadService {
     return false;
   }
 
-  /// 目录里的 `pages.json` 是否就是这一章（Source/Manga/Chapter 全匹配）。
-  static Future<bool> _chapterDirectoryBelongsTo(
-    Directory directory,
+  /// 容器里的 `pages.json` 是否就是这一章（Source/Manga/Chapter 全匹配）且完整。
+  static Future<bool> _chapterContainerAdoptable(
+    _ExistingChapterContainer container,
     OnlineMangaLibraryEntry entry,
     OnlineMangaChapter chapter,
   ) async {
-    final MangaPagesManifest? manifest = await readPagesManifest(directory);
-    return manifest != null &&
-        manifest.sourceRuntime == entry.runtime.wireValue &&
-        manifest.extensionPackage == entry.extensionPackage &&
-        manifest.sourceId == entry.sourceId &&
-        manifest.mangaKey == entry.series.key &&
-        manifest.chapterKey == chapter.key;
+    final Directory? directory = container.directory;
+    if (directory != null) {
+      return _manifestBelongsTo(
+            await readPagesManifest(directory),
+            entry,
+            chapter,
+          ) &&
+          await isDownloadLibraryChapterComplete(directory);
+    }
+    final File archiveFile = container.archiveFile!;
+    return _manifestBelongsTo(
+          await readDownloadLibraryArchiveManifest(archiveFile),
+          entry,
+          chapter,
+        ) &&
+        await isDownloadLibraryArchiveComplete(archiveFile);
   }
+
+  static bool _manifestBelongsTo(
+    MangaPagesManifest? manifest,
+    OnlineMangaLibraryEntry entry,
+    OnlineMangaChapter chapter,
+  ) =>
+      manifest != null &&
+      manifest.sourceRuntime == entry.runtime.wireValue &&
+      manifest.extensionPackage == entry.extensionPackage &&
+      manifest.sourceId == entry.sourceId &&
+      manifest.mangaKey == entry.series.key &&
+      manifest.chapterKey == chapter.key;
 
   /// 把 staging 目录整章 rename 到正式章目录；目标被占时用确定后缀，绝不覆盖。
   Future<String> _renameStagingIntoPlace({
@@ -846,15 +958,103 @@ class MangaDownloadService {
     }
   }
 
+  /// 把 staging 压成 CBZ：先写同漫画目录的 `{chapter}.cbz.tmp`，完成后原子
+  /// 改名为最终 `.cbz`，再删 staging。
+  ///
+  /// 目标名被占（含同名 `.cbz` 文件）时用确定后缀重试，绝不覆盖。取消发生在
+  /// 改名前会抛 [_Cancelled]：临时包由 [_deleteChapterDirectory] 按
+  /// [_archiveTempJobId] 定点删除，最终 `.cbz` 不会出现。
+  Future<String> _writeStagingArchiveIntoPlace({
+    required MangaDownloadJobRow job,
+    required Directory staging,
+    required String mangaDir,
+    required String desiredContainerName,
+    required _CancelToken token,
+    String? qualifier,
+  }) async {
+    final int budget = downloadLibrarySegmentBudget(mangaDir);
+    final int baseBudget = budget > kDownloadArchiveExtension.length
+        ? budget - kDownloadArchiveExtension.length
+        : 1;
+    final String desiredBase =
+        isDownloadChapterArchiveName(desiredContainerName)
+        ? desiredContainerName.substring(
+            0,
+            desiredContainerName.length - kDownloadArchiveExtension.length,
+          )
+        : desiredContainerName;
+    while (true) {
+      final String candidateBase = await uniqueDownloadLibraryFolderName(
+        base: desiredBase,
+        qualifier: qualifier,
+        isTaken: (String name) =>
+            _chapterNameTaken(mangaDir, '$name$kDownloadArchiveExtension'),
+        maxLength: baseBudget,
+      );
+      final String candidateName = '$candidateBase$kDownloadArchiveExtension';
+      final File target = downloadChapterArchiveFile(mangaDir, candidateName);
+      if (await target.exists()) continue;
+      final File temporary = File('${target.path}.tmp');
+      _archiveTempPath = temporary.path;
+      _archiveTempJobId = job.jobId;
+      try {
+        await writeDownloadChapterArchive(
+          staging: staging,
+          temporaryArchive: temporary,
+        );
+        _throwIfCancelled(token);
+        // 同一目录内的 rename：完成后最终 `.cbz` 一次性可见。
+        await temporary.rename(target.path);
+      } on FileSystemException {
+        if (!await target.exists()) rethrow;
+        // 目标被并发占住：换后缀重试。
+        await _deleteFileQuietly(temporary);
+        continue;
+      } on Object {
+        await _deleteFileQuietly(temporary);
+        rethrow;
+      }
+      _archiveTempPath = null;
+      _archiveTempJobId = null;
+      try {
+        await staging.delete(recursive: true);
+      } on FileSystemException {
+        // staging 删不掉不影响已完成的结果；扫描本来就会忽略点号目录。
+      }
+      await _cleanupStagingParent(staging);
+      return candidateName;
+    }
+  }
+
+  /// 删除当前任务写了一半的 CBZ 临时包（取消 / 停止 / 失败重试前）。
+  Future<void> _deleteArchiveTemp(MangaDownloadJobRow job) async {
+    if (_archiveTempJobId != job.jobId) return;
+    final String? path = _archiveTempPath;
+    _archiveTempPath = null;
+    _archiveTempJobId = null;
+    if (path == null) return;
+    await _deleteFileQuietly(File(path));
+  }
+
+  static Future<void> _deleteFileQuietly(File file) async {
+    try {
+      if (await file.exists()) await file.delete();
+    } on FileSystemException {
+      // 被占用 / 已删除：临时文件不是可见章节，留给系统清理也无害。
+    }
+  }
+
   Future<void> _persistMapping({
     required String bookKey,
     required String chapterKey,
-    required String folderName,
+    required String containerName,
+    required String containerKind,
   }) =>
       _database.upsertMangaChapterDir(
         bookKey: bookKey,
         chapterKey: chapterKey,
-        folderName: folderName,
+        folderName: containerName,
+        containerKind: containerKind,
         updatedAt: _now,
       );
 
@@ -918,6 +1118,7 @@ class MangaDownloadService {
 
   Future<void> _deleteChapterDirectory(MangaDownloadJobRow job) async {
     try {
+      await _deleteArchiveTemp(job);
       final EpubBookRow? row = await _database.getEpubBook(job.bookKey);
       if (row == null) return;
       await DownloadLibraryIndex(
