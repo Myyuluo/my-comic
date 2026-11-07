@@ -5240,6 +5240,8 @@
   "profile_media_video": "Видео",
   "profile_name_hint": "Название профиля",
   "profile_rename": "Переименовать",
+  "program_state_fallback_notice_message": "The install folder is not writable, so MyComic keeps program data in $path. Your library, settings and extensions will not travel with the install folder. Reinstall MyComic to a writable folder to keep them portable.",
+  "program_state_fallback_notice_title": "Program data is not portable",
   "quick_import_title": "Быстрый импорт",
   "reader_audiobook_current_chapter": "Текущая глава",
   "reader_audiobook_empty_hint": "Import audio to listen along with this book",
