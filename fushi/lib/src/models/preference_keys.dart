@@ -124,6 +124,10 @@ const Set<String> kKnownPreferenceKeys = <String>{
   // 自配服务器各自带 enabled 字段，不进那份停用清单。
   // 含凭据 → 同时登记在 kCredentialPreferenceKeys 与 deviceLocalPrefKeys。
   'discovery_opds_servers',
+  // bool（默认 true）：「保存为CBZ压缩包」——新开始的在线章节下载写成
+  // `downloads/{source}/{manga}/{chapter}.cbz`；关闭沿用文件夹。只在任务开始
+  // 运行时读取，已有章节不转换。见 PreferencesRepository.downloadSaveAsCbz。
+  'download_save_as_cbz',
   'download_save_root',
   'download_save_root_history',
   'experimental_focus_navigation_enabled',

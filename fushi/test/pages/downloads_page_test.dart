@@ -55,6 +55,7 @@ void main() {
       // 本测试只读任务列表，不会触发下载 worker。
       serviceFor: (OnlineMangaRuntimeKind _) =>
           throw UnimplementedError('下载 worker 不应在本测试中运行'),
+      saveAsCbz: () => false,
     );
   });
 

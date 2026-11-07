@@ -85,6 +85,7 @@ void main() {
     downloads = MangaDownloadService(
       database: db,
       serviceFor: (OnlineMangaRuntimeKind runtime) => library,
+      saveAsCbz: () => false,
     );
     bookKey = (await library.add(_entry())).bookKey;
     // 一条该书的章节任务 + 一条与书无关的 mokuro 卷任务；服务不 start，行停在 queued。

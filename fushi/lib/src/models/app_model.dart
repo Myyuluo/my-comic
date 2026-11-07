@@ -4131,6 +4131,8 @@ class AppModel with ChangeNotifier {
       _mangaDownloadService ??= MangaDownloadService(
         database: database,
         serviceFor: onlineMangaLibraryService,
+        // 任务开始运行时现读：排队任务按真正开始那一刻的开关落盘。
+        saveAsCbz: () => prefsRepo.downloadSaveAsCbz,
       );
 
   /// 启动章节下载 worker：复位上次进程死亡留下的 `running` 行并开始消费。幂等。
@@ -7713,6 +7715,12 @@ class AppModel with ChangeNotifier {
   bool get mangaDownloadAutoOcr => prefsRepo.mangaDownloadAutoOcr;
   Future<void> setMangaDownloadAutoOcr(bool value) =>
       prefsRepo.setMangaDownloadAutoOcr(value);
+
+  /// 「保存为CBZ压缩包」（默认开）。下载服务在任务开始运行时现读，运行中的
+  /// 任务不受开关切换影响。
+  bool get downloadSaveAsCbz => prefsRepo.downloadSaveAsCbz;
+  Future<void> setDownloadSaveAsCbz(bool value) =>
+      prefsRepo.setDownloadSaveAsCbz(value);
 
   // TODO-1024 / BUG-479：更新检查结果缓存（缓存优先 + 后台静默刷新）。
   UpdateCheckCacheEntry? get updateCheckCache => prefsRepo.updateCheckCache;

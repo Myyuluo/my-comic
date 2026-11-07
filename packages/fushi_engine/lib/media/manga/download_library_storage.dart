@@ -7,10 +7,12 @@
 ///   {source}/                    # Source 显示名（基础 Windows 净化）
 ///     {manga}/                   # 漫画标题（基础 Windows 净化）
 ///       .staging/{jobId}/        # 下载中的半成品；扫描/重建必须忽略
-///       {chapter}/               # 完成后整章 rename 到这里
+///       {chapter}/               # 文件夹章节：完成后整章 rename 到这里
 ///         001.jpg                # 页图平铺、零填充
 ///         002.png
 ///         pages.json             # 稳定身份 + 页表 + 下载时间
+///       {chapter}.cbz            # CBZ 章节（ticket 08 起新下载默认）：
+///                                # 包根同样是 001.jpg… + pages.json
 /// ```
 ///
 /// 目录名**不是身份**：数据库保存 `bookKey + chapterKey → folderName` 映射
@@ -24,11 +26,13 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:archive/archive_io.dart';
 import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 
 import 'package:fushi_engine/media/manga/local_source/local_source_archive.dart';
 import 'package:fushi_engine/media/manga/mokuro_payload.dart';
+import 'package:fushi_engine/utils/archive/native_zip.dart';
 import 'package:fushi_engine/utils/misc/safe_file_name.dart';
 
 /// Content root 下 Download library 的目录名。
@@ -556,3 +560,47 @@ Future<MokuroPayload?> readDownloadLibraryArchivePayload(
 /// 一章（CBZ 容器）是否完整下载。
 Future<bool> isDownloadLibraryArchiveComplete(File archiveFile) async =>
     await readDownloadLibraryArchivePayload(archiveFile) != null;
+
+/// 把 staging 里的平铺页图与 `pages.json` 写成 CBZ 的**临时**包。
+///
+/// 只收 staging 根下的常规文件：跳过点号文件与 `.tmp`（页图先写 `.tmp` 再改名，
+/// 崩溃可能留下半截页）；`pages.json` 最后写入包内。调用方负责把内容写到同一
+/// 漫画目录的 `{chapter}.cbz.tmp`，完成后原子改名为最终 `.cbz`——半成品永远不会
+/// 以 `.cbz` 出现。
+Future<void> writeDownloadChapterArchive({
+  required Directory staging,
+  required File temporaryArchive,
+}) async {
+  final List<File> pages = <File>[];
+  File? manifest;
+  await for (final FileSystemEntity entity in staging.list(followLinks: false)) {
+    if (entity is! File) continue;
+    final String name = p.basename(entity.path);
+    if (name.startsWith('.') || name.toLowerCase().endsWith('.tmp')) continue;
+    if (name == kDownloadPagesFileName) {
+      manifest = entity;
+      continue;
+    }
+    pages.add(entity);
+  }
+  pages.sort(
+    (File a, File b) => p.basename(a.path).compareTo(p.basename(b.path)),
+  );
+  final File? manifestFile = manifest;
+  if (manifestFile == null) {
+    throw StateError(
+      'Cannot write a CBZ without $kDownloadPagesFileName in staging',
+    );
+  }
+  final ZipFileEncoder encoder = ZipFileEncoder();
+  encoder.create(temporaryArchive.path);
+  try {
+    for (final File page in pages) {
+      // 原生 zlib 分块压缩；页图（jpg/png/…）按 STORE 直写，不二次压缩。
+      addFileNativeDeflate(encoder, page, p.basename(page.path));
+    }
+    addFileNativeDeflate(encoder, manifestFile, kDownloadPagesFileName);
+  } finally {
+    await encoder.close();
+  }
+}

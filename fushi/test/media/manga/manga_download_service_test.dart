@@ -145,11 +145,15 @@ void main() {
   late String bookKey;
   late String bookDir;
 
-  MangaDownloadService build({DownloadKeepAlive? keepAlive}) =>
+  MangaDownloadService build({
+    DownloadKeepAlive? keepAlive,
+    bool Function()? saveAsCbz,
+  }) =>
       MangaDownloadService(
         database: db,
         serviceFor: (OnlineMangaRuntimeKind runtime) => library,
         keepAlive: keepAlive,
+        saveAsCbz: saveAsCbz ?? () => false,
         wait: (Duration duration) async {
           waits.add(duration);
         },
@@ -294,12 +298,13 @@ void main() {
     expect(manifest.payload.images[2].size.width, 102);
     expect(manifest.payload.images[2].size.height, 152);
 
-    // 数据库映射：bookKey + chapterKey → 实际目录名。
+    // 数据库映射：bookKey + chapterKey → 实际目录名 + 容器类型。
     final MangaChapterDirRow? mapping = await db.getMangaChapterDir(
       bookKey,
       '/chapter/1',
     );
     expect(mapping?.folderName, 'Chapter 1');
+    expect(mapping?.containerKind, MangaChapterContainerKind.folder);
     final DownloadLibraryIndex index = DownloadLibraryIndex(db);
     expect(
       await index.isChapterDownloaded(
@@ -382,6 +387,234 @@ void main() {
       ).isChapterDownloaded(bookKey: bookKey, chapterKey: '/chapter/1'),
       isTrue,
     );
+    downloads.dispose();
+  });
+
+  test('CBZ 开启：写成 {chapter}.cbz，包根页图 + pages.json，映射为 archive', () async {
+    final MangaDownloadService downloads = build(saveAsCbz: () => true);
+    await downloads.enqueueChapter(
+      entry: _entry(),
+      chapter: _chapters.last,
+      autoOcr: false,
+    );
+    await downloads.start();
+    await downloads.whenIdle;
+
+    final File archiveFile = downloadChapterArchiveFile(
+      bookDir,
+      'Chapter 1.cbz',
+    );
+    expect(archiveFile.existsSync(), isTrue, reason: '载体是单文件 CBZ');
+    expect(
+      downloadChapterDirectory(bookDir, 'Chapter 1').existsSync(),
+      isFalse,
+      reason: '开启 CBZ 时不再产生章节目录',
+    );
+    expect(
+      File('${archiveFile.path}.tmp').existsSync(),
+      isFalse,
+      reason: '临时包必须在完成后改名，不能留在漫画目录里',
+    );
+    expect(
+      Directory(p.join(bookDir, '.staging')).existsSync(),
+      isFalse,
+      reason: '整章落进压缩包后 staging 应清理',
+    );
+
+    final MangaPagesManifest? manifest =
+        await readDownloadLibraryArchiveManifest(archiveFile);
+    expect(manifest, isNotNull);
+    expect(manifest!.sourceName, 'Fake');
+    expect(manifest.chapterKey, '/chapter/1');
+    expect(
+      manifest.payload.images.map((MokuroImage image) => image.url).toList(),
+      <String>['001.png', '002.png', '003.png'],
+      reason: '包根是平铺、零填充的页图',
+    );
+    expect(await isDownloadLibraryArchiveComplete(archiveFile), isTrue);
+
+    final MangaChapterDirRow? mapping = await db.getMangaChapterDir(
+      bookKey,
+      '/chapter/1',
+    );
+    expect(mapping?.folderName, 'Chapter 1.cbz');
+    expect(mapping?.containerKind, MangaChapterContainerKind.archive);
+
+    final DownloadLibraryIndex index = DownloadLibraryIndex(db);
+    expect(
+      await index.isChapterDownloaded(
+        bookKey: bookKey,
+        chapterKey: '/chapter/1',
+      ),
+      isTrue,
+    );
+    final MangaChapterContainer? container = await index.resolveChapter(
+      bookKey: bookKey,
+      chapterKey: '/chapter/1',
+    );
+    expect(container?.kind, MangaChapterContainerKind.archive);
+    expect(container?.archiveFile?.path, archiveFile.path);
+
+    // 删除压缩包章节 = 删对应文件并清映射。
+    await index.deleteChapter(bookKey: bookKey, chapterKey: '/chapter/1');
+    expect(archiveFile.existsSync(), isFalse);
+    expect(await db.getMangaChapterDir(bookKey, '/chapter/1'), isNull);
+    downloads.dispose();
+  });
+
+  test('已有完整文件夹章节原样采纳：开启 CBZ 也不转换、不重下', () async {
+    final MangaDownloadService folderService = build(saveAsCbz: () => false);
+    await folderService.enqueueChapter(
+      entry: _entry(),
+      chapter: _chapters.last,
+      autoOcr: false,
+    );
+    await folderService.start();
+    await folderService.whenIdle;
+    folderService.dispose();
+
+    final Directory folder = downloadChapterDirectory(bookDir, 'Chapter 1');
+    expect(folder.existsSync(), isTrue);
+    // 模拟「磁盘上有完整文件夹章节、索引还没关联」的既有内容。
+    await db.deleteMangaChapterDir(bookKey, '/chapter/1');
+    final Map<int, int> fetchedBefore = Map<int, int>.of(adapter.fetchCounts);
+
+    final MangaDownloadService cbzService = build(saveAsCbz: () => true);
+    await cbzService.enqueueChapter(
+      entry: _entry(),
+      chapter: _chapters.last,
+      autoOcr: false,
+    );
+    await cbzService.start();
+    await cbzService.whenIdle;
+
+    expect(folder.existsSync(), isTrue, reason: '既有文件夹章节保持原样');
+    expect(
+      File(p.join(bookDir, 'Chapter 1.cbz')).existsSync(),
+      isFalse,
+      reason: '开关不触发批量转换',
+    );
+    final MangaChapterDirRow? mapping = await db.getMangaChapterDir(
+      bookKey,
+      '/chapter/1',
+    );
+    expect(mapping?.folderName, 'Chapter 1');
+    expect(mapping?.containerKind, MangaChapterContainerKind.folder);
+    expect(
+      adapter.fetchCounts,
+      fetchedBefore,
+      reason: '认领完整目录，不再访问源站',
+    );
+    cbzService.dispose();
+  });
+
+  test('格式在任务开始运行时确定：运行中的任务保持，排队任务读真正开始时的值', () async {
+    bool saveAsCbz = true;
+    adapter.gate = Completer<void>();
+    final MangaDownloadService downloads = build(saveAsCbz: () => saveAsCbz);
+    // chapters 顺序是 Chapter 2、Chapter 1；worker 按入队顺序领取。
+    await downloads.enqueueChapter(
+      entry: _entry(),
+      chapter: _chapters.first,
+      autoOcr: false,
+    );
+    await downloads.enqueueChapter(
+      entry: _entry(),
+      chapter: _chapters.last,
+      autoOcr: false,
+    );
+    await downloads.start();
+    while ((adapter.fetchCounts[0] ?? 0) == 0) {
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+    }
+
+    // 第一个任务已经在跑（格式已捕获），此时关闭开关。
+    saveAsCbz = false;
+    adapter.gate!.complete();
+    await downloads.whenIdle;
+
+    expect(
+      File(p.join(bookDir, 'Chapter 2.cbz')).existsSync(),
+      isTrue,
+      reason: '运行中的任务保持它开始时的 CBZ 格式',
+    );
+    expect(
+      downloadChapterDirectory(bookDir, 'Chapter 1').existsSync(),
+      isTrue,
+      reason: '排队任务在真正开始时读到关闭 → 文件夹',
+    );
+    expect(
+      File(p.join(bookDir, 'Chapter 1.cbz')).existsSync(),
+      isFalse,
+    );
+    downloads.dispose();
+  });
+
+  test('同名 .cbz 已存在（属于别的章）：不覆盖，改用确定后缀', () async {
+    final File existing = File(p.join(bookDir, 'Chapter 1.cbz'));
+    await existing.writeAsString('do not touch');
+
+    final MangaDownloadService downloads = build(saveAsCbz: () => true);
+    await downloads.enqueueChapter(
+      entry: _entry(),
+      chapter: _chapters.last,
+      autoOcr: false,
+    );
+    await downloads.start();
+    await downloads.whenIdle;
+
+    expect(await existing.readAsString(), 'do not touch', reason: '已有 .cbz 不得被覆盖');
+    final MangaChapterDirRow? mapping = await db.getMangaChapterDir(
+      bookKey,
+      '/chapter/1',
+    );
+    expect(mapping?.folderName, 'Chapter 1 (2).cbz');
+    expect(mapping?.containerKind, MangaChapterContainerKind.archive);
+    expect(
+      File(p.join(bookDir, 'Chapter 1 (2).cbz')).existsSync(),
+      isTrue,
+    );
+    expect(
+      await DownloadLibraryIndex(
+        db,
+      ).isChapterDownloaded(bookKey: bookKey, chapterKey: '/chapter/1'),
+      isTrue,
+    );
+    downloads.dispose();
+  });
+
+  test('取消 CBZ 下载：清理 staging 与临时包，不出现可见的半成品 .cbz', () async {
+    adapter.gate = Completer<void>();
+    final MangaDownloadService downloads = build(saveAsCbz: () => true);
+    final MangaDownloadJobRow job = await downloads.enqueueChapter(
+      entry: _entry(),
+      chapter: _chapters.last,
+      autoOcr: false,
+    );
+    await downloads.start();
+    while ((adapter.fetchCounts[0] ?? 0) == 0) {
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+    }
+    final Directory staging = downloadStagingDirectory(bookDir, job.jobId);
+    expect(staging.existsSync(), isTrue, reason: '下载中的页只在 staging 里');
+
+    await downloads.cancel(job.jobId);
+    adapter.gate!.complete();
+    await downloads.whenIdle;
+
+    expect(
+      (await jobOf('/chapter/1')).status,
+      MangaDownloadJobStatus.cancelled,
+    );
+    expect(staging.existsSync(), isFalse, reason: '取消要删 staging');
+    final List<String> leftovers = Directory(bookDir)
+        .listSync()
+        .map((FileSystemEntity entity) => p.basename(entity.path))
+        .where((String name) => name.toLowerCase().endsWith('.cbz') ||
+            name.toLowerCase().endsWith('.cbz.tmp'))
+        .toList();
+    expect(leftovers, isEmpty, reason: '取消不得留下可见或临时的 .cbz 文件');
+    expect(await db.getMangaChapterDir(bookKey, '/chapter/1'), isNull);
     downloads.dispose();
   });
 
