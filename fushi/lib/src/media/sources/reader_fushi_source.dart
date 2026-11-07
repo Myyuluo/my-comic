@@ -19,6 +19,7 @@ import 'package:fushi/src/media/audiobook/book_import_dialog.dart';
 import 'package:fushi/src/media/manga/interconnect/interconnect_manga_source.dart'
     show InterconnectMangaCatalog;
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
+import 'package:fushi_engine/media/manga/local_source/local_source_metadata.dart';
 import 'package:fushi/src/reader/page_turn_animation.dart';
 import 'package:fushi/src/reader/reader_chrome_floating.dart';
 import 'package:fushi/src/reader/highlight_stroke_style.dart';
@@ -1070,6 +1071,27 @@ class ReaderFushiSource extends ReaderMediaSource {
       final SrtBook? srt = hasSrtBooksTable
           ? await SrtBookRepository(db).findByBookKey(bookKey)
           : null;
+
+      // Local source（ADR 0013）：移出书架只删 Library 记录 + 立墓碑，绝不删
+      // `localcomic` 里用户自己的文件。书架长删 / 批删 / 合集连删都经过这里。
+      if (bookRow != null &&
+          LocalSourceMetadata.tryParse(bookRow.sourceMetadata) != null) {
+        if (deleteStatistics) {
+          await deleteBookStatistics(
+            db: db,
+            title: bookRow.title,
+            mediaKeys: <String>[bookKey],
+          );
+        }
+        final int localDeletedRows =
+            await db.deleteEpubBook(bookKey, tombstone: true);
+        if (localDeletedRows > 0) return const DeleteBookResult.success();
+        final String reason =
+            'Local source 删除未移除任何行（bookKey="$bookKey"）';
+        ErrorLogService.instance
+            .logDiagnostic('ReaderFushiSource.deleteBook', reason);
+        return DeleteBookResult.failure(reason);
+      }
 
       // BUG-439：bookKey 指向的行不存在（孤儿壳行 bookKey==''、key 不匹配、或重复
       // 删除）时，以前 deleteEpubBook 删 0 行后仍无条件 return true 谎报成功，调用方
