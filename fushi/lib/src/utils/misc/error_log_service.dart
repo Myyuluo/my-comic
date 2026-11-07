@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:fushi/i18n/strings.g.dart';
 import 'package:fushi/src/startup/test_environment.dart';
+import 'package:fushi/src/storage/app_paths.dart';
 import 'package:fushi/src/utils/misc/frame_safe_notifier.dart';
 import 'package:fushi/src/utils/misc/fushi_toast.dart';
 import 'package:fushi_anki/fushi_anki.dart';
@@ -212,11 +213,23 @@ class ErrorLogService extends ChangeNotifier
   }
 
   /// [directoryOverride] 仅供测试注入临时目录（端到端验面包屑恢复，不碰
-  /// path_provider）；生产不传，走 [fushiTestDirectory] / 应用文档目录。
+  /// path_provider）；生产不传，走 Program state root 的 `state/logs`。
   Future<void> init({Directory? directoryOverride}) async {
-    final dir = directoryOverride ??
-        fushiTestDirectory('app-documents') ??
-        await getApplicationDocumentsDirectory();
+    // Ticket 02：日志属于 Portable state，落 Program state root 的 `state/logs`，
+    // 随程序目录 + `userdata` 一起拷走。解析失败（极早期 / 无 path_provider
+    // 的纯测试）才退回旧 documents 落点。
+    Directory dir;
+    if (directoryOverride != null) {
+      dir = directoryOverride;
+    } else {
+      try {
+        dir = await AppPaths.logsRootDirectory();
+        await dir.create(recursive: true);
+      } on Object {
+        dir = fushiTestDirectory('app-documents') ??
+            await getApplicationDocumentsDirectory();
+      }
+    }
     _appDir = dir;
     _logFile = File('${dir.path}/error_log.txt');
     _breadcrumbFile = File('${dir.path}/import_crash_breadcrumb.txt');

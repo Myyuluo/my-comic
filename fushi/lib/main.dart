@@ -68,6 +68,7 @@ import 'package:fushi/src/startup/exit_flush_registry.dart';
 import 'package:fushi/src/startup/android_view_lifecycle.dart';
 import 'package:fushi/src/startup/program_state_shared_preferences.dart';
 import 'package:fushi/src/startup/test_root_shared_preferences.dart';
+import 'package:fushi/src/storage/webview2_state_root.dart';
 import 'package:fushi/src/anki/anki_view_model.dart';
 import 'package:fushi/src/anki/ankimobile_mined_ledger.dart';
 import 'package:fushi/src/anki/ankimobile_repository.dart';
@@ -200,6 +201,10 @@ void main([List<String> args = const <String>[]]) {
     // `state/`（`<exeDir>/userdata/state/shared_preferences.json`），不再落在
     // `%APPDATA%`。测试根生效时上一步已装好隔离 store，这里是幂等 no-op。
     isolateSharedPreferencesUnderProgramStateRoot();
+    // Ticket 02：WebView2 的 user data folder（站点登录态 / cookie）属于 Portable
+    // state，固定到 `<programState>/state/webview2`。必须早于任何 WebView 创建：
+    // WebView2 只在 CreateCoreWebView2EnvironmentWithOptions 时接受 folder。
+    WebView2StateRoot.install();
     // Ticket 01 / fresh start：不搬、也不读旧 Fushi / Hibiki 的 app-support 数据
     // （`%APPDATA%` / NSUserDefaults 旧域）。旧目录由用户自行删除。
     // ASR 算法层住在独立包（fushi_asr_core），它的数据根 / 出站 HTTP / 日志三个装配点

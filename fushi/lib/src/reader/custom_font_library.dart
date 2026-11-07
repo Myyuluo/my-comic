@@ -74,7 +74,7 @@ class CustomFontLibrary {
   /// 生产装配：AppModel 的数据库与字体目录，写穿后刷新全部消费端。
   factory CustomFontLibrary.forApp(AppModel appModel) => CustomFontLibrary(
     database: appModel.database,
-    fontsDir: customFontsDirectory(appModel.appDirectory),
+    fontsDir: customFontsDirectory(appModel.stateDirectory),
     persist:
         (
           ReaderSettings settings,

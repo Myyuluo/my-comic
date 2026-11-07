@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:fushi/src/startup/test_environment.dart';
+import 'package:fushi/src/storage/app_paths.dart';
 import 'package:path_provider/path_provider.dart';
 
 /// 学习统计诊断日志（用户 2026-09-12：「要有个导出日志的方式用于排查阅读速度异常」）。
@@ -47,12 +48,23 @@ class StudyDiagLog {
   /// 在途落盘链（测试确定性 await）。
   Future<void> get pending => _chain;
 
-  /// [directoryOverride] 仅供测试；生产走 [fushiTestDirectory] / 应用文档目录。
+  /// [directoryOverride] 仅供测试；生产走 Program state root 的 `state/logs`。
   Future<void> init({Directory? directoryOverride}) async {
     try {
-      final Directory dir = directoryOverride ??
-          fushiTestDirectory('app-documents') ??
-          await getApplicationDocumentsDirectory();
+      // Ticket 02：学习统计日志与错误日志同属 Portable state，落
+      // `<programState>/state/logs`。解析失败才退回旧 documents 落点。
+      Directory dir;
+      if (directoryOverride != null) {
+        dir = directoryOverride;
+      } else {
+        try {
+          dir = await AppPaths.logsRootDirectory();
+          await dir.create(recursive: true);
+        } on Object {
+          dir = fushiTestDirectory('app-documents') ??
+              await getApplicationDocumentsDirectory();
+        }
+      }
       _file = File('${dir.path}/$fileName');
       await _trimFile();
     } catch (e) {

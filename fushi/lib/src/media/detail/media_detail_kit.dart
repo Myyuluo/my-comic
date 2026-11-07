@@ -1288,7 +1288,16 @@ class MediaDetailSectionHeader extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 /// 条目（章节 / 分集）的下载状态。
-enum MediaDetailDownloadState { none, queued, downloading, downloaded, failed }
+enum MediaDetailDownloadState {
+  none,
+  queued,
+  downloading,
+  downloaded,
+  failed,
+
+  /// 记录说下载过，但文件在当前 Content root 下不存在。
+  missing,
+}
 
 /// 章节 / 分集的分段列表行（M3E segmented list，组首尾大圆角、行间 2px 缝）：
 ///
@@ -1492,6 +1501,9 @@ class MediaDetailItemRow extends StatelessWidget {
         ],
         MediaDetailDownloadState.failed => <Widget>[
           FushiIcon(FushiIcons.error, size: 20, color: cs.error),
+        ],
+        MediaDetailDownloadState.missing => <Widget>[
+          FushiIcon(FushiIcons.warning, size: 20, color: cs.error),
         ],
       },
     ];
