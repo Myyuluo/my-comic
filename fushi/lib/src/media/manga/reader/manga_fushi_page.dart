@@ -45,10 +45,10 @@ import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_service.dart';
 import 'package:fushi/src/media/manga/library/online_manga_runtime_adapter.dart';
 import 'package:fushi/src/media/online/online_source_error_text.dart';
+import 'package:fushi_engine/media/manga/local_source/local_source_metadata.dart';
+import 'package:fushi_engine/media/manga/local_source/local_source_reader.dart';
 import 'package:fushi_engine/media/manga/mokuro_payload.dart';
 import 'package:fushi_engine/media/manga/panel_detection.dart';
-
-
 
 import 'package:fushi/src/media/manga/library/online_manga_chapter_updates.dart'
     show mangaChapterDisplayName;
@@ -93,7 +93,6 @@ import 'package:fushi/src/media/manga/reader/manga_chapter_drawer.dart';
 import 'package:fushi/src/reader/reader_desktop_chrome.dart'
     show ReaderHeaderAction, ReaderSideSheetSide, showReaderSideSheet;
 
-
 import 'package:fushi/src/reader/reader_session_remote.dart';
 import 'package:fushi/src/reader/illustration_zoom_viewer.dart'
     show copyImageFileToClipboard, shareImageFile;
@@ -101,7 +100,6 @@ import 'package:fushi/src/startup/exit_flush_registry.dart';
 import 'package:fushi/src/stats/read_unit_ledger.dart';
 import 'package:fushi/src/webview/webview_death_guard.dart';
 import 'package:fushi/utils.dart';
-
 
 /// Manga reader implementation owned by the standalone manga module.
 ///
@@ -1526,6 +1524,11 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
       setState(() => _loadFailed = true);
       return;
     }
+    // Local source（ADR 0013）：章节目录原地读取，不复制、不需要 manga.json。
+    if (LocalSourceMetadata.tryParse(row.sourceMetadata) != null) {
+      await _loadLocalSourceChapter(row);
+      return;
+    }
     final OnlineMangaLibraryEntry? onlineEntry =
         OnlineMangaLibraryEntry.tryParse(row.sourceMetadata);
     if (onlineEntry != null) {
@@ -1538,6 +1541,45 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
       row: row,
       mangaJsonPath: p.join(row.extractDir, row.epubPath),
       initialPage: widget.initialPage,
+    );
+  }
+
+  /// Local source 章节：按 `sourceMetadata` 标记分流，页图从 `localcomic` 的
+  /// 章节目录原地读取（不复制、不要求 manga.json）。
+  ///
+  /// 多章作品从点名的章（或第 1 章）开始；单章作品保留书级断点续读。第一章之后
+  /// 的章级进度由章节列表重新打开时从第 1 页开始——与 ticket 06 的最小阅读闭环
+  /// 一致，完整的章级断点续读留给重建索引/本地源条目后续扩展。
+  Future<void> _loadLocalSourceChapter(EpubBookRow row) async {
+    final int chapterIndex = widget.initialChapterIndex ?? 0;
+    final LocalSourceResolvedChapter? resolved =
+        await LocalSourceReader.resolveChapter(
+          db: appModel.database,
+          bookKey: row.bookKey,
+          chapterIndex: chapterIndex,
+        );
+    if (!mounted) return;
+    if (resolved == null) {
+      _releaseWebView();
+      setState(() {
+        _bookRow = row;
+        _loadFailed = true;
+      });
+      return;
+    }
+    final int chapterCount = decodeLocalSourceChapters(row.chaptersJson).length;
+    final int? initialPage =
+        widget.initialPage ?? (chapterCount <= 1 ? null : 0);
+    final String chapterDir = resolved.chapterDirectory.path;
+    await _presentPayload(
+      row: row.copyWith(extractDir: chapterDir, epubPath: ''),
+      payload: resolved.payload,
+      imagesDir: chapterDir,
+      openSession: (List<String> relativePagePaths) => LocalMangaPageProvider(
+        imagesRoot: Directory(chapterDir),
+        relativePaths: relativePagePaths,
+      ).open(),
+      initialPage: initialPage,
     );
   }
 

@@ -4392,6 +4392,11 @@ class AppModel with ChangeNotifier {
           rootDirectory: interconnectMangaLibraryRoot,
           adapter: const InterconnectLibraryAdapter(),
         );
+      case OnlineMangaRuntimeKind.local:
+        // Local source 没有在线 service/adapter：作品页只把它借给章节列表渲染。
+        throw UnsupportedError(
+          'Local source is not an online manga runtime',
+        );
     }
   }
 

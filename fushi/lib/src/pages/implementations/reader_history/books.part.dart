@@ -1351,14 +1351,77 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
   Future<void> _openMangaImportPrefilled({
     required List<String> mangaPaths,
   }) async {
+    // 页图文件夹走 Local source：先复制进 `localcomic` 再登记，原始文件夹保留
+    // （ADR 0013）。`.mokuro` / CBZ / 图片型 zip / PDF 等仍走漫画导入对话框；
+    // CBZ 的 localcomic 登记属于 ticket 07。
+    final List<String> localFolders = <String>[];
+    final List<String> dialogPaths = <String>[];
+    for (final String path in mangaPaths) {
+      final bool localSourceFolder = Directory(path).existsSync() &&
+          MangaModule.directoryHasPageImages(path) &&
+          MangaModule.directoryMokuroFileCount(path) == 0;
+      (localSourceFolder ? localFolders : dialogPaths).add(path);
+    }
+
+    if (localFolders.isNotEmpty) {
+      int imported = 0;
+      int skipped = 0;
+      int failed = 0;
+      for (final String path in localFolders) {
+        try {
+          final LocalSourceDropResult result =
+              await LocalSourceDrop.importDroppedPath(
+            db: appModel.database,
+            root: appModel.appPaths.localComicRoot,
+            sourcePath: path,
+          );
+          final LocalSourceImportReport? report = result.report;
+          if (report != null) {
+            imported += report.added + report.refreshed;
+            skipped += report.skippedTombstoned;
+            failed += report.failed;
+          }
+          if (!result.registered) failed++;
+        } on Object catch (error, stack) {
+          failed++;
+          ErrorLogService.instance.log(
+            'ReaderFushiHistoryPage.localSourceDrop',
+            error,
+            stack,
+          );
+        }
+      }
+      if (mounted) {
+        FushiToast.show(
+          msg: t.manga_import_batch_done(
+            imported: imported,
+            skipped: skipped,
+            failed: failed,
+          ),
+          severity: imported > 0
+              ? ToastSeverity.success
+              : ToastSeverity.error,
+        );
+      }
+    }
+
+    if (dialogPaths.isEmpty) {
+      if (mounted && localFolders.isNotEmpty) {
+        _refreshSrtBooks();
+        ref.invalidate(fushiBooksProvider(JapaneseLanguage.instance));
+      }
+      return;
+    }
+    if (!mounted) return;
+
     final bool? imported = await showAppDialog<bool>(
       context: context,
       builder: (_) => MangaImportDialog(
         db: appModel.database,
-        initialPaths: mangaPaths,
+        initialPaths: dialogPaths,
       ),
     );
-    if (imported == true && mounted) {
+    if ((imported == true || localFolders.isNotEmpty) && mounted) {
       _refreshSrtBooks();
       ref.invalidate(fushiBooksProvider(JapaneseLanguage.instance));
     }
