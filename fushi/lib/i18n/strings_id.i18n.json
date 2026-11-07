@@ -1664,7 +1664,7 @@
   "data_root_use_default_button": "Mulai dengan lokasi default",
   "data_storage_change_button": "Ubah lokasi",
   "data_storage_content_root_footer": "Changing this only creates empty folders at the new location. Files are not moved or copied; downloads in the old location show as missing until you move them and rebuild the download index.",
-  "data_storage_content_root_title": "Manga data location",
+  "data_storage_content_root_title": "Storage location",
   "data_storage_import_local_comics_button": "Scan now",
   "data_storage_import_local_comics_failed": "Could not scan local comics: $message",
   "data_storage_import_local_comics_section": "Local comics",
