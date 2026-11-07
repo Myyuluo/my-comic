@@ -138,18 +138,33 @@ function Get-GitHead {
     return $head
 }
 
-function Assert-TargetNotRunning {
+function Get-RunningTargetProcess {
     $target = [IO.Path]::GetFullPath($Exe)
-    $running = Get-Process -Name 'fushi' -ErrorAction SilentlyContinue | Where-Object {
+    return Get-Process -Name 'fushi' -ErrorAction SilentlyContinue | Where-Object {
         try {
             $path = $_.Path
             return ($path -and ([IO.Path]::GetFullPath($path) -ieq $target))
         } catch {
             return $false
         }
+    } | Select-Object -First 1
+}
+
+function Show-LaunchedWindow {
+    param([System.Diagnostics.Process] $Process)
+    # 首次启动要先等 Flutter/WebView 把主窗口建出来，否则用户会以为没启动。
+    $deadline = [DateTime]::UtcNow.AddSeconds(30)
+    while ([DateTime]::UtcNow -lt $deadline) {
+        $Process.Refresh()
+        if ($Process.HasExited) { return }
+        if ($Process.MainWindowHandle -ne 0) { break }
+        Start-Sleep -Milliseconds 300
     }
-    if ($running) {
-        throw "Close my-comic before building: $Exe is running."
+    if ($Process.HasExited) { return }
+    try {
+        $null = (New-Object -ComObject WScript.Shell).AppActivate($Process.Id)
+    } catch {
+        # 窗口还在初始化时 AppActivate 可能失败；应用本身仍在运行。
     }
 }
 
@@ -306,7 +321,19 @@ function Install-RuntimeBundle {
     }
 }
 
-Assert-TargetNotRunning
+$running = Get-RunningTargetProcess
+if ($running) {
+    if ($NoLaunch) {
+        throw "Close my-comic before building: $Exe is running."
+    }
+    try {
+        $null = (New-Object -ComObject WScript.Shell).AppActivate($running.Id)
+    } catch {
+        # 窗口可能被最小化/隐藏；应用仍在运行。
+    }
+    Write-Host "[my-comic] already running; brought it to the front."
+    exit 0
+}
 
 $head = Get-GitHead
 $needsBuild = $true
@@ -436,5 +463,6 @@ if (Test-RuntimeDirectory $BundleDir) {
 
 if (-not $NoLaunch) {
     Write-Host "[my-comic] launching $Exe"
-    Start-Process -FilePath $Exe -WorkingDirectory $ReleaseDir
+    $launched = Start-Process -FilePath $Exe -WorkingDirectory $ReleaseDir -PassThru
+    Show-LaunchedWindow -Process $launched
 }
