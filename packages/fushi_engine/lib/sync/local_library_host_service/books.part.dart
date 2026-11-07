@@ -62,23 +62,10 @@ mixin _LocalLibraryHostBooks on _LocalLibraryHostBase, _LocalLibraryHostShared {
           in await _db.getAllMangaReaderOverrides())
         row.bookUid: row,
     };
-    // BUG-812：srt-backed 有声书（同 bookKey 既有 EpubBooks 又有 SrtBooks 行）加入合集
-    // 时以 **`srt|<uid>`** 存进成员表（本地书架把它当 SRT 卡渲染、经 srt|uid 折叠），
-    // 而非 `epub|<bookKey>`。互联 client 把这类书作为 EPUB 占位卡收下，只查 `epub|bookKey`
-    // 会 miss → RemoteBookInfo.collection=null → 有声书不折进合集。这里补一趟
-    // bookKey→srtUid 映射，供下面按 srt 成员键兜底查归属，让有声书 EPUB 卡也带上
-    // collection（client 经现有注入循环折进合集，与本地书架对称、不依赖后台 sweep）。
-    // Ticket 12：漫画-only schema 没有 srt_books 表；休眠的互联路径缺表时按空
-    // 映射处理，不让清单端点崩。
-    Map<String, String> srtUidByBookKey = const <String, String>{};
-    try {
-      srtUidByBookKey = <String, String>{
-        for (final SrtBookRow s in await _db.getAllSrtBooks())
-          if (s.bookKey.isNotEmpty) s.bookKey: s.uid,
-      };
-    } on Object {
-      // 缺表 → 没有 SRT 有声书可折叠。
-    }
+    // Ticket 12：漫画-only schema 没有 srt_books 表，且 BUG-812 的
+    // bookKey→srtUid 映射在删除有声书 collection 折叠后已无消费方。原先的
+    // `on Object` 吞异常连真正的查询错误也一起隐藏；映射既已无用，直接删除，
+    // 不再触碰 srt_books（恢复同步 schema 时如有需要再按 hasSrtBooksTable 重建）。
     return rows.map((EpubBookRow r) {
       // EPUB 行的 coverPath 是 EPUB 内部相对 href，必须拼 extractDir 才是磁盘真
       // 路径；直接 _existingFilePath(相对href) 恒 false → 远端书卡没封面（#4）。

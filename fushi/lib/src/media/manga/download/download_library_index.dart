@@ -14,6 +14,7 @@ import 'dart:io';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi_engine/epub/epub_storage.dart';
 import 'package:fushi_engine/media/manga/download_library_storage.dart';
+import 'package:fushi_engine/media/manga/local_source/local_source_layout.dart';
 import 'package:path/path.dart' as p;
 
 import 'package:fushi/src/storage/app_paths.dart';
@@ -55,11 +56,11 @@ class DownloadLibraryIndex {
     // Ticket 08：库里的章节路径记录切换 Content root 时**不重基**。解析时必须
     // 确认记录的漫画目录仍在**当前** Content root 的 Download library 下；指向
     // 旧根的记录一律视为找不到文件（Missing），绝不回头读旧路径。
-    final String downloadsRoot = p.canonicalize((await _downloadsRoot()).path);
-    final String recordedMangaDir = p.canonicalize(row.extractDir);
-    final bool withinCurrentRoot =
-        p.equals(downloadsRoot, recordedMangaDir) ||
-        p.isWithin(downloadsRoot, recordedMangaDir);
+    final Directory currentDownloadsRoot = await _downloadsRoot();
+    final bool withinCurrentRoot = isLocalSourcePathWithinRoot(
+      row.extractDir,
+      currentDownloadsRoot,
+    );
     final MangaChapterDirRow? mapping = await database.getMangaChapterDir(
       bookKey,
       chapterKey,
@@ -69,10 +70,10 @@ class DownloadLibraryIndex {
         row.extractDir,
         mapping.folderName,
       );
-      final String canonicalDirectory = p.canonicalize(directory.path);
-      final bool withinMangaDir =
-          p.equals(p.canonicalize(row.extractDir), canonicalDirectory) ||
-          p.isWithin(p.canonicalize(row.extractDir), canonicalDirectory);
+      final bool withinMangaDir = isLocalSourcePathWithinRoot(
+        directory.path,
+        Directory(row.extractDir),
+      );
       if (withinMangaDir && await directory.exists()) {
         return MangaChapterContainer(
           directory: directory,
@@ -125,7 +126,8 @@ class DownloadLibraryIndex {
 
   /// 删除一章的磁盘内容，并清掉它的映射。
   ///
-  /// 目录不存在时静默（任务取消 / 重复删除）；旧布局也按旧判据删。
+  /// 目录不存在时静默（任务取消 / 重复删除）。旧哈希布局已不再解析，
+  /// 映射行仍清掉，避免留下指向不存在容器的记录。
   Future<void> deleteChapter({
     required String bookKey,
     required String chapterKey,

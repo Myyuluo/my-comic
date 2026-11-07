@@ -319,21 +319,25 @@ mixin _LocalLibraryHostShared on _LocalLibraryHostBase {
   /// [listBooks] 的 `hasAudiobook` 徽章、[listAudiobooks] 清单、orchestrator
   /// sweep 三处判据全部走此单一派生逻辑，确保徽章/清单/导出契约完全同源（TODO-778）。
   Future<Set<String>> _srtBackedAudiobookKeys() async {
-    // Ticket 12：my-comic 的漫画-only schema 里没有 audiobooks / srt_books 表，
-    // 而互联/同步只是保留的休眠代码。缺表时按「没有有声书」处理，不让清单端点
-    // 在漫画-only 库里抛 SqliteException（休眠路径必须安全隔离，不能编译通过却在
-    // 运行时崩）。
-    try {
-      final List<AudiobookRow> rows = await _db.getAllAudiobooks();
-      final Set<String> keys = <String>{};
-      for (final AudiobookRow r in rows) {
-        if (await _db.getSrtBookByBookKey(r.bookKey) != null) {
-          keys.add(r.bookKey);
-        }
-      }
-      return keys;
-    } on Object {
+    // Scope: my-comic 的漫画-only live schema 没有 audiobooks / srt_books 表
+    // （ADR 0002 删除非漫画模块），互联/同步是保留的休眠代码。缺表时按「没有
+    // 有声书」处理，不让清单端点在漫画-only 库里崩。
+    //
+    // 用 hasTable 能力判断而不是 `on Object` 吞异常：表存在时查询失败是真正的
+    // bug，必须照常上抛；否则数据库损坏 / SQL 错误会被伪装成「没有有声书」。
+    //
+    // Cleanup: 若将来恢复同步/有声书 schema，删除这里的表检查即可，其余读取
+    // 逻辑与完整 schema 相同。
+    if (!await _db.hasAudiobooksTable || !await _db.hasSrtBooksTable) {
       return const <String>{};
     }
+    final List<AudiobookRow> rows = await _db.getAllAudiobooks();
+    final Set<String> keys = <String>{};
+    for (final AudiobookRow r in rows) {
+      if (await _db.getSrtBookByBookKey(r.bookKey) != null) {
+        keys.add(r.bookKey);
+      }
+    }
+    return keys;
   }
 }

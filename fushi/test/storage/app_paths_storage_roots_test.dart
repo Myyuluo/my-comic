@@ -144,6 +144,33 @@ void main() {
         p.join(installDir.path, 'userdata'));
   });
 
+  test('启动时校验已存 content_root：安装目录、其内部/祖先与 Program state root 内部都拒绝',
+      () async {
+    final List<String> invalidTargets = <String>[
+      installDir.path,
+      p.join(installDir.path, 'data'),
+      tmp.path,
+      p.join(installDir.path, 'userdata'),
+      p.join(installDir.path, 'userdata', 'content'),
+    ];
+    for (final String target in invalidTargets) {
+      SharedPreferences.setMockInitialValues(<String, Object>{
+        AppPaths.contentRootPrefKey: target,
+      });
+
+      await expectLater(
+        AppPaths.resolve(),
+        throwsA(isA<DataRootUnavailableException>()),
+        reason: '启动期校验必须拒绝 content_root=$target（不能只在切换时校验）',
+      );
+      expect(
+        Directory(p.join(target, 'downloads')).existsSync(),
+        isFalse,
+        reason: '被拒绝的 Content root 不得被创建/写入：$target',
+      );
+    }
+  });
+
   test('旧 data_root 与布局锚点偏好不再影响根解析，也不读取旧根', () async {
     final Directory oldRoot = Directory(p.join(tmp.path, 'OldFushiData'))
       ..createSync(recursive: true);

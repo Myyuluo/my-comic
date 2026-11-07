@@ -344,8 +344,9 @@ class OnlineMangaLibraryService {
   /// `<content>/downloads/{source}/{manga}`，返回**当前**行。
   ///
   /// fresh-start：旧布局（`<runtimeRoot>/library` / `<content>/fushi_books`）
-  /// **不搬移、不复制**，只把 `extractDir` 重指向新布局。旧章仍可由
-  /// `DownloadLibraryIndex` 的只读回退打开，直到清理旧 root 的票删除它。
+  /// **不搬移、不复制**，只把 `extractDir` 重指向新布局。ticket 12 已删除旧
+  /// 哈希布局的只读回退：旧目录不再被读取，旧章显示 Missing，需用户自行搬移
+  /// 后运行 Rebuild download index。
   ///
   /// 已在标准位置的行原样返回（零 IO 之外的一次路径比较）。
   Future<EpubBookRow> ensureBookDirectory(EpubBookRow row) async {
@@ -453,6 +454,32 @@ class OnlineMangaLibraryService {
         ),
       );
     }
+    // 作品被移出书架时文件与目录保留，`epub_books` 行却没了。若只信数据库，
+    // 另一部同名 Source 会直接复用旧 Source 的目录。这里补扫磁盘上还没有
+    // 稳定身份声明的 source 目录：任一 `pages.json` 能证明该目录属于哪个
+    // Source。读不到稳定身份的目录仍按旧行为处理（复用/靠 manga 目录名去重），
+    // 不凭空猜测归属。
+    final Set<String> identityClaimedFolders = <String>{
+      for (final _DownloadLibraryClaim claim in claims)
+        if (claim.sourceIdentity != null) claim.sourceFolder.toLowerCase(),
+    };
+    final Map<String, Set<String>> diskSourceIdentities =
+        await _diskSourceIdentities(
+          rootPath,
+          skipFolderNames: identityClaimedFolders,
+        );
+    for (final MapEntry<String, Set<String>> disk
+        in diskSourceIdentities.entries) {
+      for (final String identity in disk.value) {
+        claims.add(
+          _DownloadLibraryClaim(
+            sourceFolder: disk.key,
+            mangaFolder: null,
+            sourceIdentity: identity,
+          ),
+        );
+      }
+    }
 
     final String sourceLabel = await downloadSourceName(entry);
     final int sourceBudget = downloadLibrarySegmentBudget(
@@ -540,6 +567,70 @@ class OnlineMangaLibraryService {
         ? normalizedRoot
         : '$normalizedRoot${p.separator}';
     return normalizedPath.startsWith(prefix);
+  }
+
+  /// 磁盘上各 source 目录能从 `pages.json` 证明的 Source 身份集合。
+  ///
+  /// 只看 `downloads/<source>/<manga>/<chapter>/pages.json` 的一层（找到第一个
+  /// 可解析 manifest 即停）。[skipFolderNames] 是已经有数据库身份声明的目录
+  /// （小写），无需再读盘。目录读不了按没有身份处理，不让一次冲突解析失败。
+  static Future<Map<String, Set<String>>> _diskSourceIdentities(
+    String rootPath, {
+    required Set<String> skipFolderNames,
+  }) async {
+    final Map<String, Set<String>> result = <String, Set<String>>{};
+    for (final Directory sourceDir in await _childDirectories(rootPath)) {
+      final String folderName = p.basename(sourceDir.path);
+      if (skipFolderNames.contains(folderName.toLowerCase())) continue;
+      final Set<String> identities = <String>{};
+      for (final Directory mangaDir
+          in await _childDirectories(sourceDir.path)) {
+        for (final Directory chapterDir
+            in await _childDirectories(mangaDir.path)) {
+          final MangaPagesManifest? manifest = await readPagesManifest(
+            chapterDir,
+          );
+          if (manifest == null) continue;
+          identities.add(
+            <String>[
+              manifest.sourceRuntime,
+              manifest.extensionPackage,
+              manifest.sourceId,
+            ].join(String.fromCharCode(0)),
+          );
+          break;
+        }
+        if (identities.isNotEmpty) break;
+      }
+      result[folderName] = identities;
+    }
+    return result;
+  }
+
+  /// 直接子目录（跳过点号目录）。不存在 / 读不了 → 空列表。
+  static Future<List<Directory>> _childDirectories(String path) async {
+    final Directory parent = Directory(path);
+    if (!await parent.exists()) return const <Directory>[];
+    final List<Directory> dirs = <Directory>[];
+    try {
+      await for (final FileSystemEntity entity in parent.list(
+        followLinks: false,
+      )) {
+        if (entity is Directory &&
+            !p.basename(entity.path).startsWith('.')) {
+          dirs.add(entity);
+        }
+      }
+    } on FileSystemException {
+      return const <Directory>[];
+    }
+    dirs.sort(
+      (Directory a, Directory b) => p
+          .basename(a.path)
+          .toLowerCase()
+          .compareTo(p.basename(b.path).toLowerCase()),
+    );
+    return dirs;
   }
 
   /// 已有子目录名（小写）。目录不存在 → 空集。

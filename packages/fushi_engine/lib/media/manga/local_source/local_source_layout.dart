@@ -147,6 +147,25 @@ bool isLocalSourcePathWithinRoot(String path, Directory root) {
       p.isWithin(canonicalRoot, canonicalPath);
 }
 
+/// 一部 Local source 作品的封面相对路径：优先 `cover.jpg/jpeg/png`，否则取第一
+/// 个文件夹章节的首页。
+///
+/// CBZ 章节的页没有独立磁盘文件（封面解析只认真实文件），跳过——`cover.jpg`
+/// 约定仍由封面解析器在作品目录里兜底。登记（[LocalSourceLibrary]）与重建
+/// （Rebuild download index）共用这一处，避免两边对「哪张图算封面」漂移。
+String? localSourceCoverRelativePath(LocalSourceManga manga) {
+  if (manga.coverRelativePath != null) return manga.coverRelativePath;
+  for (final LocalSourceChapter chapter in manga.chapters) {
+    if (chapter.isArchive) continue;
+    if (chapter.pages.isEmpty) continue;
+    final String page = chapter.pages.first.relativePath;
+    return chapter.relativePath.isEmpty
+        ? page
+        : '${chapter.relativePath}/$page';
+  }
+  return null;
+}
+
 /// 扫描 Local source root 的**第一层目录**为作品。
 ///
 /// 不递归到更深层找作品；根下散落的文件、点目录（`.staging` 等）忽略。没有页图

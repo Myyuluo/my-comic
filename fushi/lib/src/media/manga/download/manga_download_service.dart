@@ -200,6 +200,11 @@ class MangaDownloadService {
   /// 幂等：已 `done` 且目录判据为真 → 原样返回不重下；`queued` / `running` →
   /// 原样返回；`failed` / `cancelled` / 已 done 但目录被删 → 重置成 `queued`。
   /// 条目必须已在书架（`bookKey` 由条目身份推导，与作品页入库用的同一条）。
+  ///
+  /// [autoOcr] 只保留入队 API 的形状（作品页 / CLI 调用方仍传值），**当前不生效**：
+  /// ADR 0002 已删除 OCR 模块，ticket 04 随之移除了 `MangaDownloadOcrHook` 完成
+  /// 回调，任务完成后不会触发识别，值也不写入任务行。`auto_ocr` 列 / 偏好留待
+  /// schema 与调用方一起清理；恢复 OCR 时再把它接回完成流程。
   Future<MangaDownloadJobRow> enqueueChapter({
     required OnlineMangaLibraryEntry entry,
     required OnlineMangaChapter chapter,
@@ -494,7 +499,8 @@ class MangaDownloadService {
     }
     final OnlineMangaChapter chapter = entry.chapters[chapterIndex];
     // 新布局的漫画根：`downloads/{source}/{manga}`。旧行在这里被重指向新根
-    // （不搬文件）；旧布局的已下载章仍由 DownloadLibraryIndex 只读回退打开。
+    // （不搬文件）；ticket 12 起旧哈希布局不再读取，旧章显示 Missing，直到用户
+    // 自己搬移文件并运行 Rebuild download index。
     row = await service.ensureBookDirectory(row);
     final String mangaDir = row.extractDir;
     final DownloadLibraryIndex index = DownloadLibraryIndex(_database);

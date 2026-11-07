@@ -1224,6 +1224,44 @@ void main() {
     );
   });
 
+  test('重建不清除 manga_chapter_dirs 记录：指向被 ID 认领目录的旧映射原样保留', () async {
+    const String bookKey = 'mihon-fixture';
+    final OnlineMangaLibraryEntry entry = entryFor();
+    final Directory mangaDir = Directory(
+      p.join(downloadsRoot.path, 'Example Source', 'Fixture series'),
+    );
+    await writeChapter(
+      mangaDir: mangaDir,
+      folderName: 'Chapter 1',
+      entry: entry,
+      chapter: entry.chapters[0],
+    );
+    await insertOnlineBook(
+      bookKey: bookKey,
+      entry: entry,
+      extractDir: mangaDir.path,
+    );
+    // /c/2 的旧映射指向磁盘上已被 pages.json 证明属于 /c/1 的目录。
+    await db.upsertMangaChapterDir(
+      bookKey: bookKey,
+      chapterKey: '/c/2',
+      folderName: 'Chapter 1',
+      updatedAt: 1,
+    );
+
+    await service().run();
+
+    expect(
+      (await db.getMangaChapterDir(bookKey, '/c/1'))?.folderName,
+      'Chapter 1',
+    );
+    expect(
+      (await db.getMangaChapterDir(bookKey, '/c/2'))?.folderName,
+      'Chapter 1',
+      reason: 'Rebuild 只增改数据库行，绝不删除记录（spec 规则 4）',
+    );
+  });
+
   test('同一目录里 pages.json 身份互相冲突时跳过并报告，不猜', () async {
     final OnlineMangaLibraryEntry first = entryFor(
       seriesKey: '/series/first',

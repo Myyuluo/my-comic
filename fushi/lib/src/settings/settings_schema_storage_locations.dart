@@ -78,13 +78,10 @@ String _folderTitle(ContentRootFolder folder) => switch (folder) {
 
 /// 当前运行中的 [AppPaths]；设置页最早也只在初始化之后可达，但测试 / 极端早期
 /// 可能尚未注入，读不到时返回 null（副标题留空，不崩）。
-AppPaths? _pathsOrNull(SettingsContext ctx) {
-  try {
-    return ctx.appModel.appPaths;
-  } on Error {
-    return null;
-  }
-}
+///
+/// 走 [AppModel.appPathsOrNull] 的显式就绪标记，不用 `on Error` 吞 `late`
+/// 未初始化异常——那会把真正的编程错误一起伪装成「还没注入」。
+AppPaths? _pathsOrNull(SettingsContext ctx) => ctx.appModel.appPathsOrNull;
 
 String? _contentRootSubtitle(SettingsContext ctx) =>
     _pathsOrNull(ctx)?.contentRoot.path;
@@ -189,14 +186,11 @@ Future<ContentRootSwitchResult> _switchContentRoot(
   String picked,
 ) async {
   final AppPaths? paths = _pathsOrNull(ctx);
-  final Directory currentContentRoot =
-      paths?.contentRoot ?? await AppPaths.contentRootDirectory();
   final Directory programStateRoot =
       paths?.programStateRoot ?? await AppPaths.programStateRootDirectory();
   final Directory defaultContentRoot =
       await AppPaths.defaultContentRootDirectory();
   return ContentRootSwitch(
-    currentContentRoot: currentContentRoot,
     programStateRoot: programStateRoot,
     defaultContentRoot: defaultContentRoot,
     executablePath: Platform.resolvedExecutable,

@@ -21,7 +21,13 @@ import 'package:fushi_engine/media/manga/manga_storage.dart'
 import 'package:fushi/src/models/app_model.dart';
 import 'package:fushi/utils.dart';
 
-/// 漫画导入对话框。
+/// 漫画导入对话框（**受管书库**导入，storage-layout 后逐步退场）。
+///
+/// 2026-11-07 storage-layout：Browse › Import 已改为扫描 `localcomic` 的
+/// 「导入本地漫画」入口，文件夹 / CBZ 走 Local source 原地登记（ADR 0013），
+/// 不再从本对话框复制进 `fushi_books`。本对话框仍服务 `.mokuro` / PDF 等
+/// 只能进受管书库的载体，以及既有拖入 / 来源页入口；把文件夹/CBZ 路由到这里
+/// 的旧路径视为已弃用，后续移除。
 ///
 /// 与 [BookImportDialog] 分家的理由不是「代码重复」——两者共用 [ImportFlowMixin]
 /// 骨架、[ImportDialogFrame] 外框、同名书冲突解决和 `EpubBooks` 表，共用的部分一

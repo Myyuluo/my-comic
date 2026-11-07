@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:fushi/src/storage/app_paths.dart';
 import 'package:fushi/src/storage/content_root_switch.dart';
+import 'package:fushi/src/storage/content_root_validation.dart';
 
 /// Ticket 08：切换 Content root 只在新位置创建 `downloads` / `autobackup` /
 /// `localcomic` 三个空文件夹，不移动/复制任何旧文件，也不重基库内路径。
@@ -38,7 +39,6 @@ void main() {
   });
 
   ContentRootSwitch switcher() => ContentRootSwitch(
-    currentContentRoot: oldContent,
     programStateRoot: programState,
     defaultContentRoot: defaultContent,
     executablePath: p.join(installDir.path, 'my_comic.exe'),
@@ -180,6 +180,19 @@ void main() {
     }
   });
 
+  test('切换与启动共用的校验器把不可写目标判为 notWritable', () async {
+    final File blocker = File(p.join(tmp.path, 'blocked_validator'))
+      ..writeAsStringSync('not a directory');
+
+    final ContentRootValidationFailure? failure =
+        await ContentRootTargetValidator(
+          programStateRoot: programState,
+          executablePath: p.join(installDir.path, 'my_comic.exe'),
+        ).validate(p.join(blocker.path, 'candidate'));
+
+    expect(failure, ContentRootValidationFailure.notWritable);
+  });
+
   test('不可写的位置失败，且偏好保持不变', () async {
     SharedPreferences.setMockInitialValues(<String, Object>{
       AppPaths.contentRootPrefKey: oldContent.path,
@@ -205,7 +218,6 @@ void main() {
       ..createSync(recursive: true);
     final Directory newContent = Directory(p.join(tmp.path, 'NewContent'));
     final ContentRootSwitch switcherWithDefault = ContentRootSwitch(
-      currentContentRoot: testDefault,
       programStateRoot: programState,
       defaultContentRoot: testDefault,
       executablePath: p.join(installDir.path, 'my_comic.exe'),

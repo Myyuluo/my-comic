@@ -180,7 +180,7 @@ class LocalSourceLibrary {
               relativePath: chapter.relativePath,
             ),
         ]);
-    final String? coverPath = _coverPathFor(manga);
+    final String? coverPath = localSourceCoverRelativePath(manga);
     final String sourceMetadata = LocalSourceMetadata(
       relativePath: manga.relativePath,
     ).encode();
@@ -220,22 +220,6 @@ class LocalSourceLibrary {
       ),
     );
     return false;
-  }
-
-  /// 封面相对 Manga 目录：优先 `cover.jpg/jpeg/png`，否则第一个文件夹章节的
-  /// 首页。CBZ 章节的页没有独立磁盘文件（封面解析只认真实文件），跳过——
-  /// `cover.jpg` 约定仍由封面解析器在作品目录里兜底。
-  String? _coverPathFor(LocalSourceManga manga) {
-    if (manga.coverRelativePath != null) return manga.coverRelativePath;
-    for (final LocalSourceChapter chapter in manga.chapters) {
-      if (chapter.isArchive) continue;
-      if (chapter.pages.isEmpty) continue;
-      final String page = chapter.pages.first.relativePath;
-      return chapter.relativePath.isEmpty
-          ? page
-          : '${chapter.relativePath}/$page';
-    }
-    return null;
   }
 }
 

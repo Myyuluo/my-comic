@@ -1193,6 +1193,21 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     }
   }
 
+  /// 只有当前 `localcomic` 根内的条目才提供「删除本地文件」。
+  ///
+  /// 源未安装时 Rebuild 会把 `downloads/{source}/{manga}` 降级成指向该目录的
+  /// Local source 条目（票 10）；这些文件不归 Local source 管，
+  /// [LocalSourceLibrary.deleteLocalFiles] 会拒绝越界路径。与其显示一个必然
+  /// 失败的动作，不如隐藏它。读不到 AppPaths 的测试壳按不可删处理。
+  bool _canDeleteLocalSourceFiles(EpubBookRow row) {
+    final AppModel? appModel = _appModelOrNull;
+    if (appModel == null) return false;
+    return isLocalSourcePathWithinRoot(
+      row.extractDir,
+      appModel.appPaths.localComicRoot,
+    );
+  }
+
   /// 「删除本地文件」：与「移出书架」分开的破坏性动作，二次确认后删除
   /// `localcomic` 里的作品目录。路径越界 / 非 Local source 条目由 service 拒绝。
   Future<void> _deleteLocalSourceFiles(
@@ -2099,7 +2114,10 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
             onSelected: () => unawaited(_openShelfMenu(showShelfMenu)),
           ),
         // 删除本地文件是**单独**且二次确认的动作；「移出书架」只删记录。
-        if (_isLocalSource && _row != null)
+        // Ticket 10 的恢复条目指向 downloads 根，不在 localcomic 内，
+        // LocalSourceLibrary.deleteLocalFiles 会拒绝——入口直接隐藏，不给一个
+        // 必然失败的动作。
+        if (_isLocalSource && _row != null && _canDeleteLocalSourceFiles(_row!))
           MediaDetailMenuItem(
             key: const ValueKey<String>('manga_series_delete_local_files'),
             icon: FushiIcons.delete,
