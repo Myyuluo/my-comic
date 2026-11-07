@@ -1152,13 +1152,26 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     }
   }
 
-  /// 未入库本地作品显式「加入书架」：扫描结果原样交给单部作品登记入口
-  /// （`registerScannedManga`，与 Rebuild download index 同一条写入路径），
-  /// 原地登记、不复制文件。插入行本身会清 tombstone（`insertEpubBook`）。
+  /// 未入库本地作品显式「加入书架」。
   Future<void> _addScannedLocalToLibrary(LocalSourceManga manga) async {
-    final AppModel? appModel = _appModelOrNull;
-    if (appModel == null || _busy) return;
+    if (_busy) return;
     setState(() => _busy = true);
+    try {
+      await _registerScannedLocal(manga);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// 单部作品的原地登记（显式「加入书架」与点章自动加入共用）：扫描结果原样
+  /// 交给 `registerScannedManga`（与 Rebuild download index 同一条写入路径），
+  /// 原地登记、不复制文件；插入行本身会清 tombstone（`insertEpubBook`）。
+  ///
+  /// 成功后切到正常书架条目并返回 bookKey；失败已 toast 并返回 null（页面保持
+  /// 未入库态，章节列表照常可用）。
+  Future<String?> _registerScannedLocal(LocalSourceManga manga) async {
+    final AppModel? appModel = _appModelOrNull;
+    if (appModel == null) return null;
     try {
       await LocalSourceLibrary(
         db: appModel.database,
@@ -1166,7 +1179,7 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
       ).registerScannedManga(manga);
       final String bookKey = localSourceBookKeyFor(manga.directoryPath);
       final EpubBookRow? row = await appModel.database.getEpubBook(bookKey);
-      if (!mounted || row == null) return;
+      if (!mounted || row == null) return null;
       setState(() {
         _row = row;
         _entry = null;
@@ -1178,6 +1191,7 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
       });
       _watchLocalVolume(row.bookKey);
       unawaited(_refreshDownloadState());
+      return bookKey;
     } on Object catch (error, stack) {
       ErrorLogService.instance.log(
         'MangaSeriesPage.addScannedLocal',
@@ -1190,8 +1204,7 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
           severity: ToastSeverity.error,
         );
       }
-    } finally {
-      if (mounted) setState(() => _busy = false);
+      return null;
     }
   }
 
@@ -1415,9 +1428,22 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
   /// 2026-09-12 §1.1「先下载再读」；下载入口不变，走章节行溢出菜单 / 下载全部）。
   /// 未入库的先入库——进度、已读标记、下载任务都按 bookKey 记，没有行就无处可落。
   Future<void> _openChapterAt(int index) async {
-    // 未入库的本地扫描结果：ticket 04 只提供显式「加入书架」；点章节静默登记
-    // 并开读属于 ticket 05。
-    if (_isScannedLocal) return;
+    // 未入库的本地扫描结果：点章节 = 用户显式选择该作品。先静默登记（进度 /
+    // 历史 / 已读标记都按 bookKey 记，没有行就无处可落），再按正常书架条目开读。
+    final LocalSourceManga? scanned = _scannedLocal;
+    if (scanned != null) {
+      if (_busy || index < 0 || index >= _localChapters.length) return;
+      setState(() => _busy = true);
+      try {
+        final String? bookKey = await _registerScannedLocal(scanned);
+        if (bookKey == null || !mounted) return;
+        await _openReader(bookKey, chapterIndex: index);
+        await _reloadAfterReading();
+      } finally {
+        if (mounted) setState(() => _busy = false);
+      }
+      return;
+    }
     // Local source：章节原地读取，不经过在线 service / 下载状态机。
     if (_isLocalSource) {
       final String? localBookKey = _bookKey;
