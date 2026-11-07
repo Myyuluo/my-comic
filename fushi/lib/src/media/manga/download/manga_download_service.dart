@@ -515,6 +515,7 @@ class MangaDownloadService {
 
     final _ChapterTarget target = await _prepareChapterTarget(
       job: job,
+      entry: entry,
       chapter: chapter,
       mangaDir: mangaDir,
     );
@@ -662,6 +663,7 @@ class MangaDownloadService {
       staging: staging,
       mangaDir: mangaDir,
       desiredFolderName: target.folderName,
+      qualifier: _chapterScanlatorQualifier(chapter),
     );
     // rename 成功后立刻落映射（中间没有取消检查：取消路径按映射删目录）。
     await _persistMapping(
@@ -672,41 +674,143 @@ class MangaDownloadService {
     await _markDone(job);
   }
 
+  /// 选一个章节目录名（不创建），并把「可认领的完整目录」与「必须避开」分开。
+  ///
+  /// 判定顺序：
+  /// 1. 数据库映射指向的目录若存在且**身份匹配**（pages.json 的 Source/Manga/
+  ///    Chapter 全对上）且完整 → 认领（进程在 rename 与落映射之间崩溃的续跑）。
+  /// 2. 否则扫描 manga 目录：任一同身份的完整目录也可认领。
+  /// 3. 其余一律视为已占用：同名不同章（哪怕大小写不同）、半成品、外来目录——
+  ///    绝不覆盖，按 `[扫译组]` / `(2)` 后缀另起目录。
   Future<_ChapterTarget> _prepareChapterTarget({
     required MangaDownloadJobRow job,
+    required OnlineMangaLibraryEntry entry,
     required OnlineMangaChapter chapter,
     required String mangaDir,
   }) async {
+    final Map<String, Directory> existing = await _existingChapterDirectories(
+      mangaDir,
+    );
     final MangaChapterDirRow? mapping = await _database.getMangaChapterDir(
       job.bookKey,
       job.chapterKey,
     );
-    final String base = _chapterFolderName(chapter);
-    final Set<String> tried = <String>{};
-    String desired = mapping?.folderName ?? base;
-    int suffix = 2;
-    while (true) {
-      if (!tried.add(desired)) {
-        desired = '$base ($suffix)';
-        suffix += 1;
-        continue;
+    final String base = _chapterBaseFolderName(chapter, mangaDir);
+    final String? qualifier = _chapterScanlatorQualifier(chapter);
+
+    if (mapping != null && mapping.folderName.isNotEmpty) {
+      final Directory? mapped = _findChapterDirectory(
+        existing,
+        mapping.folderName,
+      );
+      if (mapped == null) {
+        return _ChapterTarget(
+          folderName: mapping.folderName,
+          adoptedComplete: false,
+        );
       }
-      final Directory directory = downloadChapterDirectory(mangaDir, desired);
-      if (!await directory.exists()) {
-        return _ChapterTarget(folderName: desired, adoptedComplete: false);
+      if (await _chapterDirectoryBelongsTo(mapped, entry, chapter) &&
+          await isDownloadLibraryChapterComplete(mapped)) {
+        return _ChapterTarget(
+          folderName: p.basename(mapped.path),
+          adoptedComplete: true,
+        );
       }
-      if (await isDownloadLibraryChapterComplete(directory)) {
-        return _ChapterTarget(folderName: desired, adoptedComplete: true);
-      }
-      desired = '$base ($suffix)';
-      suffix += 1;
+      // 映射指向的目录是半成品或属于别的章：不动它，另起后缀目录。
     }
+
+    final List<String> names = existing.keys.toList()..sort();
+    for (final String name in names) {
+      final Directory directory = existing[name]!;
+      if (await _chapterDirectoryBelongsTo(directory, entry, chapter) &&
+          await isDownloadLibraryChapterComplete(directory)) {
+        return _ChapterTarget(
+          folderName: p.basename(directory.path),
+          adoptedComplete: true,
+        );
+      }
+    }
+
+    final String folderName = await uniqueDownloadLibraryFolderName(
+      base: base,
+      qualifier: qualifier,
+      isTaken: (String candidate) => _chapterNameTaken(mangaDir, candidate),
+      maxLength: downloadLibrarySegmentBudget(mangaDir),
+    );
+    return _ChapterTarget(folderName: folderName, adoptedComplete: false);
   }
 
-  /// 章目录名：章展示名；空名退回章 key。票 05 再补扫译组/序号后缀。
-  static String _chapterFolderName(OnlineMangaChapter chapter) {
+  /// 章目录基础名：章展示名（空名退回章 key），按剩余路径预算净化。
+  static String _chapterBaseFolderName(
+    OnlineMangaChapter chapter,
+    String mangaDir,
+  ) {
     final String name = chapter.name.trim();
-    return sanitizeDownloadLibrarySegment(name.isEmpty ? chapter.key : name);
+    return downloadChapterFolderName(
+      mangaDirPath: mangaDir,
+      raw: name.isEmpty ? chapter.key : name,
+    );
+  }
+
+  /// 同名章的优先区分后缀：扫译组；无扫译组时退回 `(2)` 序号。
+  static String? _chapterScanlatorQualifier(OnlineMangaChapter chapter) {
+    final String scanlator = chapter.scanlator?.trim() ?? '';
+    if (scanlator.isEmpty) return null;
+    return sanitizeDownloadLibrarySegment(scanlator, maxLength: 32);
+  }
+
+  /// 章目录 `<mangaDir>/<name>`；只认目录，且忽略点号目录（`.staging`）。
+  static Future<Map<String, Directory>> _existingChapterDirectories(
+    String mangaDir,
+  ) async {
+    final Directory parent = Directory(mangaDir);
+    if (!await parent.exists()) return <String, Directory>{};
+    final Map<String, Directory> byLowerName = <String, Directory>{};
+    await for (final FileSystemEntity entity in parent.list(
+      followLinks: false,
+    )) {
+      if (entity is! Directory) continue;
+      final String name = p.basename(entity.path);
+      if (name.startsWith('.')) continue;
+      byLowerName[name.toLowerCase()] = entity;
+    }
+    return byLowerName;
+  }
+
+  static Directory? _findChapterDirectory(
+    Map<String, Directory> existing,
+    String name,
+  ) => existing[name.toLowerCase()];
+
+  /// 这个名字在 manga 目录里是否已被**任何条目**占用（文件也算，大小写不敏感）。
+  ///
+  /// 不用 `Directory.exists`：Windows 上大小写不敏感，非 Windows 上不敏感才是
+  /// 我们承诺的命名契约；文件占位时 rename 会失败，必须换后缀而不是覆盖。
+  static Future<bool> _chapterNameTaken(String mangaDir, String name) async {
+    final Directory parent = Directory(mangaDir);
+    if (!await parent.exists()) return false;
+    final String lower = name.toLowerCase();
+    await for (final FileSystemEntity entity in parent.list(
+      followLinks: false,
+    )) {
+      if (p.basename(entity.path).toLowerCase() == lower) return true;
+    }
+    return false;
+  }
+
+  /// 目录里的 `pages.json` 是否就是这一章（Source/Manga/Chapter 全匹配）。
+  static Future<bool> _chapterDirectoryBelongsTo(
+    Directory directory,
+    OnlineMangaLibraryEntry entry,
+    OnlineMangaChapter chapter,
+  ) async {
+    final MangaPagesManifest? manifest = await readPagesManifest(directory);
+    return manifest != null &&
+        manifest.sourceRuntime == entry.runtime.wireValue &&
+        manifest.extensionPackage == entry.extensionPackage &&
+        manifest.sourceId == entry.sourceId &&
+        manifest.mangaKey == entry.series.key &&
+        manifest.chapterKey == chapter.key;
   }
 
   /// 把 staging 目录整章 rename 到正式章目录；目标被占时用确定后缀，绝不覆盖。
@@ -714,22 +818,25 @@ class MangaDownloadService {
     required Directory staging,
     required String mangaDir,
     required String desiredFolderName,
+    String? qualifier,
   }) async {
-    String candidate = desiredFolderName;
-    int suffix = 2;
+    final int maxLength = downloadLibrarySegmentBudget(mangaDir);
     while (true) {
+      final String candidate = await uniqueDownloadLibraryFolderName(
+        base: desiredFolderName,
+        qualifier: qualifier,
+        isTaken: (String name) => _chapterNameTaken(mangaDir, name),
+        maxLength: maxLength,
+      );
       final Directory target = downloadChapterDirectory(mangaDir, candidate);
-      if (!await target.exists()) {
-        try {
-          await staging.rename(target.path);
-          await _cleanupStagingParent(staging);
-          return candidate;
-        } on FileSystemException {
-          if (!await target.exists()) rethrow;
-        }
+      if (await target.exists()) continue;
+      try {
+        await staging.rename(target.path);
+        await _cleanupStagingParent(staging);
+        return candidate;
+      } on FileSystemException {
+        if (!await target.exists()) rethrow;
       }
-      candidate = '$desiredFolderName ($suffix)';
-      suffix += 1;
     }
   }
 

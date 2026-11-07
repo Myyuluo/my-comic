@@ -107,8 +107,114 @@ void main() {
     );
     expect(sanitizeDownloadLibrarySegment('   '), '_');
     expect(sanitizeDownloadLibrarySegment('...'), '_');
-    // 票 05 的保留名/超长/冲突不在本票处理；这里只钉基础行为存在。
-    expect(sanitizeDownloadLibrarySegment('CON'), 'CON');
+  });
+
+  test('Windows 保留名加前缀，尾随空格/点清理后仍合法', () {
+    expect(sanitizeDownloadLibrarySegment('CON'), '_CON');
+    expect(sanitizeDownloadLibrarySegment('nul.txt'), '_nul.txt');
+    expect(sanitizeDownloadLibrarySegment('COM1'), '_COM1');
+    expect(sanitizeDownloadLibrarySegment('LPT9'), '_LPT9');
+    expect(sanitizeDownloadLibrarySegment('CONSOLE'), 'CONSOLE');
+    expect(sanitizeDownloadLibrarySegment('CON (1)'), 'CON (1)');
+    expect(sanitizeDownloadLibrarySegment('Series. . '), 'Series');
+    expect(sanitizeDownloadLibrarySegment('Series .'), 'Series');
+    // 点号开头的目录会被扫描/重建忽略（与 .staging 同规则），用户内容不能躲进去。
+    expect(sanitizeDownloadLibrarySegment('.hidden'), '_.hidden');
+    expect(sanitizeDownloadLibrarySegment('.staging'), '_.staging');
+  });
+
+  test('超长段截断 + 短哈希：确定、不超上限、不同全名不碰撞', () {
+    final String longA = 'A' * 300;
+    final String longB = '${'A' * 299}B';
+    final String a = sanitizeDownloadLibrarySegment(longA);
+    final String b = sanitizeDownloadLibrarySegment(longB);
+
+    expect(a.length, lessThanOrEqualTo(kDownloadLibraryMaxSegmentLength));
+    expect(a, matches(RegExp(r'~[0-9a-f]{8}$')));
+    expect(b, matches(RegExp(r'~[0-9a-f]{8}$')));
+    expect(a, isNot(b), reason: '共享超长前缀也必须得到不同目录名');
+    expect(
+      sanitizeDownloadLibrarySegment(longA),
+      a,
+      reason: '同一输入必须每次得到同一名字',
+    );
+  });
+
+  test('路径预算：深层 root + 超长 source/manga/chapter 仍不超过上限', () {
+    final String deepRoot = p.join(root.path, 'a' * 40, 'b' * 40);
+    final Directory mangaDir = downloadMangaDirectory(
+      downloadsRoot: deepRoot,
+      sourceName: 'S' * 300,
+      mangaTitle: 'M' * 300,
+    );
+    expect(
+      mangaDir.path.length,
+      lessThanOrEqualTo(
+        kDownloadLibraryMaxPathLength - kDownloadLibraryStagingPathReserve,
+      ),
+      reason: 'manga 目录要给 .staging/<jobId>/<page> 留出路径预算',
+    );
+    expect(p.basename(mangaDir.parent.path), startsWith('S'));
+    expect(p.basename(mangaDir.path), startsWith('M'));
+
+    final String chapterName = downloadChapterFolderName(
+      mangaDirPath: mangaDir.path,
+      raw: 'C' * 300,
+    );
+    final String chapterPath = downloadChapterDirectory(
+      mangaDir.path,
+      chapterName,
+    ).path;
+    expect(
+      chapterPath.length,
+      lessThanOrEqualTo(kDownloadLibraryMaxPathLength),
+    );
+    expect(p.basename(chapterPath), startsWith('C'));
+    final String jobId = 'f' * 32; // MangaDownloadService 的 jobId 长度
+    expect(
+      p.join(
+        mangaDir.path,
+        kDownloadStagingDirName,
+        jobId,
+        '${downloadPageFileName(0, '.jpg')}.tmp',
+      ).length,
+      lessThanOrEqualTo(kDownloadLibraryMaxPathLength),
+    );
+  });
+
+  test('同名候选使用确定后缀：base → base [扫译组] → base [扫译组] (2)', () async {
+    final Set<String> taken = <String>{'chapter 1'};
+    Future<bool> isTaken(String candidate) async =>
+        taken.contains(candidate.toLowerCase());
+
+    expect(
+      await uniqueDownloadLibraryFolderName(
+        base: 'Chapter 1',
+        qualifier: 'Group B',
+        isTaken: isTaken,
+      ),
+      'Chapter 1 [Group B]',
+    );
+
+    taken.add('chapter 1 [group b]');
+    expect(
+      await uniqueDownloadLibraryFolderName(
+        base: 'Chapter 1',
+        qualifier: 'Group B',
+        isTaken: isTaken,
+      ),
+      'Chapter 1 [Group B] (2)',
+    );
+
+    taken.add('chapter 1 (2)');
+    expect(
+      await uniqueDownloadLibraryFolderName(
+        base: 'Chapter 1',
+        isTaken: isTaken,
+      ),
+      'Chapter 1 (3)',
+      reason: '没有扫译组时直接从 (2) 起编号，并跳过已占用的大小写变体',
+    );
   });
 
   test('staging 是 manga 目录下的点号目录', () {
