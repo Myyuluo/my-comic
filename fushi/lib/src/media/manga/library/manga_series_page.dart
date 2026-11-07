@@ -40,6 +40,7 @@ import 'package:fushi/src/utils/components/fushi_staggered_entrance.dart';
 import 'package:fushi/src/utils/fushi_icons.dart';
 import 'package:fushi/src/utils/misc/error_details_dialog.dart';
 import 'package:fushi/utils.dart';
+import 'package:fushi_engine/media/manga/local_source/local_source_layout.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_library.dart';
 import 'package:fushi_engine/sync/deletion_propagation.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -149,6 +150,10 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
   LocalSourceMetadata? _localSource;
   List<LocalSourceChapterRecord> _localChapters =
       const <LocalSourceChapterRecord>[];
+
+  /// Local source 作品目录已不在当前 `localcomic` 根内（典型：切换 Content root
+  /// 后库里仍记着旧根）。这些章显示为 Missing，阅读入口拒绝回读旧路径。
+  Set<String> _localMissingChapterKeys = const <String>{};
 
   OnlineMangaLibraryService? _service;
   OnlineMangaRuntimeAdapter? _adapter;
@@ -327,7 +332,32 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     final EpubBookRow? row = _row;
     final OnlineMangaLibraryEntry? entry = _entry;
     final AppModel? appModel = _appModelOrNull;
-    if (row == null || entry == null || appModel == null) return;
+    if (row == null || appModel == null) return;
+
+    // Local source（ADR 0013）：作品目录必须仍在**当前** `localcomic` 根内。
+    // 切换 Content root 后库里的旧路径不重基，这里把整部作品的章标成 Missing，
+    // 不再从旧根读取。
+    if (_isLocalSource) {
+      final bool missing =
+          !isLocalSourcePathWithinRoot(
+            row.extractDir,
+            appModel.appPaths.localComicRoot,
+          ) ||
+          !await Directory(row.extractDir).exists();
+      final Set<String> next = missing
+          ? _localChapters.map((LocalSourceChapterRecord c) => c.key).toSet()
+          : const <String>{};
+      if (!mounted) return;
+      final bool changed =
+          _localMissingChapterKeys.length != next.length ||
+          !_localMissingChapterKeys.containsAll(next);
+      if (changed) {
+        setState(() => _localMissingChapterKeys = next);
+      }
+      return;
+    }
+
+    if (entry == null) return;
     final MangaDownloadService downloads = appModel.mangaDownloadService;
     _jobsWatch ??= downloads.watchJobs().listen(
       (_) => unawaited(_refreshDownloadState()),
@@ -342,11 +372,11 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     final Map<String, MangaDownloadJobRow> jobs = await downloads.jobsForBook(
       row.bookKey,
     );
-    final Set<String> downloaded =
-        await DownloadLibraryIndex(appModel.database).downloadedChapterKeys(
-      row.bookKey,
-      entry.chapters.map((OnlineMangaChapter chapter) => chapter.key),
-    );
+    final Set<String> downloaded = await DownloadLibraryIndex(appModel.database)
+        .downloadedChapterKeys(
+          row.bookKey,
+          entry.chapters.map((OnlineMangaChapter chapter) => chapter.key),
+        );
     if (!mounted) return;
     setState(() {
       _jobs = jobs;
@@ -391,11 +421,9 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     final EpubBookRow? row = _row;
     final AppModel? appModel = _appModelOrNull;
     if (row == null || appModel == null) return;
-    final MangaChapterContainer? container =
-        await DownloadLibraryIndex(appModel.database).resolveChapter(
-      bookKey: row.bookKey,
-      chapterKey: chapter.key,
-    );
+    final MangaChapterContainer? container = await DownloadLibraryIndex(
+      appModel.database,
+    ).resolveChapter(bookKey: row.bookKey, chapterKey: chapter.key);
     if (container == null) {
       if (mounted) {
         FushiToast.show(
@@ -434,10 +462,9 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     );
     if (!confirmed || !mounted) return;
     try {
-      await DownloadLibraryIndex(appModel.database).deleteChapter(
-        bookKey: row.bookKey,
-        chapterKey: chapter.key,
-      );
+      await DownloadLibraryIndex(
+        appModel.database,
+      ).deleteChapter(bookKey: row.bookKey, chapterKey: chapter.key);
       // Ticket 02：done 任务行是「这章曾经下载过」的持久标记。用户主动删除
       // 下载时必须一起清掉，否则磁盘判据变 false、任务仍 done → 被误显示成
       // Missing。缺失文件本身（便携拷贝没带 content）不走这里，保留 Missing。
@@ -1275,11 +1302,11 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
       // 直读（2026-09-26 用户撤回设计稿 §1.1）。锁章（源标了要登录 / 购买）照旧
       // 先问：弹窗的出口是「仍然下载」/「登录」，选下载就入队、不开读。
       final AppModel? appModel = _appModelOrNull;
-      final bool downloaded = appModel != null &&
-          await DownloadLibraryIndex(appModel.database).isChapterDownloaded(
-            bookKey: bookKey,
-            chapterKey: chapter.key,
-          );
+      final bool downloaded =
+          appModel != null &&
+          await DownloadLibraryIndex(
+            appModel.database,
+          ).isChapterDownloaded(bookKey: bookKey, chapterKey: chapter.key);
       if (chapter.locked && !downloaded) {
         if (await _promptLockedChapter(chapter)) {
           await _enqueueChapter(chapter);
@@ -1585,6 +1612,9 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
                     .map((LocalSourceChapterRecord chapter) => chapter.key)
                     .toSet()
               : _downloaded,
+          missingChapterKeys: _isLocalSource
+              ? _localMissingChapterKeys
+              : const <String>{},
           jobsByChapterKey: _jobs,
           languageScope: _languageScope,
           onSiblingSourceTap: (OnlineMangaSiblingSource sibling) =>

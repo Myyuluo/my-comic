@@ -6,6 +6,7 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:fushi/src/media/manga/download/download_library_index.dart';
+import 'package:fushi/src/media/manga/library/manga_chapter_download_state.dart';
 import 'package:fushi/src/media/manga/library/manga_chapter_storage.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi_engine/epub/epub_storage.dart';
@@ -54,25 +55,25 @@ void main() {
   });
 
   MangaPagesManifest manifestFor(String chapterKey) => MangaPagesManifest(
-        sourceRuntime: 'mihon',
-        sourceId: '1',
-        sourceName: 'Example Source',
-        extensionPackage: 'org.example.fixture',
-        mangaKey: '/series/fixture',
-        mangaTitle: 'Fixture series',
-        chapterKey: chapterKey,
-        chapterName: 'Chapter 1',
-        payload: const MokuroPayload(
-          images: <MokuroImage>[
-            MokuroImage(
-              url: '001.jpg',
-              size: MokuroSize(100, 150),
-              blocks: <MokuroBlock>[],
-            ),
-          ],
+    sourceRuntime: 'mihon',
+    sourceId: '1',
+    sourceName: 'Example Source',
+    extensionPackage: 'org.example.fixture',
+    mangaKey: '/series/fixture',
+    mangaTitle: 'Fixture series',
+    chapterKey: chapterKey,
+    chapterName: 'Chapter 1',
+    payload: const MokuroPayload(
+      images: <MokuroImage>[
+        MokuroImage(
+          url: '001.jpg',
+          size: MokuroSize(100, 150),
+          blocks: <MokuroBlock>[],
         ),
-        downloadedAt: DateTime.utc(2026, 11, 7),
-      );
+      ],
+    ),
+    downloadedAt: DateTime.utc(2026, 11, 7),
+  );
 
   Future<Directory> writeNewLayoutChapter(String folderName) async {
     final Directory chapterDir = downloadChapterDirectory(mangaDir, folderName);
@@ -175,6 +176,79 @@ void main() {
     expect(
       await index.isChapterDownloaded(bookKey: bookKey, chapterKey: '/c/1'),
       isTrue,
+    );
+  });
+
+  test('切换 Content root 后旧根下的下载不再被读取，状态为 Missing', () async {
+    // 当前 Content root 的 Download library 是 `<root>/downloads`（见 setUp）。
+    // 旧根是切换前的 Content root：库里的 extract_dir 仍指向它（switch 不重基）。
+    final Directory oldRoot = Directory(p.join(root.path, 'OldContent'));
+    final String oldMangaDir = p.join(
+      oldRoot.path,
+      'downloads',
+      'Example Source',
+      'Fixture series',
+    );
+    final Directory oldChapterDir = downloadChapterDirectory(
+      oldMangaDir,
+      'Chapter 1',
+    );
+    await oldChapterDir.create(recursive: true);
+    final File oldPage = File(p.join(oldChapterDir.path, '001.jpg'));
+    await oldPage.writeAsBytes(<int>[1]);
+    await writePagesManifestAtomically(oldChapterDir, manifestFor('/c/1'));
+    await db.customStatement(
+      'UPDATE epub_books SET extract_dir = ? WHERE book_key = ?',
+      <Object?>[oldMangaDir, bookKey],
+    );
+    await db.upsertMangaChapterDir(
+      bookKey: bookKey,
+      chapterKey: '/c/1',
+      folderName: 'Chapter 1',
+      updatedAt: 1,
+    );
+
+    final DownloadLibraryIndex index = DownloadLibraryIndex(db);
+
+    expect(
+      await index.resolveChapter(bookKey: bookKey, chapterKey: '/c/1'),
+      isNull,
+      reason: '旧 Content root 下的章容器不得再被定位',
+    );
+    expect(
+      await index.isChapterDownloaded(bookKey: bookKey, chapterKey: '/c/1'),
+      isFalse,
+      reason: '磁盘判据只看当前 Content root',
+    );
+    expect(
+      await index.downloadedChapterKeys(bookKey, <String>['/c/1']),
+      isEmpty,
+    );
+    // 旧文件原地保留——切换既不搬移也不删除。
+    expect(oldPage.existsSync(), isTrue);
+
+    final MangaDownloadJobRow doneJob = MangaDownloadJobRow(
+      jobId: 'job-1',
+      kind: MangaDownloadJobKind.chapter,
+      bookKey: bookKey,
+      chapterKey: '/c/1',
+      runtime: 'mihon',
+      title: 'Fixture series',
+      chapterTitle: 'Chapter 1',
+      status: MangaDownloadJobStatus.done,
+      pagesDone: 1,
+      pagesTotal: 1,
+      attemptCount: 1,
+      lastError: null,
+      autoOcr: false,
+      createdAt: 1,
+      updatedAt: 1,
+      completedAt: 1,
+    );
+    expect(
+      mangaChapterDownloadState(downloaded: false, job: doneJob),
+      MangaChapterDownloadState.missing,
+      reason: 'done 任务 + 当前根下找不到文件 = Missing',
     );
   });
 

@@ -12,9 +12,13 @@ library;
 import 'dart:io';
 
 import 'package:fushi_core/fushi_core.dart';
+import 'package:fushi_engine/epub/epub_storage.dart';
 import 'package:fushi_engine/media/manga/download_library_storage.dart';
 import 'package:fushi_engine/media/manga/manga_chapter_storage.dart';
 import 'package:fushi_engine/media/manga/manga_storage.dart';
+import 'package:path/path.dart' as p;
+
+import 'package:fushi/src/storage/app_paths.dart';
 
 /// 一个已定位的章节载体。
 class MangaChapterContainer {
@@ -55,16 +59,28 @@ class DownloadLibraryIndex {
   }) async {
     final EpubBookRow? row = await database.getEpubBook(bookKey);
     if (row == null) return null;
+    // Ticket 08：库里的章节路径记录切换 Content root 时**不重基**。解析时必须
+    // 确认记录的漫画目录仍在**当前** Content root 的 Download library 下；指向
+    // 旧根的记录一律视为找不到文件（Missing），绝不回头读旧路径。
+    final String downloadsRoot = p.canonicalize((await _downloadsRoot()).path);
+    final String recordedMangaDir = p.canonicalize(row.extractDir);
+    final bool withinCurrentRoot =
+        p.equals(downloadsRoot, recordedMangaDir) ||
+        p.isWithin(downloadsRoot, recordedMangaDir);
     final MangaChapterDirRow? mapping = await database.getMangaChapterDir(
       bookKey,
       chapterKey,
     );
-    if (mapping != null) {
+    if (mapping != null && withinCurrentRoot) {
       final Directory directory = downloadChapterDirectory(
         row.extractDir,
         mapping.folderName,
       );
-      if (await directory.exists()) {
+      final String canonicalDirectory = p.canonicalize(directory.path);
+      final bool withinMangaDir =
+          p.equals(p.canonicalize(row.extractDir), canonicalDirectory) ||
+          p.isWithin(p.canonicalize(row.extractDir), canonicalDirectory);
+      if (withinMangaDir && await directory.exists()) {
         return MangaChapterContainer(
           directory: directory,
           manifestFile: downloadPagesManifestFile(directory),
@@ -74,6 +90,7 @@ class DownloadLibraryIndex {
       }
     }
     // 票 01 的旧哈希布局：`<content>/fushi_books/<bookKey>/chapters/<digest>`。
+    // 路径由 EpubStorage 解析，天然只指向**当前** Content root。
     final Directory legacyDirectory = mangaChapterDirectory(
       await MangaStorage.bookPath(bookKey),
       chapterKey,
@@ -87,6 +104,18 @@ class DownloadLibraryIndex {
       );
     }
     return null;
+  }
+
+  /// 当前 Content root 下的 Download library 根。
+  ///
+  /// 与 `OnlineMangaLibraryService._downloadsRoot` 同一条测试缝：`EpubStorage` 测试根是
+  /// `<tmp>/fushi_books`，Download library 派生到同级 `<tmp>/downloads`。
+  Future<Directory> _downloadsRoot() async {
+    final String? legacyBase = EpubStorage.debugBaseDirectoryOverridePath;
+    if (legacyBase != null) {
+      return Directory(p.join(p.dirname(legacyBase), 'downloads'));
+    }
+    return AppPaths.downloadsRootDirectory();
   }
 
   /// 这一章是否**完整**下载（容器存在且 manifest + 全部页文件齐）。

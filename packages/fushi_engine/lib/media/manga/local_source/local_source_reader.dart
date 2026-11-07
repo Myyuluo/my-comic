@@ -52,10 +52,18 @@ abstract final class LocalSourceReader {
     required FushiDatabase db,
     required String bookKey,
     required int chapterIndex,
+    Directory? localSourceRoot,
   }) async {
     final EpubBookRow? row = await db.getEpubBook(bookKey);
     if (row == null) return null;
     if (LocalSourceMetadata.tryParse(row.sourceMetadata) == null) return null;
+    // Ticket 08：切换 Content root 后库里的 extractDir 仍指向旧根（switch 不重基
+    // 路径）。调用方给了当前 Local source root 时，旧根下的作品一律视为 Missing，
+    // 绝不回读旧路径。
+    if (localSourceRoot != null &&
+        !isLocalSourcePathWithinRoot(row.extractDir, localSourceRoot)) {
+      return null;
+    }
     final List<LocalSourceChapterRecord> chapters = decodeLocalSourceChapters(
       row.chaptersJson,
     );

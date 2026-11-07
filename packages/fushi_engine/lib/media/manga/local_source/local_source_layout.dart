@@ -135,6 +135,18 @@ class LocalSourceManga {
   );
 }
 
+/// [path] 是否等于 [root] 或位于 [root] 之下（Local source 原地读取的边界）。
+///
+/// 路径比较先规范化（Windows 大小写不敏感由 package:path 的平台语义负责）。
+/// 用途：切换 Content root 后，库里记录的旧作品目录不再是当前 Local source root
+/// 的一部分——读取入口据此拒绝回读旧路径，把作品当作 Missing。
+bool isLocalSourcePathWithinRoot(String path, Directory root) {
+  final String canonicalRoot = p.canonicalize(root.path);
+  final String canonicalPath = p.canonicalize(path);
+  return p.equals(canonicalRoot, canonicalPath) ||
+      p.isWithin(canonicalRoot, canonicalPath);
+}
+
 /// 扫描 Local source root 的**第一层目录**为作品。
 ///
 /// 不递归到更深层找作品；根下散落的文件、点目录（`.staging` 等）忽略。没有页图

@@ -209,27 +209,30 @@ void main() {
       expect(src.contains('Future<void> restartApp() async {}'), isFalse);
     });
 
-    test('data-root settings widget wires migrator + close + restart', () {
-      final String src = readSource(
+    test('ticket 08: settings page no longer wires the old migrator', () {
+      final String dataRootPart = readSource(
         'lib/src/sync/sync_settings_schema/data_root.part.dart',
       ).readAsStringSync();
-      // Triggers the already-implemented migration engine.
-      expect(src.contains('DataRootMigrator().migrate('), isTrue);
-      // Injects real resource closers: audio stop, dict FFI dispose, DB close.
-      expect(src.contains('audiobookSession.stop()'), isTrue);
-      expect(src.contains('FushiDicts.disposeInstance()'), isTrue);
-      expect(src.contains('closeDatabase()'), isTrue);
-      expect(src.contains('wal_checkpoint(TRUNCATE)'), isTrue);
-      // TODO-935：迁移前也释放图片缓存句柄（封面/缩略图解码），减少数据根文件锁。
-      expect(src.contains('PaintingBinding.instance.imageCache'), isTrue);
-      expect(src.contains('clearLiveImages()'), isTrue);
-      // Writes the data_root pref via the canonical key.
-      expect(src.contains('AppPaths.dataRootPrefKey'), isTrue);
-      // Auto-restarts after a successful migration.
-      expect(src.contains('restartApp()'), isTrue);
-      // 「必须标注实验性」这条断言已删除：应用户要求，实验性标注整体从界面移除
-      // （settings_experimental_suffix key 连同它的四个叠加点一并删掉）。
-      // 反向守卫见 test/i18n/no_experimental_labels_guard_test.dart。
+      // 旧「数据存储位置」设置行（整目录迁移入口）已移除。
+      expect(dataRootPart.contains('_DataRootWidget'), isFalse);
+      // 迁移引擎本身仍由控制通道 `storage migrate` 使用。
+      expect(dataRootPart.contains('DataRootMigrator().migrate('), isTrue);
+      expect(dataRootPart.contains('audiobookSession.stop()'), isTrue);
+      expect(dataRootPart.contains('FushiDicts.disposeInstance()'), isTrue);
+      expect(dataRootPart.contains('closeDatabase()'), isTrue);
+      expect(dataRootPart.contains('wal_checkpoint(TRUNCATE)'), isTrue);
+      expect(
+        dataRootPart.contains('PaintingBinding.instance.imageCache'),
+        isTrue,
+      );
+      expect(dataRootPart.contains('clearLiveImages()'), isTrue);
+      expect(dataRootPart.contains('restartApp()'), isTrue);
+
+      final String schema = readSource(
+        'lib/src/sync/sync_settings_schema.dart',
+      ).readAsStringSync();
+      expect(schema.contains('buildDataStorageLocationSection'), isFalse);
+      expect(schema.contains("'sync.data_storage_location'"), isFalse);
     });
 
     test(
@@ -295,11 +298,11 @@ void main() {
       },
     );
 
-    test('data-root entry has one home in storage and remains expanded', () {
+    test('content-root section has one home and remains expanded', () {
       final SettingsDestination storage = buildStorageDestination();
       final SettingsSection section = storage.sections.singleWhere(
         (SettingsSection s) => s.items.any(
-          (SettingsItem item) => item.id == 'sync.data_storage_location',
+          (SettingsItem item) => item.id == 'storage.content_root',
         ),
       );
       expect(section.id, 'storage.location.section');
@@ -307,49 +310,30 @@ void main() {
       expect(
         buildSystemDestination().sections
             .expand((SettingsSection s) => s.items)
-            .where(
-              (SettingsItem item) => item.id == 'sync.data_storage_location',
-            ),
+            .where((SettingsItem item) => item.id == 'storage.content_root'),
         isEmpty,
       );
     });
 
-    test('data-storage section is gated desktop-only', () {
+    test('storage-location section is gated desktop-only', () {
       final String src = readSource(
-        'lib/src/sync/sync_settings_schema.dart',
+        'lib/src/settings/settings_schema_storage_locations.dart',
       ).readAsStringSync();
-      expect(src.contains("id: 'sync.data_storage_location'"), isTrue);
-      expect(src.contains('_DataRootWidget(settingsContext: ctx)'), isTrue);
-      // The section + item both gate on isDesktopPlatform so mobile never sees
-      // a control it cannot honor (sandbox-fixed roots).
+      expect(src.contains("id: 'storage.content_root'"), isTrue);
       expect(
         src.contains('visible: (SettingsContext ctx) => isDesktopPlatform'),
         isTrue,
       );
     });
 
-    test(
-      'TODO-1211: default location shows the real path, no prefix label',
-      () {
-        final String src = readSource(
-          'lib/src/sync/sync_settings_schema/data_root.part.dart',
-        ).readAsStringSync();
-        // 未迁移（默认根）分支直接返回真实路径，仅 late 未初始化时才回退到标签。
-        expect(
-          src.contains(
-            'return defaultRootPath ?? t.data_storage_location_default;',
-          ),
-          isTrue,
-        );
-        // 不再拼「默认位置 - 路径」前缀（旧实现）。
-        expect(
-          src.contains(
-            r"'${t.data_storage_location_default} - $defaultRootPath'",
-          ),
-          isFalse,
-          reason: 'TODO-1211：去掉「默认位置」前缀，直接显示实际路径',
-        );
-      },
-    );
+    test('ticket 08: storage page switches Content root, not migrate', () {
+      final String src = readSource(
+        'lib/src/settings/settings_schema_storage_locations.dart',
+      ).readAsStringSync();
+      expect(src.contains('ContentRootSwitch('), isTrue);
+      expect(src.contains('DataRootMigrator'), isFalse);
+      expect(src.contains('runDataRootMigration'), isFalse);
+      expect(src.contains('data_storage_change_confirm'), isFalse);
+    });
   });
 }

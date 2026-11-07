@@ -1559,6 +1559,7 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
           db: appModel.database,
           bookKey: row.bookKey,
           chapterIndex: chapterIndex,
+          localSourceRoot: appModel.appPaths.localComicRoot,
         );
     if (!mounted) return;
     if (resolved == null) {
@@ -2040,7 +2041,8 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
       bookKey: row.bookKey,
       chapterKey: chapter.key,
     );
-    final Directory chapterDir = container?.directory ??
+    final Directory chapterDir =
+        container?.directory ??
         downloadChapterDirectory(
           row.extractDir,
           downloadChapterFolderName(
@@ -2295,10 +2297,9 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
         chapterKey == null) {
       return;
     }
-    if (!await DownloadLibraryIndex(appModel.database).isChapterDownloaded(
-      bookKey: row.bookKey,
-      chapterKey: chapterKey,
-    )) {
+    if (!await DownloadLibraryIndex(
+      appModel.database,
+    ).isChapterDownloaded(bookKey: row.bookKey, chapterKey: chapterKey)) {
       return;
     }
     if (!mounted || !_chapterNotDownloaded) return;
@@ -2986,10 +2987,9 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
       final OnlineMangaChapter next = entry.chapters[target];
       // 锁定章入队必败（要登录购买），预下载不替用户去撞。
       if (next.locked) return;
-      if (await DownloadLibraryIndex(appModel.database).isChapterDownloaded(
-        bookKey: row.bookKey,
-        chapterKey: next.key,
-      )) {
+      if (await DownloadLibraryIndex(
+        appModel.database,
+      ).isChapterDownloaded(bookKey: row.bookKey, chapterKey: next.key)) {
         return;
       }
       // 已有任务行就不动：排队 / 下载中本来就会下完；失败 / 已取消是用户看得见
@@ -3953,11 +3953,11 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
     final Map<String, MangaChapterStateRow> states = row.uid.isEmpty
         ? const <String, MangaChapterStateRow>{}
         : await appModel.database.getMangaChapterStates(row.uid);
-    final Set<String> downloaded =
-        await DownloadLibraryIndex(appModel.database).downloadedChapterKeys(
-      row.bookKey,
-      entry.chapters.map((OnlineMangaChapter chapter) => chapter.key),
-    );
+    final Set<String> downloaded = await DownloadLibraryIndex(appModel.database)
+        .downloadedChapterKeys(
+          row.bookKey,
+          entry.chapters.map((OnlineMangaChapter chapter) => chapter.key),
+        );
     if (!mounted) return;
     // 左侧侧栏（对齐 Mihon / Mangatan 的章节抽屉）；设置面板固定在右侧，两者
     // 不抢同一条边。
@@ -4422,7 +4422,7 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
     // 读章时 [_bookRow] 指向章目录副本；存图仍落在漫画根（数据库行是权威）。
     final String root =
         (await appModel.database.getEpubBook(row.bookKey))?.extractDir ??
-            row.extractDir;
+        row.extractDir;
     final String chapter = _shelfChapterKey ?? 'chapter';
     final String book = safeWindowsFileName(row.title);
     final String savePath = switch (_saveDirectory) {
