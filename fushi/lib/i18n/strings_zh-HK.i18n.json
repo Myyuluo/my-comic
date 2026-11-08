@@ -3962,6 +3962,8 @@
   "local_audio_reference_unavailable": "所選檔案是暫存副本，已改為匯入永久副本。",
   "local_audio_source_order_title": "來源優先順序",
   "local_audio_source_reorder_tooltip": "Drag or tap to reorder",
+  "local_source_batch_add_done": "已加入書架 $success 部，失敗 $failed 部。",
+  "local_source_batch_remove_done": "已移出書架 $success 部，失敗 $failed 部。",
   "local_source_empty": "尚未發現任何漫畫",
   "local_source_filter_all": "全部",
   "local_source_filter_in_library": "已入架",
