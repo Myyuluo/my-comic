@@ -1063,9 +1063,7 @@ class _OnlineCtl {
     _requireMangaDownloads();
     final String id = call.params['id']!;
     final MangaDownloadJobRow row = await _requireMangaJob(id);
-    if (row.status != MangaDownloadJobStatus.queued &&
-        row.status != MangaDownloadJobStatus.running &&
-        row.status != MangaDownloadJobStatus.paused) {
+    if (!MangaDownloadJobStatus.isActive(row.status)) {
       throw CtlFailure.conflict('任务已结束，不能取消（当前：${row.status}）');
     }
     await appModel.mangaDownloadService.cancel(id);
@@ -1080,8 +1078,7 @@ class _OnlineCtl {
     _requireMangaDownloads();
     final String id = call.params['id']!;
     final MangaDownloadJobRow row = await _requireMangaJob(id);
-    if (row.status != MangaDownloadJobStatus.failed &&
-        row.status != MangaDownloadJobStatus.cancelled) {
+    if (!MangaDownloadJobStatus.isRetryable(row.status)) {
       throw CtlFailure.conflict('只有失败 / 已取消的任务能重试（当前：${row.status}）');
     }
     await appModel.mangaDownloadService.retry(id);

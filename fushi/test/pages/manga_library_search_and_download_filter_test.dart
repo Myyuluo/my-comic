@@ -4,8 +4,10 @@
 // 同源）：真实 37 表内存库 + 真实漫画书架 `ReaderFushiHistoryPage(mangaOnly:
 // true)`，书架列表 provider 覆写成受控 MediaItem 列表。断言只落在用户可见结果
 // 上：网格里出现哪些卡、页签上的数量、排序与筛选菜单里点选的结果。
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:archive/archive.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter/services.dart';
@@ -525,7 +527,11 @@ void main() {
       p.join(contentRoot.path, 'local', 'Missing'),
     );
     await tester.runAsync(() async {
-      await localPresent.create(recursive: true);
+      // 本地图源「已下载」= 至少一章真的读得出来：给存在的那本放一章页图。
+      await Directory(p.join(localPresent.path, 'vol1')).create(recursive: true);
+      await File(
+        p.join(localPresent.path, 'vol1', '001.jpg'),
+      ).writeAsBytes(<int>[1]);
       await seedOnlineManga(
         bookKey: 'm1',
         title: '完整下载',
@@ -588,7 +594,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(mangaCard('m1'), findsOneWidget, reason: '完整落盘的在线漫画算已下载');
-    expect(mangaCard('m4'), findsOneWidget, reason: '本地图源目录存在算已下载');
+    expect(mangaCard('m4'), findsOneWidget, reason: '本地图源至少一章可读算已下载');
     expect(mangaCard('m2'), findsNothing, reason: 'Missing 不计为已下载');
     expect(mangaCard('m3'), findsNothing, reason: '半成品（无 pages.json）不算已下载');
     expect(mangaCard('m5'), findsNothing, reason: '本地图源目录不存在不算已下载');
@@ -624,7 +630,9 @@ void main() {
     );
     late int tagId;
     await tester.runAsync(() async {
-      await localDir.create(recursive: true);
+      // 本地图源「已下载」按可读章节判定：至少放一章页图。
+      await Directory(p.join(localDir.path, 'vol1')).create(recursive: true);
+      await File(p.join(localDir.path, 'vol1', '001.jpg')).writeAsBytes(<int>[1]);
       await seedOnlineManga(
         bookKey: 'm1',
         title: '下载的连载',
@@ -693,5 +701,164 @@ void main() {
     expect(countText(tester, 'shelf'), '0');
     expect(countText(tester, '$tagId'), '1', reason: '其他页签数量按当前筛选重算');
     expect(mangaCard('m3'), findsNothing, reason: 'm3 已下载，被「未下载」筛掉');
+  });
+
+  testWidgets('停留在书架：后台下载完成后「已下载」筛选与页签数量自动刷新', (
+    WidgetTester tester,
+  ) async {
+    await tester.runAsync(() async {
+      await seedOnlineManga(
+        bookKey: 'm1',
+        title: '后台下载',
+        chapters: <String>['/c/1'],
+      );
+    });
+    mangaItems.add(mangaItem('m1', '后台下载'));
+    await pumpShelf(tester, mangaItems);
+
+    expect(countText(tester, 'shelf'), '1');
+    await pickDownloadFilter(tester, 'downloaded');
+    expect(mangaCard('m1'), findsNothing, reason: '尚未下载时被「已下载」筛掉');
+    expect(countText(tester, 'shelf'), '0');
+
+    // 后台下载完成：章容器先落盘，任务行转 done（任务表通知触发书架重算）。
+    await tester.runAsync(() async {
+      await writeCompleteChapter('m1', chapterKey: '/c/1');
+      await db.upsertMangaDownloadJob(
+        MangaDownloadJobsCompanion(
+          jobId: const Value<String>('job_m1_c1'),
+          kind: const Value<String>(MangaDownloadJobKind.chapter),
+          bookKey: const Value<String>('m1'),
+          chapterKey: const Value<String>('/c/1'),
+          runtime: const Value<String>('mihon'),
+          title: const Value<String>('后台下载'),
+          chapterTitle: const Value<String>('/c/1'),
+          status: const Value<String>(MangaDownloadJobStatus.done),
+          pagesDone: const Value<int>(1),
+          pagesTotal: const Value<int>(1),
+          createdAt: const Value<int>(1),
+          updatedAt: const Value<int>(1),
+          completedAt: const Value<int>(1),
+        ),
+      );
+    });
+    await pumpRealAsync(tester);
+
+    expect(mangaCard('m1'), findsOneWidget, reason: '下载完成后筛选结果自动更新');
+    expect(countText(tester, 'shelf'), '1', reason: '页签数量同步刷新');
+
+    await pickDownloadFilter(tester, 'all');
+    expect(mangaCard('m1'), findsOneWidget);
+  });
+
+  testWidgets('本地图源「已下载」要求至少一章真的可读，目录存在不算', (
+    WidgetTester tester,
+  ) async {
+    final Directory rootChapter = Directory(
+      p.join(contentRoot.path, 'local', 'RootChapter'),
+    );
+    final Directory folderChapter = Directory(
+      p.join(contentRoot.path, 'local', 'FolderChapter'),
+    );
+    final Directory archiveChapter = Directory(
+      p.join(contentRoot.path, 'local', 'ArchiveChapter'),
+    );
+    final Directory coverOnly = Directory(
+      p.join(contentRoot.path, 'local', 'CoverOnly'),
+    );
+    final Directory emptyDir = Directory(
+      p.join(contentRoot.path, 'local', 'Empty'),
+    );
+    final Directory deletedChapter = Directory(
+      p.join(contentRoot.path, 'local', 'DeletedChapter'),
+    );
+    await tester.runAsync(() async {
+      // 单章：漫画目录本身直接含页图。
+      await rootChapter.create(recursive: true);
+      await File(p.join(rootChapter.path, '001.jpg')).writeAsBytes(<int>[1]);
+      // 文件夹章节：子目录含页图。
+      await Directory(
+        p.join(folderChapter.path, 'vol1'),
+      ).create(recursive: true);
+      await File(
+        p.join(folderChapter.path, 'vol1', '001.jpg'),
+      ).writeAsBytes(<int>[1]);
+      // CBZ 章节：包内有页图。
+      await archiveChapter.create(recursive: true);
+      final Archive archive = Archive();
+      final List<int> page = utf8.encode('page');
+      archive.addFile(ArchiveFile('001.jpg', page.length, page));
+      await File(
+        p.join(archiveChapter.path, 'vol1.cbz'),
+      ).writeAsBytes(ZipEncoder().encode(archive)!);
+      // 只有封面 / 空目录 / 章目录还在但页图删光：都不算可读。
+      await coverOnly.create(recursive: true);
+      await File(p.join(coverOnly.path, 'cover.jpg')).writeAsBytes(<int>[1]);
+      await emptyDir.create(recursive: true);
+      await Directory(
+        p.join(deletedChapter.path, 'vol1'),
+      ).create(recursive: true);
+      await File(
+        p.join(deletedChapter.path, 'vol1', 'notes.txt'),
+      ).writeAsString('not a page');
+
+      await seedLocalSourceManga(
+        bookKey: 'l1',
+        title: '单章目录',
+        extractDir: rootChapter.path,
+        chapterKeys: <String>['.'],
+      );
+      await seedLocalSourceManga(
+        bookKey: 'l2',
+        title: '文件夹章节',
+        extractDir: folderChapter.path,
+      );
+      await seedLocalSourceManga(
+        bookKey: 'l3',
+        title: '压缩包章节',
+        extractDir: archiveChapter.path,
+      );
+      await seedLocalSourceManga(
+        bookKey: 'l4',
+        title: '只有封面',
+        extractDir: coverOnly.path,
+      );
+      await seedLocalSourceManga(
+        bookKey: 'l5',
+        title: '空目录',
+        extractDir: emptyDir.path,
+      );
+      await seedLocalSourceManga(
+        bookKey: 'l6',
+        title: '页图已删',
+        extractDir: deletedChapter.path,
+      );
+    });
+    mangaItems.addAll(<MediaItem>[
+      mangaItem('l1', '单章目录'),
+      mangaItem('l2', '文件夹章节'),
+      mangaItem('l3', '压缩包章节'),
+      mangaItem('l4', '只有封面'),
+      mangaItem('l5', '空目录'),
+      mangaItem('l6', '页图已删'),
+    ]);
+    await pumpShelf(tester, mangaItems);
+
+    expect(countText(tester, 'shelf'), '6');
+    await pickDownloadFilter(tester, 'downloaded');
+    expect(mangaCard('l1'), findsOneWidget, reason: '单章 = 漫画目录本身，页图可读');
+    expect(mangaCard('l2'), findsOneWidget, reason: '章节目录里的页图可读');
+    expect(mangaCard('l3'), findsOneWidget, reason: 'CBZ 包内页图可读');
+    expect(mangaCard('l4'), findsNothing, reason: '只有封面不算一章');
+    expect(mangaCard('l5'), findsNothing, reason: '空目录不算已下载');
+    expect(mangaCard('l6'), findsNothing, reason: '章目录还在但页图删光不算已下载');
+    expect(countText(tester, 'shelf'), '3');
+
+    await pickDownloadFilter(tester, 'not_downloaded');
+    expect(mangaCard('l4'), findsOneWidget);
+    expect(mangaCard('l5'), findsOneWidget);
+    expect(mangaCard('l6'), findsOneWidget);
+    expect(mangaCard('l1'), findsNothing);
+    expect(countText(tester, 'shelf'), '3');
   });
 }

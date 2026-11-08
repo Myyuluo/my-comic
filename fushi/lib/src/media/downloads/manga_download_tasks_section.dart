@@ -53,9 +53,7 @@ class MangaDownloadTasksSection extends ConsumerStatefulWidget {
 /// 展示（作品页 Missing 判定需要它）；`cancelled` 是取消路径不再产生的遗留值，
 /// 也一并隐藏。
 const Set<String> _visibleJobStatuses = <String>{
-  MangaDownloadJobStatus.queued,
-  MangaDownloadJobStatus.running,
-  MangaDownloadJobStatus.paused,
+  ...MangaDownloadJobStatus.active,
   MangaDownloadJobStatus.failed,
 };
 
@@ -239,9 +237,7 @@ DownloadTaskEntry mangaDownloadTaskEntry(
     };
 
 bool _isFinished(MangaDownloadJobRow job) =>
-    job.status == MangaDownloadJobStatus.done ||
-    job.status == MangaDownloadJobStatus.failed ||
-    job.status == MangaDownloadJobStatus.cancelled;
+    MangaDownloadJobStatus.isTerminal(job.status);
 
 String _statusLabel(MangaDownloadJobRow job) => switch (job.status) {
       MangaDownloadJobStatus.queued => t.download_status_queued,

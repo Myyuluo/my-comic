@@ -78,26 +78,34 @@ void main() {
     WidgetTester tester, {
     required List<String> genres,
     ValueChanged<String>? onGenreTap,
+    int? maxGenres = 8,
+    bool useDefaultMaxGenres = false,
   }) async {
     await tester.binding.setSurfaceSize(const Size(800, 1200));
     addTearDown(() => tester.binding.setSurfaceSize(null));
+    const Widget cover = ColoredBox(
+      key: ValueKey<String>('cover'),
+      color: Colors.grey,
+    );
+    // useDefaultMaxGenres = 不传该参数，验证构造器的默认上限（其他作品页）。
+    final Widget header = useDefaultMaxGenres
+        ? OnlineWorkHeader(
+            cover: cover,
+            title: 'Work title',
+            genres: genres,
+            onGenreTap: onGenreTap,
+          )
+        : OnlineWorkHeader(
+            cover: cover,
+            title: 'Work title',
+            genres: genres,
+            maxGenres: maxGenres,
+            onGenreTap: onGenreTap,
+          );
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: ListView(
-            padding: EdgeInsets.zero,
-            children: <Widget>[
-              OnlineWorkHeader(
-                cover: const ColoredBox(
-                  key: ValueKey<String>('cover'),
-                  color: Colors.grey,
-                ),
-                title: 'Work title',
-                genres: genres,
-                onGenreTap: onGenreTap,
-              ),
-            ],
-          ),
+          body: ListView(padding: EdgeInsets.zero, children: <Widget>[header]),
         ),
       ),
     );
@@ -107,13 +115,34 @@ void main() {
     for (int i = 1; i <= 10; i++) 'Genre $i',
   ];
 
-  testWidgets('源分类全部渲染，不传回调时保持纯展示', (WidgetTester tester) async {
-    await pumpGenreHeader(tester, genres: tenGenres);
+  testWidgets('默认最多渲染 8 个源分类（其他作品页保持原版上限）', (WidgetTester tester) async {
+    await pumpGenreHeader(
+      tester,
+      genres: tenGenres,
+      useDefaultMaxGenres: true,
+    );
+
+    expect(
+      find.byType(FushiTagChip),
+      findsNWidgets(8),
+      reason: '不传 maxGenres 时沿用原版最多 8 个（小说作品页等既有调用方）',
+    );
+    for (final String genre in tenGenres.take(8)) {
+      expect(find.text(genre), findsOneWidget);
+    }
+    expect(find.text('Genre 9'), findsNothing);
+    expect(find.text('Genre 10'), findsNothing);
+  });
+
+  testWidgets('maxGenres = null 时源分类全部渲染，不传回调时保持纯展示', (
+    WidgetTester tester,
+  ) async {
+    await pumpGenreHeader(tester, genres: tenGenres, maxGenres: null);
 
     expect(
       find.byType(FushiTagChip),
       findsNWidgets(10),
-      reason: '来源给多少就渲染多少，不再限制为 8 个',
+      reason: '漫画作品页不截断：来源给多少就渲染多少',
     );
     for (final String genre in tenGenres) {
       expect(find.text(genre), findsOneWidget);
@@ -136,7 +165,12 @@ void main() {
     WidgetTester tester,
   ) async {
     final List<String> tapped = <String>[];
-    await pumpGenreHeader(tester, genres: tenGenres, onGenreTap: tapped.add);
+    await pumpGenreHeader(
+      tester,
+      genres: tenGenres,
+      maxGenres: null,
+      onGenreTap: tapped.add,
+    );
 
     for (final String genre in <String>['Genre 1', 'Genre 6', 'Genre 10']) {
       final Finder chip = find.widgetWithText(FushiTagChip, genre);

@@ -165,10 +165,9 @@ mixin _FushiDbMangaDownload on _$FushiDatabase {
     required int updatedAt,
   }) =>
       (update(mangaDownloadJobs)
-            ..where((t) => t.status.isIn(const <String>[
-                  MangaDownloadJobStatus.queued,
-                  MangaDownloadJobStatus.running,
-                ])))
+            ..where(
+              (t) => t.status.isIn(MangaDownloadJobStatus.queuedOrRunning),
+            ))
           .write(MangaDownloadJobsCompanion(
         status: const Value<String>(MangaDownloadJobStatus.paused),
         updatedAt: Value<int>(updatedAt),
