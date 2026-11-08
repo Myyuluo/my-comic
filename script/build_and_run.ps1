@@ -150,6 +150,20 @@ function Get-GitHead {
     return $head
 }
 
+function Get-BuildStamp {
+    $parts = New-Object System.Collections.Generic.List[string]
+    foreach ($path in @('fushi', 'packages', 'pubspec.yaml', 'pubspec.lock')) {
+        $value = (& git -C $RepositoryRoot rev-parse "HEAD:$path" 2>$null | Out-String).Trim()
+        if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($value)) {
+            throw "git rev-parse HEAD:$path failed in $RepositoryRoot"
+        }
+        $parts.Add($value)
+    }
+    $bytes = [Text.Encoding]::UTF8.GetBytes(($parts -join "`n"))
+    $sha = [Security.Cryptography.SHA256]::Create().ComputeHash($bytes)
+    return (($sha | ForEach-Object { $_.ToString('x2') }) -join '')
+}
+
 function Get-RunningTargetProcess {
     $target = [IO.Path]::GetFullPath($Exe)
     $processes = @(Get-Process -Name 'fushi' -ErrorAction SilentlyContinue)
@@ -378,12 +392,13 @@ if ($running) {
 }
 
 $head = Get-GitHead
-Write-LauncherLog "start; head=$head"
+$buildStamp = Get-BuildStamp
+Write-LauncherLog "start; head=$head; buildStamp=$buildStamp"
 $needsBuild = $true
 if (Test-Path -LiteralPath $Exe -PathType Leaf) {
     if (Test-Path -LiteralPath $Stamp -PathType Leaf) {
         $built = ([IO.File]::ReadAllText($Stamp)).Trim()
-        if ($built -eq $head) { $needsBuild = $false }
+        if ($built -eq $buildStamp) { $needsBuild = $false }
     }
 }
 if ($SkipBuild) { $needsBuild = $false }
@@ -464,8 +479,8 @@ if ($needsBuild) {
         Move-Item -LiteralPath $pendingLocalLock -Destination $localLock -Force
     }
     [IO.Directory]::CreateDirectory((Split-Path -Parent $Stamp)) | Out-Null
-    [IO.File]::WriteAllText($Stamp, $head, (New-Object Text.UTF8Encoding($false)))
-    Write-LauncherLog "build succeeded; stamp=$head"
+    [IO.File]::WriteAllText($Stamp, $buildStamp, (New-Object Text.UTF8Encoding($false)))
+    Write-LauncherLog "build succeeded; stamp=$buildStamp"
 } else {
     Write-Host "[my-comic] build is current ($($head.Substring(0, [Math]::Min(12, $head.Length))))"
 }
