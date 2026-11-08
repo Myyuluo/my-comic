@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [string] $RuntimeSource = $env:MYCOMIC_MIHON_RUNTIME_SOURCE,
     [string] $NuGetPath = $env:MYCOMIC_NUGET,
@@ -13,9 +13,10 @@ Set-StrictMode -Version Latest
 #
 # `flutter build windows` never produces `mihon_bridge`. Fushi's Windows CI
 # copies the pinned runtime into the Release directory after the build; this
-# script is the local equivalent. The app itself stays fail-closed: it only
-# launches the copy next to the executable, so this script must make that copy
-# present before every launch.
+# script is the local equivalent.
+#
+# The app itself stays fail-closed: it only launches the copy next to the
+# executable, so this script must make that copy present before every launch.
 #
 # The runtime is taken verbatim from an existing official Fushi v3.0.0
 # installation (or built with Fushi's own script on a cache miss). It is not
@@ -34,6 +35,17 @@ $Exe = Join-Path $ReleaseDir 'fushi.exe'
 $Stamp = Join-Path $FushiDir 'build\.last_built_commit'
 $CacheDir = Join-Path $RepositoryRoot '.dart_tool\mihon_bridge'
 $BundleDir = Join-Path $ReleaseDir 'mihon_bridge'
+$LogPath = Join-Path $RepositoryRoot '启动日志.txt'
+
+function Write-LauncherLog {
+    param([string] $Message)
+    try {
+        $line = "[{0}] {1}" -f (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'), $Message
+        Add-Content -LiteralPath $LogPath -Value $line -Encoding UTF8
+    } catch {
+        # 日志写失败不能影响启动。
+    }
+}
 
 # Official Fushi v3.0.0 Bundled extension runtime. The vendored build is
 # reproducible and produces the same jar, so this pins provenance even when the
@@ -140,14 +152,28 @@ function Get-GitHead {
 
 function Get-RunningTargetProcess {
     $target = [IO.Path]::GetFullPath($Exe)
-    return Get-Process -Name 'fushi' -ErrorAction SilentlyContinue | Where-Object {
+    $processes = @(Get-Process -Name 'fushi' -ErrorAction SilentlyContinue)
+    foreach ($process in $processes) {
         try {
-            $path = $_.Path
-            return ($path -and ([IO.Path]::GetFullPath($path) -ieq $target))
+            $path = $process.Path
+            if ($path -and ([IO.Path]::GetFullPath($path) -ieq $target)) {
+                return $process
+            }
         } catch {
-            return $false
+            # 路径不可读：继续检查下一个进程。
         }
-    } | Select-Object -First 1
+    }
+    # 路径不可读时无法确认是否为目标 exe；按“可能正在运行”处理，避免构建时文件锁失败。
+    foreach ($process in $processes) {
+        try {
+            if ([string]::IsNullOrWhiteSpace($process.Path)) {
+                return $process
+            }
+        } catch {
+            return $process
+        }
+    }
+    return $null
 }
 
 function Show-LaunchedWindow {
@@ -156,16 +182,17 @@ function Show-LaunchedWindow {
     $deadline = [DateTime]::UtcNow.AddSeconds(30)
     while ([DateTime]::UtcNow -lt $deadline) {
         $Process.Refresh()
-        if ($Process.HasExited) { return }
+        if ($Process.HasExited) { return $false }
         if ($Process.MainWindowHandle -ne 0) { break }
         Start-Sleep -Milliseconds 300
     }
-    if ($Process.HasExited) { return }
+    if ($Process.HasExited) { return $false }
     try {
         $null = (New-Object -ComObject WScript.Shell).AppActivate($Process.Id)
     } catch {
         # 窗口还在初始化时 AppActivate 可能失败；应用本身仍在运行。
     }
+    return $true
 }
 
 function Resolve-NuGet {
@@ -201,7 +228,10 @@ function Invoke-Flutter {
     )
     Push-Location $FushiDir
     try {
-        & $Flutter @Arguments
+        & $Flutter @Arguments 2>&1 | ForEach-Object {
+            Write-Host $_
+            try { Add-Content -LiteralPath $LogPath -Value $_ -Encoding UTF8 } catch { }
+        }
         if ($LASTEXITCODE -ne 0) {
             throw "flutter $($Arguments -join ' ') failed with exit code $LASTEXITCODE"
         }
@@ -221,7 +251,10 @@ function Invoke-Dart {
     }
     Push-Location $FushiDir
     try {
-        & $dart @Arguments
+        & $dart @Arguments 2>&1 | ForEach-Object {
+            Write-Host $_
+            try { Add-Content -LiteralPath $LogPath -Value $_ -Encoding UTF8 } catch { }
+        }
         if ($LASTEXITCODE -ne 0) {
             throw "dart $($Arguments -join ' ') failed with exit code $LASTEXITCODE"
         }
@@ -324,18 +357,28 @@ function Install-RuntimeBundle {
 $running = Get-RunningTargetProcess
 if ($running) {
     if ($NoLaunch) {
+        Write-LauncherLog "refusing to build: fushi is running (PID $($running.Id))"
         throw "Close my-comic before building: $Exe is running."
     }
+    $activated = $false
     try {
-        $null = (New-Object -ComObject WScript.Shell).AppActivate($running.Id)
+        $activated = [bool](New-Object -ComObject WScript.Shell).AppActivate($running.Id)
     } catch {
-        # 窗口可能被最小化/隐藏；应用仍在运行。
+        $activated = $false
     }
-    Write-Host "[my-comic] already running; brought it to the front."
-    exit 0
+    if ($activated) {
+        Write-Host "[my-comic] already running; brought it to the front."
+        Write-LauncherLog "already running (PID $($running.Id)); activated"
+        exit 0
+    }
+    Write-Host "[my-comic] already running (PID $($running.Id)), but its window could not be activated."
+    Write-Host "[my-comic] Close my-comic completely, then run this launcher again."
+    Write-LauncherLog "already running (PID $($running.Id)); activation failed"
+    exit 1
 }
 
 $head = Get-GitHead
+Write-LauncherLog "start; head=$head"
 $needsBuild = $true
 if (Test-Path -LiteralPath $Exe -PathType Leaf) {
     if (Test-Path -LiteralPath $Stamp -PathType Leaf) {
@@ -346,6 +389,9 @@ if (Test-Path -LiteralPath $Exe -PathType Leaf) {
 if ($SkipBuild) { $needsBuild = $false }
 
 if ($needsBuild) {
+    $shortHead = $head.Substring(0, [Math]::Min(12, $head.Length))
+    Write-Host "[my-comic] build required for $shortHead; this can take 2-4 minutes..."
+    Write-LauncherLog "build required; head=$head"
     $nuget = Resolve-NuGet
     if (-not $nuget) {
         throw "NuGet.exe is required for the Windows WebView2/WIL dependencies. Put nuget.exe in .dart_tool\nuget\ or set MYCOMIC_NUGET to its path."
@@ -419,6 +465,7 @@ if ($needsBuild) {
     }
     [IO.Directory]::CreateDirectory((Split-Path -Parent $Stamp)) | Out-Null
     [IO.File]::WriteAllText($Stamp, $head, (New-Object Text.UTF8Encoding($false)))
+    Write-LauncherLog "build succeeded; stamp=$head"
 } else {
     Write-Host "[my-comic] build is current ($($head.Substring(0, [Math]::Min(12, $head.Length))))"
 }
@@ -456,13 +503,23 @@ if (-not (Test-RuntimeDirectory $CacheDir)) {
 
 if (Test-RuntimeDirectory $BundleDir) {
     Write-Host "[my-comic] runtime bundle is current"
+    Write-LauncherLog "runtime bundle current"
 } else {
     Write-Host "[my-comic] bundling runtime into $BundleDir"
+    Write-LauncherLog "bundling runtime"
     Install-RuntimeBundle
+    Write-LauncherLog "runtime bundled"
 }
 
 if (-not $NoLaunch) {
     Write-Host "[my-comic] launching $Exe"
+    Write-LauncherLog "launching $Exe"
     $launched = Start-Process -FilePath $Exe -WorkingDirectory $ReleaseDir -PassThru
-    Show-LaunchedWindow -Process $launched
+    if (-not (Show-LaunchedWindow -Process $launched)) {
+        $launched.Refresh()
+        $code = $launched.ExitCode
+        Write-LauncherLog "app exited during startup; exitCode=$code"
+        throw "my-comic exited during startup (exit code $code). See $LogPath for details."
+    }
+    Write-LauncherLog "app launched; PID=$($launched.Id)"
 }
