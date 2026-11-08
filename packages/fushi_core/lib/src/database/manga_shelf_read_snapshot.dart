@@ -14,6 +14,8 @@ class MangaShelfChapterSource {
     required this.bookUid,
     required this.sourceMetadata,
     required this.chaptersJson,
+    required this.author,
+    required this.extractDir,
   });
 
   /// 书架身份（`EpubBooks.bookKey`），角标按它归到卡片。
@@ -28,6 +30,13 @@ class MangaShelfChapterSource {
 
   /// 章节列表 JSON。本地图源与在线条目都会写；单卷 / PDF 类漫画为 `'[]'`。
   final String chaptersJson;
+
+  /// 作者（在线条目 = 源作者行，作者优先、画师兜底；本地图源可被用户编辑）。
+  /// 书架搜索的作者行与「是否已下载」的本地图源判定都读它。
+  final String? author;
+
+  /// 作品目录（在线 = Download library 里的漫画目录；本地图源 = 原地目录）。
+  final String extractDir;
 }
 
 /// [FushiDatabase.getMangaShelfReadSnapshot] 的返回值。

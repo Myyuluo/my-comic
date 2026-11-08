@@ -1025,6 +1025,8 @@ mixin _FushiDbContentMisc
             epubBooks.uid,
             epubBooks.sourceMetadata,
             epubBooks.chaptersJson,
+            epubBooks.author,
+            epubBooks.extractDir,
           ])
           ..where(epubBooks.format.equals(BookFormat.manga.dbValue)))
         .get();
@@ -1050,6 +1052,8 @@ mixin _FushiDbContentMisc
             bookUid: row.read(epubBooks.uid)!,
             sourceMetadata: row.read(epubBooks.sourceMetadata),
             chaptersJson: row.read(epubBooks.chaptersJson)!,
+            author: row.read(epubBooks.author),
+            extractDir: row.read(epubBooks.extractDir)!,
           ),
       ],
       readChapterKeysByBookUid: readChapterKeysByBookUid,
