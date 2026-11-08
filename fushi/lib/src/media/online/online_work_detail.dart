@@ -223,6 +223,7 @@ class _OnlineWorkFooter extends StatelessWidget {
                 for (final String genre in tags)
                   FushiTagChip(
                     label: genre,
+                    brightenOnHover: onGenreTap != null,
                     onTap: onGenreTap == null ? null : () => onGenreTap(genre),
                   ),
               ],

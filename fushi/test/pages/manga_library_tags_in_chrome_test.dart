@@ -420,4 +420,53 @@ void main() {
     );
     expect(find.text('连载'), findsOneWidget, reason: '普通书籍页标题下仍有独立标签行');
   });
+
+  testWidgets('壳里的页头搜索按钮可见且能打开搜索栏', (WidgetTester tester) async {
+    await seedManga('m1', '漫画一');
+    await pumpPage(tester);
+
+    final Finder searchButton = find.byKey(
+      const ValueKey<String>('fushi-header-search-button'),
+    );
+    expect(searchButton, findsOneWidget);
+    expect(searchButton.hitTestable(), findsOneWidget, reason: '搜索按钮必须在命中区内');
+
+    await tester.tap(searchButton);
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey<String>('shelf_search_field')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('页头搜索第一次输入不会丢焦点', (WidgetTester tester) async {
+    await seedManga('m1', '漫画一');
+    await pumpPage(tester);
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('fushi-header-search-button')),
+    );
+    await tester.pumpAndSettle();
+
+    final Finder field = find.byKey(
+      const ValueKey<String>('shelf_search_field'),
+    );
+    expect(field, findsOneWidget);
+    expect(
+      tester.widget<TextField>(field).focusNode?.hasFocus,
+      isTrue,
+      reason: '展开搜索后输入框应已聚焦',
+    );
+
+    // 模拟 IME 输入第一个字符，不走 tester.enterText 的重新聚焦路径。
+    tester.testTextInput.enterText('漫');
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.widget<TextField>(field).focusNode?.hasFocus,
+      isTrue,
+      reason: '首次输入后焦点必须保持在搜索框',
+    );
+    expect(tester.widget<TextField>(field).controller?.text, '漫');
+  });
 }

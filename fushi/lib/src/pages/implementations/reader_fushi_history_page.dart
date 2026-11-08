@@ -896,7 +896,12 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
     final MediaLibraryChromeTabsSlot? chromeTabs = _mangaOnly
         ? MediaLibraryShellScope.maybeOf(context)?.chromeTabsSlot
         : null;
-    _syncChromeTabsClaim(chromeTabs, allTagRows);
+    // 搜索展开且已有关键词时，chrome 页签位整行被搜索栏取代；此时再登记标签
+    // 胶囊会让外壳在每次输入后重建 chrome 行，打断正在输入的搜索框焦点
+    // （用户实报「第一次输入就失焦」）。收起/清空后恢复登记。
+    if (!(_mangaOnly && _headerSearch.hasQuery)) {
+      _syncChromeTabsClaim(chromeTabs, allTagRows);
+    }
 
     // BUG-250: 书架批量选择模式（[_selectionMode]）活在本 tab 内容里，不是独立
     // route。顶层 HomePage 的 PopScope 对它无感，返回键会直接弹掉 root route 退

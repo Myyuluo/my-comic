@@ -19,6 +19,7 @@ import 'package:flutter/services.dart'
         KeyEvent,
         LogicalKeyboardKey,
         SystemChannels,
+        SystemMouseCursors,
         TextInputAction,
         TextInputFormatter;
 import 'package:macos_ui/macos_ui.dart'
@@ -2223,6 +2224,7 @@ class FushiTagChip extends StatefulWidget {
     this.onDeleted,
     this.focusId,
     this.status,
+    this.brightenOnHover = false,
   });
 
   final String label;
@@ -2240,6 +2242,11 @@ class FushiTagChip extends StatefulWidget {
   final VoidCallback? onDeleted;
   final FushiFocusId? focusId;
 
+  /// 鼠标悬停时把 primary 12% 混入底色（与作品页作者名的 hover 同效），
+  /// 鼠标指针保持默认箭头。默认关闭；只有需要「像作者名一样提亮」的标签
+  /// （源分类）开启。
+  final bool brightenOnHover;
+
   @override
   State<FushiTagChip> createState() => _FushiTagChipState();
 }
@@ -2251,6 +2258,14 @@ class _FushiTagChipState extends State<FushiTagChip> {
   late final FushiFocusId _fallbackFocusId = FushiFocusId(
     'fushi-tag-chip-${identityHashCode(this)}',
   );
+
+  /// 源分类等需要「作者名式」悬停提亮的标签：鼠标进入时混入 primary 12%。
+  bool _hovered = false;
+
+  void _setHovered(bool value) {
+    if (_hovered == value) return;
+    setState(() => _hovered = value);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -2292,6 +2307,11 @@ class _FushiTagChipState extends State<FushiTagChip> {
         : eink
         ? colors.surface
         : statusColor.withValues(alpha: widget.dimmed ? 0.08 : 0.14);
+    // 作者名式 hover：只改底色（primary 12% overlay），不改形状 / 指针。
+    final Color hoverBackground =
+        widget.brightenOnHover && _hovered && !eink
+        ? Color.alphaBlend(colors.primary.withValues(alpha: 0.12), background)
+        : background;
     final Color toneForeground = switch (widget.tone) {
       FushiTagChipTone.filled => _foregroundFor(toneBackground),
       FushiTagChipTone.surface =>
@@ -2368,7 +2388,7 @@ class _FushiTagChipState extends State<FushiTagChip> {
         vertical: 3,
       ),
       decoration: BoxDecoration(
-        color: background,
+        color: hoverBackground,
         borderRadius: radius,
         border: border,
       ),
@@ -2382,6 +2402,10 @@ class _FushiTagChipState extends State<FushiTagChip> {
             child: InkWell(
               borderRadius: radius,
               onTap: widget.onTap,
+              onHover: widget.brightenOnHover ? _setHovered : null,
+              mouseCursor: widget.brightenOnHover
+                  ? SystemMouseCursors.basic
+                  : null,
               child: chip,
             ),
           );
