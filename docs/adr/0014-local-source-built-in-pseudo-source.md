@@ -25,3 +25,7 @@ status: accepted
 - 内置伪源的生命周期与 Extension 源不同：只有启用开关，没有安装 / 卸载 / 清数据 / 排序动作。
 - 图源列表的搜索框同时过滤内置行与扩展源，占位文案改为「搜索图源」。
 - 未来若再需要不依赖 Extension 的来源，应沿用伪源模式，而不是把本地内容塞进扩展源表。
+
+## Amendment 2026-11-08（local-source-polish）
+
+Local source root 的目录名已由 `localcomic` 改为 Content root 下的 `local`；旧 `localcomic` 已停用，不扫描、不迁移、不删除。原文决策描述中的 `localcomic` 均按 `local` 理解。
