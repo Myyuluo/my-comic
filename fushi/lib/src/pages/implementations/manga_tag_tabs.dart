@@ -5,7 +5,6 @@ import 'package:fushi/i18n/strings.g.dart';
 import 'package:fushi/media.dart';
 import 'package:fushi/src/utils/adaptive/adaptive_platform.dart';
 import 'package:fushi/src/utils/components/fushi_design_tokens.dart';
-import 'package:fushi/src/utils/components/fushi_floating_chrome.dart';
 import 'package:fushi/src/utils/components/fushi_floating_toolbar.dart';
 import 'package:fushi/src/utils/components/glass/fushi_apple_palette.dart';
 import 'package:fushi/src/utils/components/settings_shared.dart';
@@ -105,13 +104,18 @@ Map<MangaTabSelection, int> countMangaTagTabItems(
   return counts;
 }
 
-/// 漫画页标签栏：浏览页「图源 / 发现」同款浮动分段胶囊。
+/// 漫画页标签栏：标题 / 动作行下方的二级内容域分段胶囊。
 ///
 /// 首项「书架」固定在最左（不随标签区横滚），其后按标签管理页维护的顺序排列
 /// 用户标签；放不下时只有标签区在胶囊内横向滚动。整排单选，选中段是
 /// secondaryContainer 填充的胶囊（Apple 设计系统 = 强调色文字、不铺底），标签
 /// 自身的颜色不参与呈现。每段右侧显示当前搜索 / 阅读状态筛选下该段会显示的
-/// 漫画数（始终显示，包括 0）；标签名过长时截断，数字不截断。
+/// 漫画数（始终显示，包括 0）；数量是更轻的次要色小号数字，标签名过长时截断，
+/// 数字不截断。
+///
+/// 视觉与库页二级内容域的分段胶囊一致（`LibrarySectionTabs(secondary: true,
+/// floating: true)`）：Material 是一条扁平的 surfaceContainerHigh 全胶囊、贴合
+/// 内容宽、无一级工具栏投影；Apple 设计系统不画底，只按内容宽排二级文字页签。
 class MangaTagTabBar extends StatelessWidget {
   const MangaTagTabBar({
     required this.tags,
@@ -133,12 +137,21 @@ class MangaTagTabBar extends StatelessWidget {
 
   final ValueChanged<MangaTabSelection> onSelected;
 
-  /// 嵌在浮动 chrome 页签位时为 true：不再加页面横向留白（chrome 行已有）。
+  /// 由壳的二级浮动行画出时为 true：不再加页面横向留白（二级行已有页边与
+  /// 上下间距）。独立使用（无壳、页头下方自成一行）时为 false。
   final bool inline;
 
-  /// 段高：胶囊（56）减去上下各 4 的胶囊内边距。Apple 设计系统的浮动胶囊更矮，
-  /// 实际高度由 [LayoutBuilder] 从约束里读，这里只是无约束时的兜底。
-  static const double _fallbackSegmentHeight = 48;
+  /// 二级胶囊总高：36 的段高 + 上下各 4 的胶囊内边距（与库页二级分段胶囊的
+  /// 44 高一致）。实际段高由 [LayoutBuilder] 从约束里读，[_fallbackSegmentHeight]
+  /// 只是无约束时的兜底。
+  static const double _capsuleHeight = 44;
+
+  /// 胶囊四周留白：选中段到胶囊外缘一圈等宽。
+  static const double _capsulePadding = 4;
+
+  /// 无约束时的段高兜底（胶囊高减去上下内边距）。
+  static const double _fallbackSegmentHeight =
+      _capsuleHeight - _capsulePadding * 2;
 
   /// 单段左右内边距（与库页页签的 label padding 同值）。
   static const double _segmentPadding = 16;
@@ -175,18 +188,46 @@ class MangaTagTabBar extends StatelessWidget {
       child: LayoutBuilder(
         builder: (BuildContext context, BoxConstraints constraints) {
           final bool bounded = constraints.maxWidth.isFinite;
-          final Widget capsule = FushiFloatingToolbarSurface(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+          // 胶囊按内容宽贴左（摆不下时吃满可用宽、标签区在里面横滑），与
+          // `LibrarySectionTabs(secondary: true, floating: true)` 的二级外框
+          // 同一尺寸与配色；Apple 设计系统不画底（同 `_CompactSecondaryTabsFrame`）。
+          final Widget capsule = SizedBox(
+            height: _capsuleHeight,
             child: LayoutBuilder(
               builder: (BuildContext context, BoxConstraints inner) {
                 final double segmentHeight = inner.maxHeight.isFinite
-                    ? inner.maxHeight
+                    ? inner.maxHeight - _capsulePadding * 2
                     : _fallbackSegmentHeight;
-                return _buildStrip(
-                  context,
-                  entries,
-                  segmentHeight: segmentHeight,
-                  bounded: bounded,
+                final Widget strip = Padding(
+                  padding: const EdgeInsets.all(_capsulePadding),
+                  child: _buildStrip(
+                    context,
+                    entries,
+                    segmentHeight: segmentHeight,
+                    bounded: bounded,
+                  ),
+                );
+                final bool apple = isGlassDesign(context);
+                if (apple) return strip;
+                final ColorScheme cs = Theme.of(context).colorScheme;
+                return DecoratedBox(
+                  key: const ValueKey<String>('manga_tag_tab_capsule'),
+                  decoration: ShapeDecoration(
+                    // 二级内容域的中性扁平面：不是一级悬浮工具栏（无投影）。
+                    color: cs.surfaceContainerHigh,
+                    shape: StadiumBorder(
+                      side: isEinkTheme(context)
+                          ? BorderSide(color: cs.outline)
+                          : BorderSide.none,
+                    ),
+                  ),
+                  child: ClipPath(
+                    clipper: const ShapeBorderClipper(shape: StadiumBorder()),
+                    child: Material(
+                      type: MaterialType.transparency,
+                      child: strip,
+                    ),
+                  ),
                 );
               },
             ),
@@ -312,8 +353,10 @@ class _MangaTagTabSegment extends StatelessWidget {
           color: foreground,
           fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
         );
+    // 数量是次要信息：用与标签名同一个前景色、但压到更轻的半透明，字号取
+    // metadata 小号（始终完整显示，见下方 Text 的 softWrap / maxLines）。
     final TextStyle countStyle = tokens.type.metadata.copyWith(
-      color: foreground,
+      color: foreground.withValues(alpha: 0.7),
       fontWeight: FontWeight.w500,
     );
     final OutlinedBorder shape = StadiumBorder(

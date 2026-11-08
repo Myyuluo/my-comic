@@ -16,7 +16,9 @@ class MangaLibraryPage extends StatelessWidget {
     return MediaLibraryShell(
       focusIdPrefix: 'manga-library-view',
       // 只剩书架一个视图，但「漫画」标题和右上角动作仍由壳画。页签位不画只有
-      // 「书架」一项的视图页签，改由书架页把标签页签胶囊登记到该位置。
+      // 「书架」一项的视图页签；标签页签胶囊由书架页登记到标题 / 动作行下方的
+      // 二级浮动行（布局跟进 ticket 01）。主 chrome 行的页签位留空，按布局方案
+      // 让给顶部行的继续阅读胶囊（ticket 03）。
       alwaysShowChrome: true,
       chromeTabsFromView: true,
       views: <MediaLibraryViewSpec>[
