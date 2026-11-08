@@ -133,12 +133,23 @@ class FushiIconButton extends StatefulWidget {
     this.overflowPriority = 0,
     this.alwaysVisible = false,
     this.badge = false,
+    this.tapRegionGroupId,
     super.key,
   });
 
   /// 右上角亮一枚主色小圆点（筛选生效 / 后台任务进行中 / 收起的搜索仍有过滤词）。
   /// 只是提示，不改按钮的命中区与尺寸；收进「⋯」后菜单项不带圆点。
   final bool badge;
+
+  /// 与某个 [MenuAnchor] 共用的 [TapRegion.groupId]（通常就是它的
+  /// [MenuController]）。
+  ///
+  /// 库页页头的「排序与筛选」按钮画在菜单的零尺寸常驻锚点**之外**：菜单开着时
+  /// 按下按钮会被 [MenuAnchor] 当成外部点击先关掉，抬起时按钮的 onTap 又看到
+  /// `isOpen == false` 把菜单重开（用户实报「第二次点击关了又开」）。把按钮登记
+  /// 进菜单的 tap region 组后，按下按钮不再算外部点击，同一按钮才能可靠地
+  /// 开 → 关 → 开。不传时按钮不参与任何 tap region 组，行为与之前完全一致。
+  final Object? tapRegionGroupId;
 
   /// 在页头 / 顶栏动作行里的重要程度（越大越晚被收进「⋯」溢出菜单）。
   ///
@@ -381,32 +392,36 @@ class _FushiIconButtonState extends State<FushiIconButton>
 
   @override
   Widget build(BuildContext context) {
-    final Widget button = _buildButton(context);
-    if (!widget.badge) return button;
-    final ColorScheme colors = Theme.of(context).colorScheme;
-    // 墨水屏：primary 塌成前景色，圆点照样可见（实心黑点）。
-    final Color dot = isEinkTheme(context) ? colors.onSurface : colors.primary;
-    return Stack(
-      clipBehavior: Clip.none,
-      children: <Widget>[
-        button,
-        PositionedDirectional(
-          top: 4,
-          end: 4,
-          child: IgnorePointer(
-            child: DecoratedBox(
-              key: const ValueKey<String>('fushi_icon_button_badge'),
-              decoration: BoxDecoration(
-                color: dot,
-                shape: BoxShape.circle,
-                border: Border.all(color: colors.surface, width: 1.5),
+    Widget button = _buildButton(context);
+    if (widget.badge) {
+      final ColorScheme colors = Theme.of(context).colorScheme;
+      // 墨水屏：primary 塌成前景色，圆点照样可见（实心黑点）。
+      final Color dot = isEinkTheme(context) ? colors.onSurface : colors.primary;
+      button = Stack(
+        clipBehavior: Clip.none,
+        children: <Widget>[
+          button,
+          PositionedDirectional(
+            top: 4,
+            end: 4,
+            child: IgnorePointer(
+              child: DecoratedBox(
+                key: const ValueKey<String>('fushi_icon_button_badge'),
+                decoration: BoxDecoration(
+                  color: dot,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: colors.surface, width: 1.5),
+                ),
+                child: const SizedBox.square(dimension: 9),
               ),
-              child: const SizedBox.square(dimension: 9),
             ),
           ),
-        ),
-      ],
-    );
+        ],
+      );
+    }
+    final Object? tapRegionGroupId = widget.tapRegionGroupId;
+    if (tapRegionGroupId == null) return button;
+    return TapRegion(groupId: tapRegionGroupId, child: button);
   }
 
   Widget _buildButton(BuildContext context) {
