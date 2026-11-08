@@ -1,6 +1,6 @@
 # 漫画页标签页签、源分类跳转与下载页暂停（manga-library-polish）
 
-Status: ready-for-agent
+Status: implemented
 Date: 2026-11-09
 
 ## Problem Statement
