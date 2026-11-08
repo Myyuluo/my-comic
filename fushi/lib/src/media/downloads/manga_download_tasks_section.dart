@@ -24,11 +24,14 @@ import 'package:fushi/utils.dart';
 ///
 /// 下载页只列可操作任务（ticket 05）：`done` 行保留在表里仅供作品页判
 /// 「文件缺失」，取消会直接删行，因此都不进列表；`failed` 保留并显示「继续」。
+/// `paused`（ticket 07 全局暂停）保留在列表且可单独取消；暂停 / 继续只由下载页
+/// 右下角的全局按钮控制，行内不提供。
 class MangaDownloadTasksSection extends ConsumerStatefulWidget {
   const MangaDownloadTasksSection({
     super.key,
     this.downloadsOverride,
     this.tasksBuilder,
+    this.onTasksChanged,
   });
 
   /// 测试注入服务（null = 取 [AppModel.mangaDownloadService]）。
@@ -37,17 +40,22 @@ class MangaDownloadTasksSection extends ConsumerStatefulWidget {
   /// Parent owns unified filtering, sorting and grouping, including empty lists.
   final DownloadTasksBuilder? tasksBuilder;
 
+  /// 每次重新读取任务表后回调当前可见条目（下载页据此决定全局按钮状态）。
+  /// 回调发生在异步 reload 完成之后，不在 build 阶段。
+  final ValueChanged<List<DownloadTaskEntry>>? onTasksChanged;
+
   @override
   ConsumerState<MangaDownloadTasksSection> createState() =>
       _MangaDownloadTasksSectionState();
 }
 
-/// 下载页可见的任务状态：排队 / 下载中 / 失败。`done` 保留在表中但不再展示
-/// （作品页 Missing 判定需要它）；`cancelled` 是取消路径不再产生的遗留值，
+/// 下载页可见的任务状态：排队 / 下载中 / 暂停 / 失败。`done` 保留在表中但不再
+/// 展示（作品页 Missing 判定需要它）；`cancelled` 是取消路径不再产生的遗留值，
 /// 也一并隐藏。
 const Set<String> _visibleJobStatuses = <String>{
   MangaDownloadJobStatus.queued,
   MangaDownloadJobStatus.running,
+  MangaDownloadJobStatus.paused,
   MangaDownloadJobStatus.failed,
 };
 
@@ -97,16 +105,23 @@ class _MangaDownloadTasksSectionState
     );
     if (!mounted) return;
     setState(() => _jobs = jobs);
+    widget.onTasksChanged?.call(_entriesFor(jobs, downloads));
   }
+
+  List<DownloadTaskEntry> _entriesFor(
+    List<MangaDownloadJobRow> jobs,
+    MangaDownloadService downloads,
+  ) => <DownloadTaskEntry>[
+        for (final MangaDownloadJobRow job in jobs)
+          mangaDownloadTaskEntry(job, downloads),
+      ];
 
   @override
   Widget build(BuildContext context) {
     final MangaDownloadService? downloads = _downloads;
-    final List<DownloadTaskEntry> entries = <DownloadTaskEntry>[
-      if (downloads != null)
-        for (final MangaDownloadJobRow job in _jobs)
-          mangaDownloadTaskEntry(job, downloads),
-    ];
+    final List<DownloadTaskEntry> entries = downloads == null
+        ? const <DownloadTaskEntry>[]
+        : _entriesFor(_jobs, downloads);
     final DownloadTasksBuilder? builder = widget.tasksBuilder;
     if (builder != null) return builder(context, entries);
     if (entries.isEmpty) return const SizedBox.shrink();
@@ -152,6 +167,7 @@ DownloadTaskEntry mangaDownloadTaskEntry(
     status: switch (job.status) {
       MangaDownloadJobStatus.queued => DownloadTaskStatus.queued,
       MangaDownloadJobStatus.running => DownloadTaskStatus.active,
+      MangaDownloadJobStatus.paused => DownloadTaskStatus.paused,
       MangaDownloadJobStatus.done => DownloadTaskStatus.completed,
       MangaDownloadJobStatus.failed => DownloadTaskStatus.attention,
       _ => DownloadTaskStatus.cancelled,
@@ -229,6 +245,7 @@ bool _isFinished(MangaDownloadJobRow job) =>
 
 String _statusLabel(MangaDownloadJobRow job) => switch (job.status) {
       MangaDownloadJobStatus.queued => t.download_status_queued,
+      MangaDownloadJobStatus.paused => t.download_task_status_paused,
       MangaDownloadJobStatus.running => job.pagesTotal > 0
           ? t.manga_ocr_wizard_page_progress(
               done: job.pagesDone,
@@ -276,6 +293,8 @@ class _MangaDownloadTaskRow extends StatelessWidget {
     final Widget statusIcon = switch (job.status) {
       MangaDownloadJobStatus.queued =>
         FushiIcon(Icons.schedule_outlined, size: 20, color: scheme.outline),
+      MangaDownloadJobStatus.paused =>
+        FushiIcon(Icons.pause_circle_outline, size: 20, color: scheme.outline),
       MangaDownloadJobStatus.done =>
         FushiIcon(Icons.check_circle_outline, size: 20, color: scheme.primary),
       MangaDownloadJobStatus.failed =>

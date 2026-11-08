@@ -1314,6 +1314,244 @@ void main() {
     downloads.dispose();
   });
 
+  group('全局暂停 / 继续（ticket 07）', () {
+    Future<void> insertFailedChapter2() => db.upsertMangaDownloadJob(
+          MangaDownloadJobsCompanion.insert(
+            jobId: mangaDownloadJobId(
+              kind: MangaDownloadJobKind.chapter,
+              bookKey: bookKey,
+              chapterKey: '/chapter/2',
+            ),
+            kind: MangaDownloadJobKind.chapter,
+            bookKey: bookKey,
+            chapterKey: '/chapter/2',
+            runtime: 'mihon',
+            title: 'Fixture series',
+            chapterTitle: 'Chapter 2',
+            status: const Value<String>(MangaDownloadJobStatus.failed),
+            pagesDone: const Value<int>(0),
+            pagesTotal: const Value<int>(0),
+            attemptCount: const Value<int>(3),
+            lastError: const Value<String>('boom'),
+            autoOcr: const Value<bool>(false),
+            createdAt: 1,
+            updatedAt: 1,
+          ),
+        );
+
+    test('pauseAll：暂停排队中/下载中的任务并保留 staging，失败任务保持失败', () async {
+      await insertFailedChapter2();
+      adapter.gate = Completer<void>();
+      final MangaDownloadService downloads = build();
+      final MangaDownloadJobRow job = await downloads.enqueueChapter(
+        entry: _entry(),
+        chapter: _chapters.last,
+        autoOcr: false,
+      );
+      await downloads.start();
+      while ((adapter.fetchCounts[0] ?? 0) == 0) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+      expect(
+        (await jobOf('/chapter/1')).status,
+        MangaDownloadJobStatus.running,
+        reason: '前置：任务确实在跑',
+      );
+
+      await downloads.pauseAll();
+      expect(
+        (await jobOf('/chapter/1')).status,
+        MangaDownloadJobStatus.paused,
+        reason: '排队中/下载中的任务立即变为暂停（全局按钮据此切换文案）',
+      );
+      expect(
+        (await jobOf('/chapter/2')).status,
+        MangaDownloadJobStatus.failed,
+        reason: '全部暂停不动失败任务',
+      );
+
+      adapter.gate!.complete();
+      await downloads.whenIdle;
+      expect(
+        (await jobOf('/chapter/1')).status,
+        MangaDownloadJobStatus.paused,
+        reason: '运行中的任务收到暂停信号后停在暂停态，不得落成 done',
+      );
+      final Directory staging = downloadStagingDirectory(bookDir, job.jobId);
+      expect(staging.existsSync(), isTrue, reason: '暂停必须保留 staging 供续传');
+      expect(
+        downloadChapterDirectory(bookDir, 'Chapter 1').existsSync(),
+        isFalse,
+        reason: '暂停不得把半成品落成正式章节',
+      );
+      expect(await db.getMangaChapterDir(bookKey, '/chapter/1'), isNull);
+      downloads.dispose();
+    });
+
+    test('resumeAll：暂停任务续传（已落地页不重取）并重试失败任务', () async {
+      await insertFailedChapter2();
+      adapter.gate = Completer<void>();
+      final MangaDownloadService downloads = build();
+      final MangaDownloadJobRow job = await downloads.enqueueChapter(
+        entry: _entry(),
+        chapter: _chapters.last,
+        autoOcr: false,
+      );
+      await downloads.start();
+      while ((adapter.fetchCounts[0] ?? 0) == 0) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+      await downloads.pauseAll();
+      adapter.gate!.complete();
+      await downloads.whenIdle;
+      expect((await jobOf('/chapter/1')).status, MangaDownloadJobStatus.paused);
+      expect(
+        downloadStagingDirectory(bookDir, job.jobId).existsSync(),
+        isTrue,
+        reason: '前置：暂停保留了 staging',
+      );
+      // 两个章共用同一个假 adapter 的页索引计数；清空后，恢复时若暂停的章
+      // 重新取页，计数会是每页 2 次（重试的失败章也各取 1 次）。
+      adapter.fetchCounts.clear();
+
+      await downloads.resumeAll();
+      await downloads.whenIdle;
+
+      expect(
+        (await jobOf('/chapter/1')).status,
+        MangaDownloadJobStatus.done,
+        reason: '暂停任务恢复为排队并完成',
+      );
+      expect(
+        (await jobOf('/chapter/2')).status,
+        MangaDownloadJobStatus.done,
+        reason: '全部继续会重试所有失败任务',
+      );
+      expect(
+        adapter.fetchCounts,
+        <int, int>{0: 1, 1: 1, 2: 1},
+        reason: '暂停章复用 staging 页级续传，已落地的页不重复下载（只有被重试的'
+            '失败章重新取页）',
+      );
+      expect(waits, isEmpty);
+      downloads.dispose();
+    });
+
+    test('暂停状态在服务重启后保留，不会自动开始', () async {
+      final MangaDownloadService first = build();
+      await first.enqueueChapter(
+        entry: _entry(),
+        chapter: _chapters.last,
+        autoOcr: false,
+      );
+      await first.pauseAll();
+      expect(
+        (await jobOf('/chapter/1')).status,
+        MangaDownloadJobStatus.paused,
+      );
+      first.dispose();
+
+      final MangaDownloadService restarted = build();
+      await restarted.start();
+      await restarted.whenIdle;
+
+      expect(
+        (await jobOf('/chapter/1')).status,
+        MangaDownloadJobStatus.paused,
+        reason: '重启后暂停任务仍暂停',
+      );
+      expect(adapter.fetchCounts, isEmpty, reason: '暂停任务不会在启动时自动开跑');
+      restarted.dispose();
+    });
+
+    test('暂停期间新入队的章节以暂停入队，不自动开始', () async {
+      final MangaDownloadService downloads = build();
+      await downloads.enqueueChapter(
+        entry: _entry(),
+        chapter: _chapters.last,
+        autoOcr: false,
+      );
+      await downloads.pauseAll();
+
+      final MangaDownloadJobRow enqueuedWhilePaused = await downloads
+          .enqueueChapter(
+            entry: _entry(),
+            chapter: _chapters.first,
+            autoOcr: false,
+          );
+      expect(
+        enqueuedWhilePaused.status,
+        MangaDownloadJobStatus.paused,
+        reason: '暂停期间新任务直接以暂停入队',
+      );
+
+      await downloads.start();
+      await downloads.whenIdle;
+      expect(adapter.fetchCounts, isEmpty, reason: '暂停任务不会自动开始');
+      expect((await jobOf('/chapter/1')).status, MangaDownloadJobStatus.paused);
+      expect((await jobOf('/chapter/2')).status, MangaDownloadJobStatus.paused);
+      downloads.dispose();
+    });
+
+    test('取消暂停中的任务：删除任务行并清理 staging', () async {
+      adapter.gate = Completer<void>();
+      final MangaDownloadService downloads = build();
+      final MangaDownloadJobRow job = await downloads.enqueueChapter(
+        entry: _entry(),
+        chapter: _chapters.last,
+        autoOcr: false,
+      );
+      await downloads.start();
+      while ((adapter.fetchCounts[0] ?? 0) == 0) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+      await downloads.pauseAll();
+      adapter.gate!.complete();
+      await downloads.whenIdle;
+      final Directory staging = downloadStagingDirectory(bookDir, job.jobId);
+      expect(staging.existsSync(), isTrue, reason: '前置：暂停保留了 staging');
+
+      await downloads.cancel(job.jobId);
+
+      expect(await db.getMangaDownloadJob(job.jobId), isNull);
+      expect(staging.existsSync(), isFalse, reason: '取消暂停任务仍要清理半成品');
+      downloads.dispose();
+    });
+
+    test('暂停期间重新入队已暂停的章节：保持暂停且不丢进度', () async {
+      final MangaDownloadService downloads = build();
+      await downloads.enqueueChapter(
+        entry: _entry(),
+        chapter: _chapters.last,
+        autoOcr: false,
+      );
+      await db.updateMangaDownloadJobProgress(
+        mangaDownloadJobId(
+          kind: MangaDownloadJobKind.chapter,
+          bookKey: bookKey,
+          chapterKey: '/chapter/1',
+        ),
+        pagesDone: 1,
+        pagesTotal: 3,
+        updatedAt: 2,
+      );
+      await downloads.pauseAll();
+
+      final MangaDownloadJobRow again = await downloads.enqueueChapter(
+        entry: _entry(),
+        chapter: _chapters.last,
+        autoOcr: false,
+      );
+      expect(again.status, MangaDownloadJobStatus.paused);
+      expect(
+        again.pagesDone,
+        1,
+        reason: '入队幂等：暂停中的任务不重置进度',
+      );
+      downloads.dispose();
+    });
+  });
+
   group('下载保活（BUG-2714）', () {
     test('worker 开跑即保活、报页进度；两章连跑中间不撤，排空后撤一次', () async {
       final _RecordingKeepAlive keepAlive = _RecordingKeepAlive();

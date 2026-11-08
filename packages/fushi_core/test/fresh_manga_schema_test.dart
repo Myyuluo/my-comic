@@ -45,16 +45,16 @@ void main() {
   }
 
   test(
-    'fresh DB creates exactly the manga-only table set at schema v3',
+    'fresh DB creates exactly the manga-only table set at current schema',
     () async {
       final FushiDatabase db = await open();
       addTearDown(db.close);
 
-      expect(db.schemaVersion, 3);
+      expect(db.schemaVersion, 4);
       final QueryRow version = await db
           .customSelect('PRAGMA user_version')
           .getSingle();
-      expect(version.data['user_version'], 3);
+      expect(version.data['user_version'], 4);
 
       final Set<String> tables = await userTables(db);
       expect(
@@ -115,7 +115,7 @@ void main() {
       final FushiDatabase upgraded = await open();
       addTearDown(upgraded.close);
 
-      expect(upgraded.schemaVersion, 3);
+      expect(upgraded.schemaVersion, 4);
       expect((await upgraded.getEpubBook('old-book'))?.title, 'Old Manga');
       await upgraded.upsertMangaChapterDir(
         bookKey: 'old-book',
@@ -172,7 +172,7 @@ void main() {
       final FushiDatabase upgraded = await open();
       addTearDown(upgraded.close);
 
-      expect(upgraded.schemaVersion, 3);
+      expect(upgraded.schemaVersion, 4);
       final MangaChapterDirRow? migrated = await upgraded.getMangaChapterDir(
         'old-book',
         'chapter-1',
@@ -203,9 +203,81 @@ void main() {
   );
 
   test(
-    'fresh v3 与 v2→v3 升级后的 manga_chapter_dirs 有效 schema 一致',
+    'v3 升级到 v4：下载任务 status CHECK 放宽到 paused，已有任务行保留',
     () async {
-      // fresh v3：drift 按当前表定义建表。
+      final FushiDatabase db = await open();
+      addTearDown(db.close);
+
+      // 取 fresh 表的建表 SQL，去掉 status CHECK 里的 'paused'，还原成 v3 表。
+      final String freshSql = (await db
+              .customSelect(
+                "SELECT sql FROM sqlite_master "
+                "WHERE type = 'table' AND name = 'manga_download_jobs'",
+              )
+              .getSingle())
+          .read<String>('sql');
+      expect(freshSql, contains("'paused'"));
+      final String v3Sql = freshSql.replaceFirst(", 'paused'", '');
+      expect(v3Sql, isNot(contains("'paused'")));
+      await db.customStatement('DROP TABLE manga_download_jobs');
+      await db.customStatement(v3Sql);
+      await db.customStatement(
+        'INSERT INTO manga_download_jobs '
+        '(job_id, kind, book_key, chapter_key, runtime, title, chapter_title, '
+        'status, pages_done, pages_total, attempt_count, last_error, auto_ocr, '
+        'created_at, updated_at, completed_at) '
+        "VALUES ('legacy-job', 'chapter', 'book', 'chapter-1', 'mihon', "
+        "'Manga', 'Chapter 1', 'failed', 1, 3, 3, 'boom', 0, "
+        '1700000000000, 1700000000000, NULL)',
+      );
+      await db.customStatement('PRAGMA user_version = 3');
+      await db.close();
+
+      final FushiDatabase upgraded = await open();
+      addTearDown(upgraded.close);
+
+      expect(upgraded.schemaVersion, 4);
+      final MangaDownloadJobRow? kept = await upgraded.getMangaDownloadJob(
+        'legacy-job',
+      );
+      expect(kept?.status, MangaDownloadJobStatus.failed);
+      expect(kept?.chapterTitle, 'Chapter 1');
+      expect(kept?.pagesDone, 1);
+      expect(kept?.attemptCount, 3);
+      expect(kept?.lastError, 'boom');
+
+      // 新增的 paused 值可以写入（v3 的 CHECK 会拒绝）。
+      await upgraded.updateMangaDownloadJobStatus(
+        'legacy-job',
+        status: MangaDownloadJobStatus.paused,
+        updatedAt: 1700000001000,
+      );
+      expect(
+        (await upgraded.getMangaDownloadJob('legacy-job'))?.status,
+        MangaDownloadJobStatus.paused,
+      );
+      expect(await upgraded.hasPausedMangaDownloadJobs(), isTrue);
+      // 重建表后索引由迁移步补回。
+      final List<QueryRow> indexes = await upgraded
+          .customSelect(
+            "SELECT name FROM sqlite_master WHERE type = 'index' "
+            "AND tbl_name = 'manga_download_jobs'",
+          )
+          .get();
+      expect(
+        indexes.map((QueryRow row) => row.read<String>('name')),
+        containsAll(<String>[
+          'idx_manga_download_jobs_identity',
+          'idx_manga_download_jobs_status_created',
+        ]),
+      );
+    },
+  );
+
+  test(
+    'fresh 与 v2→当前 升级后的 manga_chapter_dirs 有效 schema 一致',
+    () async {
+      // fresh：drift 按当前表定义建表。
       final FushiDatabase fresh = await open();
       final Map<String, String> freshColumns = await _columnShape(fresh);
       final Set<String> freshChecks = await _tableChecks(fresh);

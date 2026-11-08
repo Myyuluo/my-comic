@@ -3161,12 +3161,16 @@ abstract final class MangaDownloadJobKind {
 }
 
 /// 漫画下载任务状态值域（`manga_download_jobs.status`）。
+///
+/// `paused`（ticket 07）是**非终态**：worker 不领取它，恢复时改回 `queued`；
+/// 暂停运行中的任务保留 staging，恢复后按页级续传继续。
 abstract final class MangaDownloadJobStatus {
   static const String queued = 'queued';
   static const String running = 'running';
   static const String done = 'done';
   static const String failed = 'failed';
   static const String cancelled = 'cancelled';
+  static const String paused = 'paused';
 }
 
 /// 漫画章节的下载任务队列（schema v103，device-local）。
@@ -3233,7 +3237,7 @@ class MangaDownloadJobs extends Table {
             "AND runtime != '')",
         "CHECK (kind IN ('chapter', 'mokuro_volume'))",
         "CHECK (status IN ('queued', 'running', 'done', 'failed', "
-            "'cancelled'))",
+            "'cancelled', 'paused'))",
         'CHECK (pages_done >= 0 AND pages_total >= 0 '
             'AND pages_done <= pages_total)',
         'CHECK (attempt_count >= 0)',
