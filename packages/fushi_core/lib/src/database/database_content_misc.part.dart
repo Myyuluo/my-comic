@@ -1012,6 +1012,50 @@ mixin _FushiDbContentMisc
     };
   }
 
+  /// 书架漫画未读角标的批量快照（**两条查询**，不随卡片 / 章节数量增长）。
+  ///
+  /// 章节身份来源取 `format='manga'` 的书行；已读状态只取 `readAt` 非空的行
+  /// （未读完 / 读到一半的章不进集合，正是「未读」的定义）。章节 JSON 的解码
+  /// 不在这里做：数据库层不认识在线运行时描述符（`OnlineMangaLibraryEntry`）
+  /// 与本地图源 `chaptersJson` 的形状，解码与计数归展示层。
+  Future<MangaShelfReadSnapshot> getMangaShelfReadSnapshot() async {
+    final List<TypedResult> bookRows = await (selectOnly(epubBooks)
+          ..addColumns(<Expression<Object>>[
+            epubBooks.bookKey,
+            epubBooks.uid,
+            epubBooks.sourceMetadata,
+            epubBooks.chaptersJson,
+          ])
+          ..where(epubBooks.format.equals(BookFormat.manga.dbValue)))
+        .get();
+    final List<TypedResult> readRows = await (selectOnly(mangaChapterStates)
+          ..addColumns(<Expression<Object>>[
+            mangaChapterStates.bookUid,
+            mangaChapterStates.chapterKey,
+          ])
+          ..where(mangaChapterStates.readAt.isNotNull()))
+        .get();
+    final Map<String, Set<String>> readChapterKeysByBookUid =
+        <String, Set<String>>{};
+    for (final TypedResult row in readRows) {
+      final String bookUid = row.read(mangaChapterStates.bookUid)!;
+      final String chapterKey = row.read(mangaChapterStates.chapterKey)!;
+      (readChapterKeysByBookUid[bookUid] ??= <String>{}).add(chapterKey);
+    }
+    return MangaShelfReadSnapshot(
+      books: <MangaShelfChapterSource>[
+        for (final TypedResult row in bookRows)
+          MangaShelfChapterSource(
+            bookKey: row.read(epubBooks.bookKey)!,
+            bookUid: row.read(epubBooks.uid)!,
+            sourceMetadata: row.read(epubBooks.sourceMetadata),
+            chaptersJson: row.read(epubBooks.chaptersJson)!,
+          ),
+      ],
+      readChapterKeysByBookUid: readChapterKeysByBookUid,
+    );
+  }
+
   Future<MangaChapterStateRow?> getMangaChapterState({
     required String bookUid,
     required String chapterKey,
