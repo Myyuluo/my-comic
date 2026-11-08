@@ -2138,7 +2138,7 @@
   "download_request_failed": "다운로드를 만들 수 없습니다. 다운로드 설정과 작업 목록을 확인한 다음 다시 시도하세요.",
   "download_resource_resolve_failed": "다운로드 리소스를 가져올 수 없습니다. 네트워크와 프록시 설정을 확인한 다음 다시 시도하세요.",
   "download_resume_all": "Resume all",
-  "download_save_as_cbz_subtitle": "Only affects downloads started from now on; existing chapters keep their current form.",
+  "download_save_as_cbz_subtitle": "When off, downloaded manga are saved as folders with image files.",
   "download_save_as_cbz_title": "Save as CBZ archive",
   "download_save_root_change": "폴더 변경",
   "download_save_root_create_failed": "해당 폴더를 만들 수 없습니다. 드라이브와 권한을 확인하세요.",
