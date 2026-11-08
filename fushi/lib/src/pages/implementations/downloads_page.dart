@@ -183,11 +183,6 @@ class _DownloadsPageState extends ConsumerState<DownloadsPage> {
                             : t.download_pause_all,
                         style: FushiPageChromeTitle.titleStyleOf(context),
                       ),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: fushiPageChromeColor(context),
-                        foregroundColor: fushiPageChromeForeground(context),
-                        textStyle: FushiPageChromeTitle.titleStyleOf(context),
-                      ),
                     ),
                   ),
                 ),
