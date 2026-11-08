@@ -54,6 +54,7 @@ import 'package:fushi_engine/media/discovery/discovery_models.dart'
     show DiscoveryMediaKind;
 import 'package:fushi/src/pages/implementations/name_input_dialog.dart';
 import 'package:fushi/src/pages/implementations/library_filter_dropdown.dart';
+import 'package:fushi/src/pages/implementations/manga_tag_tabs.dart';
 import 'package:fushi/src/pages/implementations/tag_filter_bar.dart';
 import 'package:fushi/src/utils/components/fushi_header_search.dart';
 import 'package:fushi/src/utils/components/fushi_floating_chrome.dart'
@@ -322,6 +323,18 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
   /// 状态筛选），重启就丢等于每次打开都要重选（用户实报）。initState 读回。
   ShelfReadStatus? _readStatusFilter;
 
+  /// 本帧漫画页标签页签的有效选中值（null = 「书架」）。选中的标签在标签管理页
+  /// 被删除后回落到「书架」；字段在 build 里按 [mangaTagTabSelectionProvider]
+  /// 与本帧标签池解析，供同一帧的筛选与页签渲染共用。
+  int? _mangaTagTabSelection;
+
+  /// 本帧每个页签在当前搜索词 / 阅读状态筛选下会显示的漫画数（key null = 书架）。
+  Map<int?, int> _mangaTagTabCounts = const <int?, int>{};
+
+  /// 本帧标签页签筛选前，漫画书架是否有条目。用于区分空态文案：整个书架为空
+  /// （引导入库）还是当前页签 / 搜索无命中（「没有符合筛选的书」）。
+  bool _mangaShelfUnfilteredNonEmpty = false;
+
   void _setReadStatusFilter(ShelfReadStatus? value) {
     setState(() => _readStatusFilter = value);
     unawaited(
@@ -346,6 +359,26 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
           duration: progress?.duration ?? 0,
         ) ==
         filter;
+  }
+
+  /// 漫画页当前搜索词 + 阅读状态筛选（ticket 06 再叠加漫画下载状态）是否放行该
+  /// 条目。页签数量与实际渲染共用这一判据，保证「切过去能看到多少」不说谎。
+  bool _mangaItemPassesActiveFilters(MediaItem item) {
+    final bool matchesSearch = _matchesShelfSearch(<String>[
+      mediaSource.getDisplayTitleFromMediaItem(item),
+      item.title,
+    ]);
+    if (!matchesSearch) return false;
+    return _matchesReadStatusFilter(
+      bookKey: _parseBookKey(item.mediaIdentifier),
+      progress: (position: item.position, duration: item.duration),
+    );
+  }
+
+  /// 选中漫画页某个标签页签；null = 「书架」。
+  void _selectMangaTagTab(int? tagId) {
+    if (ref.read(mangaTagTabSelectionProvider) == tagId) return;
+    ref.read(mangaTagTabSelectionProvider.notifier).state = tagId;
   }
 
   String _readStatusLabel(ShelfReadStatus status) => switch (status) {
@@ -610,13 +643,55 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
       };
       return true;
     }());
-    final AsyncValue<Set<String>?> filteredIds =
-        ref.watch(filteredBookIdsProvider);
+    // 漫画页的标签筛选是独立的单选页签（书架 + 用户标签），与共享的彩色多选
+    // selectedTagIdsProvider 无关；其他媒体库继续走 filteredBookIdsProvider。
+    final AsyncValue<Set<String>?> filteredIds = _mangaOnly
+        ? const AsyncData<Set<String>?>(null)
+        : ref.watch(filteredBookIdsProvider);
     final allTags = ref.watch(allTagsProvider);
     final List<BookTagRow> allTagRows =
         allTags.valueOrNull ?? const <BookTagRow>[];
-    // 漫画页在库页壳里时，视图页签位由 Tag chips 取代（ticket 06）：页签位是壳画
-    // 的，标签数据与交互在本书架里，所以像页头动作一样把标签行登记给壳。
+    final Map<String, List<BookTagRow>> mangaTagMap = _mangaOnly
+        ? ref.watch(bookTagMapProvider).valueOrNull ??
+            const <String, List<BookTagRow>>{}
+        : const <String, List<BookTagRow>>{};
+    final int? requestedMangaTagTab = _mangaOnly
+        ? ref.watch(mangaTagTabSelectionProvider)
+        : null;
+    // 选中的标签可能刚在标签管理页被删除：本帧按「书架」渲染，并顺手把状态修回去。
+    final bool mangaTagTabExists = requestedMangaTagTab == null ||
+        allTagRows.any((BookTagRow tag) => tag.id == requestedMangaTagTab);
+    final int? mangaTagTab = mangaTagTabExists ? requestedMangaTagTab : null;
+    if (!mangaTagTabExists) {
+      WidgetsBinding.instance.addPostFrameCallback((Duration _) {
+        if (!mounted) return;
+        if (ref.read(mangaTagTabSelectionProvider) == requestedMangaTagTab) {
+          ref.read(mangaTagTabSelectionProvider.notifier).state = null;
+        }
+      });
+    }
+    _mangaTagTabSelection = mangaTagTab;
+    // 页签数量只基于已加载的书架条目计算（搜索 / 阅读状态在 _mangaItemPasses…
+    // 里统一生效）；ticket 06 的下载筛选会作为同一个判据的一部分接进来。
+    final List<MediaItem> mangaBooksForTabs =
+        _mangaOnly && books.valueOrNull != null
+            ? filterShelfEntriesByMangaSplit(
+                books.valueOrNull!,
+                mangaOnly: true,
+              )
+            : const <MediaItem>[];
+    _mangaTagTabCounts = _mangaOnly
+        ? countMangaTagTabItems(
+            mangaBooksForTabs,
+            bookKeyOf: (MediaItem item) =>
+                _parseBookKey(item.mediaIdentifier),
+            tagMap: mangaTagMap,
+            tagIds: <int>{for (final BookTagRow tag in allTagRows) tag.id},
+            visible: _mangaItemPassesActiveFilters,
+          )
+        : const <int?, int>{};
+    // 漫画页在库页壳里时，视图页签位由标签页签胶囊取代：页签位是壳画的，标签
+    // 数据与交互在本书架里，所以像页头动作一样把标签行登记给壳。
     final MediaLibraryChromeTabsSlot? chromeTabs = _mangaOnly
         ? MediaLibraryShellScope.maybeOf(context)?.chromeTabsSlot
         : null;
@@ -661,11 +736,16 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
                           _buildPageHeader(),
                           _buildSortMenuAnchor(allTagRows),
                           if (chromeTabs == null) _buildTagBar(allTagRows),
-                        ] else
+                        ] else ...<Widget>[
+                          // 漫画页的标签栏是独立的单选页签胶囊，不再并进 legacy
+                          // 工具行的「多选标签」菜单；其他媒体库保持原菜单。
                           _buildSearchBar(
                             allTagRows,
-                            hideTagChips: chromeTabs != null,
+                            hideTagChips: chromeTabs != null || _mangaOnly,
                           ),
+                          if (_mangaOnly && chromeTabs == null)
+                            _buildTagBar(allTagRows),
+                        ],
                         // 下拉同步可能跑几十秒，光一个转圈看不出进展；没同步在飞时
                         // 零高度。
                         SyncProgressBanner(compact: _compactLibraryToolbar),
@@ -710,9 +790,27 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
                           bookList,
                           mangaOnly: _mangaOnly,
                         );
+                        _mangaShelfUnfilteredNonEmpty = shelfBooks.isNotEmpty;
                         final Set<String>? filterSet = filteredIds.valueOrNull;
                         List<MediaItem> filtered;
-                        if (filterSet == null) {
+                        if (_mangaOnly) {
+                          // 排他归属：书架 = 无任何标签；标签页签 = 带该标签（多标签
+                          // 漫画在每个对应标签下都出现）。
+                          final int? selectedTagId = _mangaTagTabSelection;
+                          filtered = shelfBooks.where((MediaItem item) {
+                            final String? key =
+                                _parseBookKey(item.mediaIdentifier);
+                            final List<BookTagRow>? tags =
+                                key == null ? null : mangaTagMap[key];
+                            if (selectedTagId == null) {
+                              return tags == null || tags.isEmpty;
+                            }
+                            return tags
+                                    ?.any((BookTagRow tag) =>
+                                        tag.id == selectedTagId) ??
+                                false;
+                          }).toList();
+                        } else if (filterSet == null) {
                           filtered = shelfBooks;
                         } else {
                           filtered = shelfBooks.where((item) {
@@ -788,9 +886,9 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
   /// 上次登记页签位内容的壳槽（换槽 / 卸载时先撤回旧登记）。
   MediaLibraryChromeTabsSlot? _claimedChromeTabs;
 
-  /// 把 Tag chips 登记到壳的视图页签位（漫画页，ticket 06）。独立使用（无壳）
-  /// 时不登记，标签行仍在标题下自成一行。`inlineTags` 去掉行内页边，让 chip
-  /// 从页签原来的左缘开始、高度与浮动 chrome 行一致（没有标签时零高度，位置留空）。
+  /// 把标签页签胶囊登记到壳的视图页签位（漫画页）。独立使用（无壳）时不登记，
+  /// 页签行仍在标题下自成一行。`inlineTags` 去掉行内页边，让胶囊从页签原来的
+  /// 左缘开始、高度与浮动 chrome 行一致。
   void _syncChromeTabsClaim(
     MediaLibraryChromeTabsSlot? slot,
     List<BookTagRow> allTags,
@@ -825,6 +923,20 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
     bool tagsInMenu = false,
     bool inlineTags = false,
   }) {
+    // 漫画页用单选分段胶囊（书架 + 用户标签），共享彩色多选 chip 只服务其他媒体
+    // 库。动作段（actions）仍是共享动作组，页头「管理标签」入口不受影响。
+    if (_mangaOnly &&
+        (part == FushiTagFilterBarPart.tags ||
+            part == FushiTagFilterBarPart.full)) {
+      return MangaTagTabBar(
+        key: const ValueKey<String>('manga_tag_tab_bar'),
+        tags: allTags,
+        selectedTagId: _mangaTagTabSelection,
+        counts: _mangaTagTabCounts,
+        inline: inlineTags,
+        onSelected: _selectMangaTagTab,
+      );
+    }
     return FushiTagFilterBar(
       tags: allTags,
       part: part,
@@ -999,6 +1111,10 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
         if (r.uid.isNotEmpty) r.bookKey: r.uid,
     };
     _completedBookKeys = await appModel.database.getCompletedEpubBookKeys();
+    // 漫画页页签数量要按「阅读状态」筛选统计，读完集合是异步预取的；集合就绪后
+    // 补一帧，让浮动 chrome 里的数量与正文同一口径（正文由 FutureBuilder 重建，
+    // chrome 不在它下面）。
+    if (mounted) setState(() {});
   }
 
   /// 用户切换排序方式：立即重排 + 偏好持久化（跨启动记住）。
@@ -1475,7 +1591,12 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
             return key == null || !srtBookKeys.contains(key);
           }).toList();
 
-    final bool hasActiveFilter = ref.read(selectedTagIdsProvider).isNotEmpty;
+    // 漫画页的标签页签本身就是筛选维度：书架里还有漫画但当前页签无命中时，
+    // 空态要说「没有符合筛选的书」，不能落回「书架为空」。其他媒体库仍以共用的
+    // 多选标签集判据。
+    final bool hasActiveFilter = _mangaOnly
+        ? _mangaShelfUnfilteredNonEmpty
+        : ref.read(selectedTagIdsProvider).isNotEmpty;
     final Set<String>? srtFilterSet =
         ref.watch(filteredSrtBookUidsProvider).valueOrNull;
     final List<SrtBook> tagFilteredSrtBooks;
@@ -1708,7 +1829,9 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
   /// 归进任何一档筛选都是猜。两处以前各抄一份，新加条件时漏掉一处就会出现「合集
   /// 行头数字与详情页对不上」。
   bool get _remotePlaceholdersAllowed =>
-      ref.read(selectedTagIdsProvider).isEmpty &&
+      (_mangaOnly
+          ? _mangaTagTabSelection == null
+          : ref.read(selectedTagIdsProvider).isEmpty) &&
       _readStatusFilter == null &&
       appModel.prefsRepo.showRemoteEntries &&
       _moduleVisibility.isEnabled(ModuleId.sync);

@@ -19,7 +19,6 @@ import 'package:fushi/media.dart';
 import 'package:fushi/models.dart';
 import 'package:fushi/src/models/preferences_repository.dart';
 import 'package:fushi/src/pages/implementations/reader_fushi_history_page.dart';
-import 'package:fushi/src/pages/implementations/tag_filter_sheet.dart';
 import 'package:fushi/src/utils/adaptive/adaptive_platform.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:fushi_audio/fushi_audio.dart';
@@ -176,7 +175,7 @@ void main() {
     expect(prefs.shelfReadStatusFilterName, 'reading');
   });
 
-  testWidgets('Cupertino/legacy 工具行：同一按钮二次点击也收起，标签项保持菜单打开',
+  testWidgets('Cupertino/legacy 工具行：同一按钮二次点击也收起，漫画标签不进菜单',
       (WidgetTester tester) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(500, 900);
@@ -190,17 +189,18 @@ void main() {
     await tester.pumpAndSettle();
     expect(menuProbe(), findsOneWidget, reason: 'legacy 工具行按钮应展开菜单');
 
-    // 窄屏 legacy 工具栏把标签并进排序菜单（多选组，点选不关菜单）。
-    final Finder tagItem =
-        find.byKey(ValueKey<String>('library_menu_tag_$tagA'));
-    expect(tagItem, findsOneWidget, reason: '窄屏标签应在排序菜单里');
-    await tester.tap(tagItem);
-    await tester.pumpAndSettle();
-    expect(tagItem, findsOneWidget, reason: '标签项点选后菜单应保持打开');
-    final ProviderContainer container = ProviderScope.containerOf(
-      tester.element(find.byType(ReaderFushiHistoryPage)),
+    // 漫画页标签栏已改为独立的单选页签胶囊（ticket 01）：legacy 工具行的排序
+    // 菜单里不再有「多选标签」组。
+    expect(
+      find.byKey(ValueKey<String>('library_menu_tag_$tagA')),
+      findsNothing,
+      reason: '漫画页标签是独立页签，不再并进排序菜单',
     );
-    expect(container.read(selectedTagIdsProvider), <int>{tagA});
+    expect(
+      find.byKey(ValueKey<String>('manga_tag_tab_$tagA')),
+      findsOneWidget,
+      reason: '标签以单选页签形式出现在页签胶囊里',
+    );
 
     await tester.tap(sortButton());
     await tester.pumpAndSettle();
