@@ -31,3 +31,7 @@ my-comic 需要同时满足两件事：用户能在资源管理器里直接找�
 设置页的存储入口已收敛为一个：「存储位置」（即 Content root）整行只读，行尾提供「变更文件夹」与「打开文件夹」；「变更文件夹」沿用原切换语义，「打开文件夹」在目录不存在时先创建再打开。原先在「存储与下载」里重复列出的 `downloads` / `localcomic` / `autobackup` 三个文件夹入口已移除，SRS 备份页上的同名入口也一并消失。备份分组（导入 / 导出 Mihon 备份）从「系统与关于」搬入「存储与下载」，分组顺序为数据存储位置 → 下载 → 备份 → 下载索引。
 
 原文 **Consequences** 中「UI 只允许……三个文件夹的打开入口……以及『导入本地漫画』扫描入口」一条由本修订取代：三个文件夹入口与「导入本地漫画」入口都不再存在；本地漫画改由图源列表里的「本地图源」按单部作品登记（见 ADR 0013 修订与 ADR 0014）。
+
+## Amendment 2026-11-08（local-source-polish）
+
+Content root 的三个子目录为 `downloads` / `autobackup` / `local`：本地源根目录名由 `localcomic` 改为 `local`，默认路径为 `<Documents>\MyComic\local`；旧 `localcomic` 不再扫描、不迁移、不删除。原文与上一修订中出现的 `localcomic` 均按 `local` 理解；本地源根的完整修订见 ADR 0013。
