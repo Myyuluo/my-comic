@@ -22,6 +22,7 @@ import 'package:fushi/src/media/manga/mihon/mihon_models.dart';
 import 'package:fushi/src/media/manga/mihon/mihon_runtime.dart';
 import 'package:fushi/src/models/preferences_repository.dart';
 import 'package:fushi/src/platform/platform_providers.dart';
+import 'package:fushi/src/utils/components/fushi_material_components.dart';
 import 'package:fushi_audio/fushi_audio.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:path/path.dart' as p;
@@ -166,6 +167,7 @@ const List<OnlineMangaChapter> _chapters = <OnlineMangaChapter>[
 OnlineMangaLibraryEntry _entry({
   String title = 'Fixture series',
   String? author = 'Fixture author',
+  String? genre,
   OnlineMangaRuntimeKind runtime = OnlineMangaRuntimeKind.mihon,
 }) => OnlineMangaLibraryEntry(
   runtime: runtime,
@@ -175,10 +177,16 @@ OnlineMangaLibraryEntry _entry({
     key: '/series/fixture',
     title: title,
     author: author,
+    genre: genre,
     raw: const <String, Object?>{'url': '/series/fixture'},
   ),
   chapters: _chapters,
 );
+
+/// 10 个源分类：超过旧实现的 8 个上限。
+const String _tenGenres =
+    'Action, Adventure, Comedy, Drama, Fantasy, Horror, Mystery, Romance, '
+    'Sci-Fi, Slice of Life';
 
 MangaExtensionsCompanion _extension(
   String packageName, {
@@ -319,6 +327,7 @@ void main() {
     _FakeMihonRuntime? runtime,
     bool platformSupported = true,
     OnlineMangaRuntimeKind entryRuntime = OnlineMangaRuntimeKind.mihon,
+    String? genre,
     String? localBookKey,
     Finder? waitFor,
   }) async {
@@ -339,7 +348,9 @@ void main() {
     );
     final String bookKey =
         localBookKey ??
-        (await library.add(_entry(runtime: entryRuntime))).bookKey;
+        (await library.add(
+          _entry(runtime: entryRuntime, genre: genre),
+        )).bookKey;
     await tester.pumpWidget(
       _harness(appModel, ShelfMangaSeriesTarget(bookKey)),
     );
@@ -432,6 +443,92 @@ void main() {
     expect(runtime.searches, <({String sourceName, String query})>[
       (sourceName: 'Enabled source', query: 'Fixture author'),
     ]);
+  });
+
+  testWidgets('源分类超过 8 个时全部渲染（不再截断）', (WidgetTester tester) async {
+    await tester.runAsync(() async {
+      await pumpSeriesPage(tester, genre: _tenGenres);
+    });
+
+    for (final String genre in <String>[
+      'Action',
+      'Adventure',
+      'Comedy',
+      'Drama',
+      'Fantasy',
+      'Horror',
+      'Mystery',
+      'Romance',
+      'Sci-Fi',
+      'Slice of Life',
+    ]) {
+      expect(
+        find.widgetWithText(FushiTagChip, genre),
+        findsOneWidget,
+        reason: '来源给的全部源分类都要渲染：$genre',
+      );
+    }
+  });
+
+  testWidgets('点击源分类：以分类文字打开「搜索全部来源」并自动搜索全部已启用源', (WidgetTester tester) async {
+    late _FakeMihonRuntime runtime;
+    await tester.runAsync(() async {
+      runtime = (await pumpSeriesPage(tester, genre: _tenGenres)).runtime;
+      final Finder drama = find.widgetWithText(FushiTagChip, 'Drama');
+      await tester.ensureVisible(drama);
+      await _settle(tester);
+      // 与书名 / 作者一致：鼠标点击触发。
+      await tester.tap(drama, kind: PointerDeviceKind.mouse);
+      await openSearchAndSettle(tester);
+    });
+
+    expect(runtime.searches, <({String sourceName, String query})>[
+      (sourceName: 'Enabled source', query: 'Drama'),
+    ], reason: '只用分类文字搜全部已启用在线源（禁用的源与扩展都被排除）');
+    expect(find.byType(MangaGlobalSearchPage), findsOneWidget);
+    expect(find.text('Enabled source'), findsOneWidget);
+  });
+
+  testWidgets('源分类接入可点击标签的悬停 / 焦点反馈', (WidgetTester tester) async {
+    await tester.runAsync(() async {
+      await pumpSeriesPage(tester, genre: _tenGenres);
+    });
+
+    expect(
+      find.descendant(
+        of: find.widgetWithText(FushiTagChip, 'Drama'),
+        matching: find.byType(InkWell),
+      ),
+      findsOneWidget,
+      reason: '与可点击标签一致：悬停 / 焦点有反馈，能看出可以点',
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(_authorChipKey),
+        matching: find.byType(MediaDetailMouseHoverTap),
+      ),
+      findsOneWidget,
+      reason: '作者 chip 的既有悬停反馈保持不变',
+    );
+  });
+
+  testWidgets('没有可用在线源：点击源分类仍打开搜索页自己的空态', (WidgetTester tester) async {
+    await tester.runAsync(() async {
+      await pumpSeriesPage(tester, genre: _tenGenres, withEnabledSource: false);
+
+      final Finder drama = find.widgetWithText(FushiTagChip, 'Drama');
+      await tester.ensureVisible(drama);
+      await _settle(tester);
+      await tester.tap(drama, kind: PointerDeviceKind.mouse);
+      await _pumpUntil(tester, find.byType(MangaGlobalSearchPage));
+      await _pumpUntil(tester, find.text(t.manga_global_search_no_sources));
+    });
+
+    expect(
+      find.byKey(const ValueKey<String>('manga_global_search_open_sources')),
+      findsNothing,
+      reason: '不接「去装来源」回调',
+    );
   });
 
   testWidgets('标题与作者只响应鼠标点击：触摸点击不打开搜索页', (WidgetTester tester) async {
