@@ -52,13 +52,21 @@ void main() {
     );
   });
 
-  test('任务状态映射：queued / running / failed，其余为 notDownloaded', () {
+  test('任务状态映射：queued / paused / running / failed，其余为 notDownloaded', () {
     expect(
       mangaChapterDownloadState(
         downloaded: false,
         job: job(MangaDownloadJobStatus.queued),
       ),
       MangaChapterDownloadState.queued,
+    );
+    expect(
+      mangaChapterDownloadState(
+        downloaded: false,
+        job: job(MangaDownloadJobStatus.paused),
+      ),
+      MangaChapterDownloadState.queued,
+      reason: '全局暂停的任务仍占队列位，章节列表按排队中展示',
     );
     expect(
       mangaChapterDownloadState(

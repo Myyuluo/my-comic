@@ -303,6 +303,187 @@ void main() {
     });
   });
 
+  group('下载页全局暂停 / 继续（ticket 07）', () {
+    final Finder globalFab = find.byKey(
+      const ValueKey<String>('downloads-global-toggle-fab'),
+    );
+
+    testWidgets('列表为空时不显示全局按钮', (WidgetTester tester) async {
+      await pumpPage(tester);
+
+      expect(globalFab, findsNothing);
+      expect(find.text(t.download_pause_all), findsNothing);
+      expect(find.text(t.download_resume_all), findsNothing);
+    });
+
+    testWidgets('存在排队中或下载中任务时显示「全部暂停」', (
+      WidgetTester tester,
+    ) async {
+      await insertTask(
+        jobId: 'job-queued',
+        status: MangaDownloadJobStatus.queued,
+        createdAt: 1,
+      );
+      await insertTask(
+        jobId: 'job-running',
+        status: MangaDownloadJobStatus.running,
+        createdAt: 2,
+      );
+      await pumpPage(tester);
+
+      expect(globalFab, findsOneWidget);
+      expect(find.text(t.download_pause_all), findsOneWidget);
+      expect(find.text(t.download_resume_all), findsNothing);
+    });
+
+    testWidgets('列表非空且所有任务都是暂停或失败时显示「全部继续」', (
+      WidgetTester tester,
+    ) async {
+      await insertTask(
+        jobId: 'job-paused',
+        status: MangaDownloadJobStatus.paused,
+        createdAt: 1,
+      );
+      await insertTask(
+        jobId: 'job-failed',
+        status: MangaDownloadJobStatus.failed,
+        createdAt: 2,
+      );
+      await pumpPage(tester);
+
+      expect(globalFab, findsOneWidget);
+      expect(find.text(t.download_resume_all), findsOneWidget);
+      expect(find.text(t.download_pause_all), findsNothing);
+    });
+
+    testWidgets('点击「全部暂停」：排队 / 下载中任务变为暂停，失败保持失败', (
+      WidgetTester tester,
+    ) async {
+      await insertTask(
+        jobId: 'job-queued',
+        status: MangaDownloadJobStatus.queued,
+        createdAt: 1,
+      );
+      await insertTask(
+        jobId: 'job-running',
+        status: MangaDownloadJobStatus.running,
+        createdAt: 2,
+      );
+      await insertTask(
+        jobId: 'job-failed',
+        status: MangaDownloadJobStatus.failed,
+        createdAt: 3,
+      );
+      await pumpPage(tester);
+
+      await tester.tap(find.text(t.download_pause_all));
+      await tester.pumpAndSettle();
+
+      expect(
+        (await db.getMangaDownloadJob('job-queued'))?.status,
+        MangaDownloadJobStatus.paused,
+      );
+      expect(
+        (await db.getMangaDownloadJob('job-running'))?.status,
+        MangaDownloadJobStatus.paused,
+      );
+      expect(
+        (await db.getMangaDownloadJob('job-failed'))?.status,
+        MangaDownloadJobStatus.failed,
+        reason: '全部暂停不处理失败任务',
+      );
+      expect(
+        find.text(t.download_resume_all),
+        findsOneWidget,
+        reason: '全部暂停后按钮切换为「全部继续」',
+      );
+    });
+
+    testWidgets('点击「全部继续」：暂停任务恢复排队并重试失败任务', (
+      WidgetTester tester,
+    ) async {
+      await insertTask(
+        jobId: 'job-paused',
+        status: MangaDownloadJobStatus.paused,
+        createdAt: 1,
+      );
+      await insertTask(
+        jobId: 'job-failed',
+        status: MangaDownloadJobStatus.failed,
+        createdAt: 2,
+      );
+      await pumpPage(tester);
+
+      await tester.tap(find.text(t.download_resume_all));
+      await tester.pumpAndSettle();
+
+      expect(
+        (await db.getMangaDownloadJob('job-paused'))?.status,
+        MangaDownloadJobStatus.queued,
+      );
+      expect(
+        (await db.getMangaDownloadJob('job-failed'))?.status,
+        MangaDownloadJobStatus.queued,
+        reason: '全部继续会重试所有失败任务',
+      );
+      expect(
+        find.text(t.download_pause_all),
+        findsOneWidget,
+        reason: '恢复后存在排队任务，按钮切换为「全部暂停」',
+      );
+    });
+
+    testWidgets('暂停任务保留在列表，可单独取消，没有行内「继续」', (
+      WidgetTester tester,
+    ) async {
+      await insertTask(
+        jobId: 'job-paused',
+        status: MangaDownloadJobStatus.paused,
+        createdAt: 1,
+      );
+      await pumpPage(tester);
+
+      expect(find.byType(DownloadTaskCard), findsOneWidget);
+      expect(find.textContaining(t.download_task_status_paused), findsOneWidget);
+      expect(
+        find.byTooltip(t.download_resume),
+        findsNothing,
+        reason: '暂停不是失败：没有行内继续按钮（继续只由全局按钮控制）',
+      );
+      expect(find.byTooltip(t.dialog_cancel), findsOneWidget);
+
+      await tester.tap(find.byTooltip(t.dialog_cancel));
+      await tester.pumpAndSettle();
+
+      expect(await db.getMangaDownloadJob('job-paused'), isNull);
+      expect(find.byType(DownloadTaskCard), findsNothing);
+      expect(globalFab, findsNothing, reason: '列表空了按钮隐藏');
+    });
+
+    testWidgets('最后一张任务卡不被右下角全局按钮遮挡', (WidgetTester tester) async {
+      for (int i = 0; i < 12; i++) {
+        await insertTask(
+          jobId: 'job-$i',
+          status: MangaDownloadJobStatus.queued,
+          createdAt: i,
+        );
+      }
+      await pumpPage(tester);
+      expect(globalFab, findsOneWidget);
+
+      await tester.drag(find.byType(ListView), const Offset(0, -5000));
+      await tester.pumpAndSettle();
+
+      final Rect lastCard = tester.getRect(find.byType(DownloadTaskCard).last);
+      final Rect fab = tester.getRect(globalFab);
+      expect(
+        lastCard.bottom,
+        lessThanOrEqualTo(fab.top),
+        reason: '列表底部留白要托住最后一张卡，不能压在 FAB 下面',
+      );
+    });
+  });
+
   group('共享任务卡默认模式（其它调用点）', () {
     testWidgets('仍显示来源标签、可展开且展开后显示详情', (WidgetTester tester) async {
       await tester.pumpWidget(

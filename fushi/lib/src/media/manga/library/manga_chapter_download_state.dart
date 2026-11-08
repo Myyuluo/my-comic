@@ -23,6 +23,9 @@ MangaChapterDownloadState mangaChapterDownloadState({
   if (downloaded) return MangaChapterDownloadState.downloaded;
   switch (job?.status) {
     case MangaDownloadJobStatus.queued:
+    // 全局暂停（ticket 07）不是终态：任务仍占着队列位，只是被全局按钮停住。
+    // 章节列表按「排队中」展示（不提供重复下载入口），恢复由下载页统一控制。
+    case MangaDownloadJobStatus.paused:
       return MangaChapterDownloadState.queued;
     case MangaDownloadJobStatus.running:
       return MangaChapterDownloadState.downloading;
