@@ -21,6 +21,9 @@ import 'package:fushi/utils.dart';
 /// 只做映射，不持有任务：动作全部委托 [MangaDownloadService]（取消 / 重试 /
 /// 清除），行的真相是表——`watchJobs` 一响就整体重取。独立使用时空表不占位；
 /// [tasksBuilder] 把条目接进外层统一列表。
+///
+/// 下载页只列可操作任务（ticket 05）：`done` 行保留在表里仅供作品页判
+/// 「文件缺失」，取消会直接删行，因此都不进列表；`failed` 保留并显示「继续」。
 class MangaDownloadTasksSection extends ConsumerStatefulWidget {
   const MangaDownloadTasksSection({
     super.key,
@@ -38,6 +41,15 @@ class MangaDownloadTasksSection extends ConsumerStatefulWidget {
   ConsumerState<MangaDownloadTasksSection> createState() =>
       _MangaDownloadTasksSectionState();
 }
+
+/// 下载页可见的任务状态：排队 / 下载中 / 失败。`done` 保留在表中但不再展示
+/// （作品页 Missing 判定需要它）；`cancelled` 是取消路径不再产生的遗留值，
+/// 也一并隐藏。
+const Set<String> _visibleJobStatuses = <String>{
+  MangaDownloadJobStatus.queued,
+  MangaDownloadJobStatus.running,
+  MangaDownloadJobStatus.failed,
+};
 
 class _MangaDownloadTasksSectionState
     extends ConsumerState<MangaDownloadTasksSection> {
@@ -80,7 +92,9 @@ class _MangaDownloadTasksSectionState
   Future<void> _reload() async {
     final MangaDownloadService? downloads = _downloads;
     if (downloads == null) return;
-    final List<MangaDownloadJobRow> jobs = await downloads.listJobs();
+    final List<MangaDownloadJobRow> jobs = await downloads.listJobs(
+      statuses: _visibleJobStatuses,
+    );
     if (!mounted) return;
     setState(() => _jobs = jobs);
   }
@@ -108,7 +122,7 @@ class _MangaDownloadTasksSectionState
 /// 一条任务行 → 统一下载中心条目。
 ///
 /// `id = manga:<jobId>`；`collectionKey` 取 bookKey；动作：未结束可取消、
-/// failed / cancelled 可重试（同一行复位，BUG-1433）、已结束可清除。
+/// failed 可「继续」（同一行复位，BUG-1433）、已结束可清除。
 String _mangaTaskTitle(MangaDownloadJobRow job) =>
     '${job.title} · ${job.chapterTitle}';
 
@@ -118,8 +132,9 @@ DownloadTaskEntry mangaDownloadTaskEntry(
 ) {
   final String id = 'manga:${job.jobId}';
   final bool finished = _isFinished(job);
-  final bool retryable = job.status == MangaDownloadJobStatus.failed ||
-      job.status == MangaDownloadJobStatus.cancelled;
+  // 下载页只列失败的可操作任务；取消行会被删除（遗留 cancelled 行不展示），
+  // 所以行内「继续」只服务 failed。
+  final bool retryable = job.status == MangaDownloadJobStatus.failed;
   final double? progress = job.status == MangaDownloadJobStatus.done
       ? 1
       : job.pagesTotal > 0
@@ -154,12 +169,12 @@ DownloadTaskEntry mangaDownloadTaskEntry(
     ),
     builder: (BuildContext context) {
       // 简化卡片的行尾直接操作（不再藏在展开面板里）：排队 / 下载中可取消，
-      // 失败 / 已取消可重试，已完成保持安静。图标、tooltip 与调用的 service
-      // 方法沿用原展开面板。
+      // 失败可「继续」重试，已完成不展示。图标、tooltip 与调用的 service 方法
+      // 沿用原展开面板。
       final DownloadTaskQuickAction? quickAction = retryable
           ? DownloadTaskQuickAction(
               icon: Icons.refresh,
-              tooltip: t.retry,
+              tooltip: t.download_resume,
               onPressed: () => unawaited(downloads.retry(job.jobId)),
             )
           : finished
@@ -242,7 +257,7 @@ class _MangaDownloadTaskRow extends StatelessWidget {
   final MangaDownloadJobRow job;
   final String status;
 
-  /// failed / cancelled 可重试（与卡片 actions / quickAction 同一判据）。
+  /// failed 可「继续」重试（与卡片 actions / quickAction 同一判据）。
   final bool retryable;
   final MangaDownloadService downloads;
 
@@ -301,7 +316,7 @@ class _MangaDownloadTaskRow extends StatelessWidget {
       ),
       trailing: retryable
           ? FushiIconButton(
-              tooltip: t.retry,
+              tooltip: t.download_resume,
               icon: Icons.refresh,
               size: 20,
               constraints: _actionTarget,

@@ -2137,6 +2137,7 @@
   "download_remote_jobs_title": "Tâches sur $device",
   "download_request_failed": "Impossible de créer le téléchargement. Vérifiez les réglages de téléchargement et la liste des tâches, puis réessayez.",
   "download_resource_resolve_failed": "Impossible de récupérer la ressource à télécharger. Vérifiez le réseau et les réglages du proxy, puis réessayez.",
+  "download_resume": "Resume",
   "download_resume_all": "Resume all",
   "download_save_as_cbz_subtitle": "When off, downloaded manga are saved as folders with image files.",
   "download_save_as_cbz_title": "Save as CBZ archive",

@@ -292,22 +292,23 @@ class MangaDownloadService {
     }
   }
 
-  /// 取消：`queued` 直接改状态；正在飞的任务中止并删半成品目录。
+  /// 取消：删除任务行并清理半成品（staging / 临时压缩包）。下载页只列可操作
+  /// 任务，取消后不保留「已取消」行。
+  ///
+  /// 正在飞的任务先收到中止信号，任务行**立即**删除（列表即时消失），清理在
+  /// worker 观察到信号后由取消路径完成；排队 / 未在跑的任务当场清理。
   Future<void> cancel(String jobId) async {
     final MangaDownloadJobRow? row = await _database.getMangaDownloadJob(jobId);
     if (row == null) return;
     final _ActiveJob? active = _active;
     if (active != null && active.jobId == jobId) {
       active.token.cancelled = true;
+      await _database.deleteMangaDownloadJob(jobId);
       return;
     }
     if (row.status == MangaDownloadJobStatus.queued ||
         row.status == MangaDownloadJobStatus.running) {
-      await _database.updateMangaDownloadJobStatus(
-        jobId,
-        status: MangaDownloadJobStatus.cancelled,
-        updatedAt: _now,
-      );
+      await _database.deleteMangaDownloadJob(jobId);
       await _deleteChapterDirectory(row);
     }
   }
