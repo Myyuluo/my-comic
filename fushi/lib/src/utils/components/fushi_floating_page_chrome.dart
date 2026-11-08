@@ -20,6 +20,8 @@
 /// （iOS 26 / macOS 26 导航栏的内联标题是纯文字，玻璃只给栏上的控件）。
 library;
 
+import 'dart:math' as math;
+
 import 'package:material_ui/material_ui.dart';
 import 'package:fushi/src/utils/adaptive/adaptive_platform.dart';
 import 'package:fushi/src/utils/components/glass/fushi_glass_feedback.dart';
@@ -252,6 +254,42 @@ class FushiPageChromeTitle extends StatelessWidget {
   @visibleForTesting
   static double maxTitleScaleFactor(double titleFontSize) =>
       _kTextBudget / (titleFontSize * _kTitleLineHeight);
+
+  /// 标题胶囊的自然宽估算（逻辑像素）。
+  ///
+  /// 供页头动作收纳（[FushiHeaderCrampScope]）使用：标题位若不是单个分段条、
+  /// 而是「标题胶囊 + 页签」这类组合行，只上报页签自己的宽会让预算少算胶囊
+  /// 那一段，窄窗上多留动作、把标题行挤到不可读。只依赖文案 / 字阶 / 文字缩放
+  /// （build 期可算），与 [build] 用同一字阶与缩放上界。
+  ///
+  /// 只支持 [Text] 标题（本仓页头标题都是纯文字）；其它 widget 返回胶囊最小宽。
+  static double naturalWidthOf(BuildContext context, Widget title) {
+    final bool apple = isGlassDesign(context);
+    final TextStyle baseStyle = apple
+        ? _appleTitleStyle(context)
+        : titleStyleOf(context);
+    final double fontSize = baseStyle.fontSize ?? 14;
+    double textWidth = 0;
+    if (title is Text) {
+      final String? text = title.data ?? title.textSpan?.toPlainText();
+      if (text != null && text.isNotEmpty) {
+        final TextPainter painter = TextPainter(
+          text: TextSpan(text: text, style: baseStyle.merge(title.style)),
+          textDirection: TextDirection.ltr,
+          textScaler: MediaQuery.textScalerOf(
+            context,
+          ).clamp(maxScaleFactor: maxTitleScaleFactor(fontSize)),
+          maxLines: 1,
+        )..layout();
+        textWidth = painter.width;
+        painter.dispose();
+      }
+    }
+    // 与 build 的胶囊内边距同口径：MD3 横向各 20（下方胶囊自身还有最小宽），
+    // Apple 纯文字标题横向各 4。
+    if (apple) return textWidth + 4 * 2;
+    return math.max(kFushiPageChromeExtent, textWidth + 20 * 2);
+  }
 
   /// Apple 内联标题的字阶（iOS 26 bar title 17 / macOS 26 窗口标题 15，semibold）。
   static TextStyle _appleTitleStyle(BuildContext context) {

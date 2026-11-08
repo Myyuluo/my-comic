@@ -29,3 +29,7 @@ status: accepted
 ## Amendment 2026-11-08（local-source-polish）
 
 Local source root 的目录名已由 `localcomic` 改为 Content root 下的 `local`；旧 `localcomic` 已停用，不扫描、不迁移、不删除。原文决策描述中的 `localcomic` 均按 `local` 理解。
+
+## Amendment 2026-11-08（local-source-polish，独立浏览页）
+
+原「复用现有源行与**源浏览页组件**」中的源浏览页外壳一条，由本地图源的独立浏览页取代：本地图源页不再复用 `OnlineSourceBrowsePage` 的页面外壳（其列表 / 筛选 / 分页 / 空态机制），而是自己的页头（返回键 + 标题胶囊 + 「全部 / 未入架 / 已入架」页签 + 选择）、扫描封面网格与底部批量栏。**仍然复用**的是图源列表里的源行与启用开关、以及通用的 Fushi 组件（标题胶囊、分区页签、搜索栏、封面卡片、骨架 / 占位、批量栏、选择状态机与长按手势）。内置伪源的接入方式、禁用语义与「不出现在发现 / 全局搜索」等原决定不变；在线源浏览页继续使用原共享外壳，行为不变。

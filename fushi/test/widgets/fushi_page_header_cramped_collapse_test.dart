@@ -75,6 +75,55 @@ void main() {
     expect(find.byIcon(Icons.star_border), findsNWidgets(4));
   });
 
+  testWidgets('「标题胶囊 + 页签」组合标题按整行自然宽收纳动作，不少算胶囊宽', (
+    WidgetTester tester,
+  ) async {
+    final List<String> tapped = <String>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: SizedBox(
+              // 行宽 = 620 − 页头左右页边（16×2）。页签自然宽约 330，
+              // 只按页签估算时 4 个动作放得下；算上标题胶囊（约 200）就放不下。
+              width: 620,
+              child: FushiPageHeader.customTitle(
+                title: LibraryHeaderTitleWithTabs<String>(
+                  title: 'Local source',
+                  tabs: const <LibrarySectionTab<String>>[
+                    LibrarySectionTab<String>(value: 'all', label: 'All'),
+                    LibrarySectionTab<String>(
+                      value: 'not',
+                      label: 'Not in library',
+                    ),
+                    LibrarySectionTab<String>(
+                      value: 'in',
+                      label: 'In library',
+                    ),
+                  ],
+                  selected: 'all',
+                  onChanged: (_) {},
+                  focusIdPrefix: 'test-local-filter',
+                ),
+                actions: buildActions(tapped),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      find.byIcon(FushiIcons.more),
+      findsOneWidget,
+      reason: '整行（胶囊 + 页签）+ 4 动作放不下：必须收进 ⋯；'
+          '只上报页签宽会把预算算大、误判为放得下',
+    );
+    expect(find.byIcon(Icons.star_border), findsNothing);
+  });
+
   testWidgets('纯文字标题：给标题留保底宽后放得下就一个不收', (WidgetTester tester) async {
     final List<String> tapped = <String>[];
     await tester.pumpWidget(

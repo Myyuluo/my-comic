@@ -35,3 +35,5 @@ my-comic 需要同时满足两件事：用户能在资源管理器里直接找�
 ## Amendment 2026-11-08（local-source-polish）
 
 Content root 的三个子目录为 `downloads` / `autobackup` / `local`：本地源根目录名由 `localcomic` 改为 `local`，默认路径为 `<Documents>\MyComic\local`；旧 `localcomic` 不再扫描、不迁移、不删除。原文与上一修订中出现的 `localcomic` 均按 `local` 理解；本地源根的完整修订见 ADR 0013。
+
+本地漫画的登记入口除作品页的单部 Add to Library 外，也支持本地图源页选择模式下的**批量** Add to Library（见 ADR 0013 的 2026-11-08「批量加入书架」修订）；上一修订中「按单部作品登记」的描述按「单部或批量显式动作」理解。

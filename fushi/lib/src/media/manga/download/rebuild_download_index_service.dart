@@ -17,7 +17,9 @@
 ///
 /// 找不到文件的章节**不删除记录**：书目行与任务行原样保留，磁盘判据返回
 /// 「找不到」，任务行的 `done` 状态使它显示为 Missing。整个流程只增改数据库
-/// 行，不写、不移动、不删除任何用户文件。
+/// 行，不移动、不删除任何用户文件；唯一会写的用户文件是按本地图源扫描规则
+/// 补写缺失的可见 `cover.jpg`（已有封面绝不覆盖，见 [LocalSourceCoverService]），
+/// 让只经 Rebuild 登记 / 重链的作品在书架与作品页也有封面。
 ///
 /// 只接收当前 Content root 的 `downloads` 与 `local` 两个根，因此结构上
 /// 不可能读取旧 Content root，也不会扫描 `autobackup`。
@@ -31,6 +33,7 @@ import 'package:path/path.dart' as p;
 
 import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi_engine/media/manga/download_library_storage.dart';
+import 'package:fushi_engine/media/manga/local_source/local_source_cover.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_layout.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_library.dart';
 
@@ -197,6 +200,11 @@ class RebuildDownloadIndexService {
     }
 
     final _DownloadScan downloadScan = await _scanDownloadLibrary();
+    // 只经 Rebuild 登记 / 重链的本地作品也要有封面：与进入本地图源页同一条
+    // 补齐路径（幂等、绝不覆盖已有封面、坏页跳过）。
+    final LocalSourceCoverService coverService = LocalSourceCoverService(
+      db: database,
+    );
     final List<LocalSourceManga> localMangas = await scanLocalSourceRoot(
       localComicRoot,
     );
@@ -250,7 +258,12 @@ class RebuildDownloadIndexService {
                 doneJobChapterKeys[book.row.bookKey] ?? const <String>{},
                 cancelToken,
               )
-            : await _relinkLocalBook(book.row, book.local!, localMangas);
+            : await _relinkLocalBook(
+                book.row,
+                book.local!,
+                localMangas,
+                coverService,
+              );
         ambiguousPaths.addAll(outcome.ambiguousPaths);
         if (outcome.cancelled) {
           cancelled = true;
@@ -341,10 +354,16 @@ class RebuildDownloadIndexService {
           continue;
         }
         try {
+          // 先补齐封面再登记：扫描结果里的 `coverRelativePath` 对 CBZ 作品为空，
+          // 生成后的 `cover.jpg` 要写进登记行，书架 / 作品页才能直接显示。
+          final LocalSourceManga withCover = await _withGeneratedCover(
+            manga,
+            coverService,
+          );
           final bool added = await LocalSourceLibrary(
             db: database,
             root: localComicRoot,
-          ).registerScannedManga(manga);
+          ).registerScannedManga(withCover);
           if (added) {
             booksAdded++;
             booksAddedLocal++;
@@ -627,6 +646,7 @@ class RebuildDownloadIndexService {
     EpubBookRow row,
     LocalSourceMetadata metadata,
     List<LocalSourceManga> mangas,
+    LocalSourceCoverService coverService,
   ) async {
     // Ticket 10：源未安装的下载内容被降级成指向 `downloads/{source}/{manga}`
     // 的本地条目。它不在 local 扫描结果里，按记录路径原地刷新即可。
@@ -668,7 +688,31 @@ class RebuildDownloadIndexService {
             : const <String>{},
       );
     }
-    return _refreshLocalMangaRow(row, match.manga!);
+    // Rebuild 是本地作品补封面的一条独立入口：用户不进入本地图源页也应看到
+    // 封面。只对 Local source root 里的作品做（downloads 降级条目不在本 spec
+    // 的封面范围内）。
+    final LocalSourceManga found = await _withGeneratedCover(
+      match.manga!,
+      coverService,
+    );
+    return _refreshLocalMangaRow(row, found);
+  }
+
+  /// 补齐缺失封面后返回带真实封面相对路径的扫描条目；生成失败时原样返回
+  /// （重建索引不因封面失败而失败）。
+  Future<LocalSourceManga> _withGeneratedCover(
+    LocalSourceManga manga,
+    LocalSourceCoverService coverService,
+  ) async {
+    try {
+      final LocalSourceCoverResult result = await coverService
+          .generateMissingCover(manga);
+      final String? cover = result.coverRelativePath;
+      if (cover == null) return manga;
+      return withLocalSourceCoverRelativePath(manga, cover);
+    } on Object {
+      return manga;
+    }
   }
 
   /// 用一次扫描结果刷新 Local source 条目（local 或 downloads 降级条目）。

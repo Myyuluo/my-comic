@@ -26,3 +26,5 @@ CBZ 从「后续也可」变为新下载的默认形态：设置新增「保存�
 ## Amendment 2026-11-08（local-source-polish）
 
 新下载的 Source 目录名改为 `源名 (LANG)`：语言取 Source 的语言原值并大写，保留子标签（`zh-Hans` → `ZH-HANS`）；语言为空、`all` 或 `multi` 时不写语言后缀。已有 Source 目录不重命名，继续按源身份复用；`pages.json.source.name` 仍保存裸源名，语言只体现在目录名上。目录名的净化、截断与同名冲突后缀规则不变。
+
+原文（Consequences 小节）中的 `localcomic` 按 `local` 理解：本地源根目录已更名为 `local`，见 ADR 0013 的 2026-11-08（local-source-polish）修订。该句的语义不变——`downloads` 不是 Mihon 本地源根，`local` 才是 Local source。

@@ -11,6 +11,8 @@ import 'package:fushi/src/utils/adaptive/adaptive_platform.dart';
 import 'package:fushi/src/focus/fushi_focus_controller.dart';
 import 'package:fushi/src/utils/components/fushi_floating_chrome.dart'
     show FushiFloatingToolbarSurface;
+import 'package:fushi/src/utils/components/fushi_design_tokens.dart';
+import 'package:fushi/src/utils/components/fushi_floating_page_chrome.dart';
 import 'package:fushi/src/utils/components/fushi_material_components.dart';
 import 'package:fushi/src/utils/components/fushi_motion_tokens.dart';
 import 'package:fushi/src/utils/components/settings_shared.dart';
@@ -135,6 +137,7 @@ class LibrarySectionTabs<T extends Object> extends StatelessWidget {
     this.secondary = false,
     this.fill = true,
     this.floating = false,
+    this.reportNaturalWidth = true,
     super.key,
   }) : controller = null;
 
@@ -153,6 +156,7 @@ class LibrarySectionTabs<T extends Object> extends StatelessWidget {
     this.secondary = false,
     this.fill = true,
     this.floating = false,
+    this.reportNaturalWidth = true,
     super.key,
   }) : selected = null,
        onChanged = null;
@@ -187,6 +191,13 @@ class LibrarySectionTabs<T extends Object> extends StatelessWidget {
   /// focusId 前缀（如 `game-library-tab`），焦点停靠点 id 为 `<prefix>-sections`。
   final String focusIdPrefix;
 
+  /// 是否经 [FushiHeaderCrampScope] 上报自己的自然宽（页头据此决定动作收纳）。
+  ///
+  /// 默认 true；放在「标题胶囊 + 页签」组合行里时由外层（如
+  /// [LibraryHeaderTitleWithTabs]）上报**整行**宽并把它关掉——否则页签的后一次
+  /// 上报会覆盖整行宽，页头少算标题胶囊那一段。
+  final bool reportNaturalWidth;
+
   Widget _focusShell({
     required T selectedValue,
     required ValueChanged<T> onSelect,
@@ -217,6 +228,7 @@ class LibrarySectionTabs<T extends Object> extends StatelessWidget {
                 selected: selectedValue,
                 onChanged: onSelect,
                 fill: fill && !floating,
+                reportNaturalWidth: reportNaturalWidth,
               )
             : FushiSectionTabBar<T>(
                 tabs: tabs,
@@ -225,6 +237,7 @@ class LibrarySectionTabs<T extends Object> extends StatelessWidget {
                 secondary: secondary,
                 fill: fill,
                 floating: floating,
+                reportNaturalWidth: reportNaturalWidth,
               ),
       );
     }
@@ -250,6 +263,7 @@ class LibrarySectionTabs<T extends Object> extends StatelessWidget {
                   selected: tabs[index].value,
                   onChanged: select,
                   fill: fill && !floating,
+                  reportNaturalWidth: reportNaturalWidth,
                 )
               : FushiSectionTabBar<T>.controlled(
                   tabs: tabs,
@@ -257,9 +271,77 @@ class LibrarySectionTabs<T extends Object> extends StatelessWidget {
                   secondary: secondary,
                   fill: fill,
                   floating: floating,
+                  reportNaturalWidth: reportNaturalWidth,
                 ),
         );
       },
+    );
+  }
+}
+
+/// 页头主位的一行：「浮动标题胶囊 + 紧挨其右侧的分区页签」。
+///
+/// 页签组件自己只上报**页签**的自然宽；页头把「标题位自然宽 + 动作自然宽 >
+/// 行宽」当作动作收纳判据，只拿到页签宽就会少算标题胶囊那一段，窄窗上多留
+/// 动作、把标题行挤到不可读。本组件把整行（胶囊 + 间距 + 页签）的自然宽统一
+/// 上报，并关掉页签内部的上报（后一次上报会覆盖整行宽）。
+///
+/// 布局与既有本地图源页头一致：胶囊按自然宽，页签占剩余宽（放不下时在页签
+/// 内部横滑 / 收进「更多」）。[title] 只支持纯文字（[FushiPageChromeTitle]）。
+class LibraryHeaderTitleWithTabs<T extends Object> extends StatelessWidget {
+  const LibraryHeaderTitleWithTabs({
+    required this.title,
+    required this.tabs,
+    required this.selected,
+    required this.onChanged,
+    required this.focusIdPrefix,
+    this.tabsKey,
+    super.key,
+  });
+
+  final String title;
+  final List<LibrarySectionTab<T>> tabs;
+  final T selected;
+  final ValueChanged<T> onChanged;
+  final String focusIdPrefix;
+
+  /// 挂在页签组件上的 key（既有测试用它定位整排页签）。
+  final Key? tabsKey;
+
+  @override
+  Widget build(BuildContext context) {
+    final FushiDesignTokens tokens = FushiDesignTokens.of(context);
+    final double gap = tokens.spacing.gap;
+    final double titleWidth = FushiPageChromeTitle.naturalWidthOf(
+      context,
+      Text(title),
+    );
+    final double tabsWidth = estimateSectionTabBarWidth(
+      context,
+      <String>[for (final LibrarySectionTab<T> tab in tabs) tab.label],
+      horizontalPaddingPerTab: _kSectionTabHorizontalPadding,
+    );
+    FushiHeaderCrampScope.maybeOf(
+      context,
+    )?.reportTitleNaturalWidth(titleWidth + gap + tabsWidth);
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: <Widget>[
+        FushiPageChromeTitle(title: Text(title)),
+        SizedBox(width: gap),
+        Flexible(
+          child: LibrarySectionTabs<T>(
+            key: tabsKey,
+            tabs: tabs,
+            selected: selected,
+            onChanged: onChanged,
+            focusIdPrefix: focusIdPrefix,
+            floating: true,
+            reportNaturalWidth: false,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -280,12 +362,14 @@ class _AppleSectionSegments<T extends Object> extends StatelessWidget {
     required this.selected,
     required this.onChanged,
     required this.fill,
+    this.reportNaturalWidth = true,
   });
 
   final List<LibrarySectionTab<T>> tabs;
   final T selected;
   final ValueChanged<T> onChanged;
   final bool fill;
+  final bool reportNaturalWidth;
 
   /// 等宽段的格宽：最宽文案 + 两侧 14（同 [FushiSegmentedButton] 的口径）。
   double _cellWidth(BuildContext context) {
@@ -364,7 +448,9 @@ class _AppleSectionSegments<T extends Object> extends StatelessWidget {
   Widget build(BuildContext context) {
     final double cell = _cellWidth(context);
     final double natural = _controlWidth(cell, tabs.length);
-    FushiHeaderCrampScope.maybeOf(context)?.reportTitleNaturalWidth(natural);
+    if (reportNaturalWidth) {
+      FushiHeaderCrampScope.maybeOf(context)?.reportTitleNaturalWidth(natural);
+    }
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
         final double max = constraints.maxWidth;
@@ -430,6 +516,7 @@ class FushiSectionTabBar<T extends Object> extends StatefulWidget {
     this.secondary = false,
     this.fill = true,
     this.floating = false,
+    this.reportNaturalWidth = true,
     super.key,
   }) : controller = null;
 
@@ -441,6 +528,7 @@ class FushiSectionTabBar<T extends Object> extends StatefulWidget {
     this.secondary = false,
     this.fill = true,
     this.floating = false,
+    this.reportNaturalWidth = true,
     super.key,
   }) : selected = null,
        onChanged = null;
@@ -458,6 +546,9 @@ class FushiSectionTabBar<T extends Object> extends StatefulWidget {
 
   /// 见 [LibrarySectionTabs.floating]。
   final bool floating;
+
+  /// 见 [LibrarySectionTabs.reportNaturalWidth]。
+  final bool reportNaturalWidth;
 
   @override
   State<FushiSectionTabBar<T>> createState() => _FushiSectionTabBarState<T>();
@@ -759,12 +850,15 @@ class _FushiSectionTabBarState<T extends Object>
   @override
   Widget build(BuildContext context) {
     // 自然宽是纯 build 期可算量（只依赖文案 / 字号 / 缩放）：页头用它判定「左边摆得
-    // 下吗」，据此决定是否把动作收进 ⋯ 菜单。
-    FushiHeaderCrampScope.maybeOf(context)?.reportTitleNaturalWidth(
-      estimateSectionTabBarWidth(context, <String>[
-        for (final LibrarySectionTab<T> tab in widget.tabs) tab.label,
-      ], horizontalPaddingPerTab: _kSectionTabHorizontalPadding),
-    );
+    // 下吗」，据此决定是否把动作收进 ⋯ 菜单。组合标题行（标题胶囊 + 页签）由外层
+    // 统一上报整行宽，这里关闭以免覆盖。
+    if (widget.reportNaturalWidth) {
+      FushiHeaderCrampScope.maybeOf(context)?.reportTitleNaturalWidth(
+        estimateSectionTabBarWidth(context, <String>[
+          for (final LibrarySectionTab<T> tab in widget.tabs) tab.label,
+        ], horizontalPaddingPerTab: _kSectionTabHorizontalPadding),
+      );
+    }
 
     if (!_hostControlled) _scheduleProjection();
 

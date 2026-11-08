@@ -11,6 +11,7 @@ import 'package:fushi/src/media/manga/mihon/mihon_runtime_factory.dart';
 import 'package:fushi/src/media/manga/mihon/mihon_web_login_page.dart';
 import 'package:fushi/src/media/manga/mihon/mihon_web_url.dart';
 import 'package:fushi/src/media/manga/mihon/quirks/comico_magazine_comic_quirk.dart';
+import 'package:fushi/src/media/manga/manga_source_language.dart';
 import 'package:fushi/src/media/online/online_source_error_text.dart';
 import 'package:fushi/src/utils/misc/error_log_service.dart';
 
@@ -424,9 +425,6 @@ class MihonLibraryAdapter
       ? null
       : loginTarget(entry);
 
-  /// Mihon 里「不按语言取章」的源语言值：多语言单源扩展用这些占位。
-  static const Set<String> _languageAgnostic = <String>{'', 'all', 'multi'};
-
   @override
   String? sourceLanguage(OnlineMangaLibraryEntry entry) {
     final MihonSourceContext? preset = presetContext;
@@ -441,8 +439,7 @@ class MihonLibraryAdapter
   @override
   OnlineMangaSourceLanguageScope? languageScope(OnlineMangaLibraryEntry entry) {
     final String? language = sourceLanguage(entry);
-    if (language == null ||
-        _languageAgnostic.contains(language.toLowerCase())) {
+    if (language == null || isLanguageAgnosticSourceLanguage(language)) {
       return null;
     }
     return OnlineMangaSourceLanguageScope(
@@ -473,7 +470,7 @@ class MihonLibraryAdapter
       if (!row.enabled ||
           row.extensionPackage != extensionPackage ||
           candidate == own ||
-          _languageAgnostic.contains(candidate)) {
+          isLanguageAgnosticSourceLanguage(candidate)) {
         continue;
       }
       byLanguage.putIfAbsent(
