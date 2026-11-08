@@ -372,6 +372,27 @@ void main() {
         greaterThan(0),
         reason: '保持 FushiFloatingTextAction 默认的柔和悬浮投影',
       );
+
+      // 标签保留页头标题的粗体字形，但前景必须跟随按钮的 onSecondaryContainer，
+      // 不能被 FushiPageChromeTitle.titleStyleOf 硬编码的 onSurface 覆盖。
+      final Text label = tester.widget<Text>(
+        find.descendant(of: globalFab, matching: find.text(t.download_pause_all)),
+      );
+      expect(
+        label.style?.color,
+        scheme.onSecondaryContainer,
+        reason: '标签前景跟随 FushiFloatingTextAction 的按钮前景',
+      );
+      expect(
+        label.style?.color,
+        isNot(scheme.onSurface),
+        reason: '不得用页头标题的 onSurface 覆盖胶囊前景',
+      );
+      expect(
+        label.style?.fontWeight,
+        FontWeight.w700,
+        reason: '保留页头标题的粗体字形',
+      );
     });
 
     testWidgets('列表非空且所有任务都是暂停或失败时显示「全部继续」', (

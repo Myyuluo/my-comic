@@ -2,13 +2,16 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-/// BUG-1108 源码扫描守卫：书架顶部「继续阅读」hero 条（旧大卡 / 主 chrome 行的
-/// 继续阅读胶囊）的书名必须经 [MediaSource.getDisplayTitleFromMediaItem] 应用
-/// 编辑弹窗写入的 override 书名，不得直读 DB 原始列 `hero.title` 上屏。
+/// BUG-1108 源码扫描守卫：书架顶部「继续阅读」hero 条的书名必须经
+/// [MediaSource.getDisplayTitleFromMediaItem] 应用编辑弹窗写入的 override 书名，
+/// 不得直读 DB 原始列 `hero.title` 上屏。
 ///
 /// 同卡封面早已走 override（getDisplayThumbnailFromMediaItem），BUG-1018 修
 /// dashboard 改名不同步时因**无面级守卫**漏掉了本面——网格卡的同类守卫在
 /// `shelf_srt_card_override_title_guard_test.dart`，这里按同一范式补上 hero 条。
+///
+/// 主 chrome 行继续阅读胶囊的同类覆盖是行为测试（tooltip 书名经 override），
+/// 见 `manga_library_continue_pill_test.dart`：页面级测试不扫描源码。
 void main() {
   String source() =>
       File('lib/src/pages/implementations/reader_fushi_history_page.dart')
@@ -18,12 +21,6 @@ void main() {
   String hero() => _functionSource(
         source(),
         '  Widget _buildContinueReadingHero(',
-        '\n  Widget ',
-      );
-
-  String pill() => _functionSource(
-        source(),
-        '  Widget _buildContinueReadingPill(',
         '\n  Widget ',
       );
 
@@ -39,22 +36,6 @@ void main() {
     // 以表达式形态（带逗号结尾）匹配，避免误伤注释里的提及。
     expect(
       hero(),
-      isNot(contains('hero.title,')),
-      reason: '直读 hero.title 会在改名后仍显示旧名（BUG-1108）',
-    );
-  });
-
-  test('顶部继续阅读胶囊的 tooltip 书名同样经 getDisplayTitleFromMediaItem', () {
-    expect(
-      pill(),
-      contains('mediaSource.getDisplayTitleFromMediaItem(hero)'),
-      reason: '胶囊 tooltip 的 hover 书名必须应用编辑弹窗写入的 override 书名',
-    );
-  });
-
-  test('顶部继续阅读胶囊的 tooltip 不得直读 DB 原始列 hero.title', () {
-    expect(
-      pill(),
       isNot(contains('hero.title,')),
       reason: '直读 hero.title 会在改名后仍显示旧名（BUG-1108）',
     );

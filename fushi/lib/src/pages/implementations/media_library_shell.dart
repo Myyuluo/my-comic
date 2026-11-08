@@ -436,10 +436,10 @@ class _MediaLibraryShellState extends State<MediaLibraryShell> {
     );
   }
 
-  /// 二级浮动行：在线源组胶囊 + 当前视图登记的内容（漫画页的标签页签）。
+  /// 二级浮动行：当前视图登记的内容（漫画页的标签页签）或在线源组胶囊。
   ///
-  /// 两者互斥使用（在线源组只在多视图壳出现，登记内容只由单视图漫画页使用），
-  /// 但结构上允许同时存在，避免以后加视图时丢内容。
+  /// 两者互斥使用：在线源组只在多视图壳出现，登记内容只由单视图漫画页使用。
+  /// 登记内容优先（它是视图明确要占据这一行的内容），没有登记时才画在线源组。
   Widget _buildSecondaryChrome(
     BuildContext context,
     List<MediaLibraryViewSpec> views,
@@ -447,14 +447,9 @@ class _MediaLibraryShellState extends State<MediaLibraryShell> {
     return ListenableBuilder(
       listenable: _secondaryRowSlot,
       builder: (BuildContext context, Widget? _) {
-        final Widget online = _buildOnlineSubNavigation(context, views);
         final Widget? claimed = _secondaryRowSlot.content;
-        if (claimed == null) return online;
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: <Widget>[online, _secondaryRowInset(context, claimed)],
-        );
+        if (claimed != null) return _secondaryRowInset(context, claimed);
+        return _buildOnlineSubNavigation(context, views);
       },
     );
   }

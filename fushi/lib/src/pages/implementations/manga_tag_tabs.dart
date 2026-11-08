@@ -7,6 +7,7 @@ import 'package:fushi/src/utils/adaptive/adaptive_platform.dart';
 import 'package:fushi/src/utils/components/fushi_design_tokens.dart';
 import 'package:fushi/src/utils/components/fushi_floating_toolbar.dart';
 import 'package:fushi/src/utils/components/glass/fushi_apple_palette.dart';
+import 'package:fushi/src/utils/components/library_section_tabs.dart';
 import 'package:fushi/src/utils/components/settings_shared.dart';
 import 'package:fushi/src/utils/misc/platform_utils.dart';
 import 'package:fushi_core/fushi_core.dart';
@@ -141,18 +142,6 @@ class MangaTagTabBar extends StatelessWidget {
   /// 上下间距）。独立使用（无壳、页头下方自成一行）时为 false。
   final bool inline;
 
-  /// 二级胶囊总高：36 的段高 + 上下各 4 的胶囊内边距（与库页二级分段胶囊的
-  /// 44 高一致）。实际段高由 [LayoutBuilder] 从约束里读，[_fallbackSegmentHeight]
-  /// 只是无约束时的兜底。
-  static const double _capsuleHeight = 44;
-
-  /// 胶囊四周留白：选中段到胶囊外缘一圈等宽。
-  static const double _capsulePadding = 4;
-
-  /// 无约束时的段高兜底（胶囊高减去上下内边距）。
-  static const double _fallbackSegmentHeight =
-      _capsuleHeight - _capsulePadding * 2;
-
   /// 单段左右内边距（与库页页签的 label padding 同值）。
   static const double _segmentPadding = 16;
 
@@ -185,59 +174,27 @@ class MangaTagTabBar extends StatelessWidget {
       selected: selection,
       onChanged: onSelected,
       focusIdPrefix: 'manga-tag-tabs',
-      child: LayoutBuilder(
-        builder: (BuildContext context, BoxConstraints constraints) {
-          final bool bounded = constraints.maxWidth.isFinite;
-          // 胶囊按内容宽贴左（摆不下时吃满可用宽、标签区在里面横滑），与
-          // `LibrarySectionTabs(secondary: true, floating: true)` 的二级外框
-          // 同一尺寸与配色；Apple 设计系统不画底（同 `_CompactSecondaryTabsFrame`）。
-          final Widget capsule = SizedBox(
-            height: _capsuleHeight,
-            child: LayoutBuilder(
-              builder: (BuildContext context, BoxConstraints inner) {
-                final double segmentHeight = inner.maxHeight.isFinite
-                    ? inner.maxHeight - _capsulePadding * 2
-                    : _fallbackSegmentHeight;
-                final Widget strip = Padding(
-                  padding: const EdgeInsets.all(_capsulePadding),
-                  child: _buildStrip(
-                    context,
-                    entries,
-                    segmentHeight: segmentHeight,
-                    bounded: bounded,
-                  ),
-                );
-                final bool apple = isGlassDesign(context);
-                if (apple) return strip;
-                final ColorScheme cs = Theme.of(context).colorScheme;
-                return DecoratedBox(
-                  key: const ValueKey<String>('manga_tag_tab_capsule'),
-                  decoration: ShapeDecoration(
-                    // 二级内容域的中性扁平面：不是一级悬浮工具栏（无投影）。
-                    color: cs.surfaceContainerHigh,
-                    shape: StadiumBorder(
-                      side: isEinkTheme(context)
-                          ? BorderSide(color: cs.outline)
-                          : BorderSide.none,
-                    ),
-                  ),
-                  child: ClipPath(
-                    clipper: const ShapeBorderClipper(shape: StadiumBorder()),
-                    child: Material(
-                      type: MaterialType.transparency,
-                      child: strip,
-                    ),
-                  ),
-                );
-              },
-            ),
-          );
-          return Align(
-            alignment: AlignmentDirectional.centerStart,
-            widthFactor: bounded ? null : 1,
-            child: capsule,
-          );
-        },
+      // 胶囊按内容宽贴左（摆不下时吃满可用宽、标签区在里面横滑），复用库页
+      // 二级内容域的外框（`LibrarySectionTabs(secondary: true, floating: true)`
+      // 同一尺寸与配色；Apple 设计系统不画底）。
+      child: FushiCompactSecondaryTabsFrame(
+        key: const ValueKey<String>('manga_tag_tab_capsule'),
+        height: FushiCompactSecondaryTabsFrame.compactHeight,
+        child: LayoutBuilder(
+          builder: (BuildContext context, BoxConstraints inner) {
+            final bool bounded = inner.maxWidth.isFinite;
+            final double segmentHeight = inner.maxHeight.isFinite
+                ? inner.maxHeight
+                : FushiCompactSecondaryTabsFrame.compactHeight -
+                      FushiCompactSecondaryTabsFrame.padding * 2;
+            return _buildStrip(
+              context,
+              entries,
+              segmentHeight: segmentHeight,
+              bounded: bounded,
+            );
+          },
+        ),
       ),
     );
     if (inline) return bar;
