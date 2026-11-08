@@ -279,6 +279,17 @@ class OnlineMangaSourceLanguageScope {
   final List<OnlineMangaSiblingSource> siblings;
 }
 
+/// 能报出「源语言」的适配器：下载库源目录名 `源名 (LANG)` 用它区分同名源。
+///
+/// 只报**原值**（Mihon 的 `manga_online_sources.language`）：空串 / `all` /
+/// `multi` 的判定与大小写转换属于目录命名规则，由调用方处理；源缺失或被禁用
+/// 时返回 null。旧 Aidoku 与互联没有语言概念，不实现本接口——它们的下载目录
+/// 只写源名。
+abstract interface class OnlineMangaSourceLanguageProvider {
+  /// 该条目所属源声明的语言原值；源缺失 / 被禁用时返回 null。
+  String? sourceLanguage(OnlineMangaLibraryEntry entry);
+}
+
 /// 章节列表按源语言过滤的适配器（BUG-2510）。
 ///
 /// Mihon 的多语言扩展（MangaDex 之类）一语言一个源，日文源在一部只有译版的作品
@@ -307,6 +318,7 @@ class MihonLibraryAdapter
         MangaOcrSidecarProvider,
         OnlineMangaLoginCapable,
         OnlineMangaWebUrlCapable,
+        OnlineMangaSourceLanguageProvider,
         OnlineMangaLanguageScoped,
         OnlineMangaPageCancellable {
   const MihonLibraryAdapter(
@@ -416,19 +428,23 @@ class MihonLibraryAdapter
   static const Set<String> _languageAgnostic = <String>{'', 'all', 'multi'};
 
   @override
-  OnlineMangaSourceLanguageScope? languageScope(OnlineMangaLibraryEntry entry) {
+  String? sourceLanguage(OnlineMangaLibraryEntry entry) {
     final MihonSourceContext? preset = presetContext;
-    final String language;
-    if (preset != null) {
-      language = preset.source.language;
-    } else {
-      try {
-        language = _sourceRow(entry).language;
-      } on OnlineMangaUnavailable {
-        return null;
-      }
+    if (preset != null) return preset.source.language;
+    try {
+      return _sourceRow(entry).language;
+    } on OnlineMangaUnavailable {
+      return null;
     }
-    if (_languageAgnostic.contains(language.toLowerCase())) return null;
+  }
+
+  @override
+  OnlineMangaSourceLanguageScope? languageScope(OnlineMangaLibraryEntry entry) {
+    final String? language = sourceLanguage(entry);
+    if (language == null ||
+        _languageAgnostic.contains(language.toLowerCase())) {
+      return null;
+    }
     return OnlineMangaSourceLanguageScope(
       language: language,
       siblings: siblingSourcesOf(

@@ -25,7 +25,8 @@ import 'package:path/path.dart' as p;
 ///
 /// [OnlineMangaPageRef] 是密封类，假适配器借用数据形状最简单的
 /// [InterconnectMangaPageRef] 当页引用——下载服务只看 `index`，不看里面是谁的。
-class _FakeAdapter implements OnlineMangaRuntimeAdapter {
+class _FakeAdapter
+    implements OnlineMangaRuntimeAdapter, OnlineMangaSourceLanguageProvider {
   static const int pageCount = 3;
 
   /// 每页被取了几次（续跑 / 幂等断言用）。
@@ -53,6 +54,12 @@ class _FakeAdapter implements OnlineMangaRuntimeAdapter {
   @override
   Future<String?> sourceLabel(OnlineMangaLibraryEntry entry) async =>
       sourceLabelText;
+
+  /// 源语言原值；null = 源没有声明语言（目录只写源名）。
+  String? sourceLanguageText;
+
+  @override
+  String? sourceLanguage(OnlineMangaLibraryEntry entry) => sourceLanguageText;
 
   @override
   Future<OnlineMangaRefreshResult> refresh(
@@ -683,6 +690,48 @@ void main() {
         ),
         chapters: chapters,
       );
+
+  test('源有语言：新下载落在「源名 (LANG)」，pages.json 仍写裸源名', () async {
+    adapter.sourceLanguageText = 'zh-Hans';
+    const OnlineMangaChapter chapter = OnlineMangaChapter(
+      key: '/chapter/1',
+      name: 'Chapter 1',
+      number: 1,
+      raw: <String, Object?>{'url': '/chapter/1'},
+    );
+    // 独立 Source：setUp 里已用无语言状态建过 'Fake' 目录，同源会复用旧目录。
+    final OnlineMangaLibraryEntry entry = entryWith(
+      sourceId: '2',
+      seriesKey: '/series/lang',
+      title: 'Lang series',
+      chapters: const <OnlineMangaChapter>[chapter],
+    );
+    final EpubBookRow row = await library.add(entry);
+    expect(
+      row.extractDir,
+      p.join(root.path, 'downloads', 'Fake (ZH-HANS)', 'Lang series'),
+    );
+
+    final MangaDownloadService downloads = build();
+    await downloads.enqueueChapter(
+      entry: entry,
+      chapter: chapter,
+      autoOcr: false,
+    );
+    await downloads.start();
+    await downloads.whenIdle;
+
+    final MangaPagesManifest? manifest = await readPagesManifest(
+      downloadChapterDirectory(row.extractDir, 'Chapter 1'),
+    );
+    expect(manifest, isNotNull);
+    expect(
+      manifest!.sourceName,
+      'Fake',
+      reason: 'pages.json 只写裸源名，语言只体现在目录名',
+    );
+    downloads.dispose();
+  });
 
   test('同章不同扫译组：第二个落 [扫译组] 后缀目录，两个都能打开', () async {
     const OnlineMangaChapter groupA = OnlineMangaChapter(
