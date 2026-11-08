@@ -23,12 +23,13 @@ import 'package:fushi_core/fushi_core.dart';
 
 import '../helpers/test_platform_services.dart';
 
-/// Ticket 06：漫画页的「书架」视图页签被 Tag chips 取代。
+/// 漫画页的标签栏占据原「书架」视图页签位（ticket 06 起），ticket 01 起从彩色
+/// 多选 chip 改为单选分段胶囊：首项「书架」+ 用户标签，点选即切换页签。
 ///
 /// 页面级 seam（与 [reader_shelf_tag_filter_empty_state_test] 同源）：挂真实
 /// [MangaLibraryPage]（壳 + 书架页），标签走真 37 表 DB；书架列表 provider 覆写
-/// 成受控列表，避开封面真 I/O。断言只落在用户可见的结果上：页签消失、chip 在
-/// 浮动 chrome 行、空标签留空、点选筛选 / 清除筛选 / 长按排序仍生效。
+/// 成受控列表，避开封面真 I/O。断言只落在用户可见的结果上：视图页签消失、分段
+/// 胶囊在浮动 chrome 行、空标签时仍有「书架」页签、点选筛选生效、长按不再排序。
 void main() {
   final TestWidgetsFlutterBinding binding =
       TestWidgetsFlutterBinding.ensureInitialized();
@@ -144,19 +145,26 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('漫画页不再显示「书架」视图页签', (WidgetTester tester) async {
+  testWidgets('漫画页不再显示视图页签；chrome 页签位是标签页签胶囊', (
+    WidgetTester tester,
+  ) async {
     await seedManga('m1', '漫画一');
     await pumpPage(tester);
 
     expect(
       find.byType(FushiSectionTabBar<MediaLibraryViewKind>),
       findsNothing,
-      reason: '漫画页只剩书架一个视图，不得再画单页签分段条',
+      reason: '漫画页只剩书架一个视图，不得再画视图页签分段条',
+    );
+    expect(
+      find.byKey(const ValueKey<String>('manga_tag_tab_bar')),
+      findsOneWidget,
+      reason: 'chrome 页签位由标签页签胶囊占据',
     );
     expect(
       find.text(t.library_view_shelf),
-      findsNothing,
-      reason: '「书架」页签文案不得出现在漫画页',
+      findsOneWidget,
+      reason: '标签栏首项固定是「书架」页签',
     );
     // 「漫画」标题仍在浮动 chrome 行上。
     expect(
@@ -165,7 +173,7 @@ void main() {
     );
   });
 
-  testWidgets('Tag chips 出现在浮动 chrome 行，标题下不再有独立标签行', (
+  testWidgets('标签页签出现在浮动 chrome 行，标题下不再有独立标签行', (
     WidgetTester tester,
   ) async {
     await seedManga('m1', '漫画一');
@@ -178,7 +186,7 @@ void main() {
       expect(
         find.descendant(of: bar, matching: find.text(name)),
         findsOneWidget,
-        reason: 'Tag chip「$name」必须出现在浮动 chrome 行（原视图页签位置）',
+        reason: '标签页签「$name」必须出现在浮动 chrome 行（原视图页签位置）',
       );
       expect(
         find.text(name),
@@ -202,12 +210,12 @@ void main() {
     expect(
       (chipCenter - titleCenter).abs(),
       lessThan(4.0),
-      reason: 'Tag chips 与「漫画」标题同一行',
+      reason: '标签页签与「漫画」标题同一行',
     );
     expect(
       (chipCenter - actionsCenter).abs(),
       lessThan(4.0),
-      reason: 'Tag chips 与右上角动作同一行',
+      reason: '标签页签与右上角动作同一行',
     );
   });
 
@@ -227,14 +235,26 @@ void main() {
     );
   });
 
-  testWidgets('没有标签时页签位置留空：不出现空 chip，标题与动作照常', (WidgetTester tester) async {
+  testWidgets('没有标签时 chrome 页签位仍有「书架」页签，不出现彩色 chip', (
+    WidgetTester tester,
+  ) async {
     await seedManga('m1', '漫画一');
     await pumpPage(tester);
 
     expect(
       find.byType(FushiTagToggleChip),
       findsNothing,
-      reason: '没有任何标签时该位置留空，不得出现空胶囊',
+      reason: '漫画页不再使用彩色多选 chip',
+    );
+    expect(
+      find.byKey(const ValueKey<String>('manga_tag_tab_shelf')),
+      findsOneWidget,
+      reason: '没有用户标签时「书架」仍是固定首项',
+    );
+    expect(
+      find.byKey(const ValueKey<String>('manga_tag_tab_count_shelf')),
+      findsOneWidget,
+      reason: '书架页签始终显示数量（含 0）',
     );
     expect(
       find.byType(FushiFloatingChromeBar),
@@ -251,7 +271,7 @@ void main() {
     );
   });
 
-  testWidgets('点击 chrome 里的 Tag chip 筛选书架，清除 chip 恢复全部', (
+  testWidgets('点击 chrome 里的标签页签切换筛选，点回「书架」恢复默认', (
     WidgetTester tester,
   ) async {
     await seedManga('m1', '漫画一');
@@ -270,33 +290,30 @@ void main() {
         'book_entry_${ReaderFushiSource.mediaIdentifierFor('m2')}',
       ),
     );
-    expect(card1, findsOneWidget);
-    expect(card2, findsOneWidget);
+    // 默认「书架」只收无标签漫画。
+    expect(card2, findsOneWidget, reason: '书架显示无标签漫画');
+    expect(card1, findsNothing, reason: '有标签漫画不在书架');
 
     final Finder bar = find.byType(FushiFloatingChromeBar);
     await tester.tap(find.descendant(of: bar, matching: find.text('连载')));
     await tester.pumpAndSettle();
 
-    expect(card1, findsOneWidget, reason: '带标签的漫画保留');
-    expect(card2, findsNothing, reason: '没有该标签的漫画被筛掉');
-    final Finder clearChip = find.byKey(
-      const ValueKey<String>('library_tag_clear_chip'),
-    );
+    expect(card1, findsOneWidget, reason: '标签页签显示对应漫画');
+    expect(card2, findsNothing, reason: '无标签漫画不在标签页签');
     expect(
-      find.descendant(of: bar, matching: clearChip),
-      findsOneWidget,
-      reason: '有生效筛选时，清除筛选 chip 和标签同一行',
+      find.byKey(const ValueKey<String>('library_tag_clear_chip')),
+      findsNothing,
+      reason: '单选页签没有多选「清除筛选」chip',
     );
 
-    await tester.tap(clearChip);
+    await tester.tap(find.descendant(of: bar, matching: find.text('书架')));
     await tester.pumpAndSettle();
 
-    expect(card1, findsOneWidget);
-    expect(card2, findsOneWidget, reason: '清除筛选后恢复全部漫画');
-    expect(clearChip, findsNothing, reason: '清除后不再显示清除筛选 chip');
+    expect(card2, findsOneWidget, reason: '点回书架恢复无标签漫画');
+    expect(card1, findsNothing);
   });
 
-  testWidgets('在 chrome 行里长按拖动 Tag chip 仍能排序并落库', (WidgetTester tester) async {
+  testWidgets('在 chrome 行里长按拖动标签页签不再排序', (WidgetTester tester) async {
     await seedManga('m1', '漫画一');
     await db.createTag('连载', 0xFF112233);
     await db.createTag('短篇', 0xFF445566);
@@ -309,19 +326,28 @@ void main() {
     final Finder bar = find.byType(FushiFloatingChromeBar);
     final Finder chipA = find.descendant(of: bar, matching: find.text('连载'));
     final Finder chipB = find.descendant(of: bar, matching: find.text('短篇'));
+    expect(
+      find.descendant(
+        of: bar,
+        matching: find.byType(LongPressDraggable<BookTagRow>),
+      ),
+      findsNothing,
+      reason: '漫画页标签栏不再提供长按拖拽排序',
+    );
 
     final TestGesture drag = await tester.startGesture(tester.getCenter(chipA));
-    // 按住不动，等长按识别器接棒，再把第一枚拖到第二枚上放下。
+    // 按住不动，等长按识别器接管；再把第一枚拖到第二枚上放下。
     await tester.pump(kLongPressTimeout + const Duration(milliseconds: 100));
     await drag.moveTo(tester.getCenter(chipB));
     await tester.pump(const Duration(milliseconds: 100));
     await drag.up();
     await tester.pumpAndSettle();
 
-    expect(await tagOrder(), <String>[
-      '短篇',
-      '连载',
-    ], reason: '长按拖到另一枚 chip 上即改变标签顺序，并写入标签池');
+    expect(
+      await tagOrder(),
+      <String>['连载', '短篇'],
+      reason: '标签顺序仍在标签管理页维护，页签栏拖动不改变顺序',
+    );
   });
 
   testWidgets('普通书籍页（my-comic 中不可达）仍保留视图页签与标题下标签行', (
