@@ -18,7 +18,7 @@ bool isLocalSourceEnabled(AppModel appModel) =>
 /// 照旧 Mokuro.moe 的内置伪源做法（用户口径）：不是 `manga_online_sources` 行、
 /// 不由 Extension 提供、不走扩展启用 / 安装检查；固定排在所有扩展源与「已置顶」
 /// 分组之上，没有置顶 / 排序 / 清除数据 / 卸载扩展菜单。行内容 = 开关 + 名称 +
-/// `localcomic` 的绝对路径（过长由 [InstalledOnlineSourceRow] 统一截断），没有
+/// `local` 的绝对路径（过长由 [InstalledOnlineSourceRow] 统一截断），没有
 /// 语言 tag。
 ///
 /// 开关语义与普通源行一致：关掉后行保留、置灰、不可进入。
@@ -33,7 +33,7 @@ class LocalSourceEntryRow extends ConsumerWidget {
     final AppModel appModel = ref.watch(appProvider);
     final bool ready = appModel.isPreferencesReady;
     final bool enabled = isLocalSourceEnabled(appModel);
-    // 绝对路径：`<Content root>/localcomic`。路径尚未解析时先不给副标题，
+    // 绝对路径：`<Content root>/local`。路径尚未解析时先不给副标题，
     // 解析完成后 AppModel 会触发重建（设置页同款降级）。
     final String? localRootPath = appModel.appPathsOrNull?.localComicRoot.path;
     return FushiStaggeredEntrance(

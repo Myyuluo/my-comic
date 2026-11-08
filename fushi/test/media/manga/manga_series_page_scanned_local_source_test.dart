@@ -257,7 +257,7 @@ void main() {
     expect(
       row!.extractDir,
       manga.directoryPath,
-      reason: '原地读取：登记行指向 localcomic 里的作品目录',
+      reason: '原地读取：登记行指向 local 里的作品目录',
     );
     expect(
       File(p.join(manga.directoryPath, 'Ch 1', '001.jpg')).existsSync(),

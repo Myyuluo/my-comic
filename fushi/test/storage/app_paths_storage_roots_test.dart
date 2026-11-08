@@ -13,7 +13,7 @@ import 'package:fushi/src/storage/app_paths.dart';
 ///
 /// 生产默认形态：
 ///  - Content root = `<Documents>/MyComic`，首启创建 `downloads` / `autobackup` /
-///    `localcomic`；
+///    `local`；
 ///  - Program state root = `<exeDir>/userdata`，创建 `state` / `cache`。
 ///
 /// 测试用 path_provider mock + exe/LOCALAPPDATA 注入，不触碰真实用户目录。
@@ -83,7 +83,7 @@ void main() {
     expect(paths.contentRoot.path, content.path);
     expect(paths.downloadsRoot.path, p.join(content.path, 'downloads'));
     expect(paths.autobackupRoot.path, p.join(content.path, 'autobackup'));
-    expect(paths.localComicRoot.path, p.join(content.path, 'localcomic'));
+    expect(paths.localComicRoot.path, p.join(content.path, 'local'));
     expect(paths.programStateRoot.path, programState.path);
     expect(paths.stateRoot.path, state.path);
     expect(paths.cacheRoot.path, cache.path);
@@ -99,6 +99,27 @@ void main() {
     ]) {
       expect(dir.existsSync(), isTrue, reason: '首启应创建 ${dir.path}');
     }
+  });
+
+  test('首次启动创建 local，旧 localcomic 不创建、不搬移、不删除', () async {
+    // 旧版本留下的 localcomic（含用户文件）：升级后必须原地保留，绝不迁移。
+    final Directory legacy = Directory(
+      p.join(platformDocuments.path, 'MyComic', 'localcomic', 'Old Manga'),
+    )..createSync(recursive: true);
+    final File oldPage = File(p.join(legacy.path, 'Ch 1', '001.jpg'))
+      ..createSync(recursive: true)
+      ..writeAsStringSync('legacy page');
+
+    final AppPaths paths = await AppPaths.resolve();
+
+    final Directory local = Directory(
+      p.join(platformDocuments.path, 'MyComic', 'local'),
+    );
+    expect(paths.localComicRoot.path, local.path);
+    expect(local.existsSync(), isTrue, reason: '首启应创建 local');
+    expect(local.listSync(), isEmpty, reason: '不把旧 localcomic 的内容搬进 local');
+    expect(legacy.existsSync(), isTrue, reason: '旧 localcomic 不得删除');
+    expect(oldPage.readAsStringSync(), 'legacy page', reason: '旧文件不得搬移或改写');
   });
 
   test('静态便捷层与实例根同源', () async {
@@ -130,7 +151,7 @@ void main() {
     expect(paths.contentRoot.path, custom.path);
     expect(paths.downloadsRoot.path, p.join(custom.path, 'downloads'));
     expect(paths.autobackupRoot.path, p.join(custom.path, 'autobackup'));
-    expect(paths.localComicRoot.path, p.join(custom.path, 'localcomic'));
+    expect(paths.localComicRoot.path, p.join(custom.path, 'local'));
     for (final Directory dir in <Directory>[
       paths.downloadsRoot,
       paths.autobackupRoot,

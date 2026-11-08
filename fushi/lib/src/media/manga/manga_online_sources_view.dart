@@ -73,7 +73,7 @@ class _MangaOnlineSourcesViewState
     if (mounted) setState(() {});
   }
 
-  /// 点内置「本地图源」行进它的封面网格。进页即扫描 `localcomic`（不复制、
+  /// 点内置「本地图源」行进它的封面网格。进页即扫描 `local`（不复制、
   /// 不移动文件）；扫描结果只展示，用户逐部点开作品页再加入书架。
   void _openLocalSource() {
     Navigator.of(context).push(
@@ -112,7 +112,7 @@ class _MangaOnlineSourcesViewState
     final bool onlineSourcesAvailable =
         StoreRestrictedCapability.onlineMangaSource.isAvailable;
     final OnlineSourcesSection section = widget.section;
-    // 内置「本地图源」不依赖扩展宿主：没有扩展也能进 localcomic 的封面网格。
+    // 内置「本地图源」不依赖扩展宿主：没有扩展也能进 local 的封面网格。
     final Widget localSourceRow = LocalSourceEntryRow(
       onOpen: _openLocalSource,
     );

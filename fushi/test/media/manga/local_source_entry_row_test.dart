@@ -20,7 +20,7 @@ import '../../helpers/test_platform_services.dart';
 
 /// Ticket 04：图源列表第一位的内置「本地图源」行。
 ///
-/// 行内容 = 启用开关（默认开、可持久化）+ 名称 + `localcomic` 绝对路径；
+/// 行内容 = 启用开关（默认开、可持久化）+ 名称 + `local` 绝对路径；
 /// 关闭后行置灰、不可进入（点击不触发 onOpen）；不写入 `manga_online_sources`
 /// （因此不会进入 enabledMangaOnlineSources / 发现页 / 全局搜索）。
 class _TestAppModel extends AppModel {
@@ -82,7 +82,7 @@ void main() {
     if (tmp.existsSync()) tmp.deleteSync(recursive: true);
   });
 
-  testWidgets('行显示名称与 localcomic 绝对路径，开关默认开，点击可进入', (
+  testWidgets('行显示名称与 local 绝对路径，开关默认开，点击可进入', (
     WidgetTester tester,
   ) async {
     int opened = 0;

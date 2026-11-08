@@ -15,7 +15,7 @@ import 'package:fushi/utils.dart';
 import 'package:fushi_engine/media/collections/shelf_sort.dart' show naturalCompare;
 import 'package:fushi_engine/media/manga/local_source/local_source_layout.dart';
 
-/// 内置「本地图源」的浏览页：进入即扫描 Local source root（`localcomic`），以
+/// 内置「本地图源」的浏览页：进入即扫描 Local source root（`local`），以
 /// 封面网格展示扫描结果。
 ///
 /// 只展示、不登记：点封面进作品页（未入库的走
@@ -69,7 +69,7 @@ class LocalSourceRootUnavailable implements Exception {
 class LocalSourceBrowseCatalog extends OnlineSourceCatalog<LocalSourceManga> {
   LocalSourceBrowseCatalog({required this.root});
 
-  /// Local source root（`<Content root>/localcomic`）。
+  /// Local source root（`<Content root>/local`）。
   final Directory root;
 
   List<LocalSourceManga> _scanned = const <LocalSourceManga>[];

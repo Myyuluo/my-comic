@@ -236,6 +236,50 @@ void main() {
       );
     });
 
+    test('本地源根使用 local，归入书籍类目；旧 localcomic 目录归入其他', () async {
+      writeFile(
+        p.join(docs.path, 'local', 'Manga', 'Ch 1', '001.jpg'),
+        120,
+      );
+      writeFile(
+        p.join(docs.path, 'localcomic', 'Old Manga', 'Ch 1', '001.jpg'),
+        70,
+      );
+
+      final List<StorageCategoryUsage> all = await service()
+          .scanCategories(
+            books: const <StorageBookRef>[],
+            dictionaryNames: const <String>[],
+          )
+          .toList();
+      final StorageCategoryUsage books = all.singleWhere(
+        (StorageCategoryUsage u) => u.id == StorageCategoryId.books,
+      );
+      final StorageCategoryUsage other = all.singleWhere(
+        (StorageCategoryUsage u) => u.id == StorageCategoryId.other,
+      );
+
+      expect(books.bytes, 120, reason: 'local 是 Local source，属于用户可见的书籍内容');
+      expect(
+        books.entries.any((StorageEntryUsage e) => e.label.contains('local/Manga')),
+        isTrue,
+      );
+      expect(other.bytes, 70, reason: '更名前的 localcomic 不再归类，落进其他');
+      expect(
+        other.entries.any(
+          (StorageEntryUsage e) => e.label.contains('localcomic'),
+        ),
+        isTrue,
+      );
+      expect(
+        books.entries.any(
+          (StorageEntryUsage e) => e.label.contains('localcomic'),
+        ),
+        isFalse,
+        reason: '旧目录不得重复计入书籍类目',
+      );
+    });
+
     test('BUG-1893：同步导入的明文音频目录（非哈希）计进明细，且不重复计数', () async {
       // 互联/同步拉来的有声书落 audiobooks/<safeDirName(bookKey)>——**明文**目录，
       // 不是 fnv1a32Hex(key)。旧实现只按哈希反推，这本书的明细恒为 0，几 GB 音频

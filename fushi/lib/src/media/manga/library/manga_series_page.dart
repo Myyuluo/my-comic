@@ -158,7 +158,7 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
   EpubBookRow? _row;
   OnlineMangaLibraryEntry? _entry;
 
-  /// Local source（`localcomic`）条目：`sourceMetadata` 标记 + 章节表。
+  /// Local source（`local`）条目：`sourceMetadata` 标记 + 章节表。
   /// 有它时章节区按共享章节列表渲染，`_entry` 保持 null（不是在线条目）。
   LocalSourceMetadata? _localSource;
   List<LocalSourceChapterRecord> _localChapters =
@@ -168,7 +168,7 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
   /// 不是那种状态；显式加入书架后清空并切换成正常书架条目。
   LocalSourceManga? _scannedLocal;
 
-  /// Local source 作品目录已不在当前 `localcomic` 根内（典型：切换 Content root
+  /// Local source 作品目录已不在当前 `local` 根内（典型：切换 Content root
   /// 后库里仍记着旧根）。这些章显示为 Missing，阅读入口拒绝回读旧路径。
   Set<String> _localMissingChapterKeys = const <String>{};
 
@@ -267,7 +267,7 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
   /// 本地卷（无在线描述符）。
   bool get _isLocal => _entry == null && _row != null;
 
-  /// `localcomic` 里原地读取的本地图源作品（有章节表）：已在书架的条目，或刚从
+  /// `local` 里原地读取的本地图源作品（有章节表）：已在书架的条目，或刚从
   /// 「本地图源」网格打开、还没登记的扫描结果。
   bool get _isLocalSource => _localSource != null || _scannedLocal != null;
 
@@ -377,7 +377,7 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     final AppModel? appModel = _appModelOrNull;
     if (row == null || appModel == null) return;
 
-    // Local source（ADR 0013）：作品目录必须仍在**当前** `localcomic` 根内。
+    // Local source（ADR 0013）：作品目录必须仍在**当前** `local` 根内。
     // 切换 Content root 后库里的旧路径不重基，这里把整部作品的章标成 Missing，
     // 不再从旧根读取。
     //
@@ -1338,7 +1338,7 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     }
   }
 
-  /// 只有当前 `localcomic` 根内的条目才提供「删除本地文件」。
+  /// 只有当前 `local` 根内的条目才提供「删除本地文件」。
   ///
   /// 源未安装时 Rebuild 会把 `downloads/{source}/{manga}` 降级成指向该目录的
   /// Local source 条目（票 10）；这些文件不归 Local source 管，
@@ -1354,7 +1354,7 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
   }
 
   /// 「删除本地文件」：与「移出书架」分开的破坏性动作，二次确认后删除
-  /// `localcomic` 里的作品目录。路径越界 / 非 Local source 条目由 service 拒绝。
+  /// `local` 里的作品目录。路径越界 / 非 Local source 条目由 service 拒绝。
   Future<void> _deleteLocalSourceFiles(
     EpubBookRow row,
     AppModel appModel,
@@ -2288,7 +2288,7 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
             onSelected: () => unawaited(_openShelfMenu(showShelfMenu)),
           ),
         // 删除本地文件是**单独**且二次确认的动作；「移出书架」只删记录。
-        // Ticket 10 的恢复条目指向 downloads 根，不在 localcomic 内，
+        // Ticket 10 的恢复条目指向 downloads 根，不在 local 内，
         // LocalSourceLibrary.deleteLocalFiles 会拒绝——入口直接隐藏，不给一个
         // 必然失败的动作。
         if (_isLocalSource && _row != null && _canDeleteLocalSourceFiles(_row!))

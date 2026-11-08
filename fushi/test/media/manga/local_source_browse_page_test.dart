@@ -21,7 +21,7 @@ import '../../helpers/test_platform_services.dart';
 
 /// Ticket 04：本地图源页面。
 ///
-/// 进入即扫描 `localcomic`（原地读取，不复制），封面网格按标题自然排序；
+/// 进入即扫描 `local`（原地读取，不复制），封面网格按标题自然排序；
 /// 搜索框在已扫描结果里过滤；空态是书本图标 +「尚未发现任何漫画」，扫描失败
 /// 显示错误提示；不显示「热门 / 最新」分段与筛选按钮。
 class _TestAppModel extends AppModel {
@@ -86,7 +86,7 @@ void main() {
     return mangaDir;
   }
 
-  testWidgets('进入页面扫描 localcomic，按标题自然排序（大小写不敏感、数字按数值）', (
+  testWidgets('进入页面扫描 local，按标题自然排序（大小写不敏感、数字按数值）', (
     WidgetTester tester,
   ) async {
     tester.view.physicalSize = const Size(500, 1600);
@@ -137,6 +137,40 @@ void main() {
     );
   });
 
+  testWidgets('只扫描更名后的 local；旧 localcomic 不扫描、不删除', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(900, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    // 更名前的旧根：里面仍有用户文件。升级后它既不该被扫描，也不该被删掉。
+    final File legacyPage =
+        File(
+            p.join(
+              paths.contentRoot.path,
+              'localcomic',
+              'Old Manga',
+              'Ch 1',
+              '001.jpg',
+            ),
+          )
+          ..createSync(recursive: true)
+          ..writeAsBytesSync(<int>[1, 2, 3]);
+    writeManga('New Manga');
+
+    await tester.runAsync(() async {
+      await tester.pumpWidget(_harness(_TestAppModel(db, paths)));
+      await _pumpUntil(tester, find.text('New Manga'));
+      await tester.pump();
+    });
+
+    expect(find.text('New Manga'), findsOneWidget);
+    expect(find.text('Old Manga'), findsNothing, reason: '旧 localcomic 不再被扫描');
+    expect(paths.localComicRoot.path, p.join(paths.contentRoot.path, 'local'));
+    expect(legacyPage.existsSync(), isTrue, reason: '旧 localcomic 不得删除或搬移');
+    expect(legacyPage.readAsBytesSync(), <int>[1, 2, 3]);
+  });
+
   testWidgets('搜索框按标题过滤已扫描结果', (WidgetTester tester) async {
     tester.view.physicalSize = const Size(900, 1200);
     tester.view.devicePixelRatio = 1.0;
@@ -180,7 +214,7 @@ void main() {
     expect(find.text(t.no_search_results), findsOneWidget);
   });
 
-  testWidgets('localcomic 为空时显示「尚未发现任何漫画」空态，不加按钮', (
+  testWidgets('local 为空时显示「尚未发现任何漫画」空态，不加按钮', (
     WidgetTester tester,
   ) async {
     tester.view.physicalSize = const Size(900, 1200);
@@ -207,13 +241,13 @@ void main() {
     );
   });
 
-  testWidgets('localcomic 读取失败时显示错误提示而不是空白页', (
+  testWidgets('local 读取失败时显示错误提示而不是空白页', (
     WidgetTester tester,
   ) async {
     tester.view.physicalSize = const Size(900, 1200);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
-    // 模拟 Content root 掉线：localcomic 已不存在。
+    // 模拟 Content root 掉线：local 已不存在。
     paths.localComicRoot.deleteSync(recursive: true);
 
     await tester.runAsync(() async {

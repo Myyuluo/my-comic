@@ -1,7 +1,7 @@
 /// Rebuild download index：re-link（票 09）+ 全量恢复（票 10）。
 ///
 /// 第一段以书架为**主线**：对每个 Library Manga（在线条目 / Local source 条目），
-/// 在**当前** Content root 的 `downloads/{source}/{manga}` 或 `localcomic/{manga}`
+/// 在**当前** Content root 的 `downloads/{source}/{manga}` 或 `local/{manga}`
 /// 里重新定位章节，更新 `epub_books.extractDir` 与 `manga_chapter_dirs` 映射。
 ///
 /// 匹配顺序（spec「Rebuild download index」规则 1）：
@@ -10,7 +10,7 @@
 ///  2. 已有映射 / 文件夹名回退（章节目录无稳定身份时）。
 ///
 /// 第二段扫描磁盘上书架没有的作品并补建 Library 条目（spec 规则 2/3）：
-///  - `localcomic` 作品按 Local source 扫描规则登记；
+///  - `local` 作品按 Local source 扫描规则登记；
 ///  - `downloads` 作品在源已安装时按 `pages.json` 稳定身份建在线条目，源未安装
 ///    或缺少 `pages.json` 时降级为指向该文件夹的本地条目；
 ///  - 主动移出书架（`book_tombstones`）的作品跳过，绝不复活。
@@ -19,7 +19,7 @@
 /// 「找不到」，任务行的 `done` 状态使它显示为 Missing。整个流程只增改数据库
 /// 行，不写、不移动、不删除任何用户文件。
 ///
-/// 只接收当前 Content root 的 `downloads` 与 `localcomic` 两个根，因此结构上
+/// 只接收当前 Content root 的 `downloads` 与 `local` 两个根，因此结构上
 /// 不可能读取旧 Content root，也不会扫描 `autobackup`。
 library;
 
@@ -108,13 +108,13 @@ class RebuildDownloadIndexReport {
   /// 书架里参与重建的书目数（在线 + Local source）。
   final int booksScanned;
 
-  /// 从 `downloads` / `localcomic` 新补建的 Library 条目数。
+  /// 从 `downloads` / `local` 新补建的 Library 条目数。
   final int booksAdded;
 
   /// [booksAdded] 中建为在线条目的数量（源已安装）。
   final int booksAddedOnline;
 
-  /// [booksAdded] 中建为本地条目的数量（`localcomic` 作品、源未安装或
+  /// [booksAdded] 中建为本地条目的数量（`local` 作品、源未安装或
   /// 缺少 `pages.json` 的下载目录）。
   final int booksAddedLocal;
 
@@ -281,7 +281,7 @@ class RebuildDownloadIndexService {
       );
     }
 
-    // ── 全量恢复：downloads / localcomic 里书架没有的作品（票 10） ──────
+    // ── 全量恢复：downloads / local 里书架没有的作品（票 10） ──────
     if (!cancelled) {
       final List<EpubBookRow> latestRows = await database.getAllEpubBooks();
       final Set<String> latestBookKeys = <String>{
@@ -291,7 +291,7 @@ class RebuildDownloadIndexService {
         for (final EpubBookRow row in latestRows)
           _canonicalPath(row.extractDir),
       };
-      // localcomic 里尚未登记的本地作品。已立墓碑的也留在候选里：处理时计入
+      // local 里尚未登记的本地作品。已立墓碑的也留在候选里：处理时计入
       // skipped 并报告用户「主动移出书架」的选择被尊重。
       final List<LocalSourceManga> localRecoveryCandidates = <LocalSourceManga>[
         for (final LocalSourceManga manga in localMangas)
@@ -320,7 +320,7 @@ class RebuildDownloadIndexService {
           localRecoveryCandidates.length +
           downloadRecoveryCandidates.length;
 
-      // localcomic：新增作品（ticket 06 的扫描规则），尊重墓碑。
+      // local：新增作品（ticket 06 的扫描规则），尊重墓碑。
       for (int index = 0; index < localRecoveryCandidates.length; index++) {
         if (cancelToken?.isCancelled ?? false) {
           cancelled = true;
@@ -629,7 +629,7 @@ class RebuildDownloadIndexService {
     List<LocalSourceManga> mangas,
   ) async {
     // Ticket 10：源未安装的下载内容被降级成指向 `downloads/{source}/{manga}`
-    // 的本地条目。它不在 localcomic 扫描结果里，按记录路径原地刷新即可。
+    // 的本地条目。它不在 local 扫描结果里，按记录路径原地刷新即可。
     if (_isWithinDownloadsRoot(row.extractDir)) {
       final Directory directory = Directory(row.extractDir);
       if (await directory.exists()) {
@@ -645,7 +645,7 @@ class RebuildDownloadIndexService {
             return await _refreshLocalMangaRow(row, scanned);
           }
         } on Object {
-          // 读盘失败按「找不到」处理，继续走 localcomic 名称回退。
+          // 读盘失败按「找不到」处理，继续走 local 名称回退。
         }
       }
     }
@@ -671,7 +671,7 @@ class RebuildDownloadIndexService {
     return _refreshLocalMangaRow(row, match.manga!);
   }
 
-  /// 用一次扫描结果刷新 Local source 条目（localcomic 或 downloads 降级条目）。
+  /// 用一次扫描结果刷新 Local source 条目（local 或 downloads 降级条目）。
   Future<_BookOutcome> _refreshLocalMangaRow(
     EpubBookRow row,
     LocalSourceManga found,

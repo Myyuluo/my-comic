@@ -1351,9 +1351,9 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
   Future<void> _openMangaImportPrefilled({
     required List<String> mangaPaths,
   }) async {
-    // 页图文件夹走 Local source：先复制进 `localcomic` 再登记，原始文件夹保留
+    // 页图文件夹走 Local source：先复制进 `local` 再登记，原始文件夹保留
     // （ADR 0013）。`.mokuro` / CBZ / 图片型 zip / PDF 等仍走漫画导入对话框；
-    // CBZ 的 localcomic 登记属于 ticket 07。
+    // CBZ 的 local 登记属于 ticket 07。
     final List<String> localFolders = <String>[];
     final List<String> dialogPaths = <String>[];
     for (final String path in mangaPaths) {

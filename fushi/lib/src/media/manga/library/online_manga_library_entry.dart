@@ -21,7 +21,7 @@ enum OnlineMangaRuntimeKind {
   /// `sourceId` 恒是对端库那一维的常量，`seriesKey` = 对端 `bookKey`。
   interconnect('interconnect'),
 
-  /// Local source（`localcomic`）。**不是在线运行时**：没有 service/adapter，
+  /// Local source（`local`）。**不是在线运行时**：没有 service/adapter，
   /// 只用于让作品页把本地章节列表交给共享的 `MangaChapterList` 渲染；条目本身
   /// 的持久化标记是 `LocalSourceMetadata`（`epub_books.sourceMetadata`），
   /// 不会把这个 wire 值写进库。

@@ -7,7 +7,7 @@ import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
-/// Ticket 07：`localcomic/{manga}/{chapter}.cbz` 目录扫描。
+/// Ticket 07：`local/{manga}/{chapter}.cbz` 目录扫描。
 ///
 /// CBZ 与章节目录同级：包根 `pages.json` 优先，缺失/损坏/引用缺页时回退到
 /// 包内图片自然序扫描；没有图片的包不算章节。

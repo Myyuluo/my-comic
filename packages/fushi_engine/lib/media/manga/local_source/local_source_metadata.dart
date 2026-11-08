@@ -1,6 +1,6 @@
 /// Local source 条目的 Library 元数据。
 ///
-/// Local source 不向用户的 `localcomic` 写隐藏元数据（ADR 0013）；作品与章节的
+/// Local source 不向用户的 `local` 写隐藏元数据（ADR 0013）；作品与章节的
 /// 重启安全描述只存在数据库的 `epub_books.sourceMetadata` / `chaptersJson` 列里。
 /// 这不是「目录即身份」的替代品——身份仍是文件夹路径，这里只记录相对路径，
 /// 供缺失检测 / 重建索引重新定位。

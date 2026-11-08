@@ -13,7 +13,7 @@ import 'package:fushi/src/utils/misc/platform_utils.dart';
 ///
 /// 存储按生命周期拆成两个根（ADR 0011）：
 ///   - **Content root（内容根）**：用户可见的漫画内容。默认
-///     `<Documents>/MyComic`，下设 `downloads`、`autobackup`、`localcomic`。
+///     `<Documents>/MyComic`，下设 `downloads`、`autobackup`、`local`。
 ///     卸载/更新不触碰它。
 ///   - **Program state root（程序状态根）**：随程序目录存放的应用状态。默认
 ///     `<exeDir>/userdata`，下设 `state`（DB、prefs、Mihon runtime、更新包、自定义
@@ -66,7 +66,7 @@ class AppPaths {
   /// Content root 下存放 Backup 的目录 `<content>/autobackup`。
   final Directory autobackupRoot;
 
-  /// Content root 下的本地源根 `<content>/localcomic`。
+  /// Content root 下的本地源根 `<content>/local`。
   final Directory localComicRoot;
 
   /// 程序状态根（默认 `<exeDir>/userdata`）。
@@ -133,7 +133,11 @@ class AppPaths {
   static const String autobackupDirName = 'autobackup';
 
   /// Content root 下本地源根的子目录名。
-  static const String localComicDirName = 'localcomic';
+  ///
+  /// 2026-11 local-source-polish：永久更名为 `local`，与产品里的「本地图源」
+  /// 命名一致。**不做迁移**：旧 `localcomic` 不扫描、不搬移、不删除，旧登记行
+  /// 自然变成 Missing（开发阶段接受的代价）。
+  static const String localComicDirName = 'local';
 
   /// 用户选择的 Content root 绝对路径（SharedPreferences，落 Program state root 的
   /// `state/shared_preferences.json`）。DB 打开前即可读，供 [resolve] 解析。
@@ -476,7 +480,7 @@ class AppPaths {
   static Future<Directory> autobackupRootDirectory() async =>
       Directory(p.join((await _resolveContentRoot()).path, autobackupDirName));
 
-  /// `<content>/localcomic`（不创建）。
+  /// `<content>/local`（不创建）。
   static Future<Directory> localComicRootDirectory() async =>
       Directory(p.join((await _resolveContentRoot()).path, localComicDirName));
 

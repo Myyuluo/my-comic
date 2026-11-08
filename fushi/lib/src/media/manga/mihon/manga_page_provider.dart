@@ -150,7 +150,7 @@ class LocalMangaReaderSession implements MangaReaderSession {
 const String kLocalSourceArchiveCacheDirName = 'local_source_archive_cache';
 
 /// Local source CBZ 章节的页会话：按需把正在读的页从压缩包解到 app cache，
-/// [close] 时删掉整个会话目录。`localcomic` 里的原包始终只读、不复制。
+/// [close] 时删掉整个会话目录。`local` 里的原包始终只读、不复制。
 class LocalSourceArchivePageProvider implements MangaPageProvider {
   const LocalSourceArchivePageProvider({
     required this.archivePath,

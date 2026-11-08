@@ -12,7 +12,7 @@ import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
-/// Ticket 06：把 `localcomic` 扫描结果登记进 Library —— 原地引用，不复制；
+/// Ticket 06：把 `local` 扫描结果登记进 Library —— 原地引用，不复制；
 /// 移出书架只删记录（tombstone），删文件是单独且显式确认的动作。
 void main() {
   late Directory root;

@@ -1,4 +1,4 @@
-/// 读取 Local source 的一部作品的某一章——**原地**从 `localcomic` 目录取页。
+/// 读取 Local source 的一部作品的某一章——**原地**从 `local` 目录取页。
 ///
 /// 登记时写入的章节描述只保存目录相对路径；每次打开都重新枚举章节页，因此用户
 /// 在导入后新增/替换的图片无需重新导入即可读到（ADR 0013：不复制、不监视）。
@@ -167,7 +167,7 @@ abstract final class LocalSourceReader {
   }
 
   /// CBZ 章节：只读打开压缩包，页表/宽高按需取自包内条目，读完即关闭——
-  /// 不解压进受管目录，也不改 `localcomic` 里的原包。
+  /// 不解压进受管目录，也不改 `local` 里的原包。
   static Future<LocalSourceResolvedChapter?> _resolveArchiveChapter({
     required EpubBookRow row,
     required int chapterIndex,

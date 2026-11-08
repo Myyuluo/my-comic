@@ -14,7 +14,7 @@ import 'package:fushi/utils.dart';
 /// 只增加必要入口：确认框 → 进度（可取消）→ 结果摘要。视觉全部复用现有设置
 /// 组件、对话框壳与进度指示器，不改变设计/美术（ADR 0008）。
 ///
-/// 服务只接收**当前** Content root 的 `downloads` / `localcomic`，所以入口不会
+/// 服务只接收**当前** Content root 的 `downloads` / `local`，所以入口不会
 /// 读旧 Content root，也不会扫描 `autobackup`。
 SettingsSection buildRebuildDownloadIndexSection() {
   return SettingsSection(

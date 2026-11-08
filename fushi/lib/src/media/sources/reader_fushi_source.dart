@@ -1073,7 +1073,7 @@ class ReaderFushiSource extends ReaderMediaSource {
           : null;
 
       // Local source（ADR 0013）：移出书架只删 Library 记录 + 立墓碑，绝不删
-      // `localcomic` 里用户自己的文件。书架长删 / 批删 / 合集连删都经过这里。
+      // `local` 里用户自己的文件。书架长删 / 批删 / 合集连删都经过这里。
       if (bookRow != null &&
           LocalSourceMetadata.tryParse(bookRow.sourceMetadata) != null) {
         if (deleteStatistics) {

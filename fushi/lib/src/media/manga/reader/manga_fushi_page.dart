@@ -1547,7 +1547,7 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
     );
   }
 
-  /// Local source 章节：按 `sourceMetadata` 标记分流，页图从 `localcomic` 的
+  /// Local source 章节：按 `sourceMetadata` 标记分流，页图从 `local` 的
   /// 章节目录 / CBZ 原地读取（不复制、不要求 manga.json）。
   ///
   /// 多章作品从点名的章（或第 1 章）开始；单章作品保留书级断点续读。第一章之后
@@ -1598,7 +1598,7 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
     );
   }
 
-  /// CBZ 章节：页缓存由页会话按需解到 app cache，`localcomic` 里的原包只读。
+  /// CBZ 章节：页缓存由页会话按需解到 app cache，`local` 里的原包只读。
   Future<void> _loadLocalSourceArchiveChapter({
     required EpubBookRow row,
     required LocalSourceResolvedChapter resolved,

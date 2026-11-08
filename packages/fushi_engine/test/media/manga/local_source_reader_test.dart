@@ -371,7 +371,7 @@ void main() {
           localSourceRoot: newRoot,
         );
 
-    expect(resolved, isNull, reason: '不得回读旧 Content root 下的 localcomic');
+    expect(resolved, isNull, reason: '不得回读旧 Content root 下的 local');
     expect(
       File(p.join(root.path, 'Manga', 'Ch 1', '001.png')).existsSync(),
       isTrue,

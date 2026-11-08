@@ -20,7 +20,7 @@ import 'package:fushi/utils.dart';
 ///    时先创建，失败复用现有提示。
 ///  - `程序数据位置`：Program state root，只读，使用回退位置时在副标题标注。
 ///
-/// 2026-11-08（ticket 03）：移除 downloads / localcomic / autobackup 三个重复的
+/// 2026-11-08（ticket 03）：移除 downloads / local / autobackup 三个重复的
 /// 子文件夹入口。本构建器与 SRS 备份页共用，SRS 上的同名入口同步消失。
 SettingsSection buildContentRootsSection() {
   return SettingsSection(

@@ -186,7 +186,10 @@ void main() {
         'documents',
         'downloads',
         'autobackup',
-        'localcomic',
+        // Local source root 自 local-source-polish 起叫 `local`。这里必须写
+        // **路径限定**的完整形式：裸 `local` 会误匹配上面必须保留的
+        // `{localappdata}\MyComic\userdata` 回退项（localappdata 含 "local"）。
+        r'{userdocs}\mycomic\local',
       ]) {
         expect(
           uninstall.contains(forbidden),

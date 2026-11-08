@@ -1,8 +1,8 @@
 /// 拖入 Local source root 的过渡路径：先把文件夹 / CBZ **复制**进
-/// `localcomic`，再登记；原始文件保持不动（ADR 0013 / storage-layout spec）。
+/// `local`，再登记；原始文件保持不动（ADR 0013 / storage-layout spec）。
 ///
 /// 未来的「源」里的 Local source 入口会取代拖入；本条是当前版本的过渡行为。
-/// CBZ 复制成 `localcomic/{manga}/{chapter}.cbz` 后按 CBZ 章节扫描登记。
+/// CBZ 复制成 `local/{manga}/{chapter}.cbz` 后按 CBZ 章节扫描登记。
 ///
 /// 批量导入入口退役后，这里只登记本次拖入的那一部作品（按单部扫描 +
 /// `registerScannedManga`），不再顺带扫描整个 root。
