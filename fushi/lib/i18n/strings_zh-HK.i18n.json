@@ -2138,7 +2138,7 @@
   "download_request_failed": "無法創建下載。請檢查下載設定和任務列表後重試。",
   "download_resource_resolve_failed": "無法獲取下載資源。請檢查網絡和代理設定後重試。",
   "download_resume_all": "Resume all",
-  "download_save_as_cbz_subtitle": "只影響新開始的下載；已有章節保持原樣。",
+  "download_save_as_cbz_subtitle": "關閉後，下載的漫畫將以資料夾+圖片形式保存。",
   "download_save_as_cbz_title": "儲存為CBZ壓縮包",
   "download_save_root_change": "更改目錄",
   "download_save_root_create_failed": "無法創建該目錄，請檢查磁碟與權限。",

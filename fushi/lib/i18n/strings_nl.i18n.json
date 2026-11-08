@@ -2138,7 +2138,7 @@
   "download_request_failed": "De download kon niet worden aangemaakt. Controleer de downloadinstellingen en de takenlijst en probeer het opnieuw.",
   "download_resource_resolve_failed": "De downloadbron kon niet worden opgehaald. Controleer de netwerk- en proxyinstellingen en probeer het opnieuw.",
   "download_resume_all": "Resume all",
-  "download_save_as_cbz_subtitle": "Only affects downloads started from now on; existing chapters keep their current form.",
+  "download_save_as_cbz_subtitle": "When off, downloaded manga are saved as folders with image files.",
   "download_save_as_cbz_title": "Save as CBZ archive",
   "download_save_root_change": "Map wijzigen",
   "download_save_root_create_failed": "Kan die map niet aanmaken. Controleer de schijf en rechten.",

@@ -2138,7 +2138,7 @@
   "download_request_failed": "İndirme oluşturulamadı. İndirme ayarlarını ve görev listesini kontrol edip tekrar deneyin.",
   "download_resource_resolve_failed": "İndirme kaynağı alınamadı. Ağ ve proxy ayarlarını kontrol edip tekrar deneyin.",
   "download_resume_all": "Resume all",
-  "download_save_as_cbz_subtitle": "Only affects downloads started from now on; existing chapters keep their current form.",
+  "download_save_as_cbz_subtitle": "When off, downloaded manga are saved as folders with image files.",
   "download_save_as_cbz_title": "Save as CBZ archive",
   "download_save_root_change": "Klasörü değiştir",
   "download_save_root_create_failed": "Bu klasör oluşturulamıyor. Sürücüyü ve izinleri kontrol edin.",
