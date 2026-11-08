@@ -708,6 +708,9 @@ List<FushiIconButton> libraryHeaderTagActions(
             : sortTooltip,
         badge: sortFilterActive,
         overflowPriority: sortPriority,
+        // 按钮画在菜单常驻锚点之外；登记进菜单的 tap region 组，按下按钮才
+        // 不会被 MenuAnchor 当外部点击先关掉（第二次点击才能可靠收起）。
+        tapRegionGroupId: menu,
         onTap: () => menu.isOpen ? menu.close() : menu.open(),
       ),
     if (showTagManagement)
