@@ -154,6 +154,12 @@ abstract class OnlineSourceCatalog<T> {
   /// 「筛选」）。
   String get filtersTooltip => t.mihon_source_preferences;
 
+  /// 目录内容在后台变化时的通知（本地图源据此逐部更新生成好的封面）。
+  ///
+  /// null = 页面不监听：在线源的内容只在 [fetch] 时变化。返回的 [Listenable]
+  /// 生命周期归 catalog，[dispose] 时由 catalog 自己释放。
+  Listenable? get changes => null;
+
   void dispose() {}
 }
 
@@ -194,15 +200,25 @@ class _OnlineSourceBrowsePageState<T> extends State<OnlineSourceBrowsePage<T>> {
   @override
   void initState() {
     super.initState();
+    _catalog.changes?.addListener(_onCatalogChanged);
     unawaited(_initialise());
   }
 
   @override
   void dispose() {
+    _catalog.changes?.removeListener(_onCatalogChanged);
     _searchController.dispose();
     _searchFocus.dispose();
     _catalog.dispose();
     super.dispose();
+  }
+
+  /// catalog 在后台更新了内容（本地图源逐部补齐封面）：重新取一次当前查询的
+  /// 结果，让对应卡片拿到新的封面路径。取页仍走 [OnlineSourceCatalog.fetch]，
+  /// 页面不直接伸手进 catalog 的扫描列表。
+  void _onCatalogChanged() {
+    if (!mounted || !_prepared) return;
+    unawaited(_load(reset: true));
   }
 
   Future<void> _initialise() async {
