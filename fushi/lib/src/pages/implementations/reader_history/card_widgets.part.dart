@@ -294,11 +294,15 @@ extension _ReaderHistoryCardWidgets on _ReaderFushiHistoryPageState {
     return result;
   }
 
+  /// [coverBadgeAutoWidth]：封面右上角徽章按内容自然宽度布局（漫画未读章数），
+  /// 不再套 22×22 方框 + [FittedBox]。纯图标徽章保持原固定尺寸（TODO-361 / 552
+  /// 的视觉守卫继续成立）。
   Widget _bookCardLayout({
     required String title,
     required Widget cover,
     Widget? tagLabels,
     Widget? coverBadge,
+    bool coverBadgeAutoWidth = false,
     Widget? leadingBadge,
     Widget? metadata,
     Widget? loadingOverlay,
@@ -332,13 +336,18 @@ extension _ReaderHistoryCardWidgets on _ReaderFushiHistoryPageState {
                     // 徽章内在尺寸 kShelfCoverBadgeDimension=22，配合 `BoxFit.contain` 既不
                     // 放大也不缩小，徽章按 22px 满尺寸渲染——TODO-361 曾把方框收到 16px 把徽章
                     // 缩得太小看不清，TODO-552 恢复正常大小。
-                    child: SizedBox.square(
-                      dimension: kShelfCoverBadgeDimension,
-                      child: FittedBox(
-                        fit: BoxFit.contain,
-                        child: coverBadge,
-                      ),
-                    ),
+                    //
+                    // 漫画未读章数（coverBadgeAutoWidth）是文字角标：宽度必须随位数伸展
+                    // （「99+」清晰可读），故绕过固定方框，按自然尺寸布局。
+                    child: coverBadgeAutoWidth
+                        ? coverBadge
+                        : SizedBox.square(
+                            dimension: kShelfCoverBadgeDimension,
+                            child: FittedBox(
+                              fit: BoxFit.contain,
+                              child: coverBadge,
+                            ),
+                          ),
                   ),
                 if (leadingBadge != null)
                   PositionedDirectional(
