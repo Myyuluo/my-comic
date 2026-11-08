@@ -21,7 +21,11 @@ import 'package:fushi/src/sync/desktop_lookup_service.dart';
 import 'package:fushi/src/utils/fushi_icons.dart';
 import 'package:fushi/src/utils/components/fushi_floating_chrome.dart'
     show FushiFloatingChromeBar;
+import 'package:fushi/src/utils/components/fushi_floating_page_chrome.dart'
+    show FushiPageChromeTitle;
 import 'package:fushi/src/utils/components/glass/fushi_glass_bars.dart';
+import 'package:fushi/src/utils/components/glass/fushi_icon.dart'
+    show FushiIcon;
 import 'package:fushi/src/utils/components/library_section_tabs.dart'
     show FushiSectionTabBar;
 import 'package:fushi/src/utils/misc/update_checker.dart';
@@ -393,6 +397,18 @@ void main() {
         FontWeight.w700,
         reason: '保留页头标题的粗体字形',
       );
+
+      // 用户口径：文字缩小 30%，图标放大一倍。
+      final TextStyle base = FushiPageChromeTitle.titleStyleOf(context);
+      expect(
+        label.style?.fontSize,
+        closeTo((base.fontSize ?? 22) * 0.7, 0.01),
+        reason: '文字缩小到原来的 70%',
+      );
+      final FushiIcon icon = tester.widget<FushiIcon>(
+        find.descendant(of: globalFab, matching: find.byType(FushiIcon)).first,
+      );
+      expect(icon.size, 36, reason: '图标从默认 18 放大到 36');
     });
 
     testWidgets('列表非空且所有任务都是暂停或失败时显示「全部继续」', (

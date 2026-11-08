@@ -97,6 +97,14 @@ class _DownloadsPageState extends ConsumerState<DownloadsPage> {
     final double fabExtent = fushiFabMetrics(FushiFabSize.regular).extent;
     final bool showGlobalButton = _downloads != null && _entries.isNotEmpty;
     final bool resumeAll = _canResumeAll;
+    // 用户口径：右下角按钮文字缩到 70%（titleLarge → 约 15.4），图标放大
+    // 一倍（FilledButton 默认 18 → 36）；粗体字形与 onSecondaryContainer 前景
+    // 保持不变。
+    final TextStyle pillBaseStyle = FushiPageChromeTitle.titleStyleOf(context);
+    final TextStyle pillLabelStyle = pillBaseStyle.copyWith(
+      fontSize: (pillBaseStyle.fontSize ?? 22) * 0.7,
+      color: Theme.of(context).colorScheme.onSecondaryContainer,
+    );
     return FushiFloatingChromeHost(
       // 玻璃设计系统与浏览页一致：页内工具区不画，标题由外壳大标题承担
       // （滚动收起）。MD3 下工具区行只画标题胶囊；窄窗 / 没有外壳标题作用域
@@ -176,20 +184,16 @@ class _DownloadsPageState extends ConsumerState<DownloadsPage> {
                       onPressed: () => unawaited(_toggleAll(resumeAll)),
                       icon: FushiIcon(
                         resumeAll ? FushiIcons.play : FushiIcons.pause,
+                        size: 36,
                       ),
                       label: Text(
                         resumeAll
                             ? t.download_resume_all
                             : t.download_pause_all,
-                        // 保留页头标题的粗体 titleLarge 字形，但前景跟随
-                        // FushiFloatingTextAction 的按钮前景（onSecondaryContainer），
-                        // 不用 titleStyleOf 硬编码的 onSurface 覆盖胶囊配色。
-                        style: FushiPageChromeTitle.titleStyleOf(context)
-                            .copyWith(
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.onSecondaryContainer,
-                            ),
+                        style: pillLabelStyle,
+                      ),
+                      style: FilledButton.styleFrom(
+                        textStyle: pillLabelStyle,
                       ),
                     ),
                   ),
