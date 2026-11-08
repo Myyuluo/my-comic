@@ -153,7 +153,12 @@ abstract class OnlineSourceCatalog<T> {
 const double kOnlineBrowseAutoLoadExtent = 600;
 
 class OnlineSourceBrowsePage<T> extends StatefulWidget {
-  const OnlineSourceBrowsePage({required this.catalog, super.key, this.footer});
+  const OnlineSourceBrowsePage({
+    required this.catalog,
+    super.key,
+    this.footer,
+    this.initialQuery,
+  });
 
   final OnlineSourceCatalog<T> catalog;
 
@@ -162,6 +167,12 @@ class OnlineSourceBrowsePage<T> extends StatefulWidget {
   /// BUG-2440：scaffold 的 body 不再扣底部安全区，**底部安全区由 footer 自己套
   /// SafeArea 补**，这里不代劳。
   final Widget? footer;
+
+  /// 进页即用的搜索词（来自发现页聚合搜索的「查看全部」）：预填搜索框、清掉
+  /// 列表选中，并在 [OnlineSourceCatalog.prepare] 后自动执行一次搜索。
+  ///
+  /// 为空 = 保持原行为：打开第一个列表，只有用户提交搜索框才搜索。
+  final String? initialQuery;
 
   @override
   State<OnlineSourceBrowsePage<T>> createState() =>
@@ -206,9 +217,16 @@ class _OnlineSourceBrowsePageState<T> extends State<OnlineSourceBrowsePage<T>> {
       await _catalog.prepare();
       if (!mounted) return;
       _prepared = true;
-      _listingId = _catalog.listings.isEmpty
-          ? null
-          : _catalog.listings.first.id;
+      final String initialQuery = widget.initialQuery?.trim() ?? '';
+      if (initialQuery.isNotEmpty) {
+        // 「查看全部」入口：预填搜索框、列表不选中（null = 搜索态），立即执行。
+        _searchController.text = initialQuery;
+        _listingId = null;
+      } else {
+        _listingId = _catalog.listings.isEmpty
+            ? null
+            : _catalog.listings.first.id;
+      }
       await _load(reset: true);
     } on Object catch (error, stack) {
       ErrorLogService.instance.log('OnlineSourceBrowse.prepare', error, stack);
@@ -547,5 +565,4 @@ class _OnlineSourceBrowsePageState<T> extends State<OnlineSourceBrowsePage<T>> {
       },
     );
   }
-
 }

@@ -69,6 +69,7 @@ class OnlineWorkHeader extends StatelessWidget {
     this.extra,
     this.titleKey,
     this.onTitleTap,
+    this.onGenreTap,
   });
 
   /// 封面内容（各域自己的取图组件）；外面统一套 2:3 封面卡。
@@ -82,7 +83,7 @@ class OnlineWorkHeader extends StatelessWidget {
   /// 额外的元信息 chip（排在 [lines] 之后）。
   final List<MediaDetailChip> chips;
 
-  /// 类型标签，最多显示 8 个。
+  /// 类型标签（源分类），来源给多少就渲染多少。
   final List<String> genres;
 
   /// 旧接法的主操作区（原样横排）。给了 [primaryAction] 时忽略。
@@ -116,6 +117,10 @@ class OnlineWorkHeader extends StatelessWidget {
   /// hero 大标题的鼠标点击回调；null = 纯展示（既有页面不传，行为不变）。
   final VoidCallback? onTitleTap;
 
+  /// 源分类 chip 的点击回调；null = 纯展示（小说作品页等既有调用方不传，外观与
+  /// 命中行为不变）。给了回调时每枚分类都接入可点击标签的悬停 / 焦点反馈。
+  final ValueChanged<String>? onGenreTap;
+
   @override
   Widget build(BuildContext context) {
     final String? summary = description?.trim();
@@ -146,10 +151,9 @@ class OnlineWorkHeader extends StatelessWidget {
             primary: actions.first,
             secondary: actions.sublist(1),
           );
-    final List<String> tags = genres.take(8).toList(growable: false);
     final Widget? extra = this.extra;
     final bool hasFooter =
-        tags.isNotEmpty ||
+        genres.isNotEmpty ||
         (summary != null && summary.isNotEmpty) ||
         extra != null;
     return MediaDetailHero(
@@ -163,10 +167,11 @@ class OnlineWorkHeader extends StatelessWidget {
       actions: actionBar,
       footer: hasFooter
           ? _OnlineWorkFooter(
-              tags: tags,
+              tags: genres,
               summary: summary,
               selectable: selectableDescription,
               extra: extra,
+              onGenreTap: onGenreTap,
             )
           : null,
     );
@@ -181,17 +186,20 @@ class _OnlineWorkFooter extends StatelessWidget {
     required this.summary,
     required this.selectable,
     required this.extra,
+    required this.onGenreTap,
   });
 
   final List<String> tags;
   final String? summary;
   final bool selectable;
   final Widget? extra;
+  final ValueChanged<String>? onGenreTap;
 
   @override
   Widget build(BuildContext context) {
     final String? summary = this.summary;
     final Widget? extra = this.extra;
+    final ValueChanged<String>? onGenreTap = this.onGenreTap;
     return ConstrainedBox(
       constraints: const BoxConstraints(maxWidth: 760),
       child: Column(
@@ -203,7 +211,11 @@ class _OnlineWorkFooter extends StatelessWidget {
               spacing: 6,
               runSpacing: 6,
               children: <Widget>[
-                for (final String genre in tags) FushiTagChip(label: genre),
+                for (final String genre in tags)
+                  FushiTagChip(
+                    label: genre,
+                    onTap: onGenreTap == null ? null : () => onGenreTap(genre),
+                  ),
               ],
             ),
           if (summary != null && summary.isNotEmpty) ...<Widget>[

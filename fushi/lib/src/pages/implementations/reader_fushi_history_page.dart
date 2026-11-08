@@ -36,6 +36,7 @@ import 'package:fushi/src/media/manga/download/manga_download_service.dart';
 import 'package:fushi/src/media/manga/interconnect/interconnect_manga_source.dart';
 import 'package:fushi/src/media/manga/download/download_library_index.dart';
 import 'package:fushi/src/media/manga/library/manga_download_planner.dart';
+import 'package:fushi/src/media/manga/library/manga_shelf_unread.dart';
 import 'package:fushi/src/media/manga/library/manga_series_page.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_service.dart';
@@ -406,6 +407,12 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
   /// 「Completed」统计、卡片完成视觉、菜单「标记/取消」标签联动。随 [_loadShelfMaps]
   /// 一次性预取，手动切换或删书后 `_shelfMapsFuture = _loadShelfMaps()` 重取。
   Set<String> _completedBookKeys = const <String>{};
+
+  /// 漫画卡右上角未读章节数（bookKey → 未读章数；0 未读不出现）。随
+  /// [_loadShelfMaps] 用一次批量快照算好，卡片渲染只查这张内存表——滚动路径上
+  /// 不逐卡查库、不逐卡探测文件。刷新时机与 [_completedBookKeys] 完全相同：
+  /// 阅读器关闭 / 批量标记已读 / 从作品页返回。
+  Map<String, int> _mangaUnreadCountsByBookKey = const <String, int>{};
 
   RemoteBookClient? _remoteBookClient;
 
@@ -1111,6 +1118,12 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
         if (r.uid.isNotEmpty) r.bookKey: r.uid,
     };
     _completedBookKeys = await appModel.database.getCompletedEpubBookKeys();
+    // 漫画书架才需要未读角标；书籍 / 视频书架没有漫画卡，省掉两条查询。
+    _mangaUnreadCountsByBookKey = _mangaOnly
+        ? computeMangaShelfUnreadCounts(
+            await appModel.database.getMangaShelfReadSnapshot(),
+          )
+        : const <String, int>{};
     // 漫画页页签数量要按「阅读状态」筛选统计，读完集合是异步预取的；集合就绪后
     // 补一帧，让浮动 chrome 里的数量与正文同一口径（正文由 FutureBuilder 重建，
     // chrome 不在它下面）。
@@ -1937,8 +1950,12 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
     final info = _getAudiobookInfo(bookKey ?? '');
     final bool hasAudiobook = info.hasAudiobook;
     final HealthKind healthKind = info.healthKind;
+    final bool isManga = _isMangaItem(item);
 
-    final tagWidget = bookKey != null ? _buildTagLabels(bookKey) : null;
+    // 漫画封面左上角不再挂用户标签 chip（ticket 03）：封面空间让给未读角标，
+    // 标签浏览走页签栏。其他媒体类型原样保留。
+    final tagWidget =
+        isManga ? null : (bookKey != null ? _buildTagLabels(bookKey) : null);
 
     return _bookCardLayout(
       title: mediaSource.getDisplayTitleFromMediaItem(item),
@@ -1954,19 +1971,36 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
         fit: _bookCardCoverFit,
       ),
       tagLabels: tagWidget,
-      coverBadge: hasAudiobook
-          ? _audiobookBadge(healthKind)
-          : _cardBadge(
-              icon: Icons.menu_book_outlined,
-              background: theme.colorScheme.surfaceContainerHighest,
-              foreground: theme.colorScheme.onSurfaceVariant,
-            ),
+      // 漫画卡右上角是未读章节数（0 时整个角标不渲染），不再是书本图标；
+      // 角标宽度随数字伸展，故不套固定 22px 方框。其余媒体类型仍用原图标角标。
+      coverBadge: isManga
+          ? _mangaUnreadBadge(bookKey)
+          : hasAudiobook
+              ? _audiobookBadge(healthKind)
+              : _cardBadge(
+                  icon: Icons.menu_book_outlined,
+                  background: theme.colorScheme.surfaceContainerHighest,
+                  foreground: theme.colorScheme.onSurfaceVariant,
+                ),
+      coverBadgeAutoWidth: isManga,
       metadata: _progressBar(
         item,
         completed: bookKey != null && _completedBookKeys.contains(bookKey),
       ),
       // BUG-990：这本书的有声书包还在下载 → 本地 EPUB 卡继续显示加载覆盖层。
       loadingOverlay: _audiobookDownloadingOverlay(bookKey),
+    );
+  }
+
+  /// 漫画卡右上角的未读章节数角标：0 未读返回 null（整个角标不渲染），
+  /// ≥100 封顶显示「99+」。底色 / 字号沿用共享 [CoverBadge]。
+  Widget? _mangaUnreadBadge(String? bookKey) {
+    if (bookKey == null) return null;
+    final int unread = _mangaUnreadCountsByBookKey[bookKey] ?? 0;
+    if (unread <= 0) return null;
+    return CoverBadge(
+      key: ValueKey<String>('manga_unread_badge_$bookKey'),
+      label: unread >= 100 ? '99+' : '$unread',
     );
   }
 
@@ -2016,6 +2050,13 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
               ),
             ),
           );
+          // 作品页里可能读了几章 / 手动标记了已读：返回书架时重取一次未读
+          // 角标（与「标记为已读完」菜单同一条刷新路径）。阅读器关闭另有
+          // mediaType.refreshTab 信号，两条路都落到 [_loadShelfMaps]。
+          if (!mounted) return;
+          setState(() {
+            _shelfMapsFuture = _loadShelfMaps();
+          });
           return;
         }
         final MediaSource source = item.getMediaSource(appModel: appModel);

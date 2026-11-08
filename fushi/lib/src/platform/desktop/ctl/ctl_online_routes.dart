@@ -1058,7 +1058,7 @@ class _OnlineCtl {
     };
   }
 
-  /// 下载页漫画任务行「取消」：排队的直接改状态，正在下的中止并删半成品目录。
+  /// 下载页漫画任务行「取消」：删除任务行并把任务的半成品目录清掉。
   Future<Object?> cancelMangaDownload(CtlCall call) async {
     _requireMangaDownloads();
     final String id = call.params['id']!;
@@ -1068,7 +1068,10 @@ class _OnlineCtl {
       throw CtlFailure.conflict('任务已结束，不能取消（当前：${row.status}）');
     }
     await appModel.mangaDownloadService.cancel(id);
-    return ctlMangaDownloadJobJson(await _requireMangaJob(id));
+    // 取消会直接删除任务行（下载页不再保留「已取消」记录），响应里回显终止态。
+    return ctlMangaDownloadJobJson(
+      row.copyWith(status: MangaDownloadJobStatus.cancelled),
+    );
   }
 
   /// 下载页漫画任务行「重试」：只对 failed / cancelled 成立。
