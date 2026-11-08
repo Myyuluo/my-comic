@@ -396,12 +396,12 @@ void main() {
         reason: '保留页头标题的粗体字形',
       );
 
-      // 用户口径：文字 15，图标保持自身比例并与文字同高。
+      // 用户口径：文字 15；图标盒 24，字形可见高度约等于文字视觉高度。
       expect(label.style?.fontSize, 15, reason: '文字大小为 15');
       final FushiIcon icon = tester.widget<FushiIcon>(
         find.descendant(of: globalFab, matching: find.byType(FushiIcon)).first,
       );
-      expect(icon.size, 15, reason: '图标与文字同高');
+      expect(icon.size, 24, reason: '图标字形与 15px 文字视觉同高');
     });
 
     testWidgets('列表非空且所有任务都是暂停或失败时显示「全部继续」', (

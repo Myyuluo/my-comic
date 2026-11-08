@@ -97,8 +97,9 @@ class _DownloadsPageState extends ConsumerState<DownloadsPage> {
     final double fabExtent = fushiFabMetrics(FushiFabSize.regular).extent;
     final bool showGlobalButton = _downloads != null && _entries.isNotEmpty;
     final bool resumeAll = _canResumeAll;
-    // 用户口径：右下角按钮文字 15，图标保持自身比例、与文字同高（15）；
-    // 粗体字形与 onSecondaryContainer 前景保持不变。
+    // 用户口径：右下角按钮文字 15；图标字形与文字视觉同高。图标有字形内边距，
+    // 15 的盒只有约 8–9px 可见高度，所以盒取 24（字形可见高度约 15），
+    // 保持图标自身比例。粗体字形与 onSecondaryContainer 前景不变。
     final TextStyle pillLabelStyle = FushiPageChromeTitle.titleStyleOf(
       context,
     ).copyWith(
@@ -184,7 +185,7 @@ class _DownloadsPageState extends ConsumerState<DownloadsPage> {
                       onPressed: () => unawaited(_toggleAll(resumeAll)),
                       icon: FushiIcon(
                         resumeAll ? FushiIcons.play : FushiIcons.pause,
-                        size: 15,
+                        size: 24,
                       ),
                       label: Text(
                         resumeAll
