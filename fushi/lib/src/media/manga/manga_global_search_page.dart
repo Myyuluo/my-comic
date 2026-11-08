@@ -11,6 +11,8 @@ import 'package:fushi/src/media/manga/mihon/mihon_manager.dart';
 import 'package:fushi/src/media/manga/mihon/mihon_models.dart';
 import 'package:fushi/src/media/manga/mihon/mihon_source_browse_page.dart';
 import 'package:fushi/src/media/online/online_source_error_text.dart';
+import 'package:fushi/src/pages/implementations/discovery/discovery_layout.dart'
+    show DiscoveryViewAllButton;
 import 'package:fushi/utils.dart';
 
 /// 一次跨**所有已启用来源**搜索同一个书名的页面（Mihon 在线源）。
@@ -134,6 +136,27 @@ class _MangaGlobalSearchPageState extends State<MangaGlobalSearchPage> {
     ],
   );
 
+  /// 「查看全部」：进入该来源自己的浏览页，把聚合页当前的搜索词带过去并立即
+  /// 执行，用户能看到该来源的完整分页结果；返回时本页状态原样保留（路由栈
+  /// 只 push 一层，不重建本页）。
+  void _openSourceSearch(MangaSourceSearchRun run) {
+    final MangaGlobalSource source = run.source;
+    final MihonManager? manager = widget.mihonManager;
+    if (source is! MihonGlobalSource || manager == null) return;
+    final String query = _searchController.text.trim();
+    Navigator.of(context).push(
+      adaptivePageRoute<void>(
+        context: context,
+        builder: (BuildContext context) => MihonSourceBrowsePage(
+          manager: manager,
+          target: MihonInstalledTarget(source.row),
+          // 空关键词（用户清空了搜索框）退化为普通进页：不开搜索态。
+          initialQuery: query.isEmpty ? null : query,
+        ),
+      ),
+    );
+  }
+
   void _openMihon(MangaSourceSearchRun run, MihonManga manga) {
     final MihonSourceContext? sourceContext = run.mihonContext;
     final MihonManager? manager = widget.mihonManager;
@@ -185,9 +208,7 @@ class _MangaGlobalSearchPageState extends State<MangaGlobalSearchPage> {
         action: onOpenSources == null
             ? null
             : FushiFilledButton.tonalIcon(
-                key: const ValueKey<String>(
-                  'manga_global_search_open_sources',
-                ),
+                key: const ValueKey<String>('manga_global_search_open_sources'),
                 onPressed: onOpenSources,
                 // 「导入」的图标（与书架空态引导同一个）。拼图块 extension_outlined
                 // 恰恰是本 bug 的病根：漫画库里没有叫「扩展」的入口。
@@ -241,7 +262,22 @@ class _MangaGlobalSearchPageState extends State<MangaGlobalSearchPage> {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                _statusTrailing(run),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    _statusTrailing(run),
+                    // 「查看全部」不随分区状态隐藏：加载中 / 空 / 失败 / 有结果
+                    // 都保留入口（04 的验收条件）。
+                    if (run.source is MihonGlobalSource &&
+                        widget.mihonManager != null)
+                      DiscoveryViewAllButton(
+                        key: ValueKey<String>(
+                          'manga_global_search_view_all_${run.source.id}',
+                        ),
+                        onPressed: () => _openSourceSearch(run),
+                      ),
+                  ],
+                ),
               ],
             ),
           ),

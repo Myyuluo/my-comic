@@ -54,10 +54,15 @@ class MihonSourceBrowsePage extends StatefulWidget {
     required this.target,
     super.key,
     this.footer,
+    this.initialQuery,
   });
 
   final MihonManager manager;
   final MihonBrowseTarget target;
+
+  /// 进页即搜的「初始关键词 + 自动搜索」入口（发现页聚合搜索的「查看全部」）。
+  /// 为空 = 原来的行为：打开热门列表，提交搜索框才搜。
+  final String? initialQuery;
 
   /// 钉在正文底部的操作条。预览用它放「放弃 / 信任并安装」。
   ///
@@ -82,6 +87,7 @@ class _MihonSourceBrowsePageState extends State<MihonSourceBrowsePage> {
       OnlineSourceBrowsePage<MihonCatalogueEntry>(
         catalog: _catalog,
         footer: widget.footer,
+        initialQuery: widget.initialQuery,
       );
 }
 

@@ -375,8 +375,233 @@ void main() {
         find.byKey(const ValueKey<String>('manga_series_open_website')),
       );
       await tester.pumpAndSettle();
-      expect(launched, <Uri>[Uri.parse('https://fixture.invalid/manga/fixture')]);
+      expect(launched, <Uri>[
+        Uri.parse('https://fixture.invalid/manga/fixture'),
+      ]);
       expect(tester.takeException(), isNull);
+    },
+  );
+
+  // ---- 04：来源浏览页的「初始关键词 + 自动搜索」入口 ----
+
+  testWidgets(
+    'an initial query fills the source search box and searches automatically',
+    (WidgetTester tester) async {
+      runtime.searchPages = <int, MihonMangaPage>{
+        1: const MihonMangaPage(
+          items: <MihonManga>[
+            MihonManga(url: '/manga/hit', title: 'Fixture hit'),
+          ],
+          hasNextPage: false,
+        ),
+      };
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MihonSourceBrowsePage(
+            manager: manager,
+            target: MihonInstalledTarget(manager.sources.single),
+            initialQuery: 'fixture',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller?.text,
+        'fixture',
+      );
+      expect(runtime.searchCalls, 1);
+      expect(runtime.lastSearchQuery, 'fixture');
+      expect(runtime.lastSearchPage, 1);
+      expect(find.text('Fixture hit'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'an initial query result shows the full source page and paginates on demand',
+    (WidgetTester tester) async {
+      runtime.searchPages = <int, MihonMangaPage>{
+        1: const MihonMangaPage(
+          items: <MihonManga>[MihonManga(url: '/manga/one', title: 'Hit one')],
+          hasNextPage: true,
+        ),
+        2: const MihonMangaPage(
+          items: <MihonManga>[MihonManga(url: '/manga/two', title: 'Hit two')],
+          hasNextPage: false,
+        ),
+      };
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MihonSourceBrowsePage(
+            manager: manager,
+            target: MihonInstalledTarget(manager.sources.single),
+            initialQuery: 'fixture',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Hit one'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey<String>('mihon_browse_more')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Hit two'), findsOneWidget);
+      expect(runtime.lastSearchQuery, 'fixture');
+      expect(runtime.lastSearchPage, 2);
+    },
+  );
+
+  testWidgets(
+    'without an initial query the source page keeps submit-to-search',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MihonSourceBrowsePage(
+            manager: manager,
+            target: MihonInstalledTarget(manager.sources.single),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(runtime.searchCalls, 0, reason: '没有初始关键词时进页不搜索');
+      expect(find.text('Raw Otaku fixture'), findsOneWidget);
+
+      await tester.enterText(find.byType(TextField), 'manual query');
+      await tester.testTextInput.receiveAction(TextInputAction.search);
+      await tester.pumpAndSettle();
+
+      expect(runtime.searchCalls, 1);
+      expect(runtime.lastSearchQuery, 'manual query');
+    },
+  );
+
+  // ---- 04：聚合搜索结果的「查看全部」 ----
+
+  String viewAllKey(MangaOnlineSourceRow row) =>
+      'manga_global_search_view_all_mihon:'
+      '${row.extensionPackage}:${row.sourceId}';
+
+  Widget globalSearchPage() => MaterialApp(
+    home: MangaGlobalSearchPage(
+      mihonManager: manager,
+      mihonSources: manager.sources,
+      initialQuery: 'fixture',
+    ),
+  );
+
+  testWidgets(
+    'every aggregate section shows view all while its source is loading',
+    (WidgetTester tester) async {
+      await database.replaceMangaOnlineSources(
+        'org.example.fixture',
+        <MangaOnlineSourcesCompanion>[
+          MangaOnlineSourcesCompanion.insert(
+            extensionPackage: 'org.example.fixture',
+            sourceId: '9223372036854775807',
+            name: 'Raw Otaku',
+            language: 'en',
+          ),
+          MangaOnlineSourcesCompanion.insert(
+            extensionPackage: 'org.example.fixture',
+            sourceId: '42',
+            name: 'Second source',
+            language: 'en',
+          ),
+        ],
+      );
+      await manager.reload();
+      runtime.searchGate = Completer<MihonMangaPage>();
+
+      await tester.pumpWidget(globalSearchPage());
+      await tester.pump();
+
+      expect(manager.sources, hasLength(2));
+      for (final MangaOnlineSourceRow row in manager.sources) {
+        expect(
+          find.byKey(ValueKey<String>(viewAllKey(row))),
+          findsOneWidget,
+          reason: '加载中也要有「查看全部」：${row.name}',
+        );
+      }
+
+      runtime.searchGate!.complete(
+        const MihonMangaPage(items: <MihonManga>[], hasNextPage: false),
+      );
+      await tester.pumpAndSettle();
+    },
+  );
+
+  testWidgets('view all stays visible when a source returns no results', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(globalSearchPage());
+    await tester.pumpAndSettle();
+
+    expect(find.text(t.mihon_source_no_results), findsOneWidget);
+    expect(
+      find.byKey(ValueKey<String>(viewAllKey(manager.sources.single))),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('view all stays visible when a source search fails', (
+    WidgetTester tester,
+  ) async {
+    runtime.searchFailure = Exception('fixture failure');
+    await tester.pumpWidget(globalSearchPage());
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(ValueKey<String>(viewAllKey(manager.sources.single))),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets(
+    'view all opens that source search prefilled and auto-run, and back keeps '
+    'the aggregate results',
+    (WidgetTester tester) async {
+      runtime.searchPages = <int, MihonMangaPage>{
+        1: const MihonMangaPage(
+          items: <MihonManga>[
+            MihonManga(url: '/manga/hit', title: 'Fixture hit'),
+          ],
+          hasNextPage: false,
+        ),
+      };
+      await tester.pumpWidget(globalSearchPage());
+      await tester.pumpAndSettle();
+
+      expect(runtime.searchCalls, 1, reason: '聚合页自身先搜了一轮');
+      await tester.tap(
+        find.byKey(ValueKey<String>(viewAllKey(manager.sources.single))),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(MihonSourceBrowsePage), findsOneWidget);
+      expect(runtime.searchCalls, 2, reason: '来源页进页后要自动执行搜索');
+      expect(runtime.lastSearchQuery, 'fixture');
+      expect(runtime.lastSearchPage, 1);
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller?.text,
+        'fixture',
+      );
+      expect(find.text('Fixture hit'), findsWidgets);
+
+      Navigator.of(tester.element(find.byType(MihonSourceBrowsePage))).pop();
+      await tester.pumpAndSettle();
+
+      expect(find.byType(MangaGlobalSearchPage), findsOneWidget);
+      expect(
+        find.byKey(ValueKey<String>(viewAllKey(manager.sources.single))),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Fixture hit'),
+        findsOneWidget,
+        reason: '返回后聚合页原有结果必须还在',
+      );
     },
   );
 }
@@ -386,6 +611,11 @@ class _BrowseRuntime extends Fake
   final List<Uri> solved = <Uri>[];
   Exception? searchFailure;
   int searchCalls = 0;
+  String? lastSearchQuery;
+  int? lastSearchPage;
+
+  /// 非空时搜索第 N 页返回这里的结果；空时沿用 [searchGate] / 空结果。
+  Map<int, MihonMangaPage>? searchPages;
 
   @override
   Future<void> solveCloudflare(Uri uri, {String? userAgent}) async {
@@ -437,8 +667,11 @@ class _BrowseRuntime extends Fake
     List<MihonPreference> preferences = const <MihonPreference>[],
   }) async {
     searchCalls++;
+    lastSearchQuery = query;
+    lastSearchPage = page;
     if (searchFailure != null) throw searchFailure!;
     return searchGate?.future ??
+        searchPages?[page] ??
         const MihonMangaPage(items: <MihonManga>[], hasNextPage: false);
   }
 
