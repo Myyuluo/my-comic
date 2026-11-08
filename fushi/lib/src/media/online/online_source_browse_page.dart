@@ -20,10 +20,10 @@ import 'package:material_ui/material_ui.dart';
 import 'package:fushi/src/focus/fushi_focus_controller.dart';
 
 import 'package:fushi/src/utils/components/glass/fushi_icon.dart';
+import 'package:fushi/src/media/online/cover_browse_shared.dart';
 import 'package:fushi/src/media/online/online_source_error_text.dart';
 import 'package:fushi/utils.dart';
 import 'package:fushi/src/utils/components/fushi_staggered_entrance.dart';
-import 'package:fushi/src/utils/components/fushi_m3e_feedback.dart';
 import 'package:fushi/src/utils/components/fushi_search.dart';
 import 'package:fushi/src/utils/fushi_icons.dart';
 
@@ -142,23 +142,9 @@ abstract class OnlineSourceCatalog<T> {
 
   String get emptyText => t.mihon_source_no_results;
 
-  /// 空结果占位图标；[searching] = 当前显示的是搜索无命中（而不是这个源本身
-  /// 什么都没有）。默认放大镜，与既有源一致。
-  IconData emptyIcon({required bool searching}) => FushiIcons.searchOff;
-
-  /// 空结果占位文案；默认沿用 [emptyText]（既有源的文案不变）。本地图源用它
-  /// 区分「local 里还没有漫画」与「搜索没命中」。
-  String emptyTextFor({required bool searching}) => emptyText;
-
   /// 筛选按钮的提示（各源沿用自己原来的叫法：Mihon 叫「来源偏好」，LNReader 叫
   /// 「筛选」）。
   String get filtersTooltip => t.mihon_source_preferences;
-
-  /// 目录内容在后台变化时的通知（本地图源据此逐部更新生成好的封面）。
-  ///
-  /// null = 页面不监听：在线源的内容只在 [fetch] 时变化。返回的 [Listenable]
-  /// 生命周期归 catalog，[dispose] 时由 catalog 自己释放。
-  Listenable? get changes => null;
 
   void dispose() {}
 }
@@ -200,25 +186,15 @@ class _OnlineSourceBrowsePageState<T> extends State<OnlineSourceBrowsePage<T>> {
   @override
   void initState() {
     super.initState();
-    _catalog.changes?.addListener(_onCatalogChanged);
     unawaited(_initialise());
   }
 
   @override
   void dispose() {
-    _catalog.changes?.removeListener(_onCatalogChanged);
     _searchController.dispose();
     _searchFocus.dispose();
     _catalog.dispose();
     super.dispose();
-  }
-
-  /// catalog 在后台更新了内容（本地图源逐部补齐封面）：重新取一次当前查询的
-  /// 结果，让对应卡片拿到新的封面路径。取页仍走 [OnlineSourceCatalog.fetch]，
-  /// 页面不直接伸手进 catalog 的扫描列表。
-  void _onCatalogChanged() {
-    if (!mounted || !_prepared) return;
-    unawaited(_load(reset: true));
   }
 
   Future<void> _initialise() async {
@@ -454,60 +430,59 @@ class _OnlineSourceBrowsePageState<T> extends State<OnlineSourceBrowsePage<T>> {
     // 加载 = 与封面网格同轮廓的骨架；错误 / 空态统一 FushiPlaceholderMessage
     // （错误走 errorContainer 色块）。
     if (_loading && _items.isEmpty) {
-      return _buildSkeleton();
+      return FushiCoverGridSkeleton(
+        keyPrefix: _catalog.keyPrefix,
+        padding: EdgeInsets.fromLTRB(
+          16,
+          16 + MediaQuery.paddingOf(context).top,
+          16,
+          16,
+        ),
+      );
     }
     final Object? error = _error;
     if (error != null && _items.isEmpty) {
-      return SafeArea(
-        bottom: false,
-        child: FushiPlaceholderMessage(
-          key: ValueKey<String>('${_catalog.keyPrefix}_error'),
-          icon: FushiIcons.error,
-          tone: FushiPlaceholderTone.error,
-          message: _catalog.describeError(error),
-          action: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              FushiFilledButton.tonalIcon(
-                onPressed: () => unawaited(_retry()),
-                icon: const FushiIcon(FushiIcons.refresh),
-                label: Text(t.retry),
-              ),
-              const SizedBox(height: 8),
-              _catalog.buildVerifyAction(
-                context,
-                error: error,
-                onVerified: _retry,
-              ),
-            ],
-          ),
+      return FushiCoverBrowsePlaceholder(
+        messageKey: ValueKey<String>('${_catalog.keyPrefix}_error'),
+        icon: FushiIcons.error,
+        error: true,
+        message: _catalog.describeError(error),
+        action: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            FushiFilledButton.tonalIcon(
+              onPressed: () => unawaited(_retry()),
+              icon: const FushiIcon(FushiIcons.refresh),
+              label: Text(t.retry),
+            ),
+            const SizedBox(height: 8),
+            _catalog.buildVerifyAction(
+              context,
+              error: error,
+              onVerified: _retry,
+            ),
+          ],
         ),
       );
     }
     if (_items.isEmpty) {
-      // 列表分段全空时，搜索词非空就是「搜索没命中」；否则是这个源本身为空。
-      final bool searching =
-          _listingId == null && _searchController.text.trim().isNotEmpty;
-      return SafeArea(
-        bottom: false,
-        child: FushiPlaceholderMessage(
-          icon: _catalog.emptyIcon(searching: searching),
-          message: _catalog.emptyTextFor(searching: searching),
-          action: _catalog.verifyOnEmpty
-              ? _catalog.buildVerifyAction(
-                  context,
-                  error: null,
-                  onVerified: _retry,
-                )
-              : null,
-        ),
+      return FushiCoverBrowsePlaceholder(
+        // 空态图标沿用既有放大镜：搜索没命中与源本身为空都用它。
+        icon: FushiIcons.searchOff,
+        message: _catalog.emptyText,
+        action: _catalog.verifyOnEmpty
+            ? _catalog.buildVerifyAction(
+                context,
+                error: null,
+                onVerified: _retry,
+              )
+            : null,
       );
     }
     final String prefix = _catalog.keyPrefix;
     final void Function(BuildContext, T)? open = _catalog.openDetail;
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
-        final int columns = (constraints.maxWidth / 180).floor().clamp(2, 8);
         return NotificationListener<ScrollNotification>(
           onNotification: _onScroll,
           child: FushiEntranceScope(
@@ -523,12 +498,7 @@ class _OnlineSourceBrowsePageState<T> extends State<OnlineSourceBrowsePage<T>> {
                   16,
                 ),
               ),
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: columns,
-                childAspectRatio: 0.62,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-              ),
+              gridDelegate: coverGridDelegateFor(constraints.maxWidth),
               itemCount: _items.length + (_hasNextPage ? 1 : 0),
               itemBuilder: fushiStaggeredItemBuilder((
                 BuildContext context,
@@ -578,45 +548,4 @@ class _OnlineSourceBrowsePageState<T> extends State<OnlineSourceBrowsePage<T>> {
     );
   }
 
-  /// 首屏加载骨架：与结果网格同列数、同比例的封面块 + 两条标题条，整组共享
-  /// 一道有界闪光。
-  Widget _buildSkeleton() {
-    return LayoutBuilder(
-      builder: (BuildContext context, BoxConstraints constraints) {
-        final int columns = (constraints.maxWidth / 180).floor().clamp(2, 8);
-        return FushiSkeletonShimmer(
-          child: GridView.builder(
-            key: ValueKey<String>('${_catalog.keyPrefix}_skeleton'),
-            primary: false,
-            physics: const NeverScrollableScrollPhysics(),
-            padding: EdgeInsets.fromLTRB(
-              16,
-              16 + MediaQuery.paddingOf(context).top,
-              16,
-              16,
-            ),
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: columns,
-              childAspectRatio: 0.62,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-            ),
-            itemCount: columns * 3,
-            itemBuilder: (BuildContext context, int index) => Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                Expanded(
-                  child: FushiSkeleton(borderRadius: FushiM3eShape.cardRadius),
-                ),
-                const SizedBox(height: 10),
-                FushiSkeleton.line(widthFactor: 0.9),
-                const SizedBox(height: 6),
-                FushiSkeleton.line(widthFactor: 0.5),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
 }

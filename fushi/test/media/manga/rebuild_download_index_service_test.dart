@@ -11,6 +11,7 @@ import 'package:fushi/src/media/manga/download/download_library_index.dart';
 import 'package:fushi/src/media/manga/download/rebuild_download_index_service.dart';
 import 'package:fushi/src/media/manga/library/manga_chapter_download_state.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
+import 'package:image/image.dart' as img;
 import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi_engine/epub/epub_storage.dart';
 import 'package:fushi_engine/media/manga/download_library_storage.dart';
@@ -1008,6 +1009,66 @@ void main() {
     expect(second.booksRelinked, 0);
     expect((await db.getAllEpubBooks()).length, 1);
     expect(page.readAsStringSync(), 'page');
+  });
+
+  /// 一张真实可解码的页图（封面生成要能解码第一页）。
+  List<int> coverTestPageBytes() {
+    final img.Image image = img.Image(width: 400, height: 600)
+      ..clear(img.ColorRgb8(255, 0, 0));
+    return img.encodePng(image);
+  }
+
+  test('Rebuild 给只经它登记的本地作品生成 cover.jpg 并写入 coverPath', () async {
+    final Directory mangaDir = Directory(
+      p.join(localComicRoot.path, 'Cover orphan'),
+    );
+    final File page = File(p.join(mangaDir.path, 'Ch 1', '001.png'))
+      ..createSync(recursive: true)
+      ..writeAsBytesSync(coverTestPageBytes());
+
+    final RebuildDownloadIndexReport report = await service().run();
+
+    expect(report.booksAddedLocal, 1);
+    final File cover = File(p.join(mangaDir.path, 'cover.jpg'));
+    expect(cover.existsSync(), isTrue, reason: 'Rebuild 登记时补齐封面');
+    final EpubBookRow row = (await db.getAllEpubBooks()).single;
+    expect(row.coverPath, 'cover.jpg', reason: '书架 / 作品页据此显示封面');
+    expect(page.readAsBytesSync(), isNotEmpty);
+
+    // 幂等：再跑一次不重复生成、不覆盖已生成的封面。
+    final List<int> coverBytes = cover.readAsBytesSync();
+    final RebuildDownloadIndexReport second = await service().run();
+    expect(second.booksAdded, 0);
+    expect(cover.readAsBytesSync(), coverBytes);
+  });
+
+  test('Rebuild 重链已登记的 CBZ 本地作品时补封面并更新 coverPath', () async {
+    final Directory mangaDir = Directory(
+      p.join(localComicRoot.path, 'Cover cbz'),
+    );
+    await mangaDir.create(recursive: true);
+    final List<int> pageBytes = coverTestPageBytes();
+    final Archive archive = Archive()
+      ..addFile(ArchiveFile('001.png', pageBytes.length, pageBytes));
+    await File(
+      p.join(mangaDir.path, 'Ch 1.cbz'),
+    ).writeAsBytes(ZipEncoder().encode(archive)!);
+    final LocalSourceManga scanned = (await scanLocalSourceRoot(
+      localComicRoot,
+    )).single;
+    await LocalSourceLibrary(
+      db: db,
+      root: localComicRoot,
+    ).registerScannedManga(scanned);
+    // CBZ 的页没有独立文件：登记时 coverPath 为空，正是需要 Rebuild 补齐的情形。
+    expect((await db.getAllEpubBooks()).single.coverPath, isNull);
+
+    final RebuildDownloadIndexReport report = await service().run();
+
+    expect(report.booksRelinked, greaterThanOrEqualTo(1));
+    final File cover = File(p.join(mangaDir.path, 'cover.jpg'));
+    expect(cover.existsSync(), isTrue, reason: '重链时补齐缺失封面');
+    expect((await db.getAllEpubBooks()).single.coverPath, 'cover.jpg');
   });
 
   test('尊重 book_tombstones：主动移出书架的下载/本地作品不会被重新加入', () async {

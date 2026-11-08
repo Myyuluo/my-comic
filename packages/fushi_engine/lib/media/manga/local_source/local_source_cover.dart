@@ -105,8 +105,11 @@ class LocalSourceCoverService {
       );
     }
 
+    // 上面的存在检查与写入之间仍有窗口：用「目标已存在就不发布」的写入路径
+    // 收窄竞态——生成期间用户放进来的封面绝不被这里覆盖。
+    final bool written;
     try {
-      await writeCoverBytesAtomically(
+      written = await writeCoverBytesIfAbsent(
         bytes: encoded,
         destPath: p.join(
           manga.directoryPath,
@@ -116,6 +119,17 @@ class LocalSourceCoverService {
     } on Object {
       return const LocalSourceCoverResult(
         outcome: LocalSourceCoverOutcome.unavailable,
+      );
+    }
+    if (!written) {
+      final String cover =
+          _existingCoverName(manga.directoryPath) ??
+          kLocalSourceGeneratedCoverFileName;
+      final bool updated = await _syncRegisteredCoverPath(manga, cover);
+      return LocalSourceCoverResult(
+        outcome: LocalSourceCoverOutcome.existing,
+        coverRelativePath: cover,
+        registeredCoverPathUpdated: updated,
       );
     }
 

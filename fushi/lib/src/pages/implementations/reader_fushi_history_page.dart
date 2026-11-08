@@ -60,8 +60,7 @@ import 'package:fushi/src/utils/components/fushi_floating_chrome.dart'
     show
         FushiFloatingChromeInset,
         FushiFloatingChromeInsetPadding,
-        FushiFloatingChromeOverlay,
-        FushiSpringReveal;
+        FushiFloatingChromeOverlay;
 import 'package:fushi_core/fushi_core.dart';
 // BUG-813：构造 ReaderPositionsCompanion 回填下载书的阅读进度需要 drift 的 Value（
 // fushi_core 未再导出它）。
@@ -771,17 +770,12 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
                   ),
                   ),
                 ),
-                // 批量栏是多选态的底部浮动工具栏：弹簧从底边浮起 / 沉下（与视频库
-                // 同一形态）。
-                FushiSpringReveal(
+                // 批量栏是多选态的底部浮动工具栏：弹簧从底边浮起 / 沉下；
+                // 退出多选后沉下去的那一程还画着上一帧的批量栏（只是不再接
+                // 指针），沉到底才卸掉（容器见 [BatchActionBarHost]）。
+                BatchActionBarHost(
                   visible: _selectionMode,
-                  edge: VerticalDirection.down,
-                  maintainState: false,
-                  // 退出多选后沉下去的那一程还画着上一帧的批量栏（只是不再接
-                  // 指针），沉到底才卸掉。
-                  child: _selectionMode
-                      ? (_lastBatchActionBar = _buildBatchActionBar())
-                      : (_lastBatchActionBar ?? const SizedBox.shrink()),
+                  builder: (BuildContext context) => _buildBatchActionBar(),
                 ),
               ],
             ),
@@ -790,9 +784,6 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
       ),
     );
   }
-
-  /// 最近一次画出的批量栏：退出多选后沉下动画期间继续画它。
-  Widget? _lastBatchActionBar;
 
   /// 上次登记页签位内容的壳槽（换槽 / 卸载时先撤回旧登记）。
   MediaLibraryChromeTabsSlot? _claimedChromeTabs;

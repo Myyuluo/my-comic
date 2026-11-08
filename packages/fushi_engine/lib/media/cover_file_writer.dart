@@ -12,6 +12,10 @@
 /// `existsSync`，坏文件会在每次重建时反复解码反复报错。判据放在写侧唯一入口
 /// （[isDecodableImageBytes]），所有写入方——内存字节、拷文件、外部进程 staged
 /// 文件——都过同一道门，而不是每个调用点各写一遍校验（那正是漏掉三处的形状）。
+///
+/// 另一个入口 [writeCoverBytesIfAbsent] 服务「生成封面但绝不覆盖用户文件」的
+/// 场景（本地图源）：同样校验可解码字节、同样驱逐解码缓存，只是发布方式换成
+/// 独占创建（见其注释里的平台限制说明）。
 library;
 
 import 'dart:io';
@@ -170,6 +174,49 @@ Future<void> writeCoverBytesAtomically({
     await _deleteQuietly(tmp);
     rethrow;
   }
+}
+
+/// 写入封面但**绝不覆盖** [destPath] 上已存在的文件；返回 true = 本次写入了新文件。
+///
+/// 与 [writeCoverBytesAtomically] 的区别在发布一步：这里用 `create(exclusive:
+/// true)` 独占创建目标名——「检查目标不存在」与「占住名字」由 OS 原子完成，
+/// 因此生成封面期间用户 / 其它进程刚放进去的封面**不会**被覆盖。校验与
+/// [writeCoverBytesAtomically] 同一道门（[isDecodableImageBytes]），写入失败
+/// 会删掉本次刚创建的目标。
+///
+/// 平台限制（已知并接受）：Dart stdlib 没有 rename-if-absent / 硬链接 API，
+/// 「原子发布完整文件」与「绝不覆盖」无法同时满足。本函数优先保证不覆盖：
+/// 目标名在写入前就可能以空文件出现，进程在写入途中崩溃会留下半成品（正常
+/// 错误路径会清理）。生成方（本地图源封面）接受这个极小窗口，换取用户封面
+/// 在任何时序下都不被改写。
+///
+/// 返回 false 只表示目标已存在（本次未写）；其它写入错误照常抛出。
+Future<bool> writeCoverBytesIfAbsent({
+  required List<int> bytes,
+  required String destPath,
+}) async {
+  if (!isDecodableImageBytes(bytes)) {
+    throw CoverImageInvalidException(
+      '${bytes.length} bytes for $destPath are not a complete decodable image',
+    );
+  }
+  final File dest = File(destPath);
+  try {
+    await dest.create(exclusive: true);
+  } on FileSystemException {
+    // 目标已存在 = 不覆盖；目录不可写等其它原因照常冒泡。
+    if (await dest.exists()) return false;
+    rethrow;
+  }
+  try {
+    await dest.writeAsBytes(bytes, flush: true);
+  } on Object {
+    // 本次刚创建的目标没写完整：删掉半成品，别让渲染层解码坏图。
+    await _deleteQuietly(dest);
+    rethrow;
+  }
+  await evictImageCacheForFile(dest);
+  return true;
 }
 
 Future<void> copyCoverFileAtomically({

@@ -51,12 +51,15 @@ final RegExp kRawWrite =
     RegExp(r'writeAsBytes\(|\.copy\(|\.rename\(|openWrite\(');
 
 /// 「经收口落盘」的判据：app 的 `MediaCoverService.applyCover*`，或引擎的
-/// writer 本体 `writeCoverBytesAtomically` / `copyCoverFileAtomically` /
-/// `publishStagedCoverFile`（前者是后者的薄委派；写盘→驱逐的结构在 writer 里，见
-/// cover_file_writer.dart；第三个是外部进程 staged 文件的发布口，BUG-2496）。
+/// writer 本体 `writeCoverBytesAtomically` / `writeCoverBytesIfAbsent` /
+/// `copyCoverFileAtomically` / `publishStagedCoverFile`（前者是后者的薄委派；
+/// 写盘→驱逐的结构在 writer 里，见 cover_file_writer.dart；第四个是外部进程
+/// staged 文件的发布口，BUG-2496；`writeCoverBytesIfAbsent` 是本地图源生成封面
+/// 的「绝不覆盖」发布口）。
 bool _viaCoverSink(String maskedSrc) =>
     maskedSrc.contains('MediaCoverService.applyCover') ||
     maskedSrc.contains('writeCoverBytesAtomically(') ||
+    maskedSrc.contains('writeCoverBytesIfAbsent(') ||
     maskedSrc.contains('copyCoverFileAtomically(') ||
     maskedSrc.contains('publishStagedCoverFile(');
 
@@ -431,6 +434,8 @@ void main() {
       // 收口实现本体（.tmp 写 / copy + rename + 驱逐）在引擎 writer 里。
       '../packages/fushi_engine/lib/media/cover_file_writer.dart': <String>{
         'writeCoverBytesAtomically',
+        // 本地图源生成封面：独占创建 + 写字节 + 驱逐，绝不覆盖已有封面。
+        'writeCoverBytesIfAbsent',
         'copyCoverFileAtomically',
         // BUG-2496：ffmpeg 写 staged 文件后由这里校验 + rename 发布 + 驱逐。
         'publishStagedCoverFile',
@@ -479,14 +484,14 @@ void main() {
     expect(service.contains('applyCoverBytes'), isTrue);
     expect(service.contains('copyCoverFileAtomically('), isTrue);
     expect(service.contains('writeCoverBytesAtomically('), isTrue);
-    // 写盘→驱逐的结构在引擎 writer：三个入口各自 rename 成功后必须驱逐 dest。
+    // 写盘→驱逐的结构在引擎 writer：四个入口各自发布成功后必须驱逐 dest。
     final String writer = maskComments(
         File('../packages/fushi_engine/lib/media/cover_file_writer.dart')
             .readAsStringSync());
     expect(
         RegExp(r'await evictImageCacheForFile\(dest\);').allMatches(writer).length,
-        3,
-        reason: '引擎 writer 的三个入口都必须在 rename 之后驱逐 destPath 的解码缓存'
+        4,
+        reason: '引擎 writer 的四个入口都必须在发布之后驱逐 destPath 的解码缓存'
             '（BUG-1118 的不变量搬进引擎后就住在这里）');
     // BUG-2496：「落盘的必须是完整可解码图片」的判据也只住在这三个入口——字节路查
     // isDecodableImageBytes，文件路（copy / staged 发布）查 isDecodableImageFile；

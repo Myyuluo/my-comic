@@ -9,14 +9,12 @@ import 'package:fushi/src/focus/fushi_focus_controller.dart';
 import 'package:fushi/src/media/manga/library/manga_series_page.dart';
 import 'package:fushi/src/media/manga/manga_cover_placeholder.dart';
 import 'package:fushi/src/media/media_search_text.dart';
-import 'package:fushi/src/media/online/online_source_browse_page.dart';
+import 'package:fushi/src/media/online/cover_browse_shared.dart';
 import 'package:fushi/src/media/online/online_source_error_text.dart';
 import 'package:fushi/src/media/selection/media_selection_controller.dart';
 import 'package:fushi/src/media/selection/selection_gestures.dart';
 import 'package:fushi/src/models/app_model.dart';
 import 'package:fushi/src/utils/components/batch_action_bar.dart';
-import 'package:fushi/src/utils/components/fushi_floating_chrome.dart';
-import 'package:fushi/src/utils/components/fushi_m3e_feedback.dart';
 import 'package:fushi/src/utils/components/glass/fushi_icon.dart';
 import 'package:fushi/src/utils/components/fushi_search.dart';
 import 'package:fushi/src/utils/components/fushi_staggered_entrance.dart';
@@ -45,10 +43,10 @@ enum LocalSourceShelfFilter {
 /// 内置「本地图源」的独立浏览页：进入即扫描 Local source root（`local`），以
 /// 封面网格展示扫描结果。
 ///
-/// 不再复用在线源浏览页外壳（[OnlineSourceBrowsePage]）：页头是返回键 + 浮动
-/// 标题胶囊 + 标题右侧「全部 / 未入架 / 已入架」页签（与「浏览 / 图源 / 发现」
-/// 同款 [LibrarySectionTabs] 浮动分段页签），搜索框在标题行下方；正文保留扫描、
-/// 搜索、封面网格与加载 / 空态 / 错误态。
+/// 不复用在线源浏览页外壳：页头是返回键 + 浮动标题胶囊 + 标题右侧「全部 /
+/// 未入架 / 已入架」页签（与「浏览 / 图源 / 发现」同款 [LibrarySectionTabs]
+/// 浮动分段页签），搜索框在标题行下方；正文保留扫描、搜索、封面网格与加载 /
+/// 空态 / 错误态。
 ///
 /// 单部作品不在这里隐式登记：普通单击进作品页（未入库的走
 /// [LocalSourceMangaSeriesTarget]），用户在作品页显式「加入书架」才写 Library；
@@ -79,9 +77,6 @@ class _LocalSourceBrowsePageState extends ConsumerState<LocalSourceBrowsePage> {
 
   /// 批量操作进行中：防止重复点击 / 并发两次登记。
   bool _batchRunning = false;
-
-  /// 最近一次画出的批量栏：退出选择后沉下动画期间继续画它（与漫画书架页同款）。
-  Widget? _lastBatchActionBar;
 
   bool get _selectionMode => _selection.active;
 
@@ -178,6 +173,10 @@ class _LocalSourceBrowsePageState extends ConsumerState<LocalSourceBrowsePage> {
   ///
   /// 可见序变了要补一帧：它是 build 期算出来的，批量栏 / 页头在同一帧更早的
   /// 位置已读过选中集，会慢一拍且没有后续 setState 把它补上。
+  ///
+  /// 这段 6 行补帧与漫画书架页有意保留为同一份小重复：两边各自持有 State，
+  /// 抽成 helper 要传 `setState` + `mounted`，反而把「谁在重建」藏起来；批量栏
+  /// 的弹簧容器已抽成 [BatchActionBarHost]，这里只剩这一个约定。
   void _syncVisibleSelectionOrder(List<LocalSourceManga> items) {
     final bool changed = _selection.setVisibleOrder(
       loose: <String>[
@@ -427,15 +426,12 @@ class _LocalSourceBrowsePageState extends ConsumerState<LocalSourceBrowsePage> {
                 ),
               ),
               Expanded(child: _buildResults(context, items)),
-              // 批量栏与漫画书架页同款：从底边弹簧浮入 / 沉下，收起后从树里移除；
-              // 退出选择后沉下那一程继续画上一帧的批量栏（计数不会先闪成 0）。
-              FushiSpringReveal(
+              // 批量栏与漫画书架页同款：从底边弹簧浮入 / 沉下，收起后从树里
+              // 移除；退出选择后沉下那一程继续画上一帧的批量栏（计数不会先
+              // 闪成 0）。容器与书架页共用 [BatchActionBarHost]。
+              BatchActionBarHost(
                 visible: _selectionMode,
-                edge: VerticalDirection.down,
-                maintainState: false,
-                child: _selectionMode
-                    ? (_lastBatchActionBar = _buildBatchActionBar(context))
-                    : (_lastBatchActionBar ?? const SizedBox.shrink()),
+                builder: _buildBatchActionBar,
               ),
             ],
           ),
@@ -491,70 +487,58 @@ class _LocalSourceBrowsePageState extends ConsumerState<LocalSourceBrowsePage> {
 
   /// 页头主位：浮动标题胶囊 + 紧挨其右侧的状态页签。
   ///
-  /// 结构留好页头的 `actions` 位（ticket 06 的「选择」按钮走脚手架 actions，
-  /// 不需要重排这一行）。
+  /// 用共享的 [LibraryHeaderTitleWithTabs]：它把「胶囊 + 间距 + 页签」整行的
+  /// 自然宽上报给页头，动作收纳预算不会少算胶囊那一段。结构留好页头的
+  /// `actions` 位（ticket 06 的「选择」按钮走脚手架 actions，不需要重排这一行）。
   Widget _buildHeaderTitle(BuildContext context) {
-    final FushiDesignTokens tokens = FushiDesignTokens.of(context);
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: <Widget>[
-        FushiPageChromeTitle(title: Text(t.local_source_title)),
-        SizedBox(width: tokens.spacing.gap),
-        Flexible(
-          child: LibrarySectionTabs<LocalSourceShelfFilter>(
-            key: const ValueKey<String>('local_source_filter_tabs'),
-            tabs: <LibrarySectionTab<LocalSourceShelfFilter>>[
-              LibrarySectionTab<LocalSourceShelfFilter>(
-                value: LocalSourceShelfFilter.all,
-                label: t.local_source_filter_all,
-                labelKey: const ValueKey<String>('local_source_filter_all'),
-              ),
-              LibrarySectionTab<LocalSourceShelfFilter>(
-                value: LocalSourceShelfFilter.notInLibrary,
-                label: t.local_source_filter_not_in_library,
-                labelKey: const ValueKey<String>(
-                  'local_source_filter_not_in_library',
-                ),
-              ),
-              LibrarySectionTab<LocalSourceShelfFilter>(
-                value: LocalSourceShelfFilter.inLibrary,
-                label: t.local_source_filter_in_library,
-                labelKey: const ValueKey<String>(
-                  'local_source_filter_in_library',
-                ),
-              ),
-            ],
-            selected: _filter,
-            onChanged: _selectFilter,
-            focusIdPrefix: 'local-source-filter',
-            floating: true,
-          ),
+    return LibraryHeaderTitleWithTabs<LocalSourceShelfFilter>(
+      title: t.local_source_title,
+      tabsKey: const ValueKey<String>('local_source_filter_tabs'),
+      tabs: <LibrarySectionTab<LocalSourceShelfFilter>>[
+        LibrarySectionTab<LocalSourceShelfFilter>(
+          value: LocalSourceShelfFilter.all,
+          label: t.local_source_filter_all,
+          labelKey: const ValueKey<String>('local_source_filter_all'),
+        ),
+        LibrarySectionTab<LocalSourceShelfFilter>(
+          value: LocalSourceShelfFilter.notInLibrary,
+          label: t.local_source_filter_not_in_library,
+          labelKey: const ValueKey<String>('local_source_filter_not_in_library'),
+        ),
+        LibrarySectionTab<LocalSourceShelfFilter>(
+          value: LocalSourceShelfFilter.inLibrary,
+          label: t.local_source_filter_in_library,
+          labelKey: const ValueKey<String>('local_source_filter_in_library'),
         ),
       ],
+      selected: _filter,
+      onChanged: _selectFilter,
+      focusIdPrefix: 'local-source-filter',
     );
   }
 
   Widget _buildResults(BuildContext context, List<LocalSourceManga> items) {
-    // 加载 = 与封面网格同轮廓的骨架；错误 / 空态统一 FushiPlaceholderMessage。
+    // 加载 = 与封面网格同轮廓的骨架；错误 / 空态统一 FushiPlaceholderMessage
+    // （与在线源浏览页共用同一套骨架 / 占位组件）。
     if (_loading && items.isEmpty) {
-      return _buildSkeleton(context);
+      return const FushiCoverGridSkeleton(
+        keyPrefix: 'local_source',
+        padding: EdgeInsets.fromLTRB(16, 16, 16, 16),
+      );
     }
     final Object? error = _error;
     if (error != null && items.isEmpty) {
-      return SafeArea(
-        bottom: false,
-        child: FushiPlaceholderMessage(
-          key: const ValueKey<String>('local_source_error'),
-          icon: FushiIcons.error,
-          tone: FushiPlaceholderTone.error,
-          message: error is LocalSourceRootUnavailable
-              ? t.local_source_scan_failed
-              : describeOnlineSourceError(error),
-          action: FushiFilledButton.tonalIcon(
-            onPressed: () => unawaited(_retry()),
-            icon: const FushiIcon(FushiIcons.refresh),
-            label: Text(t.retry),
-          ),
+      return FushiCoverBrowsePlaceholder(
+        messageKey: const ValueKey<String>('local_source_error'),
+        icon: FushiIcons.error,
+        error: true,
+        message: error is LocalSourceRootUnavailable
+            ? t.local_source_scan_failed
+            : describeOnlineSourceError(error),
+        action: FushiFilledButton.tonalIcon(
+          onPressed: () => unawaited(_retry()),
+          icon: const FushiIcon(FushiIcons.refresh),
+          label: Text(t.retry),
         ),
       );
     }
@@ -563,17 +547,13 @@ class _LocalSourceBrowsePageState extends ConsumerState<LocalSourceBrowsePage> {
       // = 现有的无结果态（不新增另一套文案）。
       final bool emptyScan = _catalog.scanned.isEmpty;
       final bool noResults = !emptyScan || _query.isNotEmpty;
-      return SafeArea(
-        bottom: false,
-        child: FushiPlaceholderMessage(
-          icon: noResults ? FushiIcons.searchOff : FushiIcons.books,
-          message: noResults ? t.no_search_results : t.local_source_empty,
-        ),
+      return FushiCoverBrowsePlaceholder(
+        icon: noResults ? FushiIcons.searchOff : FushiIcons.books,
+        message: noResults ? t.no_search_results : t.local_source_empty,
       );
     }
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
-        final int columns = (constraints.maxWidth / 180).floor().clamp(2, 8);
         return FushiEntranceScope(
           child: GridView.builder(
             key: const ValueKey<String>('local_source_grid'),
@@ -581,12 +561,7 @@ class _LocalSourceBrowsePageState extends ConsumerState<LocalSourceBrowsePage> {
               context,
               const EdgeInsets.fromLTRB(16, 16, 16, 16),
             ),
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: columns,
-              childAspectRatio: 0.62,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-            ),
+            gridDelegate: coverGridDelegateFor(constraints.maxWidth),
             itemCount: items.length,
             itemBuilder: fushiStaggeredItemBuilder((
               BuildContext context,
@@ -663,41 +638,6 @@ class _LocalSourceBrowsePageState extends ConsumerState<LocalSourceBrowsePage> {
     );
   }
 
-  /// 首屏加载骨架：与结果网格同列数、同比例的封面块 + 两条标题条。
-  Widget _buildSkeleton(BuildContext context) {
-    return LayoutBuilder(
-      builder: (BuildContext context, BoxConstraints constraints) {
-        final int columns = (constraints.maxWidth / 180).floor().clamp(2, 8);
-        return FushiSkeletonShimmer(
-          child: GridView.builder(
-            key: const ValueKey<String>('local_source_skeleton'),
-            primary: false,
-            physics: const NeverScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: columns,
-              childAspectRatio: 0.62,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-            ),
-            itemCount: columns * 3,
-            itemBuilder: (BuildContext context, int index) => Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                Expanded(
-                  child: FushiSkeleton(borderRadius: FushiM3eShape.cardRadius),
-                ),
-                const SizedBox(height: 10),
-                FushiSkeleton.line(widthFactor: 0.9),
-                const SizedBox(height: 6),
-                FushiSkeleton.line(widthFactor: 0.5),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
 }
 
 /// Local source root 读不了（目录不存在 / 无权限）时抛给浏览页的错误态。
@@ -719,9 +659,9 @@ class LocalSourceRootUnavailable implements Exception {
 /// 一部就通过 [changes] 通知页面更新对应卡片。生成失败的作品保持占位，下次
 /// 进页重试。扫描原地读取，不复制、不移动任何文件。
 ///
-/// [OnlineSourceCatalog] 的适配方法（[fetch] / [buildCover] / 空态文案等）保留
-/// 给既有测试与在线源适配器契约使用；独立页只消费 [scanned] 与 [changes]。
-class LocalSourceBrowseCatalog extends OnlineSourceCatalog<LocalSourceManga> {
+/// 独立页只消费 [scanned] 与 [changes]；这里刻意不再实现在线源目录适配器，
+/// 避免留下一堆只有测试在用的空实现。
+class LocalSourceBrowseCatalog {
   LocalSourceBrowseCatalog({required this.root, required this.db});
 
   /// Local source root（`<Content root>/local`）。
@@ -732,29 +672,15 @@ class LocalSourceBrowseCatalog extends OnlineSourceCatalog<LocalSourceManga> {
 
   List<LocalSourceManga> _scanned = const <LocalSourceManga>[];
   final ValueNotifier<int> _revision = ValueNotifier<int>(0);
-  Future<void> _coversGenerated = Future<void>.value();
   int _coverGenerationId = 0;
 
   /// 本轮扫描结果（后台补齐封面后原地更新对应条目）。
   List<LocalSourceManga> get scanned =>
       List<LocalSourceManga>.unmodifiable(_scanned);
 
-  @override
+  /// 后台封面补齐有进展时通知页面（每补好一部 +1，页面据此重建网格）。
   Listenable get changes => _revision;
 
-  /// 本轮后台封面补齐完成（进页时启动一次；测试可等待它）。
-  Future<void> get coversGenerated => _coversGenerated;
-
-  @override
-  String get title => t.local_source_title;
-
-  @override
-  String get searchHint => t.local_source_search_hint;
-
-  @override
-  String get keyPrefix => 'local_source';
-
-  @override
   Future<void> prepare() async {
     // 目录不在了（Content root 掉线 / 被删）是错误态，不是空态：空态只表示
     // 「文件夹里确实还没有漫画」。先探一次根目录，让读取失败冒泡给页面。
@@ -767,7 +693,7 @@ class LocalSourceBrowseCatalog extends OnlineSourceCatalog<LocalSourceManga> {
       throw LocalSourceRootUnavailable(root.path, error);
     }
     _scanned = await scanLocalSourceRoot(root);
-    _coversGenerated = _generateMissingCovers();
+    unawaited(_generateMissingCovers());
   }
 
   /// 后台逐部补齐封面：不阻塞首屏；成功后替换扫描条目并通知页面刷新。
@@ -798,92 +724,9 @@ class LocalSourceBrowseCatalog extends OnlineSourceCatalog<LocalSourceManga> {
     }
   }
 
-  @override
+  /// 让在途的后台循环在下一个作品前停下，之后不再触碰已释放的 notifier。
   void dispose() {
-    // 让在途的后台循环在下一个作品前停下，之后不再触碰已释放的 notifier。
     _coverGenerationId++;
     _revision.dispose();
-    super.dispose();
   }
-
-  @override
-  List<OnlineBrowseListing> get listings => const <OnlineBrowseListing>[];
-
-  @override
-  bool get hasFilters => false;
-
-  @override
-  Future<OnlineBrowseFilterTarget?> editFilters(BuildContext context) async =>
-      null;
-
-  @override
-  Future<OnlineBrowsePageResult<LocalSourceManga>> fetch(
-    OnlineBrowseQuery query,
-    int page,
-  ) async {
-    final List<LocalSourceManga> matched = _scanned
-        .where(
-          (LocalSourceManga manga) => matchesMediaSearch(
-            query: query.isSearch ? query.text : '',
-            titles: <String>[manga.title],
-          ),
-        )
-        .toList();
-    matched.sort(
-      (LocalSourceManga a, LocalSourceManga b) =>
-          naturalCompare(a.title, b.title),
-    );
-    return (items: matched, hasNextPage: false);
-  }
-
-  @override
-  String keyOf(LocalSourceManga item) => item.directoryPath;
-
-  @override
-  String titleOf(LocalSourceManga item) => item.title;
-
-  @override
-  Widget buildCover(BuildContext context, LocalSourceManga item) {
-    final String? relative = item.coverRelativePath;
-    if (relative == null) return const MangaCoverPlaceholder();
-    final String path = p.join(item.directoryPath, relative);
-    return Image.file(
-      File(path),
-      fit: BoxFit.cover,
-      errorBuilder: (_, Object error, __) => const MangaCoverPlaceholder(),
-    );
-  }
-
-  @override
-  void Function(BuildContext context, LocalSourceManga item)? get openDetail =>
-      (BuildContext context, LocalSourceManga manga) {
-        Navigator.of(context).push(
-          adaptivePageRoute<void>(
-            context: context,
-            builder: (BuildContext context) =>
-                MangaSeriesPage(target: LocalSourceMangaSeriesTarget(manga)),
-          ),
-        );
-      };
-
-  @override
-  Widget buildVerifyAction(
-    BuildContext context, {
-    required Object? error,
-    required Future<void> Function() onVerified,
-  }) => const SizedBox.shrink();
-
-  @override
-  String describeError(Object error) => error is LocalSourceRootUnavailable
-      ? t.local_source_scan_failed
-      : describeOnlineSourceError(error);
-
-  /// 空态：不搜索时是书架图标 +「尚未发现任何漫画」；搜索无命中仍是放大镜。
-  @override
-  IconData emptyIcon({required bool searching}) =>
-      searching ? FushiIcons.searchOff : FushiIcons.books;
-
-  @override
-  String emptyTextFor({required bool searching}) =>
-      searching ? t.no_search_results : t.local_source_empty;
 }

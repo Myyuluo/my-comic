@@ -2,6 +2,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:fushi/i18n/strings.g.dart';
 import 'package:fushi/src/utils/components/fushi_design_tokens.dart';
 import 'package:fushi/src/utils/adaptive/adaptive_platform.dart';
+import 'package:fushi/src/utils/components/fushi_floating_chrome.dart';
 import 'package:fushi/src/utils/components/fushi_floating_toolbar.dart';
 import 'package:fushi/src/utils/components/fushi_motion_tokens.dart';
 import 'package:fushi/src/utils/components/glass/fushi_glass_controls.dart';
@@ -187,6 +188,46 @@ class BatchActionBar extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// 多选态底部的批量栏容器：弹簧从底边浮入 / 沉下，退出选择后沉下那一程继续
+/// 画上一帧的批量栏（计数不会先闪成 0）。
+///
+/// 漫画书架页与本地图源页共用这一层：两边都不再各自保留 `_lastBatchActionBar`
+/// 字段与 [FushiSpringReveal] 的参数。刻意分开「容器」与 [BatchActionBar] 本身
+/// ——批量栏的动作集合与可用态判据属于各页面的业务语义。
+class BatchActionBarHost extends StatefulWidget {
+  const BatchActionBarHost({
+    required this.visible,
+    required this.builder,
+    super.key,
+  });
+
+  /// 选择模式是否激活。
+  final bool visible;
+
+  /// 选择模式激活时构建批量栏；退出后的收起动画复用最近一次构建结果。
+  final WidgetBuilder builder;
+
+  @override
+  State<BatchActionBarHost> createState() => _BatchActionBarHostState();
+}
+
+class _BatchActionBarHostState extends State<BatchActionBarHost> {
+  /// 最近一次画出的批量栏：退出选择后沉下动画期间继续画它。
+  Widget? _lastBatchActionBar;
+
+  @override
+  Widget build(BuildContext context) {
+    return FushiSpringReveal(
+      visible: widget.visible,
+      edge: VerticalDirection.down,
+      maintainState: false,
+      child: widget.visible
+          ? (_lastBatchActionBar = widget.builder(context))
+          : (_lastBatchActionBar ?? const SizedBox.shrink()),
     );
   }
 }

@@ -9,6 +9,7 @@ import 'package:fushi/src/media/manga/library/online_manga_chapter_updates.dart'
 import 'package:fushi/src/media/manga/library/manga_resume_point.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi/src/media/manga/library/online_manga_runtime_adapter.dart';
+import 'package:fushi/src/media/manga/manga_source_language.dart';
 import 'package:fushi/src/media/media_cover_service.dart';
 import 'package:fushi/src/media/manga/mihon/mihon_manager.dart';
 import 'package:fushi/src/storage/app_paths.dart';
@@ -416,9 +417,6 @@ class OnlineMangaLibraryService {
     return entry.runtime.wireValue;
   }
 
-  /// 源语言里「不区分语言」的占位值（与 Mihon 的约定一致）。
-  static const Set<String> _languageAgnostic = <String>{'', 'all', 'multi'};
-
   /// 新下载的源目录显示名：`源名 (LANG)`；没有可区分的语言时只写源名。
   ///
   /// 语言取 [OnlineMangaSourceLanguageProvider] 报告的源语言原值并大写，保留
@@ -436,7 +434,7 @@ class OnlineMangaLibraryService {
       _ => null,
     };
     final String language = (rawLanguage ?? '').trim();
-    if (_languageAgnostic.contains(language.toLowerCase())) return sourceName;
+    if (isLanguageAgnosticSourceLanguage(language)) return sourceName;
     return '$sourceName (${language.toUpperCase()})';
   }
 

@@ -10,12 +10,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:fushi/models.dart';
 import 'package:fushi/src/media/manga/local_source/local_source_browse_page.dart';
-import 'package:fushi/src/media/online/online_source_browse_page.dart';
 import 'package:fushi/src/platform/platform_providers.dart';
 import 'package:fushi/src/storage/app_paths.dart';
 import 'package:fushi/utils.dart';
 import 'package:fushi_core/fushi_core.dart';
-import 'package:fushi_engine/media/manga/local_source/local_source_layout.dart';
 
 import '../../helpers/test_platform_services.dart';
 
@@ -80,7 +78,16 @@ void main() {
     AppPaths.debugTestEnvironment = null;
     SharedPreferences.setMockInitialValues(<String, Object>{});
     await db.close();
-    if (tmp.existsSync()) tmp.deleteSync(recursive: true);
+    // 后台封面补齐可能仍持有片刻文件句柄（Windows 下删除会报「另一个程序正在
+    // 使用」）；给后台任务一点时间收尾。
+    for (int attempt = 0; attempt < 20 && tmp.existsSync(); attempt++) {
+      try {
+        tmp.deleteSync(recursive: true);
+        break;
+      } on FileSystemException {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+      }
+    }
   });
 
   Directory writeManga(String title, {String chapter = 'Ch 1'}) {
@@ -95,58 +102,37 @@ void main() {
     return mangaDir;
   }
 
-  testWidgets('扫描结果先返回（无封面），封面后台逐个补齐后条目更新', (WidgetTester tester) async {
-    writeManga('Alpha');
-    writeManga('Beta');
+  testWidgets('进入页面先显示扫描结果，封面后台补齐后卡片自行更新（无需重新进入）', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(900, 1600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final String alphaCover = p.join(writeManga('Alpha').path, 'cover.jpg');
+    final String betaCover = p.join(writeManga('Beta').path, 'cover.jpg');
 
     await tester.runAsync(() async {
-      final LocalSourceBrowseCatalog catalog = LocalSourceBrowseCatalog(
-        root: paths.localComicRoot,
-        db: db,
-      );
-      addTearDown(catalog.dispose);
+      await tester.pumpWidget(_harness(_TestAppModel(db, paths)));
+      // 网格先出现（扫描结果不等封面）；此后的封面生成由页面后台推进。
+      await _pumpUntil(tester, find.text('Alpha'));
+      expect(find.text('Alpha'), findsOneWidget, reason: '扫描结果先画出来');
+      expect(find.text('Beta'), findsOneWidget);
 
-      await catalog.prepare();
-      final List<LocalSourceManga> first = (await catalog.fetch(
-        const OnlineBrowseQuery.listing('local'),
-        1,
-      )).items;
-      expect(first, hasLength(2), reason: '扫描结果先返回，不等封面');
-      expect(
-        first.every(
-          (LocalSourceManga manga) => manga.coverRelativePath == null,
-        ),
-        isTrue,
-        reason: '首屏网格先显示占位',
-      );
-      expect(
-        File(
-          p.join(paths.localComicRoot.path, 'Alpha', 'cover.jpg'),
-        ).existsSync(),
-        isFalse,
-      );
-
-      await catalog.coversGenerated;
-
-      final List<LocalSourceManga> after = (await catalog.fetch(
-        const OnlineBrowseQuery.listing('local'),
-        1,
-      )).items;
-      expect(
-        after.every(
-          (LocalSourceManga manga) => manga.coverRelativePath == 'cover.jpg',
-        ),
-        isTrue,
-        reason: '后台补齐后目录里的条目带上封面路径',
-      );
-      for (final LocalSourceManga manga in after) {
-        expect(
-          File(p.join(manga.directoryPath, 'cover.jpg')).existsSync(),
-          isTrue,
-          reason: '${manga.title} 的 cover.jpg 已生成',
-        );
+      for (int i = 0; i < 120; i++) {
+        if (File(alphaCover).existsSync() && File(betaCover).existsSync()) {
+          break;
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 25));
       }
+      expect(File(alphaCover).existsSync(), isTrue, reason: 'Alpha 的 cover.jpg 已生成');
+      expect(File(betaCover).existsSync(), isTrue, reason: 'Beta 的 cover.jpg 已生成');
+
+      // 后台完成 → 页面通知网格重建 → 对应卡片换成真实封面。
+      await _pumpUntil(tester, _coverImage(alphaCover));
+      await _pumpUntil(tester, _coverImage(betaCover));
     });
+    expect(_coverImage(alphaCover), findsOneWidget);
+    expect(_coverImage(betaCover), findsOneWidget);
   });
 
   testWidgets('网格卡片与作品页都显示后台生成的封面', (WidgetTester tester) async {
