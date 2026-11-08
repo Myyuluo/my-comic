@@ -2138,7 +2138,7 @@
   "download_request_failed": "สร้างการดาวน์โหลดไม่ได้ ตรวจสอบการตั้งค่าการดาวน์โหลดและรายการงาน แล้วลองอีกครั้ง",
   "download_resource_resolve_failed": "ดึงทรัพยากรดาวน์โหลดไม่ได้ ตรวจสอบเครือข่ายและการตั้งค่าพร็อกซี แล้วลองอีกครั้ง",
   "download_resume_all": "Resume all",
-  "download_save_as_cbz_subtitle": "Only affects downloads started from now on; existing chapters keep their current form.",
+  "download_save_as_cbz_subtitle": "When off, downloaded manga are saved as folders with image files.",
   "download_save_as_cbz_title": "Save as CBZ archive",
   "download_save_root_change": "เปลี่ยนโฟลเดอร์",
   "download_save_root_create_failed": "ไม่สามารถสร้างโฟลเดอร์นั้นได้ ตรวจสอบไดรฟ์และสิทธิ์",

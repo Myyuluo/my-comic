@@ -17,8 +17,9 @@ import '../helpers/test_platform_services.dart';
 
 /// Ticket 08：「存储与下载 → 下载 → 保存为CBZ压缩包」。
 ///
-/// 守用户可见的三件事：开关位于数据存储位置与备份之间、默认开启（新安装与
-/// 升级后的存量用户都读 true）、开关值真的落进偏好表。
+/// 守用户可见的几件事：开关位于数据存储位置与备份之间、默认开启（新安装与
+/// 升级后的存量用户都读 true）、开关值真的落进偏好表；副标题说明关闭后的
+/// 保存形式（简中/繁中准确文案，英文及其它 locale 用英文基线）。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -77,10 +78,35 @@ void main() {
     expect(toggle.title, '保存为CBZ压缩包');
     expect(
       toggle.subtitle,
-      contains('新开始'),
-      reason: '副标题必须说明只影响新开始的下载',
+      '关闭后，下载的漫画将以文件夹+图片形式保存。',
+      reason: '副标题必须说明关闭后的保存形式',
     );
     expect(toggle.defaultValue, isTrue, reason: '默认开启');
+  });
+
+  test('CBZ 开关副标题：繁中准确文案，英文及其它 locale 使用英文基线', () {
+    const String englishBaseline =
+        'When off, downloaded manga are saved as folders with image files.';
+    expect(
+      AppLocale.zhHk.translations.download_save_as_cbz_subtitle,
+      '關閉後，下載的漫畫將以資料夾+圖片形式保存。',
+      reason: '繁中副标题必须准确表达关闭后的保存形式',
+    );
+    expect(
+      AppLocale.en.translations.download_save_as_cbz_subtitle,
+      englishBaseline,
+      reason: '英文基线必须准确表达关闭后的保存形式',
+    );
+    for (final AppLocale locale in AppLocale.values) {
+      if (locale == AppLocale.zhCn || locale == AppLocale.zhHk) {
+        continue;
+      }
+      expect(
+        locale.translations.download_save_as_cbz_subtitle,
+        englishBaseline,
+        reason: '${locale.name}：其它 locale 使用英文基线',
+      );
+    }
   });
 
   testWidgets('开关默认开启、关闭后写穿偏好', (WidgetTester tester) async {
