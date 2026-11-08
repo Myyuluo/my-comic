@@ -63,7 +63,9 @@ import 'package:fushi/src/utils/components/fushi_floating_chrome.dart'
     show
         FushiFloatingChromeInset,
         FushiFloatingChromeInsetPadding,
-        FushiFloatingChromeOverlay;
+        FushiFloatingChromeOverlay,
+        FushiFloatingToolbarSurface;
+import 'package:fushi/src/utils/components/fushi_floating_toolbar.dart';
 import 'package:fushi_core/fushi_core.dart';
 // BUG-813：构造 ReaderPositionsCompanion 回填下载书的阅读进度需要 drift 的 Value（
 // fushi_core 未再导出它）。
@@ -785,6 +787,7 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
 
   @override
   void dispose() {
+    _claimedChromeTabs?.release(this);
     _claimedSecondaryRow?.release(this);
     _headerSearch.dispose();
     _searchController.dispose();
@@ -899,6 +902,14 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
         ? MediaLibraryShellScope.maybeOf(context)?.secondaryRowSlot
         : null;
     _syncSecondaryRowClaim(secondaryRow, allTagRows);
+    // 书架数据还没到（首帧加载 / 错误态）时不能留着上一帧的继续阅读胶囊：
+    // 数据就绪后由 [_buildBodyWithSrtBooks] 按同一份候选列表重新登记。
+    if (_mangaOnly && books.valueOrNull == null) {
+      _syncChromeTabsClaim(
+        MediaLibraryShellScope.maybeOf(context)?.chromeTabsSlot,
+        null,
+      );
+    }
 
     // BUG-250: 书架批量选择模式（[_selectionMode]）活在本 tab 内容里，不是独立
     // route。顶层 HomePage 的 PopScope 对它无感，返回键会直接弹掉 root route 退
@@ -1108,6 +1119,34 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
       visible:
           TickerMode.valuesOf(context).enabled && SectionVisibility.of(context),
       content: _buildTagBar(allTags, inlineTags: true),
+    );
+  }
+
+  /// 上次登记主 chrome 行页签位内容的壳槽（换槽 / 卸载时先撤回旧登记）。
+  MediaLibraryChromeTabsSlot? _claimedChromeTabs;
+
+  /// 把继续阅读胶囊登记到主 chrome 行的页签位（漫画页，标签栏原来的位置，
+  /// ticket 03）。`hero == null`（没有继续阅读条目 / 页面还没拿到书架数据）时
+  /// 胶囊不显示；独立使用（无壳）时槽位为 null，保留网格顶部的旧 hero。
+  void _syncChromeTabsClaim(
+    MediaLibraryChromeTabsSlot? slot,
+    MediaItem? hero,
+  ) {
+    if (!identical(_claimedChromeTabs, slot)) {
+      _claimedChromeTabs?.release(this);
+      _claimedChromeTabs = slot;
+    }
+    if (slot == null) return;
+    slot.claim(
+      this,
+      // 可见 = 没被保活外壳停帧且所在分区在台上（与标签行 / 页头动作同一判据）。
+      visible:
+          hero != null &&
+          TickerMode.valuesOf(context).enabled &&
+          SectionVisibility.of(context),
+      content: hero == null
+          ? const SizedBox.shrink()
+          : _buildContinueReadingPill(hero),
     );
   }
 
@@ -1608,23 +1647,7 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
   /// 用户反馈移除——与右上角「阅读统计」入口重复。
   Widget _buildShelfOverviewSection(List<MediaItem> progressBooks) {
     final FushiDesignTokens tokens = FushiDesignTokens.of(context);
-    final ShelfProgressTally<MediaItem> tally = tallyShelfProgress<MediaItem>(
-      progressBooks,
-      (MediaItem item) => item.position,
-      (MediaItem item) => item.duration,
-      // 与阅读状态筛选同一判据：标了读完的书不再当「在读」顶进继续阅读。
-      isCompleted: (MediaItem item) =>
-          _completedBookKeys.contains(_parseBookKey(item.mediaIdentifier)),
-    );
-    final MediaItem? hero = pickShelfContinueHero(
-      tally.inProgress,
-      // BUG-2904：映射键是 uid，bookKey 必须经换算表一跳（与「最近阅读」排序同）。
-      (MediaItem item) => lastReadAtForBookKey(
-        _lastReadAtByBookKey,
-        _epubUidByKey,
-        _parseBookKey(item.mediaIdentifier),
-      ),
-    );
+    final MediaItem? hero = _pickContinueReadingHero(progressBooks);
     if (hero == null) return const SizedBox.shrink();
     return Padding(
       padding: EdgeInsets.fromLTRB(
@@ -1634,6 +1657,144 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
         0,
       ),
       child: _buildContinueReadingHero(hero, tokens),
+    );
+  }
+
+  /// 继续阅读候选的选择（旧 hero 与主 chrome 行胶囊共用同一份口径）。
+  ///
+  /// 在读（0<position<duration、未标读完）+ 有可用最近阅读时间（无痕哨兵不算）
+  /// 的书里选最后阅读时间最大者（[pickShelfContinueHero]）。
+  MediaItem? _pickContinueReadingHero(List<MediaItem> progressBooks) {
+    final ShelfProgressTally<MediaItem> tally = tallyShelfProgress<MediaItem>(
+      progressBooks,
+      (MediaItem item) => item.position,
+      (MediaItem item) => item.duration,
+      // 与阅读状态筛选同一判据：标了读完的书不再当「在读」顶进继续阅读。
+      isCompleted: (MediaItem item) =>
+          _completedBookKeys.contains(_parseBookKey(item.mediaIdentifier)),
+    );
+    return pickShelfContinueHero(
+      tally.inProgress,
+      // BUG-2904：映射键是 uid，bookKey 必须经换算表一跳（与「最近阅读」排序同）。
+      (MediaItem item) => lastReadAtForBookKey(
+        _lastReadAtByBookKey,
+        _epubUidByKey,
+        _parseBookKey(item.mediaIdentifier),
+      ),
+    );
+  }
+
+  /// 主 chrome 行的继续阅读胶囊（ticket 03，标签栏原来的页签位）。
+  ///
+  /// 形态严格按参考图：圆形封面缩略图 + 主色「继续阅读」文案 + 主色圆形播放钮
+  /// （主色上的对比色播放图标），不显示书名与进度。整颗胶囊是一个点击目标，走
+  /// 与旧 hero 相同的继续阅读打开路径（[AppModel.openMedia]）；播放钮只是视觉
+  /// 强调，不单独接事件。悬停 tooltip 显示（应用改名 override 后的）书名。
+  ///
+  /// 复用悬浮工具栏胶囊表面（[FushiFloatingToolbarSurface]）与胶囊段
+  /// （[FushiCapsuleSegment]）的按压 / 悬停反馈，不引入新的视觉语言；窄窗放不下
+  /// 时整颗胶囊在中区横向滚动，右侧动作仍按 [FushiFloatingChromeBar] 的既有规则
+  /// 收进「⋯」。
+  Widget _buildContinueReadingPill(MediaItem hero) {
+    final FushiDesignTokens tokens = FushiDesignTokens.of(context);
+    final ThemeData theme = Theme.of(context);
+    final ColorScheme cs = theme.colorScheme;
+    final bool apple = isGlassDesign(context) && !isEinkTheme(context);
+    final Color accent =
+        apple ? appleColorsOf(context).accent : tokens.surfaces.primary;
+    final Color onAccent =
+        apple ? appleColorsOf(context).onAccent : cs.onPrimary;
+    // BUG-1108 同源：书名走显示名（编辑弹窗写入的 override ?? DB 原名），
+    // 直读 hero.title 会在改名后仍显示旧名。
+    final String title = mediaSource.getDisplayTitleFromMediaItem(hero);
+    final TextStyle labelStyle =
+        (theme.textTheme.labelLarge ?? const TextStyle()).copyWith(
+          color: accent,
+          fontWeight: FontWeight.w600,
+        );
+    return Align(
+      alignment: AlignmentDirectional.centerStart,
+      child: HorizontalDragScrollable(
+        child: SingleChildScrollView(
+          key: const ValueKey<String>('reader_shelf_continue_pill_scroll'),
+          scrollDirection: Axis.horizontal,
+          child: FushiTooltip(
+            message: title,
+            child: FushiFloatingToolbarSurface(
+              key: const ValueKey<String>('reader_shelf_continue_pill'),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+              child: FushiCapsuleSegment(
+                selected: false,
+                onTap: () async {
+                  final MediaSource source = hero.getMediaSource(
+                    appModel: appModel,
+                  );
+                  await appModel.openMedia(
+                    ref: ref,
+                    mediaSource: source,
+                    item: hero,
+                  );
+                },
+                height: 40,
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    ClipOval(
+                      child: SizedBox(
+                        key: const ValueKey<String>(
+                          'reader_shelf_continue_pill_cover',
+                        ),
+                        width: 28,
+                        height: 28,
+                        child: FadeInImage(
+                          imageErrorBuilder: (_, __, ___) =>
+                              _coverPlaceholderIcon(Icons.menu_book_outlined),
+                          placeholder: MemoryImage(kTransparentImage),
+                          image: mediaSource.getDisplayThumbnailFromMediaItem(
+                            appModel: appModel,
+                            item: hero,
+                          ),
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                    ),
+                    SizedBox(width: tokens.spacing.gap),
+                    Text(
+                      t.book_continue_reading,
+                      maxLines: 1,
+                      softWrap: false,
+                      style: labelStyle,
+                    ),
+                    SizedBox(width: tokens.spacing.gap),
+                    // 行尾播放钮：纯视觉强调（整颗胶囊就是点击目标），不单独
+                    // 抢焦点。
+                    ExcludeSemantics(
+                      child: DecoratedBox(
+                        key: const ValueKey<String>(
+                          'reader_shelf_continue_pill_play',
+                        ),
+                        decoration: BoxDecoration(
+                          color: accent,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.all(6),
+                          child: FushiIcon(
+                            FushiIcons.play,
+                            size: 18,
+                            color: onAccent,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -1827,6 +1988,14 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
                 progress: (position: item.position, duration: item.duration),
               ))
         .toList();
+    // 漫画页在库页壳里时，主 chrome 行标签栏原来的页签位由继续阅读胶囊占据
+    // （ticket 03）。胶囊数据与打开路径都在本书架里，所以像标签行一样登记给壳；
+    // 候选列表与网格顶部旧 hero 完全相同（同一组筛选谓词），续读落点不变。
+    // 独立使用（无壳）时槽位为 null，此时仍画网格顶部的旧 hero，行为不变。
+    final MediaLibraryChromeTabsSlot? chromeTabs = _mangaOnly
+        ? MediaLibraryShellScope.maybeOf(context)?.chromeTabsSlot
+        : null;
+    _syncChromeTabsClaim(chromeTabs, _pickContinueReadingHero(shelfBooks));
     final List<MediaItem> epubBooks = srtBookKeys.isEmpty
         ? shelfBooks
         : shelfBooks.where((item) {
@@ -1997,7 +2166,10 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
                 // 属重复信息。无在读候选时整条隐藏。
                 // BUG-804：hero 喂**未过滤的全量 EPUB-backed `books`**（含有声书），
                 // 不是 srt 过滤后的 `epubBooks`——否则读了有声书「继续阅读」永不更新。
-                if (epubBooks.isNotEmpty || srtBooks.isNotEmpty)
+                // 漫画页在库页壳里时（ticket 03）继续阅读入口是主 chrome 行的胶囊，
+                // 旧 hero 不再占网格顶部，避免同一页出现两个入口。
+                if (chromeTabs == null &&
+                    (epubBooks.isNotEmpty || srtBooks.isNotEmpty))
                   SliverToBoxAdapter(
                     child: _buildShelfOverviewSection(shelfBooks),
                   ),
