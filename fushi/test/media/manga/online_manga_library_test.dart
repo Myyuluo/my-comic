@@ -132,6 +132,22 @@ void main() {
         chapters: chapters,
       );
 
+  OnlineMangaLibraryService serviceWith(
+    OnlineMangaRuntimeAdapter runtimeAdapter,
+  ) => OnlineMangaLibraryService(
+    database: database,
+    rootDirectory: root,
+    downloadsRootDirectory: Directory(p.join(root.path, 'downloads')),
+    adapter: runtimeAdapter,
+  );
+
+  _LanguageFixtureAdapter languageAdapter({
+    String label = 'Fixture',
+    String? language,
+  }) => _LanguageFixtureAdapter()
+    ..sourceLabelText = label
+    ..sourceLanguageText = language;
+
   test('两个同名 Source 的下载落在不同目录，第二个带短源 ID 后缀', () async {
     final EpubBookRow first = await service.add(
       entryVariant(
@@ -397,6 +413,189 @@ void main() {
     expect(
       row.extractDir,
       p.join(root.path, 'downloads', '_CON', '_NUL'),
+    );
+  });
+
+  test('新下载的源目录名为「源名 (LANG)」：语言大写、保留子标签', () async {
+    final OnlineMangaLibraryService langService = serviceWith(
+      languageAdapter(label: '六漫画', language: 'zh-Hans'),
+    );
+    final EpubBookRow row = await langService.add(
+      entryVariant(
+        sourceId: '1001',
+        seriesKey: '/series/first',
+        title: 'Fixture series',
+      ),
+    );
+
+    expect(
+      p.dirname(row.extractDir),
+      p.join(root.path, 'downloads', '六漫画 (ZH-HANS)'),
+    );
+    expect(Directory(row.extractDir).existsSync(), isTrue);
+  });
+
+  test('语言为空 / all / multi 视为无语言：源目录不写后缀', () async {
+    final _LanguageFixtureAdapter langAdapter = languageAdapter();
+    final OnlineMangaLibraryService langService = serviceWith(langAdapter);
+    const List<(String, String)> cases = <(String, String)>[
+      ('Empty Language', ''),
+      ('All Language', 'all'),
+      ('Multi Language', 'multi'),
+    ];
+    for (final (String label, String language) in cases) {
+      langAdapter
+        ..sourceLabelText = label
+        ..sourceLanguageText = language;
+      final EpubBookRow row = await langService.add(
+        entryVariant(
+          sourceId: 'id-$label',
+          seriesKey: '/series/$label',
+          title: 'Series $label',
+        ),
+      );
+      expect(
+        p.dirname(row.extractDir),
+        p.join(root.path, 'downloads', label),
+        reason: '语言 "$language" 不应产生 (ALL) 之类的后缀',
+      );
+    }
+  });
+
+  test('语言后缀与源名一起走现有 Windows 净化规则', () async {
+    final OnlineMangaLibraryService langService = serviceWith(
+      languageAdapter(label: 'Bad:Source', language: 'zh-Hans'),
+    );
+    final EpubBookRow row = await langService.add(
+      entryVariant(
+        sourceId: '1001',
+        seriesKey: '/series/bad',
+        title: 'Fixture series',
+      ),
+    );
+
+    expect(
+      p.dirname(row.extractDir),
+      p.join(root.path, 'downloads', 'Bad_Source (ZH-HANS)'),
+    );
+  });
+
+  test('同名同语言的两个 Source：短哈希后缀仍追加在 (LANG) 之后', () async {
+    final OnlineMangaLibraryService langService = serviceWith(
+      languageAdapter(language: 'en'),
+    );
+    final EpubBookRow first = await langService.add(
+      entryVariant(
+        sourceId: '1001',
+        seriesKey: '/series/first',
+        title: 'Fixture series',
+      ),
+    );
+    final EpubBookRow second = await langService.add(
+      entryVariant(
+        sourceId: '2002',
+        seriesKey: '/series/second',
+        title: 'Fixture series',
+      ),
+    );
+
+    expect(
+      p.dirname(first.extractDir),
+      p.join(root.path, 'downloads', 'Fixture (EN)'),
+    );
+    expect(
+      p.dirname(second.extractDir),
+      matches(RegExp(r'[/\\]Fixture \(EN\) \[[0-9a-f]{8}\]$')),
+    );
+  });
+
+  test('同名不同语言的 Source：靠 (LANG) 区分，无需哈希后缀', () async {
+    final _LanguageFixtureAdapter langAdapter = languageAdapter(language: 'en');
+    final OnlineMangaLibraryService langService = serviceWith(langAdapter);
+    final EpubBookRow en = await langService.add(
+      entryVariant(
+        sourceId: '1001',
+        seriesKey: '/series/en',
+        title: 'EN series',
+      ),
+    );
+    langAdapter.sourceLanguageText = 'zh-Hans';
+    final EpubBookRow zh = await langService.add(
+      entryVariant(
+        sourceId: '2002',
+        seriesKey: '/series/zh',
+        title: 'ZH series',
+      ),
+    );
+
+    expect(
+      p.dirname(en.extractDir),
+      p.join(root.path, 'downloads', 'Fixture (EN)'),
+    );
+    expect(
+      p.dirname(zh.extractDir),
+      p.join(root.path, 'downloads', 'Fixture (ZH-HANS)'),
+    );
+  });
+
+  test('已有源目录不重命名：同一 Source 在语言出现后仍复用旧目录', () async {
+    final EpubBookRow first = await service.add(
+      entryVariant(
+        sourceId: '1001',
+        seriesKey: '/series/first',
+        title: 'First series',
+      ),
+    );
+    expect(
+      p.dirname(first.extractDir),
+      p.join(root.path, 'downloads', 'Fixture'),
+    );
+
+    final OnlineMangaLibraryService langService = serviceWith(
+      languageAdapter(language: 'en'),
+    );
+    final EpubBookRow second = await langService.add(
+      entryVariant(
+        sourceId: '1001',
+        seriesKey: '/series/second',
+        title: 'Second series',
+      ),
+    );
+
+    expect(
+      p.dirname(second.extractDir),
+      p.join(root.path, 'downloads', 'Fixture'),
+      reason: '目录名不是身份：已存在的源目录不因命名规则变化而重命名',
+    );
+  });
+
+  test('源语言后来变化：已建立的 (LANG) 目录不被重命名', () async {
+    final _LanguageFixtureAdapter langAdapter = languageAdapter(language: 'en');
+    final OnlineMangaLibraryService langService = serviceWith(langAdapter);
+    final EpubBookRow first = await langService.add(
+      entryVariant(
+        sourceId: '1001',
+        seriesKey: '/series/first',
+        title: 'First series',
+      ),
+    );
+    expect(
+      p.dirname(first.extractDir),
+      p.join(root.path, 'downloads', 'Fixture (EN)'),
+    );
+
+    langAdapter.sourceLanguageText = 'ja';
+    final EpubBookRow second = await langService.add(
+      entryVariant(
+        sourceId: '1001',
+        seriesKey: '/series/second',
+        title: 'Second series',
+      ),
+    );
+
+    expect(
+      p.dirname(second.extractDir),
+      p.join(root.path, 'downloads', 'Fixture (EN)'),
     );
   });
 
@@ -898,4 +1097,17 @@ class _FixtureAdapter implements OnlineMangaRuntimeAdapter {
   /// 默认是完整 1×1 PNG（BUG-2496 起写侧收口拒收只有魔数的截断 PNG）；用例可换成
   /// HTML / 截断字节验证「不落盘、coverPath 为空」。
   List<int> coverBytes = kTransparentImage;
+}
+
+/// 有语言能力的假适配器：验证下载源目录名 `源名 (LANG)`。
+///
+/// 普通 [_FixtureAdapter] 故意**不**实现 [OnlineMangaSourceLanguageProvider]，
+/// 用于证明没有语言能力的运行时（互联、旧 Aidoku）只写裸源名。
+class _LanguageFixtureAdapter extends _FixtureAdapter
+    implements OnlineMangaSourceLanguageProvider {
+  /// 源语言原值；null = 源没有声明语言。
+  String? sourceLanguageText;
+
+  @override
+  String? sourceLanguage(OnlineMangaLibraryEntry entry) => sourceLanguageText;
 }

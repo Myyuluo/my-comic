@@ -416,6 +416,30 @@ class OnlineMangaLibraryService {
     return entry.runtime.wireValue;
   }
 
+  /// 源语言里「不区分语言」的占位值（与 Mihon 的约定一致）。
+  static const Set<String> _languageAgnostic = <String>{'', 'all', 'multi'};
+
+  /// 新下载的源目录显示名：`源名 (LANG)`；没有可区分的语言时只写源名。
+  ///
+  /// 语言取 [OnlineMangaSourceLanguageProvider] 报告的源语言原值并大写，保留
+  /// 子标签（`zh-Hans` → `ZH-HANS`）；空、`all`、`multi` 视为无语言。互联、
+  /// 旧 Aidoku 等没有语言能力的运行时同样不写后缀。目录名的净化、长度预算与
+  /// 截断仍由 engine 的 [downloadSourceFolderName] 负责；`pages.json.source.name`
+  /// 继续用 [downloadSourceName] 的裸源名。
+  Future<String> _downloadSourceFolderLabel(
+    OnlineMangaLibraryEntry entry,
+  ) async {
+    final String sourceName = await downloadSourceName(entry);
+    final String? rawLanguage = switch (adapter) {
+      final OnlineMangaSourceLanguageProvider provider =>
+        provider.sourceLanguage(entry),
+      _ => null,
+    };
+    final String language = (rawLanguage ?? '').trim();
+    if (_languageAgnostic.contains(language.toLowerCase())) return sourceName;
+    return '$sourceName (${language.toUpperCase()})';
+  }
+
   /// 决定这本 Manga 在 Download library 里的目录（不创建）。
   ///
   /// 目录名不是身份，但必须先保证同一路径上不会住进两个不同 Source / 两本不同
@@ -481,7 +505,7 @@ class OnlineMangaLibraryService {
       }
     }
 
-    final String sourceLabel = await downloadSourceName(entry);
+    final String sourceFolderLabel = await _downloadSourceFolderLabel(entry);
     final int sourceBudget = downloadLibrarySegmentBudget(
       rootPath,
       pathReserve:
@@ -491,7 +515,7 @@ class OnlineMangaLibraryService {
     );
     final String baseSourceFolder = downloadSourceFolderName(
       downloadsRoot: rootPath,
-      sourceName: sourceLabel,
+      sourceName: sourceFolderLabel,
     );
 
     // 同一 Source 已经有目录（含此前冲突后加的短后缀）就复用它：目录名不稳定
