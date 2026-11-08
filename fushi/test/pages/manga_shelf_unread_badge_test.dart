@@ -253,6 +253,7 @@ void main() {
   }
 
   testWidgets('在线漫画：未读数按章已读标记计算，读到一半的章仍算未读', (WidgetTester tester) async {
+    late int tagId;
     final EpubBookRow row =
         await tester.runAsync(() async {
               final EpubBookRow row = await insertOnlineManga(<String>[
@@ -270,7 +271,7 @@ void main() {
                 chapterKey: '/chapter/2',
                 lastPage: 5,
               );
-              final int tagId = await db.createTag('收藏', 0xFF112233);
+              tagId = await db.createTag('收藏', 0xFF112233);
               await db.addTagToBook(_onlineKey, tagId);
               return row;
             })
@@ -278,6 +279,12 @@ void main() {
     expect(row.uid.isNotEmpty, isTrue);
 
     await pumpShelf(tester, <MediaItem>[_mangaItem(_onlineKey, _onlineTitle)]);
+
+    // Ticket 01：有用户标签的漫画只出现在对应标签页签下，「书架」只收无标签漫画。
+    await tester.tap(
+      find.byKey(ValueKey<String>('manga_tag_tab_$tagId')),
+    );
+    await tester.pumpAndSettle();
 
     final CoverBadge? badge = badgeOf(tester, _onlineKey);
     expect(badge, isNotNull, reason: '有未读章时必须渲染角标');

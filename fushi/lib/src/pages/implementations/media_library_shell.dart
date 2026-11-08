@@ -69,10 +69,10 @@ class MediaLibraryViewSpec {
 /// 视图页签位置的自定义内容槽。
 ///
 /// 漫画页只剩书架一个视图，用户口径（2026-11-05）：不再画只有「书架」一项的视图
-/// 页签，Tag chips 放到页签原来的位置，与「漫画」标题、右上角动作同一行。Tag 的
-/// 数据与交互在视图 State 里（共享的 [FushiTagFilterBar]），壳只负责那个位置，
-/// 所以视图像页头登记动作（[FushiShellActionsSlot]）一样，把要画的内容登记到本槽。
-/// 壳取「最后登记的可见内容」；没有登记时该位置留空。
+/// 页签，标签页签放到页签原来的位置，与「漫画」标题、右上角动作同一行。标签的
+/// 数据与交互在视图 State 里（`MangaTagTabBar`），壳只负责那个位置，所以视图像
+/// 页头登记动作（[FushiShellActionsSlot]）一样，把要画的内容登记到本槽。壳取
+/// 「最后登记的可见内容」；没有登记时该位置留空。
 ///
 /// 登记状态机与 [FushiShellActionsSlot] 共用 [FushiShellClaimSlot]（review D1：
 /// 两处曾各抄一份完全相同的 `_claims` / 帧末通知 / dispose）。
