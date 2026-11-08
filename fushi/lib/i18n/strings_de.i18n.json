@@ -2138,7 +2138,7 @@
   "download_request_failed": "Der Download konnte nicht erstellt werden. Prüfe die Download-Einstellungen und die Aufgabenliste und versuche es erneut.",
   "download_resource_resolve_failed": "Die Download-Ressource konnte nicht abgerufen werden. Prüfe die Netzwerk- und Proxy-Einstellungen und versuche es erneut.",
   "download_resume_all": "Resume all",
-  "download_save_as_cbz_subtitle": "Only affects downloads started from now on; existing chapters keep their current form.",
+  "download_save_as_cbz_subtitle": "When off, downloaded manga are saved as folders with image files.",
   "download_save_as_cbz_title": "Save as CBZ archive",
   "download_save_root_change": "Ordner ändern",
   "download_save_root_create_failed": "Dieser Ordner kann nicht erstellt werden. Überprüfe das Laufwerk und die Berechtigungen.",
