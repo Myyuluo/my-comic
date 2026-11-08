@@ -336,6 +336,44 @@ void main() {
       expect(find.text(t.download_resume_all), findsNothing);
     });
 
+    testWidgets('全局按钮使用悬浮文字动作默认的 secondaryContainer 胶囊样式', (
+      WidgetTester tester,
+    ) async {
+      await insertTask(
+        jobId: 'job-queued',
+        status: MangaDownloadJobStatus.queued,
+        createdAt: 1,
+      );
+      await pumpPage(tester);
+
+      final BuildContext context = tester.element(globalFab);
+      final ColorScheme scheme = Theme.of(context).colorScheme;
+      final Material material = tester.widget<Material>(
+        find.descendant(of: globalFab, matching: find.byType(Material)).first,
+      );
+
+      expect(
+        material.color,
+        scheme.secondaryContainer,
+        reason: '浅蓝胶囊使用 FushiFloatingTextAction 默认的 secondaryContainer 底',
+      );
+      expect(
+        material.color,
+        isNot(scheme.surfaceContainer),
+        reason: '不再沿用上一轮自定义的 surfaceContainer 页头底色',
+      );
+      expect(
+        material.shape,
+        isA<StadiumBorder>(),
+        reason: '保持 FushiFloatingTextAction 默认的 stadium 圆角',
+      );
+      expect(
+        material.elevation,
+        greaterThan(0),
+        reason: '保持 FushiFloatingTextAction 默认的柔和悬浮投影',
+      );
+    });
+
     testWidgets('列表非空且所有任务都是暂停或失败时显示「全部继续」', (
       WidgetTester tester,
     ) async {
