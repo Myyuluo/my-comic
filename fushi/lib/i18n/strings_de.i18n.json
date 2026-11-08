@@ -3962,6 +3962,8 @@
   "local_audio_reference_unavailable": "Die ausgewählte Datei ist eine temporäre Kopie. Stattdessen wird eine dauerhafte Kopie importiert.",
   "local_audio_source_order_title": "Quellenpriorität",
   "local_audio_source_reorder_tooltip": "Drag or tap to reorder",
+  "local_source_batch_add_done": "Added $success to the shelf, $failed failed.",
+  "local_source_batch_remove_done": "Removed $success from the shelf, $failed failed.",
   "local_source_empty": "No comics found yet",
   "local_source_filter_all": "All",
   "local_source_filter_in_library": "In library",

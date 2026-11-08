@@ -11,11 +11,16 @@ import 'package:fushi/src/media/manga/manga_cover_placeholder.dart';
 import 'package:fushi/src/media/media_search_text.dart';
 import 'package:fushi/src/media/online/online_source_browse_page.dart';
 import 'package:fushi/src/media/online/online_source_error_text.dart';
+import 'package:fushi/src/media/selection/media_selection_controller.dart';
+import 'package:fushi/src/media/selection/selection_gestures.dart';
 import 'package:fushi/src/models/app_model.dart';
+import 'package:fushi/src/utils/components/batch_action_bar.dart';
+import 'package:fushi/src/utils/components/fushi_floating_chrome.dart';
 import 'package:fushi/src/utils/components/fushi_m3e_feedback.dart';
 import 'package:fushi/src/utils/components/glass/fushi_icon.dart';
 import 'package:fushi/src/utils/components/fushi_search.dart';
 import 'package:fushi/src/utils/components/fushi_staggered_entrance.dart';
+import 'package:fushi/src/utils/components/section_visibility.dart';
 import 'package:fushi/src/utils/fushi_icons.dart';
 import 'package:fushi/utils.dart';
 import 'package:fushi_core/fushi_core.dart';
@@ -45,9 +50,11 @@ enum LocalSourceShelfFilter {
 /// 同款 [LibrarySectionTabs] 浮动分段页签），搜索框在标题行下方；正文保留扫描、
 /// 搜索、封面网格与加载 / 空态 / 错误态。
 ///
-/// 只展示、不登记：点封面进作品页（未入库的走
-/// [LocalSourceMangaSeriesTarget]），用户在作品页显式「加入书架」才写 Library。
-/// 封面由 ticket 04 的 [LocalSourceCoverService] 在后台逐部补齐。
+/// 单部作品不在这里隐式登记：普通单击进作品页（未入库的走
+/// [LocalSourceMangaSeriesTarget]），用户在作品页显式「加入书架」才写 Library；
+/// 批量入口（右上「选择」或鼠标长按卡片）进入选择模式后，可把选中的未入架作品
+/// 批量加入书架、把已入架作品批量移出书架（只删条目 + 墓碑，**不删 `local`
+/// 文件**）。封面由 ticket 04 的 [LocalSourceCoverService] 在后台逐部补齐。
 class LocalSourceBrowsePage extends ConsumerStatefulWidget {
   const LocalSourceBrowsePage({super.key});
 
@@ -65,6 +72,18 @@ class _LocalSourceBrowsePageState extends ConsumerState<LocalSourceBrowsePage> {
 
   LocalSourceShelfFilter _filter = LocalSourceShelfFilter.all;
   String _query = '';
+
+  /// 批量选择状态机（与漫画书架页共用 [MediaSelectionController]）：模式位、
+  /// 散卡选中集与可见序约束都在里面。选中键用作品目录路径（扫描结果的稳定身份）。
+  final MediaSelectionController _selection = MediaSelectionController();
+
+  /// 批量操作进行中：防止重复点击 / 并发两次登记。
+  bool _batchRunning = false;
+
+  /// 最近一次画出的批量栏：退出选择后沉下动画期间继续画它（与漫画书架页同款）。
+  Widget? _lastBatchActionBar;
+
+  bool get _selectionMode => _selection.active;
 
   /// 已在 Library 里登记的 bookKey 集合（ticket 04 的身份派生：
   /// [localSourceBookKeyFor]）。tombstone 行不在这里，所以算「未入架」。
@@ -132,11 +151,194 @@ class _LocalSourceBrowsePageState extends ConsumerState<LocalSourceBrowsePage> {
 
   void _selectFilter(LocalSourceShelfFilter filter) {
     if (filter == _filter) return;
-    setState(() => _filter = filter);
+    setState(() {
+      _filter = filter;
+      // 切换页签后旧选择要么已被筛掉、要么语义已变：立即退出选择并清空，
+      // 不让用户对看不见的条目继续批量操作。
+      _selection.exit();
+    });
   }
 
   void _search(String value) {
     setState(() => _query = value.trim());
+  }
+
+  void _toggleSelectionMode() {
+    if (_batchRunning) return;
+    setState(_selection.toggleMode);
+  }
+
+  void _exitSelectionMode() {
+    if (!_selectionMode) return;
+    setState(_selection.exit);
+  }
+
+  /// 每帧把「页签 + 搜索 + 自然排序」之后的可见顺序登记给状态机：全选 / 反选
+  /// 与「已选 N」都只认这份可见序（漫画书架页同一做法）。
+  ///
+  /// 可见序变了要补一帧：它是 build 期算出来的，批量栏 / 页头在同一帧更早的
+  /// 位置已读过选中集，会慢一拍且没有后续 setState 把它补上。
+  void _syncVisibleSelectionOrder(List<LocalSourceManga> items) {
+    final bool changed = _selection.setVisibleOrder(
+      loose: <String>[
+        for (final LocalSourceManga item in items) item.directoryPath,
+      ],
+      collections: const <int>[],
+    );
+    if (!changed || !_selectionMode) return;
+    WidgetsBinding.instance.addPostFrameCallback((Duration _) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  /// 卡片点击：选择模式内切换选中（Shift = 区间选）；普通模式打开作品页。
+  void _handleCardTap(LocalSourceManga manga) {
+    if (_selectionMode) {
+      setState(() => _selection.applyTap(
+        SelectionSlot.loose(manga.directoryPath),
+        selectionTapKind(),
+      ));
+      return;
+    }
+    unawaited(_openManga(manga));
+  }
+
+  /// 鼠标 / 触屏长按：普通模式进入选择并选中该作品；选择模式内切换选中。
+  void _handleCardLongPress(LocalSourceManga manga) {
+    final SelectionSlot slot = SelectionSlot.loose(manga.directoryPath);
+    setState(() {
+      if (_selectionMode) {
+        _selection.toggle(slot);
+      } else {
+        _selection.enterWith(slot);
+      }
+    });
+  }
+
+  void _selectAll() {
+    setState(() => _selection.selectAll(
+      loose: _selection.visibleLooseKeys,
+      collections: const <int>[],
+    ));
+  }
+
+  void _invertSelection() {
+    setState(() => _selection.invert(
+      loose: _selection.visibleLooseKeys,
+      collections: const <int>[],
+    ));
+  }
+
+  /// 当前可见列表里被选中的作品（批量动作的作用域；不可见项不参与）。
+  List<LocalSourceManga> _selectedWorks() {
+    final Set<String> keys = _selection.looseKeys;
+    if (keys.isEmpty) return const <LocalSourceManga>[];
+    return <LocalSourceManga>[
+      for (final LocalSourceManga manga in _visibleItems)
+        if (keys.contains(manga.directoryPath)) manga,
+    ];
+  }
+
+  /// 批量「加入书架」：只登记选中且未入架的作品（tombstone 算未入架，插入行
+  /// 会清墓碑）；已入架的不重复登记。
+  Future<void> _batchAddToLibrary() async {
+    if (_batchRunning) return;
+    final List<LocalSourceManga> targets = _selectedWorks()
+        .where((LocalSourceManga manga) => !_isInLibrary(manga))
+        .toList(growable: false);
+    if (targets.isEmpty) return;
+    setState(() => _batchRunning = true);
+    final LocalSourceLibrary library = LocalSourceLibrary(
+      db: _appModel.database,
+      root: _appModel.appPaths.localComicRoot,
+    );
+    int success = 0;
+    int failed = 0;
+    for (final LocalSourceManga manga in targets) {
+      try {
+        await library.registerScannedManga(manga);
+        success++;
+      } on Object catch (error, stack) {
+        failed++;
+        ErrorLogService.instance.log(
+          'LocalSourceBrowse.batchAddToLibrary',
+          error,
+          stack,
+        );
+      }
+    }
+    await _finishBatch(
+      success: success,
+      failed: failed,
+      message: t.local_source_batch_add_done(success: success, failed: failed),
+    );
+  }
+
+  /// 批量「移出书架」：只删除选中且已入架的书架条目并写 tombstone，
+  /// **绝不删除 `local` 文件**（与作品页的单部移出同一路径）。
+  Future<void> _batchRemoveFromLibrary() async {
+    if (_batchRunning) return;
+    final List<LocalSourceManga> targets = _selectedWorks()
+        .where(_isInLibrary)
+        .toList(growable: false);
+    if (targets.isEmpty) return;
+    setState(() => _batchRunning = true);
+    final LocalSourceLibrary library = LocalSourceLibrary(
+      db: _appModel.database,
+      root: _appModel.appPaths.localComicRoot,
+    );
+    int success = 0;
+    int failed = 0;
+    for (final LocalSourceManga manga in targets) {
+      try {
+        final bool removed = await library.removeFromLibrary(
+          localSourceBookKeyFor(manga.directoryPath),
+        );
+        if (removed) {
+          success++;
+        } else {
+          failed++;
+        }
+      } on Object catch (error, stack) {
+        failed++;
+        ErrorLogService.instance.log(
+          'LocalSourceBrowse.batchRemoveFromLibrary',
+          error,
+          stack,
+        );
+      }
+    }
+    await _finishBatch(
+      success: success,
+      failed: failed,
+      message: t.local_source_batch_remove_done(
+        success: success,
+        failed: failed,
+      ),
+    );
+  }
+
+  /// 批量动作收尾：刷新书架状态（页签 / 卡片判定），退出选择并清空——
+  /// 不保留失败项；用 toast 报告成功 / 失败数量。
+  Future<void> _finishBatch({
+    required int success,
+    required int failed,
+    required String message,
+  }) async {
+    try {
+      await _loadLibraryKeys();
+    } on Object {
+      // 刷新失败不改变批量已落库的事实：仍退出选择并照实报告计数。
+    }
+    if (!mounted) return;
+    setState(() {
+      _batchRunning = false;
+      _selection.exit();
+    });
+    FushiToast.show(
+      msg: message,
+      severity: failed == 0 ? ToastSeverity.success : ToastSeverity.warning,
+    );
   }
 
   bool _isInLibrary(LocalSourceManga manga) =>
@@ -191,33 +393,99 @@ class _LocalSourceBrowsePageState extends ConsumerState<LocalSourceBrowsePage> {
 
   @override
   Widget build(BuildContext context) {
-    return FushiPageScaffold(
-      title: t.local_source_title,
-      headerTitle: _buildHeaderTitle(context),
-      body: SafeArea(
-        bottom: false,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: <Widget>[
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-              child: FushiSearchBar(
-                fieldKey: const ValueKey<String>('local_source_search_field'),
-                focusId: const FushiFocusId('local-source-browse-search'),
-                controller: _searchController,
-                focusNode: _searchFocus,
-                hintText: t.local_source_search_hint,
-                onSubmitted: _search,
-                onClear: () {
-                  _searchController.clear();
-                  _search('');
-                },
+    final List<LocalSourceManga> items = _visibleItems;
+    _syncVisibleSelectionOrder(items);
+    // 选择模式吃返回键 / ESC：先退出选择，再允许离开页面（与书架页 BUG-250 同语义）。
+    // 用 [SectionPopScope] 是为了不在保活分区里错误拦截（本页是独立路由，恒可见）。
+    return SectionPopScope(
+      intercepting: _selectionMode,
+      onIntercept: _exitSelectionMode,
+      child: FushiPageScaffold(
+        title: t.local_source_title,
+        headerTitle: _buildHeaderTitle(context),
+        actions: <Widget>[_buildSelectToggle(context)],
+        body: SafeArea(
+          bottom: false,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                child: FushiSearchBar(
+                  fieldKey: const ValueKey<String>(
+                    'local_source_search_field',
+                  ),
+                  focusId: const FushiFocusId('local-source-browse-search'),
+                  controller: _searchController,
+                  focusNode: _searchFocus,
+                  hintText: t.local_source_search_hint,
+                  onSubmitted: _search,
+                  onClear: () {
+                    _searchController.clear();
+                    _search('');
+                  },
+                ),
               ),
-            ),
-            Expanded(child: _buildResults(context)),
-          ],
+              Expanded(child: _buildResults(context, items)),
+              // 批量栏与漫画书架页同款：从底边弹簧浮入 / 沉下，收起后从树里移除；
+              // 退出选择后沉下那一程继续画上一帧的批量栏（计数不会先闪成 0）。
+              FushiSpringReveal(
+                visible: _selectionMode,
+                edge: VerticalDirection.down,
+                maintainState: false,
+                child: _selectionMode
+                    ? (_lastBatchActionBar = _buildBatchActionBar(context))
+                    : (_lastBatchActionBar ?? const SizedBox.shrink()),
+              ),
+            ],
+          ),
         ),
       ),
+    );
+  }
+
+  /// 页头右上角「选择」：与漫画书架页同款清单图标，选择模式内变成 X。
+  Widget _buildSelectToggle(BuildContext context) {
+    return FushiIconButton(
+      key: const ValueKey<String>('local_source_select_toggle'),
+      icon: _selectionMode ? FushiIcons.close : FushiIcons.checklist,
+      tooltip: _selectionMode
+          ? MaterialLocalizations.of(context).closeButtonTooltip
+          : t.batch_select,
+      selected: _selectionMode,
+      onTap: _toggleSelectionMode,
+    );
+  }
+
+  /// 底部批量栏（复用漫画书架页的 [BatchActionBar]）：已选 N / 全选 / 反选 +
+  /// 「加入书架」/「移出书架」。两个动作始终显示；没有适用的选中项时置灰
+  /// （加入只看未入架、移出只看已入架，混合选择各按适用子集执行）。
+  Widget _buildBatchActionBar(BuildContext context) {
+    final List<LocalSourceManga> selected = _selectedWorks();
+    final bool hasAddable =
+        selected.any((LocalSourceManga manga) => !_isInLibrary(manga));
+    final bool hasRemovable = selected.any(_isInLibrary);
+    return BatchActionBar(
+      selectedCount: _selection.length,
+      onSelectAll: _selectAll,
+      onInvertSelection: _invertSelection,
+      actions: <Widget>[
+        FushiIconButton(
+          key: const ValueKey<String>('local_source_batch_add'),
+          enabled: hasAddable && !_batchRunning,
+          onTap: () => unawaited(_batchAddToLibrary()),
+          icon: FushiIcons.libraryAdd,
+          tooltip: t.mihon_add_to_bookshelf,
+        ),
+        FushiIconButton(
+          key: const ValueKey<String>('local_source_batch_remove'),
+          enabled: hasRemovable && !_batchRunning,
+          onTap: () => unawaited(_batchRemoveFromLibrary()),
+          icon: Icons.delete_outline,
+          tooltip: t.manga_series_remove_from_bookshelf,
+          enabledColor: Theme.of(context).colorScheme.error,
+        ),
+      ],
     );
   }
 
@@ -266,8 +534,7 @@ class _LocalSourceBrowsePageState extends ConsumerState<LocalSourceBrowsePage> {
     );
   }
 
-  Widget _buildResults(BuildContext context) {
-    final List<LocalSourceManga> items = _visibleItems;
+  Widget _buildResults(BuildContext context, List<LocalSourceManga> items) {
     // 加载 = 与封面网格同轮廓的骨架；错误 / 空态统一 FushiPlaceholderMessage。
     if (_loading && items.isEmpty) {
       return _buildSkeleton(context);
@@ -326,27 +593,34 @@ class _LocalSourceBrowsePageState extends ConsumerState<LocalSourceBrowsePage> {
               int index,
             ) {
               final LocalSourceManga manga = items[index];
-              return FushiCard(
-                key: ValueKey<String>(
-                  'local_source_item_${manga.directoryPath}',
-                ),
-                padding: EdgeInsets.zero,
-                onTap: () => unawaited(_openManga(manga)),
-                // FushiCard 内部已按同一圆角 token 裁剪，这里不再多包 ClipRRect。
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: <Widget>[
-                    Expanded(child: _buildCover(manga)),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-                      child: Text(
-                        manga.title,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: context.fushiType.titleSmall,
+              final bool selected = _selection.looseKeys.contains(
+                manga.directoryPath,
+              );
+              return SelectionSlotTarget(
+                slot: SelectionSlot.loose(manga.directoryPath),
+                child: FushiCard(
+                  key: ValueKey<String>(
+                    'local_source_item_${manga.directoryPath}',
+                  ),
+                  padding: EdgeInsets.zero,
+                  onTap: () => _handleCardTap(manga),
+                  onLongPress: () => _handleCardLongPress(manga),
+                  // FushiCard 内部已按同一圆角 token 裁剪，这里不再多包 ClipRRect。
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: <Widget>[
+                      Expanded(child: _buildCover(manga, selected: selected)),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+                        child: Text(
+                          manga.title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: context.fushiType.titleSmall,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               );
             }),
@@ -358,15 +632,34 @@ class _LocalSourceBrowsePageState extends ConsumerState<LocalSourceBrowsePage> {
 
   /// 封面沿用 `cover.jpg/jpeg/png` 约定；缺失时用现有占位封面。后台补齐后
   /// catalog 会通知页面重建，对应卡片自动换成生成好的 `cover.jpg`。
-  Widget _buildCover(LocalSourceManga manga) {
+  ///
+  /// 选择模式下叠加漫画书架页的共享选中罩与左上角勾选圈
+  /// （[ShelfSelectedOverlay] / [ShelfSelectionCheck]）；未选中时只画勾选圈，
+  /// 保证用户知道哪些卡可以勾。
+  Widget _buildCover(LocalSourceManga manga, {required bool selected}) {
     final String? relative = manga.coverRelativePath;
-    if (relative == null) return const MangaCoverPlaceholder();
-    final String path = p.join(manga.directoryPath, relative);
-    return Image.file(
-      File(path),
-      fit: BoxFit.cover,
-      // 坏封面 / 扫描后被移走的文件退回占位，不让网格解码报错。
-      errorBuilder: (_, Object error, __) => const MangaCoverPlaceholder(),
+    final Widget cover = relative == null
+        ? const MangaCoverPlaceholder()
+        : Image.file(
+            File(p.join(manga.directoryPath, relative)),
+            fit: BoxFit.cover,
+            // 坏封面 / 扫描后被移走的文件退回占位，不让网格解码报错。
+            errorBuilder: (_, Object error, __) => const MangaCoverPlaceholder(),
+          );
+    if (!_selectionMode) return cover;
+    final FushiDesignTokens tokens = FushiDesignTokens.of(context);
+    final double checkInset = tokens.spacing.gap / 2;
+    return Stack(
+      fit: StackFit.expand,
+      children: <Widget>[
+        cover,
+        if (selected) const Positioned.fill(child: ShelfSelectedOverlay()),
+        PositionedDirectional(
+          top: checkInset,
+          start: checkInset,
+          child: ShelfSelectionCheck(selected: selected),
+        ),
+      ],
     );
   }
 

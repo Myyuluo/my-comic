@@ -3962,6 +3962,8 @@
   "local_audio_reference_unavailable": "所选文件是临时副本，已改为导入持久副本。",
   "local_audio_source_order_title": "来源顺序",
   "local_audio_source_reorder_tooltip": "拖动或点按调整顺序",
+  "local_source_batch_add_done": "已加入书架 $success 部，失败 $failed 部。",
+  "local_source_batch_remove_done": "已移出书架 $success 部，失败 $failed 部。",
   "local_source_empty": "尚未发现任何漫画",
   "local_source_filter_all": "全部",
   "local_source_filter_in_library": "已入架",
