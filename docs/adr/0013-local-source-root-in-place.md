@@ -22,3 +22,7 @@ status: accepted
 ## Amendment 2026-11-08
 
 「本地图源」入口现已落地：它固定出现在浏览页「图源」列表第一位，进入时自动扫描 Local source root（不再依赖「导入本地漫画」按钮），扫描结果以封面网格展示，只展示、不自动登记；用户在作品页显式 Add to Library 才把单部作品登记进 Library，点开某章阅读也会先静默登记。批量导入（浏览页「导入」子视图与设置里的「导入本地漫画」）已退役，只保留按单部作品登记的入口，供本地图源与 Rebuild download index 使用。书架拖入导入的行为同期收窄：拖入一部作品（文件夹或 `.cbz`）只复制并登记**该作品**；拖入 Local source root 本身时登记 root 下第一层的每部作品。原文中「拖入后扫描整个 root」的 root-wide sweep 已废止，以上述单部 / 第一层语义为准。原地读取、不复制、不写隐藏元数据等原决定不变；内置伪源的接入方式见 ADR 0014。原文「扫描是手动的」现在指扫描只由用户进入「本地图源」或运行 Rebuild download index 触发，仍然没有文件监视。
+
+## Amendment 2026-11-08（local-source-polish）
+
+Local source root 的目录名由 `localcomic` 改为 Content root 下的 `local`；旧 `localcomic` 不再扫描、不迁移、不搬移、不删除，旧登记行变为 Missing 是接受的代价。扫描的只读约束调整为「只允许补写缺失的 `cover.jpg`」：作品根目录没有 `cover.jpg/jpeg/png` 时，可从第一页生成一张可见的 `cover.jpg`；已有封面绝不覆盖，仍不写隐藏 ID、不复制或移动页文件。已登记作品的 `coverPath` 在生成后同步指向该封面，使书架与作品页可见。封面是用户 `local` 目录内的普通可见文件，不是隐藏元数据。

@@ -169,8 +169,8 @@ _Avoid_: 追踪、导入
 _Avoid_: 本地文件、离线模式、本地源
 
 **Local source root（本地图源根）**:
-承载 Local source 的目录；用户把 Manga/Chapter 文件夹或 CBZ 放在这里，my-comic 原地读取、不复制。扫描时机只有两种：进入「本地图源」时自动扫描，或运行 Rebuild download index。
-_Avoid_: 本地库、离线库
+承载 Local source 的目录，即 Content root 下的 `local`；用户把 Manga/Chapter 文件夹或 CBZ 放在这里，my-comic 原地读取、不复制。扫描时机只有两种：进入「本地图源」时自动扫描，或运行 Rebuild download index。旧目录名 `localcomic` 已停用，不扫描、不迁移、不删除。作品根目录缺少封面时，扫描会从第一页生成可见的 `cover.jpg`；已有封面绝不覆盖，也不写隐藏元数据。
+_Avoid_: 本地库、离线库、localcomic（旧目录名）
 
 **OCR**:
 在设备上从图片识别文字。本项目不包含端上 OCR/AI 生成。
