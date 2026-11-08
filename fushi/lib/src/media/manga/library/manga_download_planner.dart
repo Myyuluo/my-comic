@@ -24,7 +24,9 @@ planMangaChapterDownload({
     if (downloadedChapterKeys.contains(chapter.key)) continue;
     final String? status = jobsByChapterKey[chapter.key]?.status;
     if (status == MangaDownloadJobStatus.queued ||
-        status == MangaDownloadJobStatus.running) {
+        status == MangaDownloadJobStatus.running ||
+        // 全局暂停的任务也在队列里（ticket 07）：不重复入队，恢复时自然开跑。
+        status == MangaDownloadJobStatus.paused) {
       continue;
     }
     if (chapter.locked) {

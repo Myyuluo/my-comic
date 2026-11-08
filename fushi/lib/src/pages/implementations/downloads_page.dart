@@ -1,12 +1,17 @@
+import 'dart:async';
+
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fushi/src/media/downloads/download_task_entry.dart';
 import 'package:fushi/src/media/downloads/manga_download_tasks_section.dart';
 import 'package:fushi/src/media/manga/download/manga_download_service.dart';
+import 'package:fushi/src/models/app_model.dart';
 import 'package:fushi/src/utils/components/fushi_floating_chrome.dart'
     show
         FushiFloatingChromeBar,
         FushiFloatingChromeHost,
         FushiFloatingChromeInsetSpacer;
 import 'package:fushi/src/utils/components/fushi_staggered_entrance.dart';
+import 'package:fushi/src/utils/components/glass/fushi_icon.dart';
 import 'package:fushi/src/utils/fushi_icons.dart';
 import 'package:fushi/utils.dart';
 import 'package:material_ui/material_ui.dart';
@@ -30,20 +35,68 @@ import 'package:material_ui/material_ui.dart';
 /// 动效按仓库规则（Fushi-CLAUDE「新模块 / 重设计页面必须带动效」）：任务卡片在
 /// [FushiEntranceScope] 的进场窗口内错峰淡入上移；滚动带出来的项由窗口关闭后的
 /// [FushiStaggeredEntrance] 直接显示，不拖影。
-class DownloadsPage extends StatefulWidget {
+class DownloadsPage extends ConsumerStatefulWidget {
   const DownloadsPage({super.key, this.downloadsOverride});
 
   /// 测试注入下载服务（null = 取 [AppModel.mangaDownloadService]）。
   final MangaDownloadService? downloadsOverride;
 
   @override
-  State<DownloadsPage> createState() => _DownloadsPageState();
+  ConsumerState<DownloadsPage> createState() => _DownloadsPageState();
 }
 
-class _DownloadsPageState extends State<DownloadsPage> {
+class _DownloadsPageState extends ConsumerState<DownloadsPage> {
+  MangaDownloadService? _downloads;
+
+  /// 当前可见任务（由 [MangaDownloadTasksSection] 每次重载后回调），全局按钮
+  /// 的文案只由它决定：空 → 隐藏；全是暂停 / 失败 → 全部继续；否则全部暂停。
+  List<DownloadTaskEntry> _entries = const <DownloadTaskEntry>[];
+
+  @override
+  void initState() {
+    super.initState();
+    final MangaDownloadService? injected = widget.downloadsOverride;
+    if (injected != null) {
+      _downloads = injected;
+      return;
+    }
+    final AppModel appModel = ref.read(appProvider);
+    _downloads = appModel.isDatabaseReady
+        ? appModel.mangaDownloadService
+        : null;
+  }
+
+  /// 列表非空且所有任务都是暂停或失败 → 全局按钮显示「全部继续」。
+  bool get _canResumeAll =>
+      _entries.isNotEmpty &&
+      _entries.every(
+        (DownloadTaskEntry entry) =>
+            entry.status == DownloadTaskStatus.paused ||
+            entry.status == DownloadTaskStatus.attention,
+      );
+
+  void _onTasksChanged(List<DownloadTaskEntry> entries) {
+    if (!mounted) return;
+    setState(() => _entries = entries);
+  }
+
+  Future<void> _toggleAll(bool resume) async {
+    final MangaDownloadService? downloads = _downloads;
+    if (downloads == null) return;
+    if (resume) {
+      await downloads.resumeAll();
+    } else {
+      await downloads.pauseAll();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final FushiDesignTokens tokens = FushiDesignTokens.of(context);
+    final double bottomInset = MediaQuery.paddingOf(context).bottom;
+    final double fabExtent = fushiFabMetrics(FushiFabSize.regular).extent;
+    final bool showGlobalButton = _downloads != null && _entries.isNotEmpty;
+    final bool resumeAll = _canResumeAll;
     return FushiFloatingChromeHost(
       // 玻璃设计系统与浏览页一致：页内工具区不画，标题由外壳大标题承担
       // （滚动收起）。MD3 下工具区行只画标题胶囊；窄窗 / 没有外壳标题作用域
@@ -53,43 +106,79 @@ class _DownloadsPageState extends State<DownloadsPage> {
           ? const SizedBox.shrink()
           : FushiFloatingChromeBar(tabs: const SizedBox.shrink(), slot: slot),
       child: FushiEntranceScope(
-        child: ListView(
-          padding: EdgeInsets.all(tokens.spacing.page),
+        child: Stack(
           children: <Widget>[
-            // 在浮动工具区内部读实测 inset（不写死高度、不从工具区外层的
-            // context 读）：首卡从标题下方开始，标题收起后内容继续上移。
-            const FushiFloatingChromeInsetSpacer(),
-            MangaDownloadTasksSection(
-              downloadsOverride: widget.downloadsOverride,
-              tasksBuilder:
-                  (BuildContext context, List<DownloadTaskEntry> entries) {
-                    if (entries.isEmpty) {
-                      // 空态下压一段呼吸位，避免插画紧贴浮动标题。
-                      return FushiStaggeredEntrance(
-                        index: 0,
-                        child: Padding(
-                          padding: EdgeInsets.only(
-                            top: tokens.spacing.page * 2,
-                          ),
-                          child: FushiPlaceholderMessage(
-                            icon: FushiIcons.download,
-                            message: t.downloads_page_no_tasks,
-                          ),
-                        ),
-                      );
-                    }
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: <Widget>[
-                        for (int i = 0; i < entries.length; i++)
-                          FushiStaggeredEntrance(
-                            index: i,
-                            child: entries[i].builder(context),
-                          ),
-                      ],
-                    );
-                  },
+            ListView(
+              padding: EdgeInsets.fromLTRB(
+                tokens.spacing.page,
+                tokens.spacing.page,
+                tokens.spacing.page,
+                // 给右下角全局按钮留位：最后一张任务卡滚到底也不能被盖住。
+                bottomInset +
+                    tokens.spacing.page +
+                    fabExtent +
+                    tokens.spacing.gap,
+              ),
+              children: <Widget>[
+                // 在浮动工具区内部读实测 inset（不写死高度、不从工具区外层的
+                // context 读）：首卡从标题下方开始，标题收起后内容继续上移。
+                const FushiFloatingChromeInsetSpacer(),
+                MangaDownloadTasksSection(
+                  downloadsOverride: widget.downloadsOverride,
+                  onTasksChanged: _onTasksChanged,
+                  tasksBuilder:
+                      (BuildContext context, List<DownloadTaskEntry> entries) {
+                        if (entries.isEmpty) {
+                          // 空态下压一段呼吸位，避免插画紧贴浮动标题。
+                          return FushiStaggeredEntrance(
+                            index: 0,
+                            child: Padding(
+                              padding: EdgeInsets.only(
+                                top: tokens.spacing.page * 2,
+                              ),
+                              child: FushiPlaceholderMessage(
+                                icon: FushiIcons.download,
+                                message: t.downloads_page_no_tasks,
+                              ),
+                            ),
+                          );
+                        }
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: <Widget>[
+                            for (int i = 0; i < entries.length; i++)
+                              FushiStaggeredEntrance(
+                                index: i,
+                                child: entries[i].builder(context),
+                              ),
+                          ],
+                        );
+                      },
+                ),
+              ],
             ),
+            // 全局暂停 / 继续只此一颗（ticket 07）：列表空时隐藏；所有任务都是
+            // 暂停 / 失败时显示「全部继续」，否则显示「全部暂停」。行内不提供
+            // 暂停 / 继续。
+            if (showGlobalButton)
+              PositionedDirectional(
+                end: tokens.spacing.page,
+                bottom: bottomInset + tokens.spacing.page,
+                child: FushiFab(
+                  key: const ValueKey<String>('downloads-global-toggle-fab'),
+                  heroTag: null,
+                  tooltip: resumeAll
+                      ? t.download_resume_all
+                      : t.download_pause_all,
+                  icon: FushiIcon(
+                    resumeAll ? FushiIcons.play : FushiIcons.pause,
+                  ),
+                  label: Text(
+                    resumeAll ? t.download_resume_all : t.download_pause_all,
+                  ),
+                  onPressed: () => unawaited(_toggleAll(resumeAll)),
+                ),
+              ),
           ],
         ),
       ),

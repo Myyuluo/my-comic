@@ -99,4 +99,36 @@ void main() {
     expect(plan.pending, isEmpty);
     expect(plan.lockedSkipped, 1);
   });
+
+  test('全局暂停中的章不重复入队（恢复时自然开跑）', () {
+    final OnlineMangaLibraryEntry entry = OnlineMangaLibraryEntry(
+      runtime: OnlineMangaRuntimeKind.mihon,
+      extensionPackage: 'org.example.fixture',
+      sourceId: '1',
+      series: const OnlineMangaSeries(
+        key: '/series/fixture',
+        title: 'Fixture',
+        raw: <String, Object?>{'url': '/series/fixture'},
+      ),
+      chapters: <OnlineMangaChapter>[
+        _chapter('/chapter/2'),
+        _chapter('/chapter/1'),
+      ],
+    );
+
+    final ({List<OnlineMangaChapter> pending, int lockedSkipped}) plan =
+        planMangaChapterDownload(
+          entry: entry,
+          downloadedChapterKeys: const <String>{},
+          jobsByChapterKey: <String, MangaDownloadJobRow>{
+            '/chapter/2': _job('/chapter/2', MangaDownloadJobStatus.paused),
+          },
+        );
+
+    expect(
+      plan.pending.map((OnlineMangaChapter chapter) => chapter.key),
+      <String>['/chapter/1'],
+      reason: '暂停任务已在队列里，只需规划未入队的章',
+    );
+  });
 }

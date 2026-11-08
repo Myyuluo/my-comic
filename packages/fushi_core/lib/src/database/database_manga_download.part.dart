@@ -131,6 +131,71 @@ mixin _FushiDbMangaDownload on _$FushiDatabase {
         updatedAt: Value<int>(updatedAt),
       ));
 
+  /// 是否存在暂停任务（= 全局暂停生效中）。暂停状态持久化在任务行上，重启后
+  /// 仍能据此判定「暂停期间新入队的章节保持暂停」。
+  Future<bool> hasPausedMangaDownloadJobs() async {
+    final MangaDownloadJobRow? row = await (select(mangaDownloadJobs)
+          ..where((t) => t.status.equals(MangaDownloadJobStatus.paused))
+          ..limit(1))
+        .getSingleOrNull();
+    return row != null;
+  }
+
+  /// 把**仍在 `running`** 的任务落到 `paused`。
+  ///
+  /// 暂停收尾专用：与「全部继续」竞态时，用户已经把行改回 `queued` 的不能再被
+  /// 迟到的暂停收尾覆盖回 `paused`（否则任务永远停在暂停态）。返回 0 = 行已
+  /// 被恢复 / 取消 / 删除，调用方无需别的处理。
+  Future<int> pauseRunningMangaDownloadJob(
+    String jobId, {
+    required int updatedAt,
+  }) =>
+      (update(mangaDownloadJobs)
+            ..where((t) =>
+                t.jobId.equals(jobId) &
+                t.status.equals(MangaDownloadJobStatus.running)))
+          .write(MangaDownloadJobsCompanion(
+        status: const Value<String>(MangaDownloadJobStatus.paused),
+        updatedAt: Value<int>(updatedAt),
+      ));
+
+  /// 全局暂停：把排队中 / 下载中的任务置为 `paused`。`failed` / `done` 等
+  /// 其它状态不动。返回受影响行数。
+  Future<int> pauseQueuedAndRunningMangaDownloadJobs({
+    required int updatedAt,
+  }) =>
+      (update(mangaDownloadJobs)
+            ..where((t) => t.status.isIn(const <String>[
+                  MangaDownloadJobStatus.queued,
+                  MangaDownloadJobStatus.running,
+                ])))
+          .write(MangaDownloadJobsCompanion(
+        status: const Value<String>(MangaDownloadJobStatus.paused),
+        updatedAt: Value<int>(updatedAt),
+      ));
+
+  /// 全局继续：暂停任务恢复为排队，并重试全部失败任务（复位尝试次数、清错误）。
+  /// 两段在同一事务里完成，页面不会观察到「一半暂停一半排队」的中间态。
+  Future<void> resumePausedAndRetryFailedMangaDownloadJobs({
+    required int updatedAt,
+  }) =>
+      transaction(() async {
+        await (update(mangaDownloadJobs)
+              ..where((t) => t.status.equals(MangaDownloadJobStatus.paused)))
+            .write(MangaDownloadJobsCompanion(
+          status: const Value<String>(MangaDownloadJobStatus.queued),
+          updatedAt: Value<int>(updatedAt),
+        ));
+        await (update(mangaDownloadJobs)
+              ..where((t) => t.status.equals(MangaDownloadJobStatus.failed)))
+            .write(MangaDownloadJobsCompanion(
+          status: const Value<String>(MangaDownloadJobStatus.queued),
+          updatedAt: Value<int>(updatedAt),
+          attemptCount: const Value<int>(0),
+          lastError: const Value<String?>(null),
+        ));
+      });
+
   /// 事务内取最早的 `queued` 任务置为 `running` 并返回置后的行；队列空返回 null。
   /// 单 worker 场景下事务只是防「取到与置状态之间被另一条 upsert 改掉」。
   Future<MangaDownloadJobRow?> claimNextQueuedMangaDownloadJob({

@@ -426,7 +426,10 @@ Future<void> _rebuildSidecar(File dbFile) async {
 ///
 /// - v2：Download library 的章节映射表（storage-layout 票 04）。
 /// - v3：章节映射表增加 `container_kind`（folder / archive；CBZ 票 06）。
-const int kMyComicSchemaVersion = 3;
+/// - v4：下载任务状态值域新增 `paused`（全局暂停，ticket 07）。状态是 TEXT 列，
+///   但表级 `CHECK (status IN (...))` 必须重建表才能放宽——SQLite 不支持原地改
+///   CHECK。
+const int kMyComicSchemaVersion = 4;
 
 /// my-comic 主库文件名（与 Fushi 的 `fushi.db` 不同）。
 ///
@@ -931,12 +934,26 @@ class FushiDatabase extends _$FushiDatabase
             // v1 → 当前：Download library 的章节映射（票 04）。表定义按当前
             // 版本创建，因此 v3 起同时包含 `container_kind` 列。
             await m.createTable(mangaChapterDirs);
+            // v4：v1 的 manga_download_jobs 仍带旧的 status CHECK，重建放宽。
+            await m.alterTable(TableMigration(mangaDownloadJobs));
+            // 重建表会连表上的索引一起删掉，按 _ensureIndexes 的约定补回。
+            await _ensureIndexes();
             return;
           }
           if (from == 2) {
             // v2 → v3：章节映射增加显式容器类型（CBZ 票 06）。已有行都是
             // 章节目录；列默认值 `folder` 使它们无需数据回填。
             await m.addColumn(mangaChapterDirs, mangaChapterDirs.containerKind);
+            // v4：下载任务表重建以放宽 status CHECK（新增 paused）。
+            await m.alterTable(TableMigration(mangaDownloadJobs));
+            await _ensureIndexes();
+            return;
+          }
+          if (from == 3) {
+            // v3 → v4：下载任务状态新增 `paused`（全局暂停，ticket 07）。
+            // SQLite 不能原地改表级 CHECK；重建表并按同名列复制全部任务行。
+            await m.alterTable(TableMigration(mangaDownloadJobs));
+            await _ensureIndexes();
             return;
           }
           throw StateError(

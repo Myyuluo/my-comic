@@ -70,11 +70,13 @@ String mangaDownloadJobId({
   return sha256.convert(utf8.encode(identity)).toString().substring(0, 32);
 }
 
-/// 中止信号。用户取消（[cancelled]）与服务停止（[stopped]）必须分开：前者把行改成
-/// `cancelled` 并删半成品，后者只是进程要退出，行保持 `running` 留给下次启动续跑。
+/// 中止信号。用户取消（[cancelled]）、全局暂停（[paused]）与服务停止（[stopped]）
+/// 必须分开：取消把行改成 `cancelled` 并删半成品；暂停把行改成 `paused` 且**保留**
+/// staging 供页级续传；服务停止只是进程要退出，行保持 `running` 留给下次启动续跑。
 class _CancelToken {
   bool cancelled = false;
   bool stopped = false;
+  bool paused = false;
 }
 
 class _ActiveJob {
@@ -247,6 +249,7 @@ class MangaDownloadService {
       switch (existing.status) {
         case MangaDownloadJobStatus.queued:
         case MangaDownloadJobStatus.running:
+        case MangaDownloadJobStatus.paused:
           return existing;
         case MangaDownloadJobStatus.done:
           if (await DownloadLibraryIndex(_database).isChapterDownloaded(
@@ -257,6 +260,8 @@ class MangaDownloadService {
           }
       }
     }
+    // 全局暂停期间新入队的章节直接以 `paused` 入队，不自动开始。
+    final bool paused = await _database.hasPausedMangaDownloadJobs();
     final int now = _now;
     await _database.upsertMangaDownloadJob(
       MangaDownloadJobsCompanion(
@@ -267,7 +272,11 @@ class MangaDownloadService {
         runtime: Value<String>(entry.runtime.wireValue),
         title: Value<String>(entry.series.title),
         chapterTitle: Value<String>(mangaChapterDisplayName(chapter)),
-        status: const Value<String>(MangaDownloadJobStatus.queued),
+        status: Value<String>(
+          paused
+              ? MangaDownloadJobStatus.paused
+              : MangaDownloadJobStatus.queued,
+        ),
         pagesDone: const Value<int>(0),
         pagesTotal: const Value<int>(0),
         attemptCount: const Value<int>(0),
@@ -277,7 +286,7 @@ class MangaDownloadService {
         completedAt: const Value<int?>(null),
       ),
     );
-    _kick();
+    if (!paused) _kick();
     return (await _database.getMangaDownloadJob(jobId))!;
   }
 
@@ -307,13 +316,15 @@ class MangaDownloadService {
       return;
     }
     if (row.status == MangaDownloadJobStatus.queued ||
-        row.status == MangaDownloadJobStatus.running) {
+        row.status == MangaDownloadJobStatus.running ||
+        row.status == MangaDownloadJobStatus.paused) {
       await _database.deleteMangaDownloadJob(jobId);
       await _deleteChapterDirectory(row);
     }
   }
 
-  /// 重试 `failed` / `cancelled` 的任务。
+  /// 重试 `failed` / `cancelled` 的任务。全局暂停期间重试的行以 `paused` 入队，
+  /// 不会绕过暂停开跑。
   Future<void> retry(String jobId) async {
     final MangaDownloadJobRow? row = await _database.getMangaDownloadJob(jobId);
     if (row == null) return;
@@ -321,12 +332,31 @@ class MangaDownloadService {
         row.status != MangaDownloadJobStatus.cancelled) {
       return;
     }
+    final bool paused = await _database.hasPausedMangaDownloadJobs();
     await _database.updateMangaDownloadJobStatus(
       jobId,
-      status: MangaDownloadJobStatus.queued,
+      status: paused
+          ? MangaDownloadJobStatus.paused
+          : MangaDownloadJobStatus.queued,
       updatedAt: _now,
       clearLastError: true,
       attemptCount: 0,
+    );
+    if (!paused) _kick();
+  }
+
+  /// 全局暂停：把排队中 / 下载中的任务置为 `paused`。正在飞的任务收到暂停信号
+  /// 后停止取页并保留 staging；失败任务保持失败（ticket 07）。
+  Future<void> pauseAll() async {
+    final _ActiveJob? active = _active;
+    if (active != null) active.token.paused = true;
+    await _database.pauseQueuedAndRunningMangaDownloadJobs(updatedAt: _now);
+  }
+
+  /// 全局继续：暂停任务恢复为排队，并重试全部失败任务（ticket 07）。
+  Future<void> resumeAll() async {
+    await _database.resumePausedAndRetryFailedMangaDownloadJobs(
+      updatedAt: _now,
     );
     _kick();
   }
@@ -440,6 +470,14 @@ class MangaDownloadService {
 
   Future<void> _run(MangaDownloadJobRow job, _ActiveJob active) async {
     final _CancelToken token = active.token;
+    // 领取与 pauseAll / cancel 的竞态：行可能在事务提交后、worker 拿到 active
+    // 之前已被改成 paused 或删除。此时不能再开跑（否则会把 paused 覆盖回 done）。
+    final MangaDownloadJobRow? current = await _database.getMangaDownloadJob(
+      job.jobId,
+    );
+    if (current == null || current.status != MangaDownloadJobStatus.running) {
+      return;
+    }
     // 格式在任务开始运行时确定一次：排队任务在真正被领取的这一刻读取偏好；
     // 运行中的任务（含 2s/8s/20s 自动重试）保持同一种格式。
     final bool saveAsCbz = _saveAsCbz();
@@ -459,6 +497,9 @@ class MangaDownloadService {
           updatedAt: _now,
         );
         await _deleteChapterDirectory(job);
+        return;
+      } on _Paused {
+        await _markPaused(job);
         return;
       } on Object catch (error, stack) {
         ErrorLogService.instance.log(
@@ -501,8 +542,24 @@ class MangaDownloadService {
           await _deleteChapterDirectory(job);
           return;
         }
+        if (token.paused) {
+          await _markPaused(job);
+          return;
+        }
       }
     }
+  }
+
+  /// 暂停收尾：保留 staging（页级续传），把行从 `running` 落到 `paused`。
+  ///
+  /// 只覆盖仍在 `running` 的行：pauseAll 之后用户立刻点了「全部继续」时，行
+  /// 已经被改回 `queued`，迟到的暂停收尾不能把它重新按回暂停态。
+  Future<void> _markPaused(MangaDownloadJobRow job) async {
+    await _deleteArchiveTemp(job);
+    await _database.pauseRunningMangaDownloadJob(
+      job.jobId,
+      updatedAt: _now,
+    );
   }
 
   Future<void> _download(
@@ -602,7 +659,7 @@ class MangaDownloadService {
     StackTrace? firstStack;
     Future<void> worker() async {
       while (pending.isNotEmpty && firstError == null) {
-        if (token.cancelled || token.stopped) return;
+        if (token.cancelled || token.stopped || token.paused) return;
         final int index = pending.removeAt(0);
         try {
           files[index] = await _fetchPage(
@@ -1117,6 +1174,7 @@ class MangaDownloadService {
   static void _throwIfCancelled(_CancelToken token) {
     if (token.stopped) throw const _Stopped();
     if (token.cancelled) throw const _Cancelled();
+    if (token.paused) throw const _Paused();
   }
 }
 
@@ -1126,4 +1184,9 @@ class _Cancelled implements Exception {
 
 class _Stopped implements Exception {
   const _Stopped();
+}
+
+/// 全局暂停：停止取页，保留 staging（与取消不同，半成品要留给续传）。
+class _Paused implements Exception {
+  const _Paused();
 }
