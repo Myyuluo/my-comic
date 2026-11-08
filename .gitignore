@@ -191,3 +191,6 @@ third_party/media_kit_video/macos/Headers/
 /tool/sync_to_mac.ps1
 /tool/run_mac_itest.ps1
 /tool/sync_upload_exclusions.txt
+
+# 本地启动器日志（启动失败排查用，不入库）
+/启动日志.txt
