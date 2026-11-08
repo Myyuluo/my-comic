@@ -36,6 +36,7 @@ import 'package:fushi/src/media/manga/download/manga_download_service.dart';
 import 'package:fushi/src/media/manga/interconnect/interconnect_manga_source.dart';
 import 'package:fushi/src/media/manga/download/download_library_index.dart';
 import 'package:fushi/src/media/manga/library/manga_download_planner.dart';
+import 'package:fushi/src/media/manga/library/manga_shelf_download_state.dart';
 import 'package:fushi/src/media/manga/library/manga_shelf_unread.dart';
 import 'package:fushi/src/media/manga/library/manga_series_page.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
@@ -329,8 +330,24 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
   /// 与本帧标签池解析，供同一帧的筛选与页签渲染共用。
   int? _mangaTagTabSelection;
 
-  /// 本帧每个页签在当前搜索词 / 阅读状态筛选下会显示的漫画数（key null = 书架）。
+  /// 本帧每个页签在当前搜索词 / 阅读状态 / 漫画下载筛选下会显示的漫画数
+  /// （key null = 书架）。
   Map<int?, int> _mangaTagTabCounts = const <int?, int>{};
+
+  /// 「漫画下载」筛选（null = 全部）。会话内状态，不持久化；与阅读状态、当前
+  /// 页签是 AND 关系。
+  _MangaDownloadFilter? _mangaDownloadFilter;
+
+  /// 至少有一章本地可读的漫画 `bookKey` 集合，随 [_loadShelfMaps] 批量预取
+  /// （在线看 Download library，本地图源看目录存在性；Missing 不计）。
+  Set<String> _mangaDownloadedBookKeys = const <String>{};
+
+  /// 漫画书架搜索用的附加元数据（`bookKey → 描述符 / 作者`），随
+  /// [_loadShelfMaps] 一次批量预取。`MediaItem` 不携带在线描述符（它的
+  /// `sourceMetadata` 是阅读进度用的另一份 JSON），源分类 / 简介只能从
+  /// `epub_books.sourceMetadata` 解码。
+  Map<String, _MangaShelfMeta> _mangaMetaByBookKey =
+      const <String, _MangaShelfMeta>{};
 
   /// 本帧标签页签筛选前，漫画书架是否有条目。用于区分空态文案：整个书架为空
   /// （引导入库）还是当前页签 / 搜索无命中（「没有符合筛选的书」）。
@@ -362,18 +379,102 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
         filter;
   }
 
-  /// 漫画页当前搜索词 + 阅读状态筛选（ticket 06 再叠加漫画下载状态）是否放行该
-  /// 条目。页签数量与实际渲染共用这一判据，保证「切过去能看到多少」不说谎。
+  /// 漫画页当前搜索词 + 阅读状态 + 漫画下载筛选是否放行该条目。页签数量与实际
+  /// 渲染共用这一判据，保证「切过去能看到多少」不说谎。
   bool _mangaItemPassesActiveFilters(MediaItem item) {
-    final bool matchesSearch = _matchesShelfSearch(<String>[
-      mediaSource.getDisplayTitleFromMediaItem(item),
-      item.title,
-    ]);
-    if (!matchesSearch) return false;
-    return _matchesReadStatusFilter(
+    if (!_matchesShelfSearch(_mangaSearchTexts(item))) return false;
+    if (!_matchesReadStatusFilter(
       bookKey: _parseBookKey(item.mediaIdentifier),
       progress: (position: item.position, duration: item.duration),
-    );
+    )) {
+      return false;
+    }
+    return _matchesMangaDownloadFilter(item);
+  }
+
+  /// 「已下载」= 这本书至少有一章在本地可读（[_mangaDownloadedBookKeys] 批量
+  /// 预取）；「未下载」= 不在该集合里。全部（null）恒放行。
+  bool _matchesMangaDownloadFilter(MediaItem item) {
+    final _MangaDownloadFilter? filter = _mangaDownloadFilter;
+    if (filter == null) return true;
+    final String? bookKey = _parseBookKey(item.mediaIdentifier);
+    final bool downloaded =
+        bookKey != null && _mangaDownloadedBookKeys.contains(bookKey);
+    return filter == _MangaDownloadFilter.downloaded ? downloaded : !downloaded;
+  }
+
+  void _setMangaDownloadFilter(_MangaDownloadFilter? value) {
+    if (_mangaDownloadFilter == value) return;
+    setState(() => _mangaDownloadFilter = value);
+  }
+
+  String _mangaDownloadFilterKey(_MangaDownloadFilter? filter) =>
+      switch (filter) {
+        null => 'all',
+        _MangaDownloadFilter.downloaded => 'downloaded',
+        _MangaDownloadFilter.notDownloaded => 'not_downloaded',
+      };
+
+  String _mangaDownloadFilterLabel(_MangaDownloadFilter filter) =>
+      switch (filter) {
+        _MangaDownloadFilter.downloaded =>
+          t.shelf_filter_download_downloaded,
+        _MangaDownloadFilter.notDownloaded =>
+          t.shelf_filter_download_not_downloaded,
+      };
+
+  /// 「排序与筛选」里的「漫画下载」单选组（全部 / 已下载 / 未下载）。
+  List<LibraryViewOption> _mangaDownloadFilterOptions() =>
+      <LibraryViewOption>[
+        for (final _MangaDownloadFilter? filter
+            in <_MangaDownloadFilter?>[
+              null,
+              ..._MangaDownloadFilter.values,
+            ])
+          LibraryViewOption(
+            key: ValueKey<String>(
+              'shelf_filter_download_${_mangaDownloadFilterKey(filter)}',
+            ),
+            label: filter == null
+                ? t.home_filter_all
+                : _mangaDownloadFilterLabel(filter),
+            selected: filter == _mangaDownloadFilter,
+            onSelected: () => _setMangaDownloadFilter(filter),
+          ),
+      ];
+
+  /// 排序按钮的筛选标记：阅读状态或漫画下载任一生效。
+  bool get _sortFilterActive =>
+      _readStatusFilter != null || _mangaDownloadFilter != null;
+
+  /// 一部漫画参与搜索的全部字段（ticket 06）：
+  /// 显示标题、原始标题、作者行（作者优先、画师兜底）、源分类、简介。
+  ///
+  /// 用户标签**刻意不参与**——标签已经是独立页签。本地图源没有源分类 / 简介，
+  /// 只会命中标题与作者。字段来源：`MediaItem`（标题 / 编辑过的作者）+
+  /// [_loadShelfMaps] 预取的描述符（在线条目的源分类 / 简介 / 源作者行）。
+  List<String> _mangaSearchTexts(MediaItem item) {
+    final String? bookKey = _parseBookKey(item.mediaIdentifier);
+    final _MangaShelfMeta? meta =
+        bookKey == null ? null : _mangaMetaByBookKey[bookKey];
+    final OnlineMangaLibraryEntry? entry =
+        meta?.onlineEntry ??
+        OnlineMangaLibraryEntry.tryParse(item.sourceMetadata);
+    final String? itemAuthor = item.author?.trim();
+    final String? metaAuthor = meta?.author?.trim();
+    final String? byline = itemAuthor != null && itemAuthor.isNotEmpty
+        ? itemAuthor
+        : metaAuthor != null && metaAuthor.isNotEmpty
+        ? metaAuthor
+        : entry?.series.byline;
+    final String? description = entry?.series.description?.trim();
+    return <String>[
+      mediaSource.getDisplayTitleFromMediaItem(item),
+      item.title,
+      if (byline != null && byline.isNotEmpty) byline,
+      if (entry != null) ...entry.series.genreLabels,
+      if (description != null && description.isNotEmpty) description,
+    ];
   }
 
   /// 选中漫画页某个标签页签；null = 「书架」。
@@ -831,7 +932,12 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
                         // 用户既可能记得新名也可能记得旧名，只匹配其一都会「搜不到
                         // 明明在书架上的书」。归一化走与游戏库页同一份
                         // [matchesMediaSearch]（全角/片假名/标点折叠）。
-                        if (_searchQuery.trim().isNotEmpty) {
+                        //
+                        // 漫画页（ticket 06）搜索扩围到作者 / 源分类 / 简介，且需要
+                        // [_loadShelfMaps] 预取的描述符——统一在正文的
+                        // buildBody（`_shelfMapsFuture` 完成后）经
+                        // `_mangaItemPassesActiveFilters` 应用，这里不再先裁一刀。
+                        if (!_mangaOnly && _searchQuery.trim().isNotEmpty) {
                           filtered = filtered.where((MediaItem item) {
                             return _matchesShelfSearch(<String>[
                               ReaderFushiSource.instance
@@ -963,23 +1069,13 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
       // 下拉框放在排序那」）。持久化仍是 `shelf_read_status_filter`；生效时排序
       // 按钮亮圆点。
       filterOptionsTitle: t.shelf_filter_read_status,
-      filterActive: _readStatusFilter != null,
-      filterOptions: <LibraryViewOption>[
-        for (final ShelfReadStatus? status in <ShelfReadStatus?>[
-          null,
-          ...ShelfReadStatus.values,
-        ])
-          LibraryViewOption(
-            key: ValueKey<String>(
-              'shelf_filter_read_status_${status?.name ?? 'all'}',
-            ),
-            label: status == null
-                ? t.home_filter_all
-                : _readStatusLabel(status),
-            selected: status == _readStatusFilter,
-            onSelected: () => _setReadStatusFilter(status),
-          ),
-      ],
+      filterActive: _sortFilterActive,
+      filterOptions: _readStatusFilterOptions(),
+      // 漫画页在「阅读状态」之后再挂一组「漫画下载」；其他媒体库不传。
+      secondaryFilterOptionsTitle: _mangaOnly ? t.shelf_filter_download : null,
+      secondaryFilterOptions: _mangaOnly
+          ? _mangaDownloadFilterOptions()
+          : const <LibraryViewOption>[],
       onTagsChanged: () => ref.invalidate(bookTagMapProvider),
     );
   }
@@ -1003,8 +1099,14 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
           sortModeLabel: _sortModeLabel,
           onSortModeChanged: _setSortMode,
           filterOptionsTitle: t.shelf_filter_read_status,
-          filterActive: _readStatusFilter != null,
+          filterActive: _sortFilterActive,
           filterOptions: _readStatusFilterOptions(),
+          secondaryFilterOptionsTitle: _mangaOnly
+              ? t.shelf_filter_download
+              : null,
+          secondaryFilterOptions: _mangaOnly
+              ? _mangaDownloadFilterOptions()
+              : const <LibraryViewOption>[],
         ),
       ),
     );
@@ -1036,7 +1138,7 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
         ref: ref,
         sortMenu: _sortMenu,
         sortGrouped: true,
-        sortFilterActive: _readStatusFilter != null,
+        sortFilterActive: _sortFilterActive,
         selectionMode: _selectionMode,
         onToggleSelectionMode: _toggleSelectionMode,
         onTagsChanged: () => ref.invalidate(bookTagMapProvider),
@@ -1118,12 +1220,38 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
         if (r.uid.isNotEmpty) r.bookKey: r.uid,
     };
     _completedBookKeys = await appModel.database.getCompletedEpubBookKeys();
-    // 漫画书架才需要未读角标；书籍 / 视频书架没有漫画卡，省掉两条查询。
+    // 漫画书架才需要未读角标 / 搜索元数据 / 下载状态；书籍 / 视频书架没有漫画卡，
+    // 省掉这条快照查询。
+    final MangaShelfReadSnapshot mangaSnapshot = _mangaOnly
+        ? await appModel.database.getMangaShelfReadSnapshot()
+        : const MangaShelfReadSnapshot(
+            books: <MangaShelfChapterSource>[],
+            readChapterKeysByBookUid: <String, Set<String>>{},
+          );
     _mangaUnreadCountsByBookKey = _mangaOnly
-        ? computeMangaShelfUnreadCounts(
-            await appModel.database.getMangaShelfReadSnapshot(),
-          )
+        ? computeMangaShelfUnreadCounts(mangaSnapshot)
         : const <String, int>{};
+    _mangaMetaByBookKey = _mangaOnly
+        ? <String, _MangaShelfMeta>{
+            for (final MangaShelfChapterSource book in mangaSnapshot.books)
+              book.bookKey: _MangaShelfMeta(
+                author: book.author,
+                onlineEntry: OnlineMangaLibraryEntry.tryParse(
+                  book.sourceMetadata,
+                ),
+              ),
+          }
+        : const <String, _MangaShelfMeta>{};
+    // 「漫画下载」筛选：在线看 Download library 至少一章完整落盘，本地图源看
+    // 目录存在；Missing 不计。随本快照一次批量算好，卡片与页签数量只查内存集合。
+    _mangaDownloadedBookKeys = _mangaOnly
+        ? await computeMangaShelfDownloadedBookKeys(
+            mangaSnapshot.books,
+            database: appModel.database,
+            localSourceRoot: appModel.appPathsOrNull?.localComicRoot,
+            downloadsRoot: appModel.appPathsOrNull?.downloadsRoot,
+          )
+        : const <String>{};
     // 漫画页页签数量要按「阅读状态」筛选统计，读完集合是异步预取的；集合就绪后
     // 补一帧，让浮动 chrome 里的数量与正文同一口径（正文由 FutureBuilder 重建，
     // chrome 不在它下面）。
@@ -1591,11 +1719,18 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
     // [_loadShelfMaps] 异步预取，只有本函数（_shelfMapsFuture 完成后）读得到真值。
     // 继续阅读 hero 也吃这份列表——筛「未读」时不该再顶着一本在读的书。
     // （展示列表过滤走 books.where；借用映射仍只遍历上面的全量列表，BUG-963。）
+    //
+    // 漫画页（ticket 06）把搜索 / 阅读状态 / 漫画下载三项收进同一个谓词
+    // [_mangaItemPassesActiveFilters]，与页签数量共用，避免「数量说有、切过去
+    // 却没有」。它依赖 [_loadShelfMaps] 的异步快照，故必须在本 FutureBuilder
+    // 之后应用。
     final List<MediaItem> shelfBooks = books
-        .where((MediaItem item) => _matchesReadStatusFilter(
-              bookKey: _parseBookKey(item.mediaIdentifier),
-              progress: (position: item.position, duration: item.duration),
-            ))
+        .where((MediaItem item) => _mangaOnly
+            ? _mangaItemPassesActiveFilters(item)
+            : _matchesReadStatusFilter(
+                bookKey: _parseBookKey(item.mediaIdentifier),
+                progress: (position: item.position, duration: item.duration),
+              ))
         .toList();
     final List<MediaItem> epubBooks = srtBookKeys.isEmpty
         ? shelfBooks
@@ -1719,7 +1854,9 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
     // BUG-2327：搜索零命中与标签筛选零命中同一空态（「没有符合筛选的书」），
     // 不能落到「书架为空」占位——那会把用户引去导入。
     final bool searching =
-        _searchQuery.trim().isNotEmpty || _readStatusFilter != null;
+        _searchQuery.trim().isNotEmpty ||
+        _readStatusFilter != null ||
+        _mangaDownloadFilter != null;
     if (epubBooks.isEmpty &&
         srtBooks.isEmpty &&
         remoteBooks.isEmpty &&
@@ -1846,6 +1983,9 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
           ? _mangaTagTabSelection == null
           : ref.read(selectedTagIdsProvider).isEmpty) &&
       _readStatusFilter == null &&
+      // 远端占位卡没有本地的下载状态可判，归进「已下载 / 未下载」任何一档都是
+      // 猜；有下载筛选时整块不混排（与阅读状态筛选同一条纪律）。
+      _mangaDownloadFilter == null &&
       appModel.prefsRepo.showRemoteEntries &&
       _moduleVisibility.isEnabled(ModuleId.sync);
 
@@ -2455,6 +2595,26 @@ MediaItem? pickShelfContinueHero(
 /// BUG-2458：远端占位卡的多选键（库级私有，parts 共用）。
 const String _kRemoteBookSelectionPrefix = 'remote_book_';
 const String _kRemoteSrtSelectionPrefix = 'remote_srt_';
+
+/// 漫画页「排序与筛选」里的「漫画下载」单选值（null = 全部）。
+enum _MangaDownloadFilter {
+  /// 至少有一章在本地可读。
+  downloaded,
+
+  /// 一章本地可读的都没有。
+  notDownloaded,
+}
+
+/// 漫画书架搜索用的附加元数据：一条 `epub_books` 行的作者与在线描述符。
+///
+/// 只随 [_loadShelfMaps] 批量预取一次；`MediaItem` 上的 `sourceMetadata` 是
+/// 阅读进度用的另一份 JSON，不能拿它解码源分类 / 简介。
+class _MangaShelfMeta {
+  const _MangaShelfMeta({required this.author, required this.onlineEntry});
+
+  final String? author;
+  final OnlineMangaLibraryEntry? onlineEntry;
+}
 
 /// 远端 EPUB 占位卡的多选键：身份是 host 的 `downloadId`（与 [_ShelfBookSlot]
 /// 的 entryKey、下载任务 id 同源），不是可被 host 改名的显示名。

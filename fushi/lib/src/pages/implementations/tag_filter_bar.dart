@@ -39,6 +39,8 @@ class FushiTagFilterBar extends ConsumerStatefulWidget {
     this.onSortModeChanged,
     this.filterOptionsTitle,
     this.filterOptions = const <LibraryViewOption>[],
+    this.secondaryFilterOptionsTitle,
+    this.secondaryFilterOptions = const <LibraryViewOption>[],
     this.filterActive = false,
     this.tagsInMenu = false,
     this.inlineTags = false,
@@ -92,8 +94,17 @@ class FushiTagFilterBar extends ConsumerStatefulWidget {
   /// 「筛选」单选组（含「全部」项）；空 = 菜单里没有筛选组。
   final List<LibraryViewOption> filterOptions;
 
-  /// [filterOptions] 当前不是「全部」：排序按钮右上角亮一枚主色圆点，列表被筛过
-  /// 一眼可见（筛选收进菜单后，工具行上不再有激活态 chip 提示）。
+  /// 第二组单选筛选的小标题（漫画页「漫画下载」）。与
+  /// [secondaryFilterOptions] 同时非空时，这组排在 [filterOptions] 之后、标签组
+  /// 之前，组间同样有分隔线。其他媒体库不传 = 菜单与行为完全不变。
+  final String? secondaryFilterOptionsTitle;
+
+  /// 第二组单选项（含「全部」项）；空 = 菜单里没有第二组。
+  final List<LibraryViewOption> secondaryFilterOptions;
+
+  /// [filterOptions] / [secondaryFilterOptions] 当前不是「全部」：排序按钮右上角
+  /// 亮一枚主色圆点，列表被筛过一眼可见（筛选收进菜单后，工具行上不再有激活态
+  /// chip 提示）。
   final bool filterActive;
 
   /// 把标签筛选并进「排序」菜单（多选组，选中即生效、菜单不关）：窄屏库页顶部
@@ -382,9 +393,13 @@ class _FushiTagFilterBarState extends ConsumerState<FushiTagFilterBar> {
     final String? filterTitle = widget.filterOptionsTitle;
     final bool hasFilter =
         filterTitle != null && widget.filterOptions.isNotEmpty;
+    final bool hasSecondaryFilter =
+        widget.secondaryFilterOptionsTitle != null &&
+        widget.secondaryFilterOptions.isNotEmpty;
     final bool hasTags = widget.tagsInMenu && widget.tags.isNotEmpty;
-    final bool grouped = hasFilter || hasTags;
-    // 筛选生效（阅读状态不是「全部」/ 菜单里的标签有选中）：按钮亮圆点。
+    final bool grouped = hasFilter || hasSecondaryFilter || hasTags;
+    // 筛选生效（阅读状态 / 漫画下载不是「全部」，或菜单里的标签有选中）：按钮
+    // 亮圆点。
     final bool filtered =
         widget.filterActive || (hasTags && selectedTagIds.isNotEmpty);
     // 菜单面板样式交给 FushiMenuAnchor（MD3 走全局 menuTheme，Apple 走玻璃
@@ -438,8 +453,12 @@ class _FushiTagFilterBarState extends ConsumerState<FushiTagFilterBar> {
     final String? filterTitle = widget.filterOptionsTitle;
     final bool hasFilter =
         filterTitle != null && widget.filterOptions.isNotEmpty;
+    final String? secondaryFilterTitle = widget.secondaryFilterOptionsTitle;
+    final bool hasSecondaryFilter =
+        secondaryFilterTitle != null &&
+        widget.secondaryFilterOptions.isNotEmpty;
     final bool hasTags = widget.tagsInMenu && widget.tags.isNotEmpty;
-    final bool grouped = hasFilter || hasTags;
+    final bool grouped = hasFilter || hasSecondaryFilter || hasTags;
     return <Widget>[
       if (grouped) _menuSectionLabel(tokens, t.sort_by),
       for (final ShelfSortMode mode in ShelfSortMode.values)
@@ -460,6 +479,21 @@ class _FushiTagFilterBarState extends ConsumerState<FushiTagFilterBar> {
             icon: option.icon,
             selected: option.selected,
             // 排序组已有 autofocus 落点（选中的排序项），这组不抢。
+            autofocus: false,
+            onPressed: option.onSelected,
+          ),
+      ],
+      if (hasSecondaryFilter) ...<Widget>[
+        const FushiDivider(),
+        _menuSectionLabel(tokens, secondaryFilterTitle),
+        for (final LibraryViewOption option in widget.secondaryFilterOptions)
+          _choiceMenuItem(
+            tokens,
+            key: option.key,
+            label: option.label,
+            icon: option.icon,
+            selected: option.selected,
+            // 同上：autofocus 留给排序组。
             autofocus: false,
             onPressed: option.onSelected,
           ),

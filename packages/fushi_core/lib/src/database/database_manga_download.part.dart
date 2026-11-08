@@ -286,6 +286,10 @@ mixin _FushiDbMangaDownload on _$FushiDatabase {
     };
   }
 
+  /// 全部章节容器映射（书架「是否已下载」批量判定；一次查询，不随书数增长）。
+  Future<List<MangaChapterDirRow>> getAllMangaChapterDirRows() =>
+      select(mangaChapterDirs).get();
+
   Future<int> deleteMangaChapterDir(String bookKey, String chapterKey) =>
       (delete(mangaChapterDirs)
             ..where((t) =>

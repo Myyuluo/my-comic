@@ -121,12 +121,14 @@ class DownloadLibraryIndex {
   ///
   /// 与 `OnlineMangaLibraryService._downloadsRoot` 同一条测试缝：`EpubStorage` 测试根是
   /// `<tmp>/fushi_books`，Download library 派生到同级 `<tmp>/downloads`。
-  Future<Directory> _downloadsRoot() async {
+  Future<Directory> _downloadsRoot() async =>
+      _debugDownloadsRoot() ?? AppPaths.downloadsRootDirectory();
+
+  /// 测试注入的 EpubStorage 根派生出的 Download library 根；生产 / 未注入为 null。
+  Directory? _debugDownloadsRoot() {
     final String? legacyBase = EpubStorage.debugBaseDirectoryOverridePath;
-    if (legacyBase != null) {
-      return Directory(p.join(p.dirname(legacyBase), 'downloads'));
-    }
-    return AppPaths.downloadsRootDirectory();
+    if (legacyBase == null) return null;
+    return Directory(p.join(p.dirname(legacyBase), 'downloads'));
   }
 
   /// 这一章是否**完整**下载（容器存在且 manifest + 全部页齐）。
@@ -157,6 +159,80 @@ class DownloadLibraryIndex {
     for (final String key in chapterKeys) {
       if (await isChapterDownloaded(bookKey: bookKey, chapterKey: key)) {
         downloaded.add(key);
+      }
+    }
+    return downloaded;
+  }
+
+  /// 这批书里哪些**至少有一章完整落盘**（书架「已下载」筛选 / 页签数量的
+  /// 批量口径，ticket 06）。
+  ///
+  /// 一次读全量 `manga_chapter_dirs` 映射，只为有映射的候选章探磁盘，不按书 /
+  /// 按章反复查库；完整性判据与 [isChapterDownloaded] 相同（容器存在且
+  /// manifest + 全部页齐）。书目录不在**当前** Download library 根下（切换
+  /// Content root 后的旧路径 = Missing）整本不算已下载。
+  Future<Set<String>> booksWithAnyCompleteChapter(
+    Map<String, ({String extractDir, Iterable<String> chapterKeys})> books, {
+    Directory? currentDownloadsRoot,
+  }) async {
+    if (books.isEmpty) return <String>{};
+    // 调用方（页面）传当前 Content root 的 Download library；测试壳没有
+    // AppPaths 时回落到 [EpubStorage] 测试根的同级 `downloads`。两者都未知则
+    // 跳过「旧根 = Missing」检查，只按容器完整性判定。
+    final Directory? currentRoot =
+        currentDownloadsRoot ?? _debugDownloadsRoot();
+    final Map<String, Map<String, MangaChapterDirRow>> mappingsByBook =
+        <String, Map<String, MangaChapterDirRow>>{};
+    for (final MangaChapterDirRow row
+        in await database.getAllMangaChapterDirRows()) {
+      if (!books.containsKey(row.bookKey)) continue;
+      (mappingsByBook[row.bookKey] ??=
+              <String, MangaChapterDirRow>{})[row.chapterKey] =
+          row;
+    }
+    final Set<String> downloaded = <String>{};
+    for (final MapEntry<
+          String,
+          ({String extractDir, Iterable<String> chapterKeys})
+        >
+        entry
+        in books.entries) {
+      final Map<String, MangaChapterDirRow>? mappings =
+          mappingsByBook[entry.key];
+      if (mappings == null || mappings.isEmpty) continue;
+      final String extractDir = entry.value.extractDir;
+      if (currentRoot != null &&
+          !isLocalSourcePathWithinRoot(extractDir, currentRoot)) {
+        continue;
+      }
+      final Directory mangaDir = Directory(extractDir);
+      for (final String chapterKey in entry.value.chapterKeys) {
+        final MangaChapterDirRow? mapping = mappings[chapterKey];
+        if (mapping == null) continue;
+        final String containerPath = p.join(extractDir, mapping.folderName);
+        if (!isLocalSourcePathWithinRoot(containerPath, mangaDir)) continue;
+        final bool complete;
+        if (mapping.containerKindEnum == MangaChapterContainerKind.archive) {
+          final File file = downloadChapterArchiveFile(
+            extractDir,
+            mapping.folderName,
+          );
+          complete =
+              await file.exists() &&
+              await isDownloadLibraryArchiveComplete(file);
+        } else {
+          final Directory directory = downloadChapterDirectory(
+            extractDir,
+            mapping.folderName,
+          );
+          complete =
+              await directory.exists() &&
+              await readDownloadLibraryChapterPayload(directory) != null;
+        }
+        if (complete) {
+          downloaded.add(entry.key);
+          break;
+        }
       }
     }
     return downloaded;
