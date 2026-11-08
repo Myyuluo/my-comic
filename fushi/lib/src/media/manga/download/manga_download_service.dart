@@ -551,11 +551,13 @@ class MangaDownloadService {
   }
 
   /// 暂停收尾：保留 staging（页级续传），把行从 `running` 落到 `paused`。
+  ///
+  /// 只覆盖仍在 `running` 的行：pauseAll 之后用户立刻点了「全部继续」时，行
+  /// 已经被改回 `queued`，迟到的暂停收尾不能把它重新按回暂停态。
   Future<void> _markPaused(MangaDownloadJobRow job) async {
     await _deleteArchiveTemp(job);
-    await _database.updateMangaDownloadJobStatus(
+    await _database.pauseRunningMangaDownloadJob(
       job.jobId,
-      status: MangaDownloadJobStatus.paused,
       updatedAt: _now,
     );
   }

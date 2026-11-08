@@ -1493,6 +1493,38 @@ void main() {
       downloads.dispose();
     });
 
+    test('暂停后立刻全部继续：迟到的暂停收尾不覆盖已恢复的排队状态', () async {
+      adapter.gate = Completer<void>();
+      final MangaDownloadService downloads = build();
+      await downloads.enqueueChapter(
+        entry: _entry(),
+        chapter: _chapters.last,
+        autoOcr: false,
+      );
+      await downloads.start();
+      while ((adapter.fetchCounts[0] ?? 0) == 0) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+
+      // worker 还卡在取页时先暂停、再立刻继续（行被改回 queued）。
+      await downloads.pauseAll();
+      await downloads.resumeAll();
+      expect(
+        (await jobOf('/chapter/1')).status,
+        MangaDownloadJobStatus.queued,
+      );
+
+      adapter.gate!.complete();
+      await downloads.whenIdle;
+
+      expect(
+        (await jobOf('/chapter/1')).status,
+        MangaDownloadJobStatus.done,
+        reason: '恢复后的排队不能被迟到的暂停收尾按回 paused',
+      );
+      downloads.dispose();
+    });
+
     test('取消暂停中的任务：删除任务行并清理 staging', () async {
       adapter.gate = Completer<void>();
       final MangaDownloadService downloads = build();

@@ -141,6 +141,24 @@ mixin _FushiDbMangaDownload on _$FushiDatabase {
     return row != null;
   }
 
+  /// 把**仍在 `running`** 的任务落到 `paused`。
+  ///
+  /// 暂停收尾专用：与「全部继续」竞态时，用户已经把行改回 `queued` 的不能再被
+  /// 迟到的暂停收尾覆盖回 `paused`（否则任务永远停在暂停态）。返回 0 = 行已
+  /// 被恢复 / 取消 / 删除，调用方无需别的处理。
+  Future<int> pauseRunningMangaDownloadJob(
+    String jobId, {
+    required int updatedAt,
+  }) =>
+      (update(mangaDownloadJobs)
+            ..where((t) =>
+                t.jobId.equals(jobId) &
+                t.status.equals(MangaDownloadJobStatus.running)))
+          .write(MangaDownloadJobsCompanion(
+        status: const Value<String>(MangaDownloadJobStatus.paused),
+        updatedAt: Value<int>(updatedAt),
+      ));
+
   /// 全局暂停：把排队中 / 下载中的任务置为 `paused`。`failed` / `done` 等
   /// 其它状态不动。返回受影响行数。
   Future<int> pauseQueuedAndRunningMangaDownloadJobs({
