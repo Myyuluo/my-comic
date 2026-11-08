@@ -22,3 +22,7 @@ status: accepted
 ## Amendment 2026-11-08
 
 CBZ 从「后续也可」变为新下载的默认形态：设置新增「保存为CBZ压缩包」开关（默认开启，见 ADR 0015）。新开始的在线下载写 `downloads/{source}/{manga}/{chapter}.cbz`，包根平铺页图与 `pages.json`；已存在的文件夹章节原样保留，不做批量转换，两种 Chapter container 共存。数据库把容器类型显式化（folder / archive，schema v2→v3），已有行迁移为 folder；章节载体抽象、阅读、缩略图、删除、Rebuild download index 与互联读取都按容器类型分支。写入仍先落到 `.staging/{jobId}`，再生成同目录的 `{chapter}.cbz.tmp` 并原子改名为最终 `.cbz`，取消或崩溃不会留下可见的半成品。
+
+## Amendment 2026-11-08（local-source-polish）
+
+新下载的 Source 目录名改为 `源名 (LANG)`：语言取 Source 的语言原值并大写，保留子标签（`zh-Hans` → `ZH-HANS`）；语言为空、`all` 或 `multi` 时不写语言后缀。已有 Source 目录不重命名，继续按源身份复用；`pages.json.source.name` 仍保存裸源名，语言只体现在目录名上。目录名的净化、截断与同名冲突后缀规则不变。
