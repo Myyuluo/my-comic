@@ -606,13 +606,14 @@ void main() {
     expect(staging.existsSync(), isTrue, reason: '下载中的页只在 staging 里');
 
     await downloads.cancel(job.jobId);
+    expect(
+      await db.getMangaDownloadJob(job.jobId),
+      isNull,
+      reason: '取消立即删除任务行（下载页即时移除），不必等 worker 收尾',
+    );
     adapter.gate!.complete();
     await downloads.whenIdle;
 
-    expect(
-      (await jobOf('/chapter/1')).status,
-      MangaDownloadJobStatus.cancelled,
-    );
     expect(staging.existsSync(), isFalse, reason: '取消要删 staging');
     final List<String> leftovers = Directory(bookDir)
         .listSync()
@@ -1161,7 +1162,7 @@ void main() {
     downloads.dispose();
   });
 
-  test('取消 running 的任务 → cancelled，半成品目录被删', () async {
+  test('取消 running 的任务 → 删除任务行，半成品目录被删', () async {
     adapter.gate = Completer<void>();
     final MangaDownloadService downloads = build();
     final MangaDownloadJobRow job = await downloads.enqueueChapter(
@@ -1192,13 +1193,14 @@ void main() {
     );
 
     await downloads.cancel(job.jobId);
+    expect(
+      await db.getMangaDownloadJob(job.jobId),
+      isNull,
+      reason: '取消立即删除任务行（下载页即时移除），不必等 worker 收尾',
+    );
     adapter.gate!.complete();
     await downloads.whenIdle;
 
-    expect(
-      (await jobOf('/chapter/1')).status,
-      MangaDownloadJobStatus.cancelled,
-    );
     expect(staging.existsSync(), isFalse, reason: '取消要删半成品 staging');
     expect(
       downloadChapterDirectory(bookDir, 'Chapter 1').existsSync(),
@@ -1208,7 +1210,7 @@ void main() {
     downloads.dispose();
   });
 
-  test('queued 的任务取消 → 直接 cancelled；再 enqueue 同章 → 重置成 queued', () async {
+  test('queued 的任务取消 → 删除任务行；再 enqueue 同章 → 重新排队', () async {
     final MangaDownloadService downloads = build();
     final MangaDownloadJobRow job = await downloads.enqueueChapter(
       entry: _entry(),
@@ -1217,8 +1219,9 @@ void main() {
     );
     await downloads.cancel(job.jobId);
     expect(
-      (await jobOf('/chapter/2')).status,
-      MangaDownloadJobStatus.cancelled,
+      await db.getMangaDownloadJob(job.jobId),
+      isNull,
+      reason: '取消直接删除任务行，不保留已取消记录',
     );
     final MangaDownloadJobRow again = await downloads.enqueueChapter(
       entry: _entry(),

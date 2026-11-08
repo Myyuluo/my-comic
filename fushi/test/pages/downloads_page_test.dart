@@ -121,6 +121,23 @@ void main() {
       expect(find.text(t.downloads_page_no_tasks), findsNothing);
     });
 
+    testWidgets('已完成的任务不在列表显示，但任务行保留在数据库', (WidgetTester tester) async {
+      await insertTask(
+        jobId: 'job-done',
+        status: MangaDownloadJobStatus.done,
+        createdAt: 1,
+      );
+      await pumpPage(tester);
+
+      expect(find.byType(DownloadTaskCard), findsNothing, reason: '完成即从下载页消失');
+      expect(find.text(t.downloads_page_no_tasks), findsOneWidget);
+      expect(
+        (await db.getMangaDownloadJob('job-done'))?.status,
+        MangaDownloadJobStatus.done,
+        reason: 'done 行保留在数据库中，仅供作品页判 Missing',
+      );
+    });
+
     testWidgets('页面内不显示视图页签', (WidgetTester tester) async {
       await insertTask();
       await pumpPage(tester);
@@ -170,7 +187,9 @@ void main() {
       expect(find.text('某作品 · 第 1 话'), findsNothing, reason: '点整行不应展开出详情');
     });
 
-    testWidgets('排队中与下载中的行尾可直接取消', (WidgetTester tester) async {
+    testWidgets('取消排队中/下载中的任务：行立即消失且任务行被删除', (
+      WidgetTester tester,
+    ) async {
       await insertTask(
         jobId: 'job-queued',
         status: MangaDownloadJobStatus.queued,
@@ -190,28 +209,30 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        (await db.getMangaDownloadJob('job-queued'))?.status,
-        MangaDownloadJobStatus.cancelled,
-        reason: '点取消直接调用现有取消能力',
+        await db.getMangaDownloadJob('job-queued'),
+        isNull,
+        reason: '取消直接删除任务行，不保留已取消记录',
       );
+      expect(find.byType(DownloadTaskCard), findsOneWidget, reason: '列表立即移除该行');
       expect(
-        find.byTooltip(t.dialog_cancel),
-        findsOneWidget,
-        reason: '已取消的行换成重试图标',
+        find.text(t.download_status_cancelled),
+        findsNothing,
+        reason: '下载页不再出现「已取消」行',
       );
 
       await tester.tap(find.byTooltip(t.dialog_cancel));
       await tester.pumpAndSettle();
 
+      expect(await db.getMangaDownloadJob('job-running'), isNull);
+      expect(find.byType(DownloadTaskCard), findsNothing);
       expect(
-        (await db.getMangaDownloadJob('job-running'))?.status,
-        MangaDownloadJobStatus.cancelled,
+        find.text(t.downloads_page_no_tasks),
+        findsOneWidget,
+        reason: '没有任务时回到空态',
       );
-      expect(find.byTooltip(t.dialog_cancel), findsNothing);
-      expect(find.byTooltip(t.retry), findsNWidgets(2));
     });
 
-    testWidgets('失败与已取消的行尾可直接重试', (WidgetTester tester) async {
+    testWidgets('失败的任务保留在列表，行内显示「继续」并可重试', (WidgetTester tester) async {
       await insertTask(
         jobId: 'job-failed',
         status: MangaDownloadJobStatus.failed,
@@ -224,50 +245,61 @@ void main() {
       );
       await pumpPage(tester);
 
-      final Finder retry = find.byTooltip(t.retry);
-      expect(retry, findsNWidgets(2), reason: '失败与已取消的行尾都有重试图标');
+      expect(
+        find.byType(DownloadTaskCard),
+        findsOneWidget,
+        reason: '失败任务保留；遗留的已取消行不再展示',
+      );
+      expect(
+        find.byTooltip(t.download_resume),
+        findsOneWidget,
+        reason: '失败行的行内操作是「继续」',
+      );
+      expect(find.byTooltip(t.retry), findsNothing);
+      expect(find.byTooltip(t.dialog_cancel), findsNothing);
 
-      await tester.tap(retry.first);
+      await tester.tap(find.byTooltip(t.download_resume));
       await tester.pumpAndSettle();
 
       expect(
         (await db.getMangaDownloadJob('job-failed'))?.status,
         MangaDownloadJobStatus.queued,
-        reason: '点重试直接调用现有重试能力',
+        reason: '「继续」复用重试：同一行复位为排队',
       );
-      expect(
-        (await db.getMangaDownloadJob('job-cancelled'))?.status,
-        MangaDownloadJobStatus.cancelled,
-      );
+      expect(find.byTooltip(t.download_resume), findsNothing);
       expect(
         find.byTooltip(t.dialog_cancel),
         findsOneWidget,
         reason: '重试后该行变回排队中，行尾换成取消图标',
       );
-      expect(find.byTooltip(t.retry), findsOneWidget);
     });
 
-    testWidgets('已完成的行不显示行尾操作', (WidgetTester tester) async {
-      await insertTask(status: MangaDownloadJobStatus.done);
+    testWidgets('重试成功（任务完成）后从列表消失并回到空态', (WidgetTester tester) async {
+      await insertTask(
+        jobId: 'job-failed',
+        status: MangaDownloadJobStatus.failed,
+        createdAt: 1,
+      );
       await pumpPage(tester);
 
-      expect(find.byType(DownloadTaskCard), findsOneWidget);
-      expect(find.byTooltip(t.retry), findsNothing);
-      expect(find.byTooltip(t.dialog_cancel), findsNothing);
+      await tester.tap(find.byTooltip(t.download_resume));
+      await tester.pumpAndSettle();
       expect(
-        find.descendant(
-          of: find.byType(DownloadTaskCard),
-          matching: find.byIcon(Icons.close),
-        ),
-        findsNothing,
+        (await db.getMangaDownloadJob('job-failed'))?.status,
+        MangaDownloadJobStatus.queued,
       );
-      expect(
-        find.descendant(
-          of: find.byType(DownloadTaskCard),
-          matching: find.byIcon(Icons.refresh),
-        ),
-        findsNothing,
+
+      // worker 跑完把同一行标为 done（真实下载路径由服务测试覆盖）；页面按
+      // 已完成规则移除该行。
+      await db.updateMangaDownloadJobStatus(
+        'job-failed',
+        status: MangaDownloadJobStatus.done,
+        updatedAt: 2,
       );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(DownloadTaskCard), findsNothing);
+      expect(find.text(t.downloads_page_no_tasks), findsOneWidget);
     });
   });
 
@@ -651,8 +683,9 @@ Future<_HostAppModel> _pumpHome(
         runtime: 'mihon',
         title: 'Fixture series',
         chapterTitle: 'Chapter $i',
-        // done：任务列表不启动 worker（本测试只验证列表与保活）。
-        status: const Value<String>(MangaDownloadJobStatus.done),
+        // failed：worker 只领取 queued，本测试只验证列表与保活（done 行已不在
+        // 下载页展示，ticket 05）。
+        status: const Value<String>(MangaDownloadJobStatus.failed),
         pagesDone: const Value<int>(1),
         pagesTotal: const Value<int>(1),
         attemptCount: const Value<int>(0),
