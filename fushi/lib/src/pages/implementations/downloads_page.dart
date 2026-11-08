@@ -97,12 +97,12 @@ class _DownloadsPageState extends ConsumerState<DownloadsPage> {
     final double fabExtent = fushiFabMetrics(FushiFabSize.regular).extent;
     final bool showGlobalButton = _downloads != null && _entries.isNotEmpty;
     final bool resumeAll = _canResumeAll;
-    // 用户口径：右下角按钮文字缩到 70%（titleLarge → 约 15.4），图标放大
-    // 一倍（FilledButton 默认 18 → 36）；粗体字形与 onSecondaryContainer 前景
-    // 保持不变。
-    final TextStyle pillBaseStyle = FushiPageChromeTitle.titleStyleOf(context);
-    final TextStyle pillLabelStyle = pillBaseStyle.copyWith(
-      fontSize: (pillBaseStyle.fontSize ?? 22) * 0.7,
+    // 用户口径：右下角按钮文字 15，图标保持自身比例、与文字同高（15）；
+    // 粗体字形与 onSecondaryContainer 前景保持不变。
+    final TextStyle pillLabelStyle = FushiPageChromeTitle.titleStyleOf(
+      context,
+    ).copyWith(
+      fontSize: 15,
       color: Theme.of(context).colorScheme.onSecondaryContainer,
     );
     return FushiFloatingChromeHost(
@@ -184,7 +184,7 @@ class _DownloadsPageState extends ConsumerState<DownloadsPage> {
                       onPressed: () => unawaited(_toggleAll(resumeAll)),
                       icon: FushiIcon(
                         resumeAll ? FushiIcons.play : FushiIcons.pause,
-                        size: 36,
+                        size: 15,
                       ),
                       label: Text(
                         resumeAll
