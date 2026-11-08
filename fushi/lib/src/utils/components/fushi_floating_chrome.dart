@@ -1166,6 +1166,13 @@ class _FushiSpringRevealState extends State<FushiSpringReveal>
     spring: fushiChromeRevealFadeSpring(context),
   );
 
+  /// 子树在「包装层 ↔ 裸 child」换装时保持同一个 element：完全展开的快速路径
+  /// 会撤掉裁剪 / 位移 / 透明包装，直接把 child 交给上层。若 child 自带入场
+  /// 动画（批量栏的 MD3 tween），换装会把它重新 inflate、动画从 0 重播一遍
+  /// （2026-11-08 漫画页批量栏第二次入场）。GlobalKey 让换装变成 reparent，
+  /// State / 动画进度 / 焦点原地保留，渲染结构仍按快速路径省掉包装层。
+  final GlobalKey _childKey = GlobalKey(debugLabel: 'FushiSpringReveal.child');
+
   @override
   void didUpdateWidget(covariant FushiSpringReveal oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -1191,7 +1198,9 @@ class _FushiSpringRevealState extends State<FushiSpringReveal>
         _spring.animation,
         _fade.animation,
       ]),
-      child: widget.child,
+      // 两条路径共用这枚 keyed 壳：完全展开返回它本身，收起 / 展开中作为包装层
+      // 的最内层 child。换装时子树由 GlobalKey reparent，不重新 inflate。
+      child: KeyedSubtree(key: _childKey, child: widget.child),
       builder: (BuildContext context, Widget? child) {
         final double value = _spring.value;
         final double opacity = _fade.value.clamp(0.0, 1.0);
