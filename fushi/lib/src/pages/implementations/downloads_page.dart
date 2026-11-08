@@ -164,19 +164,32 @@ class _DownloadsPageState extends ConsumerState<DownloadsPage> {
               PositionedDirectional(
                 end: tokens.spacing.page,
                 bottom: bottomInset + tokens.spacing.page,
-                child: FushiFab(
-                  key: const ValueKey<String>('downloads-global-toggle-fab'),
-                  heroTag: null,
-                  tooltip: resumeAll
-                      ? t.download_resume_all
-                      : t.download_pause_all,
-                  icon: FushiIcon(
-                    resumeAll ? FushiIcons.play : FushiIcons.pause,
+                child: FushiFloatingTextAction(
+                  child: FushiTooltip(
+                    message: resumeAll
+                        ? t.download_resume_all
+                        : t.download_pause_all,
+                    child: FilledButton.icon(
+                      key: const ValueKey<String>(
+                        'downloads-global-toggle-fab',
+                      ),
+                      onPressed: () => unawaited(_toggleAll(resumeAll)),
+                      icon: FushiIcon(
+                        resumeAll ? FushiIcons.play : FushiIcons.pause,
+                      ),
+                      label: Text(
+                        resumeAll
+                            ? t.download_resume_all
+                            : t.download_pause_all,
+                        style: FushiPageChromeTitle.titleStyleOf(context),
+                      ),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: fushiPageChromeColor(context),
+                        foregroundColor: fushiPageChromeForeground(context),
+                        textStyle: FushiPageChromeTitle.titleStyleOf(context),
+                      ),
+                    ),
                   ),
-                  label: Text(
-                    resumeAll ? t.download_resume_all : t.download_pause_all,
-                  ),
-                  onPressed: () => unawaited(_toggleAll(resumeAll)),
                 ),
               ),
           ],

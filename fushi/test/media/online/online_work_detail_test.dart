@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi/src/media/online/online_work_detail.dart';
@@ -186,5 +187,48 @@ void main() {
     }
 
     expect(tapped, <String>['Genre 1', 'Genre 6', 'Genre 10']);
+  });
+
+  testWidgets('源分类悬停提亮，鼠标指针保持默认', (WidgetTester tester) async {
+    await pumpGenreHeader(
+      tester,
+      genres: const <String>['奇幻'],
+      maxGenres: null,
+      onGenreTap: (_) {},
+    );
+
+    final Finder chip = find.widgetWithText(FushiTagChip, '奇幻');
+    await tester.ensureVisible(chip);
+    await tester.pumpAndSettle();
+
+    Color? chipColor() {
+      final Finder container = find
+          .descendant(of: chip, matching: find.byType(AnimatedContainer))
+          .first;
+      final BoxDecoration decoration =
+          tester.widget<AnimatedContainer>(container).decoration!
+              as BoxDecoration;
+      return decoration.color;
+    }
+
+    final Color? before = chipColor();
+    final TestGesture mouse = await tester.createGesture(
+      kind: PointerDeviceKind.mouse,
+    );
+    await mouse.addPointer(location: Offset.zero);
+    addTearDown(mouse.removePointer);
+    await mouse.moveTo(tester.getCenter(chip));
+    await tester.pumpAndSettle();
+
+    expect(chipColor(), isNot(before), reason: '悬停应把底色提亮');
+    expect(
+      tester
+          .widget<InkWell>(
+            find.descendant(of: chip, matching: find.byType(InkWell)),
+          )
+          .mouseCursor,
+      SystemMouseCursors.basic,
+      reason: '与作者名 hover 一致：指针保持默认箭头',
+    );
   });
 }
