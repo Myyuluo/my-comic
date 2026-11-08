@@ -61,7 +61,7 @@ void main() {
       );
       expect(
         (await AppPaths.localComicRootDirectory()).path,
-        p.join(content.path, 'localcomic'),
+        p.join(content.path, 'local'),
       );
     });
 

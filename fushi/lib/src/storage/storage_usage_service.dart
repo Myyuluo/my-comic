@@ -446,9 +446,11 @@ const Map<StorageCategoryId, List<String>> kStorageCategoryContentRootChildren =
     <StorageCategoryId, List<String>>{
       StorageCategoryId.books: <String>[
         // Ticket 12：Content root 的 Download library 与 Local source 也属于
-        // 用户可见的漫画内容，不能落进「其他未归类」。
+        // 用户可见的漫画内容，不能落进「其他未归类」。Local source root 自
+        // local-source-polish 起更名为 `local`；旧 `localcomic` 不再扫描，
+        // 因此归入「其他」。
         'downloads',
-        'localcomic',
+        'local',
         'fushi_books',
         // 旧名存量目录（启动就地改名失败时仍可能在磁盘上）：引用迁移常量，
         // 不重复旧代号字面量（fushi_rename_guard 禁模式）。

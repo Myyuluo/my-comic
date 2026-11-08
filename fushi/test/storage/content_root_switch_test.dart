@@ -9,7 +9,7 @@ import 'package:fushi/src/storage/content_root_switch.dart';
 import 'package:fushi/src/storage/content_root_validation.dart';
 
 /// Ticket 08：切换 Content root 只在新位置创建 `downloads` / `autobackup` /
-/// `localcomic` 三个空文件夹，不移动/复制任何旧文件，也不重基库内路径。
+/// `local` 三个空文件夹，不移动/复制任何旧文件，也不重基库内路径。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -56,6 +56,11 @@ void main() {
       ),
     )..createSync(recursive: true);
     oldChapter.writeAsStringSync('old page bytes');
+    // 旧 Local source root（更名前）：切换后原地保留，绝不迁移。
+    final File oldLocalPage = File(
+      p.join(oldContent.path, 'localcomic', 'Old Manga', 'Ch 1', '001.jpg'),
+    )..createSync(recursive: true);
+    oldLocalPage.writeAsStringSync('old local page');
     final Directory newContent = Directory(p.join(tmp.path, 'NewContent'));
 
     final ContentRootSwitchResult result = await switcher().switchTo(
@@ -69,15 +74,22 @@ void main() {
     for (final String name in <String>[
       'downloads',
       'autobackup',
-      'localcomic',
+      'local',
     ]) {
       final Directory dir = Directory(p.join(newContent.path, name));
       expect(dir.existsSync(), isTrue, reason: '$name 必须存在');
       expect(dir.listSync(), isEmpty, reason: '切换不得复制旧文件到 $name');
     }
+    expect(
+      Directory(p.join(newContent.path, 'localcomic')).existsSync(),
+      isFalse,
+      reason: '更名后不再创建旧 localcomic',
+    );
     // 旧文件原地保留：没有搬移、没有复制、没有删除。
     expect(oldChapter.existsSync(), isTrue);
     expect(oldChapter.readAsStringSync(), 'old page bytes');
+    expect(oldLocalPage.existsSync(), isTrue, reason: '旧 localcomic 不得删除');
+    expect(oldLocalPage.readAsStringSync(), 'old local page');
     expect(
       File(
         p.join(
@@ -132,7 +144,7 @@ void main() {
     for (final String name in <String>[
       'downloads',
       'autobackup',
-      'localcomic',
+      'local',
     ]) {
       expect(Directory(p.join(oldContent.path, name)).existsSync(), isTrue);
     }

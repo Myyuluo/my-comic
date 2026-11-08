@@ -334,7 +334,7 @@ void main() {
     for (final String name in <String>[
       'downloads',
       'autobackup',
-      'localcomic',
+      'local',
     ]) {
       final Directory dir = Directory(p.join(target.path, name));
       expect(dir.existsSync(), isTrue, reason: '$name 必须创建');

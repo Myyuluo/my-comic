@@ -1,8 +1,8 @@
-/// 把 Local source root（`localcomic/{manga}/...`）登记进 Library。
+/// 把 Local source root（`local/{manga}/...`）登记进 Library。
 ///
 /// 关键约束（ADR 0013 / storage-layout spec）：
 /// - **原地读取、不复制**：登记只写 `epub_books` 行，`extractDir` 直接指向
-///   `localcomic` 里的作品目录；不碰受管书库（`fushi_books`）。
+///   `local` 里的作品目录；不碰受管书库（`fushi_books`）。
 /// - **移出书架不删文件**：[removeFromLibrary] 只删行并立 `book_tombstones`；
 ///   删除本地文件是单独的 [deleteLocalFiles]，且必须显式 `confirmed: true`。
 /// - **墓碑防复活由调用方执行**：本类登记入口不查墓碑；拖入（LocalSourceDrop）
@@ -81,7 +81,7 @@ class LocalSourceLibrary {
 
   final FushiDatabase db;
 
-  /// Local source root（`<Content root>/localcomic`）。
+  /// Local source root（`<Content root>/local`）。
   final Directory root;
 
   /// 移出书架：删记录 + 立墓碑，**不删磁盘文件**。
@@ -97,7 +97,7 @@ class LocalSourceLibrary {
 
   /// 「删除本地文件」——单独的用户动作，[confirmed] 必须为 true。
   ///
-  /// 只允许删除 `localcomic` 之内的已登记目录；路径越界时拒绝且不动文件/记录。
+  /// 只允许删除 `local` 之内的已登记目录；路径越界时拒绝且不动文件/记录。
   /// 删除后同样立墓碑，避免下次扫描复活空记录。
   Future<LocalSourceDeleteResult> deleteLocalFiles(
     String bookKey, {

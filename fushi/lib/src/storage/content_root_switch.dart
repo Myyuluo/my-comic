@@ -40,7 +40,7 @@ class ContentRootSwitchResult {
 ///
 /// 只做三件事：
 ///  1. 校验目标位置（绝对、可写、不碰安装目录与 Program state root）；
-///  2. 在目标根下创建 `downloads` / `autobackup` / `localcomic` 三个空目录；
+///  2. 在目标根下创建 `downloads` / `autobackup` / `local` 三个空目录；
 ///  3. 写入 `content_root` 偏好（目标就是当前用户默认根时改为删除偏好）。
 ///
 /// **不**移动 / 复制 / 删除任何用户文件，**不**重基数据库里记录的路径。旧路径下

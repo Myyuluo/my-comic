@@ -226,7 +226,7 @@ Root: HKCU; Subkey: "Software\Classes\.ts\OpenWithProgids"; ValueType: none; Val
 ; 默认位置是 exe 同级的 userdata；安装目录不可写时 app 回退到
 ; %LOCALAPPDATA%\MyComic\userdata（AppPaths.fallbackProgramStateRootFor）。回退位置
 ; 是 per-user、应用专属的固定路径，直接显式删除即可，不需要额外的注册表/标记文件。
-; Content root（默认 <Documents>\MyComic 下的 downloads / autobackup / localcomic）
+; Content root（默认 <Documents>\MyComic 下的 downloads / autobackup / local）
 ; 是用户可见的漫画内容，卸载不得删除，所以这里一条都不能出现。
 Type: filesandordirs; Name: "{app}\userdata"
 Type: filesandordirs; Name: "{localappdata}\MyComic\userdata"

@@ -100,7 +100,7 @@ class MangaChapterList extends StatelessWidget {
   final Set<String> downloadedChapterKeys;
 
   /// 宿主明确判定为 Missing 的章（ticket 08：Local source 作品切到新 Content
-  /// root 后仍留在书架里，旧目录不再属于当前 `localcomic`）。命中时覆盖普通
+  /// root 后仍留在书架里，旧目录不再属于当前 `local`）。命中时覆盖普通
   /// 下载状态合成——那些章没有下载任务行，光靠任务表表达不出 Missing。
   final Set<String> missingChapterKeys;
 

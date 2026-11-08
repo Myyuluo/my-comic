@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi/i18n/strings.g.dart';
 
@@ -123,6 +125,63 @@ void main() {
       expect(
         AppLocale.zhCn.translations.video_source_scrape_clear_all,
         '清理全部刮削记录',
+      );
+    });
+  });
+
+  group('Local source root rename', () {
+    test('用户可见文案不再出现旧目录名 localcomic', () {
+      final List<String> hits = <String>[];
+      for (final FileSystemEntity entity in Directory('lib/i18n').listSync()) {
+        if (entity is! File || !entity.path.endsWith('.i18n.json')) continue;
+        if (entity.readAsStringSync().contains('localcomic')) {
+          hits.add(entity.path);
+        }
+      }
+      expect(hits, isEmpty, reason: '旧目录名不得出现在用户可见文案：${hits.join(', ')}');
+    });
+
+    test('确认文案使用新的 local 目录名', () {
+      final zh = AppLocale.zhCn.translations;
+      expect(
+        zh.data_storage_import_local_comics_subtitle,
+        '扫描本地漫画文件夹（local），把新作品加入书架；原地读取，不复制、不移动文件。',
+      );
+      expect(
+        zh.manga_series_delete_local_files_confirm,
+        '要从 local 删除这部作品的文件夹吗？此操作无法撤销。',
+      );
+      expect(
+        zh.manga_series_remove_local_confirm,
+        '把这部作品移出书架？local 中的文件会保留。',
+      );
+      expect(
+        zh.rebuild_download_index_confirm_body,
+        '将扫描当前漫画数据位置下的 downloads 与 local：重新关联书架里已有的作品，'
+        '并把磁盘上还没入库的作品补进书架。不会移动或删除任何文件；'
+        '主动移出书架的作品不会被加回。',
+      );
+
+      final en = AppLocale.en.translations;
+      expect(
+        en.data_storage_import_local_comics_subtitle,
+        'Scan the local comics folder (local) and add new works to your library. '
+        'Files are read in place; nothing is copied or moved.',
+      );
+      expect(
+        en.manga_series_delete_local_files_confirm,
+        'Delete this manga folder from local? This cannot be undone.',
+      );
+      expect(
+        en.manga_series_remove_local_confirm,
+        'Remove this manga from the shelf? Files in local will be kept.',
+      );
+      expect(
+        en.rebuild_download_index_confirm_body,
+        'my-comic will scan downloads and local under the current manga data '
+        'location, re-link books already in your library, and add works found '
+        'on disk that are not on your shelf. Files are never moved or deleted; '
+        'works you removed from the library are not added back.',
       );
     });
   });

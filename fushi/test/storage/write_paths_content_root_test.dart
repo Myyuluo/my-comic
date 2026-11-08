@@ -69,7 +69,7 @@ void main() {
     expect((await AppPaths.autobackupRootDirectory()).path,
         p.join(content, 'autobackup'));
     expect((await AppPaths.localComicRootDirectory()).path,
-        p.join(content, 'localcomic'));
+        p.join(content, 'local'));
     expect(p.equals(await AudiobookStorage.audiobooksRootDir(),
         p.join(content, 'audiobooks')), isTrue);
 
@@ -88,7 +88,7 @@ void main() {
     expect((await AppPaths.downloadsRootDirectory()).path,
         p.join(content.path, 'downloads'));
     expect((await AppPaths.localComicRootDirectory()).path,
-        p.join(content.path, 'localcomic'));
+        p.join(content.path, 'local'));
     expect(p.equals(await AudiobookStorage.audiobooksRootDir(),
         p.join(content.path, 'audiobooks')), isTrue);
   });

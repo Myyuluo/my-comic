@@ -20,7 +20,7 @@ import 'package:fushi_engine/media/manga/local_source/local_source_library.dart'
 import '../../helpers/test_platform_services.dart';
 
 /// Ticket 05/10 的恢复条目：源未安装时 Rebuild 把 `downloads/{source}/{manga}`
-/// 降级成指向该文件夹的 Local source 条目。它的文件不在 `localcomic` 根内，
+/// 降级成指向该文件夹的 Local source 条目。它的文件不在 `local` 根内，
 /// 「删除本地文件」必然被 LocalSourceLibrary 拒绝——入口必须隐藏。
 class _TestAppModel extends AppModel {
   _TestAppModel(this._db, this._paths, Directory root)
@@ -141,11 +141,11 @@ void main() {
     expect(
       find.byKey(const ValueKey<String>('manga_series_delete_local_files')),
       findsNothing,
-      reason: '指向 downloads 的条目不在 localcomic 根内，删除动作必须隐藏',
+      reason: '指向 downloads 的条目不在 local 根内，删除动作必须隐藏',
     );
   });
 
-  testWidgets('localcomic 根里的条目仍显示「删除本地文件」', (WidgetTester tester) async {
+  testWidgets('local 根里的条目仍显示「删除本地文件」', (WidgetTester tester) async {
     tester.view.physicalSize = const Size(500, 1800);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
@@ -169,7 +169,7 @@ void main() {
     expect(
       find.byKey(const ValueKey<String>('manga_series_delete_local_files')),
       findsOneWidget,
-      reason: 'localcomic 内的条目仍可显式删除本地文件',
+      reason: 'local 内的条目仍可显式删除本地文件',
     );
   });
 }

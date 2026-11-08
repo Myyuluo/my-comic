@@ -21,7 +21,7 @@ import 'package:fushi_engine/media/manga/mokuro_payload.dart';
 
 /// Ticket 09：Rebuild download index 的 re-link 半场。
 ///
-/// 书架条目是主线：在**当前** Content root 的 `downloads` / `localcomic` 里按
+/// 书架条目是主线：在**当前** Content root 的 `downloads` / `local` 里按
 /// `pages.json` 稳定 ID 优先、文件夹名兜底重新定位章节，更新 `extractDir` 与
 /// `manga_chapter_dirs` 映射。找不到的章保持记录并显示 Missing；不移动/删除
 /// 任何文件，不读旧 Content root，不扫描 `autobackup`。
@@ -39,7 +39,7 @@ void main() {
     root = await Directory.systemTemp.createTemp('rebuild_download_index_');
     content = Directory(p.join(root.path, 'Content'));
     downloadsRoot = Directory(p.join(content.path, 'downloads'));
-    localComicRoot = Directory(p.join(content.path, 'localcomic'));
+    localComicRoot = Directory(p.join(content.path, 'local'));
     oldContent = Directory(p.join(root.path, 'OldContent'));
     await downloadsRoot.create(recursive: true);
     await localComicRoot.create(recursive: true);
@@ -573,7 +573,7 @@ void main() {
 
   test('Local source 条目搬到新 Content root 后按相对路径重新关联（原地读取）', () async {
     final Directory oldLocalRoot = Directory(
-      p.join(oldContent.path, 'localcomic'),
+      p.join(oldContent.path, 'local'),
     );
     final File oldPage = File(
       p.join(oldLocalRoot.path, 'Local Manga', 'Ch 1', '001.jpg'),
@@ -584,7 +584,7 @@ void main() {
     );
     final EpubBookRow before = (await db.getAllEpubBooks()).single;
 
-    // 用户把整个作品目录搬到新 Content root 的 localcomic 下。
+    // 用户把整个作品目录搬到新 Content root 的 local 下。
     final Directory newMangaDir = Directory(
       p.join(localComicRoot.path, 'Local Manga'),
     );
@@ -600,7 +600,7 @@ void main() {
     expect(
       p.equals(after.extractDir, newMangaDir.path),
       isTrue,
-      reason: 'Local source 原地读取，extractDir 必须指向当前 localcomic 根',
+      reason: 'Local source 原地读取，extractDir 必须指向当前 local 根',
     );
     expect(
       LocalSourceMetadata.tryParse(after.sourceMetadata)?.relativePath,
@@ -619,7 +619,7 @@ void main() {
 
   test('Local source 改名后按文件夹名回退；找不到的作品保留记录并计 Missing', () async {
     final Directory oldLocalRoot = Directory(
-      p.join(oldContent.path, 'localcomic'),
+      p.join(oldContent.path, 'local'),
     );
     final File oldLocalPage = File(
       p.join(oldLocalRoot.path, 'Old local name', 'Ch 1', '001.jpg'),
@@ -673,7 +673,7 @@ void main() {
     expect(elsewhere.existsSync(), isTrue);
   });
 
-  test('不扫描 autobackup；localcomic 里书架没有的作品由票 10 补建条目', () async {
+  test('不扫描 autobackup；local 里书架没有的作品由票 10 补建条目', () async {
     final OnlineMangaLibraryEntry entry = entryFor();
     final String oldMangaDir = p.join(
       oldContent.path,
@@ -697,7 +697,7 @@ void main() {
       entry: entry,
       chapter: entry.chapters[0],
     );
-    // localcomic 里放一部书架没有的作品——票 10 负责创建条目。
+    // local 里放一部书架没有的作品——票 10 负责创建条目。
     final File orphanPage = File(
       p.join(localComicRoot.path, 'Orphan local', 'Ch 1', '001.jpg'),
     );
@@ -708,7 +708,7 @@ void main() {
 
     expect(report.booksMissing, 1);
     expect(report.chaptersMissing, 2);
-    expect(report.booksAdded, 1, reason: 'localcomic 里的孤儿作品会被补建');
+    expect(report.booksAdded, 1, reason: 'local 里的孤儿作品会被补建');
     expect(
       (await db.getEpubBook('mihon-fixture'))!.extractDir,
       oldMangaDir,
@@ -722,7 +722,7 @@ void main() {
     expect(
       p.equals(added.extractDir, p.join(localComicRoot.path, 'Orphan local')),
       isTrue,
-      reason: '只登记 localcomic 里的作品，不碰 autobackup',
+      reason: '只登记 local 里的作品，不碰 autobackup',
     );
     expect(p.isWithin(content.path, added.extractDir), isTrue);
     expect(
@@ -976,7 +976,7 @@ void main() {
     expect((await db.getAllEpubBooks()).length, 1);
   });
 
-  test('localcomic 里书架没有的作品也会被登记；重复运行不重复添加', () async {
+  test('local 里书架没有的作品也会被登记；重复运行不重复添加', () async {
     final File page =
         File(p.join(localComicRoot.path, 'Local orphan', 'Ch 1', '001.jpg'))
           ..createSync(recursive: true)
@@ -1105,9 +1105,9 @@ void main() {
     );
     await markDownloaded('mihon-missing', '/c/1');
 
-    // 2) 书架里的 Local source 条目：用户把目录搬到了当前 localcomic → 更新。
+    // 2) 书架里的 Local source 条目：用户把目录搬到了当前 local → 更新。
     final Directory oldLocalRoot = Directory(
-      p.join(oldContent.path, 'localcomic'),
+      p.join(oldContent.path, 'local'),
     );
     File(p.join(oldLocalRoot.path, 'Moved local', 'Ch 1', '001.jpg'))
       ..createSync(recursive: true)
@@ -1146,7 +1146,7 @@ void main() {
       chapter: newEntry.chapters.single,
     );
 
-    // 4) 主动移出书架的 localcomic 作品 → 跳过。
+    // 4) 主动移出书架的 local 作品 → 跳过。
     final File tombstonedPage =
         File(p.join(localComicRoot.path, 'Tombstoned', 'Ch 1', '001.jpg'))
           ..createSync(recursive: true)

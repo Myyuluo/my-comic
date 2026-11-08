@@ -142,7 +142,7 @@ Android / Windows / macOS / iOS debug/beta workflow 必须使用跨 workflow 统
   和日志留在 `{app}\userdata`。
 - **卸载删除 Program state**：`[UninstallDelete]` 删除 `{app}\userdata`，以及安装目录
   不可写时 app 回退到的 `%LOCALAPPDATA%\MyComic\userdata`。Content root 的
-  `downloads` / `autobackup` / `localcomic` 一条都不能出现在卸载段。
+  `downloads` / `autobackup` / `local` 一条都不能出现在卸载段。
 - 安装目录不可写时 app 回退到 `%LOCALAPPDATA%\MyComic\userdata`，并在首页首帧弹一次
   可见提示：便携状态不随安装目录走（`program_state_fallback_notice.dart`）。
   安装器预检也会在用户硬要装进不可写目录时把这条后果写进提示。

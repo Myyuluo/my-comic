@@ -147,7 +147,7 @@ abstract class OnlineSourceCatalog<T> {
   IconData emptyIcon({required bool searching}) => FushiIcons.searchOff;
 
   /// 空结果占位文案；默认沿用 [emptyText]（既有源的文案不变）。本地图源用它
-  /// 区分「localcomic 里还没有漫画」与「搜索没命中」。
+  /// 区分「local 里还没有漫画」与「搜索没命中」。
   String emptyTextFor({required bool searching}) => emptyText;
 
   /// 筛选按钮的提示（各源沿用自己原来的叫法：Mihon 叫「来源偏好」，LNReader 叫

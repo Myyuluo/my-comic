@@ -5,7 +5,7 @@ import 'package:fushi_engine/media/manga/local_source/local_source_layout.dart';
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
-/// Ticket 06：`localcomic/{manga}/{chapter}/` 目录扫描。
+/// Ticket 06：`local/{manga}/{chapter}/` 目录扫描。
 ///
 /// 扫描是「导入本地漫画」的唯一入口：第一层目录是作品，含页图的直接子目录是
 /// 章节，manga 目录直接有页图时整本算单章；`cover.jpg` 只作封面不算页。

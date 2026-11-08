@@ -12,7 +12,7 @@ import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 
 /// Ticket 06：书架长按 / 批删 / 合集连删都经过 [ReaderFushiSource.deleteBook]；
-/// Local source 条目必须只删记录并立墓碑，**不删 localcomic 文件**。
+/// Local source 条目必须只删记录并立墓碑，**不删 local 文件**。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 

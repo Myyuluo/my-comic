@@ -1,6 +1,6 @@
 /// Local source root（ADR 0013）的目录扫描与章节识别。
 ///
-/// `localcomic/{manga}/{chapter}/` 是 Mihon local-source layout：
+/// `local/{manga}/{chapter}/` 是 Mihon local-source layout：
 /// - 第一层目录 = 一部 Manga；
 /// - Manga 目录下的每个含页图的直接子目录 = 一个 Chapter；
 /// - Manga 目录下的每个 `.cbz` 文件 = 一个 CBZ Chapter（包根 `pages.json`

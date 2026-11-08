@@ -11,7 +11,7 @@ import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
-/// Ticket 06：拖入 Local source 的内容**先复制**到 `localcomic/{manga}/...`，再
+/// Ticket 06：拖入 Local source 的内容**先复制**到 `local/{manga}/...`，再
 /// 登记；原始文件保持不动。
 void main() {
   late Directory root;
@@ -56,7 +56,7 @@ void main() {
     return file;
   }
 
-  test('拖入文件夹：复制进 localcomic 并登记，原文件保留', () async {
+  test('拖入文件夹：复制进 local 并登记，原文件保留', () async {
     final Directory source = Directory(p.join(outside.path, 'Dropped'))
       ..createSync(recursive: true);
     writeFile(source, 'cover.jpg');
@@ -177,7 +177,7 @@ void main() {
     expect(chapters.single.name, 'Vol 1');
   });
 
-  test('拖入已在 localcomic 里的文件夹：不复制、直接登记', () async {
+  test('拖入已在 local 里的文件夹：不复制、直接登记', () async {
     final Directory source = Directory(p.join(root.path, 'InPlace'))
       ..createSync(recursive: true);
     writeFile(source, '001.jpg');

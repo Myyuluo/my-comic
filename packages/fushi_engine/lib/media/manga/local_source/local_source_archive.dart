@@ -2,7 +2,7 @@
 ///
 /// CBZ = 标准 ZIP：页图 + 可选的包根 `pages.json`。本文件只读条目表、按需读取
 /// 条目内容，**不解压到磁盘、不复制**；阅读器把要显示的页按需落到 `cache`，
-/// `localcomic` 里的原包始终不动。
+/// `local` 里的原包始终不动。
 library;
 
 import 'dart:convert';
