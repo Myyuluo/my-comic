@@ -415,16 +415,23 @@ void main() {
     // 页签状态活在 app 级 ProviderScope 里：同一容器内保留，容器销毁即回到
     // 默认值——这正是「运行期间保留、重启回到书架」的实现边界。
     final ProviderContainer first = ProviderContainer();
-    expect(first.read(mangaTagTabSelectionProvider), isNull);
-    first.read(mangaTagTabSelectionProvider.notifier).state = 42;
-    expect(first.read(mangaTagTabSelectionProvider), 42);
+    expect(
+      first.read(mangaTagTabSelectionProvider),
+      const MangaShelfTabSelection(),
+    );
+    first.read(mangaTagTabSelectionProvider.notifier).state =
+        const MangaTagTabSelection(42);
+    expect(
+      first.read(mangaTagTabSelectionProvider),
+      const MangaTagTabSelection(42),
+    );
     first.dispose();
 
     final ProviderContainer restarted = ProviderContainer();
     addTearDown(restarted.dispose);
     expect(
       restarted.read(mangaTagTabSelectionProvider),
-      isNull,
+      const MangaShelfTabSelection(),
       reason: '重启后默认选中「书架」',
     );
   });

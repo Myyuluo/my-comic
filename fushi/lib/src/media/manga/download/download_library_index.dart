@@ -56,6 +56,24 @@ class MangaChapterContainer {
   bool get isArchive => kind == MangaChapterContainerKind.archive;
 }
 
+/// [DownloadLibraryIndex.booksWithAnyCompleteChapter] 的输入项：一本书在
+/// Download library 里的漫画目录与**当前**章节 key 列表。
+///
+/// 章节 key 来自书架快照（在线描述符 / `chaptersJson`），不是数据库映射表的
+/// 全部行——映射表里可能残留描述符已经不再列出的历史章，那些不该让整本算已下载。
+class MangaDownloadLibraryBook {
+  const MangaDownloadLibraryBook({
+    required this.extractDir,
+    required this.chapterKeys,
+  });
+
+  /// Download library 里的漫画目录。
+  final String extractDir;
+
+  /// 当前章节身份列表。
+  final Iterable<String> chapterKeys;
+}
+
 /// 按数据库映射解析章节载体与「已下载」判据。
 class DownloadLibraryIndex {
   const DownloadLibraryIndex(this.database);
@@ -172,7 +190,7 @@ class DownloadLibraryIndex {
   /// manifest + 全部页齐）。书目录不在**当前** Download library 根下（切换
   /// Content root 后的旧路径 = Missing）整本不算已下载。
   Future<Set<String>> booksWithAnyCompleteChapter(
-    Map<String, ({String extractDir, Iterable<String> chapterKeys})> books, {
+    Map<String, MangaDownloadLibraryBook> books, {
     Directory? currentDownloadsRoot,
   }) async {
     if (books.isEmpty) return <String>{};
@@ -191,11 +209,7 @@ class DownloadLibraryIndex {
           row;
     }
     final Set<String> downloaded = <String>{};
-    for (final MapEntry<
-          String,
-          ({String extractDir, Iterable<String> chapterKeys})
-        >
-        entry
+    for (final MapEntry<String, MangaDownloadLibraryBook> entry
         in books.entries) {
       final Map<String, MangaChapterDirRow>? mappings =
           mappingsByBook[entry.key];

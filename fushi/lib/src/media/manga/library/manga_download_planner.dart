@@ -23,12 +23,9 @@ planMangaChapterDownload({
   for (final OnlineMangaChapter chapter in entry.chapters.reversed) {
     if (downloadedChapterKeys.contains(chapter.key)) continue;
     final String? status = jobsByChapterKey[chapter.key]?.status;
-    if (status == MangaDownloadJobStatus.queued ||
-        status == MangaDownloadJobStatus.running ||
-        // 全局暂停的任务也在队列里（ticket 07）：不重复入队，恢复时自然开跑。
-        status == MangaDownloadJobStatus.paused) {
-      continue;
-    }
+    // 排队 / 下载中 / 全局暂停（ticket 07）都占着队列位：不重复入队，恢复时
+    // 自然开跑。
+    if (status != null && MangaDownloadJobStatus.isActive(status)) continue;
     if (chapter.locked) {
       lockedSkipped++;
       continue;

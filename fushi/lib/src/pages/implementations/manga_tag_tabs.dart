@@ -6,58 +6,100 @@ import 'package:fushi/media.dart';
 import 'package:fushi/src/utils/adaptive/adaptive_platform.dart';
 import 'package:fushi/src/utils/components/fushi_design_tokens.dart';
 import 'package:fushi/src/utils/components/fushi_floating_chrome.dart';
-import 'package:fushi/src/utils/components/fushi_motion_tokens.dart';
+import 'package:fushi/src/utils/components/fushi_floating_toolbar.dart';
+import 'package:fushi/src/utils/components/glass/fushi_apple_palette.dart';
 import 'package:fushi/src/utils/components/settings_shared.dart';
 import 'package:fushi/src/utils/misc/platform_utils.dart';
 import 'package:fushi_core/fushi_core.dart';
 
-/// 漫画页标签页签的当前选择：null = 「书架」（没有任何用户标签的漫画）。
+/// 漫画页标签页签的当前选择。
 ///
 /// 只在漫画页使用，与共享的彩色多选 `selectedTagIdsProvider` 完全独立——其他媒体
 /// 库（书籍 / 视频 / 游戏）仍保持多选筛选语义。State 活在 app 级 ProviderScope
 /// 里：应用运行期间保留当前页签，进程重启（ProviderScope 重建）回到「书架」。
-final StateProvider<int?> mangaTagTabSelectionProvider = StateProvider<int?>(
-  (_) => null,
-);
-
-/// 「书架」页签在 [FushiAdjustableSegmented] 里的占位值。
 ///
-/// [FushiAdjustableSegmented] 的泛型要求 `T extends Object`（不接受可空值），而
-/// 页签值用 null 表示「书架」更贴近数据模型；两者之间用这个哨兵互转。
-/// 标签 id 来自 SQLite 自增主键（恒为正），不会与它冲突。
-const int _kShelfTabValue = -1;
+/// 用值类型而不是 `int?` + 哨兵：页签的两种语义（书架 / 某个标签）在类型上
+/// 互斥，分派页签位与筛选谓词都不再依赖「负数 id 不会出现」这条隐含约定。
+final StateProvider<MangaTabSelection> mangaTagTabSelectionProvider =
+    StateProvider<MangaTabSelection>((_) => const MangaShelfTabSelection());
+
+/// 漫画页标签页签：书架或某个用户标签。
+sealed class MangaTabSelection {
+  const MangaTabSelection();
+}
+
+/// 「书架」页签：没有任何用户标签的漫画。
+final class MangaShelfTabSelection extends MangaTabSelection {
+  const MangaShelfTabSelection();
+
+  @override
+  bool operator ==(Object other) => other is MangaShelfTabSelection;
+
+  @override
+  int get hashCode => (MangaShelfTabSelection).hashCode;
+
+  @override
+  String toString() => 'MangaShelfTabSelection()';
+}
+
+/// 某个用户标签页签。标签 id 来自 SQLite 自增主键（恒为正）。
+final class MangaTagTabSelection extends MangaTabSelection {
+  const MangaTagTabSelection(this.tagId);
+
+  final int tagId;
+
+  @override
+  bool operator ==(Object other) =>
+      other is MangaTagTabSelection && other.tagId == tagId;
+
+  @override
+  int get hashCode => Object.hash(MangaTagTabSelection, tagId);
+
+  @override
+  String toString() => 'MangaTagTabSelection($tagId)';
+}
+
+/// 一本漫画是否属于某个页签（排他归属，页签数量与实际渲染共用这一条判据）。
+///
+/// 「书架」= 没有任何用户标签；标签页签 = 带该标签（多标签漫画在每个对应标签
+/// 下都出现）。
+bool mangaBookBelongsToTab(
+  List<BookTagRow>? tags,
+  MangaTabSelection selection,
+) => switch (selection) {
+  MangaShelfTabSelection() => tags == null || tags.isEmpty,
+  MangaTagTabSelection(:final int tagId) =>
+    tags?.any((BookTagRow tag) => tag.id == tagId) ?? false,
+};
 
 /// 统计漫画页每个页签当前会显示的条目数。
 ///
-/// 归属是排他的：没有任何用户标签的条目只计入「书架」（key `null`）；有标签的
-/// 条目只算进它自己的每个标签（多标签条目在每个标签下都出现，故各页签数量之和
-/// 可以大于书架总数）。
+/// 归属是排他的（见 [mangaBookBelongsToTab]）：多标签条目在每个标签下都计数，
+/// 故各页签数量之和可以大于书架总数。
 ///
-/// [visible] 是当前搜索 / 阅读状态（ticket 06 起再叠加漫画下载状态）过滤后的
-/// 判据——页面实际渲染与数量共用同一批谓词，切换页签或改筛选时两边不会分叉。
-Map<int?, int> countMangaTagTabItems(
+/// [visible] 是当前搜索 / 阅读状态 / 漫画下载状态过滤后的判据——页面实际渲染
+/// 与数量共用同一批谓词，切换页签或改筛选时两边不会分叉。
+Map<MangaTabSelection, int> countMangaTagTabItems(
   Iterable<MediaItem> items, {
   required String? Function(MediaItem item) bookKeyOf,
   required Map<String, List<BookTagRow>> tagMap,
-  required Set<int> tagIds,
+  required Iterable<int> tagIds,
   required bool Function(MediaItem item) visible,
 }) {
-  final Map<int?, int> counts = <int?, int>{null: 0};
-  for (final int tagId in tagIds) {
-    counts[tagId] = 0;
-  }
+  final List<MangaTabSelection> tabs = <MangaTabSelection>[
+    const MangaShelfTabSelection(),
+    for (final int tagId in tagIds) MangaTagTabSelection(tagId),
+  ];
+  final Map<MangaTabSelection, int> counts = <MangaTabSelection, int>{
+    for (final MangaTabSelection tab in tabs) tab: 0,
+  };
   for (final MediaItem item in items) {
     if (!visible(item)) continue;
     final String? bookKey = bookKeyOf(item);
     final List<BookTagRow>? tags = bookKey == null ? null : tagMap[bookKey];
-    if (tags == null || tags.isEmpty) {
-      counts[null] = counts[null]! + 1;
-      continue;
-    }
-    final Set<int> counted = <int>{};
-    for (final BookTagRow tag in tags) {
-      if (!tagIds.contains(tag.id) || !counted.add(tag.id)) continue;
-      counts[tag.id] = counts[tag.id]! + 1;
+    for (final MangaTabSelection tab in tabs) {
+      if (!mangaBookBelongsToTab(tags, tab)) continue;
+      counts[tab] = counts[tab]! + 1;
     }
   }
   return counts;
@@ -67,13 +109,13 @@ Map<int?, int> countMangaTagTabItems(
 ///
 /// 首项「书架」固定在最左（不随标签区横滚），其后按标签管理页维护的顺序排列
 /// 用户标签；放不下时只有标签区在胶囊内横向滚动。整排单选，选中段是
-/// secondaryContainer 填充的胶囊，标签自身的颜色不参与呈现。每段右侧显示当前
-/// 搜索 / 阅读状态筛选下该段会显示的漫画数（始终显示，包括 0）；标签名过长时
-/// 截断，数字不截断。
+/// secondaryContainer 填充的胶囊（Apple 设计系统 = 强调色文字、不铺底），标签
+/// 自身的颜色不参与呈现。每段右侧显示当前搜索 / 阅读状态筛选下该段会显示的
+/// 漫画数（始终显示，包括 0）；标签名过长时截断，数字不截断。
 class MangaTagTabBar extends StatelessWidget {
   const MangaTagTabBar({
     required this.tags,
-    required this.selectedTagId,
+    required this.selection,
     required this.counts,
     required this.onSelected,
     this.inline = false,
@@ -83,13 +125,13 @@ class MangaTagTabBar extends StatelessWidget {
   /// 用户标签，按标签管理页维护的顺序排列。
   final List<BookTagRow> tags;
 
-  /// 当前选中的标签 id；null = 「书架」。
-  final int? selectedTagId;
+  /// 当前选中的页签。
+  final MangaTabSelection selection;
 
-  /// 每个页签的数量（key null = 「书架」），见 [countMangaTagTabItems]。
-  final Map<int?, int> counts;
+  /// 每个页签的数量（key = 页签），见 [countMangaTagTabItems]。
+  final Map<MangaTabSelection, int> counts;
 
-  final ValueChanged<int?> onSelected;
+  final ValueChanged<MangaTabSelection> onSelected;
 
   /// 嵌在浮动 chrome 页签位时为 true：不再加页面横向留白（chrome 行已有）。
   final bool inline;
@@ -112,26 +154,23 @@ class MangaTagTabBar extends StatelessWidget {
     final Translations t = Translations.of(context);
     final List<_MangaTagTabData> entries = <_MangaTagTabData>[
       _MangaTagTabData(
-        tagId: null,
+        selection: const MangaShelfTabSelection(),
         label: t.library_view_shelf,
         keySuffix: 'shelf',
       ),
       for (final BookTagRow tag in tags)
         _MangaTagTabData(
-          tagId: tag.id,
+          selection: MangaTagTabSelection(tag.id),
           label: tag.name,
           keySuffix: '${tag.id}',
         ),
     ];
-    final List<int> values = <int>[
-      _kShelfTabValue,
-      for (final BookTagRow tag in tags) tag.id,
-    ];
-    final Widget bar = FushiAdjustableSegmented<int>(
-      values: values,
-      selected: selectedTagId ?? _kShelfTabValue,
-      onChanged: (int value) =>
-          onSelected(value == _kShelfTabValue ? null : value),
+    final Widget bar = FushiAdjustableSegmented<MangaTabSelection>(
+      values: <MangaTabSelection>[
+        for (final _MangaTagTabData entry in entries) entry.selection,
+      ],
+      selected: selection,
+      onChanged: onSelected,
       focusIdPrefix: 'manga-tag-tabs',
       child: LayoutBuilder(
         builder: (BuildContext context, BoxConstraints constraints) {
@@ -182,11 +221,11 @@ class MangaTagTabBar extends StatelessWidget {
     Widget segmentAt(int index) => _MangaTagTabSegment(
       key: ValueKey<String>('manga_tag_tab_${entries[index].keySuffix}'),
       label: entries[index].label,
-      count: counts[entries[index].tagId] ?? 0,
-      selected: entries[index].tagId == selectedTagId,
+      count: counts[entries[index].selection] ?? 0,
+      selected: entries[index].selection == selection,
       height: segmentHeight,
       keySuffix: entries[index].keySuffix,
-      onTap: () => onSelected(entries[index].tagId),
+      onTap: () => onSelected(entries[index].selection),
     );
     if (entries.length == 1) return segmentAt(0);
     final Widget tagSegments = Row(
@@ -223,20 +262,21 @@ class MangaTagTabBar extends StatelessWidget {
 @immutable
 class _MangaTagTabData {
   const _MangaTagTabData({
-    required this.tagId,
+    required this.selection,
     required this.label,
     required this.keySuffix,
   });
 
-  final int? tagId;
+  final MangaTabSelection selection;
   final String label;
 
   /// 页签稳定 key 的后缀：`shelf` 或标签 id（测试按它定位，不依赖文案）。
   final String keySuffix;
 }
 
-/// 单个页签：中性胶囊，选中只靠 secondaryContainer 填充；名称可截断，数量
-/// 始终完整显示。
+/// 单个页签：中性胶囊，选中只靠 secondaryContainer 填充（Apple = 强调色文字、
+/// 不铺底）；名称可截断，数量始终完整显示。按压 / 悬停动效与工具栏 inline
+/// 胶囊共用 [FushiCapsuleSegment]。
 class _MangaTagTabSegment extends StatelessWidget {
   const _MangaTagTabSegment({
     required this.label,
@@ -261,9 +301,12 @@ class _MangaTagTabSegment extends StatelessWidget {
     final ColorScheme cs = theme.colorScheme;
     final FushiDesignTokens tokens = FushiDesignTokens.of(context);
     final bool eink = isEinkTheme(context);
-    final Color foreground = selected
-        ? cs.onSecondaryContainer
-        : cs.onSurfaceVariant;
+    final bool apple = isGlassDesign(context);
+    final Color foreground = apple
+        ? (selected
+              ? appleColorsOf(context).accent
+              : appleColorsOf(context).secondaryLabel)
+        : (selected ? cs.onSecondaryContainer : cs.onSurfaceVariant);
     final TextStyle labelStyle =
         (theme.textTheme.titleSmall ?? const TextStyle()).copyWith(
           color: foreground,
@@ -276,53 +319,41 @@ class _MangaTagTabSegment extends StatelessWidget {
     final OutlinedBorder shape = StadiumBorder(
       side: eink ? BorderSide(color: cs.outline) : BorderSide.none,
     );
-    final Color fill = selected
-        ? cs.secondaryContainer
-        : cs.secondaryContainer.withValues(alpha: 0);
     return Semantics(
       button: true,
       selected: selected,
       inMutuallyExclusiveGroup: true,
-      child: Material(
-        type: MaterialType.transparency,
+      child: FushiCapsuleSegment(
+        selected: selected,
+        onTap: onTap,
+        height: height,
+        padding: const EdgeInsets.symmetric(
+          horizontal: MangaTagTabBar._segmentPadding,
+        ),
         shape: shape,
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          customBorder: shape,
-          onTap: onTap,
-          child: AnimatedContainer(
-            duration: fushiMotionDuration(context, FushiMotion.short),
-            curve: FushiMotion.standard,
-            height: height,
-            padding: const EdgeInsets.symmetric(
-              horizontal: MangaTagTabBar._segmentPadding,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: <Widget>[
+            ConstrainedBox(
+              constraints: const BoxConstraints(
+                maxWidth: MangaTagTabBar._labelMaxWidth,
+              ),
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: labelStyle,
+              ),
             ),
-            decoration: ShapeDecoration(color: fill, shape: shape),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                ConstrainedBox(
-                  constraints: const BoxConstraints(
-                    maxWidth: MangaTagTabBar._labelMaxWidth,
-                  ),
-                  child: Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: labelStyle,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  '$count',
-                  key: ValueKey<String>('manga_tag_tab_count_$keySuffix'),
-                  maxLines: 1,
-                  softWrap: false,
-                  style: countStyle,
-                ),
-              ],
+            const SizedBox(width: 6),
+            Text(
+              '$count',
+              key: ValueKey<String>('manga_tag_tab_count_$keySuffix'),
+              maxLines: 1,
+              softWrap: false,
+              style: countStyle,
             ),
-          ),
+          ],
         ),
       ),
     );

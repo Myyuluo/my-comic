@@ -657,20 +657,29 @@ void main() {
     );
   });
 
-  testWidgets('平台不支持扩展运行时：点击书名 / 作者安全无操作', (WidgetTester tester) async {
+  testWidgets('平台不支持扩展运行时：点击书名 / 作者仍打开搜索页空态', (WidgetTester tester) async {
     // 不提供 mihonManagerOverride：模型取 manager 时抛错，模拟不支持扩展运行时的平台。
+    // spec：没有运行时 / 可用来源时仍打开搜索页，由搜索页说明原因。
     await tester.runAsync(() async {
       await pumpSeriesPage(tester, platformSupported: false);
 
       await tester.tap(find.byKey(_titleKey), kind: PointerDeviceKind.mouse);
+      await _pumpUntil(tester, find.byType(MangaGlobalSearchPage));
+      await _pumpUntil(tester, find.text(t.manga_global_search_no_sources));
+
+      tester.state<NavigatorState>(find.byType(Navigator)).pop();
+      await _settle(tester);
+      await _pumpUntil(tester, find.byKey(_authorChipKey));
+      await _settle(tester);
+
       await tester.tap(
         find.byKey(_authorChipKey),
         kind: PointerDeviceKind.mouse,
       );
-      await _settle(tester);
+      await _pumpUntil(tester, find.byType(MangaGlobalSearchPage));
+      await _pumpUntil(tester, find.text(t.manga_global_search_no_sources));
     });
 
     expect(tester.takeException(), isNull);
-    expect(find.byType(MangaGlobalSearchPage), findsNothing);
   });
 }

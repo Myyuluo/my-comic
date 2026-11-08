@@ -3171,6 +3171,28 @@ abstract final class MangaDownloadJobStatus {
   static const String failed = 'failed';
   static const String cancelled = 'cancelled';
   static const String paused = 'paused';
+
+  /// 队列里的非终态：排队 / 下载中 / 暂停。暂停不是终态（ticket 07），仍占着
+  /// 队列语义——重复入队、取消、批量判定都按这一组处理。
+  static const Set<String> active = <String>{queued, running, paused};
+
+  /// 真正会被 worker 领取或正在跑的状态（不含暂停）。
+  static const Set<String> queuedOrRunning = <String>{queued, running};
+
+  /// 终态：已完成 / 失败 / 已取消。取消路径会直接删行，`cancelled` 只服务遗留行。
+  static const Set<String> terminal = <String>{done, failed, cancelled};
+
+  /// 可重试：失败与遗留的已取消行。
+  static const Set<String> retryable = <String>{failed, cancelled};
+
+  /// 是否仍在队列里（排队 / 下载中 / 暂停）。
+  static bool isActive(String status) => active.contains(status);
+
+  /// 是否已结束（已完成 / 失败 / 已取消）。
+  static bool isTerminal(String status) => terminal.contains(status);
+
+  /// 是否可重试（失败 / 已取消）。
+  static bool isRetryable(String status) => retryable.contains(status);
 }
 
 /// 漫画章节的下载任务队列（schema v103，device-local）。

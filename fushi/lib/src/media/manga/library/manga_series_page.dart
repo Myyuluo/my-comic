@@ -757,43 +757,48 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     await launchUrl(url, mode: LaunchMode.externalApplication);
   }
 
-  /// 书名 / 作者点击的去处：以当前显示的文字为关键词打开「搜索全部来源」，并自动
-  /// 检索全部已启用的在线 Source（Source 自身启用且提供它的 Extension 也启用）。
+  /// 书名 / 作者 / 源分类点击的去处：以当前显示的文字为关键词打开「搜索全部
+  /// 来源」，并自动检索全部已启用的在线 Source（Source 自身启用且提供它的
+  /// Extension 也启用）。
   ///
-  /// 平台没有扩展运行时（如 iOS）时 `mihonManager` 取不到，这里安全地什么都不做；
-  /// 没有可用来源时仍打开搜索页，由页面自己的空态说明原因（不接「去装来源」回调）。
+  /// 平台没有扩展运行时（如 iOS）或运行时初始化失败时**仍打开搜索页**，只是
+  /// 不传 manager / 来源——页面自己的空态会说明「没有可用来源」（spec：没有
+  /// 运行时 / 可用来源时仍打开搜索页，由搜索页显示空态）。不接「去装来源」回调。
   void _openGlobalSearch(String rawQuery) {
     final String query = rawQuery.trim();
     if (query.isEmpty) return;
-    if (!MihonRuntimeFactory.isSupported) return;
+    MihonManager? manager;
+    List<MangaOnlineSourceRow> sources = const <MangaOnlineSourceRow>[];
     final AppModel? appModel = _appModelOrNull;
-    if (appModel == null) return;
-    try {
-      final MihonManager manager = appModel.mihonManager;
-      final List<MangaOnlineSourceRow> sources = enabledMangaOnlineSources(
-        manager,
-      );
-      if (!mounted) return;
-      unawaited(
-        Navigator.of(context).push(
-          adaptivePageRoute<void>(
-            context: context,
-            builder: (BuildContext context) => MangaGlobalSearchPage(
-              mihonManager: manager,
-              mihonSources: sources,
-              initialQuery: query,
-            ),
+    if (MihonRuntimeFactory.isSupported && appModel != null) {
+      try {
+        manager = appModel.mihonManager;
+        sources = enabledMangaOnlineSources(manager);
+      } on Object catch (error, stack) {
+        // 运行时不可用不是用户的错，也不该让页面崩掉：降级成「没有可用来源」，
+        // 搜索页照常打开并给出空态。
+        ErrorLogService.instance.log(
+          'MangaSeriesPage.globalSearch',
+          error,
+          stack,
+        );
+        manager = null;
+        sources = const <MangaOnlineSourceRow>[];
+      }
+    }
+    if (!mounted) return;
+    unawaited(
+      Navigator.of(context).push(
+        adaptivePageRoute<void>(
+          context: context,
+          builder: (BuildContext context) => MangaGlobalSearchPage(
+            mihonManager: manager,
+            mihonSources: sources,
+            initialQuery: query,
           ),
         ),
-      );
-    } on Object catch (error, stack) {
-      // 运行时不可用不是用户的错，也不该让页面崩掉：静默无操作即可。
-      ErrorLogService.instance.log(
-        'MangaSeriesPage.globalSearch',
-        error,
-        stack,
-      );
-    }
+      ),
+    );
   }
 
   Future<void> _loginToSource(OnlineMangaLoginTarget target) async {
@@ -2046,6 +2051,8 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
           ...extensionSourceDetailChips(includeExternal: false),
       ],
       genres: series?.genreLabels ?? const <String>[],
+      // 漫画作品页不截断来源给的分类（ticket 01）；其他作品页沿用原版最多 8 个。
+      maxGenres: null,
       // 源分类与书名 / 作者同一条导航：以分类文字去全部已启用在线源搜索。
       onGenreTap: _openGlobalSearch,
       description: series?.description,

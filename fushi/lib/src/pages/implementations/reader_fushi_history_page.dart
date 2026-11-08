@@ -325,22 +325,39 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
   /// 状态筛选），重启就丢等于每次打开都要重选（用户实报）。initState 读回。
   ShelfReadStatus? _readStatusFilter;
 
-  /// 本帧漫画页标签页签的有效选中值（null = 「书架」）。选中的标签在标签管理页
+  /// 本帧漫画页标签页签的有效选中值（默认「书架」）。选中的标签在标签管理页
   /// 被删除后回落到「书架」；字段在 build 里按 [mangaTagTabSelectionProvider]
   /// 与本帧标签池解析，供同一帧的筛选与页签渲染共用。
-  int? _mangaTagTabSelection;
+  MangaTabSelection _mangaTagTabSelection = const MangaShelfTabSelection();
 
   /// 本帧每个页签在当前搜索词 / 阅读状态 / 漫画下载筛选下会显示的漫画数
-  /// （key null = 书架）。
-  Map<int?, int> _mangaTagTabCounts = const <int?, int>{};
+  /// （key = 页签）。
+  Map<MangaTabSelection, int> _mangaTagTabCounts =
+      const <MangaTabSelection, int>{};
 
   /// 「漫画下载」筛选（null = 全部）。会话内状态，不持久化；与阅读状态、当前
   /// 页签是 AND 关系。
   _MangaDownloadFilter? _mangaDownloadFilter;
 
   /// 至少有一章本地可读的漫画 `bookKey` 集合，随 [_loadShelfMaps] 批量预取
-  /// （在线看 Download library，本地图源看目录存在性；Missing 不计）。
+  /// （在线看 Download library，本地图源看章节是否真的读得出来；Missing 不计）。
   Set<String> _mangaDownloadedBookKeys = const <String>{};
+
+  /// 最近一次书架快照里的漫画章节来源行：下载任务表变化时据此重算
+  /// [_mangaDownloadedBookKeys]，不用重跑整份书架映射。
+  List<MangaShelfChapterSource> _mangaChapterSources =
+      const <MangaShelfChapterSource>[];
+
+  /// 漫画下载任务表的订阅（仅漫画书架）。后台下载完成 / 取消 / 删除后，
+  /// 「已下载」筛选与页签数量必须跟着变，不能等下次重进页面。
+  StreamSubscription<void>? _mangaDownloadJobsWatch;
+
+  /// 上次重算时的任务 `(jobId, status)` 签名。进度更新（pagesDone 变化）不改
+  /// 签名，避免每落一页就整份重探磁盘；完成 / 删除 / 状态迁移才触发重算。
+  String _mangaDownloadJobsSignature = '';
+
+  bool _mangaDownloadsRefreshing = false;
+  bool _mangaDownloadsRefreshQueued = false;
 
   /// 漫画书架搜索用的附加元数据（`bookKey → 描述符 / 作者`），随
   /// [_loadShelfMaps] 一次批量预取。`MediaItem` 不携带在线描述符（它的
@@ -477,10 +494,10 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
     ];
   }
 
-  /// 选中漫画页某个标签页签；null = 「书架」。
-  void _selectMangaTagTab(int? tagId) {
-    if (ref.read(mangaTagTabSelectionProvider) == tagId) return;
-    ref.read(mangaTagTabSelectionProvider.notifier).state = tagId;
+  /// 选中漫画页某个标签页签。
+  void _selectMangaTagTab(MangaTabSelection selection) {
+    if (ref.read(mangaTagTabSelectionProvider) == selection) return;
+    ref.read(mangaTagTabSelectionProvider.notifier).state = selection;
   }
 
   String _readStatusLabel(ShelfReadStatus status) => switch (status) {
@@ -646,6 +663,74 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
     _hiddenRemoteBooksAtLastLoad = _hiddenRemoteBooksSignature();
     _readStatusFilter = ShelfReadStatus.values
         .asNameMap()[appModelNoUpdate.prefsRepo.shelfReadStatusFilterName];
+    if (_mangaOnly) _watchMangaDownloadJobs();
+  }
+
+  /// 订阅漫画下载任务表。只在漫画书架；服务 / 数据库尚未就绪时跳过（书架页
+  /// 建立时数据库已就绪，这里的兜底只防测试壳）。
+  void _watchMangaDownloadJobs() {
+    if (_mangaDownloadJobsWatch != null) return;
+    if (!appModelNoUpdate.isDatabaseReady) return;
+    _mangaDownloadJobsWatch = appModelNoUpdate.mangaDownloadService
+        .watchJobs()
+        .listen(
+          (_) => unawaited(_refreshMangaDownloadedBookKeys()),
+          onError: (Object error, StackTrace stack) {
+            ErrorLogService.instance.log(
+              'ReaderFushiHistoryPage.watchMangaDownloads',
+              error,
+              stack,
+            );
+          },
+        );
+  }
+
+  /// 下载任务表变了：重算「已下载」集合（在线看 Download library，本地图源看
+  /// 章节是否读得出来），随后重建页面让筛选结果与页签数量立即生效。
+  ///
+  /// 同一时刻只跑一轮，期间到达的通知合并成一次尾随重算；进度更新（签名不变）
+  /// 直接跳过。
+  Future<void> _refreshMangaDownloadedBookKeys() async {
+    if (_mangaDownloadsRefreshing) {
+      _mangaDownloadsRefreshQueued = true;
+      return;
+    }
+    _mangaDownloadsRefreshing = true;
+    try {
+      do {
+        _mangaDownloadsRefreshQueued = false;
+        final MangaDownloadService downloads =
+            appModelNoUpdate.mangaDownloadService;
+        final List<MangaDownloadJobRow> jobs = await downloads.listJobs();
+        final String signature = <String>[
+          for (final MangaDownloadJobRow job in jobs)
+            '${job.jobId}:${job.status}',
+        ].join('|');
+        if (signature == _mangaDownloadJobsSignature) break;
+        _mangaDownloadJobsSignature = signature;
+        final Set<String> downloaded = await computeMangaShelfDownloadedBookKeys(
+          _mangaChapterSources,
+          database: appModelNoUpdate.database,
+          localSourceRoot: appModelNoUpdate.appPathsOrNull?.localComicRoot,
+          downloadsRoot: appModelNoUpdate.appPathsOrNull?.downloadsRoot,
+        );
+        if (!mounted) return;
+        final bool changed =
+            downloaded.length != _mangaDownloadedBookKeys.length ||
+            !downloaded.containsAll(_mangaDownloadedBookKeys);
+        if (changed) {
+          setState(() => _mangaDownloadedBookKeys = downloaded);
+        }
+      } while (_mangaDownloadsRefreshQueued);
+    } on Object catch (error, stack) {
+      ErrorLogService.instance.log(
+        'ReaderFushiHistoryPage.refreshMangaDownloads',
+        error,
+        stack,
+      );
+    } finally {
+      _mangaDownloadsRefreshing = false;
+    }
   }
 
   /// prefsRepo 变更回调：只关心「显示远端条目」门控是否翻转（BUG-1182）。其余偏好
@@ -704,6 +789,8 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
     _headerSearch.dispose();
     _searchController.dispose();
     _shelfScrollController.dispose();
+    unawaited(_mangaDownloadJobsWatch?.cancel());
+    _mangaDownloadJobsWatch = null;
     mediaType.tabRefreshNotifier.removeListener(_reloadShelfMapsOnTabRefresh);
     homeShellTabNotifier.removeListener(_onShellTabActivated);
     appModelNoUpdate.prefsRepo.removeListener(_onPrefsChangedForRemoteGate);
@@ -763,24 +850,30 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
         ? ref.watch(bookTagMapProvider).valueOrNull ??
             const <String, List<BookTagRow>>{}
         : const <String, List<BookTagRow>>{};
-    final int? requestedMangaTagTab = _mangaOnly
+    final MangaTabSelection requestedMangaTagTab = _mangaOnly
         ? ref.watch(mangaTagTabSelectionProvider)
-        : null;
+        : const MangaShelfTabSelection();
     // 选中的标签可能刚在标签管理页被删除：本帧按「书架」渲染，并顺手把状态修回去。
-    final bool mangaTagTabExists = requestedMangaTagTab == null ||
-        allTagRows.any((BookTagRow tag) => tag.id == requestedMangaTagTab);
-    final int? mangaTagTab = mangaTagTabExists ? requestedMangaTagTab : null;
+    final bool mangaTagTabExists = switch (requestedMangaTagTab) {
+      MangaShelfTabSelection() => true,
+      MangaTagTabSelection(:final int tagId) =>
+        allTagRows.any((BookTagRow tag) => tag.id == tagId),
+    };
+    final MangaTabSelection mangaTagTab = mangaTagTabExists
+        ? requestedMangaTagTab
+        : const MangaShelfTabSelection();
     if (!mangaTagTabExists) {
       WidgetsBinding.instance.addPostFrameCallback((Duration _) {
         if (!mounted) return;
         if (ref.read(mangaTagTabSelectionProvider) == requestedMangaTagTab) {
-          ref.read(mangaTagTabSelectionProvider.notifier).state = null;
+          ref.read(mangaTagTabSelectionProvider.notifier).state =
+              const MangaShelfTabSelection();
         }
       });
     }
     _mangaTagTabSelection = mangaTagTab;
-    // 页签数量只基于已加载的书架条目计算（搜索 / 阅读状态在 _mangaItemPasses…
-    // 里统一生效）；ticket 06 的下载筛选会作为同一个判据的一部分接进来。
+    // 页签数量只基于已加载的书架条目计算；搜索 / 阅读状态 / 漫画下载筛选在
+    // [_mangaItemPassesActiveFilters] 里统一生效（与正文渲染同一判据）。
     final List<MediaItem> mangaBooksForTabs =
         _mangaOnly && books.valueOrNull != null
             ? filterShelfEntriesByMangaSplit(
@@ -797,7 +890,7 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
             tagIds: <int>{for (final BookTagRow tag in allTagRows) tag.id},
             visible: _mangaItemPassesActiveFilters,
           )
-        : const <int?, int>{};
+        : const <MangaTabSelection, int>{};
     // 漫画页在库页壳里时，视图页签位由标签页签胶囊取代：页签位是壳画的，标签
     // 数据与交互在本书架里，所以像页头动作一样把标签行登记给壳。
     final MediaLibraryChromeTabsSlot? chromeTabs = _mangaOnly
@@ -902,21 +995,16 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
                         final Set<String>? filterSet = filteredIds.valueOrNull;
                         List<MediaItem> filtered;
                         if (_mangaOnly) {
-                          // 排他归属：书架 = 无任何标签；标签页签 = 带该标签（多标签
-                          // 漫画在每个对应标签下都出现）。
-                          final int? selectedTagId = _mangaTagTabSelection;
+                          // 排他归属：书架 = 无任何标签；标签页签 = 带该标签。
+                          // 与页签数量共用 [mangaBookBelongsToTab]。
+                          final MangaTabSelection selectedTab =
+                              _mangaTagTabSelection;
                           filtered = shelfBooks.where((MediaItem item) {
                             final String? key =
                                 _parseBookKey(item.mediaIdentifier);
                             final List<BookTagRow>? tags =
                                 key == null ? null : mangaTagMap[key];
-                            if (selectedTagId == null) {
-                              return tags == null || tags.isEmpty;
-                            }
-                            return tags
-                                    ?.any((BookTagRow tag) =>
-                                        tag.id == selectedTagId) ??
-                                false;
+                            return mangaBookBelongsToTab(tags, selectedTab);
                           }).toList();
                         } else if (filterSet == null) {
                           filtered = shelfBooks;
@@ -1044,7 +1132,7 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
       return MangaTagTabBar(
         key: const ValueKey<String>('manga_tag_tab_bar'),
         tags: allTags,
-        selectedTagId: _mangaTagTabSelection,
+        selection: _mangaTagTabSelection,
         counts: _mangaTagTabCounts,
         inline: inlineTags,
         onSelected: _selectMangaTagTab,
@@ -1228,6 +1316,9 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
             books: <MangaShelfChapterSource>[],
             readChapterKeysByBookUid: <String, Set<String>>{},
           );
+    // 下载任务表变化（后台下载完成 / 取消）时，用这批章节来源行重算「已下载」
+    // 集合，不必重跑整份书架映射。
+    _mangaChapterSources = mangaSnapshot.books;
     _mangaUnreadCountsByBookKey = _mangaOnly
         ? computeMangaShelfUnreadCounts(mangaSnapshot)
         : const <String, int>{};
@@ -1243,7 +1334,8 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
           }
         : const <String, _MangaShelfMeta>{};
     // 「漫画下载」筛选：在线看 Download library 至少一章完整落盘，本地图源看
-    // 目录存在；Missing 不计。随本快照一次批量算好，卡片与页签数量只查内存集合。
+    // 至少一章真的读得出来；Missing 不计。随本快照一次批量算好，卡片与页签
+    // 数量只查内存集合。
     _mangaDownloadedBookKeys = _mangaOnly
         ? await computeMangaShelfDownloadedBookKeys(
             mangaSnapshot.books,

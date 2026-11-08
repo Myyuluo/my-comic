@@ -57,6 +57,7 @@ class OnlineWorkHeader extends StatelessWidget {
     this.lines = const <String>[],
     this.chips = const <MediaDetailChip>[],
     this.genres = const <String>[],
+    this.maxGenres = 8,
     this.actions = const <Widget>[],
     this.primaryAction,
     this.secondaryActions = const <Widget>[],
@@ -83,8 +84,12 @@ class OnlineWorkHeader extends StatelessWidget {
   /// 额外的元信息 chip（排在 [lines] 之后）。
   final List<MediaDetailChip> chips;
 
-  /// 类型标签（源分类），来源给多少就渲染多少。
+  /// 类型标签（源分类）。
   final List<String> genres;
+
+  /// 最多渲染几个 [genres]；null = 不限制。漫画作品页要完整展示来源给的分类
+  /// （ticket 01），其他调用方（小说作品页等）保持原版最多 8 个。
+  final int? maxGenres;
 
   /// 旧接法的主操作区（原样横排）。给了 [primaryAction] 时忽略。
   final List<Widget> actions;
@@ -152,8 +157,12 @@ class OnlineWorkHeader extends StatelessWidget {
             secondary: actions.sublist(1),
           );
     final Widget? extra = this.extra;
+    final int? maxGenres = this.maxGenres;
+    final List<String> tags = maxGenres == null || genres.length <= maxGenres
+        ? genres
+        : genres.take(maxGenres).toList(growable: false);
     final bool hasFooter =
-        genres.isNotEmpty ||
+        tags.isNotEmpty ||
         (summary != null && summary.isNotEmpty) ||
         extra != null;
     return MediaDetailHero(
@@ -167,7 +176,7 @@ class OnlineWorkHeader extends StatelessWidget {
       actions: actionBar,
       footer: hasFooter
           ? _OnlineWorkFooter(
-              tags: genres,
+              tags: tags,
               summary: summary,
               selectable: selectableDescription,
               extra: extra,

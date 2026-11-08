@@ -4,7 +4,10 @@
 /// 口径（spec「排序与筛选与搜索」）：
 /// - 在线漫画：Download library 里至少一章**完整**落盘（判据委托
 ///   [DownloadLibraryIndex.booksWithAnyCompleteChapter]）；
-/// - 本地图源：作品目录在磁盘上实际存在（原地读取，目录存在 = 可读）；
+/// - 本地图源：漫画目录里至少一章**真的读得出来**（文件夹含页图或可解析的
+///   `.cbz`；单章作品的章就是漫画目录本身）。只看目录存在会让「章文件全被删、
+///   只剩空目录」的作品仍算已下载（复审 finding 11），判据复用 Local source 的
+///   扫描器 [scanLocalSourceMangaDirectory]；
 /// - 文件缺失（Missing，含切换 Content root 后指向旧根的记录）不计为已下载。
 ///
 /// 输入是 [`FushiDatabase.getMangaShelfReadSnapshot`] 的一次性快照——书架加载时
@@ -14,7 +17,7 @@ library;
 import 'dart:io';
 
 import 'package:fushi/src/media/manga/download/download_library_index.dart';
-import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
+import 'package:fushi/src/media/manga/library/manga_shelf_chapter_source.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_layout.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_metadata.dart';
@@ -22,31 +25,32 @@ import 'package:fushi_engine/media/manga/local_source/local_source_metadata.dart
 /// 批量计算「哪些漫画至少有一章本地可读」，返回已下载的 `bookKey` 集合。
 ///
 /// [localSourceRoot] / [downloadsRoot] 是**当前** Content root 下的本地图源根与
-/// Download library 根；任一为 null（测试壳 / 早期启动）时只按目录存在性判定，
-/// 不做「旧根 = Missing」检查。两者都非空时，本地图源目录必须落在其中任一之下。
+/// Download library 根；任一为 null（测试壳 / 早期启动）时跳过「旧根 = Missing」
+/// 检查。两者都非空时，本地图源目录必须落在其中任一之下。
 Future<Set<String>> computeMangaShelfDownloadedBookKeys(
   Iterable<MangaShelfChapterSource> books, {
   required FushiDatabase database,
   Directory? localSourceRoot,
   Directory? downloadsRoot,
 }) async {
-  final Map<String, ({String extractDir, Iterable<String> chapterKeys})>
-  online = <String, ({String extractDir, Iterable<String> chapterKeys})>{};
-  final List<MangaShelfChapterSource> localBooks = <MangaShelfChapterSource>[];
+  final Map<String, MangaDownloadLibraryBook> online =
+      <String, MangaDownloadLibraryBook>{};
+  final List<({MangaShelfChapterSource book, LocalSourceMetadata metadata})>
+      localBooks =
+      <({MangaShelfChapterSource book, LocalSourceMetadata metadata})>[];
   for (final MangaShelfChapterSource book in books) {
-    if (LocalSourceMetadata.tryParse(book.sourceMetadata) != null) {
-      localBooks.add(book);
-      continue;
-    }
-    final OnlineMangaLibraryEntry? entry = OnlineMangaLibraryEntry.tryParse(
+    final LocalSourceMetadata? localMetadata = LocalSourceMetadata.tryParse(
       book.sourceMetadata,
     );
-    if (entry == null || entry.chapters.isEmpty) continue;
-    online[book.bookKey] = (
+    if (localMetadata != null) {
+      localBooks.add((book: book, metadata: localMetadata));
+      continue;
+    }
+    final List<String> chapterKeys = book.chapterKeys;
+    if (chapterKeys.isEmpty) continue;
+    online[book.bookKey] = MangaDownloadLibraryBook(
       extractDir: book.extractDir,
-      chapterKeys: <String>[
-        for (final OnlineMangaChapter chapter in entry.chapters) chapter.key,
-      ],
+      chapterKeys: chapterKeys,
     );
   }
   final Set<String> downloaded = online.isEmpty
@@ -55,15 +59,22 @@ Future<Set<String>> computeMangaShelfDownloadedBookKeys(
           online,
           currentDownloadsRoot: downloadsRoot,
         );
-  for (final MangaShelfChapterSource book in localBooks) {
-    if (!await Directory(book.extractDir).exists()) continue;
-    if (!_withinCurrentRoots(book.extractDir, <Directory?>[
+  for (final ({MangaShelfChapterSource book, LocalSourceMetadata metadata})
+      local
+      in localBooks) {
+    if (!_withinCurrentRoots(local.book.extractDir, <Directory?>[
       localSourceRoot,
       downloadsRoot,
     ])) {
       continue;
     }
-    downloaded.add(book.bookKey);
+    // 目录存在但一章都读不出来（页图全删 / 只剩封面 / 空目录 / 坏包）不算
+    // 已下载。扫描器与「本地图源」网格、重建索引同一套章节识别规则。
+    final LocalSourceManga? scanned = await scanLocalSourceMangaDirectory(
+      Directory(local.book.extractDir),
+      relativePath: local.metadata.relativePath,
+    );
+    if (scanned != null) downloaded.add(local.book.bookKey);
   }
   return downloaded;
 }

@@ -38,8 +38,8 @@ import 'package:material_ui/material_ui.dart';
 import 'package:fushi/src/utils/components/glass/fushi_glass_feedback.dart';
 import 'package:fushi/src/utils/adaptive/adaptive_platform.dart';
 import 'package:fushi/src/utils/components/fushi_fill_slot.dart';
+import 'package:fushi/src/utils/components/fushi_hover_lift.dart';
 import 'package:fushi/src/utils/components/fushi_motion_tokens.dart';
-import 'package:fushi/src/utils/components/fushi_press_scale.dart';
 import 'package:fushi/src/utils/components/glass/fushi_apple_palette.dart';
 import 'package:fushi/src/utils/components/glass/fushi_expressive.dart';
 import 'package:fushi/src/utils/components/glass/fushi_glass_buttons.dart';
@@ -425,7 +425,6 @@ double fushiTopBarInlineItemWidth(BuildContext context, FushiToolbarItem item) {
 
 extension on FushiToolbarButton {
   Widget _buildInline(BuildContext context, Color fg) {
-    const ShapeBorder shape = StadiumBorder();
     final TextStyle? style = _inlineLabelStyle(context)?.copyWith(color: fg);
     return FushiTooltip(
       message: item.tooltip ?? item.label,
@@ -436,53 +435,100 @@ extension on FushiToolbarButton {
         enabled: item.onPressed != null,
         label: item.label,
         excludeSemantics: true,
-        child: FushiPressScale(
-          enabled: item.onPressed != null,
-          child: AnimatedContainer(
-            duration: fushiMotionDuration(context, FushiMotion.short),
-            curve: FushiMotion.standard,
-            height: _kInlineItemHeight,
-            decoration: ShapeDecoration(
-              color: item.selected
-                  ? selectedContainer
-                  : selectedContainer.withValues(alpha: 0),
-              shape: shape,
-            ),
-            child: Material(
-              type: MaterialType.transparency,
-              shape: shape,
-              clipBehavior: Clip.antiAlias,
-              child: InkWell(
-                key: item.key,
-                onTap: item.onPressed,
-                customBorder: shape,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: _kInlineItemPadding,
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: <Widget>[
-                      FushiIcon(
-                        item.icon,
-                        color: fg,
-                        size: _kInlineItemIconSize,
-                      ),
-                      const SizedBox(width: _kInlineItemIconGap),
-                      Text(
-                        item.label,
-                        style: style,
-                        maxLines: 1,
-                        softWrap: false,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
+        child: FushiCapsuleSegment(
+          tapKey: item.key,
+          selected: item.selected,
+          onTap: item.onPressed,
+          height: _kInlineItemHeight,
+          padding: const EdgeInsets.symmetric(
+            horizontal: _kInlineItemPadding,
+          ),
+          selectedColor: selectedContainer,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              FushiIcon(item.icon, color: fg, size: _kInlineItemIconSize),
+              const SizedBox(width: _kInlineItemIconGap),
+              Text(item.label, style: style, maxLines: 1, softWrap: false),
+            ],
           ),
         ),
       ),
+    );
+  }
+}
+
+/// 一颗「胶囊段」：悬浮工具栏 inline 按钮与漫画页标签页签共用的构造。
+///
+/// 两处此前各自手写 `Material + InkWell + AnimatedContainer`，复审时已经分叉
+/// （漫画页签没有 Apple 分支、也没有按压 / 悬停动效）。统一到这里：
+///
+/// - 选中：MD3 铺 [selectedColor]（默认 secondaryContainer）全胶囊；Apple 设计
+///   系统不铺底（iOS 工具栏 / 标签栏的选中态是强调色字形），由调用方把内容
+///   染成强调色；
+/// - 按压 / 悬停：[FushiHoverLift]（内部已叠 [FushiPressScale]；墨水屏与系统
+///   「减弱动态效果」自动归零）；
+/// - 水波裁在胶囊内：透明 [Material] + [InkWell]，形状与底同形。
+class FushiCapsuleSegment extends StatelessWidget {
+  const FushiCapsuleSegment({
+    required this.selected,
+    required this.onTap,
+    required this.child,
+    super.key,
+    this.tapKey,
+    this.height = 40,
+    this.padding = const EdgeInsets.symmetric(horizontal: 12),
+    this.shape = const StadiumBorder(),
+    this.selectedColor,
+    this.hoverScale = 1.02,
+  });
+
+  final bool selected;
+  final VoidCallback? onTap;
+  final Widget child;
+
+  /// 挂在 [InkWell] 上的 key（测试 / 焦点定位用）。
+  final Key? tapKey;
+
+  final double height;
+  final EdgeInsetsGeometry padding;
+  final OutlinedBorder shape;
+
+  /// 选中底色；默认 MD3 secondaryContainer。Apple 设计系统恒不铺底。
+  final Color? selectedColor;
+
+  /// 悬停放大倍数（按压缩放固定走 [FushiMotion.pressScale]）。
+  final double hoverScale;
+
+  @override
+  Widget build(BuildContext context) {
+    final bool apple = isGlassDesign(context);
+    final Color fill = selected && !apple
+        ? (selectedColor ?? Theme.of(context).colorScheme.secondaryContainer)
+        : Colors.transparent;
+    final Widget capsule = AnimatedContainer(
+      duration: fushiMotionDuration(context, FushiMotion.short),
+      curve: FushiMotion.standard,
+      height: height,
+      padding: padding,
+      decoration: ShapeDecoration(color: fill, shape: shape),
+      child: child,
+    );
+    final Widget tappable = Material(
+      type: MaterialType.transparency,
+      shape: shape,
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        key: tapKey,
+        onTap: onTap,
+        customBorder: shape,
+        child: capsule,
+      ),
+    );
+    return FushiHoverLift(
+      enabled: onTap != null,
+      scale: hoverScale,
+      builder: (BuildContext _, bool __) => tappable,
     );
   }
 }

@@ -246,22 +246,17 @@ class MangaDownloadService {
       jobId,
     );
     if (existing != null) {
-      switch (existing.status) {
-        case MangaDownloadJobStatus.queued:
-        case MangaDownloadJobStatus.running:
-        case MangaDownloadJobStatus.paused:
-          return existing;
-        case MangaDownloadJobStatus.done:
-          if (await DownloadLibraryIndex(_database).isChapterDownloaded(
+      if (MangaDownloadJobStatus.isActive(existing.status)) return existing;
+      if (existing.status == MangaDownloadJobStatus.done &&
+          await DownloadLibraryIndex(_database).isChapterDownloaded(
             bookKey: bookKey,
             chapterKey: chapter.key,
           )) {
-            return existing;
-          }
+        return existing;
       }
     }
     // 全局暂停期间新入队的章节直接以 `paused` 入队，不自动开始。
-    final bool paused = await _database.hasPausedMangaDownloadJobs();
+    final String status = await _statusRespectingGlobalPause();
     final int now = _now;
     await _database.upsertMangaDownloadJob(
       MangaDownloadJobsCompanion(
@@ -272,11 +267,7 @@ class MangaDownloadService {
         runtime: Value<String>(entry.runtime.wireValue),
         title: Value<String>(entry.series.title),
         chapterTitle: Value<String>(mangaChapterDisplayName(chapter)),
-        status: Value<String>(
-          paused
-              ? MangaDownloadJobStatus.paused
-              : MangaDownloadJobStatus.queued,
-        ),
+        status: Value<String>(status),
         pagesDone: const Value<int>(0),
         pagesTotal: const Value<int>(0),
         attemptCount: const Value<int>(0),
@@ -286,9 +277,15 @@ class MangaDownloadService {
         completedAt: const Value<int?>(null),
       ),
     );
-    if (!paused) _kick();
+    if (status != MangaDownloadJobStatus.paused) _kick();
     return (await _database.getMangaDownloadJob(jobId))!;
   }
+
+  /// 全局暂停生效期间，新入队 / 重试的任务以 `paused` 落库（不会绕过暂停开跑）。
+  Future<String> _statusRespectingGlobalPause() async =>
+      await _database.hasPausedMangaDownloadJobs()
+          ? MangaDownloadJobStatus.paused
+          : MangaDownloadJobStatus.queued;
 
   /// 批量入队（按给定顺序）。
   Future<void> enqueueChapters({
@@ -315,9 +312,7 @@ class MangaDownloadService {
       await _database.deleteMangaDownloadJob(jobId);
       return;
     }
-    if (row.status == MangaDownloadJobStatus.queued ||
-        row.status == MangaDownloadJobStatus.running ||
-        row.status == MangaDownloadJobStatus.paused) {
+    if (MangaDownloadJobStatus.isActive(row.status)) {
       await _database.deleteMangaDownloadJob(jobId);
       await _deleteChapterDirectory(row);
     }
@@ -328,21 +323,16 @@ class MangaDownloadService {
   Future<void> retry(String jobId) async {
     final MangaDownloadJobRow? row = await _database.getMangaDownloadJob(jobId);
     if (row == null) return;
-    if (row.status != MangaDownloadJobStatus.failed &&
-        row.status != MangaDownloadJobStatus.cancelled) {
-      return;
-    }
-    final bool paused = await _database.hasPausedMangaDownloadJobs();
+    if (!MangaDownloadJobStatus.isRetryable(row.status)) return;
+    final String status = await _statusRespectingGlobalPause();
     await _database.updateMangaDownloadJobStatus(
       jobId,
-      status: paused
-          ? MangaDownloadJobStatus.paused
-          : MangaDownloadJobStatus.queued,
+      status: status,
       updatedAt: _now,
       clearLastError: true,
       attemptCount: 0,
     );
-    if (!paused) _kick();
+    if (status != MangaDownloadJobStatus.paused) _kick();
   }
 
   /// 全局暂停：把排队中 / 下载中的任务置为 `paused`。正在飞的任务收到暂停信号
@@ -375,13 +365,7 @@ class MangaDownloadService {
   /// 删所有已结束（done / failed / cancelled）的任务行（下载中心「清除已完成」）。
   Future<void> clearFinished() async {
     final List<MangaDownloadJobRow> rows = await _database
-        .listMangaDownloadJobs(
-          statuses: const <String>{
-            MangaDownloadJobStatus.done,
-            MangaDownloadJobStatus.failed,
-            MangaDownloadJobStatus.cancelled,
-          },
-        );
+        .listMangaDownloadJobs(statuses: MangaDownloadJobStatus.terminal);
     for (final MangaDownloadJobRow row in rows) {
       await _database.deleteMangaDownloadJob(row.jobId);
     }
