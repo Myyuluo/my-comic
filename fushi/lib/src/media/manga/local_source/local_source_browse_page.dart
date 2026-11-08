@@ -12,7 +12,9 @@ import 'package:fushi/src/media/online/online_source_error_text.dart';
 import 'package:fushi/src/models/app_model.dart';
 import 'package:fushi/src/utils/fushi_icons.dart';
 import 'package:fushi/utils.dart';
+import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi_engine/media/collections/shelf_sort.dart' show naturalCompare;
+import 'package:fushi_engine/media/manga/local_source/local_source_cover.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_layout.dart';
 
 /// 内置「本地图源」的浏览页：进入即扫描 Local source root（`local`），以
@@ -42,6 +44,7 @@ class _LocalSourceBrowsePageState extends ConsumerState<LocalSourceBrowsePage> {
     _appModel = ref.read(appProvider);
     _catalog = LocalSourceBrowseCatalog(
       root: _appModel.appPaths.localComicRoot,
+      db: _appModel.database,
     );
   }
 
@@ -64,15 +67,29 @@ class LocalSourceRootUnavailable implements Exception {
 
 /// 「本地图源」在共用源浏览页里的差异：一次扫描的结果就是全部内容。
 ///
-/// [prepare] 每次进页扫描一次（不做文件监视、不做增量缓存）；[fetch] 只在
-/// 已扫描结果里按标题过滤并按自然序排序。扫描原地读取，不复制、不移动任何文件。
+/// [prepare] 每次进页扫描一次（不做文件监视、不做增量缓存），扫描完成即返回，
+/// 让网格先显示结果；随后在后台**逐个**给缺封面的作品生成 `cover.jpg`，每完成
+/// 一部就通过 [changes] 通知页面更新对应卡片。生成失败的作品保持占位，下次
+/// 进页重试。扫描原地读取，不复制、不移动任何文件。
 class LocalSourceBrowseCatalog extends OnlineSourceCatalog<LocalSourceManga> {
-  LocalSourceBrowseCatalog({required this.root});
+  LocalSourceBrowseCatalog({required this.root, required this.db});
 
   /// Local source root（`<Content root>/local`）。
   final Directory root;
 
+  /// 已登记作品的 `coverPath` 同步（生成封面的副作用）。
+  final FushiDatabase db;
+
   List<LocalSourceManga> _scanned = const <LocalSourceManga>[];
+  final ValueNotifier<int> _revision = ValueNotifier<int>(0);
+  Future<void> _coversGenerated = Future<void>.value();
+  int _coverGenerationId = 0;
+
+  @override
+  Listenable get changes => _revision;
+
+  /// 本轮后台封面补齐完成（进页时启动一次；测试可等待它）。
+  Future<void> get coversGenerated => _coversGenerated;
 
   @override
   String get title => t.local_source_title;
@@ -96,6 +113,43 @@ class LocalSourceBrowseCatalog extends OnlineSourceCatalog<LocalSourceManga> {
       throw LocalSourceRootUnavailable(root.path, error);
     }
     _scanned = await scanLocalSourceRoot(root);
+    _coversGenerated = _generateMissingCovers();
+  }
+
+  /// 后台逐部补齐封面：不阻塞首屏；成功后替换扫描条目并通知页面刷新。
+  ///
+  /// 单部失败（坏页 / 写入失败）只跳过它，占位保留，下次进页再试。重复
+  /// [prepare] 时旧循环在下一个作品前自停，避免两轮同时写同一批封面。
+  Future<void> _generateMissingCovers() async {
+    final int generation = ++_coverGenerationId;
+    final LocalSourceCoverService service = LocalSourceCoverService(db: db);
+    for (final LocalSourceManga manga in List<LocalSourceManga>.of(_scanned)) {
+      if (generation != _coverGenerationId) return;
+      try {
+        final LocalSourceCoverResult result = await service
+            .generateMissingCover(manga);
+        if (generation != _coverGenerationId) return;
+        final String? cover = result.coverRelativePath;
+        if (cover == null || cover == manga.coverRelativePath) continue;
+        _scanned = <LocalSourceManga>[
+          for (final LocalSourceManga item in _scanned)
+            p.equals(item.directoryPath, manga.directoryPath)
+                ? withLocalSourceCoverRelativePath(item, cover)
+                : item,
+        ];
+        _revision.value++;
+      } on Object {
+        // 保持占位；下次进入本地图源时重新扫描并重试。
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    // 让在途的后台循环在下一个作品前停下，之后不再触碰已释放的 notifier。
+    _coverGenerationId++;
+    _revision.dispose();
+    super.dispose();
   }
 
   @override
