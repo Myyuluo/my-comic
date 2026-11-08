@@ -69,14 +69,27 @@ class MediaLibraryViewSpec {
 /// 视图页签位置的自定义内容槽。
 ///
 /// 漫画页只剩书架一个视图，用户口径（2026-11-05）：不再画只有「书架」一项的视图
-/// 页签，标签页签放到页签原来的位置，与「漫画」标题、右上角动作同一行。标签的
-/// 数据与交互在视图 State 里（`MangaTagTabBar`），壳只负责那个位置，所以视图像
-/// 页头登记动作（[FushiShellActionsSlot]）一样，把要画的内容登记到本槽。壳取
-/// 「最后登记的可见内容」；没有登记时该位置留空。
+/// 页签。视图把想占据该位置的内容登记到本槽，壳取「最后登记的可见内容」；没有
+/// 登记时该位置留空。
+///
+/// ticket 01（2026-11-09）起漫画页的标签栏改到标题 / 动作行下方的二级浮动行
+/// （[MediaLibrarySecondaryRowSlot]），本槽空出；按布局方案它留给顶部行的继续
+/// 阅读胶囊。其它形态的壳仍可继续用本槽放视图页签的自定义内容。
 ///
 /// 登记状态机与 [FushiShellActionsSlot] 共用 [FushiShellClaimSlot]（review D1：
 /// 两处曾各抄一份完全相同的 `_claims` / 帧末通知 / dispose）。
 class MediaLibraryChromeTabsSlot extends FushiShellClaimSlot {}
+
+/// 视图登记到主 chrome 行下方**二级浮动行**的内容槽。
+///
+/// 与在线源组的二级胶囊（[MediaLibraryShell] 的 `_buildOnlineSubNavigation`）
+/// 走同一层 [FushiFloatingChromeOverlay]：同一份滚动显隐、同一个内容顶部让位
+/// 累加。漫画页用它把标签页签胶囊画在「漫画」标题与右上角动作的下方
+/// （ticket 01）；主 chrome 行的页签位不再登记标签栏。
+///
+/// 与 [MediaLibraryChromeTabsSlot] 共用 [FushiShellClaimSlot] 的登记状态机：
+/// 视图在自己 build 里登记内容与可见性，壳画「最后登记的可见」那一份。
+class MediaLibrarySecondaryRowSlot extends FushiShellClaimSlot {}
 
 /// 向壳内子树暴露「切到某个视图」的能力（[InheritedWidget]，不改 builder 签名）。
 ///
@@ -90,6 +103,7 @@ class MediaLibraryShellScope extends InheritedWidget {
     required this.select,
     required super.child,
     this.chromeTabsSlot,
+    this.secondaryRowSlot,
     super.key,
   });
 
@@ -99,6 +113,10 @@ class MediaLibraryShellScope extends InheritedWidget {
 
   /// 壳开启 [MediaLibraryShell.chromeTabsFromView] 时的页签位内容槽；否则 null。
   final MediaLibraryChromeTabsSlot? chromeTabsSlot;
+
+  /// 标题 / 动作行下方的二级浮动行内容槽（见 [MediaLibrarySecondaryRowSlot]）。
+  /// 壳画浮动工具栏时非 null；单视图无 chrome 的壳为 null。
+  final MediaLibrarySecondaryRowSlot? secondaryRowSlot;
 
   /// 切到指定视图；壳没有该视图时静默忽略。
   ///
@@ -122,7 +140,8 @@ class MediaLibraryShellScope extends InheritedWidget {
   bool updateShouldNotify(MediaLibraryShellScope oldWidget) =>
       select != oldWidget.select ||
       !setEquals(kinds, oldWidget.kinds) ||
-      !identical(chromeTabsSlot, oldWidget.chromeTabsSlot);
+      !identical(chromeTabsSlot, oldWidget.chromeTabsSlot) ||
+      !identical(secondaryRowSlot, oldWidget.secondaryRowSlot);
 }
 
 /// 库页视图导航壳：在一个顶层 tab 内切换 [MediaLibraryViewSpec] 声明的若干视图。
@@ -154,16 +173,18 @@ class MediaLibraryShell extends StatefulWidget {
   /// 分段条的焦点 id 前缀（每个域一个，避免多域同时挂载时撞 id）。
   final String focusIdPrefix;
 
-  /// 只有一个视图时也画浮动工具栏（壳标题 + 单页签 + 页头动作）。
+  /// 只有一个视图时也画浮动工具栏（壳标题 + 视图页签占位 + 页头动作）。
   /// 默认 false：单视图域的页面自己负责页头，不额外放一条空壳 tab。
-  /// 漫画页只剩书架后仍要靠壳画「漫画」标题、书架页签和右上角动作。
+  /// 漫画页只剩书架后仍要靠壳画「漫画」标题和右上角动作；标签页签由视图登记到
+  /// 标题 / 动作行下方的二级浮动行（[MediaLibrarySecondaryRowSlot]）。
   final bool alwaysShowChrome;
 
-  /// 视图页签位改由视图自己画（漫画页用 Tag chips 取代只剩「书架」一项的视图页签）。
+  /// 视图页签位改由视图自己画（漫画页只剩「书架」一项，不再画视图页签）。
   ///
   /// true 时壳不画 [views] 的视图页签，改画视图登记到
-  /// [MediaLibraryShellScope.chromeTabsSlot] 的内容；没有登记时该位置留空。仅用于
-  /// 「单视图 + [alwaysShowChrome]」的壳（漫画页）；其它形态忽略本开关，页签照旧由
+  /// [MediaLibraryShellScope.chromeTabsSlot] 的内容；没有登记时该位置留空（漫画页
+  /// ticket 01 起标签栏在二级浮动行，该位置空出；ticket 03 的继续阅读胶囊落在这里）。
+  /// 仅用于「单视图 + [alwaysShowChrome]」的壳；其它形态忽略本开关，页签照旧由
   /// 壳画，避免多视图壳没有视图切换入口。
   final bool chromeTabsFromView;
 
@@ -203,11 +224,16 @@ class _MediaLibraryShellState extends State<MediaLibraryShell> {
   final MediaLibraryChromeTabsSlot _chromeTabsSlot =
       MediaLibraryChromeTabsSlot();
 
+  /// 当前视图登记二级浮动行内容的槽（漫画页的标签页签胶囊）。
+  final MediaLibrarySecondaryRowSlot _secondaryRowSlot =
+      MediaLibrarySecondaryRowSlot();
+
   @override
   void dispose() {
     _chrome.dispose();
     _actionsSlot.dispose();
     _chromeTabsSlot.dispose();
+    _secondaryRowSlot.dispose();
     super.dispose();
   }
 
@@ -327,6 +353,7 @@ class _MediaLibraryShellState extends State<MediaLibraryShell> {
       kinds: kinds,
       select: _select,
       chromeTabsSlot: customChromeTabs ? _chromeTabsSlot : null,
+      secondaryRowSlot: _secondaryRowSlot,
       child: FushiShellTitleScope(
         title: FushiShellTitleScope.maybeTitleOf(context) ?? '',
         actionsSlot: _actionsSlot,
@@ -348,9 +375,10 @@ class _MediaLibraryShellState extends State<MediaLibraryShell> {
                 onNotification: _onScroll,
                 // 二级胶囊行叠在页面上、与顶栏同一份显隐（嵌套的
                 // [FushiFloatingChromeOverlay] 读同一个作用域，视图的顶部让位
-                // 自动累加两行）；不在「在线源」组时不占高度。
+                // 自动累加两行）。二级行里的内容既可能是在线源组胶囊，也可能是
+                // 视图登记的内容（漫画页的标签页签）；两者都没有时不占高度。
                 child: FushiFloatingChromeOverlay(
-                  chrome: _buildOnlineSubNavigation(context, views),
+                  chrome: _buildSecondaryChrome(context, views),
                   child: sections,
                 ),
               ),
@@ -408,6 +436,47 @@ class _MediaLibraryShellState extends State<MediaLibraryShell> {
     );
   }
 
+  /// 二级浮动行：在线源组胶囊 + 当前视图登记的内容（漫画页的标签页签）。
+  ///
+  /// 两者互斥使用（在线源组只在多视图壳出现，登记内容只由单视图漫画页使用），
+  /// 但结构上允许同时存在，避免以后加视图时丢内容。
+  Widget _buildSecondaryChrome(
+    BuildContext context,
+    List<MediaLibraryViewSpec> views,
+  ) {
+    return ListenableBuilder(
+      listenable: _secondaryRowSlot,
+      builder: (BuildContext context, Widget? _) {
+        final Widget online = _buildOnlineSubNavigation(context, views);
+        final Widget? claimed = _secondaryRowSlot.content;
+        if (claimed == null) return online;
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[online, _secondaryRowInset(context, claimed)],
+        );
+      },
+    );
+  }
+
+  /// 二级行内容与顶栏胶囊、页面内容同一条页边；顶上 8 + 顶栏底边 4 = 两级页签
+  /// 之间 12（同浏览页二级内容域）。
+  Widget _secondaryRowInset(BuildContext context, Widget child) {
+    final FushiDesignTokens tokens = FushiDesignTokens.of(context);
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        tokens.spacing.page,
+        tokens.spacing.gap,
+        tokens.spacing.page,
+        tokens.spacing.gap,
+      ),
+      child: Align(
+        alignment: AlignmentDirectional.centerStart,
+        child: child,
+      ),
+    );
+  }
+
   /// 「在线源」组的二级胶囊（来源 / 扩展）；不在该组或组内只有一个视图时为空。
   Widget _buildOnlineSubNavigation(
     BuildContext context,
@@ -421,32 +490,21 @@ class _MediaLibraryShellState extends State<MediaLibraryShell> {
     if (online.length < 2 || !_isOnline(selected)) {
       return const SizedBox.shrink();
     }
-    final FushiDesignTokens tokens = FushiDesignTokens.of(context);
-    return Padding(
-      // 与顶栏胶囊、页面内容同一条页边；顶上 8 + 顶栏底边 4 = 两级页签之间 12
-      // （同浏览页二级内容域）。
-      padding: EdgeInsets.fromLTRB(
-        tokens.spacing.page,
-        tokens.spacing.gap,
-        tokens.spacing.page,
-        tokens.spacing.gap,
-      ),
-      child: Align(
-        alignment: AlignmentDirectional.centerStart,
-        child: LibrarySectionTabs<MediaLibraryViewKind>(
-          tabs: <LibrarySectionTab<MediaLibraryViewKind>>[
-            for (final MediaLibraryViewSpec spec in online)
-              LibrarySectionTab<MediaLibraryViewKind>(
-                value: spec.kind,
-                label: spec.label,
-              ),
-          ],
-          selected: selected,
-          onChanged: _select,
-          focusIdPrefix: '${widget.focusIdPrefix}-online',
-          secondary: true,
-          floating: true,
-        ),
+    return _secondaryRowInset(
+      context,
+      LibrarySectionTabs<MediaLibraryViewKind>(
+        tabs: <LibrarySectionTab<MediaLibraryViewKind>>[
+          for (final MediaLibraryViewSpec spec in online)
+            LibrarySectionTab<MediaLibraryViewKind>(
+              value: spec.kind,
+              label: spec.label,
+            ),
+        ],
+        selected: selected,
+        onChanged: _select,
+        focusIdPrefix: '${widget.focusIdPrefix}-online',
+        secondary: true,
+        floating: true,
       ),
     );
   }

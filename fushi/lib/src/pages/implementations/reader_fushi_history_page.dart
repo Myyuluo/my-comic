@@ -785,7 +785,7 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
 
   @override
   void dispose() {
-    _claimedChromeTabs?.release(this);
+    _claimedSecondaryRow?.release(this);
     _headerSearch.dispose();
     _searchController.dispose();
     _shelfScrollController.dispose();
@@ -891,17 +891,14 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
             visible: _mangaItemPassesActiveFilters,
           )
         : const <MangaTabSelection, int>{};
-    // 漫画页在库页壳里时，视图页签位由标签页签胶囊取代：页签位是壳画的，标签
-    // 数据与交互在本书架里，所以像页头动作一样把标签行登记给壳。
-    final MediaLibraryChromeTabsSlot? chromeTabs = _mangaOnly
-        ? MediaLibraryShellScope.maybeOf(context)?.chromeTabsSlot
+    // 漫画页在库页壳里时，标签页签胶囊画在「漫画」标题 / 动作行下方的二级浮动
+    // 行里：二级行是壳画的，标签数据与交互在本书架里，所以像页头动作一样把标签
+    // 行登记给壳。登记内容与搜索栏不在同一行，展开搜索 / 每次输入都不会重建搜索
+    // 框所在的那一行，不需要再为焦点让路。
+    final MediaLibrarySecondaryRowSlot? secondaryRow = _mangaOnly
+        ? MediaLibraryShellScope.maybeOf(context)?.secondaryRowSlot
         : null;
-    // 搜索展开且已有关键词时，chrome 页签位整行被搜索栏取代；此时再登记标签
-    // 胶囊会让外壳在每次输入后重建 chrome 行，打断正在输入的搜索框焦点
-    // （用户实报「第一次输入就失焦」）。收起/清空后恢复登记。
-    if (!(_mangaOnly && _headerSearch.hasQuery)) {
-      _syncChromeTabsClaim(chromeTabs, allTagRows);
-    }
+    _syncSecondaryRowClaim(secondaryRow, allTagRows);
 
     // BUG-250: 书架批量选择模式（[_selectionMode]）活在本 tab 内容里，不是独立
     // route。顶层 HomePage 的 PopScope 对它无感，返回键会直接弹掉 root route 退
@@ -934,22 +931,23 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: <Widget>[
                         // 单行页头（2026-10-14）：页签 + 右侧 🔍 / 多选 / 排序 /
-                        // 管理标签，搜索点开整行换成搜索栏。漫画页的页签位已换成
-                        // 漂浮 chrome 行里的 Tag chips（ticket 06），标题下不再
-                        // 单独占一行；其余库页照旧在页头下画标签行。Cupertino
-                        // 旧版面保留常驻搜索行，标签 chip 不再重复嵌进工具栏。
+                        // 管理标签，搜索点开整行换成搜索栏。漫画页在库页壳里时，
+                        // 标签页签由壳的二级浮动行画出（下方 [secondaryRow]），
+                        // 标题下不再单独占一行；独立使用（无壳）时仍画在这里。
+                        // 其余库页照旧在页头下画标签行。Cupertino 旧版面保留常驻
+                        // 搜索行，标签 chip 不再重复嵌进工具栏。
                         if (!isCupertinoPlatform(context)) ...<Widget>[
                           _buildPageHeader(),
                           _buildSortMenuAnchor(allTagRows),
-                          if (chromeTabs == null) _buildTagBar(allTagRows),
+                          if (secondaryRow == null) _buildTagBar(allTagRows),
                         ] else ...<Widget>[
                           // 漫画页的标签栏是独立的单选页签胶囊，不再并进 legacy
                           // 工具行的「多选标签」菜单；其他媒体库保持原菜单。
                           _buildSearchBar(
                             allTagRows,
-                            hideTagChips: chromeTabs != null || _mangaOnly,
+                            hideTagChips: secondaryRow != null || _mangaOnly,
                           ),
-                          if (_mangaOnly && chromeTabs == null)
+                          if (_mangaOnly && secondaryRow == null)
                             _buildTagBar(allTagRows),
                         ],
                         // 下拉同步可能跑几十秒，光一个转圈看不出进展；没同步在飞时
@@ -1089,19 +1087,19 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
     );
   }
 
-  /// 上次登记页签位内容的壳槽（换槽 / 卸载时先撤回旧登记）。
-  MediaLibraryChromeTabsSlot? _claimedChromeTabs;
+  /// 上次登记二级浮动行内容的壳槽（换槽 / 卸载时先撤回旧登记）。
+  MediaLibrarySecondaryRowSlot? _claimedSecondaryRow;
 
-  /// 把标签页签胶囊登记到壳的视图页签位（漫画页）。独立使用（无壳）时不登记，
-  /// 页签行仍在标题下自成一行。`inlineTags` 去掉行内页边，让胶囊从页签原来的
-  /// 左缘开始、高度与浮动 chrome 行一致。
-  void _syncChromeTabsClaim(
-    MediaLibraryChromeTabsSlot? slot,
+  /// 把标签页签胶囊登记到壳的二级浮动行（漫画页，标题 / 动作行下方）。独立使用
+  /// （无壳）时不登记，页签行在页头下方自成一行。`inlineTags` 去掉行内页边，
+  /// 由壳统一给二级行的页边与上下间距。
+  void _syncSecondaryRowClaim(
+    MediaLibrarySecondaryRowSlot? slot,
     List<BookTagRow> allTags,
   ) {
-    if (!identical(_claimedChromeTabs, slot)) {
-      _claimedChromeTabs?.release(this);
-      _claimedChromeTabs = slot;
+    if (!identical(_claimedSecondaryRow, slot)) {
+      _claimedSecondaryRow?.release(this);
+      _claimedSecondaryRow = slot;
     }
     if (slot == null) return;
     slot.claim(

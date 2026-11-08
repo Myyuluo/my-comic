@@ -23,13 +23,16 @@ import 'package:fushi_core/fushi_core.dart';
 
 import '../helpers/test_platform_services.dart';
 
-/// 漫画页的标签栏占据原「书架」视图页签位（ticket 06 起），ticket 01 起从彩色
-/// 多选 chip 改为单选分段胶囊：首项「书架」+ 用户标签，点选即切换页签。
+/// 漫画页的标签栏在 ticket 06 曾占据原「书架」视图页签位；布局跟进 ticket 01
+/// 起移到「漫画」标题 / 右上角动作行下方的**二级浮动行**（与在线源组二级胶囊
+/// 同一套收放和顶部让位），形态是二级中性胶囊里的单选分段：首项「书架」+ 用户
+/// 标签，点选即切换页签。
 ///
 /// 页面级 seam（与 [reader_shelf_tag_filter_empty_state_test] 同源）：挂真实
 /// [MangaLibraryPage]（壳 + 书架页），标签走真 37 表 DB；书架列表 provider 覆写
-/// 成受控列表，避开封面真 I/O。断言只落在用户可见的结果上：视图页签消失、分段
-/// 胶囊在浮动 chrome 行、空标签时仍有「书架」页签、点选筛选生效、长按不再排序。
+/// 成受控列表，避开封面真 I/O。断言只落在用户可见的结果上：视图页签消失、标签
+/// 行在主 chrome 行下方、空标签时仍有「书架」页签、点选筛选生效、随滚动收放、
+/// 内容让位、长按不再排序。
 void main() {
   final TestWidgetsFlutterBinding binding =
       TestWidgetsFlutterBinding.ensureInitialized();
@@ -136,8 +139,11 @@ void main() {
     ),
   );
 
-  Future<void> pumpPage(WidgetTester tester) async {
-    tester.view.physicalSize = const Size(1400, 1200);
+  Future<void> pumpPage(
+    WidgetTester tester, {
+    Size size = const Size(1400, 1200),
+  }) async {
+    tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
@@ -145,7 +151,7 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('漫画页不再显示视图页签；chrome 页签位是标签页签胶囊', (
+  testWidgets('漫画页不再显示视图页签；标签页签在标题/动作行下方的二级浮动行', (
     WidgetTester tester,
   ) async {
     await seedManga('m1', '漫画一');
@@ -156,10 +162,20 @@ void main() {
       findsNothing,
       reason: '漫画页只剩书架一个视图，不得再画视图页签分段条',
     );
+    final Finder tagBar = find.byKey(
+      const ValueKey<String>('manga_tag_tab_bar'),
+    );
+    expect(tagBar, findsOneWidget, reason: '标签页签胶囊仍在页面里');
+    final Finder mainBar = find.byType(FushiFloatingChromeBar);
     expect(
-      find.byKey(const ValueKey<String>('manga_tag_tab_bar')),
-      findsOneWidget,
-      reason: 'chrome 页签位由标签页签胶囊占据',
+      find.descendant(of: mainBar, matching: tagBar),
+      findsNothing,
+      reason: '标签栏已离开主 chrome 行的页签位',
+    );
+    expect(
+      tester.getTopLeft(tagBar).dy,
+      greaterThanOrEqualTo(tester.getBottomLeft(mainBar).dy),
+      reason: '标签栏是标题 / 动作行下方的二级浮动行',
     );
     expect(
       find.text(t.library_view_shelf),
@@ -171,9 +187,18 @@ void main() {
       find.byKey(const ValueKey<String>('floating-chrome-shell-title')),
       findsOneWidget,
     );
+    // 主 chrome 行的页签位在 ticket 01 后留空（继续阅读胶囊在 ticket 03 才落位）。
+    expect(
+      find.descendant(
+        of: mainBar,
+        matching: find.byKey(const ValueKey<String>('library_select_toggle')),
+      ),
+      findsOneWidget,
+      reason: '右上角动作仍在主 chrome 行',
+    );
   });
 
-  testWidgets('标签页签出现在浮动 chrome 行，标题下不再有独立标签行', (
+  testWidgets('标签页签只出现在二级浮动行，主 chrome 行不再有标题下的独立标签行', (
     WidgetTester tester,
   ) async {
     await seedManga('m1', '漫画一');
@@ -181,41 +206,209 @@ void main() {
     await db.createTag('短篇', 0xFF445566);
     await pumpPage(tester);
 
-    final Finder bar = find.byType(FushiFloatingChromeBar);
+    final Finder mainBar = find.byType(FushiFloatingChromeBar);
+    final Finder tagBar = find.byKey(
+      const ValueKey<String>('manga_tag_tab_bar'),
+    );
     for (final String name in <String>['连载', '短篇']) {
       expect(
-        find.descendant(of: bar, matching: find.text(name)),
+        find.descendant(of: mainBar, matching: find.text(name)),
+        findsNothing,
+        reason: '标签页签「$name」不得再占主 chrome 行的页签位',
+      );
+      expect(
+        find.descendant(of: tagBar, matching: find.text(name)),
         findsOneWidget,
-        reason: '标签页签「$name」必须出现在浮动 chrome 行（原视图页签位置）',
+        reason: '标签页签「$name」画在二级浮动行',
       );
       expect(
         find.text(name),
         findsOneWidget,
-        reason: '标签只占 chrome 一处；标题下不再有独立标签行',
+        reason: '标签只占二级行一处；标题下不再有独立标签行',
       );
     }
 
-    // 同一行：chip 与「漫画」标题胶囊、右上角动作的纵向中心一致。
-    final double chipCenter = tester
-        .getCenter(find.descendant(of: bar, matching: find.text('连载')))
-        .dy;
-    final double titleCenter = tester
-        .getCenter(
-          find.byKey(const ValueKey<String>('floating-chrome-shell-title')),
-        )
-        .dy;
-    final double actionsCenter = tester
-        .getCenter(find.byKey(const ValueKey<String>('library_select_toggle')))
-        .dy;
+    // 二级行整体位于标题 / 动作行下方（不是同一行）。
     expect(
-      (chipCenter - titleCenter).abs(),
-      lessThan(4.0),
-      reason: '标签页签与「漫画」标题同一行',
+      tester.getTopLeft(tagBar).dy,
+      greaterThan(tester.getBottomLeft(mainBar).dy),
+      reason: '标签页签在标题 / 动作行下方，而不是与它们同一行',
+    );
+  });
+
+  testWidgets('标签行是中性二级胶囊：选中段填充、贴合内容宽，数量用更轻的次要色', (
+    WidgetTester tester,
+  ) async {
+    await seedManga('m1', '漫画一');
+    await db.createTag('连载', 0xFF112233);
+    await pumpPage(tester);
+
+    final BuildContext context = tester.element(find.byType(MangaLibraryPage));
+    final ColorScheme cs = Theme.of(context).colorScheme;
+
+    final Finder capsuleFinder = find.byKey(
+      const ValueKey<String>('manga_tag_tab_capsule'),
+    );
+    expect(capsuleFinder, findsOneWidget, reason: '标签行收在一枚二级胶囊里');
+    final ShapeDecoration capsule =
+        tester.widget<DecoratedBox>(capsuleFinder).decoration
+            as ShapeDecoration;
+    expect(
+      capsule.color,
+      cs.surfaceContainerHigh,
+      reason: '二级胶囊是中性 surfaceContainerHigh，不再是一级悬浮工具栏胶囊',
+    );
+
+    final Finder shelf = find.byKey(
+      const ValueKey<String>('manga_tag_tab_shelf'),
+    );
+    final AnimatedContainer fill = tester.widget<AnimatedContainer>(
+      find.descendant(of: shelf, matching: find.byType(AnimatedContainer)),
     );
     expect(
-      (chipCenter - actionsCenter).abs(),
-      lessThan(4.0),
-      reason: '标签页签与右上角动作同一行',
+      (fill.decoration! as ShapeDecoration).color,
+      cs.secondaryContainer,
+      reason: '选中段用 secondaryContainer 填充',
+    );
+
+    // 内容宽：两个页签远窄于整行可用宽。
+    expect(
+      tester.getSize(capsuleFinder).width,
+      lessThan(600),
+      reason: '胶囊贴合内容宽，不拉满整行',
+    );
+
+    // 数量用更轻的次要色小号数字，不与标签名同强度。
+    final Text label = tester.widget<Text>(
+      find.descendant(of: shelf, matching: find.text(t.library_view_shelf)),
+    );
+    final Text count = tester.widget<Text>(
+      find.byKey(const ValueKey<String>('manga_tag_tab_count_shelf')),
+    );
+    expect(
+      count.style?.color,
+      isNot(label.style?.color),
+      reason: '数量是更轻的次要色，不与标签名同色',
+    );
+    expect(
+      count.style?.color?.a ?? 1,
+      lessThan(1),
+      reason: '数量颜色更轻（半透明次要色）',
+    );
+    expect(
+      count.style?.fontSize,
+      lessThanOrEqualTo(label.style?.fontSize ?? 14),
+      reason: '数量是小号数字',
+    );
+  });
+
+  testWidgets('标签行与主 chrome 行一起向下收起、向上弹回', (
+    WidgetTester tester,
+  ) async {
+    for (int i = 0; i < 40; i++) {
+      await seedManga('m$i', '漫画$i');
+    }
+    await pumpPage(tester, size: const Size(1000, 800));
+
+    final Finder shelf = find.byKey(
+      const ValueKey<String>('manga_tag_tab_shelf'),
+    );
+    final Finder mainAction = find.byKey(
+      const ValueKey<String>('library_select_toggle'),
+    );
+    expect(shelf.hitTestable(), findsOneWidget, reason: '首屏标签行可点');
+    expect(mainAction.hitTestable(), findsOneWidget);
+
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, -400));
+    await tester.pumpAndSettle();
+
+    expect(
+      shelf.hitTestable(),
+      findsNothing,
+      reason: '向下滚动后标签行随主 chrome 行一起收起（同一份显隐）',
+    );
+    expect(
+      mainAction.hitTestable(),
+      findsNothing,
+      reason: '主 chrome 行同时收起',
+    );
+
+    await tester.drag(find.byType(CustomScrollView), const Offset(0, 400));
+    await tester.pumpAndSettle();
+
+    expect(
+      shelf.hitTestable(),
+      findsOneWidget,
+      reason: '向上滚动后标签行与主 chrome 行一起弹回',
+    );
+  });
+
+  testWidgets('内容首行让出两级浮动行，不被标签行遮挡', (
+    WidgetTester tester,
+  ) async {
+    await seedManga('m1', '漫画一');
+    await pumpPage(tester);
+
+    final Finder tagBar = find.byKey(
+      const ValueKey<String>('manga_tag_tab_bar'),
+    );
+    final Finder firstCard = find.byKey(
+      ValueKey<String>(
+        'book_entry_${ReaderFushiSource.mediaIdentifierFor('m1')}',
+      ),
+    );
+    expect(firstCard, findsOneWidget);
+    expect(
+      tester.getTopLeft(firstCard).dy,
+      greaterThanOrEqualTo(tester.getBottomLeft(tagBar).dy),
+      reason: '网格首行从两级浮动行的下沿开始，不被标签行遮挡',
+    );
+  });
+
+  testWidgets('标签多到放不下时在胶囊内横滚，「书架」固定可见', (
+    WidgetTester tester,
+  ) async {
+    await seedManga('m1', '漫画一');
+    final List<int> tagIds = <int>[];
+    for (int i = 0; i < 12; i++) {
+      tagIds.add(
+        await db.createTag('超长标签名称用于横向滚动测试$i', 0xFF112233),
+      );
+    }
+    await pumpPage(tester);
+
+    final Finder scroll = find.descendant(
+      of: find.byKey(const ValueKey<String>('manga_tag_tab_bar')),
+      matching: find.byType(SingleChildScrollView),
+    );
+    expect(scroll, findsOneWidget, reason: '标签区在胶囊内横向滚动');
+
+    final Finder shelf = find.byKey(
+      const ValueKey<String>('manga_tag_tab_shelf'),
+    );
+    final double shelfX = tester.getCenter(shelf).dx;
+    final Finder lastTag = find.byKey(
+      ValueKey<String>('manga_tag_tab_${tagIds.last}'),
+    );
+    final double beforeX = tester.getTopLeft(lastTag).dx;
+    expect(
+      beforeX,
+      greaterThan(tester.view.physicalSize.width),
+      reason: '最后一枚标签初始在胶囊视口外',
+    );
+
+    await tester.drag(scroll, const Offset(-600, 0));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.getTopLeft(lastTag).dx,
+      lessThan(beforeX - 100),
+      reason: '标签区可横向滚动',
+    );
+    expect(
+      tester.getCenter(shelf).dx,
+      shelfX,
+      reason: '「书架」固定在最左，不随标签区横滚',
     );
   });
 
@@ -235,7 +428,7 @@ void main() {
     );
   });
 
-  testWidgets('没有标签时 chrome 页签位仍有「书架」页签，不出现彩色 chip', (
+  testWidgets('没有标签时二级行仍有「书架」页签，不出现彩色 chip', (
     WidgetTester tester,
   ) async {
     await seedManga('m1', '漫画一');
@@ -271,7 +464,7 @@ void main() {
     );
   });
 
-  testWidgets('点击 chrome 里的标签页签切换筛选，点回「书架」恢复默认', (
+  testWidgets('点击二级行里的标签页签切换筛选，点回「书架」恢复默认', (
     WidgetTester tester,
   ) async {
     await seedManga('m1', '漫画一');
@@ -294,8 +487,10 @@ void main() {
     expect(card2, findsOneWidget, reason: '书架显示无标签漫画');
     expect(card1, findsNothing, reason: '有标签漫画不在书架');
 
-    final Finder bar = find.byType(FushiFloatingChromeBar);
-    await tester.tap(find.descendant(of: bar, matching: find.text('连载')));
+    final Finder tagBar = find.byKey(
+      const ValueKey<String>('manga_tag_tab_bar'),
+    );
+    await tester.tap(find.descendant(of: tagBar, matching: find.text('连载')));
     await tester.pumpAndSettle();
 
     expect(card1, findsOneWidget, reason: '标签页签显示对应漫画');
@@ -306,14 +501,14 @@ void main() {
       reason: '单选页签没有多选「清除筛选」chip',
     );
 
-    await tester.tap(find.descendant(of: bar, matching: find.text('书架')));
+    await tester.tap(find.descendant(of: tagBar, matching: find.text('书架')));
     await tester.pumpAndSettle();
 
     expect(card2, findsOneWidget, reason: '点回书架恢复无标签漫画');
     expect(card1, findsNothing);
   });
 
-  testWidgets('在 chrome 行里长按拖动标签页签不再排序', (WidgetTester tester) async {
+  testWidgets('在二级行里长按拖动标签页签不再排序', (WidgetTester tester) async {
     await seedManga('m1', '漫画一');
     await db.createTag('连载', 0xFF112233);
     await db.createTag('短篇', 0xFF445566);
@@ -323,12 +518,20 @@ void main() {
         (await db.getAllTags()).map((BookTagRow tag) => tag.name).toList();
     expect(await tagOrder(), <String>['连载', '短篇']);
 
-    final Finder bar = find.byType(FushiFloatingChromeBar);
-    final Finder chipA = find.descendant(of: bar, matching: find.text('连载'));
-    final Finder chipB = find.descendant(of: bar, matching: find.text('短篇'));
+    final Finder tagBar = find.byKey(
+      const ValueKey<String>('manga_tag_tab_bar'),
+    );
+    final Finder chipA = find.descendant(
+      of: tagBar,
+      matching: find.text('连载'),
+    );
+    final Finder chipB = find.descendant(
+      of: tagBar,
+      matching: find.text('短篇'),
+    );
     expect(
       find.descendant(
-        of: bar,
+        of: tagBar,
         matching: find.byType(LongPressDraggable<BookTagRow>),
       ),
       findsNothing,
@@ -348,6 +551,92 @@ void main() {
       <String>['连载', '短篇'],
       reason: '标签顺序仍在标签管理页维护，页签栏拖动不改变顺序',
     );
+  });
+
+  testWidgets('「管理标签」仍在主 chrome 右上角动作组，标签行本身没有管理入口', (
+    WidgetTester tester,
+  ) async {
+    await seedManga('m1', '漫画一');
+    await pumpPage(tester);
+
+    final Finder manage = find.byKey(
+      const ValueKey<String>('library_tag_settings'),
+    );
+    expect(manage, findsOneWidget, reason: '管理标签入口仍在页面上');
+    expect(
+      find.descendant(
+        of: find.byType(FushiFloatingChromeBar),
+        matching: manage,
+      ),
+      findsOneWidget,
+      reason: '管理标签入口属于主 chrome 行右侧动作组',
+    );
+    final Finder tagBar = find.byKey(
+      const ValueKey<String>('manga_tag_tab_bar'),
+    );
+    expect(
+      find.descendant(of: tagBar, matching: manage),
+      findsNothing,
+      reason: '标签行本身不承担管理入口',
+    );
+    expect(
+      find.descendant(of: tagBar, matching: find.text(t.tag_manage)),
+      findsNothing,
+      reason: '标签行里不再出现「管理标签」文字入口',
+    );
+  });
+
+  testWidgets('搜索词在二级标签行下仍只在当前页签内生效，数量同步', (
+    WidgetTester tester,
+  ) async {
+    await seedManga('m1', 'Alpha 起点');
+    await seedManga('m2', 'Beta 连载');
+    await seedManga('m3', 'Alpha 续');
+    final int tagA = await db.createTag('连载', 0xFF112233);
+    await db.createTag('短篇', 0xFF445566);
+    await db.addTagToBook('m2', tagA);
+    await db.addTagToBook('m3', tagA);
+    await pumpPage(tester);
+
+    Finder card(String bookKey) => find.byKey(
+      ValueKey<String>(
+        'book_entry_${ReaderFushiSource.mediaIdentifierFor(bookKey)}',
+      ),
+    );
+    String countText(String scope) => tester
+        .widget<Text>(
+          find.byKey(ValueKey<String>('manga_tag_tab_count_$scope')),
+        )
+        .data!;
+
+    expect(countText('shelf'), '1');
+    expect(countText('$tagA'), '2');
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('fushi-header-search-button')),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const ValueKey<String>('shelf_search_field')),
+      'Alpha',
+    );
+    await tester.pumpAndSettle();
+
+    expect(countText('shelf'), '1', reason: '书架命中 Alpha 的无标签漫画');
+    expect(countText('$tagA'), '1', reason: '连载下只有 m3 命中 Alpha');
+    expect(card('m1'), findsOneWidget);
+    expect(card('m2'), findsNothing, reason: '搜索只在当前页签（书架）内生效');
+
+    // 搜索栏展开时标签行仍在二级行，点选后筛选切到该页签。
+    final Finder tagBar = find.byKey(
+      const ValueKey<String>('manga_tag_tab_bar'),
+    );
+    await tester.tap(find.descendant(of: tagBar, matching: find.text('连载')));
+    await tester.pumpAndSettle();
+
+    expect(card('m3'), findsOneWidget, reason: '连载下命中 Alpha 的 m3');
+    expect(card('m2'), findsNothing);
+    expect(card('m1'), findsNothing);
   });
 
   testWidgets('普通书籍页（my-comic 中不可达）仍保留视图页签与标题下标签行', (
