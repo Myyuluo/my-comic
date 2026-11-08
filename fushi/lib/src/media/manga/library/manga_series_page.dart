@@ -936,7 +936,9 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     final AppModel? appModel = _appModelOrNull;
     if (appModel != null) {
       final String bookKey = localSourceBookKeyFor(manga.directoryPath);
-      final EpubBookRow? existing = await appModel.database.getEpubBook(bookKey);
+      final EpubBookRow? existing = await appModel.database.getEpubBook(
+        bookKey,
+      );
       if (existing != null) {
         await _loadFromShelf(bookKey);
         return;
@@ -2044,6 +2046,8 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
           ...extensionSourceDetailChips(includeExternal: false),
       ],
       genres: series?.genreLabels ?? const <String>[],
+      // 源分类与书名 / 作者同一条导航：以分类文字去全部已启用在线源搜索。
+      onGenreTap: _openGlobalSearch,
       description: series?.description,
       primaryAction: _buildPrimaryAction(),
       secondaryActions: _buildSecondaryActions(),
