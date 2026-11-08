@@ -940,7 +940,7 @@ class _FushiSectionTabBarState<T extends Object>
     );
     if (!widget.floating) return bar;
     if (widget.secondary) {
-      return _CompactSecondaryTabsFrame(
+      return FushiCompactSecondaryTabsFrame(
         naturalWidth: _floatingNaturalWidth(context),
         child: bar,
       );
@@ -1263,8 +1263,9 @@ class _FushiSectionTabBarState<T extends Object>
         : TabAlignment.fill;
     if (_compactSecondary) {
       final ColorScheme cs = Theme.of(context).colorScheme;
-      // 二级内容域：外框 [_CompactSecondaryTabsFrame] 是一条扁平的 tonal 分段
-      // 胶囊（无投影），TabBar 不带轨道；选中段是一枚 secondaryContainer 小胶囊。
+      // 二级内容域：外框 [FushiCompactSecondaryTabsFrame] 是一条扁平的 tonal
+      // 分段胶囊（无投影），TabBar 不带轨道；选中段是一枚 secondaryContainer
+      // 小胶囊。
       return FushiTabBar(
         controller: controller,
         track: false,
@@ -1435,7 +1436,7 @@ class _SectionTabOverflowFade extends StatelessWidget {
   /// 在浮动胶囊里：渐隐要用胶囊底色才盖得住。
   final bool floating;
 
-  /// 浮动 + 二级：在 [_CompactSecondaryTabsFrame] 的扁平胶囊里。
+  /// 浮动 + 二级：在 [FushiCompactSecondaryTabsFrame] 的扁平胶囊里。
   final bool secondary;
 
   @override
@@ -1444,7 +1445,7 @@ class _SectionTabOverflowFade extends StatelessWidget {
     if (isEinkTheme(context)) return const SizedBox.shrink();
     final bool apple = isGlassDesign(context);
     final Color background = floating && secondary && !apple
-        ? _CompactSecondaryTabsFrame.colorOf(context)
+        ? FushiCompactSecondaryTabsFrame.colorOf(context)
         : floating && !apple
         ? FushiFloatingToolbarSurface.colorOf(context)
         : Theme.of(context).scaffoldBackgroundColor;
@@ -1519,20 +1520,37 @@ class _FloatingSectionTabsFrame extends StatelessWidget {
 }
 
 /// 二级内容域的紧凑分段胶囊外框（`LibrarySectionTabs(floating: true,
-/// secondary: true)`）：贴合页签自然宽贴左（超出可用宽时吃满、页签在里面横滑），
+/// secondary: true)` 与漫画页标签栏共用）。
+///
+/// - [naturalWidth] 给出时（库页的二级页签）：贴合页签自然宽贴左，超出可用宽时
+///   吃满、页签在里面横滑；
+/// - [naturalWidth] 为 null 时（漫画页标签栏）：宽由内容决定，[height] 给出时
+///   同时固定胶囊总高并把内容放进 [padding] 内衬。
+///
 /// Material 是一条扁平的 surfaceContainerHigh 全胶囊（不浮、无投影，比一级
-/// 悬浮页签胶囊矮一档）；Apple 不画底，只按内容宽排二级文字页签。
-class _CompactSecondaryTabsFrame extends StatelessWidget {
-  const _CompactSecondaryTabsFrame({
-    required this.naturalWidth,
+/// 悬浮页签胶囊矮一档）；Apple 不画底，只按内容宽排二级文字页签（库页保持
+/// 文字页签自己的外边距，漫画页固定高度时保留 [padding] 内衬）。
+class FushiCompactSecondaryTabsFrame extends StatelessWidget {
+  const FushiCompactSecondaryTabsFrame({
     required this.child,
+    this.naturalWidth,
+    this.height,
+    super.key,
   });
 
-  /// 整排页签的自然宽（不含胶囊内边距）。
-  final double naturalWidth;
+  /// 内容到胶囊外缘的留白：选中段到外缘一圈等宽。
+  static const double padding = 4;
+
+  /// 二级胶囊总高：36 的段高 + 上下各 [padding]。
+  static const double compactHeight = _kCompactSecondaryTabHeight + padding * 2;
+
   final Widget child;
 
-  static const double _padding = 4;
+  /// 整排页签的自然宽（不含胶囊内边距）；null = 宽度由 [child] 决定。
+  final double? naturalWidth;
+
+  /// 固定总高；null = 高度由 [child] 决定（库页页签的自然高）。
+  final double? height;
 
   /// 胶囊底色（两端渐隐用同一个颜色才盖得住）。
   static Color colorOf(BuildContext context) =>
@@ -1543,38 +1561,51 @@ class _CompactSecondaryTabsFrame extends StatelessWidget {
     final bool apple = isGlassDesign(context);
     final bool eink = isEinkTheme(context);
     final ColorScheme cs = Theme.of(context).colorScheme;
+    final Widget content;
+    if (apple) {
+      // Apple 文字页签不装进实色胶囊。库页（未固定高度）保持原生外边距；
+      // 漫画页标签栏固定高度时仍留内衬，内容框与 Material 一致。
+      content = height == null
+          ? child
+          : Padding(padding: const EdgeInsets.all(padding), child: child);
+    } else {
+      content = DecoratedBox(
+        decoration: ShapeDecoration(
+          color: colorOf(context),
+          shape: StadiumBorder(
+            side: eink ? BorderSide(color: cs.outline) : BorderSide.none,
+          ),
+        ),
+        child: ClipPath(
+          clipper: const ShapeBorderClipper(shape: StadiumBorder()),
+          child: Material(
+            type: MaterialType.transparency,
+            child: Padding(
+              padding: const EdgeInsets.all(padding),
+              child: child,
+            ),
+          ),
+        ),
+      );
+    }
+    final Widget sized = height == null
+        ? content
+        : SizedBox(height: height, child: content);
+    final double? naturalWidth = this.naturalWidth;
     return LayoutBuilder(
       builder: (BuildContext context, BoxConstraints constraints) {
-        final double wanted = naturalWidth + (apple ? 0 : _padding * 2) + 2;
-        final double width = constraints.maxWidth.isFinite
-            ? math.min(wanted, constraints.maxWidth)
-            : wanted;
-        final Widget content = apple
-            ? child
-            : DecoratedBox(
-                decoration: ShapeDecoration(
-                  color: colorOf(context),
-                  shape: StadiumBorder(
-                    side: eink
-                        ? BorderSide(color: cs.outline)
-                        : BorderSide.none,
-                  ),
-                ),
-                child: ClipPath(
-                  clipper: const ShapeBorderClipper(shape: StadiumBorder()),
-                  child: Material(
-                    type: MaterialType.transparency,
-                    child: Padding(
-                      padding: const EdgeInsets.all(_padding),
-                      child: child,
-                    ),
-                  ),
-                ),
-              );
+        final double? width = naturalWidth == null
+            ? null
+            : constraints.maxWidth.isFinite
+            ? math.min(
+                naturalWidth + (apple ? 0 : padding * 2) + 2,
+                constraints.maxWidth,
+              )
+            : naturalWidth + (apple ? 0 : padding * 2) + 2;
         return Align(
           alignment: AlignmentDirectional.centerStart,
           widthFactor: constraints.maxWidth.isFinite ? null : 1,
-          child: SizedBox(width: width, child: content),
+          child: width == null ? sized : SizedBox(width: width, child: sized),
         );
       },
     );

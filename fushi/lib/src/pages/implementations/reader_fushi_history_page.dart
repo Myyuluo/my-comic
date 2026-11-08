@@ -787,8 +787,8 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
 
   @override
   void dispose() {
-    _claimedChromeTabs?.release(this);
-    _claimedSecondaryRow?.release(this);
+    _continueReadingClaim.release(this);
+    _secondaryRowClaim.release(this);
     _headerSearch.dispose();
     _searchController.dispose();
     _shelfScrollController.dispose();
@@ -833,11 +833,7 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
         if (target == null) {
           return;
         }
-        await appModel.openMedia(
-          ref: ref,
-          mediaSource: target.getMediaSource(appModel: appModel),
-          item: target,
-        );
+        await _openMediaItem(target);
       };
       return true;
     }());
@@ -905,7 +901,7 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
     // 书架数据还没到（首帧加载 / 错误态）时不能留着上一帧的继续阅读胶囊：
     // 数据就绪后由 [_buildBodyWithSrtBooks] 按同一份候选列表重新登记。
     if (_mangaOnly && books.valueOrNull == null) {
-      _syncChromeTabsClaim(
+      _syncContinueReadingPillClaim(
         MediaLibraryShellScope.maybeOf(context)?.chromeTabsSlot,
         null,
       );
@@ -1098,8 +1094,9 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
     );
   }
 
-  /// 上次登记二级浮动行内容的壳槽（换槽 / 卸载时先撤回旧登记）。
-  MediaLibrarySecondaryRowSlot? _claimedSecondaryRow;
+  /// 二级浮动行（标签页签胶囊）的壳槽登记（换槽 / 卸载时先撤回旧登记）。
+  final _ShellSlotClaim<MediaLibrarySecondaryRowSlot> _secondaryRowClaim =
+      _ShellSlotClaim<MediaLibrarySecondaryRowSlot>();
 
   /// 把标签页签胶囊登记到壳的二级浮动行（漫画页，标题 / 动作行下方）。独立使用
   /// （无壳）时不登记，页签行在页头下方自成一行。`inlineTags` 去掉行内页边，
@@ -1108,13 +1105,9 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
     MediaLibrarySecondaryRowSlot? slot,
     List<BookTagRow> allTags,
   ) {
-    if (!identical(_claimedSecondaryRow, slot)) {
-      _claimedSecondaryRow?.release(this);
-      _claimedSecondaryRow = slot;
-    }
-    if (slot == null) return;
-    slot.claim(
+    _secondaryRowClaim.sync(
       this,
+      slot,
       // 可见 = 没被保活外壳停帧且所在分区在台上（与页头动作登记同一判据）。
       visible:
           TickerMode.valuesOf(context).enabled && SectionVisibility.of(context),
@@ -1122,31 +1115,28 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
     );
   }
 
-  /// 上次登记主 chrome 行页签位内容的壳槽（换槽 / 卸载时先撤回旧登记）。
-  MediaLibraryChromeTabsSlot? _claimedChromeTabs;
+  /// 主 chrome 行页签位（继续阅读胶囊）的壳槽登记（换槽 / 卸载时先撤回旧登记）。
+  final _ShellSlotClaim<MediaLibraryChromeTabsSlot> _continueReadingClaim =
+      _ShellSlotClaim<MediaLibraryChromeTabsSlot>();
 
   /// 把继续阅读胶囊登记到主 chrome 行的页签位（漫画页，标签栏原来的位置，
-  /// ticket 03）。`hero == null`（没有继续阅读条目 / 页面还没拿到书架数据）时
+  /// ticket 03）。`item == null`（没有继续阅读条目 / 页面还没拿到书架数据）时
   /// 胶囊不显示；独立使用（无壳）时槽位为 null，保留网格顶部的旧 hero。
-  void _syncChromeTabsClaim(
+  void _syncContinueReadingPillClaim(
     MediaLibraryChromeTabsSlot? slot,
-    MediaItem? hero,
+    MediaItem? item,
   ) {
-    if (!identical(_claimedChromeTabs, slot)) {
-      _claimedChromeTabs?.release(this);
-      _claimedChromeTabs = slot;
-    }
-    if (slot == null) return;
-    slot.claim(
+    _continueReadingClaim.sync(
       this,
+      slot,
       // 可见 = 没被保活外壳停帧且所在分区在台上（与标签行 / 页头动作同一判据）。
       visible:
-          hero != null &&
+          item != null &&
           TickerMode.valuesOf(context).enabled &&
           SectionVisibility.of(context),
-      content: hero == null
+      content: item == null
           ? const SizedBox.shrink()
-          : _buildContinueReadingPill(hero),
+          : _buildContinueReadingPill(item),
     );
   }
 
@@ -1647,8 +1637,8 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
   /// 用户反馈移除——与右上角「阅读统计」入口重复。
   Widget _buildShelfOverviewSection(List<MediaItem> progressBooks) {
     final FushiDesignTokens tokens = FushiDesignTokens.of(context);
-    final MediaItem? hero = _pickContinueReadingHero(progressBooks);
-    if (hero == null) return const SizedBox.shrink();
+    final MediaItem? item = _pickContinueReadingItem(progressBooks);
+    if (item == null) return const SizedBox.shrink();
     return Padding(
       padding: EdgeInsets.fromLTRB(
         tokens.spacing.card,
@@ -1656,7 +1646,7 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
         tokens.spacing.card,
         0,
       ),
-      child: _buildContinueReadingHero(hero, tokens),
+      child: _buildContinueReadingHero(item, tokens),
     );
   }
 
@@ -1664,7 +1654,7 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
   ///
   /// 在读（0<position<duration、未标读完）+ 有可用最近阅读时间（无痕哨兵不算）
   /// 的书里选最后阅读时间最大者（[pickShelfContinueHero]）。
-  MediaItem? _pickContinueReadingHero(List<MediaItem> progressBooks) {
+  MediaItem? _pickContinueReadingItem(List<MediaItem> progressBooks) {
     final ShelfProgressTally<MediaItem> tally = tallyShelfProgress<MediaItem>(
       progressBooks,
       (MediaItem item) => item.position,
@@ -1684,18 +1674,46 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
     );
   }
 
+  /// 开始阅读一个书架条目：旧 hero、继续阅读胶囊与网格卡共用同一条打开路径
+  /// （媒体会话语义见 [AppModel.openMedia]）。
+  Future<void> _openMediaItem(MediaItem item) async {
+    final MediaSource source = item.getMediaSource(appModel: appModel);
+    await appModel.openMedia(ref: ref, mediaSource: source, item: item);
+  }
+
+  /// 书架作品封面：显示名缩略图 + 透明占位 + 统一的错误占位图标（旧 hero /
+  /// 继续阅读胶囊 / 网格卡共用）。
+  Widget _buildMediaCover(
+    MediaItem item, {
+    BoxFit fit = BoxFit.cover,
+    AlignmentGeometry alignment = Alignment.center,
+  }) {
+    return FadeInImage(
+      imageErrorBuilder: (_, __, ___) =>
+          _coverPlaceholderIcon(Icons.menu_book_outlined),
+      placeholder: MemoryImage(kTransparentImage),
+      image: mediaSource.getDisplayThumbnailFromMediaItem(
+        appModel: appModel,
+        item: item,
+      ),
+      alignment: alignment,
+      fit: fit,
+    );
+  }
+
   /// 主 chrome 行的继续阅读胶囊（ticket 03，标签栏原来的页签位）。
   ///
   /// 形态严格按参考图：圆形封面缩略图 + 主色「继续阅读」文案 + 主色圆形播放钮
-  /// （主色上的对比色播放图标），不显示书名与进度。整颗胶囊是一个点击目标，走
-  /// 与旧 hero 相同的继续阅读打开路径（[AppModel.openMedia]）；播放钮只是视觉
-  /// 强调，不单独接事件。悬停 tooltip 显示（应用改名 override 后的）书名。
+  /// （主色上的对比色播放图标），不显示书名与进度。整颗胶囊（含悬浮面的内衬）
+  /// 是一个点击目标，走与旧 hero 相同的继续阅读打开路径（[AppModel.openMedia]）；
+  /// 播放钮只是视觉强调，不单独接事件。悬停 tooltip 显示（应用改名 override 后
+  /// 的）书名。
   ///
   /// 复用悬浮工具栏胶囊表面（[FushiFloatingToolbarSurface]）与胶囊段
   /// （[FushiCapsuleSegment]）的按压 / 悬停反馈，不引入新的视觉语言；窄窗放不下
   /// 时整颗胶囊在中区横向滚动，右侧动作仍按 [FushiFloatingChromeBar] 的既有规则
   /// 收进「⋯」。
-  Widget _buildContinueReadingPill(MediaItem hero) {
+  Widget _buildContinueReadingPill(MediaItem item) {
     final FushiDesignTokens tokens = FushiDesignTokens.of(context);
     final ThemeData theme = Theme.of(context);
     final ColorScheme cs = theme.colorScheme;
@@ -1705,13 +1723,14 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
     final Color onAccent =
         apple ? appleColorsOf(context).onAccent : cs.onPrimary;
     // BUG-1108 同源：书名走显示名（编辑弹窗写入的 override ?? DB 原名），
-    // 直读 hero.title 会在改名后仍显示旧名。
-    final String title = mediaSource.getDisplayTitleFromMediaItem(hero);
+    // 直读 item.title 会在改名后仍显示旧名。
+    final String title = mediaSource.getDisplayTitleFromMediaItem(item);
     final TextStyle labelStyle =
         (theme.textTheme.labelLarge ?? const TextStyle()).copyWith(
           color: accent,
           fontWeight: FontWeight.w600,
         );
+    void open() => unawaited(_openMediaItem(item));
     return Align(
       alignment: AlignmentDirectional.centerStart,
       child: HorizontalDragScrollable(
@@ -1720,75 +1739,68 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
           scrollDirection: Axis.horizontal,
           child: FushiTooltip(
             message: title,
-            child: FushiFloatingToolbarSurface(
-              key: const ValueKey<String>('reader_shelf_continue_pill'),
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-              child: FushiCapsuleSegment(
-                selected: false,
-                onTap: () async {
-                  final MediaSource source = hero.getMediaSource(
-                    appModel: appModel,
-                  );
-                  await appModel.openMedia(
-                    ref: ref,
-                    mediaSource: source,
-                    item: hero,
-                  );
-                },
-                height: 40,
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
-                    ClipOval(
-                      child: SizedBox(
-                        key: const ValueKey<String>(
-                          'reader_shelf_continue_pill_cover',
-                        ),
-                        width: 28,
-                        height: 28,
-                        child: FadeInImage(
-                          imageErrorBuilder: (_, __, ___) =>
-                              _coverPlaceholderIcon(Icons.menu_book_outlined),
-                          placeholder: MemoryImage(kTransparentImage),
-                          image: mediaSource.getDisplayThumbnailFromMediaItem(
-                            appModel: appModel,
-                            item: hero,
+            child: GestureDetector(
+              // 悬浮面四周的内衬（4/6）也是点击目标：整颗胶囊任意位置都能
+              // 继续阅读，而不是只有内部的胶囊段。内部胶囊段保留自己的按压 /
+              // 悬停反馈，手势竞技场里它中选时外层不会重复触发。
+              behavior: HitTestBehavior.opaque,
+              excludeFromSemantics: true,
+              onTap: open,
+              child: FushiFloatingToolbarSurface(
+                key: const ValueKey<String>('reader_shelf_continue_pill'),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 6,
+                  vertical: 4,
+                ),
+                child: FushiCapsuleSegment(
+                  selected: false,
+                  onTap: open,
+                  height: 40,
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      ClipOval(
+                        child: SizedBox(
+                          key: const ValueKey<String>(
+                            'reader_shelf_continue_pill_cover',
                           ),
-                          fit: BoxFit.cover,
+                          width: 28,
+                          height: 28,
+                          child: _buildMediaCover(item),
                         ),
                       ),
-                    ),
-                    SizedBox(width: tokens.spacing.gap),
-                    Text(
-                      t.book_continue_reading,
-                      maxLines: 1,
-                      softWrap: false,
-                      style: labelStyle,
-                    ),
-                    SizedBox(width: tokens.spacing.gap),
-                    // 行尾播放钮：纯视觉强调（整颗胶囊就是点击目标），不单独
-                    // 抢焦点。
-                    ExcludeSemantics(
-                      child: DecoratedBox(
-                        key: const ValueKey<String>(
-                          'reader_shelf_continue_pill_play',
-                        ),
-                        decoration: BoxDecoration(
-                          color: accent,
-                          shape: BoxShape.circle,
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.all(6),
-                          child: FushiIcon(
-                            FushiIcons.play,
-                            size: 18,
-                            color: onAccent,
+                      SizedBox(width: tokens.spacing.gap),
+                      Text(
+                        t.book_continue_reading,
+                        maxLines: 1,
+                        softWrap: false,
+                        style: labelStyle,
+                      ),
+                      SizedBox(width: tokens.spacing.gap),
+                      // 行尾播放钮：纯视觉强调（整颗胶囊就是点击目标），不单独
+                      // 抢焦点。
+                      ExcludeSemantics(
+                        child: DecoratedBox(
+                          key: const ValueKey<String>(
+                            'reader_shelf_continue_pill_play',
+                          ),
+                          decoration: BoxDecoration(
+                            color: accent,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(6),
+                            child: FushiIcon(
+                              FushiIcons.play,
+                              size: 18,
+                              color: onAccent,
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -1819,27 +1831,13 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
       key: const ValueKey<String>('reader_shelf_continue_hero'),
       focusId: const FushiFocusId('reader-shelf-continue-hero'),
       padding: EdgeInsets.all(tokens.spacing.gap * 1.5),
-      onTap: () async {
-        final MediaSource source = hero.getMediaSource(appModel: appModel);
-        await appModel.openMedia(ref: ref, mediaSource: source, item: hero);
-      },
+      onTap: () => _openMediaItem(hero),
       child: Row(
         children: <Widget>[
           SizedBox(
             width: coverWidth,
             height: coverWidth * 1.5,
-            child: ShelfCoverFrame(
-              child: FadeInImage(
-                imageErrorBuilder: (_, __, ___) =>
-                    _coverPlaceholderIcon(Icons.menu_book_outlined),
-                placeholder: MemoryImage(kTransparentImage),
-                image: mediaSource.getDisplayThumbnailFromMediaItem(
-                  appModel: appModel,
-                  item: hero,
-                ),
-                fit: BoxFit.cover,
-              ),
-            ),
+            child: ShelfCoverFrame(child: _buildMediaCover(hero)),
           ),
           SizedBox(width: tokens.spacing.gap * 2),
           Expanded(
@@ -1995,7 +1993,10 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
     final MediaLibraryChromeTabsSlot? chromeTabs = _mangaOnly
         ? MediaLibraryShellScope.maybeOf(context)?.chromeTabsSlot
         : null;
-    _syncChromeTabsClaim(chromeTabs, _pickContinueReadingHero(shelfBooks));
+    _syncContinueReadingPillClaim(
+      chromeTabs,
+      _pickContinueReadingItem(shelfBooks),
+    );
     final List<MediaItem> epubBooks = srtBookKeys.isEmpty
         ? shelfBooks
         : shelfBooks.where((item) {
@@ -2366,14 +2367,8 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
 
     return _bookCardLayout(
       title: mediaSource.getDisplayTitleFromMediaItem(item),
-      cover: FadeInImage(
-        imageErrorBuilder: (_, __, ___) =>
-            _coverPlaceholderIcon(Icons.menu_book_outlined),
-        placeholder: MemoryImage(kTransparentImage),
-        image: mediaSource.getDisplayThumbnailFromMediaItem(
-          appModel: appModel,
-          item: item,
-        ),
+      cover: _buildMediaCover(
+        item,
         alignment: Alignment.topCenter,
         fit: _bookCardCoverFit,
       ),
@@ -2466,12 +2461,7 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
           });
           return;
         }
-        final MediaSource source = item.getMediaSource(appModel: appModel);
-        await appModel.openMedia(
-          ref: ref,
-          mediaSource: source,
-          item: item,
-        );
+        await _openMediaItem(item);
       },
       onLongPress: () => _showEpubItemMenu(item),
       child: buildMediaItemContent(item),
@@ -2918,4 +2908,34 @@ class _ShelfBookSlot {
   /// standalone 项，本地尚无同 uid 的 SrtBook）。与 [remote] 同为「远端占位」，无本地
   /// 阅读进度，排在本地条目之后；下载后原地变本地 SRT 卡。
   final RemoteAudiobookInfo? remoteSrt;
+}
+
+/// 页面向壳槽登记内容的通用状态机：槽变化时先在旧槽上撤回本页登记，槽为 null
+/// 时什么都不做。
+///
+/// 二级浮动行（标签页签）与主 chrome 行页签位（继续阅读胶囊）共用这一份骨架，
+/// 避免两处各写一遍「identical / 换槽 / 撤回」判断。
+class _ShellSlotClaim<T extends FushiShellClaimSlot> {
+  T? _slot;
+
+  /// 把 [owner] 的内容同步到 [slot]；槽变化时先撤回旧槽上的登记。
+  void sync(
+    Object owner,
+    T? slot, {
+    required bool visible,
+    required Widget content,
+  }) {
+    if (!identical(_slot, slot)) {
+      _slot?.release(owner);
+      _slot = slot;
+    }
+    if (slot == null) return;
+    slot.claim(owner, visible: visible, content: content);
+  }
+
+  /// 撤回本页在槽上的登记（页面卸载时）。
+  void release(Object owner) {
+    _slot?.release(owner);
+    _slot = null;
+  }
 }

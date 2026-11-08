@@ -1,192 +1,66 @@
-import 'dart:io';
-
-import 'package:drift/drift.dart' show Value;
-import 'package:drift/native.dart';
 import 'package:flutter/gestures.dart';
-import 'package:flutter/services.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:fushi/i18n/strings.g.dart';
 import 'package:fushi/media.dart';
-import 'package:fushi/models.dart';
-import 'package:fushi/src/media/manga/manga_library_page.dart';
-import 'package:fushi/src/models/preferences_repository.dart';
 import 'package:fushi/src/utils/components/glass/fushi_icon.dart';
 import 'package:fushi/src/utils/components/fushi_floating_chrome.dart'
-    show FushiFloatingChromeBar, FushiShellInlineTitle;
+    show FushiFloatingChromeBar;
 import 'package:fushi/utils.dart';
-import 'package:fushi_audio/fushi_audio.dart';
-import 'package:fushi_core/fushi_core.dart';
 
-import '../helpers/test_platform_services.dart';
+import 'manga_library_page_harness.dart';
 
 /// 漫画页布局跟进 ticket 03：继续阅读入口从网格顶部的大 hero 卡变成主 chrome
 /// 行里的一枚紧凑胶囊（tag bar 原来的页签位，「漫画」标题右侧、右上角动作左侧）。
 ///
-/// 页面级 seam（与 `manga_library_tags_in_chrome_test` 同源）：挂真实
-/// [MangaLibraryPage]（壳 + 书架页），书架列表 provider 受控，阅读历史落真
-/// `reader_positions` 表。断言只落在用户可见的结果上：胶囊在哪、长什么样、
-/// 点它是否走原继续阅读路径、无候选是否隐藏、滚动手势是否随 chrome 收放、
-/// 窄窗是否仍能看到。
-class _RecordingAppModel extends AppModel {
-  _RecordingAppModel() : super(testPlatformServices());
-
-  final List<MediaItem?> opened = <MediaItem?>[];
-
-  @override
-  Future<void> openMedia({
-    required WidgetRef ref,
-    required MediaSource mediaSource,
-    bool killOnPop = false,
-    bool pushReplacement = false,
-    MediaItem? item,
-    Bookmark? initialBookmarkJump,
-    bool recordHistory = true,
-    bool waitUntilClosed = true,
-    Widget Function()? launchPageBuilder,
-  }) async {
-    opened.add(item);
-  }
-}
-
+/// 页面级 seam（公共骨架见 [MangaLibraryPageHarness]）：挂真实页面（壳 + 书架
+/// 页），书架列表 provider 受控，阅读历史落真 `reader_positions` 表。断言只落在
+/// 用户可见的结果上：胶囊在哪、长什么样、点它是否走原继续阅读路径、无候选是否
+/// 隐藏、滚动手势是否随 chrome 收放、窄窗是否仍能看到。
 void main() {
   final TestWidgetsFlutterBinding binding =
       TestWidgetsFlutterBinding.ensureInitialized();
 
-  late Directory pathProviderDir;
-  setUpAll(() {
-    pathProviderDir = Directory.systemTemp.createTempSync(
-      'fushi_manga_continue_pill_pp',
-    );
-    binding.defaultBinaryMessenger.setMockMethodCallHandler(
-      const MethodChannel('plugins.flutter.io/path_provider'),
-      (MethodCall call) async => pathProviderDir.path,
-    );
-  });
-  tearDownAll(() {
-    binding.defaultBinaryMessenger.setMockMethodCallHandler(
-      const MethodChannel('plugins.flutter.io/path_provider'),
-      null,
-    );
-    if (pathProviderDir.existsSync()) {
-      try {
-        pathProviderDir.deleteSync(recursive: true);
-      } catch (_) {}
-    }
-  });
+  setUpAll(
+    () => MangaLibraryPageHarness.setUpPathProvider(
+      binding,
+      tempPrefix: 'fushi_manga_continue_pill_pp',
+    ),
+  );
+  tearDownAll(() => MangaLibraryPageHarness.tearDownPathProvider(binding));
 
-  late FushiDatabase db;
-  late PreferencesRepository prefs;
-  late _RecordingAppModel appModel;
-  late Directory storeDir;
-  late List<MediaItem> mangaItems;
+  late MangaLibraryPageHarness<RecordingAppModel> harness;
+  late RecordingAppModel appModel;
 
   setUp(() async {
-    LocaleSettings.setLocale(AppLocale.zhCn);
-    db = FushiDatabase.forTesting(NativeDatabase.memory());
-    prefs = PreferencesRepository(db);
-    await prefs.loadFromDb();
-    storeDir = Directory.systemTemp.createTempSync('fushi_manga_pill');
-    appModel = _RecordingAppModel()
-      ..wireDatabaseForTesting(db)
-      ..wireLocalAudioForTesting(prefsRepo: prefs, databaseDirectory: storeDir);
-    appModel.populateLanguages();
-    appModel.populateMediaTypes();
-    appModel.populateMediaSources();
-    mangaItems = <MediaItem>[];
+    harness = await MangaLibraryPageHarness.create<RecordingAppModel>(
+      tempPrefix: 'fushi_manga_pill',
+      appModelFactory: RecordingAppModel.new,
+    );
+    appModel = harness.appModel;
   });
 
-  tearDown(() async {
-    await db.close();
-    if (storeDir.existsSync()) {
-      try {
-        storeDir.deleteSync(recursive: true);
-      } catch (_) {}
-    }
-  });
+  tearDown(() => harness.dispose());
 
   Future<String> seedManga(
     String bookKey,
     String title, {
     int position = 0,
     int duration = 1,
-  }) async {
-    final String uid = 'uid_$bookKey';
-    await db.insertEpubBook(
-      EpubBooksCompanion.insert(
-        bookKey: bookKey,
-        uid: Value<String>(uid),
-        title: title,
-        epubPath: '${pathProviderDir.path}/$bookKey/manga.json',
-        extractDir: '${pathProviderDir.path}/$bookKey',
-        chapterCount: duration,
-        chaptersJson: '[]',
-        importedAt: 0,
-        format: Value<String>(BookFormat.manga.dbValue),
-      ),
-    );
-    mangaItems.add(
-      MediaItem(
-        mediaIdentifier: ReaderFushiSource.mediaIdentifierFor(bookKey),
-        title: title,
-        mediaTypeIdentifier: 'reader_media_type',
-        mediaSourceIdentifier: MangaFushiSource.kUniqueKey,
-        position: position,
-        duration: duration,
-        canDelete: false,
-        canEdit: true,
-      ),
-    );
-    return uid;
-  }
-
-  Future<void> seedRecency(String uid, int updatedAt) async {
-    await db.upsertReaderPosition(
-      ReaderPositionsCompanion.insert(
-        bookUid: uid,
-        sectionIndex: 0,
-        normCharOffset: 0,
-        updatedAt: updatedAt,
-      ),
-    );
-  }
-
-  Widget buildApp() => ProviderScope(
-    overrides: <Override>[
-      appProvider.overrideWith((ref) => appModel),
-      fushiBooksProvider.overrideWith(
-        (ref, language) => Future<List<MediaItem>>.value(mangaItems),
-      ),
-      srtBooksProvider.overrideWith(
-        (ref) => Future<List<SrtBook>>.value(const <SrtBook>[]),
-      ),
-    ],
-    child: TranslationProvider(
-      child: MaterialApp(
-        home: Scaffold(
-          body: FushiShellTitleScope(
-            title: t.manga_library,
-            child: const FushiShellInlineTitle(
-              enabled: true,
-              child: MangaLibraryPage(),
-            ),
-          ),
-        ),
-      ),
-    ),
+  }) => harness.seedManga(
+    bookKey,
+    title,
+    position: position,
+    duration: duration,
   );
+
+  Future<void> seedRecency(String uid, int updatedAt) =>
+      harness.seedRecency(uid, updatedAt);
 
   Future<void> pumpPage(
     WidgetTester tester, {
     Size size = const Size(1400, 1200),
-  }) async {
-    tester.view.physicalSize = size;
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    await tester.pumpWidget(buildApp());
-    await tester.pumpAndSettle();
-  }
+  }) => harness.pumpPage(tester, size: size);
 
   Finder pillFinder() =>
       find.byKey(const ValueKey<String>('reader_shelf_continue_pill'));
@@ -344,6 +218,65 @@ void main() {
     expect(
       appModel.opened.single?.mediaIdentifier,
       ReaderFushiSource.mediaIdentifierFor('m1'),
+    );
+  });
+
+  testWidgets('整颗胶囊可点：悬浮面内衬（留白）也是继续阅读点击目标', (
+    WidgetTester tester,
+  ) async {
+    final String uid = await seedManga('m1', '漫画一', position: 5, duration: 10);
+    await seedRecency(uid, 1000);
+    await pumpPage(tester);
+
+    final Finder pill = pillFinder();
+    expect(pill, findsOneWidget);
+    final Rect pillRect = tester.getRect(pill);
+
+    // 点左缘内 3px、垂直居中：落在悬浮胶囊表面的横向内衬（6px）里，位于
+    // 内部胶囊段（封面 / 文案 / 播放钮）之外。没有整颗点击目标时这里点不动。
+    await tester.tapAt(Offset(pillRect.left + 3, pillRect.center.dy));
+    await tester.pump();
+
+    expect(appModel.opened, hasLength(1), reason: '点胶囊留白也走继续阅读打开路径');
+    expect(
+      appModel.opened.single?.mediaIdentifier,
+      ReaderFushiSource.mediaIdentifierFor('m1'),
+    );
+  });
+
+  testWidgets('胶囊 tooltip 书名经显示名 override（编辑弹窗改名）', (
+    WidgetTester tester,
+  ) async {
+    final String uid = await seedManga(
+      'm-override',
+      '原名',
+      position: 5,
+      duration: 10,
+    );
+    await seedRecency(uid, 1000);
+    await ReaderFushiSource.instance.setOverrideTitleFromMediaItem(
+      item: harness.mangaItems.single,
+      title: '改名漫画',
+    );
+    addTearDown(
+      () => ReaderFushiSource.instance.setOverrideTitleFromMediaItem(
+        item: harness.mangaItems.single,
+        title: null,
+      ),
+    );
+    await pumpPage(tester);
+
+    final Finder pill = pillFinder();
+    expect(pill, findsOneWidget);
+    expect(
+      find.ancestor(of: pill, matching: find.byTooltip('改名漫画')),
+      findsOneWidget,
+      reason: 'tooltip 书名应用编辑弹窗写入的 override，不直读 DB 原名',
+    );
+    expect(
+      find.ancestor(of: pill, matching: find.byTooltip('原名')),
+      findsNothing,
+      reason: '改名后不得再显示 DB 原始书名',
     );
   });
 

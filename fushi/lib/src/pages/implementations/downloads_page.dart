@@ -181,7 +181,15 @@ class _DownloadsPageState extends ConsumerState<DownloadsPage> {
                         resumeAll
                             ? t.download_resume_all
                             : t.download_pause_all,
-                        style: FushiPageChromeTitle.titleStyleOf(context),
+                        // 保留页头标题的粗体 titleLarge 字形，但前景跟随
+                        // FushiFloatingTextAction 的按钮前景（onSecondaryContainer），
+                        // 不用 titleStyleOf 硬编码的 onSurface 覆盖胶囊配色。
+                        style: FushiPageChromeTitle.titleStyleOf(context)
+                            .copyWith(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.onSecondaryContainer,
+                            ),
                       ),
                     ),
                   ),

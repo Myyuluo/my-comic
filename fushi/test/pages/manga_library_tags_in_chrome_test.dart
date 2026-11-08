@@ -1,155 +1,60 @@
-import 'dart:io';
-
-import 'package:drift/drift.dart' show Value;
-import 'package:drift/native.dart';
 import 'package:flutter/gestures.dart' show kLongPressTimeout;
-import 'package:flutter/services.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:fushi/media.dart';
 import 'package:fushi/models.dart';
 import 'package:fushi/src/media/manga/manga_library_page.dart';
 import 'package:fushi/src/media/tags/tag_chips.dart' show FushiTagToggleChip;
-import 'package:fushi/src/models/preferences_repository.dart';
 import 'package:fushi/src/pages/implementations/media_library_shell.dart';
 import 'package:fushi/src/pages/implementations/reader_fushi_history_page.dart';
 import 'package:fushi/src/utils/components/fushi_floating_chrome.dart'
-    show FushiFloatingChromeBar, FushiShellInlineTitle;
+    show FushiFloatingChromeBar;
 import 'package:fushi/src/utils/fushi_icons.dart';
 import 'package:fushi/utils.dart';
-import 'package:fushi_audio/fushi_audio.dart';
 import 'package:fushi_core/fushi_core.dart';
 
-import '../helpers/test_platform_services.dart';
+import 'manga_library_page_harness.dart';
 
 /// 漫画页的标签栏在 ticket 06 曾占据原「书架」视图页签位；布局跟进 ticket 01
 /// 起移到「漫画」标题 / 右上角动作行下方的**二级浮动行**（与在线源组二级胶囊
 /// 同一套收放和顶部让位），形态是二级中性胶囊里的单选分段：首项「书架」+ 用户
 /// 标签，点选即切换页签。
 ///
-/// 页面级 seam（与 [reader_shelf_tag_filter_empty_state_test] 同源）：挂真实
-/// [MangaLibraryPage]（壳 + 书架页），标签走真 37 表 DB；书架列表 provider 覆写
-/// 成受控列表，避开封面真 I/O。断言只落在用户可见的结果上：视图页签消失、标签
-/// 行在主 chrome 行下方、空标签时仍有「书架」页签、点选筛选生效、随滚动收放、
-/// 内容让位、长按不再排序。
+/// 页面级 seam（公共骨架见 [MangaLibraryPageHarness]）：挂真实页面（壳 + 书架
+/// 页），标签走真 37 表 DB；书架列表 provider 覆写成受控列表，避开封面真 I/O。
+/// 断言只落在用户可见的结果上：视图页签消失、标签行在主 chrome 行下方、空标签
+/// 时仍有「书架」页签、点选筛选生效、随滚动收放、内容让位、长按不再排序。
 void main() {
   final TestWidgetsFlutterBinding binding =
       TestWidgetsFlutterBinding.ensureInitialized();
 
-  late Directory pathProviderDir;
-  setUpAll(() {
-    pathProviderDir = Directory.systemTemp.createTempSync(
-      'fushi_manga_tags_chrome_pp',
-    );
-    binding.defaultBinaryMessenger.setMockMethodCallHandler(
-      const MethodChannel('plugins.flutter.io/path_provider'),
-      (MethodCall call) async => pathProviderDir.path,
-    );
-  });
-  tearDownAll(() {
-    binding.defaultBinaryMessenger.setMockMethodCallHandler(
-      const MethodChannel('plugins.flutter.io/path_provider'),
-      null,
-    );
-    if (pathProviderDir.existsSync()) {
-      try {
-        pathProviderDir.deleteSync(recursive: true);
-      } catch (_) {}
-    }
-  });
-
-  late FushiDatabase db;
-  late PreferencesRepository prefs;
-  late AppModel appModel;
-  late Directory storeDir;
-  late List<MediaItem> mangaItems;
-
-  setUp(() async {
-    LocaleSettings.setLocale(AppLocale.zhCn);
-    db = FushiDatabase.forTesting(NativeDatabase.memory());
-    prefs = PreferencesRepository(db);
-    await prefs.loadFromDb();
-    storeDir = Directory.systemTemp.createTempSync('fushi_manga_tags_chrome');
-    appModel = AppModel(testPlatformServices())
-      ..wireDatabaseForTesting(db)
-      ..wireLocalAudioForTesting(prefsRepo: prefs, databaseDirectory: storeDir);
-    appModel.populateLanguages();
-    mangaItems = <MediaItem>[];
-  });
-
-  tearDown(() async {
-    await db.close();
-    if (storeDir.existsSync()) {
-      try {
-        storeDir.deleteSync(recursive: true);
-      } catch (_) {}
-    }
-  });
-
-  Future<void> seedManga(String bookKey, String title) async {
-    await db.insertEpubBook(
-      EpubBooksCompanion.insert(
-        bookKey: bookKey,
-        title: title,
-        epubPath: '${pathProviderDir.path}/$bookKey/manga.json',
-        extractDir: '${pathProviderDir.path}/$bookKey',
-        chapterCount: 0,
-        chaptersJson: '[]',
-        importedAt: 0,
-        format: Value<String>(BookFormat.manga.dbValue),
-      ),
-    );
-    mangaItems.add(
-      MediaItem(
-        mediaIdentifier: ReaderFushiSource.mediaIdentifierFor(bookKey),
-        title: title,
-        mediaTypeIdentifier: 'reader',
-        mediaSourceIdentifier: MangaFushiSource.kUniqueKey,
-        position: 0,
-        duration: 1,
-        canDelete: false,
-        canEdit: true,
-      ),
-    );
-  }
-
-  Widget buildApp() => ProviderScope(
-    overrides: <Override>[
-      appProvider.overrideWith((ref) => appModel),
-      fushiBooksProvider.overrideWith(
-        (ref, language) => Future<List<MediaItem>>.value(mangaItems),
-      ),
-      srtBooksProvider.overrideWith(
-        (ref) => Future<List<SrtBook>>.value(const <SrtBook>[]),
-      ),
-    ],
-    child: TranslationProvider(
-      child: MaterialApp(
-        home: Scaffold(
-          body: FushiShellTitleScope(
-            title: t.manga_library,
-            child: const FushiShellInlineTitle(
-              enabled: true,
-              child: MangaLibraryPage(),
-            ),
-          ),
-        ),
-      ),
+  setUpAll(
+    () => MangaLibraryPageHarness.setUpPathProvider(
+      binding,
+      tempPrefix: 'fushi_manga_tags_chrome_pp',
     ),
   );
+  tearDownAll(() => MangaLibraryPageHarness.tearDownPathProvider(binding));
+
+  late MangaLibraryPageHarness<AppModel> harness;
+  late FushiDatabase db;
+
+  setUp(() async {
+    harness = await MangaLibraryPageHarness.create<AppModel>(
+      tempPrefix: 'fushi_manga_tags_chrome',
+    );
+    db = harness.db;
+  });
+
+  tearDown(() => harness.dispose());
+
+  Future<String> seedManga(String bookKey, String title) =>
+      harness.seedManga(bookKey, title);
 
   Future<void> pumpPage(
     WidgetTester tester, {
     Size size = const Size(1400, 1200),
-  }) async {
-    tester.view.physicalSize = size;
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    await tester.pumpWidget(buildApp());
-    await tester.pumpAndSettle();
-  }
+  }) => harness.pumpPage(tester, size: size);
 
   testWidgets('漫画页不再显示视图页签；标签页签在标题/动作行下方的二级浮动行', (
     WidgetTester tester,
@@ -250,8 +155,14 @@ void main() {
       const ValueKey<String>('manga_tag_tab_capsule'),
     );
     expect(capsuleFinder, findsOneWidget, reason: '标签行收在一枚二级胶囊里');
+    // 胶囊外框是共享的 FushiCompactSecondaryTabsFrame（与库页二级页签同源），
+    // 绘底的 DecoratedBox 在它里面。
+    final Finder capsuleSurface = find.descendant(
+      of: capsuleFinder,
+      matching: find.byType(DecoratedBox),
+    );
     final ShapeDecoration capsule =
-        tester.widget<DecoratedBox>(capsuleFinder).decoration
+        tester.widget<DecoratedBox>(capsuleSurface.first).decoration
             as ShapeDecoration;
     expect(
       capsule.color,
@@ -273,7 +184,7 @@ void main() {
 
     // 内容宽：两个页签远窄于整行可用宽。
     expect(
-      tester.getSize(capsuleFinder).width,
+      tester.getSize(capsuleSurface.first).width,
       lessThan(600),
       reason: '胶囊贴合内容宽，不拉满整行',
     );
@@ -649,46 +560,26 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
 
     await tester.pumpWidget(
-      ProviderScope(
-        overrides: <Override>[
-          appProvider.overrideWith((ref) => appModel),
-          fushiBooksProvider.overrideWith(
-            (ref, language) => Future<List<MediaItem>>.value(mangaItems),
-          ),
-          srtBooksProvider.overrideWith(
-            (ref) => Future<List<SrtBook>>.value(const <SrtBook>[]),
-          ),
-        ],
-        child: TranslationProvider(
-          child: MaterialApp(
-            home: Scaffold(
-              body: FushiShellTitleScope(
-                title: t.books,
-                child: FushiShellInlineTitle(
-                  enabled: true,
-                  child: MediaLibraryShell(
-                    focusIdPrefix: 'book-library-view',
-                    views: <MediaLibraryViewSpec>[
-                      MediaLibraryViewSpec(
-                        kind: MediaLibraryViewKind.library,
-                        label: '书架',
-                        handlesChromeInset: true,
-                        // 普通书架：mangaOnly 默认为 false，不受漫画页改动影响。
-                        builder: (BuildContext context, Widget navigation) =>
-                            ReaderFushiHistoryPage(navigation: navigation),
-                      ),
-                      MediaLibraryViewSpec(
-                        kind: MediaLibraryViewKind.sources,
-                        label: '导入',
-                        builder: (BuildContext context, Widget navigation) =>
-                            const SizedBox.shrink(),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+      harness.buildScaffold(
+        title: t.books,
+        child: MediaLibraryShell(
+          focusIdPrefix: 'book-library-view',
+          views: <MediaLibraryViewSpec>[
+            MediaLibraryViewSpec(
+              kind: MediaLibraryViewKind.library,
+              label: '书架',
+              handlesChromeInset: true,
+              // 普通书架：mangaOnly 默认为 false，不受漫画页改动影响。
+              builder: (BuildContext context, Widget navigation) =>
+                  ReaderFushiHistoryPage(navigation: navigation),
             ),
-          ),
+            MediaLibraryViewSpec(
+              kind: MediaLibraryViewKind.sources,
+              label: '导入',
+              builder: (BuildContext context, Widget navigation) =>
+                  const SizedBox.shrink(),
+            ),
+          ],
         ),
       ),
     );
