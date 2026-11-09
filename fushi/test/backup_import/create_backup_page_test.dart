@@ -54,6 +54,13 @@ Future<void> _pumpUntil(WidgetTester tester, Finder finder) async {
 FushiCheckboxListTile _tile(WidgetTester tester, Key key) =>
     tester.widget<FushiCheckboxListTile>(find.byKey(key));
 
+/// The 设置 group sits below the 书架 group; scroll it above the fixed 创建
+/// button so its rows can receive taps.
+Future<void> _scrollToSettings(WidgetTester tester) async {
+  await tester.drag(find.byType(ListView), const Offset(0, -300));
+  await tester.pumpAndSettle();
+}
+
 void main() {
   late Directory tmp;
   late AppPaths paths;
@@ -130,12 +137,64 @@ void main() {
     );
   });
 
+  testWidgets('history and all-read default on and follow the library option', (
+    WidgetTester tester,
+  ) async {
+    final _TestAppModel appModel = _TestAppModel(db, paths);
+    await tester.pumpWidget(_harness(appModel, const CreateBackupPage()));
+    await tester.pumpAndSettle();
+
+    expect(find.text('历史'), findsOneWidget);
+    expect(find.text('所有已读作品'), findsOneWidget);
+    expect(
+      _tile(tester, const Key('create_backup_include_history')).value,
+      isTrue,
+    );
+    expect(
+      _tile(tester, const Key('create_backup_include_all_read')).value,
+      isTrue,
+    );
+    expect(
+      _tile(tester, const Key('create_backup_include_history')).enabled,
+      isNot(false),
+    );
+    expect(
+      _tile(tester, const Key('create_backup_include_all_read')).enabled,
+      isNot(false),
+    );
+
+    await tester.tap(find.byKey(const Key('create_backup_include_library')));
+    await tester.pumpAndSettle();
+    expect(
+      _tile(tester, const Key('create_backup_include_history')).enabled,
+      isFalse,
+      reason: '历史 cannot be exported without 书架中的作品',
+    );
+    expect(
+      _tile(tester, const Key('create_backup_include_all_read')).enabled,
+      isFalse,
+      reason: '所有已读作品 cannot be exported without 书架中的作品',
+    );
+
+    await tester.tap(find.byKey(const Key('create_backup_include_library')));
+    await tester.pumpAndSettle();
+    expect(
+      _tile(tester, const Key('create_backup_include_history')).enabled,
+      isNot(false),
+    );
+    expect(
+      _tile(tester, const Key('create_backup_include_all_read')).enabled,
+      isNot(false),
+    );
+  });
+
   testWidgets('app settings default on and sensitive settings default off', (
     WidgetTester tester,
   ) async {
     final _TestAppModel appModel = _TestAppModel(db, paths);
     await tester.pumpWidget(_harness(appModel, const CreateBackupPage()));
     await tester.pumpAndSettle();
+    await _scrollToSettings(tester);
 
     expect(find.text('应用设置'), findsOneWidget);
     expect(find.text('包含敏感设置'), findsOneWidget);
@@ -162,8 +221,7 @@ void main() {
     // Re-opening the page restores the defaults; the sensitive tick is not
     // remembered. The row sits below the fold once every section row is shown,
     // so scroll the list before tapping it.
-    await tester.drag(find.byType(ListView), const Offset(0, -120));
-    await tester.pumpAndSettle();
+    await _scrollToSettings(tester);
     await tester.tap(
       find.byKey(const Key('create_backup_include_sensitive_settings')),
     );
@@ -182,6 +240,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await _scrollToSettings(tester);
     expect(
       _tile(tester, const Key('create_backup_include_app_settings')).value,
       isTrue,
@@ -202,6 +261,7 @@ void main() {
     await tester.pumpWidget(_harness(appModel, const CreateBackupPage()));
     await tester.pumpAndSettle();
 
+    await _scrollToSettings(tester);
     await tester.tap(
       find.byKey(const Key('create_backup_include_app_settings')),
     );
@@ -254,6 +314,7 @@ void main() {
         reason: 'app settings alone are still worth exporting',
       );
 
+      await _scrollToSettings(tester);
       await tester.tap(
         find.byKey(const Key('create_backup_include_app_settings')),
       );
@@ -306,8 +367,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.drag(find.byType(ListView), const Offset(0, -120));
-      await tester.pumpAndSettle();
+      await _scrollToSettings(tester);
       await tester.tap(
         find.byKey(const Key('create_backup_include_sensitive_settings')),
       );
@@ -369,6 +429,7 @@ void main() {
         reason: '应用设置 is still selected',
       );
 
+      await _scrollToSettings(tester);
       await tester.tap(
         find.byKey(const Key('create_backup_include_app_settings')),
       );
@@ -383,6 +444,9 @@ void main() {
         reason: 'nothing exportable → 创建 is greyed out',
       );
 
+      // Scroll back up to the 书架 group before re-enabling it.
+      await tester.drag(find.byType(ListView), const Offset(0, 400));
+      await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('create_backup_include_library')));
       await tester.pumpAndSettle();
       expect(
@@ -517,6 +581,7 @@ void main() {
     );
 
     await tester.tap(find.byKey(const Key('create_backup_include_library')));
+    await _scrollToSettings(tester);
     await tester.tap(
       find.byKey(const Key('create_backup_include_app_settings')),
     );
@@ -531,6 +596,9 @@ void main() {
       reason: '书架中的作品, 分类 and 应用设置 are all unselected',
     );
 
+    // Scroll back up to the 书架 group before re-enabling 分类.
+    await tester.drag(find.byType(ListView), const Offset(0, 400));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('create_backup_include_categories')));
     await tester.pumpAndSettle();
     expect(

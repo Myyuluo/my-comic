@@ -1,7 +1,10 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:drift/drift.dart';
 import 'package:fushi_core/fushi_core.dart';
+import 'package:fushi_engine/media/media_pref_keys.dart'
+    show readerBookMediaIdentifierFor;
 import 'package:fushi_engine/media/tracking/media_tracking_repository.dart'
     show kTrackingProviderBangumi, TrackingMediaType;
 
@@ -9,21 +12,26 @@ import 'package:fushi/src/backup_export/mihon_backup_writer.dart';
 import 'package:fushi/src/backup_import/mihon_backup_import_service.dart'
     show kMihonBangumiTrackerId;
 import 'package:fushi/src/backup_import/mihon_backup_parser.dart';
+import 'package:fushi/src/media/manga/history/manga_history.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
+import 'package:fushi/src/media/sources/manga_fushi_source.dart';
 import 'package:fushi/src/sync/pref_redaction_policy.dart';
 import 'package:fushi/src/sync/sync_repository.dart';
 
 /// Which Mihon backup sections the user asked for.
 ///
-/// Ticket 07 ships Library + Chapters; ticket 09 adds Categories; ticket 10
-/// adds Tracking; ticket 11 adds App settings. Later tickets add History,
-/// extension stores and source settings. The page owns the dependency rules;
-/// the exporter only honours the resolved options.
+/// Ticket 07 ships Library + Chapters; ticket 08 adds History and the
+/// non-library read works; ticket 09 adds Categories; ticket 10 adds Tracking;
+/// ticket 11 adds App settings. Later tickets add extension stores and source
+/// settings. The page owns the dependency rules; the exporter only honours the
+/// resolved options.
 class MihonBackupExportOptions {
   const MihonBackupExportOptions({
     this.includeLibrary = true,
     this.includeChapters = true,
     this.includeCategories = true,
+    this.includeHistory = true,
+    this.includeAllRead = true,
     this.includeTracking = true,
     this.includeAppSettings = true,
     this.includeSensitiveSettings = false,
@@ -39,6 +47,13 @@ class MihonBackupExportOptions {
   /// category orders from each exported manga. Independent of [includeLibrary]
   /// so categories can be exported on their own.
   final bool includeCategories;
+
+  /// 「历史」: export the most recent History row of every Library manga.
+  final bool includeHistory;
+
+  /// 「所有已读作品」: export read online works that are not in the Library as
+  /// `favorite=false` entries (Mihon keeps them for history continuity).
+  final bool includeAllRead;
 
   /// 「进度记录」: export each manga's Bangumi tracking record. The UI label
   /// follows Mihon's reference layout, but the data is Tracking, not Reading
@@ -107,9 +122,24 @@ class MihonBackupExporter {
     required MihonBackupExportOptions options,
     void Function(MihonBackupExportProgress progress)? onProgress,
   }) async {
-    final List<_ExportableManga> exportable = await _exportableManga(options);
+    // 历史 / 所有已读作品 follow 「书架中的作品」; the page already greys them
+    // out, but honouring the dependency here keeps direct API use consistent.
+    final bool includeHistory = options.includeLibrary && options.includeHistory;
+    final bool includeAllRead = options.includeLibrary && options.includeAllRead;
+    final List<EpubBookRow> libraryRows = options.includeLibrary
+        ? await database.getAllEpubBooks()
+        : const <EpubBookRow>[];
+    final List<_ExportableManga> exportable = _exportableManga(libraryRows);
     final Map<String, Map<String, MangaChapterStateRow>> chapterStates =
-        options.includeChapters ? await _loadChapterStates() : const {};
+        options.includeChapters || includeHistory
+        ? await _loadChapterStates()
+        : const {};
+    final List<MediaOpenHistoryRow> historyRows = includeHistory || includeAllRead
+        ? await _loadHistoryRows()
+        : const <MediaOpenHistoryRow>[];
+    final Map<String, MediaOpenHistoryRow> historyByKey = includeHistory
+        ? _historyRowsByKey(historyRows)
+        : const <String, MediaOpenHistoryRow>{};
     final Map<String, MihonBackupTracking> trackingByBook =
         options.includeLibrary && options.includeTracking
         ? await _loadTrackingByBook()
@@ -126,14 +156,33 @@ class MihonBackupExporter {
     final List<MihonBackupManga> mangas = <MihonBackupManga>[];
     final Map<int, String> sourceNames = <int, String>{};
     final Map<int, String> knownSourceNames = await _knownSourceNames();
+    final List<MihonBackupManga> readOnly = includeAllRead
+        ? _readOnlyMangas(
+            historyRows: historyRows,
+            libraryRows: libraryRows,
+            knownSourceNames: knownSourceNames,
+            sourceNames: sourceNames,
+          )
+        : const <MihonBackupManga>[];
+    final int total = exportable.length + readOnly.length;
 
     int processed = 0;
     for (final _ExportableManga candidate in exportable) {
       processed++;
       final OnlineMangaLibraryEntry entry = candidate.entry;
+      final Map<String, MangaChapterStateRow> states =
+          chapterStates[candidate.row.uid] ?? const {};
       final List<MihonBackupChapter> chapters = options.includeChapters
-          ? _backupChapters(entry, chapterStates[candidate.row.uid] ?? const {})
+          ? _backupChapters(entry, states)
           : const <MihonBackupChapter>[];
+      final MihonBackupHistory? history = includeHistory
+          ? _libraryHistory(
+              row: candidate.row,
+              entry: entry,
+              states: states,
+              historyByKey: historyByKey,
+            )
+          : null;
 
       final MihonBackupTracking? tracking = trackingByBook[candidate.row.bookKey];
       mangas.add(
@@ -154,7 +203,9 @@ class MihonBackupExporter {
           chapters: chapters,
           categoryOrders:
               categoryExport?.ordersFor(candidate.row.bookKey) ?? const <int>[],
-          history: const <MihonBackupHistory>[],
+          history: history == null
+              ? const <MihonBackupHistory>[]
+              : <MihonBackupHistory>[history],
           tracking: tracking == null
               ? const <MihonBackupTracking>[]
               : <MihonBackupTracking>[tracking],
@@ -164,16 +215,29 @@ class MihonBackupExporter {
       final String? knownName = knownSourceNames[candidate.sourceId];
       if (knownName != null) sourceNames[candidate.sourceId] = knownName;
 
-      if (processed % 25 == 0 || processed == exportable.length) {
+      if (processed % 25 == 0 || processed == total) {
         onProgress?.call(
           MihonBackupExportProgress(
             processed: processed,
-            total: exportable.length,
+            total: total,
             currentTitle: candidate.row.title,
           ),
         );
       }
     }
+    for (final MihonBackupManga manga in readOnly) {
+      processed++;
+      if (processed % 25 == 0 || processed == total) {
+        onProgress?.call(
+          MihonBackupExportProgress(
+            processed: processed,
+            total: total,
+            currentTitle: manga.title,
+          ),
+        );
+      }
+    }
+    mangas.addAll(readOnly);
 
     return MihonBackupData(
       mangas: List<MihonBackupManga>.unmodifiable(mangas),
@@ -314,11 +378,7 @@ class MihonBackupExporter {
     );
   }
 
-  Future<List<_ExportableManga>> _exportableManga(
-    MihonBackupExportOptions options,
-  ) async {
-    if (!options.includeLibrary) return const <_ExportableManga>[];
-    final List<EpubBookRow> rows = await database.getAllEpubBooks();
+  List<_ExportableManga> _exportableManga(List<EpubBookRow> rows) {
     final List<_ExportableManga> exportable = <_ExportableManga>[];
     for (final EpubBookRow row in rows) {
       if (row.format != 'manga') continue;
@@ -354,6 +414,302 @@ class MihonBackupExporter {
       )[state.chapterKey] = state;
     }
     return byBook;
+  }
+
+  Future<List<MediaOpenHistoryRow>> _loadHistoryRows() =>
+      database.select(database.mediaOpenHistory).get();
+
+  /// Every History row keyed by its identity (`source\0id`), keeping the newest
+  /// row when both the current online identity and the legacy import identity
+  /// describe the same Manga.
+  Map<String, MediaOpenHistoryRow> _historyRowsByKey(
+    List<MediaOpenHistoryRow> rows,
+  ) {
+    final Map<String, MediaOpenHistoryRow> byKey =
+        <String, MediaOpenHistoryRow>{};
+    for (final MediaOpenHistoryRow row in rows) {
+      final String key = '${row.mediaSource}\u0000${row.mediaId}';
+      final MediaOpenHistoryRow? existing = byKey[key];
+      if (existing == null || row.openedAt >= existing.openedAt) {
+        byKey[key] = row;
+      }
+    }
+    return byKey;
+  }
+
+  /// Read online works that are not in the Library, exported as `favorite=false`
+  /// so Mihon keeps their reading history without adding them to the shelf.
+  ///
+  /// Library works are excluded by history identity and by (Source, URL): the
+  /// Library row and its History row can carry different identities after a
+  /// backup import or an extension-package change. Snapshot data without a
+  /// chapter URL exports metadata only — no chapters or history links are
+  /// invented.
+  List<MihonBackupManga> _readOnlyMangas({
+    required List<MediaOpenHistoryRow> historyRows,
+    required List<EpubBookRow> libraryRows,
+    required Map<int, String> knownSourceNames,
+    required Map<int, String> sourceNames,
+  }) {
+    final _LibraryHistoryKeys library = _libraryHistoryKeys(libraryRows);
+    final Set<String> seen = <String>{};
+    final List<MihonBackupManga> mangas = <MihonBackupManga>[];
+    for (final MediaOpenHistoryRow row in historyRows) {
+      if (!row.mediaSource.startsWith(kMangaHistoryOnlineSourcePrefix)) {
+        continue;
+      }
+      final String historyKey = '${row.mediaSource}\u0000${row.mediaId}';
+      if (library.historyKeys.contains(historyKey)) continue;
+
+      final Map<String, Object?>? rawSnapshot = _snapshotJson(
+        row.snapshotJson,
+      );
+      final MangaHistorySnapshot? snapshot = MangaHistorySnapshot.tryParse(
+        row.snapshotJson,
+      );
+      final MangaHistoryOnlineRef? online = snapshot?.online;
+      final _HistorySource? source = _historySourceOf(row.mediaSource, online);
+      if (source == null || source.runtime != OnlineMangaRuntimeKind.mihon) {
+        continue;
+      }
+      final int? sourceId = int.tryParse(source.sourceId);
+      if (sourceId == null || sourceId <= 0) continue;
+
+      final String url = online?.seriesKey.trim().isNotEmpty == true
+          ? online!.seriesKey.trim()
+          : row.mediaId.trim();
+      if (url.isEmpty) continue;
+      if (library.seriesKeys.contains('$sourceId\u0000$url')) continue;
+      if (!seen.add('$sourceId\u0000$url')) continue;
+
+      final Map<String, Object?> raw = online?.raw ?? const <String, Object?>{};
+      final String title =
+          _firstNonEmpty(<String?>[
+            snapshot?.title,
+            raw['title']?.toString(),
+            rawSnapshot?['title']?.toString(),
+            url,
+          ])!;
+      final String? author = _firstNonEmpty(<String?>[
+        snapshot?.author,
+        raw['author']?.toString(),
+        rawSnapshot?['author']?.toString(),
+      ]);
+      final String? artist = _firstNonEmpty(<String?>[
+        raw['artist']?.toString(),
+      ]);
+      final String? description = _firstNonEmpty(<String?>[
+        raw['description']?.toString(),
+        rawSnapshot?['description']?.toString(),
+      ]);
+      final String? genre = _firstNonEmpty(<String?>[
+        raw['genre']?.toString(),
+        rawSnapshot?['genre']?.toString(),
+      ]);
+      final int status = (raw['status'] as num?)?.toInt() ?? 0;
+      final String? thumbnailUrl =
+          _remoteUrl(online?.coverUrl) ??
+          _remoteUrl(snapshot?.imageUrl) ??
+          _remoteUrl(raw['thumbnail_url']?.toString()) ??
+          _remoteUrl(raw['coverUrl']?.toString());
+      final String? chapterUrl = _snapshotChapterUrl(rawSnapshot);
+
+      mangas.add(
+        MihonBackupManga(
+          source: sourceId,
+          url: url,
+          title: title,
+          artist: artist,
+          author: author,
+          description: description,
+          genres: _genresOf(genre),
+          status: status,
+          thumbnailUrl: thumbnailUrl,
+          dateAdded: 0,
+          favorite: false,
+          chapters: const <MihonBackupChapter>[],
+          categoryOrders: const <int>[],
+          history: chapterUrl == null
+              ? const <MihonBackupHistory>[]
+              : <MihonBackupHistory>[
+                  MihonBackupHistory(
+                    url: chapterUrl,
+                    lastRead: row.openedAt,
+                    readDuration: _snapshotReadDuration(rawSnapshot),
+                  ),
+                ],
+          tracking: const <MihonBackupTracking>[],
+        ),
+      );
+
+      final String? knownName = knownSourceNames[sourceId];
+      if (knownName != null) sourceNames[sourceId] = knownName;
+    }
+    return mangas;
+  }
+
+  _LibraryHistoryKeys _libraryHistoryKeys(List<EpubBookRow> rows) {
+    final Set<String> historyKeys = <String>{};
+    final Set<String> seriesKeys = <String>{};
+    for (final EpubBookRow row in rows) {
+      final OnlineMangaLibraryEntry? entry = OnlineMangaLibraryEntry.tryParse(
+        row.sourceMetadata,
+      );
+      if (entry == null) continue;
+      historyKeys.add(mangaHistoryIdentityForOnline(entry).key);
+      historyKeys.add(
+        '${MangaFushiSource.kUniqueKey}\u0000'
+        '${readerBookMediaIdentifierFor(row.bookKey)}',
+      );
+      final int? sourceId = int.tryParse(entry.sourceId);
+      if (sourceId != null && sourceId > 0) {
+        seriesKeys.add('$sourceId\u0000${entry.series.key}');
+      }
+    }
+    return _LibraryHistoryKeys(historyKeys, seriesKeys);
+  }
+
+  static _HistorySource? _historySourceOf(
+    String mediaSource,
+    MangaHistoryOnlineRef? online,
+  ) {
+    OnlineMangaRuntimeKind? runtime = online?.runtime;
+    String sourceId = online?.sourceId ?? '';
+    if (mediaSource.startsWith(kMangaHistoryOnlineSourcePrefix)) {
+      try {
+        final Object? decoded = jsonDecode(
+          mediaSource.substring(kMangaHistoryOnlineSourcePrefix.length),
+        );
+        if (decoded is List<Object?> && decoded.length >= 3) {
+          runtime ??= OnlineMangaRuntimeKind.fromWire(decoded[0]?.toString());
+          if (sourceId.isEmpty) sourceId = decoded[2]?.toString() ?? '';
+        }
+      } on Object {
+        return null;
+      }
+    }
+    if (runtime == null) return null;
+    return _HistorySource(runtime: runtime, sourceId: sourceId);
+  }
+
+  static List<String> _genresOf(String? genre) {
+    if (genre == null || genre.trim().isEmpty) return const <String>[];
+    return genre
+        .split(RegExp(r'[,，、;；]'))
+        .map((String item) => item.trim())
+        .where((String item) => item.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  static String? _remoteUrl(String? value) {
+    final String? trimmed = value?.trim();
+    if (trimmed == null) return null;
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+      return trimmed;
+    }
+    return null;
+  }
+
+  static String? _firstNonEmpty(List<String?> values) {
+    for (final String? value in values) {
+      final String? trimmed = value?.trim();
+      if (trimmed != null && trimmed.isNotEmpty) return trimmed;
+    }
+    return null;
+  }
+
+  /// The most recent History row of a Library Manga. Reader sessions write the
+  /// current online identity; backups imported by earlier versions wrote the
+  /// legacy book-key identity, and both must keep round-tripping.
+  MediaOpenHistoryRow? _historyRowFor(
+    EpubBookRow row,
+    OnlineMangaLibraryEntry entry,
+    Map<String, MediaOpenHistoryRow> historyByKey,
+  ) {
+    final MangaHistoryIdentity identity = mangaHistoryIdentityForOnline(entry);
+    final MediaOpenHistoryRow? current = historyByKey[identity.key];
+    if (current != null) return current;
+    final String legacyKey =
+        '${MangaFushiSource.kUniqueKey}\u0000'
+        '${readerBookMediaIdentifierFor(row.bookKey)}';
+    return historyByKey[legacyKey];
+  }
+
+  /// Mihon stores History per chapter. A MyComic History row only knows the
+  /// Manga and its open time, so the chapter comes from the imported snapshot
+  /// when available and otherwise from the most recently touched chapter state.
+  /// If neither exists there is no honest chapter URL to export.
+  MihonBackupHistory? _libraryHistory({
+    required EpubBookRow row,
+    required OnlineMangaLibraryEntry entry,
+    required Map<String, MangaChapterStateRow> states,
+    required Map<String, MediaOpenHistoryRow> historyByKey,
+  }) {
+    final MediaOpenHistoryRow? history = _historyRowFor(
+      row,
+      entry,
+      historyByKey,
+    );
+    if (history == null) return null;
+    final Map<String, Object?>? snapshot = _snapshotJson(history.snapshotJson);
+    final String? chapterUrl =
+        _snapshotChapterUrl(snapshot) ?? _recentChapterKey(entry, states);
+    if (chapterUrl == null || chapterUrl.isEmpty) return null;
+    return MihonBackupHistory(
+      url: chapterUrl,
+      lastRead: history.openedAt,
+      readDuration: _snapshotReadDuration(snapshot),
+    );
+  }
+
+  static String? _recentChapterKey(
+    OnlineMangaLibraryEntry entry,
+    Map<String, MangaChapterStateRow> states,
+  ) {
+    String? bestKey;
+    int bestUpdatedAt = -1;
+    for (final OnlineMangaChapter chapter in entry.chapters) {
+      final String key = chapter.key.trim();
+      if (key.isEmpty) continue;
+      final MangaChapterStateRow? state = states[key];
+      if (state == null || state.updatedAt <= bestUpdatedAt) continue;
+      bestUpdatedAt = state.updatedAt;
+      bestKey = key;
+    }
+    if (bestKey != null) return bestKey;
+    final String? current = entry.currentChapter?.key.trim();
+    return current == null || current.isEmpty ? null : current;
+  }
+
+  static Map<String, Object?>? _snapshotJson(String? raw) {
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final Object? decoded = jsonDecode(raw);
+      if (decoded is Map<Object?, Object?>) {
+        return decoded.cast<String, Object?>();
+      }
+    } on Object {
+      // A corrupt snapshot must not abort the whole backup.
+    }
+    return null;
+  }
+
+  static String? _snapshotChapterUrl(Map<String, Object?>? snapshot) {
+    final Object? history = snapshot?['mihon_history'];
+    if (history is Map<Object?, Object?>) {
+      final String? url = history['chapter_url']?.toString().trim();
+      if (url != null && url.isNotEmpty) return url;
+    }
+    return null;
+  }
+
+  static int _snapshotReadDuration(Map<String, Object?>? snapshot) {
+    final Object? history = snapshot?['mihon_history'];
+    if (history is Map<Object?, Object?>) {
+      final Object? duration = history['read_duration'];
+      if (duration is num) return duration.toInt();
+    }
+    return 0;
   }
 
   /// Loads the Bangumi Tracking records stored for Library manga, keyed by the
@@ -551,4 +907,22 @@ class _ExportableManga {
   final EpubBookRow row;
   final OnlineMangaLibraryEntry entry;
   final int sourceId;
+}
+
+/// Identities that must not be re-exported as `favorite=false` read works.
+class _LibraryHistoryKeys {
+  const _LibraryHistoryKeys(this.historyKeys, this.seriesKeys);
+
+  /// `mediaSource\0mediaId` of every Library Manga (current + legacy import).
+  final Set<String> historyKeys;
+
+  /// `<sourceId>\0url` of every Library Manga.
+  final Set<String> seriesKeys;
+}
+
+class _HistorySource {
+  const _HistorySource({required this.runtime, required this.sourceId});
+
+  final OnlineMangaRuntimeKind runtime;
+  final String sourceId;
 }

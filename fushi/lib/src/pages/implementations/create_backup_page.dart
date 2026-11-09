@@ -43,10 +43,10 @@ Future<String?> pickMihonBackupSavePath({
 /// 「创建备份」页：Bookshelf / Settings group cards with a bottom 创建 button.
 ///
 /// Ticket 07 delivers the Library options (书架中的作品 / 章节) and the file
-/// plumbing; ticket 09 adds 分类 (Categories), ticket 10 adds 进度记录
-/// (Tracking) and ticket 11 adds 应用设置 / 包含敏感设置 in the 设置 card.
-/// History, extension stores and source settings are appended by later
-/// tickets; an empty group card is not rendered.
+/// plumbing; ticket 08 adds 历史 and 所有已读作品, which depend on 书架中的作品;
+/// ticket 09 adds 分类 (Categories), ticket 10 adds 进度记录 (Tracking) and
+/// ticket 11 adds 应用设置 / 包含敏感设置 in the 设置 card. Later tickets append
+/// 插件商店 / 图源设置; an empty group card is not rendered.
 class CreateBackupPage extends ConsumerStatefulWidget {
   const CreateBackupPage({super.key, this.savePathPicker, this.exporter});
 
@@ -65,6 +65,8 @@ class _CreateBackupPageState extends ConsumerState<CreateBackupPage> {
   // persisted (spec: 每次打开创建备份页都恢复默认勾选).
   bool _includeLibrary = true;
   bool _includeChapters = true;
+  bool _includeHistory = true;
+  bool _includeAllRead = true;
   bool _includeTracking = true;
   bool _includeCategories = true;
   bool _includeAppSettings = true;
@@ -74,15 +76,17 @@ class _CreateBackupPageState extends ConsumerState<CreateBackupPage> {
   /// Ticket 12 adds「图源设置」to this condition.
   bool get _sensitiveSettingsAvailable => _includeAppSettings;
 
-  /// Standalone exportable sections: 书架中的作品, 分类 and 应用设置. 章节
-  /// and 进度记录 depend on 书架中的作品. Later tickets add 插件商店 /
-  /// 图源设置 here.
+  /// Standalone exportable sections: 书架中的作品, 分类 and 应用设置. 章节 /
+  /// 进度记录 / 历史 / 所有已读作品 depend on 书架中的作品. Later tickets add
+  /// 插件商店 / 图源设置 here.
   bool get _canCreate =>
       _includeLibrary || _includeCategories || _includeAppSettings;
 
   MihonBackupExportOptions get _options => MihonBackupExportOptions(
     includeLibrary: _includeLibrary,
     includeChapters: _includeLibrary && _includeChapters,
+    includeHistory: _includeLibrary && _includeHistory,
+    includeAllRead: _includeLibrary && _includeAllRead,
     includeTracking: _includeLibrary && _includeTracking,
     includeCategories: _includeCategories,
     includeAppSettings: _includeAppSettings,
@@ -167,6 +171,32 @@ class _CreateBackupPageState extends ConsumerState<CreateBackupPage> {
         onChanged: _includeLibrary
             ? (bool? value) {
                 setState(() => _includeTracking = value ?? false);
+              }
+            : null,
+      ),
+      FushiCheckboxListTile(
+        key: const Key('create_backup_include_history'),
+        contentPadding: EdgeInsets.zero,
+        controlAffinity: ListTileControlAffinity.leading,
+        value: _includeHistory,
+        enabled: _includeLibrary,
+        title: Text(t.backup_create_history),
+        onChanged: _includeLibrary
+            ? (bool? value) {
+                setState(() => _includeHistory = value ?? false);
+              }
+            : null,
+      ),
+      FushiCheckboxListTile(
+        key: const Key('create_backup_include_all_read'),
+        contentPadding: EdgeInsets.zero,
+        controlAffinity: ListTileControlAffinity.leading,
+        value: _includeAllRead,
+        enabled: _includeLibrary,
+        title: Text(t.backup_create_all_read),
+        onChanged: _includeLibrary
+            ? (bool? value) {
+                setState(() => _includeAllRead = value ?? false);
               }
             : null,
       ),
