@@ -1,4 +1,6 @@
 import 'package:fushi/src/backup_import/mihon_backup_import_flow.dart';
+import 'package:fushi/src/pages/implementations/create_backup_page.dart';
+import 'package:fushi/src/settings/settings_actions.dart';
 import 'package:fushi/src/utils/fushi_icons.dart';
 import 'package:fushi/src/models/module_registry.dart';
 
@@ -90,19 +92,21 @@ SettingsSection buildMihonBackupSection() {
         ),
         onTap: runMihonBackupImport,
       ),
-      // `.tachibk` 导出在 v1.5 交付（ADR 0005）；入口先展示但置灰，
-      // 让用户知道 Backup 会从这里走，同时不给出半成品动作。
+      // 「创建备份」：进入独立页面，把书架数据导出为 Mihon v0.21.3 可导入
+      // 的 `.tachibk`（ADR 0005 的导出交付）。
       SettingsActionItem(
         id: 'system.export_mihon_backup',
         title: t.backup_export_mihon_title,
         subtitle: t.backup_export_mihon_subtitle,
         icon: FushiIcons.upload,
-        enabled: (SettingsContext _) => false,
         cli: const SettingsCliAction.unsupported(
-          'Exporting .tachibk backups is not implemented yet '
-          '(planned for v1.5).',
+          'Creating a .tachibk backup saves a file chosen from the app '
+          'window: Settings → Storage & downloads → Backup → Create backup.',
         ),
-        onTap: (SettingsContext _) {},
+        onTap: (SettingsContext context) => pushSettingsPage(
+          context,
+          (_) => const CreateBackupPage(),
+        ),
       ),
     ],
   );
