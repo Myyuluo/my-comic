@@ -12,6 +12,7 @@ import 'package:fushi/src/settings/settings_destination.dart';
 import 'package:fushi/src/settings/settings_schema_cache_clear.dart';
 import 'package:fushi/src/settings/settings_schema_storage_locations.dart';
 import 'package:fushi/src/storage/manga_cache_clear_service.dart';
+import 'package:fushi/src/storage/manga_webview_cache_clear.dart';
 import 'package:fushi/src/utils/misc/fushi_byte_format.dart';
 import 'package:fushi/src/utils/misc/fushi_toast.dart';
 
@@ -201,6 +202,79 @@ void main() {
     // 让 toast 自动消失计时器跑完，避免 pending-timer。
     await tester.pump(const Duration(seconds: 3));
   });
+
+  testWidgets('WebView profile 无法安全清理时跳过并提示部分成功', (WidgetTester tester) async {
+    final GlobalKey<NavigatorState> navKey = GlobalKey<NavigatorState>();
+    FushiToast.navigatorKey = navKey;
+    final SettingsContext settings = await captureContext(
+      tester,
+      navigatorKey: navKey,
+    );
+
+    debugBuildMangaCacheClearService = (SettingsContext _) =>
+        MangaCacheClearService(
+          steps: <MangaCacheClearStep>[
+            MangaWebViewCacheClearStep(
+              id: 'webview_http',
+              label: 'WebView cache',
+              profiles: <MangaWebViewCacheProfile>[
+                MangaWebViewCacheProfile(
+                  id: 'default',
+                  sessionSource: MangaWebViewCacheSessionSource(
+                    openHeadless: () async =>
+                        _FakeWebViewCacheSession(clearError: StateError('CDP')),
+                  ),
+                ),
+                MangaWebViewCacheProfile(
+                  id: 'manga',
+                  sessionSource: MangaWebViewCacheSessionSource(
+                    openHeadless: () async => _FakeWebViewCacheSession(),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        );
+
+    final SettingsStatusItem item = clearItem(locationSection());
+    final Future<void> action = Future<void>.sync(
+      () => item.resolveAction(settings)!(settings),
+    );
+    await tester.pump();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('清除'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(t.cache_clear_partial(size: '0 B')),
+      findsOneWidget,
+      reason: 'WebView 某 profile 失败不应当作整体失败',
+    );
+    await action;
+    // 让 toast 自动消失计时器跑完，避免 pending-timer。
+    await tester.pump(const Duration(seconds: 3));
+  });
+}
+
+class _FakeWebViewCacheSession implements MangaWebViewCacheSession {
+  _FakeWebViewCacheSession({this.clearError});
+
+  @override
+  String get profileId => 'fixture';
+
+  final Error? clearError;
+  bool disposed = false;
+
+  @override
+  Future<void> clearHttpCache() async {
+    final Error? error = clearError;
+    if (error != null) throw error;
+  }
+
+  @override
+  Future<void> dispose() async {
+    disposed = true;
+  }
 }
 
 class _FakeStep extends MangaCacheClearStep {
