@@ -515,7 +515,9 @@ void main() {
       bookKey = row.bookKey;
       uid = row.uid;
 
-      // 页面先在首屏记下任务基线，再把这一章模拟成「刚下载完成」。
+      // 等首屏那次任务状态读取落定（基线），再模拟「刚下载完成」。
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      await tester.pump();
       await _insertCompletedDownload(db, row: row, chapter: _chapters[1]);
       await pumpUntilFound(tester, find.byKey(promptKey));
       // 等提示条滑入到位再点动作（刚入树时还在屏幕下方）。
@@ -554,6 +556,44 @@ void main() {
     expect(added.bookKey, bookKey, reason: '加入书架不得改变行身份');
     expect(added.uid, uid);
     expect(await db.getLibraryEpubBooks(), hasLength(1));
+  });
+
+  testWidgets('同一次打开作品页只提示一次，批量逐章完成不反复打扰', (WidgetTester tester) async {
+    const ValueKey<String> promptKey = ValueKey<String>(
+      'manga_series_add_to_shelf_after_download',
+    );
+    late String bookKey;
+    late EpubBookRow seeded;
+    await tester.runAsync(() async {
+      await pumpSourcePage(tester);
+      seeded = (await db.getAllEpubBooks()).single;
+      bookKey = seeded.bookKey;
+
+      // 等首屏任务状态基线落定后再模拟下载完成。
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      await tester.pump();
+      await _insertCompletedDownload(db, row: seeded, chapter: _chapters[1]);
+      await pumpUntilFound(tester, find.byKey(promptKey));
+    });
+    // 手动收起提示条（自动退场的计时器挂在真实时钟上），模拟用户看过/划走。
+    tester
+        .state<ScaffoldMessengerState>(find.byType(ScaffoldMessenger))
+        .hideCurrentSnackBar();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.byKey(promptKey), findsNothing);
+
+    // 第二批章节完成：同一次打开页里不再追问。
+    await tester.runAsync(() async {
+      await _insertCompletedDownload(db, row: seeded, chapter: _chapters[0]);
+      for (int i = 0; i < 10; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+        await tester.pump();
+      }
+    });
+
+    expect(find.byKey(promptKey), findsNothing, reason: '批量下载逐章完成只提示一次');
+    expect((await db.getEpubBook(bookKey))!.inLibrary, isFalse);
   });
 
   testWidgets('书架作品、以及打开页面前就已完成的下载，都不弹「加入书架？」', (WidgetTester tester) async {

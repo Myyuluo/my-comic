@@ -252,8 +252,9 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
   Map<String, String> _observedJobStatuses = const <String, String>{};
   bool _jobStatusBaselineReady = false;
 
-  /// 「加入书架？」提示正在显示：同一批完成只问一次，不叠提示条。
-  bool _addToShelfPromptVisible = false;
+  /// 本次打开作品页已经问过「加入书架？」。批量下载会逐章完成，只提示一次，
+  /// 不反复打扰；下次打开作品页再下载仍可再次询问。
+  bool _addToShelfPromptShown = false;
 
   /// 本地卷的阅读位置（`sectionIndex` = 页号，阅读器 `_persistPosition` 写）。
   ReaderPosition? _localPosition;
@@ -507,10 +508,8 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
       _downloaded = downloaded;
     });
     // 票 05：非书架作品下载完成后给一次可选「加入书架？」提示，绝不自动加入。
-    // 书架成员不需要这个入口；同一批完成只问一次。
-    if (completedNow &&
-        _row?.isInLibrary == false &&
-        !_addToShelfPromptVisible) {
+    // 书架成员不需要这个入口；本次打开页只问一次，批量逐章完成不反复打扰。
+    if (completedNow && _row?.isInLibrary == false && !_addToShelfPromptShown) {
       _showAddToShelfAfterDownloadPrompt();
     }
   }
@@ -524,29 +523,21 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
       context,
     );
     if (messenger == null) return;
-    _addToShelfPromptVisible = true;
-    final ScaffoldFeatureController<SnackBar, SnackBarClosedReason> controller =
-        messenger.showSnackBar(
-          FushiSnackBar(
-            key: const ValueKey<String>(
-              'manga_series_add_to_shelf_after_download',
-            ),
-            content: Text(
-              t.manga_series_add_to_shelf_after_download(title: _displayTitle),
-            ),
-            duration: const Duration(seconds: 6),
-            // 带 action 的 SnackBar 默认常驻；这里是「可选提示」，让它自己退场。
-            persist: false,
-            action: SnackBarAction(
-              label: t.mihon_add_to_bookshelf,
-              onPressed: () => unawaited(_addToLibrary()),
-            ),
-          ),
-        );
-    unawaited(
-      controller.closed.whenComplete(() {
-        _addToShelfPromptVisible = false;
-      }),
+    _addToShelfPromptShown = true;
+    messenger.showSnackBar(
+      FushiSnackBar(
+        key: const ValueKey<String>('manga_series_add_to_shelf_after_download'),
+        content: Text(
+          t.manga_series_add_to_shelf_after_download(title: _displayTitle),
+        ),
+        duration: const Duration(seconds: 6),
+        // 带 action 的 SnackBar 默认常驻；这里是「可选提示」，让它自己退场。
+        persist: false,
+        action: SnackBarAction(
+          label: t.mihon_add_to_bookshelf,
+          onPressed: () => unawaited(_addToLibrary()),
+        ),
+      ),
     );
   }
 
