@@ -452,6 +452,40 @@ void main() {
     expect(find.text('Beta'), findsNothing);
   });
 
+  testWidgets('搜索框首字输入后焦点仍在', (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(900, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    writeManga('Alpha');
+
+    await tester.runAsync(() async {
+      await tester.pumpWidget(_harness(_TestAppModel(db, paths)));
+      await _pumpUntil(tester, find.text('Alpha'));
+
+      final Finder field = find.byKey(
+        const ValueKey<String>('local_source_search_field'),
+      );
+      await tester.showKeyboard(field);
+      await tester.pump();
+      expect(
+        tester.widget<TextField>(field).focusNode?.hasFocus,
+        isTrue,
+        reason: '前置条件：搜索框已聚焦',
+      );
+
+      // 模拟 IME 输入第一个字符，不走 tester.enterText 的重新聚焦路径。
+      tester.testTextInput.enterText('a');
+      await tester.pump();
+      await tester.pump();
+
+      expect(
+        tester.widget<TextField>(field).focusNode?.hasFocus,
+        isTrue,
+        reason: '首字输入后焦点必须保持在搜索框',
+      );
+    });
+  });
+
   testWidgets('搜索没有命中时显示无结果提示', (WidgetTester tester) async {
     tester.view.physicalSize = const Size(900, 1200);
     tester.view.devicePixelRatio = 1.0;

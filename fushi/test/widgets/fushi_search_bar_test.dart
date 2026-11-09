@@ -41,6 +41,37 @@ Future<void> _pumpBar(
 
 void main() {
   group('FushiSearchBar', () {
+    testWidgets('首字输入后焦点仍在搜索框', (WidgetTester tester) async {
+      final FocusNode focus = FocusNode(debugLabel: 'first-char');
+      addTearDown(focus.dispose);
+      final TextEditingController controller = TextEditingController();
+      addTearDown(controller.dispose);
+      await _pumpBar(
+        tester,
+        FushiSearchBar(
+          hintText: 'Search',
+          controller: controller,
+          focusNode: focus,
+        ),
+      );
+      focus.requestFocus();
+      await tester.pump();
+      expect(focus.hasFocus, isTrue, reason: '前置条件：搜索框已聚焦');
+      final Element fieldBefore = tester.element(find.byType(TextField));
+
+      // 模拟 IME 输入第一个字符，不走 tester.enterText 的重新聚焦路径。
+      tester.testTextInput.enterText('a');
+      await tester.pumpAndSettle();
+
+      expect(controller.text, 'a');
+      expect(focus.hasFocus, isTrue, reason: '首字输入后焦点必须保持在搜索框');
+      expect(
+        identical(tester.element(find.byType(TextField)), fieldBefore),
+        isTrue,
+        reason: '查询变化不得重建输入框（key / 祖先结构保持稳定）',
+      );
+    });
+
     testWidgets('零防抖即时出查询，同值不重复', (WidgetTester tester) async {
       final List<String> queries = <String>[];
       final TextEditingController controller = TextEditingController();
