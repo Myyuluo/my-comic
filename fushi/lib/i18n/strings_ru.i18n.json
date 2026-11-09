@@ -4415,6 +4415,8 @@
   "manga_series_auto_download": "Автоматически скачивать новые главы",
   "manga_series_auto_ocr": "Распознавать после загрузки",
   "manga_series_chapters_action": "Главы",
+  "manga_series_delete_downloads": "Delete downloads",
+  "manga_series_delete_downloads_confirm": "Delete downloaded files for $count chapter(s)? This cannot be undone.",
   "manga_series_delete_local_files": "删除本地文件",
   "manga_series_delete_local_files_confirm": "要从 local 删除这部作品的文件夹吗？此操作无法撤销。",
   "manga_series_download_all": "Скачать всё",
