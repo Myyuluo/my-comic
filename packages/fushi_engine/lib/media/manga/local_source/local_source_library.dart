@@ -95,6 +95,44 @@ class LocalSourceLibrary {
     return true;
   }
 
+  /// 移出书架前删除 Local source 原作文件，**不删数据库行**。
+  ///
+  /// 与 [deleteLocalFiles]（独立动作）不同，本方法只处理磁盘，由调用方在成功后再
+  /// 删 Library 行——文件删除失败时作品必须仍留在架上。文件本来就不存在视为已
+  /// 删除；路径越界时不碰文件并返回 [LocalSourceDeleteReason.outsideLocalSourceRoot]。
+  Future<LocalSourceDeleteResult> deleteOriginalFilesBeforeLibraryRemoval(
+    String bookKey,
+  ) async {
+    final EpubBookRow? row = await db.getEpubBook(bookKey);
+    if (row == null) {
+      return const LocalSourceDeleteResult(LocalSourceDeleteReason.notFound);
+    }
+    if (LocalSourceMetadata.tryParse(row.sourceMetadata) == null) {
+      return const LocalSourceDeleteResult(
+        LocalSourceDeleteReason.notLocalSource,
+      );
+    }
+    final FileSystemEntityType type = await FileSystemEntity.type(
+      row.extractDir,
+    );
+    if (type == FileSystemEntityType.notFound) {
+      return const LocalSourceDeleteResult(LocalSourceDeleteReason.deleted);
+    }
+    final String rootCanon = p.canonicalize(root.path);
+    final String dirCanon = p.canonicalize(row.extractDir);
+    if (!p.isWithin(rootCanon, dirCanon)) {
+      return const LocalSourceDeleteResult(
+        LocalSourceDeleteReason.outsideLocalSourceRoot,
+      );
+    }
+    if (type == FileSystemEntityType.directory) {
+      await Directory(row.extractDir).delete(recursive: true);
+    } else {
+      await File(row.extractDir).delete();
+    }
+    return const LocalSourceDeleteResult(LocalSourceDeleteReason.deleted);
+  }
+
   /// 「删除本地文件」——单独的用户动作，[confirmed] 必须为 true。
   ///
   /// 只允许删除 `local` 之内的已登记目录；路径越界时拒绝且不动文件/记录。
