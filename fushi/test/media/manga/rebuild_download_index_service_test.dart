@@ -92,6 +92,7 @@ void main() {
     required String extractDir,
     String? title,
     int importedAt = 1,
+    bool inLibrary = true,
   }) async {
     await db.insertEpubBook(
       EpubBooksCompanion.insert(
@@ -104,6 +105,7 @@ void main() {
         sourceMetadata: Value<String?>(entry.encode()),
         importedAt: importedAt,
         format: const Value<String>('manga'),
+        inLibrary: Value<bool>(inLibrary),
       ),
     );
     return (await db.getEpubBook(bookKey))!;
@@ -111,8 +113,9 @@ void main() {
 
   MangaPagesManifest manifestFor(
     OnlineMangaLibraryEntry entry,
-    OnlineMangaChapter chapter,
-  ) => MangaPagesManifest(
+    OnlineMangaChapter chapter, {
+    DateTime? downloadedAt,
+  }) => MangaPagesManifest(
     sourceRuntime: entry.runtime.wireValue,
     sourceId: entry.sourceId,
     sourceName: 'Example Source',
@@ -130,7 +133,7 @@ void main() {
         ),
       ],
     ),
-    downloadedAt: DateTime.utc(2026, 11, 7),
+    downloadedAt: downloadedAt ?? DateTime.utc(2026, 11, 7),
   );
 
   Future<Directory> writeChapter({
@@ -139,6 +142,7 @@ void main() {
     required OnlineMangaLibraryEntry entry,
     required OnlineMangaChapter chapter,
     String pageBytes = 'page',
+    DateTime? downloadedAt,
   }) async {
     final Directory chapterDir = downloadChapterDirectory(
       mangaDir.path,
@@ -146,7 +150,10 @@ void main() {
     );
     await chapterDir.create(recursive: true);
     await File(p.join(chapterDir.path, '001.jpg')).writeAsString(pageBytes);
-    await writePagesManifestAtomically(chapterDir, manifestFor(entry, chapter));
+    await writePagesManifestAtomically(
+      chapterDir,
+      manifestFor(entry, chapter, downloadedAt: downloadedAt),
+    );
     return chapterDir;
   }
 
@@ -1594,6 +1601,411 @@ void main() {
         row.chaptersJson,
       ).map((LocalSourceChapterRecord chapter) => chapter.key),
       <String>['Chapter 1.cbz'],
+    );
+  });
+
+  test('local 中带 manifest 的文件夹按身份关联到在线 Manga 行（含非书架）', () async {
+    const String bookKey = 'mihon-fixture';
+    final OnlineMangaLibraryEntry entry = entryFor();
+    await insertOnlineBook(
+      bookKey: bookKey,
+      entry: entry,
+      extractDir: p.join(
+        oldContent.path,
+        'downloads',
+        'Example Source',
+        'Fixture series',
+      ),
+      inLibrary: false,
+    );
+    // 目录名与作品标题毫无关系：只有 pages.json 能证明身份。
+    final Directory localMangaDir = Directory(
+      p.join(localComicRoot.path, '完全不同的本地目录'),
+    );
+    await writeChapter(
+      mangaDir: localMangaDir,
+      folderName: 'Local Ch 1',
+      entry: entry,
+      chapter: entry.chapters[0],
+    );
+    await writeChapter(
+      mangaDir: localMangaDir,
+      folderName: 'Local Ch 2',
+      entry: entry,
+      chapter: entry.chapters[1],
+    );
+
+    final RebuildDownloadIndexReport report = await service().run();
+
+    expect(report.booksScanned, 1);
+    expect(report.booksMatched, 1);
+    expect(report.booksRelinked, 1);
+    final EpubBookRow after = (await db.getEpubBook(bookKey))!;
+    expect(after.isInLibrary, isFalse, reason: '非书架归属不被重建改写');
+    expect(
+      p.equals(after.extractDir, localMangaDir.path),
+      isTrue,
+      reason: 'local manifest 证明身份时，在线行关联到该本地目录',
+    );
+    expect(
+      (await db.getMangaChapterDir(bookKey, '/c/1'))?.folderName,
+      'Local Ch 1',
+    );
+    expect(
+      (await db.getMangaChapterDir(bookKey, '/c/2'))?.folderName,
+      'Local Ch 2',
+    );
+    expect(
+      await db.getAllEpubBooks(),
+      hasLength(1),
+      reason: '已被在线行认领的 local 目录不能再登记成重复的本地条目',
+    );
+    // 只关联、不搬移、不删除任何文件。
+    expect(
+      File(p.join(localMangaDir.path, 'Local Ch 1', '001.jpg')).existsSync(),
+      isTrue,
+    );
+    expect(
+      File(p.join(localMangaDir.path, 'Local Ch 2', '001.jpg')).existsSync(),
+      isTrue,
+    );
+
+    // 幂等：第二次仍能匹配，但不再改写记录、不再补建条目。
+    final RebuildDownloadIndexReport second = await service().run();
+    expect(second.booksMatched, 1);
+    expect(second.booksRelinked, 0);
+    expect(second.booksAdded, 0);
+    expect(await db.getAllEpubBooks(), hasLength(1));
+  });
+
+  test('membership=false 的 Manga 行也按 pages.json 身份 re-link', () async {
+    const String bookKey = 'mihon-fixture';
+    final OnlineMangaLibraryEntry entry = entryFor();
+    await insertOnlineBook(
+      bookKey: bookKey,
+      entry: entry,
+      extractDir: p.join(
+        oldContent.path,
+        'downloads',
+        'Example Source',
+        'Fixture series',
+      ),
+      inLibrary: false,
+    );
+    final Directory mangaDir = Directory(
+      p.join(downloadsRoot.path, 'Example Source', 'Fixture series'),
+    );
+    await writeChapter(
+      mangaDir: mangaDir,
+      folderName: 'Chapter 1',
+      entry: entry,
+      chapter: entry.chapters[0],
+    );
+
+    final RebuildDownloadIndexReport report = await service().run();
+
+    expect(report.booksScanned, 1);
+    expect(report.booksMatched, 1);
+    final EpubBookRow after = (await db.getEpubBook(bookKey))!;
+    expect(after.isInLibrary, isFalse);
+    expect(p.equals(after.extractDir, mangaDir.path), isTrue);
+    expect(
+      (await db.getMangaChapterDir(bookKey, '/c/1'))?.folderName,
+      'Chapter 1',
+    );
+  });
+
+  test('重复副本优先已记录的 extractDir（即使另一份更新）', () async {
+    const String bookKey = 'mihon-fixture';
+    final OnlineMangaLibraryEntry entry = entryFor(
+      chapters: const <OnlineMangaChapter>[
+        OnlineMangaChapter(
+          key: '/c/1',
+          name: 'Chapter 1',
+          raw: <String, Object?>{},
+        ),
+      ],
+    );
+    final Directory recordedDir = Directory(
+      p.join(downloadsRoot.path, 'Example Source', 'Fixture series'),
+    );
+    final Directory newerCopy = Directory(
+      p.join(downloadsRoot.path, 'Example Source', 'Fixture series (2)'),
+    );
+    await insertOnlineBook(
+      bookKey: bookKey,
+      entry: entry,
+      extractDir: recordedDir.path,
+    );
+    await writeChapter(
+      mangaDir: recordedDir,
+      folderName: 'Chapter 1',
+      entry: entry,
+      chapter: entry.chapters.single,
+      downloadedAt: DateTime.utc(2026, 11, 1),
+    );
+    await writeChapter(
+      mangaDir: newerCopy,
+      folderName: 'Chapter 1',
+      entry: entry,
+      chapter: entry.chapters.single,
+      downloadedAt: DateTime.utc(2026, 11, 9),
+    );
+
+    final RebuildDownloadIndexReport report = await service().run();
+
+    expect(report.booksMatched, 1);
+    expect(report.booksAmbiguous, 0);
+    expect(report.booksSkipped, 0);
+    final EpubBookRow after = (await db.getEpubBook(bookKey))!;
+    expect(
+      p.equals(after.extractDir, recordedDir.path),
+      isTrue,
+      reason: '已记录的下载目录优先于更新的重复副本',
+    );
+    expect(
+      File(p.join(newerCopy.path, 'Chapter 1', '001.jpg')).existsSync(),
+      isTrue,
+      reason: '未采用的重复副本原样保留',
+    );
+  });
+
+  test('没有记录目录时重复副本优先最新完整副本', () async {
+    const String bookKey = 'mihon-fixture';
+    final OnlineMangaLibraryEntry entry = entryFor(
+      chapters: const <OnlineMangaChapter>[
+        OnlineMangaChapter(
+          key: '/c/1',
+          name: 'Chapter 1',
+          raw: <String, Object?>{},
+        ),
+      ],
+    );
+    final Directory olderCopy = Directory(
+      p.join(downloadsRoot.path, 'Example Source', 'Fixture series'),
+    );
+    final Directory newerCopy = Directory(
+      p.join(downloadsRoot.path, 'Example Source', 'Fixture series (2)'),
+    );
+    await insertOnlineBook(
+      bookKey: bookKey,
+      entry: entry,
+      extractDir: p.join(
+        oldContent.path,
+        'downloads',
+        'Example Source',
+        'Fixture series',
+      ),
+    );
+    await writeChapter(
+      mangaDir: olderCopy,
+      folderName: 'Chapter 1',
+      entry: entry,
+      chapter: entry.chapters.single,
+      downloadedAt: DateTime.utc(2026, 11, 1),
+    );
+    await writeChapter(
+      mangaDir: newerCopy,
+      folderName: 'Chapter 1',
+      entry: entry,
+      chapter: entry.chapters.single,
+      downloadedAt: DateTime.utc(2026, 11, 9),
+    );
+
+    final RebuildDownloadIndexReport report = await service().run();
+
+    expect(report.booksMatched, 1);
+    expect(report.booksAmbiguous, 0);
+    final EpubBookRow after = (await db.getEpubBook(bookKey))!;
+    expect(
+      p.equals(after.extractDir, newerCopy.path),
+      isTrue,
+      reason: '没有记录目录时采用 manifest 时间最新的完整副本',
+    );
+    expect(
+      File(p.join(olderCopy.path, 'Chapter 1', '001.jpg')).existsSync(),
+      isTrue,
+      reason: '较旧的重复副本原样保留',
+    );
+  });
+
+  test('重复副本无法决定时跳过并报告歧义，不改记录、不删文件、不补建重复条目', () async {
+    const String bookKey = 'mihon-fixture';
+    final OnlineMangaLibraryEntry entry = entryFor(
+      chapters: const <OnlineMangaChapter>[
+        OnlineMangaChapter(
+          key: '/c/1',
+          name: 'Chapter 1',
+          raw: <String, Object?>{},
+        ),
+      ],
+    );
+    final Directory firstCopy = Directory(
+      p.join(downloadsRoot.path, 'Example Source', 'Fixture series'),
+    );
+    final Directory secondCopy = Directory(
+      p.join(downloadsRoot.path, 'Example Source', 'Fixture series (2)'),
+    );
+    final String recorded = p.join(
+      oldContent.path,
+      'downloads',
+      'Example Source',
+      'Fixture series',
+    );
+    await insertOnlineBook(
+      bookKey: bookKey,
+      entry: entry,
+      extractDir: recorded,
+    );
+    final DateTime sameTime = DateTime.utc(2026, 11, 9);
+    for (final Directory copy in <Directory>[firstCopy, secondCopy]) {
+      await writeChapter(
+        mangaDir: copy,
+        folderName: 'Chapter 1',
+        entry: entry,
+        chapter: entry.chapters.single,
+        downloadedAt: sameTime,
+      );
+    }
+
+    final RebuildDownloadIndexReport report = await service().run();
+
+    expect(report.booksMatched, 0);
+    expect(report.booksRelinked, 0);
+    expect(report.booksSkipped, 1);
+    expect(report.booksAmbiguous, 1);
+    final EpubBookRow after = (await db.getEpubBook(bookKey))!;
+    expect(after.extractDir, recorded, reason: '无法决定时不得改写记录');
+    expect(
+      await db.getMangaChapterDir(bookKey, '/c/1'),
+      isNull,
+      reason: '无法决定时不得写映射',
+    );
+    expect(await db.getAllEpubBooks(), hasLength(1));
+    for (final Directory copy in <Directory>[firstCopy, secondCopy]) {
+      expect(
+        File(p.join(copy.path, 'Chapter 1', '001.jpg')).existsSync(),
+        isTrue,
+        reason: '不删除任何重复副本文件',
+      );
+    }
+  });
+
+  test('local 中带 manifest 的孤儿作品仍按现有语义登记为本地条目', () async {
+    final OnlineMangaLibraryEntry entry = entryFor();
+    await installSource(
+      extensionPackage: entry.extensionPackage,
+      sourceId: entry.sourceId,
+    );
+    final Directory localMangaDir = Directory(
+      p.join(localComicRoot.path, 'Unindexed local'),
+    );
+    await writeChapter(
+      mangaDir: localMangaDir,
+      folderName: 'Ch 1',
+      entry: entry,
+      chapter: entry.chapters[0],
+    );
+
+    final RebuildDownloadIndexReport report = await service().run();
+
+    expect(report.booksAdded, 1);
+    expect(report.booksAddedLocal, 1);
+    final EpubBookRow epubBook = (await db.getAllEpubBooks()).single;
+    expect(
+      LocalSourceMetadata.tryParse(epubBook.sourceMetadata),
+      isNotNull,
+      reason: 'orphan recovery 保留本地条目语义',
+    );
+    expect(p.equals(epubBook.extractDir, localMangaDir.path), isTrue);
+    expect(
+      File(p.join(localMangaDir.path, 'Ch 1', '001.jpg')).existsSync(),
+      isTrue,
+    );
+  });
+
+  test('local manifest 证明属于已移出书架的在线作品时不复活', () async {
+    final OnlineMangaLibraryEntry entry = entryFor();
+    final Directory localMangaDir = Directory(
+      p.join(localComicRoot.path, 'Removed online work'),
+    );
+    await writeChapter(
+      mangaDir: localMangaDir,
+      folderName: 'Ch 1',
+      entry: entry,
+      chapter: entry.chapters[0],
+    );
+    await db.insertBookTombstone(
+      onlineMangaBookKeyFor(
+        runtime: entry.runtime,
+        extensionPackage: entry.extensionPackage,
+        sourceId: entry.sourceId,
+        seriesKey: entry.series.key,
+      ),
+    );
+
+    final RebuildDownloadIndexReport report = await service().run();
+
+    expect(report.booksAdded, 0);
+    expect(report.booksSkipped, 1);
+    expect(report.booksSkippedTombstoned, 1);
+    expect(await db.getAllEpubBooks(), isEmpty);
+    expect(
+      File(p.join(localMangaDir.path, 'Ch 1', '001.jpg')).existsSync(),
+      isTrue,
+      reason: '只跳过登记，不删文件',
+    );
+  });
+
+  test('local 里与在线行身份相同的重复副本不补建本地条目', () async {
+    const String bookKey = 'mihon-fixture';
+    final OnlineMangaLibraryEntry entry = entryFor(
+      chapters: const <OnlineMangaChapter>[
+        OnlineMangaChapter(
+          key: '/c/1',
+          name: 'Chapter 1',
+          raw: <String, Object?>{},
+        ),
+      ],
+    );
+    final Directory downloadsCopy = Directory(
+      p.join(downloadsRoot.path, 'Example Source', 'Fixture series'),
+    );
+    final Directory localCopy = Directory(
+      p.join(localComicRoot.path, 'Local duplicate'),
+    );
+    await insertOnlineBook(
+      bookKey: bookKey,
+      entry: entry,
+      extractDir: downloadsCopy.path,
+    );
+    await writeChapter(
+      mangaDir: downloadsCopy,
+      folderName: 'Chapter 1',
+      entry: entry,
+      chapter: entry.chapters.single,
+      downloadedAt: DateTime.utc(2026, 11, 1),
+    );
+    await writeChapter(
+      mangaDir: localCopy,
+      folderName: 'Local Ch 1',
+      entry: entry,
+      chapter: entry.chapters.single,
+      downloadedAt: DateTime.utc(2026, 11, 2),
+    );
+
+    final RebuildDownloadIndexReport report = await service().run();
+
+    expect(report.booksMatched, 1);
+    expect(report.booksAdded, 0);
+    expect(
+      await db.getAllEpubBooks(),
+      hasLength(1),
+      reason: '同一在线身份已被行覆盖时，local 重复副本不得补建本地条目',
+    );
+    expect(
+      File(p.join(localCopy.path, 'Local Ch 1', '001.jpg')).existsSync(),
+      isTrue,
     );
   });
 
