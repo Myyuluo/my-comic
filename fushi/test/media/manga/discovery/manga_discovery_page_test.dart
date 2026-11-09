@@ -569,6 +569,39 @@ void main() {
     expect(opened, 1);
   });
 
+  testWidgets('发现页搜索框首字输入后焦点仍在', (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1000, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(wrap(MangaDiscoveryPage(
+      sourceFeedsOverride: const <MangaDiscoverySourceFeed>[],
+      catalogOverride: const MangaSourceCatalog(),
+    )));
+    await tester.pumpAndSettle();
+
+    final Finder field = find.byKey(
+      const ValueKey<String>('discovery_search_field'),
+    );
+    expect(field, findsOneWidget);
+    await tester.showKeyboard(field);
+    await tester.pump();
+    expect(
+      tester.widget<TextField>(field).focusNode?.hasFocus,
+      isTrue,
+      reason: '前置条件：搜索框已聚焦',
+    );
+
+    // 模拟 IME 输入第一个字符，不走 tester.enterText 的重新聚焦路径。
+    tester.testTextInput.enterText('a');
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.widget<TextField>(field).focusNode?.hasFocus,
+      isTrue,
+      reason: '首字输入后焦点必须保持在搜索框',
+    );
+  });
+
   // PR #1707 审查：每行一个 SliverToBoxAdapter 会在进入本页时把全部来源的行一次
   // 建出来，对所有来源同时并发 loadPopular；行必须按可见范围懒建。
   testWidgets('热门行按可见范围懒建，不在进入时拉全部来源', (WidgetTester tester) async {

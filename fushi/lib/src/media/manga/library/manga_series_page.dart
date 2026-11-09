@@ -277,9 +277,35 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
   /// 未入库的本地图源扫描结果（本地图源网格 → 作品页，尚未登记）。
   bool get _isScannedLocal => _scannedLocal != null;
 
-  /// 本地图源下一章：优先第一个未读完的章，全读完则停在最后一章。
+  /// 本地图源「继续阅读」落到哪一章。
+  ///
+  /// 先回到上次读到的章（`currentChapterKey`）；按「重新打开位置」偏好已经读完
+  /// 这一章时前进到下一个未读章，否则从第一个未读章开始，全读完停在最后一章。
+  /// 本地顺序是第 1 话→第 N 话，前进方向与在线源相反（下标 +1）。
   int get _localResumeIndex {
     if (_localChapters.isEmpty) return -1;
+    final MangaResumeTarget target = MangaResumeTargetKey.fromKey(
+      _appModelOrNull?.mangaResumeTarget ?? kMangaResumeTargetDefault,
+    );
+    final String? currentKey = _localSource?.currentChapterKey;
+    if (currentKey != null) {
+      final int currentIndex = _localChapters.indexWhere(
+        (LocalSourceChapterRecord chapter) => chapter.key == currentKey,
+      );
+      if (currentIndex >= 0) {
+        final MangaChapterStateRow? state = _states[currentKey];
+        final bool advance = state != null &&
+            switch (target) {
+              MangaResumeTarget.furthestProgress => state.readAt != null,
+              MangaResumeTarget.lastPosition =>
+                mangaChapterStoppedAtEnd(state),
+            };
+        if (!advance) return currentIndex;
+        for (int i = currentIndex + 1; i < _localChapters.length; i++) {
+          if (_states[_localChapters[i].key]?.readAt == null) return i;
+        }
+      }
+    }
     final int unread = _localChapters.indexWhere(
       (LocalSourceChapterRecord chapter) =>
           _states[chapter.key]?.readAt == null,
@@ -314,6 +340,12 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     }
     final EpubBookRow? row = _row;
     if (_localSource == null || row == null) return null;
+    final String? currentKey = _localSource!.currentChapterKey;
+    final int currentIndex = currentKey == null
+        ? -1
+        : _localChapters.indexWhere(
+            (LocalSourceChapterRecord chapter) => chapter.key == currentKey,
+          );
     return OnlineMangaLibraryEntry(
       runtime: OnlineMangaRuntimeKind.local,
       extensionPackage: '',
@@ -331,6 +363,7 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
             raw: const <String, Object?>{},
           ),
       ],
+      currentChapterIndex: currentIndex >= 0 ? currentIndex : null,
     );
   }
 
@@ -1761,6 +1794,10 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     // 借一个展示用条目，回调仍走本地分支（[_openChapterAt] 不碰在线 service）。
     final OnlineMangaLibraryEntry? displayEntry = _entry ?? _localDisplayEntry;
     final bool online = _entry != null;
+    // 在线源用描述符里的选中章；本地图源读 LocalSourceMetadata.currentChapterKey
+    //（打开 / 换章时由阅读器写回）。
+    final String? currentChapterKey =
+        _entry?.currentChapter?.key ?? _localSource?.currentChapterKey;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
@@ -1775,10 +1812,10 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
           states: _states,
           newestFirst: _newestFirst,
           unreadOnly: _unreadOnly,
-          currentChapterKey: _entry?.currentChapter?.key,
+          currentChapterKey: currentChapterKey,
           currentChapterAnchorKey: _currentChapterAnchor,
           onSortToggled: _toggleSort,
-          onJumpToCurrent: _entry?.currentChapter == null
+          onJumpToCurrent: currentChapterKey == null
               ? null
               : () => scrollToMangaChapterAnchor(
                   _currentChapterAnchor,
