@@ -780,7 +780,18 @@ class ReaderFushiSource extends ReaderMediaSource {
     position = prog.position;
     duration = prog.duration;
 
-    final String? imageUrl = await _resolveCoverUrl(book);
+    String? imageUrl = await _resolveCoverUrl(book);
+    // 导入的在线漫画（Mihon 备份）通常没有本地封面文件，备份只带远程
+    // `series.coverUrl`。本地探测全落空时回退到它，交给 `MediaItem.imageUrl`
+    // 的现有 HTTP 图片缓存（`AppCachedHttpImage`）懒加载；来源是否安装无关紧要。
+    // 它**不**写入 [_lastGoodCoverUrlByBookKey]：那份进程缓存只存磁盘上真实
+    // 存在过的 `file://` URL（BUG-513），混入远程地址会破坏离线语义。
+    if (imageUrl == null) {
+      final String? remoteCoverUrl = onlineEntry?.series.coverUrl?.trim();
+      if (remoteCoverUrl != null && remoteCoverUrl.isNotEmpty) {
+        imageUrl = remoteCoverUrl;
+      }
+    }
 
     return MediaItem(
       mediaIdentifier: mediaIdentifierFor(book.bookKey),
