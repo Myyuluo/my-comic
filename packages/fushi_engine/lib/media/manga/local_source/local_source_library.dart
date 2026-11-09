@@ -152,8 +152,12 @@ class LocalSourceLibrary {
             ),
         ]);
     final String? coverPath = localSourceCoverRelativePath(manga);
+    // 扫描刷新只重写「磁盘上有什么」；当前章属于阅读状态，必须原样保留。
     final String sourceMetadata = LocalSourceMetadata(
       relativePath: manga.relativePath,
+      currentChapterKey: LocalSourceMetadata.tryParse(
+        existing?.sourceMetadata,
+      )?.currentChapterKey,
     ).encode();
 
     if (existing == null) {
@@ -192,6 +196,37 @@ class LocalSourceLibrary {
     );
     return false;
   }
+}
+
+/// 记下 Local source 的当前阅读章（相对路径，即章节 key）；null = 清除。
+///
+/// 只改 `sourceMetadata` 这一个 JSON 字段，不碰章状态 / 阅读位置 / 其他列，
+/// 所以不需要迁移。返回是否真的写入（相同值 / 非 Local source 条目 = false）。
+Future<bool> updateLocalSourceCurrentChapter({
+  required FushiDatabase db,
+  required String bookKey,
+  required String? chapterKey,
+}) async {
+  final EpubBookRow? row = await db.getEpubBook(bookKey);
+  if (row == null) return false;
+  final LocalSourceMetadata? metadata = LocalSourceMetadata.tryParse(
+    row.sourceMetadata,
+  );
+  if (metadata == null) return false;
+  final String? normalized = chapterKey == null || chapterKey.isEmpty
+      ? null
+      : chapterKey;
+  if (metadata.currentChapterKey == normalized) return false;
+  await (db.update(
+    db.epubBooks,
+  )..where((t) => t.bookKey.equals(bookKey))).write(
+    EpubBooksCompanion(
+      sourceMetadata: Value<String>(
+        metadata.withCurrentChapterKey(normalized).encode(),
+      ),
+    ),
+  );
+  return true;
 }
 
 /// Local source 作品身份：绝对目录路径（小写、规范）的摘要。

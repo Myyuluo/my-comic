@@ -650,6 +650,30 @@ class ReaderFushiSource extends ReaderMediaSource {
     return (position: (total - selected).clamp(0, total), duration: total);
   }
 
+  /// 本地图源的章级进度。
+  ///
+  /// 章节总数必须从 `chaptersJson` 推导——`EpubBooks.chapterCount` 对本地图源
+  /// 存的是**总页数**（[LocalSourceManga.pageCount]），拿来当章数会让进度条与
+  /// 未读角标全错。章节按扫描的自然顺序（第 1 话→第 N 话），当前进度 =
+  /// `currentChapterKey` 的位置 + 1；没读过 = 0。
+  static ({int position, int duration}) _localSourceMangaProgress(
+    EpubBookRow book,
+    LocalSourceMetadata metadata,
+  ) {
+    final List<LocalSourceChapterRecord> chapters = decodeLocalSourceChapters(
+      book.chaptersJson,
+    );
+    final int total = chapters.length;
+    if (total == 0) return (position: 0, duration: 1);
+    final String? currentKey = metadata.currentChapterKey;
+    if (currentKey == null) return (position: 0, duration: total);
+    final int index = chapters.indexWhere(
+      (LocalSourceChapterRecord chapter) => chapter.key == currentKey,
+    );
+    if (index < 0) return (position: 0, duration: total);
+    return (position: index + 1, duration: total);
+  }
+
   /// Resolve a single [EpubBookRow] into a [MediaItem], probing its cover
   /// concurrently with sibling books (HBK-AUDIT-128). [pos] is the book's
   /// reader position (already keyed by uid by the caller; null = never read).
@@ -699,8 +723,14 @@ class ReaderFushiSource extends ReaderMediaSource {
     final OnlineMangaLibraryEntry? onlineEntry = pageBased
         ? OnlineMangaLibraryEntry.tryParse(book.sourceMetadata)
         : null;
+    final LocalSourceMetadata? localSource =
+        pageBased && onlineEntry == null
+        ? LocalSourceMetadata.tryParse(book.sourceMetadata)
+        : null;
     final ({int position, int duration}) prog = onlineEntry != null
         ? _onlineMangaProgress(onlineEntry)
+        : localSource != null
+        ? _localSourceMangaProgress(book, localSource)
         : pageBased
             // PDF Phase 3 / 漫画同款：进度单位是**页**（sectionIndex=当前页 0-based，
             // chapterCount=总页数）。chaptersJson='[]' 无字数，走 computeBookProgress 会恒回
