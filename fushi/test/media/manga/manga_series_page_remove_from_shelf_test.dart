@@ -228,7 +228,7 @@ void main() {
     if (root.existsSync()) root.deleteSync(recursive: true);
   });
 
-  testWidgets('在库态按钮是「移出」；确认后书、下载目录、章节状态一起删，页面退回未入库', (
+  testWidgets('在库态按钮是「移出」；确认后只清 membership，文件/章节状态/下载索引保留，页面退回非书架态', (
     WidgetTester tester,
   ) async {
     tester.view.physicalSize = const Size(900, 1800);
@@ -300,13 +300,15 @@ void main() {
       );
     });
 
-    expect(await db.getEpubBook(bookKey), isNull, reason: 'DB 行已删');
+    final EpubBookRow? after = await db.getEpubBook(bookKey);
+    expect(after, isNotNull, reason: '移出不删除 Manga 行');
+    expect(after!.isInLibrary, isFalse, reason: 'membership 清除');
     expect(
       await db.getMangaChapterStates(bookUid),
-      isEmpty,
-      reason: '章节状态随书级联删',
+      hasLength(1),
+      reason: '章节状态保留',
     );
-    // 票 04：默认不勾「同时删除已下载文件」→ 文件保留，DB 记录删掉。
+    // 票 04：默认不勾「同时删除已下载文件」→ 文件与下载索引保留。
     expect(
       extractDir,
       p.join(root.path, 'downloads', 'Fake', 'Fixture series'),
@@ -317,19 +319,19 @@ void main() {
       reason: '未勾选删除文件时 Download library 内容保留',
     );
     expect(chapterDir.existsSync(), isTrue);
-    expect(await db.getMangaChapterDir(bookKey, '/chapter/1'), isNull,
-        reason: '映射随书级联删除');
+    expect(await db.getMangaChapterDir(bookKey, '/chapter/1'), isNotNull,
+        reason: '下载索引保留');
     expect(
       find.byKey(const ValueKey<String>('manga_series_add_to_bookshelf')),
       findsOneWidget,
-      reason: '页面退回未入库态，可再次加入',
+      reason: '页面退回非书架态，可再次加入',
     );
     // 章节列表还在：条目本身没丢，只是不在库了。
     expect(find.text('Chapter 1'), findsOneWidget);
     expect(
       find.byKey(const ValueKey<String>('manga_chapter_download_downloaded')),
-      findsNothing,
-      reason: '下载状态位随删除清空',
+      findsOneWidget,
+      reason: '非书架行仍显示已下载状态',
     );
   });
 
@@ -378,9 +380,18 @@ void main() {
       );
     });
 
-    expect(await db.getEpubBook(bookKey), isNull, reason: 'DB 行已删');
+    expect(
+      (await db.getEpubBook(bookKey))?.isInLibrary,
+      isFalse,
+      reason: '在线作品删文件后保留非书架行',
+    );
     expect(chapterDir.existsSync(), isFalse, reason: '勾选后章节目录删除');
     expect(Directory(extractDir).existsSync(), isFalse, reason: '漫画目录删除');
+    expect(
+      await db.getMangaChapterDir(bookKey, '/chapter/1'),
+      isNull,
+      reason: '下载索引随删文件清除',
+    );
   });
 
   testWidgets('删除整部作品（含已下载文件）→ 历史条目仍保留', (

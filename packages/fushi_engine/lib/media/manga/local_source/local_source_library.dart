@@ -218,6 +218,8 @@ class LocalSourceLibrary {
     }
 
     // 刷新只覆盖内容描述；uid / importedAt / 进度 / 已读状态全部保留。
+    // 显式登记同时把 membership 翻回 true（票 03/04）：移出书架后行仍在，重新
+    // 加入必须复用同一条记录，而不是静默留在非书架状态。
     await (db.update(
       db.epubBooks,
     )..where((t) => t.bookKey.equals(bookKey))).write(
@@ -230,6 +232,7 @@ class LocalSourceLibrary {
         chaptersJson: Value<String>(chaptersJson),
         format: const Value<String>('manga'),
         sourceMetadata: Value<String>(sourceMetadata),
+        inLibrary: const Value<bool>(true),
       ),
     );
     return false;

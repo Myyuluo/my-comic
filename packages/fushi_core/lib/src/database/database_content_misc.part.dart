@@ -1012,7 +1012,9 @@ mixin _FushiDbContentMisc
   ///
   /// 同一行的 bookKey、uid、extractDir、章节、阅读进度、已读、下载映射与
   /// History 都原样保留；非书架行与书架行是同一条 Manga 记录。
-  Future<void> updateEpubBookInLibrary(
+  ///
+  /// 返回实际更新的行数（0 = bookKey 不存在）。
+  Future<int> updateEpubBookInLibrary(
     String bookKey, {
     required bool inLibrary,
   }) =>

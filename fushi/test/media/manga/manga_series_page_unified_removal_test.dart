@@ -329,7 +329,7 @@ void main() {
       reason: '同步能力提示不再出现',
     );
 
-    // 默认两个选项都不勾：直接删除只移出书架，已下载章节文件保留。
+    // 默认两个选项都不勾：只移出书架，行与已下载章节文件都保留。
     await tester.runAsync(() async {
       await tester.tap(find.text(t.dialog_delete));
       await _pumpUntil(
@@ -337,11 +337,15 @@ void main() {
         find.byKey(const ValueKey<String>('manga_series_add_to_bookshelf')),
       );
     });
-    expect(await db.getEpubBook(bookKey), isNull);
+    expect(
+      (await db.getEpubBook(bookKey))?.isInLibrary,
+      isFalse,
+      reason: '默认移出只清 Library membership，不删除 Manga 行',
+    );
     expect(chapterDir.existsSync(), isTrue, reason: '未勾选「同时删除本地文件」时已下载章节保留');
   });
 
-  testWidgets('在线作品页：不勾选任何选项只移出书架，文件与统计保留，进度/已读/标签删除，History 保留', (
+  testWidgets('在线作品页：默认移出只清 membership，保留进度/已读/下载任务/映射/History，移除 Tag 与订阅', (
     WidgetTester tester,
   ) async {
     tester.view.physicalSize = const Size(900, 1800);
@@ -351,6 +355,7 @@ void main() {
 
     late EpubBookRow row;
     late Directory chapterDir;
+    const String jobId = 'job-unified-online-default';
     await tester.runAsync(() async {
       row = await library.add(_entry());
       chapterDir = await _writeDownloadedChapter(
@@ -369,6 +374,12 @@ void main() {
       ).save(bookUid: row.uid, sectionIndex: 1, normCharOffset: 20);
       final int tagId = await db.getOrCreateTagByName('Tag A');
       await db.addTagToBook(row.bookKey, tagId);
+      await library.setSubscription(
+        bookKey: row.bookKey,
+        entry: _entry(),
+        subscribed: true,
+        autoDownload: true,
+      );
       await recordMangaHistoryOpened(db: db, row: row, onlineEntry: _entry());
       await db.upsertStudySegment(
         StudySegmentsCompanion.insert(
@@ -382,6 +393,20 @@ void main() {
           dateKey: '2026-11-07',
           hour: 10,
           updatedAt: 61000,
+        ),
+      );
+      await db.upsertMangaDownloadJob(
+        MangaDownloadJobsCompanion.insert(
+          jobId: jobId,
+          kind: MangaDownloadJobKind.chapter,
+          bookKey: row.bookKey,
+          chapterKey: '/chapter/1',
+          runtime: 'mihon',
+          title: row.title,
+          chapterTitle: 'Chapter 1',
+          status: const Value<String>(MangaDownloadJobStatus.queued),
+          createdAt: 1,
+          updatedAt: 1,
         ),
       );
       await tester.pumpWidget(_harness(appModel, row.bookKey));
@@ -405,17 +430,20 @@ void main() {
       );
     });
 
-    expect(await db.getEpubBook(row.bookKey), isNull, reason: 'Library 条目已删');
+    final EpubBookRow? after = await db.getEpubBook(row.bookKey);
+    expect(after, isNotNull, reason: '移出不删除 Manga 行');
+    expect(after!.isInLibrary, isFalse, reason: 'Library membership 已清除');
+    expect(after.uid, row.uid, reason: 'uid 不变');
     expect(chapterDir.existsSync(), isTrue, reason: '默认不删本地文件');
     expect(
       await db.getMangaChapterStates(row.uid),
-      isEmpty,
-      reason: 'Chapter 已读标记随移出删除',
+      hasLength(1),
+      reason: 'Chapter 已读标记保留',
     );
     expect(
       await ReaderPositionRepository(db).findByBookUid(row.uid),
-      isNull,
-      reason: 'Reading progress 随移出删除',
+      isNotNull,
+      reason: 'Reading progress 保留',
     );
     expect(
       await db.getTagsForBook(row.bookKey),
@@ -431,9 +459,33 @@ void main() {
       reason: '默认不删统计数据',
     );
     expect(await loadMangaHistory(db), hasLength(1), reason: '移出书架不删除 History');
+    expect(
+      await db.getMangaChapterDir(row.bookKey, '/chapter/1'),
+      isNotNull,
+      reason: '下载索引（章目录映射）保留',
+    );
+    expect(
+      await db.getMangaDownloadJob(jobId),
+      isNotNull,
+      reason: '默认移出保留排队中的下载任务',
+    );
+    final OnlineMangaLibraryEntry afterEntry =
+        OnlineMangaLibraryEntry.tryParse(after.sourceMetadata)!;
+    expect(afterEntry.subscribed, isFalse, reason: '移出后订阅被移除');
+    expect(afterEntry.autoDownload, isFalse, reason: '移出后自动追更被移除');
+    expect(
+      find.byKey(const ValueKey<String>('manga_series_add_to_bookshelf')),
+      findsOneWidget,
+      reason: '页面切回「加入书架」',
+    );
+    expect(
+      find.byKey(const ValueKey<String>('manga_series_subscribe')),
+      findsNothing,
+      reason: '非书架作品不再显示订阅入口',
+    );
   });
 
-  testWidgets('在线作品页：勾选「同时删除本地文件」→ 已下载章节文件删除，History 保留', (
+  testWidgets('在线作品页：勾选「同时删除本地文件」→ 文件与下载索引删除，非书架行与阅读状态保留', (
     WidgetTester tester,
   ) async {
     tester.view.physicalSize = const Size(900, 1800);
@@ -443,12 +495,33 @@ void main() {
 
     late EpubBookRow row;
     late Directory chapterDir;
+    const String jobId = 'job-unified-online-delete-files';
     await tester.runAsync(() async {
       row = await library.add(_entry());
       chapterDir = await _writeDownloadedChapter(
         db,
         row.bookKey,
         row.extractDir,
+      );
+      await db.saveMangaChapterState(
+        bookUid: row.uid,
+        chapterKey: '/chapter/1',
+        lastPage: 2,
+        readAt: 1,
+      );
+      await db.upsertMangaDownloadJob(
+        MangaDownloadJobsCompanion.insert(
+          jobId: jobId,
+          kind: MangaDownloadJobKind.chapter,
+          bookKey: row.bookKey,
+          chapterKey: '/chapter/1',
+          runtime: 'mihon',
+          title: row.title,
+          chapterTitle: 'Chapter 1',
+          status: const Value<String>(MangaDownloadJobStatus.done),
+          createdAt: 1,
+          updatedAt: 1,
+        ),
       );
       await recordMangaHistoryOpened(db: db, row: row, onlineEntry: _entry());
       await _openRemovalDialog(tester, appModel, row.bookKey);
@@ -461,9 +534,26 @@ void main() {
       );
     });
 
-    expect(await db.getEpubBook(row.bookKey), isNull);
+    final EpubBookRow? after = await db.getEpubBook(row.bookKey);
+    expect(after, isNotNull, reason: '在线作品删文件后仍保留非书架行');
+    expect(after!.isInLibrary, isFalse);
     expect(chapterDir.existsSync(), isFalse, reason: '已下载章节目录删除');
     expect(Directory(row.extractDir).existsSync(), isFalse, reason: '作品目录删除');
+    expect(
+      await db.getMangaChapterDir(row.bookKey, '/chapter/1'),
+      isNull,
+      reason: '下载索引随删文件清除',
+    );
+    expect(
+      await db.getMangaDownloadJob(jobId),
+      isNull,
+      reason: '指向已删文件的任务清除',
+    );
+    expect(
+      await db.getMangaChapterStates(row.uid),
+      hasLength(1),
+      reason: '阅读状态保留',
+    );
     expect(
       await loadMangaHistory(db),
       hasLength(1),
@@ -512,7 +602,11 @@ void main() {
       );
     });
 
-    expect(await db.getEpubBook(row.bookKey), isNull);
+    expect(
+      (await db.getEpubBook(row.bookKey))?.isInLibrary,
+      isFalse,
+      reason: '删统计只清 membership，不删 Manga 行',
+    );
     expect(
       await db.getStudySegmentsForMedia(
         mediaKind: kActivityMediaBook,
@@ -565,9 +659,9 @@ void main() {
     });
 
     expect(
-      await db.getEpubBook(row.bookKey),
-      isNotNull,
-      reason: '文件删除失败时 Library 条目必须保留',
+      (await db.getEpubBook(row.bookKey))?.isInLibrary,
+      isTrue,
+      reason: '文件删除失败时作品必须留在 Library',
     );
     expect(chapterDir.existsSync(), isTrue);
     expect(
@@ -600,7 +694,11 @@ void main() {
       );
     });
 
-    expect(await db.getEpubBook(row.bookKey), isNull, reason: '缺失文件不阻塞移出');
+    expect(
+      (await db.getEpubBook(row.bookKey))?.isInLibrary,
+      isFalse,
+      reason: '缺失文件不阻塞移出',
+    );
     expect(
       find.textContaining(t.epub_delete_error),
       findsNothing,
@@ -638,7 +736,10 @@ void main() {
       );
     });
 
-    expect(await db.getEpubBook(row.bookKey), isNull);
+    expect(
+      (await db.getEpubBook(row.bookKey))?.isInLibrary,
+      isFalse,
+    );
     expect(chapterDir.existsSync(), isTrue, reason: '旧「记住这些选择」值被忽略，文件没有被误删');
   });
 
@@ -675,7 +776,7 @@ void main() {
     expect(await loadMangaHistory(db), hasLength(1));
   });
 
-  testWidgets('本地作品页：与在线共用同一弹窗，默认只移出书架（保留原作文件），进度/已读/标签删除，History 保留', (
+  testWidgets('本地作品页：默认移出只清 membership，保留原作文件/进度/已读/History，移除 Tag', (
     WidgetTester tester,
   ) async {
     tester.view.physicalSize = const Size(900, 1800);
@@ -722,12 +823,27 @@ void main() {
       await _pumpFrames(tester);
     });
 
-    expect(await db.getEpubBook(row.bookKey), isNull, reason: 'Library 条目已删');
+    final EpubBookRow? after = await db.getEpubBook(row.bookKey);
+    expect(after, isNotNull, reason: '本地作品移出不删除 Manga 行');
+    expect(after!.isInLibrary, isFalse, reason: 'Library membership 已清除');
     expect(mangaDir.existsSync(), isTrue, reason: '默认保留 local 原作文件夹');
-    expect(await db.getMangaChapterStates(row.uid), isEmpty);
-    expect(await ReaderPositionRepository(db).findByBookUid(row.uid), isNull);
+    expect(
+      await db.getMangaChapterStates(row.uid),
+      hasLength(1),
+      reason: 'Chapter 已读标记保留',
+    );
+    expect(
+      await ReaderPositionRepository(db).findByBookUid(row.uid),
+      isNotNull,
+      reason: 'Reading progress 保留',
+    );
     expect(await db.getTagsForBook(row.bookKey), isEmpty);
     expect(await loadMangaHistory(db), hasLength(1), reason: 'History 保留');
+    expect(
+      find.byKey(const ValueKey<String>('manga_series_remove_from_bookshelf')),
+      findsNothing,
+      reason: '移出后不再显示「移出书架」',
+    );
   });
 
   testWidgets('本地作品页：勾选「同时删除本地文件」→ local 原作文件夹删除，History 保留', (
@@ -799,7 +915,11 @@ void main() {
       await _pumpFrames(tester);
     });
 
-    expect(await db.getEpubBook(row.bookKey), isNull);
+    expect(
+      (await db.getEpubBook(row.bookKey))?.isInLibrary,
+      isFalse,
+      reason: '删统计只清 membership，不删行',
+    );
     expect(
       await db.getStudySegmentsForMedia(
         mediaKind: kActivityMediaBook,
@@ -849,9 +969,9 @@ void main() {
     });
 
     expect(
-      await db.getEpubBook(row.bookKey),
-      isNotNull,
-      reason: '文件删除失败时 Library 条目必须保留',
+      (await db.getEpubBook(row.bookKey))?.isInLibrary,
+      isTrue,
+      reason: '文件删除失败时作品必须留在 Library',
     );
     expect(mangaDir.existsSync(), isTrue);
     openFile?.closeSync();
@@ -883,14 +1003,25 @@ void main() {
       await _pumpFrames(tester);
     });
 
-    expect(await db.getEpubBook(row.bookKey), isNull, reason: '缺失文件不阻塞移出');
+    expect(
+      await db.getEpubBook(row.bookKey),
+      isNull,
+      reason: '本地作品删文件移出时连行一起删除；缺失文件不阻塞',
+    );
     expect(find.textContaining(t.epub_delete_error), findsNothing);
   });
 
   test('zh-CN 文案与票面一致', () {
     LocaleSettings.setLocale(AppLocale.zhCn);
     expect(t.manga_series_remove_from_bookshelf, '移出漫画书架');
-    expect(t.manga_series_remove_confirm, '把这部作品移出书架？阅读进度与已读标记会一并删除。');
+    expect(
+      t.manga_series_remove_confirm,
+      '把这部作品移出书架？阅读进度、已读标记、已下载章节与 History 会保留。',
+    );
+    expect(
+      t.manga_series_remove_confirm_batch(n: 3),
+      '确定把选中的 3 部作品移出书架？阅读进度、已读标记、已下载章节与 History 会保留。',
+    );
     expect(t.delete_local_files_download_desc, '已下载的章节文件会从本机删除，且无法恢复。');
     expect(t.delete_statistics_manga_desc, '该作品的阅读时长、页数与查词/制卡计数将从统计中移除，且无法恢复。');
   });
