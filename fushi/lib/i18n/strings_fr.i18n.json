@@ -1181,6 +1181,7 @@
   "backup_create_progress": "$processed / $total processed",
   "backup_create_saved_path": "Saved to $path",
   "backup_create_sensitive_settings": "Include sensitive settings",
+  "backup_create_tracking": "Tracking",
   "backup_export": "Exporter la sauvegarde",
   "backup_export_books_all": "Tous les livres",
   "backup_export_books_selected": "$count livres sélectionnés",

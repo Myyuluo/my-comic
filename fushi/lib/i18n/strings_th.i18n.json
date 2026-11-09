@@ -1181,6 +1181,7 @@
   "backup_create_progress": "$processed / $total processed",
   "backup_create_saved_path": "Saved to $path",
   "backup_create_sensitive_settings": "Include sensitive settings",
+  "backup_create_tracking": "Tracking",
   "backup_export": "ส่งออกข้อมูลสำรอง",
   "backup_export_books_all": "หนังสือทั้งหมด",
   "backup_export_books_selected": "เลือกหนังสือ $count เล่ม",
