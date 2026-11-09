@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
 import 'package:fushi/src/focus/fushi_focus_controller.dart';
+import 'package:fushi/src/media/manga/library/manga_shelf_removal_dialog.dart';
+import 'package:fushi/src/media/manga/library/manga_shelf_removal_service.dart';
 import 'package:fushi/src/media/manga/library/manga_series_page.dart';
 import 'package:fushi/src/media/manga/manga_cover_placeholder.dart';
 import 'package:fushi/src/media/media_search_text.dart';
@@ -52,8 +54,9 @@ enum LocalSourceShelfFilter {
 /// 单部作品不在这里隐式登记：普通单击进作品页（未入库的走
 /// [LocalSourceMangaSeriesTarget]），用户在作品页显式「加入书架」才写 Library；
 /// 批量入口（右上「选择」或鼠标长按卡片）进入选择模式后，可把选中的未入架作品
-/// 批量加入书架、把已入架作品批量移出书架（只删条目 + 墓碑，**不删 `local`
-/// 文件**）。封面由 ticket 04 的 [LocalSourceCoverService] 在后台逐部补齐。
+/// 批量加入书架、把已入架作品批量移出书架。批量移出先弹统一确认弹窗，默认只删
+/// 条目 + 墓碑、**保留 `local` 原作**；勾选后才删除原作文件 / 阅读统计。封面由
+/// ticket 04 的 [LocalSourceCoverService] 在后台逐部补齐。
 class LocalSourceBrowsePage extends ConsumerStatefulWidget {
   const LocalSourceBrowsePage({super.key});
 
@@ -332,27 +335,37 @@ class _LocalSourceBrowsePageState extends ConsumerState<LocalSourceBrowsePage> {
     );
   }
 
-  /// 批量「移出书架」：只删除选中且已入架的书架条目并写 tombstone，
-  /// **绝不删除 `local` 文件**（与作品页的单部移出同一路径）。
+  /// 批量「移出书架」：先弹票 01 的统一确认弹窗（批量数量 = 本次适用的已入架
+  /// 作品数），取消不产生任何变化。确认后逐作品独立调用共享移出服务：默认只删
+  /// Library 条目并写 tombstone、**保留 `local` 原作**；勾选「同时删除本地文件」
+  /// 时先删原作再删行，删除失败的作品留在 Library 并计入失败数。History 不删。
   Future<void> _batchRemoveFromLibrary() async {
     if (_batchRunning) return;
     final List<LocalSourceManga> targets = _selectedWorks()
         .where(_isInLibrary)
         .toList(growable: false);
     if (targets.isEmpty) return;
+    final MangaLibraryRemovalDecision? decision =
+        await showMangaShelfRemovalDialog(
+          context,
+          message: t.manga_batch_remove_confirm(count: targets.length),
+          localFilesSubtitle: t.delete_local_files_download_desc,
+          statisticsSubtitle: t.delete_statistics_manga_batch_desc,
+        );
+    if (decision == null || !mounted) return;
     setState(() => _batchRunning = true);
-    final LocalSourceLibrary library = LocalSourceLibrary(
-      db: _appModel.database,
-      root: _appModel.appPaths.localComicRoot,
-    );
     int success = 0;
     int failed = 0;
     for (final LocalSourceManga manga in targets) {
       try {
-        final bool removed = await library.removeFromLibrary(
-          localSourceBookKeyFor(manga.directoryPath),
+        final MangaLibraryRemovalResult result = await removeMangaFromLibrary(
+          db: _appModel.database,
+          bookKey: localSourceBookKeyFor(manga.directoryPath),
+          localSourceRoot: _appModel.appPaths.localComicRoot,
+          deleteLocalFiles: decision.deleteLocalFiles,
+          deleteStatistics: decision.deleteStatistics,
         );
-        if (removed) {
+        if (result.removed) {
           success++;
         } else {
           failed++;
