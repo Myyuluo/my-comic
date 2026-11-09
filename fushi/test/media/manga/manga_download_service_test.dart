@@ -1233,6 +1233,116 @@ void main() {
     downloads.dispose();
   });
 
+  group('取消失败任务（ticket 09）', () {
+    Future<void> insertFailedJob({
+      required String jobId,
+      required String chapterKey,
+      required String chapterTitle,
+      required int createdAt,
+    }) =>
+        db.upsertMangaDownloadJob(
+          MangaDownloadJobsCompanion.insert(
+            jobId: jobId,
+            kind: MangaDownloadJobKind.chapter,
+            bookKey: bookKey,
+            chapterKey: chapterKey,
+            runtime: 'mihon',
+            title: 'Fixture series',
+            chapterTitle: chapterTitle,
+            status: const Value<String>(MangaDownloadJobStatus.failed),
+            pagesDone: const Value<int>(1),
+            pagesTotal: const Value<int>(3),
+            attemptCount: const Value<int>(3),
+            autoOcr: const Value<bool>(false),
+            createdAt: createdAt,
+            updatedAt: createdAt,
+          ),
+        );
+
+    test('删除任务行、staging、临时包与映射容器，其他任务不受影响', () async {
+      final MangaDownloadService downloads = build(saveAsCbz: () => true);
+      addTearDown(downloads.dispose);
+      await insertFailedJob(
+        jobId: 'failed-1',
+        chapterKey: '/chapter/1',
+        chapterTitle: 'Chapter 1',
+        createdAt: 1,
+      );
+      await insertFailedJob(
+        jobId: 'failed-2',
+        chapterKey: '/chapter/2',
+        chapterTitle: 'Chapter 2',
+        createdAt: 2,
+      );
+
+      final Directory staging = downloadStagingDirectory(bookDir, 'failed-1');
+      await staging.create(recursive: true);
+      await File(
+        p.join(staging.path, downloadPageFileName(0, '.png')),
+      ).writeAsBytes(_FakeAdapter.pngOf(0));
+      final File temp = File(p.join(bookDir, 'Chapter 1.cbz.tmp'));
+      await temp.writeAsString('partial archive');
+      final Directory mapped = downloadChapterDirectory(bookDir, 'Chapter 1');
+      await mapped.create(recursive: true);
+      await db.upsertMangaChapterDir(
+        bookKey: bookKey,
+        chapterKey: '/chapter/1',
+        folderName: 'Chapter 1',
+        updatedAt: 1,
+      );
+
+      final Directory otherStaging = downloadStagingDirectory(
+        bookDir,
+        'failed-2',
+      );
+      await otherStaging.create(recursive: true);
+
+      expect(await downloads.discardFailed('failed-1'), isTrue);
+
+      expect(await db.getMangaDownloadJob('failed-1'), isNull);
+      expect(staging.existsSync(), isFalse, reason: '删除 .staging/<jobId>');
+      expect(temp.existsSync(), isFalse, reason: '删除失败的 .cbz.tmp');
+      expect(mapped.existsSync(), isFalse, reason: '删除可能存在的映射容器');
+      expect(
+        await db.getMangaChapterDir(bookKey, '/chapter/1'),
+        isNull,
+        reason: '映射行一并清理',
+      );
+      expect(
+        await db.getMangaDownloadJob('failed-2'),
+        isNotNull,
+        reason: '其他任务不受影响',
+      );
+      expect(
+        otherStaging.existsSync(),
+        isTrue,
+        reason: '其他任务的 staging 不被清理',
+      );
+      expect(
+        await downloads.discardFailed('failed-1'),
+        isFalse,
+        reason: '已删除的任务幂等 no-op',
+      );
+    });
+
+    test('非失败任务不被取消失败路径删除', () async {
+      final MangaDownloadService downloads = build();
+      addTearDown(downloads.dispose);
+      final MangaDownloadJobRow job = await downloads.enqueueChapter(
+        entry: _entry(),
+        chapter: _chapters.last,
+        autoOcr: false,
+      );
+      final Directory staging = downloadStagingDirectory(bookDir, job.jobId);
+      await staging.create(recursive: true);
+
+      expect(await downloads.discardFailed(job.jobId), isFalse);
+
+      expect(await db.getMangaDownloadJob(job.jobId), isNotNull);
+      expect(staging.existsSync(), isTrue);
+    });
+  });
+
   test('重启：running 行复位成 queued 续跑', () async {
     final MangaDownloadService first = build();
     final MangaDownloadJobRow job = await first.enqueueChapter(
