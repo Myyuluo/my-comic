@@ -64,8 +64,16 @@ class _MangaHistoryPageState extends ConsumerState<MangaHistoryPage> {
     // 在 Library：直接进作品页（章节、已读标记、下载状态都齐）。
     final String? bookKey = entry.bookKey;
     if (bookKey != null) {
-      await _pushSeries(ShelfMangaSeriesTarget(bookKey));
-      return;
+      // 历史页加载与点击之间作品可能已被删除（书架删除 / 同步删除 / 清库）：
+      // 带 bookKey 进作品页会因行不存在落到错误态。先确认 Library 行还在；
+      // 不在就按快照回退到来源作品页，来源也没有时给错误提示并保留条目。
+      final bool rowExists =
+          (await appModel.database.getEpubBook(bookKey)) != null;
+      if (!mounted) return;
+      if (rowExists) {
+        await _pushSeries(ShelfMangaSeriesTarget(bookKey));
+        return;
+      }
     }
     // 未入书架 / 已移出书架：快照里带着来源身份，按来源重新打开作品页。
     final MangaHistoryOnlineRef? online = entry.online;

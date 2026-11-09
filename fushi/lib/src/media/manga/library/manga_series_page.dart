@@ -13,6 +13,7 @@ import 'package:fushi/src/utils/components/glass/fushi_icon.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi/src/media/manga/download/download_library_index.dart';
 import 'package:fushi/src/media/manga/download/manga_download_service.dart';
+import 'package:fushi/src/media/manga/history/manga_history.dart';
 import 'package:fushi/src/media/manga/library/manga_chapter_list.dart';
 import 'package:fushi/src/media/manga/library/manga_download_planner.dart';
 import 'package:fushi/src/media/manga/library/manga_resume_point.dart';
@@ -1425,6 +1426,19 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
         );
         return;
       }
+      // 票 10：Local source 的「删除本地文件」= 删除整部作品（含文件）。作品行
+      // 已删、磁盘文件也没了，历史页再没有可回退的目标，级联清掉它的历史行。
+      // 与 deleteBook 同一纪律：历史清理失败只记日志，不翻转文件已删的结果。
+      try {
+        await deleteMangaHistoryForBook(appModel.database, row);
+      } catch (error, stack) {
+        ErrorLogService.instance.log(
+          'MangaSeriesPage.deleteLocalSourceHistory',
+          error,
+          stack,
+        );
+      }
+      if (!mounted) return;
       final NavigatorState navigator = Navigator.of(context);
       if (navigator.canPop()) navigator.pop();
     } on Object catch (error, stack) {
