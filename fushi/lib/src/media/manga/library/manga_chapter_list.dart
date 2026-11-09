@@ -4,6 +4,8 @@ import 'package:material_ui/material_ui.dart';
 
 import 'package:fushi/src/focus/fushi_focus_scroll.dart';
 import 'package:fushi/src/media/detail/media_detail_kit.dart';
+import 'package:fushi/src/media/selection/media_selection_controller.dart';
+import 'package:fushi/src/media/selection/selection_gestures.dart';
 import 'package:fushi/src/utils/components/fushi_staggered_entrance.dart';
 import 'package:fushi/src/utils/components/glass/fushi_icon.dart';
 import 'package:fushi/src/utils/fushi_icons.dart';
@@ -54,6 +56,8 @@ class MangaChapterList extends StatelessWidget {
     this.onUnreadOnlyToggled,
     this.onToggleRead,
     this.onMarkUpToRead,
+    this.onChapterLongPress,
+    this.selectedChapterKeys,
     this.showHeader = true,
     this.downloadedChapterKeys = const <String>{},
     this.missingChapterKeys = const <String>{},
@@ -91,6 +95,15 @@ class MangaChapterList extends StatelessWidget {
   final VoidCallback? onUnreadOnlyToggled;
   final void Function(OnlineMangaChapter chapter)? onToggleRead;
   final void Function(OnlineMangaChapter chapter)? onMarkUpToRead;
+
+  /// 长按章节（未进入多选时由宿主接去进入多选）。null = 不接。
+  final void Function(OnlineMangaChapter chapter)? onChapterLongPress;
+
+  /// 多选态下已选中的章节 key；null = 未进入多选（行不画选择标记，点击保持
+  /// [onChapterTap] 的普通语义）。非 null 时每一行都画行首选择标记，选中行铺
+  /// primaryContainer 底，供作品页的多选态使用。
+  final Set<String>? selectedChapterKeys;
+
   final bool showHeader;
 
   /// 下载状态位（设计稿 2026-09-12 §5）。两份输入合成一个状态：
@@ -166,7 +179,25 @@ class MangaChapterList extends StatelessWidget {
     );
   }
 
-  List<OnlineMangaChapter> _visibleChapters(List<OnlineMangaChapter> chapters) {
+  List<OnlineMangaChapter> _visibleChapters(
+    List<OnlineMangaChapter> chapters,
+  ) => visibleChapters(
+    chapters: chapters,
+    states: states,
+    newestFirst: newestFirst,
+    unreadOnly: unreadOnly,
+  );
+
+  /// 当前筛选 + 排序之后真正渲染出来的章节（顺序 = 屏幕顺序）。
+  ///
+  /// 作品页的多选状态机用同一份结果登记「可见序」：全选 / 反选与批量动作都只
+  /// 作用于这份列表，不能各自再推一遍筛选判据（两处推导迟早漂开）。
+  static List<OnlineMangaChapter> visibleChapters({
+    required List<OnlineMangaChapter> chapters,
+    required Map<String, MangaChapterStateRow> states,
+    required bool newestFirst,
+    required bool unreadOnly,
+  }) {
     final Iterable<OnlineMangaChapter> filtered = unreadOnly
         ? chapters.where(
             (OnlineMangaChapter chapter) => states[chapter.key]?.readAt == null,
@@ -298,48 +329,58 @@ class MangaChapterList extends StatelessWidget {
     // 相邻章节常有相同下载状态，列表身份必须取章节 key；状态探针放在每章内部，
     // 避免重复 sibling key，且排序 / 下载状态变化时保留该章的进场状态。
     final GlobalKey? anchor = current ? currentChapterAnchorKey : null;
+    final Set<String>? selectedKeys = selectedChapterKeys;
+    final bool selectionMode = selectedKeys != null;
+    final bool selected = selectionMode && selectedKeys.contains(chapter.key);
+    Widget row = MediaDetailItemRow(
+      index: index,
+      count: count,
+      title: chapter.name,
+      number: _numberLabel(chapter),
+      subtitle: _buildSubtitle(chapter, state, partial),
+      // 当前章只把标题文字染成 primary，不再铺整行底色（2026-11）。
+      current: current,
+      completed: read,
+      progress: partial && pageCount != null && pageCount > 0
+          ? (lastPage + 1) / pageCount
+          : null,
+      downloadState: switch (download) {
+        MangaChapterDownloadState.notDownloaded =>
+          MediaDetailDownloadState.none,
+        MangaChapterDownloadState.queued => MediaDetailDownloadState.queued,
+        MangaChapterDownloadState.downloading =>
+          MediaDetailDownloadState.downloading,
+        MangaChapterDownloadState.downloaded =>
+          MediaDetailDownloadState.downloaded,
+        MangaChapterDownloadState.failed => MediaDetailDownloadState.failed,
+        MangaChapterDownloadState.missing => MediaDetailDownloadState.missing,
+      },
+      downloadProgress:
+          download == MangaChapterDownloadState.downloading && pagesTotal > 0
+          ? ((job?.pagesDone ?? 0) / pagesTotal).clamp(0.0, 1.0)
+          : null,
+      // 多选态：行首换成选择标记，选中行铺 primaryContainer 底。
+      selected: selectionMode ? selected : null,
+      onLongPress: onChapterLongPress == null
+          ? null
+          : () => onChapterLongPress!(chapter),
+      trailing: _buildMenu(chapter, download),
+      onTap: () => onChapterTap(chapter),
+    );
+    // 多选态给每行贴「我是哪一章」的标记，供 SelectionDragArea 按坐标反查并
+    // 长按扫选（只看未读筛掉的行不在树上，自然扫不到）。
+    if (selectionMode) {
+      row = SelectionSlotTarget(
+        slot: SelectionSlot.loose(chapter.key),
+        child: row,
+      );
+    }
     return FushiStaggeredEntrance(
       key: ValueKey<String>('manga_chapter_${chapter.key}'),
       index: index,
       child: KeyedSubtree(
         key: ValueKey<String>('manga_chapter_download_${download.name}'),
-        child: _anchored(
-          anchor,
-          MediaDetailItemRow(
-            index: index,
-            count: count,
-            title: chapter.name,
-            number: _numberLabel(chapter),
-            subtitle: _buildSubtitle(chapter, state, partial),
-            // 当前章只把标题文字染成 primary，不再铺整行底色（2026-11）。
-            current: current,
-            completed: read,
-            progress: partial && pageCount != null && pageCount > 0
-                ? (lastPage + 1) / pageCount
-                : null,
-            downloadState: switch (download) {
-              MangaChapterDownloadState.notDownloaded =>
-                MediaDetailDownloadState.none,
-              MangaChapterDownloadState.queued =>
-                MediaDetailDownloadState.queued,
-              MangaChapterDownloadState.downloading =>
-                MediaDetailDownloadState.downloading,
-              MangaChapterDownloadState.downloaded =>
-                MediaDetailDownloadState.downloaded,
-              MangaChapterDownloadState.failed =>
-                MediaDetailDownloadState.failed,
-              MangaChapterDownloadState.missing =>
-                MediaDetailDownloadState.missing,
-            },
-            downloadProgress:
-                download == MangaChapterDownloadState.downloading &&
-                    pagesTotal > 0
-                ? ((job?.pagesDone ?? 0) / pagesTotal).clamp(0.0, 1.0)
-                : null,
-            trailing: _buildMenu(chapter, download),
-            onTap: () => onChapterTap(chapter),
-          ),
-        ),
+        child: _anchored(anchor, row),
       ),
     );
   }
