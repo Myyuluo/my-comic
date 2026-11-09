@@ -25,7 +25,7 @@ _Avoid_: 插件、addon
 _Avoid_: 扩展、插件
 
 **Missing source（缺失来源）**:
-被 Library 中的一部 Manga 引用、但对应 Source 未安装或未启用的状态。该 Manga 仍保留在 Library；备份带来的远程封面与本机已有封面仍可显示，已下载 Chapter 仍可离线阅读，但刷新章节、加载在线页面与下载需要先安装并启用对应 Extension。用户界面统一用「来源未安装」表达此状态，已知名称时显示「来源未安装：<名称>」。运行时按数字 sourceId 解析到已安装的 Source，不改写条目的来源身份，因此 Reading progress、Chapter 状态、History、Tag 与下载映射都无需迁移；同一数字 sourceId 命中多个已启用的 Source 时按缺失处理，不随意选择。
+被一部 Manga 引用、但对应 Source 未安装或未启用的状态。该 Manga 记录仍保留（在书架或作为非书架 Manga）；备份带来的远程封面与本机已有封面仍可显示，已下载 Chapter 仍可离线阅读，但刷新章节、加载在线页面与下载需要先安装并启用对应 Extension。用户界面统一用「来源未安装」表达此状态，已知名称时显示「来源未安装：<名称>」。运行时按数字 sourceId 解析到已安装的 Source，不改写条目的来源身份，因此 Reading progress、Chapter 状态、History、Tag 与下载映射都无需迁移；同一数字 sourceId 命中多个已启用的 Source 时按缺失处理，不随意选择。
 _Avoid_: mihon.unavailable（内部占位值，不是领域术语）、来源失效、未知来源
 
 **Extension store（扩展仓库）**:
@@ -41,7 +41,7 @@ _Avoid_: 签名者指纹、证书
 _Avoid_: 授权、白名单
 
 **Manga（漫画）**:
-书架中的一部作品，是 Library、Category、Reading progress 和 Tracking 的归属对象。
+一部漫画作品在应用中的持久记录，可以属于 Library，也可以是非书架 Manga；Chapter、Reading progress、History、下载与 Tracking 都归属于它。
 _Avoid_: 条目、书籍
 
 **Manga 作品页（Manga series page）**:
@@ -65,20 +65,24 @@ Chapter 中的一页图片。
 _Avoid_: 图片
 
 **Library（书架）**:
-用户保存的 Manga 集合。
+用户主动保存的 Manga 集合；集合成员由 Library membership 决定。
 _Avoid_: 收藏、书库
 
+**Library membership（书架归属）**:
+一个 Manga 是否属于 Library 的状态。书架页、Home 继续阅读、Tag 页签与计数、订阅与自动追更、更新探测以及备份的「书架中的作品」只使用书架成员；阅读器、Chapter 状态、History、下载与下载索引使用全部 Manga。加入或移出书架只改变这个状态，不重建 Manga 记录。
+_Avoid_: 入库、收藏状态
+
 **Remove from Library（移出书架）**:
-把 Manga 从 Library 移除。确认弹窗中的「同时删除本地文件」默认不勾选：Local source 的原作文件默认保留，在线 Manga 的已下载章节文件也保留；只有用户显式勾选时才删除对应文件。文件删除失败时该 Manga 仍留在 Library。移出固定删除 Reading progress、Chapter 已读标记与 Tag 分配，History 保留；Reading statistics 只有在用户显式勾选「同时删除统计数据」时才会移除。
+把 Manga 从 Library 移除的动作，默认非破坏：只清除 Library membership、Tag 分配与订阅/自动追更，保留 Manga/Chapter 记录、Reading progress、Chapter 已读标记、已下载文件与 Download index、History；之后重新加入复用同一条记录与同一个下载文件夹。确认弹窗中的「同时删除本地文件」默认不勾选：在线 Manga 勾选时删除已下载文件与下载索引，但保留非书架记录与阅读状态，之后可重新下载；本地作品（Local source 或应用管理的本地卷）勾选时删除本地文件，并连记录与阅读状态一起删除（History 仍保留）。文件删除失败时该 Manga 仍留在 Library。「同时删除统计数据」仍只在用户显式勾选时移除该作品的 Reading statistics。
 _Avoid_: 删除（删除文件是另一个动作）
 
 **Add to Library（加入书架）**:
-把在「本地图源」里扫描到但尚未入库的 Manga 显式登记进 Library 的动作：作品页对单部作品执行，本地图源页的「选择」模式对选中的未入架作品批量执行；点开该作品某一章阅读时也会先静默执行同一登记。已移出书架但文件仍在的本地 Manga 可由此重新加入。
+把 Manga 变为 Library 成员的动作。已有非书架记录时只翻转同一条记录的 Library membership，不新建记录，作品身份、阅读状态、已下载文件与 History 原样保留；尚不存在记录时创建书架记录。在线作品从作品页执行；Local source 作品从作品页或本地图源页的选择模式显式执行，点开本地作品章节阅读时也会静默执行同一登记。加入时仍可选择 Tag。
 _Avoid_: 导入（批量导入已退役）、自动入库
 
-**Non-library work（未入书架作品）**:
-出现在 Source 或 Local source 扫描中、但未加入 Library 的 Manga。尚未入库的在线作品在来源页开读章节时会先静默执行 Add to Library；Local source 作品同样在阅读时静默登记。因此两者在开始阅读后都不再保持 Non-library work 状态。已存在的 History 条目在作品仅移出 Library（保留文件）后仍保留：在线作品可凭快照回到来源作品页，本地图源作品则保留条目并给出来源不可用提示。
-_Avoid_: 未收藏、临时作品
+**Non-library Manga（非书架漫画）**:
+持久化但不属于 Library 的 Manga。打开在线源作品或阅读章节时会创建/复用，导入未收藏的作品也会创建；可阅读、保存进度、标记已读、下载与写 History，但不进入书架、Home 继续阅读、Tag 页签与计数、更新探测、订阅/自动追更或备份的「书架中的作品」，也不能分配 Tag、订阅或使用 Tracking。其下载任务出现在下载页。
+_Avoid_: Non-library work、未入书架作品（旧称）、未收藏、临时作品
 
 **Category（分类）**:
 Mihon 备份中的 Library 内用户自定义分组，与 my-comic 的 Tag 双向映射：导出时每个 Tag 成为同名 Category，导入时每个 Category 按名称成为 Tag（同名合并）。Mihon 的 Default（不属于任何 Category）对应 my-comic 的「书架」页签。my-comic 不提供分类 UI，书架不按分类分组。
@@ -105,7 +109,7 @@ _Avoid_: 子标签、标签页、分类页签
 _Avoid_: 继续阅读大卡片、继续阅读 hero（旧布局的网格顶部大卡片）
 
 **下载页（Downloads page）**:
-一级导航中的「下载」页，位于「浏览」之后、「设置」之前。标题使用与浏览页一致的页内浮动标题胶囊（向下滚动收起、向上滚动或回到顶部重新显示），不显示视图页签。内容只列可操作任务：排队中、下载中、暂停与失败；已完成的任务不再显示（文件保留、仍可阅读），取消的任务直接移除，失败的任务保留并可「继续」。任务行不显示来源标签、不可展开、整行不可点；排队中 / 下载中 / 暂停的任务在行尾可直接取消。右下角有全局「全部暂停 / 全部继续」气泡胶囊按钮，暂停与继续只由它控制：列表为空时隐藏，全部任务都是暂停或失败时显示「全部继续」，否则显示「全部暂停」。它不是「视图页签」，也不绑定任何功能模块。
+一级导航中的「下载」页，位于「浏览」之后、「设置」之前。标题使用与浏览页一致的页内浮动标题胶囊（向下滚动收起、向上滚动或回到顶部重新显示），不显示视图页签。内容只列可操作任务：排队中、下载中、暂停与失败；已完成的任务不再显示（文件保留、仍可阅读），取消的任务直接移除，失败的任务保留并同时提供「重试」与「取消」。下载任务同时包含书架与非书架 Manga。任务行不显示来源标签、不可展开、整行不可点；排队中 / 下载中 / 暂停 / 失败的任务在行尾可直接取消。右下角有全局「全部暂停 / 全部继续」气泡胶囊按钮，暂停与继续只由它控制：列表为空时隐藏，全部任务都是暂停或失败时显示「全部继续」，否则显示「全部暂停」。它不是「视图页签」，也不绑定任何功能模块。
 _Avoid_: 下载视图、下载页签、子标签
 
 **Reading progress（阅读进度）**:
@@ -113,11 +117,11 @@ _Avoid_: 下载视图、下载页签、子标签
 _Avoid_: 书签、位置
 
 **History（历史）**:
-用户阅读 Manga 的会话记录，按 Manga 去重，每部一条，记录最近一次打开 Chapter 的时间；由「历史」页直接展示。History 不设条数上限，写入新作品不会裁剪更早的记录。History 与 Reading progress 相互独立：删除 History 不会清除续读位置或 Chapter 已读标记。无痕阅读期间不新增、不更新 History。
+用户阅读 Manga 的会话记录，按 Manga 去重，每部一条，记录最近一次打开 Chapter 的时间；由「历史」页直接展示。书架与非书架 Manga 都会写入；历史卡片优先显示当前标题与本地封面，匹配不到时回退到导入快照，绝不显示内部作品标识。History 不设条数上限，写入新作品不会裁剪更早的记录。History 与 Reading progress 相互独立：删除 History 不会清除续读位置或 Chapter 已读标记。无痕阅读期间不新增、不更新 History。
 _Avoid_: 记录、阅读记录（可能指 Reading progress）
 
 **Reading statistics（阅读统计）**:
-统计中心「阅读」页所展示的阅读活动汇总：阅读时长、页数、阅读速度与会话等，以及查词/制卡计数。它按作品与时间范围聚合，与 History、Reading progress 是三套独立数据：History 记录每部 Manga 最近一次阅读会话，Reading progress 记录续读位置；删除阅读统计不会删除 History 或 Reading progress，移出书架时也只有显式勾选「同时删除统计数据」才会移除该作品的统计。
+统计中心「阅读」页所展示的阅读活动汇总：阅读时长、页数、阅读速度与会话等，以及查词/制卡计数。它按作品与时间范围聚合，与 History、Reading progress 是三套独立数据：History 记录每部 Manga 最近一次阅读会话，Reading progress 记录续读位置；删除阅读统计不会删除 History 或 Reading progress，移出书架时也只有显式勾选「同时删除统计数据」才会移除该作品的统计。非书架 Manga 的阅读同样计入。
 _Avoid_: 历史、阅读进度（它们是独立的数据；阅读统计不是阅读会话记录）
 
 **Incognito reading（无痕阅读）**:
@@ -137,15 +141,19 @@ _Avoid_: 取消（取消会删除任务与未完成的部分）、停止
 _Avoid_: 批量转换、自动压缩、打包下载
 
 **Download library（在线下载库）**:
-由应用管理的已下载在线 Chapter 集合，按 Source → Manga → Chapter 组织在 Content root 下。新开始的下载默认把 Chapter 保存为 `.cbz` 压缩包（见 Save as CBZ）；已有的文件夹章节保持原样，两种 Chapter container 共存。
+由应用管理的已下载在线 Chapter 集合，按 Source → Manga → Chapter 组织在 Content root 下。新开始的下载默认把 Chapter 保存为 `.cbz` 压缩包（见 Save as CBZ）；已有的文件夹章节保持原样，两种 Chapter container 共存。书架与非书架 Manga 共用同一套 Download library 与 Download index。
 _Avoid_: 下载文件夹、下载目录（与「下载页」混淆）
 
+**Download identity（下载身份）**:
+在线 Manga 在 Download library 中的稳定身份，由运行时、数字 Source ID 与 series/manga key 组成；扩展包名只作 tie-breaker。文件夹复用、已下载状态与 Rebuild download index 都使用这一判据，目录名不参与。
+_Avoid_: 标题匹配、文件夹名身份
+
 **Download index（下载索引）**:
-Library 中的 Manga/Chapter 与磁盘上已下载文件及其状态之间的映射。
+Manga/Chapter 与磁盘上已下载文件及其状态之间的映射，覆盖书架与非书架 Manga。
 _Avoid_: 漫画索引、书库、缓存
 
 **Rebuild download index（重建下载索引）**:
-用户触发的恢复扫描：从 Content root 重建 Download index，补建缺失的 Library 条目并更新下载状态；只增改、不删记录或文件。
+用户触发的恢复扫描：扫描当前 Content root 的 Download library 与 Local source root，按 Download identity 把文件关联到已有 Manga（含非书架；身份不足时按文件名回退），并为未索引内容补建条目。多个目录都能证明同一身份时不猜，优先已记录目录或唯一最新完整副本，否则跳过并在报告中说明；只增改，不删除或重命名文件与映射。
 _Avoid_: 导入、恢复备份、同步
 
 **Not downloaded（未下载）**:
@@ -157,7 +165,7 @@ _Avoid_: 文件缺失
 _Avoid_: 未下载
 
 **Unindexed（未索引）**:
-磁盘上存在 Chapter 内容，但还没有对应的 Library/Download index 条目。
+磁盘上存在 Chapter 内容，但还没有对应的 Manga/Download index 条目。
 _Avoid_: 未下载、孤儿
 
 **Cache（缓存）**:
@@ -168,9 +176,9 @@ _Avoid_: 下载、离线文件、书库
 「设置 → 存储与下载 → 数据存储位置」里的动作：清理应用管理的 Cache，并在行内显示当前磁盘占用（含图片管理器磁盘缓存与 WebView 的安全 HTTP cache 子目录）。它保留图源登录态、数据库、History、Reading progress、Download library 与 Local source 文件。WebView/HTTP 缓存清理只在 Windows（WebView2）上可用；其它平台跳过该部分并在结果中提示部分成功。
 _Avoid_: 清理下载、重置应用
 
-**Clear database（清除数据库）**:
-「设置 → 存储与下载 → 数据存储位置」里的动作：删除未在 Library 中的作品记录、全部 History 与无归属的 Reading progress；保留 Library 作品及其 Reading progress/已读标记、Download library、Local source 文件、设置、源、扩展、搜索历史与 Tracking 数据。它不等同于恢复出厂设置。
-_Avoid_: 恢复出厂设置、重置应用、清除缓存
+**Clear database（清理数据库）**:
+「设置 → 存储与下载 → 数据存储位置」里的动作，按 Mihon 的 Clear database 语义：列出有非书架 Manga 的 Source 及数量供多选，默认保留有已读章节或阅读进度的作品；删除所选 Source 的非书架 Manga 记录及其章节、阅读进度、已读、下载索引与被清理作品的 History，并清理无归属的阅读状态。保留书架作品与其 History、下载文件、Local source 文件、设置、源、扩展与 Tracking 数据；它不等同于恢复出厂设置。
+_Avoid_: 清除数据库（旧称）、恢复出厂设置、重置应用、清除缓存
 
 **Tracking（追踪）**:
 把阅读状态发布到外部服务（Bangumi、MAL、AniList、Kitsu、Shikimori 等）。
@@ -193,11 +201,11 @@ _Avoid_: 自动备份、应用快照
 _Avoid_: 备份目录、autobackup（那是目录名）
 
 **Import（导入）**:
-把 Backup 读入 my-comic：恢复 Library 与阅读数据，并补齐本机缺失的 my-comic 设置。Merge 语义，按 Manga 与 Source 去重；未加入 Library 的已读作品只恢复 History，不创建 Library 条目。
+把 Backup 读入 my-comic：恢复 Library 与阅读数据，并补齐本机缺失的 my-comic 设置。Merge 语义，按 Manga 与 Source 去重；未收藏的作品会恢复为非书架 Manga（含章节、阅读进度、已读与可恢复的 History），绝不进入 Library。导入后会尝试把已下载文件与可识别身份的本地文件关联到导入作品，不额外创建 Library 条目；「重建下载索引」仍是手动全量扫描。
 _Avoid_: 恢复（除非特指 Mihon 的 restore 行为）、同步
 
 **Export（导出）**:
-从 my-comic 生成 Backup 的动作：在「创建备份」页选择导出范围后写出 `.tachibk`，产物可由 Mihon 读取，也可由 my-comic 重新导入。
+从 my-comic 生成 Backup 的动作：在「创建备份」页选择导出范围后写出 `.tachibk`，产物可由 Mihon 读取，也可由 my-comic 重新导入。「书架中的作品」只包含书架成员；「所有已读作品」把未加入书架的已读作品写成 `favorite=false` 条目。
 _Avoid_: 同步、上传
 
 **Sync（同步）**:

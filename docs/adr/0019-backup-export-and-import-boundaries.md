@@ -52,3 +52,11 @@ ADR 0005 原计划在 JVM sidecar 中复用 Mihon 备份模型，v1 只导入；
 - 远程封面回退依赖备份中保存的 URL；URL 失效时作品继续显示占位封面。
 - 条目的来源身份始终是导入时写入的值；将来若需要改写身份，必须单独决策并迁移 History、Tag 与下载映射。
 - 旧备份或旧条目缺少来源名称时只显示「来源未安装」，不伪造名称。
+
+## Amendment 2026-11-10（manga-library-membership）
+
+「未入书架已读作品的边界」按 Library membership 模型修订：
+
+- **导出**：备份中的 `favorite=true` 条目只来自书架成员；「所有已读作品」仍把非书架已读作品写成 `favorite=false`，以保留阅读记录。
+- **导入**：`favorite=false` 条目现在会创建或合并一条持久化的非书架 Manga（Library membership=false），恢复章节、阅读进度与已读，有阅读记录时恢复 History，但**永不创建 Library 条目**，也不恢复 Tag、订阅或 Tracking。原文「只恢复其最新一条 History」按此扩展理解；「本机已有更新的 History 时不覆盖、作品已在本机 Library 时复用其身份」不变。
+- **导入后下载匹配**：对成功导入的 Manga，在 `downloads` 与带 manifest 的 `local` 中按 `pages.json` 身份匹配并复用已有文件夹、写入章节映射；不额外创建 Library 条目；全量重建仍是用户手动触发的动作。

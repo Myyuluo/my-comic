@@ -34,3 +34,7 @@ Local source root 的目录名由 `localcomic` 改为 Content root 下的 `local
 ## Amendment 2026-11-10（manga-ux-backup-batch，移出书架可显式删除原作）
 
 「移出书架」仍默认保留 Local source 原作文件；但统一删除弹窗新增的「同时删除本地文件」允许用户显式勾选后，在删除 Library 记录前删除 `local` root 中的原作文件夹或文件。文件删除失败时作品保留在 Library 并报告失败；文件本来就不存在视为已删除。独立的「删除本地文件」动作保持不变。这取代原文「移出书架不删除文件」中「绝不能在移出流程内删文件」的绝对表述，但默认安全行为不变。
+
+## Amendment 2026-11-10（manga-library-membership，移出后保留非书架记录）
+
+移出书架默认不再删除 Local source 的 Library 记录：只把该记录翻转为非书架 Manga，保留 Reading progress、Chapter 已读、Download index 与 History，原作文件原样保留；本地图源页会把它显示为未入书架作品，重新加入复用同一条记录。勾选「同时删除本地文件」时，先删除 `local` 中的原作，再删除该记录及其阅读 / 已读 / 下载状态（History 仍保留），与上一修订的显式删除授权一致；文件删除失败时作品留在 Library。

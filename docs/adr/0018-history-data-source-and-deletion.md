@@ -33,3 +33,14 @@ status: accepted
 ## Amendment 2026-11-10（manga-ux-backup-batch）
 
 所有漫画「移出 Library」入口（在线 / 本地作品页、书架单卡、书架批量、Local source 页批量）共用同一个移出流程，并**始终保留 History**：移出只删 Library 条目、Reading progress、Chapter 已读标记与 Tag 分配，不删 `media_open_history`。原文「删除整部作品（含文件）时一并删除其历史」对漫画在统一移出流程中已不可达：底层删除以 `removeFromLibraryOnly` 调用，跳过 History 级联，受管漫画卷（无在线 / Local source 描述符）也不例外。独立于移出的「删除本地文件」动作仍按整部作品删除并级联清理历史，与移出流程无关。
+
+## Amendment 2026-11-10（manga-library-membership）
+
+History 的归属对象从「书架条目」扩展为「全部 Manga」：
+
+- 非书架 Manga 同样写入 History；原文「在线作品从来源页开读章节时会先静默加入 Library」不再成立——源页阅读会创建或复用非书架 Manga（见 ADR 0020）。History 仍按 Manga 去重，每部一条，本 ADR「不按 Chapter 记录」的决定不变。
+- 导入为有阅读记录的 Manga 写入规范来源身份与完整快照（标题、作者、封面地址、在线来源引用、Mihon 章节 URL 与阅读时间）；`favorite=false` 的非书架作品也写入其阅读进度、已读与 History。
+- 历史页兼容旧版导入写入的裸快照与旧 `reader_manga` 身份：按快照中的作品键回退匹配已导入 Manga。封面按「本地封面 → 快照封面地址 → 来源封面 → 占位」回退，标题绝不显示原始 `fushi://book/...` 标识；点击时优先按已存在的 Manga 记录打开作品页（含非书架 Manga），没有记录时按快照中的在线来源打开来源作品页。
+- 旧历史行不自动删除；重新导入修复后的备份可让同一作品命中规范身份。同一作品同时存在旧身份与新身份记录时只展示最新一条，History 仍保持每部 Manga 一条。
+- 「清理数据库」只删除被清理非书架作品的 History（含旧身份），书架作品及其 History 保留；移出书架仍始终保留 History。
+- 本 ADR 上一修订（2026-11-10 manga-ux-backup-batch）中「移出只删 Library 条目、Reading progress、Chapter 已读标记与 Tag 分配」由 ADR 0020 取代：移出默认只清 membership、Tag 与订阅/自动追更，保留 Reading progress 与 Chapter 已读；仅本地作品勾选「同时删除本地文件」时连记录与阅读状态一起删除。History 仍始终保留。
