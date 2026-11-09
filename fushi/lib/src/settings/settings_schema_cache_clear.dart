@@ -13,6 +13,7 @@ import 'package:fushi/src/settings/settings_context.dart';
 import 'package:fushi/src/settings/settings_destination.dart';
 import 'package:fushi/src/storage/app_paths.dart';
 import 'package:fushi/src/storage/manga_cache_clear_service.dart';
+import 'package:fushi/src/storage/manga_webview_cache_clear.dart';
 import 'package:fushi/src/utils/fushi_icons.dart';
 import 'package:fushi/src/utils/net/app_http_image.dart';
 import 'package:fushi/utils.dart';
@@ -271,6 +272,14 @@ MangaCacheClearService _buildDefaultMangaCacheClearService(
         measureManagerBytes: imageCacheManager.store.getCacheSize,
         emptyManager: imageCacheManager.emptyCache,
       ),
+      // Ticket 12：只清默认与漫画 WebView profile 的 HTTP cache；WebView2 数据
+      // 目录（cookies / localStorage / IndexedDB / Preferences）不动。
+      if (Platform.isWindows)
+        MangaWebViewCacheClearStep(
+          id: 'webview_http',
+          label: t.cache_clear_step_webview,
+          profiles: buildMangaWebViewCacheProfiles(),
+        ),
       MangaMemoryImageCacheClearStep(
         id: 'memory_images',
         label: t.cache_clear_step_memory_images,
