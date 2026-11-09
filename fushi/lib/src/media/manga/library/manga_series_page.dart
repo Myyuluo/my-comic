@@ -245,6 +245,16 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
   Set<String> _downloaded = const <String>{};
   StreamSubscription<void>? _jobsWatch;
 
+  /// 上一次看到的本章节任务状态（票 05：非书架作品下载完成提示）。
+  ///
+  /// 只有页面打开期间观测到「非 done → done」才提示；打开页面前就已经下完的
+  /// 章节不再追问。首次取任务只记基线。
+  Map<String, String> _observedJobStatuses = const <String, String>{};
+  bool _jobStatusBaselineReady = false;
+
+  /// 「加入书架？」提示正在显示：同一批完成只问一次，不叠提示条。
+  bool _addToShelfPromptVisible = false;
+
   /// 本地卷的阅读位置（`sectionIndex` = 页号，阅读器 `_persistPosition` 写）。
   ReaderPosition? _localPosition;
 
@@ -478,11 +488,66 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
           row.bookKey,
           entry.chapters.map((OnlineMangaChapter chapter) => chapter.key),
         );
+    final Map<String, String> jobStatuses = <String, String>{
+      for (final MapEntry<String, MangaDownloadJobRow> job in jobs.entries)
+        job.key: job.value.status,
+    };
+    final bool completedNow =
+        _jobStatusBaselineReady &&
+        jobStatuses.entries.any(
+          (MapEntry<String, String> job) =>
+              job.value == MangaDownloadJobStatus.done &&
+              _observedJobStatuses[job.key] != MangaDownloadJobStatus.done,
+        );
+    _observedJobStatuses = jobStatuses;
+    _jobStatusBaselineReady = true;
     if (!mounted) return;
     setState(() {
       _jobs = jobs;
       _downloaded = downloaded;
     });
+    // 票 05：非书架作品下载完成后给一次可选「加入书架？」提示，绝不自动加入。
+    // 书架成员不需要这个入口；同一批完成只问一次。
+    if (completedNow &&
+        _row?.isInLibrary == false &&
+        !_addToShelfPromptVisible) {
+      _showAddToShelfAfterDownloadPrompt();
+    }
+  }
+
+  /// 非书架作品刚下完一章时的可选提示（票 05）。
+  ///
+  /// 用非模态 SnackBar 而不是对话框：不打断阅读，也不替用户做决定；点「加入
+  /// 书架」才走现有 [_addToLibrary]（翻转同一条非书架行的 membership）。
+  void _showAddToShelfAfterDownloadPrompt() {
+    final ScaffoldMessengerState? messenger = ScaffoldMessenger.maybeOf(
+      context,
+    );
+    if (messenger == null) return;
+    _addToShelfPromptVisible = true;
+    final ScaffoldFeatureController<SnackBar, SnackBarClosedReason> controller =
+        messenger.showSnackBar(
+          FushiSnackBar(
+            key: const ValueKey<String>(
+              'manga_series_add_to_shelf_after_download',
+            ),
+            content: Text(
+              t.manga_series_add_to_shelf_after_download(title: _displayTitle),
+            ),
+            duration: const Duration(seconds: 6),
+            // 带 action 的 SnackBar 默认常驻；这里是「可选提示」，让它自己退场。
+            persist: false,
+            action: SnackBarAction(
+              label: t.mihon_add_to_bookshelf,
+              onPressed: () => unawaited(_addToLibrary()),
+            ),
+          ),
+        );
+    unawaited(
+      controller.closed.whenComplete(() {
+        _addToShelfPromptVisible = false;
+      }),
+    );
   }
 
   Future<void> _enqueueChapter(OnlineMangaChapter chapter) async {

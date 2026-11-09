@@ -4447,6 +4447,7 @@
   "manga_section_display": "Display and zoom",
   "manga_section_spread_panels": "Spreads and panels",
   "manga_section_viewing": "瀏覽與翻頁",
+  "manga_series_add_to_shelf_after_download": "Download complete. Add \"$title\" to your library?",
   "manga_series_all_read": "所有章節都已讀完",
   "manga_series_auto_download": "新章自動下載",
   "manga_series_auto_ocr": "完成後自動識別",
