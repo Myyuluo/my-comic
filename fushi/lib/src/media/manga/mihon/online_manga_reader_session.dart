@@ -117,11 +117,15 @@ class OnlineMangaReaderSession implements MangaReaderSession {
   }
 
   /// 删掉 [cacheRoot] 下所有不属于活会话的目录（上次崩溃 / 被杀的残留）。
-  static Future<void> pruneStaleStreamCaches(Directory cacheRoot) async {
-    if (!await cacheRoot.exists()) return;
+  ///
+  /// 返回删除失败次数（句柄占用等）；调用方据此报告「部分成功」。活跃会话目录
+  /// 永远保留，不算失败。
+  static Future<int> pruneStaleStreamCaches(Directory cacheRoot) async {
+    if (!await cacheRoot.exists()) return 0;
+    int failures = 0;
     await for (final FileSystemEntity book in cacheRoot.list()) {
       if (book is! Directory) {
-        await _deleteQuietly(book);
+        if (!await _deleteQuietly(book)) failures++;
         continue;
       }
       bool keepBook = false;
@@ -131,10 +135,11 @@ class OnlineMangaReaderSession implements MangaReaderSession {
           keepBook = true;
           continue;
         }
-        await _deleteQuietly(chapter);
+        if (!await _deleteQuietly(chapter)) failures++;
       }
-      if (!keepBook) await _deleteQuietly(book);
+      if (!keepBook && !await _deleteQuietly(book)) failures++;
     }
+    return failures;
   }
 
   static final Set<String> _activeDirectories = <String>{};
@@ -366,11 +371,13 @@ class OnlineMangaReaderSession implements MangaReaderSession {
   static String _digest(String value) =>
       sha256.convert(utf8.encode(value)).toString().substring(0, 24);
 
-  static Future<void> _deleteQuietly(FileSystemEntity entity) async {
+  static Future<bool> _deleteQuietly(FileSystemEntity entity) async {
     try {
       if (await entity.exists()) await entity.delete(recursive: true);
+      return true;
     } on FileSystemException {
       // 句柄占用等：留给下一次 prune。
+      return false;
     }
   }
 }
