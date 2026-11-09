@@ -466,6 +466,7 @@ class MihonBackupParser {
     int dateFetch = 0;
     int dateUpload = 0;
     double chapterNumber = 0;
+    int sourceOrder = 0;
 
     while (!reader.isAtEnd) {
       final int tag = reader.readTag();
@@ -490,6 +491,8 @@ class MihonBackupParser {
           dateUpload = reader.readVarint();
         case 9 when wireType == 5:
           chapterNumber = reader.readFloat32();
+        case 10 when wireType == 0:
+          sourceOrder = reader.readVarint();
         default:
           reader.skip(wireType);
       }
@@ -505,6 +508,7 @@ class MihonBackupParser {
       dateFetch: dateFetch,
       dateUpload: dateUpload,
       chapterNumber: chapterNumber,
+      sourceOrder: sourceOrder,
     );
   }
 
@@ -662,6 +666,7 @@ class MihonBackupChapter {
     required this.dateFetch,
     required this.dateUpload,
     required this.chapterNumber,
+    this.sourceOrder = 0,
   });
 
   final String url;
@@ -673,6 +678,10 @@ class MihonBackupChapter {
   final int dateFetch;
   final int dateUpload;
   final double chapterNumber;
+
+  /// `BackupChapter.sourceOrder` (proto field 10): the chapter's position in
+  /// the source list. Preserved on export so Mihon keeps the reading order.
+  final int sourceOrder;
 }
 
 class MihonBackupHistory {
