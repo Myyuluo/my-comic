@@ -1170,26 +1170,16 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     final OnlineMangaLibraryEntry? entry = _entry;
     if (service == null || entry == null || _busy || _row != null) return;
     // 票 04：已有 Tag 时先选标签；取消（null）则不创建 Library 条目。
-    final Set<int>? selectedTagIds = await _pickTagsBeforeLibraryAdd(entry);
+    final Set<int>? selectedTagIds = await _pickTagsBeforeLibraryAdd(
+      OnlineMangaLibraryService.bookKeyOf(entry),
+    );
     if (selectedTagIds == null || !mounted) return;
     setState(() => _busy = true);
     try {
       final EpubBookRow row = await service.add(entry);
       if (!mounted) return;
       // 条目已入架；标签分配在创建成功后统一写入，加入失败时不会留下分配。
-      if (selectedTagIds.isNotEmpty) {
-        try {
-          await service.database.setTagsForBook(row.bookKey, selectedTagIds);
-        } on Object catch (error, stack) {
-          ErrorLogService.instance.log('MangaSeriesPage.addTags', error, stack);
-          if (mounted) {
-            FushiToast.show(
-              msg: describeOnlineSourceError(error),
-              severity: ToastSeverity.error,
-            );
-          }
-        }
-      }
+      await _applySelectedTags(row.bookKey, selectedTagIds);
       if (!mounted) return;
       setState(() {
         _row = row;
@@ -1209,11 +1199,12 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     }
   }
 
-  /// 加入书架前的标签选择（票 04）。返回 null = 用户取消本次加入；空集合 =
+  /// 加入书架前的标签选择（票 04/05）。返回 null = 用户取消本次加入；空集合 =
   /// 用户确认按未打标签加入（或全局还没有任何 Tag，直接加入）。
-  Future<Set<int>?> _pickTagsBeforeLibraryAdd(
-    OnlineMangaLibraryEntry entry,
-  ) async {
+  ///
+  /// 只选不写：选中的 Tag 由调用方在 Library 条目创建成功后统一写入，取消或
+  /// 加入失败都不会留下 Tag 分配。
+  Future<Set<int>?> _pickTagsBeforeLibraryAdd(String bookKey) async {
     final AppModel? appModel = _appModelOrNull;
     if (appModel == null) return const <int>{};
     final List<BookTagRow> tags;
@@ -1234,21 +1225,44 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
       context,
       targets: TagTargets(
         media: <MediaRef>[
-          MediaRef(
-            kind: MediaKind.epub,
-            entryKey: OnlineMangaLibraryService.bookKeyOf(entry),
-          ),
+          MediaRef(kind: MediaKind.epub, entryKey: bookKey),
         ],
       ),
     );
   }
 
+  /// 写入加入书架时选中的 Tag。条目已入架，失败只提示，不撤销条目。
+  Future<void> _applySelectedTags(String bookKey, Set<int> tagIds) async {
+    final AppModel? appModel = _appModelOrNull;
+    if (appModel == null || tagIds.isEmpty) return;
+    try {
+      await appModel.database.setTagsForBook(bookKey, tagIds);
+    } on Object catch (error, stack) {
+      ErrorLogService.instance.log('MangaSeriesPage.addTags', error, stack);
+      if (mounted) {
+        FushiToast.show(
+          msg: describeOnlineSourceError(error),
+          severity: ToastSeverity.error,
+        );
+      }
+    }
+  }
+
   /// 未入库本地作品显式「加入书架」。
+  ///
+  /// 票 05：已有 Tag 时先选标签；取消（null）则不登记。标签在登记成功后统一
+  /// 写入；点章节的静默登记走 [_openChapterAt] → [_registerScannedLocal]，没有
+  /// 这一步，保持未打标签。
   Future<void> _addScannedLocalToLibrary(LocalSourceManga manga) async {
     if (_busy) return;
+    final String bookKey = localSourceBookKeyFor(manga.directoryPath);
+    final Set<int>? selectedTagIds = await _pickTagsBeforeLibraryAdd(bookKey);
+    if (selectedTagIds == null || !mounted) return;
     setState(() => _busy = true);
     try {
-      await _registerScannedLocal(manga);
+      final String? registeredKey = await _registerScannedLocal(manga);
+      if (registeredKey == null) return;
+      await _applySelectedTags(registeredKey, selectedTagIds);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
