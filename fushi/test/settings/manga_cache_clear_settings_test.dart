@@ -85,6 +85,7 @@ void main() {
       'storage.content_root',
       'storage.program_state_root',
       'storage.clear_cache',
+      'storage.clear_database',
     ]);
 
     final SettingsStatusItem item = clearItem(section);
