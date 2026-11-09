@@ -8,7 +8,12 @@ library;
 import 'dart:convert' show jsonDecode, jsonEncode;
 
 import 'package:fushi_core/fushi_core.dart'
-    show EpubBookRow, FushiDatabase, MangaExtensionRow, UpdateFeedEntryRow;
+    show
+        EpubBookRow,
+        EpubBookRowLibraryMembership,
+        FushiDatabase,
+        MangaExtensionRow,
+        UpdateFeedEntryRow;
 
 import 'package:fushi/src/media/manga/library/online_manga_chapter_updates.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
@@ -22,12 +27,16 @@ import 'package:fushi/src/updates/update_feed_service.dart';
 
 /// 书架里的在线漫画条目（本地导入的 mokuro 漫画没有 `sourceMetadata`，天然被
 /// [OnlineMangaLibraryEntry.tryParse] 排除）。
+///
+/// Library membership = false 的非书架行不算「书架里的」：它们不参与后台更新
+/// 探测，也不触发订阅自动下载。
 List<({EpubBookRow book, OnlineMangaLibraryEntry entry})> onlineMangaLibraryRows(
   Iterable<EpubBookRow> books,
 ) {
   final List<({EpubBookRow book, OnlineMangaLibraryEntry entry})> out =
       <({EpubBookRow book, OnlineMangaLibraryEntry entry})>[];
   for (final EpubBookRow book in books) {
+    if (!book.isInLibrary) continue;
     final OnlineMangaLibraryEntry? entry =
         OnlineMangaLibraryEntry.tryParse(book.sourceMetadata);
     if (entry != null) out.add((book: book, entry: entry));
@@ -62,7 +71,9 @@ Future<int> runOnlineMangaUpdateProbe({
   OnlineMangaAutoDownload? autoDownload,
   void Function(Object error, String bookKey)? onError,
 }) async {
-  final List<EpubBookRow> books = await database.getAllEpubBooks();
+  // 只扫书架成员：非书架作品不参与后台更新 / 自动追更，也不必把它们的
+  // chaptersJson 整列拉出来。
+  final List<EpubBookRow> books = await database.getLibraryEpubBooks();
   int refreshed = 0;
   for (final ({EpubBookRow book, OnlineMangaLibraryEntry entry}) row
       in onlineMangaLibraryRows(books)) {

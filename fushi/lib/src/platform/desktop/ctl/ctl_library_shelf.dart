@@ -153,9 +153,9 @@ class LibraryCtlShelf {
   ///   目录，远端清单按空集传，等同详情页离线 / 关掉「显示远端条目」时的结果；
   /// - game：[isGameCollectionMemberVisible]（游戏库同一判据）；
   /// - srt：本机有这本有声书；
-  /// - epub：本机有这本书（成员行 entryKey 认 uid 或透传的 bookKey），且它不是某本
-  ///   有声书的伴生 EPUB——书架只画有声书卡、不单独画伴生 EPUB（书架页
-  ///   `_resolveCollectionMember` 同一规则）。
+  /// - epub：本机有这本书且它在书架（`in_library = true`；成员行 entryKey 认
+  ///   uid 或透传的 bookKey），且它不是某本有声书的伴生 EPUB——书架只画有声书
+  ///   卡、不单独画伴生 EPUB（书架页 `_resolveCollectionMember` 同一规则）。
   ///
   /// 删掉的条目、未知种类的透传行一律不数。库页的搜索 / 标签 / 阅读状态筛选是界面
   /// 瞬时状态，不进这里。
@@ -169,8 +169,10 @@ class LibraryCtlShelf {
         if (book.bookKey.isNotEmpty) book.bookKey,
     };
     final Set<String> epubEntryKeys = <String>{
-      for (final EpubBookRow row in await _db.getAllEpubBooks())
-        if (!srtBookKeys.contains(row.bookKey)) ...<String>[
+      // 合集成员数只数书架成员：membership=false 的行不在书架，也不该计入
+      // 「加入合集」可见成员数。
+      for (final EpubBookMeta row in await _db.getEpubBookMetas())
+        if (row.isInLibrary && !srtBookKeys.contains(row.bookKey)) ...<String>[
           row.uid,
           row.bookKey,
         ],

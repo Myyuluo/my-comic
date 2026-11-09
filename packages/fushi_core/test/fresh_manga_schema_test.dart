@@ -50,11 +50,11 @@ void main() {
       final FushiDatabase db = await open();
       addTearDown(db.close);
 
-      expect(db.schemaVersion, 4);
+      expect(db.schemaVersion, 5);
       final QueryRow version = await db
           .customSelect('PRAGMA user_version')
           .getSingle();
-      expect(version.data['user_version'], 4);
+      expect(version.data['user_version'], 5);
 
       final Set<String> tables = await userTables(db);
       expect(
@@ -107,16 +107,23 @@ void main() {
           format: const Value('manga'),
         ),
       );
-      // 模拟票 04 之前创建的 v1 库：没有 mapping 表。
+      // 模拟票 04 之前创建的 v1 库：没有 mapping 表，也还没有 Library
+      // membership 列（v5 才加入）。
       await db.customStatement('DROP TABLE manga_chapter_dirs');
+      await dropLibraryMembershipColumn(db);
       await db.customStatement('PRAGMA user_version = 1');
       await db.close();
 
       final FushiDatabase upgraded = await open();
       addTearDown(upgraded.close);
 
-      expect(upgraded.schemaVersion, 4);
+      expect(upgraded.schemaVersion, 5);
       expect((await upgraded.getEpubBook('old-book'))?.title, 'Old Manga');
+      expect(
+        (await upgraded.getEpubBook('old-book'))?.inLibrary,
+        isTrue,
+        reason: '升级前已存在的行迁移为在书架',
+      );
       await upgraded.upsertMangaChapterDir(
         bookKey: 'old-book',
         chapterKey: 'chapter-1',
@@ -166,13 +173,19 @@ void main() {
         '(book_key, chapter_key, folder_name, updated_at) '
         "VALUES ('old-book', 'chapter-1', 'Chapter 1', 1700000001000)",
       );
+      await dropLibraryMembershipColumn(db);
       await db.customStatement('PRAGMA user_version = 2');
       await db.close();
 
       final FushiDatabase upgraded = await open();
       addTearDown(upgraded.close);
 
-      expect(upgraded.schemaVersion, 4);
+      expect(upgraded.schemaVersion, 5);
+      expect(
+        (await upgraded.getEpubBook('old-book'))?.inLibrary,
+        isTrue,
+        reason: '升级前已存在的行迁移为在书架',
+      );
       final MangaChapterDirRow? migrated = await upgraded.getMangaChapterDir(
         'old-book',
         'chapter-1',
@@ -203,10 +216,22 @@ void main() {
   );
 
   test(
-    'v3 升级到 v4：下载任务 status CHECK 放宽到 paused，已有任务行保留',
+    'v3 升级到当前：下载任务 status CHECK 放宽、membership 列补上，已有行保留',
     () async {
       final FushiDatabase db = await open();
       addTearDown(db.close);
+      await db.insertEpubBook(
+        EpubBooksCompanion.insert(
+          bookKey: 'old-book',
+          title: 'Old Manga',
+          epubPath: 'manga.json',
+          extractDir: p.join(tmp.path, 'books', 'old-book'),
+          chapterCount: 1,
+          chaptersJson: '[]',
+          importedAt: 1700000000000,
+          format: const Value('manga'),
+        ),
+      );
 
       // 取 fresh 表的建表 SQL，去掉 status CHECK 里的 'paused'，还原成 v3 表。
       final String freshSql = (await db
@@ -230,13 +255,21 @@ void main() {
         "'Manga', 'Chapter 1', 'failed', 1, 3, 3, 'boom', 0, "
         '1700000000000, 1700000000000, NULL)',
       );
+      await dropLibraryMembershipColumn(db);
       await db.customStatement('PRAGMA user_version = 3');
       await db.close();
 
       final FushiDatabase upgraded = await open();
       addTearDown(upgraded.close);
 
-      expect(upgraded.schemaVersion, 4);
+      expect(upgraded.schemaVersion, 5);
+      expect(
+        (await upgraded.getAllEpubBooks()).every(
+          (EpubBookRow row) => row.inLibrary,
+        ),
+        isTrue,
+        reason: '升级前已存在的行迁移为在书架',
+      );
       final MangaDownloadJobRow? kept = await upgraded.getMangaDownloadJob(
         'legacy-job',
       );
@@ -275,6 +308,50 @@ void main() {
   );
 
   test(
+    'v4 升级到 v5：epub_books 增加 Library membership，已有行迁移为在书架',
+    () async {
+      final FushiDatabase db = await open();
+      await db.insertEpubBook(
+        EpubBooksCompanion.insert(
+          bookKey: 'old-book',
+          title: 'Old Manga',
+          epubPath: 'manga.json',
+          extractDir: p.join(tmp.path, 'books', 'old-book'),
+          chapterCount: 2,
+          chaptersJson: '[]',
+          importedAt: 1700000000000,
+          format: const Value('manga'),
+        ),
+      );
+      // v4 库还没有 membership 列。
+      await dropLibraryMembershipColumn(db);
+      await db.customStatement('PRAGMA user_version = 4');
+      await db.close();
+
+      final FushiDatabase upgraded = await open();
+      addTearDown(upgraded.close);
+
+      expect(upgraded.schemaVersion, 5);
+      final EpubBookRow? migrated = await upgraded.getEpubBook('old-book');
+      expect(migrated?.title, 'Old Manga');
+      expect(
+        migrated?.inLibrary,
+        isTrue,
+        reason: '升级前已存在的 Manga 行迁移为在书架',
+      );
+
+      // 新列可写：非书架行（membership=false）也能持久化。
+      await (upgraded.update(upgraded.epubBooks)
+            ..where((t) => t.bookKey.equals('old-book')))
+          .write(const EpubBooksCompanion(inLibrary: Value<bool>(false)));
+      expect(
+        (await upgraded.getEpubBook('old-book'))?.inLibrary,
+        isFalse,
+      );
+    },
+  );
+
+  test(
     'fresh 与 v2→当前 升级后的 manga_chapter_dirs 有效 schema 一致',
     () async {
       // fresh：drift 按当前表定义建表。
@@ -295,6 +372,7 @@ void main() {
         "CHECK (book_key != '' AND chapter_key != '' AND folder_name != ''), "
         'CHECK (updated_at >= 0))',
       );
+      await dropLibraryMembershipColumn(fresh);
       await fresh.customStatement('PRAGMA user_version = 2');
       await fresh.close();
 
@@ -455,6 +533,12 @@ void main() {
 
 /// Fushi 旧库文件名：只允许出现在“不被读取”的测试里。
 const String fushiDatabaseFileName_legacy = 'fushi.db';
+
+/// 把 fresh schema 的 `epub_books` 还原成 v4（没有 `in_library` 列）。
+///
+/// SQLite 3.35+ 支持 `DROP COLUMN`；表上没有依赖该列的索引 / CHECK，可直接删。
+Future<void> dropLibraryMembershipColumn(FushiDatabase db) =>
+    db.customStatement('ALTER TABLE epub_books DROP COLUMN in_library');
 
 /// `manga_chapter_dirs` 的列形状（顺序不敏感）：name → type / notnull / 默认值 / pk。
 Future<Map<String, String>> _columnShape(FushiDatabase db) async {

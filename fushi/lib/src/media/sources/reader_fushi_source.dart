@@ -53,10 +53,21 @@ final _srtBookUidsProvider = StreamProvider<List<String>>((ref) {
       .distinct(listEquals);
 });
 
+/// 书架成员 bookKey 集合的响应式来源（v5 Library membership）。与
+/// [_epubBookKeysProvider] 分开：`getBooksFromDb` 只列书架行，membership
+/// 翻转（加入 / 移出书架）也必须让书架重算，而全量 key 集合并不变化。
+final _libraryEpubBookKeysProvider = StreamProvider<List<String>>((ref) {
+  return ref
+      .watch(appProvider)
+      .database
+      .watchLibraryEpubBookKeys()
+      .distinct(listEquals);
+});
+
 final fushiBooksProvider =
     FutureProvider.family<List<MediaItem>, Language>((ref, language) {
-  // BUG-793：订阅 EPUB 书集合变化，任意导入路径落库后自动重算书架。
-  ref.watch(_epubBookKeysProvider);
+  // BUG-793：订阅书架成员集合变化，任意导入 / 删除 / membership 翻转后自动重算。
+  ref.watch(_libraryEpubBookKeysProvider);
   return ReaderFushiSource.instance.getBooksFromDb(
     appModel: ref.watch(appProvider),
   );
@@ -301,16 +312,6 @@ class ReaderFushiSource extends ReaderMediaSource {
         return instance.uniqueKey;
     }
   }
-
-  /// 漫画书架的 Library 成员判据。
-  ///
-  /// 与 [mediaSourceKeyFor] 同源：书架列书按 `format` 派生
-  /// `MediaItem.mediaSourceIdentifier`，漫画书架
-  /// （`filterShelfEntriesByMangaSplit`）认的正是 [MangaFushiSource.kUniqueKey]。
-  /// 需要直接判断 `EpubBooks.format` 的数据层（清除数据库）复用这个谓词，不再
-  /// 各写一份 SQL。
-  static bool isMangaLibraryBookFormat(String? format) =>
-      BookFormat.parseOrEpub(format) == BookFormat.manga;
 
   // HBK-AUDIT-127: percent-encode the href when building the URL so it is
   // symmetric with the consumer side, which decodes the whole post-'/epub/'
@@ -605,11 +606,17 @@ class ReaderFushiSource extends ReaderMediaSource {
 
   // ── Book listing from Drift ─────────────────────────────────────────
 
+  /// 书架列书：**只列 Library membership = true 的 Manga 行**。
+  ///
+  /// 书架归属不再等于「`epub_books` 里有这行」：非书架行仍持久化，供阅读 /
+  /// History / 下载使用，但不进书架、Home 继续阅读与 Tag 页签。需要全部行
+  /// （阅读器、History、下载索引）的调用方直接用 `getAllEpubBooks`，不要借
+  /// 这里。
   Future<List<MediaItem>> getBooksFromDb({
     required AppModel appModel,
   }) async {
     final FushiDatabase db = appModel.database;
-    final List<EpubBookRow> books = await db.getAllEpubBooks();
+    final List<EpubBookRow> books = await db.getLibraryEpubBooks();
     // 阅读位置一次整表取完（书 uid → 位置）。之前每本各查一次
     // `findByBookUid`：Drift 在单连接上串行执行，`Future.wait` 只能重叠 await、
     // 重叠不了 SQL，书架延迟仍随库大小线性增长（N 次往返 + N 次语句准备）。
@@ -712,7 +719,7 @@ class ReaderFushiSource extends ReaderMediaSource {
     }
     final int totalChars = sectionChars.fold<int>(0, (a, b) => a + b);
 
-    // 书架列书 format-agnostic（本方法列全部 EpubBooks 行），但打开路由按 `format`
+    // 书架列书 format-agnostic（本方法列全部**书架成员**行），但打开路由按 `format`
     // 三态分流 mediaSourceIdentifier：`'pdf'` → [ReaderPdfSource]（进 ReaderPdfPage）、
     // `'manga'` → [MangaFushiSource]（进 MangaFushiPage）、其余 → 本源（EPUB 阅读器）。
     // 缺这条分流，PDF/漫画行会用 EPUB 阅读器打开并在解压/解析路径崩溃。媒体标识前缀

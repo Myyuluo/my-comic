@@ -71,8 +71,11 @@ extension _ReaderHistoryRemote on _ReaderFushiHistoryPageState {
       // #6: 远端与本地是同一本书时（同 bookKey）不在混排网格重复展示（只显示本地卡）。
       final List<EpubBookMeta> localBooks =
           await appModel.database.getEpubBookMetas();
+      // 只有书架成员才「本端已有」：非书架行不该把对端的同名 Library 条目
+      // 从混排网格里藏掉。
       final Set<String> localKeys = <String>{
-        for (final EpubBookMeta r in localBooks) r.bookKey,
+        for (final EpubBookMeta r in localBooks)
+          if (r.isInLibrary) r.bookKey,
       };
       // BUG-2505：本端已有 EPUB 但还没有配套有声书的 bookKey，要与远端 hasAudiobook
       // 对上——这些书被下面的去重整条藏掉，它们的有声书只能从本地书卡菜单补拉。

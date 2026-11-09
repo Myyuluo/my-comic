@@ -1278,6 +1278,38 @@ void main() {
     expect(leftovers, isEmpty, reason: 'temp file must be deleted on failure');
   });
 
+  test('「书架中的作品」只导出 membership=true 的 Manga', () async {
+    await _seedSource(db, sourceId: '123', name: 'Source A');
+    await _seedManga(
+      db,
+      sourceId: '123',
+      url: '/manga/library',
+      title: 'Library manga',
+    );
+    await _seedManga(
+      db,
+      sourceId: '123',
+      url: '/manga/non-library',
+      title: 'Non-library manga',
+      inLibrary: false,
+    );
+
+    final File target = File(p.join(tmp.path, 'library-only.tachibk'));
+    final MihonBackupExportReport report =
+        await MihonBackupExporter(database: db).exportToFile(
+          target: target,
+          options: const MihonBackupExportOptions(
+            includeLibrary: true,
+            includeChapters: true,
+          ),
+        );
+
+    expect(report.mangaCount, 1, reason: '非书架作品不算 Library 条目');
+    final MihonBackupData parsed = MihonBackupParser.parseFile(target);
+    expect(parsed.mangas, hasLength(1));
+    expect(parsed.mangas.single.url, '/manga/library');
+  });
+
   test('empty database writes an empty but valid backup', () async {
     final File target = File(p.join(tmp.path, 'empty.tachibk'));
     final MihonBackupExportReport report =
@@ -1399,6 +1431,7 @@ Future<EpubBookRow> _seedManga(
   required String url,
   required String title,
   int importedAt = 1700000000000,
+  bool inLibrary = true,
   List<OnlineMangaChapter> chapters = const <OnlineMangaChapter>[],
 }) async {
   final OnlineMangaLibraryEntry entry = OnlineMangaLibraryEntry(
@@ -1443,6 +1476,7 @@ Future<EpubBookRow> _seedManga(
       sourceMetadata: Value<String>(entry.encode()),
       importedAt: importedAt,
       format: const Value<String>('manga'),
+      inLibrary: Value<bool>(inLibrary),
     ),
   );
   return (await db.getEpubBook(bookKey))!;

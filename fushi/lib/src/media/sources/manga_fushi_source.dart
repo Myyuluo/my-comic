@@ -14,7 +14,8 @@ import 'package:fushi/utils.dart';
 ///
 /// 设计要点（与 PDF 同款「漫画只是第三种书身份」）：
 /// - 漫画与 EPUB/PDF **共用一张 `EpubBooks` 表、一块书架、一套删除/进度管线**。书架列书
-///   仍走 [ReaderFushiSource.getBooksFromDb]（列全部行，format-agnostic）；漫画行靠
+///   仍走 [ReaderFushiSource.getBooksFromDb]（只列 Library membership 行，
+///   format-agnostic）；漫画行靠
 ///   `EpubBooks.format=='manga'` 在 [ReaderFushiSource] 的 `_bookToMediaItem` 里被打上
 ///   `mediaSourceIdentifier: `[kUniqueKey]，从而在**打开时**被路由到本源、进
 ///   [MangaFushiPage]，而不是 EPUB 的 [ReaderFushiPage]。

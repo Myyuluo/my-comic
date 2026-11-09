@@ -2756,12 +2756,15 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
       return <Widget>[];
     }
     final OnlineMangaLibraryEntry? entry = _entry;
-    final bool inLibrary = _row != null;
+    // 加入 / 移出按钮与下载动作仍按「行是否存在」判断（票 04/08 才切到
+    // membership）；订阅 / 自动追更则已经只认 Library membership。
+    final bool hasRow = _row != null;
+    final bool isLibraryMember = _row?.isInLibrary ?? false;
     final OnlineMangaLoginTarget? login = _loginTarget;
     return <Widget>[
       // 同一个位置、同一个按钮：不在库是「加入」，在库是「移出」（用户诉求：加了
       // 要能取消）。移出走书架同一条 deleteBook 路径，连已下载章节一起删。
-      if (inLibrary)
+      if (hasRow)
         MediaDetailSecondaryButton(
           buttonKey: const ValueKey<String>(
             'manga_series_remove_from_bookshelf',
@@ -2779,14 +2782,14 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
           onPressed: _busy ? null : () => unawaited(_addToLibrary()),
         ),
       // 下载动作只对在库条目有意义：任务表按 bookKey 记，没有行就没地方挂任务。
-      if (inLibrary)
+      if (hasRow)
         MediaDetailSecondaryButton(
           buttonKey: const ValueKey<String>('manga_series_download_all'),
           icon: FushiIcons.download,
           label: t.manga_series_download_all,
           onPressed: _busy ? null : () => unawaited(_downloadAll()),
         ),
-      if (entry != null && inLibrary && _service != null)
+      if (entry != null && isLibraryMember && _service != null)
         MediaDetailSecondaryButton(
           buttonKey: const ValueKey<String>('manga_series_subscribe'),
           icon: entry.subscribed ? FushiIcons.bookmark : FushiIcons.bookmarkAdd,
@@ -2847,7 +2850,8 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     }
     final OnlineMangaLibraryEntry? entry = _entry;
     final Object? adapter = _adapter;
-    final bool inLibrary = _row != null;
+    // 自动追更（新章自动下载）只对书架成员开放。
+    final bool isLibraryMember = _row?.isInLibrary ?? false;
     return <MediaDetailMenuItem>[
       // 源站网页入口：只有在线源（Mihon）有网页可去，本地卷 / 互联对端没有。
       if (entry != null && adapter is OnlineMangaWebUrlCapable)
@@ -2865,7 +2869,10 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
           enabled: !_refreshing,
           onSelected: () => unawaited(_refreshFromSource()),
         ),
-      if (entry != null && inLibrary && _service != null && entry.subscribed)
+      if (entry != null &&
+          isLibraryMember &&
+          _service != null &&
+          entry.subscribed)
         MediaDetailMenuItem(
           key: const ValueKey<String>('manga_series_auto_download'),
           icon: entry.autoDownload
