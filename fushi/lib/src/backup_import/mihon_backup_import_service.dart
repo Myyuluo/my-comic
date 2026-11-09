@@ -19,13 +19,11 @@ import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi/src/models/preference_keys.dart';
 import 'package:fushi/src/sync/sync_repository.dart' show SyncRepository;
 
-/// 占位 extension package：备份里的 Source 尚未安装时，书架条目仍要有一个稳定
-/// 身份，否则每次导入都会因为 package 不同而新建一行。
-///
-/// 已知限制（后续 ticket 收口）：扩展安装后 `MihonLibraryAdapter` 用真实 package
-/// 匹配源，本条目的身份不会自动改写；「安装缺失源后接管备份条目」不在 ticket 06
-/// 的最小路径内。
-const String kUnavailableMihonExtensionPackage = 'mihon.unavailable';
+/// [kUnavailableMihonExtensionPackage] 住在书架条目模型里（它是写入用户库的
+/// 身份值，作品页也要用它判断占位来源）；这里重新导出，保持既有导入/导出方
+/// 的 import 不变。
+export 'package:fushi/src/media/manga/library/online_manga_library_entry.dart'
+    show kUnavailableMihonExtensionPackage;
 
 enum MihonBackupSkipReason { notInLibrary }
 
@@ -452,6 +450,12 @@ class MihonBackupImportService {
         }
         final String extensionPackage =
             source?.extensionPackage ?? kUnavailableMihonExtensionPackage;
+        // 只有真正未安装（无 Source 行）的条目才把备份里的名称写进描述符。
+        // 已安装 / 已停用的来源由 Source 表提供名称；备份缺名称时保持 null，
+        // UI 退化为「来源未安装」。
+        final String? sourceName = source == null
+            ? _nonEmptyName(data.sourceNames[manga.source])
+            : null;
         final String identityKey = _identityKey(manga.source, url);
 
         try {
@@ -461,6 +465,7 @@ class MihonBackupImportService {
             row = await _insertEntry(
               manga,
               extensionPackage: extensionPackage,
+              sourceName: sourceName,
               importNow: importNow,
             );
             existing[identityKey] = _ExistingEntry(
@@ -619,6 +624,13 @@ class MihonBackupImportService {
 
   static void _increment<T>(Map<T, int> counts, T key) {
     counts.update(key, (int value) => value + 1, ifAbsent: () => 1);
+  }
+
+  /// 备份名称缺省（或只有空白）时返回 null，让 UI 用「来源未安装」兜底，
+  /// 而不是把合成的 `Source <id>` 写进用户可见描述符。
+  static String? _nonEmptyName(String? value) {
+    final String? name = value?.trim();
+    return name == null || name.isEmpty ? null : name;
   }
 
   /// Decides which top-level `BackupPreference` rows become MyComic settings.
@@ -805,6 +817,7 @@ class MihonBackupImportService {
   Future<EpubBookRow> _insertEntry(
     MihonBackupManga manga, {
     required String extensionPackage,
+    required String? sourceName,
     required int importNow,
   }) async {
     final String sourceId = '${manga.source}';
@@ -812,6 +825,7 @@ class MihonBackupImportService {
     final OnlineMangaLibraryEntry entry = _entryFromBackup(
       manga,
       extensionPackage: extensionPackage,
+      sourceName: sourceName,
     );
     final String bookKey = onlineMangaBookKeyFor(
       runtime: OnlineMangaRuntimeKind.mihon,
@@ -1389,6 +1403,7 @@ class MihonBackupImportService {
   OnlineMangaLibraryEntry _entryFromBackup(
     MihonBackupManga manga, {
     required String extensionPackage,
+    String? sourceName,
   }) {
     final List<OnlineMangaChapter> chapters = <OnlineMangaChapter>[
       for (final MihonBackupChapter chapter in manga.chapters)
@@ -1420,6 +1435,7 @@ class MihonBackupImportService {
       ),
       chapters: List<OnlineMangaChapter>.unmodifiable(chapters),
       currentChapterIndex: _currentChapterIndex(manga),
+      sourceName: sourceName,
     );
   }
 
