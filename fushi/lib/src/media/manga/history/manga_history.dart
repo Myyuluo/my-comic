@@ -369,6 +369,40 @@ Future<void> recordMangaHistoryOpened({
   );
 }
 
+/// 删除整部作品（连同落盘文件）时级联清理它的历史行（票 10）。
+///
+/// 历史身份是「Source + 作品 id」，作品行一删就再没有可回退的续读目标；只留
+/// 快照会变成点开即失败的记录。仅移出书架（文件保留）的路径不调用本函数。
+/// 非漫画行返回 null 身份，级联自然跳过。
+Future<void> deleteMangaHistoryForBook(
+  FushiDatabase db,
+  EpubBookRow row,
+) async {
+  final MangaHistoryIdentity? identity = mangaHistoryIdentityForBook(row);
+  if (identity == null) return;
+  await db.deleteMediaOpenHistory(identity.mediaSource, identity.mediaId);
+}
+
+/// 删除一条漫画历史（只删 `media_open_history` 行，不动阅读数据）。
+Future<void> deleteMangaHistoryEntry(
+  FushiDatabase db,
+  MangaHistoryEntry entry,
+) => db.deleteMediaOpenHistory(entry.mediaSource, entry.mediaId);
+
+/// 清空全部漫画历史（只删漫画来源行；EPUB / 视频等其它媒体历史保留）。
+///
+/// 只清历史记录：Reading progress、章节 `readAt`、书级完成标记与书架状态都不在
+/// 本函数的作用范围（ADR 0018）。
+Future<int> clearMangaHistory(FushiDatabase db) async {
+  final List<MediaOpenHistoryRow> rows = await db.getAllMediaOpenHistory();
+  int deleted = 0;
+  for (final MediaOpenHistoryRow row in rows) {
+    if (!isMangaHistorySource(row.mediaSource)) continue;
+    deleted += await db.deleteMediaOpenHistory(row.mediaSource, row.mediaId);
+  }
+  return deleted;
+}
+
 /// 历史页封面是否是一个仍然存在的本地文件。
 bool mangaHistoryCoverFileExists(String? path) {
   if (path == null || path.isEmpty) return false;
