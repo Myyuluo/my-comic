@@ -28,6 +28,7 @@ import 'package:drift/drift.dart' show Value;
 import 'package:path/path.dart' as p;
 
 import 'package:fushi/src/media/manga/download/chapter_container_on_disk.dart';
+import 'package:fushi/src/media/manga/download/download_identity.dart';
 import 'package:fushi/src/media/manga/download/download_library_index.dart';
 import 'package:fushi/src/media/manga/library/online_manga_chapter_updates.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
@@ -945,10 +946,9 @@ class MangaDownloadService {
     OnlineMangaChapter chapter,
   ) =>
       manifest != null &&
-      manifest.sourceRuntime == entry.runtime.wireValue &&
-      manifest.extensionPackage == entry.extensionPackage &&
-      manifest.sourceId == entry.sourceId &&
-      manifest.mangaKey == entry.series.key &&
+      // 与文件夹复用 / Rebuild 共用同一份下载身份：数字 sourceId + seriesKey，
+      // 扩展包只做兼容 / tie-breaker（占位包与真实包视为同一身份）。
+      MangaDownloadIdentity.ofEntry(entry).matchesManifest(manifest) &&
       manifest.chapterKey == chapter.key;
 
   /// 把 staging 目录整章 rename 到正式章目录；目标被占时用确定后缀，绝不覆盖。
