@@ -257,6 +257,13 @@ void main() {
             type: FixturePreferenceType.intValue,
             value: 1234,
           ),
+          // Known but device-local (AI provider config): belongs to the
+          // exporting machine and must not be adopted here.
+          const FixturePreference(
+            key: 'ai_providers',
+            type: FixturePreferenceType.stringValue,
+            value: '[]',
+          ),
           // Mihon's own key: MyComic must never write it into its settings.
           const FixturePreference(
             key: 'theme_mode',
@@ -277,6 +284,11 @@ void main() {
       expect(
         report.appPreferencesSkippedByReason[MihonBackupAppPreferenceSkipReason
             .notMyComicKey],
+        1,
+      );
+      expect(
+        report.appPreferencesSkippedByReason[MihonBackupAppPreferenceSkipReason
+            .deviceLocal],
         1,
       );
 
@@ -302,6 +314,7 @@ void main() {
       );
       expect(PrefCodec.decode<int>(prefs['audiobook_pos_book-1']!, 0), 1234);
       expect(prefs.containsKey('theme_mode'), isFalse);
+      expect(prefs.containsKey('ai_providers'), isFalse);
     },
   );
 
