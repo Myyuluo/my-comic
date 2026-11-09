@@ -4118,6 +4118,7 @@
   "manga_google_lens_disclosure_body": "Для распознавания этой манги уменьшенная JPEG-копия каждой страницы без OCR-текста отправляется в Google. Результаты кэшируются на этом устройстве. Конечная точка неофициальная и может перестать работать. Ничего не отправляется без вашего согласия.",
   "manga_google_lens_disclosure_decline": "Отмена",
   "manga_google_lens_disclosure_title": "Отправить страницы манги в Google Lens?",
+  "manga_history_date_header": "$month/$day",
   "manga_history_delete_all": "Delete all",
   "manga_history_delete_all_confirm_action": "Delete",
   "manga_history_delete_all_confirm_body": "All manga reading history will be deleted. Reading progress, chapter read marks, and shelf status are not affected.",

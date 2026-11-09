@@ -4118,6 +4118,7 @@
   "manga_google_lens_disclosure_body": "Beim Erkennen dieses Manga wird eine reduzierte JPEG-Kopie jeder Seite ohne OCR-Text an Google gesendet. Ergebnisse werden auf diesem Gerät zwischengespeichert. Der Endpunkt ist inoffiziell und kann jederzeit aufhören zu funktionieren. Ohne Ihre Zustimmung wird nichts hochgeladen.",
   "manga_google_lens_disclosure_decline": "Abbrechen",
   "manga_google_lens_disclosure_title": "Manga-Seiten an Google Lens senden?",
+  "manga_history_date_header": "$month/$day",
   "manga_history_delete_all": "Delete all",
   "manga_history_delete_all_confirm_action": "Delete",
   "manga_history_delete_all_confirm_body": "All manga reading history will be deleted. Reading progress, chapter read marks, and shelf status are not affected.",

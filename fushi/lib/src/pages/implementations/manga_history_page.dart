@@ -289,93 +289,92 @@ class _MangaHistoryPageState extends ConsumerState<MangaHistoryPage> {
                   builder: (BuildContext context, BoxConstraints constraints) {
                     final List<_MangaHistoryDateGroup> groups =
                         _groupHistoryByDate(visible);
-                    final List<int> startIndexes = <int>[];
-                    int nextIndex = 0;
-                    for (final _MangaHistoryDateGroup group in groups) {
-                      startIndexes.add(nextIndex);
-                      nextIndex += group.entries.length;
-                    }
                     final double topInset =
                         FushiFloatingChromeInset.of(context);
+                    final SliverGridDelegate gridDelegate =
+                        SliverGridDelegateWithMaxCrossAxisExtent(
+                      maxCrossAxisExtent: readerShelfGridExtentForLayout(
+                        mediaWidth: MediaQuery.sizeOf(context).width,
+                        contentWidth: constraints.maxWidth,
+                      ),
+                      childAspectRatio: MangaFushiSource.instance.aspectRatio,
+                      mainAxisSpacing:
+                          tokens.spacing.gap + tokens.spacing.gap / 2,
+                      crossAxisSpacing:
+                          tokens.spacing.gap + tokens.spacing.gap / 2,
+                    );
+                    final List<Widget> slivers = <Widget>[];
+                    int nextIndex = 0;
+                    for (int g = 0; g < groups.length; g++) {
+                      final _MangaHistoryDateGroup group = groups[g];
+                      final int startIndex = nextIndex;
+                      nextIndex += group.entries.length;
+                      slivers.add(
+                        SliverToBoxAdapter(
+                          child: Padding(
+                            padding: EdgeInsets.fromLTRB(
+                              tokens.spacing.page,
+                              g == 0
+                                  ? topInset + tokens.spacing.page
+                                  : tokens.spacing.gap +
+                                      tokens.spacing.gap / 2,
+                              tokens.spacing.page,
+                              tokens.spacing.gap,
+                            ),
+                            child: Text(
+                              _historyDateLabel(group.date),
+                              key: ValueKey<String>(
+                                'manga_history_date_${group.dayKey}',
+                              ),
+                              style: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(
+                                    fontWeight: FontWeight.w700,
+                                    color:
+                                        Theme.of(context).colorScheme.onSurface,
+                                  ),
+                            ),
+                          ),
+                        ),
+                      );
+                      slivers.add(
+                        SliverPadding(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: tokens.spacing.page,
+                          ),
+                          sliver: SliverGrid(
+                            gridDelegate: gridDelegate,
+                            delegate: SliverChildBuilderDelegate(
+                              (BuildContext context, int i) {
+                                final MangaHistoryEntry entry = group.entries[i];
+                                return FushiStaggeredEntrance(
+                                  index: startIndex + i,
+                                  child: _MangaHistoryCard(
+                                    key: ValueKey<String>(
+                                      'manga_history_card_${entry.key}',
+                                    ),
+                                    entry: entry,
+                                    onTap: () => _openEntry(entry),
+                                    onDelete: () => _deleteEntry(entry),
+                                  ),
+                                );
+                              },
+                              childCount: group.entries.length,
+                            ),
+                          ),
+                        ),
+                      );
+                    }
+                    slivers.add(
+                      SliverToBoxAdapter(
+                        child: SizedBox(height: tokens.spacing.page),
+                      ),
+                    );
                     return CustomScrollView(
                       key: const ValueKey<String>('manga_history_grid'),
                       physics: const AlwaysScrollableScrollPhysics(
                         parent: BouncingScrollPhysics(),
                       ),
-                      slivers: <Widget>[
-                        for (int g = 0; g < groups.length; g++) ...<Widget>[
-                          SliverToBoxAdapter(
-                            child: Padding(
-                              padding: EdgeInsets.fromLTRB(
-                                tokens.spacing.page,
-                                g == 0
-                                    ? topInset + tokens.spacing.page
-                                    : tokens.spacing.gap +
-                                        tokens.spacing.gap / 2,
-                                tokens.spacing.page,
-                                tokens.spacing.gap,
-                              ),
-                              child: Text(
-                                _historyDateLabel(groups[g].date),
-                                key: ValueKey<String>(
-                                  'manga_history_date_${groups[g].key}',
-                                ),
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleMedium
-                                    ?.copyWith(
-                                      fontWeight: FontWeight.w700,
-                                      color: Theme.of(
-                                        context,
-                                      ).colorScheme.onSurface,
-                                    ),
-                              ),
-                            ),
-                          ),
-                          SliverPadding(
-                            padding: EdgeInsets.symmetric(
-                              horizontal: tokens.spacing.page,
-                            ),
-                            sliver: SliverGrid(
-                              gridDelegate:
-                                  SliverGridDelegateWithMaxCrossAxisExtent(
-                                maxCrossAxisExtent:
-                                    readerShelfGridExtentForLayout(
-                                  mediaWidth: MediaQuery.sizeOf(context).width,
-                                  contentWidth: constraints.maxWidth,
-                                ),
-                                childAspectRatio:
-                                    MangaFushiSource.instance.aspectRatio,
-                                mainAxisSpacing:
-                                    tokens.spacing.gap + tokens.spacing.gap / 2,
-                                crossAxisSpacing:
-                                    tokens.spacing.gap + tokens.spacing.gap / 2,
-                              ),
-                              delegate: SliverChildBuilderDelegate(
-                                (BuildContext context, int i) {
-                                  final MangaHistoryEntry entry =
-                                      groups[g].entries[i];
-                                  return FushiStaggeredEntrance(
-                                    index: startIndexes[g] + i,
-                                    child: _MangaHistoryCard(
-                                      key: ValueKey<String>(
-                                        'manga_history_card_${entry.key}',
-                                      ),
-                                      entry: entry,
-                                      onTap: () => _openEntry(entry),
-                                      onDelete: () => _deleteEntry(entry),
-                                    ),
-                                  );
-                                },
-                                childCount: groups[g].entries.length,
-                              ),
-                            ),
-                          ),
-                        ],
-                        SliverToBoxAdapter(
-                          child: SizedBox(height: tokens.spacing.page),
-                        ),
-                      ],
+                      slivers: slivers,
                     );
                   },
                 );
@@ -388,9 +387,9 @@ class _MangaHistoryPageState extends ConsumerState<MangaHistoryPage> {
 
 /// 历史日期分组：同一本地日期的条目共享一个日期头。
 class _MangaHistoryDateGroup {
-  _MangaHistoryDateGroup(this.key, this.date);
+  _MangaHistoryDateGroup(this.dayKey, this.date);
 
-  final String key;
+  final String dayKey;
   final DateTime date;
   final List<MangaHistoryEntry> entries = <MangaHistoryEntry>[];
 }
@@ -403,18 +402,20 @@ List<_MangaHistoryDateGroup> _groupHistoryByDate(
   for (final MangaHistoryEntry entry in entries) {
     final DateTime at = DateTime.fromMillisecondsSinceEpoch(entry.openedAt);
     final DateTime day = DateTime(at.year, at.month, at.day);
-    final String key = '${day.year}-${day.month}-${day.day}';
+    final String dayKey = FushiTimeFormat.dayKey(day);
     groups
-        .putIfAbsent(key, () => _MangaHistoryDateGroup(key, day))
+        .putIfAbsent(dayKey, () => _MangaHistoryDateGroup(dayKey, day))
         .entries
         .add(entry);
   }
   return groups.values.toList(growable: false);
 }
 
-/// 日期头文案与参考图一致：`11月07日`（日零填充）。
-String _historyDateLabel(DateTime day) =>
-    '${day.month}月${day.day.toString().padLeft(2, '0')}日';
+/// 日期头文案与参考图一致：zh-CN `11月07日`，其它语言走本地化的月/日。
+String _historyDateLabel(DateTime day) => t.manga_history_date_header(
+  month: '${day.month}',
+  day: day.day.toString().padLeft(2, '0'),
+);
 
 /// 历史卡：共享 [ShelfCoverFrame] + [ShelfCardFooter]，与书架卡同一视觉语言。
 class _MangaHistoryCard extends StatelessWidget {

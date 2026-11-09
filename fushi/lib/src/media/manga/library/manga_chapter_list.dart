@@ -429,7 +429,7 @@ class MangaChapterList extends StatelessWidget {
       title: chapter.name,
       number: _numberLabel(chapter),
       subtitle: _buildSubtitle(chapter, state, partial),
-      // 当前章只把标题文字染成 primary，不再铺整行底色（2026-11）。
+      // 当前章把标题与副标题文字染成 primary，不再铺整行底色（2026-11）。
       current: current,
       completed: read,
       progress: partial && pageCount != null && pageCount > 0

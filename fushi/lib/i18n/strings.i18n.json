@@ -4118,6 +4118,7 @@
   "manga_google_lens_disclosure_body": "Recognizing this manga sends a reduced JPEG copy of each page without OCR text to Google. Results are cached on this device. The endpoint is unofficial and may stop working. Nothing is uploaded unless you agree.",
   "manga_google_lens_disclosure_decline": "Cancel",
   "manga_google_lens_disclosure_title": "Send manga pages to Google Lens?",
+  "manga_history_date_header": "$month/$day",
   "manga_history_delete_all": "Delete all",
   "manga_history_delete_all_confirm_action": "Delete",
   "manga_history_delete_all_confirm_body": "All manga reading history will be deleted. Reading progress, chapter read marks, and shelf status are not affected.",

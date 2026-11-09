@@ -1305,7 +1305,7 @@ enum MediaDetailDownloadState {
 /// - 标题 + 副标题 + 元信息（播出日 · 时长）；已看完的标题降为 onSurfaceVariant；
 /// - 观看进度（[progress]）：底部 primary 细条（M3E 波浪）；
 /// - 状态：已看 = tertiary 实心对勾；下载 = 排队 / 转圈 / 已下载 / 失败图标；
-/// - [current]：续看的那条只把标题文字染成 primary，行背景 / 序号胶囊保持常态；
+/// - [current]：续看的那条把标题与副标题文字染成 primary，行背景 / 序号胶囊保持常态；
 /// - [selected] 非 null = 多选模式（行首对勾圆，点行切换选择）。
 class MediaDetailItemRow extends StatelessWidget {
   const MediaDetailItemRow({
@@ -1427,7 +1427,7 @@ class MediaDetailItemRow extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: type.labelMedium.tabular.copyWith(
-                        color: selectedFg ?? (current ? cs.primary : fgVariant),
+                        color: selectedFg ?? fgVariant,
                       ),
                     ),
                   ],

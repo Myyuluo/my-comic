@@ -255,7 +255,7 @@ class MangaHistoryEntry {
   MangaHistoryOnlineRef? get online => snapshot?.online;
 }
 
-/// 读全部漫画历史（`openedAt` 倒序，由数据库查询保证；不做日期分组）。
+/// 读全部漫画历史（`openedAt` 倒序，由数据库查询保证；日期分组由历史页负责）。
 Future<List<MangaHistoryEntry>> loadMangaHistory(FushiDatabase db) async {
   final List<MediaOpenHistoryRow> rows = await db.getAllMediaOpenHistory();
   final List<EpubBookRow> books = await db.getAllEpubBooks();

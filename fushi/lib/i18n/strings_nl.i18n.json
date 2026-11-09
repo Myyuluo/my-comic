@@ -4118,6 +4118,7 @@
   "manga_google_lens_disclosure_body": "Het herkennen van deze manga stuurt een verkleinde JPEG-kopie van elke pagina zonder OCR-tekst naar Google. Resultaten worden op dit apparaat gecachet. Het eindpunt is onofficieel en kan stoppen met werken. Er wordt niets geüpload tenzij je akkoord gaat.",
   "manga_google_lens_disclosure_decline": "Annuleren",
   "manga_google_lens_disclosure_title": "Mangapagina's naar Google Lens sturen?",
+  "manga_history_date_header": "$month/$day",
   "manga_history_delete_all": "Delete all",
   "manga_history_delete_all_confirm_action": "Delete",
   "manga_history_delete_all_confirm_body": "All manga reading history will be deleted. Reading progress, chapter read marks, and shelf status are not affected.",

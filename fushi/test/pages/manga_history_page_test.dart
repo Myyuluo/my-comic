@@ -246,6 +246,9 @@ void main() {
   });
 
   testWidgets('按 openedAt 倒序展示快照，并按本地日期分组显示时间', (WidgetTester tester) async {
+    // 参考图是中文日期头（11月07日）；本文件默认英文，本用例切到 zh-CN 验证。
+    LocaleSettings.setLocale(AppLocale.zhCn);
+    addTearDown(() => LocaleSettings.setLocale(AppLocale.en));
     final MangaHistoryOnlineRef online = _onlineRef();
     final String source = mangaHistoryOnlineSourceKey(_onlineEntry());
     final int olderAt = DateTime(2026, 11, 7, 12).millisecondsSinceEpoch;

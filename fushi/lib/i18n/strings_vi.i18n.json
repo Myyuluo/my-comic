@@ -4118,6 +4118,7 @@
   "manga_google_lens_disclosure_body": "Nhận dạng truyện tranh này sẽ gửi bản JPEG thu nhỏ của mỗi trang (không kèm văn bản OCR) lên Google. Kết quả được lưu cache trên thiết bị. Đầu cuối này không chính thức và có thể ngừng hoạt động. Không gửi gì trừ khi bạn đồng ý.",
   "manga_google_lens_disclosure_decline": "Hủy",
   "manga_google_lens_disclosure_title": "Gửi trang truyện tranh lên Google Lens?",
+  "manga_history_date_header": "$month/$day",
   "manga_history_delete_all": "Delete all",
   "manga_history_delete_all_confirm_action": "Delete",
   "manga_history_delete_all_confirm_body": "All manga reading history will be deleted. Reading progress, chapter read marks, and shelf status are not affected.",

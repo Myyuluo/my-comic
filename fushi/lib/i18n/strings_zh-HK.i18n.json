@@ -4118,6 +4118,7 @@
   "manga_google_lens_disclosure_body": "識別本漫畫會把尚無 OCR 文本的頁面縮小為 JPEG 後發送給 Google，結果緩存在本設備。該接口並非官方公開 API，可能隨時失效。只有同意後才會上傳。",
   "manga_google_lens_disclosure_decline": "取消",
   "manga_google_lens_disclosure_title": "將漫畫頁面發送到 Google Lens？",
+  "manga_history_date_header": "$month/$day",
   "manga_history_delete_all": "全部刪除",
   "manga_history_delete_all_confirm_action": "刪除",
   "manga_history_delete_all_confirm_body": "將刪除全部漫畫閱讀記錄。閱讀進度、章節已讀標記和書架狀態不受影響。",
