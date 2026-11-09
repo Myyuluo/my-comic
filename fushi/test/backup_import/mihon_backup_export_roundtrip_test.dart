@@ -1160,7 +1160,12 @@ void main() {
       bookDirectory: (String bookKey) async => p.join(tmp.path, bookKey),
     ).importFile(target);
 
-    expect(await restored.getEpubBookMetas(), isEmpty);
+    // `favorite=false` is restored as a persistent non-library row, never as a
+    // shelf entry.
+    final List<EpubBookMeta> importedMetas = await restored.getEpubBookMetas();
+    expect(importedMetas, hasLength(1));
+    expect(await restored.getLibraryEpubBooks(), isEmpty);
+    expect(imported.nonLibraryEntriesImported, 1);
     expect(imported.appPreferencesImported, 5);
     expect(
       imported.appPreferencesSkippedByReason[
@@ -1210,7 +1215,7 @@ void main() {
     final List<MangaHistoryEntry> entries = await loadMangaHistory(restored);
     expect(entries, hasLength(1));
     expect(entries.single.title, 'Beta');
-    expect(entries.single.bookKey, isNull);
+    expect(entries.single.bookKey, importedMetas.single.bookKey);
     expect(entries.single.coverUrl, 'https://example.test/beta.jpg');
 
     // Re-importing the same file is idempotent.
@@ -1231,7 +1236,8 @@ void main() {
       1,
     );
     expect(await restored.getAllMediaOpenHistory(), hasLength(1));
-    expect(await restored.getEpubBookMetas(), isEmpty);
+    expect(await restored.getEpubBookMetas(), hasLength(1));
+    expect(await restored.getLibraryEpubBooks(), isEmpty);
   });
 
   test('default filename uses my-comic_YYYY-MM-DD_HH-mm.tachibk', () {
