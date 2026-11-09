@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/services.dart';
@@ -166,6 +167,23 @@ OnlineMangaLibraryEntry _placeholderEntry({String? sourceName}) =>
       chapters: _chapters,
     );
 
+/// 导入时 Source 已安装（真实包名）但后来被停用：身份不再是占位包，运行时
+/// 解析同样失败。UI 仍须按「来源未安装」展示。
+OnlineMangaLibraryEntry _disabledSourceEntry() => OnlineMangaLibraryEntry(
+  runtime: OnlineMangaRuntimeKind.mihon,
+  extensionPackage: _disabledPackage,
+  sourceId: _disabledSourceId,
+  series: const OnlineMangaSeries(
+    key: '/series/fixture',
+    title: 'Fixture series',
+    raw: <String, Object?>{'url': '/series/fixture'},
+  ),
+  chapters: _chapters,
+);
+
+const String _disabledPackage = 'com.example.disabled';
+const String _disabledSourceId = '524579092615598717';
+
 Future<void> _settle(WidgetTester tester) async {
   for (int i = 0; i < 20; i++) {
     await Future<void>.delayed(const Duration(milliseconds: 20));
@@ -273,6 +291,59 @@ void main() {
     expect(find.text(kUnavailableMihonExtensionPackage), findsNothing);
     expect(find.text(t.manga_series_source_missing_hint), findsOneWidget);
     expect(find.text('Chapter 1'), findsOneWidget);
+  });
+
+  testWidgets('已安装但已停用的来源：同样显示「来源未安装：<名称>」与说明', (WidgetTester tester) async {
+    sizeView(tester);
+    await tester.runAsync(() async {
+      // Source 行还在（名称可读），但已停用：运行时解析失败，页面不能因此
+      // 退回原始扩展包名。
+      await db
+          .into(db.mangaOnlineSources)
+          .insert(
+            MangaOnlineSourcesCompanion.insert(
+              extensionPackage: _disabledPackage,
+              sourceId: _disabledSourceId,
+              name: '再漫画',
+              language: 'zh',
+              enabled: const Value<bool>(false),
+            ),
+          );
+    });
+    final OnlineMangaLibraryService library = OnlineMangaLibraryService(
+      database: db,
+      rootDirectory: Directory(p.join(root.path, 'legacy')),
+      adapter: _MissingSourceAdapter(),
+    );
+    final _TestAppModel appModel = _TestAppModel(db, library, root);
+
+    await tester.runAsync(() async {
+      final EpubBookRow row = await library.add(_disabledSourceEntry());
+      await tester.pumpWidget(_harness(appModel, row.bookKey));
+      await pumpUntilFound(tester, find.text('Chapter 1'));
+      await _settle(tester);
+    });
+
+    expect(
+      find.text('来源未安装：再漫画'),
+      findsWidgets,
+      reason: '停用来源的名称来自 Source 表，而不是原始扩展包名',
+    );
+    expect(
+      find.text(_disabledPackage),
+      findsNothing,
+      reason: '缺失来源不得回退显示原始扩展包名',
+    );
+    expect(
+      find.byKey(const ValueKey<String>('manga_series_missing_source_notice')),
+      findsOneWidget,
+      reason: '停用来源与未安装一样说明只能看本机已保存的章节',
+    );
+    expect(find.text(t.manga_series_source_missing_hint), findsOneWidget);
+    expect(find.text('Chapter 1'), findsOneWidget);
+
+    final List<EpubBookRow> books = await db.getAllEpubBooks();
+    expect(books, hasLength(1), reason: '缺失来源的作品仍留在 Library');
   });
 
   testWidgets('来源已恢复解析：显示真实来源名，不再显示缺失来源提示', (WidgetTester tester) async {

@@ -14,6 +14,7 @@ import 'package:fushi/src/media/media_cover_service.dart';
 import 'package:fushi/src/media/manga/mihon/mihon_manager.dart';
 import 'package:fushi/src/storage/app_paths.dart';
 import 'package:fushi/src/utils/misc/error_log_service.dart';
+import 'package:fushi/src/utils/misc/trimmed_text.dart';
 import 'package:fushi_engine/epub/epub_storage.dart';
 import 'package:fushi_engine/media/cover_file_writer.dart'
     show CoverImageInvalidException;
@@ -439,11 +440,39 @@ class OnlineMangaLibraryService {
     return AppPaths.downloadsRootDirectory();
   }
 
+  /// Source 表里的显示名，即使该 Source 已停用。
+  ///
+  /// 作品页的「来源未安装」文案要在运行时解析失败后仍能说出缺的是哪个扩展：
+  /// 先按 `(extensionPackage, sourceId)` 精确匹配（不看 enabled），再按数字
+  /// sourceId 在唯一扩展包内回退。同一 sourceId 命中多个包时视为歧义，返回
+  /// null，不做猜测。非 Mihon 运行时没有这张表，返回 null。
+  Future<String?> knownSourceName(OnlineMangaLibraryEntry entry) async {
+    if (entry.runtime != OnlineMangaRuntimeKind.mihon) return null;
+    final List<MangaOnlineSourceRow> sources = await database
+        .getMangaOnlineSources(mediaKind: 'manga');
+    for (final MangaOnlineSourceRow row in sources) {
+      if (row.extensionPackage == entry.extensionPackage &&
+          row.sourceId == entry.sourceId) {
+        return trimmedOrNull(row.name);
+      }
+    }
+    final String? wanted = normalizedMangaSourceId(entry.sourceId);
+    if (wanted == null) return null;
+    final Map<String, MangaOnlineSourceRow> byPackage =
+        <String, MangaOnlineSourceRow>{};
+    for (final MangaOnlineSourceRow row in sources) {
+      if (normalizedMangaSourceId(row.sourceId) != wanted) continue;
+      byPackage.putIfAbsent(row.extensionPackage, () => row);
+    }
+    if (byPackage.length != 1) return null;
+    return trimmedOrNull(byPackage.values.single.name);
+  }
+
   /// Source 目录名：Source 显示名优先；没有显示名时退回 sourceId / runtime，
   /// 保证永远有可读且非空的目录段（同名冲突由票 05 处理）。
   Future<String> downloadSourceName(OnlineMangaLibraryEntry entry) async {
-    final String? label = (await adapter.sourceLabel(entry))?.trim();
-    if (label != null && label.isNotEmpty) return label;
+    final String? label = trimmedOrNull(await adapter.sourceLabel(entry));
+    if (label != null) return label;
     final String sourceId = entry.sourceId.trim();
     if (sourceId.isNotEmpty) return sourceId;
     return entry.runtime.wireValue;

@@ -341,6 +341,38 @@ void main() {
     await disposePage(tester);
   });
 
+  testWidgets('有分类但零 Library 条目的导入也立即刷新标签页签', (WidgetTester tester) async {
+    // 分类已经写成 Tag，但备份没有任何 favorite 条目：报告会因 totalEntries == 0
+    // 被视为「空」，标签页签仍必须刷新，否则用户看不到新建的 Tag。
+    final File backup = (await tester.runAsync(
+      () => writeFixtureBackup(
+        backupDir,
+        categories: const <FixtureCategory>[
+          FixtureCategory(name: '连载', order: 0, id: 10),
+        ],
+        mangas: const <FixtureManga>[],
+      ),
+    ))!;
+    usePicker(backup.path);
+    await pumpPage(tester);
+
+    expect(tagCountSegments(), findsOneWidget, reason: '导入前只有「书架」页签');
+    await triggerImport(tester);
+
+    expect(find.text(t.dialog_done), findsOneWidget);
+    final List<BookTagRow> tags = await db.getAllTags();
+    expect(tags.map((BookTagRow tag) => tag.name), <String>['连载']);
+    expect(
+      tagSegment(tags.single.id),
+      findsOneWidget,
+      reason: '分类已写成 Tag，即使没有 Library 条目也必须刷新标签页签',
+    );
+
+    await tester.tap(find.text(t.dialog_done));
+    await tester.pumpAndSettle();
+    await disposePage(tester);
+  });
+
   testWidgets('零 Tag 备份导入后仍只有「书架」页签', (WidgetTester tester) async {
     final File backup = (await tester.runAsync(
       () => writeFixtureBackup(

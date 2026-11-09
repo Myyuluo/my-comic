@@ -135,9 +135,11 @@ class _TagManagementPageState extends ConsumerState<TagManagementPage> {
 
   /// 标签池变了（新建 / 改名 / 改色 / 合并 / 删除 / 排序）：库页标签栏与卡面 chip
   /// 读的是这些 provider，返回库页时要看到新状态。
+  ///
+  /// 漫画侧的两个与导入流程共用 [invalidateMangaTagProviders]；其它媒体类型的
+  /// 映射只在这里追加，导入流程不会为它们重建界面。
   void _invalidateTagProviders() {
-    ref.invalidate(allTagsProvider);
-    ref.invalidate(bookTagMapProvider);
+    invalidateMangaTagProviders(ref);
     ref.invalidate(srtBookTagMapProvider);
     ref.invalidate(videoBookTagMapProvider);
     ref.invalidate(gameTagMapProvider);

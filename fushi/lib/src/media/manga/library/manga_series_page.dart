@@ -49,6 +49,7 @@ import 'package:fushi/src/utils/components/fushi_staggered_entrance.dart';
 import 'package:fushi/src/utils/fushi_icons.dart';
 import 'package:fushi/src/utils/net/app_http_image.dart';
 import 'package:fushi/src/utils/misc/error_details_dialog.dart';
+import 'package:fushi/src/utils/misc/trimmed_text.dart';
 import 'package:fushi/utils.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_layout.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_library.dart';
@@ -192,6 +193,16 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
   /// 回退能解析出真实名称（票 03），那期间不该闪一下缺失提示。来源标签本身
   /// 仍即时降级，不露出 `mihon.unavailable`。
   bool _sourceLabelResolved = false;
+
+  /// 运行时确认解析不到来源（未安装、已停用或 sourceId 歧义）。
+  ///
+  /// 只对 Mihon 条目有意义：占位来源是「导入时未安装」，而已安装但停用的
+  /// Source 没有占位包，也必须按缺失来源展示。
+  bool _sourceMissing = false;
+
+  /// 缺失来源的友好名称：优先 Source 表（停用的 Source 行仍有名称），否则
+  /// 用描述符里持久化的备份名称。只在 [_sourceMissing] 或占位条目时使用。
+  String? _missingSourceName;
 
   bool _loading = true;
   bool _refreshing = false;
@@ -955,6 +966,8 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
       _localPosition = position;
       _sourceLabel = null;
       _sourceLabelResolved = false;
+      _sourceMissing = false;
+      _missingSourceName = null;
     });
     if (entry != null && service != null) {
       unawaited(_resolveSourceLabel(service.adapter, entry));
@@ -1010,6 +1023,8 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
       _adapter = null;
       _sourceLabel = null;
       _sourceLabelResolved = false;
+      _sourceMissing = false;
+      _missingSourceName = null;
     });
   }
 
@@ -1056,8 +1071,15 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
       _service = shelf;
       _sourceLabel = sourceLabel;
       _sourceLabelResolved = sourceLabel != null && sourceLabel.isNotEmpty;
+      _sourceMissing = false;
+      _missingSourceName = null;
       _states = states;
     });
+    // 来源页未提供名称时（如从 History 打开）自己解析一次：来源可用就显示真实
+    // 名称，缺失 / 停用则与书架路径一样按缺失来源降级，而不是露出扩展包名。
+    if (sourceLabel == null || sourceLabel.isEmpty) {
+      unawaited(_resolveSourceLabel(adapter, entry));
+    }
     // 未入库的来源作品首屏是空的，自动拉一次；已入库则与书架路径同一规则：
     // 有缓存就不联网，缓存章节为空才兜底。
     if (existing == null || entry.chapters.isEmpty) {
@@ -1079,10 +1101,19 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     OnlineMangaRuntimeAdapter adapter,
     OnlineMangaLibraryEntry entry,
   ) async {
-    final String? label = await adapter.sourceLabel(entry);
+    final String? label = trimmedOrNull(await adapter.sourceLabel(entry));
+    // 运行时解析不到来源：再问 Source 表要名字（停用的 Source 行仍有名称），
+    // 都没有时才退化为「来源未安装」。非 Mihon 运行时不套用缺失语义。
+    final bool missing =
+        label == null && entry.runtime == OnlineMangaRuntimeKind.mihon;
+    final String? knownName = missing
+        ? trimmedOrNull(await _service?.knownSourceName(entry))
+        : null;
     if (!mounted) return;
     setState(() {
       _sourceLabel = label;
+      _sourceMissing = missing;
+      _missingSourceName = knownName;
       _sourceLabelResolved = true;
     });
   }
@@ -2096,40 +2127,50 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
 
   /// hero 标题上方的来源名（本地卷 / 源名 / 扩展包名）。
   ///
-  /// 占位来源（导入时扩展未安装）不显示内部包名 `mihon.unavailable`：显示
-  /// 备份里保存的名称，名称未知时退化为「来源未安装」。来源安装后若运行时
-  /// 能经数字 sourceId 回退解析出真实名称（票 03），真实名称优先。
+  /// 缺失来源不显示内部占位值 `mihon.unavailable`，也不回退到原始扩展包名：
+  /// 有 Source 表名称或备份名称时显示「来源未安装：<名称>」，否则只显示
+  /// 「来源未安装」。来源安装后若运行时能经数字 sourceId 回退解析出真实名称
+  /// （票 03），真实名称优先。
   String? _subtitle() {
     if (_isScannedLocal) return t.local_source_title;
     if (_isLocal) return t.manga_series_local_volume;
-    final String? label = _sourceLabel;
-    if (label != null && label.isNotEmpty) return label;
+    final String? label = trimmedOrNull(_sourceLabel);
+    if (label != null) return label;
     final OnlineMangaLibraryEntry? entry = _entry;
-    if (entry != null &&
-        entry.extensionPackage == kUnavailableMihonExtensionPackage) {
-      return _missingSourceLabel(entry);
+    if (entry == null) return null;
+    if (entry.runtime == OnlineMangaRuntimeKind.mihon) {
+      // 占位身份即时降级；已安装但停用的 Source 在解析确认失败后同样按缺失
+      // 展示。解析结束前的短暂空档不露出原始扩展包名。
+      if (entry.hasUnavailableSourcePlaceholder || _sourceMissing) {
+        return _missingSourceLabel(entry);
+      }
+      return null;
     }
-    return entry?.extensionPackage;
+    return entry.extensionPackage;
   }
 
-  /// 缺失来源的文案：有备份名称就用「来源未安装：<名称>」，否则只给「来源未安装」。
+  /// 缺失来源的文案：优先 Source 表名称（停用也保留），其次备份名称；都没有时
+  /// 只给「来源未安装」。
   String _missingSourceLabel(OnlineMangaLibraryEntry entry) {
-    final String? name = entry.sourceName?.trim();
-    return name == null || name.isEmpty
+    final String? name =
+        trimmedOrNull(_missingSourceName) ?? trimmedOrNull(entry.sourceName);
+    return name == null
         ? t.manga_series_source_missing
         : t.manga_series_source_missing_named(name: name);
   }
 
-  /// 占位来源且名称解析已经确认失败：作品页要主动解释离线边界。
+  /// 来源解析已经确认失败（未安装、停用或 sourceId 歧义）：作品页要主动解释
+  /// 离线边界。
   ///
   /// 解析结束前不显示（安装扩展后经 sourceId 回退能拿到真实来源，避免闪一下）；
-  /// 来源标签本身即时降级，不露出内部占位值。
+  /// 来源标签本身即时降级，不露出内部占位值或原始扩展包名。
   bool get _showsMissingSourceNotice {
     final OnlineMangaLibraryEntry? entry = _entry;
     return entry != null &&
-        entry.extensionPackage == kUnavailableMihonExtensionPackage &&
+        entry.runtime == OnlineMangaRuntimeKind.mihon &&
         _sourceLabelResolved &&
-        (_sourceLabel == null || _sourceLabel!.isEmpty);
+        _sourceMissing &&
+        trimmedOrNull(_sourceLabel) == null;
   }
 
   /// 页面上是不是一点内容都没有。

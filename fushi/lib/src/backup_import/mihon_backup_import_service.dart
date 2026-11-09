@@ -18,6 +18,7 @@ import 'package:fushi/src/media/manga/history/manga_history.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi/src/models/preference_keys.dart';
 import 'package:fushi/src/sync/sync_repository.dart' show SyncRepository;
+import 'package:fushi/src/utils/misc/trimmed_text.dart';
 
 /// [kUnavailableMihonExtensionPackage] 住在书架条目模型里（它是写入用户库的
 /// 身份值，作品页也要用它判断占位来源）；这里重新导出，保持既有导入/导出方
@@ -64,7 +65,13 @@ class MihonBackupSourceIssue {
   });
 
   final int sourceId;
-  final String sourceName;
+
+  /// 备份里记录的 Source 显示名；旧备份可能没有名称。
+  ///
+  /// 缺失来源的 UI 文案在名称为空时使用本地化的「来源未安装」，绝不把数字
+  /// sourceId 拼成用户可见名称。
+  final String? sourceName;
+
   final int entryCount;
 
   /// Source preferences kept for this source even though its extension is not
@@ -255,6 +262,13 @@ class MihonBackupImportReport {
 
   int get successfulEntries => importedEntries + mergedEntries;
 
+  /// 备份里的分类至少创建或匹配了一个 Tag（匹配也可能更新 Tag 排序）。
+  ///
+  /// 分类可以在没有任何 Library 条目时单独写 Tag 表，因此导入流程不能只用
+  /// [isEmpty] 判断「标签有没有变化」——[isEmpty] 不覆盖分类写入。
+  bool get hasCategoryTagWrites =>
+      categoriesCreated > 0 || categoriesMatched > 0;
+
   int get appPreferencesSkipped => appPreferencesSkippedByReason.values
       .fold<int>(0, (int sum, int count) => sum + count);
 
@@ -441,9 +455,7 @@ class MihonBackupImportService {
                 manga.source,
                 () => _MissingSourceBuilder(
                   sourceId: manga.source,
-                  sourceName:
-                      data.sourceNames[manga.source] ??
-                      'Source ${manga.source}',
+                  sourceName: trimmedOrNull(data.sourceNames[manga.source]),
                 ),
               )
               .entryCount++;
@@ -454,7 +466,7 @@ class MihonBackupImportService {
         // 已安装 / 已停用的来源由 Source 表提供名称；备份缺名称时保持 null，
         // UI 退化为「来源未安装」。
         final String? sourceName = source == null
-            ? _nonEmptyName(data.sourceNames[manga.source])
+            ? trimmedOrNull(data.sourceNames[manga.source])
             : null;
         final String identityKey = _identityKey(manga.source, url);
 
@@ -624,13 +636,6 @@ class MihonBackupImportService {
 
   static void _increment<T>(Map<T, int> counts, T key) {
     counts.update(key, (int value) => value + 1, ifAbsent: () => 1);
-  }
-
-  /// 备份名称缺省（或只有空白）时返回 null，让 UI 用「来源未安装」兜底，
-  /// 而不是把合成的 `Source <id>` 写进用户可见描述符。
-  static String? _nonEmptyName(String? value) {
-    final String? name = value?.trim();
-    return name == null || name.isEmpty ? null : name;
   }
 
   /// Decides which top-level `BackupPreference` rows become MyComic settings.
@@ -1322,7 +1327,7 @@ class MihonBackupImportService {
                   sourceId,
                   () => _MissingSourceBuilder(
                     sourceId: sourceId,
-                    sourceName: sourceNames[sourceId] ?? 'Source $sourceId',
+                    sourceName: trimmedOrNull(sourceNames[sourceId]),
                   ),
                 )
                 .preferenceCount +=
@@ -1589,7 +1594,7 @@ class _MissingSourceBuilder {
   _MissingSourceBuilder({required this.sourceId, required this.sourceName});
 
   final int sourceId;
-  final String sourceName;
+  final String? sourceName;
   int entryCount = 0;
   int preferenceCount = 0;
 
