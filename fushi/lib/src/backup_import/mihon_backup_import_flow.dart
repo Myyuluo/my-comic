@@ -6,6 +6,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:fushi/i18n/strings.g.dart';
 import 'package:fushi/src/backup_import/mihon_backup_import_service.dart';
 import 'package:fushi/src/backup_import/mihon_backup_parser.dart';
+import 'package:fushi/src/pages/implementations/tag_filter_sheet.dart';
 import 'package:fushi/src/settings/settings_context.dart';
 import 'package:fushi/src/storage/app_paths.dart';
 import 'package:fushi/src/utils/adaptive/adaptive_widgets.dart';
@@ -63,6 +64,18 @@ Future<void> runMihonBackupImport(SettingsContext settings) async {
     ),
   );
   if (outcome == null || !context.mounted) return;
+
+  // Ticket 05：导入会把 Mihon 分类写成 Tag、把分类归属写成 Tag 分配，而漫画页的
+  // 标签页签 / 数量 / 作品归属读的是缓存型 FutureProvider（不是 Drift stream）。
+  // 不在这里失效，用户必须进一次「管理标签」再退出才能看到新页签。复用标签管理
+  // 页退出时的同一组失效语义；放在报告弹窗**之前**，弹窗背后的书架即已是最新。
+  // 失败 / 取消没有报告，空备份报告 isEmpty（没有数据变化）——两者都不刷新。
+  // ADR 0016 的「书架 = 无 Tag」归属规则由现有页签筛选继续保证，不在此处干预。
+  final MihonBackupImportReport? report = outcome.report;
+  if (report != null && !report.isEmpty) {
+    settings.ref.invalidate(allTagsProvider);
+    settings.ref.invalidate(bookTagMapProvider);
+  }
 
   await showAppDialog<void>(
     context: context,
