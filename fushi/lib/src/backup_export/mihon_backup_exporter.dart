@@ -10,7 +10,7 @@ import 'package:fushi_engine/media/tracking/media_tracking_repository.dart'
 
 import 'package:fushi/src/backup_export/mihon_backup_writer.dart';
 import 'package:fushi/src/backup_import/mihon_backup_import_service.dart'
-    show kMihonBangumiTrackerId;
+    show kMihonBangumiTrackerId, kUnavailableMihonExtensionPackage;
 import 'package:fushi/src/backup_import/mihon_backup_parser.dart';
 import 'package:fushi/src/media/manga/history/manga_history.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
@@ -34,6 +34,8 @@ class MihonBackupExportOptions {
     this.includeAllRead = true,
     this.includeTracking = true,
     this.includeAppSettings = true,
+    this.includeExtensionStores = true,
+    this.includeSourceSettings = true,
     this.includeSensitiveSettings = false,
   });
 
@@ -64,6 +66,14 @@ class MihonBackupExportOptions {
   /// proto field 104) without mapping key names to Mihon's.
   final bool includeAppSettings;
 
+  /// 「插件商店」: export every manga extension store
+  /// (`BackupExtensionStores`, proto field 106).
+  final bool includeExtensionStores;
+
+  /// 「图源设置」: export per-source preferences grouped as
+  /// `source_<sourceId>` (`BackupSourcePreferences`, proto field 105).
+  final bool includeSourceSettings;
+
   /// 「包含敏感设置」: keep credentials in app / source settings. Device-local
   /// keys never leave the device even when this is true.
   final bool includeSensitiveSettings;
@@ -71,7 +81,11 @@ class MihonBackupExportOptions {
   /// Whether the resolved selection produces a non-empty backup. Later tickets
   /// add the remaining standalone sections here.
   bool get hasExportableContent =>
-      includeLibrary || includeCategories || includeAppSettings;
+      includeLibrary ||
+      includeCategories ||
+      includeAppSettings ||
+      includeExtensionStores ||
+      includeSourceSettings;
 }
 
 class MihonBackupExportProgress {
@@ -152,6 +166,10 @@ class MihonBackupExporter {
     final List<MihonBackupPreference> preferences = await _appPreferences(
       options,
     );
+    final List<MihonBackupExtensionStore> extensionStores =
+        await _extensionStores(options);
+    final List<MihonBackupSourcePreferences> sourcePreferences =
+        await _sourcePreferences(options);
 
     final List<MihonBackupManga> mangas = <MihonBackupManga>[];
     final Map<int, String> sourceNames = <int, String>{};
@@ -244,7 +262,63 @@ class MihonBackupExporter {
       categories: categoryExport?.categories ?? const <MihonBackupCategory>[],
       sourceNames: Map<int, String>.unmodifiable(sourceNames),
       preferences: List<MihonBackupPreference>.unmodifiable(preferences),
+      extensionStores: List<MihonBackupExtensionStore>.unmodifiable(
+        extensionStores,
+      ),
+      sourcePreferences: List<MihonBackupSourcePreferences>.unmodifiable(
+        sourcePreferences,
+      ),
     );
+  }
+
+  /// 「插件商店」: every manga Extension store becomes a `BackupExtensionStore`.
+  /// The Mihon backup format has no media-kind field, so Aniyomi (video) stores
+  /// are deliberately not written: importing them into MyComic would recreate
+  /// them as manga stores.
+  Future<List<MihonBackupExtensionStore>> _extensionStores(
+    MihonBackupExportOptions options,
+  ) async {
+    if (!options.includeExtensionStores) {
+      return const <MihonBackupExtensionStore>[];
+    }
+    final List<MangaExtensionStoreRow> rows = await database
+        .getMangaExtensionStores(mediaKind: 'manga');
+    final List<MihonBackupExtensionStore> stores =
+        <MihonBackupExtensionStore>[];
+    for (final MangaExtensionStoreRow row in rows) {
+      final Map<String, String?> contact = _storeContact(row.contactJson);
+      stores.add(
+        MihonBackupExtensionStore(
+          indexUrl: row.indexUrl,
+          name: row.name,
+          badgeLabel: row.badgeLabel,
+          signingKey: row.signingKey ?? '',
+          contactWebsite: (contact['website'] ?? '').trim(),
+          contactDiscord: _nonEmpty((contact['discord'] ?? '').trim()),
+          isLegacy: row.format == 'legacy',
+          extensionListUrl: row.extensionListUrl,
+        ),
+      );
+    }
+    return stores;
+  }
+
+  /// `MangaExtensionStores.contactJson` = `{"website": …, "discord": …}`.
+  /// Malformed metadata must not abort the whole backup, so it reads as empty.
+  static Map<String, String?> _storeContact(String? contactJson) {
+    if (contactJson == null || contactJson.trim().isEmpty) {
+      return const <String, String?>{};
+    }
+    try {
+      final Object? decoded = jsonDecode(contactJson);
+      if (decoded is! Map) return const <String, String?>{};
+      return <String, String?>{
+        for (final MapEntry<Object?, Object?> entry in decoded.entries)
+          entry.key.toString(): entry.value?.toString(),
+      };
+    } on FormatException {
+      return const <String, String?>{};
+    }
   }
 
   /// Exports MyComic's own `preferences` rows under their original key names,
@@ -290,12 +364,87 @@ class MihonBackupExporter {
     return !PrefRedactionPolicy.isDeviceLocalOrCredential(key);
   }
 
+  /// 「图源设置」: one `BackupSourcePreferences` per Source that still has
+  /// configuration, keyed by Mihon's `source_<sourceId>`.
+  ///
+  /// Imported settings for a source that was not installed are kept under
+  /// [kUnavailableMihonExtensionPackage]; they describe nothing the user can
+  /// use today, so they are skipped along with preference rows whose value has
+  /// no standard Mihon envelope (empty groups are not written either).
+  Future<List<MihonBackupSourcePreferences>> _sourcePreferences(
+    MihonBackupExportOptions options,
+  ) async {
+    if (!options.includeSourceSettings) {
+      return const <MihonBackupSourcePreferences>[];
+    }
+    final List<MangaSourcePreferenceRow> rows = await database
+        .select(database.mangaSourcePreferences)
+        .get();
+    final Map<int, List<MangaSourcePreferenceRow>> bySource =
+        <int, List<MangaSourcePreferenceRow>>{};
+    for (final MangaSourcePreferenceRow row in rows) {
+      if (row.extensionPackage == kUnavailableMihonExtensionPackage) continue;
+      final int? sourceId = int.tryParse(row.sourceId);
+      if (sourceId == null) continue;
+      bySource
+          .putIfAbsent(sourceId, () => <MangaSourcePreferenceRow>[])
+          .add(row);
+    }
+
+    final List<int> sourceIds = bySource.keys.toList()..sort();
+    final List<MihonBackupSourcePreferences> containers =
+        <MihonBackupSourcePreferences>[];
+    for (final int sourceId in sourceIds) {
+      final List<MangaSourcePreferenceRow> prefRows = bySource[sourceId]!
+        ..sort(
+          (MangaSourcePreferenceRow a, MangaSourcePreferenceRow b) =>
+              a.preferenceKey.compareTo(b.preferenceKey),
+        );
+      final List<MihonBackupPreference> preferences = <MihonBackupPreference>[];
+      for (final MangaSourcePreferenceRow row in prefRows) {
+        final String key = row.preferenceKey.trim();
+        if (key.isEmpty) continue;
+        // Same credential semantics as app settings (ticket 11): passwords,
+        // tokens and keys only leave the device when explicitly requested.
+        if (!options.includeSensitiveSettings &&
+            PrefRedactionPolicy.isDeviceLocalOrCredential(key)) {
+          continue;
+        }
+        final MihonBackupPreferenceValue? value = _jsonPreferenceValue(
+          row.valueJson,
+        );
+        if (value == null) continue;
+        preferences.add(MihonBackupPreference(key: key, value: value));
+      }
+      if (preferences.isEmpty) continue;
+      containers.add(
+        MihonBackupSourcePreferences(
+          sourceKey: 'source_$sourceId',
+          preferences: preferences,
+        ),
+      );
+    }
+    return containers;
+  }
+
+  /// Source preference rows store plain JSON (`MihonPreference.encodeValue`).
+  static MihonBackupPreferenceValue? _jsonPreferenceValue(String raw) {
+    try {
+      return _mihonPreferenceValue(jsonDecode(raw));
+    } on FormatException {
+      return null;
+    }
+  }
+
   /// Maps a [PrefCodec]-encoded row onto one of Mihon's six standard preference
   /// value envelopes. Returns null for shapes no standard envelope can carry
   /// (explicit null, JSON objects, non-string lists): Mihon aborts the whole
   /// restore on an unknown serial name, so those rows are skipped instead.
-  static MihonBackupPreferenceValue? _preferenceValue(String raw) {
-    final Object? value = PrefCodec.decodeUntyped(raw);
+  static MihonBackupPreferenceValue? _preferenceValue(String raw) =>
+      _mihonPreferenceValue(PrefCodec.decodeUntyped(raw));
+
+  /// Shared value-shape mapping for app preferences and source preferences.
+  static MihonBackupPreferenceValue? _mihonPreferenceValue(Object? value) {
     if (value is bool) {
       return MihonBackupPreferenceValue(
         type: MihonBackupPreferenceType.boolean,

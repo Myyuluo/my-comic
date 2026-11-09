@@ -254,14 +254,79 @@ void main() {
     );
   });
 
-  testWidgets('sensitive settings require app settings to be selected', (
+  testWidgets('extension stores and source settings default on', (
     WidgetTester tester,
   ) async {
     final _TestAppModel appModel = _TestAppModel(db, paths);
     await tester.pumpWidget(_harness(appModel, const CreateBackupPage()));
     await tester.pumpAndSettle();
-
     await _scrollToSettings(tester);
+
+    expect(find.text('插件商店'), findsOneWidget);
+    expect(find.text('图源设置'), findsOneWidget);
+    expect(
+      _tile(tester, const Key('create_backup_include_extension_stores')).value,
+      isTrue,
+    );
+    expect(
+      _tile(tester, const Key('create_backup_include_source_settings')).value,
+      isTrue,
+    );
+
+    // Re-opening the page restores the defaults; the choice is not remembered.
+    await tester.ensureVisible(
+      find.byKey(const Key('create_backup_include_extension_stores')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const Key('create_backup_include_extension_stores')),
+    );
+    await tester.ensureVisible(
+      find.byKey(const Key('create_backup_include_source_settings')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const Key('create_backup_include_source_settings')),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      _tile(tester, const Key('create_backup_include_extension_stores')).value,
+      isFalse,
+    );
+    await tester.pumpWidget(
+      _harness(
+        appModel,
+        const CreateBackupPage(key: ValueKey<String>('reopened-stores')),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await _scrollToSettings(tester);
+    expect(
+      _tile(tester, const Key('create_backup_include_extension_stores')).value,
+      isTrue,
+    );
+    expect(
+      _tile(tester, const Key('create_backup_include_source_settings')).value,
+      isTrue,
+    );
+  });
+
+  testWidgets('sensitive settings need app settings or source settings', (
+    WidgetTester tester,
+  ) async {
+    final _TestAppModel appModel = _TestAppModel(db, paths);
+    await tester.pumpWidget(_harness(appModel, const CreateBackupPage()));
+    await tester.pumpAndSettle();
+    await _scrollToSettings(tester);
+
+    expect(
+      _tile(
+        tester,
+        const Key('create_backup_include_sensitive_settings'),
+      ).enabled,
+      isNot(false),
+    );
+
     await tester.tap(
       find.byKey(const Key('create_backup_include_app_settings')),
     );
@@ -270,6 +335,23 @@ void main() {
       _tile(tester, const Key('create_backup_include_app_settings')).value,
       isFalse,
     );
+    expect(
+      _tile(
+        tester,
+        const Key('create_backup_include_sensitive_settings'),
+      ).enabled,
+      isNot(false),
+      reason: 'source settings are still exported',
+    );
+
+    await tester.ensureVisible(
+      find.byKey(const Key('create_backup_include_source_settings')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const Key('create_backup_include_source_settings')),
+    );
+    await tester.pumpAndSettle();
     expect(
       _tile(
         tester,
@@ -290,59 +372,74 @@ void main() {
       ).enabled,
       isNot(false),
     );
+
+    await tester.tap(
+      find.byKey(const Key('create_backup_include_app_settings')),
+    );
+    await tester.ensureVisible(
+      find.byKey(const Key('create_backup_include_source_settings')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const Key('create_backup_include_source_settings')),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      _tile(
+        tester,
+        const Key('create_backup_include_sensitive_settings'),
+      ).enabled,
+      isNot(false),
+      reason: 'source settings alone keep sensitive settings available',
+    );
   });
 
-  testWidgets(
-    'app settings count as exportable content for the create button',
-    (WidgetTester tester) async {
-      final _TestAppModel appModel = _TestAppModel(db, paths);
-      await tester.pumpWidget(_harness(appModel, const CreateBackupPage()));
-      await tester.pumpAndSettle();
+  testWidgets('every settings section counts as exportable content', (
+    WidgetTester tester,
+  ) async {
+    final _TestAppModel appModel = _TestAppModel(db, paths);
+    await tester.pumpWidget(_harness(appModel, const CreateBackupPage()));
+    await tester.pumpAndSettle();
 
-      await tester.tap(find.byKey(const Key('create_backup_include_library')));
-      await tester.tap(
-        find.byKey(const Key('create_backup_include_categories')),
-      );
-      await tester.pumpAndSettle();
-      expect(
-        tester
-            .widget<FushiFilledButton>(
-              find.byKey(const Key('create_backup_create')),
-            )
-            .onPressed,
-        isNotNull,
-        reason: 'app settings alone are still worth exporting',
-      );
+    Finder createButton() => find.byKey(const Key('create_backup_create'));
+    bool enabled() =>
+        tester.widget<FushiFilledButton>(createButton()).onPressed != null;
 
-      await _scrollToSettings(tester);
-      await tester.tap(
-        find.byKey(const Key('create_backup_include_app_settings')),
-      );
-      await tester.pumpAndSettle();
-      expect(
-        tester
-            .widget<FushiFilledButton>(
-              find.byKey(const Key('create_backup_create')),
-            )
-            .onPressed,
-        isNull,
-        reason: 'nothing selectable remains',
-      );
+    await tester.tap(find.byKey(const Key('create_backup_include_library')));
+    await tester.tap(find.byKey(const Key('create_backup_include_categories')));
+    await _scrollToSettings(tester);
+    await tester.tap(
+      find.byKey(const Key('create_backup_include_app_settings')),
+    );
+    await tester.pumpAndSettle();
+    expect(enabled(), isTrue, reason: 'stores and source settings remain');
 
-      await tester.tap(
-        find.byKey(const Key('create_backup_include_app_settings')),
-      );
-      await tester.pumpAndSettle();
-      expect(
-        tester
-            .widget<FushiFilledButton>(
-              find.byKey(const Key('create_backup_create')),
-            )
-            .onPressed,
-        isNotNull,
-      );
-    },
-  );
+    await tester.ensureVisible(
+      find.byKey(const Key('create_backup_include_source_settings')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const Key('create_backup_include_source_settings')),
+    );
+    await tester.pumpAndSettle();
+    expect(enabled(), isTrue, reason: 'extension stores alone are exportable');
+
+    await tester.ensureVisible(
+      find.byKey(const Key('create_backup_include_extension_stores')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const Key('create_backup_include_extension_stores')),
+    );
+    await tester.pumpAndSettle();
+    expect(enabled(), isFalse, reason: 'nothing selectable remains');
+
+    await tester.tap(
+      find.byKey(const Key('create_backup_include_app_settings')),
+    );
+    await tester.pumpAndSettle();
+    expect(enabled(), isTrue);
+  });
 
   testWidgets(
     'created backup passes the app settings selection to the exporter',
@@ -377,6 +474,8 @@ void main() {
 
       expect(exporter.options, isNotNull);
       expect(exporter.options!.includeAppSettings, isTrue);
+      expect(exporter.options!.includeExtensionStores, isTrue);
+      expect(exporter.options!.includeSourceSettings, isTrue);
       expect(exporter.options!.includeSensitiveSettings, isTrue);
     },
   );
@@ -433,6 +532,20 @@ void main() {
       await tester.tap(
         find.byKey(const Key('create_backup_include_app_settings')),
       );
+      await tester.ensureVisible(
+        find.byKey(const Key('create_backup_include_extension_stores')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const Key('create_backup_include_extension_stores')),
+      );
+      await tester.ensureVisible(
+        find.byKey(const Key('create_backup_include_source_settings')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const Key('create_backup_include_source_settings')),
+      );
       await tester.pumpAndSettle();
       expect(
         tester
@@ -445,7 +558,9 @@ void main() {
       );
 
       // Scroll back up to the 书架 group before re-enabling it.
-      await tester.drag(find.byType(ListView), const Offset(0, 400));
+      await tester.ensureVisible(
+        find.byKey(const Key('create_backup_include_library')),
+      );
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('create_backup_include_library')));
       await tester.pumpAndSettle();
@@ -522,40 +637,39 @@ void main() {
     expect(find.text(t.backup_export_success), findsOneWidget);
   });
 
-  testWidgets(
-    '进度记录 starts selected and depends on 书架中的作品',
-    (WidgetTester tester) async {
-      final _TestAppModel appModel = _TestAppModel(db, paths);
-      await tester.pumpWidget(_harness(appModel, const CreateBackupPage()));
-      await tester.pumpAndSettle();
+  testWidgets('进度记录 starts selected and depends on 书架中的作品', (
+    WidgetTester tester,
+  ) async {
+    final _TestAppModel appModel = _TestAppModel(db, paths);
+    await tester.pumpWidget(_harness(appModel, const CreateBackupPage()));
+    await tester.pumpAndSettle();
 
-      expect(find.text('进度记录'), findsOneWidget);
-      expect(
-        _tile(tester, const Key('create_backup_include_tracking')).value,
-        isTrue,
-        reason: '进度记录 defaults to checked',
-      );
-      expect(
-        _tile(tester, const Key('create_backup_include_tracking')).enabled,
-        isNot(false),
-      );
+    expect(find.text('进度记录'), findsOneWidget);
+    expect(
+      _tile(tester, const Key('create_backup_include_tracking')).value,
+      isTrue,
+      reason: '进度记录 defaults to checked',
+    );
+    expect(
+      _tile(tester, const Key('create_backup_include_tracking')).enabled,
+      isNot(false),
+    );
 
-      await tester.tap(find.byKey(const Key('create_backup_include_library')));
-      await tester.pumpAndSettle();
-      expect(
-        _tile(tester, const Key('create_backup_include_tracking')).enabled,
-        isFalse,
-        reason: '进度记录 cannot be exported without 书架中的作品',
-      );
+    await tester.tap(find.byKey(const Key('create_backup_include_library')));
+    await tester.pumpAndSettle();
+    expect(
+      _tile(tester, const Key('create_backup_include_tracking')).enabled,
+      isFalse,
+      reason: '进度记录 cannot be exported without 书架中的作品',
+    );
 
-      await tester.tap(find.byKey(const Key('create_backup_include_library')));
-      await tester.pumpAndSettle();
-      expect(
-        _tile(tester, const Key('create_backup_include_tracking')).enabled,
-        isNot(false),
-      );
-    },
-  );
+    await tester.tap(find.byKey(const Key('create_backup_include_library')));
+    await tester.pumpAndSettle();
+    expect(
+      _tile(tester, const Key('create_backup_include_tracking')).enabled,
+      isNot(false),
+    );
+  });
 
   testWidgets('unchecking「分类」greys out 创建 only when nothing is selected', (
     WidgetTester tester,
@@ -585,6 +699,20 @@ void main() {
     await tester.tap(
       find.byKey(const Key('create_backup_include_app_settings')),
     );
+    await tester.ensureVisible(
+      find.byKey(const Key('create_backup_include_extension_stores')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const Key('create_backup_include_extension_stores')),
+    );
+    await tester.ensureVisible(
+      find.byKey(const Key('create_backup_include_source_settings')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const Key('create_backup_include_source_settings')),
+    );
     await tester.pumpAndSettle();
     expect(
       tester
@@ -593,7 +721,7 @@ void main() {
           )
           .onPressed,
       isNull,
-      reason: '书架中的作品, 分类 and 应用设置 are all unselected',
+      reason: 'every exportable section is unselected',
     );
 
     // Scroll back up to the 书架 group before re-enabling 分类.

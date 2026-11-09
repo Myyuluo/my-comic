@@ -40,9 +40,12 @@ void main() {
         reason: 'BUG-3101：不得在 deleteBook 之后再按 uid 删一次 srt 行',
       );
       // 不写死门控的字面形状：删除结果的类型会随需求扩展。BUG-439 的不变量是
-      // **门控本身**——计数器只能由这次删除的返回值决定。
+      // **门控本身**——计数器只能由这次删除的返回值决定。票 02 起在线漫画 /
+      // 本地漫画分支用 removeMangaFromLibrary 的成功结果累加 `succeeded`。
       expect(
-        RegExp(r'if \(removed(\.\w+)?( > 0)?\) deleted\+\+').hasMatch(body),
+        RegExp(
+          r'if \(removed(\.\w+)?( > 0)?\) \{?\s*(?:deleted|succeeded)\+\+',
+        ).hasMatch(body),
         isTrue,
         reason: 'only real deletions may be counted (BUG-439).',
       );

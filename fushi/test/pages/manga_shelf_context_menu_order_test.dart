@@ -203,21 +203,24 @@ void main() {
     expectDeleteIsDestructive(tester);
   });
 
-  testWidgets('点列表末位的删除仍走原有删除确认', (WidgetTester tester) async {
+  testWidgets('点列表末位的删除仍走统一移出确认', (WidgetTester tester) async {
     await openMangaMenu(tester);
 
-    // 确认框要等一次真实 DB 探测（hasLocalFiles），fake 时钟的 pump 送不到。
     await tester.runAsync(() async {
       await tester.tap(find.text(t.dialog_delete));
       await tester.pump();
-      await _pumpUntil(tester, find.text(t.epub_delete_title));
+      await _pumpUntil(
+        tester,
+        find.text(t.manga_series_remove_from_bookshelf),
+      );
     });
 
     expect(
-      find.text(t.epub_delete_title),
+      find.text(t.manga_series_remove_from_bookshelf),
       findsOneWidget,
-      reason: '删除从危险区移进列表，但确认流程不能绕过',
+      reason: '删除从危险区移进列表，但统一移出确认流程不能绕过（票 02）',
     );
+    expect(find.text(t.manga_series_remove_confirm), findsOneWidget);
   });
 
   testWidgets('作品页「管理本卷」打开同一份顺序与样式的菜单', (WidgetTester tester) async {
