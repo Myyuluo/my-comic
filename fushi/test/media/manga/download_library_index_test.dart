@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:fushi/src/media/manga/download/download_library_index.dart';
 import 'package:fushi/src/media/manga/library/manga_chapter_download_state.dart';
+import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi_engine/epub/epub_storage.dart';
 import 'package:fushi_engine/media/manga/download_library_storage.dart';
@@ -360,5 +361,147 @@ void main() {
 
     await index.deleteChapter(bookKey: bookKey, chapterKey: '/c/2');
     expect(File(p.join(mangaDir, 'Chapter 2.cbz')).existsSync(), isFalse);
+  });
+
+  // ── 任意在线条目的已下载状态（ticket 07） ─────────────────────────────
+  //
+  // 详情页不再要求 Library 行：按 entry 身份（runtime + 数字 sourceId +
+  // seriesKey）查映射，没有映射/行时用 `pages.json` 身份扫描 downloads 与
+  // local。没有 manifest 的目录绝不按标题猜测。
+  group('在线条目身份', () {
+    const OnlineMangaLibraryEntry entry = OnlineMangaLibraryEntry(
+      runtime: OnlineMangaRuntimeKind.mihon,
+      extensionPackage: 'org.example.fixture',
+      sourceId: '1',
+      series: OnlineMangaSeries(
+        key: '/series/fixture',
+        title: 'Fixture series',
+        raw: <String, Object?>{'url': '/series/fixture'},
+      ),
+      chapters: <OnlineMangaChapter>[
+        OnlineMangaChapter(
+          key: '/c/1',
+          name: 'Chapter 1',
+          raw: <String, Object?>{'url': '/c/1'},
+        ),
+        OnlineMangaChapter(
+          key: '/c/2',
+          name: 'Chapter 2',
+          raw: <String, Object?>{'url': '/c/2'},
+        ),
+      ],
+    );
+
+    /// 在一个漫画目录下写一章「完整下载」：页图 + pages.json。
+    Future<void> writeManifestChapter(
+      String mangaDirPath,
+      String containerName,
+      String chapterKey,
+    ) async {
+      final Directory chapterDir = downloadChapterDirectory(
+        mangaDirPath,
+        containerName,
+      );
+      await chapterDir.create(recursive: true);
+      await File(p.join(chapterDir.path, '001.jpg')).writeAsBytes(<int>[1]);
+      await writePagesManifestAtomically(chapterDir, manifestFor(chapterKey));
+    }
+
+    test('无 Library 行时按 pages.json 身份从 downloads 识别已下载章', () async {
+      final String otherMangaDir = p.join(
+        root.path,
+        'downloads',
+        'Example Source',
+        'Not in library',
+      );
+      await writeManifestChapter(otherMangaDir, 'Chapter 1', '/c/1');
+
+      final Set<String> downloaded = await DownloadLibraryIndex(
+        db,
+      ).downloadedChapterKeysForEntry(entry);
+
+      expect(downloaded, <String>{'/c/1'});
+    });
+
+    test('local 中带 manifest 的文件夹可关联到在线条目', () async {
+      final Directory localRoot = Directory(p.join(root.path, 'local'));
+      await writeManifestChapter(
+        p.join(localRoot.path, '不同的本地文件夹名'),
+        'Chapter 2',
+        '/c/2',
+      );
+
+      final Set<String> downloaded = await DownloadLibraryIndex(
+        db,
+        localComicRoot: localRoot,
+      ).downloadedChapterKeysForEntry(entry);
+
+      expect(downloaded, <String>{'/c/2'});
+    });
+
+    test('local 中没有 manifest 的文件夹不按标题关联', () async {
+      final Directory localRoot = Directory(p.join(root.path, 'local'));
+      // 目录名与作品标题完全相同、也有可读页图——但没有 pages.json 身份。
+      final Directory chapterDir = Directory(
+        p.join(localRoot.path, 'Fixture series', 'Chapter 1'),
+      )..createSync(recursive: true);
+      File(p.join(chapterDir.path, '001.jpg')).writeAsBytesSync(<int>[1]);
+
+      final Set<String> downloaded = await DownloadLibraryIndex(
+        db,
+        localComicRoot: localRoot,
+      ).downloadedChapterKeysForEntry(entry);
+
+      expect(downloaded, isEmpty, reason: '无 manifest 不得按标题猜测');
+    });
+
+    test('多个目录的 manifest 都匹配同一作品时不猜', () async {
+      final String sourceDir = p.join(root.path, 'downloads', 'Example Source');
+      await writeManifestChapter(
+        p.join(sourceDir, 'Copy A'),
+        'Chapter 1',
+        '/c/1',
+      );
+      await writeManifestChapter(
+        p.join(sourceDir, 'Copy B'),
+        'Chapter 2',
+        '/c/2',
+      );
+
+      final Set<String> downloaded = await DownloadLibraryIndex(
+        db,
+      ).downloadedChapterKeysForEntry(entry);
+
+      expect(downloaded, isEmpty, reason: '多个副本可证明同身份时也不猜');
+    });
+
+    test('有行时映射与 downloads/local manifest 扫描合并', () async {
+      // 映射：/c/1 在行自己的漫画目录里。
+      await writeManifestChapter(mangaDir, 'Mapped Chapter', '/c/1');
+      await db.upsertMangaChapterDir(
+        bookKey: bookKey,
+        chapterKey: '/c/1',
+        folderName: 'Mapped Chapter',
+        updatedAt: 1,
+      );
+      // manifest：/c/2 在 local 里。
+      final Directory localRoot = Directory(p.join(root.path, 'local'));
+      await writeManifestChapter(
+        p.join(localRoot.path, 'Local copy'),
+        'Chapter 2',
+        '/c/2',
+      );
+
+      final Set<String> downloaded =
+          await DownloadLibraryIndex(
+            db,
+            localComicRoot: localRoot,
+          ).downloadedChapterKeysForEntry(
+            entry,
+            row: await db.getEpubBook(bookKey),
+          );
+
+      expect(downloaded, <String>{'/c/1', '/c/2'});
+    });
   });
 }

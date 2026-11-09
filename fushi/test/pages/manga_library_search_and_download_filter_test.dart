@@ -305,6 +305,48 @@ void main() {
     );
   }
 
+  /// Ticket 07：完整章 + `pages.json`，但**不写映射**——只能按 manifest 身份
+  /// 认出已下载。身份用这本书自己的描述符（不是共享夹具里的固定 series key）。
+  Future<void> writeManifestOnlyChapter(
+    String bookKey, {
+    required String chapterKey,
+    String? folderName,
+  }) async {
+    final EpubBookRow row = (await db.getEpubBook(bookKey))!;
+    final OnlineMangaLibraryEntry entry = OnlineMangaLibraryEntry.tryParse(
+      row.sourceMetadata,
+    )!;
+    final Directory chapterDir = downloadChapterDirectory(
+      row.extractDir,
+      folderName ?? folderFor(chapterKey),
+    );
+    await chapterDir.create(recursive: true);
+    await File(p.join(chapterDir.path, '001.jpg')).writeAsBytes(<int>[1]);
+    await writePagesManifestAtomically(
+      chapterDir,
+      MangaPagesManifest(
+        sourceRuntime: entry.runtime.wireValue,
+        sourceId: entry.sourceId,
+        sourceName: 'Example Source',
+        extensionPackage: entry.extensionPackage,
+        mangaKey: entry.series.key,
+        mangaTitle: entry.series.title,
+        chapterKey: chapterKey,
+        chapterName: chapterKey,
+        payload: const MokuroPayload(
+          images: <MokuroImage>[
+            MokuroImage(
+              url: '001.jpg',
+              size: MokuroSize(100, 150),
+              blocks: <MokuroBlock>[],
+            ),
+          ],
+        ),
+        downloadedAt: DateTime.utc(2026, 11, 7),
+      ),
+    );
+  }
+
   Widget buildApp(List<MediaItem> items) => ProviderScope(
     overrides: <Override>[
       appProvider.overrideWith((ref) => appModel),
@@ -620,6 +662,40 @@ void main() {
 
     await pickReadStatus(tester, 'all');
     expect(countText(tester, 'shelf'), '2', reason: '下载筛选保持生效');
+  });
+
+  testWidgets('只有 manifest、没有映射的下载目录按身份算已下载（与作品页一致）', (
+    WidgetTester tester,
+  ) async {
+    await tester.runAsync(() async {
+      await seedOnlineManga(
+        bookKey: 'm1',
+        title: '只有 manifest',
+        chapters: <String>['/c/1'],
+      );
+      await writeManifestOnlyChapter(
+        'm1',
+        chapterKey: '/c/1',
+        folderName: 'Ch 1',
+      );
+    });
+    mangaItems.add(mangaItem('m1', '只有 manifest'));
+    await pumpShelf(tester, mangaItems);
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('library_sort_menu_button')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey<String>('shelf_filter_download_downloaded')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      mangaCard('m1'),
+      findsOneWidget,
+      reason: '书架与作品页同一份 pages.json 身份判据',
+    );
   });
 
   testWidgets('下载筛选与当前页签 AND；搜索词切页签保留且数量同步重算', (

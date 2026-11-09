@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:fushi/src/utils/components/glass/fushi_icon.dart';
 import 'package:fushi_core/fushi_core.dart';
+import 'package:fushi/src/media/manga/download/download_identity.dart';
 import 'package:fushi/src/media/manga/download/download_library_index.dart';
 import 'package:fushi/src/media/manga/download/manga_download_service.dart';
 import 'package:fushi/src/media/manga/history/manga_history.dart';
@@ -256,6 +257,15 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
   /// 不反复打扰；下次打开作品页再下载仍可再次询问。
   bool _addToShelfPromptShown = false;
 
+  /// manifest 扫描缓存（ticket 07）：任务表进度更新不会改变身份/状态签名，
+  /// 不必每次都把整个 `downloads` + `local` 重扫一遍。
+  Set<String> _manifestDownloaded = const <String>{};
+  String? _manifestScanKey;
+
+  /// 并发重算的代号：任务表事件与页面加载/刷新可能同时触发，只让最后一轮
+  /// 写回状态，避免旧结果覆盖新一轮章节表。
+  int _downloadStateRevision = 0;
+
   /// 本地卷的阅读位置（`sectionIndex` = 页号，阅读器 `_persistPosition` 写）。
   ReaderPosition? _localPosition;
 
@@ -430,13 +440,17 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     super.dispose();
   }
 
-  /// 重算下载状态位并（首次）订阅任务表。只对在库条目有意义：未入库的作品既没有
-  /// 任务也没有章目录。
+  /// 重算下载状态位并（首次）订阅任务表。
+  ///
+  /// Ticket 07：不再要求 Library 行。有行时走记录的章节映射；没有映射 / 没有
+  /// 行的章再按 entry 身份扫描 `downloads` 与 `local` 的 `pages.json`（无
+  /// manifest 的目录不按标题猜测）。
   Future<void> _refreshDownloadState() async {
+    final int revision = ++_downloadStateRevision;
     final EpubBookRow? row = _row;
     final OnlineMangaLibraryEntry? entry = _entry;
     final AppModel? appModel = _appModelOrNull;
-    if (row == null || appModel == null) return;
+    if (appModel == null) return;
 
     // Local source（ADR 0013）：作品目录必须仍在**当前** `local` 根内。
     // 切换 Content root 后库里的旧路径不重基，这里把整部作品的章标成 Missing，
@@ -445,6 +459,7 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     // Ticket 10：源未安装时恢复出来的本地条目指向当前 `downloads` 根里的漫画
     // 目录，同样算「在当前内容根内」，不能整本标 Missing。
     if (_isLocalSource) {
+      if (row == null) return;
       final bool withinLocal = isLocalSourcePathWithinRoot(
         row.extractDir,
         appModel.appPaths.localComicRoot,
@@ -459,7 +474,7 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
       final Set<String> next = missing
           ? _localChapters.map((LocalSourceChapterRecord c) => c.key).toSet()
           : const <String>{};
-      if (!mounted) return;
+      if (!mounted || revision != _downloadStateRevision) return;
       final bool changed =
           _localMissingChapterKeys.length != next.length ||
           !_localMissingChapterKeys.containsAll(next);
@@ -481,14 +496,46 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
         );
       },
     );
+    // 非书架 / 无行时任务仍按 entry 身份推导出的 bookKey 落库。
+    final String bookKey =
+        row?.bookKey ?? OnlineMangaLibraryService.bookKeyOf(entry);
     final Map<String, MangaDownloadJobRow> jobs = await downloads.jobsForBook(
-      row.bookKey,
+      bookKey,
     );
-    final Set<String> downloaded = await DownloadLibraryIndex(appModel.database)
-        .downloadedChapterKeys(
-          row.bookKey,
-          entry.chapters.map((OnlineMangaChapter chapter) => chapter.key),
-        );
+    final List<String> chapterKeys = <String>[
+      for (final OnlineMangaChapter chapter in entry.chapters) chapter.key,
+    ];
+    final DownloadLibraryIndex index = DownloadLibraryIndex(
+      appModel.database,
+      downloadsRoot: appModel.appPathsOrNull?.downloadsRoot,
+      localComicRoot: appModel.appPathsOrNull?.localComicRoot,
+    );
+    final Set<String> mapped = row == null
+        ? <String>{}
+        : await index.downloadedChapterKeys(bookKey, chapterKeys);
+    // 身份 + 章节表 + 任务状态签名：进度更新（pagesDone）不触发全库重扫；
+    // 章节表刷新、完成 / 取消 / 删除等状态变化会。
+    final String scanKey =
+        '${entry.runtime.wireValue}\u0000${entry.extensionPackage}\u0000'
+        '${entry.sourceId}\u0000${entry.series.key}\u0000'
+        '${chapterKeys.join('\u0001')}\u0000'
+        '${<String>[for (final MangaDownloadJobRow job in jobs.values) '${job.jobId}:${job.status}'].join('|')}';
+    if (_manifestScanKey != scanKey) {
+      final MangaDownloadIdentity identity = MangaDownloadIdentity.ofEntry(
+        entry,
+      );
+      final Set<String> scanned = chapterKeys.isEmpty
+          ? const <String>{}
+          : (await index.scanDisks(
+              identities: <MangaDownloadIdentity>[identity],
+            )).downloadedChapterKeys(identity, chapterKeys);
+      if (!mounted || revision != _downloadStateRevision) return;
+      _manifestDownloaded = scanned;
+      _manifestScanKey = scanKey;
+    }
+    final Set<String> downloaded = <String>{...mapped, ..._manifestDownloaded};
+    if (!mounted || revision != _downloadStateRevision) return;
+    // 票 05：任务状态基线只由最后一轮重算推进，避免并发旧结果吞掉完成事件。
     final Map<String, String> jobStatuses = <String, String>{
       for (final MapEntry<String, MangaDownloadJobRow> job in jobs.entries)
         job.key: job.value.status,
@@ -502,7 +549,6 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
         );
     _observedJobStatuses = jobStatuses;
     _jobStatusBaselineReady = true;
-    if (!mounted) return;
     setState(() {
       _jobs = jobs;
       _downloaded = downloaded;
@@ -539,6 +585,23 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
         ),
       ),
     );
+  }
+
+  /// 用户主动删掉下载后：让 manifest 扫描缓存失效，并立即把章节行切回未下载。
+  ///
+  /// 删除后的重算是异步的（要探磁盘），不能让已删的章在等待期间继续显示
+  /// 「已下载」；下一轮 [_refreshDownloadState] 会从映射 + manifest 重建。
+  void _forgetDownloadedChapters(Iterable<String> chapterKeys) {
+    _manifestScanKey = null;
+    final Set<String> keys = chapterKeys.toSet();
+    _manifestDownloaded = _manifestDownloaded.difference(keys);
+    if (keys.isEmpty) return;
+    void apply() => _downloaded = _downloaded.difference(keys);
+    if (mounted) {
+      setState(apply);
+    } else {
+      apply();
+    }
   }
 
   Future<void> _enqueueChapter(OnlineMangaChapter chapter) async {
@@ -630,6 +693,7 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
       if (job != null) {
         await appModel.mangaDownloadService.remove(job.jobId);
       }
+      _forgetDownloadedChapters(<String>[chapter.key]);
       if (mounted) FushiToast.show(msg: t.storage_entry_delete_done);
     } on Object catch (error, stack) {
       ErrorLogService.instance.log(
@@ -1218,6 +1282,9 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
           );
           _refreshSucceeded = true;
         });
+        // 章节列表变了：已下载状态的章集合也要按新章节身份重算（首次打开
+        // 源页时 seed 往往只有标题，下载判据要等这次刷新后的章节表）。
+        unawaited(_refreshDownloadState());
         return;
       }
       final OnlineMangaLibraryEntry updated = await service.refreshFromSource(
@@ -1231,6 +1298,7 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
         if (row != null) _row = row;
         _refreshSucceeded = true;
       });
+      unawaited(_refreshDownloadState());
     } on OnlineMangaUnavailable catch (error, stack) {
       // 这条**才是**在线漫画的主流失败路径：adapter 已经把 Mihon/Aidoku 的运行时
       // 与网络异常全包成了 OnlineMangaUnavailable，兜底的 `on Object` 基本收不到
@@ -2026,6 +2094,7 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     );
     if (!confirmed || !mounted) return;
     setState(() => _batchRunning = true);
+    final Set<String> deletedChapterKeys = <String>{};
     try {
       final DownloadLibraryIndex index = DownloadLibraryIndex(
         appModel.database,
@@ -2035,6 +2104,7 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
           bookKey: row.bookKey,
           chapterKey: chapter.key,
         );
+        deletedChapterKeys.add(chapter.key);
         // done 任务行是「这章曾经下载过」的持久标记。用户主动删除下载时必须
         // 一起清掉，否则磁盘判据变 false、任务仍 done → 被误显示成 Missing。
         final MangaDownloadJobRow? job = _jobs[chapter.key];
@@ -2056,6 +2126,7 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
         );
       }
     } finally {
+      _forgetDownloadedChapters(deletedChapterKeys);
       await _refreshDownloadState();
       if (mounted) {
         _syncVisibleSelectionOrder();
