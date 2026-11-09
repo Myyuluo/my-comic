@@ -18,6 +18,8 @@ import 'package:fushi/src/media/manga/library/manga_chapter_download_state.dart'
 import 'package:fushi/src/media/manga/library/manga_chapter_list.dart';
 import 'package:fushi/src/media/manga/library/manga_download_planner.dart';
 import 'package:fushi/src/media/manga/library/manga_resume_point.dart';
+import 'package:fushi/src/media/manga/library/manga_shelf_removal_dialog.dart';
+import 'package:fushi/src/media/manga/library/manga_shelf_removal_service.dart';
 import 'package:fushi/src/media/manga/manga_cover_placeholder.dart';
 import 'package:fushi/src/media/manga/manga_global_search_page.dart';
 import 'package:fushi/src/media/manga/mihon/mihon_enabled_sources.dart';
@@ -32,7 +34,6 @@ import 'package:fushi/src/utils/misc/reveal_in_file_manager.dart'
     show currentRevealHost, revealFirstOf;
 import 'package:fushi/src/media/display_title.dart';
 import 'package:fushi/src/media/media_item.dart';
-import 'package:fushi/src/media/online/online_shelf_removal.dart';
 import 'package:fushi/src/media/online/online_source_error_text.dart';
 import 'package:fushi/src/media/online/online_work_detail.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
@@ -50,7 +51,6 @@ import 'package:fushi/src/utils/misc/error_details_dialog.dart';
 import 'package:fushi/utils.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_layout.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_library.dart';
-import 'package:fushi_engine/sync/deletion_propagation.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 /// 作品页要显示**哪一部**作品。
@@ -1170,26 +1170,16 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     final OnlineMangaLibraryEntry? entry = _entry;
     if (service == null || entry == null || _busy || _row != null) return;
     // 票 04：已有 Tag 时先选标签；取消（null）则不创建 Library 条目。
-    final Set<int>? selectedTagIds = await _pickTagsBeforeLibraryAdd(entry);
+    final Set<int>? selectedTagIds = await _pickTagsBeforeLibraryAdd(
+      OnlineMangaLibraryService.bookKeyOf(entry),
+    );
     if (selectedTagIds == null || !mounted) return;
     setState(() => _busy = true);
     try {
       final EpubBookRow row = await service.add(entry);
       if (!mounted) return;
       // 条目已入架；标签分配在创建成功后统一写入，加入失败时不会留下分配。
-      if (selectedTagIds.isNotEmpty) {
-        try {
-          await service.database.setTagsForBook(row.bookKey, selectedTagIds);
-        } on Object catch (error, stack) {
-          ErrorLogService.instance.log('MangaSeriesPage.addTags', error, stack);
-          if (mounted) {
-            FushiToast.show(
-              msg: describeOnlineSourceError(error),
-              severity: ToastSeverity.error,
-            );
-          }
-        }
-      }
+      await _applySelectedTags(row.bookKey, selectedTagIds);
       if (!mounted) return;
       setState(() {
         _row = row;
@@ -1209,11 +1199,12 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     }
   }
 
-  /// 加入书架前的标签选择（票 04）。返回 null = 用户取消本次加入；空集合 =
+  /// 加入书架前的标签选择（票 04/05）。返回 null = 用户取消本次加入；空集合 =
   /// 用户确认按未打标签加入（或全局还没有任何 Tag，直接加入）。
-  Future<Set<int>?> _pickTagsBeforeLibraryAdd(
-    OnlineMangaLibraryEntry entry,
-  ) async {
+  ///
+  /// 只选不写：选中的 Tag 由调用方在 Library 条目创建成功后统一写入，取消或
+  /// 加入失败都不会留下 Tag 分配。
+  Future<Set<int>?> _pickTagsBeforeLibraryAdd(String bookKey) async {
     final AppModel? appModel = _appModelOrNull;
     if (appModel == null) return const <int>{};
     final List<BookTagRow> tags;
@@ -1234,21 +1225,44 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
       context,
       targets: TagTargets(
         media: <MediaRef>[
-          MediaRef(
-            kind: MediaKind.epub,
-            entryKey: OnlineMangaLibraryService.bookKeyOf(entry),
-          ),
+          MediaRef(kind: MediaKind.epub, entryKey: bookKey),
         ],
       ),
     );
   }
 
+  /// 写入加入书架时选中的 Tag。条目已入架，失败只提示，不撤销条目。
+  Future<void> _applySelectedTags(String bookKey, Set<int> tagIds) async {
+    final AppModel? appModel = _appModelOrNull;
+    if (appModel == null || tagIds.isEmpty) return;
+    try {
+      await appModel.database.setTagsForBook(bookKey, tagIds);
+    } on Object catch (error, stack) {
+      ErrorLogService.instance.log('MangaSeriesPage.addTags', error, stack);
+      if (mounted) {
+        FushiToast.show(
+          msg: describeOnlineSourceError(error),
+          severity: ToastSeverity.error,
+        );
+      }
+    }
+  }
+
   /// 未入库本地作品显式「加入书架」。
+  ///
+  /// 票 05：已有 Tag 时先选标签；取消（null）则不登记。标签在登记成功后统一
+  /// 写入；点章节的静默登记走 [_openChapterAt] → [_registerScannedLocal]，没有
+  /// 这一步，保持未打标签。
   Future<void> _addScannedLocalToLibrary(LocalSourceManga manga) async {
     if (_busy) return;
+    final String bookKey = localSourceBookKeyFor(manga.directoryPath);
+    final Set<int>? selectedTagIds = await _pickTagsBeforeLibraryAdd(bookKey);
+    if (selectedTagIds == null || !mounted) return;
     setState(() => _busy = true);
     try {
-      await _registerScannedLocal(manga);
+      final String? registeredKey = await _registerScannedLocal(manga);
+      if (registeredKey == null) return;
+      await _applySelectedTags(registeredKey, selectedTagIds);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -1316,7 +1330,8 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
       return;
     }
     if (entry == null) return;
-    final DeleteDecision? decision = await _confirmRemoveFromLibrary(appModel);
+    final MangaLibraryRemovalDecision? decision =
+        await _confirmRemoveFromLibrary();
     if (decision == null || !mounted) return;
     setState(() => _busy = true);
     try {
@@ -1334,16 +1349,14 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
           await downloads.remove(job.jobId);
         }
       }
-      final DeleteBookResult result = await ReaderFushiSource.instance
-          .deleteBook(
-            db: appModel.database,
-            bookKey: row.bookKey,
-            scope: decision.scope,
-            deleteLocalFiles: decision.deleteLocalFiles,
-            deleteStatistics: decision.deleteStatistics,
-          );
+      final MangaLibraryRemovalResult result = await removeMangaFromLibrary(
+        db: appModel.database,
+        bookKey: row.bookKey,
+        deleteLocalFiles: decision.deleteLocalFiles,
+        deleteStatistics: decision.deleteStatistics,
+      );
       if (!mounted) return;
-      if (!result.deleted) {
+      if (!result.removed) {
         final String reason = result.failureReason ?? '';
         FushiToast.show(
           msg: reason.isEmpty
@@ -1378,37 +1391,37 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     }
   }
 
-  /// Local source 的「移出书架」：只删 Library 记录并立墓碑，**不删文件**
-  /// （ADR 0013）。删除本地文件是设置/作品页之外的单独动作（ticket 06 只提供
-  /// [LocalSourceLibrary.deleteLocalFiles] 的显式确认入口）。
+  /// Local source 的「移出书架」：与在线作品页同一个统一弹窗。默认只删 Library
+  /// 记录并立墓碑（ADR 0013）；勾选「同时删除本地文件」时先删 Local source root
+  /// 里的原作文件夹/文件，成功后才删行。文件删除失败时作品留在架上并提示。
   Future<void> _removeLocalSourceFromLibrary(
     EpubBookRow row,
     AppModel appModel,
   ) async {
-    final bool confirmed = await showFushiConfirmDialog(
-      context: context,
-      title: t.manga_series_remove_from_bookshelf,
-      message: t.manga_series_remove_local_confirm,
-      cancelLabel: t.dialog_cancel,
-      confirmLabel: t.dialog_ok,
-      destructive: true,
-    );
-    if (!confirmed || !mounted) return;
+    final MangaLibraryRemovalDecision? decision =
+        await _confirmRemoveFromLibrary();
+    if (decision == null || !mounted) return;
     setState(() => _busy = true);
     try {
-      final bool removed = await LocalSourceLibrary(
+      final MangaLibraryRemovalResult result = await removeMangaFromLibrary(
         db: appModel.database,
-        root: appModel.appPaths.localComicRoot,
-      ).removeFromLibrary(row.bookKey);
+        bookKey: row.bookKey,
+        localSourceRoot: appModel.appPaths.localComicRoot,
+        deleteLocalFiles: decision.deleteLocalFiles,
+        deleteStatistics: decision.deleteStatistics,
+      );
       if (!mounted) return;
-      if (!removed) {
+      if (!result.removed) {
+        final String reason = result.failureReason ?? '';
         FushiToast.show(
-          msg: t.epub_delete_error,
+          msg: reason.isEmpty
+              ? t.epub_delete_error
+              : '${t.epub_delete_error}: $reason',
           severity: ToastSeverity.error,
         );
         return;
       }
-      // Local source 的章节表住在刚删掉的行里；回书架，磁盘文件原样保留。
+      // Local source 的章节表住在刚删掉的行里；回书架。
       final NavigatorState navigator = Navigator.of(context);
       if (navigator.canPop()) navigator.pop();
     } on Object catch (error, stack) {
@@ -1504,12 +1517,10 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     }
   }
 
-  /// 与书架长按删除同一个确认框（[confirmRemoveOnlineWorkFromShelf]）。
-  Future<DeleteDecision?> _confirmRemoveFromLibrary(AppModel appModel) =>
-      confirmRemoveOnlineWorkFromShelf(
-        context: context,
-        appModel: appModel,
-        title: t.manga_series_remove_from_bookshelf,
+  /// 在线与本地 Manga 共用的统一移出弹窗（票 01）。
+  Future<MangaLibraryRemovalDecision?> _confirmRemoveFromLibrary() =>
+      showMangaShelfRemovalDialog(
+        context,
         message: t.manga_series_remove_confirm,
         localFilesSubtitle: t.delete_local_files_download_desc,
         statisticsSubtitle: t.delete_statistics_manga_desc,
