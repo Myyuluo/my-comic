@@ -115,11 +115,10 @@ void main() {
   Future<String> registerManga(WidgetTester tester, Directory dir) async {
     late String bookKey;
     await tester.runAsync(() async {
-      final LocalSourceManga manga =
-          (await scanLocalSourceMangaDirectory(
-            dir,
-            relativePath: p.basename(dir.path),
-          ))!;
+      final LocalSourceManga manga = (await scanLocalSourceMangaDirectory(
+        dir,
+        relativePath: p.basename(dir.path),
+      ))!;
       await LocalSourceLibrary(
         db: db,
         root: paths.localComicRoot,
@@ -146,9 +145,8 @@ void main() {
     });
   }
 
-  Finder cardFor(Directory dir) => find.byKey(
-    ValueKey<String>('local_source_item_${dir.path}'),
-  );
+  Finder cardFor(Directory dir) =>
+      find.byKey(ValueKey<String>('local_source_item_${dir.path}'));
 
   Finder selectToggle() =>
       find.byKey(const ValueKey<String>('local_source_select_toggle'));
@@ -178,9 +176,8 @@ void main() {
   BatchActionBar batchBar(WidgetTester tester) =>
       tester.widget<BatchActionBar>(find.byType(BatchActionBar));
 
-  bool batchButtonEnabled(WidgetTester tester, String key) => tester
-      .widget<FushiIconButton>(find.byKey(ValueKey<String>(key)))
-      .enabled;
+  bool batchButtonEnabled(WidgetTester tester, String key) =>
+      tester.widget<FushiIconButton>(find.byKey(ValueKey<String>(key))).enabled;
 
   Finder batchActionText(String text) => find.descendant(
     of: find.byType(BatchActionBar),
@@ -248,9 +245,7 @@ void main() {
     );
   }
 
-  testWidgets('右上角「选择」进入选择模式、按钮变 X；点 X 退出', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('右上角「选择」进入选择模式、按钮变 X；点 X 退出', (WidgetTester tester) async {
     final Directory alphaDir = writeManga('Alpha');
     await pumpPage(tester, cardFor(alphaDir));
 
@@ -275,9 +270,7 @@ void main() {
     );
   });
 
-  testWidgets('选择模式中按系统返回 / ESC 先退出选择，而不是离开页面', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('选择模式中按系统返回 / ESC 先退出选择，而不是离开页面', (WidgetTester tester) async {
     final Directory alphaDir = writeManga('Alpha');
     await pumpPage(tester, cardFor(alphaDir));
     await tapSelectToggle(tester);
@@ -496,19 +489,9 @@ void main() {
       isNot(contains(alphaKey)),
       reason: '取消不写墓碑',
     );
-    expect(
-      File(p.join(alphaDir.path, 'Ch 1', '001.jpg')).existsSync(),
-      isTrue,
-    );
-    expect(
-      File(p.join(betaDir.path, 'Ch 1', '001.jpg')).existsSync(),
-      isTrue,
-    );
-    expect(
-      selectToggleShowsClose(tester),
-      isTrue,
-      reason: '取消后仍留在选择模式，可以重新操作',
-    );
+    expect(File(p.join(alphaDir.path, 'Ch 1', '001.jpg')).existsSync(), isTrue);
+    expect(File(p.join(betaDir.path, 'Ch 1', '001.jpg')).existsSync(), isTrue);
+    expect(selectToggleShowsClose(tester), isTrue, reason: '取消后仍留在选择模式，可以重新操作');
     expect(find.byType(BatchActionBar), findsOneWidget);
   });
 
@@ -540,10 +523,7 @@ void main() {
       isTrue,
       reason: '未勾选「同时删除本地文件」时保留 local 原作',
     );
-    expect(
-      File(p.join(betaDir.path, 'Ch 1', '001.jpg')).existsSync(),
-      isTrue,
-    );
+    expect(File(p.join(betaDir.path, 'Ch 1', '001.jpg')).existsSync(), isTrue);
     expect(selectToggleShowsClose(tester), isFalse, reason: '批量成功后退出选择');
     expect(
       find.text(t.local_source_batch_remove_done(success: 1, failed: 0)),
@@ -621,11 +601,7 @@ void main() {
       isNull,
     );
     expect(await db.getTagsForBook(alphaKey), isEmpty);
-    expect(
-      await loadMangaHistory(db),
-      hasLength(2),
-      reason: '移出书架不删除 History',
-    );
+    expect(await loadMangaHistory(db), hasLength(2), reason: '移出书架不删除 History');
     expect(
       await db.getStudySegmentsForMedia(
         mediaKind: kActivityMediaBook,
@@ -642,9 +618,7 @@ void main() {
     await tester.pump(const Duration(seconds: 3));
   });
 
-  testWidgets('批量移出勾选「同时删除统计数据」：删统计与墓碑，原作保留', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('批量移出勾选「同时删除统计数据」：删统计与墓碑，原作保留', (WidgetTester tester) async {
     final Directory alphaDir = writeManga('Alpha');
     final Directory betaDir = writeManga('Beta');
     final String alphaKey = await registerManga(tester, alphaDir);
@@ -668,10 +642,7 @@ void main() {
       isTrue,
       reason: '未勾选「同时删除本地文件」时原作保留',
     );
-    expect(
-      File(p.join(betaDir.path, 'Ch 1', '001.jpg')).existsSync(),
-      isTrue,
-    );
+    expect(File(p.join(betaDir.path, 'Ch 1', '001.jpg')).existsSync(), isTrue);
     for (final String bookKey in <String>[alphaKey, betaKey]) {
       expect(
         await db.getStudySegmentsForMedia(
@@ -750,9 +721,7 @@ void main() {
     await tester.pump(const Duration(seconds: 3));
   });
 
-  testWidgets('两个批量动作始终显示；没有适用的选中项时置灰', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('两个批量动作始终显示；没有适用的选中项时置灰', (WidgetTester tester) async {
     final Directory alphaDir = writeManga('Alpha');
     final Directory betaDir = writeManga('Beta');
     await registerManga(tester, alphaDir);
@@ -790,9 +759,7 @@ void main() {
     expect(batchButtonEnabled(tester, 'local_source_batch_remove'), isFalse);
   });
 
-  testWidgets('全选 / 反选只作用于当前页签 + 搜索后可见的列表', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('全选 / 反选只作用于当前页签 + 搜索后可见的列表', (WidgetTester tester) async {
     final Directory alphaDir = writeManga('Alpha');
     writeManga('Beta');
     writeManga('Gamma');
@@ -821,11 +788,7 @@ void main() {
 
     await tester.tap(batchActionText(t.batch_invert_selection));
     await tester.pumpAndSettle();
-    expect(
-      batchBar(tester).selectedCount,
-      0,
-      reason: '反选同样只在可见集合内取补集',
-    );
+    expect(batchBar(tester).selectedCount, 0, reason: '反选同样只在可见集合内取补集');
 
     await tester.tap(batchActionText(t.batch_select_all));
     await tester.pumpAndSettle();
@@ -868,24 +831,14 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(
-      selectToggleShowsClose(tester),
-      isFalse,
-      reason: '切页签立即退出选择模式',
-    );
+    expect(selectToggleShowsClose(tester), isFalse, reason: '切页签立即退出选择模式');
     expect(find.byType(BatchActionBar), findsNothing);
 
     await tapSelectToggle(tester);
-    expect(
-      batchBar(tester).selectedCount,
-      0,
-      reason: '切换页签清空旧选择，再次进入时从零开始',
-    );
+    expect(batchBar(tester).selectedCount, 0, reason: '切换页签清空旧选择，再次进入时从零开始');
   });
 
-  testWidgets('批量移出部分失败：报告失败数量、退出选择且页面不崩', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('批量移出部分失败：报告失败数量、退出选择且页面不崩', (WidgetTester tester) async {
     final Directory alphaDir = writeManga('Alpha');
     final String alphaKey = await registerManga(tester, alphaDir);
     await pumpPage(tester, cardFor(alphaDir));
@@ -912,10 +865,7 @@ void main() {
       findsOneWidget,
       reason: '部分失败不崩溃，页面照常显示扫描结果',
     );
-    expect(
-      File(p.join(alphaDir.path, 'Ch 1', '001.jpg')).existsSync(),
-      isTrue,
-    );
+    expect(File(p.join(alphaDir.path, 'Ch 1', '001.jpg')).existsSync(), isTrue);
 
     await tester.pump(const Duration(seconds: 3));
   });

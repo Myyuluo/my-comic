@@ -29,6 +29,9 @@ class MihonBackupWriter {
     for (final MapEntry<int, String> source in data.sourceNames.entries) {
       top.bytes(101, _encodeSource(source.key, source.value));
     }
+    for (final MihonBackupPreference preference in data.preferences) {
+      top.bytes(104, _encodePreference(preference));
+    }
     for (final MihonBackupSourcePreferences preferences
         in data.sourcePreferences) {
       top.bytes(105, _encodeSourcePreferences(preferences));
@@ -278,9 +281,11 @@ class _ProtoWriter {
 
   static void _writeVarint(BytesBuilder builder, int value) {
     int remaining = value;
-    while (remaining >= 0x80) {
+    // Negative int32/int64 values are sign-extended to a 64-bit unsigned
+    // varint (10 bytes); `>>>` keeps the loop from spinning on -1.
+    while (remaining < 0 || remaining >= 0x80) {
       builder.addByte((remaining & 0x7f) | 0x80);
-      remaining >>= 7;
+      remaining >>>= 7;
     }
     builder.addByte(remaining);
   }

@@ -197,10 +197,12 @@ class _LocalSourceBrowsePageState extends ConsumerState<LocalSourceBrowsePage> {
   /// 卡片点击：选择模式内切换选中（Shift = 区间选）；普通模式打开作品页。
   void _handleCardTap(LocalSourceManga manga) {
     if (_selectionMode) {
-      setState(() => _selection.applyTap(
-        SelectionSlot.loose(manga.directoryPath),
-        selectionTapKind(),
-      ));
+      setState(
+        () => _selection.applyTap(
+          SelectionSlot.loose(manga.directoryPath),
+          selectionTapKind(),
+        ),
+      );
       return;
     }
     unawaited(_openManga(manga));
@@ -219,17 +221,21 @@ class _LocalSourceBrowsePageState extends ConsumerState<LocalSourceBrowsePage> {
   }
 
   void _selectAll() {
-    setState(() => _selection.selectAll(
-      loose: _selection.visibleLooseKeys,
-      collections: const <int>[],
-    ));
+    setState(
+      () => _selection.selectAll(
+        loose: _selection.visibleLooseKeys,
+        collections: const <int>[],
+      ),
+    );
   }
 
   void _invertSelection() {
-    setState(() => _selection.invert(
-      loose: _selection.visibleLooseKeys,
-      collections: const <int>[],
-    ));
+    setState(
+      () => _selection.invert(
+        loose: _selection.visibleLooseKeys,
+        collections: const <int>[],
+      ),
+    );
   }
 
   /// 当前可见列表里被选中的作品（批量动作的作用域；不可见项不参与）。
@@ -483,9 +489,7 @@ class _LocalSourceBrowsePageState extends ConsumerState<LocalSourceBrowsePage> {
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
                 child: FushiSearchBar(
-                  fieldKey: const ValueKey<String>(
-                    'local_source_search_field',
-                  ),
+                  fieldKey: const ValueKey<String>('local_source_search_field'),
                   focusId: const FushiFocusId('local-source-browse-search'),
                   controller: _searchController,
                   focusNode: _searchFocus,
@@ -530,8 +534,9 @@ class _LocalSourceBrowsePageState extends ConsumerState<LocalSourceBrowsePage> {
   /// （加入只看未入架、移出只看已入架，混合选择各按适用子集执行）。
   Widget _buildBatchActionBar(BuildContext context) {
     final List<LocalSourceManga> selected = _selectedWorks();
-    final bool hasAddable =
-        selected.any((LocalSourceManga manga) => !_isInLibrary(manga));
+    final bool hasAddable = selected.any(
+      (LocalSourceManga manga) => !_isInLibrary(manga),
+    );
     final bool hasRemovable = selected.any(_isInLibrary);
     return BatchActionBar(
       selectedCount: _selection.length,
@@ -575,7 +580,9 @@ class _LocalSourceBrowsePageState extends ConsumerState<LocalSourceBrowsePage> {
         LibrarySectionTab<LocalSourceShelfFilter>(
           value: LocalSourceShelfFilter.notInLibrary,
           label: t.local_source_filter_not_in_library,
-          labelKey: const ValueKey<String>('local_source_filter_not_in_library'),
+          labelKey: const ValueKey<String>(
+            'local_source_filter_not_in_library',
+          ),
         ),
         LibrarySectionTab<LocalSourceShelfFilter>(
           value: LocalSourceShelfFilter.inLibrary,
@@ -691,7 +698,8 @@ class _LocalSourceBrowsePageState extends ConsumerState<LocalSourceBrowsePage> {
             File(p.join(manga.directoryPath, relative)),
             fit: BoxFit.cover,
             // 坏封面 / 扫描后被移走的文件退回占位，不让网格解码报错。
-            errorBuilder: (_, Object error, __) => const MangaCoverPlaceholder(),
+            errorBuilder: (_, Object error, __) =>
+                const MangaCoverPlaceholder(),
           );
     if (!_selectionMode) return cover;
     final FushiDesignTokens tokens = FushiDesignTokens.of(context);
@@ -709,7 +717,6 @@ class _LocalSourceBrowsePageState extends ConsumerState<LocalSourceBrowsePage> {
       ],
     );
   }
-
 }
 
 /// Local source root 读不了（目录不存在 / 无权限）时抛给浏览页的错误态。

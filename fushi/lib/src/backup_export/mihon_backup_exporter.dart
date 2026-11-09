@@ -1,20 +1,31 @@
 import 'dart:io';
 
+import 'package:drift/drift.dart';
 import 'package:fushi_core/fushi_core.dart';
+import 'package:fushi_engine/media/tracking/media_tracking_repository.dart'
+    show kTrackingProviderBangumi, TrackingMediaType;
 
 import 'package:fushi/src/backup_export/mihon_backup_writer.dart';
+import 'package:fushi/src/backup_import/mihon_backup_import_service.dart'
+    show kMihonBangumiTrackerId;
 import 'package:fushi/src/backup_import/mihon_backup_parser.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
+import 'package:fushi/src/sync/pref_redaction_policy.dart';
+import 'package:fushi/src/sync/sync_repository.dart';
 
 /// Which Mihon backup sections the user asked for.
 ///
-/// Ticket 07 ships Library + Chapters; later tickets add History, categories,
-/// tracking, app settings, extension stores and source settings. The page owns
-/// the dependency rules; the exporter only honours the resolved options.
+/// Ticket 07 ships Library + Chapters; ticket 10 adds Tracking. Later tickets
+/// add History, categories, app settings, extension stores and source settings.
+/// The page owns the dependency rules; the exporter only honours the resolved
+/// options.
 class MihonBackupExportOptions {
   const MihonBackupExportOptions({
     this.includeLibrary = true,
     this.includeChapters = true,
+    this.includeTracking = true,
+    this.includeAppSettings = true,
+    this.includeSensitiveSettings = false,
   });
 
   /// 「书架中的作品」: export Library manga as `favorite=true`.
@@ -23,9 +34,22 @@ class MihonBackupExportOptions {
   /// 「章节」: export each manga's chapter list (read state, progress, dates).
   final bool includeChapters;
 
+  /// 「进度记录」: export each manga's Bangumi tracking record. The UI label
+  /// follows Mihon's reference layout, but the data is Tracking, not Reading
+  /// progress. Depends on [includeLibrary] like the other per-manga sections.
+  final bool includeTracking;
+
+  /// 「应用设置」: export MyComic's own preference rows (`BackupPreferences`,
+  /// proto field 104) without mapping key names to Mihon's.
+  final bool includeAppSettings;
+
+  /// 「包含敏感设置」: keep credentials in app / source settings. Device-local
+  /// keys never leave the device even when this is true.
+  final bool includeSensitiveSettings;
+
   /// Whether the resolved selection produces a non-empty backup. Later tickets
   /// add the standalone categories / settings sections here.
-  bool get hasExportableContent => includeLibrary;
+  bool get hasExportableContent => includeLibrary || includeAppSettings;
 }
 
 class MihonBackupExportProgress {
@@ -79,6 +103,13 @@ class MihonBackupExporter {
     final List<_ExportableManga> exportable = await _exportableManga(options);
     final Map<String, Map<String, MangaChapterStateRow>> chapterStates =
         options.includeChapters ? await _loadChapterStates() : const {};
+    final Map<String, MihonBackupTracking> trackingByBook =
+        options.includeLibrary && options.includeTracking
+        ? await _loadTrackingByBook()
+        : const <String, MihonBackupTracking>{};
+    final List<MihonBackupPreference> preferences = await _appPreferences(
+      options,
+    );
 
     final List<MihonBackupManga> mangas = <MihonBackupManga>[];
     final Map<int, String> sourceNames = <int, String>{};
@@ -95,6 +126,7 @@ class MihonBackupExporter {
             )
           : const <MihonBackupChapter>[];
 
+      final MihonBackupTracking? tracking = trackingByBook[candidate.row.bookKey];
       mangas.add(
         MihonBackupManga(
           source: candidate.sourceId,
@@ -113,7 +145,9 @@ class MihonBackupExporter {
           chapters: chapters,
           categoryOrders: const <int>[],
           history: const <MihonBackupHistory>[],
-          tracking: const <MihonBackupTracking>[],
+          tracking: tracking == null
+              ? const <MihonBackupTracking>[]
+              : <MihonBackupTracking>[tracking],
         ),
       );
 
@@ -135,7 +169,94 @@ class MihonBackupExporter {
       mangas: List<MihonBackupManga>.unmodifiable(mangas),
       categories: const <MihonBackupCategory>[],
       sourceNames: Map<int, String>.unmodifiable(sourceNames),
+      preferences: List<MihonBackupPreference>.unmodifiable(preferences),
     );
+  }
+
+  /// Exports MyComic's own `preferences` rows under their original key names,
+  /// wrapped in Mihon's six standard value envelopes. MyComic keys are not
+  /// mapped to Mihon key names on purpose (spec: 不做 Mihon 键名映射).
+  Future<List<MihonBackupPreference>> _appPreferences(
+    MihonBackupExportOptions options,
+  ) async {
+    if (!options.includeAppSettings) {
+      return const <MihonBackupPreference>[];
+    }
+    final Map<String, String> all = await database.getAllPrefs();
+    // Stable order keeps backup bytes deterministic for a given database.
+    final List<String> keys = all.keys.toList()..sort();
+    final List<MihonBackupPreference> preferences = <MihonBackupPreference>[];
+    for (final String key in keys) {
+      if (!_shouldExportPreference(
+        key,
+        includeSensitive: options.includeSensitiveSettings,
+      )) {
+        continue;
+      }
+      final MihonBackupPreferenceValue? value = _preferenceValue(all[key]!);
+      if (value == null) continue;
+      preferences.add(MihonBackupPreference(key: key, value: value));
+    }
+    return preferences;
+  }
+
+  /// Device-local rows describe this device (paths, device ids, sync state) and
+  /// never belong in a portable backup, sensitive checkbox or not. Credential
+  /// rows use the existing [PrefRedactionPolicy] semantics and are only written
+  /// when the user explicitly includes sensitive settings.
+  static bool _shouldExportPreference(
+    String key, {
+    required bool includeSensitive,
+  }) {
+    // The prefs-version counter is a per-install cache-invalidation signal
+    // written on every preference change, not a user setting.
+    if (key == FushiDatabase.prefsVersionKey) return false;
+    if (SyncRepository.deviceLocalPrefKeys.contains(key)) return false;
+    if (includeSensitive) return true;
+    return !PrefRedactionPolicy.isDeviceLocalOrCredential(key);
+  }
+
+  /// Maps a [PrefCodec]-encoded row onto one of Mihon's six standard preference
+  /// value envelopes. Returns null for shapes no standard envelope can carry
+  /// (explicit null, JSON objects, non-string lists): Mihon aborts the whole
+  /// restore on an unknown serial name, so those rows are skipped instead.
+  static MihonBackupPreferenceValue? _preferenceValue(String raw) {
+    final Object? value = PrefCodec.decodeUntyped(raw);
+    if (value is bool) {
+      return MihonBackupPreferenceValue(
+        type: MihonBackupPreferenceType.boolean,
+        value: value,
+      );
+    }
+    if (value is int) {
+      final bool fitsInt32 = value >= -0x80000000 && value <= 0x7fffffff;
+      return MihonBackupPreferenceValue(
+        type: fitsInt32
+            ? MihonBackupPreferenceType.integer
+            : MihonBackupPreferenceType.long,
+        value: value,
+      );
+    }
+    if (value is double) {
+      return MihonBackupPreferenceValue(
+        type: MihonBackupPreferenceType.float,
+        value: value,
+      );
+    }
+    if (value is String) {
+      return MihonBackupPreferenceValue(
+        type: MihonBackupPreferenceType.string,
+        value: value,
+      );
+    }
+    if (value is List &&
+        value.every((Object? item) => item is String)) {
+      return MihonBackupPreferenceValue(
+        type: MihonBackupPreferenceType.stringSet,
+        value: List<String>.from(value),
+      );
+    }
+    return null;
   }
 
   /// Writes the backup into [target] via a temp file in the same directory,
@@ -225,6 +346,81 @@ class MihonBackupExporter {
           )[state.chapterKey] = state;
     }
     return byBook;
+  }
+
+  /// Loads the Bangumi Tracking records stored for Library manga, keyed by the
+  /// book key that also identifies the Manga row.
+  ///
+  /// MyComic has no tracker rows other than `provider = bangumi`, and Mihon
+  /// trackers it cannot represent are never written here, so nothing is
+  /// fabricated for unsupported providers.
+  Future<Map<String, MihonBackupTracking>> _loadTrackingByBook() async {
+    final List<MediaTrackingMappingRow> mappings =
+        await (database.select(database.mediaTrackingMappings)..where(
+              (t) =>
+                  t.provider.equals(kTrackingProviderBangumi) &
+                  t.mediaType.equals(TrackingMediaType.book.value),
+            ))
+            .get();
+    if (mappings.isEmpty) return const <String, MihonBackupTracking>{};
+
+    final Set<int> mappingIds = <int>{
+      for (final MediaTrackingMappingRow mapping in mappings) mapping.id,
+    };
+    final Map<int, MediaTrackingOutboxRow> outboxByMapping =
+        <int, MediaTrackingOutboxRow>{
+          for (final MediaTrackingOutboxRow outbox
+              in await (database.select(database.mediaTrackingOutbox)
+                    ..where((t) => t.mappingId.isIn(mappingIds)))
+                  .get())
+            outbox.mappingId: outbox,
+        };
+
+    final Map<String, MihonBackupTracking> result =
+        <String, MihonBackupTracking>{};
+    for (final MediaTrackingMappingRow mapping in mappings) {
+      result[mapping.mediaKey] = _backupTracking(
+        mapping,
+        outboxByMapping[mapping.id],
+      );
+    }
+    return result;
+  }
+
+  /// Maps the locally stored mapping + sync progress to Mihon's BackupTracking.
+  ///
+  /// Only the fields MyComic actually keeps are exported: remote work id, last
+  /// chapter read, completion (derived Bangumi status), and the stored dates.
+  /// Score and total chapters have no local source, so they stay at proto
+  /// defaults instead of being invented.
+  static MihonBackupTracking _backupTracking(
+    MediaTrackingMappingRow mapping,
+    MediaTrackingOutboxRow? outbox,
+  ) {
+    final int progress = outbox?.progress ?? 0;
+    final bool completed = outbox?.completed ?? false;
+    // Bangumi collection types: 1 = wish, 2 = completed, 3 = reading.
+    final int status = completed ? 2 : (progress > 0 ? 3 : 1);
+    final String title = mapping.subjectName.trim().isNotEmpty
+        ? mapping.subjectName
+        : mapping.mediaTitle;
+    return MihonBackupTracking(
+      syncId: kMihonBangumiTrackerId,
+      libraryId: null,
+      mediaIdInt: null,
+      trackingUrl: '',
+      title: title,
+      lastChapterRead: progress.toDouble(),
+      totalChapters: 0,
+      score: 0,
+      status: status,
+      startedReadingDate: mapping.createdAt > 0 ? mapping.createdAt : null,
+      finishedReadingDate: completed && mapping.updatedAt > 0
+          ? mapping.updatedAt
+          : null,
+      private: false,
+      mediaId: mapping.subjectId,
+    );
   }
 
   Future<Map<int, String>> _knownSourceNames() async {
