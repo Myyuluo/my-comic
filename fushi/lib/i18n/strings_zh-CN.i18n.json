@@ -4467,6 +4467,7 @@
   "manga_series_refresh": "刷新章节",
   "manga_series_refresh_failed": "无法从来源刷新",
   "manga_series_remove_confirm": "把这部作品移出书架？阅读进度与已读标记会一并删除。",
+  "manga_series_remove_confirm_batch": "确定把选中的 $n 部作品移出书架？阅读进度与已读标记会一并删除。",
   "manga_series_remove_from_bookshelf": "移出漫画书架",
   "manga_series_sort_newest": "最新在前",
   "manga_series_sort_oldest": "最早在前",

@@ -22,7 +22,6 @@ import 'package:fushi/src/models/preferences_repository.dart';
 import 'package:fushi/src/pages/implementations/reader_fushi_history_page.dart';
 import 'package:fushi/src/utils/components/fushi_icon_button.dart';
 import 'package:fushi/src/utils/fushi_icons.dart';
-import 'package:fushi/utils.dart' show FushiFilledButton;
 import 'package:fushi_audio/fushi_audio.dart';
 import 'package:fushi_core/fushi_core.dart';
 
@@ -320,22 +319,17 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(
-      find.byType(ReaderHistoryDeleteDialog),
+      find.text(t.manga_series_remove_from_bookshelf),
       findsOneWidget,
-      reason: '批量删除必须真的弹出确认框',
+      reason: '批量删除必须真的弹出票 01 的统一确认框',
     );
     expect(
       find.text(t.delete_local_files_audio_desc),
       findsNothing,
-      reason: '37 表 schema 没有 audiobooks/srt_books：不应摆出可删原件的勾选',
+      reason: '统一弹窗不再使用有声书专用「原始音频」文案',
     );
 
-    await tester.tap(
-      find.descendant(
-        of: find.byType(ReaderHistoryDeleteDialog),
-        matching: find.byType(FushiFilledButton),
-      ),
-    );
+    await tester.tap(find.text(t.dialog_delete));
     await tester.pump();
     // 删除带真实文件 IO 与进度弹窗：用 runAsync 放真时间、pump 推帧，
     // 交替直到 DB 行真的消失。

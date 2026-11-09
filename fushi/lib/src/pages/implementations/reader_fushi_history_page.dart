@@ -37,6 +37,8 @@ import 'package:fushi/src/media/manga/interconnect/interconnect_manga_source.dar
 import 'package:fushi/src/media/manga/download/download_library_index.dart';
 import 'package:fushi/src/media/manga/library/manga_download_planner.dart';
 import 'package:fushi/src/media/manga/library/manga_shelf_download_state.dart';
+import 'package:fushi/src/media/manga/library/manga_shelf_removal_dialog.dart';
+import 'package:fushi/src/media/manga/library/manga_shelf_removal_service.dart';
 import 'package:fushi/src/media/manga/library/manga_shelf_unread.dart';
 import 'package:fushi/src/media/manga/library/manga_series_page.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
@@ -2678,14 +2680,14 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
               : Icons.subtitles_outlined,
           onPressed: () => _toggleFloatingLyricFromShelf(bookKey),
         ),
-      // 漫画卡：删除排在列表末位（不再单列危险区），但保留危险红色；
-      // 点击仍走 [_confirmDeleteEpub] 的原有确认流程。
+      // 漫画卡：删除排在列表末位（不再单列危险区），但保留危险红色。
+      // 票 02：点击走与作品页 / 批量删除共用的统一移出弹窗。
       if (isManga)
         DialogListAction(
           label: t.dialog_delete,
           icon: FushiIcons.delete,
           destructive: true,
-          onPressed: () => _confirmDeleteEpub(item, bookKey),
+          onPressed: () => _confirmMangaShelfDelete(bookKey),
         ),
     ];
   }

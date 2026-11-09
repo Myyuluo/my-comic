@@ -4467,6 +4467,7 @@
   "manga_series_refresh": "重新整理章節",
   "manga_series_refresh_failed": "無法從來源重新整理",
   "manga_series_remove_confirm": "把這部作品移出書架？閱讀進度與已讀標記會一併刪除。",
+  "manga_series_remove_confirm_batch": "確定把選中的 $n 部作品移出書架？閱讀進度與已讀標記會一併刪除。",
   "manga_series_remove_from_bookshelf": "移出漫畫書架",
   "manga_series_sort_newest": "最新在前",
   "manga_series_sort_oldest": "最早在前",

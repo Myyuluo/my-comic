@@ -5,6 +5,7 @@ import 'package:fushi_engine/epub/epub_storage.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_library.dart';
 import 'package:fushi_engine/sync/deletion_propagation.dart';
 
+import 'package:fushi/src/media/manga/download/manga_download_service.dart';
 import 'package:fushi/src/media/sources/reader_fushi_source.dart';
 
 /// 「移出书架」的结局。[failureReason] 非空 = 作品仍在 Library（文件删除失败或
@@ -37,6 +38,7 @@ Future<MangaLibraryRemovalResult> removeMangaFromLibrary({
   bool deleteLocalFiles = false,
   bool deleteStatistics = false,
   DeleteScope scope = DeleteScope.keepLocalOnly,
+  MangaDownloadService? downloadService,
 }) async {
   final EpubBookRow? row = await db.getEpubBook(bookKey);
   if (row == null) {
@@ -44,6 +46,20 @@ Future<MangaLibraryRemovalResult> removeMangaFromLibrary({
   }
   final bool localSource =
       LocalSourceMetadata.tryParse(row.sourceMetadata) != null;
+
+  // 在线 Manga 的排队中 / 下载中任务必须先停：任务还握着作品目录，随后删文件
+  // 会撞上仍被 worker 写入的目录；用户移出后也不该继续下载。本地 Manga 没有
+  // 下载任务，跳过。用 remove（等正在飞的那个真停）而不是 cancel（只置标志）。
+  if (!localSource && downloadService != null) {
+    final Map<String, MangaDownloadJobRow> jobs =
+        await downloadService.jobsForBook(bookKey);
+    for (final MangaDownloadJobRow job in jobs.values) {
+      if (job.status == MangaDownloadJobStatus.queued ||
+          job.status == MangaDownloadJobStatus.running) {
+        await downloadService.remove(job.jobId);
+      }
+    }
+  }
 
   if (deleteLocalFiles) {
     if (localSource) {
