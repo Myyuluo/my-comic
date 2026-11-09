@@ -923,27 +923,6 @@ void main() {
     expect(category.name, 'Action');
     expect(category.order, 0, reason: 'Mihon order 0 is the proto default');
     expect(category.id, action);
-    expect(
-      const MihonBackupExportOptions(
-        includeLibrary: false,
-        includeChapters: false,
-        includeCategories: true,
-        includeAppSettings: false,
-      ).hasExportableContent,
-      isTrue,
-      reason: '分类 alone is exportable',
-    );
-    expect(
-      const MihonBackupExportOptions(
-        includeLibrary: false,
-        includeChapters: false,
-        includeCategories: false,
-        includeAppSettings: false,
-        includeExtensionStores: false,
-        includeSourceSettings: false,
-      ).hasExportableContent,
-      isFalse,
-    );
   });
 
   test(

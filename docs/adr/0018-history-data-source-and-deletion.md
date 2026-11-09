@@ -12,7 +12,7 @@ status: accepted
 - 记录身份是「Source + 作品 id」，因此同一部作品从「未入书架」变为「已加入 Library」后仍是同一条历史；历史页优先显示 Library 中的最新标题与封面。
 - 在线作品从来源页开读章节时会先静默加入 Library，进度、已读与历史都按 Library 条目落库；作品之后仅移出 Library（保留文件）时历史仍保留。展示与重新打开所需的来源载荷存入 `snapshotJson`，点击时按来源身份打开来源作品页并拉取详情。
 - 无痕阅读开启时跳过历史写入；已有历史保留。
-- 删除单条或全部历史只删除历史记录，不清除 Reading progress、Chapter 已读标记或 Library 状态。删除整部作品（含文件）时一并删除其历史；仅移出 Library 保留历史。
+- 删除单条或全部历史只删除历史记录，不清除 Reading progress、Chapter 已读标记或 Library 状态。删除整部作品（含文件）时一并删除其历史；仅移出 Library 保留历史。（2026-11-10 修订：见文末 Amendment——漫画的所有「移出 Library」路径始终保留历史。）
 - History 不设条数上限：漫画历史写入不调用 `trimMediaHistory`，第 101 部及之后的作品仍保留。
 - 本功能按全新安装设计：不回填旧阅读数据，也不写历史迁移。
 
@@ -29,3 +29,7 @@ status: accepted
 - 历史行与 Reading progress 是两套数据：删除整部作品、移出书架、清空历史等动作各自维护自己的级联边界。
 - 历史页不会为功能上线前的阅读记录回填；全新安装从空历史开始。
 - 未来任何「最近读过」的展示（尤其是未入书架作品）应从历史记录取，而不是从 `reader_positions` 取。
+
+## Amendment 2026-11-10（manga-ux-backup-batch）
+
+所有漫画「移出 Library」入口（在线 / 本地作品页、书架单卡、书架批量、Local source 页批量）共用同一个移出流程，并**始终保留 History**：移出只删 Library 条目、Reading progress、Chapter 已读标记与 Tag 分配，不删 `media_open_history`。原文「删除整部作品（含文件）时一并删除其历史」对漫画在统一移出流程中已不可达：底层删除以 `removeFromLibraryOnly` 调用，跳过 History 级联，受管漫画卷（无在线 / Local source 描述符）也不例外。独立于移出的「删除本地文件」动作仍按整部作品删除并级联清理历史，与移出流程无关。

@@ -346,6 +346,79 @@ void main() {
   );
 
   test(
+    'rejects an unsupported app preference value type even on an unknown key, before any write',
+    () async {
+      final File backup = await writeFixtureBackup(
+        tmp,
+        categories: const <FixtureCategory>[
+          FixtureCategory(name: 'Action', order: 0, id: 10),
+        ],
+        mangas: const <FixtureManga>[
+          FixtureManga(source: 123, url: '/manga/alpha', title: 'Alpha'),
+        ],
+        preferences: const <FixturePreference>[
+          // Mihon's own key: previously skipped as not-MyComic without looking
+          // at the value type, so an unsupported type slipped through.
+          FixturePreference(
+            key: 'theme_mode',
+            type: FixturePreferenceType.unsupportedValue,
+            value: 'dark',
+          ),
+        ],
+      );
+
+      await expectLater(
+        service().importFile(backup),
+        throwsA(isA<MihonBackupFormatException>()),
+      );
+
+      expect(await db.getAllTags(), isEmpty, reason: 'validation runs before Tag writes');
+      expect(await db.getEpubBookMetas(), isEmpty);
+      expect(await db.getAllPrefs(), isEmpty);
+    },
+  );
+
+  test(
+    'rejects an unsupported source preference value type before any write',
+    () async {
+      final File backup = await writeFixtureBackup(
+        tmp,
+        categories: const <FixtureCategory>[
+          FixtureCategory(name: 'Action', order: 0, id: 10),
+        ],
+        mangas: const <FixtureManga>[
+          FixtureManga(source: 123, url: '/manga/alpha', title: 'Alpha'),
+        ],
+        sourcePreferences: const <FixtureSourcePreferences>[
+          FixtureSourcePreferences(
+            sourceKey: 'source_123',
+            prefs: <FixturePreference>[
+              FixturePreference(
+                key: 'unknown_shape',
+                type: FixturePreferenceType.unsupportedValue,
+                value: 'value',
+              ),
+            ],
+          ),
+        ],
+      );
+
+      await expectLater(
+        service().importFile(backup),
+        throwsA(isA<MihonBackupFormatException>()),
+      );
+
+      expect(await db.getAllTags(), isEmpty, reason: 'validation runs before Tag writes');
+      expect(await db.getEpubBookMetas(), isEmpty);
+      expect(
+        await db.select(db.mangaSourcePreferences).get(),
+        isEmpty,
+        reason: 'no source preference rows are written',
+      );
+    },
+  );
+
+  test(
     're-import merges by source + manga url without duplicating rows',
     () async {
       Future<File> fixture({required bool changed}) => writeFixtureBackup(

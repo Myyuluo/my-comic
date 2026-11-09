@@ -289,6 +289,16 @@ class MihonBackupImportService {
     final MihonBackupData data = MihonBackupParser.parseFile(file);
     final int importNow = _now();
 
+    // No partial import: an unknown preference value type anywhere in field 104
+    // or 105 aborts the whole file before the first write. This includes keys
+    // MyComic does not recognise — Mihon itself refuses an unknown serial name,
+    // and silently skipping it would leave the user with a half-restored file.
+    _ensureSupportedPreferenceTypes(data.preferences);
+    for (final MihonBackupSourcePreferences container
+        in data.sourcePreferences) {
+      _ensureSupportedPreferenceTypes(container.preferences);
+    }
+
     final List<MangaOnlineSourceRow> installed = await database
         .getMangaOnlineSources(mediaKind: 'manga');
     final Map<int, MangaOnlineSourceRow> installedBySourceId =
@@ -594,6 +604,19 @@ class MihonBackupImportService {
   String _identityKey(int sourceId, String mangaUrl) =>
       '$sourceId${String.fromCharCode(0)}$mangaUrl';
 
+  static void _ensureSupportedPreferenceTypes(
+    Iterable<MihonBackupPreference> preferences,
+  ) {
+    for (final MihonBackupPreference preference in preferences) {
+      if (preference.value.type == MihonBackupPreferenceType.unsupported) {
+        throw MihonBackupFormatException(
+          MihonBackupFormatError.corrupt,
+          'unsupported value type for preference "${preference.key}"',
+        );
+      }
+    }
+  }
+
   static void _increment<T>(Map<T, int> counts, T key) {
     counts.update(key, (int value) => value + 1, ifAbsent: () => 1);
   }
@@ -661,16 +684,7 @@ class MihonBackupImportService {
   static String _encodeAppPreferenceValue(MihonBackupPreference preference) {
     final MihonBackupPreferenceType type = preference.value.type;
     final Object? value = preference.value.value;
-    final bool valid = switch (type) {
-      MihonBackupPreferenceType.string => value is String,
-      MihonBackupPreferenceType.boolean => value is bool,
-      MihonBackupPreferenceType.integer ||
-      MihonBackupPreferenceType.long => value is int,
-      MihonBackupPreferenceType.float => value is double,
-      MihonBackupPreferenceType.stringSet => value is List<String>,
-      MihonBackupPreferenceType.unsupported => false,
-    };
-    if (!valid) {
+    if (!MihonBackupPreferenceTypes.matchesValue(type, value)) {
       throw MihonBackupFormatException(
         MihonBackupFormatError.corrupt,
         'unsupported value type for preference "${preference.key}"',
@@ -737,19 +751,18 @@ class MihonBackupImportService {
       return MihonBackupHistorySkipReason.alreadyNewer;
     }
 
-    final Map<String, Object?> snapshot = MangaHistorySnapshot(
+    final MangaHistorySnapshot snapshot = MangaHistorySnapshot(
       title: manga.title,
       author: manga.author,
       imageUrl: manga.thumbnailUrl ?? online.coverUrl,
       online: online,
-    ).toJson();
-    // `mihon_history` is the top-level block the exporter reads back (chapter
-    // URL + duration); `MangaHistorySnapshot` deliberately ignores it.
-    snapshot['mihon_history'] = <String, Object?>{
-      'chapter_url': latest.url,
-      'read_at': latest.lastRead,
-      'read_duration': latest.readDuration,
-    };
+      // The exporter reads this typed block back (chapter URL + duration).
+      mihonHistory: MangaHistoryMihonEntry(
+        chapterUrl: latest.url,
+        lastRead: latest.lastRead,
+        readDuration: latest.readDuration,
+      ),
+    );
 
     await database.upsertMediaOpenHistory(
       MediaOpenHistoryCompanion(
@@ -759,7 +772,7 @@ class MihonBackupImportService {
         openedAt: Value<int>(latest.lastRead),
         position: const Value<int>(0),
         duration: const Value<int>(0),
-        snapshotJson: Value<String>(jsonEncode(snapshot)),
+        snapshotJson: Value<String>(jsonEncode(snapshot.toJson())),
       ),
     );
     return null;
@@ -985,11 +998,11 @@ class MihonBackupImportService {
         'title': row.title,
         'author': row.author,
         if (manga.thumbnailUrl != null) 'imageUrl': manga.thumbnailUrl,
-        'mihon_history': <String, Object?>{
-          'chapter_url': latest.url,
-          'read_at': latest.lastRead,
-          'read_duration': latest.readDuration,
-        },
+        'mihon_history': MangaHistoryMihonEntry(
+          chapterUrl: latest.url,
+          lastRead: latest.lastRead,
+          readDuration: latest.readDuration,
+        ).toJson(),
       });
       await database.upsertMediaOpenHistory(
         MediaOpenHistoryCompanion(
@@ -1351,15 +1364,7 @@ class MihonBackupImportService {
   }
 
   static String _preferenceTypeName(MihonBackupPreferenceType type) =>
-      switch (type) {
-        MihonBackupPreferenceType.string => 'text',
-        MihonBackupPreferenceType.boolean => 'checkBox',
-        MihonBackupPreferenceType.stringSet => 'multiSelect',
-        MihonBackupPreferenceType.integer ||
-        MihonBackupPreferenceType.long ||
-        MihonBackupPreferenceType.float ||
-        MihonBackupPreferenceType.unsupported => 'unsupported',
-      };
+      MihonBackupPreferenceTypes.sourcePreferenceTypeName(type);
 
   /// Assign every category order in the backup Manga to its resolved Tag.
   ///

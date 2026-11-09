@@ -2,6 +2,10 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:fushi/src/backup_import/mihon_backup_preference_types.dart';
+
+export 'mihon_backup_preference_types.dart';
+
 /// Why a `.tachibk` file could not be read.
 enum MihonBackupFormatError {
   /// Zero-byte file.
@@ -353,15 +357,8 @@ class MihonBackupParser {
     }
 
     final String simpleName = serialName.split('.').last;
-    final MihonBackupPreferenceType type = switch (simpleName) {
-      'StringPreferenceValue' => MihonBackupPreferenceType.string,
-      'BooleanPreferenceValue' => MihonBackupPreferenceType.boolean,
-      'IntPreferenceValue' => MihonBackupPreferenceType.integer,
-      'LongPreferenceValue' => MihonBackupPreferenceType.long,
-      'FloatPreferenceValue' => MihonBackupPreferenceType.float,
-      'StringSetPreferenceValue' => MihonBackupPreferenceType.stringSet,
-      _ => MihonBackupPreferenceType.unsupported,
-    };
+    final MihonBackupPreferenceType type =
+        MihonBackupPreferenceTypes.fromSerialName(simpleName);
     if (payload == null) {
       return MihonBackupPreferenceValue(type: type);
     }
@@ -780,25 +777,6 @@ class MihonBackupPreference {
 
   final String key;
   final MihonBackupPreferenceValue value;
-}
-
-enum MihonBackupPreferenceType {
-  string,
-  boolean,
-  integer,
-  long,
-  float,
-  stringSet,
-  unsupported,
-}
-
-class MihonBackupPreferenceValue {
-  const MihonBackupPreferenceValue({required this.type, this.value});
-
-  final MihonBackupPreferenceType type;
-
-  /// `String`, `bool`, `int`, `double` or `List<String>` depending on [type].
-  final Object? value;
 }
 
 /// `BackupExtensionStore` (top-level field 106). Unlike the source preference

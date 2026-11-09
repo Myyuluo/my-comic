@@ -194,6 +194,19 @@ class _CreateBackupPageState extends ConsumerState<CreateBackupPage> {
               }
             : null,
       ),
+      // 分类 = Tags exported as Mihon categories. It is deliberately not tied
+      // to 书架中的作品 so a tags-only backup can be created. Spec order puts
+      // it before 所有已读作品.
+      FushiCheckboxListTile(
+        key: const Key('create_backup_include_categories'),
+        contentPadding: EdgeInsets.zero,
+        controlAffinity: ListTileControlAffinity.leading,
+        value: _includeCategories,
+        title: Text(t.backup_create_categories),
+        onChanged: (bool? value) {
+          setState(() => _includeCategories = value ?? false);
+        },
+      ),
       FushiCheckboxListTile(
         key: const Key('create_backup_include_all_read'),
         contentPadding: EdgeInsets.zero,
@@ -206,18 +219,6 @@ class _CreateBackupPageState extends ConsumerState<CreateBackupPage> {
                 setState(() => _includeAllRead = value ?? false);
               }
             : null,
-      ),
-      // 分类 = Tags exported as Mihon categories. It is deliberately not tied
-      // to 书架中的作品 so a tags-only backup can be created.
-      FushiCheckboxListTile(
-        key: const Key('create_backup_include_categories'),
-        contentPadding: EdgeInsets.zero,
-        controlAffinity: ListTileControlAffinity.leading,
-        value: _includeCategories,
-        title: Text(t.backup_create_categories),
-        onChanged: (bool? value) {
-          setState(() => _includeCategories = value ?? false);
-        },
       ),
     ];
     // 应用设置 exports MyComic's own preference keys; 插件商店 exports every

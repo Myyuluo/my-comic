@@ -137,6 +137,36 @@ void main() {
     );
   });
 
+  testWidgets('library rows render in spec order: chapters, progress, history, categories, all-read', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final _TestAppModel appModel = _TestAppModel(db, paths);
+    await tester.pumpWidget(_harness(appModel, const CreateBackupPage()));
+    await tester.pumpAndSettle();
+
+    double top(Key key) => tester.getTopLeft(find.byKey(key)).dy;
+    final List<Key> orderedKeys = <Key>[
+      const Key('create_backup_include_library'),
+      const Key('create_backup_include_chapters'),
+      const Key('create_backup_include_tracking'),
+      const Key('create_backup_include_history'),
+      const Key('create_backup_include_categories'),
+      const Key('create_backup_include_all_read'),
+    ];
+    for (int i = 1; i < orderedKeys.length; i++) {
+      expect(
+        top(orderedKeys[i]),
+        greaterThan(top(orderedKeys[i - 1])),
+        reason:
+            '${orderedKeys[i]} must render below ${orderedKeys[i - 1]} '
+            '(spec order: 书架中的作品、章节、进度记录、历史、分类、所有已读作品)',
+      );
+    }
+  });
+
   testWidgets('history and all-read default on and follow the library option', (
     WidgetTester tester,
   ) async {
