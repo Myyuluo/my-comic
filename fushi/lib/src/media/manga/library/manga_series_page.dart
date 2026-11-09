@@ -1671,18 +1671,27 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
 
   /// 标记「这一章及更早的全部」为已读。
   ///
-  /// 「更早」= 列表里**它之后**的所有章：源按新→旧返回，所以下标越大越旧。
+  /// 「更早」按**阅读顺序**算，与列表当前排序无关：
+  /// * 在线源按新→旧返回，所以列表里**它之后**（下标更大）的章更旧；
+  /// * 本地源按自然顺序（第 1 话→第 N 话）返回，所以**它之前**（下标更小）的
+  ///   章更早。
+  ///
+  /// 本地源没有在线描述符，借用作品页的展示条目取章节 key。
   Future<void> _markUpToRead(OnlineMangaChapter chapter) async {
     final String? bookUid = _bookUid;
-    final OnlineMangaLibraryEntry? entry = _entry;
+    final OnlineMangaLibraryEntry? entry = _entry ?? _localDisplayEntry;
     if (bookUid == null || entry == null) return;
     final int index = entry.indexOfChapterKey(chapter.key);
     if (index < 0) return;
+    final bool localOrder = entry.runtime == OnlineMangaRuntimeKind.local;
     await _appModel.database.markMangaChaptersRead(
       bookUid: bookUid,
       chapterKeys: <String>[
-        for (int i = index; i < entry.chapters.length; i++)
-          entry.chapters[i].key,
+        if (localOrder)
+          for (int i = 0; i <= index; i++) entry.chapters[i].key
+        else
+          for (int i = index; i < entry.chapters.length; i++)
+            entry.chapters[i].key,
       ],
     );
     await _reloadChapterStates();

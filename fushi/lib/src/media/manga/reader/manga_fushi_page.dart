@@ -3245,12 +3245,13 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
   }
 
   /// 读到当前章的边界（[delta] > 0 = 想往后翻）。
+  ///
+  /// 在线源与本地源共用这一条边界逻辑：本地源的相邻章方向由
+  /// [_adjacentChapterIndex] 按自然顺序（第 1 话→第 N 话）解析，往回翻落在
+  /// 上一话最后一页。
   Future<void> _onReachedChapterEdge(int delta) async {
     final OnlineMangaLibraryEntry? entry = _shelfEntry;
     if (entry == null || _switchingChapter) return;
-    // 本地源的章末自动换章归 ticket 04（含自然顺序与边界提示）；本阶段只在
-    // 章节抽屉 / 上一话下一话按钮里手动换章。
-    if (entry.runtime == OnlineMangaRuntimeKind.local) return;
     final bool forward = delta > 0;
     if (forward) {
       // 翻到最后一页 = 这一章读完了。先落已读标记再考虑换章：即使没有下一章
