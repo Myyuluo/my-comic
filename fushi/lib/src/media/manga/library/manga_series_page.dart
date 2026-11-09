@@ -47,6 +47,7 @@ import 'package:fushi/src/media/sources/reader_fushi_source.dart';
 import 'package:fushi/src/models/app_model.dart';
 import 'package:fushi/src/utils/components/fushi_staggered_entrance.dart';
 import 'package:fushi/src/utils/fushi_icons.dart';
+import 'package:fushi/src/utils/net/app_http_image.dart';
 import 'package:fushi/src/utils/misc/error_details_dialog.dart';
 import 'package:fushi/utils.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_layout.dart';
@@ -2503,11 +2504,18 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     return path == null ? null : FileImage(File(path));
   }
 
+  /// 备份里保存的远程封面 URL（导入条目）。来源未安装也能用——它不经过 Source，
+  /// 只是描述符里的一个地址。
+  String? _remoteCoverUrl() {
+    final String? url = _entry?.series.coverUrl?.trim();
+    return url == null || url.isEmpty ? null : url;
+  }
+
   /// 封面。
   ///
-  /// 入库条目一律走**本地已落盘**的封面：作品页的首屏不该依赖网络，源挂了封面
-  /// 也得在。没有本地封面（刚从源进来还没入库）才回退到占位块——真正的远端取图
-  /// 由源浏览页的封面缓存负责，作品页不自己再开一条取图路径。
+  /// 顺序固定：**本地已落盘**封面（作品页首屏不该依赖网络，源挂了封面也得在）→
+  /// 源浏览时由来源自己提供的取图控件 → 备份描述符里的远程 `series.coverUrl`
+  /// （经现有 HTTP 图片缓存懒加载）→ 占位块。最后两条只在前面的来源缺席时才用。
   Widget _buildCover(BuildContext context) {
     final String? resolved = _localCoverPath();
     if (resolved != null) {
@@ -2528,6 +2536,21 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     if (target is SourceMangaSeriesTarget) {
       final Widget Function(BuildContext)? builder = target.remoteCoverBuilder;
       if (builder != null) return builder(context);
+    }
+    final String? remoteUrl = _remoteCoverUrl();
+    if (remoteUrl != null) {
+      return Image(
+        image: AppCachedHttpImage(remoteUrl),
+        fit: BoxFit.cover,
+        // 远程封面过期 / 防盗链 / 网络失败只影响这一部作品：回到同一占位块。
+        errorBuilder: (_, Object error, __) {
+          ErrorLogService.instance.logDiagnostic(
+            'MangaSeriesPage.coverDecode',
+            '$remoteUrl: $error',
+          );
+          return const MangaCoverPlaceholder();
+        },
+      );
     }
     return const MangaCoverPlaceholder();
   }

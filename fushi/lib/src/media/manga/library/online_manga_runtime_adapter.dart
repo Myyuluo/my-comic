@@ -721,6 +721,8 @@ class MihonLibraryAdapter
   }
 
   MangaOnlineSourceRow _sourceRow(OnlineMangaLibraryEntry entry) {
+    // 1. 精确匹配（扩展包 + sourceId）且启用。占位来源 `mihon.unavailable`
+    // 永远不会命中这里。
     for (final MangaOnlineSourceRow row in manager.sources) {
       if (row.extensionPackage == entry.extensionPackage &&
           row.sourceId == entry.sourceId &&
@@ -728,6 +730,32 @@ class MihonLibraryAdapter
         return row;
       }
     }
+
+    // 2. 按数字 sourceId 回退到已启用的 Source。导入时扩展未安装的条目存的是
+    // 占位扩展包；安装后真实 Source 的 sourceId 不变，条目无需改写即可读。
+    // 同一 sourceId 命中多个包时视为歧义——宁可继续报「来源不可用」，也不
+    // 随意挑一个可能完全不同的站点。
+    final String? wantedSourceId = normalizedMangaSourceId(entry.sourceId);
+    if (wantedSourceId != null) {
+      final Map<String, MangaOnlineSourceRow> byPackage =
+          <String, MangaOnlineSourceRow>{};
+      for (final MangaOnlineSourceRow row in manager.sources) {
+        if (!row.enabled ||
+            normalizedMangaSourceId(row.sourceId) != wantedSourceId) {
+          continue;
+        }
+        byPackage.putIfAbsent(row.extensionPackage, () => row);
+      }
+      if (byPackage.length > 1) {
+        throw OnlineMangaUnavailable(
+          OnlineMangaUnavailableReason.sourceDisabled,
+          'The manga source ID ${entry.sourceId} is ambiguous across '
+          'extensions: ${byPackage.keys.join(', ')}',
+        );
+      }
+      if (byPackage.length == 1) return byPackage.values.single;
+    }
+
     throw const OnlineMangaUnavailable(
       OnlineMangaUnavailableReason.sourceDisabled,
       'The manga source is missing or disabled',

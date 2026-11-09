@@ -79,6 +79,16 @@ String onlineMangaBookKeyFor({
   return '${runtime.wireValue}-${digest.substring(0, 32)}';
 }
 
+/// 数字 sourceId 的规范形式；不是纯十进制数字时返回 null。
+///
+/// Mihon 的源 id 是 Long，以十进制字符串跨桥保存。导入占位条目和安装后的真实
+/// Source 可能用不同字符串形式（如带前导零）表示同一个 id；来源解析与重复检测
+/// 都必须按数字比较，而不是按字面比较。互联等非数字 sourceId 没有回退语义。
+String? normalizedMangaSourceId(String sourceId) {
+  final BigInt? value = BigInt.tryParse(sourceId.trim());
+  return value?.toString();
+}
+
 /// 把 Local source 的章节表借成共享章节列表 / 章级状态用的条目形态。
 ///
 /// [OnlineMangaRuntimeKind.local] 不是在线运行时：没有 service / adapter，也不
