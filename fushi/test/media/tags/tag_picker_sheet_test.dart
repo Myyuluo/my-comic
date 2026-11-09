@@ -1,5 +1,6 @@
 import 'package:drift/native.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi/i18n/strings.g.dart';
@@ -70,6 +71,217 @@ void main() {
     await settle(tester);
     return result;
   }
+
+  Future<void> pumpAndOpenSelection(
+    WidgetTester tester,
+    FushiDatabase db,
+    TagTargets targets, {
+    required void Function(Set<int>?) onResult,
+    Size size = const Size(420, 900),
+  }) async {
+    tester.view.physicalSize = size;
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(ProviderScope(
+      overrides: <Override>[
+        platformServicesProvider.overrideWithValue(testPlatformServices()),
+        appProvider.overrideWith((Ref ref) => _TestAppModel(db)),
+      ],
+      child: TranslationProvider(
+        child: MaterialApp(
+          theme: ThemeData(splashFactory: NoSplash.splashFactory),
+          home: Builder(
+            builder: (BuildContext context) => Scaffold(
+              body: Center(
+                child: TextButton(
+                  onPressed: () async {
+                    onResult(
+                      await showTagPickerSelection(context, targets: targets),
+                    );
+                  },
+                  child: const Text('open'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ));
+    await tester.tap(find.text('open'));
+    await settle(tester);
+  }
+
+  testWidgets('选择模式：多选只改内存，完成返回选中 id 且不写 Tag 分配', (
+    WidgetTester tester,
+  ) async {
+    final FushiDatabase db = await openDb();
+    late int tagA;
+    late int tagB;
+    await tester.runAsync(() async {
+      tagA = await db.createTag('推理', 0xFF5C6BC0);
+      tagB = await db.createTag('百合', 0xFFEC407A);
+    });
+    Set<int>? result;
+    const String entryKey = 'new-book';
+    await pumpAndOpenSelection(
+      tester,
+      db,
+      const TagTargets(
+        media: <MediaRef>[MediaRef(kind: MediaKind.epub, entryKey: entryKey)],
+      ),
+      onResult: (Set<int>? value) => result = value,
+    );
+
+    await tester.tap(find.byKey(ValueKey<String>('tag_picker_chip_$tagA')));
+    await settle(tester);
+    await tester.tap(find.byKey(ValueKey<String>('tag_picker_chip_$tagB')));
+    await settle(tester);
+    expect(
+      (await tester.runAsync(() => db.getTagsForBook(entryKey)))!,
+      isEmpty,
+      reason: '选择阶段不写数据库',
+    );
+
+    await tester.tap(find.byKey(const ValueKey<String>('tag_picker_done')));
+    await settle(tester);
+    expect(result, <int>{tagA, tagB});
+    expect(
+      (await tester.runAsync(() => db.getTagsForBook(entryKey)))!,
+      isEmpty,
+      reason: '选择器只返回选择结果，不写 Tag 分配',
+    );
+  });
+
+  testWidgets('选择模式：零选也能完成，返回空集合', (WidgetTester tester) async {
+    final FushiDatabase db = await openDb();
+    await tester.runAsync(() => db.createTag('推理', 0xFF5C6BC0));
+    Set<int>? result;
+    await pumpAndOpenSelection(
+      tester,
+      db,
+      const TagTargets(
+        media: <MediaRef>[
+          MediaRef(kind: MediaKind.epub, entryKey: 'new-book'),
+        ],
+      ),
+      onResult: (Set<int>? value) => result = value,
+    );
+
+    await tester.tap(find.byKey(const ValueKey<String>('tag_picker_done')));
+    await settle(tester);
+    expect(result, isEmpty);
+  });
+
+  testWidgets('选择模式：点弹窗外部取消返回 null，不写 Tag 分配', (
+    WidgetTester tester,
+  ) async {
+    final FushiDatabase db = await openDb();
+    late int tagId;
+    await tester.runAsync(() async {
+      tagId = await db.createTag('推理', 0xFF5C6BC0);
+    });
+    Set<int>? result;
+    await pumpAndOpenSelection(
+      tester,
+      db,
+      const TagTargets(
+        media: <MediaRef>[
+          MediaRef(kind: MediaKind.epub, entryKey: 'new-book'),
+        ],
+      ),
+      onResult: (Set<int>? value) => result = value,
+    );
+
+    await tester.tap(find.byKey(ValueKey<String>('tag_picker_chip_$tagId')));
+    await settle(tester);
+    await tester.tapAt(const Offset(200, 80));
+    await settle(tester);
+
+    expect(result, isNull);
+    expect(
+      find.byKey(const ValueKey<String>('tag_picker_done')),
+      findsNothing,
+    );
+    expect(
+      (await tester.runAsync(() => db.getTagsForBook('new-book')))!,
+      isEmpty,
+      reason: '取消不写 Tag 分配',
+    );
+  });
+
+  testWidgets('选择模式：按 Esc 取消返回 null', (WidgetTester tester) async {
+    final FushiDatabase db = await openDb();
+    await tester.runAsync(() => db.createTag('推理', 0xFF5C6BC0));
+    Set<int>? result;
+    await pumpAndOpenSelection(
+      tester,
+      db,
+      const TagTargets(
+        media: <MediaRef>[
+          MediaRef(kind: MediaKind.epub, entryKey: 'new-book'),
+        ],
+      ),
+      onResult: (Set<int>? value) => result = value,
+    );
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await settle(tester);
+    expect(result, isNull);
+    expect(
+      find.byKey(const ValueKey<String>('tag_picker_done')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('选择模式：新建标签进入选中集，完成时随结果返回', (
+    WidgetTester tester,
+  ) async {
+    final FushiDatabase db = await openDb();
+    await tester.runAsync(() => db.createTag('推理', 0xFF5C6BC0));
+    Set<int>? result;
+    await pumpAndOpenSelection(
+      tester,
+      db,
+      const TagTargets(
+        media: <MediaRef>[
+          MediaRef(kind: MediaKind.epub, entryKey: 'new-book'),
+        ],
+      ),
+      onResult: (Set<int>? value) => result = value,
+    );
+
+    await tester.enterText(
+      find.byKey(const ValueKey<String>('tag_picker_search')),
+      '冒险',
+    );
+    await settle(tester);
+    await tester.tap(find.byKey(const ValueKey<String>('tag_picker_create')));
+    await settle(tester);
+
+    final List<BookTagRow> all =
+        (await tester.runAsync(() => db.getAllTags()))!;
+    final BookTagRow created = all.singleWhere(
+      (BookTagRow tag) => tag.name == '冒险',
+    );
+    expect(
+      tester
+          .widget<FushiTagToggleChip>(
+            find.byKey(ValueKey<String>('tag_picker_chip_${created.id}')),
+          )
+          .state,
+      TagCheckState.all,
+      reason: '新建的标签在只选模式下直接进入选中集',
+    );
+
+    await tester.tap(find.byKey(const ValueKey<String>('tag_picker_done')));
+    await settle(tester);
+    expect(result, <int>{created.id});
+    expect(
+      (await tester.runAsync(() => db.getTagsForBook('new-book')))!,
+      isEmpty,
+      reason: '新建标签只写标签本身，不写 Tag 分配',
+    );
+  });
 
   testWidgets('搜索按标签名过滤；无同名时一键新建并即时挂到单目标上', (WidgetTester tester) async {
     final FushiDatabase db = await openDb();

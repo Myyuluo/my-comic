@@ -77,6 +77,9 @@ void main() {
 
   test('import picker defaults to <Content root>/autobackup and selects '
       '.tachibk files there', () async {
+    final AppLocale original = LocaleSettings.currentLocale;
+    addTearDown(() => LocaleSettings.setLocale(original));
+    LocaleSettings.setLocale(AppLocale.zhCn);
     final AppPaths paths = await AppPaths.resolve();
     final Directory expected = Directory(
       p.join(platformDocuments.path, 'MyComic', 'autobackup'),
@@ -99,6 +102,7 @@ void main() {
 
     expect(picked, backup.path);
     expect(picker.lastInitialDirectory, expected.path);
+    expect(picker.lastDialogTitle, '导入备份');
     expect(picker.lastType, FileType.custom);
     expect(picker.lastAllowedExtensions, <String>['tachibk']);
     expect(picker.lastAllowMultiple, isFalse);
@@ -277,6 +281,7 @@ class _RecordingFilePicker extends FilePicker {
 
   final String? resultPath;
 
+  String? lastDialogTitle;
   String? lastInitialDirectory;
   FileType? lastType;
   List<String>? lastAllowedExtensions;
@@ -297,6 +302,7 @@ class _RecordingFilePicker extends FilePicker {
     bool lockParentWindow = false,
     bool readSequential = false,
   }) async {
+    lastDialogTitle = dialogTitle;
     lastInitialDirectory = initialDirectory;
     lastType = type;
     lastAllowedExtensions = allowedExtensions;

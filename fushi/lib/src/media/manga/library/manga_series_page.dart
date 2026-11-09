@@ -25,6 +25,7 @@ import 'package:fushi/src/media/manga/mihon/mihon_manager.dart';
 import 'package:fushi/src/media/manga/mihon/mihon_runtime_factory.dart';
 import 'package:fushi/src/media/selection/media_selection_controller.dart';
 import 'package:fushi/src/media/selection/selection_gestures.dart';
+import 'package:fushi/src/media/tags/tag_picker_sheet.dart';
 import 'package:fushi/src/utils/components/batch_action_bar.dart';
 import 'package:fushi/src/utils/components/section_visibility.dart';
 import 'package:fushi/src/utils/misc/reveal_in_file_manager.dart'
@@ -1168,9 +1169,27 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     final OnlineMangaLibraryService? service = _service;
     final OnlineMangaLibraryEntry? entry = _entry;
     if (service == null || entry == null || _busy || _row != null) return;
+    // 票 04：已有 Tag 时先选标签；取消（null）则不创建 Library 条目。
+    final Set<int>? selectedTagIds = await _pickTagsBeforeLibraryAdd(entry);
+    if (selectedTagIds == null || !mounted) return;
     setState(() => _busy = true);
     try {
       final EpubBookRow row = await service.add(entry);
+      if (!mounted) return;
+      // 条目已入架；标签分配在创建成功后统一写入，加入失败时不会留下分配。
+      if (selectedTagIds.isNotEmpty) {
+        try {
+          await service.database.setTagsForBook(row.bookKey, selectedTagIds);
+        } on Object catch (error, stack) {
+          ErrorLogService.instance.log('MangaSeriesPage.addTags', error, stack);
+          if (mounted) {
+            FushiToast.show(
+              msg: describeOnlineSourceError(error),
+              severity: ToastSeverity.error,
+            );
+          }
+        }
+      }
       if (!mounted) return;
       setState(() {
         _row = row;
@@ -1188,6 +1207,40 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  /// 加入书架前的标签选择（票 04）。返回 null = 用户取消本次加入；空集合 =
+  /// 用户确认按未打标签加入（或全局还没有任何 Tag，直接加入）。
+  Future<Set<int>?> _pickTagsBeforeLibraryAdd(
+    OnlineMangaLibraryEntry entry,
+  ) async {
+    final AppModel? appModel = _appModelOrNull;
+    if (appModel == null) return const <int>{};
+    final List<BookTagRow> tags;
+    try {
+      tags = await appModel.database.getAllTags();
+    } on Object catch (error, stack) {
+      // 标签读不出来不该挡住「加入书架」本身：按未打标签直接加入。
+      ErrorLogService.instance.log(
+        'MangaSeriesPage.addTagLookup',
+        error,
+        stack,
+      );
+      return const <int>{};
+    }
+    if (tags.isEmpty) return const <int>{};
+    if (!mounted) return null;
+    return showTagPickerSelection(
+      context,
+      targets: TagTargets(
+        media: <MediaRef>[
+          MediaRef(
+            kind: MediaKind.epub,
+            entryKey: OnlineMangaLibraryService.bookKeyOf(entry),
+          ),
+        ],
+      ),
+    );
   }
 
   /// 未入库本地作品显式「加入书架」。

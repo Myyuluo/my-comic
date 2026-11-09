@@ -68,8 +68,10 @@ SettingsSection buildDownloadBehaviorSection() {
 
 /// 备份分组（ticket 03）：整组从「系统与关于」搬入「存储与下载」。
 ///
-/// 条目文案、启用/置灰状态、导入文件选择器的默认目录（Backup directory，
-/// 见 [mihonBackupPickerInitialDirectory]）均不变。item / section id 沿用
+/// ticket 06：导入行的标题与副标题改用「导入备份」文案（文件选择框标题复用
+/// 同一字符串）。ticket 07：「导出 Mihon 备份」更名为「创建备份」并启用，点击
+/// 进入独立创建备份页；导入文件选择器的默认目录（Backup directory，见
+/// [mihonBackupPickerInitialDirectory]）不变。item / section id 沿用
 /// `system.*`：它们是设置搜索锚点与控制通道键的稳定身份，不随展示位置改变。
 ///
 /// my-comic：Mihon v0.21.3 `.tachibk` Import。Fushi 自己的 `.fushi.zip` 同步与
@@ -88,7 +90,7 @@ SettingsSection buildMihonBackupSection() {
         icon: FushiIcons.restoreBackup,
         cli: const SettingsCliAction.unsupported(
           'The backup file is chosen from the app window: '
-          'Settings → Storage & downloads → Backup → Import Mihon backup.',
+          'Settings → Storage & downloads → Backup → Import backup.',
         ),
         onTap: runMihonBackupImport,
       ),
