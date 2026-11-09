@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi_audio/fushi_audio.dart';
@@ -88,6 +89,27 @@ void main() {
     EpubStorage.debugBaseDirectoryOverride = null;
     await database.close();
     if (await root.exists()) await root.delete(recursive: true);
+  });
+
+  test('订阅只属于书架：membership=false 的条目拒绝写订阅位', () async {
+    final EpubBookRow row = await service.add(entryFor(chapters: chapters));
+    final OnlineMangaLibraryEntry entry = OnlineMangaLibraryEntry.tryParse(
+      (await database.getEpubBook(row.bookKey))!.sourceMetadata,
+    )!;
+    await (database.update(database.epubBooks)
+          ..where((t) => t.bookKey.equals(row.bookKey)))
+        .write(const EpubBooksCompanion(inLibrary: Value<bool>(false)));
+
+    await expectLater(
+      service.setSubscription(
+        bookKey: row.bookKey,
+        entry: entry,
+        subscribed: true,
+        autoDownload: true,
+      ),
+      throwsStateError,
+      reason: '非书架作品不能订阅 / 自动追更',
+    );
   });
 
   test('入库写出漫画身份、封面与描述符，重复入库不建第二行', () async {

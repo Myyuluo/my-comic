@@ -18,7 +18,7 @@ void main() {
 
   test('schema 从 v1 重新起算，且没有 Fushi 的迁移阶梯', () {
     final String database = read(databasePath);
-    expect(database.contains('const int kMyComicSchemaVersion = 4;'), isTrue);
+    expect(database.contains('const int kMyComicSchemaVersion = 5;'), isTrue);
     expect(
       database.contains('int get schemaVersion => kMyComicSchemaVersion;'),
       isTrue,

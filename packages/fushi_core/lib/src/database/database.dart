@@ -429,7 +429,10 @@ Future<void> _rebuildSidecar(File dbFile) async {
 /// - v4：下载任务状态值域新增 `paused`（全局暂停，ticket 07）。状态是 TEXT 列，
 ///   但表级 `CHECK (status IN (...))` 必须重建表才能放宽——SQLite 不支持原地改
 ///   CHECK。
-const int kMyComicSchemaVersion = 4;
+/// - v5：`epub_books` 增加 `in_library`（Library membership，manga-library-
+///   membership 票 01）。默认 `true` 使存量行零破坏迁移为在书架；非书架行仍
+///   保留整行供阅读 / History / 下载使用，但不进书架与书架专属读取点。
+const int kMyComicSchemaVersion = 5;
 
 /// my-comic 主库文件名（与 Fushi 的 `fushi.db` 不同）。
 ///
@@ -938,6 +941,8 @@ class FushiDatabase extends _$FushiDatabase
             await m.alterTable(TableMigration(mangaDownloadJobs));
             // 重建表会连表上的索引一起删掉，按 _ensureIndexes 的约定补回。
             await _ensureIndexes();
+            // v5：Library membership。列默认 true，存量行迁移为在书架。
+            await m.addColumn(epubBooks, epubBooks.inLibrary);
             return;
           }
           if (from == 2) {
@@ -947,6 +952,8 @@ class FushiDatabase extends _$FushiDatabase
             // v4：下载任务表重建以放宽 status CHECK（新增 paused）。
             await m.alterTable(TableMigration(mangaDownloadJobs));
             await _ensureIndexes();
+            // v5：Library membership（默认 true = 存量行在书架）。
+            await m.addColumn(epubBooks, epubBooks.inLibrary);
             return;
           }
           if (from == 3) {
@@ -954,6 +961,14 @@ class FushiDatabase extends _$FushiDatabase
             // SQLite 不能原地改表级 CHECK；重建表并按同名列复制全部任务行。
             await m.alterTable(TableMigration(mangaDownloadJobs));
             await _ensureIndexes();
+            // v5：Library membership（默认 true = 存量行在书架）。
+            await m.addColumn(epubBooks, epubBooks.inLibrary);
+            return;
+          }
+          if (from == 4) {
+            // v4 → v5：Library membership（manga-library-membership 票 01）。
+            // 默认 true 使全部存量 Manga 行迁移为在书架。
+            await m.addColumn(epubBooks, epubBooks.inLibrary);
             return;
           }
           throw StateError(
