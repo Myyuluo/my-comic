@@ -137,21 +137,23 @@ class OnlineMangaLibraryService {
 
   /// 入库（已在库则只刷新，不重复建行）。
   ///
-  /// 只负责创建 Library membership=true 的新行；已有行（含非书架行）保持既有
-  /// 「只刷新描述符」语义。票 03 会把「已有非书架行」的显式加入改为翻转
-  /// membership，本方法届时再收口。
+  /// 显式加入书架命中已有**非书架行**时，只把同一行的 membership 翻成 true：
+  /// bookKey / uid / extractDir / 章节 / 阅读进度 / 已读 / 下载映射 / History
+  /// 全部原样保留。只有完全没有行时才创建新的 Library 行。
   Future<EpubBookRow> add(OnlineMangaLibraryEntry entry) async {
     final EpubBookRow? existing = await find(entry);
-    if (existing != null) {
-      await refresh(
-        bookKey: existing.bookKey,
-        existing: OnlineMangaLibraryEntry.tryParse(existing.sourceMetadata),
-        series: entry.series,
-        chapters: entry.chapters,
-      );
+    if (existing == null) return _insert(entry, inLibrary: true);
+    if (!existing.isInLibrary) {
+      await database.updateEpubBookInLibrary(existing.bookKey, inLibrary: true);
       return (await database.getEpubBook(existing.bookKey))!;
     }
-    return _insert(entry, inLibrary: true);
+    await refresh(
+      bookKey: existing.bookKey,
+      existing: OnlineMangaLibraryEntry.tryParse(existing.sourceMetadata),
+      series: entry.series,
+      chapters: entry.chapters,
+    );
+    return (await database.getEpubBook(existing.bookKey))!;
   }
 
   /// 确保这部在线作品有一条 **Library membership=false** 的 Manga 行（票 02）。
