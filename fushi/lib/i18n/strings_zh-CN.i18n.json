@@ -1401,6 +1401,7 @@
   "cache_clear_step_remote_covers": "远端封面",
   "cache_clear_step_stream": "在线页缓存",
   "cache_clear_step_thumbnails": "缩略图",
+  "cache_clear_step_webview": "WebView 缓存",
   "cache_clear_subtitle_measuring": "正在计算缓存大小…",
   "cache_clear_subtitle_usage": "封面、页面与缩略图缓存：$size。登录态、下载、本地图源与阅读数据不受影响。",
   "cache_clear_title": "清除缓存",

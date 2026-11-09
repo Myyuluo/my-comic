@@ -1401,6 +1401,7 @@
   "cache_clear_step_remote_covers": "Remote covers",
   "cache_clear_step_stream": "Online page cache",
   "cache_clear_step_thumbnails": "Thumbnails",
+  "cache_clear_step_webview": "WebView cache",
   "cache_clear_subtitle_measuring": "Calculating cache size…",
   "cache_clear_subtitle_usage": "Covers, pages and thumbnails: $size. Sign-in, downloads, local sources and reading data are kept.",
   "cache_clear_title": "Clear cache",
