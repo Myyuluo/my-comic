@@ -81,6 +81,9 @@ void main() {
   testWidgets(
     'Backup section has import plus a disabled .tachibk export entry',
     (WidgetTester tester) async {
+      final AppLocale original = LocaleSettings.currentLocale;
+      addTearDown(() => LocaleSettings.setLocale(original));
+      LocaleSettings.setLocale(AppLocale.zhCn);
       await captureContext(tester);
 
       final SettingsSection section = backupSection();
@@ -88,7 +91,7 @@ void main() {
       expect(items.map((SettingsItem item) => item.id).toList(), <String>[
         'system.import_mihon_backup',
         'system.export_mihon_backup',
-      ]);
+      ], reason: '备份分组的行与顺序保持不变');
 
       final SettingsActionItem importItem =
           items.firstWhere(
@@ -96,14 +99,15 @@ void main() {
               )
               as SettingsActionItem;
       expect(importItem.isEnabled(settings), isTrue);
-      expect(importItem.subtitle, t.backup_import_mihon_subtitle);
+      expect(importItem.title, '导入备份');
+      expect(importItem.subtitle, '本应用支持导入Mihon的备份文件，请选择您的.tachibk文件。');
 
       final SettingsActionItem exportItem =
           items.firstWhere(
                 (SettingsItem item) => item.id == 'system.export_mihon_backup',
               )
               as SettingsActionItem;
-      expect(exportItem.title, t.backup_export_mihon_title);
+      expect(exportItem.title, '导出 Mihon 备份', reason: '本次只改导入行的文案');
       expect(exportItem.subtitle, t.backup_export_mihon_subtitle);
       expect(exportItem.isEnabled(settings), isFalse);
       expect(exportItem.cli?.unsupportedHint, isNotNull);

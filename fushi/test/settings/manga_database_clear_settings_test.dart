@@ -89,6 +89,11 @@ void main() {
 
     final SettingsActionItem item = clearDatabaseItem();
     expect(item.title, '清除数据库');
+    expect(
+      item.subtitle,
+      '删除全部历史、未入书架的作品记录与阅读记录；书架进度、下载与本地图源都会保留。',
+      reason: '副标题只描述用户概念，不得再出现「孤儿」',
+    );
     expect(item.destructive, isTrue, reason: '清除数据库必须使用 destructive 红色样式');
     expect(item.isEnabled(settings), isTrue);
     expect(item.cli, isNotNull, reason: '动作行必须在控制通道声明入口');
@@ -157,6 +162,49 @@ void main() {
     expect(lifecycle.restartCalled, isFalse, reason: '清除数据库不需要重启');
     await action;
     // 让 toast 自动消失计时器跑完，避免 pending-timer。
+    await tester.pump(const Duration(seconds: 3));
+  });
+
+  testWidgets('清理阅读记录阶段的进度文案不再出现「孤儿」', (WidgetTester tester) async {
+    final GlobalKey<NavigatorState> navKey = GlobalKey<NavigatorState>();
+    FushiToast.navigatorKey = navKey;
+    final SettingsContext settings = await captureContext(
+      tester,
+      navigatorKey: navKey,
+    );
+
+    debugMeasureMangaDatabaseClearCounts = (SettingsContext _) async =>
+        fixtureCounts;
+    final Completer<MangaDatabaseClearCounts> pending =
+        Completer<MangaDatabaseClearCounts>();
+    debugRunMangaDatabaseClear =
+        (
+          SettingsContext _,
+          void Function(MangaDatabaseClearProgress progress)? onProgress,
+        ) {
+          onProgress?.call(
+            const MangaDatabaseClearProgress(
+              step: MangaDatabaseClearStep.readingState,
+              fraction: 0.9,
+            ),
+          );
+          return pending.future;
+        };
+
+    final Future<void> action = Future<void>.sync(
+      () => clearMangaDatabase(settings),
+    );
+    await tester.pump();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('清除'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text('正在清理阅读记录'), findsOneWidget);
+
+    pending.complete(fixtureCounts);
+    await tester.pumpAndSettle();
+    await action;
     await tester.pump(const Duration(seconds: 3));
   });
 
