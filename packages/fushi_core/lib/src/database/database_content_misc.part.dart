@@ -1012,7 +1012,9 @@ mixin _FushiDbContentMisc
   ///
   /// 同一行的 bookKey、uid、extractDir、章节、阅读进度、已读、下载映射与
   /// History 都原样保留；非书架行与书架行是同一条 Manga 记录。
-  Future<void> updateEpubBookInLibrary(
+  ///
+  /// 返回实际更新的行数（0 = bookKey 不存在）。
+  Future<int> updateEpubBookInLibrary(
     String bookKey, {
     required bool inLibrary,
   }) =>
@@ -1038,20 +1040,6 @@ mixin _FushiDbContentMisc
           chaptersJson: Value(chaptersJson),
         ),
       );
-
-  /// 翻转一条 Manga 行的 Library membership（v5，manga-library-membership）。
-  ///
-  /// 「移出书架」= false，「加入书架」= true。只写 `in_library` 一列：bookKey /
-  /// uid / 阅读进度 / 已读 / 下载任务 / 章目录映射 / 下载目录全部原样保留，
-  /// 重新加入时仍复用同一条记录与同一个文件夹。
-  ///
-  /// 返回实际更新的行数（0 = bookKey 不存在）。
-  Future<int> setEpubBookInLibrary(
-    String bookKey, {
-    required bool inLibrary,
-  }) =>
-      (update(epubBooks)..where((t) => t.bookKey.equals(bookKey)))
-          .write(EpubBooksCompanion(inLibrary: Value<bool>(inLibrary)));
 
   // ── manga_chapter_states（v89）─────────────────────────────────────
   //

@@ -115,14 +115,6 @@ Future<MangaLibraryRemovalResult> removeMangaFromLibrary({
   final bool deletesRow =
       deleteLocalFiles && (localSource || managedLocalVolume);
 
-  if (deleteStatistics) {
-    await ReaderFushiSource.deleteBookStatistics(
-      db: db,
-      title: row.title,
-      mediaKeys: <String>[bookKey],
-    );
-  }
-
   if (deleteLocalFiles) {
     if (localSource) {
       if (localSourceRoot == null) {
@@ -174,6 +166,16 @@ Future<MangaLibraryRemovalResult> removeMangaFromLibrary({
     }
   }
 
+  // 文件已处理完（或不需要处理）才删统计：文件删除失败时不碰任何书架外状态，
+  // 与旧的「失败保留作品」语义一致。
+  if (deleteStatistics) {
+    await ReaderFushiSource.deleteBookStatistics(
+      db: db,
+      title: row.title,
+      mediaKeys: <String>[bookKey],
+    );
+  }
+
   if (deletesRow) {
     // 本地作品连行删除：走既有删除路径（级联章节状态 / 进度 / 任务 / 映射 /
     // Tag，并写 tombstone）。文件已由本方法处理，History 始终保留。
@@ -213,7 +215,7 @@ Future<MangaLibraryRemovalResult> removeMangaFromLibrary({
       );
     }
   }
-  final int updated = await db.setEpubBookInLibrary(
+  final int updated = await db.updateEpubBookInLibrary(
     bookKey,
     inLibrary: false,
   );

@@ -545,6 +545,21 @@ void main() {
     expect(find.text('Alpha'), findsOneWidget);
     expect(find.text('Beta'), findsOneWidget);
 
+    // 显式重新加入：复用同一条非书架记录，只把 membership 翻回 true。
+    await tapSelectToggle(tester);
+    await tester.tap(cardFor(alphaDir));
+    await tester.pumpAndSettle();
+    await runBatchAction(tester, 'local_source_batch_add');
+
+    final EpubBookRow? readded = await db.getEpubBook(alphaKey);
+    expect(readded, isNotNull);
+    expect(readded!.isInLibrary, isTrue, reason: '显式加入翻回 membership');
+    expect(readded.uid, alpha.uid, reason: '重新加入复用同一条记录与 uid');
+    expect(
+      File(p.join(alphaDir.path, 'Ch 1', '001.jpg')).existsSync(),
+      isTrue,
+    );
+
     await tester.pump(const Duration(seconds: 3));
   });
 
