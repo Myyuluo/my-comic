@@ -4392,6 +4392,7 @@
   "manga_series_next_chapter": "다음 챕터",
   "manga_series_no_chapters": "아직 챕터가 없습니다",
   "manga_series_no_chapters_in_language": "이 소스는 ${language} 챕터만 제공합니다",
+  "manga_series_no_chapters_match_filter": "No chapters match the current filters",
   "manga_series_ocr_all_downloaded": "다운로드한 항목 모두 인식",
   "manga_series_ocr_all_none": "인식이 필요한 다운로드 챕터가 없습니다",
   "manga_series_ocr_no_engine": "사용할 수 있는 OCR 엔진이 없습니다",
