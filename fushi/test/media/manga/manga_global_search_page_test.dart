@@ -69,6 +69,44 @@ void main() {
     );
   }
 
+  testWidgets('Manga 全局搜索框首字输入后焦点仍在', (WidgetTester tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      TranslationProvider(
+        child: MaterialApp(
+          home: MangaGlobalSearchPage(
+            mihonManager: null,
+            mihonSources: const <Never>[],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final Finder field = find.byKey(
+      const ValueKey<String>('manga_global_search_field'),
+    );
+    expect(field, findsOneWidget);
+    await tester.showKeyboard(field);
+    await tester.pump();
+    expect(
+      tester.widget<TextField>(field).focusNode?.hasFocus,
+      isTrue,
+      reason: '前置条件：搜索框已聚焦',
+    );
+
+    // 模拟 IME 输入第一个字符，不走 tester.enterText 的重新聚焦路径。
+    tester.testTextInput.enterText('a');
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.widget<TextField>(field).focusNode?.hasFocus,
+      isTrue,
+      reason: '首字输入后焦点必须保持在搜索框',
+    );
+  });
+
   testWidgets(
       'no sources: empty state names the Import tab and its button lands on it',
       (WidgetTester tester) async {

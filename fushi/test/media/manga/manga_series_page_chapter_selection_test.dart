@@ -18,6 +18,7 @@ import 'package:fushi/src/media/media_item.dart';
 import 'package:fushi/src/media/media_source.dart';
 import 'package:fushi/src/models/preferences_repository.dart';
 import 'package:fushi/src/platform/platform_providers.dart';
+import 'package:fushi/src/utils/components/batch_action_bar.dart';
 import 'package:fushi/src/utils/components/fushi_icon_button.dart';
 import 'package:fushi_audio/fushi_audio.dart';
 import 'package:fushi_core/fushi_core.dart';
@@ -272,8 +273,14 @@ void main() {
     expect(find.text(t.batch_selected_count(n: 1)), findsOneWidget);
 
     // 全选：只选中当前可见的 Chapter 3 / Chapter 1，不把被筛掉的 Chapter 2
-    // 偷偷算进来。
-    await tester.tap(find.text(t.batch_select_all));
+    // 偷偷算进来。下载筛选 chip 的「全部 / All」也会命中同一文案，故限定在
+    // 批量栏内找按钮。
+    await tester.tap(
+      find.descendant(
+        of: find.byType(BatchActionBar),
+        matching: find.text(t.batch_select_all),
+      ),
+    );
     await _settle(tester);
     expect(_rowWidget(tester, 'Chapter 3').selected, isTrue);
     expect(_rowWidget(tester, 'Chapter 1').selected, isTrue);

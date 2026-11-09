@@ -17,6 +17,7 @@ export 'src/pages/implementations/home_reader_page.dart';
 
 
 export 'src/pages/implementations/browse_page.dart';
+export 'src/pages/implementations/manga_history_page.dart';
 export 'src/pages/implementations/downloads_page.dart';
 export 'src/pages/implementations/browser_extension_page.dart';
 export 'src/pages/implementations/srs/srs_deck_list_page.dart';

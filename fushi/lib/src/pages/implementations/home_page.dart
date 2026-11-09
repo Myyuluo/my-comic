@@ -120,9 +120,12 @@ List<HomeTab> homeActiveTabs(ModuleVisibility visibility) {
     final HomeTab? tab = homeTabOfModule(module);
     if (tab == null || !visibility.isEnabled(module)) continue;
     tabs.add(tab);
-    // 下载没有自己的 ModuleId：它固定挂在「浏览」后面，并跟随浏览的平台门禁
-    // （downloads 能力）一起出现 / 消失。
-    if (module == ModuleId.browse) tabs.add(HomeTab.downloads);
+    // 历史 / 下载都没有自己的 ModuleId：历史固定插在「浏览」与「下载」之间，
+    // 三者跟随同一条浏览平台门禁（downloads 能力）一起出现 / 消失。
+    if (module == ModuleId.browse) {
+      tabs.add(HomeTab.history);
+      tabs.add(HomeTab.downloads);
+    }
   }
   tabs.add(HomeTab.settings);
   return tabs;
@@ -220,6 +223,12 @@ AdaptiveNavItem homeNavItemFor(HomeTab tab) {
         icon: FushiIcons.browse,
         selectedIcon: FushiIcons.filled(FushiIcons.browse),
         label: t.nav_browse,
+      );
+    case HomeTab.history:
+      return AdaptiveNavItem(
+        icon: FushiIcons.history,
+        selectedIcon: FushiIcons.filled(FushiIcons.history),
+        label: t.nav_history,
       );
     case HomeTab.downloads:
       return AdaptiveNavItem(
@@ -1301,6 +1310,7 @@ class _HomePageState extends BasePageState<HomePage>
     HomeTab.video ||
     HomeTab.games ||
     HomeTab.browse ||
+    HomeTab.history ||
     HomeTab.downloads => true,
     _ => false,
   };
@@ -1401,6 +1411,7 @@ class _HomePageState extends BasePageState<HomePage>
     HomeTab.video ||
     HomeTab.games ||
     HomeTab.browse ||
+    HomeTab.history ||
     HomeTab.downloads ||
     HomeTab.dictionaries => homeNavItemFor(tab).label,
     // 复习页自己画页头（标题 + 牌组动作），同浏览器扩展。
@@ -1884,6 +1895,7 @@ class _HomePageState extends BasePageState<HomePage>
       // my-comic：视频模块已删除；保留枚举值以兼容旧偏好/旧数据。
       HomeTab.video => const SizedBox.shrink(),
       HomeTab.browse => const BrowsePage(),
+      HomeTab.history => const MangaHistoryPage(),
       HomeTab.downloads => const DownloadsPage(),
       HomeTab.dictionaries => HomeDictionaryPage(focusSignal: _dictFocusSignal),
       // my-comic：游戏模块已删除。

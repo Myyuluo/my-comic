@@ -7,7 +7,8 @@ import 'package:fushi/src/platform/desktop/ctl/ctl_online_support.dart'
     show ctlNavigationName, ctlNavigationPages, homeTabFromCtlName;
 
 /// `nav list`（`/api/admin/navigation`）的 `pages` 顺序：可用页必须按一级导航的
-/// 固定顺序 Manga → Browse → Downloads → Settings 输出，旧的模块排序偏好不能改变它。
+/// 固定顺序 Manga → Browse → History → Downloads → Settings 输出，旧的模块排序偏好
+/// 不能改变它。
 void main() {
   ModuleVisibility resolved({bool legacyPrefsOff = false}) =>
       ModuleVisibility.resolve(
@@ -18,31 +19,35 @@ void main() {
         isAndroid: false,
       );
 
-  test('可用页按固定导航顺序排在列表最前（Manga → Browse → Downloads → Settings）', () {
+  test('可用页按固定导航顺序排在列表最前（Manga → Browse → History → Downloads → Settings）', () {
     final ModuleVisibility visibility = resolved(legacyPrefsOff: true);
     final List<HomeTab> active = homeActiveTabs(visibility);
     expect(active, <HomeTab>[
       HomeTab.manga,
       HomeTab.browse,
+      HomeTab.history,
       HomeTab.downloads,
       HomeTab.settings,
     ]);
 
     final List<HomeTab> pages = ctlNavigationPages(active: active);
     expect(pages.take(active.length), active);
-    expect(pages.take(4), <HomeTab>[
+    expect(pages.take(5), <HomeTab>[
       HomeTab.manga,
       HomeTab.browse,
+      HomeTab.history,
       HomeTab.downloads,
       HomeTab.settings,
     ]);
   });
 
-  test('ctl 的 downloads 指向新下载页，browse 仍指向浏览页', () {
+  test('ctl 的 downloads / history / browse 指向对应页面', () {
     expect(homeTabFromCtlName('downloads'), HomeTab.downloads);
     expect(homeTabFromCtlName('browse'), HomeTab.browse);
+    expect(homeTabFromCtlName('history'), HomeTab.history);
     expect(ctlNavigationName(HomeTab.downloads), 'downloads');
     expect(ctlNavigationName(HomeTab.browse), 'browse');
+    expect(ctlNavigationName(HomeTab.history), 'history');
   });
 
   test('不可用页面仍保留在列表中（available=false），且不丢失 / 不重复', () {
@@ -63,6 +68,7 @@ void main() {
     expect(active, <HomeTab>[
       HomeTab.manga,
       HomeTab.browse,
+      HomeTab.history,
       HomeTab.downloads,
       HomeTab.settings,
     ]);

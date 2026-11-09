@@ -17,6 +17,7 @@ import 'package:fushi/src/sync/interconnect_sync_backend.dart';
 import 'package:fushi/src/sync/remote_cover_image.dart';
 import 'package:fushi/src/media/online/online_source_error_text.dart';
 import 'package:fushi/utils.dart';
+import 'package:fushi/src/utils/components/fushi_search.dart';
 import 'package:fushi/src/utils/components/fushi_staggered_entrance.dart';
 
 /// 浏览**已配对互联对端**的漫画库，与浏览一个扩展源同构。
@@ -134,14 +135,18 @@ class _InterconnectMangaBrowsePageState
         ),
         headerBottom: Padding(
           padding: const EdgeInsets.only(top: 8),
-          // 2026-10 体验优化：统一为 FushiSearchField；本页边打边滤。
-          child: FushiSearchField(
+          // 2026-10 体验优化：统一为共享搜索栏；本页边打边滤。查询走
+          // [FushiSearchQueryDriver]（零防抖即时交出），IME 组字期间不出查询——
+          // 拼音尚未选词的 composing text 不能被当成最终搜索词。Esc 保持本页
+          // 原有语义（搜索框不认领，交给页面），所以显式 [none]。
+          child: FushiSearchBar(
             fieldKey: const ValueKey<String>('interconnect_manga_search'),
             focusId: const FushiFocusId('interconnect-manga-search'),
             controller: _searchController,
             focusNode: _searchFocus,
             hintText: t.mihon_source_search,
-            onChanged: (String value) => setState(() => _query = value),
+            escapeBehavior: FushiSearchEscapeBehavior.none,
+            onQueryChanged: (String value) => setState(() => _query = value),
             onSubmitted: (String value) => setState(() => _query = value),
             onClear: () {
               _searchController.clear();

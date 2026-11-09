@@ -13,6 +13,7 @@ import 'package:fushi/src/utils/components/glass/fushi_icon.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi/src/media/manga/download/download_library_index.dart';
 import 'package:fushi/src/media/manga/download/manga_download_service.dart';
+import 'package:fushi/src/media/manga/library/manga_chapter_download_state.dart';
 import 'package:fushi/src/media/manga/library/manga_chapter_list.dart';
 import 'package:fushi/src/media/manga/library/manga_download_planner.dart';
 import 'package:fushi/src/media/manga/library/manga_resume_point.dart';
@@ -197,6 +198,9 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
   /// 章节排序：初值读全局偏好（阅读器章节抽屉同一份），切换即写回。
   bool _newestFirst = true;
   bool _unreadOnly = false;
+
+  /// 章节下载筛选（ticket 06）：与「只看未读」一样是会话内状态，不持久化。
+  MangaChapterDownloadFilter _downloadFilter = MangaChapterDownloadFilter.all;
 
   /// 章节多选状态机（与书架 / 本地图源页共用 [MediaSelectionController]）。
   /// 选择状态放在作品页级，不放进会随下载状态重建的章节行子树里。选中键 = 章节 key。
@@ -1667,13 +1671,32 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
   /// 当前展示的章节条目：在线描述符优先，本地图源借展示条目。
   OnlineMangaLibraryEntry? get _displayEntry => _entry ?? _localDisplayEntry;
 
-  /// 当前筛选 + 排序后真正渲染出来的章节（顺序 = 屏幕顺序）。
+  /// 与共享章节列表内部完全相同的下载状态口径（ticket 06）：多选的可见域必须
+  /// 跟着下载筛选走。
+  MangaChapterDownloadState _downloadStateOf(OnlineMangaChapter chapter) =>
+      MangaChapterList.downloadStateOf(
+        chapter: chapter,
+        downloadedChapterKeys: _isLocalSource
+            ? _localChapters
+                  .map((LocalSourceChapterRecord chapter) => chapter.key)
+                  .toSet()
+            : _downloaded,
+        missingChapterKeys: _isLocalSource
+            ? _localMissingChapterKeys
+            : const <String>{},
+        jobsByChapterKey: _jobs,
+      );
+
+  /// 当前筛选（只看未读 + 下载状态）+ 排序后真正渲染出来的章节
+  /// （顺序 = 屏幕顺序）。
   List<OnlineMangaChapter> get _visibleChapters =>
       MangaChapterList.visibleChapters(
         chapters: _displayEntry?.chapters ?? const <OnlineMangaChapter>[],
         states: _states,
         newestFirst: _newestFirst,
         unreadOnly: _unreadOnly,
+        downloadFilter: _downloadFilter,
+        downloadStateOf: _downloadStateOf,
       );
 
   /// 每帧把可见章节序登记给选择状态机：全选 / 反选与批量动作只认这份可见序。
@@ -1850,18 +1873,27 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
 
   /// 标记「这一章及更早的全部」为已读。
   ///
-  /// 「更早」= 列表里**它之后**的所有章：源按新→旧返回，所以下标越大越旧。
+  /// 「更早」按**阅读顺序**算，与列表当前排序无关：
+  /// * 在线源按新→旧返回，所以列表里**它之后**（下标更大）的章更旧；
+  /// * 本地源按自然顺序（第 1 话→第 N 话）返回，所以**它之前**（下标更小）的
+  ///   章更早。
+  ///
+  /// 本地源没有在线描述符，借用作品页的展示条目取章节 key。
   Future<void> _markUpToRead(OnlineMangaChapter chapter) async {
     final String? bookUid = _bookUid;
-    final OnlineMangaLibraryEntry? entry = _entry;
+    final OnlineMangaLibraryEntry? entry = _entry ?? _localDisplayEntry;
     if (bookUid == null || entry == null) return;
     final int index = entry.indexOfChapterKey(chapter.key);
     if (index < 0) return;
+    final bool localOrder = entry.runtime == OnlineMangaRuntimeKind.local;
     await _appModel.database.markMangaChaptersRead(
       bookUid: bookUid,
       chapterKeys: <String>[
-        for (int i = index; i < entry.chapters.length; i++)
-          entry.chapters[i].key,
+        if (localOrder)
+          for (int i = 0; i <= index; i++) entry.chapters[i].key
+        else
+          for (int i = index; i < entry.chapters.length; i++)
+            entry.chapters[i].key,
       ],
     );
     await _reloadChapterStates();
@@ -2028,6 +2060,9 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
                   duration: fushiMotionDuration(context, FushiMotion.medium),
                 ),
           onUnreadOnlyToggled: () => setState(() => _unreadOnly = !_unreadOnly),
+          downloadFilter: _downloadFilter,
+          onDownloadFilterToggled: () =>
+              setState(() => _downloadFilter = _downloadFilter.next),
           onChapterTap: _handleChapterTap,
           // 多选态里长按归 SelectionDragArea（扫选），行自身不再接长按。
           onChapterLongPress: _selectionMode ? null : _handleChapterLongPress,
