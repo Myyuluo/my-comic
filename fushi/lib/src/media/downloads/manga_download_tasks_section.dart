@@ -23,7 +23,8 @@ import 'package:fushi/utils.dart';
 /// [tasksBuilder] 把条目接进外层统一列表。
 ///
 /// 下载页只列可操作任务（ticket 05）：`done` 行保留在表里仅供作品页判
-/// 「文件缺失」，取消会直接删行，因此都不进列表；`failed` 保留并显示「继续」。
+/// 「文件缺失」，取消会直接删行，因此都不进列表；`failed` 保留并同时显示
+/// 「重试」与「取消」（ticket 09，取消清理任务行、staging / 临时包并 toast）。
 /// `paused`（ticket 07 全局暂停）保留在列表且可单独取消；暂停 / 继续只由下载页
 /// 右下角的全局按钮控制，行内不提供。
 class MangaDownloadTasksSection extends ConsumerStatefulWidget {
@@ -146,7 +147,7 @@ DownloadTaskEntry mangaDownloadTaskEntry(
   final String id = 'manga:${job.jobId}';
   final bool finished = _isFinished(job);
   // 下载页只列失败的可操作任务；取消行会被删除（遗留 cancelled 行不展示），
-  // 所以行内「继续」只服务 failed。
+  // 所以行内「重试 + 取消」只服务 failed。
   final bool retryable = job.status == MangaDownloadJobStatus.failed;
   final double? progress = job.status == MangaDownloadJobStatus.done
       ? 1
@@ -179,25 +180,39 @@ DownloadTaskEntry mangaDownloadTaskEntry(
     actions: DownloadTaskActions(
       retry: retryable ? () => downloads.retry(job.jobId) : null,
       clear: finished ? () => downloads.remove(job.jobId) : null,
-      cancel: finished ? null : () => downloads.cancel(job.jobId),
-    ),
-    builder: (BuildContext context) {
-      // 简化卡片的行尾直接操作（不再藏在展开面板里）：排队 / 下载中可取消，
-      // 失败可「继续」重试，已完成不展示。图标、tooltip 与调用的 service 方法
-      // 沿用原展开面板。
-      final DownloadTaskQuickAction? quickAction = retryable
-          ? DownloadTaskQuickAction(
-              icon: Icons.refresh,
-              tooltip: t.download_resume,
-              onPressed: () => unawaited(downloads.retry(job.jobId)),
-            )
+      cancel: retryable
+          ? () => downloads.discardFailed(job.jobId)
           : finished
               ? null
-              : DownloadTaskQuickAction(
-                  icon: Icons.close,
-                  tooltip: t.dialog_cancel,
-                  onPressed: () => unawaited(downloads.cancel(job.jobId)),
-                );
+              : () => downloads.cancel(job.jobId),
+    ),
+    builder: (BuildContext context) {
+      // 简化卡片的行尾直接操作（不再藏在展开面板里）：排队 / 下载中 / 暂停可
+      // 取消；失败同时给「重试」与「取消」（ticket 09），已完成不展示。图标、
+      // tooltip 与调用的 service 方法沿用原展开面板。
+      final List<DownloadTaskQuickAction> quickActions =
+          <DownloadTaskQuickAction>[
+            if (retryable)
+              DownloadTaskQuickAction(
+                icon: Icons.refresh,
+                tooltip: t.download_resume,
+                onPressed: () => unawaited(downloads.retry(job.jobId)),
+              ),
+            if (retryable)
+              DownloadTaskQuickAction(
+                icon: Icons.close,
+                tooltip: t.dialog_cancel,
+                onPressed: () => unawaited(
+                  _discardFailedTask(context, downloads, job.jobId),
+                ),
+              ),
+            if (!retryable && !finished)
+              DownloadTaskQuickAction(
+                icon: Icons.close,
+                tooltip: t.dialog_cancel,
+                onPressed: () => unawaited(downloads.cancel(job.jobId)),
+              ),
+          ];
       return DownloadTaskCard(
         key: ValueKey<String>(id),
         taskId: id,
@@ -210,7 +225,7 @@ DownloadTaskEntry mangaDownloadTaskEntry(
         status: status,
         subtitle: collectionTitle,
         progress: progress,
-        quickAction: quickAction,
+        quickActions: quickActions,
         details: _MangaDownloadTaskRow(
           job: job,
           status: status,
@@ -219,6 +234,21 @@ DownloadTaskEntry mangaDownloadTaskEntry(
         ),
       );
     },
+  );
+}
+
+/// 失败行的「取消」：删除任务行与半成品（staging / 临时包 / 映射容器），成功
+/// 后 toast。服务只处理 failed 行；若行已经消失则不提示。
+Future<void> _discardFailedTask(
+  BuildContext context,
+  MangaDownloadService downloads,
+  String jobId,
+) async {
+  final bool discarded = await downloads.discardFailed(jobId);
+  if (!discarded || !context.mounted) return;
+  FushiToast.show(
+    msg: t.download_task_cancel_failed,
+    severity: ToastSeverity.success,
   );
 }
 
@@ -270,7 +300,7 @@ class _MangaDownloadTaskRow extends StatelessWidget {
   final MangaDownloadJobRow job;
   final String status;
 
-  /// failed 可「继续」重试（与卡片 actions / quickAction 同一判据）。
+  /// failed 可「重试」并额外提供「取消」（与卡片 actions / quickActions 同一判据）。
   final bool retryable;
   final MangaDownloadService downloads;
 
@@ -330,12 +360,26 @@ class _MangaDownloadTaskRow extends StatelessWidget {
         ),
       ),
       trailing: retryable
-          ? FushiIconButton(
-              tooltip: t.download_resume,
-              icon: Icons.refresh,
-              size: 20,
-              constraints: _actionTarget,
-              onTap: () => unawaited(downloads.retry(job.jobId)),
+          ? Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                FushiIconButton(
+                  tooltip: t.download_resume,
+                  icon: Icons.refresh,
+                  size: 20,
+                  constraints: _actionTarget,
+                  onTap: () => unawaited(downloads.retry(job.jobId)),
+                ),
+                FushiIconButton(
+                  tooltip: t.dialog_cancel,
+                  icon: Icons.close,
+                  size: 20,
+                  constraints: _actionTarget,
+                  onTap: () => unawaited(
+                    _discardFailedTask(context, downloads, job.jobId),
+                  ),
+                ),
+              ],
             )
           : job.status == MangaDownloadJobStatus.done
               ? null

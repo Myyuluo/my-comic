@@ -2257,6 +2257,7 @@
   "download_task_add_title_label": "标题",
   "download_task_audiobook_needs_alignment": "只下到音频 - 还需要一个对齐文件（字幕）才能作为书打开。",
   "download_task_audiobook_pair": "补对齐文件",
+  "download_task_cancel_failed": "已取消失败下载",
   "download_task_collection_unassigned": "未归属合集",
   "download_task_delete": "删除任务",
   "download_task_delete_confirm": "删除“${title}”的下载任务吗？",
