@@ -18,6 +18,10 @@ import 'package:fushi/src/media/manga/library/online_manga_runtime_adapter.dart'
 import 'package:fushi/src/media/sources/reader_fushi_source.dart';
 import 'package:fushi/src/pages/implementations/manga_history_page.dart';
 import 'package:fushi/src/platform/platform_providers.dart';
+import 'package:fushi/src/utils/components/fushi_floating_chrome.dart'
+    show FushiFloatingChromeBar;
+import 'package:fushi/src/utils/components/fushi_icon_button.dart'
+    show FushiIconButton;
 import 'package:fushi/src/utils/components/shelf_card_widgets.dart';
 import 'package:fushi/src/utils/misc/fushi_toast.dart';
 import 'package:fushi_core/fushi_core.dart';
@@ -176,6 +180,7 @@ Future<EpubBookRow> _insertBook(
   String? sourceMetadata,
   String? coverPath,
   String chaptersJson = '[]',
+  DateTime? completedAt,
 }) async {
   await db.insertEpubBook(
     EpubBooksCompanion.insert(
@@ -189,6 +194,7 @@ Future<EpubBookRow> _insertBook(
       format: const Value<String>('manga'),
       coverPath: Value<String?>(coverPath),
       sourceMetadata: Value<String?>(sourceMetadata),
+      completedAt: Value<DateTime?>(completedAt),
     ),
   );
   return (await db.getEpubBook(bookKey))!;
@@ -455,6 +461,312 @@ void main() {
       findsNothing,
     );
     expect(find.text('Unavailable source'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 3));
+  });
+
+  testWidgets('搜索按钮展开页内搜索，实时按书名过滤，收起后恢复完整列表', (WidgetTester tester) async {
+    final String source = mangaHistoryOnlineSourceKey(_onlineEntry());
+    await _insertHistory(
+      db,
+      mediaSource: source,
+      mediaId: '/alpha',
+      openedAt: 100,
+      title: 'Alpha manga',
+      online: _onlineRef(seriesKey: '/alpha'),
+    );
+    await _insertHistory(
+      db,
+      mediaSource: source,
+      mediaId: '/beta',
+      openedAt: 200,
+      title: 'Beta manga',
+      online: _onlineRef(seriesKey: '/beta'),
+    );
+
+    await tester.pumpWidget(
+      _harness(_HistoryTestAppModel(database: db), navKey),
+    );
+    await _settle(tester);
+
+    // 右上角动作：搜索 + 全部删除。
+    expect(
+      find.byKey(const ValueKey<String>('fushi-header-search-button')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('manga_history_delete_all')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byType(FushiFloatingChromeBar),
+        matching: find.byType(FushiIconButton),
+      ),
+      findsNWidgets(2),
+      reason: '历史页右上角只有搜索与删除两个按钮',
+    );
+    expect(find.text('Alpha manga'), findsOneWidget);
+    expect(find.text('Beta manga'), findsOneWidget);
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('fushi-header-search-button')),
+    );
+    await _settle(tester);
+    final Finder field = find.byKey(
+      const ValueKey<String>('manga_history_search_field'),
+    );
+    expect(field, findsOneWidget);
+
+    tester.testTextInput.enterText('Alpha');
+    await _settle(tester);
+    expect(find.text('Alpha manga'), findsOneWidget);
+    expect(find.text('Beta manga'), findsNothing);
+
+    // 清空搜索词：留在搜索态，恢复完整列表。
+    await tester.tap(find.byTooltip(t.clear));
+    await _settle(tester);
+    expect(find.text('Alpha manga'), findsOneWidget);
+    expect(find.text('Beta manga'), findsOneWidget);
+
+    tester.testTextInput.enterText('Beta');
+    await _settle(tester);
+    expect(find.text('Alpha manga'), findsNothing);
+    expect(find.text('Beta manga'), findsOneWidget);
+
+    // 「←」退出搜索：清空搜索词并恢复完整列表。
+    await tester.tap(
+      find.byTooltip(
+        MaterialLocalizations.of(tester.element(field)).backButtonTooltip,
+      ),
+    );
+    await _settle(tester);
+    expect(find.text('Alpha manga'), findsOneWidget);
+    expect(find.text('Beta manga'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('manga_history_search_field')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('历史页搜索第一次输入不会丢焦点', (WidgetTester tester) async {
+    final String source = mangaHistoryOnlineSourceKey(_onlineEntry());
+    await _insertHistory(
+      db,
+      mediaSource: source,
+      mediaId: '/alpha',
+      openedAt: 100,
+      title: 'Alpha manga',
+      online: _onlineRef(seriesKey: '/alpha'),
+    );
+
+    await tester.pumpWidget(
+      _harness(_HistoryTestAppModel(database: db), navKey),
+    );
+    await _settle(tester);
+    await tester.tap(
+      find.byKey(const ValueKey<String>('fushi-header-search-button')),
+    );
+    await _settle(tester);
+
+    final Finder field = find.byKey(
+      const ValueKey<String>('manga_history_search_field'),
+    );
+    expect(field, findsOneWidget);
+    expect(
+      tester.widget<TextField>(field).focusNode?.hasFocus,
+      isTrue,
+      reason: '展开搜索后输入框应已聚焦',
+    );
+
+    // 模拟 IME 输入第一个字符，不走 tester.enterText 的重新聚焦路径。
+    tester.testTextInput.enterText('A');
+    await _settle(tester);
+
+    expect(
+      tester.widget<TextField>(field).focusNode?.hasFocus,
+      isTrue,
+      reason: '首次输入后焦点必须保持在搜索框',
+    );
+    expect(tester.widget<TextField>(field).controller?.text, 'A');
+  });
+
+  testWidgets('封面删除按钮立即删除单本历史并提示，阅读数据保留', (WidgetTester tester) async {
+    final DateTime completedAt = DateTime(2026, 1, 2);
+    final EpubBookRow book = await _insertBook(
+      db,
+      tmp,
+      bookKey: 'shelf_manga',
+      title: 'Shelf Manga',
+      completedAt: completedAt,
+    );
+    await db.upsertShelfOrder(MediaKind.epub, book.uid, 0);
+    await db.upsertReaderPosition(
+      ReaderPositionsCompanion.insert(
+        bookUid: book.uid,
+        sectionIndex: 3,
+        normCharOffset: 5,
+        updatedAt: 123,
+      ),
+    );
+    await db.saveMangaChapterState(
+      bookUid: book.uid,
+      chapterKey: 'ch1',
+      lastPage: 7,
+      readAt: 456,
+    );
+    final MangaHistoryIdentity identity = mangaHistoryIdentityForBook(book)!;
+    await _insertHistory(
+      db,
+      mediaSource: identity.mediaSource,
+      mediaId: identity.mediaId,
+      openedAt: 100,
+      title: 'Shelf Manga',
+      bookKey: book.bookKey,
+    );
+    await _insertHistory(
+      db,
+      mediaSource: kMangaHistoryLocalSource,
+      mediaId: 'Other',
+      openedAt: 90,
+      title: 'Other manga',
+      localRelativePath: 'Other',
+    );
+
+    await tester.pumpWidget(
+      _harness(_HistoryTestAppModel(database: db), navKey),
+    );
+    await _settle(tester);
+    expect(find.text('Shelf Manga'), findsOneWidget);
+    expect(find.text('Other manga'), findsOneWidget);
+
+    await tester.tap(
+      find.byKey(ValueKey<String>('manga_history_delete_${identity.key}')),
+    );
+    await _settle(tester);
+
+    expect(find.text('Shelf Manga'), findsNothing);
+    expect(find.text('Other manga'), findsOneWidget);
+    expect(find.text(t.manga_history_deleted_entry), findsOneWidget);
+
+    final List<MediaOpenHistoryRow> rows = await db.getAllMediaOpenHistory();
+    expect(rows, hasLength(1), reason: '只删除被点的那一条历史');
+    expect(
+      rows.single.mediaSource == identity.mediaSource &&
+          rows.single.mediaId == identity.mediaId,
+      isFalse,
+    );
+
+    // 删除历史不影响阅读进度、章节 readAt、书级完成标记或书架状态。
+    final EpubBookRow? keptBook = await db.getEpubBook(book.bookKey);
+    expect(keptBook, isNotNull);
+    expect(keptBook!.completedAt, completedAt);
+    expect(await db.getReaderPosition(book.uid), isNotNull);
+    final MangaChapterStateRow? chapter = await db.getMangaChapterState(
+      bookUid: book.uid,
+      chapterKey: 'ch1',
+    );
+    expect(chapter, isNotNull);
+    expect(chapter!.readAt, 456);
+    expect(await db.getShelfEntry(MediaKind.epub, book.uid), isNotNull);
+
+    // 让 toast 的 2s 计时器走完，避免测试结束时留下 pending timer。
+    await tester.pump(const Duration(seconds: 3));
+  });
+
+  testWidgets('全部删除二次确认后清空漫画历史，阅读数据保留', (WidgetTester tester) async {
+    final EpubBookRow book = await _insertBook(
+      db,
+      tmp,
+      bookKey: 'shelf_manga',
+      title: 'Shelf Manga',
+      completedAt: DateTime(2026, 1, 2),
+    );
+    await db.upsertShelfOrder(MediaKind.epub, book.uid, 0);
+    await db.upsertReaderPosition(
+      ReaderPositionsCompanion.insert(
+        bookUid: book.uid,
+        sectionIndex: 3,
+        normCharOffset: 5,
+        updatedAt: 123,
+      ),
+    );
+    await db.saveMangaChapterState(
+      bookUid: book.uid,
+      chapterKey: 'ch1',
+      lastPage: 7,
+      readAt: 456,
+    );
+    final MangaHistoryIdentity identity = mangaHistoryIdentityForBook(book)!;
+    await _insertHistory(
+      db,
+      mediaSource: identity.mediaSource,
+      mediaId: identity.mediaId,
+      openedAt: 100,
+      title: 'Shelf Manga',
+      bookKey: book.bookKey,
+    );
+    await _insertHistory(
+      db,
+      mediaSource: kMangaHistoryLocalSource,
+      mediaId: 'Other',
+      openedAt: 90,
+      title: 'Other manga',
+      localRelativePath: 'Other',
+    );
+    // 非漫画来源的历史与本次删除无关，必须保留。
+    await _insertHistory(
+      db,
+      mediaSource: 'reader_video',
+      mediaId: 'video-1',
+      openedAt: 80,
+      title: 'Video history',
+    );
+
+    await tester.pumpWidget(
+      _harness(_HistoryTestAppModel(database: db), navKey),
+    );
+    await _settle(tester);
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('manga_history_delete_all')),
+    );
+    await _settle(tester);
+    expect(find.text(t.manga_history_delete_all_confirm_title), findsOneWidget);
+
+    // 取消不删任何东西。
+    await tester.tap(find.text(t.dialog_cancel));
+    await _settle(tester);
+    expect(await db.getAllMediaOpenHistory(), hasLength(3));
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('manga_history_delete_all')),
+    );
+    await _settle(tester);
+    await tester.tap(find.text(t.manga_history_delete_all_confirm_action));
+    await _settle(tester);
+
+    expect(
+      find.byKey(const ValueKey<String>('manga_history_empty')),
+      findsOneWidget,
+    );
+    expect(find.text(t.manga_history_deleted_all), findsOneWidget);
+    final List<MediaOpenHistoryRow> rows = await db.getAllMediaOpenHistory();
+    expect(rows, hasLength(1), reason: '只清空漫画历史');
+    expect(rows.single.mediaSource, 'reader_video');
+
+    // 阅读数据保留。
+    final EpubBookRow? keptBook = await db.getEpubBook(book.bookKey);
+    expect(keptBook, isNotNull);
+    expect(keptBook!.completedAt, DateTime(2026, 1, 2));
+    expect(await db.getReaderPosition(book.uid), isNotNull);
+    final MangaChapterStateRow? chapter = await db.getMangaChapterState(
+      bookUid: book.uid,
+      chapterKey: 'ch1',
+    );
+    expect(chapter?.readAt, 456);
+    expect(await db.getShelfEntry(MediaKind.epub, book.uid), isNotNull);
+
+    // 让 toast 的 2s 计时器走完，避免测试结束时留下 pending timer。
     await tester.pump(const Duration(seconds: 3));
   });
 }
