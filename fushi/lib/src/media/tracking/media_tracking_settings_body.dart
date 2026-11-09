@@ -375,27 +375,20 @@ int normalizeTrackingProgressOffset(TrackingProgressMode mode, int? raw) =>
 
 /// 「添加映射」可选的本地条目清单。
 ///
-/// 多季合集（分组按各集文件名派生）不列为整合集映射目标：Bangumi 一季一条目，
-/// 「整个多季合集 → 单个 subject」结构性错位，建了也会被上报门控绕开——与其让
-/// 用户建一条永远不生效的映射，不如不提供入口。多季合集的上报走自动按集通道
-/// （季度感知刮削 subject + 季内集号），单集也仍可手动映射。
+/// Tracking 是书架专属功能（ADR 0020）：只有 Library membership=true 的作品
+/// 能作为映射目标。非书架 Manga 行虽然持久化，但 Tag / 订阅 / Tracking 都
+/// 不对它开放，因此不能出现在这里。MyComic 是漫画-only（ADR 0002），schema
+/// 里没有 galgames 表，本地条目只来自书架漫画。
 Future<List<MediaTrackingLocalTarget>> loadMediaTrackingLocalTargets(
   FushiDatabase database,
 ) async {
-  final List<EpubBookRow> books = await database.getAllEpubBooks();
-  final List<GalgameRow> games = await database.getAllGalgames();
+  final List<EpubBookRow> books = await database.getLibraryEpubBooks();
   return <MediaTrackingLocalTarget>[
     for (final EpubBookRow book in books)
       MediaTrackingLocalTarget(
         type: TrackingMediaType.book,
         key: book.bookKey,
         title: book.title,
-      ),
-    for (final GalgameRow game in games)
-      MediaTrackingLocalTarget(
-        type: TrackingMediaType.game,
-        key: game.id,
-        title: game.name,
       ),
   ];
 }
