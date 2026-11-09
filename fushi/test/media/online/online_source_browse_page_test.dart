@@ -67,6 +67,30 @@ void main() {
     );
   });
 
+  testWidgets('搜索框首字输入后焦点仍在', (WidgetTester tester) async {
+    final _FakeCatalog catalog = _FakeCatalog();
+    await pumpPage(tester, catalog);
+
+    await tester.showKeyboard(field());
+    await tester.pump();
+    expect(
+      tester.widget<TextField>(glassUnwrap<TextField>(field())).focusNode?.hasFocus,
+      isTrue,
+      reason: '前置条件：搜索框已聚焦',
+    );
+
+    // 模拟 IME 输入第一个字符，不走 tester.enterText 的重新聚焦路径。
+    tester.testTextInput.enterText('a');
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      tester.widget<TextField>(glassUnwrap<TextField>(field())).focusNode?.hasFocus,
+      isTrue,
+      reason: '首字输入后焦点必须保持在搜索框',
+    );
+  });
+
   testWidgets('筛选落到第一个列表时清空搜索词，查询标记 filtered', (WidgetTester tester) async {
     final _FakeCatalog catalog = _FakeCatalog()
       ..filterTarget = OnlineBrowseFilterTarget.firstListing;

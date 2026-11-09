@@ -100,6 +100,29 @@ void main() {
     expect(find.text('Unrelated extension'), findsOneWidget);
   });
 
+  testWidgets('扩展商店搜索框首字输入后焦点仍在', (WidgetTester tester) async {
+    await pumpStandalone(tester);
+
+    final Finder search =
+        find.byKey(const ValueKey<String>('mihon_extension_search_field'));
+    await tester.showKeyboard(search);
+    await tester.pump();
+    expect(
+      tester.widget<TextField>(search).focusNode?.hasFocus,
+      isTrue,
+      reason: '前置条件：搜索框已聚焦',
+    );
+
+    tester.testTextInput.enterText('f');
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.widget<TextField>(search).focusNode?.hasFocus,
+      isTrue,
+      reason: '首字输入后焦点必须保持在搜索框',
+    );
+  });
+
   testWidgets(
       'preview and install are mutually disabled while preparation runs',
       (WidgetTester tester) async {
