@@ -1335,29 +1335,19 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     if (decision == null || !mounted) return;
     setState(() => _busy = true);
     try {
-      // 先停引用再销毁实体：正在下载这本书的任务还握着目录句柄。下载用 remove
-      // （等正在飞的那个真停）而不是 cancel（只置标志就返回，worker 还在往目录里
-      // 写页，随后的目录删除会撞 errno 32 留孤儿）。任务行随后由 deleteEpubBook
-      // 级联删，这里删掉也无妨。
-      final MangaDownloadService downloads = appModel.mangaDownloadService;
-      final Map<String, MangaDownloadJobRow> jobs = await downloads.jobsForBook(
-        row.bookKey,
-      );
-      for (final MangaDownloadJobRow job in jobs.values) {
-        if (job.status == MangaDownloadJobStatus.queued ||
-            job.status == MangaDownloadJobStatus.running) {
-          await downloads.remove(job.jobId);
-        }
-      }
+      // 下载任务的停止由 removeMangaFromLibrary 统一负责（单一 owner）：它先
+      // remove 排队中 / 下载中的任务（等正在飞的那个真停），再删文件与行。页面
+      // 不再维护第二份停止循环。
       final MangaLibraryRemovalResult result = await removeMangaFromLibrary(
         db: appModel.database,
         bookKey: row.bookKey,
         deleteLocalFiles: decision.deleteLocalFiles,
         deleteStatistics: decision.deleteStatistics,
+        downloadService: appModel.mangaDownloadService,
       );
       if (!mounted) return;
       if (!result.removed) {
-        final String reason = result.failureReason ?? '';
+        final String reason = result.failureMessage;
         FushiToast.show(
           msg: reason.isEmpty
               ? t.epub_delete_error
@@ -1409,10 +1399,11 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
         localSourceRoot: appModel.appPaths.localComicRoot,
         deleteLocalFiles: decision.deleteLocalFiles,
         deleteStatistics: decision.deleteStatistics,
+        downloadService: appModel.mangaDownloadService,
       );
       if (!mounted) return;
       if (!result.removed) {
-        final String reason = result.failureReason ?? '';
+        final String reason = result.failureMessage;
         FushiToast.show(
           msg: reason.isEmpty
               ? t.epub_delete_error

@@ -1080,6 +1080,10 @@ class ReaderFushiSource extends ReaderMediaSource {
   /// [deleteStatistics]（默认 false，对应删除弹窗「同时删除统计数据」）：true 时在删
   /// 行**之前**把这本书攒下的统计一并删掉（[deleteBookStatistics]）——标题与 srt uid
   /// 都住在即将被删的行上，行一删就无从定位。
+  /// [removeFromLibraryOnly]（默认 false）：统一「移出书架」流程专用。调用方已经
+  /// 自行处理作品文件，且 History 必须保留；因此跳过工作文件清理与「整部作品
+  /// 删除时级联删历史」路径。受管漫画卷（无在线 / Local source 描述符）也不会
+  /// 被误判成「整部作品删除」。
   Future<DeleteBookResult> deleteBook({
     required FushiDatabase db,
     required String bookKey,
@@ -1087,6 +1091,7 @@ class ReaderFushiSource extends ReaderMediaSource {
     DeleteScope scope = DeleteScope.keepLocalOnly,
     bool deleteLocalFiles = false,
     bool deleteStatistics = false,
+    bool removeFromLibraryOnly = false,
   }) async {
     try {
       // 原件位置在 audiobooks / srt_books 行上，deleteEpubBook 的事务会把它们
@@ -1171,7 +1176,9 @@ class ReaderFushiSource extends ReaderMediaSource {
           bookRow != null &&
           OnlineMangaLibraryEntry.tryParse(bookRow.sourceMetadata) != null;
       final bool deletesWorkFiles =
-          bookRow != null && (deleteLocalFiles || !onlineMangaWork);
+          bookRow != null &&
+          !removeFromLibraryOnly &&
+          (deleteLocalFiles || !onlineMangaWork);
 
       // TODO-1195 part B: a user shelf delete records a tombstone so a later
       // backup MERGE import never resurrects this book from an old backup.
@@ -1224,7 +1231,7 @@ class ReaderFushiSource extends ReaderMediaSource {
         // （`downloads/{source}/{manga}`）：只有用户勾选「同时删除已下载文件」
         // 才删；否则保留文件（DB 记录已删 → 未索引，重建索引可找回）。本地卷 /
         // 导入漫画的 extractDir 仍是应用管理的副本，随书删除。
-        if (bookRow != null) {
+        if (bookRow != null && !removeFromLibraryOnly) {
           final bool onlineManga =
               OnlineMangaLibraryEntry.tryParse(bookRow.sourceMetadata) != null;
           if (!onlineManga || deleteLocalFiles) {

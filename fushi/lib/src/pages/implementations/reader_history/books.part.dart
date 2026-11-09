@@ -697,7 +697,8 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
               failed++;
               ErrorLogService.instance.log(
                 'ReaderHistory.batchRemoveFromLibrary',
-                result.failureReason ?? 'remove failed',
+                '${result.failure?.name ?? 'remove failed'}'
+                '${result.detail == null ? '' : ': ${result.detail}'}',
               );
             }
           } on Object catch (error, stack) {
@@ -951,7 +952,7 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
       );
       if (!mounted) return;
       if (!result.removed) {
-        final String reason = result.failureReason ?? '';
+        final String reason = result.failureMessage;
         FushiToast.show(
           msg: reason.isEmpty
               ? t.epub_delete_error
