@@ -65,7 +65,7 @@ _Avoid_: 图片
 _Avoid_: 收藏、书库
 
 **Remove from Library（移出书架）**:
-把 Manga 从 Library 移除。Local source 的 Manga 移出后不删除磁盘文件；在线 Manga 可另行选择是否删除已下载文件。
+把 Manga 从 Library 移除。确认弹窗中的「同时删除本地文件」默认不勾选：Local source 的原作文件默认保留，在线 Manga 的已下载章节文件也保留；只有用户显式勾选时才删除对应文件。文件删除失败时该 Manga 仍留在 Library。移出固定删除 Reading progress、Chapter 已读标记与 Tag 分配，History 保留；Reading statistics 只有在用户显式勾选「同时删除统计数据」时才会移除。
 _Avoid_: 删除（删除文件是另一个动作）
 
 **Add to Library（加入书架）**:
@@ -77,11 +77,11 @@ _Avoid_: 导入（批量导入已退役）、自动入库
 _Avoid_: 未收藏、临时作品
 
 **Category（分类）**:
-Mihon 备份中的 Library 内用户自定义分组。仅为 Mihon 备份兼容而保留；my-comic v1 已无分类 UI，书架不再按分类分组。
+Mihon 备份中的 Library 内用户自定义分组，与 my-comic 的 Tag 双向映射：导出时每个 Tag 成为同名 Category，导入时每个 Category 按名称成为 Tag（同名合并）。Mihon 的 Default（不属于任何 Category）对应 my-comic 的「书架」页签。my-comic 不提供分类 UI，书架不按分类分组。
 _Avoid_: 标签、文件夹、视图页签
 
 **Tag（标签）**:
-Library 条目的用户自定义标记。漫画页把它呈现为标签栏中的单选页签，标签栏是「漫画」标题下方的二级浮动胶囊行；每项显示当前搜索与筛选条件下的漫画数量，数量用更轻的次要色小号数字呈现；不再是彩色多选 chip，页签栏内也不提供长按拖拽排序（顺序仍在标签管理页调整）。
+Library 条目的用户自定义标记。漫画页把它呈现为标签栏中的单选页签，标签栏是「漫画」标题下方的二级浮动胶囊行；每项显示当前搜索与筛选条件下的漫画数量，数量用更轻的次要色小号数字呈现；不再是彩色多选 chip，页签栏内也不提供长按拖拽排序（顺序仍在标签管理页调整）。每个 Tag 在 Backup 中导出为同名 Mihon Category，导入 Mihon 备份时同名 Category 恢复为 Tag；Tag 颜色不进入 Backup。
 _Avoid_: 分类、合集、文件夹
 
 **书架页签（Library tab）**:
@@ -111,6 +111,10 @@ _Avoid_: 书签、位置
 **History（历史）**:
 用户阅读 Manga 的会话记录，按 Manga 去重，每部一条，记录最近一次打开 Chapter 的时间；由「历史」页直接展示。History 不设条数上限，写入新作品不会裁剪更早的记录。History 与 Reading progress 相互独立：删除 History 不会清除续读位置或 Chapter 已读标记。无痕阅读期间不新增、不更新 History。
 _Avoid_: 记录、阅读记录（可能指 Reading progress）
+
+**Reading statistics（阅读统计）**:
+统计中心「阅读」页所展示的阅读活动汇总：阅读时长、页数、阅读速度与会话等，以及查词/制卡计数。它按作品与时间范围聚合，与 History、Reading progress 是三套独立数据：History 记录每部 Manga 最近一次阅读会话，Reading progress 记录续读位置；删除阅读统计不会删除 History 或 Reading progress，移出书架时也只有显式勾选「同时删除统计数据」才会移除该作品的统计。
+_Avoid_: 历史、阅读进度（它们是独立的数据；阅读统计不是阅读会话记录）
 
 **Incognito reading（无痕阅读）**:
 「设置 → 系统与关于 → 更新提醒」里的设备本地开关，默认关闭。开启后阅读仍保留 Reading progress（下次能接着读，「继续阅读」指向当前 Chapter），但不新增或更新 History 条目，也不自动新增或推进书架「最近阅读」排序、不自动写入 Chapter 已读标记与完成标记；已有 History 保留，手动标记已读/未读不受影响，Tracking 与统计照常。开关不随 Profile / Backup 同步，换设备按新设备的选择。
@@ -169,7 +173,7 @@ _Avoid_: 恢复出厂设置、重置应用、清除缓存
 _Avoid_: 同步
 
 **Backup（备份）**:
-Mihon 或 my-comic 生成的 `.tachibk` 快照。
+Mihon 或 my-comic 生成的 `.tachibk` 快照。my-comic 可在「创建备份」页按所选范围生成 Backup，供 Mihon 或另一台 my-comic 导入。
 _Avoid_: 存档、导出文件、应用快照（`.fushi.zip` 是另一种东西）
 
 **App snapshot（应用快照）**:
@@ -185,11 +189,11 @@ _Avoid_: 自动备份、应用快照
 _Avoid_: 备份目录、autobackup（那是目录名）
 
 **Import（导入）**:
-把 Backup 读入 my-comic 的 Library。
+把 Backup 读入 my-comic：恢复 Library 与阅读数据，并补齐本机缺失的 my-comic 设置。Merge 语义，按 Manga 与 Source 去重；未加入 Library 的已读作品只恢复 History，不创建 Library 条目。
 _Avoid_: 恢复（除非特指 Mihon 的 restore 行为）、同步
 
 **Export（导出）**:
-从 my-comic 生成 Backup，供 Mihon 读取。
+从 my-comic 生成 Backup 的动作：在「创建备份」页选择导出范围后写出 `.tachibk`，产物可由 Mihon 读取，也可由 my-comic 重新导入。
 _Avoid_: 同步、上传
 
 **Sync（同步）**:
@@ -209,7 +213,7 @@ _Avoid_: 本地库、离线库、localcomic（旧目录名）
 _Avoid_: 本地图源
 
 **Sidecar（伴生进程）**:
-随应用启动的 JVM 进程，负责运行 Extension 和解析/生成 Backup。
+随应用启动的 JVM 进程，负责运行 Extension。Backup 的解析与生成由 my-comic 自身完成。
 _Avoid_: 服务器、后端（避免暗示需要用户自建服务器）
 
 **Extension runtime（扩展运行时）**:
