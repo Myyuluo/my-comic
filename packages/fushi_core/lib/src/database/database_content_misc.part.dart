@@ -614,14 +614,24 @@ mixin _FushiDbContentMisc
           await deleteStudySegmentsForMedia(
               mediaKind: kActivityMediaBook, mediaKey: bookKey);
         }
-        await (delete(readingStatistics)..where((t) => t.title.equals(title)))
-            .go();
-        await (delete(lookupMiningCounters)
-              ..where((t) =>
-                  t.title.equals(title) &
-                  t.sourceType.equals(FushiDatabase.statSourceBook)))
-            .go();
-        await insertStatisticsTombstone(title, FushiDatabase.statSourceBook);
+        // my-comic 的漫画-only live schema 只有 study_segments，没有这两张旧投影
+        // 表。无守卫的 delete 会在「表不存在」上抛异常并回滚整个事务，连已经删掉
+        // 的 study_segments 也一起回滚——「同时删除统计数据」会静默失效。
+        if (await hasTable(FushiSchemaTables.readingStatistics)) {
+          await (delete(readingStatistics)
+                ..where((t) => t.title.equals(title)))
+              .go();
+        }
+        if (await hasTable(FushiSchemaTables.lookupMiningCounters)) {
+          await (delete(lookupMiningCounters)
+                ..where((t) =>
+                    t.title.equals(title) &
+                    t.sourceType.equals(FushiDatabase.statSourceBook)))
+              .go();
+        }
+        if (await hasTable(FushiSchemaTables.statisticsTombstones)) {
+          await insertStatisticsTombstone(title, FushiDatabase.statSourceBook);
+        }
       });
 
   /// 删除某视频的纯统计：观看时长/字幕字数（video_watch_statistics）与查词/制卡

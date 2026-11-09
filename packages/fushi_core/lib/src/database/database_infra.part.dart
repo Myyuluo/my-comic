@@ -9,6 +9,17 @@ part of 'database.dart';
 abstract final class FushiSchemaTables {
   static const String audiobooks = 'audiobooks';
   static const String srtBooks = 'srt_books';
+
+  /// 旧版日统计投影；my-comic 漫画-only live schema 不创建，统计中心以
+  /// `study_segments` 为准。
+  static const String readingStatistics = 'reading_statistics';
+
+  /// 旧版查词/制卡计数；同上，my-comic live schema 不创建。
+  static const String lookupMiningCounters = 'lookup_mining_counters';
+
+  /// 旧版统计墓碑（按 title 粒度）；my-comic 用 `study_segment_tombstones` 按
+  /// 身份立碑，不创建本表。
+  static const String statisticsTombstones = 'statistics_tombstones';
 }
 
 mixin _FushiDbInfra on _$FushiDatabase {
