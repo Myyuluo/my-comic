@@ -43,10 +43,10 @@ Future<String?> pickMihonBackupSavePath({
 /// 「创建备份」页：Bookshelf / Settings group cards with a bottom 创建 button.
 ///
 /// Ticket 07 delivers the Library options (书架中的作品 / 章节) and the file
-/// plumbing; ticket 10 adds 进度记录 (Tracking). History, categories, app
-/// settings and source settings are appended to these same groups by later
-/// tickets; an empty group card is not rendered, so this slice shows only the
-/// 书架 card.
+/// plumbing; ticket 09 adds 分类 (Categories), ticket 10 adds 进度记录
+/// (Tracking) and ticket 11 adds 应用设置 / 包含敏感设置 in the 设置 card.
+/// History, extension stores and source settings are appended by later
+/// tickets; an empty group card is not rendered.
 class CreateBackupPage extends ConsumerStatefulWidget {
   const CreateBackupPage({super.key, this.savePathPicker, this.exporter});
 
@@ -66,6 +66,7 @@ class _CreateBackupPageState extends ConsumerState<CreateBackupPage> {
   bool _includeLibrary = true;
   bool _includeChapters = true;
   bool _includeTracking = true;
+  bool _includeCategories = true;
   bool _includeAppSettings = true;
   bool _includeSensitiveSettings = false;
 
@@ -73,15 +74,17 @@ class _CreateBackupPageState extends ConsumerState<CreateBackupPage> {
   /// Ticket 12 adds「图源设置」to this condition.
   bool get _sensitiveSettingsAvailable => _includeAppSettings;
 
-  /// Standalone exportable sections: 书架中的作品 and 应用设置. 章节 and
-  /// 进度记录 depend on 书架中的作品. Later tickets add 分类 / 插件商店 /
+  /// Standalone exportable sections: 书架中的作品, 分类 and 应用设置. 章节
+  /// and 进度记录 depend on 书架中的作品. Later tickets add 插件商店 /
   /// 图源设置 here.
-  bool get _canCreate => _includeLibrary || _includeAppSettings;
+  bool get _canCreate =>
+      _includeLibrary || _includeCategories || _includeAppSettings;
 
   MihonBackupExportOptions get _options => MihonBackupExportOptions(
     includeLibrary: _includeLibrary,
     includeChapters: _includeLibrary && _includeChapters,
     includeTracking: _includeLibrary && _includeTracking,
+    includeCategories: _includeCategories,
     includeAppSettings: _includeAppSettings,
     includeSensitiveSettings: _includeSensitiveSettings,
   );
@@ -100,23 +103,22 @@ class _CreateBackupPageState extends ConsumerState<CreateBackupPage> {
 
     final MihonBackupExporter exporter =
         widget.exporter ?? MihonBackupExporter(database: appModel.database);
-    final _CreateBackupOutcome? outcome = await showAppDialog<_CreateBackupOutcome>(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext _) => _CreateBackupProgressDialog(
-        exporter: exporter,
-        options: _options,
-        target: File(path),
-      ),
-    );
+    final _CreateBackupOutcome? outcome =
+        await showAppDialog<_CreateBackupOutcome>(
+          context: context,
+          barrierDismissible: false,
+          builder: (BuildContext _) => _CreateBackupProgressDialog(
+            exporter: exporter,
+            options: _options,
+            target: File(path),
+          ),
+        );
     if (outcome == null || !mounted) return;
 
     await showAppDialog<void>(
       context: context,
-      builder: (BuildContext _) => _CreateBackupResultDialog(
-        outcome: outcome,
-        targetPath: path,
-      ),
+      builder: (BuildContext _) =>
+          _CreateBackupResultDialog(outcome: outcome, targetPath: path),
     );
   }
 
@@ -167,6 +169,18 @@ class _CreateBackupPageState extends ConsumerState<CreateBackupPage> {
                 setState(() => _includeTracking = value ?? false);
               }
             : null,
+      ),
+      // 分类 = Tags exported as Mihon categories. It is deliberately not tied
+      // to 书架中的作品 so a tags-only backup can be created.
+      FushiCheckboxListTile(
+        key: const Key('create_backup_include_categories'),
+        contentPadding: EdgeInsets.zero,
+        controlAffinity: ListTileControlAffinity.leading,
+        value: _includeCategories,
+        title: Text(t.backup_create_categories),
+        onChanged: (bool? value) {
+          setState(() => _includeCategories = value ?? false);
+        },
       ),
     ];
     // 应用设置 exports MyComic's own preference keys; 包含敏感设置 is gated on

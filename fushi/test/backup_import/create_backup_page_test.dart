@@ -41,9 +41,7 @@ Widget _harness(AppModel appModel, Widget page) => ProviderScope(
     platformServicesProvider.overrideWithValue(testPlatformServices()),
     appProvider.overrideWith((Ref ref) => appModel),
   ],
-  child: TranslationProvider(
-    child: MaterialApp(home: page),
-  ),
+  child: TranslationProvider(child: MaterialApp(home: page)),
 );
 
 Future<void> _pumpUntil(WidgetTester tester, Finder finder) async {
@@ -94,8 +92,14 @@ void main() {
     expect(find.text('设置'), findsWidgets);
     expect(find.text('书架中的作品'), findsOneWidget);
     expect(find.text('章节'), findsOneWidget);
-    expect(_tile(tester, const Key('create_backup_include_library')).value, isTrue);
-    expect(_tile(tester, const Key('create_backup_include_chapters')).value, isTrue);
+    expect(
+      _tile(tester, const Key('create_backup_include_library')).value,
+      isTrue,
+    );
+    expect(
+      _tile(tester, const Key('create_backup_include_chapters')).value,
+      isTrue,
+    );
     expect(
       tester
           .widget<FushiCheckboxListTile>(
@@ -120,7 +124,10 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(_tile(tester, const Key('create_backup_include_library')).value, isTrue);
+    expect(
+      _tile(tester, const Key('create_backup_include_library')).value,
+      isTrue,
+    );
   });
 
   testWidgets('app settings default on and sensitive settings default off', (
@@ -137,7 +144,10 @@ void main() {
       isTrue,
     );
     expect(
-      _tile(tester, const Key('create_backup_include_sensitive_settings')).value,
+      _tile(
+        tester,
+        const Key('create_backup_include_sensitive_settings'),
+      ).value,
       isFalse,
     );
     expect(
@@ -150,13 +160,19 @@ void main() {
     );
 
     // Re-opening the page restores the defaults; the sensitive tick is not
-    // remembered.
+    // remembered. The row sits below the fold once every section row is shown,
+    // so scroll the list before tapping it.
+    await tester.drag(find.byType(ListView), const Offset(0, -120));
+    await tester.pumpAndSettle();
     await tester.tap(
       find.byKey(const Key('create_backup_include_sensitive_settings')),
     );
     await tester.pumpAndSettle();
     expect(
-      _tile(tester, const Key('create_backup_include_sensitive_settings')).value,
+      _tile(
+        tester,
+        const Key('create_backup_include_sensitive_settings'),
+      ).value,
       isTrue,
     );
     await tester.pumpWidget(
@@ -171,7 +187,10 @@ void main() {
       isTrue,
     );
     expect(
-      _tile(tester, const Key('create_backup_include_sensitive_settings')).value,
+      _tile(
+        tester,
+        const Key('create_backup_include_sensitive_settings'),
+      ).value,
       isFalse,
     );
   });
@@ -183,7 +202,9 @@ void main() {
     await tester.pumpWidget(_harness(appModel, const CreateBackupPage()));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('create_backup_include_app_settings')));
+    await tester.tap(
+      find.byKey(const Key('create_backup_include_app_settings')),
+    );
     await tester.pumpAndSettle();
     expect(
       _tile(tester, const Key('create_backup_include_app_settings')).value,
@@ -198,7 +219,9 @@ void main() {
       reason: 'sensitive settings need app settings or source settings',
     );
 
-    await tester.tap(find.byKey(const Key('create_backup_include_app_settings')));
+    await tester.tap(
+      find.byKey(const Key('create_backup_include_app_settings')),
+    );
     await tester.pumpAndSettle();
     expect(
       _tile(
@@ -209,57 +232,182 @@ void main() {
     );
   });
 
-  testWidgets('app settings count as exportable content for the create button', (
-    WidgetTester tester,
-  ) async {
-    final _TestAppModel appModel = _TestAppModel(db, paths);
-    await tester.pumpWidget(_harness(appModel, const CreateBackupPage()));
-    await tester.pumpAndSettle();
+  testWidgets(
+    'app settings count as exportable content for the create button',
+    (WidgetTester tester) async {
+      final _TestAppModel appModel = _TestAppModel(db, paths);
+      await tester.pumpWidget(_harness(appModel, const CreateBackupPage()));
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.byKey(const Key('create_backup_include_library')));
-    await tester.pumpAndSettle();
-    expect(
-      tester
-          .widget<FushiFilledButton>(
-            find.byKey(const Key('create_backup_create')),
-          )
-          .onPressed,
-      isNotNull,
-      reason: 'app settings alone are still worth exporting',
-    );
+      await tester.tap(find.byKey(const Key('create_backup_include_library')));
+      await tester.tap(
+        find.byKey(const Key('create_backup_include_categories')),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<FushiFilledButton>(
+              find.byKey(const Key('create_backup_create')),
+            )
+            .onPressed,
+        isNotNull,
+        reason: 'app settings alone are still worth exporting',
+      );
 
-    await tester.tap(find.byKey(const Key('create_backup_include_app_settings')));
-    await tester.pumpAndSettle();
-    expect(
-      tester
-          .widget<FushiFilledButton>(
-            find.byKey(const Key('create_backup_create')),
-          )
-          .onPressed,
-      isNull,
-      reason: 'nothing selectable remains',
-    );
+      await tester.tap(
+        find.byKey(const Key('create_backup_include_app_settings')),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<FushiFilledButton>(
+              find.byKey(const Key('create_backup_create')),
+            )
+            .onPressed,
+        isNull,
+        reason: 'nothing selectable remains',
+      );
 
-    await tester.tap(find.byKey(const Key('create_backup_include_app_settings')));
-    await tester.pumpAndSettle();
-    expect(
-      tester
-          .widget<FushiFilledButton>(
-            find.byKey(const Key('create_backup_create')),
-          )
-          .onPressed,
-      isNotNull,
-    );
-  });
+      await tester.tap(
+        find.byKey(const Key('create_backup_include_app_settings')),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<FushiFilledButton>(
+              find.byKey(const Key('create_backup_create')),
+            )
+            .onPressed,
+        isNotNull,
+      );
+    },
+  );
 
-  testWidgets('created backup passes the app settings selection to the exporter', (
+  testWidgets(
+    'created backup passes the app settings selection to the exporter',
+    (WidgetTester tester) async {
+      final _TestAppModel appModel = _TestAppModel(db, paths);
+      final _CapturingOptionsExporter exporter = _CapturingOptionsExporter(
+        database: db,
+      );
+      final String targetPath = p.join(tmp.path, 'options.tachibk');
+
+      await tester.pumpWidget(
+        _harness(
+          appModel,
+          CreateBackupPage(
+            exporter: exporter,
+            savePathPicker:
+                ({
+                  required String initialDirectory,
+                  required String fileName,
+                }) async => targetPath,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.drag(find.byType(ListView), const Offset(0, -120));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const Key('create_backup_include_sensitive_settings')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('create_backup_create')));
+      await tester.pumpAndSettle();
+
+      expect(exporter.options, isNotNull);
+      expect(exporter.options!.includeAppSettings, isTrue);
+      expect(exporter.options!.includeSensitiveSettings, isTrue);
+    },
+  );
+
+  testWidgets(
+    'unchecking「书架中的作品」disables chapters but keeps standalone sections',
+    (WidgetTester tester) async {
+      final _TestAppModel appModel = _TestAppModel(db, paths);
+      await tester.pumpWidget(_harness(appModel, const CreateBackupPage()));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('create_backup_include_library')));
+      await tester.pumpAndSettle();
+
+      expect(
+        _tile(tester, const Key('create_backup_include_library')).value,
+        isFalse,
+      );
+      expect(
+        _tile(tester, const Key('create_backup_include_chapters')).enabled,
+        isFalse,
+        reason: '章节 cannot be exported without 书架中的作品',
+      );
+      expect(
+        _tile(tester, const Key('create_backup_include_categories')).enabled,
+        isNot(false),
+        reason: '分类 is independent of 书架中的作品',
+      );
+      expect(
+        tester
+            .widget<FushiFilledButton>(
+              find.byKey(const Key('create_backup_create')),
+            )
+            .onPressed,
+        isNotNull,
+        reason: '分类 alone keeps 创建 available',
+      );
+
+      await tester.tap(
+        find.byKey(const Key('create_backup_include_categories')),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<FushiFilledButton>(
+              find.byKey(const Key('create_backup_create')),
+            )
+            .onPressed,
+        isNotNull,
+        reason: '应用设置 is still selected',
+      );
+
+      await tester.tap(
+        find.byKey(const Key('create_backup_include_app_settings')),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<FushiFilledButton>(
+              find.byKey(const Key('create_backup_create')),
+            )
+            .onPressed,
+        isNull,
+        reason: 'nothing exportable → 创建 is greyed out',
+      );
+
+      await tester.tap(find.byKey(const Key('create_backup_include_library')));
+      await tester.pumpAndSettle();
+      expect(
+        _tile(tester, const Key('create_backup_include_chapters')).enabled,
+        isNot(false),
+      );
+      expect(
+        tester
+            .widget<FushiFilledButton>(
+              find.byKey(const Key('create_backup_create')),
+            )
+            .onPressed,
+        isNotNull,
+      );
+    },
+  );
+
+  testWidgets('「分类」 starts checked and exports without 书架中的作品', (
     WidgetTester tester,
   ) async {
     final _TestAppModel appModel = _TestAppModel(db, paths);
     final _CapturingOptionsExporter exporter = _CapturingOptionsExporter(
       database: db,
     );
-    final String targetPath = p.join(tmp.path, 'options.tachibk');
+    final String targetPath = p.join(tmp.path, 'categories.tachibk');
 
     await tester.pumpWidget(
       _harness(
@@ -275,67 +423,20 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(
-      find.byKey(const Key('create_backup_include_sensitive_settings')),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('create_backup_create')));
-    await tester.pumpAndSettle();
 
-    expect(exporter.options, isNotNull);
-    expect(exporter.options!.includeAppSettings, isTrue);
-    expect(exporter.options!.includeSensitiveSettings, isTrue);
-  });
-
-  testWidgets('进度记录 starts selected and depends on 书架中的作品', (
-    WidgetTester tester,
-  ) async {
-    final _TestAppModel appModel = _TestAppModel(db, paths);
-    await tester.pumpWidget(_harness(appModel, const CreateBackupPage()));
-    await tester.pumpAndSettle();
-
-    expect(find.text('进度记录'), findsOneWidget);
     expect(
-      _tile(tester, const Key('create_backup_include_tracking')).value,
+      _tile(tester, const Key('create_backup_include_categories')).value,
       isTrue,
-      reason: '进度记录 defaults to checked',
+      reason: '分类 defaults to checked',
     );
+
+    await tester.tap(find.byKey(const Key('create_backup_include_library')));
+    await tester.pumpAndSettle();
+
     expect(
-      _tile(tester, const Key('create_backup_include_tracking')).enabled,
+      _tile(tester, const Key('create_backup_include_categories')).enabled,
       isNot(false),
-    );
-
-    await tester.tap(find.byKey(const Key('create_backup_include_library')));
-    await tester.pumpAndSettle();
-    expect(
-      _tile(tester, const Key('create_backup_include_tracking')).enabled,
-      isFalse,
-      reason: '进度记录 cannot be exported without 书架中的作品',
-    );
-
-    await tester.tap(find.byKey(const Key('create_backup_include_library')));
-    await tester.pumpAndSettle();
-    expect(
-      _tile(tester, const Key('create_backup_include_tracking')).enabled,
-      isNot(false),
-    );
-  });
-
-  testWidgets('unchecking「书架中的作品」disables chapters and the create button', (
-    WidgetTester tester,
-  ) async {
-    final _TestAppModel appModel = _TestAppModel(db, paths);
-    await tester.pumpWidget(_harness(appModel, const CreateBackupPage()));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byKey(const Key('create_backup_include_library')));
-    await tester.pumpAndSettle();
-
-    expect(_tile(tester, const Key('create_backup_include_library')).value, isFalse);
-    expect(
-      _tile(tester, const Key('create_backup_include_chapters')).enabled,
-      isFalse,
-      reason: '章节 cannot be exported without 书架中的作品',
+      reason: '分类 does not depend on 书架中的作品',
     );
     expect(
       tester
@@ -344,10 +445,81 @@ void main() {
           )
           .onPressed,
       isNotNull,
-      reason: '应用设置 is still selected',
+      reason: '分类 alone is exportable',
     );
 
-    await tester.tap(find.byKey(const Key('create_backup_include_app_settings')));
+    await tester.tap(find.byKey(const Key('create_backup_create')));
+    await _pumpUntil(tester, find.text(t.backup_export_success));
+
+    expect(exporter.options, isNotNull);
+    expect(exporter.options!.includeLibrary, isFalse);
+    expect(exporter.options!.includeChapters, isFalse);
+    expect(exporter.options!.includeCategories, isTrue);
+    expect(find.text(t.backup_export_success), findsOneWidget);
+  });
+
+  testWidgets(
+    '进度记录 starts selected and depends on 书架中的作品',
+    (WidgetTester tester) async {
+      final _TestAppModel appModel = _TestAppModel(db, paths);
+      await tester.pumpWidget(_harness(appModel, const CreateBackupPage()));
+      await tester.pumpAndSettle();
+
+      expect(find.text('进度记录'), findsOneWidget);
+      expect(
+        _tile(tester, const Key('create_backup_include_tracking')).value,
+        isTrue,
+        reason: '进度记录 defaults to checked',
+      );
+      expect(
+        _tile(tester, const Key('create_backup_include_tracking')).enabled,
+        isNot(false),
+      );
+
+      await tester.tap(find.byKey(const Key('create_backup_include_library')));
+      await tester.pumpAndSettle();
+      expect(
+        _tile(tester, const Key('create_backup_include_tracking')).enabled,
+        isFalse,
+        reason: '进度记录 cannot be exported without 书架中的作品',
+      );
+
+      await tester.tap(find.byKey(const Key('create_backup_include_library')));
+      await tester.pumpAndSettle();
+      expect(
+        _tile(tester, const Key('create_backup_include_tracking')).enabled,
+        isNot(false),
+      );
+    },
+  );
+
+  testWidgets('unchecking「分类」greys out 创建 only when nothing is selected', (
+    WidgetTester tester,
+  ) async {
+    final _TestAppModel appModel = _TestAppModel(db, paths);
+    await tester.pumpWidget(_harness(appModel, const CreateBackupPage()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('create_backup_include_categories')));
+    await tester.pumpAndSettle();
+    expect(
+      _tile(tester, const Key('create_backup_include_categories')).value,
+      isFalse,
+    );
+    expect(
+      tester
+          .widget<FushiFilledButton>(
+            find.byKey(const Key('create_backup_create')),
+          )
+          .onPressed,
+      isNotNull,
+      reason: 'the library is still exported',
+    );
+
+    await tester.tap(find.byKey(const Key('create_backup_include_library')));
+    await tester.tap(
+      find.byKey(const Key('create_backup_include_app_settings')),
+    );
     await tester.pumpAndSettle();
     expect(
       tester
@@ -356,15 +528,11 @@ void main() {
           )
           .onPressed,
       isNull,
-      reason: 'nothing exportable → 创建 is greyed out',
+      reason: '书架中的作品, 分类 and 应用设置 are all unselected',
     );
 
-    await tester.tap(find.byKey(const Key('create_backup_include_library')));
+    await tester.tap(find.byKey(const Key('create_backup_include_categories')));
     await tester.pumpAndSettle();
-    expect(
-      _tile(tester, const Key('create_backup_include_chapters')).enabled,
-      isNot(false),
-    );
     expect(
       tester
           .widget<FushiFilledButton>(
@@ -375,44 +543,45 @@ void main() {
     );
   });
 
-  testWidgets('save dialog defaults to the Backup directory and its cancel writes nothing', (
-    WidgetTester tester,
-  ) async {
-    final _TestAppModel appModel = _TestAppModel(db, paths);
-    String? seenDirectory;
-    String? seenFileName;
-    await tester.pumpWidget(
-      _harness(
-        appModel,
-        CreateBackupPage(
-          savePathPicker:
-              ({
-                required String initialDirectory,
-                required String fileName,
-              }) async {
-                seenDirectory = initialDirectory;
-                seenFileName = fileName;
-                return null;
-              },
+  testWidgets(
+    'save dialog defaults to the Backup directory and its cancel writes nothing',
+    (WidgetTester tester) async {
+      final _TestAppModel appModel = _TestAppModel(db, paths);
+      String? seenDirectory;
+      String? seenFileName;
+      await tester.pumpWidget(
+        _harness(
+          appModel,
+          CreateBackupPage(
+            savePathPicker:
+                ({
+                  required String initialDirectory,
+                  required String fileName,
+                }) async {
+                  seenDirectory = initialDirectory;
+                  seenFileName = fileName;
+                  return null;
+                },
+          ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('create_backup_create')));
-    await tester.pumpAndSettle();
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('create_backup_create')));
+      await tester.pumpAndSettle();
 
-    expect(seenDirectory, paths.autobackupRoot.path);
-    expect(
-      seenFileName,
-      matches(RegExp(r'^my-comic_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}\.tachibk$')),
-    );
-    expect(
-      paths.autobackupRoot.listSync(),
-      isEmpty,
-      reason: 'cancelling the save dialog must not write a file',
-    );
-    expect(find.textContaining('已保存到'), findsNothing);
-  });
+      expect(seenDirectory, paths.autobackupRoot.path);
+      expect(
+        seenFileName,
+        matches(RegExp(r'^my-comic_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}\.tachibk$')),
+      );
+      expect(
+        paths.autobackupRoot.listSync(),
+        isEmpty,
+        reason: 'cancelling the save dialog must not write a file',
+      );
+      expect(find.textContaining('已保存到'), findsNothing);
+    },
+  );
 
   testWidgets('shows progress while creating and the saved path on success', (
     WidgetTester tester,
@@ -444,7 +613,10 @@ void main() {
 
     exporter.finish();
     await tester.pumpAndSettle();
-    expect(find.text(t.backup_create_saved_path(path: targetPath)), findsOneWidget);
+    expect(
+      find.text(t.backup_create_saved_path(path: targetPath)),
+      findsOneWidget,
+    );
   });
 
   testWidgets('reports export failures and does not claim the file was saved', (

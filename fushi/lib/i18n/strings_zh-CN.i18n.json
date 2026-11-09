@@ -1173,6 +1173,7 @@
   "backup_category_videos_desc": "本地视频文件",
   "backup_create_action": "创建",
   "backup_create_app_settings": "应用设置",
+  "backup_create_categories": "分类",
   "backup_create_chapters": "章节",
   "backup_create_failed_title": "创建备份失败",
   "backup_create_group_library": "书架",
