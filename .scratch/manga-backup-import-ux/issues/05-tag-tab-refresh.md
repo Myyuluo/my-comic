@@ -4,15 +4,19 @@
 
 **Blocked by:** None（can start immediately）
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] 导入成功且报告非空后，成对 invalidate `allTagsProvider` 与 `bookTagMapProvider`。
-- [ ] 导入完成后标签页签立即出现，数量正确，带 Tag 的作品立即从「书架」移到对应标签页签。
-- [ ] 「书架」页签只显示无 Tag 作品；多 Tag 作品出现在每个对应标签页签（ADR 0016 不变）。
-- [ ] 导入报告弹窗显示期间或关闭后，背后的书架已经是最新状态。
-- [ ] 导入失败或取消时不触发刷新。
-- [ ] 空备份或零 Tag 场景仍只有「书架」页签，不出现空页签。
-- [ ] 重复导入同一备份时标签页签保持幂等，不重复出现或重复计数。
-- [ ] 当前选中的页签保持不变，除非选中的 Tag 已被删除。
-- [ ] 不改变标签管理页、标签选择器或批量打标签的现有行为。
-- [ ] 页面级测试覆盖导入后立即出现页签、数量、归属、失败/取消不刷新与零 Tag 场景。
+- [x] 导入成功且报告非空后，成对 invalidate `allTagsProvider` 与 `bookTagMapProvider`。
+- [x] 导入完成后标签页签立即出现，数量正确，带 Tag 的作品立即从「书架」移到对应标签页签。
+- [x] 「书架」页签只显示无 Tag 作品；多 Tag 作品出现在每个对应标签页签（ADR 0016 不变）。
+- [x] 导入报告弹窗显示期间或关闭后，背后的书架已经是最新状态。
+- [x] 导入失败或取消时不触发刷新。
+- [x] 空备份或零 Tag 场景仍只有「书架」页签，不出现空页签。
+- [x] 重复导入同一备份时标签页签保持幂等，不重复出现或重复计数。
+- [x] 当前选中的页签保持不变，除非选中的 Tag 已被删除。
+- [x] 不改变标签管理页、标签选择器或批量打标签的现有行为。
+- [x] 页面级测试覆盖导入后立即出现页签、数量、归属、失败/取消不刷新与零 Tag 场景。
+
+## Answer
+
+Implemented in `9deaf71f`, merged as `b84f3033`. `runMihonBackupImport` 在导入流程返回、且报告非空时，先 `ref.invalidate(allTagsProvider)` 与 `ref.invalidate(bookTagMapProvider)`，再显示导入报告弹窗——复用标签管理页退出时的同一组失效语义（`tag_management_page.dart` 的 `_invalidateTags`），因此弹窗背后的书架在显示期间已是最新：页签立即出现、数量正确、带 Tag 作品立即从「书架」移入对应页签。失败或取消时 `outcome == null` 直接返回；空备份报告 `isEmpty`（没有数据变化）——两者都不触发刷新。ADR 0016 的归属规则未改动：仍为单选胶囊页签，「书架」= 无任何用户 Tag 的漫画，多 Tag 漫画出现在每个对应页签且各计一次，不新增「全部」页签；当前选中的页签在刷新后保持，仅当对应 Tag 被删除时由现有页签收敛逻辑回退。标签管理页、标签选择器与批量打标签的行为均未改动。新增 `fushi/test/pages/manga_library_tag_refresh_test.dart`（5 个页面级 widget 测试）覆盖：导入成功后弹窗显示期间页签/数量/归属立即刷新、导入失败不刷新、取消选择文件不刷新、零 Tag 备份仍只有「书架」、重复导入幂等且选中页签保持；与 `manga_library_tag_tabs_test.dart`、`manga_library_tags_in_chrome_test.dart`、`test/backup_import/` 联合运行共 115 项测试全部通过。
