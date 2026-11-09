@@ -18,7 +18,10 @@ class DownloadTaskMetric {
   final String? tooltip;
 }
 
-/// 行尾的主操作（暂停 / 继续 / 重试）：圆形 tonal 图标按钮。
+/// 行尾的主操作（暂停 / 继续 / 重试 / 取消）：圆形 tonal 图标按钮。
+///
+/// 一条任务可以有多个主操作（失败行同时给「重试」和「取消」，ticket 09），按
+/// [DownloadTaskCard.quickActions] 的顺序渲染。
 class DownloadTaskQuickAction {
   const DownloadTaskQuickAction({
     required this.icon,
@@ -104,7 +107,7 @@ class DownloadTaskCard extends StatefulWidget {
     this.leading,
     this.tone,
     this.metrics = const <DownloadTaskMetric>[],
-    this.quickAction,
+    this.quickActions = const <DownloadTaskQuickAction>[],
     this.menuActions = const <DownloadTaskMenuAction>[],
     this.method,
     this.externalSource = false,
@@ -123,7 +126,9 @@ class DownloadTaskCard extends StatefulWidget {
   /// null = 来源没给状态语义：中性徽标、主色进度。
   final DownloadTaskTone? tone;
   final List<DownloadTaskMetric> metrics;
-  final DownloadTaskQuickAction? quickAction;
+
+  /// 行尾主操作；空列表 = 这一状态没有行内动作。
+  final List<DownloadTaskQuickAction> quickActions;
   final List<DownloadTaskMenuAction> menuActions;
 
   /// 这条任务实际走的传输方式（BT / 直链 / 扩展源）；null = 不是下载（如转录
@@ -262,9 +267,8 @@ class _DownloadTaskCardState extends State<DownloadTaskCard> {
   }
 
   Widget? _buildTrailing(BuildContext context) {
-    final DownloadTaskQuickAction? quick = widget.quickAction;
     final List<Widget> children = <Widget>[
-      if (quick != null)
+      for (final DownloadTaskQuickAction quick in widget.quickActions)
         FushiIconButtonControl.filledTonal(
           key: quick.key,
           tooltip: quick.tooltip,
