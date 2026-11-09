@@ -42,10 +42,11 @@ Future<String?> pickMihonBackupSavePath({
 
 /// 「创建备份」页：Bookshelf / Settings group cards with a bottom 创建 button.
 ///
-/// Ticket 07 delivers the Library options (书架中的作品 / 章节) and the file
-/// plumbing. History, categories, tracking, app settings and source settings
-/// are appended to these same groups by later tickets; an empty group card is
-/// not rendered, so this slice shows only the 书架 card.
+/// Ticket 07 delivered the Library options (书架中的作品 / 章节) and the file
+/// plumbing; ticket 08 adds 历史 and 所有已读作品, which depend on 书架中的作品.
+/// Categories, tracking, app settings and source settings are appended to these
+/// same groups by later tickets; an empty group card is not rendered, so this
+/// slice shows only the 书架 card.
 class CreateBackupPage extends ConsumerStatefulWidget {
   const CreateBackupPage({super.key, this.savePathPicker, this.exporter});
 
@@ -64,14 +65,19 @@ class _CreateBackupPageState extends ConsumerState<CreateBackupPage> {
   // persisted (spec: 每次打开创建备份页都恢复默认勾选).
   bool _includeLibrary = true;
   bool _includeChapters = true;
+  bool _includeHistory = true;
+  bool _includeAllRead = true;
 
   /// In this slice 书架中的作品 is the only standalone exportable section;
-  /// 章节 depends on it. Later tickets add the independent sections here.
+  /// 章节 / 历史 / 所有已读作品 depend on it. Later tickets add the independent
+  /// sections here.
   bool get _canCreate => _includeLibrary;
 
   MihonBackupExportOptions get _options => MihonBackupExportOptions(
     includeLibrary: _includeLibrary,
     includeChapters: _includeLibrary && _includeChapters,
+    includeHistory: _includeLibrary && _includeHistory,
+    includeAllRead: _includeLibrary && _includeAllRead,
   );
 
   Future<void> _create() async {
@@ -140,6 +146,32 @@ class _CreateBackupPageState extends ConsumerState<CreateBackupPage> {
         onChanged: _includeLibrary
             ? (bool? value) {
                 setState(() => _includeChapters = value ?? false);
+              }
+            : null,
+      ),
+      FushiCheckboxListTile(
+        key: const Key('create_backup_include_history'),
+        contentPadding: EdgeInsets.zero,
+        controlAffinity: ListTileControlAffinity.leading,
+        value: _includeHistory,
+        enabled: _includeLibrary,
+        title: Text(t.backup_create_history),
+        onChanged: _includeLibrary
+            ? (bool? value) {
+                setState(() => _includeHistory = value ?? false);
+              }
+            : null,
+      ),
+      FushiCheckboxListTile(
+        key: const Key('create_backup_include_all_read'),
+        contentPadding: EdgeInsets.zero,
+        controlAffinity: ListTileControlAffinity.leading,
+        value: _includeAllRead,
+        enabled: _includeLibrary,
+        title: Text(t.backup_create_all_read),
+        onChanged: _includeLibrary
+            ? (bool? value) {
+                setState(() => _includeAllRead = value ?? false);
               }
             : null,
       ),

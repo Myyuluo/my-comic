@@ -10,6 +10,7 @@ import 'package:path/path.dart' as p;
 import 'package:fushi/src/backup_export/mihon_backup_exporter.dart';
 import 'package:fushi/src/backup_import/mihon_backup_import_service.dart';
 import 'package:fushi/src/backup_import/mihon_backup_parser.dart';
+import 'package:fushi/src/media/manga/history/manga_history.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 
 /// Seams:
@@ -198,7 +199,69 @@ void main() {
     expect(states['/chapter/a2']!.lastPage, 3);
   });
 
-  test('includeChapters=false writes no chapter entries', () async {
+  test('includeHistory exports one recent history per library manga', () async {
+    await _seedSource(db, sourceId: '123', name: 'Source A');
+    final EpubBookRow alpha = await _seedManga(
+      db,
+      sourceId: '123',
+      url: '/manga/alpha',
+      title: 'Alpha',
+      chapters: const <OnlineMangaChapter>[
+        OnlineMangaChapter(
+          key: '/chapter/a1',
+          name: 'Chapter 1',
+          raw: <String, Object?>{'url': '/chapter/a1'},
+        ),
+        OnlineMangaChapter(
+          key: '/chapter/a2',
+          name: 'Chapter 2',
+          raw: <String, Object?>{'url': '/chapter/a2'},
+        ),
+      ],
+    );
+    await db.importMangaChapterState(
+      bookUid: alpha.uid,
+      chapterKey: '/chapter/a1',
+      lastPage: 3,
+      readAt: 1700000001000,
+      updatedAt: 1700000001000,
+    );
+    await db.importMangaChapterState(
+      bookUid: alpha.uid,
+      chapterKey: '/chapter/a2',
+      lastPage: 9,
+      updatedAt: 1700000009000,
+    );
+    final OnlineMangaLibraryEntry entry = _entryOf(alpha);
+    await _insertHistory(
+      db,
+      mediaSource: mangaHistoryOnlineSourceKey(entry),
+      mediaId: '/manga/alpha',
+      openedAt: 1700000050000,
+      snapshotJson: jsonEncode(<String, Object?>{'title': 'Alpha'}),
+    );
+
+    final File target = File(p.join(tmp.path, 'with-history.tachibk'));
+    await MihonBackupExporter(database: db).exportToFile(
+      target: target,
+      options: const MihonBackupExportOptions(
+        includeLibrary: true,
+        includeChapters: true,
+        includeHistory: true,
+        includeAllRead: false,
+      ),
+    );
+
+    final MihonBackupData parsed = MihonBackupParser.parseFile(target);
+    final MihonBackupManga exported = parsed.mangas.single;
+    expect(exported.favorite, isTrue);
+    expect(exported.history, hasLength(1));
+    expect(exported.history.single.url, '/chapter/a2');
+    expect(exported.history.single.lastRead, 1700000050000);
+    expect(exported.history.single.readDuration, 0);
+  });
+
+  test('includeHistory=false writes no library history', () async {
     await _seedManga(
       db,
       sourceId: '123',
@@ -212,17 +275,300 @@ void main() {
         ),
       ],
     );
+    await _insertHistory(
+      db,
+      mediaSource:
+          'manga_online:["mihon","org.example.ext","123"]',
+      mediaId: '/manga/alpha',
+      openedAt: 1700000050000,
+      snapshotJson: jsonEncode(<String, Object?>{'title': 'Alpha'}),
+    );
+
+    final File target = File(p.join(tmp.path, 'no-history.tachibk'));
+    await MihonBackupExporter(database: db).exportToFile(
+      target: target,
+      options: const MihonBackupExportOptions(
+        includeLibrary: true,
+        includeChapters: true,
+        includeHistory: false,
+        includeAllRead: false,
+      ),
+    );
+
+    final MihonBackupData parsed = MihonBackupParser.parseFile(target);
+    expect(parsed.mangas.single.history, isEmpty);
+  });
+
+  test('includeAllRead exports non-library read works as favorite=false', () async {
+    await _seedSource(db, sourceId: '456', name: 'Source B');
+    await _insertHistory(
+      db,
+      mediaSource: 'manga_online:["mihon","org.example.ext","456"]',
+      mediaId: '/manga/beta',
+      openedAt: 1700000099000,
+      snapshotJson: jsonEncode(<String, Object?>{
+        'title': 'Beta',
+        'author': 'Author B',
+        'imageUrl': 'https://example.test/beta.jpg',
+        'mangaHistory': <String, Object?>{
+          'kind': 'manga-history',
+          'online': <String, Object?>{
+            'runtime': 'mihon',
+            'extensionPackage': 'org.example.ext',
+            'sourceId': '456',
+            'seriesKey': '/manga/beta',
+            'coverUrl': 'https://example.test/beta.jpg',
+            'raw': <String, Object?>{
+              'url': '/manga/beta',
+              'title': 'Beta',
+              'author': 'Author B',
+              'artist': 'Artist B',
+              'genre': 'Action, Drama',
+              'status': 2,
+            },
+          },
+        },
+        'mihon_history': <String, Object?>{
+          'chapter_url': '/chapter/b1',
+          'read_at': 1700000099000,
+          'read_duration': 12000,
+        },
+      }),
+    );
+
+    final File target = File(p.join(tmp.path, 'all-read.tachibk'));
+    await MihonBackupExporter(database: db).exportToFile(
+      target: target,
+      options: const MihonBackupExportOptions(
+        includeLibrary: true,
+        includeChapters: true,
+        includeHistory: true,
+        includeAllRead: true,
+      ),
+    );
+
+    final MihonBackupData parsed = MihonBackupParser.parseFile(target);
+    final MihonBackupManga beta = parsed.mangas.single;
+    expect(beta.favorite, isFalse);
+    expect(beta.source, 456);
+    expect(beta.url, '/manga/beta');
+    expect(beta.title, 'Beta');
+    expect(beta.author, 'Author B');
+    expect(beta.artist, 'Artist B');
+    expect(beta.genres, <String>['Action', 'Drama']);
+    expect(beta.status, 2);
+    expect(beta.thumbnailUrl, 'https://example.test/beta.jpg');
+    expect(beta.chapters, isEmpty);
+    expect(beta.history, hasLength(1));
+    expect(beta.history.single.url, '/chapter/b1');
+    expect(beta.history.single.lastRead, 1700000099000);
+    expect(beta.history.single.readDuration, 12000);
+    expect(parsed.sourceNames, <int, String>{456: 'Source B'});
+  });
+
+  test('includeAllRead without a chapter URL exports metadata only', () async {
+    await _insertHistory(
+      db,
+      mediaSource: 'manga_online:["mihon","org.example.ext","456"]',
+      mediaId: '/manga/beta',
+      openedAt: 1700000099000,
+      snapshotJson: jsonEncode(<String, Object?>{
+        'title': 'Beta',
+        'author': 'Author B',
+        'imageUrl': 'https://example.test/beta.jpg',
+        'mangaHistory': <String, Object?>{
+          'kind': 'manga-history',
+          'online': <String, Object?>{
+            'runtime': 'mihon',
+            'extensionPackage': 'org.example.ext',
+            'sourceId': '456',
+            'seriesKey': '/manga/beta',
+            'coverUrl': 'https://example.test/beta.jpg',
+            'raw': <String, Object?>{'url': '/manga/beta'},
+          },
+        },
+      }),
+    );
+
+    final File target = File(p.join(tmp.path, 'all-read-metadata.tachibk'));
+    await MihonBackupExporter(database: db).exportToFile(
+      target: target,
+      options: const MihonBackupExportOptions(
+        includeLibrary: true,
+        includeChapters: true,
+        includeHistory: true,
+        includeAllRead: true,
+      ),
+    );
+
+    final MihonBackupManga beta = MihonBackupParser.parseFile(
+      target,
+    ).mangas.single;
+    expect(beta.favorite, isFalse);
+    expect(beta.url, '/manga/beta');
+    expect(beta.title, 'Beta');
+    expect(beta.chapters, isEmpty);
+    expect(
+      beta.history,
+      isEmpty,
+      reason: 'no chapter URL means no honest history link',
+    );
+  });
+
+  test('includeAllRead=false writes no read-only works', () async {
+    await _insertHistory(
+      db,
+      mediaSource: 'manga_online:["mihon","org.example.ext","456"]',
+      mediaId: '/manga/beta',
+      openedAt: 1700000099000,
+      snapshotJson: jsonEncode(<String, Object?>{
+        'title': 'Beta',
+        'mangaHistory': <String, Object?>{
+          'kind': 'manga-history',
+          'online': <String, Object?>{
+            'runtime': 'mihon',
+            'extensionPackage': 'org.example.ext',
+            'sourceId': '456',
+            'seriesKey': '/manga/beta',
+            'raw': <String, Object?>{'url': '/manga/beta'},
+          },
+        },
+      }),
+    );
+
+    final File target = File(p.join(tmp.path, 'no-read-only.tachibk'));
+    await MihonBackupExporter(database: db).exportToFile(
+      target: target,
+      options: const MihonBackupExportOptions(
+        includeLibrary: true,
+        includeChapters: true,
+        includeHistory: true,
+        includeAllRead: false,
+      ),
+    );
+
+    expect(MihonBackupParser.parseFile(target).mangas, isEmpty);
+  });
+
+  test('includeAllRead does not duplicate a library work', () async {
+    final EpubBookRow alpha = await _seedManga(
+      db,
+      sourceId: '123',
+      url: '/manga/alpha',
+      title: 'Alpha',
+      chapters: const <OnlineMangaChapter>[
+        OnlineMangaChapter(
+          key: '/chapter/a1',
+          name: 'Chapter 1',
+          raw: <String, Object?>{'url': '/chapter/a1'},
+        ),
+      ],
+    );
+    await _insertHistory(
+      db,
+      mediaSource: mangaHistoryOnlineSourceKey(_entryOf(alpha)),
+      mediaId: '/manga/alpha',
+      openedAt: 1700000050000,
+      snapshotJson: jsonEncode(<String, Object?>{'title': 'Alpha'}),
+    );
+
+    final File target = File(p.join(tmp.path, 'no-duplicate.tachibk'));
+    await MihonBackupExporter(database: db).exportToFile(
+      target: target,
+      options: const MihonBackupExportOptions(
+        includeLibrary: true,
+        includeChapters: true,
+        includeHistory: true,
+        includeAllRead: true,
+      ),
+    );
+
+    final MihonBackupData parsed = MihonBackupParser.parseFile(target);
+    expect(parsed.mangas, hasLength(1));
+    expect(parsed.mangas.single.favorite, isTrue);
+    expect(parsed.mangas.single.url, '/manga/alpha');
+  });
+
+  test('history and all-read are not exported without the library section',
+      () async {
+    final EpubBookRow alpha = await _seedManga(
+      db,
+      sourceId: '123',
+      url: '/manga/alpha',
+      title: 'Alpha',
+      chapters: const <OnlineMangaChapter>[
+        OnlineMangaChapter(
+          key: '/chapter/a1',
+          name: 'Chapter 1',
+          raw: <String, Object?>{'url': '/chapter/a1'},
+        ),
+      ],
+    );
+    await _insertHistory(
+      db,
+      mediaSource: mangaHistoryOnlineSourceKey(_entryOf(alpha)),
+      mediaId: '/manga/alpha',
+      openedAt: 1700000050000,
+      snapshotJson: jsonEncode(<String, Object?>{'title': 'Alpha'}),
+    );
+
+    final File target = File(p.join(tmp.path, 'dependent.tachibk'));
+    await MihonBackupExporter(database: db).exportToFile(
+      target: target,
+      options: const MihonBackupExportOptions(
+        includeLibrary: false,
+        includeChapters: true,
+        includeHistory: true,
+        includeAllRead: true,
+      ),
+    );
+
+    expect(MihonBackupParser.parseFile(target).mangas, isEmpty);
+  });
+
+  test('includeChapters=false writes no chapters but keeps history', () async {
+    final EpubBookRow alpha = await _seedManga(
+      db,
+      sourceId: '123',
+      url: '/manga/alpha',
+      title: 'Alpha',
+      chapters: const <OnlineMangaChapter>[
+        OnlineMangaChapter(
+          key: '/chapter/a1',
+          name: 'Chapter 1',
+          raw: <String, Object?>{'url': '/chapter/a1'},
+        ),
+      ],
+    );
+    await db.importMangaChapterState(
+      bookUid: alpha.uid,
+      chapterKey: '/chapter/a1',
+      lastPage: 4,
+      updatedAt: 1700000001000,
+    );
+    await _insertHistory(
+      db,
+      mediaSource: mangaHistoryOnlineSourceKey(_entryOf(alpha)),
+      mediaId: '/manga/alpha',
+      openedAt: 1700000050000,
+      snapshotJson: jsonEncode(<String, Object?>{'title': 'Alpha'}),
+    );
     final File target = File(p.join(tmp.path, 'no-chapters.tachibk'));
     await MihonBackupExporter(database: db).exportToFile(
       target: target,
       options: const MihonBackupExportOptions(
         includeLibrary: true,
         includeChapters: false,
+        includeHistory: true,
+        includeAllRead: false,
       ),
     );
 
-    final MihonBackupData parsed = MihonBackupParser.parseFile(target);
-    expect(parsed.mangas.single.chapters, isEmpty);
+    final MihonBackupManga exported = MihonBackupParser.parseFile(
+      target,
+    ).mangas.single;
+    expect(exported.chapters, isEmpty);
+    expect(exported.history.single.url, '/chapter/a1');
   });
 
   test('default filename uses my-comic_YYYY-MM-DD_HH-mm.tachibk', () {
@@ -285,6 +631,27 @@ void main() {
     final MihonBackupData parsed = MihonBackupParser.parseFile(target);
     expect(parsed.mangas, isEmpty);
   });
+}
+
+OnlineMangaLibraryEntry _entryOf(EpubBookRow row) =>
+    OnlineMangaLibraryEntry.tryParse(row.sourceMetadata)!;
+
+Future<void> _insertHistory(
+  FushiDatabase db, {
+  required String mediaSource,
+  required String mediaId,
+  required int openedAt,
+  required String snapshotJson,
+}) async {
+  await db.into(db.mediaOpenHistory).insert(
+    MediaOpenHistoryCompanion.insert(
+      mediaType: 'reader_media_type',
+      mediaSource: mediaSource,
+      mediaId: mediaId,
+      openedAt: Value<int>(openedAt),
+      snapshotJson: Value<String>(snapshotJson),
+    ),
+  );
 }
 
 Future<void> _seedSource(

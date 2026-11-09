@@ -123,6 +123,57 @@ void main() {
     expect(_tile(tester, const Key('create_backup_include_library')).value, isTrue);
   });
 
+  testWidgets('history and all-read default on and follow the library option', (
+    WidgetTester tester,
+  ) async {
+    final _TestAppModel appModel = _TestAppModel(db, paths);
+    await tester.pumpWidget(_harness(appModel, const CreateBackupPage()));
+    await tester.pumpAndSettle();
+
+    expect(find.text('历史'), findsOneWidget);
+    expect(find.text('所有已读作品'), findsOneWidget);
+    expect(
+      _tile(tester, const Key('create_backup_include_history')).value,
+      isTrue,
+    );
+    expect(
+      _tile(tester, const Key('create_backup_include_all_read')).value,
+      isTrue,
+    );
+    expect(
+      _tile(tester, const Key('create_backup_include_history')).enabled,
+      isNot(false),
+    );
+    expect(
+      _tile(tester, const Key('create_backup_include_all_read')).enabled,
+      isNot(false),
+    );
+
+    await tester.tap(find.byKey(const Key('create_backup_include_library')));
+    await tester.pumpAndSettle();
+    expect(
+      _tile(tester, const Key('create_backup_include_history')).enabled,
+      isFalse,
+      reason: '历史 cannot be exported without 书架中的作品',
+    );
+    expect(
+      _tile(tester, const Key('create_backup_include_all_read')).enabled,
+      isFalse,
+      reason: '所有已读作品 cannot be exported without 书架中的作品',
+    );
+
+    await tester.tap(find.byKey(const Key('create_backup_include_library')));
+    await tester.pumpAndSettle();
+    expect(
+      _tile(tester, const Key('create_backup_include_history')).enabled,
+      isNot(false),
+    );
+    expect(
+      _tile(tester, const Key('create_backup_include_all_read')).enabled,
+      isNot(false),
+    );
+  });
+
   testWidgets('unchecking「书架中的作品」disables chapters and the create button', (
     WidgetTester tester,
   ) async {
