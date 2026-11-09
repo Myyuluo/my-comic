@@ -13,6 +13,7 @@ import 'package:fushi/src/media/online/cover_browse_shared.dart';
 import 'package:fushi/src/media/online/online_source_error_text.dart';
 import 'package:fushi/src/media/selection/media_selection_controller.dart';
 import 'package:fushi/src/media/selection/selection_gestures.dart';
+import 'package:fushi/src/media/tags/tag_picker_sheet.dart';
 import 'package:fushi/src/models/app_model.dart';
 import 'package:fushi/src/utils/components/batch_action_bar.dart';
 import 'package:fushi/src/utils/components/glass/fushi_icon.dart';
@@ -240,12 +241,17 @@ class _LocalSourceBrowsePageState extends ConsumerState<LocalSourceBrowsePage> {
 
   /// 批量「加入书架」：只登记选中且未入架的作品（tombstone 算未入架，插入行
   /// 会清墓碑）；已入架的不重复登记。
+  ///
+  /// 票 05：已有 Tag 时只弹一次选择器，所选 Tag 应用到本批所有新加入的作品；
+  /// 关闭弹窗（null）则整批取消，不登记、不写 Tag 分配。
   Future<void> _batchAddToLibrary() async {
     if (_batchRunning) return;
     final List<LocalSourceManga> targets = _selectedWorks()
         .where((LocalSourceManga manga) => !_isInLibrary(manga))
         .toList(growable: false);
     if (targets.isEmpty) return;
+    final Set<int>? selectedTagIds = await _pickTagsForBatch(targets);
+    if (selectedTagIds == null || !mounted) return;
     setState(() => _batchRunning = true);
     final LocalSourceLibrary library = LocalSourceLibrary(
       db: _appModel.database,
@@ -264,12 +270,65 @@ class _LocalSourceBrowsePageState extends ConsumerState<LocalSourceBrowsePage> {
           error,
           stack,
         );
+        continue; // 加入失败不留 Tag 分配。
+      }
+      if (selectedTagIds.isEmpty) continue;
+      try {
+        await _appModel.database.setTagsForBook(
+          localSourceBookKeyFor(manga.directoryPath),
+          selectedTagIds,
+        );
+      } on Object catch (error, stack) {
+        // 作品已入架：标签写入失败只提示，不改写入架结果。
+        ErrorLogService.instance.log(
+          'LocalSourceBrowse.batchAddToLibraryTags',
+          error,
+          stack,
+        );
+        if (mounted) {
+          FushiToast.show(
+            msg: describeOnlineSourceError(error),
+            severity: ToastSeverity.error,
+          );
+        }
       }
     }
     await _finishBatch(
       success: success,
       failed: failed,
       message: t.local_source_batch_add_done(success: success, failed: failed),
+    );
+  }
+
+  /// 批量加入前的标签选择（票 05）。返回 null = 取消整批；空集合 = 按未打标签
+  /// 直接加入（或全局还没有任何 Tag）。选择器只返回选中集合，Tag 分配在每部
+  /// 作品登记成功后统一写入。
+  Future<Set<int>?> _pickTagsForBatch(List<LocalSourceManga> targets) async {
+    final List<BookTagRow> tags;
+    try {
+      tags = await _appModel.database.getAllTags();
+    } on Object catch (error, stack) {
+      // 标签读不出来不该挡住批量加入本身：按未打标签直接加入。
+      ErrorLogService.instance.log(
+        'LocalSourceBrowse.addTagLookup',
+        error,
+        stack,
+      );
+      return const <int>{};
+    }
+    if (tags.isEmpty) return const <int>{};
+    if (!mounted) return null;
+    return showTagPickerSelection(
+      context,
+      targets: TagTargets(
+        media: <MediaRef>[
+          for (final LocalSourceManga manga in targets)
+            MediaRef(
+              kind: MediaKind.epub,
+              entryKey: localSourceBookKeyFor(manga.directoryPath),
+            ),
+        ],
+      ),
     );
   }
 

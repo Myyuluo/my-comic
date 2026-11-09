@@ -5,18 +5,22 @@ import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi/src/backup_export/mihon_backup_writer.dart';
 import 'package:fushi/src/backup_import/mihon_backup_parser.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
+import 'package:fushi/src/sync/pref_redaction_policy.dart';
+import 'package:fushi/src/sync/sync_repository.dart';
 
 /// Which Mihon backup sections the user asked for.
 ///
 /// The page owns the dependency rules; the exporter only honours the resolved
-/// options. Library + Chapters + Categories are implemented so far; later
-/// tickets add History, tracking, app settings, extension stores and source
+/// options. Library + Chapters + Categories + App settings are implemented so
+/// far; later tickets add History, tracking, extension stores and source
 /// settings.
 class MihonBackupExportOptions {
   const MihonBackupExportOptions({
     this.includeLibrary = true,
     this.includeChapters = true,
     this.includeCategories = true,
+    this.includeAppSettings = true,
+    this.includeSensitiveSettings = false,
   });
 
   /// 「书架中的作品」: export Library manga as `favorite=true`.
@@ -30,9 +34,18 @@ class MihonBackupExportOptions {
   /// so categories can be exported on their own.
   final bool includeCategories;
 
+  /// 「应用设置」: export MyComic's own preference rows (`BackupPreferences`,
+  /// proto field 104) without mapping key names to Mihon's.
+  final bool includeAppSettings;
+
+  /// 「包含敏感设置」: keep credentials in app / source settings. Device-local
+  /// keys never leave the device even when this is true.
+  final bool includeSensitiveSettings;
+
   /// Whether the resolved selection produces a non-empty backup. Later tickets
-  /// add the standalone settings sections here.
-  bool get hasExportableContent => includeLibrary || includeCategories;
+  /// add the remaining standalone sections here.
+  bool get hasExportableContent =>
+      includeLibrary || includeCategories || includeAppSettings;
 }
 
 class MihonBackupExportProgress {
@@ -91,6 +104,9 @@ class MihonBackupExporter {
     final _CategoryExport? categoryExport = options.includeCategories
         ? await _loadCategories()
         : null;
+    final List<MihonBackupPreference> preferences = await _appPreferences(
+      options,
+    );
 
     final List<MihonBackupManga> mangas = <MihonBackupManga>[];
     final Map<int, String> sourceNames = <int, String>{};
@@ -101,10 +117,7 @@ class MihonBackupExporter {
       processed++;
       final OnlineMangaLibraryEntry entry = candidate.entry;
       final List<MihonBackupChapter> chapters = options.includeChapters
-          ? _backupChapters(
-              entry,
-              chapterStates[candidate.row.uid] ?? const {},
-            )
+          ? _backupChapters(entry, chapterStates[candidate.row.uid] ?? const {})
           : const <MihonBackupChapter>[];
 
       mangas.add(
@@ -124,8 +137,7 @@ class MihonBackupExporter {
           favorite: true,
           chapters: chapters,
           categoryOrders:
-              categoryExport?.ordersFor(candidate.row.bookKey) ??
-              const <int>[],
+              categoryExport?.ordersFor(candidate.row.bookKey) ?? const <int>[],
           history: const <MihonBackupHistory>[],
           tracking: const <MihonBackupTracking>[],
         ),
@@ -147,10 +159,95 @@ class MihonBackupExporter {
 
     return MihonBackupData(
       mangas: List<MihonBackupManga>.unmodifiable(mangas),
-      categories:
-          categoryExport?.categories ?? const <MihonBackupCategory>[],
+      categories: categoryExport?.categories ?? const <MihonBackupCategory>[],
       sourceNames: Map<int, String>.unmodifiable(sourceNames),
+      preferences: List<MihonBackupPreference>.unmodifiable(preferences),
     );
+  }
+
+  /// Exports MyComic's own `preferences` rows under their original key names,
+  /// wrapped in Mihon's six standard value envelopes. MyComic keys are not
+  /// mapped to Mihon key names on purpose (spec: 不做 Mihon 键名映射).
+  Future<List<MihonBackupPreference>> _appPreferences(
+    MihonBackupExportOptions options,
+  ) async {
+    if (!options.includeAppSettings) {
+      return const <MihonBackupPreference>[];
+    }
+    final Map<String, String> all = await database.getAllPrefs();
+    // Stable order keeps backup bytes deterministic for a given database.
+    final List<String> keys = all.keys.toList()..sort();
+    final List<MihonBackupPreference> preferences = <MihonBackupPreference>[];
+    for (final String key in keys) {
+      if (!_shouldExportPreference(
+        key,
+        includeSensitive: options.includeSensitiveSettings,
+      )) {
+        continue;
+      }
+      final MihonBackupPreferenceValue? value = _preferenceValue(all[key]!);
+      if (value == null) continue;
+      preferences.add(MihonBackupPreference(key: key, value: value));
+    }
+    return preferences;
+  }
+
+  /// Device-local rows describe this device (paths, device ids, sync state) and
+  /// never belong in a portable backup, sensitive checkbox or not. Credential
+  /// rows use the existing [PrefRedactionPolicy] semantics and are only written
+  /// when the user explicitly includes sensitive settings.
+  static bool _shouldExportPreference(
+    String key, {
+    required bool includeSensitive,
+  }) {
+    // The prefs-version counter is a per-install cache-invalidation signal
+    // written on every preference change, not a user setting.
+    if (key == FushiDatabase.prefsVersionKey) return false;
+    if (SyncRepository.deviceLocalPrefKeys.contains(key)) return false;
+    if (includeSensitive) return true;
+    return !PrefRedactionPolicy.isDeviceLocalOrCredential(key);
+  }
+
+  /// Maps a [PrefCodec]-encoded row onto one of Mihon's six standard preference
+  /// value envelopes. Returns null for shapes no standard envelope can carry
+  /// (explicit null, JSON objects, non-string lists): Mihon aborts the whole
+  /// restore on an unknown serial name, so those rows are skipped instead.
+  static MihonBackupPreferenceValue? _preferenceValue(String raw) {
+    final Object? value = PrefCodec.decodeUntyped(raw);
+    if (value is bool) {
+      return MihonBackupPreferenceValue(
+        type: MihonBackupPreferenceType.boolean,
+        value: value,
+      );
+    }
+    if (value is int) {
+      final bool fitsInt32 = value >= -0x80000000 && value <= 0x7fffffff;
+      return MihonBackupPreferenceValue(
+        type: fitsInt32
+            ? MihonBackupPreferenceType.integer
+            : MihonBackupPreferenceType.long,
+        value: value,
+      );
+    }
+    if (value is double) {
+      return MihonBackupPreferenceValue(
+        type: MihonBackupPreferenceType.float,
+        value: value,
+      );
+    }
+    if (value is String) {
+      return MihonBackupPreferenceValue(
+        type: MihonBackupPreferenceType.string,
+        value: value,
+      );
+    }
+    if (value is List && value.every((Object? item) => item is String)) {
+      return MihonBackupPreferenceValue(
+        type: MihonBackupPreferenceType.stringSet,
+        value: List<String>.from(value),
+      );
+    }
+    return null;
   }
 
   /// Writes the backup into [target] via a temp file in the same directory,
@@ -233,11 +330,10 @@ class MihonBackupExporter {
     final Map<String, Map<String, MangaChapterStateRow>> byBook =
         <String, Map<String, MangaChapterStateRow>>{};
     for (final MangaChapterStateRow state in states) {
-      byBook
-          .putIfAbsent(
-            state.bookUid,
-            () => <String, MangaChapterStateRow>{},
-          )[state.chapterKey] = state;
+      byBook.putIfAbsent(
+        state.bookUid,
+        () => <String, MangaChapterStateRow>{},
+      )[state.chapterKey] = state;
     }
     return byBook;
   }
