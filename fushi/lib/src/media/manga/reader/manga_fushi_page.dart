@@ -3191,9 +3191,11 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
     }
     if (entry.runtime == OnlineMangaRuntimeKind.local) {
       final int step = forward ? 1 : -1;
-      for (int i = _shelfChapterIndex + step;
-          i >= 0 && i < entry.chapters.length;
-          i += step) {
+      for (
+        int i = _shelfChapterIndex + step;
+        i >= 0 && i < entry.chapters.length;
+        i += step
+      ) {
         if (prefs.skipRead && readKeys.contains(entry.chapters[i].key)) {
           continue;
         }
@@ -3408,6 +3410,9 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
         chapterIndex: index,
         initialPage: landOnLastPage ? kMangaLandOnLastPage : null,
       );
+      // 本地源内切章同样是「打开章节进入阅读器」：刷新同一部作品的历史
+      // openedAt（每部一条，历史页随之置顶）。
+      await _recordOpenHistory(bookRow);
       if (landOnLastPage && mounted && _payload != null) {
         _recordProgress();
       }
@@ -4273,8 +4278,7 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
         ? const <String, MangaChapterStateRow>{}
         : await appModel.database.getMangaChapterStates(row.uid);
     // 本地源章节就在磁盘上原地可读，恒为「已下载」，不查下载库。
-    final Set<String> downloaded =
-        entry.runtime == OnlineMangaRuntimeKind.local
+    final Set<String> downloaded = entry.runtime == OnlineMangaRuntimeKind.local
         ? entry.chapters
               .map((OnlineMangaChapter chapter) => chapter.key)
               .toSet()

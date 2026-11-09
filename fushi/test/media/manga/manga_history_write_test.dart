@@ -534,6 +534,115 @@ void main() {
     expect(history['localRelativePath'], 'Fixture series');
   });
 
+  testWidgets('本地源阅读器内切章：每部一条，只刷新 openedAt', (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(600, 1000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final Directory root = Directory.systemTemp.createTempSync(
+      'fushi_history_local_switch_',
+    );
+    addTearDown(() {
+      if (root.existsSync()) root.deleteSync(recursive: true);
+    });
+    AppPaths.debugTestEnvironment = <String, String>{
+      'FUSHI_TEST_ROOT': root.path,
+    };
+    final AppPaths paths = (await tester.runAsync(AppPaths.resolve))!;
+    final FushiDatabase db = FushiDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(db.close);
+    final PreferencesRepository prefs = PreferencesRepository(db);
+    await prefs.loadFromDb();
+
+    final Directory mangaDir = Directory(
+      p.join(paths.localComicRoot.path, 'Fixture series'),
+    );
+    for (final String chapter in <String>['Ch 1', 'Ch 2']) {
+      final Directory dir = Directory(p.join(mangaDir.path, chapter))
+        ..createSync(recursive: true);
+      for (int i = 1; i <= 3; i++) {
+        File(p.join(dir.path, '00$i.jpg')).writeAsBytesSync(<int>[i]);
+      }
+    }
+    final String bookKey = localSourceBookKeyFor(mangaDir.path);
+    late int firstOpenedAt;
+    await tester.runAsync(() async {
+      await db.insertEpubBook(
+        EpubBooksCompanion.insert(
+          bookKey: bookKey,
+          title: 'Fixture series',
+          epubPath: '',
+          extractDir: mangaDir.path,
+          chapterCount: 6,
+          chaptersJson: encodeLocalSourceChapters(<LocalSourceChapterRecord>[
+            const LocalSourceChapterRecord(
+              key: 'Ch 1',
+              name: 'Ch 1',
+              relativePath: 'Ch 1',
+            ),
+            const LocalSourceChapterRecord(
+              key: 'Ch 2',
+              name: 'Ch 2',
+              relativePath: 'Ch 2',
+            ),
+          ]),
+          importedAt: 1,
+          format: const Value<String>('manga'),
+          sourceMetadata: Value<String>(
+            const LocalSourceMetadata(
+              relativePath: 'Fixture series',
+              currentChapterKey: 'Ch 1',
+            ).encode(),
+          ),
+        ),
+      );
+      await tester.pumpWidget(
+        _readerHarness(
+          _LocalSeriesAppModel(
+            database: db,
+            prefs: prefs,
+            directory: root,
+            paths: paths,
+          ),
+          bookKey,
+          chapterIndex: 0,
+        ),
+      );
+      await pumpUntilFound(
+        tester,
+        find.byKey(const ValueKey<String>('manga_content_ready')),
+      );
+    });
+
+    final List<MediaOpenHistoryRow> first = await _waitForHistory(
+      tester,
+      db,
+      (List<MediaOpenHistoryRow> rows) => rows.length == 1,
+    );
+    firstOpenedAt = first.single.openedAt;
+    expect(first.single.mediaSource, kMangaHistoryLocalSource);
+    expect(first.single.mediaId, 'Fixture series');
+
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 5)),
+    );
+    await tester.runAsync(() async {
+      final ReaderSessionRemote remote = readerSessionRemotes.current.value!;
+      expect(await remote.goToChapter(1), isTrue);
+    });
+    await tester.pump();
+
+    final List<MediaOpenHistoryRow> afterSwitch = await _waitForHistory(
+      tester,
+      db,
+      (List<MediaOpenHistoryRow> rows) =>
+          rows.length == 1 && rows.single.openedAt > firstOpenedAt,
+    );
+    expect(afterSwitch, hasLength(1), reason: '每部 Manga 一条，不得新增第二行');
+    expect(afterSwitch.single.mediaSource, kMangaHistoryLocalSource);
+    expect(afterSwitch.single.mediaId, 'Fixture series');
+  });
+
   testWidgets('在线书直接开书 + 阅读器内切章：每部一条，只刷新 openedAt', (
     WidgetTester tester,
   ) async {
