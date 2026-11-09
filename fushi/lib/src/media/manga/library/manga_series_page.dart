@@ -1221,13 +1221,14 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     }
     final OnlineMangaLibraryService? service = _service;
     final OnlineMangaLibraryEntry? entry = _entry;
-    // 票 02 起源作品页一打开就有非书架行；把「加入书架」改为翻转这条行的
-    // membership 是票 03 的范围。这里继续只在完全没有行时创建 Library 行，
-    // 避免重复建行 / 把 Tag 写到非书架行上。
-    if (service == null || entry == null || _busy || _row != null) return;
-    // 票 04：已有 Tag 时先选标签；取消（null）则不创建 Library 条目。
+    // 票 02 起源作品页一打开就有非书架行；票 03 把「加入书架」改为翻转这条
+    // 行的 membership（行不存在时才创建 Library 行）。已在书架则不再重复加入。
+    if (service == null || entry == null || _busy) return;
+    if (_row?.isInLibrary ?? false) return;
+    // 票 04：已有 Tag 时先选标签；取消（null）则不创建 / 不翻转。
+    // 目标键用现有行的真实身份（同源回退时它可能与 seed 推导出的键不同）。
     final Set<int>? selectedTagIds = await _pickTagsBeforeLibraryAdd(
-      OnlineMangaLibraryService.bookKeyOf(entry),
+      _row?.bookKey ?? OnlineMangaLibraryService.bookKeyOf(entry),
     );
     if (selectedTagIds == null || !mounted) return;
     setState(() => _busy = true);
