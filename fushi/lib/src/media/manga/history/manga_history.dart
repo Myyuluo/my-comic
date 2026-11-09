@@ -19,8 +19,11 @@ import 'dart:io';
 
 import 'package:drift/drift.dart' show Value;
 
+import 'package:fushi/i18n/strings.g.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_metadata.dart';
+import 'package:fushi_engine/media/media_pref_keys.dart'
+    show kReaderBookIdentifierPrefix;
 
 import 'package:fushi/src/media/display_title.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
@@ -253,6 +256,13 @@ class MangaHistorySnapshot {
     },
   };
 
+  /// Parses a canonical snapshot (`mangaHistory` marker) or the legacy bare
+  /// snapshot written by earlier backup imports
+  /// (`{title,author,imageUrl,mihon_history}` — no marker, no online ref).
+  ///
+  /// Only call this for rows whose [isMangaHistorySource] is true; a map
+  /// without the marker is treated as the legacy shape. A marker with a
+  /// different kind is another media type's snapshot and returns null.
   static MangaHistorySnapshot? tryParse(String? raw) {
     if (raw == null || raw.isEmpty) return null;
     try {
@@ -260,6 +270,15 @@ class MangaHistorySnapshot {
       if (decoded is! Map<Object?, Object?>) return null;
       final Map<String, Object?> json = decoded.cast<String, Object?>();
       final Object? marker = json['mangaHistory'];
+      if (marker == null) {
+        // Legacy import snapshot: metadata + typed Mihon history only.
+        return MangaHistorySnapshot(
+          title: json['title']?.toString() ?? '',
+          author: json['author']?.toString(),
+          imageUrl: json['imageUrl']?.toString(),
+          mihonHistory: MangaHistoryMihonEntry.fromJson(json['mihon_history']),
+        );
+      }
       if (marker is! Map<Object?, Object?>) return null;
       final Map<String, Object?> history = marker.cast<String, Object?>();
       if (history['kind']?.toString() != kind) return null;
@@ -292,6 +311,7 @@ class MangaHistoryEntry {
     this.coverFilePath,
     this.coverUrl,
     this.snapshot,
+    this.online,
   });
 
   final String mediaSource;
@@ -307,19 +327,42 @@ class MangaHistoryEntry {
   final String? coverUrl;
   final MangaHistorySnapshot? snapshot;
 
-  String get key => '$mediaSource\u0000$mediaId';
+  /// 来源身份：快照里没有时从命中的 Library 行补出，保证点击总能回到来源作品页。
+  final MangaHistoryOnlineRef? online;
 
-  MangaHistoryOnlineRef? get online => snapshot?.online;
+  String get key => '$mediaSource\u0000$mediaId';
 }
 
 /// 读全部漫画历史（`openedAt` 倒序，由数据库查询保证；日期分组由历史页负责）。
+///
+/// Row identity is matched against:
+/// - the canonical identity of every Manga row (online / Local source / local
+///   volume), and
+/// - the legacy import identity `reader_manga` + `fushi://book/<bookKey>` for
+///   online rows. Older imports wrote History under that identity with a bare
+///   snapshot; those rows must keep resolving to their Library row.
+///
+/// When both the legacy and the canonical row exist for the same Manga (after
+/// re-importing a repaired backup), only the newest entry is shown: History
+/// stays one row per Manga (ADR 0018).
 Future<List<MangaHistoryEntry>> loadMangaHistory(FushiDatabase db) async {
   final List<MediaOpenHistoryRow> rows = await db.getAllMediaOpenHistory();
   final List<EpubBookRow> books = await db.getAllEpubBooks();
   final Map<String, EpubBookRow> byIdentity = <String, EpubBookRow>{};
+  final Map<String, EpubBookRow> byBookKey = <String, EpubBookRow>{};
   for (final EpubBookRow book in books) {
+    byBookKey.putIfAbsent(book.bookKey, () => book);
     final MangaHistoryIdentity? identity = mangaHistoryIdentityForBook(book);
-    if (identity != null) byIdentity[identity.key] = book;
+    if (identity != null) byIdentity.putIfAbsent(identity.key, () => book);
+    if (OnlineMangaLibraryEntry.tryParse(book.sourceMetadata) != null) {
+      byIdentity.putIfAbsent(
+        MangaHistoryIdentity(
+          MangaFushiSource.kUniqueKey,
+          ReaderFushiSource.mediaIdentifierFor(book.bookKey),
+        ).key,
+        () => book,
+      );
+    }
   }
 
   final List<MangaHistoryEntry> entries = <MangaHistoryEntry>[];
@@ -329,46 +372,120 @@ Future<List<MangaHistoryEntry>> loadMangaHistory(FushiDatabase db) async {
       row.snapshotJson,
     );
     final EpubBookRow? book =
-        byIdentity[MangaHistoryIdentity(row.mediaSource, row.mediaId).key];
+        byIdentity[MangaHistoryIdentity(row.mediaSource, row.mediaId).key] ??
+        _bookForSnapshotKey(byBookKey, snapshot?.bookKey) ??
+        _bookForLegacyMediaId(byBookKey, row);
+    final OnlineMangaLibraryEntry? onlineEntry = book == null
+        ? null
+        : OnlineMangaLibraryEntry.tryParse(book.sourceMetadata);
+    // Snapshot first (it records the source at read time); otherwise derive it
+    // from the matched Library row so a later row deletion can still reopen the
+    // source page.
+    final MangaHistoryOnlineRef? online =
+        snapshot?.online ??
+        (onlineEntry == null
+            ? null
+            : MangaHistoryOnlineRef.fromEntry(onlineEntry));
+
     String? coverFilePath;
     String? coverUrl;
     if (book != null) {
-      // Library 最新信息优先：标题走用户改名覆盖，封面走本地落盘文件。
+      // Library latest cover file wins.
       coverFilePath = ReaderFushiSource.resolveCoverFilePath(
         extractDir: book.extractDir,
         coverPath: book.coverPath,
       );
-    } else {
-      final String? imageUrl = snapshot?.imageUrl;
-      if (imageUrl != null && imageUrl.startsWith('file://')) {
+    }
+    final String? imageUrl = snapshot?.imageUrl?.trim();
+    if (coverFilePath == null && imageUrl != null && imageUrl.isNotEmpty) {
+      if (imageUrl.startsWith('file://')) {
         final String? path = Uri.tryParse(imageUrl)?.toFilePath();
-        if (mangaHistoryCoverFileExists(path)) {
-          coverFilePath = path;
-        } else {
-          // 作品被移出书架 / 文件被清理：回退快照里的来源封面 URL。
-          coverUrl = snapshot?.online?.coverUrl;
-        }
+        if (mangaHistoryCoverFileExists(path)) coverFilePath = path;
       } else {
-        coverUrl = imageUrl ?? snapshot?.online?.coverUrl;
+        coverUrl = imageUrl;
       }
     }
+    // Fallback chain: local cover file → snapshot imageUrl → source metadata
+    // series cover → snapshot online cover → placeholder (null).
+    coverUrl ??=
+        _usableCoverUrl(onlineEntry?.series.coverUrl) ??
+        _usableCoverUrl(online?.coverUrl);
+
     final String snapshotTitle = snapshot?.title.trim() ?? '';
+    final String title;
+    if (book != null) {
+      title = displayTitleForBook(bookKey: book.bookKey, rawTitle: book.title);
+    } else if (snapshotTitle.isNotEmpty &&
+        !snapshotTitle.startsWith(kReaderBookIdentifierPrefix)) {
+      title = snapshotTitle;
+    } else {
+      // Never show a raw `fushi://book/...` identity as a title.
+      title = t.srs_stats_source_untitled;
+    }
     entries.add(
       MangaHistoryEntry(
         mediaSource: row.mediaSource,
         mediaId: row.mediaId,
         openedAt: row.openedAt,
-        title: book != null
-            ? displayTitleForBook(bookKey: book.bookKey, rawTitle: book.title)
-            : (snapshotTitle.isNotEmpty ? snapshotTitle : row.mediaId),
+        title: title,
         bookKey: book?.bookKey,
         coverFilePath: coverFilePath,
         coverUrl: coverUrl,
         snapshot: snapshot,
+        online: online,
       ),
     );
   }
-  return entries;
+  return _dedupeHistoryEntriesByBook(entries);
+}
+
+EpubBookRow? _bookForSnapshotKey(
+  Map<String, EpubBookRow> byBookKey,
+  String? bookKey,
+) {
+  if (bookKey == null || bookKey.isEmpty) return null;
+  return byBookKey[bookKey];
+}
+
+EpubBookRow? _bookForLegacyMediaId(
+  Map<String, EpubBookRow> byBookKey,
+  MediaOpenHistoryRow row,
+) {
+  if (row.mediaSource != MangaFushiSource.kUniqueKey) return null;
+  if (!row.mediaId.startsWith(kReaderBookIdentifierPrefix)) return null;
+  return byBookKey[row.mediaId.substring(kReaderBookIdentifierPrefix.length)];
+}
+
+String? _usableCoverUrl(String? value) {
+  final String? trimmed = value?.trim();
+  if (trimmed == null || trimmed.isEmpty) return null;
+  if (trimmed.startsWith('file://')) return null;
+  return trimmed;
+}
+
+/// One History card per Manga: when the legacy `reader_manga` row and the
+/// canonical `manga_online` row describe the same Library Manga, keep the most
+/// recently opened one. Entries without a Library row stay untouched.
+List<MangaHistoryEntry> _dedupeHistoryEntriesByBook(
+  List<MangaHistoryEntry> entries,
+) {
+  final List<MangaHistoryEntry> withoutBook = <MangaHistoryEntry>[];
+  final Map<String, MangaHistoryEntry> byBook = <String, MangaHistoryEntry>{};
+  for (final MangaHistoryEntry entry in entries) {
+    final String? bookKey = entry.bookKey;
+    if (bookKey == null) {
+      withoutBook.add(entry);
+      continue;
+    }
+    final MangaHistoryEntry? kept = byBook[bookKey];
+    if (kept == null || entry.openedAt > kept.openedAt) {
+      byBook[bookKey] = entry;
+    }
+  }
+  return <MangaHistoryEntry>[...withoutBook, ...byBook.values]..sort(
+    (MangaHistoryEntry a, MangaHistoryEntry b) =>
+        b.openedAt.compareTo(a.openedAt),
+  );
 }
 
 /// 打开章节进入阅读器时写入 / 更新一条漫画历史。

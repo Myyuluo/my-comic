@@ -117,10 +117,11 @@ class MihonBackupImportReportDialog extends StatelessWidget {
       report.categoriesSkipped,
       (int count) => t.backup_import_mihon_categories_skipped(count: count),
     );
-    _addReasonLine(
+    // `favorite=false` entries become persistent non-library rows; report them
+    // as a count rather than a skip reason.
+    _addPositiveLine(
       lines,
-      report.skippedByReason,
-      MihonBackupSkipReason.notInLibrary,
+      report.nonLibraryEntriesImported + report.nonLibraryEntriesMerged,
       (int count) => t.backup_import_mihon_skip_not_in_library(count: count),
     );
     _addReasonLine(

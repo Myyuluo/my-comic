@@ -129,6 +129,7 @@ MangaHistoryOnlineRef _onlineRef({
 OnlineMangaLibraryEntry _onlineEntry({
   String seriesKey = '/series/fixture',
   String title = 'Fixture series',
+  String? coverUrl,
 }) => OnlineMangaLibraryEntry(
   runtime: OnlineMangaRuntimeKind.mihon,
   extensionPackage: 'org.example.fixture',
@@ -136,7 +137,11 @@ OnlineMangaLibraryEntry _onlineEntry({
   series: OnlineMangaSeries(
     key: seriesKey,
     title: title,
-    raw: <String, Object?>{'url': seriesKey},
+    coverUrl: coverUrl,
+    raw: <String, Object?>{
+      'url': seriesKey,
+      if (coverUrl != null) 'thumbnail_url': coverUrl,
+    },
   ),
   chapters: const <OnlineMangaChapter>[],
 );
@@ -168,6 +173,39 @@ Future<void> _insertHistory(
       position: const Value<int>(0),
       duration: const Value<int>(0),
       snapshotJson: Value<String>(jsonEncode(snapshot.toJson())),
+    ),
+  );
+}
+
+/// Older MyComic versions wrote History under `reader_manga` with a bare
+/// snapshot (`{title,author,imageUrl,mihon_history}` — no `mangaHistory`).
+Future<void> _insertLegacyHistory(
+  FushiDatabase db, {
+  required String bookKey,
+  required int openedAt,
+  String title = '',
+  String? imageUrl,
+  String? chapterUrl,
+}) async {
+  final Map<String, Object?> snapshot = <String, Object?>{
+    if (title.isNotEmpty) 'title': title,
+    if (imageUrl != null) 'imageUrl': imageUrl,
+    if (chapterUrl != null)
+      'mihon_history': <String, Object?>{
+        'chapter_url': chapterUrl,
+        'read_at': openedAt,
+        'read_duration': 0,
+      },
+  };
+  await db.upsertMediaOpenHistory(
+    MediaOpenHistoryCompanion(
+      mediaType: const Value<String>('reader_media_type'),
+      mediaSource: const Value<String>('reader_manga'),
+      mediaId: Value<String>(ReaderFushiSource.mediaIdentifierFor(bookKey)),
+      openedAt: Value<int>(openedAt),
+      position: const Value<int>(0),
+      duration: const Value<int>(0),
+      snapshotJson: Value<String>(jsonEncode(snapshot)),
     ),
   );
 }
@@ -336,6 +374,188 @@ void main() {
     );
   });
 
+  testWidgets('旧 reader_manga 裸快照命中在线 Library 行，点击进入作品页', (
+    WidgetTester tester,
+  ) async {
+    final OnlineMangaLibraryEntry entry = _onlineEntry(title: 'Fixture series');
+    const String bookKey = 'mihon-legacy-history';
+    await _insertBook(
+      db,
+      tmp,
+      bookKey: bookKey,
+      title: 'Library title',
+      sourceMetadata: entry.encode(),
+    );
+    await _insertLegacyHistory(
+      db,
+      bookKey: bookKey,
+      openedAt: 100,
+      title: 'Old snapshot title',
+    );
+
+    final List<MangaHistoryEntry> entries = await loadMangaHistory(db);
+    expect(entries, hasLength(1), reason: '旧快照按 bookKey 回退匹配 Library 行');
+    final MangaHistoryEntry loaded = entries.single;
+    expect(loaded.bookKey, bookKey);
+    expect(loaded.title, 'Library title', reason: 'Library 标题优先于旧快照');
+    expect(loaded.online, isNotNull, reason: '从 Library 行补出来源身份');
+    expect(loaded.online!.seriesKey, '/series/fixture');
+    expect(loaded.snapshot!.mihonHistory, isNull);
+
+    await tester.pumpWidget(
+      _harness(_HistoryTestAppModel(database: db), navKey),
+    );
+    await _settle(tester);
+    expect(find.text('Library title'), findsOneWidget);
+    await tester.tap(find.text('Library title'));
+    await tester.runAsync(
+      () => pumpUntilFound(
+        tester,
+        find.byKey(const ValueKey<String>('manga_series_title')),
+      ),
+    );
+
+    expect(
+      find.byKey(const ValueKey<String>('manga_series_title')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('旧裸快照无 Library 行时显示快照标题，绝不显示原始 bookKey', (
+    WidgetTester tester,
+  ) async {
+    await _insertLegacyHistory(
+      db,
+      bookKey: 'orphan-with-title',
+      openedAt: 200,
+      title: 'Legacy snapshot title',
+      chapterUrl: '/chapter/legacy',
+    );
+    await _insertLegacyHistory(
+      db,
+      bookKey: 'orphan-without-title',
+      openedAt: 100,
+    );
+
+    final List<MangaHistoryEntry> entries = await loadMangaHistory(db);
+    expect(entries, hasLength(2));
+    final MangaHistoryEntry titled = entries.first;
+    expect(titled.title, 'Legacy snapshot title');
+    expect(titled.snapshot!.mihonHistory!.chapterUrl, '/chapter/legacy');
+    expect(entries.last.title, t.srs_stats_source_untitled);
+
+    await tester.pumpWidget(
+      _harness(_HistoryTestAppModel(database: db), navKey),
+    );
+    await _settle(tester);
+    expect(find.text('Legacy snapshot title'), findsOneWidget);
+    expect(find.text(t.srs_stats_source_untitled), findsOneWidget);
+    expect(find.textContaining('fushi://book/'), findsNothing);
+  });
+
+  testWidgets('旧身份与 canonical 身份指向同一 Manga 时只显示最新一条', (
+    WidgetTester tester,
+  ) async {
+    final OnlineMangaLibraryEntry entry = _onlineEntry(title: 'Fixture series');
+    const String bookKey = 'mihon-dedupe';
+    final EpubBookRow book = await _insertBook(
+      db,
+      tmp,
+      bookKey: bookKey,
+      title: 'Library title',
+      sourceMetadata: entry.encode(),
+    );
+    await _insertLegacyHistory(
+      db,
+      bookKey: bookKey,
+      openedAt: 100,
+      title: 'Legacy snapshot',
+    );
+    final MangaHistoryIdentity identity = mangaHistoryIdentityForBook(book)!;
+    await _insertHistory(
+      db,
+      mediaSource: identity.mediaSource,
+      mediaId: identity.mediaId,
+      openedAt: 200,
+      title: 'Canonical snapshot',
+      online: _onlineRef(),
+    );
+
+    final List<MangaHistoryEntry> entries = await loadMangaHistory(db);
+    expect(entries, hasLength(1), reason: 'History 仍是每部 Manga 一条');
+    expect(entries.single.openedAt, 200);
+    expect(entries.single.title, 'Library title');
+
+    await tester.pumpWidget(
+      _harness(_HistoryTestAppModel(database: db), navKey),
+    );
+    await _settle(tester);
+    expect(find.text('Library title'), findsOneWidget);
+  });
+
+  test('封面回退：快照 imageUrl → 来源 coverUrl → 占位', () async {
+    await _insertBook(
+      db,
+      tmp,
+      bookKey: 'cover-snapshot',
+      title: 'Snapshot cover',
+      sourceMetadata: _onlineEntry(
+        seriesKey: '/series/snapshot',
+        coverUrl: 'https://source.test/snapshot.jpg',
+      ).encode(),
+    );
+    await _insertLegacyHistory(
+      db,
+      bookKey: 'cover-snapshot',
+      openedAt: 300,
+      title: 'Snapshot cover',
+      imageUrl: 'https://snapshot.test/cover.jpg',
+    );
+
+    await _insertBook(
+      db,
+      tmp,
+      bookKey: 'cover-source',
+      title: 'Source cover',
+      sourceMetadata: _onlineEntry(
+        seriesKey: '/series/source',
+        coverUrl: 'https://source.test/cover.jpg',
+      ).encode(),
+    );
+    await _insertLegacyHistory(
+      db,
+      bookKey: 'cover-source',
+      openedAt: 200,
+      title: 'Source cover',
+    );
+
+    await _insertBook(
+      db,
+      tmp,
+      bookKey: 'cover-placeholder',
+      title: 'No cover',
+      sourceMetadata: _onlineEntry(seriesKey: '/series/placeholder').encode(),
+    );
+    await _insertLegacyHistory(
+      db,
+      bookKey: 'cover-placeholder',
+      openedAt: 100,
+      title: 'No cover',
+    );
+
+    final List<MangaHistoryEntry> entries = await loadMangaHistory(db);
+    final Map<String, MangaHistoryEntry> byTitle = <String, MangaHistoryEntry>{
+      for (final MangaHistoryEntry entry in entries) entry.title: entry,
+    };
+    expect(
+      byTitle['Snapshot cover']!.coverUrl,
+      'https://snapshot.test/cover.jpg',
+    );
+    expect(byTitle['Source cover']!.coverUrl, 'https://source.test/cover.jpg');
+    expect(byTitle['No cover']!.coverUrl, isNull);
+    expect(byTitle['No cover']!.coverFilePath, isNull);
+  });
+
   testWidgets('Local source 用伪源 + 相对路径身份，命中 Library 时显示书名', (
     WidgetTester tester,
   ) async {
@@ -438,9 +658,7 @@ void main() {
     expect(adapter.refreshCalls, greaterThanOrEqualTo(1));
   });
 
-  testWidgets('Library 行在点击前被删除：给错误提示，卡片保留，不崩溃', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('Library 行在点击前被删除：给错误提示，卡片保留，不崩溃', (WidgetTester tester) async {
     const String bookKey = 'shelf_deleted_after_load';
     await _insertBook(db, tmp, bookKey: bookKey, title: 'Deleted after load');
     await _insertHistory(
@@ -473,9 +691,7 @@ void main() {
     await tester.pump(const Duration(seconds: 3));
   });
 
-  testWidgets('本地图源历史条目已无 Library 行：点击给错误提示，卡片保留', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('本地图源历史条目已无 Library 行：点击给错误提示，卡片保留', (WidgetTester tester) async {
     await _insertHistory(
       db,
       mediaSource: kMangaHistoryLocalSource,
