@@ -82,6 +82,7 @@ class MihonBackupParser {
     final List<MihonBackupManga> mangas = <MihonBackupManga>[];
     final List<MihonBackupCategory> categories = <MihonBackupCategory>[];
     final Map<int, String> sourceNames = <int, String>{};
+    final List<MihonBackupPreference> preferences = <MihonBackupPreference>[];
     final List<MihonBackupSourcePreferences> sourcePreferences =
         <MihonBackupSourcePreferences>[];
     final List<MihonBackupExtensionStore> extensionStores =
@@ -108,6 +109,8 @@ class MihonBackupParser {
         if (source.name.isNotEmpty) {
           sourceNames[source.id] = source.name;
         }
+      } else if (field == 104 && wireType == 2) {
+        preferences.add(_readPreference(_ProtoReader(reader.readBytes())));
       } else if (field == 105 && wireType == 2) {
         sourcePreferences.add(
           _readSourcePreferences(_ProtoReader(reader.readBytes())),
@@ -125,6 +128,7 @@ class MihonBackupParser {
       mangas: List<MihonBackupManga>.unmodifiable(mangas),
       categories: List<MihonBackupCategory>.unmodifiable(categories),
       sourceNames: Map<int, String>.unmodifiable(sourceNames),
+      preferences: List<MihonBackupPreference>.unmodifiable(preferences),
       sourcePreferences: List<MihonBackupSourcePreferences>.unmodifiable(
         sourcePreferences,
       ),
@@ -594,6 +598,7 @@ class MihonBackupData {
     required this.mangas,
     required this.categories,
     required this.sourceNames,
+    this.preferences = const <MihonBackupPreference>[],
     this.sourcePreferences = const <MihonBackupSourcePreferences>[],
     this.extensionStores = const <MihonBackupExtensionStore>[],
   });
@@ -603,6 +608,10 @@ class MihonBackupData {
 
   /// Backup source id → display name from `BackupSource` (field 101).
   final Map<int, String> sourceNames;
+
+  /// Top-level `BackupPreferences` entries (field 104). MyComic writes its own
+  /// app preference keys here without mapping them to Mihon key names.
+  final List<MihonBackupPreference> preferences;
 
   /// Top-level `BackupSourcePreferences` entries (field 105).
   final List<MihonBackupSourcePreferences> sourcePreferences;
