@@ -64,14 +64,22 @@ class _CreateBackupPageState extends ConsumerState<CreateBackupPage> {
   // persisted (spec: 每次打开创建备份页都恢复默认勾选).
   bool _includeLibrary = true;
   bool _includeChapters = true;
+  bool _includeAppSettings = true;
+  bool _includeSensitiveSettings = false;
 
-  /// In this slice 书架中的作品 is the only standalone exportable section;
-  /// 章节 depends on it. Later tickets add the independent sections here.
-  bool get _canCreate => _includeLibrary;
+  /// 「包含敏感设置」only means something when a settings section is exported.
+  /// Ticket 12 adds「图源设置」to this condition.
+  bool get _sensitiveSettingsAvailable => _includeAppSettings;
+
+  /// Standalone exportable sections: 书架中的作品 and 应用设置. Later tickets
+  /// add 分类 / 插件商店 / 图源设置 here.
+  bool get _canCreate => _includeLibrary || _includeAppSettings;
 
   MihonBackupExportOptions get _options => MihonBackupExportOptions(
     includeLibrary: _includeLibrary,
     includeChapters: _includeLibrary && _includeChapters,
+    includeAppSettings: _includeAppSettings,
+    includeSensitiveSettings: _includeSensitiveSettings,
   );
 
   Future<void> _create() async {
@@ -144,10 +152,33 @@ class _CreateBackupPageState extends ConsumerState<CreateBackupPage> {
             : null,
       ),
     ];
-    // Ticket 07 ships the Library group; tickets 11/12 append 应用设置 / 插件
-    // 商店 / 图源设置 / 包含敏感设置 here. The Settings card is part of the
-    // reference layout from the start, so it stays present while empty.
-    final List<Widget> settingsRows = <Widget>[const SizedBox.shrink()];
+    // 应用设置 exports MyComic's own preference keys; 包含敏感设置 is gated on
+    // a settings section being exported. Ticket 12 appends 插件商店 / 图源设置.
+    final List<Widget> settingsRows = <Widget>[
+      FushiCheckboxListTile(
+        key: const Key('create_backup_include_app_settings'),
+        contentPadding: EdgeInsets.zero,
+        controlAffinity: ListTileControlAffinity.leading,
+        value: _includeAppSettings,
+        title: Text(t.backup_create_app_settings),
+        onChanged: (bool? value) {
+          setState(() => _includeAppSettings = value ?? false);
+        },
+      ),
+      FushiCheckboxListTile(
+        key: const Key('create_backup_include_sensitive_settings'),
+        contentPadding: EdgeInsets.zero,
+        controlAffinity: ListTileControlAffinity.leading,
+        value: _includeSensitiveSettings,
+        enabled: _sensitiveSettingsAvailable,
+        title: Text(t.backup_create_sensitive_settings),
+        onChanged: _sensitiveSettingsAvailable
+            ? (bool? value) {
+                setState(() => _includeSensitiveSettings = value ?? false);
+              }
+            : null,
+      ),
+    ];
 
     return SettingsKitScaffold(
       title: t.backup_export_mihon_title,
