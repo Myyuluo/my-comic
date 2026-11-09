@@ -8,4 +8,4 @@ status: accepted
 
 ticket 11 用简化版 `home_shell.dart` 替换原版 `home_page.dart`，违反了此约束；恢复工作由 ticket 16 跟踪。
 
-manga-backup-import-ux 的导入完成 / 创建备份结果弹窗重排与导入作品封面远程回退，是用户在 2026-11-10 逐项明确批准的 UI 改动。实现只复用 Fushi v3.0.0 的弹窗、卡片、notice、hero icon 与 spacing tokens，封面沿用现有图片缓存与占位组件，不引入新的视觉语言；Fushi 的 shell、组件、主题与布局均未替换或简化。
+manga-backup-import-ux 的导入完成 / 创建备份结果弹窗重排、导入作品封面远程回退，以及作品页的缺失来源标签与提示（「来源未安装：<名称>」与本地章节说明），是用户在 2026-11-10 逐项明确批准的 UI 改动。实现只复用 Fushi v3.0.0 的弹窗、卡片、notice、hero icon 与 spacing tokens，封面沿用现有图片缓存与占位组件，不引入新的视觉语言；Fushi 的 shell、组件、主题与布局均未替换或简化。
