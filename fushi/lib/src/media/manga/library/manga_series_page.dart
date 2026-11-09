@@ -1816,8 +1816,84 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     }
   }
 
+  /// 批量删除的适用子集：当前可见且选中的「已完成」在线下载。
+  ///
+  /// 本地图源章节的磁盘文件属于用户文件，永远不参与；排队中 / 下载中 /
+  /// 暂停 / 文件缺失也都不算「已完成」，只认磁盘判据为已下载的章。
+  List<OnlineMangaChapter> get _deletableSelectedChapters {
+    if (_entry == null || _bookKey == null) return const <OnlineMangaChapter>[];
+    return <OnlineMangaChapter>[
+      for (final OnlineMangaChapter chapter in _selectedVisibleChapters)
+        if (_downloadStateOf(chapter) == MangaChapterDownloadState.downloaded)
+          chapter,
+    ];
+  }
+
+  /// 批量删除选中的已完成在线下载：只动 Download library 里由应用管理的
+  /// 文件，不碰本地图源用户文件。删除前二次确认；删完章节回到「未下载」，
+  /// 章级已读标记与阅读进度原样保留。
+  Future<void> _batchDeleteDownloads() async {
+    final EpubBookRow? row = _row;
+    final AppModel? appModel = _appModelOrNull;
+    if (row == null || appModel == null || _batchRunning) return;
+    final List<OnlineMangaChapter> targets = _deletableSelectedChapters;
+    if (targets.isEmpty) return;
+    final bool confirmed = await showFushiConfirmDialog(
+      context: context,
+      title: t.manga_series_delete_downloads,
+      message: t.manga_series_delete_downloads_confirm(count: targets.length),
+      icon: FushiIcons.delete,
+      confirmLabel: t.dialog_delete,
+      destructive: true,
+    );
+    if (!confirmed || !mounted) return;
+    setState(() => _batchRunning = true);
+    try {
+      final DownloadLibraryIndex index = DownloadLibraryIndex(
+        appModel.database,
+      );
+      for (final OnlineMangaChapter chapter in targets) {
+        await index.deleteChapter(
+          bookKey: row.bookKey,
+          chapterKey: chapter.key,
+        );
+        // done 任务行是「这章曾经下载过」的持久标记。用户主动删除下载时必须
+        // 一起清掉，否则磁盘判据变 false、任务仍 done → 被误显示成 Missing。
+        final MangaDownloadJobRow? job = _jobs[chapter.key];
+        if (job != null) {
+          await appModel.mangaDownloadService.remove(job.jobId);
+        }
+      }
+      if (mounted) FushiToast.show(msg: t.storage_entry_delete_done);
+    } on Object catch (error, stack) {
+      ErrorLogService.instance.log(
+        'MangaSeriesPage.batchDeleteDownloads',
+        error,
+        stack,
+      );
+      if (mounted) {
+        FushiToast.show(
+          msg: describeOnlineSourceError(error),
+          severity: ToastSeverity.error,
+        );
+      }
+    } finally {
+      await _refreshDownloadState();
+      if (mounted) {
+        _syncVisibleSelectionOrder();
+        setState(() {
+          _batchRunning = false;
+          // 下载筛选为「已下载」时，删掉的章会从可见集消失；清空后退出多选，
+          // 不让用户停在一个没有批量栏、点一下却只是勾选的状态里。
+          if (_selectionMode && _selection.isEmpty) _selection.exit();
+        });
+      }
+    }
+  }
+
   /// 底部批量栏：已选 N / 全选 / 反选 + 标记已读（圆形空心对勾）/ 标记未读
-  /// （圆形实心对勾）。全部已选已读时已读置灰，全部未读时未读置灰。
+  /// （圆形实心对勾）/ 删除已下载（垃圾桶）。全部已选已读时已读置灰，全部
+  /// 未读时未读置灰；没有可删的已完成在线下载时垃圾桶置灰。
   Widget _buildBatchActionBar(BuildContext context) {
     final List<OnlineMangaChapter> selected = _selectedVisibleChapters;
     final bool canMarkRead =
@@ -1830,6 +1906,7 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
         selected.any(
           (OnlineMangaChapter chapter) => _states[chapter.key]?.readAt != null,
         );
+    final bool canDeleteDownloads = _deletableSelectedChapters.isNotEmpty;
     return BatchActionBar(
       selectedCount: _selection.length,
       onSelectAll: _selectAllChapters,
@@ -1848,6 +1925,13 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
           onTap: () => unawaited(_batchMarkRead(read: false)),
           icon: FushiIcons.filled(FushiIcons.success),
           tooltip: t.manga_series_mark_unread,
+        ),
+        FushiIconButton(
+          key: const ValueKey<String>('manga_series_batch_delete_downloads'),
+          enabled: canDeleteDownloads && !_batchRunning,
+          onTap: () => unawaited(_batchDeleteDownloads()),
+          icon: FushiIcons.delete,
+          tooltip: t.manga_series_delete_downloads,
         ),
       ],
     );

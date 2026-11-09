@@ -4394,6 +4394,8 @@
   "manga_series_auto_download": "新章自动下载",
   "manga_series_auto_ocr": "完成后自动识别",
   "manga_series_chapters_action": "章节",
+  "manga_series_delete_downloads": "删除下载",
+  "manga_series_delete_downloads_confirm": "删除 $count 个章节的下载文件？此操作无法撤销。",
   "manga_series_delete_local_files": "删除本地文件",
   "manga_series_delete_local_files_confirm": "要从 local 删除这部作品的文件夹吗？此操作无法撤销。",
   "manga_series_download_all": "下载全部",
