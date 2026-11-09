@@ -1567,6 +1567,7 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
       final MangaLibraryRemovalResult result = await removeMangaFromLibrary(
         db: appModel.database,
         bookKey: row.bookKey,
+        downloadsRoot: appModel.appPaths.downloadsRoot,
         deleteLocalFiles: decision.deleteLocalFiles,
         deleteStatistics: decision.deleteStatistics,
         downloadService: appModel.mangaDownloadService,
