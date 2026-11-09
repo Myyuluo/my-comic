@@ -385,6 +385,50 @@ void main() {
     expect(await db.getMangaChapterDir(bookKey, '/c/2'), isNull);
   });
 
+  test('占位扩展包条目按数字 sourceId + seriesKey 重链真实包 manifest', () async {
+    const String bookKey = 'mihon-placeholder';
+    final OnlineMangaLibraryEntry real = entryFor();
+    final OnlineMangaLibraryEntry placeholder = OnlineMangaLibraryEntry(
+      runtime: OnlineMangaRuntimeKind.mihon,
+      extensionPackage: 'mihon.unavailable',
+      sourceId: '1',
+      series: real.series,
+      chapters: real.chapters,
+    );
+    await insertOnlineBook(
+      bookKey: bookKey,
+      entry: placeholder,
+      extractDir: p.join(
+        downloadsRoot.path,
+        'Example Source',
+        'Old missing folder',
+      ),
+    );
+    // 磁盘 manifest 是真实扩展包写的；条目身份仍是导入时的占位包。
+    final Directory moved = Directory(
+      p.join(downloadsRoot.path, 'Example Source', 'Renamed series'),
+    );
+    await writeChapter(
+      mangaDir: moved,
+      folderName: 'Chapter 1',
+      entry: real,
+      chapter: real.chapters.first,
+    );
+
+    final RebuildDownloadIndexReport report = await service().run();
+
+    expect(report.booksRelinked, 1);
+    expect(
+      (await db.getEpubBook(bookKey))!.extractDir,
+      moved.path,
+      reason: '占位包与真实包视为同一身份，数字 sourceId + seriesKey 命中',
+    );
+    expect(
+      (await db.getMangaChapterDir(bookKey, '/c/1'))?.folderName,
+      'Chapter 1',
+    );
+  });
+
   test('同名文件夹与 pages.json 身份同时存在时，稳定 ID 优先于文件夹名', () async {
     const String bookKey = 'mihon-fixture';
     final OnlineMangaLibraryEntry entry = entryFor(

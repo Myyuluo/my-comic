@@ -15,6 +15,9 @@ import 'package:fushi/src/media/manga/mihon/mihon_manager.dart';
 import 'package:fushi/src/storage/app_paths.dart';
 import 'package:fushi/src/utils/misc/error_log_service.dart';
 import 'package:fushi/src/utils/misc/trimmed_text.dart';
+import 'package:fushi/src/media/manga/download/download_identity.dart';
+import 'package:fushi/src/media/manga/download/download_library_scanner.dart';
+import 'package:fushi/src/media/manga/download/download_manga_relinker.dart';
 import 'package:fushi_engine/epub/epub_storage.dart';
 import 'package:fushi_engine/media/cover_file_writer.dart'
     show CoverImageInvalidException;
@@ -151,10 +154,12 @@ class OnlineMangaLibraryService {
     // Download library：`downloads/{source}/{manga}`。章节是它的直接子目录，
     // 每章自己的 `pages.json` 才是身份；书根不再写占位 manga.json。
     // 同名 Source / 同名 Manga 在这里解决（短源 ID / `(2)` 后缀），绝不覆盖。
-    final Directory directory = await _resolveDownloadMangaDirectory(
-      entry,
-      downloadsRoot: await _downloadsRoot(),
-    );
+    final _DownloadMangaDirectoryResolution resolution =
+        await _resolveDownloadMangaDirectory(
+          entry,
+          downloadsRoot: await _downloadsRoot(),
+        );
+    final Directory directory = resolution.directory;
     await directory.create(recursive: true);
 
     String? coverPath;
@@ -203,6 +208,18 @@ class OnlineMangaLibraryService {
       ),
     );
     final EpubBookRow row = (await database.getEpubBook(bookKey))!;
+    // 复用已有文件夹后立即重建章节映射：详情页/作品页马上显示已下载，不必等
+    // 用户手动跑 Rebuild download index。
+    final DownloadMangaFolderOnDisk? reusedFolder = resolution.reusedFolder;
+    if (reusedFolder != null) {
+      await relinkDownloadMangaFolder(
+        database: database,
+        row: row,
+        entry: entry,
+        mangaFolder: reusedFolder.directory,
+        chapters: reusedFolder.chapters,
+      );
+    }
     await _clearPeerDeletionTombstone(entry);
     return row;
   }
@@ -410,15 +427,27 @@ class OnlineMangaLibraryService {
       if (!await existing.exists()) await existing.create(recursive: true);
       return row;
     }
-    final Directory target = await _resolveDownloadMangaDirectory(
-      entry,
-      downloadsRoot: downloadsRoot,
-    );
+    final _DownloadMangaDirectoryResolution resolution =
+        await _resolveDownloadMangaDirectory(
+          entry,
+          downloadsRoot: downloadsRoot,
+        );
+    final Directory target = resolution.directory;
     await target.create(recursive: true);
     await database.updateEpubBookContentPaths(
       row.bookKey,
       extractDir: target.path,
     );
+    final DownloadMangaFolderOnDisk? reusedFolder = resolution.reusedFolder;
+    if (reusedFolder != null) {
+      await relinkDownloadMangaFolder(
+        database: database,
+        row: row,
+        entry: entry,
+        mangaFolder: reusedFolder.directory,
+        chapters: reusedFolder.chapters,
+      );
+    }
     // 旧的阅读期页缓存对新布局毫无价值，顺手清掉——失败只记日志，不挡打开。
     final Directory staleCache = Directory(
       p.join(rootDirectory.path, 'reader-cache', 'chapters', row.bookKey),
@@ -515,19 +544,22 @@ class OnlineMangaLibraryService {
   ///
   /// - Source：同一 Source 复用已建立的目录；显示名被**另一个** Source 占用时
   ///   追加 `[短源 ID]`；同一显示名只有大小写不同也算占用。
-  /// - Manga：同一 Source 下同名 Manga 用 ` (2)`、` (3)`…；磁盘上已有但未入库
-  ///   的非空目录同样视为占用（绝不覆盖用户已有内容）。
+  /// - Manga：先按 `pages.json` 下载身份复用已有漫画文件夹（目录或 `.cbz`）：
+  ///   恰好一个匹配 → 复用；多个匹配 → 不猜，回落到冲突后缀；无 manifest →
+  ///   保持原有 ` (2)`、` (3)`… 安全规则。磁盘上已有但未入库的非空目录同样
+  ///   视为占用（绝不覆盖用户已有内容）。
   ///
   /// 源/漫画改名不会走到这里重命名——行已存在时 [add] 只刷新；[ensureBookDirectory]
   /// 只处理还没住进 Download library 的旧行。
-  Future<Directory> _resolveDownloadMangaDirectory(
+  Future<_DownloadMangaDirectoryResolution> _resolveDownloadMangaDirectory(
     OnlineMangaLibraryEntry entry, {
     required Directory downloadsRoot,
   }) async {
     // 用 normalize 而不是 canonicalize：后者在 Windows 上会整串小写，写进
     // extractDir 的用户可见目录就丢了大小写。
     final String rootPath = p.normalize(downloadsRoot.path);
-    final String identity = _sourceIdentity(entry);
+    final DownloadSourceIdentity sourceIdentity =
+        DownloadSourceIdentity.fromEntry(entry);
     final List<_DownloadLibraryClaim> claims = <_DownloadLibraryClaim>[];
     for (final EpubBookRow row in await database.getAllEpubBooks()) {
       final String directory = p.normalize(row.extractDir);
@@ -542,32 +574,34 @@ class OnlineMangaLibraryService {
         _DownloadLibraryClaim(
           sourceFolder: segments.first,
           mangaFolder: segments.length > 1 ? segments[1] : null,
-          sourceIdentity: claimed == null ? null : _sourceIdentity(claimed),
+          sourceIdentity: claimed == null
+              ? null
+              : DownloadSourceIdentity.fromEntry(claimed),
         ),
       );
     }
     // 作品被移出书架时文件与目录保留，`epub_books` 行却没了。若只信数据库，
     // 另一部同名 Source 会直接复用旧 Source 的目录。这里补扫磁盘上还没有
-    // 稳定身份声明的 source 目录：任一 `pages.json` 能证明该目录属于哪个
-    // Source。读不到稳定身份的目录仍按旧行为处理（复用/靠 manga 目录名去重），
-    // 不凭空猜测归属。
+    // 稳定身份声明的 source 目录：任一 `pages.json`（含 `.cbz` 内）能证明该
+    // 目录属于哪个 Source。读不到稳定身份的目录仍按旧行为处理（复用/靠 manga
+    // 目录名去重），不凭空猜测归属。
     final Set<String> identityClaimedFolders = <String>{
       for (final _DownloadLibraryClaim claim in claims)
         if (claim.sourceIdentity != null) claim.sourceFolder.toLowerCase(),
     };
-    final Map<String, Set<String>> diskSourceIdentities =
+    final Map<String, Set<DownloadSourceIdentity>> diskSourceIdentities =
         await _diskSourceIdentities(
           rootPath,
           skipFolderNames: identityClaimedFolders,
         );
-    for (final MapEntry<String, Set<String>> disk
+    for (final MapEntry<String, Set<DownloadSourceIdentity>> disk
         in diskSourceIdentities.entries) {
-      for (final String identity in disk.value) {
+      for (final DownloadSourceIdentity diskIdentity in disk.value) {
         claims.add(
           _DownloadLibraryClaim(
             sourceFolder: disk.key,
             mangaFolder: null,
-            sourceIdentity: identity,
+            sourceIdentity: diskIdentity,
           ),
         );
       }
@@ -590,7 +624,8 @@ class OnlineMangaLibraryService {
     // 会让同一 Source 的下载散落到多个文件夹。
     String? sourceFolder;
     for (final _DownloadLibraryClaim claim in claims) {
-      if (claim.sourceIdentity == identity) {
+      final DownloadSourceIdentity? claimIdentity = claim.sourceIdentity;
+      if (claimIdentity != null && claimIdentity.matches(sourceIdentity)) {
         sourceFolder = claim.sourceFolder;
         break;
       }
@@ -599,19 +634,40 @@ class OnlineMangaLibraryService {
       final bool baseClaimedByOther = claims.any(
         (_DownloadLibraryClaim claim) =>
             claim.sourceIdentity != null &&
-            claim.sourceIdentity != identity &&
+            !claim.sourceIdentity!.matches(sourceIdentity) &&
             _sameFolderName(claim.sourceFolder, baseSourceFolder),
       );
       sourceFolder = baseClaimedByOther
           ? fitDownloadLibrarySegmentWithSuffix(
               base: baseSourceFolder,
-              suffix: ' [${downloadLibraryShortHash(identity)}]',
+              // 冲突后缀的哈希沿用旧口径（runtime + 扩展包 + 原始 sourceId），
+              // 避免同一 sourceId 的不同扩展包算出同一个后缀而互撞。
+              suffix:
+                  ' [${downloadLibraryShortHash('${sourceIdentity.runtimeWire}\u0000${sourceIdentity.extensionPackage}\u0000${sourceIdentity.sourceId}')}]',
               maxLength: sourceBudget,
             )
           : baseSourceFolder;
     }
 
     final String sourceDirPath = p.join(rootPath, sourceFolder);
+    final List<DownloadMangaFolderOnDisk> diskFolders =
+        await scanDownloadSourceFolders(Directory(sourceDirPath));
+
+    // 身份优先：目录名不是身份，manifest 才能证明文件夹属于这部作品。
+    final DownloadMangaFolderIdentityMatch identityMatch =
+        matchDownloadMangaFolderByIdentity(
+          diskFolders,
+          MangaDownloadIdentity.ofEntry(entry),
+        );
+    if (identityMatch.folder != null) {
+      return _DownloadMangaDirectoryResolution(
+        directory: identityMatch.folder!.directory,
+        reusedFolder: identityMatch.folder,
+      );
+    }
+    // 多个 manifest 匹配：不猜，继续走下面的冲突后缀；已存在的目录一个都
+    // 不改名、不删除。
+
     final String baseMangaFolder = downloadMangaFolderName(
       sourceDirPath: sourceDirPath,
       title: entry.series.title,
@@ -622,9 +678,10 @@ class OnlineMangaLibraryService {
             _sameFolderName(claim.sourceFolder, sourceFolder))
           claim.mangaFolder!.toLowerCase(),
     };
-    final Set<String> diskMangaFolders = await _existingChildFolderNames(
-      sourceDirPath,
-    );
+    final Set<String> diskMangaFolders = <String>{
+      for (final DownloadMangaFolderOnDisk folder in diskFolders)
+        folder.mangaFolderName.toLowerCase(),
+    };
     final String mangaFolder = await uniqueDownloadLibraryFolderName(
       base: baseMangaFolder,
       isTaken: (String candidate) async =>
@@ -635,17 +692,10 @@ class OnlineMangaLibraryService {
         pathReserve: kDownloadLibraryStagingPathReserve,
       ),
     );
-    return Directory(p.join(sourceDirPath, mangaFolder));
+    return _DownloadMangaDirectoryResolution(
+      directory: Directory(p.join(sourceDirPath, mangaFolder)),
+    );
   }
-
-  /// 稳定 Source 身份：runtime + extension package + source id。
-  ///
-  /// 不含显示名——改名不应让 Source 被当成新的；也不含 Manga/章节。
-  static String _sourceIdentity(OnlineMangaLibraryEntry entry) => <String>[
-    entry.runtime.wireValue,
-    entry.extensionPackage,
-    entry.sourceId,
-  ].join(String.fromCharCode(0));
 
   /// Windows 大小写不敏感：目录名比较统一转小写。
   static bool _sameFolderName(String a, String b) =>
@@ -661,83 +711,38 @@ class OnlineMangaLibraryService {
     return normalizedPath.startsWith(prefix);
   }
 
-  /// 磁盘上各 source 目录能从 `pages.json` 证明的 Source 身份集合。
+  /// 磁盘上各 source 目录能从 `pages.json`（含 `.cbz` 内）证明的 Source
+  /// 身份集合。
   ///
-  /// 只看 `downloads/<source>/<manga>/<chapter>/pages.json` 的一层（找到第一个
-  /// 可解析 manifest 即停）。[skipFolderNames] 是已经有数据库身份声明的目录
-  /// （小写），无需再读盘。目录读不了按没有身份处理，不让一次冲突解析失败。
-  static Future<Map<String, Set<String>>> _diskSourceIdentities(
+  /// 只看 `downloads/<source>/<manga>/<chapter>` 的第一个可解析 manifest 即停
+  /// （source 级的归属只需要一处证据）。[skipFolderNames] 是已经有数据库身份
+  /// 声明的目录（小写），无需再读盘。目录读不了按没有身份处理，不让一次冲突
+  /// 解析失败。
+  static Future<Map<String, Set<DownloadSourceIdentity>>> _diskSourceIdentities(
     String rootPath, {
     required Set<String> skipFolderNames,
   }) async {
-    final Map<String, Set<String>> result = <String, Set<String>>{};
-    for (final Directory sourceDir in await _childDirectories(rootPath)) {
+    final Map<String, Set<DownloadSourceIdentity>> result =
+        <String, Set<DownloadSourceIdentity>>{};
+    for (final Directory sourceDir in await listDownloadChildDirectories(
+      Directory(rootPath),
+    )) {
       final String folderName = p.basename(sourceDir.path);
       if (skipFolderNames.contains(folderName.toLowerCase())) continue;
-      final Set<String> identities = <String>{};
-      for (final Directory mangaDir
-          in await _childDirectories(sourceDir.path)) {
-        for (final Directory chapterDir
-            in await _childDirectories(mangaDir.path)) {
-          final MangaPagesManifest? manifest = await readPagesManifest(
-            chapterDir,
-          );
-          if (manifest == null) continue;
-          identities.add(
-            <String>[
-              manifest.sourceRuntime,
-              manifest.extensionPackage,
-              manifest.sourceId,
-            ].join(String.fromCharCode(0)),
-          );
-          break;
-        }
-        if (identities.isNotEmpty) break;
+      final Set<DownloadSourceIdentity> identities =
+          <DownloadSourceIdentity>{};
+      for (final Directory mangaDir in await listDownloadChildDirectories(
+        sourceDir,
+      )) {
+        final MangaPagesManifest? manifest =
+            await readFirstDownloadMangaManifest(mangaDir);
+        if (manifest == null) continue;
+        identities.add(DownloadSourceIdentity.fromManifest(manifest));
+        break;
       }
       result[folderName] = identities;
     }
     return result;
-  }
-
-  /// 直接子目录（跳过点号目录）。不存在 / 读不了 → 空列表。
-  static Future<List<Directory>> _childDirectories(String path) async {
-    final Directory parent = Directory(path);
-    if (!await parent.exists()) return const <Directory>[];
-    final List<Directory> dirs = <Directory>[];
-    try {
-      await for (final FileSystemEntity entity in parent.list(
-        followLinks: false,
-      )) {
-        if (entity is Directory &&
-            !p.basename(entity.path).startsWith('.')) {
-          dirs.add(entity);
-        }
-      }
-    } on FileSystemException {
-      return const <Directory>[];
-    }
-    dirs.sort(
-      (Directory a, Directory b) => p
-          .basename(a.path)
-          .toLowerCase()
-          .compareTo(p.basename(b.path).toLowerCase()),
-    );
-    return dirs;
-  }
-
-  /// 已有子目录名（小写）。目录不存在 → 空集。
-  static Future<Set<String>> _existingChildFolderNames(
-    String directoryPath,
-  ) async {
-    final Directory directory = Directory(directoryPath);
-    if (!await directory.exists()) return <String>{};
-    final Set<String> names = <String>{};
-    await for (final FileSystemEntity entity in directory.list(
-      followLinks: false,
-    )) {
-      names.add(p.basename(entity.path).toLowerCase());
-    }
-    return names;
   }
 
   /// 新读者从哪一章开始（[mangaInitialChapterIndex]）。
@@ -784,6 +789,20 @@ class OnlineMangaLibraryService {
   }
 }
 
+/// `_resolveDownloadMangaDirectory` 的结果：目录，以及它是否由磁盘 manifest
+/// 证明身份后复用（复用后要立刻重建章节映射）。
+class _DownloadMangaDirectoryResolution {
+  const _DownloadMangaDirectoryResolution({
+    required this.directory,
+    this.reusedFolder,
+  });
+
+  final Directory directory;
+
+  /// 命中的已有漫画文件夹；null = 新建（或按冲突后缀命名）。
+  final DownloadMangaFolderOnDisk? reusedFolder;
+}
+
 /// 一条已入库 Manga 对 Download library 目录段的占用。
 class _DownloadLibraryClaim {
   const _DownloadLibraryClaim({
@@ -796,5 +815,5 @@ class _DownloadLibraryClaim {
   final String? mangaFolder;
 
   /// null = 该行的描述符不可解析（例如本地条目）；不作为同源复用的依据。
-  final String? sourceIdentity;
+  final DownloadSourceIdentity? sourceIdentity;
 }

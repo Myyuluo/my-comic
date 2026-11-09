@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -513,6 +514,52 @@ void main() {
       reason: '认领完整目录，不再访问源站',
     );
     cbzService.dispose();
+  });
+
+  test('占位扩展包 manifest 仍被认领：数字 sourceId + series key 相同，不重下', () async {
+    final MangaDownloadService folderService = build(saveAsCbz: () => false);
+    addTearDown(folderService.dispose);
+    await folderService.enqueueChapter(
+      entry: _entry(),
+      chapter: _chapters.last,
+      autoOcr: false,
+    );
+    await folderService.start();
+    await folderService.whenIdle;
+
+    // 模拟导入占位身份写出的 pages.json（真实包条目仍应认领同一章）。
+    final Directory folder = downloadChapterDirectory(bookDir, 'Chapter 1');
+    final File manifestFile = downloadPagesManifestFile(folder);
+    final Map<String, Object?> json =
+        (jsonDecode(await manifestFile.readAsString()) as Map)
+            .cast<String, Object?>();
+    final Map<String, Object?> source =
+        (json['source'] as Map).cast<String, Object?>();
+    source['extensionPackage'] = 'mihon.unavailable';
+    json['source'] = source;
+    await manifestFile.writeAsString(jsonEncode(json));
+    await db.deleteMangaChapterDir(bookKey, '/chapter/1');
+    final Map<int, int> fetchedBefore = Map<int, int>.of(adapter.fetchCounts);
+
+    final MangaDownloadService again = build(saveAsCbz: () => false);
+    addTearDown(again.dispose);
+    await again.enqueueChapter(
+      entry: _entry(),
+      chapter: _chapters.last,
+      autoOcr: false,
+    );
+    await again.start();
+    await again.whenIdle;
+
+    expect(
+      adapter.fetchCounts,
+      fetchedBefore,
+      reason: 'mihon.unavailable 与真实包是同一身份，完整容器应直接认领',
+    );
+    expect(
+      (await db.getMangaChapterDir(bookKey, '/chapter/1'))?.folderName,
+      'Chapter 1',
+    );
   });
 
   test('格式在任务开始运行时确定：运行中的任务保持，排队任务读真正开始时的值', () async {
