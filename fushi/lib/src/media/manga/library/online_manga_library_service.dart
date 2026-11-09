@@ -136,10 +136,12 @@ class OnlineMangaLibraryService {
   }
 
   /// 入库（已在库则只刷新，不重复建行）。
+  ///
+  /// 只负责创建 Library membership=true 的新行；已有行（含非书架行）保持既有
+  /// 「只刷新描述符」语义。票 03 会把「已有非书架行」的显式加入改为翻转
+  /// membership，本方法届时再收口。
   Future<EpubBookRow> add(OnlineMangaLibraryEntry entry) async {
-    final String bookKey = bookKeyOf(entry);
-    EpubBookRow? existing = await database.getEpubBook(bookKey);
-    existing ??= await _findSameSourceSeries(entry);
+    final EpubBookRow? existing = await find(entry);
     if (existing != null) {
       await refresh(
         bookKey: existing.bookKey,
@@ -147,13 +149,33 @@ class OnlineMangaLibraryService {
         series: entry.series,
         chapters: entry.chapters,
       );
-      final EpubBookRow row = (await database.getEpubBook(existing.bookKey))!;
-      return row;
+      return (await database.getEpubBook(existing.bookKey))!;
     }
+    return _insert(entry, inLibrary: true);
+  }
 
-    // Download library：`downloads/{source}/{manga}`。章节是它的直接子目录，
-    // 每章自己的 `pages.json` 才是身份；书根不再写占位 manga.json。
-    // 同名 Source / 同名 Manga 在这里解决（短源 ID / `(2)` 后缀），绝不覆盖。
+  /// 确保这部在线作品有一条 **Library membership=false** 的 Manga 行（票 02）。
+  ///
+  /// 打开在线源作品页时调用：同一作品已有行（含占位来源的同作品回退）就原样
+  /// 复用，不翻转 membership、不重复建行；没有行才插入一条非书架行，章节与
+  /// 来源 metadata 都来自 [entry]。标题 / 封面 / 下载目录与 [add] 共用同一条
+  /// 插入路径，之后显式加入书架只翻 membership，bookKey/uid 不变。
+  ///
+  /// 这里**不联网刷新**：首屏章节缓存由作品页自己的刷新策略决定，打开源作品
+  /// 页不该被一次全量刷新挡住。
+  Future<EpubBookRow> ensureNonLibrary(OnlineMangaLibraryEntry entry) async =>
+      await find(entry) ?? await _insert(entry, inLibrary: false);
+
+  /// 插入一条新的 Manga 行（bookKey 尚不存在时）。
+  ///
+  /// Download library：`downloads/{source}/{manga}`。章节是它的直接子目录，
+  /// 每章自己的 `pages.json` 才是身份；书根不再写占位 manga.json。
+  /// 同名 Source / 同名 Manga 在这里解决（短源 ID / `(2)` 后缀），绝不覆盖。
+  Future<EpubBookRow> _insert(
+    OnlineMangaLibraryEntry entry, {
+    required bool inLibrary,
+  }) async {
+    final String bookKey = bookKeyOf(entry);
     final _DownloadMangaDirectoryResolution resolution =
         await _resolveDownloadMangaDirectory(
           entry,
@@ -205,6 +227,7 @@ class OnlineMangaLibraryService {
         sourceMetadata: Value<String?>(entry.encode()),
         importedAt: DateTime.now().millisecondsSinceEpoch,
         format: const Value<String>('manga'),
+        inLibrary: Value<bool>(inLibrary),
       ),
     );
     final EpubBookRow row = (await database.getEpubBook(bookKey))!;

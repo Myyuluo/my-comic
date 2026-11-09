@@ -1050,9 +1050,15 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     // 展示照旧，只是入库按钮不可用。
     final OnlineMangaLibraryService? shelf = service ?? _shelfServiceFor(seed);
     EpubBookRow? existing;
+    bool hadRow = false;
     if (shelf != null) {
       try {
         existing = await shelf.find(seed);
+        hadRow = existing != null;
+        // 票 02：打开在线源作品页就确保一条 membership=false 的 Manga 行
+        // （已有则复用）。阅读进度、已读、History 与下载从此有稳定归属，
+        // 但作品不进书架；首屏仍按下面的刷新策略决定是否联网。
+        existing ??= await shelf.ensureNonLibrary(seed);
       } on Object catch (error, stack) {
         ErrorLogService.instance.log('MangaSeriesPage.find', error, stack);
       }
@@ -1080,9 +1086,9 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     if (sourceLabel == null || sourceLabel.isEmpty) {
       unawaited(_resolveSourceLabel(adapter, entry));
     }
-    // 未入库的来源作品首屏是空的，自动拉一次；已入库则与书架路径同一规则：
-    // 有缓存就不联网，缓存章节为空才兜底。
-    if (existing == null || entry.chapters.isEmpty) {
+    // 首次打开（行刚建出来）首屏是空的，自动拉一次；已有行则与书架路径同一
+    // 规则：有缓存就不联网，缓存章节为空才兜底。
+    if (!hadRow || entry.chapters.isEmpty) {
       unawaited(_refreshFromSource(silent: true));
     }
     unawaited(_refreshDownloadState());
@@ -1215,6 +1221,9 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     }
     final OnlineMangaLibraryService? service = _service;
     final OnlineMangaLibraryEntry? entry = _entry;
+    // 票 02 起源作品页一打开就有非书架行；把「加入书架」改为翻转这条行的
+    // membership 是票 03 的范围。这里继续只在完全没有行时创建 Library 行，
+    // 避免重复建行 / 把 Tag 写到非书架行上。
     if (service == null || entry == null || _busy || _row != null) return;
     // 票 04：已有 Tag 时先选标签；取消（null）则不创建 Library 条目。
     final Set<int>? selectedTagIds = await _pickTagsBeforeLibraryAdd(
@@ -1621,8 +1630,9 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     try {
       String? bookKey = _bookKey;
       if (bookKey == null) {
-        // 从源里直接点章：先入库再读，否则进度、已读标记、断点续读全都无处可落。
-        final EpubBookRow row = await service.add(entry);
+        // 从源里直接点章：确保一条**非书架**行再读（票 02：阅读不等于收藏）。
+        // 进度、已读标记、断点续读按 bookKey/uid 落在这条行上。
+        final EpubBookRow row = await service.ensureNonLibrary(entry);
         entry = OnlineMangaLibraryEntry.tryParse(row.sourceMetadata) ?? entry;
         bookKey = row.bookKey;
         if (!mounted) return;
@@ -2756,15 +2766,16 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
       return <Widget>[];
     }
     final OnlineMangaLibraryEntry? entry = _entry;
-    // 加入 / 移出按钮与下载动作仍按「行是否存在」判断（票 04/08 才切到
-    // membership）；订阅 / 自动追更则已经只认 Library membership。
+    // 加入 / 移出按 Library membership 判断：票 02 起源作品页一打开就有行，
+    // 「有行」不再等于「在书架」。下载动作只要有行就能挂任务（票 08 再完善
+    // 非书架下载的入口语义）。
     final bool hasRow = _row != null;
     final bool isLibraryMember = _row?.isInLibrary ?? false;
     final OnlineMangaLoginTarget? login = _loginTarget;
     return <Widget>[
       // 同一个位置、同一个按钮：不在库是「加入」，在库是「移出」（用户诉求：加了
       // 要能取消）。移出走书架同一条 deleteBook 路径，连已下载章节一起删。
-      if (hasRow)
+      if (isLibraryMember)
         MediaDetailSecondaryButton(
           buttonKey: const ValueKey<String>(
             'manga_series_remove_from_bookshelf',
