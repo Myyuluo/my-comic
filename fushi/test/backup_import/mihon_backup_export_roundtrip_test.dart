@@ -939,6 +939,8 @@ void main() {
         includeChapters: false,
         includeCategories: false,
         includeAppSettings: false,
+        includeExtensionStores: false,
+        includeSourceSettings: false,
       ).hasExportableContent,
       isFalse,
     );

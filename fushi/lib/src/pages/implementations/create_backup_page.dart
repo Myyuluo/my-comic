@@ -44,9 +44,9 @@ Future<String?> pickMihonBackupSavePath({
 ///
 /// Ticket 07 delivers the Library options (书架中的作品 / 章节) and the file
 /// plumbing; ticket 08 adds 历史 and 所有已读作品, which depend on 书架中的作品;
-/// ticket 09 adds 分类 (Categories), ticket 10 adds 进度记录 (Tracking) and
-/// ticket 11 adds 应用设置 / 包含敏感设置 in the 设置 card. Later tickets append
-/// 插件商店 / 图源设置; an empty group card is not rendered.
+/// ticket 09 adds 分类 (Categories), ticket 10 adds 进度记录 (Tracking),
+/// ticket 11 adds 应用设置 / 包含敏感设置 and ticket 12 adds 插件商店 /
+/// 图源设置 in the 设置 card. An empty group card is not rendered.
 class CreateBackupPage extends ConsumerStatefulWidget {
   const CreateBackupPage({super.key, this.savePathPicker, this.exporter});
 
@@ -70,17 +70,22 @@ class _CreateBackupPageState extends ConsumerState<CreateBackupPage> {
   bool _includeTracking = true;
   bool _includeCategories = true;
   bool _includeAppSettings = true;
+  bool _includeExtensionStores = true;
+  bool _includeSourceSettings = true;
   bool _includeSensitiveSettings = false;
 
   /// 「包含敏感设置」only means something when a settings section is exported.
-  /// Ticket 12 adds「图源设置」to this condition.
-  bool get _sensitiveSettingsAvailable => _includeAppSettings;
+  bool get _sensitiveSettingsAvailable =>
+      _includeAppSettings || _includeSourceSettings;
 
-  /// Standalone exportable sections: 书架中的作品, 分类 and 应用设置. 章节 /
-  /// 进度记录 / 历史 / 所有已读作品 depend on 书架中的作品. Later tickets add
-  /// 插件商店 / 图源设置 here.
+  /// Standalone exportable sections: 书架中的作品, 分类, 应用设置, 插件商店 and
+  /// 图源设置. 章节 / 进度记录 / 历史 / 所有已读作品 depend on 书架中的作品.
   bool get _canCreate =>
-      _includeLibrary || _includeCategories || _includeAppSettings;
+      _includeLibrary ||
+      _includeCategories ||
+      _includeAppSettings ||
+      _includeExtensionStores ||
+      _includeSourceSettings;
 
   MihonBackupExportOptions get _options => MihonBackupExportOptions(
     includeLibrary: _includeLibrary,
@@ -90,6 +95,8 @@ class _CreateBackupPageState extends ConsumerState<CreateBackupPage> {
     includeTracking: _includeLibrary && _includeTracking,
     includeCategories: _includeCategories,
     includeAppSettings: _includeAppSettings,
+    includeExtensionStores: _includeExtensionStores,
+    includeSourceSettings: _includeSourceSettings,
     includeSensitiveSettings: _includeSensitiveSettings,
   );
 
@@ -213,8 +220,9 @@ class _CreateBackupPageState extends ConsumerState<CreateBackupPage> {
         },
       ),
     ];
-    // 应用设置 exports MyComic's own preference keys; 包含敏感设置 is gated on
-    // a settings section being exported. Ticket 12 appends 插件商店 / 图源设置.
+    // 应用设置 exports MyComic's own preference keys; 插件商店 exports every
+    // Extension store; 图源设置 exports per-source preferences. 包含敏感设置 is
+    // gated on either settings section being exported.
     final List<Widget> settingsRows = <Widget>[
       FushiCheckboxListTile(
         key: const Key('create_backup_include_app_settings'),
@@ -224,6 +232,26 @@ class _CreateBackupPageState extends ConsumerState<CreateBackupPage> {
         title: Text(t.backup_create_app_settings),
         onChanged: (bool? value) {
           setState(() => _includeAppSettings = value ?? false);
+        },
+      ),
+      FushiCheckboxListTile(
+        key: const Key('create_backup_include_extension_stores'),
+        contentPadding: EdgeInsets.zero,
+        controlAffinity: ListTileControlAffinity.leading,
+        value: _includeExtensionStores,
+        title: Text(t.backup_create_extension_stores),
+        onChanged: (bool? value) {
+          setState(() => _includeExtensionStores = value ?? false);
+        },
+      ),
+      FushiCheckboxListTile(
+        key: const Key('create_backup_include_source_settings'),
+        contentPadding: EdgeInsets.zero,
+        controlAffinity: ListTileControlAffinity.leading,
+        value: _includeSourceSettings,
+        title: Text(t.backup_create_source_settings),
+        onChanged: (bool? value) {
+          setState(() => _includeSourceSettings = value ?? false);
         },
       ),
       FushiCheckboxListTile(
