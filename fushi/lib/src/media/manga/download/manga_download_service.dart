@@ -318,6 +318,29 @@ class MangaDownloadService {
     }
   }
 
+  /// 取消失败的任务（下载页失败行的「取消」）：删除任务行并清理半成品
+  /// （`.staging/<jobId>`、残留的 `.cbz.tmp`、可能存在的映射容器）。不弹确认，
+  /// 由调用方 toast。
+  ///
+  /// 只处理 `failed` 行；其他状态 / 不存在的行一律 no-op 并返回 false——失败行
+  /// 的「取消」绝不能误删排队或正在下载的任务。任务行删除后列表立即消失；
+  /// 若同章刚被重试领取（仍在 worker 里），先发中止信号交给现有取消收尾。
+  Future<bool> discardFailed(String jobId) async {
+    final MangaDownloadJobRow? row = await _database.getMangaDownloadJob(jobId);
+    if (row == null || row.status != MangaDownloadJobStatus.failed) {
+      return false;
+    }
+    final _ActiveJob? active = _active;
+    if (active != null && active.jobId == jobId) {
+      active.token.cancelled = true;
+      await _database.deleteMangaDownloadJob(jobId);
+      return true;
+    }
+    await _database.deleteMangaDownloadJob(jobId);
+    await _deleteChapterDirectory(row);
+    return true;
+  }
+
   /// 重试 `failed` / `cancelled` 的任务。全局暂停期间重试的行以 `paused` 入队，
   /// 不会绕过暂停开跑。
   Future<void> retry(String jobId) async {
@@ -1146,12 +1169,51 @@ class MangaDownloadService {
         await staging.delete(recursive: true);
         await _cleanupStagingParent(staging);
       }
+      await _deleteArchiveTempsForJob(job, row.extractDir);
     } on Object catch (error, stack) {
       ErrorLogService.instance.log(
         'MangaDownloadService.deleteChapter ${job.jobId}',
         error,
         stack,
       );
+    }
+  }
+
+  /// 删除本任务遗留的 `{chapter}.cbz.tmp`。
+  ///
+  /// 正常情况下失败收尾已按 [_archiveTempJobId] 删掉临时包；进程在压缩中途退出
+  /// 时路径只留在磁盘上，内存里没有记录。这里按任务标题推导本章的临时包名，
+  /// 只清本章的 `.cbz.tmp`（支持 `[扫译组]` / `(2)` 后缀），不影响其他任务的
+  /// 临时文件。
+  Future<void> _deleteArchiveTempsForJob(
+    MangaDownloadJobRow job,
+    String mangaDir,
+  ) async {
+    final Directory directory = Directory(mangaDir);
+    if (!await directory.exists()) return;
+    final String raw = job.chapterTitle.trim().isNotEmpty
+        ? job.chapterTitle
+        : job.chapterKey;
+    final int budget = downloadLibrarySegmentBudget(mangaDir);
+    final int baseBudget = budget > kDownloadArchiveExtension.length
+        ? budget - kDownloadArchiveExtension.length
+        : 1;
+    final String base = sanitizeDownloadLibrarySegment(
+      raw,
+      maxLength: baseBudget,
+    );
+    final RegExp expected = RegExp(
+      '^${RegExp.escape(base)}(?: \\[[^\\]]+\\]| \\(\\d+\\))*'
+      '${RegExp.escape('$kDownloadArchiveExtension.tmp')}\$',
+      caseSensitive: false,
+    );
+    await for (final FileSystemEntity entity in directory.list(
+      followLinks: false,
+    )) {
+      if (entity is! File) continue;
+      if (expected.hasMatch(p.basename(entity.path))) {
+        await _deleteFileQuietly(entity);
+      }
     }
   }
 

@@ -26,6 +26,7 @@ import 'package:fushi/src/utils/components/glass/fushi_icon.dart'
     show FushiIcon;
 import 'package:fushi/src/utils/components/library_section_tabs.dart'
     show FushiSectionTabBar;
+import 'package:fushi/src/utils/misc/fushi_toast.dart';
 import 'package:fushi/src/utils/misc/update_checker.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:material_ui/material_ui.dart';
@@ -46,11 +47,15 @@ void main() {
 
   late FushiDatabase db;
   late MangaDownloadService downloads;
+  late GlobalKey<NavigatorState> navKey;
 
   setUp(() {
     LocaleSettings.setLocale(AppLocale.en);
     UpdateChecker.disableAutoCheckForTesting = true;
     DesktopLookupService.instance.debugReset();
+    // FushiToast 走全局 navigator overlay；页面测试挂上 key 才能断言 toast 真渲染。
+    navKey = GlobalKey<NavigatorState>();
+    FushiToast.navigatorKey = navKey;
     db = FushiDatabase.forTesting(NativeDatabase.memory());
     downloads = MangaDownloadService(
       database: db,
@@ -70,6 +75,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         child: MaterialApp(
+          navigatorKey: navKey,
           home: Scaffold(body: DownloadsPage(downloadsOverride: downloads)),
         ),
       ),
@@ -258,7 +264,11 @@ void main() {
         reason: '失败行的行内操作是「继续」',
       );
       expect(find.byTooltip(t.retry), findsNothing);
-      expect(find.byTooltip(t.dialog_cancel), findsNothing);
+      expect(
+        find.byTooltip(t.dialog_cancel),
+        findsOneWidget,
+        reason: '失败行同时显示「取消」（ticket 09）',
+      );
 
       await tester.tap(find.byTooltip(t.download_resume));
       await tester.pumpAndSettle();
@@ -272,8 +282,59 @@ void main() {
       expect(
         find.byTooltip(t.dialog_cancel),
         findsOneWidget,
-        reason: '重试后该行变回排队中，行尾换成取消图标',
+        reason: '重试后该行变回排队中，只剩取消图标',
       );
+    });
+
+    testWidgets('取消失败任务：删除任务行、toast 提示，其他任务不受影响', (
+      WidgetTester tester,
+    ) async {
+      await insertTask(
+        jobId: 'job-failed',
+        status: MangaDownloadJobStatus.failed,
+        createdAt: 1,
+      );
+      await insertTask(
+        jobId: 'job-queued',
+        status: MangaDownloadJobStatus.queued,
+        createdAt: 2,
+      );
+      await pumpPage(tester);
+
+      expect(
+        find.byTooltip(t.dialog_cancel),
+        findsNWidgets(2),
+        reason: '失败行与排队行都有取消图标',
+      );
+
+      // 列表按 createdAt 升序：第一张是失败任务。
+      await tester.tap(find.byTooltip(t.dialog_cancel).first);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AlertDialog), findsNothing, reason: '取消失败任务不弹二次确认');
+      expect(
+        await db.getMangaDownloadJob('job-failed'),
+        isNull,
+        reason: '失败任务行被删除',
+      );
+      expect(
+        find.text(t.download_task_cancel_failed),
+        findsOneWidget,
+        reason: '取消完成后有 toast 反馈',
+      );
+      expect(
+        await db.getMangaDownloadJob('job-queued'),
+        isNotNull,
+        reason: '其他任务不受影响',
+      );
+      expect(
+        find.byType(DownloadTaskCard),
+        findsOneWidget,
+        reason: '列表只剩排队中的另一条任务',
+      );
+
+      // 等 toast 自动消失计时器跑完，避免 pending timer。
+      await tester.pump(const Duration(seconds: 3));
     });
 
     testWidgets('重试成功（任务完成）后从列表消失并回到空态', (WidgetTester tester) async {

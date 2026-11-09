@@ -2257,6 +2257,7 @@
   "download_task_add_title_label": "Title",
   "download_task_audiobook_needs_alignment": "Audio only - an alignment file (subtitle) is still needed before this can open as a book.",
   "download_task_audiobook_pair": "Add alignment file",
+  "download_task_cancel_failed": "Failed download cancelled",
   "download_task_collection_unassigned": "No collection",
   "download_task_delete": "Delete task",
   "download_task_delete_confirm": "Delete the download task for ${title}?",
