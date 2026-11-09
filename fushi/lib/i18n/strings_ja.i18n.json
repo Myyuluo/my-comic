@@ -1250,6 +1250,7 @@
   "backup_import_mihon_subtitle": "This app supports importing Mihon backup files. Select your .tachibk file.",
   "backup_import_mihon_summary_app_settings": "App settings: filled $imported, skipped $skipped",
   "backup_import_mihon_summary_categories": "Categories: $created created, $matched matched",
+  "backup_import_mihon_summary_downloads": "Downloads: $matched matched, $chapters chapters linked, $skipped skipped",
   "backup_import_mihon_summary_entries": "Library: $imported imported, $merged merged, $skipped skipped, $failed failed",
   "backup_import_mihon_summary_extension_stores": "Extension stores: $imported added, $merged merged, $skipped skipped",
   "backup_import_mihon_summary_history": "History: $count recent entries",

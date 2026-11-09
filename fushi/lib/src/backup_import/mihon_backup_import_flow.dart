@@ -60,7 +60,14 @@ Future<void> runMihonBackupImport(SettingsContext settings) async {
     barrierDismissible: false,
     builder: (BuildContext _) => _MihonBackupImportProgressDialog(
       file: File(path),
-      service: MihonBackupImportService(database: settings.appModel.database),
+      service: MihonBackupImportService(
+        database: settings.appModel.database,
+        // Ticket 11: the import re-links only the imported Manga against the
+        // current Content root's download/local roots. Both are resolved by the
+        // time Settings can open the importer.
+        downloadsRoot: settings.appModel.appPaths.downloadsRoot,
+        localComicRoot: settings.appModel.appPaths.localComicRoot,
+      ),
     ),
   );
   if (outcome == null || !context.mounted) return;

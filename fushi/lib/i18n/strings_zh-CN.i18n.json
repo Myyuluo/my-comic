@@ -1250,6 +1250,7 @@
   "backup_import_mihon_subtitle": "本应用支持导入Mihon的备份文件，请选择您的.tachibk文件。",
   "backup_import_mihon_summary_app_settings": "应用设置：补齐 $imported，跳过 $skipped",
   "backup_import_mihon_summary_categories": "分类：新建 $created，已存在 $matched",
+  "backup_import_mihon_summary_downloads": "下载匹配：匹配 $matched 部，写入 $chapters 章，跳过 $skipped 部",
   "backup_import_mihon_summary_entries": "书架：新增 $imported，合并 $merged，跳过 $skipped，失败 $failed",
   "backup_import_mihon_summary_extension_stores": "扩展仓库：新增 $imported，合并 $merged，跳过 $skipped",
   "backup_import_mihon_summary_history": "历史：$count 条最近记录",
