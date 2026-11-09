@@ -8,13 +8,15 @@ import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 
 /// Which Mihon backup sections the user asked for.
 ///
-/// Ticket 07 ships Library + Chapters; later tickets add History, categories,
-/// tracking, app settings, extension stores and source settings. The page owns
-/// the dependency rules; the exporter only honours the resolved options.
+/// The page owns the dependency rules; the exporter only honours the resolved
+/// options. Library + Chapters + Categories are implemented so far; later
+/// tickets add History, tracking, app settings, extension stores and source
+/// settings.
 class MihonBackupExportOptions {
   const MihonBackupExportOptions({
     this.includeLibrary = true,
     this.includeChapters = true,
+    this.includeCategories = true,
   });
 
   /// 「书架中的作品」: export Library manga as `favorite=true`.
@@ -23,9 +25,14 @@ class MihonBackupExportOptions {
   /// 「章节」: export each manga's chapter list (read state, progress, dates).
   final bool includeChapters;
 
+  /// 「分类」: export every Tag as a Mihon category and reference the matching
+  /// category orders from each exported manga. Independent of [includeLibrary]
+  /// so categories can be exported on their own.
+  final bool includeCategories;
+
   /// Whether the resolved selection produces a non-empty backup. Later tickets
-  /// add the standalone categories / settings sections here.
-  bool get hasExportableContent => includeLibrary;
+  /// add the standalone settings sections here.
+  bool get hasExportableContent => includeLibrary || includeCategories;
 }
 
 class MihonBackupExportProgress {
@@ -79,6 +86,11 @@ class MihonBackupExporter {
     final List<_ExportableManga> exportable = await _exportableManga(options);
     final Map<String, Map<String, MangaChapterStateRow>> chapterStates =
         options.includeChapters ? await _loadChapterStates() : const {};
+    // Categories (Tags) are independent of the Library section: they export
+    // even when 书架中的作品 is unchecked.
+    final _CategoryExport? categoryExport = options.includeCategories
+        ? await _loadCategories()
+        : null;
 
     final List<MihonBackupManga> mangas = <MihonBackupManga>[];
     final Map<int, String> sourceNames = <int, String>{};
@@ -111,7 +123,9 @@ class MihonBackupExporter {
           dateAdded: candidate.row.importedAt,
           favorite: true,
           chapters: chapters,
-          categoryOrders: const <int>[],
+          categoryOrders:
+              categoryExport?.ordersFor(candidate.row.bookKey) ??
+              const <int>[],
           history: const <MihonBackupHistory>[],
           tracking: const <MihonBackupTracking>[],
         ),
@@ -133,7 +147,8 @@ class MihonBackupExporter {
 
     return MihonBackupData(
       mangas: List<MihonBackupManga>.unmodifiable(mangas),
-      categories: const <MihonBackupCategory>[],
+      categories:
+          categoryExport?.categories ?? const <MihonBackupCategory>[],
       sourceNames: Map<int, String>.unmodifiable(sourceNames),
     );
   }
@@ -227,6 +242,50 @@ class MihonBackupExporter {
     return byBook;
   }
 
+  /// Tags → Mihon categories.
+  ///
+  /// Mihon identifies categories inside `BackupManga.categories` by their
+  /// **order**, so orders must be unique even though `BookTags.sortOrder` is
+  /// not guaranteed to be (legacy rows default to 0). Display order is the
+  /// source of truth: tags are visited in [FushiDatabase.getAllTags] order and
+  /// a colliding sort order moves to the next free integer. Tag colours have
+  /// no Mihon category field and are deliberately dropped.
+  Future<_CategoryExport> _loadCategories() async {
+    final List<BookTagRow> tags = await database.getAllTags();
+    final Set<int> usedOrders = <int>{};
+    final Map<int, int> orderByTagId = <int, int>{};
+    final List<MihonBackupCategory> categories = <MihonBackupCategory>[];
+    for (final BookTagRow tag in tags) {
+      int order = tag.sortOrder < 0 ? 0 : tag.sortOrder;
+      while (usedOrders.contains(order)) {
+        order++;
+      }
+      usedOrders.add(order);
+      orderByTagId[tag.id] = order;
+      categories.add(
+        MihonBackupCategory(name: tag.name, order: order, id: tag.id),
+      );
+    }
+
+    final List<TagAssignmentRow> assignments = await database
+        .getTagAssignmentsForKind(TagHostKind.epub);
+    final Map<String, List<int>> ordersByBookKey = <String, List<int>>{};
+    for (final TagAssignmentRow assignment in assignments) {
+      final int? order = orderByTagId[assignment.tagId];
+      if (order == null) continue;
+      ordersByBookKey
+          .putIfAbsent(assignment.entryKey, () => <int>[])
+          .add(order);
+    }
+    for (final List<int> orders in ordersByBookKey.values) {
+      orders.sort();
+    }
+    return _CategoryExport(
+      categories: List<MihonBackupCategory>.unmodifiable(categories),
+      ordersByBookKey: ordersByBookKey,
+    );
+  }
+
   Future<Map<int, String>> _knownSourceNames() async {
     final List<MangaOnlineSourceRow> sources = await database
         .getMangaOnlineSources(mediaKind: 'manga');
@@ -276,6 +335,21 @@ class MihonBackupExporter {
     final String? trimmed = value?.trim();
     return trimmed == null || trimmed.isEmpty ? null : value;
   }
+}
+
+/// Resolved category section: the exported Mihon categories plus each book's
+/// category orders (never tag ids — Mihon references categories by order).
+class _CategoryExport {
+  const _CategoryExport({
+    required this.categories,
+    required this.ordersByBookKey,
+  });
+
+  final List<MihonBackupCategory> categories;
+  final Map<String, List<int>> ordersByBookKey;
+
+  List<int> ordersFor(String bookKey) =>
+      ordersByBookKey[bookKey] ?? const <int>[];
 }
 
 class _ExportableManga {

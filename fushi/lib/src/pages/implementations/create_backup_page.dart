@@ -42,10 +42,10 @@ Future<String?> pickMihonBackupSavePath({
 
 /// 「创建备份」页：Bookshelf / Settings group cards with a bottom 创建 button.
 ///
-/// Ticket 07 delivers the Library options (书架中的作品 / 章节) and the file
-/// plumbing. History, categories, tracking, app settings and source settings
-/// are appended to these same groups by later tickets; an empty group card is
-/// not rendered, so this slice shows only the 书架 card.
+/// Delivered Library options so far: 书架中的作品 / 章节 / 分类. History,
+/// tracking, app settings and source settings are appended to these same groups
+/// by later tickets; an empty group card is not rendered, so this slice shows
+/// only the 书架 card.
 class CreateBackupPage extends ConsumerStatefulWidget {
   const CreateBackupPage({super.key, this.savePathPicker, this.exporter});
 
@@ -64,14 +64,16 @@ class _CreateBackupPageState extends ConsumerState<CreateBackupPage> {
   // persisted (spec: 每次打开创建备份页都恢复默认勾选).
   bool _includeLibrary = true;
   bool _includeChapters = true;
+  bool _includeCategories = true;
 
-  /// In this slice 书架中的作品 is the only standalone exportable section;
-  /// 章节 depends on it. Later tickets add the independent sections here.
-  bool get _canCreate => _includeLibrary;
+  /// 章节 depends on 书架中的作品; 分类 is independent, so it is exportable
+  /// on its own. Later tickets add the remaining standalone sections here.
+  bool get _canCreate => _includeLibrary || _includeCategories;
 
   MihonBackupExportOptions get _options => MihonBackupExportOptions(
     includeLibrary: _includeLibrary,
     includeChapters: _includeLibrary && _includeChapters,
+    includeCategories: _includeCategories,
   );
 
   Future<void> _create() async {
@@ -142,6 +144,18 @@ class _CreateBackupPageState extends ConsumerState<CreateBackupPage> {
                 setState(() => _includeChapters = value ?? false);
               }
             : null,
+      ),
+      // 分类 = Tags exported as Mihon categories. It is deliberately not tied
+      // to 书架中的作品 so a tags-only backup can be created.
+      FushiCheckboxListTile(
+        key: const Key('create_backup_include_categories'),
+        contentPadding: EdgeInsets.zero,
+        controlAffinity: ListTileControlAffinity.leading,
+        value: _includeCategories,
+        title: Text(t.backup_create_categories),
+        onChanged: (bool? value) {
+          setState(() => _includeCategories = value ?? false);
+        },
       ),
     ];
     // Ticket 07 ships the Library group; tickets 11/12 append 应用设置 / 插件

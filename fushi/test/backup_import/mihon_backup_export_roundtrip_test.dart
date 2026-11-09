@@ -225,6 +225,253 @@ void main() {
     expect(parsed.mangas.single.chapters, isEmpty);
   });
 
+  test('exports Tags as Mihon categories and each manga category orders',
+      () async {
+    final EpubBookRow alpha = await _seedManga(
+      db,
+      sourceId: '123',
+      url: '/manga/alpha',
+      title: 'Alpha',
+      chapters: const <OnlineMangaChapter>[],
+    );
+    final EpubBookRow beta = await _seedManga(
+      db,
+      sourceId: '456',
+      url: '/manga/beta',
+      title: 'Beta',
+      chapters: const <OnlineMangaChapter>[],
+    );
+    final int action = await _seedTag(db, name: 'Action', sortOrder: 1);
+    final int drama = await _seedTag(db, name: 'Drama', sortOrder: 3);
+    await db.addTagToBook(alpha.bookKey, action);
+    await db.addTagToBook(alpha.bookKey, drama);
+    await db.addTagToBook(beta.bookKey, drama);
+
+    final File target = File(p.join(tmp.path, 'categories.tachibk'));
+    await MihonBackupExporter(database: db).exportToFile(
+      target: target,
+      options: const MihonBackupExportOptions(
+        includeLibrary: true,
+        includeChapters: false,
+      ),
+    );
+
+    final MihonBackupData parsed = MihonBackupParser.parseFile(target);
+    expect(
+      parsed.categories.map((MihonBackupCategory category) => category.name),
+      <String>['Action', 'Drama'],
+    );
+    expect(
+      parsed.categories.map((MihonBackupCategory category) => category.order),
+      <int>[1, 3],
+      reason: 'category order comes from the Tag sort order',
+    );
+    expect(
+      parsed.categories.map((MihonBackupCategory category) => category.id),
+      <int>[action, drama],
+      reason: 'Mihon category ids must be unique and non-zero',
+    );
+
+    final MihonBackupManga exportedAlpha = parsed.mangas.singleWhere(
+      (MihonBackupManga manga) => manga.url == '/manga/alpha',
+    );
+    final MihonBackupManga exportedBeta = parsed.mangas.singleWhere(
+      (MihonBackupManga manga) => manga.url == '/manga/beta',
+    );
+    expect(exportedAlpha.categoryOrders, <int>[1, 3],
+        reason: 'multi-Tag manga writes every Tag category order');
+    expect(exportedBeta.categoryOrders, <int>[3]);
+  });
+
+  test('categories export on their own when 书架中的作品 is unchecked',
+      () async {
+    final int action = await _seedTag(db, name: 'Action', sortOrder: 0);
+    final File target = File(p.join(tmp.path, 'categories-only.tachibk'));
+    await MihonBackupExporter(database: db).exportToFile(
+      target: target,
+      options: const MihonBackupExportOptions(
+        includeLibrary: false,
+        includeChapters: false,
+        includeCategories: true,
+      ),
+    );
+
+    final MihonBackupData parsed = MihonBackupParser.parseFile(target);
+    expect(parsed.mangas, isEmpty);
+    final MihonBackupCategory category = parsed.categories.single;
+    expect(category.name, 'Action');
+    expect(category.order, 0, reason: 'Mihon order 0 is the proto default');
+    expect(category.id, action);
+    expect(
+      const MihonBackupExportOptions(
+        includeLibrary: false,
+        includeChapters: false,
+        includeCategories: true,
+      ).hasExportableContent,
+      isTrue,
+      reason: '分类 alone is exportable',
+    );
+    expect(
+      const MihonBackupExportOptions(
+        includeLibrary: false,
+        includeChapters: false,
+        includeCategories: false,
+      ).hasExportableContent,
+      isFalse,
+    );
+  });
+
+  test('includeCategories=false writes no categories or per-manga orders',
+      () async {
+    final EpubBookRow alpha = await _seedManga(
+      db,
+      sourceId: '123',
+      url: '/manga/alpha',
+      title: 'Alpha',
+      chapters: const <OnlineMangaChapter>[],
+    );
+    final int action = await _seedTag(db, name: 'Action', sortOrder: 1);
+    await db.addTagToBook(alpha.bookKey, action);
+
+    final File target = File(p.join(tmp.path, 'no-categories.tachibk'));
+    await MihonBackupExporter(database: db).exportToFile(
+      target: target,
+      options: const MihonBackupExportOptions(
+        includeLibrary: true,
+        includeChapters: false,
+        includeCategories: false,
+      ),
+    );
+
+    final MihonBackupData parsed = MihonBackupParser.parseFile(target);
+    expect(parsed.categories, isEmpty);
+    expect(parsed.mangas.single.categoryOrders, isEmpty);
+  });
+
+  test('category orders stay unique when Tags share a sort order', () async {
+    final EpubBookRow alpha = await _seedManga(
+      db,
+      sourceId: '123',
+      url: '/manga/alpha',
+      title: 'Alpha',
+      chapters: const <OnlineMangaChapter>[],
+    );
+    // Display order: Charlie (1), Alpha (2), Bravo (2). Alpha and Bravo
+    // collide, so Bravo's exported order moves to the next free integer.
+    final int alphaTag = await _seedTag(
+      db,
+      name: 'AlphaTag',
+      sortOrder: 2,
+      createdAt: 1,
+    );
+    final int bravoTag = await _seedTag(
+      db,
+      name: 'BravoTag',
+      sortOrder: 2,
+      createdAt: 2,
+    );
+    await _seedTag(db, name: 'CharlieTag', sortOrder: 1, createdAt: 3);
+    await db.addTagToBook(alpha.bookKey, alphaTag);
+    await db.addTagToBook(alpha.bookKey, bravoTag);
+
+    final File target = File(p.join(tmp.path, 'unique-orders.tachibk'));
+    await MihonBackupExporter(database: db).exportToFile(
+      target: target,
+      options: const MihonBackupExportOptions(
+        includeLibrary: true,
+        includeChapters: false,
+        includeCategories: true,
+      ),
+    );
+
+    final MihonBackupData parsed = MihonBackupParser.parseFile(target);
+    expect(
+      parsed.categories.map((MihonBackupCategory category) => category.name),
+      <String>['CharlieTag', 'AlphaTag', 'BravoTag'],
+      reason: 'categories follow Tag sort order, then creation order',
+    );
+    expect(
+      parsed.categories.map((MihonBackupCategory category) => category.order),
+      <int>[1, 2, 3],
+    );
+    expect(
+      parsed.categories
+          .map((MihonBackupCategory category) => category.order)
+          .toSet(),
+      hasLength(3),
+      reason: 'orders are the reference key and must be unique',
+    );
+    expect(parsed.mangas.single.categoryOrders, <int>[2, 3]);
+  });
+
+  test('exported categories round-trip back into Tags and assignments',
+      () async {
+    final EpubBookRow alpha = await _seedManga(
+      db,
+      sourceId: '123',
+      url: '/manga/alpha',
+      title: 'Alpha',
+      chapters: const <OnlineMangaChapter>[],
+    );
+    final int action = await _seedTag(
+      db,
+      name: 'Action',
+      sortOrder: 1,
+      createdAt: 1,
+    );
+    final int drama = await _seedTag(
+      db,
+      name: 'Drama',
+      sortOrder: 3,
+      createdAt: 2,
+    );
+    await db.addTagToBook(alpha.bookKey, action);
+    await db.addTagToBook(alpha.bookKey, drama);
+
+    final File target = File(p.join(tmp.path, 'category-roundtrip.tachibk'));
+    await MihonBackupExporter(database: db).exportToFile(
+      target: target,
+      options: const MihonBackupExportOptions(
+        includeLibrary: true,
+        includeChapters: false,
+        includeCategories: true,
+      ),
+    );
+
+    final FushiDatabase restored = FushiDatabase.forTesting(
+      NativeDatabase.memory(),
+    );
+    addTearDown(restored.close);
+    await MihonBackupImportService(
+      database: restored,
+      bookDirectory: (String bookKey) async => p.join(tmp.path, bookKey),
+    ).importFile(target);
+
+    final List<BookTagRow> tags = await restored.getAllTags();
+    expect(
+      <String, int>{
+        for (final BookTagRow tag in tags) tag.name: tag.sortOrder,
+      },
+      <String, int>{'Action': 1, 'Drama': 3},
+      reason: 'Tag names and category-order-based sorting survive the round trip',
+    );
+
+    final EpubBookMeta meta = (await restored.getEpubBookMetas()).singleWhere(
+      (EpubBookMeta meta) => meta.title == 'Alpha',
+    );
+    final EpubBookRow restoredAlpha = (await restored.getEpubBook(
+      meta.bookKey,
+    ))!;
+    final List<BookTagRow> alphaTags = await restored.getTagsForBook(
+      restoredAlpha.bookKey,
+    );
+    expect(
+      alphaTags.map((BookTagRow tag) => tag.name).toSet(),
+      <String>{'Action', 'Drama'},
+      reason: 'multi-Tag manga gets an assignment for every category order',
+    );
+  });
+
   test('default filename uses my-comic_YYYY-MM-DD_HH-mm.tachibk', () {
     expect(
       mihonBackupDefaultFileName(DateTime(2026, 11, 9, 20, 5)),
@@ -285,6 +532,22 @@ void main() {
     final MihonBackupData parsed = MihonBackupParser.parseFile(target);
     expect(parsed.mangas, isEmpty);
   });
+}
+
+Future<int> _seedTag(
+  FushiDatabase db, {
+  required String name,
+  required int sortOrder,
+  int createdAt = 0,
+}) {
+  return db.into(db.bookTags).insert(
+    BookTagsCompanion.insert(
+      name: name,
+      colorValue: const Value<int>(0xFF123456),
+      sortOrder: Value<int>(sortOrder),
+      createdAt: createdAt,
+    ),
+  );
 }
 
 Future<void> _seedSource(
