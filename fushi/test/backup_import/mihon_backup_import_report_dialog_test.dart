@@ -327,6 +327,40 @@ void main() {
     expect(find.byType(FushiFilledButton), findsOneWidget);
   });
 
+  testWidgets(
+    'missing sources without backup names use localized wording, not numeric ids',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(_harness(appModel));
+      await tester.pumpAndSettle();
+
+      // The backup references two sources it never names (an old backup shape).
+      // The warning must not surface their numeric ids and repeated unknown
+      // labels collapse to one.
+      final File backup = (await tester.runAsync(
+        () => writeFixtureBackup(
+          tmp,
+          name: 'unknown-sources.tachibk',
+          mangas: const <FixtureManga>[
+            FixtureManga(source: 123, url: '/manga/a', title: 'A'),
+            FixtureManga(source: 456, url: '/manga/b', title: 'B'),
+          ],
+        ),
+      ))!;
+      await _openReportDialog(tester, backup);
+
+      expect(find.byType(FushiInlineNotice), findsOneWidget);
+      expect(
+        find.textContaining('缺少来源（2）：来源未安装'),
+        findsOneWidget,
+        reason: '名称缺失时显示本地化的「来源未安装」，并去重重复名称',
+      );
+      expect(find.textContaining('Source 123'), findsNothing);
+      expect(find.textContaining('Source 456'), findsNothing);
+      expect(find.textContaining('来源未安装, 来源未安装'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('no warning notice when every source is installed', (
     WidgetTester tester,
   ) async {

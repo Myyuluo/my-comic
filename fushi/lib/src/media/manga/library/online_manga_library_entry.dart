@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_metadata.dart'
     show LocalSourceChapterRecord;
 
+import 'package:fushi/src/utils/misc/trimmed_text.dart';
+
 /// 提供这条书架条目的在线漫画运行时。
 ///
 /// 只用来在**重启后**把条目分派回正确的适配器，因此值必须稳定——它已经被写进
@@ -333,6 +335,10 @@ class OnlineMangaSeries {
 ///
 /// v3（设计稿 2026-09-12 §2.3）只在 v2 上加两个可选位 [subscribed] / [autoDownload]
 /// （缺省 false），**不加 DB 列**。
+///
+/// 之后又以向后兼容的方式追加了可选 [sourceName]（导入时备份记录的来源名，
+/// 缺省 null）：它同样只出现在 JSON 描述符里，不新增 DB 列；旧描述符没有该字段
+/// 时照常解析为 null。
 @immutable
 class OnlineMangaLibraryEntry {
   const OnlineMangaLibraryEntry({
@@ -386,6 +392,16 @@ class OnlineMangaLibraryEntry {
   /// 占位身份时写入；来源安装后名称由 Source 表解析，这个字段只作为缺失来源的
   /// 友好降级文案（「来源未安装：<名称>」）。旧条目没有该字段，读取为 null。
   final String? sourceName;
+
+  /// 条目仍以导入时写入的 [kUnavailableMihonExtensionPackage] 占位身份保存。
+  ///
+  /// 它表示「导入时 Source 未安装」，不是当前是否缺失的唯一判据——扩展安装后
+  /// 运行时可按 sourceId 回退到真实 Source；反过来，已安装但停用的 Source 没有
+  /// 这个标记也属于缺失来源。作品页用它决定是否用备份名称兜底，运行时可解析性
+  /// 由来源解析结果单独判断。
+  bool get hasUnavailableSourcePlaceholder =>
+      runtime == OnlineMangaRuntimeKind.mihon &&
+      extensionPackage == kUnavailableMihonExtensionPackage;
 
   OnlineMangaChapter? get currentChapter {
     final int? index = currentChapterIndex;
@@ -483,7 +499,7 @@ class OnlineMangaLibraryEntry {
       // v3 两位；v2 没有 → false。
       subscribed: json['subscribed'] == true,
       autoDownload: json['autoDownload'] == true,
-      sourceName: _nonEmptyString(json['sourceName']),
+      sourceName: trimmedOrNull(json['sourceName']),
     );
   }
 
@@ -508,12 +524,6 @@ class OnlineMangaLibraryEntry {
       ),
       currentChapterIndex: (json['currentChapterIndex'] as num?)?.toInt(),
     );
-  }
-
-  /// 可选文案字段：缺失 / 空串统一读成 null，UI 只需判断 null。
-  static String? _nonEmptyString(Object? value) {
-    final String? text = value?.toString().trim();
-    return text == null || text.isEmpty ? null : text;
   }
 
   static List<OnlineMangaChapter> _chaptersFrom(
