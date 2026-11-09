@@ -38,6 +38,7 @@ import 'package:fushi/src/media/manga/manga_panel_navigation.dart';
 import 'package:fushi/src/media/manga/manga_spread_model.dart';
 import 'package:fushi/src/utils/adaptive/fushi_fold_posture.dart';
 import 'package:fushi/src/media/manga/mihon/manga_page_provider.dart';
+import 'package:fushi/src/media/manga/history/manga_history.dart';
 import 'package:fushi/src/media/manga/library/manga_adjacent_chapter.dart';
 import 'package:fushi/src/media/manga/mihon/online_manga_reader_session.dart';
 import 'package:fushi/src/media/manga/download/download_library_index.dart';
@@ -1531,6 +1532,9 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
       setState(() => _loadFailed = true);
       return;
     }
+    // 打开章节进入阅读器 = 一次阅读会话：写 / 更新历史（每部 Manga 一条）。
+    // 只打开作品详情页不会走到这里；无痕阅读由 [_recordOpenHistory] 统一跳过。
+    await _recordOpenHistory(row);
     // Local source（ADR 0013）：章节目录原地读取，不复制、不需要 manga.json。
     if (LocalSourceMetadata.tryParse(row.sourceMetadata) != null) {
       await _loadLocalSourceChapter(row, initialLoad: true);
@@ -1549,6 +1553,30 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
       mangaJsonPath: p.join(row.extractDir, row.epubPath),
       initialPage: widget.initialPage,
     );
+  }
+
+  /// 打开章节进入阅读器时写 / 更新历史（ADR 0018）。
+  ///
+  /// - 每部 Manga 一条：`media_open_history` 的 PK 是 (mediaSource, mediaId)，
+  ///   重复阅读只刷新 `openedAt`，历史页按它倒序置顶。
+  /// - 无痕阅读：跳过新增与更新，已有历史原样保留。
+  /// - 来源回看（source review）是只读会话，与进度落库同一口径不写。
+  /// - 历史写失败不能挡住开书：记日志后继续。
+  Future<void> _recordOpenHistory(EpubBookRow row) async {
+    if (_sourceReviewActive || appModel.incognitoReading) return;
+    try {
+      await recordMangaHistoryOpened(
+        db: appModel.database,
+        row: row,
+        onlineEntry: OnlineMangaLibraryEntry.tryParse(row.sourceMetadata),
+      );
+    } on Object catch (error, stack) {
+      ErrorLogService.instance.log(
+        'MangaFushiPage.recordOpenHistory',
+        error,
+        stack,
+      );
+    }
   }
 
   /// Local source 章节：按 `sourceMetadata` 标记分流，页图从 `local` 的
@@ -3163,9 +3191,11 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
     }
     if (entry.runtime == OnlineMangaRuntimeKind.local) {
       final int step = forward ? 1 : -1;
-      for (int i = _shelfChapterIndex + step;
-          i >= 0 && i < entry.chapters.length;
-          i += step) {
+      for (
+        int i = _shelfChapterIndex + step;
+        i >= 0 && i < entry.chapters.length;
+        i += step
+      ) {
         if (prefs.skipRead && readKeys.contains(entry.chapters[i].key)) {
           continue;
         }
@@ -3327,6 +3357,9 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
         chapterIndex: index,
         landOnLastPage: landOnLastPage,
       );
+      // 阅读器内切章也是一次「打开章节进入阅读器」：刷新同一部作品的历史
+      // openedAt（每部一条，历史页随之置顶）。
+      await _recordOpenHistory(bookRow);
       // 末页是装载时的起始页，不再「装好再跳」（BUG-3222）；这里只把落点记成
       // 本章进度（与翻页同一条路径）。直读失败退到「本章未下载」态时没有正文。
       if (landOnLastPage && mounted && !_chapterNotDownloaded) {
@@ -3377,6 +3410,9 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
         chapterIndex: index,
         initialPage: landOnLastPage ? kMangaLandOnLastPage : null,
       );
+      // 本地源内切章同样是「打开章节进入阅读器」：刷新同一部作品的历史
+      // openedAt（每部一条，历史页随之置顶）。
+      await _recordOpenHistory(bookRow);
       if (landOnLastPage && mounted && _payload != null) {
         _recordProgress();
       }
@@ -4242,8 +4278,7 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
         ? const <String, MangaChapterStateRow>{}
         : await appModel.database.getMangaChapterStates(row.uid);
     // 本地源章节就在磁盘上原地可读，恒为「已下载」，不查下载库。
-    final Set<String> downloaded =
-        entry.runtime == OnlineMangaRuntimeKind.local
+    final Set<String> downloaded = entry.runtime == OnlineMangaRuntimeKind.local
         ? entry.chapters
               .map((OnlineMangaChapter chapter) => chapter.key)
               .toSet()

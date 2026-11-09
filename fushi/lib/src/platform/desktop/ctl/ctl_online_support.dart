@@ -10,7 +10,6 @@ library;
 
 import 'package:fushi_cli/fushi_cli.dart' show CtlFailure;
 
-
 import 'package:fushi/src/models/home_tab.dart';
 
 /// 在线扩展 / 在线源的内容域。
@@ -241,6 +240,7 @@ const Map<String, HomeTab> kCtlNavigationNames = <String, HomeTab>{
   'games': HomeTab.games,
   'game': HomeTab.games,
   'browse': HomeTab.browse,
+  'history': HomeTab.history,
   'downloads': HomeTab.downloads,
   'dictionaries': HomeTab.dictionaries,
   'dictionary': HomeTab.dictionaries,
@@ -260,6 +260,7 @@ String ctlNavigationName(HomeTab tab) => switch (tab) {
   HomeTab.manga => 'manga',
   HomeTab.video => 'video',
   HomeTab.browse => 'browse',
+  HomeTab.history => 'history',
   HomeTab.downloads => 'downloads',
   HomeTab.dictionaries => 'dictionaries',
   HomeTab.srs => 'srs',
@@ -269,7 +270,7 @@ String ctlNavigationName(HomeTab tab) => switch (tab) {
 };
 
 /// `nav list`（`/api/admin/navigation`）的 `pages` 顺序：可用页按一级导航的固定
-/// 顺序（Manga → 浏览 → 下载 → 设置）排在前面，其余页面按 [HomeTab] 枚举顺序接后。
+/// 顺序（Manga → 浏览 → 历史 → 下载 → 设置）排在前面，其余页面按 [HomeTab] 枚举顺序接后。
 /// `available` 标记与 [active] 同源，调用方不再另算。常驻项不受旧排序偏好影响，
 /// 因此 ctl 的 `module order` 写入不会改变这里的可用页顺序。
 List<HomeTab> ctlNavigationPages({required List<HomeTab> active}) => <HomeTab>[
