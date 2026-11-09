@@ -13,6 +13,7 @@ status: accepted
 - 在线作品从来源页开读章节时会先静默加入 Library，进度、已读与历史都按 Library 条目落库；作品之后仅移出 Library（保留文件）时历史仍保留。展示与重新打开所需的来源载荷存入 `snapshotJson`，点击时按来源身份打开来源作品页并拉取详情。
 - 无痕阅读开启时跳过历史写入；已有历史保留。
 - 删除单条或全部历史只删除历史记录，不清除 Reading progress、Chapter 已读标记或 Library 状态。删除整部作品（含文件）时一并删除其历史；仅移出 Library 保留历史。
+- History 不设条数上限：漫画历史写入不调用 `trimMediaHistory`，第 101 部及之后的作品仍保留。
 - 本功能按全新安装设计：不回填旧阅读数据，也不写历史迁移。
 
 **Considered Options**

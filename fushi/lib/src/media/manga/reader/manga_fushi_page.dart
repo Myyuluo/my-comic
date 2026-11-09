@@ -1695,23 +1695,10 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
     int index,
   ) {
     _shelfLibraryService = null;
-    _shelfEntry = OnlineMangaLibraryEntry(
-      runtime: OnlineMangaRuntimeKind.local,
-      extensionPackage: '',
-      sourceId: '',
-      series: OnlineMangaSeries(
-        key: row.bookKey,
-        title: row.title,
-        raw: const <String, Object?>{},
-      ),
-      chapters: <OnlineMangaChapter>[
-        for (final LocalSourceChapterRecord chapter in chapters)
-          OnlineMangaChapter(
-            key: chapter.key,
-            name: chapter.name,
-            raw: const <String, Object?>{},
-          ),
-      ],
+    _shelfEntry = localSourceMangaLibraryEntry(
+      seriesKey: row.bookKey,
+      title: row.title,
+      chapters: chapters,
       currentChapterIndex: index,
     );
     _shelfChapterIndex = index;

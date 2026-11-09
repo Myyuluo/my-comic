@@ -6,15 +6,23 @@
 ///
 /// 默认 WebView profile（`state/webview2`）与漫画 WebView profile
 /// （`state/webview2-manga*`）各清一次。设置页发起清理时没有可靠的可见
-/// WebView 引用，步骤默认临时创建 headless WebView（`about:blank`）执行后销毁；
-/// [MangaWebViewCacheSessionSource.findVisible] 为将来复用可见 controller 预留。
+/// WebView 引用，每个 profile 都临时创建 headless WebView（`about:blank`）
+/// 执行后销毁。清理只在 Windows（WebView2 / CDP）上可用：其它平台把步骤标记为
+/// skipped，整体结果按部分成功提示，而不是静默当作清完了。
+///
+/// 占用统计只读扫描 profile 数据目录下的**安全 cache 子目录**（Cache / Code
+/// Cache / GPUCache 等）；cookies / localStorage / IndexedDB / Preferences
+/// 等站点数据既不计入也不读取。
 library;
 
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:path/path.dart' as p;
 
 import 'package:fushi/src/media/manga/cookie/manga_web_view_environment.dart';
+import 'package:fushi/src/storage/app_paths.dart';
 import 'package:fushi/src/storage/manga_cache_clear_service.dart';
 import 'package:fushi/src/utils/misc/error_log_service.dart';
 
@@ -30,24 +38,14 @@ abstract class MangaWebViewCacheSession {
   Future<void> dispose();
 }
 
-/// 打开某个 profile 的清缓存会话：优先复用可见 WebView，没有时建 headless。
+/// 打开某个 profile 的 headless 清缓存会话。
 class MangaWebViewCacheSessionSource {
-  const MangaWebViewCacheSessionSource({
-    required this.openHeadless,
-    this.findVisible,
-  });
+  const MangaWebViewCacheSessionSource({required this.openHeadless});
 
-  /// 没有可见 WebView 时临时创建 headless WebView（`about:blank`）。
+  /// 临时创建 headless WebView（`about:blank`），用完由步骤销毁。
   final Future<MangaWebViewCacheSession> Function() openHeadless;
 
-  /// 可见 WebView 查找缝；返回 null 表示当前没有可复用的可见 WebView。
-  final Future<MangaWebViewCacheSession?> Function()? findVisible;
-
-  Future<MangaWebViewCacheSession> open() async {
-    final MangaWebViewCacheSession? visible = await findVisible?.call();
-    if (visible != null) return visible;
-    return openHeadless();
-  }
+  Future<MangaWebViewCacheSession> open() => openHeadless();
 }
 
 /// 一个需要清理 HTTP 缓存的 WebView profile。
@@ -55,22 +53,27 @@ class MangaWebViewCacheProfile {
   const MangaWebViewCacheProfile({
     required this.id,
     required this.sessionSource,
+    this.cacheDirectories = const <Directory>[],
   });
 
   final String id;
   final MangaWebViewCacheSessionSource sessionSource;
+
+  /// 该 profile 下安全的 HTTP cache 子目录；[MangaWebViewCacheClearStep.measureBytes]
+  /// 只读扫描这些目录。为空 = 不参与占用统计（例如测试 fake / 解析不到 state 根）。
+  final List<Directory> cacheDirectories;
 }
 
 /// 依次清理每个 profile；单个 profile 失败不阻断其余 profile。
 ///
-/// WebView HTTP 缓存大小无法在不读取用户数据的前提下安全统计，因此
-/// [measureBytes] 返回 0（不计入副标题占用）；失败按 [failedEntries] 计入
-/// 部分成功提示。
+/// [measureBytes] 汇总各 profile 的安全 cache 子目录大小；失败按
+/// [failedEntries] 计入部分成功提示，平台不支持时整个步骤报告 skipped。
 class MangaWebViewCacheClearStep extends MangaCacheClearStep {
   const MangaWebViewCacheClearStep({
     required this.id,
     required this.label,
     required this.profiles,
+    this.supported = true,
     this.clearTimeout = const Duration(seconds: 30),
     this.disposeTimeout = const Duration(seconds: 10),
   });
@@ -83,6 +86,9 @@ class MangaWebViewCacheClearStep extends MangaCacheClearStep {
 
   final List<MangaWebViewCacheProfile> profiles;
 
+  /// WebView2 / CDP 清理在当前平台是否可用；false = 跳过并报告 skipped。
+  final bool supported;
+
   /// 单个 CDP 调用 / profile 打开的上限，避免设置页进度框无限等待。
   final Duration clearTimeout;
 
@@ -90,10 +96,19 @@ class MangaWebViewCacheClearStep extends MangaCacheClearStep {
   final Duration disposeTimeout;
 
   @override
-  Future<int> measureBytes() async => 0;
+  Future<int> measureBytes() {
+    if (!supported) return Future<int>.value(0);
+    return mangaCacheDirectorySize(<Directory>[
+      for (final MangaWebViewCacheProfile profile in profiles)
+        ...profile.cacheDirectories,
+    ]);
+  }
 
   @override
   Future<MangaCacheClearStepResult> clear() async {
+    if (!supported) {
+      return MangaCacheClearStepResult(id: id, freedBytes: 0, skipped: true);
+    }
     int failures = 0;
     for (final MangaWebViewCacheProfile profile in profiles) {
       MangaWebViewCacheSession? session;
@@ -130,14 +145,72 @@ class MangaWebViewCacheClearStep extends MangaCacheClearStep {
   }
 }
 
+/// WebView2 user data folder 下可以安全统计的 HTTP cache 子目录（相对路径）。
+///
+/// 刻意只列 cache 目录：cookies / localStorage / IndexedDB / Preferences 等
+/// 站点数据既不在统计范围，也不会被清理。
+const List<String> kMangaWebViewSafeCacheSubdirectories = <String>[
+  'EBWebView/Default/Cache',
+  'EBWebView/Default/Code Cache',
+  'EBWebView/Default/GPUCache',
+  'EBWebView/Default/DawnCache',
+  'EBWebView/Default/GrShaderCache',
+  'EBWebView/Default/ShaderCache',
+  'EBWebView/GrShaderCache',
+  'EBWebView/ShaderCache',
+];
+
+/// 一个 WebView2 user data folder 下的安全 HTTP cache 子目录。
+List<Directory> mangaWebViewSafeCacheDirectories(
+  Directory userDataFolder,
+) => <Directory>[
+  for (final String relative in kMangaWebViewSafeCacheSubdirectories)
+    Directory(p.joinAll(<String>[userDataFolder.path, ...relative.split('/')])),
+];
+
 /// 生产环境的两个 WebView profile。默认 profile 使用插件的默认 environment
 /// （已由 `WebView2StateRoot.install()` 固定到 `state/webview2`）；漫画 profile
 /// 复用 [MangaWebViewEnvironment] 的 `state/webview2-manga*`。
 ///
+/// [stateRoot] 为空时按 [AppPaths.stateRootDirectorySync] 解析；解析不到时
+/// profile 没有可统计的 cache 目录（占用按 0 计，清理仍可执行）。漫画 profile
+/// 把 `webview2-manga*` 兄弟目录全部纳入：换代理参数后 environment 会落到带
+/// 哈希后缀的目录。
+///
 /// 两个 profile 都走临时 headless WebView：设置页没有可见 WebView 的可靠引用，
 /// 而 WebView2 的 HTTP cache 归 environment 所有，同 profile 的 headless 实例
 /// 清理的正是共享缓存。
-List<MangaWebViewCacheProfile> buildMangaWebViewCacheProfiles() {
+List<MangaWebViewCacheProfile> buildMangaWebViewCacheProfiles({
+  Directory? stateRoot,
+}) {
+  final Directory? root = stateRoot ?? AppPaths.stateRootDirectorySync();
+  List<Directory> defaultCacheDirectories = const <Directory>[];
+  List<Directory> mangaCacheDirectories = const <Directory>[];
+  if (root != null) {
+    defaultCacheDirectories = mangaWebViewSafeCacheDirectories(
+      Directory(p.join(root.path, AppPaths.webView2DirName)),
+    );
+    final List<Directory> mangaFolders = <Directory>[];
+    try {
+      if (root.existsSync()) {
+        for (final FileSystemEntity entity in root.listSync(
+          followLinks: false,
+        )) {
+          final String name = p.basename(entity.path);
+          if (entity is Directory &&
+              name.startsWith('${AppPaths.webView2DirName}-manga')) {
+            mangaFolders.add(entity);
+          }
+        }
+      }
+    } on FileSystemException {
+      // state 根不可读：只是少算占用，不影响清理。
+    }
+    mangaCacheDirectories = <Directory>[
+      for (final Directory folder in mangaFolders)
+        ...mangaWebViewSafeCacheDirectories(folder),
+    ];
+  }
   return <MangaWebViewCacheProfile>[
     MangaWebViewCacheProfile(
       id: 'default',
@@ -145,6 +218,7 @@ List<MangaWebViewCacheProfile> buildMangaWebViewCacheProfiles() {
         openHeadless: () =>
             MangaWebViewCdpCacheSession.headless(profileId: 'default'),
       ),
+      cacheDirectories: defaultCacheDirectories,
     ),
     MangaWebViewCacheProfile(
       id: 'manga',
@@ -161,6 +235,7 @@ List<MangaWebViewCacheProfile> buildMangaWebViewCacheProfiles() {
           );
         },
       ),
+      cacheDirectories: mangaCacheDirectories,
     ),
   ];
 }

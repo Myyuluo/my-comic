@@ -109,7 +109,7 @@ _Avoid_: 下载视图、下载页签、子标签
 _Avoid_: 书签、位置
 
 **History（历史）**:
-用户阅读 Manga 的会话记录，按 Manga 去重，每部一条，记录最近一次打开 Chapter 的时间；由「历史」页直接展示。History 与 Reading progress 相互独立：删除 History 不会清除续读位置或 Chapter 已读标记。无痕阅读期间不新增、不更新 History。
+用户阅读 Manga 的会话记录，按 Manga 去重，每部一条，记录最近一次打开 Chapter 的时间；由「历史」页直接展示。History 不设条数上限，写入新作品不会裁剪更早的记录。History 与 Reading progress 相互独立：删除 History 不会清除续读位置或 Chapter 已读标记。无痕阅读期间不新增、不更新 History。
 _Avoid_: 记录、阅读记录（可能指 Reading progress）
 
 **Incognito reading（无痕阅读）**:
@@ -157,7 +157,7 @@ _Avoid_: 未下载、孤儿
 _Avoid_: 下载、离线文件、书库
 
 **Clear cache（清除缓存）**:
-「设置 → 存储与下载 → 数据存储位置」里的动作：清理应用管理的 Cache，并在行内显示当前磁盘占用。它保留图源登录态、数据库、History、Reading progress、Download library 与 Local source 文件。
+「设置 → 存储与下载 → 数据存储位置」里的动作：清理应用管理的 Cache，并在行内显示当前磁盘占用（含图片管理器磁盘缓存与 WebView 的安全 HTTP cache 子目录）。它保留图源登录态、数据库、History、Reading progress、Download library 与 Local source 文件。WebView/HTTP 缓存清理只在 Windows（WebView2）上可用；其它平台跳过该部分并在结果中提示部分成功。
 _Avoid_: 清理下载、重置应用
 
 **Clear database（清除数据库）**:

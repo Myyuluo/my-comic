@@ -68,13 +68,13 @@ void main() {
             Directory(p.join(stateRoot.path, 'mihon', 'cache', 'covers')),
           ],
         ),
-        MangaCacheActiveDirectoryClearStep(
+        MangaCacheSessionPruneStep(
           id: 'stream',
           label: 'Online page cache',
           root: Directory(p.join(cacheRoot.path, 'manga_stream_cache')),
           pruneInactive: OnlineMangaReaderSession.pruneStaleStreamCaches,
         ),
-        MangaCacheActiveDirectoryClearStep(
+        MangaCacheSessionPruneStep(
           id: 'archive',
           label: 'CBZ page cache',
           root: Directory(p.join(cacheRoot.path, 'local_source_archive_cache')),
@@ -160,13 +160,13 @@ void main() {
             Directory(p.join(stateRoot.path, 'mihon', 'cache', 'covers')),
           ],
         ),
-        MangaCacheActiveDirectoryClearStep(
+        MangaCacheSessionPruneStep(
           id: 'stream',
           label: 'Online page cache',
           root: Directory(p.join(cacheRoot.path, 'manga_stream_cache')),
           pruneInactive: OnlineMangaReaderSession.pruneStaleStreamCaches,
         ),
-        MangaCacheActiveDirectoryClearStep(
+        MangaCacheSessionPruneStep(
           id: 'archive',
           label: 'CBZ page cache',
           root: Directory(p.join(cacheRoot.path, 'local_source_archive_cache')),
@@ -280,13 +280,13 @@ void main() {
 
     final MangaCacheClearService service = MangaCacheClearService(
       steps: <MangaCacheClearStep>[
-        MangaCacheActiveDirectoryClearStep(
+        MangaCacheSessionPruneStep(
           id: 'stream',
           label: 'Online page cache',
           root: streamRoot,
           pruneInactive: OnlineMangaReaderSession.pruneStaleStreamCaches,
         ),
-        MangaCacheActiveDirectoryClearStep(
+        MangaCacheSessionPruneStep(
           id: 'archive',
           label: 'CBZ page cache',
           root: archiveRoot,
@@ -312,6 +312,29 @@ void main() {
       isTrue,
       reason: '活跃阅读会话的 CBZ 解包目录必须保留',
     );
+  });
+
+  test('图片管理器磁盘缓存计入副标题 / 确认框显示的占用', () async {
+    int emptied = 0;
+    final MangaCacheManagerClearStep step = MangaCacheManagerClearStep(
+      id: 'image_manager',
+      label: 'Image cache',
+      measureManagerBytes: () async => 700,
+      emptyManager: () async => emptied++,
+    );
+
+    expect(await step.measureBytes(), 700, reason: '副标题 / 确认框必须算上管理器磁盘缓存');
+    final MangaCacheClearService service = MangaCacheClearService(
+      steps: <MangaCacheClearStep>[
+        _RecordingStep(id: 'covers', label: 'Covers', freed: 0, onClear: () {}),
+        step,
+      ],
+    );
+    expect(await service.measureTotalBytes(), 700);
+
+    final MangaCacheClearStepResult result = await step.clear();
+    expect(result.freedBytes, 700);
+    expect(emptied, 1);
   });
 
   test('单文件删除失败后继续清理其余项，并报告部分成功与释放量', () async {

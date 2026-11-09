@@ -13,9 +13,9 @@
 /// 下载库（Content root 的 `downloads`）、本地图源（`local`，含 `cover.jpg`）、
 /// History / Reading progress / 数据库、图源登录态都不在本服务的步骤里。
 ///
-/// 可扩展：ticket 12（WebView / HTTP 缓存）实现 [MangaCacheClearStep] 后追加到
-/// [MangaCacheClearService.steps] 即可；进度、确认框、部分成功提示和 toast 由
-/// 同一套外层流程自动覆盖。
+/// 占用统计覆盖上述显式缓存目录、图片管理器自己的磁盘 store，以及 WebView
+/// profile 里安全的 HTTP cache 子目录（见 `manga_webview_cache_clear.dart`）。
+/// 进度、确认框、部分成功提示和 toast 由同一套外层流程自动覆盖。
 library;
 
 import 'dart:io';
@@ -50,6 +50,7 @@ class MangaCacheClearStepResult {
     required this.freedBytes,
     this.failedEntries = 0,
     this.failed = false,
+    this.skipped = false,
   });
 
   final String id;
@@ -60,6 +61,10 @@ class MangaCacheClearStepResult {
 
   /// 整个步骤失败（例如缓存管理器抛异常）。
   final bool failed;
+
+  /// 当前平台无法安全清理该步骤（例如非 Windows 上的 WebView / HTTP 缓存）。
+  /// 跳过的步骤没有释放任何字节，整体结果按部分成功提示。
+  final bool skipped;
 
   bool get hasFailure => failed || failedEntries > 0;
 }
@@ -77,12 +82,17 @@ class MangaCacheClearReport {
 
   bool get hasFailures =>
       steps.any((MangaCacheClearStepResult s) => s.hasFailure);
+
+  bool get hasSkipped => steps.any((MangaCacheClearStepResult s) => s.skipped);
+
+  /// 只要有任何步骤失败或被跳过，就不能宣称全部清完。
+  bool get hasPartial => hasFailures || hasSkipped;
 }
 
 /// 一个可清理的缓存步骤。
 ///
-/// [measureBytes] 供副标题 / 确认框显示当前占用；不需要计入显示值的步骤
-/// （内存图片、缓存管理器磁盘）返回 0。真正的释放量始终以 [clear] 的结果为准。
+/// [measureBytes] 供副标题 / 确认框显示当前占用；只有内存图片等不占磁盘的
+/// 步骤返回 0。真正的释放量始终以 [clear] 的结果为准。
 abstract class MangaCacheClearStep {
   const MangaCacheClearStep();
 
@@ -256,8 +266,8 @@ class MangaCacheDirectoryClearStep extends MangaCacheClearStep {
 ///
 /// [pruneInactive] 复用阅读会话自己的 prune 原语（它知道哪些目录仍被会话持有），
 /// 返回删除失败次数。释放量按 prune 前后目录大小差计算。
-class MangaCacheActiveDirectoryClearStep extends MangaCacheClearStep {
-  const MangaCacheActiveDirectoryClearStep({
+class MangaCacheSessionPruneStep extends MangaCacheClearStep {
+  const MangaCacheSessionPruneStep({
     required this.id,
     required this.label,
     required this.root,
@@ -294,7 +304,7 @@ class MangaCacheActiveDirectoryClearStep extends MangaCacheClearStep {
 
 /// 缓存管理器磁盘缓存：大小由管理器自己的 store 统计，不扫描系统临时目录。
 ///
-/// 显示值（[measureBytes]）返回 0——占用统计按 ticket 要求只扫显式缓存目录；
+/// [measureBytes] 直接返回管理器统计的磁盘占用，副标题与确认框因此包含这部分；
 /// 释放量仍在 [clear] 里真实计算并计入 toast。
 class MangaCacheManagerClearStep extends MangaCacheClearStep {
   const MangaCacheManagerClearStep({
@@ -314,7 +324,7 @@ class MangaCacheManagerClearStep extends MangaCacheClearStep {
   final Future<void> Function() emptyManager;
 
   @override
-  Future<int> measureBytes() async => 0;
+  Future<int> measureBytes() => measureManagerBytes();
 
   @override
   Future<MangaCacheClearStepResult> clear() async {

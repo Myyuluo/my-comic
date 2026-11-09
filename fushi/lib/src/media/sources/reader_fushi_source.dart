@@ -302,6 +302,16 @@ class ReaderFushiSource extends ReaderMediaSource {
     }
   }
 
+  /// 漫画书架的 Library 成员判据。
+  ///
+  /// 与 [mediaSourceKeyFor] 同源：书架列书按 `format` 派生
+  /// `MediaItem.mediaSourceIdentifier`，漫画书架
+  /// （`filterShelfEntriesByMangaSplit`）认的正是 [MangaFushiSource.kUniqueKey]。
+  /// 需要直接判断 `EpubBooks.format` 的数据层（清除数据库）复用这个谓词，不再
+  /// 各写一份 SQL。
+  static bool isMangaLibraryBookFormat(String? format) =>
+      BookFormat.parseOrEpub(format) == BookFormat.manga;
+
   // HBK-AUDIT-127: percent-encode the href when building the URL so it is
   // symmetric with the consumer side, which decodes the whole post-'/epub/'
   // path with Uri.decodeComponent (reader_fushi_page.dart, epub_book.dart).
