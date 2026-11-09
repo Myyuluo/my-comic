@@ -4,6 +4,8 @@
 /// - 窄屏（宽 < [kTagPickerWideBreakpoint]）底部 sheet，宽屏弹层（≈560 宽）。
 /// - 单目标：勾选**即时落库**（与旧 TagPickerPage 同语义）。多目标：每个标签三态
 ///   （全有 / 部分 / 全无），点击在「原状 → 全加 → 全去」间循环，「应用」统一落库。
+/// - [showTagPickerSelection]：只选不写（加入书架前选标签）。勾选只改内存，
+///   「完成」返回选中 Tag id 集合；取消返回 null。
 /// - 顶部搜索（[matchesMediaSearch] 同口径归一化）；没有同名标签时一键「新建“xxx”」
 ///   并选中。已选标签以 input chip 排在上方，全部标签以 filter chip 云排在下方。
 /// - 目标里含合集时多一个「作用于：合集本身 / 合集内全部条目」分段，二选一并附说明：
@@ -83,12 +85,38 @@ Future<bool> showTagPicker(
   String? title,
 }) async {
   if (targets.isEmpty) return false;
+  final bool? changed = await _showTagPickerShell<bool>(
+    context,
+    TagPickerPanel(targets: targets, title: title),
+  );
+  return changed ?? TagPickerPanel.lastChanged;
+}
+
+/// 打开共享标签选择器的「只选不写」模式（加入书架前选标签）。
+///
+/// 视觉与交互和 [showTagPicker] 相同，但勾选只改内存，不写 Tag 分配：
+/// - 「完成」返回选中的 Tag id 集合（可以为空集）；
+/// - 点弹窗外部 / 按 Esc / 关闭返回 null，调用方据此取消整个加入动作。
+///
+/// 新建标签是显式动作，仍会写入标签本身；取消 / 加入失败时不会留下 Tag 分配。
+Future<Set<int>?> showTagPickerSelection(
+  BuildContext context, {
+  required TagTargets targets,
+  String? title,
+}) async {
+  if (targets.isEmpty) return null;
+  return _showTagPickerShell<Set<int>>(
+    context,
+    TagPickerPanel(targets: targets, title: title, selectionOnly: true),
+  );
+}
+
+/// 共用外壳：窄屏底部 sheet，宽屏居中弹层。
+Future<T?> _showTagPickerShell<T>(BuildContext context, Widget panel) {
   final bool wide =
       MediaQuery.sizeOf(context).width >= kTagPickerWideBreakpoint;
-  final Widget panel = TagPickerPanel(targets: targets, title: title);
-  final bool? changed;
   if (wide) {
-    changed = await showAppDialog<bool>(
+    return showAppDialog<T>(
       context: context,
       builder: (BuildContext ctx) => FushiDialogFrame(
         maxWidth: 560,
@@ -97,13 +125,11 @@ Future<bool> showTagPicker(
         child: panel,
       ),
     );
-  } else {
-    changed = await adaptiveModalSheet<bool>(
-      context: context,
-      builder: (BuildContext ctx) => panel,
-    );
   }
-  return changed ?? TagPickerPanel.lastChanged;
+  return adaptiveModalSheet<T>(
+    context: context,
+    builder: (BuildContext ctx) => panel,
+  );
 }
 
 /// 一个打标签宿主（条目或合集），带写库分派。
@@ -234,6 +260,7 @@ class TagPickerPanel extends ConsumerStatefulWidget {
     super.key,
     this.title,
     this.embedded = false,
+    this.selectionOnly = false,
   });
 
   final TagTargets targets;
@@ -242,6 +269,10 @@ class TagPickerPanel extends ConsumerStatefulWidget {
   /// true = 嵌在整页（[TagPickerPage]）里：没有底部关闭 / 应用以外的外壳语义，
   /// 关闭由页面返回键负责。
   final bool embedded;
+
+  /// true = 只选不写（[showTagPickerSelection]）：勾选只改内存选择，不落 Tag
+  /// 分配；底部只保留「完成」，pop 返回选中的 Tag id 集合。
+  final bool selectionOnly;
 
   /// 单目标即时落库模式下，被外部手势（下拉 / 点遮罩）关掉时 pop 不带结果；
   /// 这里记最近一次面板是否落过库，供 [showTagPicker] 兜底返回。
@@ -328,12 +359,13 @@ class TagPickerPanelState extends ConsumerState<TagPickerPanel> {
       _hosts = hosts;
       _initialCounts = counts;
       _intents.clear();
-      _selected
-        ..clear()
-        ..addAll(<int>[
+      _selected.clear();
+      if (!widget.selectionOnly) {
+        _selected.addAll(<int>[
           for (final MapEntry<int, int> e in counts.entries)
             if (hosts.isNotEmpty && e.value >= hosts.length) e.key,
         ]);
+      }
     });
   }
 
@@ -346,13 +378,19 @@ class TagPickerPanelState extends ConsumerState<TagPickerPanel> {
   /// 标签在面板里当前显示的状态。
   @visibleForTesting
   TagCheckState stateOf(int tagId) {
-    if (_single) {
+    if (widget.selectionOnly || _single) {
       return _selected.contains(tagId) ? TagCheckState.all : TagCheckState.none;
     }
     return _intents[tagId] ?? _initialState(tagId);
   }
 
   Future<void> _toggle(BookTagRow tag) async {
+    if (widget.selectionOnly) {
+      setState(() {
+        if (!_selected.remove(tag.id)) _selected.add(tag.id);
+      });
+      return;
+    }
     if (_hosts.isEmpty) return;
     if (_single) {
       final bool on = !_selected.contains(tag.id);
@@ -387,6 +425,7 @@ class TagPickerPanelState extends ConsumerState<TagPickerPanel> {
   }
 
   void _markChanged() {
+    if (widget.selectionOnly) return;
     _changed = true;
     TagPickerPanel.lastChanged = true;
   }
@@ -643,6 +682,12 @@ class TagPickerPanelState extends ConsumerState<TagPickerPanel> {
         const Spacer(),
         if (widget.embedded)
           const SizedBox.shrink()
+        else if (widget.selectionOnly)
+          FushiFilledButton(
+            key: const ValueKey<String>('tag_picker_done'),
+            onPressed: () => Navigator.of(context).pop(Set<int>.of(_selected)),
+            child: Text(t.dialog_done),
+          )
         else if (_single)
           FushiFilledButton(
             key: const ValueKey<String>('tag_picker_done'),
@@ -673,7 +718,13 @@ class TagPickerPanelState extends ConsumerState<TagPickerPanel> {
         actions: <Type, Action<Intent>>{
           DismissIntent: CallbackAction<DismissIntent>(
             onInvoke: (_) {
-              if (!widget.embedded) Navigator.of(context).maybePop(_changed);
+              if (!widget.embedded) {
+                if (widget.selectionOnly) {
+                  Navigator.of(context).maybePop();
+                } else {
+                  Navigator.of(context).maybePop(_changed);
+                }
+              }
               return null;
             },
           ),
@@ -706,6 +757,12 @@ class TagPickerPanelState extends ConsumerState<TagPickerPanel> {
   }
 
   Future<void> _deselect(BookTagRow tag) async {
+    if (widget.selectionOnly) {
+      if (_selected.contains(tag.id)) {
+        setState(() => _selected.remove(tag.id));
+      }
+      return;
+    }
     if (_single) {
       if (_selected.contains(tag.id)) await _toggle(tag);
       return;
