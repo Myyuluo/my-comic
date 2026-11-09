@@ -5602,7 +5602,7 @@
   "rebuild_download_index_confirm_title": "重建下载索引？",
   "rebuild_download_index_failed": "重建下载索引失败：$message",
   "rebuild_download_index_progress_title": "正在重建下载索引",
-  "rebuild_download_index_report_body": "新增 $added 部作品（其中 $local 部作为本地条目）、更新 $books 部作品；新增/更新 $chapters 章。\n缺失：$missingBooks 部作品、$missingChapters 章。\n跳过：$skippedBooks 部作品、$skippedChapters 章。",
+  "rebuild_download_index_report_body": "匹配 $matched 部作品（更新 $books 部）；新增 $added 部作品（其中 $local 部作为本地条目）；新增/更新 $chapters 章。\n缺失：$missingBooks 部作品、$missingChapters 章。\n跳过：$skippedBooks 部作品（其中 $ambiguous 部歧义）、$skippedChapters 章。失败：$failed 部。",
   "rebuild_download_index_report_cancelled": "已取消，以下是已完成的部分：",
   "rebuild_download_index_report_title": "重建完成",
   "rebuild_download_index_section": "下载索引",

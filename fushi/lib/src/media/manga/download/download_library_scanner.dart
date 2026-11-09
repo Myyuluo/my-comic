@@ -242,18 +242,21 @@ Future<List<Directory>> listDownloadChildDirectories(Directory parent) async {
 /// 按 `pages.json` 身份匹配漫画文件夹的结果。
 class DownloadMangaFolderIdentityMatch {
   const DownloadMangaFolderIdentityMatch.found(
-    DownloadMangaFolderOnDisk this.folder,
-  )   : ambiguous = false,
+    DownloadMangaFolderOnDisk this.folder, {
+    this.matches = const <DownloadMangaFolderOnDisk>[],
+  })   : ambiguous = false,
         candidates = const <DownloadMangaFolderOnDisk>[];
 
   const DownloadMangaFolderIdentityMatch.none()
       : folder = null,
         ambiguous = false,
-        candidates = const <DownloadMangaFolderOnDisk>[];
+        candidates = const <DownloadMangaFolderOnDisk>[],
+        matches = const <DownloadMangaFolderOnDisk>[];
 
   const DownloadMangaFolderIdentityMatch.ambiguous(this.candidates)
       : folder = null,
-        ambiguous = true;
+        ambiguous = true,
+        matches = candidates;
 
   /// 恰好一个可复用目录。
   final DownloadMangaFolderOnDisk? folder;
@@ -263,7 +266,29 @@ class DownloadMangaFolderIdentityMatch {
 
   /// 歧义候选（报告 / 测试用）。
   final List<DownloadMangaFolderOnDisk> candidates;
+
+  /// 所有核心身份匹配的目录（包括被扩展包 tie-breaker 淘汰的重复副本）。
+  ///
+  /// Rebuild download index 用它把未采用的重复副本排除在 orphan recovery 之外。
+  final List<DownloadMangaFolderOnDisk> matches;
 }
+
+/// [folders] 里所有能由 `pages.json` 证明属于 [identity] 的漫画目录。
+///
+/// 核心身份 = runtime + 数字 sourceId + seriesKey（占位扩展包容忍）；返回值
+/// 不做扩展包 tie-breaker，供 Rebuild download index 评估重复副本。
+List<DownloadMangaFolderOnDisk> matchingDownloadMangaFolders(
+  List<DownloadMangaFolderOnDisk> folders,
+  MangaDownloadIdentity identity,
+) => <DownloadMangaFolderOnDisk>[
+  for (final DownloadMangaFolderOnDisk folder in folders)
+    if (folder.chapters.any(
+      (ChapterContainerOnDisk chapter) =>
+          chapter.manifest != null &&
+          identity.matchesManifest(chapter.manifest!),
+    ))
+      folder,
+];
 
 /// 在 [folders] 里找能由 [identity] 的 `pages.json` 证明的漫画目录。
 ///
@@ -274,15 +299,10 @@ DownloadMangaFolderIdentityMatch matchDownloadMangaFolderByIdentity(
   List<DownloadMangaFolderOnDisk> folders,
   MangaDownloadIdentity identity,
 ) {
-  final List<DownloadMangaFolderOnDisk> matches = <DownloadMangaFolderOnDisk>[
-    for (final DownloadMangaFolderOnDisk folder in folders)
-      if (folder.chapters.any(
-        (ChapterContainerOnDisk chapter) =>
-            chapter.manifest != null &&
-            identity.matchesManifest(chapter.manifest!),
-      ))
-        folder,
-  ];
+  final List<DownloadMangaFolderOnDisk> matches = matchingDownloadMangaFolders(
+    folders,
+    identity,
+  );
   final List<DownloadMangaFolderOnDisk> exact = <DownloadMangaFolderOnDisk>[
     for (final DownloadMangaFolderOnDisk folder in matches)
       if (folder.chapters.any(
@@ -293,13 +313,19 @@ DownloadMangaFolderIdentityMatch matchDownloadMangaFolderByIdentity(
         folder,
   ];
   if (exact.length == 1) {
-    return DownloadMangaFolderIdentityMatch.found(exact.single);
+    return DownloadMangaFolderIdentityMatch.found(
+      exact.single,
+      matches: matches,
+    );
   }
   if (exact.length > 1) {
     return DownloadMangaFolderIdentityMatch.ambiguous(exact);
   }
   if (matches.length == 1) {
-    return DownloadMangaFolderIdentityMatch.found(matches.single);
+    return DownloadMangaFolderIdentityMatch.found(
+      matches.single,
+      matches: matches,
+    );
   }
   if (matches.length > 1) {
     return DownloadMangaFolderIdentityMatch.ambiguous(matches);
