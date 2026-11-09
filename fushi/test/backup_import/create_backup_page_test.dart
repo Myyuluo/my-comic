@@ -56,6 +56,13 @@ Future<void> _pumpUntil(WidgetTester tester, Finder finder) async {
 FushiCheckboxListTile _tile(WidgetTester tester, Key key) =>
     tester.widget<FushiCheckboxListTile>(find.byKey(key));
 
+/// The 设置 group sits below the 书架 group; scroll it above the fixed 创建
+/// button so its rows can receive taps.
+Future<void> _scrollToSettings(WidgetTester tester) async {
+  await tester.drag(find.byType(ListView), const Offset(0, -300));
+  await tester.pumpAndSettle();
+}
+
 void main() {
   late Directory tmp;
   late AppPaths paths;
@@ -202,12 +209,10 @@ void main() {
 
     // Re-opening the page restores the defaults; the sensitive tick is not
     // remembered.
-    final Finder sensitiveFinder = find.byKey(
-      const Key('create_backup_include_sensitive_settings'),
+    await _scrollToSettings(tester);
+    await tester.tap(
+      find.byKey(const Key('create_backup_include_sensitive_settings')),
     );
-    await tester.ensureVisible(sensitiveFinder);
-    await tester.pumpAndSettle();
-    await tester.tap(sensitiveFinder);
     await tester.pumpAndSettle();
     expect(
       _tile(tester, const Key('create_backup_include_sensitive_settings')).value,
@@ -237,6 +242,7 @@ void main() {
     await tester.pumpWidget(_harness(appModel, const CreateBackupPage()));
     await tester.pumpAndSettle();
 
+    await _scrollToSettings(tester);
     await tester.tap(find.byKey(const Key('create_backup_include_app_settings')));
     await tester.pumpAndSettle();
     expect(
@@ -282,6 +288,7 @@ void main() {
       reason: 'app settings alone are still worth exporting',
     );
 
+    await _scrollToSettings(tester);
     await tester.tap(find.byKey(const Key('create_backup_include_app_settings')));
     await tester.pumpAndSettle();
     expect(
@@ -329,12 +336,10 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    final Finder sensitiveFinder = find.byKey(
-      const Key('create_backup_include_sensitive_settings'),
+    await _scrollToSettings(tester);
+    await tester.tap(
+      find.byKey(const Key('create_backup_include_sensitive_settings')),
     );
-    await tester.ensureVisible(sensitiveFinder);
-    await tester.pumpAndSettle();
-    await tester.tap(sensitiveFinder);
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('create_backup_create')));
     await tester.pumpAndSettle();
@@ -342,6 +347,40 @@ void main() {
     expect(exporter.options, isNotNull);
     expect(exporter.options!.includeAppSettings, isTrue);
     expect(exporter.options!.includeSensitiveSettings, isTrue);
+  });
+
+  testWidgets('进度记录 starts selected and depends on 书架中的作品', (
+    WidgetTester tester,
+  ) async {
+    final _TestAppModel appModel = _TestAppModel(db, paths);
+    await tester.pumpWidget(_harness(appModel, const CreateBackupPage()));
+    await tester.pumpAndSettle();
+
+    expect(find.text('进度记录'), findsOneWidget);
+    expect(
+      _tile(tester, const Key('create_backup_include_tracking')).value,
+      isTrue,
+      reason: '进度记录 defaults to checked',
+    );
+    expect(
+      _tile(tester, const Key('create_backup_include_tracking')).enabled,
+      isNot(false),
+    );
+
+    await tester.tap(find.byKey(const Key('create_backup_include_library')));
+    await tester.pumpAndSettle();
+    expect(
+      _tile(tester, const Key('create_backup_include_tracking')).enabled,
+      isFalse,
+      reason: '进度记录 cannot be exported without 书架中的作品',
+    );
+
+    await tester.tap(find.byKey(const Key('create_backup_include_library')));
+    await tester.pumpAndSettle();
+    expect(
+      _tile(tester, const Key('create_backup_include_tracking')).enabled,
+      isNot(false),
+    );
   });
 
   testWidgets('unchecking「书架中的作品」disables chapters and the create button', (
@@ -370,6 +409,7 @@ void main() {
       reason: '应用设置 is still selected',
     );
 
+    await _scrollToSettings(tester);
     await tester.tap(find.byKey(const Key('create_backup_include_app_settings')));
     await tester.pumpAndSettle();
     expect(
@@ -382,6 +422,9 @@ void main() {
       reason: 'nothing exportable → 创建 is greyed out',
     );
 
+    // Scroll back up to the 书架 group before re-enabling it.
+    await tester.drag(find.byType(ListView), const Offset(0, 400));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('create_backup_include_library')));
     await tester.pumpAndSettle();
     expect(

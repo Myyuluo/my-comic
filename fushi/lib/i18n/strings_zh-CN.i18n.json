@@ -1183,6 +1183,7 @@
   "backup_create_progress": "已处理 $processed / $total 部",
   "backup_create_saved_path": "已保存到 $path",
   "backup_create_sensitive_settings": "包含敏感设置",
+  "backup_create_tracking": "进度记录",
   "backup_export": "导出备份",
   "backup_export_books_all": "全部书籍",
   "backup_export_books_selected": "已选 $count 本书",

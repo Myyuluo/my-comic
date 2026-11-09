@@ -43,10 +43,10 @@ Future<String?> pickMihonBackupSavePath({
 /// 「创建备份」页：Bookshelf / Settings group cards with a bottom 创建 button.
 ///
 /// Ticket 07 delivered the Library options (书架中的作品 / 章节) and the file
-/// plumbing; ticket 08 adds 历史 and 所有已读作品, which depend on 书架中的作品.
-/// Categories, tracking, app settings and source settings are appended to these
-/// same groups by later tickets; an empty group card is not rendered, so this
-/// slice shows only the 书架 card.
+/// plumbing; ticket 08 adds 历史 and 所有已读作品, which depend on 书架中的作品;
+/// ticket 10 adds 进度记录 (Tracking) and ticket 11 adds app settings. Later
+/// tickets append 分类 / 插件商店 / 图源设置 to these same groups; an empty
+/// group card is not rendered.
 class CreateBackupPage extends ConsumerStatefulWidget {
   const CreateBackupPage({super.key, this.savePathPicker, this.exporter});
 
@@ -67,6 +67,7 @@ class _CreateBackupPageState extends ConsumerState<CreateBackupPage> {
   bool _includeChapters = true;
   bool _includeHistory = true;
   bool _includeAllRead = true;
+  bool _includeTracking = true;
   bool _includeAppSettings = true;
   bool _includeSensitiveSettings = false;
 
@@ -74,9 +75,9 @@ class _CreateBackupPageState extends ConsumerState<CreateBackupPage> {
   /// Ticket 12 adds「图源设置」to this condition.
   bool get _sensitiveSettingsAvailable => _includeAppSettings;
 
-  /// Standalone exportable sections: 书架中的作品 and 应用设置; 章节 / 历史 /
-  /// 所有已读作品 depend on 书架中的作品. Later tickets add 分类 / 插件商店 /
-  /// 图源设置 here.
+  /// Standalone exportable sections: 书架中的作品 and 应用设置. 章节 / 进度记录 /
+  /// 历史 / 所有已读作品 depend on 书架中的作品. Later tickets add 分类 /
+  /// 插件商店 / 图源设置 here.
   bool get _canCreate => _includeLibrary || _includeAppSettings;
 
   MihonBackupExportOptions get _options => MihonBackupExportOptions(
@@ -84,6 +85,7 @@ class _CreateBackupPageState extends ConsumerState<CreateBackupPage> {
     includeChapters: _includeLibrary && _includeChapters,
     includeHistory: _includeLibrary && _includeHistory,
     includeAllRead: _includeLibrary && _includeAllRead,
+    includeTracking: _includeLibrary && _includeTracking,
     includeAppSettings: _includeAppSettings,
     includeSensitiveSettings: _includeSensitiveSettings,
   );
@@ -154,6 +156,19 @@ class _CreateBackupPageState extends ConsumerState<CreateBackupPage> {
         onChanged: _includeLibrary
             ? (bool? value) {
                 setState(() => _includeChapters = value ?? false);
+              }
+            : null,
+      ),
+      FushiCheckboxListTile(
+        key: const Key('create_backup_include_tracking'),
+        contentPadding: EdgeInsets.zero,
+        controlAffinity: ListTileControlAffinity.leading,
+        value: _includeTracking,
+        enabled: _includeLibrary,
+        title: Text(t.backup_create_tracking),
+        onChanged: _includeLibrary
+            ? (bool? value) {
+                setState(() => _includeTracking = value ?? false);
               }
             : null,
       ),

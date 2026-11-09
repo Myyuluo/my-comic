@@ -5,6 +5,8 @@ import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi_core/fushi_core.dart';
+import 'package:fushi_engine/media/tracking/media_tracking_repository.dart'
+    show kTrackingProviderBangumi;
 import 'package:path/path.dart' as p;
 
 import 'package:fushi/src/backup_export/mihon_backup_exporter.dart';
@@ -259,6 +261,60 @@ void main() {
     expect(exported.history.single.url, '/chapter/a2');
     expect(exported.history.single.lastRead, 1700000050000);
     expect(exported.history.single.readDuration, 0);
+  });
+
+  test('exported Bangumi tracking round-trips through the importer', () async {
+    final EpubBookRow alpha = await _seedManga(
+      db,
+      sourceId: '123',
+      url: '/manga/alpha',
+      title: 'Alpha',
+      chapters: const <OnlineMangaChapter>[],
+    );
+    await _seedTracking(
+      db,
+      book: alpha,
+      subjectId: 4242,
+      subjectName: 'Remote Alpha',
+      progress: 12,
+      completed: true,
+    );
+    final File target = File(p.join(tmp.path, 'tracking-roundtrip.tachibk'));
+    await MihonBackupExporter(database: db).exportToFile(
+      target: target,
+      options: const MihonBackupExportOptions(includeChapters: false),
+    );
+
+    final FushiDatabase restored = FushiDatabase.forTesting(
+      NativeDatabase.memory(),
+    );
+    addTearDown(restored.close);
+    final MihonBackupImportReport report = await MihonBackupImportService(
+      database: restored,
+      bookDirectory: (String bookKey) async => p.join(tmp.path, bookKey),
+    ).importFile(target);
+
+    expect(report.failedEntries, 0);
+    expect(report.trackingMappingsImported, 1);
+    final EpubBookMeta restoredMeta = (await restored.getEpubBookMetas())
+        .singleWhere((EpubBookMeta meta) => meta.title == 'Alpha');
+    final EpubBookRow restoredAlpha = (await restored.getEpubBook(
+      restoredMeta.bookKey,
+    ))!;
+    final mapping = await (restored.select(restored.mediaTrackingMappings)
+          ..where((t) => t.mediaKey.equals(restoredAlpha.bookKey)))
+        .getSingle();
+    expect(mapping.provider, 'bangumi');
+    expect(mapping.mediaType, 'book');
+    expect(mapping.subjectId, 4242);
+    expect(mapping.subjectName, 'Remote Alpha');
+    expect(mapping.createdAt, 1700000001000);
+    expect(mapping.updatedAt, 1700000002000);
+    final outbox = await (restored.select(restored.mediaTrackingOutbox)
+          ..where((t) => t.mappingId.equals(mapping.id)))
+        .getSingle();
+    expect(outbox.progress, 12);
+    expect(outbox.completed, isTrue);
   });
 
   test('includeHistory=false writes no library history', () async {
@@ -571,6 +627,194 @@ void main() {
     expect(exported.history.single.url, '/chapter/a1');
   });
 
+  test('exports the Bangumi tracking record stored for a Library manga',
+      () async {
+    final EpubBookRow alpha = await _seedManga(
+      db,
+      sourceId: '123',
+      url: '/manga/alpha',
+      title: 'Alpha',
+      chapters: const <OnlineMangaChapter>[],
+    );
+    await _seedTracking(
+      db,
+      book: alpha,
+      subjectId: 4242,
+      subjectName: 'Remote Alpha',
+      progress: 12,
+      completed: true,
+    );
+    final File target = File(p.join(tmp.path, 'tracking.tachibk'));
+    await MihonBackupExporter(database: db).exportToFile(
+      target: target,
+      options: const MihonBackupExportOptions(
+        includeChapters: false,
+        includeTracking: true,
+      ),
+    );
+
+    final MihonBackupData parsed = MihonBackupParser.parseFile(target);
+    final MihonBackupManga exported = parsed.mangas.single;
+    final MihonBackupTracking tracking = exported.tracking.single;
+    expect(tracking.syncId, 5, reason: 'Mihon tracker id for Bangumi');
+    expect(tracking.remoteId, 4242);
+    expect(tracking.title, 'Remote Alpha');
+    expect(tracking.lastChapterRead, closeTo(12, 1e-6));
+    expect(tracking.status, 2, reason: 'completed');
+    expect(tracking.startedReadingDate, 1700000001000);
+    expect(tracking.finishedReadingDate, 1700000002000);
+    expect(tracking.score, 0, reason: 'score is not stored locally');
+    expect(tracking.totalChapters, 0, reason: 'total is not stored locally');
+    expect(tracking.libraryId, isNull);
+    expect(tracking.mediaIdInt, isNull);
+    expect(tracking.private, isFalse);
+  });
+
+  test('does not write an empty tracking record for manga without Bangumi data',
+      () async {
+    final EpubBookRow alpha = await _seedManga(
+      db,
+      sourceId: '123',
+      url: '/manga/alpha',
+      title: 'Alpha',
+      chapters: const <OnlineMangaChapter>[],
+    );
+    await _seedManga(
+      db,
+      sourceId: '456',
+      url: '/manga/beta',
+      title: 'Beta',
+      chapters: const <OnlineMangaChapter>[],
+    );
+    await _seedTracking(db, book: alpha, progress: 5, completed: false);
+
+    final File target = File(p.join(tmp.path, 'some-tracking.tachibk'));
+    await MihonBackupExporter(database: db).exportToFile(
+      target: target,
+      options: const MihonBackupExportOptions(includeChapters: false),
+    );
+
+    final MihonBackupData parsed = MihonBackupParser.parseFile(target);
+    final MihonBackupManga exportedAlpha = parsed.mangas.singleWhere(
+      (MihonBackupManga manga) => manga.url == '/manga/alpha',
+    );
+    final MihonBackupManga exportedBeta = parsed.mangas.singleWhere(
+      (MihonBackupManga manga) => manga.url == '/manga/beta',
+    );
+    expect(exportedAlpha.tracking, hasLength(1));
+    expect(exportedBeta.tracking, isEmpty,
+        reason: 'no tracking record means no empty BackupTracking entry');
+  });
+
+  test('exports an in-progress Bangumi record as reading without a finish date',
+      () async {
+    final EpubBookRow alpha = await _seedManga(
+      db,
+      sourceId: '123',
+      url: '/manga/alpha',
+      title: 'Alpha',
+      chapters: const <OnlineMangaChapter>[],
+    );
+    await _seedTracking(
+      db,
+      book: alpha,
+      progress: 3,
+      completed: false,
+      updatedAt: 1700000003000,
+    );
+
+    final File target = File(p.join(tmp.path, 'reading.tachibk'));
+    await MihonBackupExporter(database: db).exportToFile(
+      target: target,
+      options: const MihonBackupExportOptions(includeChapters: false),
+    );
+
+    final MihonBackupTracking tracking =
+        MihonBackupParser.parseFile(target).mangas.single.tracking.single;
+    expect(tracking.lastChapterRead, closeTo(3, 1e-6));
+    expect(tracking.status, 3, reason: 'reading');
+    expect(tracking.startedReadingDate, 1700000001000);
+    expect(tracking.finishedReadingDate, isNull);
+  });
+
+  test('exports a linked-but-unread Bangumi record as a wish entry', () async {
+    final EpubBookRow alpha = await _seedManga(
+      db,
+      sourceId: '123',
+      url: '/manga/alpha',
+      title: 'Alpha',
+      chapters: const <OnlineMangaChapter>[],
+    );
+    await _seedTracking(db, book: alpha);
+
+    final File target = File(p.join(tmp.path, 'wish.tachibk'));
+    await MihonBackupExporter(database: db).exportToFile(
+      target: target,
+      options: const MihonBackupExportOptions(includeChapters: false),
+    );
+
+    final MihonBackupTracking tracking =
+        MihonBackupParser.parseFile(target).mangas.single.tracking.single;
+    expect(tracking.lastChapterRead, 0);
+    expect(tracking.status, 1, reason: 'wish');
+    expect(tracking.startedReadingDate, 1700000001000);
+    expect(tracking.finishedReadingDate, isNull);
+  });
+
+  test('includeTracking=false writes no tracking entries', () async {
+    final EpubBookRow alpha = await _seedManga(
+      db,
+      sourceId: '123',
+      url: '/manga/alpha',
+      title: 'Alpha',
+      chapters: const <OnlineMangaChapter>[],
+    );
+    await _seedTracking(db, book: alpha, progress: 5, completed: true);
+
+    final File target = File(p.join(tmp.path, 'no-tracking.tachibk'));
+    await MihonBackupExporter(database: db).exportToFile(
+      target: target,
+      options: const MihonBackupExportOptions(
+        includeChapters: false,
+        includeTracking: false,
+      ),
+    );
+
+    expect(
+      MihonBackupParser.parseFile(target).mangas.single.tracking,
+      isEmpty,
+    );
+  });
+
+  test('does not export tracking records from unsupported providers', () async {
+    final EpubBookRow alpha = await _seedManga(
+      db,
+      sourceId: '123',
+      url: '/manga/alpha',
+      title: 'Alpha',
+      chapters: const <OnlineMangaChapter>[],
+    );
+    await _seedTracking(
+      db,
+      book: alpha,
+      provider: 'anilist',
+      progress: 5,
+      completed: false,
+    );
+
+    final File target = File(p.join(tmp.path, 'unsupported.tachibk'));
+    await MihonBackupExporter(database: db).exportToFile(
+      target: target,
+      options: const MihonBackupExportOptions(includeChapters: false),
+    );
+
+    expect(
+      MihonBackupParser.parseFile(target).mangas.single.tracking,
+      isEmpty,
+      reason: 'only Bangumi is supported; other trackers are not stored',
+    );
+  });
+
   test('default filename uses my-comic_YYYY-MM-DD_HH-mm.tachibk', () {
     expect(
       mihonBackupDefaultFileName(DateTime(2026, 11, 9, 20, 5)),
@@ -669,6 +913,48 @@ Future<void> _seedSource(
           language: 'en',
         ),
       );
+}
+
+Future<void> _seedTracking(
+  FushiDatabase db, {
+  required EpubBookRow book,
+  String provider = kTrackingProviderBangumi,
+  int subjectId = 4242,
+  String subjectName = 'Remote Alpha',
+  int createdAt = 1700000001000,
+  int updatedAt = 1700000002000,
+  int progress = 0,
+  bool completed = false,
+}) async {
+  final int mappingId = await db
+      .into(db.mediaTrackingMappings)
+      .insert(
+        MediaTrackingMappingsCompanion.insert(
+          provider: Value<String>(provider),
+          mediaType: 'book',
+          mediaKey: book.bookKey,
+          mediaTitle: book.title,
+          kind: 'manga',
+          subjectId: subjectId,
+          subjectName: subjectName,
+          progressMode: 'chapter',
+          progressOffset: const Value<int>(0),
+          createdAt: createdAt,
+          updatedAt: updatedAt,
+        ),
+      );
+  if (progress > 0 || completed) {
+    await db
+        .into(db.mediaTrackingOutbox)
+        .insert(
+          MediaTrackingOutboxCompanion.insert(
+            mappingId: mappingId,
+            progress: progress,
+            completed: Value<bool>(completed),
+            updatedAt: updatedAt,
+          ),
+        );
+  }
 }
 
 Future<EpubBookRow> _seedManga(
