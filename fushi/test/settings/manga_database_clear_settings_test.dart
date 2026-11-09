@@ -6,6 +6,7 @@ import 'package:material_ui/material_ui.dart';
 
 import 'package:fushi/i18n/strings.g.dart';
 import 'package:fushi/models.dart';
+import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi/src/media/sources/reader_fushi_source.dart';
 import 'package:fushi/src/settings/settings_context.dart';
 import 'package:fushi/src/settings/settings_destination.dart';
@@ -17,17 +18,18 @@ import 'package:fushi/src/utils/misc/fushi_toast.dart';
 import '../helpers/fake_platform_services.dart';
 import '../helpers/test_platform_services.dart';
 
-/// Ticket 13：设置 →「存储与下载」→「数据存储位置」的「清除数据库」动作行。
+/// Ticket 13：设置 →「存储与下载」→「数据存储位置」的「清理数据库」动作行。
 ///
-/// 页面级测试覆盖：破坏性行位于「清除缓存」之后、确认框显示将删除的数量、
-/// 进度框、完成 toast 与不重启；删除本身由服务层测试覆盖。
+/// 页面级测试覆盖：Source 列表与数量、多选、默认开启「保留有阅读记录的作品」、
+/// 关闭开关的警告、将删除的作品/History 数量、取消不执行、进度、结果 toast 与
+/// 不重启。删除范围本身由服务层测试覆盖。
 void main() {
   setUp(() {
     LocaleSettings.setLocale(AppLocale.zhCn);
   });
 
   tearDown(() {
-    debugMeasureMangaDatabaseClearCounts = null;
+    debugMeasureMangaDatabaseClearSources = null;
     debugRunMangaDatabaseClear = null;
     LocaleSettings.setLocale(AppLocale.en);
   });
@@ -70,13 +72,30 @@ void main() {
           )
           as SettingsActionItem;
 
-  const MangaDatabaseClearCounts fixtureCounts = MangaDatabaseClearCounts(
-    works: 2,
-    historyEntries: 5,
-    readingStateRows: 3,
+  const MangaDatabaseClearSource sourceA = MangaDatabaseClearSource(
+    key: 'source-a',
+    kind: MangaDatabaseClearSourceKind.online,
+    name: 'Source A',
+    runtime: OnlineMangaRuntimeKind.mihon,
+    sourceId: '101',
+    nonLibraryWorks: 3,
+    readWorks: 1,
+    historyEntries: 4,
+    readHistoryEntries: 2,
+  );
+  const MangaDatabaseClearSource sourceB = MangaDatabaseClearSource(
+    key: 'source-b',
+    kind: MangaDatabaseClearSourceKind.online,
+    name: 'Source B',
+    runtime: OnlineMangaRuntimeKind.mihon,
+    sourceId: '102',
+    nonLibraryWorks: 1,
+    readWorks: 0,
+    historyEntries: 1,
+    readHistoryEntries: 0,
   );
 
-  testWidgets('「清除数据库」行排在「清除缓存」之后，使用破坏性样式', (WidgetTester tester) async {
+  testWidgets('「清理数据库」行排在「清除缓存」之后，使用破坏性样式', (WidgetTester tester) async {
     final SettingsContext settings = await captureContext(tester);
     final SettingsSection section = buildContentRootsSection();
 
@@ -88,18 +107,46 @@ void main() {
     ]);
 
     final SettingsActionItem item = clearDatabaseItem();
-    expect(item.title, '清除数据库');
+    expect(item.title, '清理数据库');
     expect(
       item.subtitle,
-      '删除全部历史、未入书架的作品记录与阅读记录；书架进度、下载与本地图源都会保留。',
-      reason: '副标题只描述用户概念，不得再出现「孤儿」',
+      '按来源清理未加入书架的作品记录与历史；默认保留有阅读记录的作品。书架、下载文件与本地图源文件都会保留。',
     );
-    expect(item.destructive, isTrue, reason: '清除数据库必须使用 destructive 红色样式');
+    expect(item.destructive, isTrue, reason: '清理数据库必须使用 destructive 红色样式');
     expect(item.isEnabled(settings), isTrue);
     expect(item.cli, isNotNull, reason: '动作行必须在控制通道声明入口');
   });
 
-  testWidgets('确认框显示将删除的作品/历史/阅读记录数量，完成后 toast 且不重启', (
+  testWidgets('没有非书架作品时给出空状态提示且不弹确认框', (WidgetTester tester) async {
+    final GlobalKey<NavigatorState> navKey = GlobalKey<NavigatorState>();
+    FushiToast.navigatorKey = navKey;
+    final SettingsContext settings = await captureContext(
+      tester,
+      navigatorKey: navKey,
+    );
+    debugMeasureMangaDatabaseClearSources = (SettingsContext _) async =>
+        const <MangaDatabaseClearSource>[];
+    bool ran = false;
+    debugRunMangaDatabaseClear =
+        (SettingsContext _, Set<String> _, bool _, _) async {
+          ran = true;
+          return const MangaDatabaseClearCounts(
+            works: 0,
+            historyEntries: 0,
+            readingStateRows: 0,
+          );
+        };
+
+    await clearMangaDatabase(settings);
+    await tester.pumpAndSettle();
+
+    expect(find.text(t.database_clear_nothing), findsOneWidget);
+    expect(find.text(t.database_clear_confirm_title), findsNothing);
+    expect(ran, isFalse);
+    await tester.pump(const Duration(seconds: 3));
+  });
+
+  testWidgets('确认框列出 Source 与数量；多选、默认保留已读作品并显示删除数量', (
     WidgetTester tester,
   ) async {
     final GlobalKey<NavigatorState> navKey = GlobalKey<NavigatorState>();
@@ -112,15 +159,21 @@ void main() {
       navigatorKey: navKey,
     );
 
-    debugMeasureMangaDatabaseClearCounts = (SettingsContext _) async =>
-        fixtureCounts;
+    debugMeasureMangaDatabaseClearSources = (SettingsContext _) async =>
+        const <MangaDatabaseClearSource>[sourceA, sourceB];
+    Set<String>? receivedSources;
+    bool? receivedKeepRead;
     final Completer<MangaDatabaseClearCounts> pending =
         Completer<MangaDatabaseClearCounts>();
     debugRunMangaDatabaseClear =
         (
           SettingsContext _,
+          Set<String> sourceKeys,
+          bool keepRead,
           void Function(MangaDatabaseClearProgress progress)? onProgress,
         ) {
+          receivedSources = sourceKeys;
+          receivedKeepRead = keepRead;
           onProgress?.call(
             const MangaDatabaseClearProgress(
               step: MangaDatabaseClearStep.works,
@@ -136,36 +189,79 @@ void main() {
     await tester.pump();
     await tester.pumpAndSettle();
 
-    expect(find.text('清除数据库？'), findsOneWidget);
+    expect(find.text(t.database_clear_confirm_title), findsOneWidget);
+    expect(find.text(t.database_clear_dialog_intro), findsOneWidget);
+    expect(find.text('Source A'), findsOneWidget);
+    expect(find.text('Source B'), findsOneWidget);
+    expect(find.text(t.database_clear_source_count(count: 3)), findsOneWidget);
+    expect(find.text(t.database_clear_source_count(count: 1)), findsOneWidget);
+    expect(find.text(t.database_clear_keep_read_title), findsOneWidget);
+    expect(find.text(t.database_clear_keep_read_warning), findsNothing);
     expect(
-      find.text(
-        t.database_clear_confirm_body(works: 2, history: 5, records: 3),
-      ),
+      find.text(t.database_clear_confirm_body(works: 0, history: 0)),
       findsOneWidget,
-      reason: '确认框必须显示将删除的作品/历史/阅读记录数量',
     );
 
-    await tester.tap(find.text('清除'));
+    // 未选择 Source 时确认按钮不生效。
+    await tester.tap(find.text(t.database_clear_button));
+    await tester.pumpAndSettle();
+    expect(find.text(t.database_clear_confirm_title), findsOneWidget);
+    expect(receivedSources, isNull);
+
+    // 多选：A 的 3 部（其中 1 部有阅读记录）→ 默认删除 2 部 / 2 条历史。
+    await tester.tap(find.text('Source A'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text(t.database_clear_confirm_body(works: 2, history: 2)),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('Source B'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text(t.database_clear_confirm_body(works: 3, history: 3)),
+      findsOneWidget,
+    );
+
+    // 关闭保留开关：已读/进度会丢失，给出警告并显示全量删除数量。
+    await tester.tap(find.text(t.database_clear_keep_read_title));
+    await tester.pumpAndSettle();
+    expect(find.text(t.database_clear_keep_read_warning), findsOneWidget);
+    expect(
+      find.text(t.database_clear_confirm_body(works: 4, history: 5)),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text(t.database_clear_button));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
+    expect(receivedSources, <String>{'source-a', 'source-b'});
+    expect(receivedKeepRead, isFalse);
     expect(find.text(t.database_clear_progress_title), findsOneWidget);
-    expect(find.text('正在删除未入书架的作品'), findsOneWidget);
+    expect(find.text(t.database_clear_step_works), findsOneWidget);
 
-    pending.complete(fixtureCounts);
+    pending.complete(
+      const MangaDatabaseClearCounts(
+        works: 4,
+        historyEntries: 5,
+        readingStateRows: 2,
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(
-      find.text(t.database_clear_done(works: 2, history: 5, records: 3)),
+      find.text(t.database_clear_done(works: 4, history: 5)),
       findsOneWidget,
     );
-    expect(lifecycle.restartCalled, isFalse, reason: '清除数据库不需要重启');
+    expect(lifecycle.restartCalled, isFalse, reason: '清理数据库不需要重启');
     await action;
-    // 让 toast 自动消失计时器跑完，避免 pending-timer。
     await tester.pump(const Duration(seconds: 3));
   });
 
-  testWidgets('清理阅读记录阶段的进度文案不再出现「孤儿」', (WidgetTester tester) async {
+  testWidgets('默认开启保留开关：确认时传 keepRead=true 且保留已读作品的数量', (
+    WidgetTester tester,
+  ) async {
     final GlobalKey<NavigatorState> navKey = GlobalKey<NavigatorState>();
     FushiToast.navigatorKey = navKey;
     final SettingsContext settings = await captureContext(
@@ -173,22 +269,24 @@ void main() {
       navigatorKey: navKey,
     );
 
-    debugMeasureMangaDatabaseClearCounts = (SettingsContext _) async =>
-        fixtureCounts;
-    final Completer<MangaDatabaseClearCounts> pending =
-        Completer<MangaDatabaseClearCounts>();
+    debugMeasureMangaDatabaseClearSources = (SettingsContext _) async =>
+        const <MangaDatabaseClearSource>[sourceA];
+    bool? receivedKeepRead;
+    Set<String>? receivedSources;
     debugRunMangaDatabaseClear =
         (
           SettingsContext _,
+          Set<String> sourceKeys,
+          bool keepRead,
           void Function(MangaDatabaseClearProgress progress)? onProgress,
-        ) {
-          onProgress?.call(
-            const MangaDatabaseClearProgress(
-              step: MangaDatabaseClearStep.readingState,
-              fraction: 0.9,
-            ),
+        ) async {
+          receivedSources = sourceKeys;
+          receivedKeepRead = keepRead;
+          return const MangaDatabaseClearCounts(
+            works: 2,
+            historyEntries: 2,
+            readingStateRows: 0,
           );
-          return pending.future;
         };
 
     final Future<void> action = Future<void>.sync(
@@ -196,19 +294,76 @@ void main() {
     );
     await tester.pump();
     await tester.pumpAndSettle();
-    await tester.tap(find.text('清除'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 300));
-
-    expect(find.text('正在清理阅读记录'), findsOneWidget);
-
-    pending.complete(fixtureCounts);
+    await tester.tap(find.text('Source A'));
     await tester.pumpAndSettle();
+
+    expect(find.text(t.database_clear_keep_read_warning), findsNothing);
+    expect(
+      find.text(t.database_clear_confirm_body(works: 2, history: 2)),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text(t.database_clear_button));
+    await tester.pumpAndSettle();
+
+    expect(receivedSources, <String>{'source-a'});
+    expect(receivedKeepRead, isTrue);
+    expect(
+      find.text(t.database_clear_done(works: 2, history: 2)),
+      findsOneWidget,
+    );
     await action;
     await tester.pump(const Duration(seconds: 3));
   });
 
-  testWidgets('删除失败时提示错误且不重启', (WidgetTester tester) async {
+  testWidgets('取消不执行清理', (WidgetTester tester) async {
+    final SettingsContext settings = await captureContext(tester);
+    debugMeasureMangaDatabaseClearSources = (SettingsContext _) async =>
+        const <MangaDatabaseClearSource>[sourceA];
+    bool ran = false;
+    debugRunMangaDatabaseClear =
+        (SettingsContext _, Set<String> _, bool _, _) async {
+          ran = true;
+          return const MangaDatabaseClearCounts(
+            works: 0,
+            historyEntries: 0,
+            readingStateRows: 0,
+          );
+        };
+
+    final Future<void> action = Future<void>.sync(
+      () => clearMangaDatabase(settings),
+    );
+    await tester.pump();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Source A'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(t.dialog_cancel));
+    await tester.pumpAndSettle();
+
+    expect(ran, isFalse);
+    expect(find.text(t.database_clear_confirm_title), findsNothing);
+    await action;
+  });
+
+  testWidgets('读取 Source 失败时提示错误', (WidgetTester tester) async {
+    final GlobalKey<NavigatorState> navKey = GlobalKey<NavigatorState>();
+    FushiToast.navigatorKey = navKey;
+    final SettingsContext settings = await captureContext(
+      tester,
+      navigatorKey: navKey,
+    );
+    debugMeasureMangaDatabaseClearSources = (SettingsContext _) async =>
+        throw StateError('fixture measure failure');
+
+    await clearMangaDatabase(settings);
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('fixture measure failure'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 3));
+  });
+
+  testWidgets('执行失败时提示错误且不重启', (WidgetTester tester) async {
     final GlobalKey<NavigatorState> navKey = GlobalKey<NavigatorState>();
     FushiToast.navigatorKey = navKey;
     final FakeLifecycleService lifecycle = FakeLifecycleService()
@@ -219,27 +374,23 @@ void main() {
       navigatorKey: navKey,
     );
 
-    debugMeasureMangaDatabaseClearCounts = (SettingsContext _) async =>
-        fixtureCounts;
+    debugMeasureMangaDatabaseClearSources = (SettingsContext _) async =>
+        const <MangaDatabaseClearSource>[sourceA];
     debugRunMangaDatabaseClear =
-        (
-          SettingsContext _,
-          void Function(MangaDatabaseClearProgress progress)? onProgress,
-        ) async => throw StateError('fixture failure');
+        (SettingsContext _, Set<String> _, bool _, _) async =>
+            throw StateError('fixture failure');
 
     final Future<void> action = Future<void>.sync(
       () => clearMangaDatabase(settings),
     );
     await tester.pump();
     await tester.pumpAndSettle();
-    await tester.tap(find.text('清除'));
+    await tester.tap(find.text('Source A'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(t.database_clear_button));
     await tester.pumpAndSettle();
 
-    expect(
-      find.textContaining('fixture failure'),
-      findsOneWidget,
-      reason: '失败必须给出可见反馈',
-    );
+    expect(find.textContaining('fixture failure'), findsOneWidget);
     expect(lifecycle.restartCalled, isFalse);
     await action;
     await tester.pump(const Duration(seconds: 3));

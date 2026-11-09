@@ -60,24 +60,50 @@ MangaHistoryIdentity mangaHistoryIdentityForOnline(
   OnlineMangaLibraryEntry entry,
 ) => MangaHistoryIdentity(mangaHistoryOnlineSourceKey(entry), entry.series.key);
 
-/// 一条 Library 行的历史身份；非漫画 / 无身份返回 null。
-MangaHistoryIdentity? mangaHistoryIdentityForBook(EpubBookRow row) {
+/// 漫画行的历史身份；非漫画 / 无身份返回 null。
+///
+/// 只依赖身份列（bookKey / sourceMetadata / format），让不持有完整
+/// [EpubBookRow] 的调用方（如清理数据库的瘦投影查询）复用同一份判据，而不是
+/// 各自抄一遍来源解析规则。
+MangaHistoryIdentity? mangaHistoryIdentityForMangaRow({
+  required String bookKey,
+  required String? sourceMetadata,
+  required String format,
+}) {
   final OnlineMangaLibraryEntry? online = OnlineMangaLibraryEntry.tryParse(
-    row.sourceMetadata,
+    sourceMetadata,
   );
   if (online != null) return mangaHistoryIdentityForOnline(online);
   final LocalSourceMetadata? local = LocalSourceMetadata.tryParse(
-    row.sourceMetadata,
+    sourceMetadata,
   );
   if (local != null) {
     return MangaHistoryIdentity(kMangaHistoryLocalSource, local.relativePath);
   }
-  if (BookFormat.parseOrEpub(row.format) != BookFormat.manga) return null;
+  if (BookFormat.parseOrEpub(format) != BookFormat.manga) return null;
   return MangaHistoryIdentity(
     MangaFushiSource.kUniqueKey,
-    ReaderFushiSource.mediaIdentifierFor(row.bookKey),
+    ReaderFushiSource.mediaIdentifierFor(bookKey),
   );
 }
+
+/// 一条 Library 行的历史身份；非漫画 / 无身份返回 null。
+MangaHistoryIdentity? mangaHistoryIdentityForBook(EpubBookRow row) =>
+    mangaHistoryIdentityForMangaRow(
+      bookKey: row.bookKey,
+      sourceMetadata: row.sourceMetadata,
+      format: row.format,
+    );
+
+/// 旧版导入写入的裸 `reader_manga` 身份（`fushi://book/<bookKey>`）。
+///
+/// Ticket 10 之前导入的 History 仍可能以这个身份存在；清理数据库按作品删除
+/// History 时必须连同旧身份一起命中，否则会留下指向已删作品的记录。
+MangaHistoryIdentity mangaHistoryLegacyReaderIdentity(String bookKey) =>
+    MangaHistoryIdentity(
+      MangaFushiSource.kUniqueKey,
+      ReaderFushiSource.mediaIdentifierFor(bookKey),
+    );
 
 /// 这一行是不是漫画历史（与 EPUB / 视频 / 音频历史共表，按 Source 区分）。
 bool isMangaHistorySource(String mediaSource) =>

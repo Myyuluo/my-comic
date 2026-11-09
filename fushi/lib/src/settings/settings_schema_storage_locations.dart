@@ -22,7 +22,8 @@ import 'package:fushi/utils.dart';
 ///    时先创建，失败复用现有提示。
 ///  - `程序数据位置`：Program state root，只读，使用回退位置时在副标题标注。
 ///  - `清除缓存`：显式缓存目录的占用与清理入口（ticket 11）。
-///  - `清除数据库`：删除全部 History、未入书架的作品记录与孤儿阅读记录（ticket 13）。
+///  - `清理数据库`：按 Source 清理未入书架的作品、其章节/进度/已读/下载索引与
+///    History；默认保留有阅读记录的作品（ticket 13）。
 ///
 /// 2026-11-08（ticket 03）：移除 downloads / local / autobackup 三个重复的
 /// 子文件夹入口。本构建器与 SRS 备份页共用，SRS 上的同名入口同步消失。
