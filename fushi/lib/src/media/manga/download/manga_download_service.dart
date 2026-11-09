@@ -226,7 +226,11 @@ class MangaDownloadService {
   ///
   /// 幂等：已 `done` 且目录判据为真 → 原样返回不重下；`queued` / `running` →
   /// 原样返回；`failed` / `cancelled` / 已 done 但目录被删 → 重置成 `queued`。
-  /// 条目必须已在书架（`bookKey` 由条目身份推导，与作品页入库用的同一条）。
+  ///
+  /// 不要求 Library membership：先用共享的下载身份 [OnlineMangaLibraryService.find]
+  /// 解析已有 Manga 行（含占位扩展包 / 规范化数字 sourceId 的回退），没有行时
+  /// 按票 02 的语义补一条 membership=false 的非书架行。任务因此始终挂在真实
+  /// `bookKey` 上，worker / 下载索引无需自己猜身份。
   ///
   /// [autoOcr] 只保留入队 API 的形状（作品页 / CLI 调用方仍传值），**当前不生效**：
   /// ADR 0002 已删除 OCR 模块，ticket 04 随之移除了 `MangaDownloadOcrHook` 完成
@@ -237,7 +241,10 @@ class MangaDownloadService {
     required OnlineMangaChapter chapter,
     required bool autoOcr,
   }) async {
-    final String bookKey = OnlineMangaLibraryService.bookKeyOf(entry);
+    final OnlineMangaLibraryService service = _serviceFor(entry.runtime);
+    final EpubBookRow row =
+        await service.find(entry) ?? await service.ensureNonLibrary(entry);
+    final String bookKey = row.bookKey;
     final String jobId = mangaDownloadJobId(
       kind: MangaDownloadJobKind.chapter,
       bookKey: bookKey,
@@ -584,7 +591,8 @@ class MangaDownloadService {
     final OnlineMangaLibraryService service = _serviceFor(runtime);
     EpubBookRow? row = await _database.getEpubBook(job.bookKey);
     if (row == null) {
-      throw StateError('The manga is no longer in the library: ${job.bookKey}');
+      // 非书架行同样算「有行」；只有行真的被清理掉时才是这里的错误。
+      throw StateError('The manga row no longer exists: ${job.bookKey}');
     }
     final OnlineMangaLibraryEntry? entry = OnlineMangaLibraryEntry.tryParse(
       row.sourceMetadata,

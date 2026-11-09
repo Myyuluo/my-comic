@@ -330,6 +330,74 @@ class DownloadLibraryIndex {
     }
     await database.deleteMangaChapterDir(bookKey, chapterKey);
   }
+
+  /// 删除一章的下载：有行 / 映射时按记录删；没有行或映射没覆盖时按 [entry]
+  /// 的下载身份在 `downloads` 里找唯一能证明身份的漫画文件夹，再删其中
+  /// `chapterKey` 的容器。
+  ///
+  /// 票 08：非书架作品（含源页暂时没有 Manga 行的场景）不需要 Library 行也能
+  /// 删除已显示为「已下载」的章节。身份判据与 [downloadedChapterKeysForEntry]
+  /// 相同；同一根下多个文件夹都能证明同一身份时仍不猜（不删），避免误删。
+  /// `local` 根不参与删除：本地原作文件不归「删除下载」管理。
+  Future<void> deleteChapterForEntry({
+    required OnlineMangaLibraryEntry entry,
+    required String chapterKey,
+    EpubBookRow? row,
+  }) async {
+    if (row != null) {
+      final MangaChapterContainer? mapped = await resolveChapter(
+        bookKey: row.bookKey,
+        chapterKey: chapterKey,
+      );
+      if (mapped != null) {
+        await deleteChapter(bookKey: row.bookKey, chapterKey: chapterKey);
+        return;
+      }
+      // 映射已失效 / 从未写过：清掉残留行，再按身份找磁盘容器。
+      await database.deleteMangaChapterDir(row.bookKey, chapterKey);
+    }
+    await _deleteChapterByIdentity(entry, chapterKey);
+  }
+
+  Future<void> _deleteChapterByIdentity(
+    OnlineMangaLibraryEntry entry,
+    String chapterKey,
+  ) async {
+    final MangaDownloadIdentity identity = MangaDownloadIdentity.ofEntry(entry);
+    final List<DownloadMangaFolderProbe> probes =
+        await probeDownloadLibraryFolders(await _downloadsRoot());
+    final List<DownloadMangaFolderProbe> matches = <DownloadMangaFolderProbe>[
+      for (final DownloadMangaFolderProbe probe in probes)
+        if (probe.manifest != null && identity.matchesManifest(probe.manifest!))
+          probe,
+    ];
+    final List<DownloadMangaFolderProbe> exact = <DownloadMangaFolderProbe>[
+      for (final DownloadMangaFolderProbe probe in matches)
+        if (identity.matchesManifestPackage(probe.manifest!)) probe,
+    ];
+    final DownloadMangaFolderProbe? folder = exact.length == 1
+        ? exact.single
+        : exact.isEmpty && matches.length == 1
+        ? matches.single
+        : null;
+    if (folder == null) return;
+    for (final ChapterContainerOnDisk container
+        in await scanDownloadChapterContainers(folder.directory)) {
+      final MangaPagesManifest? manifest = container.manifest;
+      if (manifest == null ||
+          manifest.chapterKey != chapterKey ||
+          !identity.matchesManifest(manifest)) {
+        continue;
+      }
+      final Directory? directory = container.directory;
+      if (directory != null) {
+        if (await directory.exists()) await directory.delete(recursive: true);
+        continue;
+      }
+      final File? archive = container.archiveFile;
+      if (archive != null && await archive.exists()) await archive.delete();
+    }
+  }
 }
 
 /// 当前 Content root 下 `downloads` 与 `local` 的 manifest 身份索引。
