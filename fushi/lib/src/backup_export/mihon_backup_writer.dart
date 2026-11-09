@@ -133,9 +133,7 @@ class MihonBackupWriter {
     return w.takeBytes();
   }
 
-  Uint8List _encodeSourcePreferences(
-    MihonBackupSourcePreferences preferences,
-  ) {
+  Uint8List _encodeSourcePreferences(MihonBackupSourcePreferences preferences) {
     final _ProtoWriter w = _ProtoWriter();
     w.stringOrOmit(1, preferences.sourceKey);
     for (final MihonBackupPreference preference in preferences.preferences) {
@@ -160,31 +158,26 @@ class MihonBackupWriter {
   /// error here rather than something to write.
   Uint8List _encodePreferenceValue(MihonBackupPreferenceValue value) {
     final _ProtoWriter payload = _ProtoWriter();
-    final String simpleName;
     switch (value.type) {
       case MihonBackupPreferenceType.string:
-        simpleName = 'StringPreferenceValue';
         payload.stringOrOmit(1, value.value as String?);
       case MihonBackupPreferenceType.boolean:
-        simpleName = 'BooleanPreferenceValue';
         if (value.value == true) payload.varint(1, 1);
       case MihonBackupPreferenceType.integer:
-        simpleName = 'IntPreferenceValue';
         payload.varintOrOmit(1, value.value as int?);
       case MihonBackupPreferenceType.long:
-        simpleName = 'LongPreferenceValue';
         payload.varintOrOmit(1, value.value as int?);
       case MihonBackupPreferenceType.float:
-        simpleName = 'FloatPreferenceValue';
         payload.float32OrOmit(1, value.value as double?);
       case MihonBackupPreferenceType.stringSet:
-        simpleName = 'StringSetPreferenceValue';
         final Object? raw = value.value;
         for (final String item
             in raw is List<String> ? raw : const <String>[]) {
           payload.stringOrOmit(1, item);
         }
       case MihonBackupPreferenceType.unsupported:
+        // Serial name resolution below throws the same diagnostic; keeping an
+        // explicit branch makes the invalid state impossible to miss.
         throw ArgumentError(
           'A .tachibk backup may only contain the six standard Mihon '
           'preference value types; got unsupported.',
@@ -192,10 +185,7 @@ class MihonBackupWriter {
     }
 
     final _ProtoWriter envelope = _ProtoWriter();
-    envelope.string(
-      1,
-      'eu.kanade.tachiyomi.data.backup.models.$simpleName',
-    );
+    envelope.string(1, MihonBackupPreferenceTypes.serialName(value.type));
     // Write the payload message even when it is empty: the parser (and Mihon)
     // distinguish "missing payload" from "payload with default value".
     envelope.bytes(2, payload.takeBytes());

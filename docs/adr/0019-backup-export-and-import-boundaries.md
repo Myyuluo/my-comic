@@ -30,3 +30,7 @@ ADR 0005 原计划在 JVM sidecar 中复用 Mihon 备份模型，v1 只导入；
 - 导入遇到已知键的未知偏好值类型时会中止，不留下半导入状态。
 - 以前导入产生的隐藏合集保持原样、不自动迁移为 Tag；重新导入同一份备份会按新映射写入 Tag，旧隐藏合集不会因此消失。
 - 真实 Mihon 备份只作本地手工验证；自动化测试继续使用合成 fixture，不提交 `.tachibk`。
+
+## Amendment 2026-11-10（manga-ux-backup-batch）
+
+插件商店导出**仅限 manga Extension store**。MyComic 是漫画-only 应用；Mihon v0.21.3 的 `BackupExtensionStore` 没有 media-kind 字段，无法表达 Aniyomi（视频）store，导出后在导入端只会被重建为漫画 store。因此 Aniyomi store 不写入备份，导出实现（`_MangaExtensionStoreExportSection`）与测试都显式按 manga-only 命名与断言。

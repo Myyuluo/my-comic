@@ -182,15 +182,13 @@ class _MihonBackupImportReportDialog extends StatelessWidget {
         ),
         style: tokens.type.listSubtitle,
       ),
-      if (report.categoriesSkipped > 0) ...[
-        const SizedBox(height: 8),
-        Text(
+      if (report.categoriesSkipped > 0)
+        _ReportDetailLine(
           t.backup_import_mihon_categories_skipped(
             count: report.categoriesSkipped,
           ),
           style: tokens.type.listSubtitle,
         ),
-      ],
       const SizedBox(height: 8),
       Text(
         t.backup_import_mihon_summary_progress(
@@ -215,9 +213,8 @@ class _MihonBackupImportReportDialog extends StatelessWidget {
         ),
         if (report.nonLibraryHistorySkippedByReason[MihonBackupHistorySkipReason
                 .noHistory] !=
-            null) ...[
-          const SizedBox(height: 8),
-          Text(
+            null)
+          _ReportDetailLine(
             t.backup_import_mihon_nonlibrary_history_missing(
               count:
                   report
@@ -226,12 +223,10 @@ class _MihonBackupImportReportDialog extends StatelessWidget {
             ),
             style: tokens.type.listSubtitle,
           ),
-        ],
         if (report.nonLibraryHistorySkippedByReason[MihonBackupHistorySkipReason
                 .missingUrl] !=
-            null) ...[
-          const SizedBox(height: 8),
-          Text(
+            null)
+          _ReportDetailLine(
             t.backup_import_mihon_nonlibrary_history_missing_url(
               count:
                   report
@@ -240,12 +235,10 @@ class _MihonBackupImportReportDialog extends StatelessWidget {
             ),
             style: tokens.type.listSubtitle,
           ),
-        ],
         if (report.nonLibraryHistorySkippedByReason[MihonBackupHistorySkipReason
                 .alreadyNewer] !=
-            null) ...[
-          const SizedBox(height: 8),
-          Text(
+            null)
+          _ReportDetailLine(
             t.backup_import_mihon_nonlibrary_history_newer(
               count:
                   report
@@ -254,7 +247,6 @@ class _MihonBackupImportReportDialog extends StatelessWidget {
             ),
             style: tokens.type.listSubtitle,
           ),
-        ],
       ],
       if (report.appPreferencesImported + report.appPreferencesSkipped > 0) ...[
         const SizedBox(height: 8),
@@ -268,9 +260,8 @@ class _MihonBackupImportReportDialog extends StatelessWidget {
         if (report
                 .appPreferencesSkippedByReason[MihonBackupAppPreferenceSkipReason
                 .notMyComicKey] !=
-            null) ...[
-          const SizedBox(height: 8),
-          Text(
+            null)
+          _ReportDetailLine(
             t.backup_import_mihon_app_settings_not_mycomic(
               count:
                   report
@@ -279,13 +270,11 @@ class _MihonBackupImportReportDialog extends StatelessWidget {
             ),
             style: tokens.type.listSubtitle,
           ),
-        ],
         if (report
                 .appPreferencesSkippedByReason[MihonBackupAppPreferenceSkipReason
                 .deviceLocal] !=
-            null) ...[
-          const SizedBox(height: 8),
-          Text(
+            null)
+          _ReportDetailLine(
             t.backup_import_mihon_app_settings_device_local(
               count:
                   report
@@ -294,13 +283,11 @@ class _MihonBackupImportReportDialog extends StatelessWidget {
             ),
             style: tokens.type.listSubtitle,
           ),
-        ],
         if (report
                 .appPreferencesSkippedByReason[MihonBackupAppPreferenceSkipReason
                 .alreadyPresent] !=
-            null) ...[
-          const SizedBox(height: 8),
-          Text(
+            null)
+          _ReportDetailLine(
             t.backup_import_mihon_app_settings_present(
               count:
                   report
@@ -309,7 +296,6 @@ class _MihonBackupImportReportDialog extends StatelessWidget {
             ),
             style: tokens.type.listSubtitle,
           ),
-        ],
       ],
       if (report.trackingMappingsImported +
               report.trackingMappingsMerged +
@@ -324,18 +310,15 @@ class _MihonBackupImportReportDialog extends StatelessWidget {
           ),
           style: tokens.type.listSubtitle,
         ),
-        if (report.trackingInvalidRemoteIds > 0) ...[
-          const SizedBox(height: 8),
-          Text(
+        if (report.trackingInvalidRemoteIds > 0)
+          _ReportDetailLine(
             t.backup_import_mihon_tracking_invalid(
               count: report.trackingInvalidRemoteIds,
             ),
             style: tokens.type.listSubtitle,
           ),
-        ],
-        if (report.unsupportedTrackers.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          Text(
+        if (report.unsupportedTrackers.isNotEmpty)
+          _ReportDetailLine(
             t.backup_import_mihon_tracking_unsupported(
               names: report.unsupportedTrackers
                   .map(
@@ -346,7 +329,6 @@ class _MihonBackupImportReportDialog extends StatelessWidget {
             ),
             style: tokens.type.listSubtitle,
           ),
-        ],
       ],
       if (report.extensionStoresImported +
               report.extensionStoresMerged +
@@ -361,24 +343,20 @@ class _MihonBackupImportReportDialog extends StatelessWidget {
           ),
           style: tokens.type.listSubtitle,
         ),
-        if (report.extensionStoresSkipped > 0) ...[
-          const SizedBox(height: 8),
-          Text(
+        if (report.extensionStoresSkipped > 0)
+          _ReportDetailLine(
             t.backup_import_mihon_extension_stores_skipped(
               count: report.extensionStoresSkipped,
             ),
             style: tokens.type.listSubtitle,
           ),
-        ],
-        if (report.extensionStoresFailed > 0) ...[
-          const SizedBox(height: 8),
-          Text(
+        if (report.extensionStoresFailed > 0)
+          _ReportDetailLine(
             t.backup_import_mihon_extension_stores_failed(
               count: report.extensionStoresFailed,
             ),
             style: tokens.type.listSubtitle,
           ),
-        ],
       ],
       if (report.sourcePreferencesImported + report.sourcePreferencesSkipped >
           0) ...[
@@ -390,68 +368,52 @@ class _MihonBackupImportReportDialog extends StatelessWidget {
           ),
           style: tokens.type.listSubtitle,
         ),
-        if (report.sourcePreferencesSkipped > 0) ...[
-          const SizedBox(height: 8),
-          Text(
+        if (report.sourcePreferencesSkipped > 0)
+          _ReportDetailLine(
             t.backup_import_mihon_source_preferences_skipped(
               count: report.sourcePreferencesSkipped,
             ),
             style: tokens.type.listSubtitle,
           ),
-        ],
-        if (report.sourcePreferencesFailed > 0) ...[
-          const SizedBox(height: 8),
-          Text(
+        if (report.sourcePreferencesFailed > 0)
+          _ReportDetailLine(
             t.backup_import_mihon_source_preferences_failed(
               count: report.sourcePreferencesFailed,
             ),
             style: tokens.type.listSubtitle,
           ),
-        ],
-        if (report.sourcePreferencesForMissingSources > 0) ...[
-          const SizedBox(height: 8),
-          Text(
+        if (report.sourcePreferencesForMissingSources > 0)
+          _ReportDetailLine(
             t.backup_import_mihon_source_preferences_missing(
               count: report.sourcePreferencesForMissingSources,
             ),
             style: tokens.type.listSubtitle,
           ),
-        ],
       ],
-      if (report.skippedByReason[MihonBackupSkipReason.notInLibrary] !=
-          null) ...[
-        const SizedBox(height: 8),
-        Text(
+      if (report.skippedByReason[MihonBackupSkipReason.notInLibrary] != null)
+        _ReportDetailLine(
           t.backup_import_mihon_skip_not_in_library(
             count: report.skippedByReason[MihonBackupSkipReason.notInLibrary]!,
           ),
           style: tokens.type.listSubtitle,
         ),
-      ],
-      if (report.failedByReason[MihonBackupFailureReason.missingUrl] !=
-          null) ...[
-        const SizedBox(height: 8),
-        Text(
+      if (report.failedByReason[MihonBackupFailureReason.missingUrl] != null)
+        _ReportDetailLine(
           t.backup_import_mihon_fail_missing_url(
             count: report.failedByReason[MihonBackupFailureReason.missingUrl]!,
           ),
           style: tokens.type.listSubtitle,
         ),
-      ],
-      if (report.failedByReason[MihonBackupFailureReason.databaseError] !=
-          null) ...[
-        const SizedBox(height: 8),
-        Text(
+      if (report.failedByReason[MihonBackupFailureReason.databaseError] != null)
+        _ReportDetailLine(
           t.backup_import_mihon_fail_database(
             count:
                 report.failedByReason[MihonBackupFailureReason.databaseError]!,
           ),
           style: tokens.type.listSubtitle,
         ),
-      ],
-      if (report.missingSources.isNotEmpty) ...[
-        const SizedBox(height: 8),
-        Text(
+      if (report.missingSources.isNotEmpty)
+        _ReportDetailLine(
           t.backup_import_mihon_missing_sources(
             count: report.missingSources.length,
             names: report.missingSources
@@ -460,7 +422,6 @@ class _MihonBackupImportReportDialog extends StatelessWidget {
           ),
           style: tokens.type.listSubtitle,
         ),
-      ],
       if (report.isEmpty) ...[
         const SizedBox(height: 8),
         Text(t.backup_import_mihon_empty, style: tokens.type.listSubtitle),
@@ -483,6 +444,24 @@ class _MihonBackupImportReportDialog extends StatelessWidget {
           child: Text(t.dialog_done),
         ),
       ),
+    );
+  }
+}
+
+/// One extra report line (skip / failure reason). All reason rows share the
+/// same 8px top gap and subtitle style, so they are built from one widget
+/// instead of repeating the SizedBox + Text pair in every branch.
+class _ReportDetailLine extends StatelessWidget {
+  const _ReportDetailLine(this.text, {required this.style});
+
+  final String text;
+  final TextStyle style;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Text(text, style: style),
     );
   }
 }

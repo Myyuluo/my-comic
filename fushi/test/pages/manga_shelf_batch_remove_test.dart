@@ -198,6 +198,29 @@ void main() {
     return (await db.getEpubBook(bookKey))!;
   }
 
+  /// 受管本地漫画卷：`format='manga'`，但既没有在线作品描述符，也没有 Local
+  /// source 元数据（例如导入的漫画卷）。它的 `extractDir` 是应用目录里的副本。
+  Future<EpubBookRow> seedManagedManga(String bookKey, String title) async {
+    final Directory dir = Directory(
+      p.join(root.path, 'managed', title.replaceAll(' ', '_')),
+    )..createSync(recursive: true);
+    File(p.join(dir.path, '001.jpg')).writeAsBytesSync(<int>[1, 2, 3]);
+    await db.insertEpubBook(
+      EpubBooksCompanion.insert(
+        bookKey: bookKey,
+        title: title,
+        epubPath: '',
+        extractDir: dir.path,
+        chapterCount: 1,
+        chaptersJson: '[]',
+        importedAt: 1,
+        format: const Value<String>('manga'),
+      ),
+    );
+    books.add(mangaItem(bookKey, title));
+    return (await db.getEpubBook(bookKey))!;
+  }
+
   Widget buildApp() => ProviderScope(
         overrides: <Override>[
           platformServicesProvider.overrideWithValue(testPlatformServices()),
@@ -652,6 +675,72 @@ void main() {
     );
     await flushToast(tester);
   });
+
+  testWidgets(
+    '受管漫画卷默认移出：不删应用文件、不删 History',
+    (WidgetTester tester) async {
+      const String bookKey = 'manga:managed:defaults';
+      final EpubBookRow row = await seedManagedManga(bookKey, 'Managed Defaults');
+      await recordMangaHistoryOpened(db: db, row: row, onlineEntry: null);
+
+      await pumpPage(tester);
+      await selectBooks(tester, <String>[bookKey]);
+      await openBatchDeleteDialog(tester);
+      // 两个选项都保持默认（不勾选）。
+      await tester.tap(find.text(t.dialog_delete));
+      await pumpUntil(
+        tester,
+        () async => await db.getEpubBook(bookKey) == null,
+      );
+
+      expect(await db.getEpubBook(bookKey), isNull, reason: 'Library 条目已删');
+      expect(
+        Directory(row.extractDir).existsSync(),
+        isTrue,
+        reason: '未勾选「同时删除本地文件」时受管漫画卷的应用文件必须保留',
+      );
+      expect(
+        await loadMangaHistory(db),
+        hasLength(1),
+        reason: '移出书架不删除 History（受管漫画卷也一样）',
+      );
+      await flushToast(tester);
+    },
+  );
+
+  testWidgets(
+    '受管漫画卷勾选「同时删除本地文件」：删除应用文件但保留 History',
+    (WidgetTester tester) async {
+      const String bookKey = 'manga:managed:delete-files';
+      final EpubBookRow row =
+          await seedManagedManga(bookKey, 'Managed Delete Files');
+      await recordMangaHistoryOpened(db: db, row: row, onlineEntry: null);
+
+      await pumpPage(tester);
+      await selectBooks(tester, <String>[bookKey]);
+      await openBatchDeleteDialog(tester);
+      await tester.tap(find.text(t.delete_local_files));
+      await tester.pump();
+      await tester.tap(find.text(t.dialog_delete));
+      await pumpUntil(
+        tester,
+        () async => await db.getEpubBook(bookKey) == null,
+      );
+
+      expect(await db.getEpubBook(bookKey), isNull);
+      expect(
+        Directory(row.extractDir).existsSync(),
+        isFalse,
+        reason: '勾选后受管漫画卷的应用文件删除',
+      );
+      expect(
+        await loadMangaHistory(db),
+        hasLength(1),
+        reason: '即使删了文件，History 也保留',
+      );
+      await flushToast(tester);
+    },
+  );
 
   testWidgets('被筛选隐藏的选中项继续提示且不参与删除', (WidgetTester tester) async {
     const String visibleKey = 'manga:batch:hidden:visible';

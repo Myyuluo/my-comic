@@ -160,6 +160,57 @@ class MangaHistoryOnlineRef {
       );
 }
 
+/// Mihon 备份里的章节级历史载荷（`snapshot_json.mihon_history`）。
+///
+/// Mihon 的 History 按章节记录；MyComic 的历史行只到 Manga 粒度，因此最近阅读
+/// 的章节 URL、阅读时间与阅读时长随快照一起保存，导出时原样写回备份。
+class MangaHistoryMihonEntry {
+  const MangaHistoryMihonEntry({
+    required this.chapterUrl,
+    required this.lastRead,
+    required this.readDuration,
+  });
+
+  final String chapterUrl;
+  final int lastRead;
+  final int readDuration;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+    'chapter_url': chapterUrl,
+    'read_at': lastRead,
+    'read_duration': readDuration,
+  };
+
+  static MangaHistoryMihonEntry? fromJson(Object? raw) {
+    if (raw is! Map<Object?, Object?>) return null;
+    final Map<String, Object?> json = raw.cast<String, Object?>();
+    final String chapterUrl = json['chapter_url']?.toString().trim() ?? '';
+    if (chapterUrl.isEmpty) return null;
+    final Object? lastRead = json['read_at'];
+    final Object? readDuration = json['read_duration'];
+    return MangaHistoryMihonEntry(
+      chapterUrl: chapterUrl,
+      lastRead: lastRead is num ? lastRead.toInt() : 0,
+      readDuration: readDuration is num ? readDuration.toInt() : 0,
+    );
+  }
+}
+
+/// 从任意漫画历史快照 JSON 读取 `mihon_history`。
+///
+/// 阅读器写的快照带 `mangaHistory` 标记；旧导入路径写的书架历史是裸对象。
+/// 两种形状都从这里读，导出端不再各自解析私有字段。
+MangaHistoryMihonEntry? mangaHistoryMihonEntryFromJson(String? raw) {
+  if (raw == null || raw.isEmpty) return null;
+  try {
+    final Object? decoded = jsonDecode(raw);
+    if (decoded is! Map<Object?, Object?>) return null;
+    return MangaHistoryMihonEntry.fromJson(decoded['mihon_history']);
+  } on Object {
+    return null;
+  }
+}
+
 /// `media_open_history.snapshot_json` 里漫画历史的展示 / 重开载荷。
 ///
 /// 列化字段（source / id / openedAt）不在这里；标题、封面与来源身份随行走，
@@ -172,6 +223,7 @@ class MangaHistorySnapshot {
     this.bookKey,
     this.localRelativePath,
     this.online,
+    this.mihonHistory,
   });
 
   static const String kind = 'manga-history';
@@ -185,10 +237,14 @@ class MangaHistorySnapshot {
   final String? localRelativePath;
   final MangaHistoryOnlineRef? online;
 
+  /// Mihon 备份中的最近一条章节级历史（可选）。
+  final MangaHistoryMihonEntry? mihonHistory;
+
   Map<String, Object?> toJson() => <String, Object?>{
     'title': title,
     if (author != null) 'author': author,
     if (imageUrl != null) 'imageUrl': imageUrl,
+    if (mihonHistory != null) 'mihon_history': mihonHistory!.toJson(),
     'mangaHistory': <String, Object?>{
       'kind': kind,
       if (bookKey != null) 'bookKey': bookKey,
@@ -217,6 +273,7 @@ class MangaHistorySnapshot {
         online: online is Map<Object?, Object?>
             ? MangaHistoryOnlineRef.fromJson(online.cast<String, Object?>())
             : null,
+        mihonHistory: MangaHistoryMihonEntry.fromJson(json['mihon_history']),
       );
     } on Object {
       return null;

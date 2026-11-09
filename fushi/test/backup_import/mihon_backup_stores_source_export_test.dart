@@ -111,6 +111,39 @@ void main() {
     expect(legacy.contactWebsite, isEmpty);
   });
 
+  test('exports manga extension stores only (app is manga-only)', () async {
+    await db
+        .into(db.mangaExtensionStores)
+        .insert(
+          MangaExtensionStoresCompanion.insert(
+            indexUrl: 'https://manga.test/index.pb',
+            name: 'Manga Store',
+            format: 'currentProtobuf',
+          ),
+        );
+    // Aniyomi (video) store: Mihon's backup format has no media-kind field, so
+    // exporting it would recreate it as a manga store on the other side.
+    await db
+        .into(db.mangaExtensionStores)
+        .insert(
+          MangaExtensionStoresCompanion.insert(
+            indexUrl: 'https://anime.test/index.pb',
+            name: 'Anime Store',
+            format: 'currentProtobuf',
+            mediaKind: const Value<String>('anime'),
+          ),
+        );
+
+    final MihonBackupData data = await export(includeExtensionStores: true);
+
+    expect(
+      data.extensionStores.map(
+        (MihonBackupExtensionStore store) => store.indexUrl,
+      ),
+      <String>['https://manga.test/index.pb'],
+    );
+  });
+
   test('extension stores off writes no extension store entries', () async {
     await db
         .into(db.mangaExtensionStores)
