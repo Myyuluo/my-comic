@@ -28,6 +28,7 @@ import 'package:fushi_core/fushi_core.dart' show MediaKind;
 ModuleId? moduleOfHomeTab(HomeTab tab) => switch (tab) {
   HomeTab.home => ModuleId.home,
   HomeTab.settings => null,
+  HomeTab.history => null,
   HomeTab.downloads => null,
   HomeTab.books => ModuleId.books,
   HomeTab.manga => ModuleId.manga,

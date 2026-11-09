@@ -43,7 +43,7 @@ void main() {
   group('startup module', () {
     test('未选启动页（null）时落默认：可见列表第一项', () {
       final List<HomeTab> tabs = homeActiveTabs(_visibility(video: true));
-      // 固定导航 Manga → 浏览 → 下载打头，默认落点因此是漫画。
+      // 固定导航 Manga → 浏览 → 历史 → 下载打头，默认落点因此是漫画。
       expect(homeInitialTab(startupModule: null, tabs: tabs), HomeTab.manga);
       final List<HomeTab> noManga = homeActiveTabs(
         const ModuleVisibility(<ModuleId>{ModuleId.video, ModuleId.browse}),
@@ -163,17 +163,34 @@ void main() {
       expect(HomeTab.values, contains(HomeTab.downloads));
     });
 
-    test('下载固定排在浏览之后、设置之前，与浏览共用平台门禁', () {
+    test('下载固定排在历史之后、设置之前，与浏览共用平台门禁', () {
       final List<HomeTab> tabs = homeActiveTabs(_visibility(video: true));
-      expect(tabs.indexOf(HomeTab.downloads), tabs.indexOf(HomeTab.browse) + 1);
+      expect(tabs.indexOf(HomeTab.downloads), tabs.indexOf(HomeTab.browse) + 2);
+      expect(tabs[tabs.indexOf(HomeTab.browse) + 1], HomeTab.history);
       expect(tabs.last, HomeTab.settings);
 
-      // 浏览 / 下载能力不可用（如 iOS 合规限制）时两页一起消失。
+      // 浏览 / 下载能力不可用（如 iOS 合规限制）时浏览、历史、下载一起消失。
       final List<HomeTab> withoutBrowse = homeActiveTabs(
         _visibility(video: true, downloads: false),
       );
       expect(withoutBrowse, isNot(contains(HomeTab.browse)));
+      expect(withoutBrowse, isNot(contains(HomeTab.history)));
       expect(withoutBrowse, isNot(contains(HomeTab.downloads)));
+    });
+
+    test('历史是独立一级导航项：固定插在浏览与下载之间，标签 / 图标来自资源', () {
+      expect(HomeTab.values, contains(HomeTab.history));
+      final List<HomeTab> tabs = homeActiveTabs(_visibility(video: true));
+      expect(tabs.indexOf(HomeTab.history), tabs.indexOf(HomeTab.browse) + 1);
+      expect(
+        tabs.indexOf(HomeTab.history),
+        tabs.indexOf(HomeTab.downloads) - 1,
+      );
+
+      final AdaptiveNavItem item = homeNavItemFor(HomeTab.history);
+      expect(item.label, t.nav_history);
+      expect(item.icon, FushiIcons.history);
+      expect(item.selectedIcon, FushiIcons.filled(FushiIcons.history));
     });
 
     test('下载导航项标签来自字符串资源，图标复用下载图标', () {
@@ -249,6 +266,7 @@ void main() {
       );
       expect(tabs, <HomeTab>[
         HomeTab.browse,
+        HomeTab.history,
         HomeTab.downloads,
         HomeTab.home,
         HomeTab.dictionaries,
@@ -256,11 +274,12 @@ void main() {
       ]);
     });
 
-    test('downloads=false 同时隐藏浏览与下载，词典仍紧随最后一个媒体库页', () {
+    test('downloads=false 同时隐藏浏览、历史与下载，词典仍紧随最后一个媒体库页', () {
       final List<HomeTab> tabs = homeActiveTabs(
         _visibility(video: true, games: true, downloads: false),
       );
       expect(tabs, isNot(contains(HomeTab.browse)));
+      expect(tabs, isNot(contains(HomeTab.history)));
       expect(tabs, isNot(contains(HomeTab.downloads)));
       expect(
         tabs.indexOf(HomeTab.dictionaries),
@@ -351,8 +370,8 @@ void main() {
     });
   });
 
-  group('固定导航（Manga / 浏览 / 下载常驻）', () {
-    test('旧的模块开关偏好全关，导航仍是 Manga → 浏览 → 下载 → 设置', () {
+  group('固定导航（Manga / 浏览 / 历史 / 下载常驻）', () {
+    test('旧的模块开关偏好全关，导航仍是 Manga → 浏览 → 历史 → 下载 → 设置', () {
       final List<HomeTab> tabs = homeActiveTabs(
         ModuleVisibility.resolve(
           prefOf: (ModuleId _) => false,
@@ -365,12 +384,13 @@ void main() {
       expect(tabs, <HomeTab>[
         HomeTab.manga,
         HomeTab.browse,
+        HomeTab.history,
         HomeTab.downloads,
         HomeTab.settings,
       ]);
     });
 
-    test('iOS 上浏览与下载按合规门禁一起不出现，漫画不受影响', () {
+    test('iOS 上浏览 / 历史 / 下载按合规门禁一起不出现，漫画不受影响', () {
       final List<HomeTab> tabs = homeActiveTabs(
         ModuleVisibility.resolve(
           prefOf: (ModuleId _) => true,

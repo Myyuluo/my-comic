@@ -66,6 +66,7 @@ void main() {
     expect(tabs, <HomeTab>[
       HomeTab.manga,
       HomeTab.browse,
+      HomeTab.history,
       HomeTab.downloads,
       HomeTab.home,
       HomeTab.books,
