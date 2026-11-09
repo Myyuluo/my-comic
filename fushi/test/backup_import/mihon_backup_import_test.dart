@@ -9,6 +9,7 @@ import 'package:path/path.dart' as p;
 import 'package:fushi/src/backup_import/mihon_backup_import_service.dart';
 import 'package:fushi/src/backup_import/mihon_backup_parser.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
+import 'package:fushi/src/pages/implementations/manga_tag_tabs.dart';
 
 import 'mihon_backup_fixture.dart';
 
@@ -41,7 +42,7 @@ void main() {
     now: () => now,
   );
 
-  test('imports library entries, categories and reading progress', () async {
+  test('imports library entries, categories as tags and progress', () async {
     final File backup = await writeFixtureBackup(
       tmp,
       categories: const <FixtureCategory>[
@@ -169,21 +170,39 @@ void main() {
         .getMangaChapterStates(beta.uid);
     expect(betaStates['/chapter/b1']!.readAt, 1700000003000);
 
-    final List<MediaCollectionRow> collections = await db
-        .getAllMediaCollections();
-    expect(collections.map((MediaCollectionRow c) => c.name).toSet(), <String>{
+    final List<BookTagRow> tags = await db.getAllTags();
+    expect(tags.map((BookTagRow tag) => tag.name).toSet(), <String>{
       'Action',
       'Drama',
     });
-    final MediaCollectionRow action = collections.singleWhere(
-      (MediaCollectionRow c) => c.name == 'Action',
+    final BookTagRow actionTag = tags.singleWhere(
+      (BookTagRow tag) => tag.name == 'Action',
     );
-    final List<MediaCollectionItemRow> members = await db.getCollectionItems(
-      action.id,
+    final BookTagRow dramaTag = tags.singleWhere(
+      (BookTagRow tag) => tag.name == 'Drama',
     );
-    expect(members, hasLength(1));
-    expect(members.single.mediaType, MediaKind.epub.dbValue);
-    expect(members.single.entryKey, alpha.uid);
+    expect(actionTag.sortOrder, 0);
+    expect(dramaTag.sortOrder, 1);
+    expect(actionTag.colorValue, 0xFF9E9E9E);
+    expect(dramaTag.colorValue, 0xFF9E9E9E);
+
+    final List<BookTagRow> alphaTags = await db.getTagsForBook(alpha.bookKey);
+    expect(alphaTags.map((BookTagRow tag) => tag.name), <String>['Action']);
+    expect(
+      mangaBookBelongsToTab(alphaTags, const MangaShelfTabSelection()),
+      isFalse,
+      reason: 'a categorised manga leaves the 书架 tab',
+    );
+    expect(
+      mangaBookBelongsToTab(alphaTags, MangaTagTabSelection(actionTag.id)),
+      isTrue,
+    );
+    final List<BookTagRow> betaTags = await db.getTagsForBook(beta.bookKey);
+    expect(betaTags.map((BookTagRow tag) => tag.name), <String>['Drama']);
+
+    // Categories no longer become hidden collections.
+    expect(await db.getAllMediaCollections(), isEmpty);
+    expect(await db.getAllTagAssignments(), hasLength(2));
   });
 
   test(
@@ -275,6 +294,8 @@ void main() {
         await fixture(changed: false),
       );
       expect(first.importedEntries, 2);
+      expect(first.categoriesCreated, 2);
+      expect(first.categoriesMatched, 0);
 
       final MihonBackupImportReport second = await service().importFile(
         await fixture(changed: true),
@@ -285,6 +306,8 @@ void main() {
       expect(second.mergedEntries, 2);
       expect(second.skippedEntries, 1);
       expect(second.failedEntries, 0);
+      expect(second.categoriesCreated, 0);
+      expect(second.categoriesMatched, 2);
 
       expect(await db.getEpubBookMetas(), hasLength(2));
       final String alphaKey = (await db.getEpubBookMetas())
@@ -311,11 +334,163 @@ void main() {
       expect(states['/chapter/a2']!.readAt, 1700000009000);
       expect(states['/chapter/a3']!.lastPage, 2);
 
-      final MediaCollectionRow action = (await db.getAllMediaCollections())
-          .singleWhere((MediaCollectionRow c) => c.name == 'Action');
-      expect(await db.getCollectionItems(action.id), hasLength(1));
+      final List<BookTagRow> alphaTags = await db.getTagsForBook(
+        alphaRow.bookKey,
+      );
+      expect(alphaTags.map((BookTagRow tag) => tag.name).toSet(), <String>{
+        'Action',
+        'Drama',
+      });
+      expect(await db.getAllTagAssignments(), hasLength(3));
+      expect(await db.getAllMediaCollections(), isEmpty);
     },
   );
+
+  test(
+    'reuses existing tags and leaves existing collections untouched',
+    () async {
+      final int actionTagId = await db.createTag('Action', 0xFF123456);
+      final String legacyBookKey = await db.insertEpubBook(
+        EpubBooksCompanion.insert(
+          bookKey: 'legacy-book',
+          title: 'Legacy',
+          epubPath: 'manga.json',
+          extractDir: 'legacy',
+          chapterCount: 0,
+          chaptersJson: '[]',
+          importedAt: 1,
+        ),
+      );
+      final EpubBookRow legacyBook = (await db.getEpubBook(legacyBookKey))!;
+      final int legacyCollectionId = await db.createMediaCollection('Action');
+      await db.addToCollection(
+        legacyCollectionId,
+        MediaKind.epub,
+        legacyBook.uid,
+      );
+
+      final File backup = await writeFixtureBackup(
+        tmp,
+        categories: const <FixtureCategory>[
+          FixtureCategory(name: 'Action', order: 0, id: 10),
+          FixtureCategory(name: 'Drama', order: 3, id: 20),
+        ],
+        sources: const <FixtureSource>[
+          FixtureSource(id: 123, name: 'Source A'),
+        ],
+        mangas: const <FixtureManga>[
+          FixtureManga(
+            source: 123,
+            url: '/manga/alpha',
+            title: 'Alpha',
+            categoryOrders: <int>[0, 3],
+          ),
+        ],
+      );
+
+      final MihonBackupImportReport report = await service().importFile(backup);
+
+      expect(report.categoriesCreated, 1);
+      expect(report.categoriesMatched, 1);
+      final List<BookTagRow> tags = await db.getAllTags();
+      expect(tags, hasLength(2));
+      final BookTagRow action = tags.singleWhere(
+        (BookTagRow tag) => tag.name == 'Action',
+      );
+      expect(action.id, actionTagId);
+      expect(
+        action.sortOrder,
+        0,
+        reason: 'tag order comes from the backup category order',
+      );
+      expect(
+        action.colorValue,
+        0xFF123456,
+        reason: 'a reused tag keeps its own color',
+      );
+      final BookTagRow drama = tags.singleWhere(
+        (BookTagRow tag) => tag.name == 'Drama',
+      );
+      expect(drama.sortOrder, 3);
+      expect(drama.colorValue, 0xFF9E9E9E);
+
+      // Old hidden collections survive unchanged; import adds no new ones.
+      final List<MediaCollectionRow> collections = await db
+          .getAllMediaCollections();
+      expect(collections, hasLength(1));
+      expect(collections.single.id, legacyCollectionId);
+      expect(collections.single.name, 'Action');
+      final List<MediaCollectionItemRow> members = await db.getCollectionItems(
+        legacyCollectionId,
+      );
+      expect(members, hasLength(1));
+      expect(members.single.mediaType, MediaKind.epub.dbValue);
+      expect(members.single.entryKey, legacyBook.uid);
+
+      final String importedBookKey = (await db.getEpubBookMetas())
+          .singleWhere((EpubBookMeta meta) => meta.title == 'Alpha')
+          .bookKey;
+      final List<BookTagRow> importedTags = await db.getTagsForBook(
+        importedBookKey,
+      );
+      expect(importedTags.map((BookTagRow tag) => tag.name).toSet(), <String>{
+        'Action',
+        'Drama',
+      });
+      expect(
+        mangaBookBelongsToTab(importedTags, const MangaShelfTabSelection()),
+        isFalse,
+      );
+      expect(
+        mangaBookBelongsToTab(importedTags, MangaTagTabSelection(action.id)),
+        isTrue,
+      );
+    },
+  );
+
+  test('repeated import keeps tag assignments idempotent', () async {
+    final File backup = await writeFixtureBackup(
+      tmp,
+      categories: const <FixtureCategory>[
+        FixtureCategory(name: 'Action', order: 0, id: 10),
+        FixtureCategory(name: 'Drama', order: 1, id: 20),
+      ],
+      sources: const <FixtureSource>[FixtureSource(id: 123, name: 'Source A')],
+      mangas: const <FixtureManga>[
+        FixtureManga(
+          source: 123,
+          url: '/manga/alpha',
+          title: 'Alpha',
+          categoryOrders: <int>[0, 1],
+        ),
+        FixtureManga(
+          source: 123,
+          url: '/manga/beta',
+          title: 'Beta',
+          categoryOrders: <int>[1],
+        ),
+      ],
+    );
+
+    final MihonBackupImportReport first = await service().importFile(backup);
+    expect(first.categoriesCreated, 2);
+    expect(first.categoriesMatched, 0);
+    final Set<String> assignmentsAfterFirst = <String>{
+      for (final TagAssignmentRow row in await db.getAllTagAssignments())
+        '${row.entryKey}:${row.tagId}',
+    };
+    expect(assignmentsAfterFirst, hasLength(3));
+
+    final MihonBackupImportReport second = await service().importFile(backup);
+    expect(second.categoriesCreated, 0);
+    expect(second.categoriesMatched, 2);
+    expect(await db.getAllTags(), hasLength(2));
+    final Set<String> assignmentsAfterSecond = <String>{
+      for (final TagAssignmentRow row in await db.getAllTagAssignments())
+        '${row.entryKey}:${row.tagId}',
+    };
+    expect(assignmentsAfterSecond, assignmentsAfterFirst);
+  });
 
   test('skips non-library entries and accepts an empty backup', () async {
     final File onlyRead = await writeFixtureBackup(

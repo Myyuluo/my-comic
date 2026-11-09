@@ -134,7 +134,11 @@ class MihonBackupImportReport {
   final int skippedEntries;
 
   final int failedEntries;
+
+  /// Tags created from Backup categories (Mihon categories import as Tags).
   final int categoriesCreated;
+
+  /// Backup categories matched an existing Tag by trimmed name and reused it.
   final int categoriesMatched;
 
   /// Chapter progress rows written or merged (read + partially read + history).
@@ -233,32 +237,40 @@ class MihonBackupImportService {
             if (int.tryParse(row.sourceId) case final int id) id: row,
         };
 
-    // Categories are resolved by *order*, matching Mihon's restore behavior:
-    // BackupManga.categories stores order values, not category ids.
-    final Map<int, MihonBackupCategory> categoriesByOrder =
-        <int, MihonBackupCategory>{
-          for (final MihonBackupCategory category in data.categories)
-            if (category.name.trim().isNotEmpty) category.order: category,
-        };
-
-    final Map<String, int> collectionsByName = <String, int>{
-      for (final MediaCollectionRow collection
-          in await database.getAllMediaCollections())
-        collection.name: collection.id,
+    // Mihon categories import as Tags. Resolve/create each one by trimmed name
+    // and align its sort order with the category order, so a MyComic-generated
+    // backup (Tags exported as categories) round-trips. Per-manga
+    // BackupManga.categories stores category *orders*, not ids.
+    final List<BookTagRow> existingTags = await database.getAllTags();
+    final Map<String, int> tagIdByName = <String, int>{
+      for (final BookTagRow tag in existingTags) tag.name: tag.id,
     };
+    final Map<String, int> tagSortOrderByName = <String, int>{
+      for (final BookTagRow tag in existingTags) tag.name: tag.sortOrder,
+    };
+    final Map<int, int> tagIdByCategoryOrder = <int, int>{};
     int categoriesCreated = 0;
     int categoriesMatched = 0;
     for (final MihonBackupCategory category in data.categories) {
       final String name = category.name.trim();
       if (name.isEmpty) continue;
-      final int? existingId = collectionsByName[name];
-      if (existingId != null) {
+      final int? existingTagId = tagIdByName[name];
+      final int tagId;
+      if (existingTagId == null) {
+        tagId = await database.getOrCreateTagByName(name);
+        tagIdByName[name] = tagId;
+        categoriesCreated++;
+      } else {
+        tagId = existingTagId;
         categoriesMatched++;
-        continue;
       }
-      final int id = await database.createMediaCollection(name);
-      collectionsByName[name] = id;
-      categoriesCreated++;
+      if (tagSortOrderByName[name] != category.order) {
+        await (database.update(database.bookTags)
+              ..where((t) => t.id.equals(tagId)))
+            .write(BookTagsCompanion(sortOrder: Value<int>(category.order)));
+        tagSortOrderByName[name] = category.order;
+      }
+      tagIdByCategoryOrder[category.order] = tagId;
     }
 
     final Map<String, _ExistingEntry> existing = await _loadExistingEntries();
@@ -388,11 +400,10 @@ class MihonBackupImportService {
               ifAbsent: () => entry.value,
             );
           }
-          await _applyCategories(
+          await _applyTags(
             row: row,
             manga: manga,
-            categoriesByOrder: categoriesByOrder,
-            collectionsByName: collectionsByName,
+            tagIdByCategoryOrder: tagIdByCategoryOrder,
           );
         } on Object {
           failed++;
@@ -1078,19 +1089,23 @@ class MihonBackupImportService {
         MihonBackupPreferenceType.unsupported => 'unsupported',
       };
 
-  Future<void> _applyCategories({
+  /// Assign every category order in the backup Manga to its resolved Tag.
+  ///
+  /// Tag assignments use `bookKey` (the key the manga shelf and tag picker use),
+  /// so an imported Manga with any Tag leaves the 书架 tab and appears under
+  /// each assigned Tag. Assignments upsert by their composite primary key, so
+  /// re-importing the same Backup never duplicates a Tag on a Manga; Tags the
+  /// user added locally but the Backup does not mention are preserved.
+  Future<void> _applyTags({
     required EpubBookRow row,
     required MihonBackupManga manga,
-    required Map<int, MihonBackupCategory> categoriesByOrder,
-    required Map<String, int> collectionsByName,
+    required Map<int, int> tagIdByCategoryOrder,
   }) async {
     final Set<int> seen = <int>{};
     for (final int order in manga.categoryOrders) {
-      final MihonBackupCategory? category = categoriesByOrder[order];
-      if (category == null) continue;
-      final int? collectionId = collectionsByName[category.name.trim()];
-      if (collectionId == null || !seen.add(collectionId)) continue;
-      await database.addToCollection(collectionId, MediaKind.epub, row.uid);
+      final int? tagId = tagIdByCategoryOrder[order];
+      if (tagId == null || !seen.add(tagId)) continue;
+      await database.addTagToBook(row.bookKey, tagId);
     }
   }
 
