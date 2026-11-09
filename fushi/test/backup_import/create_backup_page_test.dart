@@ -160,7 +160,8 @@ void main() {
     );
 
     // Re-opening the page restores the defaults; the sensitive tick is not
-    // remembered.
+    // remembered. The row sits below the fold once every section row is shown,
+    // so scroll it into view before tapping.
     await tester.ensureVisible(
       find.byKey(const Key('create_backup_include_sensitive_settings')),
     );
@@ -346,6 +347,9 @@ void main() {
 
     await tester.tap(find.byKey(const Key('create_backup_include_library')));
     await tester.tap(
+      find.byKey(const Key('create_backup_include_categories')),
+    );
+    await tester.tap(
       find.byKey(const Key('create_backup_include_app_settings')),
     );
     await tester.pumpAndSettle();
@@ -420,24 +424,140 @@ void main() {
     },
   );
 
-  testWidgets('unchecking「书架中的作品」disables chapters and the create button', (
+  testWidgets(
+    'unchecking「书架中的作品」disables chapters but keeps standalone sections',
+    (WidgetTester tester) async {
+      final _TestAppModel appModel = _TestAppModel(db, paths);
+      await tester.pumpWidget(_harness(appModel, const CreateBackupPage()));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('create_backup_include_library')));
+      await tester.pumpAndSettle();
+
+      expect(
+        _tile(tester, const Key('create_backup_include_library')).value,
+        isFalse,
+      );
+      expect(
+        _tile(tester, const Key('create_backup_include_chapters')).enabled,
+        isFalse,
+        reason: '章节 cannot be exported without 书架中的作品',
+      );
+      expect(
+        _tile(tester, const Key('create_backup_include_categories')).enabled,
+        isNot(false),
+        reason: '分类 is independent of 书架中的作品',
+      );
+      expect(
+        tester
+            .widget<FushiFilledButton>(
+              find.byKey(const Key('create_backup_create')),
+            )
+            .onPressed,
+        isNotNull,
+        reason: '分类 alone keeps 创建 available',
+      );
+
+      await tester.tap(
+        find.byKey(const Key('create_backup_include_categories')),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<FushiFilledButton>(
+              find.byKey(const Key('create_backup_create')),
+            )
+            .onPressed,
+        isNotNull,
+        reason: '应用设置 is still selected',
+      );
+
+      await tester.tap(
+        find.byKey(const Key('create_backup_include_app_settings')),
+      );
+      await tester.ensureVisible(
+        find.byKey(const Key('create_backup_include_extension_stores')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const Key('create_backup_include_extension_stores')),
+      );
+      await tester.ensureVisible(
+        find.byKey(const Key('create_backup_include_source_settings')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const Key('create_backup_include_source_settings')),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<FushiFilledButton>(
+              find.byKey(const Key('create_backup_create')),
+            )
+            .onPressed,
+        isNull,
+        reason: 'nothing exportable → 创建 is greyed out',
+      );
+
+      await tester.ensureVisible(
+        find.byKey(const Key('create_backup_include_library')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('create_backup_include_library')));
+      await tester.pumpAndSettle();
+      expect(
+        _tile(tester, const Key('create_backup_include_chapters')).enabled,
+        isNot(false),
+      );
+      expect(
+        tester
+            .widget<FushiFilledButton>(
+              find.byKey(const Key('create_backup_create')),
+            )
+            .onPressed,
+        isNotNull,
+      );
+    },
+  );
+
+  testWidgets('「分类」 starts checked and exports without 书架中的作品', (
     WidgetTester tester,
   ) async {
     final _TestAppModel appModel = _TestAppModel(db, paths);
-    await tester.pumpWidget(_harness(appModel, const CreateBackupPage()));
+    final _CapturingOptionsExporter exporter = _CapturingOptionsExporter(
+      database: db,
+    );
+    final String targetPath = p.join(tmp.path, 'categories.tachibk');
+
+    await tester.pumpWidget(
+      _harness(
+        appModel,
+        CreateBackupPage(
+          exporter: exporter,
+          savePathPicker:
+              ({
+                required String initialDirectory,
+                required String fileName,
+              }) async => targetPath,
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
+
+    expect(
+      _tile(tester, const Key('create_backup_include_categories')).value,
+      isTrue,
+      reason: '分类 defaults to checked',
+    );
 
     await tester.tap(find.byKey(const Key('create_backup_include_library')));
     await tester.pumpAndSettle();
 
     expect(
-      _tile(tester, const Key('create_backup_include_library')).value,
-      isFalse,
-    );
-    expect(
-      _tile(tester, const Key('create_backup_include_chapters')).enabled,
-      isFalse,
-      reason: '章节 cannot be exported without 书架中的作品',
+      _tile(tester, const Key('create_backup_include_categories')).enabled,
+      isNot(false),
+      reason: '分类 does not depend on 书架中的作品',
     );
     expect(
       tester
@@ -446,15 +566,92 @@ void main() {
           )
           .onPressed,
       isNotNull,
-      reason: 'the settings sections are still selected',
+      reason: '分类 alone is exportable',
     );
 
+    await tester.tap(find.byKey(const Key('create_backup_create')));
+    await _pumpUntil(tester, find.text(t.backup_export_success));
+
+    expect(exporter.options, isNotNull);
+    expect(exporter.options!.includeLibrary, isFalse);
+    expect(exporter.options!.includeChapters, isFalse);
+    expect(exporter.options!.includeCategories, isTrue);
+    expect(find.text(t.backup_export_success), findsOneWidget);
+  });
+
+  testWidgets(
+    '进度记录 starts selected and depends on 书架中的作品',
+    (WidgetTester tester) async {
+      final _TestAppModel appModel = _TestAppModel(db, paths);
+      await tester.pumpWidget(_harness(appModel, const CreateBackupPage()));
+      await tester.pumpAndSettle();
+
+      expect(find.text('进度记录'), findsOneWidget);
+      expect(
+        _tile(tester, const Key('create_backup_include_tracking')).value,
+        isTrue,
+        reason: '进度记录 defaults to checked',
+      );
+      expect(
+        _tile(tester, const Key('create_backup_include_tracking')).enabled,
+        isNot(false),
+      );
+
+      await tester.tap(find.byKey(const Key('create_backup_include_library')));
+      await tester.pumpAndSettle();
+      expect(
+        _tile(tester, const Key('create_backup_include_tracking')).enabled,
+        isFalse,
+        reason: '进度记录 cannot be exported without 书架中的作品',
+      );
+
+      await tester.tap(find.byKey(const Key('create_backup_include_library')));
+      await tester.pumpAndSettle();
+      expect(
+        _tile(tester, const Key('create_backup_include_tracking')).enabled,
+        isNot(false),
+      );
+    },
+  );
+
+  testWidgets('unchecking「分类」greys out 创建 only when nothing is selected', (
+    WidgetTester tester,
+  ) async {
+    final _TestAppModel appModel = _TestAppModel(db, paths);
+    await tester.pumpWidget(_harness(appModel, const CreateBackupPage()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('create_backup_include_categories')));
+    await tester.pumpAndSettle();
+    expect(
+      _tile(tester, const Key('create_backup_include_categories')).value,
+      isFalse,
+    );
+    expect(
+      tester
+          .widget<FushiFilledButton>(
+            find.byKey(const Key('create_backup_create')),
+          )
+          .onPressed,
+      isNotNull,
+      reason: 'the library is still exported',
+    );
+
+    await tester.tap(find.byKey(const Key('create_backup_include_library')));
     await tester.tap(
       find.byKey(const Key('create_backup_include_app_settings')),
     );
+    await tester.ensureVisible(
+      find.byKey(const Key('create_backup_include_extension_stores')),
+    );
+    await tester.pumpAndSettle();
     await tester.tap(
       find.byKey(const Key('create_backup_include_extension_stores')),
     );
+    await tester.ensureVisible(
+      find.byKey(const Key('create_backup_include_source_settings')),
+    );
+    await tester.pumpAndSettle();
     await tester.tap(
       find.byKey(const Key('create_backup_include_source_settings')),
     );
@@ -466,15 +663,11 @@ void main() {
           )
           .onPressed,
       isNull,
-      reason: 'nothing exportable → 创建 is greyed out',
+      reason: 'every exportable section is unselected',
     );
 
-    await tester.tap(find.byKey(const Key('create_backup_include_library')));
+    await tester.tap(find.byKey(const Key('create_backup_include_categories')));
     await tester.pumpAndSettle();
-    expect(
-      _tile(tester, const Key('create_backup_include_chapters')).enabled,
-      isNot(false),
-    );
     expect(
       tester
           .widget<FushiFilledButton>(

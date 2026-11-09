@@ -1,11 +1,14 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:drift/drift.dart';
 import 'package:fushi_core/fushi_core.dart';
+import 'package:fushi_engine/media/tracking/media_tracking_repository.dart'
+    show kTrackingProviderBangumi, TrackingMediaType;
 
 import 'package:fushi/src/backup_export/mihon_backup_writer.dart';
 import 'package:fushi/src/backup_import/mihon_backup_import_service.dart'
-    show kUnavailableMihonExtensionPackage;
+    show kMihonBangumiTrackerId, kUnavailableMihonExtensionPackage;
 import 'package:fushi/src/backup_import/mihon_backup_parser.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi/src/sync/pref_redaction_policy.dart';
@@ -13,13 +16,16 @@ import 'package:fushi/src/sync/sync_repository.dart';
 
 /// Which Mihon backup sections the user asked for.
 ///
-/// Ticket 07 ships Library + Chapters; later tickets add History, categories,
-/// tracking, app settings, extension stores and source settings. The page owns
-/// the dependency rules; the exporter only honours the resolved options.
+/// Ticket 07 ships Library + Chapters; ticket 09 adds Categories; ticket 10
+/// adds Tracking; ticket 11 adds App settings. Later tickets add History,
+/// extension stores and source settings. The page owns the dependency rules;
+/// the exporter only honours the resolved options.
 class MihonBackupExportOptions {
   const MihonBackupExportOptions({
     this.includeLibrary = true,
     this.includeChapters = true,
+    this.includeCategories = true,
+    this.includeTracking = true,
     this.includeAppSettings = true,
     this.includeExtensionStores = true,
     this.includeSourceSettings = true,
@@ -31,6 +37,16 @@ class MihonBackupExportOptions {
 
   /// 「章节」: export each manga's chapter list (read state, progress, dates).
   final bool includeChapters;
+
+  /// 「分类」: export every Tag as a Mihon category and reference the matching
+  /// category orders from each exported manga. Independent of [includeLibrary]
+  /// so categories can be exported on their own.
+  final bool includeCategories;
+
+  /// 「进度记录」: export each manga's Bangumi tracking record. The UI label
+  /// follows Mihon's reference layout, but the data is Tracking, not Reading
+  /// progress. Depends on [includeLibrary] like the other per-manga sections.
+  final bool includeTracking;
 
   /// 「应用设置」: export MyComic's own preference rows (`BackupPreferences`,
   /// proto field 104) without mapping key names to Mihon's.
@@ -49,9 +65,10 @@ class MihonBackupExportOptions {
   final bool includeSensitiveSettings;
 
   /// Whether the resolved selection produces a non-empty backup. Later tickets
-  /// add the standalone categories / tracking / history sections here.
+  /// add the remaining standalone sections here.
   bool get hasExportableContent =>
       includeLibrary ||
+      includeCategories ||
       includeAppSettings ||
       includeExtensionStores ||
       includeSourceSettings;
@@ -108,6 +125,15 @@ class MihonBackupExporter {
     final List<_ExportableManga> exportable = await _exportableManga(options);
     final Map<String, Map<String, MangaChapterStateRow>> chapterStates =
         options.includeChapters ? await _loadChapterStates() : const {};
+    final Map<String, MihonBackupTracking> trackingByBook =
+        options.includeLibrary && options.includeTracking
+        ? await _loadTrackingByBook()
+        : const <String, MihonBackupTracking>{};
+    // Categories (Tags) are independent of the Library section: they export
+    // even when 书架中的作品 is unchecked.
+    final _CategoryExport? categoryExport = options.includeCategories
+        ? await _loadCategories()
+        : null;
     final List<MihonBackupPreference> preferences = await _appPreferences(
       options,
     );
@@ -128,6 +154,7 @@ class MihonBackupExporter {
           ? _backupChapters(entry, chapterStates[candidate.row.uid] ?? const {})
           : const <MihonBackupChapter>[];
 
+      final MihonBackupTracking? tracking = trackingByBook[candidate.row.bookKey];
       mangas.add(
         MihonBackupManga(
           source: candidate.sourceId,
@@ -144,9 +171,12 @@ class MihonBackupExporter {
           dateAdded: candidate.row.importedAt,
           favorite: true,
           chapters: chapters,
-          categoryOrders: const <int>[],
+          categoryOrders:
+              categoryExport?.ordersFor(candidate.row.bookKey) ?? const <int>[],
           history: const <MihonBackupHistory>[],
-          tracking: const <MihonBackupTracking>[],
+          tracking: tracking == null
+              ? const <MihonBackupTracking>[]
+              : <MihonBackupTracking>[tracking],
         ),
       );
 
@@ -166,7 +196,7 @@ class MihonBackupExporter {
 
     return MihonBackupData(
       mangas: List<MihonBackupManga>.unmodifiable(mangas),
-      categories: const <MihonBackupCategory>[],
+      categories: categoryExport?.categories ?? const <MihonBackupCategory>[],
       sourceNames: Map<int, String>.unmodifiable(sourceNames),
       preferences: List<MihonBackupPreference>.unmodifiable(preferences),
       extensionStores: List<MihonBackupExtensionStore>.unmodifiable(
@@ -476,6 +506,125 @@ class MihonBackupExporter {
     return byBook;
   }
 
+  /// Loads the Bangumi Tracking records stored for Library manga, keyed by the
+  /// book key that also identifies the Manga row.
+  ///
+  /// MyComic has no tracker rows other than `provider = bangumi`, and Mihon
+  /// trackers it cannot represent are never written here, so nothing is
+  /// fabricated for unsupported providers.
+  Future<Map<String, MihonBackupTracking>> _loadTrackingByBook() async {
+    final List<MediaTrackingMappingRow> mappings =
+        await (database.select(database.mediaTrackingMappings)..where(
+              (t) =>
+                  t.provider.equals(kTrackingProviderBangumi) &
+                  t.mediaType.equals(TrackingMediaType.book.value),
+            ))
+            .get();
+    if (mappings.isEmpty) return const <String, MihonBackupTracking>{};
+
+    final Set<int> mappingIds = <int>{
+      for (final MediaTrackingMappingRow mapping in mappings) mapping.id,
+    };
+    final Map<int, MediaTrackingOutboxRow> outboxByMapping =
+        <int, MediaTrackingOutboxRow>{
+          for (final MediaTrackingOutboxRow outbox
+              in await (database.select(database.mediaTrackingOutbox)
+                    ..where((t) => t.mappingId.isIn(mappingIds)))
+                  .get())
+            outbox.mappingId: outbox,
+        };
+
+    final Map<String, MihonBackupTracking> result =
+        <String, MihonBackupTracking>{};
+    for (final MediaTrackingMappingRow mapping in mappings) {
+      result[mapping.mediaKey] = _backupTracking(
+        mapping,
+        outboxByMapping[mapping.id],
+      );
+    }
+    return result;
+  }
+
+  /// Maps the locally stored mapping + sync progress to Mihon's BackupTracking.
+  ///
+  /// Only the fields MyComic actually keeps are exported: remote work id, last
+  /// chapter read, completion (derived Bangumi status), and the stored dates.
+  /// Score and total chapters have no local source, so they stay at proto
+  /// defaults instead of being invented.
+  static MihonBackupTracking _backupTracking(
+    MediaTrackingMappingRow mapping,
+    MediaTrackingOutboxRow? outbox,
+  ) {
+    final int progress = outbox?.progress ?? 0;
+    final bool completed = outbox?.completed ?? false;
+    // Bangumi collection types: 1 = wish, 2 = completed, 3 = reading.
+    final int status = completed ? 2 : (progress > 0 ? 3 : 1);
+    final String title = mapping.subjectName.trim().isNotEmpty
+        ? mapping.subjectName
+        : mapping.mediaTitle;
+    return MihonBackupTracking(
+      syncId: kMihonBangumiTrackerId,
+      libraryId: null,
+      mediaIdInt: null,
+      trackingUrl: '',
+      title: title,
+      lastChapterRead: progress.toDouble(),
+      totalChapters: 0,
+      score: 0,
+      status: status,
+      startedReadingDate: mapping.createdAt > 0 ? mapping.createdAt : null,
+      finishedReadingDate: completed && mapping.updatedAt > 0
+          ? mapping.updatedAt
+          : null,
+      private: false,
+      mediaId: mapping.subjectId,
+    );
+  }
+
+  /// Tags → Mihon categories.
+  ///
+  /// Mihon identifies categories inside `BackupManga.categories` by their
+  /// **order**, so orders must be unique even though `BookTags.sortOrder` is
+  /// not guaranteed to be (legacy rows default to 0). Display order is the
+  /// source of truth: tags are visited in [FushiDatabase.getAllTags] order and
+  /// a colliding sort order moves to the next free integer. Tag colours have
+  /// no Mihon category field and are deliberately dropped.
+  Future<_CategoryExport> _loadCategories() async {
+    final List<BookTagRow> tags = await database.getAllTags();
+    final Set<int> usedOrders = <int>{};
+    final Map<int, int> orderByTagId = <int, int>{};
+    final List<MihonBackupCategory> categories = <MihonBackupCategory>[];
+    for (final BookTagRow tag in tags) {
+      int order = tag.sortOrder < 0 ? 0 : tag.sortOrder;
+      while (usedOrders.contains(order)) {
+        order++;
+      }
+      usedOrders.add(order);
+      orderByTagId[tag.id] = order;
+      categories.add(
+        MihonBackupCategory(name: tag.name, order: order, id: tag.id),
+      );
+    }
+
+    final List<TagAssignmentRow> assignments = await database
+        .getTagAssignmentsForKind(TagHostKind.epub);
+    final Map<String, List<int>> ordersByBookKey = <String, List<int>>{};
+    for (final TagAssignmentRow assignment in assignments) {
+      final int? order = orderByTagId[assignment.tagId];
+      if (order == null) continue;
+      ordersByBookKey
+          .putIfAbsent(assignment.entryKey, () => <int>[])
+          .add(order);
+    }
+    for (final List<int> orders in ordersByBookKey.values) {
+      orders.sort();
+    }
+    return _CategoryExport(
+      categories: List<MihonBackupCategory>.unmodifiable(categories),
+      ordersByBookKey: ordersByBookKey,
+    );
+  }
+
   Future<Map<int, String>> _knownSourceNames() async {
     final List<MangaOnlineSourceRow> sources = await database
         .getMangaOnlineSources(mediaKind: 'manga');
@@ -525,6 +674,21 @@ class MihonBackupExporter {
     final String? trimmed = value?.trim();
     return trimmed == null || trimmed.isEmpty ? null : value;
   }
+}
+
+/// Resolved category section: the exported Mihon categories plus each book's
+/// category orders (never tag ids — Mihon references categories by order).
+class _CategoryExport {
+  const _CategoryExport({
+    required this.categories,
+    required this.ordersByBookKey,
+  });
+
+  final List<MihonBackupCategory> categories;
+  final Map<String, List<int>> ordersByBookKey;
+
+  List<int> ordersFor(String bookKey) =>
+      ordersByBookKey[bookKey] ?? const <int>[];
 }
 
 class _ExportableManga {

@@ -42,9 +42,11 @@ Future<String?> pickMihonBackupSavePath({
 
 /// 「创建备份」页：Bookshelf / Settings group cards with a bottom 创建 button.
 ///
-/// History, categories and tracking are appended to these same groups by later
-/// tickets. The Settings group carries 应用设置 / 插件商店 / 图源设置 and the
-/// 「包含敏感设置」gate that requires at least one of the two settings sections.
+/// Ticket 07 delivers the Library options (书架中的作品 / 章节) and the file
+/// plumbing; ticket 09 adds 分类 (Categories), ticket 10 adds 进度记录
+/// (Tracking), ticket 11 adds 应用设置 / 包含敏感设置 and ticket 12 adds
+/// 插件商店 / 图源设置 in the 设置 card. History is appended by a later ticket;
+/// an empty group card is not rendered.
 class CreateBackupPage extends ConsumerStatefulWidget {
   const CreateBackupPage({super.key, this.savePathPicker, this.exporter});
 
@@ -63,6 +65,8 @@ class _CreateBackupPageState extends ConsumerState<CreateBackupPage> {
   // persisted (spec: 每次打开创建备份页都恢复默认勾选).
   bool _includeLibrary = true;
   bool _includeChapters = true;
+  bool _includeTracking = true;
+  bool _includeCategories = true;
   bool _includeAppSettings = true;
   bool _includeExtensionStores = true;
   bool _includeSourceSettings = true;
@@ -72,10 +76,11 @@ class _CreateBackupPageState extends ConsumerState<CreateBackupPage> {
   bool get _sensitiveSettingsAvailable =>
       _includeAppSettings || _includeSourceSettings;
 
-  /// Standalone exportable sections. Later tickets add 分类 / 历史 / 进度记录
-  /// here.
+  /// Standalone exportable sections: 书架中的作品, 分类, 应用设置, 插件商店 and
+  /// 图源设置. 章节 and 进度记录 depend on 书架中的作品.
   bool get _canCreate =>
       _includeLibrary ||
+      _includeCategories ||
       _includeAppSettings ||
       _includeExtensionStores ||
       _includeSourceSettings;
@@ -83,6 +88,8 @@ class _CreateBackupPageState extends ConsumerState<CreateBackupPage> {
   MihonBackupExportOptions get _options => MihonBackupExportOptions(
     includeLibrary: _includeLibrary,
     includeChapters: _includeLibrary && _includeChapters,
+    includeTracking: _includeLibrary && _includeTracking,
+    includeCategories: _includeCategories,
     includeAppSettings: _includeAppSettings,
     includeExtensionStores: _includeExtensionStores,
     includeSourceSettings: _includeSourceSettings,
@@ -156,6 +163,31 @@ class _CreateBackupPageState extends ConsumerState<CreateBackupPage> {
                 setState(() => _includeChapters = value ?? false);
               }
             : null,
+      ),
+      FushiCheckboxListTile(
+        key: const Key('create_backup_include_tracking'),
+        contentPadding: EdgeInsets.zero,
+        controlAffinity: ListTileControlAffinity.leading,
+        value: _includeTracking,
+        enabled: _includeLibrary,
+        title: Text(t.backup_create_tracking),
+        onChanged: _includeLibrary
+            ? (bool? value) {
+                setState(() => _includeTracking = value ?? false);
+              }
+            : null,
+      ),
+      // 分类 = Tags exported as Mihon categories. It is deliberately not tied
+      // to 书架中的作品 so a tags-only backup can be created.
+      FushiCheckboxListTile(
+        key: const Key('create_backup_include_categories'),
+        contentPadding: EdgeInsets.zero,
+        controlAffinity: ListTileControlAffinity.leading,
+        value: _includeCategories,
+        title: Text(t.backup_create_categories),
+        onChanged: (bool? value) {
+          setState(() => _includeCategories = value ?? false);
+        },
       ),
     ];
     // 应用设置 exports MyComic's own preference keys; 插件商店 exports every
