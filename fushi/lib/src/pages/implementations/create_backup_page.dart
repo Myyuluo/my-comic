@@ -443,6 +443,18 @@ class _CreateBackupResultDialog extends StatelessWidget {
             ? Icons.check_circle_outline
             : Icons.error_outline,
         scrollable: true,
+        bodyPadding: EdgeInsets.fromLTRB(
+          tokens.spacing.card,
+          0,
+          tokens.spacing.card,
+          tokens.spacing.gap,
+        ),
+        footerPadding: EdgeInsets.fromLTRB(
+          tokens.spacing.card,
+          tokens.spacing.gap,
+          tokens.spacing.card,
+          tokens.spacing.card,
+        ),
         body: Text(
           error == null
               ? t.backup_create_saved_path(path: targetPath)
