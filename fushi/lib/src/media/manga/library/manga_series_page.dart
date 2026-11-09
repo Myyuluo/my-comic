@@ -14,6 +14,7 @@ import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi/src/media/manga/download/download_library_index.dart';
 import 'package:fushi/src/media/manga/download/manga_download_service.dart';
 import 'package:fushi/src/media/manga/history/manga_history.dart';
+import 'package:fushi/src/media/manga/library/manga_chapter_download_state.dart';
 import 'package:fushi/src/media/manga/library/manga_chapter_list.dart';
 import 'package:fushi/src/media/manga/library/manga_download_planner.dart';
 import 'package:fushi/src/media/manga/library/manga_resume_point.dart';
@@ -22,6 +23,10 @@ import 'package:fushi/src/media/manga/manga_global_search_page.dart';
 import 'package:fushi/src/media/manga/mihon/mihon_enabled_sources.dart';
 import 'package:fushi/src/media/manga/mihon/mihon_manager.dart';
 import 'package:fushi/src/media/manga/mihon/mihon_runtime_factory.dart';
+import 'package:fushi/src/media/selection/media_selection_controller.dart';
+import 'package:fushi/src/media/selection/selection_gestures.dart';
+import 'package:fushi/src/utils/components/batch_action_bar.dart';
+import 'package:fushi/src/utils/components/section_visibility.dart';
 import 'package:fushi/src/utils/misc/reveal_in_file_manager.dart'
     show currentRevealHost, revealFirstOf;
 import 'package:fushi/src/media/display_title.dart';
@@ -198,6 +203,15 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
   /// 章节下载筛选（ticket 06）：与「只看未读」一样是会话内状态，不持久化。
   MangaChapterDownloadFilter _downloadFilter = MangaChapterDownloadFilter.all;
 
+  /// 章节多选状态机（与书架 / 本地图源页共用 [MediaSelectionController]）。
+  /// 选择状态放在作品页级，不放进会随下载状态重建的章节行子树里。选中键 = 章节 key。
+  final MediaSelectionController _selection = MediaSelectionController();
+
+  /// 批量已读 / 未读进行中：防止重复点击与并发写库。
+  bool _batchRunning = false;
+
+  bool get _selectionMode => _selection.active;
+
   /// 正文滚动（窄屏整页 / 宽屏右栏）：快速滚动条与「跳到当前章节」都挂在它上。
   final ScrollController _scroll = ScrollController();
   final GlobalKey _currentChapterAnchor = GlobalKey(
@@ -295,11 +309,11 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
       );
       if (currentIndex >= 0) {
         final MangaChapterStateRow? state = _states[currentKey];
-        final bool advance = state != null &&
+        final bool advance =
+            state != null &&
             switch (target) {
               MangaResumeTarget.furthestProgress => state.readAt != null,
-              MangaResumeTarget.lastPosition =>
-                mangaChapterStoppedAtEnd(state),
+              MangaResumeTarget.lastPosition => mangaChapterStoppedAtEnd(state),
             };
         if (!advance) return currentIndex;
         for (int i = currentIndex + 1; i < _localChapters.length; i++) {
@@ -1668,6 +1682,191 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     unawaited(_refreshDownloadState());
   }
 
+  /// 当前展示的章节条目：在线描述符优先，本地图源借展示条目。
+  OnlineMangaLibraryEntry? get _displayEntry => _entry ?? _localDisplayEntry;
+
+  /// 与共享章节列表内部完全相同的下载状态口径（ticket 06）：多选的可见域必须
+  /// 跟着下载筛选走。
+  MangaChapterDownloadState _downloadStateOf(OnlineMangaChapter chapter) =>
+      MangaChapterList.downloadStateOf(
+        chapter: chapter,
+        downloadedChapterKeys: _isLocalSource
+            ? _localChapters
+                  .map((LocalSourceChapterRecord chapter) => chapter.key)
+                  .toSet()
+            : _downloaded,
+        missingChapterKeys: _isLocalSource
+            ? _localMissingChapterKeys
+            : const <String>{},
+        jobsByChapterKey: _jobs,
+      );
+
+  /// 当前筛选（只看未读 + 下载状态）+ 排序后真正渲染出来的章节
+  /// （顺序 = 屏幕顺序）。
+  List<OnlineMangaChapter> get _visibleChapters =>
+      MangaChapterList.visibleChapters(
+        chapters: _displayEntry?.chapters ?? const <OnlineMangaChapter>[],
+        states: _states,
+        newestFirst: _newestFirst,
+        unreadOnly: _unreadOnly,
+        downloadFilter: _downloadFilter,
+        downloadStateOf: _downloadStateOf,
+      );
+
+  /// 每帧把可见章节序登记给选择状态机：全选 / 反选与批量动作只认这份可见序。
+  ///
+  /// 可见序是 build 期算出来的，批量栏在同一帧更早的位置已读过选中集，会慢一
+  /// 拍；可见序变了且正在多选时补一帧（与书架 / 本地图源页同一约定）。
+  void _syncVisibleSelectionOrder() {
+    final bool changed = _selection.setVisibleOrder(
+      loose: <String>[
+        for (final OnlineMangaChapter chapter in _visibleChapters) chapter.key,
+      ],
+      collections: const <int>[],
+    );
+    if (!changed || !_selectionMode) return;
+    WidgetsBinding.instance.addPostFrameCallback((Duration _) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  void _exitSelectionMode() {
+    if (!_selectionMode) return;
+    setState(_selection.exit);
+  }
+
+  /// 多选态内单击章节：切换选中；取消最后一项 = 清空选择，退出多选。
+  /// 非多选态保持原语义：打开该章。
+  void _handleChapterTap(OnlineMangaChapter chapter) {
+    if (_selectionMode) {
+      setState(() {
+        _selection.toggle(SelectionSlot.loose(chapter.key));
+        if (_selection.isEmpty) _selection.exit();
+      });
+      return;
+    }
+    final int index = _displayEntry?.indexOfChapterKey(chapter.key) ?? -1;
+    if (index >= 0) unawaited(_openChapterAt(index));
+  }
+
+  /// 长按章节进入多选并选中它。多选态内的长按交给 [SelectionDragArea] 扫选，
+  /// 所以章节行在多选态不挂这个回调。
+  void _handleChapterLongPress(OnlineMangaChapter chapter) {
+    if (_batchRunning) return;
+    setState(() => _selection.enterWith(SelectionSlot.loose(chapter.key)));
+  }
+
+  void _selectAllChapters() {
+    setState(
+      () => _selection.selectAll(
+        loose: _selection.visibleLooseKeys,
+        collections: const <int>[],
+      ),
+    );
+  }
+
+  void _invertChapterSelection() {
+    setState(() {
+      _selection.invert(
+        loose: _selection.visibleLooseKeys,
+        collections: const <int>[],
+      );
+      if (_selection.isEmpty) _selection.exit();
+    });
+  }
+
+  /// 当前可见且选中的章节（批量动作的作用域；被筛选隐藏的选中项不参与）。
+  List<OnlineMangaChapter> get _selectedVisibleChapters {
+    final Set<String> keys = _selection.looseKeys;
+    if (keys.isEmpty) return const <OnlineMangaChapter>[];
+    return <OnlineMangaChapter>[
+      for (final OnlineMangaChapter chapter in _visibleChapters)
+        if (keys.contains(chapter.key)) chapter,
+    ];
+  }
+
+  /// 批量标记已读 / 未读：只写章级 `readAt`，与单章菜单同一套数据库动作，不
+  /// 改书级 `completedAt`，也不弹确认。混合选择只处理适用子集。
+  Future<void> _batchMarkRead({required bool read}) async {
+    final String? bookUid = _bookUid;
+    if (bookUid == null || _batchRunning) return;
+    final List<OnlineMangaChapter> targets = _selectedVisibleChapters
+        .where(
+          (OnlineMangaChapter chapter) => read
+              ? _states[chapter.key]?.readAt == null
+              : _states[chapter.key]?.readAt != null,
+        )
+        .toList(growable: false);
+    if (targets.isEmpty) return;
+    setState(() => _batchRunning = true);
+    try {
+      if (read) {
+        await _appModel.database.markMangaChaptersRead(
+          bookUid: bookUid,
+          chapterKeys: <String>[
+            for (final OnlineMangaChapter chapter in targets) chapter.key,
+          ],
+        );
+      } else {
+        // 逐章清除与单章「标为未读」是同一个动作（保留 lastPage / 页数）。
+        for (final OnlineMangaChapter chapter in targets) {
+          await _appModel.database.clearMangaChapterRead(
+            bookUid: bookUid,
+            chapterKey: chapter.key,
+          );
+        }
+      }
+      await _reloadChapterStates();
+      _syncVisibleSelectionOrder();
+    } finally {
+      if (mounted) {
+        setState(() {
+          _batchRunning = false;
+          // 「只看未读」下标记已读会让选中项从可见集消失；清空后退出多选，
+          // 不让用户停在一个没有批量栏、点一下却只是勾选的状态里。
+          if (_selectionMode && _selection.isEmpty) _selection.exit();
+        });
+      }
+    }
+  }
+
+  /// 底部批量栏：已选 N / 全选 / 反选 + 标记已读（圆形空心对勾）/ 标记未读
+  /// （圆形实心对勾）。全部已选已读时已读置灰，全部未读时未读置灰。
+  Widget _buildBatchActionBar(BuildContext context) {
+    final List<OnlineMangaChapter> selected = _selectedVisibleChapters;
+    final bool canMarkRead =
+        _bookUid != null &&
+        selected.any(
+          (OnlineMangaChapter chapter) => _states[chapter.key]?.readAt == null,
+        );
+    final bool canMarkUnread =
+        _bookUid != null &&
+        selected.any(
+          (OnlineMangaChapter chapter) => _states[chapter.key]?.readAt != null,
+        );
+    return BatchActionBar(
+      selectedCount: _selection.length,
+      onSelectAll: _selectAllChapters,
+      onInvertSelection: _invertChapterSelection,
+      actions: <Widget>[
+        FushiIconButton(
+          key: const ValueKey<String>('manga_series_batch_mark_read'),
+          enabled: canMarkRead && !_batchRunning,
+          onTap: () => unawaited(_batchMarkRead(read: true)),
+          icon: FushiIcons.success,
+          tooltip: t.manga_series_mark_read,
+        ),
+        FushiIconButton(
+          key: const ValueKey<String>('manga_series_batch_mark_unread'),
+          enabled: canMarkUnread && !_batchRunning,
+          onTap: () => unawaited(_batchMarkRead(read: false)),
+          icon: FushiIcons.filled(FushiIcons.success),
+          tooltip: t.manga_series_mark_unread,
+        ),
+      ],
+    );
+  }
+
   Future<void> _toggleChapterRead(OnlineMangaChapter chapter) async {
     final String? bookUid = _bookUid;
     if (bookUid == null) return;
@@ -1688,18 +1887,27 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
 
   /// 标记「这一章及更早的全部」为已读。
   ///
-  /// 「更早」= 列表里**它之后**的所有章：源按新→旧返回，所以下标越大越旧。
+  /// 「更早」按**阅读顺序**算，与列表当前排序无关：
+  /// * 在线源按新→旧返回，所以列表里**它之后**（下标更大）的章更旧；
+  /// * 本地源按自然顺序（第 1 话→第 N 话）返回，所以**它之前**（下标更小）的
+  ///   章更早。
+  ///
+  /// 本地源没有在线描述符，借用作品页的展示条目取章节 key。
   Future<void> _markUpToRead(OnlineMangaChapter chapter) async {
     final String? bookUid = _bookUid;
-    final OnlineMangaLibraryEntry? entry = _entry;
+    final OnlineMangaLibraryEntry? entry = _entry ?? _localDisplayEntry;
     if (bookUid == null || entry == null) return;
     final int index = entry.indexOfChapterKey(chapter.key);
     if (index < 0) return;
+    final bool localOrder = entry.runtime == OnlineMangaRuntimeKind.local;
     await _appModel.database.markMangaChaptersRead(
       bookUid: bookUid,
       chapterKeys: <String>[
-        for (int i = index; i < entry.chapters.length; i++)
-          entry.chapters[i].key,
+        if (localOrder)
+          for (int i = 0; i <= index; i++) entry.chapters[i].key
+        else
+          for (int i = index; i < entry.chapters.length; i++)
+            entry.chapters[i].key,
       ],
     );
     await _reloadChapterStates();
@@ -1726,11 +1934,31 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     final String title = _displayTitle;
     // 正文铺到悬浮页头底下（脚手架默认 extendBodyBehindHeader）：封面模糊背景
     // 一直画到窗口顶端，页头只是胶囊。
-    return FushiPageScaffold(
-      // hero 里已有大标题：顶栏标题等它滚出视口再淡入（不同屏重复）。
-      revealTitleAfterScroll: kMediaDetailTitleRevealOffset,
-      title: title,
-      body: _buildBody(context),
+    return SectionPopScope(
+      // 多选态吃返回键 / ESC：先退出多选，再允许离开作品页。
+      intercepting: _selectionMode,
+      onIntercept: _exitSelectionMode,
+      child: SelectionDragArea(
+        // 多选态才接管长按扫选；非多选态章行长按归自己（进入多选）。
+        enabled: _selectionMode,
+        onDragBegin: (SelectionSlot slot) =>
+            setState(() => _selection.beginRangeDrag(slot)),
+        onDragUpdate: (SelectionSlot slot) =>
+            setState(() => _selection.updateRangeDrag(slot)),
+        onDragEnd: () => setState(_selection.endRangeDrag),
+        child: FushiPageScaffold(
+          // hero 里已有大标题：顶栏标题等它滚出视口再淡入（不同屏重复）。
+          revealTitleAfterScroll: kMediaDetailTitleRevealOffset,
+          title: title,
+          body: _buildBody(context),
+          // 批量栏作为底部栏参与布局（不遮住最后一章）。没有可见选中项时隐藏；
+          // 退出多选的收起动画继续画上一帧（计数不会先闪成 0）。
+          bottomNavigationBar: BatchActionBarHost(
+            visible: _selectionMode && _selection.isNotEmpty,
+            builder: _buildBatchActionBar,
+          ),
+        ),
+      ),
     );
   }
 
@@ -1769,7 +1997,7 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     final double page = FushiDesignTokens.of(context).spacing.page;
     // 宽屏两栏：左 hero（封面 / 标题 / 操作 / 简介）独立滚动，右章节列表；窄屏
     // 单列。BUG-2440 的底部安全区由 MediaDetailLayout 的尾部 SliverSafeArea 补。
-    return FushiEntranceScope(
+    final Widget content = FushiEntranceScope(
       child: MangaChapterFastScrollbar(
         controller: _scroll,
         notificationPredicate: _isBodyScroll,
@@ -1799,14 +2027,24 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
         ),
       ),
     );
+    // 多选态点空白处退出（章节行 / 筛选 chip / 按钮自己的点击会赢下手势竞技场，
+    // 不会误触退出）。非多选态不注册识别器，行为与之前完全一致。
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onTap: _selectionMode ? _exitSelectionMode : null,
+      child: content,
+    );
   }
 
   /// 章节区：刷新中顶一条波浪进度（原 AppBar 刷新钮的转圈挪进了「⋯」菜单，
   /// 进行中的反馈落在被刷新的列表上）+ 共享的 [MangaChapterList]。
   Widget _buildChapterList(BuildContext context) {
+    // 每帧把当前筛选 / 排序后的可见章节序登记给多选状态机（全选 / 反选 /
+    // 批量动作的唯一定义域）。
+    _syncVisibleSelectionOrder();
     // Local source 条目没有在线描述符，但共享章节列表只消费 `entry.chapters`；
     // 借一个展示用条目，回调仍走本地分支（[_openChapterAt] 不碰在线 service）。
-    final OnlineMangaLibraryEntry? displayEntry = _entry ?? _localDisplayEntry;
+    final OnlineMangaLibraryEntry? displayEntry = _displayEntry;
     final bool online = _entry != null;
     // 在线源用描述符里的选中章；本地图源读 LocalSourceMetadata.currentChapterKey
     //（打开 / 换章时由阅读器写回）。
@@ -1839,14 +2077,10 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
           downloadFilter: _downloadFilter,
           onDownloadFilterToggled: () =>
               setState(() => _downloadFilter = _downloadFilter.next),
-          onChapterTap: (OnlineMangaChapter chapter) {
-            final int index =
-                (_entry ?? _localDisplayEntry)?.indexOfChapterKey(
-                  chapter.key,
-                ) ??
-                -1;
-            if (index >= 0) unawaited(_openChapterAt(index));
-          },
+          onChapterTap: _handleChapterTap,
+          // 多选态里长按归 SelectionDragArea（扫选），行自身不再接长按。
+          onChapterLongPress: _selectionMode ? null : _handleChapterLongPress,
+          selectedChapterKeys: _selectionMode ? _selection.looseKeys : null,
           onToggleRead: _bookUid == null
               ? null
               : (OnlineMangaChapter chapter) =>

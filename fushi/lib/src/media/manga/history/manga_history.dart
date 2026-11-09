@@ -383,6 +383,26 @@ Future<void> deleteMangaHistoryForBook(
   await db.deleteMediaOpenHistory(identity.mediaSource, identity.mediaId);
 }
 
+/// 删除一条漫画历史（只删 `media_open_history` 行，不动阅读数据）。
+Future<void> deleteMangaHistoryEntry(
+  FushiDatabase db,
+  MangaHistoryEntry entry,
+) => db.deleteMediaOpenHistory(entry.mediaSource, entry.mediaId);
+
+/// 清空全部漫画历史（只删漫画来源行；EPUB / 视频等其它媒体历史保留）。
+///
+/// 只清历史记录：Reading progress、章节 `readAt`、书级完成标记与书架状态都不在
+/// 本函数的作用范围（ADR 0018）。
+Future<int> clearMangaHistory(FushiDatabase db) async {
+  final List<MediaOpenHistoryRow> rows = await db.getAllMediaOpenHistory();
+  int deleted = 0;
+  for (final MediaOpenHistoryRow row in rows) {
+    if (!isMangaHistorySource(row.mediaSource)) continue;
+    deleted += await db.deleteMediaOpenHistory(row.mediaSource, row.mediaId);
+  }
+  return deleted;
+}
+
 /// 历史页封面是否是一个仍然存在的本地文件。
 bool mangaHistoryCoverFileExists(String? path) {
   if (path == null || path.isEmpty) return false;
