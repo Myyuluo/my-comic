@@ -194,6 +194,9 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
   bool _newestFirst = true;
   bool _unreadOnly = false;
 
+  /// 章节下载筛选（ticket 06）：与「只看未读」一样是会话内状态，不持久化。
+  MangaChapterDownloadFilter _downloadFilter = MangaChapterDownloadFilter.all;
+
   /// 正文滚动（窄屏整页 / 宽屏右栏）：快速滚动条与「跳到当前章节」都挂在它上。
   final ScrollController _scroll = ScrollController();
   final GlobalKey _currentChapterAnchor = GlobalKey(
@@ -1782,6 +1785,9 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
                   duration: fushiMotionDuration(context, FushiMotion.medium),
                 ),
           onUnreadOnlyToggled: () => setState(() => _unreadOnly = !_unreadOnly),
+          downloadFilter: _downloadFilter,
+          onDownloadFilterToggled: () =>
+              setState(() => _downloadFilter = _downloadFilter.next),
           onChapterTap: (OnlineMangaChapter chapter) {
             final int index =
                 (_entry ?? _localDisplayEntry)?.indexOfChapterKey(
