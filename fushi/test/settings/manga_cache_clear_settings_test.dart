@@ -203,6 +203,49 @@ void main() {
     await tester.pump(const Duration(seconds: 3));
   });
 
+  testWidgets('平台不支持 WebView 清理时跳过并提示部分成功', (WidgetTester tester) async {
+    final GlobalKey<NavigatorState> navKey = GlobalKey<NavigatorState>();
+    FushiToast.navigatorKey = navKey;
+    final SettingsContext settings = await captureContext(
+      tester,
+      navigatorKey: navKey,
+    );
+
+    debugBuildMangaCacheClearService = (SettingsContext _) =>
+        MangaCacheClearService(
+          steps: <MangaCacheClearStep>[
+            _FakeStep(
+              id: 'webview_http',
+              label: 'WebView cache',
+              measured: 0,
+              onClear: () async => const MangaCacheClearStepResult(
+                id: 'webview_http',
+                freedBytes: 0,
+                skipped: true,
+              ),
+            ),
+          ],
+        );
+
+    final SettingsStatusItem item = clearItem(locationSection());
+    final Future<void> action = Future<void>.sync(
+      () => item.resolveAction(settings)!(settings),
+    );
+    await tester.pump();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('清除'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(t.cache_clear_partial(size: '0 B')),
+      findsOneWidget,
+      reason: '跳过的清理步骤必须作为部分成功提示，不能静默按全部成功',
+    );
+    await action;
+    // 让 toast 自动消失计时器跑完，避免 pending-timer。
+    await tester.pump(const Duration(seconds: 3));
+  });
+
   testWidgets('WebView profile 无法安全清理时跳过并提示部分成功', (WidgetTester tester) async {
     final GlobalKey<NavigatorState> navKey = GlobalKey<NavigatorState>();
     FushiToast.navigatorKey = navKey;

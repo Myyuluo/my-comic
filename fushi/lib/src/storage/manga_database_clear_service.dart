@@ -1,17 +1,24 @@
 import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 
+import 'package:fushi/src/media/sources/reader_fushi_source.dart';
 import 'package:fushi_core/fushi_core.dart';
 
 /// 清除数据库的三个阶段；进度框按它显示当前在做什么。
-enum MangaDatabaseClearStep { works, history, readingRecords }
+enum MangaDatabaseClearStep { works, history, readingState }
+
+/// 书行按「是否为漫画书架成员」的一次性分流结果。
+typedef _LibrarySplit = ({
+  Set<String> libraryUids,
+  List<String> notInLibraryKeys,
+});
 
 /// 待删除（或已删除）的数量。
 class MangaDatabaseClearCounts {
   const MangaDatabaseClearCounts({
     required this.works,
     required this.historyEntries,
-    required this.readingRecords,
+    required this.readingStateRows,
   });
 
   /// 不在 Library 中、将被记录级级联删除的作品数。
@@ -20,9 +27,10 @@ class MangaDatabaseClearCounts {
   /// `media_open_history` 行数（含未入书架作品的 snapshot 行）。
   final int historyEntries;
 
-  /// 无法归属 Library 作品的 `reader_positions` + `manga_chapter_states` 行数。
-  /// 包含「不在 Library 作品名下」与「完全无归属」两类。
-  final int readingRecords;
+  /// 无法归属 Library 作品的 Reading progress（`reader_positions`）与
+  /// Chapter 已读 / 章级进度（`manga_chapter_states`）行数。包含「不在 Library
+  /// 作品名下」与「完全无归属」两类。用户可见文案仍统称为「阅读记录」。
+  final int readingStateRows;
 }
 
 /// 进度通知：当前阶段与 0..1 的粗略进度。
@@ -50,9 +58,9 @@ class MangaDatabaseClearProgress {
 /// `readAt`、书级完成标记，也保留 Download library 文件与索引、Local source 目录
 /// 与文件、设置、源、扩展、搜索历史与 Tracking 数据。
 ///
-/// Library 成员判据与漫画书架同源：`ReaderFushiHistoryPage(mangaOnly: true)` 只列
-/// `format='manga'` 的 `epub_books` 行（`filterShelfEntriesByMangaSplit` 按
-/// [BookFormat.manga] 分流）。my-comic 只保留漫画域，因此其余 format 的
+/// Library 成员判据与漫画书架同源：复用
+/// [ReaderFushiSource.isMangaLibraryBookFormat]（书架列书按 `format` 派生
+/// `MangaFushiSource`）。my-comic 只保留漫画域，因此其余 format 的
 /// `epub_books` 行是不在 Library 中、不可达的遗留作品记录。
 class MangaDatabaseClearService {
   const MangaDatabaseClearService({
@@ -68,11 +76,13 @@ class MangaDatabaseClearService {
 
   /// 统计确认框要展示的将删除数量。读取后用户可能取消，所以 [run] 不依赖它。
   Future<MangaDatabaseClearCounts> measure() async {
-    final Set<String> libraryUids = await _libraryBookUids();
+    final _LibrarySplit split = await _librarySplit();
     return MangaDatabaseClearCounts(
-      works: (await _notInLibraryBookKeys()).length,
+      works: split.notInLibraryKeys.length,
       historyEntries: await _countAll(database.mediaOpenHistory),
-      readingRecords: await _countReadingRecordsOutsideLibrary(libraryUids),
+      readingStateRows: await _countReadingStateOutsideLibrary(
+        split.libraryUids,
+      ),
     );
   }
 
@@ -84,9 +94,9 @@ class MangaDatabaseClearService {
   }) async {
     final MangaDatabaseClearCounts counts = await database.transaction(
       () async {
-        final Set<String> libraryUids = await _libraryBookUids();
-        final List<String> notInLibrary = await _notInLibraryBookKeys();
-        final int readingRecords = await _countReadingRecordsOutsideLibrary(
+        final _LibrarySplit split = await _librarySplit();
+        final Set<String> libraryUids = split.libraryUids;
+        final int readingStateRows = await _countReadingStateOutsideLibrary(
           libraryUids,
         );
 
@@ -98,7 +108,7 @@ class MangaDatabaseClearService {
         );
         await debugBeforeStep?.call(MangaDatabaseClearStep.works);
         int worksDeleted = 0;
-        for (final String bookKey in notInLibrary) {
+        for (final String bookKey in split.notInLibraryKeys) {
           worksDeleted += await database.deleteEpubBook(bookKey);
         }
 
@@ -115,11 +125,11 @@ class MangaDatabaseClearService {
 
         onProgress?.call(
           const MangaDatabaseClearProgress(
-            step: MangaDatabaseClearStep.readingRecords,
+            step: MangaDatabaseClearStep.readingState,
             fraction: 0.85,
           ),
         );
-        await debugBeforeStep?.call(MangaDatabaseClearStep.readingRecords);
+        await debugBeforeStep?.call(MangaDatabaseClearStep.readingState);
         await (database.delete(
           database.readerPositions,
         )..where((t) => t.bookUid.isNotIn(libraryUids))).go();
@@ -130,43 +140,42 @@ class MangaDatabaseClearService {
         return MangaDatabaseClearCounts(
           works: worksDeleted,
           historyEntries: historyDeleted,
-          readingRecords: readingRecords,
+          readingStateRows: readingStateRows,
         );
       },
     );
     return counts;
   }
 
-  /// Library 的稳定身份集合（漫画书架条目的 `uid`）。
-  Future<Set<String>> _libraryBookUids() async {
+  /// 一次查询读出全部书行的身份列，再用共享的漫画书架成员判据
+  /// （[ReaderFushiSource.isMangaLibraryBookFormat]）分流。
+  ///
+  /// 不再分别写 `format = manga` / `format != manga` 两条镜像 SQL：任何书架
+  /// 判据变化只改共享谓词一处。
+  Future<_LibrarySplit> _librarySplit() async {
     final List<TypedResult> rows =
         await (database.selectOnly(database.epubBooks)
-              ..addColumns(<Expression<Object>>[database.epubBooks.uid])
-              ..where(
-                database.epubBooks.format.equals(BookFormat.manga.dbValue),
-              ))
+              ..addColumns(<Expression<Object>>[
+                database.epubBooks.bookKey,
+                database.epubBooks.uid,
+                database.epubBooks.format,
+              ]))
             .get();
-    return <String>{
-      for (final TypedResult row in rows)
-        if ((row.read(database.epubBooks.uid) ?? '').isNotEmpty)
-          row.read(database.epubBooks.uid)!,
-    };
-  }
-
-  /// 不在 Library 中的 `epub_books` 行；逐个交给记录级级联删除。
-  Future<List<String>> _notInLibraryBookKeys() async {
-    final List<TypedResult> rows =
-        await (database.selectOnly(database.epubBooks)
-              ..addColumns(<Expression<Object>>[database.epubBooks.bookKey])
-              ..where(
-                database.epubBooks.format
-                    .equals(BookFormat.manga.dbValue)
-                    .not(),
-              ))
-            .get();
-    return <String>[
-      for (final TypedResult row in rows) row.read(database.epubBooks.bookKey)!,
-    ];
+    final Set<String> libraryUids = <String>{};
+    final List<String> notInLibraryKeys = <String>[];
+    for (final TypedResult row in rows) {
+      final String? bookKey = row.read(database.epubBooks.bookKey);
+      if (bookKey == null) continue;
+      if (ReaderFushiSource.isMangaLibraryBookFormat(
+        row.read(database.epubBooks.format),
+      )) {
+        final String? uid = row.read(database.epubBooks.uid);
+        if (uid != null && uid.isNotEmpty) libraryUids.add(uid);
+      } else {
+        notInLibraryKeys.add(bookKey);
+      }
+    }
+    return (libraryUids: libraryUids, notInLibraryKeys: notInLibraryKeys);
   }
 
   Future<int> _countAll(TableInfo<Table, dynamic> table) async {
@@ -177,11 +186,11 @@ class MangaDatabaseClearService {
     return row.read(count) ?? 0;
   }
 
-  /// 无法归属 Library 作品的阅读记录行数：既包括不在 Library 作品名下的行
-  /// （随后由记录级级联删除），也包括完全无归属的孤儿行。
-  Future<int> _countReadingRecordsOutsideLibrary(
-    Set<String> libraryUids,
-  ) async {
+  /// 无法归属 Library 作品的阅读状态行数：既包括不在 Library 作品名下的行
+  /// （随后由记录级级联删除），也包括完全无归属的孤儿行。统计的是 Reading
+  /// progress（`reader_positions`）与 Chapter 已读 / 章级进度
+  /// （`manga_chapter_states`）两类行，不是「阅读次数」。
+  Future<int> _countReadingStateOutsideLibrary(Set<String> libraryUids) async {
     // 两张表同形（`book_uid` 是归属键），各自用自己表的列构造谓词。
     final Expression<int> positionCount = countAll();
     final TypedResult positions =

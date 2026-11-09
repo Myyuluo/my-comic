@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
+import 'package:fushi_engine/media/manga/local_source/local_source_metadata.dart'
+    show LocalSourceChapterRecord;
 
 /// 提供这条书架条目的在线漫画运行时。
 ///
@@ -76,6 +78,36 @@ String onlineMangaBookKeyFor({
   final String digest = sha256.convert(utf8.encode(identity)).toString();
   return '${runtime.wireValue}-${digest.substring(0, 32)}';
 }
+
+/// 把 Local source 的章节表借成共享章节列表 / 章级状态用的条目形态。
+///
+/// [OnlineMangaRuntimeKind.local] 不是在线运行时：没有 service / adapter，也不
+/// 会写进 `sourceMetadata`。作品页的展示条目与阅读器的章级上下文共用这一份
+/// 转换，避免三处各抄一遍构造。
+OnlineMangaLibraryEntry localSourceMangaLibraryEntry({
+  required String seriesKey,
+  required String title,
+  required List<LocalSourceChapterRecord> chapters,
+  int? currentChapterIndex,
+}) => OnlineMangaLibraryEntry(
+  runtime: OnlineMangaRuntimeKind.local,
+  extensionPackage: '',
+  sourceId: '',
+  series: OnlineMangaSeries(
+    key: seriesKey,
+    title: title,
+    raw: const <String, Object?>{},
+  ),
+  chapters: <OnlineMangaChapter>[
+    for (final LocalSourceChapterRecord chapter in chapters)
+      OnlineMangaChapter(
+        key: chapter.key,
+        name: chapter.name,
+        raw: const <String, Object?>{},
+      ),
+  ],
+  currentChapterIndex: currentChapterIndex,
+);
 
 /// 归一化后的章节。
 ///

@@ -22,8 +22,8 @@ import 'package:fushi/utils.dart';
 ///
 /// 复用现有设置状态行、对话框壳与进度指示器（ADR 0008）；动作只清显式缓存
 /// 目录，保留下载库、本地图源（含 `cover.jpg`）、History / Reading progress /
-/// 数据库与图源登录态。WebView / HTTP 缓存是 ticket 12，本文件通过
-/// [MangaCacheClearStep] 列表预留了扩展位。
+/// 数据库与图源登录态。占用与清理范围包含图片管理器磁盘缓存和 WebView / HTTP
+/// 缓存；后者只在 Windows（WebView2）上可清，其它平台跳过并按部分成功提示。
 ///
 /// 副标题的占用是异步测出来的：分组渲染时（[SettingsSection.liveListenable]）
 /// 触发一次，结果写进 [mangaCacheUsageBytes] 并只重建本分组。内存缓存不计入。
@@ -205,7 +205,8 @@ Future<void> clearMangaCache(SettingsContext settings) async {
 
   if (!settings.context.mounted) return;
   final String freed = FushiByteFormat.bytes(report.freedBytes);
-  if (report.hasFailures) {
+  // 失败与「当前平台跳过 WebView 清理」都不能宣称全部成功。
+  if (report.hasPartial) {
     FushiToast.show(
       msg: t.cache_clear_partial(size: freed),
       severity: ToastSeverity.warning,
@@ -218,7 +219,7 @@ Future<void> clearMangaCache(SettingsContext settings) async {
   );
 }
 
-/// 生产环境的默认步骤列表。ticket 12 在这里追加 WebView / HTTP 缓存步骤。
+/// 生产环境的默认步骤列表（含图片管理器磁盘缓存与 WebView / HTTP 缓存）。
 MangaCacheClearService _buildDefaultMangaCacheClearService(
   SettingsContext settings,
 ) {
@@ -237,13 +238,13 @@ MangaCacheClearService _buildDefaultMangaCacheClearService(
           Directory(p.join(paths.stateRoot.path, 'mihon', 'cache', 'covers')),
         ],
       ),
-      MangaCacheActiveDirectoryClearStep(
+      MangaCacheSessionPruneStep(
         id: 'stream_pages',
         label: t.cache_clear_step_stream,
         root: Directory(p.join(paths.cacheRoot.path, kMangaStreamCacheDirName)),
         pruneInactive: OnlineMangaReaderSession.pruneStaleStreamCaches,
       ),
-      MangaCacheActiveDirectoryClearStep(
+      MangaCacheSessionPruneStep(
         id: 'archive_pages',
         label: t.cache_clear_step_archive,
         root: Directory(
@@ -272,14 +273,16 @@ MangaCacheClearService _buildDefaultMangaCacheClearService(
         measureManagerBytes: imageCacheManager.store.getCacheSize,
         emptyManager: imageCacheManager.emptyCache,
       ),
-      // Ticket 12：只清默认与漫画 WebView profile 的 HTTP cache；WebView2 数据
-      // 目录（cookies / localStorage / IndexedDB / Preferences）不动。
-      if (Platform.isWindows)
-        MangaWebViewCacheClearStep(
-          id: 'webview_http',
-          label: t.cache_clear_step_webview,
-          profiles: buildMangaWebViewCacheProfiles(),
-        ),
+      // 只清默认与漫画 WebView profile 的 HTTP cache；WebView2 数据目录
+      // （cookies / localStorage / IndexedDB / Preferences）不动。清理依赖
+      // Windows WebView2 的 CDP 实现：其它平台保留步骤但标记 skipped，结果按
+      // 部分成功提示，不能静默当作全部清完。
+      MangaWebViewCacheClearStep(
+        id: 'webview_http',
+        label: t.cache_clear_step_webview,
+        supported: Platform.isWindows,
+        profiles: buildMangaWebViewCacheProfiles(stateRoot: paths.stateRoot),
+      ),
       MangaMemoryImageCacheClearStep(
         id: 'memory_images',
         label: t.cache_clear_step_memory_images,

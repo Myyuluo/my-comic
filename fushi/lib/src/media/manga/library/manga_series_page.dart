@@ -295,8 +295,11 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
   /// 本地图源「继续阅读」落到哪一章。
   ///
   /// 先回到上次读到的章（`currentChapterKey`）；按「重新打开位置」偏好已经读完
-  /// 这一章时前进到下一个未读章，否则从第一个未读章开始，全读完停在最后一章。
-  /// 本地顺序是第 1 话→第 N 话，前进方向与在线源相反（下标 +1）。
+  /// 这一章时前进到下一个未读章。后面没有未读章就停在当前章（读到最后一话时
+  /// 就是最后一章），**不**回落到更早的未读章——与在线源
+  /// [continueMangaChapterIndex] 的「读到最新一话就停在原地」一致。只有没有
+  /// 当前章（`currentChapterKey` 缺失或失配）时才从第一个未读章开始，全读完
+  /// 停在最后一章。本地顺序是第 1 话→第 N 话，前进方向与在线源相反（下标 +1）。
   int get _localResumeIndex {
     if (_localChapters.isEmpty) return -1;
     final MangaResumeTarget target = MangaResumeTargetKey.fromKey(
@@ -319,6 +322,8 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
         for (int i = currentIndex + 1; i < _localChapters.length; i++) {
           if (_states[_localChapters[i].key]?.readAt == null) return i;
         }
+        // 后面没有未读章：停在当前章（当前章即最后一章时也就是最后一章）。
+        return currentIndex;
       }
     }
     final int unread = _localChapters.indexWhere(
@@ -334,23 +339,10 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     if (_localChapters.isEmpty) return null;
     final LocalSourceManga? scanned = _scannedLocal;
     if (scanned != null) {
-      return OnlineMangaLibraryEntry(
-        runtime: OnlineMangaRuntimeKind.local,
-        extensionPackage: '',
-        sourceId: '',
-        series: OnlineMangaSeries(
-          key: localSourceBookKeyFor(scanned.directoryPath),
-          title: scanned.title,
-          raw: const <String, Object?>{},
-        ),
-        chapters: <OnlineMangaChapter>[
-          for (final LocalSourceChapterRecord chapter in _localChapters)
-            OnlineMangaChapter(
-              key: chapter.key,
-              name: chapter.name,
-              raw: const <String, Object?>{},
-            ),
-        ],
+      return localSourceMangaLibraryEntry(
+        seriesKey: localSourceBookKeyFor(scanned.directoryPath),
+        title: scanned.title,
+        chapters: _localChapters,
       );
     }
     final EpubBookRow? row = _row;
@@ -361,23 +353,10 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
         : _localChapters.indexWhere(
             (LocalSourceChapterRecord chapter) => chapter.key == currentKey,
           );
-    return OnlineMangaLibraryEntry(
-      runtime: OnlineMangaRuntimeKind.local,
-      extensionPackage: '',
-      sourceId: '',
-      series: OnlineMangaSeries(
-        key: row.bookKey,
-        title: row.title,
-        raw: const <String, Object?>{},
-      ),
-      chapters: <OnlineMangaChapter>[
-        for (final LocalSourceChapterRecord chapter in _localChapters)
-          OnlineMangaChapter(
-            key: chapter.key,
-            name: chapter.name,
-            raw: const <String, Object?>{},
-          ),
-      ],
+    return localSourceMangaLibraryEntry(
+      seriesKey: row.bookKey,
+      title: row.title,
+      chapters: _localChapters,
       currentChapterIndex: currentIndex >= 0 ? currentIndex : null,
     );
   }

@@ -164,7 +164,7 @@ void main() {
     expect(counts.works, 1, reason: '只有不在 Library 中的 epub_books 行');
     expect(counts.historyEntries, 2, reason: '全部 media_open_history 行');
     expect(
-      counts.readingRecords,
+      counts.readingStateRows,
       4,
       reason: '非 Library 作品名下的 2 条 + 无归属作品的 2 条孤儿行',
     );
@@ -239,11 +239,11 @@ void main() {
 
     expect(report.works, 1);
     expect(report.historyEntries, 2);
-    expect(report.readingRecords, 4);
+    expect(report.readingStateRows, 4);
     expect(progressSteps, <MangaDatabaseClearStep>[
       MangaDatabaseClearStep.works,
       MangaDatabaseClearStep.history,
-      MangaDatabaseClearStep.readingRecords,
+      MangaDatabaseClearStep.readingState,
     ]);
 
     // 删除对象。
@@ -366,12 +366,12 @@ void main() {
     final MangaDatabaseClearCounts counts = await service().measure();
     expect(counts.works, 0);
     expect(counts.historyEntries, 1);
-    expect(counts.readingRecords, 0);
+    expect(counts.readingStateRows, 0);
 
     final MangaDatabaseClearCounts report = await service().run();
     expect(report.works, 0);
     expect(report.historyEntries, 1);
-    expect(report.readingRecords, 0);
+    expect(report.readingStateRows, 0);
     expect(await db.getAllMediaOpenHistory(), isEmpty);
     expect(await db.getEpubBook(library.bookKey), isNotNull);
     expect(await db.select(db.readerPositions).get(), hasLength(1));

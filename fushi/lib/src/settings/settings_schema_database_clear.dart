@@ -83,7 +83,7 @@ Future<void> clearMangaDatabase(SettingsContext settings) async {
     body: t.database_clear_confirm_body(
       works: counts.works,
       history: counts.historyEntries,
-      records: counts.readingRecords,
+      records: counts.readingStateRows,
     ),
     confirmLabel: t.database_clear_button,
     destructive: true,
@@ -137,7 +137,7 @@ Future<void> clearMangaDatabase(SettingsContext settings) async {
     msg: t.database_clear_done(
       works: report.works,
       history: report.historyEntries,
-      records: report.readingRecords,
+      records: report.readingStateRows,
     ),
     severity: ToastSeverity.success,
   );
@@ -156,7 +156,7 @@ class MangaDatabaseClearProgressDialog extends StatelessWidget {
   static String _stepLabel(MangaDatabaseClearStep step) => switch (step) {
     MangaDatabaseClearStep.works => t.database_clear_step_works,
     MangaDatabaseClearStep.history => t.database_clear_step_history,
-    MangaDatabaseClearStep.readingRecords =>
+    MangaDatabaseClearStep.readingState =>
       t.database_clear_step_reading_records,
   };
 

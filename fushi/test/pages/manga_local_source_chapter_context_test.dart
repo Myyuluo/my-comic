@@ -31,6 +31,8 @@ import 'package:fushi/src/models/preferences_repository.dart';
 import 'package:fushi/src/platform/platform_providers.dart';
 import 'package:fushi/src/reader/reader_session_remote.dart';
 import 'package:fushi/src/storage/app_paths.dart';
+import 'package:fushi/src/utils/app_ui_scale.dart';
+import 'package:fushi_audio/fushi_audio.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_library.dart';
 
@@ -109,6 +111,40 @@ Widget _seriesHarness(AppModel appModel, String bookKey) => ProviderScope(
     ),
   ),
 );
+
+/// 记录作品页交给 openMedia 的 launchPageBuilder：断言「继续阅读」实际落到哪一章。
+class _CapturingOpenAppModel extends _LocalSourceTestAppModel {
+  _CapturingOpenAppModel({
+    required super.database,
+    required super.prefs,
+    required super.paths,
+    required super.directory,
+  });
+
+  Widget Function()? launchPageBuilder;
+
+  @override
+  Future<void> openMedia({
+    required WidgetRef ref,
+    required MediaSource mediaSource,
+    bool killOnPop = false,
+    bool pushReplacement = false,
+    MediaItem? item,
+    Bookmark? initialBookmarkJump,
+    bool recordHistory = true,
+    bool waitUntilClosed = true,
+    Widget Function()? launchPageBuilder,
+  }) async {
+    this.launchPageBuilder = launchPageBuilder;
+  }
+}
+
+MangaFushiPage _launchPage(Widget widget) => switch (widget) {
+  MangaFushiPage page => page,
+  FushiAppUiScaleNeutralizer(child: final Widget child) =>
+    child as MangaFushiPage,
+  _ => throw StateError('unexpected launch widget: $widget'),
+};
 
 const String _chapter1 = 'Ch 1';
 const String _chapter2 = 'Ch 2';
@@ -452,6 +488,85 @@ void main() {
       rows.singleWhere((MediaDetailItemRow row) => row.current).title,
       _chapter2,
       reason: 'currentChapterKey 指向的章才是当前章',
+    );
+  });
+
+  /// 作品页「继续阅读」实际交给阅读器的章下标。
+  Future<int> tapLocalContinueAndReadChapterIndex(
+    WidgetTester tester, {
+    required String currentChapterKey,
+    required String readChapterKey,
+  }) async {
+    late _CapturingOpenAppModel capturing;
+    late EpubBookRow row;
+    await tester.runAsync(() async {
+      await boot();
+      await writeChapter(_chapter1, 3);
+      await writeChapter(_chapter2, 4);
+      row = await insertLocalSourceRow(currentChapterKey: currentChapterKey);
+      await db.saveMangaChapterState(
+        bookUid: row.uid,
+        chapterKey: readChapterKey,
+        lastPage: 2,
+        pageCount: 3,
+        readAt: 1,
+      );
+      MediaSource.setDatabase(db);
+      capturing = _CapturingOpenAppModel(
+        database: db,
+        prefs: prefs,
+        paths: paths,
+        directory: paths.cacheRoot,
+      );
+      await tester.pumpWidget(_seriesHarness(capturing, row.bookKey));
+      await pumpUntilFound(
+        tester,
+        find.byKey(const ValueKey<String>('manga_series_title')),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      await tester.pump();
+      await tester.tap(
+        find.byKey(const ValueKey<String>('manga_series_open_local')),
+      );
+      for (int i = 0; i < 40 && capturing.launchPageBuilder == null; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+        await tester.pump();
+      }
+    });
+
+    expect(capturing.launchPageBuilder, isNotNull);
+    return _launchPage(capturing.launchPageBuilder!()).initialChapterIndex!;
+  }
+
+  testWidgets('本地继续阅读：当前章已读完且后面无未读章时停在当前章', (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(500, 1800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    expect(
+      await tapLocalContinueAndReadChapterIndex(
+        tester,
+        currentChapterKey: _chapter2,
+        readChapterKey: _chapter2,
+      ),
+      1,
+      reason: '第 2 话是最后一话且已读完，不能倒退到更早的第 1 话',
+    );
+  });
+
+  testWidgets('本地继续阅读：当前章读完后面还有未读章时前进到下一未读章', (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(500, 1800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    expect(
+      await tapLocalContinueAndReadChapterIndex(
+        tester,
+        currentChapterKey: _chapter1,
+        readChapterKey: _chapter1,
+      ),
+      1,
+      reason: '第 1 话读完，第 2 话未读：自动前进到第 2 话',
     );
   });
 

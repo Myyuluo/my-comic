@@ -844,4 +844,35 @@ void main() {
     expect(after.single.openedAt, before.openedAt, reason: '无痕不刷新 openedAt');
     expect(after.single.snapshotJson, before.snapshotJson);
   });
+
+  test('历史不设条数上限：第 101 部作品仍保留', () async {
+    final FushiDatabase db = FushiDatabase.forTesting(NativeDatabase.memory());
+    addTearDown(db.close);
+
+    for (int i = 0; i < 101; i++) {
+      final String bookKey = 'history_cap_$i';
+      await db.insertEpubBook(
+        EpubBooksCompanion.insert(
+          bookKey: bookKey,
+          title: 'History Manga $i',
+          epubPath: '',
+          extractDir: '',
+          chapterCount: 1,
+          chaptersJson: '[]',
+          importedAt: i,
+          format: const Value<String>('manga'),
+        ),
+      );
+      await recordMangaHistoryOpened(
+        db: db,
+        row: (await db.getEpubBook(bookKey))!,
+      );
+    }
+
+    expect(
+      await db.getAllMediaOpenHistory(),
+      hasLength(101),
+      reason: 'History 不设条数上限，不得静默丢弃第 101 部作品',
+    );
+  });
 }

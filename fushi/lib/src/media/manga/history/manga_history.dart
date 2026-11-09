@@ -37,9 +37,6 @@ const String kMangaHistoryLocalSource = 'local_source';
 /// JSON 数组，避免扩展包 / 源 id 里出现分隔符时撞键。
 const String kMangaHistoryOnlineSourcePrefix = 'manga_online:';
 
-/// 历史页保留的漫画条数上限（与 [MediaHistoryRepository] 的默认上限一致）。
-const int kMangaHistoryMaxEntries = 100;
-
 /// 漫画历史的一行身份。
 class MangaHistoryIdentity {
   const MangaHistoryIdentity(this.mediaSource, this.mediaId);
@@ -319,9 +316,10 @@ Future<List<MangaHistoryEntry>> loadMangaHistory(FushiDatabase db) async {
 
 /// 打开章节进入阅读器时写入 / 更新一条漫画历史。
 ///
-/// 每部 Manga 一条：PK 命中时只刷新 `openedAt`（置顶）。调用方负责无痕阅读
-/// 跳过（`AppModel.incognitoReading` / `ReaderHistoryPolicy`）与「只打开详情页
-/// 不写」——本函数只被阅读器在真正装载章节时调用。
+/// 每部 Manga 一条：PK 命中时只刷新 `openedAt`（置顶）。History 不设条数
+/// 上限：这里不调用 `trimMediaHistory`，旧记录不会因读得多而被静默丢弃。
+/// 调用方负责无痕阅读跳过（`AppModel.incognitoReading` / `ReaderHistoryPolicy`）
+/// 与「只打开详情页不写」——本函数只被阅读器在真正装载章节时调用。
 Future<void> recordMangaHistoryOpened({
   required FushiDatabase db,
   required EpubBookRow row,
@@ -362,10 +360,6 @@ Future<void> recordMangaHistoryOpened({
       duration: const Value<int>(0),
       snapshotJson: Value<String>(jsonEncode(snapshot.toJson())),
     ),
-  );
-  await db.trimMediaHistory(
-    ReaderMediaType.instance.uniqueKey,
-    kMangaHistoryMaxEntries,
   );
 }
 

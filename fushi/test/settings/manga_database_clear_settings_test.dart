@@ -73,7 +73,7 @@ void main() {
   const MangaDatabaseClearCounts fixtureCounts = MangaDatabaseClearCounts(
     works: 2,
     historyEntries: 5,
-    readingRecords: 3,
+    readingStateRows: 3,
   );
 
   testWidgets('「清除数据库」行排在「清除缓存」之后，使用破坏性样式', (WidgetTester tester) async {

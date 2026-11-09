@@ -39,31 +39,73 @@ void main() {
     expect(mangaSession.disposed, isTrue);
   });
 
-  test('存在可见 WebView 时复用它的会话，不创建 headless WebView', () async {
-    final _FakeSession visible = _FakeSession('manga');
+  test('WebView 占用只读扫描安全的 HTTP cache 子目录', () async {
+    final Directory stateRoot = Directory.systemTemp.createTempSync(
+      'manga_webview_measure_',
+    );
+    addTearDown(() {
+      if (stateRoot.existsSync()) stateRoot.deleteSync(recursive: true);
+    });
+    void write(String relative, int bytes) {
+      final File file = File(
+        p.joinAll(<String>[stateRoot.path, ...relative.split('/')]),
+      )..createSync(recursive: true);
+      file.writeAsBytesSync(List<int>.filled(bytes, 0x41));
+    }
+
+    // 默认 profile 的安全 cache 子目录。
+    write('webview2/EBWebView/Default/Cache/data_0', 100);
+    write('webview2/EBWebView/Default/Code Cache/js/data_0', 50);
+    write('webview2/EBWebView/Default/GPUCache/data_0', 25);
+    // 漫画 profile，包含按代理参数派生后缀的兄弟目录。
+    write('webview2-manga/EBWebView/Default/Cache/data_0', 200);
+    write('webview2-manga-ab12/EBWebView/Default/Cache/data_0', 300);
+    // 登录态与站点数据绝不计入占用。
+    write('webview2/EBWebView/Default/Network/Cookies', 999);
+    write('webview2/EBWebView/Default/Local Storage/leveldb/000003.log', 999);
+    write('webview2/EBWebView/Default/IndexedDB/source/LOG', 999);
+    write('webview2/EBWebView/Default/Preferences', 999);
+
+    final MangaWebViewCacheClearStep step = MangaWebViewCacheClearStep(
+      id: 'webview_http',
+      label: 'WebView cache',
+      profiles: buildMangaWebViewCacheProfiles(stateRoot: stateRoot),
+    );
+
+    expect(await step.measureBytes(), 675);
+  });
+
+  test('平台不支持 WebView 清理时跳过并在结果中体现部分成功', () async {
     int headlessOpened = 0;
     final MangaWebViewCacheClearStep step = MangaWebViewCacheClearStep(
       id: 'webview_http',
       label: 'WebView cache',
+      supported: false,
       profiles: <MangaWebViewCacheProfile>[
         MangaWebViewCacheProfile(
-          id: 'manga',
+          id: 'default',
           sessionSource: MangaWebViewCacheSessionSource(
-            findVisible: () async => visible,
             openHeadless: () async {
               headlessOpened++;
-              return _FakeSession('manga');
+              return _FakeSession('default');
             },
           ),
         ),
       ],
     );
 
+    expect(await step.measureBytes(), 0);
     final MangaCacheClearStepResult result = await step.clear();
 
+    expect(result.skipped, isTrue);
     expect(result.failedEntries, 0);
-    expect(headlessOpened, 0, reason: '有可见 WebView 时不应再建 headless');
-    expect(visible.clearCalls, 1);
+    expect(headlessOpened, 0, reason: '不支持的平台不得创建 headless WebView');
+    expect(
+      MangaCacheClearReport(
+        steps: <MangaCacheClearStepResult>[result],
+      ).hasPartial,
+      isTrue,
+    );
   });
 
   test('某个 profile 清理失败时继续清理其余 profile 并报告部分成功', () async {
@@ -217,8 +259,14 @@ void main() {
   });
 
   test('默认步骤覆盖默认与漫画两个 WebView profile', () {
+    final Directory stateRoot = Directory.systemTemp.createTempSync(
+      'manga_webview_profiles_',
+    );
+    addTearDown(() {
+      if (stateRoot.existsSync()) stateRoot.deleteSync(recursive: true);
+    });
     final List<MangaWebViewCacheProfile> profiles =
-        buildMangaWebViewCacheProfiles();
+        buildMangaWebViewCacheProfiles(stateRoot: stateRoot);
 
     expect(
       profiles.map((MangaWebViewCacheProfile profile) => profile.id).toList(),
