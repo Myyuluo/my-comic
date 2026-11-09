@@ -148,6 +148,52 @@ void main() {
     ..sourceLabelText = label
     ..sourceLanguageText = language;
 
+  test('占位来源条目：按 (sourceId, series key) 命中，不从已安装来源重复入库',
+      () async {
+    final OnlineMangaLibraryEntry placeholder = OnlineMangaLibraryEntry(
+      runtime: OnlineMangaRuntimeKind.mihon,
+      // 导入时扩展未安装：身份保留真实数字 sourceId，扩展包是占位值。
+      extensionPackage: 'mihon.unavailable',
+      sourceId: '524579092615598717',
+      series: const OnlineMangaSeries(
+        key: '/series/fixture',
+        title: 'Fixture series',
+        raw: <String, Object?>{'url': '/series/fixture'},
+      ),
+      chapters: chapters,
+    );
+    final EpubBookRow existing = await service.add(placeholder);
+
+    // 安装扩展后从来源浏览到同一部作品：扩展包变为真实值，sourceId、key 不变。
+    final OnlineMangaLibraryEntry browsed = OnlineMangaLibraryEntry(
+      runtime: OnlineMangaRuntimeKind.mihon,
+      extensionPackage: 'org.example.fixture',
+      sourceId: '524579092615598717',
+      series: const OnlineMangaSeries(
+        key: '/series/fixture',
+        title: 'Fixture series',
+        raw: <String, Object?>{'url': '/series/fixture'},
+      ),
+      chapters: chapters,
+    );
+
+    final EpubBookRow? found = await service.find(browsed);
+    expect(found?.bookKey, existing.bookKey,
+        reason: '数字 sourceId + series key 相同就是同一部作品');
+    expect(await database.getAllEpubBooks(), hasLength(1));
+    expect(found!.uid, existing.uid, reason: '命中已有行，不新建身份/进度载体');
+
+    await service.add(browsed);
+    expect(await database.getAllEpubBooks(), hasLength(1),
+        reason: 'add 也不能为同一部作品建第二行');
+    final OnlineMangaLibraryEntry kept =
+        OnlineMangaLibraryEntry.tryParse(
+          (await database.getEpubBook(existing.bookKey))!.sourceMetadata,
+        )!;
+    expect(kept.extensionPackage, 'mihon.unavailable',
+        reason: '运行时回退不改写存量条目的扩展包身份');
+  });
+
   test('两个同名 Source 的下载落在不同目录，第二个带短源 ID 后缀', () async {
     final EpubBookRow first = await service.add(
       entryVariant(
