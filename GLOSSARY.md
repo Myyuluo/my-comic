@@ -24,6 +24,10 @@ _Avoid_: 插件、addon
 内容站点或来源，是搜索、详情、章节和页面的实际提供者，通常由 Extension 提供。图源列表也包含不由 Extension 提供的内置伪源，例如「本地图源」；这类源不进入扩展源枚举。
 _Avoid_: 扩展、插件
 
+**Missing source（缺失来源）**:
+被 Library 中的一部 Manga 引用、但对应 Source 未安装或未启用的状态。该 Manga 仍保留在 Library；备份带来的远程封面与本机已有封面仍可显示，已下载 Chapter 仍可离线阅读，但刷新章节、加载在线页面与下载需要先安装并启用对应 Extension。用户界面统一用「来源未安装」表达此状态，已知名称时显示「来源未安装：<名称>」。运行时按数字 sourceId 解析到已安装的 Source，不改写条目的来源身份，因此 Reading progress、Chapter 状态、History、Tag 与下载映射都无需迁移；同一数字 sourceId 命中多个已启用的 Source 时按缺失处理，不随意选择。
+_Avoid_: mihon.unavailable（内部占位值，不是领域术语）、来源失效、未知来源
+
 **Extension store（扩展仓库）**:
 Extension 的索引，例如 Keiyoushi 的 `index.pb`。它列出可安装的 Extension，本身不是 Source。
 _Avoid_: 插件仓库、repo（容易与 Git 仓库混淆）
