@@ -10,7 +10,10 @@ import 'dart:convert';
 
 /// `epub_books.sourceMetadata` 里 Local source 条目的标记。
 class LocalSourceMetadata {
-  const LocalSourceMetadata({required this.relativePath});
+  const LocalSourceMetadata({
+    required this.relativePath,
+    this.currentChapterKey,
+  });
 
   static const String marker = 'mycomic-local-source';
   static const int version = 1;
@@ -18,11 +21,22 @@ class LocalSourceMetadata {
   /// 相对 Local source root 的正斜杠路径。
   final String relativePath;
 
+  /// 当前阅读章的相对路径（[LocalSourceChapterRecord.key]）；null = 还没读过。
+  ///
+  /// 与 `manga_chapter_states.chapterKey` 同一个身份。它只表达「读到哪一章」，
+  /// 页内进度仍在章状态表里；章节改名/移动 = 新 key，旧记录自然失配。
+  final String? currentChapterKey;
+
   Map<String, Object?> toJson() => <String, Object?>{
     'kind': marker,
     'version': version,
     'relativePath': relativePath,
+    if (currentChapterKey != null) 'currentChapterKey': currentChapterKey,
   };
+
+  /// 只替换当前章，保留重启定位所需的 [relativePath]。
+  LocalSourceMetadata withCurrentChapterKey(String? key) =>
+      LocalSourceMetadata(relativePath: relativePath, currentChapterKey: key);
 
   String encode() => jsonEncode(toJson());
 
@@ -38,7 +52,11 @@ class LocalSourceMetadata {
       if (parsedVersion != version) return null;
       final String relativePath = json['relativePath']?.toString() ?? '';
       if (relativePath.isEmpty) return null;
-      return LocalSourceMetadata(relativePath: relativePath);
+      final String rawKey = json['currentChapterKey']?.toString() ?? '';
+      return LocalSourceMetadata(
+        relativePath: relativePath,
+        currentChapterKey: rawKey.isEmpty ? null : rawKey,
+      );
     } on Object {
       return null;
     }

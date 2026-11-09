@@ -4393,6 +4393,7 @@
   "manga_series_next_chapter": "Следующая глава",
   "manga_series_no_chapters": "Глав пока нет",
   "manga_series_no_chapters_in_language": "Этот источник содержит только главы на языке: ${language}",
+  "manga_series_no_chapters_match_filter": "No chapters match the current filters",
   "manga_series_ocr_all_downloaded": "Распознать все скачанные",
   "manga_series_ocr_all_none": "Нет скачанных глав, требующих распознавания",
   "manga_series_ocr_no_engine": "Нет доступного движка OCR",

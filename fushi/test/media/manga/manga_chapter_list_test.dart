@@ -61,10 +61,12 @@ void main() {
     String? currentChapterKey,
     Set<String> downloadedChapterKeys = const <String>{},
     Set<String> missingChapterKeys = const <String>{},
+    ThemeData? theme,
     void Function(OnlineMangaChapter)? onChapterTap,
   }) async {
     await tester.pumpWidget(
       MaterialApp(
+        theme: theme,
         home: Scaffold(
           body: SingleChildScrollView(
             child: MangaChapterList(
@@ -191,21 +193,142 @@ void main() {
     );
   });
 
-  testWidgets('当前章整行高亮', (WidgetTester tester) async {
+  // 2026-11 当前章样式：整行底色 / 序号胶囊主色 / 标题加粗都撤销，只留标题
+  // 文字主色；读了一半的进度条仍在。普通行、已读行维持原样。
+  testWidgets('当前章只把标题文字染成主色，普通行与已读行不变', (WidgetTester tester) async {
+    await pumpList(
+      tester,
+      entry: entryWith(chapters),
+      currentChapterKey: '/c/2',
+      states: <String, MangaChapterStateRow>{
+        '/c/3': _state(chapterKey: '/c/3', readAt: 1),
+        '/c/2': _state(chapterKey: '/c/2', lastPage: 5, pageCount: 20),
+      },
+    );
+    final ColorScheme cs = Theme.of(
+      tester.element(find.text('Chapter 1')),
+    ).colorScheme;
+
+    final Text currentTitle = tester.widget<Text>(find.text('Chapter 2'));
+    final Text normalTitle = tester.widget<Text>(find.text('Chapter 1'));
+    final Text readTitle = tester.widget<Text>(find.text('Chapter 3'));
+
+    expect(currentTitle.style?.color, cs.primary, reason: '当前章只靠标题主色定位');
+    expect(normalTitle.style?.color, cs.onSurface, reason: '普通行文字色不变');
+    expect(readTitle.style?.color, cs.onSurfaceVariant, reason: '已读行的降调文字色不变');
+    expect(
+      currentTitle.style?.fontWeight,
+      normalTitle.style?.fontWeight,
+      reason: '当前章标题不再使用 emphasized 字重',
+    );
+    expect(currentTitle.style?.fontSize, normalTitle.style?.fontSize);
+  });
+
+  testWidgets('当前章行无背景，序号胶囊保持常态配色', (WidgetTester tester) async {
     await pumpList(
       tester,
       entry: entryWith(chapters),
       currentChapterKey: '/c/2',
     );
-    // 几百话的表里，一个 trailing 小图标扫不到；整行底色才是能一眼定位的信号。
-    final List<MediaDetailItemRow> rows = tester
-        .widgetList<MediaDetailItemRow>(find.byType(MediaDetailItemRow))
-        .toList();
-    expect(rows, hasLength(3));
-    expect(rows.where((MediaDetailItemRow row) => row.current), hasLength(1));
+    final Finder currentRow = find.ancestor(
+      of: find.text('Chapter 2'),
+      matching: find.byType(MediaDetailItemRow),
+    );
+    final FushiGroupedListItem shell = tester.widget<FushiGroupedListItem>(
+      find
+          .descendant(
+            of: currentRow,
+            matching: find.byType(FushiGroupedListItem),
+          )
+          .first,
+    );
+    expect(shell.color, isNull, reason: '整行底色（含 Apple 的半透明前景罩）必须移除');
+
+    final ColorScheme cs = Theme.of(
+      tester.element(find.text('Chapter 1')),
+    ).colorScheme;
+    final DecoratedBox pill = tester.widget<DecoratedBox>(
+      find
+          .ancestor(of: find.text('2'), matching: find.byType(DecoratedBox))
+          .first,
+    );
     expect(
-      rows.singleWhere((MediaDetailItemRow row) => row.current).title,
-      'Chapter 2',
+      (pill.decoration as BoxDecoration).color,
+      cs.secondaryContainer,
+      reason: '序号胶囊恢复常态底，不再用 primary 实色',
+    );
+    final Text pillNumber = tester.widget<Text>(find.text('2'));
+    expect(
+      pillNumber.style?.color,
+      cs.onSecondaryContainer,
+      reason: '序号文字不再反色',
+    );
+  });
+
+  testWidgets('当前章读了一半仍显示行内进度条', (WidgetTester tester) async {
+    await pumpList(
+      tester,
+      entry: entryWith(chapters),
+      currentChapterKey: '/c/2',
+      states: <String, MangaChapterStateRow>{
+        '/c/2': _state(chapterKey: '/c/2', lastPage: 5, pageCount: 20),
+      },
+    );
+    final Finder currentRow = find.ancestor(
+      of: find.text('Chapter 2'),
+      matching: find.byType(MediaDetailItemRow),
+    );
+    expect(
+      find.descendant(
+        of: currentRow,
+        matching: find.byType(FushiLinearProgressIndicator),
+      ),
+      findsOneWidget,
+      reason: '当前章只换文字色，读了一半的进度条保留',
+    );
+    expect(
+      find.descendant(
+        of: find.ancestor(
+          of: find.text('Chapter 1'),
+          matching: find.byType(MediaDetailItemRow),
+        ),
+        matching: find.byType(FushiLinearProgressIndicator),
+      ),
+      findsNothing,
+      reason: '未读的普通行不凭空出现进度条',
+    );
+  });
+
+  testWidgets('Apple 玻璃主题下当前章也没有整行前景罩', (WidgetTester tester) async {
+    await pumpList(
+      tester,
+      entry: entryWith(chapters),
+      currentChapterKey: '/c/2',
+      theme: ThemeData(
+        extensions: const <ThemeExtension<dynamic>>[
+          FushiGlassTheme(FushiGlassMaterial.off, glassDesign: true),
+        ],
+      ),
+    );
+    final Finder currentRow = find.ancestor(
+      of: find.text('Chapter 2'),
+      matching: find.byType(MediaDetailItemRow),
+    );
+    final FushiGroupedListItem shell = tester.widget<FushiGroupedListItem>(
+      find
+          .descendant(
+            of: currentRow,
+            matching: find.byType(FushiGroupedListItem),
+          )
+          .first,
+    );
+    expect(shell.color, isNull, reason: 'Apple 用半透明主色做前景罩，也必须移除');
+    final ColorScheme cs = Theme.of(
+      tester.element(find.text('Chapter 1')),
+    ).colorScheme;
+    expect(
+      tester.widget<Text>(find.text('Chapter 2')).style?.color,
+      cs.primary,
     );
   });
 

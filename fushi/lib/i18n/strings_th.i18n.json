@@ -4393,6 +4393,7 @@
   "manga_series_next_chapter": "ตอนถัดไป",
   "manga_series_no_chapters": "ยังไม่มีตอน",
   "manga_series_no_chapters_in_language": "แหล่งนี้แสดงเฉพาะตอนภาษา ${language}",
+  "manga_series_no_chapters_match_filter": "No chapters match the current filters",
   "manga_series_ocr_all_downloaded": "จดจำทั้งหมดที่ดาวน์โหลดแล้ว",
   "manga_series_ocr_all_none": "ไม่มีตอนที่ดาวน์โหลดแล้วที่ต้องจดจำ",
   "manga_series_ocr_no_engine": "ไม่มีเอนจิน OCR ที่ใช้ได้",

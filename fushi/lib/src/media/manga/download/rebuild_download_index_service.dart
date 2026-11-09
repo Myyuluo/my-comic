@@ -729,8 +729,12 @@ class RebuildDownloadIndexService {
         ),
     ];
     final String chaptersJson = encodeLocalSourceChapters(scanned);
+    // 重建索引只刷新磁盘描述；当前章是阅读状态，原样保留。
     final LocalSourceMetadata updatedMetadata = LocalSourceMetadata(
       relativePath: found.relativePath,
+      currentChapterKey: LocalSourceMetadata.tryParse(
+        row.sourceMetadata,
+      )?.currentChapterKey,
     );
     final String? coverPath = localSourceCoverRelativePath(found);
     final bool moved = !_samePath(row.extractDir, found.directoryPath);

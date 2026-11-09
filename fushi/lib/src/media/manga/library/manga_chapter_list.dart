@@ -30,6 +30,31 @@ String mangaChapterDownloadFailedLabel(String? lastError) {
   return '${t.manga_chapter_download_status_failed} · $reason';
 }
 
+/// 章节下载三态筛选（ticket 06）：全部 → 已下载 → 未下载 → 全部。
+///
+/// 状态由作品页持有（会话内，不持久化），与「只看未读」AND 联动。「已下载」只认
+/// 磁盘上可读的章；排队中 / 下载中 / 暂停 / 文件缺失都算未下载。本地图源章节由
+/// 宿主作为已下载传入，因此恒为已下载。
+enum MangaChapterDownloadFilter {
+  all,
+  downloaded,
+  notDownloaded;
+
+  /// 点按循环：全部 → 已下载 → 未下载 → 全部。
+  MangaChapterDownloadFilter get next => switch (this) {
+    all => downloaded,
+    downloaded => notDownloaded,
+    notDownloaded => all,
+  };
+
+  /// chip 上显示当前状态的文字。
+  String get label => switch (this) {
+    all => t.home_filter_all,
+    downloaded => t.shelf_filter_download_downloaded,
+    notDownloaded => t.shelf_filter_download_not_downloaded,
+  };
+}
+
 /// 章节列表。
 ///
 /// 作品页和阅读器里的「章节」弹层用**同一个** widget：两处对「已读怎么显示、
@@ -51,6 +76,8 @@ class MangaChapterList extends StatelessWidget {
     this.currentChapterAnchorKey,
     this.onSortToggled,
     this.onJumpToCurrent,
+    this.downloadFilter = MangaChapterDownloadFilter.all,
+    this.onDownloadFilterToggled,
     this.onUnreadOnlyToggled,
     this.onToggleRead,
     this.onMarkUpToRead,
@@ -76,6 +103,7 @@ class MangaChapterList extends StatelessWidget {
   /// 源按新→旧返回，所以 `true` = 保持源顺序，`false` = 反转成第 1 话在前。
   final bool newestFirst;
   final bool unreadOnly;
+  final MangaChapterDownloadFilter downloadFilter;
   final String? currentChapterKey;
 
   /// 挂在当前章那一行上的 key：宿主拿它 `FushiFocusScroll.ensureVisible` 定位到当前章
@@ -89,6 +117,9 @@ class MangaChapterList extends StatelessWidget {
   /// 区块标题里的「跳到当前章节」；null = 不出现（没有当前章 / 宿主不支持）。
   final VoidCallback? onJumpToCurrent;
   final VoidCallback? onUnreadOnlyToggled;
+
+  /// 下载筛选 chip 的点击回调；null = 不出现（阅读器章节弹层不提供该筛选）。
+  final VoidCallback? onDownloadFilterToggled;
   final void Function(OnlineMangaChapter chapter)? onToggleRead;
   final void Function(OnlineMangaChapter chapter)? onMarkUpToRead;
   final bool showHeader;
@@ -154,11 +185,7 @@ class MangaChapterList extends StatelessWidget {
         if (chapters.isEmpty)
           _buildEmptyChapters(context)
         else if (visible.isEmpty)
-          _buildEmpty(
-            context,
-            t.manga_series_all_read,
-            icon: FushiIcons.success,
-          )
+          _buildFilterEmpty(context, chapters)
         else
           for (int i = 0; i < visible.length; i++)
             _buildRow(context, visible[i], i, visible.length),
@@ -167,17 +194,31 @@ class MangaChapterList extends StatelessWidget {
   }
 
   List<OnlineMangaChapter> _visibleChapters(List<OnlineMangaChapter> chapters) {
-    final Iterable<OnlineMangaChapter> filtered = unreadOnly
-        ? chapters.where(
-            (OnlineMangaChapter chapter) => states[chapter.key]?.readAt == null,
-          )
-        : chapters;
+    Iterable<OnlineMangaChapter> filtered = chapters;
+    if (unreadOnly) {
+      filtered = filtered.where(
+        (OnlineMangaChapter chapter) => states[chapter.key]?.readAt == null,
+      );
+    }
+    // 下载筛选与「只看未读」AND 联动。
+    filtered = filtered.where(_matchesDownloadFilter);
     final List<OnlineMangaChapter> ordered = filtered.toList(growable: false);
     if (newestFirst) return ordered;
     return ordered.reversed.toList(growable: false);
   }
 
-  /// 区块标题：「章节」+ 计数胶囊，行尾排序与只看未读。
+  /// 「已下载」只认磁盘上可读的章——`missing`（任务表 done 但文件没了）以及
+  /// 排队 / 下载中 / 暂停都不算。
+  bool _matchesDownloadFilter(OnlineMangaChapter chapter) =>
+      switch (downloadFilter) {
+        MangaChapterDownloadFilter.all => true,
+        MangaChapterDownloadFilter.downloaded =>
+          _downloadStateOf(chapter) == MangaChapterDownloadState.downloaded,
+        MangaChapterDownloadFilter.notDownloaded =>
+          _downloadStateOf(chapter) != MangaChapterDownloadState.downloaded,
+      };
+
+  /// 区块标题：「章节」+ 计数胶囊，行尾排序、下载筛选与只看未读。
   Widget _buildHeader(BuildContext context, int total) {
     return MediaDetailSectionHeader(
       t.mihon_chapters_title,
@@ -209,6 +250,15 @@ class MangaChapterList extends StatelessWidget {
               onPressed: onJumpToCurrent,
               icon: const FushiIcon(FushiIcons.myLocation),
             ),
+          if (onDownloadFilterToggled != null) ...<Widget>[
+            const SizedBox(width: 4),
+            FushiSelectableChip(
+              key: const ValueKey<String>('manga_chapter_download_filter'),
+              label: downloadFilter.label,
+              selected: downloadFilter != MangaChapterDownloadFilter.all,
+              onSelected: (_) => onDownloadFilterToggled!(),
+            ),
+          ],
           if (onUnreadOnlyToggled != null) ...<Widget>[
             const SizedBox(width: 4),
             FushiSelectableChip(
@@ -221,6 +271,27 @@ class MangaChapterList extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  /// 筛选后没有可见章：确实全部读完时沿用「所有章节都已读完」（只看未读的既有
+  /// 语义）；否则是下载筛选没有匹配，用通用文案，不把筛选结果说成「都读完了」。
+  Widget _buildFilterEmpty(
+    BuildContext context,
+    List<OnlineMangaChapter> chapters,
+  ) {
+    final bool allRead =
+        unreadOnly &&
+        chapters.every(
+          (OnlineMangaChapter chapter) => states[chapter.key]?.readAt != null,
+        );
+    if (allRead) {
+      return _buildEmpty(
+        context,
+        t.manga_series_all_read,
+        icon: FushiIcons.success,
+      );
+    }
+    return _buildEmpty(context, t.manga_series_no_chapters_match_filter);
   }
 
   Widget _buildEmptyChapters(BuildContext context) {
@@ -311,7 +382,7 @@ class MangaChapterList extends StatelessWidget {
             title: chapter.name,
             number: _numberLabel(chapter),
             subtitle: _buildSubtitle(chapter, state, partial),
-            // 几百话的表里一个行尾小图标扫不到，整行底色才是能一眼定位的信号。
+            // 当前章只把标题文字染成 primary，不再铺整行底色（2026-11）。
             current: current,
             completed: read,
             progress: partial && pageCount != null && pageCount > 0
