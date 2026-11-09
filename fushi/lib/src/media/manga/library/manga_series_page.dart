@@ -186,6 +186,13 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
       const <String, MangaChapterStateRow>{};
   String? _sourceLabel;
 
+  /// 来源名解析是否已经结束（成功拿到名称，或确认解析不到）。
+  ///
+  /// 只在确认解析不到后才显示「来源未安装」提示块：安装扩展后经数字 sourceId
+  /// 回退能解析出真实名称（票 03），那期间不该闪一下缺失提示。来源标签本身
+  /// 仍即时降级，不露出 `mihon.unavailable`。
+  bool _sourceLabelResolved = false;
+
   bool _loading = true;
   bool _refreshing = false;
 
@@ -946,6 +953,8 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
       _adapter = service?.adapter;
       _states = states;
       _localPosition = position;
+      _sourceLabel = null;
+      _sourceLabelResolved = false;
     });
     if (entry != null && service != null) {
       unawaited(_resolveSourceLabel(service.adapter, entry));
@@ -1000,6 +1009,7 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
       _service = null;
       _adapter = null;
       _sourceLabel = null;
+      _sourceLabelResolved = false;
     });
   }
 
@@ -1045,6 +1055,7 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
       _adapter = adapter;
       _service = shelf;
       _sourceLabel = sourceLabel;
+      _sourceLabelResolved = sourceLabel != null && sourceLabel.isNotEmpty;
       _states = states;
     });
     // 未入库的来源作品首屏是空的，自动拉一次；已入库则与书架路径同一规则：
@@ -1069,7 +1080,11 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     OnlineMangaLibraryEntry entry,
   ) async {
     final String? label = await adapter.sourceLabel(entry);
-    if (mounted && label != null) setState(() => _sourceLabel = label);
+    if (!mounted) return;
+    setState(() {
+      _sourceLabel = label;
+      _sourceLabelResolved = true;
+    });
   }
 
   /// 联网刷新作品详情 + 章节列表。
@@ -1225,9 +1240,7 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     return showTagPickerSelection(
       context,
       targets: TagTargets(
-        media: <MediaRef>[
-          MediaRef(kind: MediaKind.epub, entryKey: bookKey),
-        ],
+        media: <MediaRef>[MediaRef(kind: MediaKind.epub, entryKey: bookKey)],
       ),
     );
   }
@@ -2082,12 +2095,41 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
   }
 
   /// hero 标题上方的来源名（本地卷 / 源名 / 扩展包名）。
+  ///
+  /// 占位来源（导入时扩展未安装）不显示内部包名 `mihon.unavailable`：显示
+  /// 备份里保存的名称，名称未知时退化为「来源未安装」。来源安装后若运行时
+  /// 能经数字 sourceId 回退解析出真实名称（票 03），真实名称优先。
   String? _subtitle() {
     if (_isScannedLocal) return t.local_source_title;
     if (_isLocal) return t.manga_series_local_volume;
     final String? label = _sourceLabel;
     if (label != null && label.isNotEmpty) return label;
-    return _entry?.extensionPackage;
+    final OnlineMangaLibraryEntry? entry = _entry;
+    if (entry != null &&
+        entry.extensionPackage == kUnavailableMihonExtensionPackage) {
+      return _missingSourceLabel(entry);
+    }
+    return entry?.extensionPackage;
+  }
+
+  /// 缺失来源的文案：有备份名称就用「来源未安装：<名称>」，否则只给「来源未安装」。
+  String _missingSourceLabel(OnlineMangaLibraryEntry entry) {
+    final String? name = entry.sourceName?.trim();
+    return name == null || name.isEmpty
+        ? t.manga_series_source_missing
+        : t.manga_series_source_missing_named(name: name);
+  }
+
+  /// 占位来源且名称解析已经确认失败：作品页要主动解释离线边界。
+  ///
+  /// 解析结束前不显示（安装扩展后经 sourceId 回退能拿到真实来源，避免闪一下）；
+  /// 来源标签本身即时降级，不露出内部占位值。
+  bool get _showsMissingSourceNotice {
+    final OnlineMangaLibraryEntry? entry = _entry;
+    return entry != null &&
+        entry.extensionPackage == kUnavailableMihonExtensionPackage &&
+        _sourceLabelResolved &&
+        (_sourceLabel == null || _sourceLabel!.isEmpty);
   }
 
   /// 页面上是不是一点内容都没有。
@@ -2433,7 +2475,6 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
   /// 类型标签 + 可展开简介（+ 刷新失败提示条）。
   Widget _buildHeader(BuildContext context) {
     final OnlineMangaSeries? series = _entry?.series;
-    final OnlineMangaUnavailable? refreshError = _refreshError;
     final String title = _displayTitle;
     final String? authorLine = _authorLine;
     return OnlineWorkHeader(
@@ -2469,10 +2510,28 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
       primaryAction: _buildPrimaryAction(),
       secondaryActions: _buildSecondaryActions(),
       moreItems: _buildMoreItems(),
-      extra: refreshError == null
-          ? null
-          : _buildRefreshBanner(context, refreshError),
+      extra: _buildHeaderExtra(context),
     );
+  }
+
+  /// hero 简介后的附加提示。
+  ///
+  /// 来源确认缺失时给「只有本机已保存章节」的说明（不新增安装/跳转按钮，用户
+  /// 自行去扩展页安装）；否则沿用原有的刷新失败横幅。
+  Widget? _buildHeaderExtra(BuildContext context) {
+    final OnlineMangaLibraryEntry? entry = _entry;
+    if (entry != null && _showsMissingSourceNotice) {
+      return FushiInlineNotice(
+        key: const ValueKey<String>('manga_series_missing_source_notice'),
+        severity: FushiNoticeSeverity.warning,
+        title: _missingSourceLabel(entry),
+        message: t.manga_series_source_missing_hint,
+      );
+    }
+    final OnlineMangaUnavailable? refreshError = _refreshError;
+    return refreshError == null
+        ? null
+        : _buildRefreshBanner(context, refreshError);
   }
 
   /// 本地已落盘封面的路径；未入库 / 无封面为 null。

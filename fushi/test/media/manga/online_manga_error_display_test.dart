@@ -48,6 +48,22 @@ void main() {
       );
       expect(error.userMessage, 'The peer has not downloaded this chapter yet');
     });
+
+    test('sourceDisabled 映射为中文安装指引，不露英文内部错误', () {
+      LocaleSettings.setLocale(AppLocale.zhCn);
+      const OnlineMangaUnavailable error = OnlineMangaUnavailable(
+        OnlineMangaUnavailableReason.sourceDisabled,
+        'The manga source is missing or disabled',
+      );
+      expect(error.userMessage, t.online_source_error_source_disabled);
+      expect(error.userMessage, '来源未安装，请先安装对应扩展后重试');
+      expect(error.userMessage, isNot(contains('manga source')));
+      // 原始英文只留在可复制诊断里。
+      expect(
+        error.diagnostics,
+        contains('The manga source is missing or disabled'),
+      );
+    });
   });
 
   group('下载失败文案', () {
@@ -64,6 +80,35 @@ void main() {
         ),
         '${t.manga_chapter_download_status_failed} · '
         'Log in via WebView to read',
+      );
+    });
+
+    test('sourceDisabled 持久化原始串（章节下载失败）归一为中文安装指引', () {
+      LocaleSettings.setLocale(AppLocale.zhCn);
+      const String missing =
+          'OnlineMangaUnavailable(OnlineMangaUnavailableReason.sourceDisabled):'
+          ' The manga source is missing or disabled';
+      expect(
+        mangaChapterDownloadFailedLabel(missing),
+        '${t.manga_chapter_download_status_failed} · '
+        '${t.online_source_error_source_disabled}',
+      );
+      expect(
+        mangaChapterDownloadFailedLabel(missing),
+        contains('来源未安装，请先安装对应扩展后重试'),
+      );
+      expect(
+        mangaChapterDownloadFailedLabel(missing),
+        isNot(contains('manga source')),
+      );
+      // 扩展被停用 / 卸载时桥接层写的是另一句英文，同样要归一。
+      expect(
+        mangaChapterDownloadFailedLabel(
+          'OnlineMangaUnavailable(OnlineMangaUnavailableReason.sourceDisabled):'
+          ' MihonRuntimeException(EXTENSION_DISABLED): The manga source '
+          'extension is not installed or is disabled',
+        ),
+        contains(t.online_source_error_source_disabled),
       );
     });
 

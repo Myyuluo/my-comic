@@ -41,6 +41,13 @@ enum OnlineMangaRuntimeKind {
   }
 }
 
+/// 占位 extension package：备份里的 Source 尚未安装时，书架条目仍要有一个稳定
+/// 身份，否则每次导入都会因为 package 不同而新建一行。
+///
+/// 运行时的数字 sourceId 回退（票 03）让安装扩展后无需改写这个占位值即可阅读。
+/// 它也会被写进用户库，**永不可改**。
+const String kUnavailableMihonExtensionPackage = 'mihon.unavailable';
+
 /// 互联漫画源在书架身份里占的「扩展包」位。
 ///
 /// 互联源没有扩展包，但 [OnlineMangaLibraryService.bookKeyFor] 的身份三元组
@@ -337,6 +344,7 @@ class OnlineMangaLibraryEntry {
     this.currentChapterIndex,
     this.subscribed = false,
     this.autoDownload = false,
+    this.sourceName,
   });
 
   /// v1：只有 Mihon 的旧描述符。仍然解析，永不再写出。
@@ -372,6 +380,13 @@ class OnlineMangaLibraryEntry {
   /// 可在作品页菜单里单独关。
   final bool autoDownload;
 
+  /// 备份里记录的 Source 显示名（可选）。
+  ///
+  /// 只在导入时 Source 尚未安装、条目落成 [kUnavailableMihonExtensionPackage]
+  /// 占位身份时写入；来源安装后名称由 Source 表解析，这个字段只作为缺失来源的
+  /// 友好降级文案（「来源未安装：<名称>」）。旧条目没有该字段，读取为 null。
+  final String? sourceName;
+
   OnlineMangaChapter? get currentChapter {
     final int? index = currentChapterIndex;
     if (index == null || index < 0 || index >= chapters.length) return null;
@@ -388,6 +403,7 @@ class OnlineMangaLibraryEntry {
     bool clearCurrentChapter = false,
     bool? subscribed,
     bool? autoDownload,
+    String? sourceName,
   }) => OnlineMangaLibraryEntry(
     runtime: runtime,
     extensionPackage: extensionPackage,
@@ -399,6 +415,7 @@ class OnlineMangaLibraryEntry {
         : currentChapterIndex ?? this.currentChapterIndex,
     subscribed: subscribed ?? this.subscribed,
     autoDownload: autoDownload ?? this.autoDownload,
+    sourceName: sourceName ?? this.sourceName,
   );
 
   Map<String, Object?> toJson() => <String, Object?>{
@@ -414,6 +431,7 @@ class OnlineMangaLibraryEntry {
     'currentChapterIndex': currentChapterIndex,
     'subscribed': subscribed,
     'autoDownload': autoDownload,
+    if (sourceName != null) 'sourceName': sourceName,
   };
 
   String encode() => jsonEncode(toJson());
@@ -465,6 +483,7 @@ class OnlineMangaLibraryEntry {
       // v3 两位；v2 没有 → false。
       subscribed: json['subscribed'] == true,
       autoDownload: json['autoDownload'] == true,
+      sourceName: _nonEmptyString(json['sourceName']),
     );
   }
 
@@ -489,6 +508,12 @@ class OnlineMangaLibraryEntry {
       ),
       currentChapterIndex: (json['currentChapterIndex'] as num?)?.toInt(),
     );
+  }
+
+  /// 可选文案字段：缺失 / 空串统一读成 null，UI 只需判断 null。
+  static String? _nonEmptyString(Object? value) {
+    final String? text = value?.toString().trim();
+    return text == null || text.isEmpty ? null : text;
   }
 
   static List<OnlineMangaChapter> _chaptersFrom(

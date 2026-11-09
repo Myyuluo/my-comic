@@ -44,6 +44,16 @@ final RegExp _exceptionPrefixPattern = RegExp(
   r'|Invalid argument(?:\(s\))?)(?:\([^)]*\))?\s*:\s*',
 );
 
+/// 漫画来源缺失 / 停用 / 数字 sourceId 歧义时桥接层抛出的内部英文原文。
+///
+/// 下载任务把 `'$error'` 原样落库（只剩字符串），所以字符串入口也必须能认出
+/// 这几句，把 `sourceDisabled` 归一成中文安装指引。
+const List<String> _sourceDisabledMarkers = <String>[
+  'the manga source is missing or disabled',
+  'the manga source extension is not installed or is disabled',
+  'is ambiguous across extensions',
+];
+
 const List<String> _timeoutMarkers = <String>[
   'timeoutexception',
   'sockettimeoutexception',
@@ -95,6 +105,9 @@ String describeOnlineSourceErrorText(String rawError) {
   final String lower = raw.toLowerCase();
   if (_webViewUnavailableMarkers.any(lower.contains)) {
     return t.online_source_error_webview_unavailable;
+  }
+  if (_sourceDisabledMarkers.any(lower.contains)) {
+    return t.online_source_error_source_disabled;
   }
   if (_timeoutMarkers.any(lower.contains)) {
     return t.online_source_error_timeout;

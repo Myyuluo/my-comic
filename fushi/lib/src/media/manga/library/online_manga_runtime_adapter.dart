@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:fushi_core/fushi_core.dart';
+import 'package:fushi/i18n/strings.g.dart';
 
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi/src/media/manga/download/manga_download_sidecar.dart';
@@ -79,6 +80,11 @@ class OnlineMangaUnavailable implements Exception {
   /// 包装方专门写了说明（如「对端还没下载这一章」），按文本归一而不是退回
   /// [cause]。
   String get userMessage {
+    // 来源被卸载 / 停用是用户可自行解决的状态，但内部 message 是英文
+    // （`The manga source is missing or disabled`），不能直接甩给用户。
+    if (reason == OnlineMangaUnavailableReason.sourceDisabled) {
+      return t.online_source_error_source_disabled;
+    }
     final Object? nested = cause;
     if (nested != null && message == '$nested') {
       return describeOnlineSourceError(nested);
