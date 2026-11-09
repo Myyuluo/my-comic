@@ -386,6 +386,7 @@ void main() {
         'storage.content_root',
         'storage.program_state_root',
         'storage.clear_cache',
+        'storage.clear_database',
       ]);
       for (final String removed in <String>[
         'storage.open_downloads',
