@@ -76,6 +76,25 @@ class _FailingAddLibraryService extends OnlineMangaLibraryService {
   }
 }
 
+/// 模拟「打开作品页时还没有任何 Manga 行」：显式加入书架必须回落到创建
+/// Library 行的路径（票 03 的无行分支）。
+class _NoRowService extends OnlineMangaLibraryService {
+  _NoRowService({
+    required super.database,
+    required super.rootDirectory,
+    required super.adapter,
+    super.downloadsRootDirectory,
+  });
+
+  @override
+  Future<EpubBookRow?> find(OnlineMangaLibraryEntry entry) async => null;
+
+  @override
+  Future<EpubBookRow> ensureNonLibrary(OnlineMangaLibraryEntry entry) async {
+    throw StateError('no row seeded for this fixture');
+  }
+}
+
 class _TestAppModel extends AppModel {
   _TestAppModel(this._db, this._library, Directory root)
     : super(testPlatformServices()) {
@@ -202,7 +221,9 @@ void main() {
     );
   }
 
-  testWidgets('已有 Tag：先弹标签选择，完成才入架并写入所选 Tag', (WidgetTester tester) async {
+  testWidgets('已有 Tag：打开页有非书架行，完成选择后翻转同一行并写入所选 Tag', (
+    WidgetTester tester,
+  ) async {
     late int tagA;
     late int tagB;
     await tester.runAsync(() async {
@@ -210,9 +231,12 @@ void main() {
       tagB = await db.createTag('百合', 0xFFEC407A);
     });
     final String bookKey = OnlineMangaLibraryService.bookKeyOf(_entry());
+    late EpubBookRow opened;
 
     await tester.runAsync(() async {
       await pumpPage(tester);
+      opened = (await db.getEpubBook(bookKey))!;
+      expect(opened.isInLibrary, isFalse, reason: '打开作品页只创建非书架行');
       await tester.tap(
         find.byKey(const ValueKey<String>('manga_series_add_to_bookshelf')),
       );
@@ -240,7 +264,11 @@ void main() {
       find.byKey(const ValueKey<String>('tag_picker_done')),
       findsOneWidget,
     );
-    expect(await db.getEpubBook(bookKey), isNull, reason: '选择阶段不创建 Library 条目');
+    expect(
+      (await db.getEpubBook(bookKey))!.isInLibrary,
+      isFalse,
+      reason: '选择阶段不翻转 membership',
+    );
 
     await tester.runAsync(() async {
       await tester.tap(find.byKey(ValueKey<String>('tag_picker_chip_$tagA')));
@@ -248,7 +276,11 @@ void main() {
       await tester.tap(find.byKey(ValueKey<String>('tag_picker_chip_$tagB')));
       await _settle(tester);
     });
-    expect(await db.getEpubBook(bookKey), isNull, reason: '选择阶段仍然不写库');
+    expect(
+      (await db.getEpubBook(bookKey))!.isInLibrary,
+      isFalse,
+      reason: '选择阶段仍然不写库',
+    );
     expect(await db.getTagsForBook(bookKey), isEmpty, reason: '选择阶段不写 Tag 分配');
 
     await tester.runAsync(() async {
@@ -261,8 +293,16 @@ void main() {
       );
     });
 
-    final EpubBookRow? row = await db.getEpubBook(bookKey);
-    expect(row, isNotNull, reason: '点完成才创建 Library 条目');
+    final EpubBookRow row = (await db.getEpubBook(bookKey))!;
+    expect(row.isInLibrary, isTrue, reason: '点完成才翻转同一行的 membership');
+    expect(row.bookKey, opened.bookKey);
+    expect(row.uid, opened.uid, reason: '加入书架不改变阅读身份');
+    expect(row.extractDir, opened.extractDir, reason: '加入书架不改变下载目录');
+    expect(
+      find.byKey(const ValueKey<String>('manga_series_subscribe')),
+      findsOneWidget,
+      reason: '加入书架后订阅 / 自动追更入口出现',
+    );
     final List<BookTagRow> tags = await db.getTagsForBook(bookKey);
     expect(tags.map((BookTagRow tag) => tag.id).toSet(), <int>{tagA, tagB});
     expect(
@@ -274,11 +314,16 @@ void main() {
     expect(mangaBookBelongsToTab(tags, MangaTagTabSelection(tagB)), isTrue);
   });
 
-  testWidgets('没有任何 Tag：点加入书架直接入架，不弹标签选择', (WidgetTester tester) async {
+  testWidgets('没有任何 Tag：打开页已有非书架行，点加入书架直接翻转，不弹标签选择', (
+    WidgetTester tester,
+  ) async {
     final String bookKey = OnlineMangaLibraryService.bookKeyOf(_entry());
+    late EpubBookRow opened;
 
     await tester.runAsync(() async {
       await pumpPage(tester);
+      opened = (await db.getEpubBook(bookKey))!;
+      expect(opened.isInLibrary, isFalse, reason: '打开作品页只创建非书架行');
       await tester.tap(
         find.byKey(const ValueKey<String>('manga_series_add_to_bookshelf')),
       );
@@ -292,16 +337,23 @@ void main() {
       );
     });
 
-    expect(await db.getEpubBook(bookKey), isNotNull);
+    final EpubBookRow row = (await db.getEpubBook(bookKey))!;
+    expect(row.isInLibrary, isTrue, reason: '显式加入书架翻转同一行的 membership');
+    expect(row.bookKey, opened.bookKey);
+    expect(row.uid, opened.uid, reason: '加入书架不改变阅读身份');
+    expect(row.extractDir, opened.extractDir, reason: '加入书架不改变下载目录');
     expect(await db.getTagsForBook(bookKey), isEmpty);
   });
 
-  testWidgets('零选「完成」：正常入架但不打 Tag，作品留在「书架」页签', (WidgetTester tester) async {
+  testWidgets('零选「完成」：翻转现有非书架行但不打 Tag，作品留在「书架」页签', (WidgetTester tester) async {
     await tester.runAsync(() => db.createTag('推理', 0xFF5C6BC0));
     final String bookKey = OnlineMangaLibraryService.bookKeyOf(_entry());
+    late EpubBookRow opened;
 
     await tester.runAsync(() async {
       await pumpPage(tester);
+      opened = (await db.getEpubBook(bookKey))!;
+      expect(opened.isInLibrary, isFalse, reason: '打开作品页只创建非书架行');
       await tester.tap(
         find.byKey(const ValueKey<String>('manga_series_add_to_bookshelf')),
       );
@@ -319,7 +371,10 @@ void main() {
       );
     });
 
-    expect(await db.getEpubBook(bookKey), isNotNull);
+    final EpubBookRow row = (await db.getEpubBook(bookKey))!;
+    expect(row.isInLibrary, isTrue, reason: '零选完成也翻转同一行');
+    expect(row.uid, opened.uid);
+    expect(row.extractDir, opened.extractDir);
     final List<BookTagRow> tags = await db.getTagsForBook(bookKey);
     expect(tags, isEmpty, reason: '零选 = 按未打标签加入');
     expect(
@@ -329,15 +384,20 @@ void main() {
     );
   });
 
-  testWidgets('点弹窗外部取消：不创建 Library 条目、不写 Tag 分配', (WidgetTester tester) async {
+  testWidgets('打开页创建非书架行；点弹窗外部取消：membership 保持 false、不写 Tag', (
+    WidgetTester tester,
+  ) async {
     late int tagId;
     await tester.runAsync(() async {
       tagId = await db.createTag('推理', 0xFF5C6BC0);
     });
     final String bookKey = OnlineMangaLibraryService.bookKeyOf(_entry());
+    late EpubBookRow opened;
 
     await tester.runAsync(() async {
       await pumpPage(tester);
+      opened = (await db.getEpubBook(bookKey))!;
+      expect(opened.isInLibrary, isFalse);
       await tester.tap(
         find.byKey(const ValueKey<String>('manga_series_add_to_bookshelf')),
       );
@@ -353,16 +413,27 @@ void main() {
     });
 
     expect(find.byType(TagPickerPanel), findsNothing, reason: '点外部关闭弹窗');
-    expect(await db.getEpubBook(bookKey), isNull);
+    final EpubBookRow row = (await db.getEpubBook(bookKey))!;
+    expect(row.isInLibrary, isFalse, reason: '取消加入不翻转 membership');
+    expect(row.uid, opened.uid);
     expect(await db.getTagsForBook(bookKey), isEmpty);
+    expect(
+      find.byKey(const ValueKey<String>('manga_series_add_to_bookshelf')),
+      findsOneWidget,
+    );
   });
 
-  testWidgets('按 Esc 取消：不创建 Library 条目、不写 Tag 分配', (WidgetTester tester) async {
+  testWidgets('打开页创建非书架行；按 Esc 取消：membership 保持 false、不写 Tag', (
+    WidgetTester tester,
+  ) async {
     await tester.runAsync(() => db.createTag('推理', 0xFF5C6BC0));
     final String bookKey = OnlineMangaLibraryService.bookKeyOf(_entry());
+    late EpubBookRow opened;
 
     await tester.runAsync(() async {
       await pumpPage(tester);
+      opened = (await db.getEpubBook(bookKey))!;
+      expect(opened.isInLibrary, isFalse);
       await tester.tap(
         find.byKey(const ValueKey<String>('manga_series_add_to_bookshelf')),
       );
@@ -376,11 +447,19 @@ void main() {
     });
 
     expect(find.byType(TagPickerPanel), findsNothing, reason: 'Esc 关闭弹窗');
-    expect(await db.getEpubBook(bookKey), isNull);
+    final EpubBookRow row = (await db.getEpubBook(bookKey))!;
+    expect(row.isInLibrary, isFalse, reason: 'Esc 取消不翻转 membership');
+    expect(row.uid, opened.uid);
     expect(await db.getTagsForBook(bookKey), isEmpty);
+    expect(
+      find.byKey(const ValueKey<String>('manga_series_add_to_bookshelf')),
+      findsOneWidget,
+    );
   });
 
-  testWidgets('加入失败：不创建 Library 条目，也不留 Tag 分配', (WidgetTester tester) async {
+  testWidgets('加入失败：非书架行保持 membership=false，也不留 Tag 分配', (
+    WidgetTester tester,
+  ) async {
     late int tagId;
     await tester.runAsync(() async {
       tagId = await db.createTag('推理', 0xFF5C6BC0);
@@ -392,9 +471,12 @@ void main() {
       downloadsRootDirectory: Directory(p.join(root.path, 'downloads')),
     );
     final String bookKey = OnlineMangaLibraryService.bookKeyOf(_entry());
+    late EpubBookRow opened;
 
     await tester.runAsync(() async {
       await pumpPage(tester, service: failing);
+      opened = (await db.getEpubBook(bookKey))!;
+      expect(opened.isInLibrary, isFalse);
       await tester.tap(
         find.byKey(const ValueKey<String>('manga_series_add_to_bookshelf')),
       );
@@ -410,12 +492,139 @@ void main() {
     });
 
     expect(tester.takeException(), isNull, reason: '失败由页面提示，不冒泡');
-    expect(await db.getEpubBook(bookKey), isNull);
+    final EpubBookRow row = (await db.getEpubBook(bookKey))!;
+    expect(row.isInLibrary, isFalse, reason: '加入失败不翻转 membership');
+    expect(row.uid, opened.uid);
     expect(await db.getTagsForBook(bookKey), isEmpty, reason: '加入失败时不留 Tag 分配');
     expect(
       find.byKey(const ValueKey<String>('manga_series_add_to_bookshelf')),
       findsOneWidget,
       reason: '仍在未入库态，可重试',
+    );
+  });
+
+  testWidgets('显式加入书架保留阅读进度、已读、下载映射与身份，并出现订阅入口', (WidgetTester tester) async {
+    final String bookKey = OnlineMangaLibraryService.bookKeyOf(_entry());
+    late EpubBookRow opened;
+    const int readAt = 1700000000000;
+
+    await tester.runAsync(() async {
+      await pumpPage(tester);
+      opened = (await db.getEpubBook(bookKey))!;
+      expect(opened.isInLibrary, isFalse, reason: '打开作品页只创建非书架行');
+      // 非书架作品在加入书架前已经可以阅读、标记已读与下载。
+      await db.saveMangaChapterState(
+        bookUid: opened.uid,
+        chapterKey: '/chapter/1',
+        lastPage: 7,
+        pageCount: 20,
+        readAt: readAt,
+      );
+      await db.upsertMangaChapterDir(
+        bookKey: opened.bookKey,
+        chapterKey: '/chapter/1',
+        folderName: 'Chapter 1',
+        updatedAt: readAt,
+      );
+
+      await tester.tap(
+        find.byKey(const ValueKey<String>('manga_series_add_to_bookshelf')),
+      );
+      await _settle(tester);
+      await pumpUntilFound(
+        tester,
+        find.byKey(
+          const ValueKey<String>('manga_series_remove_from_bookshelf'),
+        ),
+      );
+    });
+
+    final EpubBookRow row = (await db.getEpubBook(bookKey))!;
+    expect(row.isInLibrary, isTrue);
+    expect(row.bookKey, opened.bookKey);
+    expect(row.uid, opened.uid, reason: '阅读状态仍按同一 uid 归属');
+    expect(row.extractDir, opened.extractDir, reason: '下载目录不变');
+    final MangaChapterStateRow? state = await db.getMangaChapterState(
+      bookUid: row.uid,
+      chapterKey: '/chapter/1',
+    );
+    expect(state?.lastPage, 7, reason: '阅读进度保留');
+    expect(state?.readAt, readAt, reason: '已读标记保留');
+    final MangaChapterDirRow? mapping = await db.getMangaChapterDir(
+      row.bookKey,
+      '/chapter/1',
+    );
+    expect(mapping?.folderName, 'Chapter 1', reason: '下载映射保留');
+    expect(
+      find.byKey(const ValueKey<String>('manga_series_subscribe')),
+      findsOneWidget,
+      reason: '加入书架后订阅入口出现',
+    );
+
+    // 订阅入口可用：开订阅后「新章自动下载」菜单项随之出现。
+    await tester.runAsync(() async {
+      await tester.tap(
+        find.byKey(const ValueKey<String>('manga_series_subscribe')),
+      );
+      await _settle(tester);
+    });
+    final OnlineMangaLibraryEntry subscribed = OnlineMangaLibraryEntry.tryParse(
+      (await db.getEpubBook(bookKey))!.sourceMetadata,
+    )!;
+    expect(subscribed.subscribed, isTrue);
+    expect(subscribed.autoDownload, isTrue);
+    // 自适应操作区可能把「新章自动下载」平铺，也可能收进「⋯」。
+    if (find
+        .byKey(const ValueKey<String>('manga_series_auto_download'))
+        .evaluate()
+        .isEmpty) {
+      await tester.runAsync(() async {
+        await tester.tap(
+          find.byKey(const ValueKey<String>('online_work_more')),
+          warnIfMissed: false,
+        );
+        await _settle(tester);
+      });
+    }
+    expect(
+      find.byKey(const ValueKey<String>('manga_series_auto_download')),
+      findsOneWidget,
+      reason: '加入书架并订阅后出现自动追更入口',
+    );
+  });
+
+  testWidgets('不存在非书架行时，加入书架仍创建新的 Library 行', (WidgetTester tester) async {
+    final OnlineMangaLibraryService noRow = _NoRowService(
+      database: db,
+      rootDirectory: Directory(p.join(root.path, 'legacy')),
+      adapter: adapter,
+      downloadsRootDirectory: Directory(p.join(root.path, 'downloads')),
+    );
+    final String bookKey = OnlineMangaLibraryService.bookKeyOf(_entry());
+
+    await tester.runAsync(() async {
+      await pumpPage(tester, service: noRow);
+      expect(await db.getEpubBook(bookKey), isNull, reason: '打开页没有可翻转的行');
+      await tester.tap(
+        find.byKey(const ValueKey<String>('manga_series_add_to_bookshelf')),
+      );
+      await _settle(tester);
+      await pumpUntilFound(
+        tester,
+        find.byKey(
+          const ValueKey<String>('manga_series_remove_from_bookshelf'),
+        ),
+      );
+    });
+
+    final EpubBookRow row = (await db.getEpubBook(bookKey))!;
+    expect(row.isInLibrary, isTrue, reason: '无行时创建 Library 行');
+    expect(row.bookKey, bookKey);
+    expect(row.format, 'manga');
+    expect(await db.getTagsForBook(bookKey), isEmpty);
+    expect(
+      find.byKey(const ValueKey<String>('manga_series_subscribe')),
+      findsOneWidget,
     );
   });
 }

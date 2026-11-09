@@ -1008,6 +1008,17 @@ mixin _FushiDbContentMisc
         chaptersJson: Value(chaptersJson),
       ));
 
+  /// 显式加入书架 / 移出书架：只写 Library membership（`in_library`）。
+  ///
+  /// 同一行的 bookKey、uid、extractDir、章节、阅读进度、已读、下载映射与
+  /// History 都原样保留；非书架行与书架行是同一条 Manga 记录。
+  Future<void> updateEpubBookInLibrary(
+    String bookKey, {
+    required bool inLibrary,
+  }) =>
+      (update(epubBooks)..where((t) => t.bookKey.equals(bookKey)))
+          .write(EpubBooksCompanion(inLibrary: Value<bool>(inLibrary)));
+
   /// Persist the non-sensitive restart descriptor for a Mihon-backed manga.
   ///
   /// Online manga deliberately reuse [EpubBooks] so the existing shelf,

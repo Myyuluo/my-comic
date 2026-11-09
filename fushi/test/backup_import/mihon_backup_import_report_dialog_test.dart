@@ -298,6 +298,53 @@ void main() {
     },
   );
 
+  testWidgets('report counts non-library rows and their History', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(_harness(appModel));
+    await tester.pumpAndSettle();
+
+    final File backup = (await tester.runAsync(
+      () => writeFixtureBackup(
+        tmp,
+        name: 'non-library.tachibk',
+        sources: const <FixtureSource>[FixtureSource(id: 123, name: '再漫画')],
+        mangas: const <FixtureManga>[
+          FixtureManga(
+            source: 123,
+            url: '/manga/alpha',
+            title: 'Alpha',
+            chapters: <FixtureChapter>[
+              FixtureChapter(url: '/chapter/a1', name: 'Chapter 1'),
+            ],
+            history: <FixtureHistory>[
+              FixtureHistory(url: '/chapter/a1', lastRead: 1700000001000),
+            ],
+          ),
+          FixtureManga(
+            source: 123,
+            url: '/manga/beta',
+            title: 'Beta',
+            favorite: false,
+            chapters: <FixtureChapter>[
+              FixtureChapter(url: '/chapter/b1', name: 'Chapter 1', read: true),
+            ],
+            history: <FixtureHistory>[
+              FixtureHistory(url: '/chapter/b1', lastRead: 1700000002000),
+            ],
+          ),
+        ],
+      ),
+    ))!;
+    await _openReportDialog(tester, backup);
+
+    expect(find.text('书架：新增 1，合并 0，跳过 0，失败 0'), findsOneWidget);
+    expect(find.text('不在书架（仅阅读记录）：1'), findsOneWidget);
+    expect(find.text('历史：2 条最近记录'), findsOneWidget);
+    expect(find.text('未入架历史：恢复 1，跳过 0'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('missing sources render as a warning notice without actions', (
     WidgetTester tester,
   ) async {

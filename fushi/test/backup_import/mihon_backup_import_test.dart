@@ -119,12 +119,13 @@ void main() {
 
     expect(report.totalEntries, 3);
     expect(report.importedEntries, 2);
+    expect(report.nonLibraryEntriesImported, 1);
     expect(report.mergedEntries, 0);
-    expect(report.skippedEntries, 1);
+    expect(report.skippedEntries, 0);
     expect(report.failedEntries, 0);
     expect(report.categoriesCreated, 2);
     expect(report.categoriesSkipped, 1);
-    expect(report.chapterStatesWritten, 3);
+    expect(report.chapterStatesWritten, 4);
     expect(
       report.missingSources.map((MihonBackupSourceIssue s) => s.sourceId),
       <int>{123, 456},
@@ -134,8 +135,16 @@ void main() {
       for (final EpubBookMeta meta in await db.getEpubBookMetas())
         (await db.getEpubBook(meta.bookKey))!,
     ];
-    expect(books, hasLength(2));
+    expect(books, hasLength(3));
     expect(books.map((EpubBookRow b) => b.format), everyElement('manga'));
+    // Only favorite=true entries belong to the shelf.
+    expect(
+      books
+          .where((EpubBookRow b) => b.inLibrary)
+          .map((EpubBookRow b) => b.title)
+          .toSet(),
+      <String>{'Alpha', 'Beta'},
+    );
 
     final EpubBookRow alpha = books.singleWhere(
       (EpubBookRow b) => b.title == 'Alpha',
@@ -517,12 +526,14 @@ void main() {
       expect(second.totalEntries, 3);
       expect(second.importedEntries, 0);
       expect(second.mergedEntries, 2);
-      expect(second.skippedEntries, 1);
+      expect(second.nonLibraryEntriesImported, 0);
+      expect(second.nonLibraryEntriesMerged, 1);
+      expect(second.skippedEntries, 0);
       expect(second.failedEntries, 0);
       expect(second.categoriesCreated, 0);
       expect(second.categoriesMatched, 2);
 
-      expect(await db.getEpubBookMetas(), hasLength(2));
+      expect(await db.getAllEpubBooks(), hasLength(3));
       final String alphaKey = (await db.getEpubBookMetas())
           .singleWhere((EpubBookMeta meta) => meta.title == 'Alpha')
           .bookKey;
@@ -705,7 +716,7 @@ void main() {
     expect(assignmentsAfterSecond, assignmentsAfterFirst);
   });
 
-  test('skips non-library entries and accepts an empty backup', () async {
+  test('imports favorite=false entries as non-library rows', () async {
     final File onlyRead = await writeFixtureBackup(
       tmp,
       name: 'read-only.tachibk',
@@ -722,23 +733,56 @@ void main() {
               name: 'C1',
               read: true,
               lastPageRead: 3,
+              dateFetch: 1700000001000,
             ),
+          ],
+          history: <FixtureHistory>[
+            FixtureHistory(url: '/c/1', lastRead: 1700000002000),
           ],
         ),
       ],
     );
-    final MihonBackupImportReport skippedReport = await service().importFile(
-      onlyRead,
-    );
-    expect(skippedReport.totalEntries, 1);
-    expect(skippedReport.importedEntries, 0);
-    expect(skippedReport.skippedEntries, 1);
-    expect(
-      skippedReport.skippedByReason[MihonBackupSkipReason.notInLibrary],
-      1,
-    );
-    expect(await db.getEpubBookMetas(), isEmpty);
+    final MihonBackupImportReport first = await service().importFile(onlyRead);
 
+    expect(first.totalEntries, 1);
+    expect(first.importedEntries, 0);
+    expect(first.nonLibraryEntriesImported, 1);
+    expect(first.skippedEntries, 0);
+    expect(first.failedEntries, 0);
+    // Non-library rows never enter the shelf.
+    expect(await db.getLibraryEpubBooks(), isEmpty);
+    expect(await db.getEpubBookMetas(), hasLength(1));
+
+    final EpubBookRow row = (await db.getAllEpubBooks()).single;
+    expect(row.inLibrary, isFalse);
+    expect(row.format, 'manga');
+    final OnlineMangaLibraryEntry entry = OnlineMangaLibraryEntry.tryParse(
+      row.sourceMetadata,
+    )!;
+    expect(entry.series.key, '/manga/x');
+    expect(entry.chapters, hasLength(1));
+
+    // Chapters, read marks and progress belong to the non-library row.
+    final Map<String, MangaChapterStateRow> states = await db
+        .getMangaChapterStates(row.uid);
+    expect(states, hasLength(1));
+    expect(states['/c/1']!.lastPage, 3);
+    expect(states['/c/1']!.readAt, 1700000002000);
+    final ReaderPositionRow? position = await db.getReaderPosition(row.uid);
+    expect(position, isNotNull);
+    expect(position!.updatedAt, 1700000002000);
+
+    // Re-import merges into the same non-library row.
+    final MihonBackupImportReport second = await service().importFile(onlyRead);
+    expect(second.nonLibraryEntriesImported, 0);
+    expect(second.nonLibraryEntriesMerged, 1);
+    expect(second.failedEntries, 0);
+    final List<EpubBookRow> rows = await db.getAllEpubBooks();
+    expect(rows, hasLength(1));
+    expect(rows.single.inLibrary, isFalse);
+  });
+
+  test('accepts an empty backup', () async {
     final File empty = await writeFixtureBackup(
       tmp,
       mangas: const <FixtureManga>[],
@@ -873,67 +917,91 @@ void main() {
     expect(position!.updatedAt, 1700000009000);
   });
 
-  test('imports history into media_open_history', () async {
-    final File backup = await writeFixtureBackup(
-      tmp,
-      sources: const <FixtureSource>[FixtureSource(id: 123, name: 'Source A')],
-      mangas: const <FixtureManga>[
-        FixtureManga(
-          source: 123,
-          url: '/manga/alpha',
-          title: 'Alpha',
-          author: 'Author A',
-          chapters: <FixtureChapter>[
-            FixtureChapter(url: '/chapter/a1', name: 'Chapter 1'),
-            FixtureChapter(url: '/chapter/a2', name: 'Chapter 2'),
-          ],
-          history: <FixtureHistory>[
-            FixtureHistory(
-              url: '/chapter/a1',
-              lastRead: 1700000001000,
-              readDuration: 1000,
-            ),
-            FixtureHistory(
-              url: '/chapter/a2',
-              lastRead: 1700000009000,
-              readDuration: 5000,
-            ),
-          ],
-        ),
-      ],
-    );
+  test(
+    'imports history with the canonical online identity and snapshot',
+    () async {
+      final File backup = await writeFixtureBackup(
+        tmp,
+        sources: const <FixtureSource>[
+          FixtureSource(id: 123, name: 'Source A'),
+        ],
+        mangas: const <FixtureManga>[
+          FixtureManga(
+            source: 123,
+            url: '/manga/alpha',
+            title: 'Alpha',
+            author: 'Author A',
+            thumbnailUrl: 'https://example.test/alpha.jpg',
+            chapters: <FixtureChapter>[
+              FixtureChapter(url: '/chapter/a1', name: 'Chapter 1'),
+              FixtureChapter(url: '/chapter/a2', name: 'Chapter 2'),
+            ],
+            history: <FixtureHistory>[
+              FixtureHistory(
+                url: '/chapter/a1',
+                lastRead: 1700000001000,
+                readDuration: 1000,
+              ),
+              FixtureHistory(
+                url: '/chapter/a2',
+                lastRead: 1700000009000,
+                readDuration: 5000,
+              ),
+            ],
+          ),
+        ],
+      );
 
-    final MihonBackupImportReport report = await service().importFile(backup);
-    expect(report.historyRowsWritten, 1);
+      final MihonBackupImportReport report = await service().importFile(backup);
+      expect(report.historyRowsWritten, 1);
 
-    final EpubBookMeta meta = (await db.getEpubBookMetas()).single;
-    final EpubBookRow book = (await db.getEpubBook(meta.bookKey))!;
-    final List<MediaOpenHistoryRow> history = await db.getAllMediaOpenHistory();
-    expect(history, hasLength(1));
-    final MediaOpenHistoryRow row = history.single;
-    expect(row.mediaType, 'reader_media_type');
-    expect(row.mediaSource, 'reader_manga');
-    expect(row.mediaId, 'fushi://book/${book.bookKey}');
-    expect(row.openedAt, 1700000009000);
-    expect(row.duration, 2);
-    expect(row.position, 1);
-    final Map<String, Object?> snapshot =
-        (jsonDecode(row.snapshotJson) as Map<Object?, Object?>)
-            .cast<String, Object?>();
-    expect(snapshot['title'], 'Alpha');
-    expect(snapshot['author'], 'Author A');
-    final Map<String, Object?> mihonHistory =
-        (snapshot['mihon_history'] as Map<Object?, Object?>)
-            .cast<String, Object?>();
-    expect(mihonHistory['chapter_url'], '/chapter/a2');
-    expect(mihonHistory['read_duration'], 5000);
+      final EpubBookMeta meta = (await db.getEpubBookMetas()).single;
+      final EpubBookRow book = (await db.getEpubBook(meta.bookKey))!;
+      final OnlineMangaLibraryEntry entry = OnlineMangaLibraryEntry.tryParse(
+        book.sourceMetadata,
+      )!;
+      final List<MediaOpenHistoryRow> history = await db
+          .getAllMediaOpenHistory();
+      expect(history, hasLength(1));
+      final MediaOpenHistoryRow row = history.single;
+      expect(row.mediaType, 'reader_media_type');
+      // History identity is the same stable online identity the reader writes:
+      // it survives leaving/rejoining the shelf and extension-package changes.
+      expect(row.mediaSource, mangaHistoryOnlineSourceKey(entry));
+      expect(row.mediaId, '/manga/alpha');
+      expect(row.openedAt, 1700000009000);
+      expect(row.duration, 2);
+      expect(row.position, 1);
+      final Map<String, Object?> snapshot =
+          (jsonDecode(row.snapshotJson) as Map<Object?, Object?>)
+              .cast<String, Object?>();
+      expect(snapshot['title'], 'Alpha');
+      expect(snapshot['author'], 'Author A');
+      expect(snapshot['imageUrl'], 'https://example.test/alpha.jpg');
+      final Map<String, Object?> marker =
+          (snapshot['mangaHistory'] as Map<Object?, Object?>)
+              .cast<String, Object?>();
+      expect(marker['kind'], 'manga-history');
+      expect(marker['bookKey'], book.bookKey);
+      final Map<String, Object?> online =
+          (marker['online'] as Map<Object?, Object?>).cast<String, Object?>();
+      expect(online['runtime'], 'mihon');
+      expect(online['sourceId'], '123');
+      expect(online['seriesKey'], '/manga/alpha');
+      expect(online['coverUrl'], 'https://example.test/alpha.jpg');
+      final Map<String, Object?> mihonHistory =
+          (snapshot['mihon_history'] as Map<Object?, Object?>)
+              .cast<String, Object?>();
+      expect(mihonHistory['chapter_url'], '/chapter/a2');
+      expect(mihonHistory['read_duration'], 5000);
 
-    // Re-import refreshes the same recent-history row instead of duplicating it.
-    await service().importFile(backup);
-    expect(await db.getAllMediaOpenHistory(), hasLength(1));
-  });
+      // Re-import refreshes the same recent-history row instead of duplicating it.
+      await service().importFile(backup);
+      expect(await db.getAllMediaOpenHistory(), hasLength(1));
+    },
+  );
 
-  test('restores read-only works as History without library entries', () async {
+  test('restores read-only works as non-library rows with History', () async {
     final File backup = await writeFixtureBackup(
       tmp,
       sources: const <FixtureSource>[FixtureSource(id: 456, name: 'Source B')],
@@ -967,10 +1035,12 @@ void main() {
     final MihonBackupImportReport report = await service().importFile(backup);
 
     expect(report.importedEntries, 0);
-    expect(report.skippedEntries, 1);
+    expect(report.nonLibraryEntriesImported, 1);
+    expect(report.skippedEntries, 0);
     expect(report.nonLibraryHistoryImported, 1);
-    expect(report.skippedByReason[MihonBackupSkipReason.notInLibrary], 1);
-    expect(await db.getEpubBookMetas(), isEmpty);
+    expect(await db.getLibraryEpubBooks(), isEmpty);
+    final EpubBookRow row = (await db.getAllEpubBooks()).single;
+    expect(row.inLibrary, isFalse);
 
     // The restored row is visible on the History page and keeps the metadata
     // needed to reopen the work's source page.
@@ -979,7 +1049,7 @@ void main() {
     final MangaHistoryEntry entry = entries.single;
     expect(entry.title, 'Beta');
     expect(entry.openedAt, 1700000099000);
-    expect(entry.bookKey, isNull);
+    expect(entry.bookKey, row.bookKey);
     expect(entry.mediaId, '/manga/beta');
     expect(entry.coverUrl, 'https://example.test/beta.jpg');
     expect(entry.snapshot!.author, 'Author B');
@@ -987,11 +1057,23 @@ void main() {
     expect(entry.online!.runtime, OnlineMangaRuntimeKind.mihon);
     expect(entry.online!.sourceId, '456');
     expect(entry.online!.seriesKey, '/manga/beta');
+    expect(
+      entry.mediaSource,
+      mangaHistoryOnlineSourceKey(
+        OnlineMangaLibraryEntry.tryParse(row.sourceMetadata)!,
+      ),
+    );
 
-    final MediaOpenHistoryRow row = (await db.getAllMediaOpenHistory()).single;
+    final MediaOpenHistoryRow historyRow =
+        (await db.getAllMediaOpenHistory()).single;
     final Map<String, Object?> snapshot =
-        (jsonDecode(row.snapshotJson) as Map<Object?, Object?>)
+        (jsonDecode(historyRow.snapshotJson) as Map<Object?, Object?>)
             .cast<String, Object?>();
+    final Map<String, Object?> marker =
+        (snapshot['mangaHistory'] as Map<Object?, Object?>)
+            .cast<String, Object?>();
+    expect(marker['kind'], 'manga-history');
+    expect(marker['bookKey'], row.bookKey);
     final Map<String, Object?> mihonHistory =
         (snapshot['mihon_history'] as Map<Object?, Object?>)
             .cast<String, Object?>();
@@ -1001,6 +1083,8 @@ void main() {
 
     // Merge semantics: importing the same backup again keeps one row.
     final MihonBackupImportReport second = await service().importFile(backup);
+    expect(second.nonLibraryEntriesImported, 0);
+    expect(second.nonLibraryEntriesMerged, 1);
     expect(second.nonLibraryHistoryImported, 0);
     expect(
       second.nonLibraryHistorySkippedByReason[MihonBackupHistorySkipReason
@@ -1008,6 +1092,7 @@ void main() {
       1,
     );
     expect(await db.getAllMediaOpenHistory(), hasLength(1));
+    expect(await db.getAllEpubBooks(), hasLength(1));
   });
 
   test('reports why read-only works restore no History', () async {
@@ -1041,6 +1126,9 @@ void main() {
     final MihonBackupImportReport report = await service().importFile(backup);
 
     expect(report.nonLibraryHistoryImported, 0);
+    expect(report.nonLibraryEntriesImported, 1);
+    expect(report.failedEntries, 1);
+    expect(report.failedByReason[MihonBackupFailureReason.missingUrl], 1);
     expect(
       report.nonLibraryHistorySkippedByReason[MihonBackupHistorySkipReason
           .noHistory],
@@ -1052,6 +1140,11 @@ void main() {
       1,
     );
     expect(await db.getAllMediaOpenHistory(), isEmpty);
+    // The readable entry still becomes a non-library row; only the URL-less
+    // entry has no stable identity to persist.
+    final EpubBookRow row = (await db.getAllEpubBooks()).single;
+    expect(row.inLibrary, isFalse);
+    expect(row.title, 'No History');
   });
 
   test('imports Bangumi tracking and skips unsupported trackers', () async {
