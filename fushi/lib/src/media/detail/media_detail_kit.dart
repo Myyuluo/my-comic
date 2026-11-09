@@ -1368,14 +1368,19 @@ class MediaDetailItemRow extends StatelessWidget {
     ];
     final double? progress = this.progress;
     final bool? selected = this.selected;
+    // 多选选中行：primaryContainer 底 + onPrimaryContainer 前景（2026-11 章节
+    // 多选，与参考图的浅蓝选中行一致）。已读对勾 / 下载状态图标保留各自语义色。
+    final bool selectedRow = selected == true;
+    final Color? selectedFg = selectedRow ? cs.onPrimaryContainer : null;
     final Widget? leadingSlot = selected != null
-        ? _SelectionMark(selected: selected)
+        ? _SelectionMark(selected: selected, foreground: selectedFg)
         : leading ?? (number == null ? null : _NumberPill(number: number!));
     final Widget? status = _buildStatus(context, cs, trailing != null);
     return FushiGroupedListItem(
       index: index,
       count: count,
       margin: margin,
+      color: selectedRow ? cs.primaryContainer : null,
       selected: selected ?? false,
       onTap: onTap,
       onLongPress: onLongPress,
@@ -1399,9 +1404,9 @@ class MediaDetailItemRow extends StatelessWidget {
                     maxLines: titleMaxLines,
                     overflow: TextOverflow.ellipsis,
                     style: type.titleMedium.copyWith(
-                      color: current
-                          ? cs.primary
-                          : (completed ? fgVariant : fg),
+                      color:
+                          selectedFg ??
+                          (current ? cs.primary : (completed ? fgVariant : fg)),
                     ),
                   ),
                   if (subtitle != null && subtitle.isNotEmpty) ...<Widget>[
@@ -1410,7 +1415,9 @@ class MediaDetailItemRow extends StatelessWidget {
                       subtitle,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: type.bodyMedium.copyWith(color: fgVariant),
+                      style: type.bodyMedium.copyWith(
+                        color: selectedFg ?? fgVariant,
+                      ),
                     ),
                   ],
                   if (meta.isNotEmpty) ...<Widget>[
@@ -1420,7 +1427,7 @@ class MediaDetailItemRow extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: type.labelMedium.tabular.copyWith(
-                        color: fgVariant,
+                        color: selectedFg ?? fgVariant,
                       ),
                     ),
                   ],
@@ -1430,7 +1437,7 @@ class MediaDetailItemRow extends StatelessWidget {
                       child: FushiLinearProgressIndicator(
                         value: progress.clamp(0.0, 1.0),
                         minHeight: 4,
-                        color: cs.primary,
+                        color: selectedFg ?? cs.primary,
                       ),
                     ),
                 ],
@@ -1545,9 +1552,12 @@ class _NumberPill extends StatelessWidget {
 
 /// 多选模式的行首选择标记（spring 缩放切换实心对勾）。
 class _SelectionMark extends StatelessWidget {
-  const _SelectionMark({required this.selected});
+  const _SelectionMark({required this.selected, this.foreground});
 
   final bool selected;
+
+  /// 选中行的前景色（primaryContainer 底上用 onPrimaryContainer）。
+  final Color? foreground;
 
   @override
   Widget build(BuildContext context) {
@@ -1562,7 +1572,7 @@ class _SelectionMark extends StatelessWidget {
         selected ? FushiIcons.filled(FushiIcons.success) : FushiIcons.addCircle,
         key: ValueKey<bool>(selected),
         size: 24,
-        color: selected ? cs.primary : cs.onSurfaceVariant,
+        color: foreground ?? (selected ? cs.primary : cs.onSurfaceVariant),
       ),
     );
   }

@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi/i18n/strings.g.dart';
 import 'package:fushi/models.dart';
+import 'package:fushi/src/media/manga/history/manga_history.dart';
 import 'package:fushi/src/media/manga/library/manga_series_page.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_service.dart';
@@ -380,6 +381,106 @@ void main() {
     expect(await db.getEpubBook(bookKey), isNull, reason: 'DB 行已删');
     expect(chapterDir.existsSync(), isFalse, reason: '勾选后章节目录删除');
     expect(Directory(extractDir).existsSync(), isFalse, reason: '漫画目录删除');
+  });
+
+  testWidgets('删除整部作品（含已下载文件）→ 历史条目一并级联删除', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(900, 1800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final _TestAppModel appModel = _TestAppModel(db, library, root);
+
+    late String bookKey;
+    await tester.runAsync(() async {
+      final EpubBookRow row = await library.add(_entry());
+      bookKey = row.bookKey;
+      await _writeDownloadedChapter(
+        db,
+        row.bookKey,
+        row.extractDir,
+        '/chapter/1',
+      );
+      await recordMangaHistoryOpened(
+        db: db,
+        row: row,
+        onlineEntry: _entry(),
+      );
+      expect(
+        await loadMangaHistory(db),
+        hasLength(1),
+        reason: '前置：历史里有这部作品',
+      );
+      await tester.pumpWidget(_harness(appModel, bookKey));
+      await _pumpUntil(
+        tester,
+        find.byKey(
+          const ValueKey<String>('manga_series_remove_from_bookshelf'),
+        ),
+      );
+      await tester.tap(
+        find.byKey(
+          const ValueKey<String>('manga_series_remove_from_bookshelf'),
+        ),
+      );
+      await _pumpUntil(tester, find.text(t.delete_local_files));
+      await tester.tap(find.text(t.delete_local_files));
+      await tester.pump();
+      await tester.tap(find.text(t.dialog_delete));
+      await _pumpUntil(
+        tester,
+        find.byKey(const ValueKey<String>('manga_series_add_to_bookshelf')),
+      );
+    });
+
+    expect(
+      await loadMangaHistory(db),
+      isEmpty,
+      reason: '作品连同文件删除后不得留下点开即失败的历史条目',
+    );
+  });
+
+  testWidgets('仅移出书架（文件保留）→ 历史条目保留', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(900, 1800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final _TestAppModel appModel = _TestAppModel(db, library, root);
+
+    late String bookKey;
+    await tester.runAsync(() async {
+      final EpubBookRow row = await library.add(_entry());
+      bookKey = row.bookKey;
+      await recordMangaHistoryOpened(
+        db: db,
+        row: row,
+        onlineEntry: _entry(),
+      );
+      await tester.pumpWidget(_harness(appModel, bookKey));
+      await _pumpUntil(
+        tester,
+        find.byKey(
+          const ValueKey<String>('manga_series_remove_from_bookshelf'),
+        ),
+      );
+      await tester.tap(
+        find.byKey(
+          const ValueKey<String>('manga_series_remove_from_bookshelf'),
+        ),
+      );
+      // 默认不勾「同时删除本地文件」：只移出书架，文件与历史都保留。
+      await _pumpUntil(tester, find.text(t.dialog_delete));
+      await tester.tap(find.text(t.dialog_delete));
+      await _pumpUntil(
+        tester,
+        find.byKey(const ValueKey<String>('manga_series_add_to_bookshelf')),
+      );
+    });
+
+    final List<MangaHistoryEntry> history = await loadMangaHistory(db);
+    expect(history, hasLength(1), reason: '仅移出书架时历史保留');
+    expect(history.single.title, 'Fixture series');
   });
 
   testWidgets('确认框点取消：什么都不删', (WidgetTester tester) async {
