@@ -1,4 +1,6 @@
 import 'package:fushi/src/backup_import/mihon_backup_import_flow.dart';
+import 'package:fushi/src/pages/implementations/create_backup_page.dart';
+import 'package:fushi/src/settings/settings_actions.dart';
 import 'package:fushi/src/utils/fushi_icons.dart';
 import 'package:fushi/src/models/module_registry.dart';
 
@@ -67,10 +69,10 @@ SettingsSection buildDownloadBehaviorSection() {
 /// 备份分组（ticket 03）：整组从「系统与关于」搬入「存储与下载」。
 ///
 /// ticket 06：导入行的标题与副标题改用「导入备份」文案（文件选择框标题复用
-/// 同一字符串）；导出行的文案与置灰状态、导入文件选择器的默认目录（Backup
-/// directory，见 [mihonBackupPickerInitialDirectory]）不变。item / section id
-/// 沿用 `system.*`：它们是设置搜索锚点与控制通道键的稳定身份，不随展示位置
-/// 改变。
+/// 同一字符串）。ticket 07：「导出 Mihon 备份」更名为「创建备份」并启用，点击
+/// 进入独立创建备份页；导入文件选择器的默认目录（Backup directory，见
+/// [mihonBackupPickerInitialDirectory]）不变。item / section id 沿用
+/// `system.*`：它们是设置搜索锚点与控制通道键的稳定身份，不随展示位置改变。
 ///
 /// my-comic：Mihon v0.21.3 `.tachibk` Import。Fushi 自己的 `.fushi.zip` 同步与
 /// 备份链路随非漫画域一起移除，这里只保留把已有 Mihon Library 带过来的最小入口；
@@ -92,19 +94,21 @@ SettingsSection buildMihonBackupSection() {
         ),
         onTap: runMihonBackupImport,
       ),
-      // `.tachibk` 导出在 v1.5 交付（ADR 0005）；入口先展示但置灰，
-      // 让用户知道 Backup 会从这里走，同时不给出半成品动作。
+      // 「创建备份」：进入独立页面，把书架数据导出为 Mihon v0.21.3 可导入
+      // 的 `.tachibk`（ADR 0005 的导出交付）。
       SettingsActionItem(
         id: 'system.export_mihon_backup',
         title: t.backup_export_mihon_title,
         subtitle: t.backup_export_mihon_subtitle,
         icon: FushiIcons.upload,
-        enabled: (SettingsContext _) => false,
         cli: const SettingsCliAction.unsupported(
-          'Exporting .tachibk backups is not implemented yet '
-          '(planned for v1.5).',
+          'Creating a .tachibk backup saves a file chosen from the app '
+          'window: Settings → Storage & downloads → Backup → Create backup.',
         ),
-        onTap: (SettingsContext _) {},
+        onTap: (SettingsContext context) => pushSettingsPage(
+          context,
+          (_) => const CreateBackupPage(),
+        ),
       ),
     ],
   );
