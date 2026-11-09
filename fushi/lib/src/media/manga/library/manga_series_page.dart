@@ -1367,13 +1367,13 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     }
   }
 
-  /// 移出书架 = 删这本书（DB 行 + 章节状态 + 下载任务行 + 章目录映射，
-  /// `deleteEpubBook` 一个事务级联）。Download library 里的已下载文件默认**保留**
-  /// （票 04：确认框询问「同时删除本地文件」，勾选才删），避免「移出书架」误删
-  /// 用户内容；Library 记录已删，文件成为未索引内容，重建索引可找回。
+  /// 移出书架 = 只清 Library membership（票 04）：Manga/Chapter、阅读进度、
+  /// 已读标记、下载任务、章目录映射、下载文件夹与 History 全部保留；Tag 分配与
+  /// 订阅 / 自动追更移除。Download library 里的已下载文件默认保留，勾选「同时
+  /// 删除本地文件」才删文件与下载索引（行与阅读状态仍保留，之后可重新下载）。
   ///
-  /// 删完页面**不关**、退回「未入库」态：条目本身（作品 + 章节列表）还在手上，
-  /// 用户可以立刻重新加入或换源；关页面反而把他丢回不知道哪一层的列表。
+  /// 移出后页面**不关**、切回非书架态：条目本身（作品 + 章节列表 + 已下载状态）
+  /// 还在手上，用户可以立刻重新加入；关页面反而把他丢回不知道哪一层的列表。
   Future<void> _removeFromLibrary() async {
     final EpubBookRow? row = _row;
     final OnlineMangaLibraryEntry? entry = _entry;
@@ -1410,18 +1410,30 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
         );
         return;
       }
-      setState(() {
-        _row = null;
-        _states = const <String, MangaChapterStateRow>{};
-        _downloaded = const <String>{};
-        _jobs = const <String, MangaDownloadJobRow>{};
-        // 丢掉三样只属于「在库」的状态：当前章、订阅、自动下载。
-        _entry = entry.copyWith(
-          clearCurrentChapter: true,
-          subscribed: false,
-          autoDownload: false,
-        );
-      });
+      final EpubBookRow? remaining = result.row;
+      if (remaining != null) {
+        // 非破坏移出：行还在，阅读状态 / 已读 / 下载状态原样保留，只切回非书架态。
+        setState(() {
+          _row = remaining;
+          _entry =
+              OnlineMangaLibraryEntry.tryParse(remaining.sourceMetadata) ??
+              entry.copyWith(subscribed: false, autoDownload: false);
+        });
+        await _refreshDownloadState();
+      } else {
+        // 兜底：行已不存在时退回未入库态。
+        setState(() {
+          _row = null;
+          _states = const <String, MangaChapterStateRow>{};
+          _downloaded = const <String>{};
+          _jobs = const <String, MangaDownloadJobRow>{};
+          _entry = entry.copyWith(
+            clearCurrentChapter: true,
+            subscribed: false,
+            autoDownload: false,
+          );
+        });
+      }
     } on Object catch (error, stack) {
       ErrorLogService.instance.log('MangaSeriesPage.remove', error, stack);
       if (mounted) {
@@ -1435,9 +1447,10 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     }
   }
 
-  /// Local source 的「移出书架」：与在线作品页同一个统一弹窗。默认只删 Library
-  /// 记录并立墓碑（ADR 0013）；勾选「同时删除本地文件」时先删 Local source root
-  /// 里的原作文件夹/文件，成功后才删行。文件删除失败时作品留在架上并提示。
+  /// Local source 的「移出书架」：与在线作品页同一个统一弹窗。默认只清 Library
+  /// membership（票 04）：行、阅读状态与 `local` 原作都保留。勾选「同时删除本地
+  /// 文件」时先删 Local source root 里的原作文件夹/文件，成功后才连行与状态一起
+  /// 删除并立墓碑（ADR 0013）；文件删除失败时作品留在架上并提示。
   Future<void> _removeLocalSourceFromLibrary(
     EpubBookRow row,
     AppModel appModel,
@@ -1466,7 +1479,12 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
         );
         return;
       }
-      // Local source 的章节表住在刚删掉的行里；回书架。
+      // 非破坏移出时行仍在（章节表也还在）；删文件移出时行已删——两种情况都回
+      // Local source 页，由该页重新判定「已入架 / 未入架」。
+      final EpubBookRow? remaining = result.row;
+      if (remaining != null) {
+        setState(() => _row = remaining);
+      }
       final NavigatorState navigator = Navigator.of(context);
       if (navigator.canPop()) navigator.pop();
     } on Object catch (error, stack) {
@@ -2748,9 +2766,10 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     if (_scannedLocal != null) return <Widget>[];
     if (_isLocal) {
       // my-comic：端上 OCR 已移除，本地卷详情页不再提供识别 / OCR 设置入口。
-      // Local source 作品必须能「移出书架」且不删文件（ADR 0013）；受管本地卷
-      // （mokuro/PDF 转漫画）沿用书架长按菜单的删除路径，这里不加按钮。
-      if (_isLocalSource && _row != null) {
+      // Local source 作品在书架时必须能「移出书架」且默认不删文件（ADR 0013）；
+      // 移出后（membership=false）按钮消失（票 04）。受管本地卷（mokuro/PDF
+      // 转漫画）沿用书架长按菜单的删除路径，这里不加按钮。
+      if (_isLocalSource && (_row?.isInLibrary ?? false)) {
         return <Widget>[
           MediaDetailSecondaryButton(
             buttonKey: const ValueKey<String>(

@@ -1028,6 +1028,20 @@ mixin _FushiDbContentMisc
         ),
       );
 
+  /// 翻转一条 Manga 行的 Library membership（v5，manga-library-membership）。
+  ///
+  /// 「移出书架」= false，「加入书架」= true。只写 `in_library` 一列：bookKey /
+  /// uid / 阅读进度 / 已读 / 下载任务 / 章目录映射 / 下载目录全部原样保留，
+  /// 重新加入时仍复用同一条记录与同一个文件夹。
+  ///
+  /// 返回实际更新的行数（0 = bookKey 不存在）。
+  Future<int> setEpubBookInLibrary(
+    String bookKey, {
+    required bool inLibrary,
+  }) =>
+      (update(epubBooks)..where((t) => t.bookKey.equals(bookKey)))
+          .write(EpubBooksCompanion(inLibrary: Value<bool>(inLibrary)));
+
   // ── manga_chapter_states（v89）─────────────────────────────────────
   //
   // 「章」的读取状态。为什么不并进 reader_positions：那张表 bookUid 是
