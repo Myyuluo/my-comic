@@ -3,9 +3,11 @@ import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
+import 'package:fushi/src/focus/fushi_focus_controller.dart';
 import 'package:fushi/src/media/manga/history/manga_history.dart';
 import 'package:fushi/src/media/manga/library/manga_series_page.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_service.dart';
+import 'package:fushi/src/media/media_search_text.dart';
 import 'package:fushi/src/media/sources/manga_fushi_source.dart';
 import 'package:fushi/src/models/app_model.dart';
 import 'package:fushi/src/utils/components/fushi_floating_chrome.dart'
@@ -14,6 +16,7 @@ import 'package:fushi/src/utils/components/fushi_floating_chrome.dart'
         FushiFloatingChromeHost,
         FushiFloatingChromeInset,
         FushiFloatingChromeInsetSpacer;
+import 'package:fushi/src/utils/components/fushi_header_search.dart';
 import 'package:fushi/src/utils/components/fushi_staggered_entrance.dart';
 import 'package:fushi/src/utils/fushi_icons.dart';
 import 'package:fushi/src/utils/net/app_http_image.dart';
@@ -25,8 +28,11 @@ import 'package:fushi/utils.dart';
 /// `reader_positions.updatedAt`，也不拿读者进度反推历史。布局沿用 Fushi v3.0.0
 /// 的库页语言：MD3 宽窗页内标题胶囊 + 封面网格 + 书名 footer；不显示日期分组。
 ///
-/// 本票只做浏览与打开：点击进入作品页（在库走 [ShelfMangaSeriesTarget]，已移出
-/// 书架 / 未入书架走来源作品页；来源不可用给错误提示）。搜索与删除由后续票加。
+/// 右上角只有「搜索」「删除」两个动作：搜索复用页头可展开搜索（
+/// [FushiHeaderSearchController] + [FushiFloatingChromeBar] 整行换搜索栏），按
+/// 书名实时过滤；删除分单本与全部，单本立即删除并 toast，全部先二次确认。
+/// 删除只动 `media_open_history`，不碰 Reading progress / 章节 `readAt` / 书级
+/// 完成标记 / 书架状态（ADR 0018）。
 class MangaHistoryPage extends ConsumerStatefulWidget {
   const MangaHistoryPage({super.key});
 
@@ -37,10 +43,32 @@ class MangaHistoryPage extends ConsumerStatefulWidget {
 class _MangaHistoryPageState extends ConsumerState<MangaHistoryPage> {
   late Future<List<MangaHistoryEntry>> _entries;
 
+  /// 会话内搜索词（不落库）：由页头可展开搜索实时给出，收起即清空。
+  String _query = '';
+  final TextEditingController _searchController = TextEditingController();
+
+  /// 页头可展开搜索（ticket 01 修复后的共享组件）：展开时整行换成搜索栏，
+  /// 输入实时过滤网格，Esc / ← 先清空再收起。
+  late final FushiHeaderSearchController _headerSearch =
+      FushiHeaderSearchController(
+        textController: _searchController,
+        buttonFocusId: const FushiFocusId('manga-history-search'),
+        hintText: t.manga_history_search_hint,
+        fieldKey: const ValueKey<String>('manga_history_search_field'),
+        onQueryChanged: (String value) => setState(() => _query = value),
+      );
+
   @override
   void initState() {
     super.initState();
     _entries = _load();
+  }
+
+  @override
+  void dispose() {
+    _headerSearch.dispose();
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<List<MangaHistoryEntry>> _load() =>
@@ -50,6 +78,48 @@ class _MangaHistoryPageState extends ConsumerState<MangaHistoryPage> {
     final Future<List<MangaHistoryEntry>> next = _load();
     setState(() => _entries = next);
     await next;
+  }
+
+  /// 单本删除：立即删历史行并 toast，不逐条确认。
+  Future<void> _deleteEntry(MangaHistoryEntry entry) async {
+    List<MangaHistoryEntry> current = const <MangaHistoryEntry>[];
+    try {
+      current = await _entries;
+    } on Object {
+      // 加载失败时仍允许删除（用户看到的是错误态，历史行本身可能读不出来）。
+    }
+    if (!mounted) return;
+    await deleteMangaHistoryEntry(ref.read(appProvider).database, entry);
+    if (!mounted) return;
+    setState(() {
+      _entries = Future<List<MangaHistoryEntry>>.value(
+        current
+            .where((MangaHistoryEntry item) => item.key != entry.key)
+            .toList(growable: false),
+      );
+    });
+    FushiToast.show(msg: t.manga_history_deleted_entry);
+  }
+
+  /// 全部删除：二次确认后清空全部漫画历史。
+  Future<void> _confirmDeleteAll() async {
+    final bool confirmed = await showFushiConfirmDialog(
+      context: context,
+      title: t.manga_history_delete_all_confirm_title,
+      message: t.manga_history_delete_all_confirm_body,
+      confirmLabel: t.manga_history_delete_all_confirm_action,
+      icon: FushiIcons.deleteSweep,
+      destructive: true,
+    );
+    if (!confirmed || !mounted) return;
+    await clearMangaHistory(ref.read(appProvider).database);
+    if (!mounted) return;
+    setState(() {
+      _entries = Future<List<MangaHistoryEntry>>.value(
+        const <MangaHistoryEntry>[],
+      );
+    });
+    FushiToast.show(msg: t.manga_history_deleted_all);
   }
 
   void _toastUnavailable() {
@@ -109,16 +179,62 @@ class _MangaHistoryPageState extends ConsumerState<MangaHistoryPage> {
     await _reload();
   }
 
+  /// 右上角动作：搜索（展开整行搜索栏）+ 全部删除。只有这两个。
+  Widget _buildHeaderActions() => FushiShellHeaderActions(
+    actions: <Widget>[
+      fushiHeaderSearchButton(_headerSearch),
+      FushiIconButton(
+        key: const ValueKey<String>('manga_history_delete_all'),
+        icon: FushiIcons.deleteSweep,
+        tooltip: t.manga_history_delete_all,
+        onTap: _confirmDeleteAll,
+      ),
+    ],
+    search: _headerSearch,
+  );
+
+  /// 空态 / 错误态的占位列表：与网格一样让出浮动工具区的顶边留白。
+  Widget _buildPlaceholder(
+    FushiDesignTokens tokens, {
+    required IconData icon,
+    required String message,
+    Key? key,
+  }) {
+    return ListView(
+      padding: EdgeInsets.fromLTRB(
+        tokens.spacing.page,
+        tokens.spacing.page,
+        tokens.spacing.page,
+        tokens.spacing.page,
+      ),
+      children: <Widget>[
+        const FushiFloatingChromeInsetSpacer(),
+        Padding(
+          padding: EdgeInsets.only(top: tokens.spacing.page),
+          child: FushiPlaceholderMessage(
+            key: key,
+            icon: icon,
+            message: message,
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final FushiDesignTokens tokens = FushiDesignTokens.of(context);
     return FushiFloatingChromeHost(
-      // 与下载页 / 浏览页同一接线：MD3 宽窗只画页内标题胶囊（外壳下发），
-      // 窄窗标题交给底栏，Apple / 玻璃设计交给外壳大标题。
-      chromeBuilder: (BuildContext context, _, FushiShellActionsSlot slot) =>
-          isGlassDesign(context)
-          ? const SizedBox.shrink()
-          : FushiFloatingChromeBar(tabs: const SizedBox.shrink(), slot: slot),
+      // 与浏览页 / 库页浮动工具栏同一接线：整行由 [FushiFloatingChromeBar] 画，
+      // 页内标题胶囊由外壳下发；搜索展开时整行换成搜索栏（ticket 01 的共享
+      // 组件）。动作只有「搜索」「删除」两颗。
+      chromeBuilder: (BuildContext context, _, FushiShellActionsSlot slot) {
+        slot.claimActions(this, visible: true, actions: _buildHeaderActions());
+        return FushiFloatingChromeBar(
+          tabs: const SizedBox.shrink(),
+          slot: slot,
+        );
+      },
       child: FushiEntranceScope(
         child: FutureBuilder<List<MangaHistoryEntry>>(
           future: _entries,
@@ -128,23 +244,10 @@ class _MangaHistoryPageState extends ConsumerState<MangaHistoryPage> {
                 AsyncSnapshot<List<MangaHistoryEntry>> snapshot,
               ) {
                 if (snapshot.hasError) {
-                  return ListView(
-                    padding: EdgeInsets.fromLTRB(
-                      tokens.spacing.page,
-                      tokens.spacing.page,
-                      tokens.spacing.page,
-                      tokens.spacing.page,
-                    ),
-                    children: <Widget>[
-                      const FushiFloatingChromeInsetSpacer(),
-                      Padding(
-                        padding: EdgeInsets.only(top: tokens.spacing.page),
-                        child: FushiPlaceholderMessage(
-                          icon: FushiIcons.cloudOff,
-                          message: t.online_source_error_generic,
-                        ),
-                      ),
-                    ],
+                  return _buildPlaceholder(
+                    tokens,
+                    icon: FushiIcons.cloudOff,
+                    message: t.online_source_error_generic,
                   );
                 }
                 if (!snapshot.hasData) {
@@ -152,24 +255,25 @@ class _MangaHistoryPageState extends ConsumerState<MangaHistoryPage> {
                 }
                 final List<MangaHistoryEntry> entries = snapshot.data!;
                 if (entries.isEmpty) {
-                  return ListView(
-                    padding: EdgeInsets.fromLTRB(
-                      tokens.spacing.page,
-                      tokens.spacing.page,
-                      tokens.spacing.page,
-                      tokens.spacing.page,
-                    ),
-                    children: <Widget>[
-                      const FushiFloatingChromeInsetSpacer(),
-                      Padding(
-                        padding: EdgeInsets.only(top: tokens.spacing.page),
-                        child: FushiPlaceholderMessage(
-                          key: const ValueKey<String>('manga_history_empty'),
-                          icon: FushiIcons.history,
-                          message: t.manga_history_empty,
-                        ),
-                      ),
-                    ],
+                  return _buildPlaceholder(
+                    tokens,
+                    key: const ValueKey<String>('manga_history_empty'),
+                    icon: FushiIcons.history,
+                    message: t.manga_history_empty,
+                  );
+                }
+                // 搜索实时按书名过滤；清空 / 收起后 `_query` 为空，恢复完整列表。
+                final List<MangaHistoryEntry> visible = filterByMediaSearch(
+                  entries,
+                  _query,
+                  (MangaHistoryEntry entry) => <String>[entry.title],
+                );
+                if (visible.isEmpty) {
+                  return _buildPlaceholder(
+                    tokens,
+                    key: const ValueKey<String>('manga_history_search_empty'),
+                    icon: FushiIcons.searchOff,
+                    message: t.manga_history_search_empty,
                   );
                 }
                 return LayoutBuilder(
@@ -198,9 +302,9 @@ class _MangaHistoryPageState extends ConsumerState<MangaHistoryPage> {
                         physics: const AlwaysScrollableScrollPhysics(
                           parent: BouncingScrollPhysics(),
                         ),
-                        itemCount: entries.length,
+                        itemCount: visible.length,
                         itemBuilder: (BuildContext context, int index) {
-                          final MangaHistoryEntry entry = entries[index];
+                          final MangaHistoryEntry entry = visible[index];
                           return FushiStaggeredEntrance(
                             index: index,
                             child: _MangaHistoryCard(
@@ -209,6 +313,7 @@ class _MangaHistoryPageState extends ConsumerState<MangaHistoryPage> {
                               ),
                               entry: entry,
                               onTap: () => _openEntry(entry),
+                              onDelete: () => _deleteEntry(entry),
                             ),
                           );
                         },
@@ -226,14 +331,20 @@ class _MangaHistoryCard extends StatelessWidget {
   const _MangaHistoryCard({
     required this.entry,
     required this.onTap,
+    required this.onDelete,
     super.key,
   });
 
   final MangaHistoryEntry entry;
   final VoidCallback onTap;
 
+  /// 单本删除：立即执行，不逐条确认。
+  final VoidCallback onDelete;
+
   @override
   Widget build(BuildContext context) {
+    final FushiDesignTokens tokens = FushiDesignTokens.of(context);
+    final double overlayInset = tokens.spacing.gap * 0.75;
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
@@ -241,7 +352,31 @@ class _MangaHistoryCard extends StatelessWidget {
         builder: (BuildContext context, bool _) => Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            Expanded(child: ShelfCoverFrame(child: _MangaHistoryCover(entry))),
+            Expanded(
+              child: Stack(
+                fit: StackFit.expand,
+                children: <Widget>[
+                  ShelfCoverFrame(child: _MangaHistoryCover(entry)),
+                  // 封面右上角原未读角标位置：单本删除按钮。
+                  PositionedDirectional(
+                    top: overlayInset,
+                    end: overlayInset,
+                    child: FushiIconButton(
+                      key: ValueKey<String>(
+                        'manga_history_delete_${entry.key}',
+                      ),
+                      icon: FushiIcons.delete,
+                      tooltip: t.manga_history_delete_entry,
+                      size: 16,
+                      padding: const EdgeInsets.all(8),
+                      backgroundColor: coverBadgeScrim(context),
+                      enabledColor: coverBadgeForeground(context),
+                      onTap: onDelete,
+                    ),
+                  ),
+                ],
+              ),
+            ),
             SizedBox(
               height: ShelfCardFooter.heightFor(context),
               child: ShelfCardFooter(title: entry.title),
