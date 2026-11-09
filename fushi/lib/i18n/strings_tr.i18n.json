@@ -4458,6 +4458,7 @@
   "manga_section_display": "Display and zoom",
   "manga_section_spread_panels": "Spreads and panels",
   "manga_section_viewing": "Görüntüleme ve sayfa çevirme",
+  "manga_series_add_to_shelf_after_download": "Download complete. Add \"$title\" to your library?",
   "manga_series_all_read": "Tüm bölümler okundu",
   "manga_series_auto_download": "Yeni bölümleri otomatik indir",
   "manga_series_auto_ocr": "İndirdikten sonra tanı",
