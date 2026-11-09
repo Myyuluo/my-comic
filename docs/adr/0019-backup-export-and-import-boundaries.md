@@ -34,3 +34,21 @@ ADR 0005 原计划在 JVM sidecar 中复用 Mihon 备份模型，v1 只导入；
 ## Amendment 2026-11-10（manga-ux-backup-batch）
 
 插件商店导出**仅限 manga Extension store**。MyComic 是漫画-only 应用；Mihon v0.21.3 的 `BackupExtensionStore` 没有 media-kind 字段，无法表达 Aniyomi（视频）store，导出后在导入端只会被重建为漫画 store。因此 Aniyomi store 不写入备份，导出实现（`_MangaExtensionStoreExportSection`）与测试都显式按 manga-only 命名与断言。
+
+## Amendment 2026-11-10（manga-backup-import-ux）
+
+导入体验修复确定了导入作品在来源恢复、封面回退与来源缺失时的语义边界：
+
+- **运行时来源回退**：解析 Library 中在线 Manga 的 Source 时，先精确匹配已启用的 `(extensionPackage, sourceId)`；未命中（典型是导入时 Extension 未安装、条目以占位来源落库）时，再按数字 `sourceId` 匹配已启用的 Source。刷新章节、加载章节页面、下载、获取封面与解析来源名称共用这一规则。同一数字 `sourceId` 命中多个扩展包时视为歧义，继续按「来源未安装或已停用」降级，不随意选择候选。回退只发生在运行时，不回写条目。
+- **不做身份迁移**：不修改条目的 `extensionPackage`，不重算 `bookKey`，不改写 `uid`、History 的 source identity 或下载 manifest。因此 Reading progress、Chapter 状态、History、Tag 与下载映射在 Extension 安装后保持原样，无需迁移或重新导入。从已安装 Source 浏览到同一部作品时，重复检测按 `(数字 sourceId, series key)` 命中既有占位条目，不新建重复条目。语言范围与同源多语言 chip 对占位条目仍按存储的扩展包判断，不在本边界内。
+- **封面远程回退**：Library 与 Manga 作品页的封面按「显式本地封面 → 常规本地封面文件 → 备份描述符中的 `series.coverUrl` → 占位封面」解析。远程封面只作为展示地址交给现有 HTTP 图片缓存懒加载，不依赖 Source 是否安装；它不写入「最近可用本地封面」缓存，不改变离线封面语义。导入阶段不下载封面；URL 为空、过期、防盗链或网络失败时该作品回退占位封面，不影响其他作品。
+- **缺失来源文案**：真实未安装的 Source 在用户界面统一称为「来源未安装」。导入时把备份中的 Source 名称保存到占位条目；名称已知时显示「来源未安装：<名称>」，名称未知或旧备份只显示「来源未安装」。导入完成报告用 warning notice 列出来源名称，并提示安装对应扩展后可阅读。作品页说明当前只展示本机已保存的章节，刷新与阅读需要安装对应 Extension；章节打开或下载失败提示「来源未安装，请先安装对应扩展后重试」。不自动安装 Extension，不提供跳转扩展商店的入口，也不隐藏或删除该 Manga。
+- **内部占位值边界**：`mihon.unavailable` 是导入时 Extension 未安装而写入条目的内部占位来源标识，不是领域术语，也不出现在用户文案中；用户可见概念只有「来源未安装」。备份导出会跳过这类占位来源的图源设置，不写入无法对应到可安装 Source 的配置。
+
+**Consequences**
+
+- 安装并启用 Extension 后，再次打开作品或刷新即可阅读，无需重新导入或重启；Extension 被停用或卸载后仍按「来源未安装或已停用」降级。
+- 数字 `sourceId` 在多个已启用 Extension 间不唯一时，作品保持不可解析，而不是冒险打开错误站点。
+- 远程封面回退依赖备份中保存的 URL；URL 失效时作品继续显示占位封面。
+- 条目的来源身份始终是导入时写入的值；将来若需要改写身份，必须单独决策并迁移 History、Tag 与下载映射。
+- 旧备份或旧条目缺少来源名称时只显示「来源未安装」，不伪造名称。
