@@ -402,7 +402,7 @@ void main() {
     );
   });
 
-  testWidgets('胶囊跟随当前标签页签切换候选，点击打开该标签的最近阅读', (
+  testWidgets('胶囊始终指向全局最近阅读，不随标签页签切换', (
     WidgetTester tester,
   ) async {
     final String shelfUid = await seedManga(
@@ -437,7 +437,7 @@ void main() {
     expect(
       find.ancestor(of: pill, matching: find.byTooltip('无标签漫画')),
       findsOneWidget,
-      reason: '书架页签显示书架内最近阅读',
+      reason: '初始显示全局最近阅读',
     );
 
     await tester.tap(
@@ -445,18 +445,19 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    expect(find.text('标签漫画'), findsOneWidget, reason: '网格已切到该标签的漫画');
     expect(
-      find.ancestor(of: pill, matching: find.byTooltip('标签漫画')),
+      find.ancestor(of: pill, matching: find.byTooltip('无标签漫画')),
       findsOneWidget,
-      reason: '切换到标签页签后胶囊跟随该标签的最近阅读',
+      reason: '胶囊不随标签页签切换，仍指向全局最近阅读',
     );
     await tester.tap(pill);
     await tester.pump();
     expect(appModel.opened, hasLength(1));
     expect(
       appModel.opened.single?.mediaIdentifier,
-      ReaderFushiSource.mediaIdentifierFor('m-tagged'),
-      reason: '点击胶囊打开当前标签的最近阅读作品',
+      ReaderFushiSource.mediaIdentifierFor('m-shelf'),
+      reason: '点击胶囊始终打开全局最近阅读',
     );
 
     appModel.opened.clear();
@@ -464,16 +465,17 @@ void main() {
       find.byKey(ValueKey<String>('manga_tag_tab_$otherTagId')),
     );
     await tester.pumpAndSettle();
+    expect(find.text('第二标签漫画'), findsOneWidget, reason: '网格已切到另一个标签');
     expect(
-      find.ancestor(of: pill, matching: find.byTooltip('第二标签漫画')),
+      find.ancestor(of: pill, matching: find.byTooltip('无标签漫画')),
       findsOneWidget,
-      reason: '切换另一个标签后胶囊再次跟随该标签的最近阅读',
+      reason: '切换另一个标签后胶囊仍不变',
     );
     await tester.tap(pill);
     await tester.pump();
     expect(
       appModel.opened.single?.mediaIdentifier,
-      ReaderFushiSource.mediaIdentifierFor('m-other-tag'),
+      ReaderFushiSource.mediaIdentifierFor('m-shelf'),
     );
   });
 }
