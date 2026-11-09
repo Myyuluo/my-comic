@@ -28,3 +28,14 @@ CBZ 从「后续也可」变为新下载的默认形态：设置新增「保存�
 新下载的 Source 目录名改为 `源名 (LANG)`：语言取 Source 的语言原值并大写，保留子标签（`zh-Hans` → `ZH-HANS`）；语言为空、`all` 或 `multi` 时不写语言后缀。已有 Source 目录不重命名，继续按源身份复用；`pages.json.source.name` 仍保存裸源名，语言只体现在目录名上。目录名的净化、截断与同名冲突后缀规则不变。
 
 原文（Consequences 小节）中的 `localcomic` 按 `local` 理解：本地源根目录已更名为 `local`，见 ADR 0013 的 2026-11-08（local-source-polish）修订。该句的语义不变——`downloads` 不是 Mihon 本地源根，`local` 才是 Local source。
+
+## Amendment 2026-11-10（manga-library-membership，文件夹身份复用）
+
+重新加入同一部在线作品时，Download library 不再必然生成 ` (2)` 副本：
+
+- 建立或加入一部在线 Manga 时，在目标 Source 目录下读取每个 Manga 文件夹的章节容器（文件夹章节与 `.cbz` 章节）里的 `pages.json`，用 Download identity（运行时、数字 Source ID、series/manga key；扩展包名仅作 tie-breaker，占位扩展包与真实包兼容）判断归属。恰好一个文件夹匹配（或无法唯一确定时，恰有一个带相同真实扩展包）→ 复用该文件夹；仍无法唯一确定 → 不猜，保持 ` (2)` 冲突后缀；没有任何 manifest 能证明归属 → 沿用原有的 ` (2)` 安全规则，绝不覆盖无法证明归属的用户目录。
+- 复用后立即重建该作品的章节映射，作品页 / 详情页马上显示已下载，不必先运行 Rebuild download index。
+- `local` 中带 `pages.json` 的文件夹也能按同一身份关联到在线 Manga；没有 manifest 的 `local` 文件夹不做标题或文件夹名匹配。
+- 已有的重复文件夹（含 ` (2)`）不自动删除、合并或重命名；Rebuild download index 报告重复副本，并只在已记录目录或唯一最新完整副本可判定时采用，否则跳过。
+
+以上复用只依据 `pages.json` 记录的 Download identity，不使用标题匹配；`downloads/{source}/{manga}` 的可读目录规则与 Source 目录命名规则不变。
