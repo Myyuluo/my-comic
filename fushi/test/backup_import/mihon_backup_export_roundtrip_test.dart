@@ -1099,6 +1099,160 @@ void main() {
     },
   );
 
+  test('app settings and non-library History round-trip', () async {
+    await db.setPrefs(<String, String>{
+      'shelf_sort_mode': PrefCodec.encode('title'),
+      'auto_search': PrefCodec.encode(false),
+      'popup_dictionary_columns': PrefCodec.encode(3),
+      'srs_mining_deck_id': PrefCodec.encode(1700000000123),
+      'floating_lyric_font_size': PrefCodec.encode(20.5),
+      'audio_sources': PrefCodec.encode(<String>[
+        'https://a.test',
+        'https://b.test',
+      ]),
+    });
+    await _insertHistory(
+      db,
+      mediaSource: 'manga_online:["mihon","org.example.ext","456"]',
+      mediaId: '/manga/beta',
+      openedAt: 1700000099000,
+      snapshotJson: jsonEncode(<String, Object?>{
+        'title': 'Beta',
+        'author': 'Author B',
+        'imageUrl': 'https://example.test/beta.jpg',
+        'mangaHistory': <String, Object?>{
+          'kind': 'manga-history',
+          'online': <String, Object?>{
+            'runtime': 'mihon',
+            'extensionPackage': 'org.example.ext',
+            'sourceId': '456',
+            'seriesKey': '/manga/beta',
+            'coverUrl': 'https://example.test/beta.jpg',
+            'raw': <String, Object?>{'url': '/manga/beta', 'title': 'Beta'},
+          },
+        },
+        'mihon_history': <String, Object?>{
+          'chapter_url': '/chapter/b1',
+          'read_at': 1700000099000,
+          'read_duration': 12000,
+        },
+      }),
+    );
+
+    final File target = File(p.join(tmp.path, 'settings-history.tachibk'));
+    await MihonBackupExporter(database: db).exportToFile(
+      target: target,
+      options: const MihonBackupExportOptions(
+        includeLibrary: true,
+        includeChapters: true,
+        includeHistory: true,
+        includeAllRead: true,
+        includeAppSettings: true,
+      ),
+    );
+
+    final MihonBackupData parsed = MihonBackupParser.parseFile(target);
+    expect(
+      parsed.preferences.map((MihonBackupPreference pref) => pref.key).toSet(),
+      <String>{
+        'shelf_sort_mode',
+        'auto_search',
+        'popup_dictionary_columns',
+        'srs_mining_deck_id',
+        'floating_lyric_font_size',
+        'audio_sources',
+      },
+    );
+    final MihonBackupManga readOnly = parsed.mangas.single;
+    expect(readOnly.favorite, isFalse);
+    expect(readOnly.url, '/manga/beta');
+
+    final FushiDatabase restored = FushiDatabase.forTesting(
+      NativeDatabase.memory(),
+    );
+    addTearDown(restored.close);
+    await restored.setPrefs(<String, String>{
+      'shelf_sort_mode': PrefCodec.encode('author'),
+    });
+    final MihonBackupImportReport imported = await MihonBackupImportService(
+      database: restored,
+      bookDirectory: (String bookKey) async => p.join(tmp.path, bookKey),
+    ).importFile(target);
+
+    expect(await restored.getEpubBookMetas(), isEmpty);
+    expect(imported.appPreferencesImported, 5);
+    expect(
+      imported.appPreferencesSkippedByReason[
+          MihonBackupAppPreferenceSkipReason.alreadyPresent],
+      1,
+    );
+    expect(imported.nonLibraryHistoryImported, 1);
+
+    final Map<String, String> prefs = await restored.getAllPrefs();
+    expect(
+      PrefCodec.decode<String>(prefs['shelf_sort_mode']!, ''),
+      'author',
+      reason: 'an existing local value wins over the backup',
+    );
+    expect(PrefCodec.decode<bool>(prefs['auto_search']!, true), isFalse);
+    expect(PrefCodec.decode<int>(prefs['popup_dictionary_columns']!, 0), 3);
+    expect(
+      PrefCodec.decode<int>(prefs['srs_mining_deck_id']!, 0),
+      1700000000123,
+    );
+    expect(
+      PrefCodec.decode<double>(prefs['floating_lyric_font_size']!, 0.0),
+      closeTo(20.5, 1e-9),
+    );
+    expect(
+      PrefCodec.decode<List<String>>(prefs['audio_sources']!, <String>[]),
+      <String>['https://a.test', 'https://b.test'],
+    );
+
+    final List<MediaOpenHistoryRow> history =
+        await restored.getAllMediaOpenHistory();
+    expect(history, hasLength(1));
+    expect(history.single.mediaId, '/manga/beta');
+    expect(history.single.openedAt, 1700000099000);
+    final Map<String, Object?> snapshot =
+        (jsonDecode(history.single.snapshotJson) as Map<Object?, Object?>)
+            .cast<String, Object?>();
+    expect(snapshot['title'], 'Beta');
+    expect(snapshot['author'], 'Author B');
+    expect(snapshot['imageUrl'], 'https://example.test/beta.jpg');
+    final Map<String, Object?> mihonHistory =
+        (snapshot['mihon_history'] as Map<Object?, Object?>)
+            .cast<String, Object?>();
+    expect(mihonHistory['chapter_url'], '/chapter/b1');
+    expect(mihonHistory['read_duration'], 12000);
+
+    final List<MangaHistoryEntry> entries = await loadMangaHistory(restored);
+    expect(entries, hasLength(1));
+    expect(entries.single.title, 'Beta');
+    expect(entries.single.bookKey, isNull);
+    expect(entries.single.coverUrl, 'https://example.test/beta.jpg');
+
+    // Re-importing the same file is idempotent.
+    final MihonBackupImportReport second = await MihonBackupImportService(
+      database: restored,
+      bookDirectory: (String bookKey) async => p.join(tmp.path, bookKey),
+    ).importFile(target);
+    expect(second.appPreferencesImported, 0);
+    expect(
+      second.appPreferencesSkippedByReason[
+          MihonBackupAppPreferenceSkipReason.alreadyPresent],
+      6,
+    );
+    expect(second.nonLibraryHistoryImported, 0);
+    expect(
+      second.nonLibraryHistorySkippedByReason[
+          MihonBackupHistorySkipReason.alreadyNewer],
+      1,
+    );
+    expect(await restored.getAllMediaOpenHistory(), hasLength(1));
+    expect(await restored.getEpubBookMetas(), isEmpty);
+  });
+
   test('default filename uses my-comic_YYYY-MM-DD_HH-mm.tachibk', () {
     expect(
       mihonBackupDefaultFileName(DateTime(2026, 11, 9, 20, 5)),

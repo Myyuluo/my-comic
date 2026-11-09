@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 
 import 'package:fushi/src/backup_import/mihon_backup_import_service.dart';
 import 'package:fushi/src/backup_import/mihon_backup_parser.dart';
+import 'package:fushi/src/media/manga/history/manga_history.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi/src/pages/implementations/manga_tag_tabs.dart';
 
@@ -48,6 +49,8 @@ void main() {
       categories: const <FixtureCategory>[
         FixtureCategory(name: 'Action', order: 0, id: 10),
         FixtureCategory(name: 'Drama', order: 1, id: 20),
+        // Blank category names cannot become Tags and are reported as skipped.
+        FixtureCategory(name: '   ', order: 9, id: 30),
       ],
       sources: const <FixtureSource>[
         FixtureSource(id: 123, name: 'Source A'),
@@ -120,6 +123,7 @@ void main() {
     expect(report.skippedEntries, 1);
     expect(report.failedEntries, 0);
     expect(report.categoriesCreated, 2);
+    expect(report.categoriesSkipped, 1);
     expect(report.chapterStatesWritten, 3);
     expect(
       report.missingSources.map((MihonBackupSourceIssue s) => s.sourceId),
@@ -204,6 +208,129 @@ void main() {
     expect(await db.getAllMediaCollections(), isEmpty);
     expect(await db.getAllTagAssignments(), hasLength(2));
   });
+
+  test(
+    'fills missing MyComic app settings without overwriting local values',
+    () async {
+      await db.setPrefs(<String, String>{
+        'shelf_sort_mode': PrefCodec.encode('author'),
+      });
+
+      final File backup = await writeFixtureBackup(
+        tmp,
+        mangas: const <FixtureManga>[],
+        preferences: <FixturePreference>[
+          // Locally present: the backup must not overwrite it.
+          const FixturePreference(
+            key: 'shelf_sort_mode',
+            type: FixturePreferenceType.stringValue,
+            value: 'title',
+          ),
+          const FixturePreference(
+            key: 'auto_search',
+            type: FixturePreferenceType.booleanValue,
+            value: false,
+          ),
+          const FixturePreference(
+            key: 'popup_dictionary_columns',
+            type: FixturePreferenceType.intValue,
+            value: 3,
+          ),
+          const FixturePreference(
+            key: 'srs_mining_deck_id',
+            type: FixturePreferenceType.longValue,
+            value: 1700000000123,
+          ),
+          const FixturePreference(
+            key: 'floating_lyric_font_size',
+            type: FixturePreferenceType.floatValue,
+            value: 20.5,
+          ),
+          const FixturePreference(
+            key: 'audio_sources',
+            type: FixturePreferenceType.stringSetValue,
+            value: <String>['https://a.test', 'https://b.test'],
+          ),
+          // Known dynamic key family: per-book audiobook position.
+          const FixturePreference(
+            key: 'audiobook_pos_book-1',
+            type: FixturePreferenceType.intValue,
+            value: 1234,
+          ),
+          // Mihon's own key: MyComic must never write it into its settings.
+          const FixturePreference(
+            key: 'theme_mode',
+            type: FixturePreferenceType.stringValue,
+            value: 'dark',
+          ),
+        ],
+      );
+
+      final MihonBackupImportReport report = await service().importFile(backup);
+
+      expect(report.appPreferencesImported, 6);
+      expect(
+        report.appPreferencesSkippedByReason[MihonBackupAppPreferenceSkipReason
+            .alreadyPresent],
+        1,
+      );
+      expect(
+        report.appPreferencesSkippedByReason[MihonBackupAppPreferenceSkipReason
+            .notMyComicKey],
+        1,
+      );
+
+      final Map<String, String> prefs = await db.getAllPrefs();
+      expect(
+        PrefCodec.decode<String>(prefs['shelf_sort_mode']!, ''),
+        'author',
+        reason: 'an existing local value wins over the backup',
+      );
+      expect(PrefCodec.decode<bool>(prefs['auto_search']!, true), isFalse);
+      expect(PrefCodec.decode<int>(prefs['popup_dictionary_columns']!, 0), 3);
+      expect(
+        PrefCodec.decode<int>(prefs['srs_mining_deck_id']!, 0),
+        1700000000123,
+      );
+      expect(
+        PrefCodec.decode<double>(prefs['floating_lyric_font_size']!, 0.0),
+        closeTo(20.5, 1e-9),
+      );
+      expect(
+        PrefCodec.decode<List<String>>(prefs['audio_sources']!, <String>[]),
+        <String>['https://a.test', 'https://b.test'],
+      );
+      expect(PrefCodec.decode<int>(prefs['audiobook_pos_book-1']!, 0), 1234);
+      expect(prefs.containsKey('theme_mode'), isFalse);
+    },
+  );
+
+  test(
+    'rejects an unknown app preference value type without writing data',
+    () async {
+      final File backup = await writeFixtureBackup(
+        tmp,
+        mangas: const <FixtureManga>[
+          FixtureManga(source: 123, url: '/manga/alpha', title: 'Alpha'),
+        ],
+        preferences: const <FixturePreference>[
+          FixturePreference(
+            key: 'shelf_sort_mode',
+            type: FixturePreferenceType.unsupportedValue,
+            value: 'title',
+          ),
+        ],
+      );
+
+      await expectLater(
+        service().importFile(backup),
+        throwsA(isA<MihonBackupFormatException>()),
+      );
+
+      expect(await db.getEpubBookMetas(), isEmpty);
+      expect(await db.getAllPrefs(), isEmpty);
+    },
+  );
 
   test(
     're-import merges by source + manga url without duplicating rows',
@@ -718,6 +845,127 @@ void main() {
     // Re-import refreshes the same recent-history row instead of duplicating it.
     await service().importFile(backup);
     expect(await db.getAllMediaOpenHistory(), hasLength(1));
+  });
+
+  test('restores read-only works as History without library entries', () async {
+    final File backup = await writeFixtureBackup(
+      tmp,
+      sources: const <FixtureSource>[FixtureSource(id: 456, name: 'Source B')],
+      mangas: const <FixtureManga>[
+        FixtureManga(
+          source: 456,
+          url: '/manga/beta',
+          title: 'Beta',
+          author: 'Author B',
+          thumbnailUrl: 'https://example.test/beta.jpg',
+          favorite: false,
+          chapters: <FixtureChapter>[
+            FixtureChapter(
+              url: '/chapter/b1',
+              name: 'Chapter 1',
+              read: true,
+              lastPageRead: 4,
+            ),
+          ],
+          history: <FixtureHistory>[
+            FixtureHistory(
+              url: '/chapter/b1',
+              lastRead: 1700000099000,
+              readDuration: 12000,
+            ),
+          ],
+        ),
+      ],
+    );
+
+    final MihonBackupImportReport report = await service().importFile(backup);
+
+    expect(report.importedEntries, 0);
+    expect(report.skippedEntries, 1);
+    expect(report.nonLibraryHistoryImported, 1);
+    expect(report.skippedByReason[MihonBackupSkipReason.notInLibrary], 1);
+    expect(await db.getEpubBookMetas(), isEmpty);
+
+    // The restored row is visible on the History page and keeps the metadata
+    // needed to reopen the work's source page.
+    final List<MangaHistoryEntry> entries = await loadMangaHistory(db);
+    expect(entries, hasLength(1));
+    final MangaHistoryEntry entry = entries.single;
+    expect(entry.title, 'Beta');
+    expect(entry.openedAt, 1700000099000);
+    expect(entry.bookKey, isNull);
+    expect(entry.mediaId, '/manga/beta');
+    expect(entry.coverUrl, 'https://example.test/beta.jpg');
+    expect(entry.snapshot!.author, 'Author B');
+    expect(entry.online, isNotNull);
+    expect(entry.online!.runtime, OnlineMangaRuntimeKind.mihon);
+    expect(entry.online!.sourceId, '456');
+    expect(entry.online!.seriesKey, '/manga/beta');
+
+    final MediaOpenHistoryRow row = (await db.getAllMediaOpenHistory()).single;
+    final Map<String, Object?> snapshot =
+        (jsonDecode(row.snapshotJson) as Map<Object?, Object?>)
+            .cast<String, Object?>();
+    final Map<String, Object?> mihonHistory =
+        (snapshot['mihon_history'] as Map<Object?, Object?>)
+            .cast<String, Object?>();
+    expect(mihonHistory['chapter_url'], '/chapter/b1');
+    expect(mihonHistory['read_at'], 1700000099000);
+    expect(mihonHistory['read_duration'], 12000);
+
+    // Merge semantics: importing the same backup again keeps one row.
+    final MihonBackupImportReport second = await service().importFile(backup);
+    expect(second.nonLibraryHistoryImported, 0);
+    expect(
+      second.nonLibraryHistorySkippedByReason[MihonBackupHistorySkipReason
+          .alreadyNewer],
+      1,
+    );
+    expect(await db.getAllMediaOpenHistory(), hasLength(1));
+  });
+
+  test('reports why read-only works restore no History', () async {
+    final File backup = await writeFixtureBackup(
+      tmp,
+      sources: const <FixtureSource>[FixtureSource(id: 456, name: 'Source B')],
+      mangas: const <FixtureManga>[
+        // Read state without a History row: no read timestamp to restore.
+        FixtureManga(
+          source: 456,
+          url: '/manga/no-history',
+          title: 'No History',
+          favorite: false,
+          chapters: <FixtureChapter>[
+            FixtureChapter(url: '/chapter/n1', name: 'Chapter 1', read: true),
+          ],
+        ),
+        // History without a manga URL: nothing to attach it to.
+        FixtureManga(
+          source: 456,
+          url: '   ',
+          title: 'No URL',
+          favorite: false,
+          history: <FixtureHistory>[
+            FixtureHistory(url: '/chapter/u1', lastRead: 1700000088000),
+          ],
+        ),
+      ],
+    );
+
+    final MihonBackupImportReport report = await service().importFile(backup);
+
+    expect(report.nonLibraryHistoryImported, 0);
+    expect(
+      report.nonLibraryHistorySkippedByReason[MihonBackupHistorySkipReason
+          .noHistory],
+      1,
+    );
+    expect(
+      report.nonLibraryHistorySkippedByReason[MihonBackupHistorySkipReason
+          .missingUrl],
+      1,
+    );
+    expect(await db.getAllMediaOpenHistory(), isEmpty);
   });
 
   test('imports Bangumi tracking and skips unsupported trackers', () async {

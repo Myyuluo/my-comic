@@ -182,6 +182,15 @@ class _MihonBackupImportReportDialog extends StatelessWidget {
         ),
         style: tokens.type.listSubtitle,
       ),
+      if (report.categoriesSkipped > 0) ...[
+        const SizedBox(height: 8),
+        Text(
+          t.backup_import_mihon_categories_skipped(
+            count: report.categoriesSkipped,
+          ),
+          style: tokens.type.listSubtitle,
+        ),
+      ],
       const SizedBox(height: 8),
       Text(
         t.backup_import_mihon_summary_progress(
@@ -194,6 +203,114 @@ class _MihonBackupImportReportDialog extends StatelessWidget {
         t.backup_import_mihon_summary_history(count: report.historyRowsWritten),
         style: tokens.type.listSubtitle,
       ),
+      if (report.nonLibraryHistoryImported + report.nonLibraryHistorySkipped >
+          0) ...[
+        const SizedBox(height: 8),
+        Text(
+          t.backup_import_mihon_summary_nonlibrary_history(
+            imported: report.nonLibraryHistoryImported,
+            skipped: report.nonLibraryHistorySkipped,
+          ),
+          style: tokens.type.listSubtitle,
+        ),
+        if (report.nonLibraryHistorySkippedByReason[MihonBackupHistorySkipReason
+                .noHistory] !=
+            null) ...[
+          const SizedBox(height: 8),
+          Text(
+            t.backup_import_mihon_nonlibrary_history_missing(
+              count:
+                  report
+                      .nonLibraryHistorySkippedByReason[MihonBackupHistorySkipReason
+                      .noHistory]!,
+            ),
+            style: tokens.type.listSubtitle,
+          ),
+        ],
+        if (report.nonLibraryHistorySkippedByReason[MihonBackupHistorySkipReason
+                .missingUrl] !=
+            null) ...[
+          const SizedBox(height: 8),
+          Text(
+            t.backup_import_mihon_nonlibrary_history_missing_url(
+              count:
+                  report
+                      .nonLibraryHistorySkippedByReason[MihonBackupHistorySkipReason
+                      .missingUrl]!,
+            ),
+            style: tokens.type.listSubtitle,
+          ),
+        ],
+        if (report.nonLibraryHistorySkippedByReason[MihonBackupHistorySkipReason
+                .alreadyNewer] !=
+            null) ...[
+          const SizedBox(height: 8),
+          Text(
+            t.backup_import_mihon_nonlibrary_history_newer(
+              count:
+                  report
+                      .nonLibraryHistorySkippedByReason[MihonBackupHistorySkipReason
+                      .alreadyNewer]!,
+            ),
+            style: tokens.type.listSubtitle,
+          ),
+        ],
+      ],
+      if (report.appPreferencesImported + report.appPreferencesSkipped > 0) ...[
+        const SizedBox(height: 8),
+        Text(
+          t.backup_import_mihon_summary_app_settings(
+            imported: report.appPreferencesImported,
+            skipped: report.appPreferencesSkipped,
+          ),
+          style: tokens.type.listSubtitle,
+        ),
+        if (report
+                .appPreferencesSkippedByReason[MihonBackupAppPreferenceSkipReason
+                .notMyComicKey] !=
+            null) ...[
+          const SizedBox(height: 8),
+          Text(
+            t.backup_import_mihon_app_settings_not_mycomic(
+              count:
+                  report
+                      .appPreferencesSkippedByReason[MihonBackupAppPreferenceSkipReason
+                      .notMyComicKey]!,
+            ),
+            style: tokens.type.listSubtitle,
+          ),
+        ],
+        if (report
+                .appPreferencesSkippedByReason[MihonBackupAppPreferenceSkipReason
+                .deviceLocal] !=
+            null) ...[
+          const SizedBox(height: 8),
+          Text(
+            t.backup_import_mihon_app_settings_device_local(
+              count:
+                  report
+                      .appPreferencesSkippedByReason[MihonBackupAppPreferenceSkipReason
+                      .deviceLocal]!,
+            ),
+            style: tokens.type.listSubtitle,
+          ),
+        ],
+        if (report
+                .appPreferencesSkippedByReason[MihonBackupAppPreferenceSkipReason
+                .alreadyPresent] !=
+            null) ...[
+          const SizedBox(height: 8),
+          Text(
+            t.backup_import_mihon_app_settings_present(
+              count:
+                  report
+                      .appPreferencesSkippedByReason[MihonBackupAppPreferenceSkipReason
+                      .alreadyPresent]!,
+            ),
+            style: tokens.type.listSubtitle,
+          ),
+        ],
+      ],
       if (report.trackingMappingsImported +
               report.trackingMappingsMerged +
               report.trackingSkipped >
