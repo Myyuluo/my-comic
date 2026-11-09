@@ -311,7 +311,7 @@ class MangaChapterList extends StatelessWidget {
             title: chapter.name,
             number: _numberLabel(chapter),
             subtitle: _buildSubtitle(chapter, state, partial),
-            // 几百话的表里一个行尾小图标扫不到，整行底色才是能一眼定位的信号。
+            // 当前章只把标题文字染成 primary，不再铺整行底色（2026-11）。
             current: current,
             completed: read,
             progress: partial && pageCount != null && pageCount > 0
