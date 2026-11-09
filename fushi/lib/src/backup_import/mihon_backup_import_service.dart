@@ -14,7 +14,10 @@ import 'package:fushi_engine/media/tracking/media_tracking_repository.dart'
         TrackingProgressMode;
 
 import 'package:fushi/src/backup_import/mihon_backup_parser.dart';
+import 'package:fushi/src/media/manga/history/manga_history.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
+import 'package:fushi/src/models/preference_keys.dart';
+import 'package:fushi/src/sync/sync_repository.dart' show SyncRepository;
 
 /// 占位 extension package：备份里的 Source 尚未安装时，书架条目仍要有一个稳定
 /// 身份，否则每次导入都会因为 package 不同而新建一行。
@@ -25,6 +28,32 @@ import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 const String kUnavailableMihonExtensionPackage = 'mihon.unavailable';
 
 enum MihonBackupSkipReason { notInLibrary }
+
+/// Why a top-level `BackupPreference` was not applied to MyComic's settings.
+enum MihonBackupAppPreferenceSkipReason {
+  /// The key is not one of MyComic's own app preference keys (Mihon native or
+  /// completely unknown).
+  notMyComicKey,
+
+  /// The key describes another installation (device id, local paths, sync
+  /// baselines). Restoring it would make this device impersonate the exporter.
+  deviceLocal,
+
+  /// This device already has a value for the key; local settings win.
+  alreadyPresent,
+}
+
+/// Why a `favorite=false` ("read, not in library") entry restored no History.
+enum MihonBackupHistorySkipReason {
+  /// The entry carries no History rows, so there is no read timestamp.
+  noHistory,
+
+  /// The entry has no manga URL, so its History cannot be identified.
+  missingUrl,
+
+  /// A local History row is at least as new as the backup's.
+  alreadyNewer,
+}
 
 enum MihonBackupFailureReason { missingUrl, databaseError }
 
@@ -100,6 +129,11 @@ class MihonBackupImportReport {
     required this.failedEntries,
     required this.categoriesCreated,
     required this.categoriesMatched,
+    required this.categoriesSkipped,
+    required this.appPreferencesImported,
+    required this.appPreferencesSkippedByReason,
+    required this.nonLibraryHistoryImported,
+    required this.nonLibraryHistorySkippedByReason,
     required this.chapterStatesWritten,
     required this.historyRowsWritten,
     required this.trackingMappingsImported,
@@ -130,7 +164,9 @@ class MihonBackupImportReport {
   /// reading progress and category membership were merged in place.
   final int mergedEntries;
 
-  /// Entries intentionally not imported (Mihon "read, not in library" rows).
+  /// `favorite=false` ("read, not in library") entries. They never become
+  /// Library rows; their History may still be restored — see
+  /// [nonLibraryHistoryImported].
   final int skippedEntries;
 
   final int failedEntries;
@@ -140,6 +176,22 @@ class MihonBackupImportReport {
 
   /// Backup categories matched an existing Tag by trimmed name and reused it.
   final int categoriesMatched;
+
+  /// Backup categories skipped because their name is blank.
+  final int categoriesSkipped;
+
+  /// MyComic app settings written because this device lacked the key.
+  final int appPreferencesImported;
+
+  /// App settings left untouched, grouped by why.
+  final Map<MihonBackupAppPreferenceSkipReason, int>
+  appPreferencesSkippedByReason;
+
+  /// `media_open_history` rows restored from `favorite=false` entries.
+  final int nonLibraryHistoryImported;
+
+  /// `favorite=false` entries that restored no History, grouped by why.
+  final Map<MihonBackupHistorySkipReason, int> nonLibraryHistorySkippedByReason;
 
   /// Chapter progress rows written or merged (read + partially read + history).
   final int chapterStatesWritten;
@@ -199,9 +251,17 @@ class MihonBackupImportReport {
       totalEntries == 0 &&
       extensionStoresImported == 0 &&
       extensionStoresMerged == 0 &&
-      sourcePreferencesImported == 0;
+      sourcePreferencesImported == 0 &&
+      appPreferencesImported == 0 &&
+      nonLibraryHistoryImported == 0;
 
   int get successfulEntries => importedEntries + mergedEntries;
+
+  int get appPreferencesSkipped => appPreferencesSkippedByReason.values
+      .fold<int>(0, (int sum, int count) => sum + count);
+
+  int get nonLibraryHistorySkipped => nonLibraryHistorySkippedByReason.values
+      .fold<int>(0, (int sum, int count) => sum + count);
 }
 
 /// Imports a Mihon v0.21.3 `.tachibk` backup into the my-comic library.
@@ -237,6 +297,15 @@ class MihonBackupImportService {
             if (int.tryParse(row.sourceId) case final int id) id: row,
         };
 
+    // App settings are planned (and validated) before the first write. An
+    // unknown preference value type aborts the whole import instead of
+    // applying half a backup (Mihon itself refuses to restore an unknown
+    // serial name). This must stay above Tag creation below, which writes.
+    final _AppPreferencePlan appPreferences = _planAppPreferences(
+      data.preferences,
+      await database.getAllPrefs(),
+    );
+
     // Mihon categories import as Tags. Resolve/create each one by trimmed name
     // and align its sort order with the category order, so a MyComic-generated
     // backup (Tags exported as categories) round-trips. Per-manga
@@ -251,9 +320,13 @@ class MihonBackupImportService {
     final Map<int, int> tagIdByCategoryOrder = <int, int>{};
     int categoriesCreated = 0;
     int categoriesMatched = 0;
+    int categoriesSkipped = 0;
     for (final MihonBackupCategory category in data.categories) {
       final String name = category.name.trim();
-      if (name.isEmpty) continue;
+      if (name.isEmpty) {
+        categoriesSkipped++;
+        continue;
+      }
       final int? existingTagId = tagIdByName[name];
       final int tagId;
       if (existingTagId == null) {
@@ -280,6 +353,9 @@ class MihonBackupImportService {
         <MihonBackupSkipReason, int>{};
     final Map<MihonBackupFailureReason, int> failedByReason =
         <MihonBackupFailureReason, int>{};
+    final Map<MihonBackupHistorySkipReason, int> nonLibraryHistorySkipped =
+        <MihonBackupHistorySkipReason, int>{};
+    int nonLibraryHistoryImported = 0;
     int imported = 0;
     int merged = 0;
     int skipped = 0;
@@ -321,11 +397,21 @@ class MihonBackupImportService {
 
         if (!manga.favorite) {
           skipped++;
-          skippedByReason.update(
-            MihonBackupSkipReason.notInLibrary,
-            (int value) => value + 1,
-            ifAbsent: () => 1,
-          );
+          _increment(skippedByReason, MihonBackupSkipReason.notInLibrary);
+          // Mihon exports read works that are not in the Library as
+          // `favorite=false` so their History survives a restore. MyComic
+          // restores that History without adding a Library row.
+          final MihonBackupHistorySkipReason? historySkip =
+              await _importNonLibraryHistory(
+                manga,
+                local: existing[_identityKey(manga.source, manga.url.trim())],
+                installedBySourceId: installedBySourceId,
+              );
+          if (historySkip == null) {
+            nonLibraryHistoryImported++;
+          } else {
+            _increment(nonLibraryHistorySkipped, historySkip);
+          }
           continue;
         }
 
@@ -436,6 +522,10 @@ class MihonBackupImportService {
       sourcePreferencesForMissingSources += preferences.forMissingSources;
       sourcePreferencesSkipped += preferences.skipped;
       sourcePreferencesFailed += preferences.failed;
+
+      // Fills only the keys this device lacks; `setPrefs` also bumps the
+      // cross-process prefs-version signal in the same transaction.
+      await database.setPrefs(appPreferences.values);
     });
 
     stopwatch.stop();
@@ -447,6 +537,17 @@ class MihonBackupImportService {
       failedEntries: failed,
       categoriesCreated: categoriesCreated,
       categoriesMatched: categoriesMatched,
+      categoriesSkipped: categoriesSkipped,
+      appPreferencesImported: appPreferences.values.length,
+      appPreferencesSkippedByReason:
+          Map<MihonBackupAppPreferenceSkipReason, int>.unmodifiable(
+            appPreferences.skippedByReason,
+          ),
+      nonLibraryHistoryImported: nonLibraryHistoryImported,
+      nonLibraryHistorySkippedByReason:
+          Map<MihonBackupHistorySkipReason, int>.unmodifiable(
+            nonLibraryHistorySkipped,
+          ),
       chapterStatesWritten: chapterStatesWritten,
       historyRowsWritten: historyRowsWritten,
       trackingMappingsImported: trackingMappingsImported,
@@ -492,6 +593,177 @@ class MihonBackupImportService {
 
   String _identityKey(int sourceId, String mangaUrl) =>
       '$sourceId${String.fromCharCode(0)}$mangaUrl';
+
+  static void _increment<T>(Map<T, int> counts, T key) {
+    counts.update(key, (int value) => value + 1, ifAbsent: () => 1);
+  }
+
+  /// Decides which top-level `BackupPreference` rows become MyComic settings.
+  ///
+  /// Only MyComic's own keys are eligible: the static [kKnownPreferenceKeys]
+  /// registry plus the registered dynamic-prefix families. Mihon's native keys
+  /// (and anything unknown) are reported as [notMyComicKey] instead of being
+  /// written into the `preferences` table. Device-local keys describe the
+  /// exporting machine and are skipped even though they are "known". Existing
+  /// local values always win (spec: 只补齐本机缺失的键).
+  ///
+  /// Throws [MihonBackupFormatException] for an unknown value type on a known
+  /// key. This runs before the first write, so a rejected file leaves no
+  /// partial import behind.
+  _AppPreferencePlan _planAppPreferences(
+    List<MihonBackupPreference> preferences,
+    Map<String, String> existing,
+  ) {
+    final Map<String, String> values = <String, String>{};
+    final Map<MihonBackupAppPreferenceSkipReason, int> skippedByReason =
+        <MihonBackupAppPreferenceSkipReason, int>{};
+    final Set<String> present = existing.keys.toSet();
+    for (final MihonBackupPreference preference in preferences) {
+      final String key = preference.key;
+      if (key.isEmpty || !_isKnownAppPreferenceKey(key)) {
+        _increment(
+          skippedByReason,
+          MihonBackupAppPreferenceSkipReason.notMyComicKey,
+        );
+        continue;
+      }
+      // Validate first: an unknown standard type must abort even when this
+      // device happens to already have the key.
+      final String encoded = _encodeAppPreferenceValue(preference);
+      if (SyncRepository.deviceLocalPrefKeys.contains(key)) {
+        _increment(
+          skippedByReason,
+          MihonBackupAppPreferenceSkipReason.deviceLocal,
+        );
+        continue;
+      }
+      if (!present.add(key)) {
+        _increment(
+          skippedByReason,
+          MihonBackupAppPreferenceSkipReason.alreadyPresent,
+        );
+        continue;
+      }
+      values[key] = encoded;
+    }
+    return _AppPreferencePlan(values: values, skippedByReason: skippedByReason);
+  }
+
+  static bool _isKnownAppPreferenceKey(String key) =>
+      kKnownPreferenceKeys.contains(key) ||
+      kKnownPreferenceKeyPrefixes.any(key.startsWith);
+
+  /// Re-encodes a backup preference value in MyComic's [PrefCodec] format.
+  ///
+  /// All six standard Mihon envelopes map 1:1. An unknown serial name (or a
+  /// value whose runtime type does not match its envelope) aborts the import:
+  /// writing a guess would silently corrupt a setting.
+  static String _encodeAppPreferenceValue(MihonBackupPreference preference) {
+    final MihonBackupPreferenceType type = preference.value.type;
+    final Object? value = preference.value.value;
+    final bool valid = switch (type) {
+      MihonBackupPreferenceType.string => value is String,
+      MihonBackupPreferenceType.boolean => value is bool,
+      MihonBackupPreferenceType.integer ||
+      MihonBackupPreferenceType.long => value is int,
+      MihonBackupPreferenceType.float => value is double,
+      MihonBackupPreferenceType.stringSet => value is List<String>,
+      MihonBackupPreferenceType.unsupported => false,
+    };
+    if (!valid) {
+      throw MihonBackupFormatException(
+        MihonBackupFormatError.corrupt,
+        'unsupported value type for preference "${preference.key}"',
+      );
+    }
+    return PrefCodec.encode(value);
+  }
+
+  /// Restores the newest History row of a `favorite=false` entry without
+  /// creating a Library row.
+  ///
+  /// Returns null when a row was written, or the reason nothing was restored.
+  /// The row carries the same snapshot shape the reader writes, so the History
+  /// page can show and reopen the work. When the work already exists in the
+  /// local Library, its identity (and source package) is reused so the History
+  /// does not appear twice.
+  Future<MihonBackupHistorySkipReason?> _importNonLibraryHistory(
+    MihonBackupManga manga, {
+    required _ExistingEntry? local,
+    required Map<int, MangaOnlineSourceRow> installedBySourceId,
+  }) async {
+    MihonBackupHistory? latest;
+    for (final MihonBackupHistory history in manga.history) {
+      if (history.lastRead <= 0) continue;
+      if (latest == null || history.lastRead > latest.lastRead) {
+        latest = history;
+      }
+    }
+    if (latest == null) {
+      return MihonBackupHistorySkipReason.noHistory;
+    }
+
+    final String url = manga.url.trim();
+    if (url.isEmpty) {
+      return MihonBackupHistorySkipReason.missingUrl;
+    }
+
+    final MangaHistoryIdentity identity;
+    final MangaHistoryOnlineRef online;
+    final OnlineMangaLibraryEntry? localEntry = local?.entry;
+    if (localEntry != null) {
+      identity = mangaHistoryIdentityForOnline(localEntry);
+      online = MangaHistoryOnlineRef.fromEntry(localEntry);
+    } else {
+      final String extensionPackage =
+          installedBySourceId[manga.source]?.extensionPackage ??
+          kUnavailableMihonExtensionPackage;
+      final OnlineMangaLibraryEntry entry = _entryFromBackup(
+        manga,
+        extensionPackage: extensionPackage,
+      );
+      identity = mangaHistoryIdentityForOnline(entry);
+      online = MangaHistoryOnlineRef.fromEntry(entry);
+    }
+
+    final MediaOpenHistoryRow? existing =
+        await (database.select(database.mediaOpenHistory)..where(
+              (t) =>
+                  t.mediaSource.equals(identity.mediaSource) &
+                  t.mediaId.equals(identity.mediaId),
+            ))
+            .getSingleOrNull();
+    if (existing != null && existing.openedAt >= latest.lastRead) {
+      return MihonBackupHistorySkipReason.alreadyNewer;
+    }
+
+    final Map<String, Object?> snapshot = MangaHistorySnapshot(
+      title: manga.title,
+      author: manga.author,
+      imageUrl: manga.thumbnailUrl ?? online.coverUrl,
+      online: online,
+    ).toJson();
+    // `mihon_history` is the top-level block the exporter reads back (chapter
+    // URL + duration); `MangaHistorySnapshot` deliberately ignores it.
+    snapshot['mihon_history'] = <String, Object?>{
+      'chapter_url': latest.url,
+      'read_at': latest.lastRead,
+      'read_duration': latest.readDuration,
+    };
+
+    await database.upsertMediaOpenHistory(
+      MediaOpenHistoryCompanion(
+        mediaType: const Value<String>('reader_media_type'),
+        mediaSource: Value<String>(identity.mediaSource),
+        mediaId: Value<String>(identity.mediaId),
+        openedAt: Value<int>(latest.lastRead),
+        position: const Value<int>(0),
+        duration: const Value<int>(0),
+        snapshotJson: Value<String>(jsonEncode(snapshot)),
+      ),
+    );
+    return null;
+  }
 
   Future<Map<String, _ExistingEntry>> _loadExistingEntries() async {
     final List<EpubBookRow> rows = await database
@@ -1278,6 +1550,18 @@ class _ExistingEntry {
 
   final EpubBookRow row;
   final OnlineMangaLibraryEntry? entry;
+}
+
+/// App settings resolved before the import writes anything.
+class _AppPreferencePlan {
+  const _AppPreferencePlan({
+    required this.values,
+    required this.skippedByReason,
+  });
+
+  /// `preferences` rows to fill, already encoded with [PrefCodec].
+  final Map<String, String> values;
+  final Map<MihonBackupAppPreferenceSkipReason, int> skippedByReason;
 }
 
 class _MissingSourceBuilder {

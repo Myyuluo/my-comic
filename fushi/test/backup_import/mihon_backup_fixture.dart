@@ -164,6 +164,10 @@ enum FixturePreferenceType {
   stringValue,
   booleanValue,
   stringSetValue,
+
+  /// A serial name MyComic does not know. Mihon aborts the restore on these,
+  /// so the importer must reject the file instead of half-applying it.
+  unsupportedValue,
 }
 
 class FixturePreference {
@@ -195,6 +199,7 @@ Future<File> writeFixtureBackup(
   List<FixtureCategory> categories = const <FixtureCategory>[],
   List<FixtureSource> sources = const <FixtureSource>[],
   List<FixtureExtensionStore> extensionStores = const <FixtureExtensionStore>[],
+  List<FixturePreference> preferences = const <FixturePreference>[],
   List<FixtureSourcePreferences> sourcePreferences =
       const <FixtureSourcePreferences>[],
   bool gzip = true,
@@ -205,6 +210,7 @@ Future<File> writeFixtureBackup(
     categories: categories,
     sources: sources,
     extensionStores: extensionStores,
+    preferences: preferences,
     sourcePreferences: sourcePreferences,
   );
   final List<int> bytes = gzip ? gzipEncode(payload) : payload;
@@ -218,6 +224,7 @@ Uint8List encodeFixtureBackup({
   List<FixtureCategory> categories = const <FixtureCategory>[],
   List<FixtureSource> sources = const <FixtureSource>[],
   List<FixtureExtensionStore> extensionStores = const <FixtureExtensionStore>[],
+  List<FixturePreference> preferences = const <FixturePreference>[],
   List<FixtureSourcePreferences> sourcePreferences =
       const <FixtureSourcePreferences>[],
 }) {
@@ -230,6 +237,9 @@ Uint8List encodeFixtureBackup({
   }
   for (final FixtureSource source in sources) {
     top.bytes(101, _encodeSource(source));
+  }
+  for (final FixturePreference preference in preferences) {
+    top.bytes(104, _encodePreference(preference));
   }
   for (final FixtureSourcePreferences preferences in sourcePreferences) {
     top.bytes(105, _encodeSourcePreferences(preferences));
@@ -392,6 +402,9 @@ Uint8List _encodePreferenceValue(FixturePreferenceType type, Object value) {
       for (final String item in (value as List<String>)) {
         payload.string(1, item);
       }
+    case FixturePreferenceType.unsupportedValue:
+      serialName = 'SomeUnknownPreferenceValue';
+      payload.string(1, value as String);
   }
   final _ProtoWriter envelope = _ProtoWriter();
   envelope.string(1, 'eu.kanade.tachiyomi.data.backup.models.$serialName');
