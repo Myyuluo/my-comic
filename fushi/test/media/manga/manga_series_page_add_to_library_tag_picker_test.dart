@@ -1,0 +1,421 @@
+import 'dart:io';
+
+import 'package:drift/native.dart';
+import 'package:material_ui/material_ui.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
+
+import 'package:fushi/i18n/strings.g.dart';
+import 'package:fushi/models.dart';
+import 'package:fushi/src/media/manga/library/manga_series_page.dart';
+import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
+import 'package:fushi/src/media/manga/library/online_manga_library_service.dart';
+import 'package:fushi/src/media/manga/library/online_manga_runtime_adapter.dart';
+import 'package:fushi/src/media/media_item.dart';
+import 'package:fushi/src/media/media_source.dart';
+import 'package:fushi/src/models/preferences_repository.dart';
+import 'package:fushi/src/pages/implementations/manga_tag_tabs.dart';
+import 'package:fushi/src/platform/platform_providers.dart';
+import 'package:fushi/src/media/tags/tag_picker_sheet.dart' show TagPickerPanel;
+import 'package:fushi_audio/fushi_audio.dart';
+import 'package:fushi_core/fushi_core.dart';
+import 'package:fushi_engine/epub/epub_storage.dart';
+
+import '../../helpers/pump_until.dart';
+import '../../helpers/test_platform_services.dart';
+
+/// Ticket 04：在线 Manga 作品页「加入书架」前的标签选择。
+///
+/// 页面级 seam：真实 Drift DB + 可控 adapter（只负责来源标签/刷新）+ 真实偏好库。
+/// 断言只落在用户可见行为（弹窗是否出现、文案、完成/取消）与数据库结果上。
+class _FakeAdapter implements OnlineMangaRuntimeAdapter {
+  @override
+  OnlineMangaRuntimeKind get kind => OnlineMangaRuntimeKind.mihon;
+
+  @override
+  bool get isSupportedOnThisPlatform => true;
+
+  @override
+  Future<String?> sourceLabel(OnlineMangaLibraryEntry entry) async => 'Fake';
+
+  @override
+  Future<OnlineMangaRefreshResult> refresh(
+    OnlineMangaLibraryEntry entry,
+  ) async =>
+      OnlineMangaRefreshResult(series: entry.series, chapters: entry.chapters);
+
+  @override
+  Future<List<OnlineMangaPageRef>> resolveChapterPages({
+    required OnlineMangaLibraryEntry entry,
+    required OnlineMangaChapter chapter,
+  }) => throw StateError('the series page must not resolve pages');
+
+  @override
+  Future<Uint8List> fetchChapterPage(OnlineMangaPageRef page) =>
+      throw StateError('the series page must not fetch pages');
+
+  @override
+  Future<List<int>> fetchCover(OnlineMangaLibraryEntry entry, String url) =>
+      throw StateError('the fixture entry has no cover URL');
+}
+
+/// 加入书架写入失败：页面必须留在未入库态，且不写任何 Tag 分配。
+class _FailingAddLibraryService extends OnlineMangaLibraryService {
+  _FailingAddLibraryService({
+    required super.database,
+    required super.rootDirectory,
+    required super.adapter,
+    super.downloadsRootDirectory,
+  });
+
+  @override
+  Future<EpubBookRow> add(OnlineMangaLibraryEntry entry) async {
+    throw StateError('add failed');
+  }
+}
+
+class _TestAppModel extends AppModel {
+  _TestAppModel(this._db, this._library, Directory root)
+    : super(testPlatformServices()) {
+    wireLocalAudioForTesting(
+      prefsRepo: PreferencesRepository(_db),
+      databaseDirectory: root,
+    );
+  }
+
+  final FushiDatabase _db;
+  final OnlineMangaLibraryService _library;
+
+  @override
+  FushiDatabase get database => _db;
+
+  @override
+  OnlineMangaLibraryService onlineMangaLibraryService(
+    OnlineMangaRuntimeKind runtime,
+  ) => _library;
+
+  @override
+  Future<void> openMedia({
+    required WidgetRef ref,
+    required MediaSource mediaSource,
+    bool killOnPop = false,
+    bool pushReplacement = false,
+    MediaItem? item,
+    Bookmark? initialBookmarkJump,
+    bool recordHistory = true,
+    bool waitUntilClosed = true,
+    Widget Function()? launchPageBuilder,
+  }) async {}
+}
+
+Widget _harness(AppModel appModel, MangaSeriesTarget target) => ProviderScope(
+  overrides: <Override>[
+    platformServicesProvider.overrideWithValue(testPlatformServices()),
+    appProvider.overrideWith((ref) => appModel),
+  ],
+  child: TranslationProvider(
+    child: MaterialApp(home: MangaSeriesPage(target: target)),
+  ),
+);
+
+const List<OnlineMangaChapter> _chapters = <OnlineMangaChapter>[
+  OnlineMangaChapter(
+    key: '/chapter/1',
+    name: 'Chapter 1',
+    number: 1,
+    raw: <String, Object?>{'url': '/chapter/1'},
+  ),
+];
+
+OnlineMangaLibraryEntry _entry() => const OnlineMangaLibraryEntry(
+  runtime: OnlineMangaRuntimeKind.mihon,
+  extensionPackage: 'org.example.fixture',
+  sourceId: '1',
+  series: OnlineMangaSeries(
+    key: '/series/fixture',
+    title: 'Fixture series',
+    raw: <String, Object?>{'url': '/series/fixture'},
+  ),
+  chapters: _chapters,
+);
+
+/// 等页面首屏与所有后台尾活（刷新、下载状态、来源名解析）落定。
+Future<void> _settle(WidgetTester tester) async {
+  for (int i = 0; i < 20; i++) {
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    await tester.pump(const Duration(milliseconds: 50));
+  }
+}
+
+void main() {
+  late Directory root;
+  late FushiDatabase db;
+  late _FakeAdapter adapter;
+  late OnlineMangaLibraryService library;
+  late _TestAppModel appModel;
+
+  setUp(() async {
+    LocaleSettings.setLocale(AppLocale.zhCn);
+    root = await Directory.systemTemp.createTemp('manga_series_add_tag_');
+    EpubStorage.debugBaseDirectoryOverride = root.path;
+    TestWidgetsFlutterBinding.ensureInitialized();
+    db = FushiDatabase.forTesting(NativeDatabase.memory());
+    MediaSource.setDatabase(db);
+    adapter = _FakeAdapter();
+    library = OnlineMangaLibraryService(
+      database: db,
+      rootDirectory: Directory(p.join(root.path, 'legacy')),
+      adapter: adapter,
+      downloadsRootDirectory: Directory(p.join(root.path, 'downloads')),
+    );
+    appModel = _TestAppModel(db, library, root);
+  });
+
+  tearDown(() async {
+    EpubStorage.debugBaseDirectoryOverride = null;
+    await db.close();
+    if (root.existsSync()) root.deleteSync(recursive: true);
+  });
+
+  Future<void> pumpPage(
+    WidgetTester tester, {
+    OnlineMangaLibraryService? service,
+  }) async {
+    tester.view.physicalSize = const Size(420, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      _harness(
+        appModel,
+        SourceMangaSeriesTarget(
+          adapter: adapter,
+          seed: _entry(),
+          service: service ?? library,
+        ),
+      ),
+    );
+    await pumpUntilFound(
+      tester,
+      find.byKey(const ValueKey<String>('manga_series_add_to_bookshelf')),
+    );
+  }
+
+  testWidgets('已有 Tag：先弹标签选择，完成才入架并写入所选 Tag', (WidgetTester tester) async {
+    late int tagA;
+    late int tagB;
+    await tester.runAsync(() async {
+      tagA = await db.createTag('推理', 0xFF5C6BC0);
+      tagB = await db.createTag('百合', 0xFFEC407A);
+    });
+    final String bookKey = OnlineMangaLibraryService.bookKeyOf(_entry());
+
+    await tester.runAsync(() async {
+      await pumpPage(tester);
+      await tester.tap(
+        find.byKey(const ValueKey<String>('manga_series_add_to_bookshelf')),
+      );
+      // 等到弹层滑入、标签列表读库完成后再点 chip。
+      await pumpUntilFound(
+        tester,
+        find.byKey(ValueKey<String>('tag_picker_chip_$tagA')),
+      );
+      await _settle(tester);
+    });
+
+    expect(find.text('标签'), findsOneWidget);
+    expect(find.text('1 个条目'), findsOneWidget);
+    // 复用现有选择器：搜索、全部标签、新建标签、完成。
+    expect(
+      find.byKey(const ValueKey<String>('tag_picker_search')),
+      findsOneWidget,
+    );
+    expect(find.text('全部标签'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('tag_picker_new')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('tag_picker_done')),
+      findsOneWidget,
+    );
+    expect(await db.getEpubBook(bookKey), isNull, reason: '选择阶段不创建 Library 条目');
+
+    await tester.runAsync(() async {
+      await tester.tap(find.byKey(ValueKey<String>('tag_picker_chip_$tagA')));
+      await _settle(tester);
+      await tester.tap(find.byKey(ValueKey<String>('tag_picker_chip_$tagB')));
+      await _settle(tester);
+    });
+    expect(await db.getEpubBook(bookKey), isNull, reason: '选择阶段仍然不写库');
+    expect(await db.getTagsForBook(bookKey), isEmpty, reason: '选择阶段不写 Tag 分配');
+
+    await tester.runAsync(() async {
+      await tester.tap(find.byKey(const ValueKey<String>('tag_picker_done')));
+      await pumpUntilFound(
+        tester,
+        find.byKey(
+          const ValueKey<String>('manga_series_remove_from_bookshelf'),
+        ),
+      );
+    });
+
+    final EpubBookRow? row = await db.getEpubBook(bookKey);
+    expect(row, isNotNull, reason: '点完成才创建 Library 条目');
+    final List<BookTagRow> tags = await db.getTagsForBook(bookKey);
+    expect(tags.map((BookTagRow tag) => tag.id).toSet(), <int>{tagA, tagB});
+    expect(
+      mangaBookBelongsToTab(tags, const MangaShelfTabSelection()),
+      isFalse,
+      reason: '带 Tag 的作品不出现在「书架」页签',
+    );
+    expect(mangaBookBelongsToTab(tags, MangaTagTabSelection(tagA)), isTrue);
+    expect(mangaBookBelongsToTab(tags, MangaTagTabSelection(tagB)), isTrue);
+  });
+
+  testWidgets('没有任何 Tag：点加入书架直接入架，不弹标签选择', (WidgetTester tester) async {
+    final String bookKey = OnlineMangaLibraryService.bookKeyOf(_entry());
+
+    await tester.runAsync(() async {
+      await pumpPage(tester);
+      await tester.tap(
+        find.byKey(const ValueKey<String>('manga_series_add_to_bookshelf')),
+      );
+      await _settle(tester);
+      expect(find.byType(TagPickerPanel), findsNothing, reason: '零 Tag 不弹选择器');
+      await pumpUntilFound(
+        tester,
+        find.byKey(
+          const ValueKey<String>('manga_series_remove_from_bookshelf'),
+        ),
+      );
+    });
+
+    expect(await db.getEpubBook(bookKey), isNotNull);
+    expect(await db.getTagsForBook(bookKey), isEmpty);
+  });
+
+  testWidgets('零选「完成」：正常入架但不打 Tag，作品留在「书架」页签', (WidgetTester tester) async {
+    await tester.runAsync(() => db.createTag('推理', 0xFF5C6BC0));
+    final String bookKey = OnlineMangaLibraryService.bookKeyOf(_entry());
+
+    await tester.runAsync(() async {
+      await pumpPage(tester);
+      await tester.tap(
+        find.byKey(const ValueKey<String>('manga_series_add_to_bookshelf')),
+      );
+      await pumpUntilFound(
+        tester,
+        find.byKey(const ValueKey<String>('tag_picker_done')),
+      );
+      await _settle(tester);
+      await tester.tap(find.byKey(const ValueKey<String>('tag_picker_done')));
+      await pumpUntilFound(
+        tester,
+        find.byKey(
+          const ValueKey<String>('manga_series_remove_from_bookshelf'),
+        ),
+      );
+    });
+
+    expect(await db.getEpubBook(bookKey), isNotNull);
+    final List<BookTagRow> tags = await db.getTagsForBook(bookKey);
+    expect(tags, isEmpty, reason: '零选 = 按未打标签加入');
+    expect(
+      mangaBookBelongsToTab(tags, const MangaShelfTabSelection()),
+      isTrue,
+      reason: '未打标签的作品出现在「书架」页签',
+    );
+  });
+
+  testWidgets('点弹窗外部取消：不创建 Library 条目、不写 Tag 分配', (WidgetTester tester) async {
+    late int tagId;
+    await tester.runAsync(() async {
+      tagId = await db.createTag('推理', 0xFF5C6BC0);
+    });
+    final String bookKey = OnlineMangaLibraryService.bookKeyOf(_entry());
+
+    await tester.runAsync(() async {
+      await pumpPage(tester);
+      await tester.tap(
+        find.byKey(const ValueKey<String>('manga_series_add_to_bookshelf')),
+      );
+      await pumpUntilFound(
+        tester,
+        find.byKey(ValueKey<String>('tag_picker_chip_$tagId')),
+      );
+      await _settle(tester);
+      await tester.tap(find.byKey(ValueKey<String>('tag_picker_chip_$tagId')));
+      await _settle(tester);
+      await tester.tapAt(const Offset(200, 80));
+      await _settle(tester);
+    });
+
+    expect(find.byType(TagPickerPanel), findsNothing, reason: '点外部关闭弹窗');
+    expect(await db.getEpubBook(bookKey), isNull);
+    expect(await db.getTagsForBook(bookKey), isEmpty);
+  });
+
+  testWidgets('按 Esc 取消：不创建 Library 条目、不写 Tag 分配', (WidgetTester tester) async {
+    await tester.runAsync(() => db.createTag('推理', 0xFF5C6BC0));
+    final String bookKey = OnlineMangaLibraryService.bookKeyOf(_entry());
+
+    await tester.runAsync(() async {
+      await pumpPage(tester);
+      await tester.tap(
+        find.byKey(const ValueKey<String>('manga_series_add_to_bookshelf')),
+      );
+      await pumpUntilFound(
+        tester,
+        find.byKey(const ValueKey<String>('tag_picker_done')),
+      );
+      await _settle(tester);
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await _settle(tester);
+    });
+
+    expect(find.byType(TagPickerPanel), findsNothing, reason: 'Esc 关闭弹窗');
+    expect(await db.getEpubBook(bookKey), isNull);
+    expect(await db.getTagsForBook(bookKey), isEmpty);
+  });
+
+  testWidgets('加入失败：不创建 Library 条目，也不留 Tag 分配', (WidgetTester tester) async {
+    late int tagId;
+    await tester.runAsync(() async {
+      tagId = await db.createTag('推理', 0xFF5C6BC0);
+    });
+    final OnlineMangaLibraryService failing = _FailingAddLibraryService(
+      database: db,
+      rootDirectory: Directory(p.join(root.path, 'legacy')),
+      adapter: adapter,
+      downloadsRootDirectory: Directory(p.join(root.path, 'downloads')),
+    );
+    final String bookKey = OnlineMangaLibraryService.bookKeyOf(_entry());
+
+    await tester.runAsync(() async {
+      await pumpPage(tester, service: failing);
+      await tester.tap(
+        find.byKey(const ValueKey<String>('manga_series_add_to_bookshelf')),
+      );
+      await pumpUntilFound(
+        tester,
+        find.byKey(ValueKey<String>('tag_picker_chip_$tagId')),
+      );
+      await _settle(tester);
+      await tester.tap(find.byKey(ValueKey<String>('tag_picker_chip_$tagId')));
+      await _settle(tester);
+      await tester.tap(find.byKey(const ValueKey<String>('tag_picker_done')));
+      await _settle(tester);
+    });
+
+    expect(tester.takeException(), isNull, reason: '失败由页面提示，不冒泡');
+    expect(await db.getEpubBook(bookKey), isNull);
+    expect(await db.getTagsForBook(bookKey), isEmpty, reason: '加入失败时不留 Tag 分配');
+    expect(
+      find.byKey(const ValueKey<String>('manga_series_add_to_bookshelf')),
+      findsOneWidget,
+      reason: '仍在未入库态，可重试',
+    );
+  });
+}
