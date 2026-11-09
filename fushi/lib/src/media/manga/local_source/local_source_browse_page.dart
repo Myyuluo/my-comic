@@ -136,8 +136,11 @@ class _LocalSourceBrowsePageState extends ConsumerState<LocalSourceBrowsePage> {
   Future<void> _loadLibraryKeys() async {
     final List<EpubBookMeta> metas = await _appModel.database
         .getEpubBookMetas();
+    // 「在书架」按 Library membership 判：移出书架后行仍在（保留阅读状态），
+    // 但本地图源页要把它当非书架作品展示。
     _libraryKeys = <String>{
-      for (final EpubBookMeta meta in metas) meta.bookKey,
+      for (final EpubBookMeta meta in metas)
+        if (meta.isInLibrary) meta.bookKey,
     };
   }
 

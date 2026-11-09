@@ -372,12 +372,21 @@ class OnlineMangaLibraryService {
 
   /// 写订阅位（设计稿 2026-09-12 §2.3）：只改 `sourceMetadata` 里的两个布尔，
   /// 章节列表 / 当前章原样。返回写回后的描述符。
+  ///
+  /// 订阅 / 自动追更只属于 Library：书架外的非书架行不能写订阅位（更新探测与
+  /// 自动下载都按 membership 过滤，写进去也永远不会生效）。
   Future<OnlineMangaLibraryEntry> setSubscription({
     required String bookKey,
     required OnlineMangaLibraryEntry entry,
     required bool subscribed,
     required bool autoDownload,
   }) async {
+    final EpubBookRow? row = await database.getEpubBook(bookKey);
+    if (row == null || !row.isInLibrary) {
+      throw StateError(
+        'Subscriptions are only available for Library manga: $bookKey',
+      );
+    }
     final OnlineMangaLibraryEntry updated = entry.copyWith(
       subscribed: subscribed,
       autoDownload: autoDownload,

@@ -1,13 +1,12 @@
 import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 
-import 'package:fushi/src/media/sources/reader_fushi_source.dart';
 import 'package:fushi_core/fushi_core.dart';
 
 /// 清除数据库的三个阶段；进度框按它显示当前在做什么。
 enum MangaDatabaseClearStep { works, history, readingState }
 
-/// 书行按「是否为漫画书架成员」的一次性分流结果。
+/// 书行按 Library membership 的一次性分流结果。
 typedef _LibrarySplit = ({
   Set<String> libraryUids,
   List<String> notInLibraryKeys,
@@ -54,14 +53,12 @@ class MangaDatabaseClearProgress {
 /// - 无法对应任何 Library 作品的 `reader_positions` / `manga_chapter_states`
 ///   孤儿行。
 ///
-/// 保留 Library 作品（`format='manga'` 的书架条目）及其 Reading progress、章节
-/// `readAt`、书级完成标记，也保留 Download library 文件与索引、Local source 目录
-/// 与文件、设置、源、扩展、搜索历史与 Tracking 数据。
+/// 保留 Library 作品（`in_library = true` 的书架条目）及其 Reading progress、
+/// 章节 `readAt`、书级完成标记，也保留 Download library 文件与索引、Local source
+/// 目录与文件、设置、源、扩展、搜索历史与 Tracking 数据。
 ///
-/// Library 成员判据与漫画书架同源：复用
-/// [ReaderFushiSource.isMangaLibraryBookFormat]（书架列书按 `format` 派生
-/// `MangaFushiSource`）。my-comic 只保留漫画域，因此其余 format 的
-/// `epub_books` 行是不在 Library 中、不可达的遗留作品记录。
+/// Library 成员判据与书架同源：`epub_books.in_library`（见
+/// `library_membership.dart`）。`format` 只描述书身份，不再表示书架归属。
 class MangaDatabaseClearService {
   const MangaDatabaseClearService({
     required this.database,
@@ -147,18 +144,15 @@ class MangaDatabaseClearService {
     return counts;
   }
 
-  /// 一次查询读出全部书行的身份列，再用共享的漫画书架成员判据
-  /// （[ReaderFushiSource.isMangaLibraryBookFormat]）分流。
-  ///
-  /// 不再分别写 `format = manga` / `format != manga` 两条镜像 SQL：任何书架
-  /// 判据变化只改共享谓词一处。
+  /// 一次查询读出全部书行的身份列，按 Library membership（`in_library`）
+  /// 分流——书架归属的唯一判据，不再看 `format`。
   Future<_LibrarySplit> _librarySplit() async {
     final List<TypedResult> rows =
         await (database.selectOnly(database.epubBooks)
               ..addColumns(<Expression<Object>>[
                 database.epubBooks.bookKey,
                 database.epubBooks.uid,
-                database.epubBooks.format,
+                database.epubBooks.inLibrary,
               ]))
             .get();
     final Set<String> libraryUids = <String>{};
@@ -166,9 +160,7 @@ class MangaDatabaseClearService {
     for (final TypedResult row in rows) {
       final String? bookKey = row.read(database.epubBooks.bookKey);
       if (bookKey == null) continue;
-      if (ReaderFushiSource.isMangaLibraryBookFormat(
-        row.read(database.epubBooks.format),
-      )) {
+      if (row.read(database.epubBooks.inLibrary) ?? true) {
         final String? uid = row.read(database.epubBooks.uid);
         if (uid != null && uid.isNotEmpty) libraryUids.add(uid);
       } else {

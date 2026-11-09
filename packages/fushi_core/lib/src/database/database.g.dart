@@ -7618,6 +7618,21 @@ class $EpubBooksTable extends EpubBooks
     requiredDuringInsert: false,
     defaultValue: const Constant('epub'),
   );
+  static const VerificationMeta _inLibraryMeta = const VerificationMeta(
+    'inLibrary',
+  );
+  @override
+  late final GeneratedColumn<bool> inLibrary = GeneratedColumn<bool>(
+    'in_library',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("in_library" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
   static const VerificationMeta _mangaReadingModeMeta = const VerificationMeta(
     'mangaReadingMode',
   );
@@ -7680,6 +7695,7 @@ class $EpubBooksTable extends EpubBooks
     localAddedAt,
     language,
     format,
+    inLibrary,
     mangaReadingMode,
     completedAt,
     sourceId,
@@ -7813,6 +7829,12 @@ class $EpubBooksTable extends EpubBooks
         format.isAcceptableOrUnknown(data['format']!, _formatMeta),
       );
     }
+    if (data.containsKey('in_library')) {
+      context.handle(
+        _inLibraryMeta,
+        inLibrary.isAcceptableOrUnknown(data['in_library']!, _inLibraryMeta),
+      );
+    }
     if (data.containsKey('manga_reading_mode')) {
       context.handle(
         _mangaReadingModeMeta,
@@ -7912,6 +7934,10 @@ class $EpubBooksTable extends EpubBooks
         DriftSqlType.string,
         data['${effectivePrefix}format'],
       )!,
+      inLibrary: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}in_library'],
+      )!,
       mangaReadingMode: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}manga_reading_mode'],
@@ -7997,6 +8023,17 @@ class EpubBookRow extends DataClass implements Insertable<EpubBookRow> {
   /// `epubPath`=PDF 绝对路径、`extractDir`=占位、`chapterCount`=页数、`chaptersJson`=`'[]'`。
   final String format;
 
+  /// Library membership（v5，manga-library-membership 票 01）：这一行是否是
+  /// **书架成员**。`true` = 在书架；`false` = 非书架作品——行仍然持久化，供
+  /// 阅读进度、Chapter 已读、History、下载与下载索引使用，只是不出现在书架 /
+  /// Home 继续阅读 / Tag 页签 / 订阅与更新探测 / 备份「书架中的作品」里。
+  ///
+  /// 这是书架归属的**唯一判据**：`format='manga'` 只描述阅读器/书身份，不再
+  /// 表示在书架。默认 `true` 让 v5 之前的存量行零破坏迁移为在书架；新插入行
+  /// 不显式携带时同样默认在书架（加入书架路径），非书架行由后续票显式写
+  /// `false`。判据/读取口径见 `library_membership.dart`。
+  final bool inLibrary;
+
   /// 漫画阅读模式覆盖（漫画 OCR，v53）：`null`=按页图长宽比自动判定（默认，横长跨页
   /// 走 `'spread'` 双页布局、纵长走 `'webtoon'` 长条纵向连读）；非 null 为用户手动覆盖，
   /// 取值 `'spread'`（跨页/翻页）或 `'webtoon'`（长条纵向）。仅 `format='manga'` 的行有意义，
@@ -8033,6 +8070,7 @@ class EpubBookRow extends DataClass implements Insertable<EpubBookRow> {
     this.localAddedAt,
     this.language,
     required this.format,
+    required this.inLibrary,
     this.mangaReadingMode,
     this.completedAt,
     this.sourceId,
@@ -8068,6 +8106,7 @@ class EpubBookRow extends DataClass implements Insertable<EpubBookRow> {
       map['language'] = Variable<String>(language);
     }
     map['format'] = Variable<String>(format);
+    map['in_library'] = Variable<bool>(inLibrary);
     if (!nullToAbsent || mangaReadingMode != null) {
       map['manga_reading_mode'] = Variable<String>(mangaReadingMode);
     }
@@ -8112,6 +8151,7 @@ class EpubBookRow extends DataClass implements Insertable<EpubBookRow> {
           ? const Value.absent()
           : Value(language),
       format: Value(format),
+      inLibrary: Value(inLibrary),
       mangaReadingMode: mangaReadingMode == null && nullToAbsent
           ? const Value.absent()
           : Value(mangaReadingMode),
@@ -8146,6 +8186,7 @@ class EpubBookRow extends DataClass implements Insertable<EpubBookRow> {
       localAddedAt: serializer.fromJson<int?>(json['localAddedAt']),
       language: serializer.fromJson<String?>(json['language']),
       format: serializer.fromJson<String>(json['format']),
+      inLibrary: serializer.fromJson<bool>(json['inLibrary']),
       mangaReadingMode: serializer.fromJson<String?>(json['mangaReadingMode']),
       completedAt: serializer.fromJson<DateTime?>(json['completedAt']),
       sourceId: serializer.fromJson<int?>(json['sourceId']),
@@ -8171,6 +8212,7 @@ class EpubBookRow extends DataClass implements Insertable<EpubBookRow> {
       'localAddedAt': serializer.toJson<int?>(localAddedAt),
       'language': serializer.toJson<String?>(language),
       'format': serializer.toJson<String>(format),
+      'inLibrary': serializer.toJson<bool>(inLibrary),
       'mangaReadingMode': serializer.toJson<String?>(mangaReadingMode),
       'completedAt': serializer.toJson<DateTime?>(completedAt),
       'sourceId': serializer.toJson<int?>(sourceId),
@@ -8194,6 +8236,7 @@ class EpubBookRow extends DataClass implements Insertable<EpubBookRow> {
     Value<int?> localAddedAt = const Value.absent(),
     Value<String?> language = const Value.absent(),
     String? format,
+    bool? inLibrary,
     Value<String?> mangaReadingMode = const Value.absent(),
     Value<DateTime?> completedAt = const Value.absent(),
     Value<int?> sourceId = const Value.absent(),
@@ -8216,6 +8259,7 @@ class EpubBookRow extends DataClass implements Insertable<EpubBookRow> {
     localAddedAt: localAddedAt.present ? localAddedAt.value : this.localAddedAt,
     language: language.present ? language.value : this.language,
     format: format ?? this.format,
+    inLibrary: inLibrary ?? this.inLibrary,
     mangaReadingMode: mangaReadingMode.present
         ? mangaReadingMode.value
         : this.mangaReadingMode,
@@ -8252,6 +8296,7 @@ class EpubBookRow extends DataClass implements Insertable<EpubBookRow> {
           : this.localAddedAt,
       language: data.language.present ? data.language.value : this.language,
       format: data.format.present ? data.format.value : this.format,
+      inLibrary: data.inLibrary.present ? data.inLibrary.value : this.inLibrary,
       mangaReadingMode: data.mangaReadingMode.present
           ? data.mangaReadingMode.value
           : this.mangaReadingMode,
@@ -8281,6 +8326,7 @@ class EpubBookRow extends DataClass implements Insertable<EpubBookRow> {
           ..write('localAddedAt: $localAddedAt, ')
           ..write('language: $language, ')
           ..write('format: $format, ')
+          ..write('inLibrary: $inLibrary, ')
           ..write('mangaReadingMode: $mangaReadingMode, ')
           ..write('completedAt: $completedAt, ')
           ..write('sourceId: $sourceId, ')
@@ -8306,6 +8352,7 @@ class EpubBookRow extends DataClass implements Insertable<EpubBookRow> {
     localAddedAt,
     language,
     format,
+    inLibrary,
     mangaReadingMode,
     completedAt,
     sourceId,
@@ -8330,6 +8377,7 @@ class EpubBookRow extends DataClass implements Insertable<EpubBookRow> {
           other.localAddedAt == this.localAddedAt &&
           other.language == this.language &&
           other.format == this.format &&
+          other.inLibrary == this.inLibrary &&
           other.mangaReadingMode == this.mangaReadingMode &&
           other.completedAt == this.completedAt &&
           other.sourceId == this.sourceId &&
@@ -8352,6 +8400,7 @@ class EpubBooksCompanion extends UpdateCompanion<EpubBookRow> {
   final Value<int?> localAddedAt;
   final Value<String?> language;
   final Value<String> format;
+  final Value<bool> inLibrary;
   final Value<String?> mangaReadingMode;
   final Value<DateTime?> completedAt;
   final Value<int?> sourceId;
@@ -8373,6 +8422,7 @@ class EpubBooksCompanion extends UpdateCompanion<EpubBookRow> {
     this.localAddedAt = const Value.absent(),
     this.language = const Value.absent(),
     this.format = const Value.absent(),
+    this.inLibrary = const Value.absent(),
     this.mangaReadingMode = const Value.absent(),
     this.completedAt = const Value.absent(),
     this.sourceId = const Value.absent(),
@@ -8395,6 +8445,7 @@ class EpubBooksCompanion extends UpdateCompanion<EpubBookRow> {
     this.localAddedAt = const Value.absent(),
     this.language = const Value.absent(),
     this.format = const Value.absent(),
+    this.inLibrary = const Value.absent(),
     this.mangaReadingMode = const Value.absent(),
     this.completedAt = const Value.absent(),
     this.sourceId = const Value.absent(),
@@ -8423,6 +8474,7 @@ class EpubBooksCompanion extends UpdateCompanion<EpubBookRow> {
     Expression<int>? localAddedAt,
     Expression<String>? language,
     Expression<String>? format,
+    Expression<bool>? inLibrary,
     Expression<String>? mangaReadingMode,
     Expression<DateTime>? completedAt,
     Expression<int>? sourceId,
@@ -8445,6 +8497,7 @@ class EpubBooksCompanion extends UpdateCompanion<EpubBookRow> {
       if (localAddedAt != null) 'local_added_at': localAddedAt,
       if (language != null) 'language': language,
       if (format != null) 'format': format,
+      if (inLibrary != null) 'in_library': inLibrary,
       if (mangaReadingMode != null) 'manga_reading_mode': mangaReadingMode,
       if (completedAt != null) 'completed_at': completedAt,
       if (sourceId != null) 'source_id': sourceId,
@@ -8469,6 +8522,7 @@ class EpubBooksCompanion extends UpdateCompanion<EpubBookRow> {
     Value<int?>? localAddedAt,
     Value<String?>? language,
     Value<String>? format,
+    Value<bool>? inLibrary,
     Value<String?>? mangaReadingMode,
     Value<DateTime?>? completedAt,
     Value<int?>? sourceId,
@@ -8491,6 +8545,7 @@ class EpubBooksCompanion extends UpdateCompanion<EpubBookRow> {
       localAddedAt: localAddedAt ?? this.localAddedAt,
       language: language ?? this.language,
       format: format ?? this.format,
+      inLibrary: inLibrary ?? this.inLibrary,
       mangaReadingMode: mangaReadingMode ?? this.mangaReadingMode,
       completedAt: completedAt ?? this.completedAt,
       sourceId: sourceId ?? this.sourceId,
@@ -8547,6 +8602,9 @@ class EpubBooksCompanion extends UpdateCompanion<EpubBookRow> {
     if (format.present) {
       map['format'] = Variable<String>(format.value);
     }
+    if (inLibrary.present) {
+      map['in_library'] = Variable<bool>(inLibrary.value);
+    }
     if (mangaReadingMode.present) {
       map['manga_reading_mode'] = Variable<String>(mangaReadingMode.value);
     }
@@ -8583,6 +8641,7 @@ class EpubBooksCompanion extends UpdateCompanion<EpubBookRow> {
           ..write('localAddedAt: $localAddedAt, ')
           ..write('language: $language, ')
           ..write('format: $format, ')
+          ..write('inLibrary: $inLibrary, ')
           ..write('mangaReadingMode: $mangaReadingMode, ')
           ..write('completedAt: $completedAt, ')
           ..write('sourceId: $sourceId, ')
@@ -16122,7 +16181,7 @@ class MediaCollectionRow extends DataClass
 
   /// **合集自己的**封面图绝对路径（schema v61，BUG-1211）。与 [coverSource] 正交：
   /// 后者是「借哪个成员的封面」，本列是「合集自有一张图」，落在
-  /// `<documents>/video_covers/collections/<id>.jpg`（[AppPaths.videoCoversDirectory]
+  /// `<documents>/video_covers/collections/<id>.jpg`（旧 AppPaths 非漫画 getter 已删除，
   /// 的子目录 —— 与成员封面同池不同目录，文件名不可能与 `videoCoverFileName(bookUid)`
   /// 撞车）。
   ///
@@ -16135,7 +16194,7 @@ class MediaCollectionRow extends DataClass
   /// 的成员借用链（首个有本地封面的成员 → 远端成员 → 占位），老合集封面逐像素不变
   /// （Never break userspace）。
   ///
-  /// 机器本地绝对路径：随数据根迁移改写（`data_root_migrator.dart`，与
+  /// 机器本地绝对路径：随便携拷贝 rebase 改写（`portable_state_rebase.dart`，与
   /// [VideoBooks].coverPath / [Galgames].coverPath 同型），且**不跨端同步**。
   final String? coverPath;
 
@@ -54058,10 +54117,15 @@ class MangaChapterDirRow extends DataClass
   /// 章内稳定键（`manga_chapter_states.chapter_key` 同源）。
   final String chapterKey;
 
-  /// 实际容器名（相对 manga 目录，单段）。
+  /// 实际容器名（相对 manga 目录，单段）：章节目录名，或 archive 的 `.cbz`
+  /// 文件名。**不是**严格意义上的目录名——列名 `folder_name` 是既有 schema
+  /// 决策，值域见 [MangaChapterContainerKind]。
   final String folderName;
 
   /// 取 [MangaChapterContainerKind]；默认 folder 保持 v2 行的语义。
+  ///
+  /// 默认值必须写成字面量 `'folder'`（generated 列是 TEXT，不能引用枚举值），
+  /// 与 [MangaChapterContainerKind.folder.storageValue] 保持一致。
   final String containerKind;
   final int updatedAt;
   const MangaChapterDirRow({
@@ -64990,7 +65054,7 @@ final class $$MediaSourcesTableReferences
   static MultiTypedResultKey<$EpubBooksTable, List<EpubBookRow>>
   _epubBooksRefsTable(_$FushiDatabase db) => MultiTypedResultKey.fromTable(
     db.epubBooks,
-    aliasName: 'media_sources__id__epub_books__source_id',
+    aliasName: $_aliasNameGenerator(db.mediaSources.id, db.epubBooks.sourceId),
   );
 
   $$EpubBooksTableProcessedTableManager get epubBooksRefs {
@@ -65008,7 +65072,7 @@ final class $$MediaSourcesTableReferences
   static MultiTypedResultKey<$VideoBooksTable, List<VideoBookRow>>
   _videoBooksRefsTable(_$FushiDatabase db) => MultiTypedResultKey.fromTable(
     db.videoBooks,
-    aliasName: 'media_sources__id__video_books__source_id',
+    aliasName: $_aliasNameGenerator(db.mediaSources.id, db.videoBooks.sourceId),
   );
 
   $$VideoBooksTableProcessedTableManager get videoBooksRefs {
@@ -65030,7 +65094,10 @@ final class $$MediaSourcesTableReferences
   _videoSourceScrapeSettingsRefsTable(_$FushiDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.videoSourceScrapeSettings,
-        aliasName: 'media_sources__id__video_source_scrape_settings__source_id',
+        aliasName: $_aliasNameGenerator(
+          db.mediaSources.id,
+          db.videoSourceScrapeSettings.sourceId,
+        ),
       );
 
   $$VideoSourceScrapeSettingsTableProcessedTableManager
@@ -65055,7 +65122,10 @@ final class $$MediaSourcesTableReferences
   _videoSourceScrapeRunsRefsTable(_$FushiDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.videoSourceScrapeRuns,
-        aliasName: 'media_sources__id__video_source_scrape_runs__source_id',
+        aliasName: $_aliasNameGenerator(
+          db.mediaSources.id,
+          db.videoSourceScrapeRuns.sourceId,
+        ),
       );
 
   $$VideoSourceScrapeRunsTableProcessedTableManager
@@ -65080,7 +65150,10 @@ final class $$MediaSourcesTableReferences
   _videoSidecarArtifactsRefsTable(_$FushiDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.videoSidecarArtifacts,
-        aliasName: 'media_sources__id__video_sidecar_artifacts__source_id',
+        aliasName: $_aliasNameGenerator(
+          db.mediaSources.id,
+          db.videoSidecarArtifacts.sourceId,
+        ),
       );
 
   $$VideoSidecarArtifactsTableProcessedTableManager
@@ -65102,7 +65175,10 @@ final class $$MediaSourcesTableReferences
   _videoDownloadJobsRefsTable(_$FushiDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.videoDownloadJobs,
-        aliasName: 'media_sources__id__video_download_jobs__target_source_id',
+        aliasName: $_aliasNameGenerator(
+          db.mediaSources.id,
+          db.videoDownloadJobs.targetSourceId,
+        ),
       );
 
   $$VideoDownloadJobsTableProcessedTableManager get videoDownloadJobsRefs {
@@ -65126,8 +65202,10 @@ final class $$MediaSourcesTableReferences
   _videoDownloadSubscriptionsRefsTable(_$FushiDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.videoDownloadSubscriptions,
-        aliasName:
-            'media_sources__id__video_download_subscriptions__target_source_id',
+        aliasName: $_aliasNameGenerator(
+          db.mediaSources.id,
+          db.videoDownloadSubscriptions.targetSourceId,
+        ),
       );
 
   $$VideoDownloadSubscriptionsTableProcessedTableManager
@@ -66042,6 +66120,7 @@ typedef $$EpubBooksTableCreateCompanionBuilder =
       Value<int?> localAddedAt,
       Value<String?> language,
       Value<String> format,
+      Value<bool> inLibrary,
       Value<String?> mangaReadingMode,
       Value<DateTime?> completedAt,
       Value<int?> sourceId,
@@ -66065,6 +66144,7 @@ typedef $$EpubBooksTableUpdateCompanionBuilder =
       Value<int?> localAddedAt,
       Value<String?> language,
       Value<String> format,
+      Value<bool> inLibrary,
       Value<String?> mangaReadingMode,
       Value<DateTime?> completedAt,
       Value<int?> sourceId,
@@ -66077,7 +66157,9 @@ final class $$EpubBooksTableReferences
   $$EpubBooksTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
   static $MediaSourcesTable _sourceIdTable(_$FushiDatabase db) =>
-      db.mediaSources.createAlias('epub_books__source_id__media_sources__id');
+      db.mediaSources.createAlias(
+        $_aliasNameGenerator(db.epubBooks.sourceId, db.mediaSources.id),
+      );
 
   $$MediaSourcesTableProcessedTableManager? get sourceId {
     final $_column = $_itemColumn<int>('source_id');
@@ -66175,6 +66257,11 @@ class $$EpubBooksTableFilterComposer
 
   ColumnFilters<String> get format => $composableBuilder(
     column: $table.format,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get inLibrary => $composableBuilder(
+    column: $table.inLibrary,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -66301,6 +66388,11 @@ class $$EpubBooksTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get inLibrary => $composableBuilder(
+    column: $table.inLibrary,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get mangaReadingMode => $composableBuilder(
     column: $table.mangaReadingMode,
     builder: (column) => ColumnOrderings(column),
@@ -66406,6 +66498,9 @@ class $$EpubBooksTableAnnotationComposer
   GeneratedColumn<String> get format =>
       $composableBuilder(column: $table.format, builder: (column) => column);
 
+  GeneratedColumn<bool> get inLibrary =>
+      $composableBuilder(column: $table.inLibrary, builder: (column) => column);
+
   GeneratedColumn<String> get mangaReadingMode => $composableBuilder(
     column: $table.mangaReadingMode,
     builder: (column) => column,
@@ -66486,6 +66581,7 @@ class $$EpubBooksTableTableManager
                 Value<int?> localAddedAt = const Value.absent(),
                 Value<String?> language = const Value.absent(),
                 Value<String> format = const Value.absent(),
+                Value<bool> inLibrary = const Value.absent(),
                 Value<String?> mangaReadingMode = const Value.absent(),
                 Value<DateTime?> completedAt = const Value.absent(),
                 Value<int?> sourceId = const Value.absent(),
@@ -66507,6 +66603,7 @@ class $$EpubBooksTableTableManager
                 localAddedAt: localAddedAt,
                 language: language,
                 format: format,
+                inLibrary: inLibrary,
                 mangaReadingMode: mangaReadingMode,
                 completedAt: completedAt,
                 sourceId: sourceId,
@@ -66530,6 +66627,7 @@ class $$EpubBooksTableTableManager
                 Value<int?> localAddedAt = const Value.absent(),
                 Value<String?> language = const Value.absent(),
                 Value<String> format = const Value.absent(),
+                Value<bool> inLibrary = const Value.absent(),
                 Value<String?> mangaReadingMode = const Value.absent(),
                 Value<DateTime?> completedAt = const Value.absent(),
                 Value<int?> sourceId = const Value.absent(),
@@ -66551,6 +66649,7 @@ class $$EpubBooksTableTableManager
                 localAddedAt: localAddedAt,
                 language: language,
                 format: format,
+                inLibrary: inLibrary,
                 mangaReadingMode: mangaReadingMode,
                 completedAt: completedAt,
                 sourceId: sourceId,
@@ -66648,7 +66747,7 @@ final class $$BookTagsTableReferences
   static MultiTypedResultKey<$TagAssignmentsTable, List<TagAssignmentRow>>
   _tagAssignmentsRefsTable(_$FushiDatabase db) => MultiTypedResultKey.fromTable(
     db.tagAssignments,
-    aliasName: 'book_tags__id__tag_assignments__tag_id',
+    aliasName: $_aliasNameGenerator(db.bookTags.id, db.tagAssignments.tagId),
   );
 
   $$TagAssignmentsTableProcessedTableManager get tagAssignmentsRefs {
@@ -66953,7 +67052,9 @@ final class $$TagAssignmentsTableReferences
   );
 
   static $BookTagsTable _tagIdTable(_$FushiDatabase db) =>
-      db.bookTags.createAlias('tag_assignments__tag_id__book_tags__id');
+      db.bookTags.createAlias(
+        $_aliasNameGenerator(db.tagAssignments.tagId, db.bookTags.id),
+      );
 
   $$BookTagsTableProcessedTableManager get tagId {
     final $_column = $_itemColumn<int>('tag_id')!;
@@ -67257,7 +67358,10 @@ final class $$ProfilesTableReferences
   _profileSettingsRefsTable(_$FushiDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.profileSettings,
-        aliasName: 'profiles__id__profile_settings__profile_id',
+        aliasName: $_aliasNameGenerator(
+          db.profiles.id,
+          db.profileSettings.profileId,
+        ),
       );
 
   $$ProfileSettingsTableProcessedTableManager get profileSettingsRefs {
@@ -67278,7 +67382,10 @@ final class $$ProfilesTableReferences
   _mediaTypeProfilesRefsTable(_$FushiDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.mediaTypeProfiles,
-        aliasName: 'profiles__id__media_type_profiles__profile_id',
+        aliasName: $_aliasNameGenerator(
+          db.profiles.id,
+          db.mediaTypeProfiles.profileId,
+        ),
       );
 
   $$MediaTypeProfilesTableProcessedTableManager get mediaTypeProfilesRefs {
@@ -67298,7 +67405,7 @@ final class $$ProfilesTableReferences
   static MultiTypedResultKey<$BookProfilesTable, List<BookProfileRow>>
   _bookProfilesRefsTable(_$FushiDatabase db) => MultiTypedResultKey.fromTable(
     db.bookProfiles,
-    aliasName: 'profiles__id__book_profiles__profile_id',
+    aliasName: $_aliasNameGenerator(db.profiles.id, db.bookProfiles.profileId),
   );
 
   $$BookProfilesTableProcessedTableManager get bookProfilesRefs {
@@ -67317,7 +67424,10 @@ final class $$ProfilesTableReferences
   _languageProfilesRefsTable(_$FushiDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.languageProfiles,
-        aliasName: 'profiles__id__language_profiles__profile_id',
+        aliasName: $_aliasNameGenerator(
+          db.profiles.id,
+          db.languageProfiles.profileId,
+        ),
       );
 
   $$LanguageProfilesTableProcessedTableManager get languageProfilesRefs {
@@ -67858,7 +67968,9 @@ final class $$ProfileSettingsTableReferences
   );
 
   static $ProfilesTable _profileIdTable(_$FushiDatabase db) =>
-      db.profiles.createAlias('profile_settings__profile_id__profiles__id');
+      db.profiles.createAlias(
+        $_aliasNameGenerator(db.profileSettings.profileId, db.profiles.id),
+      );
 
   $$ProfilesTableProcessedTableManager get profileId {
     final $_column = $_itemColumn<int>('profile_id')!;
@@ -68178,7 +68290,9 @@ final class $$MediaTypeProfilesTableReferences
   );
 
   static $ProfilesTable _profileIdTable(_$FushiDatabase db) =>
-      db.profiles.createAlias('media_type_profiles__profile_id__profiles__id');
+      db.profiles.createAlias(
+        $_aliasNameGenerator(db.mediaTypeProfiles.profileId, db.profiles.id),
+      );
 
   $$ProfilesTableProcessedTableManager get profileId {
     final $_column = $_itemColumn<int>('profile_id')!;
@@ -68446,7 +68560,9 @@ final class $$BookProfilesTableReferences
   $$BookProfilesTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
   static $ProfilesTable _profileIdTable(_$FushiDatabase db) =>
-      db.profiles.createAlias('book_profiles__profile_id__profiles__id');
+      db.profiles.createAlias(
+        $_aliasNameGenerator(db.bookProfiles.profileId, db.profiles.id),
+      );
 
   $$ProfilesTableProcessedTableManager get profileId {
     final $_column = $_itemColumn<int>('profile_id')!;
@@ -68715,7 +68831,9 @@ final class $$LanguageProfilesTableReferences
   );
 
   static $ProfilesTable _profileIdTable(_$FushiDatabase db) =>
-      db.profiles.createAlias('language_profiles__profile_id__profiles__id');
+      db.profiles.createAlias(
+        $_aliasNameGenerator(db.languageProfiles.profileId, db.profiles.id),
+      );
 
   $$ProfilesTableProcessedTableManager get profileId {
     final $_column = $_itemColumn<int>('profile_id')!;
@@ -69191,7 +69309,9 @@ final class $$VideoBooksTableReferences
   $$VideoBooksTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
   static $MediaSourcesTable _sourceIdTable(_$FushiDatabase db) =>
-      db.mediaSources.createAlias('video_books__source_id__media_sources__id');
+      db.mediaSources.createAlias(
+        $_aliasNameGenerator(db.videoBooks.sourceId, db.mediaSources.id),
+      );
 
   $$MediaSourcesTableProcessedTableManager? get sourceId {
     final $_column = $_itemColumn<int>('source_id');
@@ -69211,7 +69331,10 @@ final class $$VideoBooksTableReferences
   _videoScrapeMetaRefsTable(_$FushiDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.videoScrapeMeta,
-        aliasName: 'video_books__book_uid__video_scrape_meta__book_uid',
+        aliasName: $_aliasNameGenerator(
+          db.videoBooks.bookUid,
+          db.videoScrapeMeta.bookUid,
+        ),
       );
 
   $$VideoScrapeMetaTableProcessedTableManager get videoScrapeMetaRefs {
@@ -69231,7 +69354,10 @@ final class $$VideoBooksTableReferences
   static MultiTypedResultKey<$MediaImagesTable, List<MediaImageRow>>
   _mediaImagesRefsTable(_$FushiDatabase db) => MultiTypedResultKey.fromTable(
     db.mediaImages,
-    aliasName: 'video_books__book_uid__media_images__book_uid',
+    aliasName: $_aliasNameGenerator(
+      db.videoBooks.bookUid,
+      db.mediaImages.bookUid,
+    ),
   );
 
   $$MediaImagesTableProcessedTableManager get mediaImagesRefs {
@@ -69253,7 +69379,10 @@ final class $$VideoBooksTableReferences
   _videoMetadataWorksRefsTable(_$FushiDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.videoMetadataWorks,
-        aliasName: 'video_books__book_uid__video_metadata_works__book_uid',
+        aliasName: $_aliasNameGenerator(
+          db.videoBooks.bookUid,
+          db.videoMetadataWorks.bookUid,
+        ),
       );
 
   $$VideoMetadataWorksTableProcessedTableManager get videoMetadataWorksRefs {
@@ -69280,7 +69409,10 @@ final class $$VideoBooksTableReferences
   _videoMetadataEpisodesRefsTable(_$FushiDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.videoMetadataEpisodes,
-        aliasName: 'video_books__book_uid__video_metadata_episodes__book_uid',
+        aliasName: $_aliasNameGenerator(
+          db.videoBooks.bookUid,
+          db.videoMetadataEpisodes.bookUid,
+        ),
       );
 
   $$VideoMetadataEpisodesTableProcessedTableManager
@@ -69308,7 +69440,10 @@ final class $$VideoBooksTableReferences
   _videoMetadataExtrasRefsTable(_$FushiDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.videoMetadataExtras,
-        aliasName: 'video_books__book_uid__video_metadata_extras__book_uid',
+        aliasName: $_aliasNameGenerator(
+          db.videoBooks.bookUid,
+          db.videoMetadataExtras.bookUid,
+        ),
       );
 
   $$VideoMetadataExtrasTableProcessedTableManager get videoMetadataExtrasRefs {
@@ -69335,8 +69470,10 @@ final class $$VideoBooksTableReferences
   _videoEpisodeBindingOverridesRefsTable(_$FushiDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.videoEpisodeBindingOverrides,
-        aliasName:
-            'video_books__book_uid__video_episode_binding_overrides__book_uid',
+        aliasName: $_aliasNameGenerator(
+          db.videoBooks.bookUid,
+          db.videoEpisodeBindingOverrides.bookUid,
+        ),
       );
 
   $$VideoEpisodeBindingOverridesTableProcessedTableManager
@@ -71842,7 +71979,7 @@ final class $$SeriesTableReferences
   static MultiTypedResultKey<$ShelfEntriesTable, List<ShelfEntryRow>>
   _shelfEntriesRefsTable(_$FushiDatabase db) => MultiTypedResultKey.fromTable(
     db.shelfEntries,
-    aliasName: 'series__id__shelf_entries__series_id',
+    aliasName: $_aliasNameGenerator(db.series.id, db.shelfEntries.seriesId),
   );
 
   $$ShelfEntriesTableProcessedTableManager get shelfEntriesRefs {
@@ -72134,7 +72271,9 @@ final class $$ShelfEntriesTableReferences
   $$ShelfEntriesTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
   static $SeriesTable _seriesIdTable(_$FushiDatabase db) =>
-      db.series.createAlias('shelf_entries__series_id__series__id');
+      db.series.createAlias(
+        $_aliasNameGenerator(db.shelfEntries.seriesId, db.series.id),
+      );
 
   $$SeriesTableProcessedTableManager? get seriesId {
     final $_column = $_itemColumn<int>('series_id');
@@ -72467,8 +72606,10 @@ final class $$MediaCollectionsTableReferences
   _mediaCollectionItemsRefsTable(_$FushiDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.mediaCollectionItems,
-        aliasName:
-            'media_collections__id__media_collection_items__collection_id',
+        aliasName: $_aliasNameGenerator(
+          db.mediaCollections.id,
+          db.mediaCollectionItems.collectionId,
+        ),
       );
 
   $$MediaCollectionItemsTableProcessedTableManager
@@ -72493,8 +72634,10 @@ final class $$MediaCollectionsTableReferences
   _collectionScrapeMetaRefsTable(_$FushiDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.collectionScrapeMeta,
-        aliasName:
-            'media_collections__id__collection_scrape_meta__collection_id',
+        aliasName: $_aliasNameGenerator(
+          db.mediaCollections.id,
+          db.collectionScrapeMeta.collectionId,
+        ),
       );
 
   $$CollectionScrapeMetaTableProcessedTableManager
@@ -72515,7 +72658,10 @@ final class $$MediaCollectionsTableReferences
   static MultiTypedResultKey<$MediaImagesTable, List<MediaImageRow>>
   _mediaImagesRefsTable(_$FushiDatabase db) => MultiTypedResultKey.fromTable(
     db.mediaImages,
-    aliasName: 'media_collections__id__media_images__collection_id',
+    aliasName: $_aliasNameGenerator(
+      db.mediaCollections.id,
+      db.mediaImages.collectionId,
+    ),
   );
 
   $$MediaImagesTableProcessedTableManager get mediaImagesRefs {
@@ -72537,7 +72683,10 @@ final class $$MediaCollectionsTableReferences
   _videoMetadataWorksRefsTable(_$FushiDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.videoMetadataWorks,
-        aliasName: 'media_collections__id__video_metadata_works__collection_id',
+        aliasName: $_aliasNameGenerator(
+          db.mediaCollections.id,
+          db.videoMetadataWorks.collectionId,
+        ),
       );
 
   $$VideoMetadataWorksTableProcessedTableManager get videoMetadataWorksRefs {
@@ -72558,7 +72707,10 @@ final class $$MediaCollectionsTableReferences
   _videoDownloadJobsRefsTable(_$FushiDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.videoDownloadJobs,
-        aliasName: 'media_collections__id__video_download_jobs__collection_id',
+        aliasName: $_aliasNameGenerator(
+          db.mediaCollections.id,
+          db.videoDownloadJobs.collectionId,
+        ),
       );
 
   $$VideoDownloadJobsTableProcessedTableManager get videoDownloadJobsRefs {
@@ -72579,13 +72731,14 @@ final class $$MediaCollectionsTableReferences
     $VideoDownloadSubscriptionsTable,
     List<VideoDownloadSubscriptionRow>
   >
-  _videoDownloadSubscriptionsRefsTable(
-    _$FushiDatabase db,
-  ) => MultiTypedResultKey.fromTable(
-    db.videoDownloadSubscriptions,
-    aliasName:
-        'media_collections__id__video_download_subscriptions__collection_id',
-  );
+  _videoDownloadSubscriptionsRefsTable(_$FushiDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.videoDownloadSubscriptions,
+        aliasName: $_aliasNameGenerator(
+          db.mediaCollections.id,
+          db.videoDownloadSubscriptions.collectionId,
+        ),
+      );
 
   $$VideoDownloadSubscriptionsTableProcessedTableManager
   get videoDownloadSubscriptionsRefs {
@@ -73477,7 +73630,10 @@ final class $$MediaCollectionItemsTableReferences
 
   static $MediaCollectionsTable _collectionIdTable(_$FushiDatabase db) =>
       db.mediaCollections.createAlias(
-        'media_collection_items__collection_id__media_collections__id',
+        $_aliasNameGenerator(
+          db.mediaCollectionItems.collectionId,
+          db.mediaCollections.id,
+        ),
       );
 
   $$MediaCollectionsTableProcessedTableManager get collectionId {
@@ -76444,8 +76600,10 @@ final class $$VideoScrapeMetaTableReferences
     super.$_typedResult,
   );
 
-  static $VideoBooksTable _bookUidTable(_$FushiDatabase db) => db.videoBooks
-      .createAlias('video_scrape_meta__book_uid__video_books__book_uid');
+  static $VideoBooksTable _bookUidTable(_$FushiDatabase db) =>
+      db.videoBooks.createAlias(
+        $_aliasNameGenerator(db.videoScrapeMeta.bookUid, db.videoBooks.bookUid),
+      );
 
   $$VideoBooksTableProcessedTableManager get bookUid {
     final $_column = $_itemColumn<String>('book_uid')!;
@@ -76974,7 +77132,10 @@ final class $$CollectionScrapeMetaTableReferences
 
   static $MediaCollectionsTable _collectionIdTable(_$FushiDatabase db) =>
       db.mediaCollections.createAlias(
-        'collection_scrape_meta__collection_id__media_collections__id',
+        $_aliasNameGenerator(
+          db.collectionScrapeMeta.collectionId,
+          db.mediaCollections.id,
+        ),
       );
 
   $$MediaCollectionsTableProcessedTableManager get collectionId {
@@ -77505,8 +77666,10 @@ final class $$MediaTrackingMappingsTableReferences
   _mediaTrackingOutboxRefsTable(_$FushiDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.mediaTrackingOutbox,
-        aliasName:
-            'media_tracking_mappings__id__media_tracking_outbox__mapping_id',
+        aliasName: $_aliasNameGenerator(
+          db.mediaTrackingMappings.id,
+          db.mediaTrackingOutbox.mappingId,
+        ),
       );
 
   $$MediaTrackingOutboxTableProcessedTableManager get mediaTrackingOutboxRefs {
@@ -77958,7 +78121,10 @@ final class $$MediaTrackingOutboxTableReferences
 
   static $MediaTrackingMappingsTable _mappingIdTable(_$FushiDatabase db) =>
       db.mediaTrackingMappings.createAlias(
-        'media_tracking_outbox__mapping_id__media_tracking_mappings__id',
+        $_aliasNameGenerator(
+          db.mediaTrackingOutbox.mappingId,
+          db.mediaTrackingMappings.id,
+        ),
       );
 
   $$MediaTrackingMappingsTableProcessedTableManager get mappingId {
@@ -78364,7 +78530,7 @@ final class $$GalgamesTableReferences
   static MultiTypedResultKey<$GalgameSourcesTable, List<GalgameSourceRow>>
   _galgameSourcesRefsTable(_$FushiDatabase db) => MultiTypedResultKey.fromTable(
     db.galgameSources,
-    aliasName: 'galgames__id__galgame_sources__game_id',
+    aliasName: $_aliasNameGenerator(db.galgames.id, db.galgameSources.gameId),
   );
 
   $$GalgameSourcesTableProcessedTableManager get galgameSourcesRefs {
@@ -78880,7 +79046,9 @@ final class $$GalgameSourcesTableReferences
   );
 
   static $GalgamesTable _gameIdTable(_$FushiDatabase db) =>
-      db.galgames.createAlias('galgame_sources__game_id__galgames__id');
+      db.galgames.createAlias(
+        $_aliasNameGenerator(db.galgameSources.gameId, db.galgames.id),
+      );
 
   $$GalgamesTableProcessedTableManager get gameId {
     final $_column = $_itemColumn<String>('game_id')!;
@@ -81045,7 +81213,10 @@ final class $$CollectionRelationsTableReferences
 
   static $MediaCollectionsTable _collectionIdTable(_$FushiDatabase db) =>
       db.mediaCollections.createAlias(
-        'collection_relations__collection_id__media_collections__id',
+        $_aliasNameGenerator(
+          db.collectionRelations.collectionId,
+          db.mediaCollections.id,
+        ),
       );
 
   $$MediaCollectionsTableProcessedTableManager get collectionId {
@@ -81064,7 +81235,10 @@ final class $$CollectionRelationsTableReferences
 
   static $MediaCollectionsTable _targetCollectionIdTable(_$FushiDatabase db) =>
       db.mediaCollections.createAlias(
-        'collection_relations__target_collection_id__media_collections__id',
+        $_aliasNameGenerator(
+          db.collectionRelations.targetCollectionId,
+          db.mediaCollections.id,
+        ),
       );
 
   $$MediaCollectionsTableProcessedTableManager? get targetCollectionId {
@@ -81548,9 +81722,13 @@ final class $$MediaImagesTableReferences
     extends BaseReferences<_$FushiDatabase, $MediaImagesTable, MediaImageRow> {
   $$MediaImagesTableReferences(super.$_db, super.$_table, super.$_typedResult);
 
-  static $MediaCollectionsTable _collectionIdTable(_$FushiDatabase db) => db
-      .mediaCollections
-      .createAlias('media_images__collection_id__media_collections__id');
+  static $MediaCollectionsTable _collectionIdTable(_$FushiDatabase db) =>
+      db.mediaCollections.createAlias(
+        $_aliasNameGenerator(
+          db.mediaImages.collectionId,
+          db.mediaCollections.id,
+        ),
+      );
 
   $$MediaCollectionsTableProcessedTableManager? get collectionId {
     final $_column = $_itemColumn<int>('collection_id');
@@ -81566,8 +81744,10 @@ final class $$MediaImagesTableReferences
     );
   }
 
-  static $VideoBooksTable _bookUidTable(_$FushiDatabase db) => db.videoBooks
-      .createAlias('media_images__book_uid__video_books__book_uid');
+  static $VideoBooksTable _bookUidTable(_$FushiDatabase db) =>
+      db.videoBooks.createAlias(
+        $_aliasNameGenerator(db.mediaImages.bookUid, db.videoBooks.bookUid),
+      );
 
   $$VideoBooksTableProcessedTableManager? get bookUid {
     final $_column = $_itemColumn<String>('book_uid');
@@ -82023,7 +82203,10 @@ final class $$VideoMetadataWorksTableReferences
 
   static $MediaCollectionsTable _collectionIdTable(_$FushiDatabase db) =>
       db.mediaCollections.createAlias(
-        'video_metadata_works__collection_id__media_collections__id',
+        $_aliasNameGenerator(
+          db.videoMetadataWorks.collectionId,
+          db.mediaCollections.id,
+        ),
       );
 
   $$MediaCollectionsTableProcessedTableManager? get collectionId {
@@ -82040,8 +82223,13 @@ final class $$VideoMetadataWorksTableReferences
     );
   }
 
-  static $VideoBooksTable _bookUidTable(_$FushiDatabase db) => db.videoBooks
-      .createAlias('video_metadata_works__book_uid__video_books__book_uid');
+  static $VideoBooksTable _bookUidTable(_$FushiDatabase db) =>
+      db.videoBooks.createAlias(
+        $_aliasNameGenerator(
+          db.videoMetadataWorks.bookUid,
+          db.videoBooks.bookUid,
+        ),
+      );
 
   $$VideoBooksTableProcessedTableManager? get bookUid {
     final $_column = $_itemColumn<String>('book_uid');
@@ -82064,7 +82252,10 @@ final class $$VideoMetadataWorksTableReferences
   _videoMetadataSeasonsRefsTable(_$FushiDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.videoMetadataSeasons,
-        aliasName: 'video_metadata_works__id__video_metadata_seasons__work_id',
+        aliasName: $_aliasNameGenerator(
+          db.videoMetadataWorks.id,
+          db.videoMetadataSeasons.workId,
+        ),
       );
 
   $$VideoMetadataSeasonsTableProcessedTableManager
@@ -82086,13 +82277,14 @@ final class $$VideoMetadataWorksTableReferences
     $VideoMetadataProviderIdentitiesTable,
     List<VideoMetadataProviderIdentityRow>
   >
-  _videoMetadataProviderIdentitiesRefsTable(
-    _$FushiDatabase db,
-  ) => MultiTypedResultKey.fromTable(
-    db.videoMetadataProviderIdentities,
-    aliasName:
-        'video_metadata_works__id__video_metadata_provider_identities__work_id',
-  );
+  _videoMetadataProviderIdentitiesRefsTable(_$FushiDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.videoMetadataProviderIdentities,
+        aliasName: $_aliasNameGenerator(
+          db.videoMetadataWorks.id,
+          db.videoMetadataProviderIdentities.workId,
+        ),
+      );
 
   $$VideoMetadataProviderIdentitiesTableProcessedTableManager
   get videoMetadataProviderIdentitiesRefs {
@@ -82116,8 +82308,10 @@ final class $$VideoMetadataWorksTableReferences
   _videoMetadataWorkTermsRefsTable(_$FushiDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.videoMetadataWorkTerms,
-        aliasName:
-            'video_metadata_works__id__video_metadata_work_terms__work_id',
+        aliasName: $_aliasNameGenerator(
+          db.videoMetadataWorks.id,
+          db.videoMetadataWorkTerms.workId,
+        ),
       );
 
   $$VideoMetadataWorkTermsTableProcessedTableManager
@@ -82142,7 +82336,10 @@ final class $$VideoMetadataWorksTableReferences
   _videoMetadataCreditsRefsTable(_$FushiDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.videoMetadataCredits,
-        aliasName: 'video_metadata_works__id__video_metadata_credits__work_id',
+        aliasName: $_aliasNameGenerator(
+          db.videoMetadataWorks.id,
+          db.videoMetadataCredits.workId,
+        ),
       );
 
   $$VideoMetadataCreditsTableProcessedTableManager
@@ -82167,7 +82364,10 @@ final class $$VideoMetadataWorksTableReferences
   _videoMetadataImagesRefsTable(_$FushiDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.videoMetadataImages,
-        aliasName: 'video_metadata_works__id__video_metadata_images__work_id',
+        aliasName: $_aliasNameGenerator(
+          db.videoMetadataWorks.id,
+          db.videoMetadataImages.workId,
+        ),
       );
 
   $$VideoMetadataImagesTableProcessedTableManager get videoMetadataImagesRefs {
@@ -82191,7 +82391,10 @@ final class $$VideoMetadataWorksTableReferences
   _videoMetadataExtrasRefsTable(_$FushiDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.videoMetadataExtras,
-        aliasName: 'video_metadata_works__id__video_metadata_extras__work_id',
+        aliasName: $_aliasNameGenerator(
+          db.videoMetadataWorks.id,
+          db.videoMetadataExtras.workId,
+        ),
       );
 
   $$VideoMetadataExtrasTableProcessedTableManager get videoMetadataExtrasRefs {
@@ -82215,7 +82418,10 @@ final class $$VideoMetadataWorksTableReferences
   _videoSidecarArtifactsRefsTable(_$FushiDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.videoSidecarArtifacts,
-        aliasName: 'video_metadata_works__id__video_sidecar_artifacts__work_id',
+        aliasName: $_aliasNameGenerator(
+          db.videoMetadataWorks.id,
+          db.videoSidecarArtifacts.workId,
+        ),
       );
 
   $$VideoSidecarArtifactsTableProcessedTableManager
@@ -83468,9 +83674,13 @@ final class $$VideoMetadataSeasonsTableReferences
     super.$_typedResult,
   );
 
-  static $VideoMetadataWorksTable _workIdTable(_$FushiDatabase db) => db
-      .videoMetadataWorks
-      .createAlias('video_metadata_seasons__work_id__video_metadata_works__id');
+  static $VideoMetadataWorksTable _workIdTable(_$FushiDatabase db) =>
+      db.videoMetadataWorks.createAlias(
+        $_aliasNameGenerator(
+          db.videoMetadataSeasons.workId,
+          db.videoMetadataWorks.id,
+        ),
+      );
 
   $$VideoMetadataWorksTableProcessedTableManager get workId {
     final $_column = $_itemColumn<int>('work_id')!;
@@ -83493,8 +83703,10 @@ final class $$VideoMetadataSeasonsTableReferences
   _videoMetadataEpisodesRefsTable(_$FushiDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.videoMetadataEpisodes,
-        aliasName:
-            'video_metadata_seasons__id__video_metadata_episodes__season_id',
+        aliasName: $_aliasNameGenerator(
+          db.videoMetadataSeasons.id,
+          db.videoMetadataEpisodes.seasonId,
+        ),
       );
 
   $$VideoMetadataEpisodesTableProcessedTableManager
@@ -83516,13 +83728,14 @@ final class $$VideoMetadataSeasonsTableReferences
     $VideoMetadataProviderIdentitiesTable,
     List<VideoMetadataProviderIdentityRow>
   >
-  _videoMetadataProviderIdentitiesRefsTable(
-    _$FushiDatabase db,
-  ) => MultiTypedResultKey.fromTable(
-    db.videoMetadataProviderIdentities,
-    aliasName:
-        'video_metadata_seasons__id__video_metadata_provider_identities__season_id',
-  );
+  _videoMetadataProviderIdentitiesRefsTable(_$FushiDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.videoMetadataProviderIdentities,
+        aliasName: $_aliasNameGenerator(
+          db.videoMetadataSeasons.id,
+          db.videoMetadataProviderIdentities.seasonId,
+        ),
+      );
 
   $$VideoMetadataProviderIdentitiesTableProcessedTableManager
   get videoMetadataProviderIdentitiesRefs {
@@ -83546,8 +83759,10 @@ final class $$VideoMetadataSeasonsTableReferences
   _videoMetadataCreditsRefsTable(_$FushiDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.videoMetadataCredits,
-        aliasName:
-            'video_metadata_seasons__id__video_metadata_credits__season_id',
+        aliasName: $_aliasNameGenerator(
+          db.videoMetadataSeasons.id,
+          db.videoMetadataCredits.seasonId,
+        ),
       );
 
   $$VideoMetadataCreditsTableProcessedTableManager
@@ -83572,8 +83787,10 @@ final class $$VideoMetadataSeasonsTableReferences
   _videoMetadataImagesRefsTable(_$FushiDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.videoMetadataImages,
-        aliasName:
-            'video_metadata_seasons__id__video_metadata_images__season_id',
+        aliasName: $_aliasNameGenerator(
+          db.videoMetadataSeasons.id,
+          db.videoMetadataImages.seasonId,
+        ),
       );
 
   $$VideoMetadataImagesTableProcessedTableManager get videoMetadataImagesRefs {
@@ -83597,8 +83814,10 @@ final class $$VideoMetadataSeasonsTableReferences
   _videoSidecarArtifactsRefsTable(_$FushiDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.videoSidecarArtifacts,
-        aliasName:
-            'video_metadata_seasons__id__video_sidecar_artifacts__season_id',
+        aliasName: $_aliasNameGenerator(
+          db.videoMetadataSeasons.id,
+          db.videoSidecarArtifacts.seasonId,
+        ),
       );
 
   $$VideoSidecarArtifactsTableProcessedTableManager
@@ -84461,7 +84680,10 @@ final class $$VideoMetadataEpisodesTableReferences
 
   static $VideoMetadataSeasonsTable _seasonIdTable(_$FushiDatabase db) =>
       db.videoMetadataSeasons.createAlias(
-        'video_metadata_episodes__season_id__video_metadata_seasons__id',
+        $_aliasNameGenerator(
+          db.videoMetadataEpisodes.seasonId,
+          db.videoMetadataSeasons.id,
+        ),
       );
 
   $$VideoMetadataSeasonsTableProcessedTableManager get seasonId {
@@ -84478,8 +84700,13 @@ final class $$VideoMetadataEpisodesTableReferences
     );
   }
 
-  static $VideoBooksTable _bookUidTable(_$FushiDatabase db) => db.videoBooks
-      .createAlias('video_metadata_episodes__book_uid__video_books__book_uid');
+  static $VideoBooksTable _bookUidTable(_$FushiDatabase db) =>
+      db.videoBooks.createAlias(
+        $_aliasNameGenerator(
+          db.videoMetadataEpisodes.bookUid,
+          db.videoBooks.bookUid,
+        ),
+      );
 
   $$VideoBooksTableProcessedTableManager? get bookUid {
     final $_column = $_itemColumn<String>('book_uid');
@@ -84499,13 +84726,14 @@ final class $$VideoMetadataEpisodesTableReferences
     $VideoMetadataProviderIdentitiesTable,
     List<VideoMetadataProviderIdentityRow>
   >
-  _videoMetadataProviderIdentitiesRefsTable(
-    _$FushiDatabase db,
-  ) => MultiTypedResultKey.fromTable(
-    db.videoMetadataProviderIdentities,
-    aliasName:
-        'video_metadata_episodes__id__video_metadata_provider_identities__episode_id',
-  );
+  _videoMetadataProviderIdentitiesRefsTable(_$FushiDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.videoMetadataProviderIdentities,
+        aliasName: $_aliasNameGenerator(
+          db.videoMetadataEpisodes.id,
+          db.videoMetadataProviderIdentities.episodeId,
+        ),
+      );
 
   $$VideoMetadataProviderIdentitiesTableProcessedTableManager
   get videoMetadataProviderIdentitiesRefs {
@@ -84529,8 +84757,10 @@ final class $$VideoMetadataEpisodesTableReferences
   _videoMetadataCreditsRefsTable(_$FushiDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.videoMetadataCredits,
-        aliasName:
-            'video_metadata_episodes__id__video_metadata_credits__episode_id',
+        aliasName: $_aliasNameGenerator(
+          db.videoMetadataEpisodes.id,
+          db.videoMetadataCredits.episodeId,
+        ),
       );
 
   $$VideoMetadataCreditsTableProcessedTableManager
@@ -84555,8 +84785,10 @@ final class $$VideoMetadataEpisodesTableReferences
   _videoMetadataImagesRefsTable(_$FushiDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.videoMetadataImages,
-        aliasName:
-            'video_metadata_episodes__id__video_metadata_images__episode_id',
+        aliasName: $_aliasNameGenerator(
+          db.videoMetadataEpisodes.id,
+          db.videoMetadataImages.episodeId,
+        ),
       );
 
   $$VideoMetadataImagesTableProcessedTableManager get videoMetadataImagesRefs {
@@ -84580,8 +84812,10 @@ final class $$VideoMetadataEpisodesTableReferences
   _videoSidecarArtifactsRefsTable(_$FushiDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.videoSidecarArtifacts,
-        aliasName:
-            'video_metadata_episodes__id__video_sidecar_artifacts__episode_id',
+        aliasName: $_aliasNameGenerator(
+          db.videoMetadataEpisodes.id,
+          db.videoSidecarArtifacts.episodeId,
+        ),
       );
 
   $$VideoSidecarArtifactsTableProcessedTableManager
@@ -85538,13 +85772,14 @@ final class $$VideoMetadataPeopleTableReferences
     $VideoMetadataProviderIdentitiesTable,
     List<VideoMetadataProviderIdentityRow>
   >
-  _videoMetadataProviderIdentitiesRefsTable(
-    _$FushiDatabase db,
-  ) => MultiTypedResultKey.fromTable(
-    db.videoMetadataProviderIdentities,
-    aliasName:
-        'video_metadata_people__person_key__video_metadata_provider_identities__person_key',
-  );
+  _videoMetadataProviderIdentitiesRefsTable(_$FushiDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.videoMetadataProviderIdentities,
+        aliasName: $_aliasNameGenerator(
+          db.videoMetadataPeople.personKey,
+          db.videoMetadataProviderIdentities.personKey,
+        ),
+      );
 
   $$VideoMetadataProviderIdentitiesTableProcessedTableManager
   get videoMetadataProviderIdentitiesRefs {
@@ -85570,13 +85805,14 @@ final class $$VideoMetadataPeopleTableReferences
     $VideoMetadataCreditsTable,
     List<VideoMetadataCreditRow>
   >
-  _videoMetadataCreditsRefsTable(
-    _$FushiDatabase db,
-  ) => MultiTypedResultKey.fromTable(
-    db.videoMetadataCredits,
-    aliasName:
-        'video_metadata_people__person_key__video_metadata_credits__person_key',
-  );
+  _videoMetadataCreditsRefsTable(_$FushiDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.videoMetadataCredits,
+        aliasName: $_aliasNameGenerator(
+          db.videoMetadataPeople.personKey,
+          db.videoMetadataCredits.personKey,
+        ),
+      );
 
   $$VideoMetadataCreditsTableProcessedTableManager
   get videoMetadataCreditsRefs {
@@ -85602,13 +85838,14 @@ final class $$VideoMetadataPeopleTableReferences
     $VideoMetadataImagesTable,
     List<VideoMetadataImageRow>
   >
-  _videoMetadataImagesRefsTable(
-    _$FushiDatabase db,
-  ) => MultiTypedResultKey.fromTable(
-    db.videoMetadataImages,
-    aliasName:
-        'video_metadata_people__person_key__video_metadata_images__person_key',
-  );
+  _videoMetadataImagesRefsTable(_$FushiDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.videoMetadataImages,
+        aliasName: $_aliasNameGenerator(
+          db.videoMetadataPeople.personKey,
+          db.videoMetadataImages.personKey,
+        ),
+      );
 
   $$VideoMetadataImagesTableProcessedTableManager get videoMetadataImagesRefs {
     final manager =
@@ -86217,13 +86454,14 @@ final class $$VideoMetadataCharactersTableReferences
     $VideoMetadataProviderIdentitiesTable,
     List<VideoMetadataProviderIdentityRow>
   >
-  _videoMetadataProviderIdentitiesRefsTable(
-    _$FushiDatabase db,
-  ) => MultiTypedResultKey.fromTable(
-    db.videoMetadataProviderIdentities,
-    aliasName:
-        'video_metadata_characters__character_key__video_metadata_provider_identities__character_key',
-  );
+  _videoMetadataProviderIdentitiesRefsTable(_$FushiDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.videoMetadataProviderIdentities,
+        aliasName: $_aliasNameGenerator(
+          db.videoMetadataCharacters.characterKey,
+          db.videoMetadataProviderIdentities.characterKey,
+        ),
+      );
 
   $$VideoMetadataProviderIdentitiesTableProcessedTableManager
   get videoMetadataProviderIdentitiesRefs {
@@ -86249,13 +86487,14 @@ final class $$VideoMetadataCharactersTableReferences
     $VideoMetadataCreditsTable,
     List<VideoMetadataCreditRow>
   >
-  _videoMetadataCreditsRefsTable(
-    _$FushiDatabase db,
-  ) => MultiTypedResultKey.fromTable(
-    db.videoMetadataCredits,
-    aliasName:
-        'video_metadata_characters__character_key__video_metadata_credits__character_key',
-  );
+  _videoMetadataCreditsRefsTable(_$FushiDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.videoMetadataCredits,
+        aliasName: $_aliasNameGenerator(
+          db.videoMetadataCharacters.characterKey,
+          db.videoMetadataCredits.characterKey,
+        ),
+      );
 
   $$VideoMetadataCreditsTableProcessedTableManager
   get videoMetadataCreditsRefs {
@@ -86281,13 +86520,14 @@ final class $$VideoMetadataCharactersTableReferences
     $VideoMetadataImagesTable,
     List<VideoMetadataImageRow>
   >
-  _videoMetadataImagesRefsTable(
-    _$FushiDatabase db,
-  ) => MultiTypedResultKey.fromTable(
-    db.videoMetadataImages,
-    aliasName:
-        'video_metadata_characters__character_key__video_metadata_images__character_key',
-  );
+  _videoMetadataImagesRefsTable(_$FushiDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.videoMetadataImages,
+        aliasName: $_aliasNameGenerator(
+          db.videoMetadataCharacters.characterKey,
+          db.videoMetadataImages.characterKey,
+        ),
+      );
 
   $$VideoMetadataImagesTableProcessedTableManager get videoMetadataImagesRefs {
     final manager =
@@ -86823,7 +87063,10 @@ final class $$VideoMetadataProviderIdentitiesTableReferences
 
   static $VideoMetadataWorksTable _workIdTable(_$FushiDatabase db) =>
       db.videoMetadataWorks.createAlias(
-        'video_metadata_provider_identities__work_id__video_metadata_works__id',
+        $_aliasNameGenerator(
+          db.videoMetadataProviderIdentities.workId,
+          db.videoMetadataWorks.id,
+        ),
       );
 
   $$VideoMetadataWorksTableProcessedTableManager? get workId {
@@ -86840,11 +87083,13 @@ final class $$VideoMetadataProviderIdentitiesTableReferences
     );
   }
 
-  static $VideoMetadataSeasonsTable _seasonIdTable(
-    _$FushiDatabase db,
-  ) => db.videoMetadataSeasons.createAlias(
-    'video_metadata_provider_identities__season_id__video_metadata_seasons__id',
-  );
+  static $VideoMetadataSeasonsTable _seasonIdTable(_$FushiDatabase db) =>
+      db.videoMetadataSeasons.createAlias(
+        $_aliasNameGenerator(
+          db.videoMetadataProviderIdentities.seasonId,
+          db.videoMetadataSeasons.id,
+        ),
+      );
 
   $$VideoMetadataSeasonsTableProcessedTableManager? get seasonId {
     final $_column = $_itemColumn<int>('season_id');
@@ -86860,11 +87105,13 @@ final class $$VideoMetadataProviderIdentitiesTableReferences
     );
   }
 
-  static $VideoMetadataEpisodesTable _episodeIdTable(
-    _$FushiDatabase db,
-  ) => db.videoMetadataEpisodes.createAlias(
-    'video_metadata_provider_identities__episode_id__video_metadata_episodes__id',
-  );
+  static $VideoMetadataEpisodesTable _episodeIdTable(_$FushiDatabase db) =>
+      db.videoMetadataEpisodes.createAlias(
+        $_aliasNameGenerator(
+          db.videoMetadataProviderIdentities.episodeId,
+          db.videoMetadataEpisodes.id,
+        ),
+      );
 
   $$VideoMetadataEpisodesTableProcessedTableManager? get episodeId {
     final $_column = $_itemColumn<int>('episode_id');
@@ -86880,11 +87127,13 @@ final class $$VideoMetadataProviderIdentitiesTableReferences
     );
   }
 
-  static $VideoMetadataPeopleTable _personKeyTable(
-    _$FushiDatabase db,
-  ) => db.videoMetadataPeople.createAlias(
-    'video_metadata_provider_identities__person_key__video_metadata_people__person_key',
-  );
+  static $VideoMetadataPeopleTable _personKeyTable(_$FushiDatabase db) =>
+      db.videoMetadataPeople.createAlias(
+        $_aliasNameGenerator(
+          db.videoMetadataProviderIdentities.personKey,
+          db.videoMetadataPeople.personKey,
+        ),
+      );
 
   $$VideoMetadataPeopleTableProcessedTableManager? get personKey {
     final $_column = $_itemColumn<String>('person_key');
@@ -86900,11 +87149,13 @@ final class $$VideoMetadataProviderIdentitiesTableReferences
     );
   }
 
-  static $VideoMetadataCharactersTable _characterKeyTable(
-    _$FushiDatabase db,
-  ) => db.videoMetadataCharacters.createAlias(
-    'video_metadata_provider_identities__character_key__video_metadata_characters__character_key',
-  );
+  static $VideoMetadataCharactersTable _characterKeyTable(_$FushiDatabase db) =>
+      db.videoMetadataCharacters.createAlias(
+        $_aliasNameGenerator(
+          db.videoMetadataProviderIdentities.characterKey,
+          db.videoMetadataCharacters.characterKey,
+        ),
+      );
 
   $$VideoMetadataCharactersTableProcessedTableManager? get characterKey {
     final $_column = $_itemColumn<String>('character_key');
@@ -86924,13 +87175,14 @@ final class $$VideoMetadataProviderIdentitiesTableReferences
     $VideoMetadataRawSnapshotsTable,
     List<VideoMetadataRawSnapshotRow>
   >
-  _videoMetadataRawSnapshotsRefsTable(
-    _$FushiDatabase db,
-  ) => MultiTypedResultKey.fromTable(
-    db.videoMetadataRawSnapshots,
-    aliasName:
-        'video_metadata_provider_identities__identity_key__video_metadata_raw_snapshots__identity_key',
-  );
+  _videoMetadataRawSnapshotsRefsTable(_$FushiDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.videoMetadataRawSnapshots,
+        aliasName: $_aliasNameGenerator(
+          db.videoMetadataProviderIdentities.identityKey,
+          db.videoMetadataRawSnapshots.identityKey,
+        ),
+      );
 
   $$VideoMetadataRawSnapshotsTableProcessedTableManager
   get videoMetadataRawSnapshotsRefs {
@@ -87796,7 +88048,10 @@ final class $$VideoMetadataRawSnapshotsTableReferences
   static $VideoMetadataProviderIdentitiesTable _identityKeyTable(
     _$FushiDatabase db,
   ) => db.videoMetadataProviderIdentities.createAlias(
-    'video_metadata_raw_snapshots__identity_key__video_metadata_provider_identities__identity_key',
+    $_aliasNameGenerator(
+      db.videoMetadataRawSnapshots.identityKey,
+      db.videoMetadataProviderIdentities.identityKey,
+    ),
   );
 
   $$VideoMetadataProviderIdentitiesTableProcessedTableManager get identityKey {
@@ -88192,13 +88447,14 @@ final class $$VideoMetadataTermsTableReferences
     $VideoMetadataWorkTermsTable,
     List<VideoMetadataWorkTermRow>
   >
-  _videoMetadataWorkTermsRefsTable(
-    _$FushiDatabase db,
-  ) => MultiTypedResultKey.fromTable(
-    db.videoMetadataWorkTerms,
-    aliasName:
-        'video_metadata_terms__term_key__video_metadata_work_terms__term_key',
-  );
+  _videoMetadataWorkTermsRefsTable(_$FushiDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.videoMetadataWorkTerms,
+        aliasName: $_aliasNameGenerator(
+          db.videoMetadataTerms.termKey,
+          db.videoMetadataWorkTerms.termKey,
+        ),
+      );
 
   $$VideoMetadataWorkTermsTableProcessedTableManager
   get videoMetadataWorkTermsRefs {
@@ -88504,7 +88760,10 @@ final class $$VideoMetadataWorkTermsTableReferences
 
   static $VideoMetadataWorksTable _workIdTable(_$FushiDatabase db) =>
       db.videoMetadataWorks.createAlias(
-        'video_metadata_work_terms__work_id__video_metadata_works__id',
+        $_aliasNameGenerator(
+          db.videoMetadataWorkTerms.workId,
+          db.videoMetadataWorks.id,
+        ),
       );
 
   $$VideoMetadataWorksTableProcessedTableManager get workId {
@@ -88523,7 +88782,10 @@ final class $$VideoMetadataWorkTermsTableReferences
 
   static $VideoMetadataTermsTable _termKeyTable(_$FushiDatabase db) =>
       db.videoMetadataTerms.createAlias(
-        'video_metadata_work_terms__term_key__video_metadata_terms__term_key',
+        $_aliasNameGenerator(
+          db.videoMetadataWorkTerms.termKey,
+          db.videoMetadataTerms.termKey,
+        ),
       );
 
   $$VideoMetadataTermsTableProcessedTableManager get termKey {
@@ -88915,9 +89177,13 @@ final class $$VideoMetadataCreditsTableReferences
     super.$_typedResult,
   );
 
-  static $VideoMetadataWorksTable _workIdTable(_$FushiDatabase db) => db
-      .videoMetadataWorks
-      .createAlias('video_metadata_credits__work_id__video_metadata_works__id');
+  static $VideoMetadataWorksTable _workIdTable(_$FushiDatabase db) =>
+      db.videoMetadataWorks.createAlias(
+        $_aliasNameGenerator(
+          db.videoMetadataCredits.workId,
+          db.videoMetadataWorks.id,
+        ),
+      );
 
   $$VideoMetadataWorksTableProcessedTableManager? get workId {
     final $_column = $_itemColumn<int>('work_id');
@@ -88935,7 +89201,10 @@ final class $$VideoMetadataCreditsTableReferences
 
   static $VideoMetadataSeasonsTable _seasonIdTable(_$FushiDatabase db) =>
       db.videoMetadataSeasons.createAlias(
-        'video_metadata_credits__season_id__video_metadata_seasons__id',
+        $_aliasNameGenerator(
+          db.videoMetadataCredits.seasonId,
+          db.videoMetadataSeasons.id,
+        ),
       );
 
   $$VideoMetadataSeasonsTableProcessedTableManager? get seasonId {
@@ -88954,7 +89223,10 @@ final class $$VideoMetadataCreditsTableReferences
 
   static $VideoMetadataEpisodesTable _episodeIdTable(_$FushiDatabase db) =>
       db.videoMetadataEpisodes.createAlias(
-        'video_metadata_credits__episode_id__video_metadata_episodes__id',
+        $_aliasNameGenerator(
+          db.videoMetadataCredits.episodeId,
+          db.videoMetadataEpisodes.id,
+        ),
       );
 
   $$VideoMetadataEpisodesTableProcessedTableManager? get episodeId {
@@ -88973,7 +89245,10 @@ final class $$VideoMetadataCreditsTableReferences
 
   static $VideoMetadataPeopleTable _personKeyTable(_$FushiDatabase db) =>
       db.videoMetadataPeople.createAlias(
-        'video_metadata_credits__person_key__video_metadata_people__person_key',
+        $_aliasNameGenerator(
+          db.videoMetadataCredits.personKey,
+          db.videoMetadataPeople.personKey,
+        ),
       );
 
   $$VideoMetadataPeopleTableProcessedTableManager get personKey {
@@ -88990,11 +89265,13 @@ final class $$VideoMetadataCreditsTableReferences
     );
   }
 
-  static $VideoMetadataCharactersTable _characterKeyTable(
-    _$FushiDatabase db,
-  ) => db.videoMetadataCharacters.createAlias(
-    'video_metadata_credits__character_key__video_metadata_characters__character_key',
-  );
+  static $VideoMetadataCharactersTable _characterKeyTable(_$FushiDatabase db) =>
+      db.videoMetadataCharacters.createAlias(
+        $_aliasNameGenerator(
+          db.videoMetadataCredits.characterKey,
+          db.videoMetadataCharacters.characterKey,
+        ),
+      );
 
   $$VideoMetadataCharactersTableProcessedTableManager? get characterKey {
     final $_column = $_itemColumn<String>('character_key');
@@ -89805,9 +90082,13 @@ final class $$VideoMetadataImagesTableReferences
     super.$_typedResult,
   );
 
-  static $VideoMetadataWorksTable _workIdTable(_$FushiDatabase db) => db
-      .videoMetadataWorks
-      .createAlias('video_metadata_images__work_id__video_metadata_works__id');
+  static $VideoMetadataWorksTable _workIdTable(_$FushiDatabase db) =>
+      db.videoMetadataWorks.createAlias(
+        $_aliasNameGenerator(
+          db.videoMetadataImages.workId,
+          db.videoMetadataWorks.id,
+        ),
+      );
 
   $$VideoMetadataWorksTableProcessedTableManager? get workId {
     final $_column = $_itemColumn<int>('work_id');
@@ -89825,7 +90106,10 @@ final class $$VideoMetadataImagesTableReferences
 
   static $VideoMetadataSeasonsTable _seasonIdTable(_$FushiDatabase db) =>
       db.videoMetadataSeasons.createAlias(
-        'video_metadata_images__season_id__video_metadata_seasons__id',
+        $_aliasNameGenerator(
+          db.videoMetadataImages.seasonId,
+          db.videoMetadataSeasons.id,
+        ),
       );
 
   $$VideoMetadataSeasonsTableProcessedTableManager? get seasonId {
@@ -89844,7 +90128,10 @@ final class $$VideoMetadataImagesTableReferences
 
   static $VideoMetadataEpisodesTable _episodeIdTable(_$FushiDatabase db) =>
       db.videoMetadataEpisodes.createAlias(
-        'video_metadata_images__episode_id__video_metadata_episodes__id',
+        $_aliasNameGenerator(
+          db.videoMetadataImages.episodeId,
+          db.videoMetadataEpisodes.id,
+        ),
       );
 
   $$VideoMetadataEpisodesTableProcessedTableManager? get episodeId {
@@ -89863,7 +90150,10 @@ final class $$VideoMetadataImagesTableReferences
 
   static $VideoMetadataPeopleTable _personKeyTable(_$FushiDatabase db) =>
       db.videoMetadataPeople.createAlias(
-        'video_metadata_images__person_key__video_metadata_people__person_key',
+        $_aliasNameGenerator(
+          db.videoMetadataImages.personKey,
+          db.videoMetadataPeople.personKey,
+        ),
       );
 
   $$VideoMetadataPeopleTableProcessedTableManager? get personKey {
@@ -89880,11 +90170,13 @@ final class $$VideoMetadataImagesTableReferences
     );
   }
 
-  static $VideoMetadataCharactersTable _characterKeyTable(
-    _$FushiDatabase db,
-  ) => db.videoMetadataCharacters.createAlias(
-    'video_metadata_images__character_key__video_metadata_characters__character_key',
-  );
+  static $VideoMetadataCharactersTable _characterKeyTable(_$FushiDatabase db) =>
+      db.videoMetadataCharacters.createAlias(
+        $_aliasNameGenerator(
+          db.videoMetadataImages.characterKey,
+          db.videoMetadataCharacters.characterKey,
+        ),
+      );
 
   $$VideoMetadataCharactersTableProcessedTableManager? get characterKey {
     final $_column = $_itemColumn<String>('character_key');
@@ -90776,9 +91068,13 @@ final class $$VideoMetadataExtrasTableReferences
     super.$_typedResult,
   );
 
-  static $VideoMetadataWorksTable _workIdTable(_$FushiDatabase db) => db
-      .videoMetadataWorks
-      .createAlias('video_metadata_extras__work_id__video_metadata_works__id');
+  static $VideoMetadataWorksTable _workIdTable(_$FushiDatabase db) =>
+      db.videoMetadataWorks.createAlias(
+        $_aliasNameGenerator(
+          db.videoMetadataExtras.workId,
+          db.videoMetadataWorks.id,
+        ),
+      );
 
   $$VideoMetadataWorksTableProcessedTableManager get workId {
     final $_column = $_itemColumn<int>('work_id')!;
@@ -90794,8 +91090,13 @@ final class $$VideoMetadataExtrasTableReferences
     );
   }
 
-  static $VideoBooksTable _bookUidTable(_$FushiDatabase db) => db.videoBooks
-      .createAlias('video_metadata_extras__book_uid__video_books__book_uid');
+  static $VideoBooksTable _bookUidTable(_$FushiDatabase db) =>
+      db.videoBooks.createAlias(
+        $_aliasNameGenerator(
+          db.videoMetadataExtras.bookUid,
+          db.videoBooks.bookUid,
+        ),
+      );
 
   $$VideoBooksTableProcessedTableManager? get bookUid {
     final $_column = $_itemColumn<String>('book_uid');
@@ -91449,7 +91750,10 @@ final class $$VideoSourceScrapeSettingsTableReferences
 
   static $MediaSourcesTable _sourceIdTable(_$FushiDatabase db) =>
       db.mediaSources.createAlias(
-        'video_source_scrape_settings__source_id__media_sources__id',
+        $_aliasNameGenerator(
+          db.videoSourceScrapeSettings.sourceId,
+          db.mediaSources.id,
+        ),
       );
 
   $$MediaSourcesTableProcessedTableManager get sourceId {
@@ -91942,9 +92246,13 @@ final class $$VideoSourceScrapeRunsTableReferences
     super.$_typedResult,
   );
 
-  static $MediaSourcesTable _sourceIdTable(_$FushiDatabase db) => db
-      .mediaSources
-      .createAlias('video_source_scrape_runs__source_id__media_sources__id');
+  static $MediaSourcesTable _sourceIdTable(_$FushiDatabase db) =>
+      db.mediaSources.createAlias(
+        $_aliasNameGenerator(
+          db.videoSourceScrapeRuns.sourceId,
+          db.mediaSources.id,
+        ),
+      );
 
   $$MediaSourcesTableProcessedTableManager? get sourceId {
     final $_column = $_itemColumn<int>('source_id');
@@ -91967,8 +92275,10 @@ final class $$VideoSourceScrapeRunsTableReferences
   _videoSidecarArtifactsRefsTable(_$FushiDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.videoSidecarArtifacts,
-        aliasName:
-            'video_source_scrape_runs__id__video_sidecar_artifacts__run_id',
+        aliasName: $_aliasNameGenerator(
+          db.videoSourceScrapeRuns.id,
+          db.videoSidecarArtifacts.runId,
+        ),
       );
 
   $$VideoSidecarArtifactsTableProcessedTableManager
@@ -92621,9 +92931,13 @@ final class $$VideoSidecarArtifactsTableReferences
     super.$_typedResult,
   );
 
-  static $MediaSourcesTable _sourceIdTable(_$FushiDatabase db) => db
-      .mediaSources
-      .createAlias('video_sidecar_artifacts__source_id__media_sources__id');
+  static $MediaSourcesTable _sourceIdTable(_$FushiDatabase db) =>
+      db.mediaSources.createAlias(
+        $_aliasNameGenerator(
+          db.videoSidecarArtifacts.sourceId,
+          db.mediaSources.id,
+        ),
+      );
 
   $$MediaSourcesTableProcessedTableManager? get sourceId {
     final $_column = $_itemColumn<int>('source_id');
@@ -92641,7 +92955,10 @@ final class $$VideoSidecarArtifactsTableReferences
 
   static $VideoSourceScrapeRunsTable _runIdTable(_$FushiDatabase db) =>
       db.videoSourceScrapeRuns.createAlias(
-        'video_sidecar_artifacts__run_id__video_source_scrape_runs__id',
+        $_aliasNameGenerator(
+          db.videoSidecarArtifacts.runId,
+          db.videoSourceScrapeRuns.id,
+        ),
       );
 
   $$VideoSourceScrapeRunsTableProcessedTableManager? get runId {
@@ -92660,7 +92977,10 @@ final class $$VideoSidecarArtifactsTableReferences
 
   static $VideoMetadataWorksTable _workIdTable(_$FushiDatabase db) =>
       db.videoMetadataWorks.createAlias(
-        'video_sidecar_artifacts__work_id__video_metadata_works__id',
+        $_aliasNameGenerator(
+          db.videoSidecarArtifacts.workId,
+          db.videoMetadataWorks.id,
+        ),
       );
 
   $$VideoMetadataWorksTableProcessedTableManager? get workId {
@@ -92679,7 +92999,10 @@ final class $$VideoSidecarArtifactsTableReferences
 
   static $VideoMetadataSeasonsTable _seasonIdTable(_$FushiDatabase db) =>
       db.videoMetadataSeasons.createAlias(
-        'video_sidecar_artifacts__season_id__video_metadata_seasons__id',
+        $_aliasNameGenerator(
+          db.videoSidecarArtifacts.seasonId,
+          db.videoMetadataSeasons.id,
+        ),
       );
 
   $$VideoMetadataSeasonsTableProcessedTableManager? get seasonId {
@@ -92698,7 +93021,10 @@ final class $$VideoSidecarArtifactsTableReferences
 
   static $VideoMetadataEpisodesTable _episodeIdTable(_$FushiDatabase db) =>
       db.videoMetadataEpisodes.createAlias(
-        'video_sidecar_artifacts__episode_id__video_metadata_episodes__id',
+        $_aliasNameGenerator(
+          db.videoSidecarArtifacts.episodeId,
+          db.videoMetadataEpisodes.id,
+        ),
       );
 
   $$VideoMetadataEpisodesTableProcessedTableManager? get episodeId {
@@ -93572,9 +93898,13 @@ final class $$VideoDownloadJobsTableReferences
     super.$_typedResult,
   );
 
-  static $MediaSourcesTable _targetSourceIdTable(_$FushiDatabase db) => db
-      .mediaSources
-      .createAlias('video_download_jobs__target_source_id__media_sources__id');
+  static $MediaSourcesTable _targetSourceIdTable(_$FushiDatabase db) =>
+      db.mediaSources.createAlias(
+        $_aliasNameGenerator(
+          db.videoDownloadJobs.targetSourceId,
+          db.mediaSources.id,
+        ),
+      );
 
   $$MediaSourcesTableProcessedTableManager? get targetSourceId {
     final $_column = $_itemColumn<int>('target_source_id');
@@ -93590,9 +93920,13 @@ final class $$VideoDownloadJobsTableReferences
     );
   }
 
-  static $MediaCollectionsTable _collectionIdTable(_$FushiDatabase db) => db
-      .mediaCollections
-      .createAlias('video_download_jobs__collection_id__media_collections__id');
+  static $MediaCollectionsTable _collectionIdTable(_$FushiDatabase db) =>
+      db.mediaCollections.createAlias(
+        $_aliasNameGenerator(
+          db.videoDownloadJobs.collectionId,
+          db.mediaCollections.id,
+        ),
+      );
 
   $$MediaCollectionsTableProcessedTableManager? get collectionId {
     final $_column = $_itemColumn<int>('collection_id');
@@ -93615,8 +93949,10 @@ final class $$VideoDownloadJobsTableReferences
   _videoDownloadJobFilesRefsTable(_$FushiDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.videoDownloadJobFiles,
-        aliasName:
-            'video_download_jobs__job_id__video_download_job_files__job_id',
+        aliasName: $_aliasNameGenerator(
+          db.videoDownloadJobs.jobId,
+          db.videoDownloadJobFiles.jobId,
+        ),
       );
 
   $$VideoDownloadJobFilesTableProcessedTableManager
@@ -93641,8 +93977,10 @@ final class $$VideoDownloadJobsTableReferences
   _videoDownloadJobSubtitlesRefsTable(_$FushiDatabase db) =>
       MultiTypedResultKey.fromTable(
         db.videoDownloadJobSubtitles,
-        aliasName:
-            'video_download_jobs__job_id__video_download_job_subtitles__job_id',
+        aliasName: $_aliasNameGenerator(
+          db.videoDownloadJobs.jobId,
+          db.videoDownloadJobSubtitles.jobId,
+        ),
       );
 
   $$VideoDownloadJobSubtitlesTableProcessedTableManager
@@ -93664,13 +94002,14 @@ final class $$VideoDownloadJobsTableReferences
     $VideoDownloadSubscriptionItemsTable,
     List<VideoDownloadSubscriptionItemRow>
   >
-  _videoDownloadSubscriptionItemsRefsTable(
-    _$FushiDatabase db,
-  ) => MultiTypedResultKey.fromTable(
-    db.videoDownloadSubscriptionItems,
-    aliasName:
-        'video_download_jobs__job_id__video_download_subscription_items__job_id',
-  );
+  _videoDownloadSubscriptionItemsRefsTable(_$FushiDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.videoDownloadSubscriptionItems,
+        aliasName: $_aliasNameGenerator(
+          db.videoDownloadJobs.jobId,
+          db.videoDownloadSubscriptionItems.jobId,
+        ),
+      );
 
   $$VideoDownloadSubscriptionItemsTableProcessedTableManager
   get videoDownloadSubscriptionItemsRefs {
@@ -94971,7 +95310,10 @@ final class $$VideoDownloadJobFilesTableReferences
 
   static $VideoDownloadJobsTable _jobIdTable(_$FushiDatabase db) =>
       db.videoDownloadJobs.createAlias(
-        'video_download_job_files__job_id__video_download_jobs__job_id',
+        $_aliasNameGenerator(
+          db.videoDownloadJobFiles.jobId,
+          db.videoDownloadJobs.jobId,
+        ),
       );
 
   $$VideoDownloadJobsTableProcessedTableManager get jobId {
@@ -94992,13 +95334,14 @@ final class $$VideoDownloadJobFilesTableReferences
     $VideoDownloadJobSubtitlesTable,
     List<VideoDownloadJobSubtitleRow>
   >
-  _videoDownloadJobSubtitlesRefsTable(
-    _$FushiDatabase db,
-  ) => MultiTypedResultKey.fromTable(
-    db.videoDownloadJobSubtitles,
-    aliasName:
-        'video_download_job_files__id__video_download_job_subtitles__job_file_id',
-  );
+  _videoDownloadJobSubtitlesRefsTable(_$FushiDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.videoDownloadJobSubtitles,
+        aliasName: $_aliasNameGenerator(
+          db.videoDownloadJobFiles.id,
+          db.videoDownloadJobSubtitles.jobFileId,
+        ),
+      );
 
   $$VideoDownloadJobSubtitlesTableProcessedTableManager
   get videoDownloadJobSubtitlesRefs {
@@ -95637,7 +95980,10 @@ final class $$VideoDownloadJobSubtitlesTableReferences
 
   static $VideoDownloadJobsTable _jobIdTable(_$FushiDatabase db) =>
       db.videoDownloadJobs.createAlias(
-        'video_download_job_subtitles__job_id__video_download_jobs__job_id',
+        $_aliasNameGenerator(
+          db.videoDownloadJobSubtitles.jobId,
+          db.videoDownloadJobs.jobId,
+        ),
       );
 
   $$VideoDownloadJobsTableProcessedTableManager get jobId {
@@ -95654,11 +96000,13 @@ final class $$VideoDownloadJobSubtitlesTableReferences
     );
   }
 
-  static $VideoDownloadJobFilesTable _jobFileIdTable(
-    _$FushiDatabase db,
-  ) => db.videoDownloadJobFiles.createAlias(
-    'video_download_job_subtitles__job_file_id__video_download_job_files__id',
-  );
+  static $VideoDownloadJobFilesTable _jobFileIdTable(_$FushiDatabase db) =>
+      db.videoDownloadJobFiles.createAlias(
+        $_aliasNameGenerator(
+          db.videoDownloadJobSubtitles.jobFileId,
+          db.videoDownloadJobFiles.id,
+        ),
+      );
 
   $$VideoDownloadJobFilesTableProcessedTableManager? get jobFileId {
     final $_column = $_itemColumn<int>('job_file_id');
@@ -96312,7 +96660,10 @@ final class $$VideoDownloadSubscriptionsTableReferences
 
   static $MediaSourcesTable _targetSourceIdTable(_$FushiDatabase db) =>
       db.mediaSources.createAlias(
-        'video_download_subscriptions__target_source_id__media_sources__id',
+        $_aliasNameGenerator(
+          db.videoDownloadSubscriptions.targetSourceId,
+          db.mediaSources.id,
+        ),
       );
 
   $$MediaSourcesTableProcessedTableManager? get targetSourceId {
@@ -96331,7 +96682,10 @@ final class $$VideoDownloadSubscriptionsTableReferences
 
   static $MediaCollectionsTable _collectionIdTable(_$FushiDatabase db) =>
       db.mediaCollections.createAlias(
-        'video_download_subscriptions__collection_id__media_collections__id',
+        $_aliasNameGenerator(
+          db.videoDownloadSubscriptions.collectionId,
+          db.mediaCollections.id,
+        ),
       );
 
   $$MediaCollectionsTableProcessedTableManager? get collectionId {
@@ -96352,13 +96706,14 @@ final class $$VideoDownloadSubscriptionsTableReferences
     $VideoDownloadSubscriptionItemsTable,
     List<VideoDownloadSubscriptionItemRow>
   >
-  _videoDownloadSubscriptionItemsRefsTable(
-    _$FushiDatabase db,
-  ) => MultiTypedResultKey.fromTable(
-    db.videoDownloadSubscriptionItems,
-    aliasName:
-        'video_download_subscriptions__subscription_id__video_download_subscription_items__subscription_id',
-  );
+  _videoDownloadSubscriptionItemsRefsTable(_$FushiDatabase db) =>
+      MultiTypedResultKey.fromTable(
+        db.videoDownloadSubscriptionItems,
+        aliasName: $_aliasNameGenerator(
+          db.videoDownloadSubscriptions.subscriptionId,
+          db.videoDownloadSubscriptionItems.subscriptionId,
+        ),
+      );
 
   $$VideoDownloadSubscriptionItemsTableProcessedTableManager
   get videoDownloadSubscriptionItemsRefs {
@@ -97430,7 +97785,10 @@ final class $$VideoDownloadSubscriptionItemsTableReferences
   static $VideoDownloadSubscriptionsTable _subscriptionIdTable(
     _$FushiDatabase db,
   ) => db.videoDownloadSubscriptions.createAlias(
-    'video_download_subscription_items__subscription_id__video_download_subscriptions__subscription_id',
+    $_aliasNameGenerator(
+      db.videoDownloadSubscriptionItems.subscriptionId,
+      db.videoDownloadSubscriptions.subscriptionId,
+    ),
   );
 
   $$VideoDownloadSubscriptionsTableProcessedTableManager get subscriptionId {
@@ -97447,11 +97805,13 @@ final class $$VideoDownloadSubscriptionItemsTableReferences
     );
   }
 
-  static $VideoDownloadJobsTable _jobIdTable(
-    _$FushiDatabase db,
-  ) => db.videoDownloadJobs.createAlias(
-    'video_download_subscription_items__job_id__video_download_jobs__job_id',
-  );
+  static $VideoDownloadJobsTable _jobIdTable(_$FushiDatabase db) =>
+      db.videoDownloadJobs.createAlias(
+        $_aliasNameGenerator(
+          db.videoDownloadSubscriptionItems.jobId,
+          db.videoDownloadJobs.jobId,
+        ),
+      );
 
   $$VideoDownloadJobsTableProcessedTableManager? get jobId {
     final $_column = $_itemColumn<String>('job_id');
@@ -101269,7 +101629,10 @@ final class $$VideoEpisodeBindingOverridesTableReferences
 
   static $VideoBooksTable _bookUidTable(_$FushiDatabase db) =>
       db.videoBooks.createAlias(
-        'video_episode_binding_overrides__book_uid__video_books__book_uid',
+        $_aliasNameGenerator(
+          db.videoEpisodeBindingOverrides.bookUid,
+          db.videoBooks.bookUid,
+        ),
       );
 
   $$VideoBooksTableProcessedTableManager get bookUid {

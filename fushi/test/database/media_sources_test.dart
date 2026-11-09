@@ -123,6 +123,8 @@ void main() {
       FushiDatabase db,
       String bookKey, {
       int? sourceId,
+      String format = 'epub',
+      bool inLibrary = true,
     }) =>
         db.insertEpubBook(
           EpubBooksCompanion.insert(
@@ -134,6 +136,8 @@ void main() {
             chaptersJson: '[]',
             importedAt: 1000,
             sourceId: Value(sourceId),
+            format: Value<String>(format),
+            inLibrary: Value<bool>(inLibrary),
           ),
         );
 
@@ -177,6 +181,30 @@ void main() {
 
       expect(await db.countMediaBySourceId(id, 'book'), 3);
       expect(await db.countMediaBySourceId(other, 'book'), 1);
+    });
+
+    test('manga kind 只统计书架成员（membership=false 不算来源拥有数）', () async {
+      final db = await _openDb();
+      final id = await db.insertMediaSource(_source(mediaKind: 'manga'));
+
+      await insertEpub(
+        db,
+        'M1',
+        sourceId: id,
+        format: 'manga',
+        inLibrary: true,
+      );
+      await insertEpub(
+        db,
+        'M2',
+        sourceId: id,
+        format: 'manga',
+        inLibrary: false,
+      );
+      // 非漫画行不算 manga 拥有数。
+      await insertEpub(db, 'B1', sourceId: id, format: 'epub');
+
+      expect(await db.countMediaBySourceId(id, 'manga'), 1);
     });
 
     test('counts video_books for video kind', () async {

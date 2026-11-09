@@ -736,8 +736,9 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
   /// 变化剪枝，多选态期间同步下架 / 别处删除都会留下幽灵键，落库时撞外键——打标签
   /// 会把弹窗卡死在 loading、组合会静默失败、确认框数字是虚数。
   ///
-  /// 存在性全集取**全库**而非可见集：被搜索或标签筛掉的书仍然存在，用户先勾后筛
-  /// 是合法用法，不该被悄悄剔掉。
+  /// 存在性全集取**全部书架成员**而非可见集：被搜索或标签筛掉的书仍然存在，用户
+  /// 先勾后筛是合法用法，不该被悄悄剔掉；但已移出书架（membership=false）的行
+  /// 不再是书架动作的合法目标。
   ///
   /// 返回剔完后是否还有东西可做。
   Future<bool> _pruneStaleSelection() async {
@@ -763,8 +764,10 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
     final _RemoteBookState? remoteState = _lastRemoteState;
     final int dropped = _selection.retainExisting(
       loose: <String>{
+        // 书架批量动作只作用于书架成员：移出书架的选中项不再可操作。
         for (final EpubBookMeta row in epubBooks)
-          ReaderFushiSource.mediaIdentifierFor(row.bookKey),
+          if (row.isInLibrary)
+            ReaderFushiSource.mediaIdentifierFor(row.bookKey),
         for (final SrtBook book in srtBooks) 'srt_${book.uid}',
         if (remoteState != null) ...<String>[
           for (final RemoteBookInfo book in remoteState.books)

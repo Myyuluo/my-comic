@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi_core/fushi_core.dart';
@@ -151,6 +152,47 @@ void main() {
     expect((await stored(keyA)).chapters, hasLength(3));
     expect((await stored(keyB)).chapters, hasLength(3), reason: 'B 照常落库');
     expect((await stored(keyA)).autoDownload, isTrue, reason: '探针刷新不冲掉订阅');
+  });
+
+  test('membership=false 的条目不被刷新、不入队（非书架排不进更新探测）', () async {
+    await addBook(
+      entryFor('/series/a', chapters: const <OnlineMangaChapter>[c2, c1]),
+      autoDownload: true,
+    );
+    final String keyB = await addBook(
+      entryFor('/series/b', chapters: const <OnlineMangaChapter>[c2, c1]),
+      autoDownload: true,
+    );
+    // B 已移出书架（membership=false），订阅位可能还没清干净：探针仍不得碰它。
+    await (database.update(database.epubBooks)
+          ..where((t) => t.bookKey.equals(keyB)))
+        .write(const EpubBooksCompanion(inLibrary: Value<bool>(false)));
+    adapter.script =
+        (OnlineMangaLibraryEntry entry) async => OnlineMangaRefreshResult(
+              series: entry.series,
+              chapters: const <OnlineMangaChapter>[c3, c2, c1],
+            );
+
+    final int refreshed = await runOnlineMangaUpdateProbe(
+      database: database,
+      serviceFor: (OnlineMangaRuntimeKind _) => service,
+      autoDownload: autoDownload,
+      onError: onError,
+    );
+
+    expect(refreshed, 1);
+    expect(
+      adapter.refreshedSeriesKeys,
+      <String>['/series/a'],
+      reason: '非书架作品不参与后台更新探测',
+    );
+    expect(enqueued, hasLength(1));
+    expect(enqueued.single.seriesKey, '/series/a');
+    expect(
+      (await stored(keyB)).chapters,
+      hasLength(2),
+      reason: '非书架条目不被探测刷新',
+    );
   });
 
   test('新出现多章时按旧→新章序入队', () async {

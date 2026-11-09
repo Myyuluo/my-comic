@@ -141,8 +141,10 @@ class MihonBackupExporter {
     final bool includeAllRead =
         options.includeLibrary && options.includeAllRead;
     final _LibraryExportSection library = _LibraryExportSection(database);
+    // 「书架中的作品」= Library membership 行。非书架作品不导出为 Library
+    // 条目；它们若要保留阅读记录，由「所有已读作品」以 favorite=false 导出。
     final List<EpubBookRow> libraryRows = options.includeLibrary
-        ? await database.getAllEpubBooks()
+        ? await database.getLibraryEpubBooks()
         : const <EpubBookRow>[];
     final List<_ExportableManga> exportable = library.exportableManga(
       libraryRows,

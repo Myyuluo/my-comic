@@ -13,6 +13,7 @@ class EpubBookMeta {
     required this.format,
     required this.importedAt,
     required this.extractDir,
+    this.inLibrary = true,
     this.completedAt,
     this.localAddedAt,
   });
@@ -26,6 +27,10 @@ class EpubBookMeta {
 
   /// `'epub'` / `'pdf'` / `'manga'`（见 `BookFormat`）。
   final String format;
+
+  /// Library membership（`EpubBooks.inLibrary`）。书架专属读取点用它过滤，
+  /// 判据入口见 `library_membership.dart` 的 `isInLibrary`。
+  final bool inLibrary;
 
   /// 原始入库时刻（毫秒，跨设备保留；互联下载的书 = 对端入库时刻）。展示与
   /// 「导入时间」排序用。

@@ -29,7 +29,7 @@ void main() {
 
   Future<EpubBookRow> insertBook({
     required String bookKey,
-    String format = 'manga',
+    bool inLibrary = true,
     DateTime? completedAt,
   }) async {
     await db.insertEpubBook(
@@ -41,7 +41,8 @@ void main() {
         chapterCount: 2,
         chaptersJson: '[]',
         importedAt: 1,
-        format: Value<String>(format),
+        format: const Value<String>('manga'),
+        inLibrary: Value<bool>(inLibrary),
         completedAt: Value<DateTime?>(completedAt),
       ),
     );
@@ -151,7 +152,7 @@ void main() {
     );
     final EpubBookRow hidden = await insertBook(
       bookKey: 'hidden',
-      format: 'epub',
+      inLibrary: false,
     );
     await seedBookOwnedRows(library);
     await seedBookOwnedRows(hidden);
@@ -178,7 +179,7 @@ void main() {
     final DateTime? completedAt = library.completedAt;
     final EpubBookRow hidden = await insertBook(
       bookKey: 'hidden',
-      format: 'epub',
+      inLibrary: false,
     );
     await seedBookOwnedRows(library);
     await seedBookOwnedRows(hidden);
@@ -330,7 +331,7 @@ void main() {
     final EpubBookRow library = await insertBook(bookKey: 'library');
     final EpubBookRow hidden = await insertBook(
       bookKey: 'hidden',
-      format: 'epub',
+      inLibrary: false,
     );
     await seedBookOwnedRows(library);
     await seedBookOwnedRows(hidden);
