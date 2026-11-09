@@ -325,6 +325,62 @@ void main() {
     downloads.dispose();
   });
 
+  test('非书架占位行：入队按下载身份复用它，worker 不需要 Library membership', () async {
+    // 导入时来源未安装 → 占位包；安装后从源页拿到的条目是真实包 + 规范化后的
+    // 数字 sourceId。两者是同一部作品，任务必须挂到已有的非书架行上。
+    const OnlineMangaLibraryEntry placeholder =
+        OnlineMangaLibraryEntry(
+          runtime: OnlineMangaRuntimeKind.mihon,
+          extensionPackage: kUnavailableMihonExtensionPackage,
+          sourceId: '42',
+          series: OnlineMangaSeries(
+            key: '/series/placeholder',
+            title: 'Placeholder series',
+            raw: <String, Object?>{'url': '/series/placeholder'},
+          ),
+          chapters: _chapters,
+        );
+    final EpubBookRow row = await library.ensureNonLibrary(placeholder);
+    expect(row.isInLibrary, isFalse);
+    final OnlineMangaLibraryEntry installed = OnlineMangaLibraryEntry(
+      runtime: OnlineMangaRuntimeKind.mihon,
+      extensionPackage: 'org.example.installed',
+      sourceId: '042',
+      series: placeholder.series,
+      chapters: _chapters,
+    );
+
+    final MangaDownloadService downloads = build();
+    addTearDown(downloads.dispose);
+    final MangaDownloadJobRow job = await downloads.enqueueChapter(
+      entry: installed,
+      chapter: _chapters.last,
+      autoOcr: false,
+    );
+    expect(
+      job.bookKey,
+      row.bookKey,
+      reason: '非书架作品按下载身份复用已有行，不另起孤儿 bookKey',
+    );
+
+    await downloads.start();
+    await downloads.whenIdle;
+
+    final MangaDownloadJobRow done =
+        (await db.getMangaDownloadJob(job.jobId))!;
+    expect(done.status, MangaDownloadJobStatus.done);
+    expect(
+      (await db.getEpubBook(row.bookKey))!.isInLibrary,
+      isFalse,
+      reason: '下载不要求 Library membership，也不得自动加入书架',
+    );
+    expect(
+      await db.getMangaChapterDir(row.bookKey, '/chapter/1'),
+      isNotNull,
+      reason: '下载索引与 worker 解析非书架行后写入映射',
+    );
+  });
+
   test('下载中只有 .staging 有内容：正式章目录与索引要等整章 rename 后才出现', () async {
     adapter.gate = Completer<void>();
     final MangaDownloadService downloads = build();

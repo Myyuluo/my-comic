@@ -609,11 +609,12 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     final AppModel? appModel = _appModelOrNull;
     if (entry == null || appModel == null) return;
     try {
-      await appModel.mangaDownloadService.enqueueChapter(
-        entry: entry,
-        chapter: chapter,
-        autoOcr: false,
-      );
+      final MangaDownloadJobRow job = await appModel.mangaDownloadService
+          .enqueueChapter(entry: entry, chapter: chapter, autoOcr: false);
+      // 票 08：源页可能还没有行（书架半边暂时不可用）；入队会按下载身份补一条
+      // 非书架行。把这条真实行接回页面，任务列表 / 已下载状态 / 删除下载与
+      // 「加入书架？」提示才有稳定的 bookKey。
+      await _adoptDownloadRow(job.bookKey);
       if (mounted) FushiToast.show(msg: t.manga_chapter_download_queued);
     } on Object catch (error, stack) {
       ErrorLogService.instance.log('MangaSeriesPage.enqueue', error, stack);
@@ -625,6 +626,31 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
       }
     }
     await _refreshDownloadState();
+  }
+
+  /// 入队后把任务真实使用的 Manga 行接回页面状态。
+  Future<void> _adoptDownloadRow(String bookKey) async {
+    final AppModel? appModel = _appModelOrNull;
+    if (appModel == null) return;
+    final EpubBookRow? row = await appModel.database.getEpubBook(bookKey);
+    if (!mounted || row == null || _row?.bookKey == row.bookKey) return;
+    setState(() => _row = row);
+  }
+
+  /// 批量入队后按 entry 的下载身份找回真实行（占位包 / 数字 sourceId 回退）。
+  Future<void> _syncDownloadRow() async {
+    final OnlineMangaLibraryEntry? entry = _entry;
+    final AppModel? appModel = _appModelOrNull;
+    if (entry == null || appModel == null) return;
+    final OnlineMangaLibraryService? service =
+        _service ?? _shelfServiceFor(entry);
+    final EpubBookRow? row = service != null
+        ? await service.find(entry)
+        : await appModel.database.getEpubBook(
+            OnlineMangaLibraryService.bookKeyOf(entry),
+          );
+    if (!mounted || row == null || _row?.bookKey == row.bookKey) return;
+    setState(() => _row = row);
   }
 
   Future<void> _retryChapterDownload(OnlineMangaChapter chapter) async {
@@ -671,8 +697,9 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
   /// 先确认（写明章名），删完给 Toast。
   Future<void> _deleteChapterDownload(OnlineMangaChapter chapter) async {
     final EpubBookRow? row = _row;
+    final OnlineMangaLibraryEntry? entry = _entry;
     final AppModel? appModel = _appModelOrNull;
-    if (row == null || appModel == null) return;
+    if (appModel == null || entry == null) return;
     final bool confirmed = await showFushiConfirmDialog(
       context: context,
       title: t.manga_chapter_download_delete_action,
@@ -683,9 +710,13 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     );
     if (!confirmed || !mounted) return;
     try {
+      // 票 08：非书架 / 无 Library 行也能删。有映射按映射删；没有时按 entry
+      // 的下载身份找唯一匹配的目录，不按标题猜。
       await DownloadLibraryIndex(
         appModel.database,
-      ).deleteChapter(bookKey: row.bookKey, chapterKey: chapter.key);
+        downloadsRoot: appModel.appPathsOrNull?.downloadsRoot,
+        localComicRoot: appModel.appPathsOrNull?.localComicRoot,
+      ).deleteChapterForEntry(entry: entry, chapterKey: chapter.key, row: row);
       // Ticket 02：done 任务行是「这章曾经下载过」的持久标记。用户主动删除
       // 下载时必须一起清掉，否则磁盘判据变 false、任务仍 done → 被误显示成
       // Missing。缺失文件本身（便携拷贝没带 content）不走这里，保留 Missing。
@@ -716,7 +747,7 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
   Future<void> _downloadAll() async {
     final OnlineMangaLibraryEntry? entry = _entry;
     final AppModel? appModel = _appModelOrNull;
-    if (entry == null || appModel == null || _bookKey == null) return;
+    if (entry == null || appModel == null) return;
     // 锁定章（未登录 / 未购买）入队必败，整批跳过并说清楚跳了几个；用户登录并
     // 刷新后它们会脱锁，再点一次即可（BUG-2479）。规划规则与书架批量下载共用
     // [planMangaChapterDownload]（review D2）。
@@ -745,6 +776,7 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
         chapters: pending,
         autoOcr: false,
       );
+      await _syncDownloadRow();
       if (mounted) {
         FushiToast.show(
           msg: t.manga_series_download_all_queued(count: pending.length),
@@ -2461,15 +2493,18 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
           languageScope: _languageScope,
           onSiblingSourceTap: (OnlineMangaSiblingSource sibling) =>
               unawaited(_openSiblingSource(sibling)),
-          onDownload: !online || _bookKey == null
+          // 票 08：下载 / 重试 / 删除下载只要求在线条目，不要求页面上已有
+          // Library 行——入队会按下载身份补非书架行，删除按记录映射或 entry
+          // 身份找容器。定位文件仍需要有行/映射，保持原有门控。
+          onDownload: !online
               ? null
               : (OnlineMangaChapter chapter) =>
                     unawaited(_enqueueChapter(chapter)),
-          onRetryDownload: !online || _bookKey == null
+          onRetryDownload: !online
               ? null
               : (OnlineMangaChapter chapter) =>
                     unawaited(_retryChapterDownload(chapter)),
-          onDeleteDownload: !online || _bookKey == null
+          onDeleteDownload: !online
               ? null
               : (OnlineMangaChapter chapter) =>
                     unawaited(_deleteChapterDownload(chapter)),
@@ -2914,9 +2949,8 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     }
     final OnlineMangaLibraryEntry? entry = _entry;
     // 加入 / 移出按 Library membership 判断：票 02 起源作品页一打开就有行，
-    // 「有行」不再等于「在书架」。下载动作只要有行就能挂任务（票 08 再完善
-    // 非书架下载的入口语义）。
-    final bool hasRow = _row != null;
+    // 「有行」不再等于「在书架」。票 08：下载全部也不再要求页面先有行——入队
+    // 会按下载身份补一条非书架行。
     final bool isLibraryMember = _row?.isInLibrary ?? false;
     final OnlineMangaLoginTarget? login = _loginTarget;
     return <Widget>[
@@ -2939,8 +2973,7 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
           label: t.mihon_add_to_bookshelf,
           onPressed: _busy ? null : () => unawaited(_addToLibrary()),
         ),
-      // 下载动作只对在库条目有意义：任务表按 bookKey 记，没有行就没地方挂任务。
-      if (hasRow)
+      if (entry != null)
         MediaDetailSecondaryButton(
           buttonKey: const ValueKey<String>('manga_series_download_all'),
           icon: FushiIcons.download,
