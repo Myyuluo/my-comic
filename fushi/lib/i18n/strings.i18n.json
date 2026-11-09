@@ -5601,7 +5601,7 @@
   "rebuild_download_index_confirm_title": "Rebuild download index?",
   "rebuild_download_index_failed": "Could not rebuild the download index: $message",
   "rebuild_download_index_progress_title": "Rebuilding download index",
-  "rebuild_download_index_report_body": "Added $added book(s) ($local recovered as local entries), updated $books book(s); $chapters chapter(s) added or relinked.\nMissing: $missingBooks book(s), $missingChapters chapter(s).\nSkipped: $skippedBooks book(s), $skippedChapters chapter(s).",
+  "rebuild_download_index_report_body": "Matched $matched book(s) ($books updated); added $added book(s) ($local recovered as local entries); $chapters chapter(s) added or relinked.\nMissing: $missingBooks book(s), $missingChapters chapter(s).\nSkipped: $skippedBooks book(s) ($ambiguous ambiguous), $skippedChapters chapter(s). Failed: $failed.",
   "rebuild_download_index_report_cancelled": "Rebuild cancelled. Results so far:",
   "rebuild_download_index_report_title": "Rebuild complete",
   "rebuild_download_index_section": "Download index",

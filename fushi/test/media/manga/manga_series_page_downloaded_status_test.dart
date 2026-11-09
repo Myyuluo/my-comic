@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi/i18n/strings.g.dart';
 import 'package:fushi/models.dart';
+import 'package:fushi/src/media/manga/download/rebuild_download_index_service.dart';
 import 'package:fushi/src/media/manga/library/manga_series_page.dart';
 import 'package:fushi/src/media/manga/library/manga_shelf_removal_service.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
@@ -436,6 +437,65 @@ void main() {
         ),
       );
       await _pumpUntil(tester, _downloadedStatus());
+    });
+
+    expect(_downloadedStatus(), findsOneWidget);
+    await _pickDownloadedFilter(tester);
+    expect(find.text('Chapter 1'), findsOneWidget);
+    expect(find.text('Chapter 2'), findsNothing);
+  });
+
+  testWidgets('重建下载索引完成后已打开的详情页刷新已下载状态', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(900, 1400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await tester.runAsync(() async {
+      await library.ensureNonLibrary(_entry);
+    });
+    final _TestAppModel appModel = _TestAppModel(
+      db,
+      root,
+      library: library,
+      paths: paths,
+    );
+
+    await tester.runAsync(() async {
+      await tester.pumpWidget(
+        _harness(
+          appModel,
+          SourceMangaSeriesTarget(
+            adapter: adapter,
+            seed: _entry,
+            service: library,
+            sourceLabel: 'Fake',
+          ),
+        ),
+      );
+    });
+    await _settle(tester);
+    expect(_downloadedStatus(), findsNothing, reason: '页面打开时还没有下载文件');
+
+    await tester.runAsync(() async {
+      // 页面保持打开：用户把带 manifest 的文件复制进 local，然后运行重建。
+      await _writeManifestChapter(
+        p.join(paths.localComicRoot.path, '页面打开后放入的目录'),
+        'Local Ch 1',
+        '/chapter/1',
+        'Chapter 1',
+      );
+      await RebuildDownloadIndexService(
+        database: db,
+        downloadsRoot: paths.downloadsRoot,
+        localComicRoot: paths.localComicRoot,
+      ).run();
+      for (int i = 0; i < 120; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 25));
+        await tester.pump();
+        if (_downloadedStatus().evaluate().isNotEmpty) return;
+      }
     });
 
     expect(_downloadedStatus(), findsOneWidget);
