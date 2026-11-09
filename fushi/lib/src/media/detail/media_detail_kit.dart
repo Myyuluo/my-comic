@@ -1416,7 +1416,7 @@ class MediaDetailItemRow extends StatelessWidget {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: type.bodyMedium.copyWith(
-                        color: selectedFg ?? fgVariant,
+                        color: selectedFg ?? (current ? cs.primary : fgVariant),
                       ),
                     ),
                   ],
@@ -1427,7 +1427,7 @@ class MediaDetailItemRow extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: type.labelMedium.tabular.copyWith(
-                        color: selectedFg ?? fgVariant,
+                        color: selectedFg ?? (current ? cs.primary : fgVariant),
                       ),
                     ),
                   ],

@@ -245,14 +245,16 @@ void main() {
     expect(find.byType(ShelfCoverFrame), findsNothing);
   });
 
-  testWidgets('按 openedAt 倒序展示快照，不显示日期分组', (WidgetTester tester) async {
+  testWidgets('按 openedAt 倒序展示快照，并按本地日期分组显示时间', (WidgetTester tester) async {
     final MangaHistoryOnlineRef online = _onlineRef();
     final String source = mangaHistoryOnlineSourceKey(_onlineEntry());
+    final int olderAt = DateTime(2026, 11, 7, 12).millisecondsSinceEpoch;
+    final int newerAt = DateTime(2026, 11, 8, 12).millisecondsSinceEpoch;
     await _insertHistory(
       db,
       mediaSource: source,
       mediaId: '/older',
-      openedAt: 100,
+      openedAt: olderAt,
       title: 'Older work',
       online: online,
     );
@@ -260,7 +262,7 @@ void main() {
       db,
       mediaSource: source,
       mediaId: '/newer',
-      openedAt: 200,
+      openedAt: newerAt,
       title: 'Newer work',
       online: _onlineRef(seriesKey: '/newer'),
     );
@@ -273,11 +275,16 @@ void main() {
     expect(find.text('Older work'), findsOneWidget);
     expect(find.text('Newer work'), findsOneWidget);
     expect(find.text(t.manga_history_empty), findsNothing);
-    // 网格第一项是最近打开的那部（同一行内 dx 更小）。
-    expect(
-      tester.getTopLeft(find.text('Newer work')).dx,
-      lessThan(tester.getTopLeft(find.text('Older work')).dx),
-    );
+    // 日期分组头按本地日期显示，最近的一天在上。
+    expect(find.text('11月08日'), findsOneWidget, reason: '历史记录显示日期分组');
+    expect(find.text('11月07日'), findsOneWidget);
+    final double newerHeaderDy = tester.getTopLeft(find.text('11月08日')).dy;
+    final double newerDy = tester.getTopLeft(find.text('Newer work')).dy;
+    final double olderHeaderDy = tester.getTopLeft(find.text('11月07日')).dy;
+    final double olderDy = tester.getTopLeft(find.text('Older work')).dy;
+    expect(newerHeaderDy, lessThan(newerDy), reason: '日期头在该组卡片上方');
+    expect(newerDy, lessThan(olderHeaderDy), reason: '较新的一组排在前面');
+    expect(olderHeaderDy, lessThan(olderDy));
   });
 
   testWidgets('命中 Library 时优先显示 Library 的最新标题与封面，且只有一条', (

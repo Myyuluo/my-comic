@@ -224,6 +224,51 @@ void main() {
     expect(currentTitle.style?.fontSize, normalTitle.style?.fontSize);
   });
 
+  testWidgets('当前章的副标题小字也跟随标题染成主色', (WidgetTester tester) async {
+    await pumpList(
+      tester,
+      entry: entryWith(chapters),
+      currentChapterKey: '/c/2',
+      states: <String, MangaChapterStateRow>{
+        '/c/2': _state(chapterKey: '/c/2', lastPage: 5, pageCount: 20),
+      },
+    );
+    final ColorScheme cs = Theme.of(
+      tester.element(find.text('Chapter 1')),
+    ).colorScheme;
+    final Finder currentRow = find.ancestor(
+      of: find.text('Chapter 2'),
+      matching: find.byType(MediaDetailItemRow),
+    );
+    final Finder currentSubtitle = find.descendant(
+      of: currentRow,
+      matching: find.textContaining(
+        t.manga_series_read_progress(page: '6', total: '20'),
+      ),
+    );
+    expect(currentSubtitle, findsOneWidget);
+    expect(
+      tester.widget<Text>(currentSubtitle).style?.color,
+      cs.primary,
+      reason: '当前章标题下方的小字也跟随标题变主色',
+    );
+
+    final Finder normalRow = find.ancestor(
+      of: find.text('Chapter 1'),
+      matching: find.byType(MediaDetailItemRow),
+    );
+    final Finder normalSubtitle = find.descendant(
+      of: normalRow,
+      matching: find.textContaining(t.manga_chapter_not_downloaded),
+    );
+    expect(normalSubtitle, findsOneWidget);
+    expect(
+      tester.widget<Text>(normalSubtitle).style?.color,
+      cs.onSurfaceVariant,
+      reason: '普通行副标题保持次要色',
+    );
+  });
+
   testWidgets('当前章行无背景，序号胶囊保持常态配色', (WidgetTester tester) async {
     await pumpList(
       tester,
