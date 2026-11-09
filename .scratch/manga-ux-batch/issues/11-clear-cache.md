@@ -21,3 +21,7 @@
 ## Comments
 
 - 2026-11-09：实现完成。定向测试与 `flutter analyze` 结果见提交说明；完整 Windows 构建未运行（批量任务明确要求不跑）。WebView / HTTP 缓存步骤留给 ticket 12，通过 `MangaCacheClearStep` 列表扩展。
+
+## Answer
+
+Merged as `77852c42`. 设置新增「清除缓存」行，显示占用并清理封面/页流/解包/远端封面/缩略图/图片缓存，保留登录态与阅读数据。

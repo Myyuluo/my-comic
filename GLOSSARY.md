@@ -73,7 +73,7 @@ _Avoid_: 删除（删除文件是另一个动作）
 _Avoid_: 导入（批量导入已退役）、自动入库
 
 **Non-library work（未入书架作品）**:
-出现在 Source 或 Local source 扫描中、但未加入 Library 的 Manga。在线未入书架作品可以直接阅读并进入 History，但没有 Library 条目；本地图源作品在阅读时会先静默执行 Add to Library，因此不保持 Non-library work 状态。
+出现在 Source 或 Local source 扫描中、但未加入 Library 的 Manga。尚未入库的在线作品在来源页开读章节时会先静默执行 Add to Library；Local source 作品同样在阅读时静默登记。因此两者在开始阅读后都不再保持 Non-library work 状态。已存在的 History 条目在作品仅移出 Library（保留文件）后仍保留：在线作品可凭快照回到来源作品页，本地图源作品则保留条目并给出来源不可用提示。
 _Avoid_: 未收藏、临时作品
 
 **Category（分类）**:
@@ -113,7 +113,7 @@ _Avoid_: 书签、位置
 _Avoid_: 记录、阅读记录（可能指 Reading progress）
 
 **Incognito reading（无痕阅读）**:
-「设置 → 系统与关于 → 更新提醒」里的设备本地开关，默认关闭。开启后阅读仍保留 Reading progress（下次能接着读，「继续阅读」指向当前 Chapter），但不新增或更新 History 条目，也不新增书架「最近阅读」排序、Chapter 已读标记与完成标记；已有 History 保留，Tracking 与统计照常。开关不随 Profile / Backup 同步，换设备按新设备的选择。
+「设置 → 系统与关于 → 更新提醒」里的设备本地开关，默认关闭。开启后阅读仍保留 Reading progress（下次能接着读，「继续阅读」指向当前 Chapter），但不新增或更新 History 条目，也不自动新增或推进书架「最近阅读」排序、不自动写入 Chapter 已读标记与完成标记；已有 History 保留，手动标记已读/未读不受影响，Tracking 与统计照常。开关不随 Profile / Backup 同步，换设备按新设备的选择。
 _Avoid_: 隐身模式、隐私浏览、无痕模式（浏览器同名词会让人误以为会清除已有记录）
 
 **Download（下载）**:
@@ -157,11 +157,11 @@ _Avoid_: 未下载、孤儿
 _Avoid_: 下载、离线文件、书库
 
 **Clear cache（清除缓存）**:
-「设置 → 存储与下载 → 数据存储位置」里的动作：清理应用管理的 Cache，并在行内显示当前磁盘占用。它保留图源登录态、History、Reading progress、Download library 与 Local source 文件。
+「设置 → 存储与下载 → 数据存储位置」里的动作：清理应用管理的 Cache，并在行内显示当前磁盘占用。它保留图源登录态、数据库、History、Reading progress、Download library 与 Local source 文件。
 _Avoid_: 清理下载、重置应用
 
 **Clear database（清除数据库）**:
-「设置 → 存储与下载 → 数据存储位置」里的动作：删除未在 Library 中的作品记录、全部 History 与无归属的 Reading progress；保留 Library 作品及其 Reading progress/已读标记、Download library、Local source 文件、设置、源与扩展。它不等同于恢复出厂设置。
+「设置 → 存储与下载 → 数据存储位置」里的动作：删除未在 Library 中的作品记录、全部 History 与无归属的 Reading progress；保留 Library 作品及其 Reading progress/已读标记、Download library、Local source 文件、设置、源、扩展、搜索历史与 Tracking 数据。它不等同于恢复出厂设置。
 _Avoid_: 恢复出厂设置、重置应用、清除缓存
 
 **Tracking（追踪）**:

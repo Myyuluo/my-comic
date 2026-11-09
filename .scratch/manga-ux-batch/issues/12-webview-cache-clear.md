@@ -17,3 +17,7 @@
 ## Comments
 
 - 2026-11-09：实现完成。新增 `MangaWebViewCacheClearStep` 并追加到 ticket 11 的清缓存步骤列表；默认与漫画 profile 各用临时 headless WebView 执行 CDP `Network.clearBrowserCache`，用完销毁；单个 profile 失败继续其余 profile 并以部分成功提示。定向测试与 `flutter analyze` 结果见提交说明；完整 Windows 构建未运行（批量任务明确要求不跑）。
+
+## Answer
+
+Merged as `eef5eab8`. 通过 CDP 清理默认与漫画 WebView profile 的 HTTP 缓存，保留 cookies/localStorage/IndexedDB，失败按部分成功提示。
