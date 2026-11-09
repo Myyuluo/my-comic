@@ -14,6 +14,7 @@ import 'package:fushi/src/backup_export/mihon_backup_exporter.dart';
 import 'package:fushi/src/pages/implementations/create_backup_page.dart';
 import 'package:fushi/src/platform/platform_providers.dart';
 import 'package:fushi/src/storage/app_paths.dart';
+import 'package:fushi/src/utils/components/fushi_material_components.dart';
 import 'package:fushi/src/utils/components/glass/fushi_glass_buttons.dart';
 import 'package:fushi/src/utils/components/glass/fushi_glass_toggles.dart';
 import 'package:fushi_core/fushi_core.dart';
@@ -842,6 +843,48 @@ void main() {
     expect(
       find.text(t.backup_create_saved_path(path: targetPath)),
       findsOneWidget,
+    );
+  });
+
+  testWidgets('saved result dialog pads its body away from the edge', (
+    WidgetTester tester,
+  ) async {
+    final _TestAppModel appModel = _TestAppModel(db, paths);
+    final String targetPath = p.join(tmp.path, 'padded.tachibk');
+
+    await tester.pumpWidget(
+      _harness(
+        appModel,
+        CreateBackupPage(
+          exporter: _CapturingOptionsExporter(database: db),
+          savePathPicker:
+              ({
+                required String initialDirectory,
+                required String fileName,
+              }) async => targetPath,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('create_backup_create')));
+    await _pumpUntil(
+      tester,
+      find.text(t.backup_create_saved_path(path: targetPath)),
+    );
+
+    final Rect sheet = tester.getRect(find.byType(FushiModalSheetFrame));
+    final Rect body = tester.getRect(
+      find.text(t.backup_create_saved_path(path: targetPath)),
+    );
+    expect(
+      body.left - sheet.left,
+      greaterThanOrEqualTo(16),
+      reason: '备份结果正文不能贴左',
+    );
+    expect(
+      sheet.right - body.right,
+      greaterThanOrEqualTo(16),
+      reason: '备份结果正文不能贴右',
     );
   });
 

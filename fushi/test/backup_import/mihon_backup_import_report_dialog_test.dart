@@ -1,0 +1,389 @@
+import 'dart:io';
+
+import 'package:drift/native.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:material_ui/material_ui.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'package:fushi/i18n/strings.g.dart';
+import 'package:fushi/models.dart';
+import 'package:fushi/src/backup_import/mihon_backup_import_flow.dart';
+import 'package:fushi/src/media/sources/reader_fushi_source.dart';
+import 'package:fushi/src/platform/platform_providers.dart';
+import 'package:fushi/src/settings/settings_context.dart';
+import 'package:fushi/src/storage/app_paths.dart';
+import 'package:fushi/src/utils/components/fushi_inline_notice.dart';
+import 'package:fushi/src/utils/components/fushi_m3e_overlays.dart';
+import 'package:fushi/src/utils/components/fushi_material_components.dart';
+import 'package:fushi/src/utils/components/glass/fushi_glass_buttons.dart';
+import 'package:fushi_core/fushi_core.dart';
+import 'package:fushi_engine/epub/epub_storage.dart';
+
+import '../helpers/test_platform_services.dart';
+import 'mihon_backup_fixture.dart';
+
+/// Page-level seam: the real `.tachibk` import flow ([runMihonBackupImport])
+/// against a real Drift database and a synthetic backup fixture. Only the native
+/// file picker is faked — widget tests cannot open one.
+///
+/// Ticket 01: the completion report dialog is a Fushi dialog with a hero header,
+/// two grouped cards, warning notice for missing sources and no extra buttons.
+class _TestAppModel extends AppModel {
+  _TestAppModel(this._db, this._paths) : super(testPlatformServices());
+
+  final FushiDatabase _db;
+  final AppPaths _paths;
+
+  @override
+  FushiDatabase get database => _db;
+
+  @override
+  AppPaths get appPaths => _paths;
+}
+
+class _ImportHost extends ConsumerWidget {
+  const _ImportHost({required this.appModel});
+
+  final AppModel appModel;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Scaffold(
+      body: Center(
+        child: TextButton(
+          onPressed: () => runMihonBackupImport(
+            SettingsContext(
+              context: context,
+              appModel: appModel,
+              ref: ref,
+              readerSource: ReaderFushiSource.instance,
+              refresh: () {},
+            ),
+          ),
+          child: const Text('import backup'),
+        ),
+      ),
+    );
+  }
+}
+
+Widget _harness(AppModel appModel) => ProviderScope(
+  overrides: <Override>[
+    platformServicesProvider.overrideWithValue(testPlatformServices()),
+    appProvider.overrideWith((Ref ref) => appModel),
+  ],
+  child: TranslationProvider(
+    child: MaterialApp(home: _ImportHost(appModel: appModel)),
+  ),
+);
+
+Future<void> _pumpUntil(WidgetTester tester, Finder finder) async {
+  for (int i = 0; i < 120; i++) {
+    await tester.pump(const Duration(milliseconds: 50));
+    if (finder.evaluate().isNotEmpty) return;
+  }
+}
+
+/// Fixture creation is real file I/O; widget tests run in a fake-async zone, so
+/// it must go through [WidgetTester.runAsync] to actually complete.
+Future<File> _writeFixtureInTest(
+  WidgetTester tester,
+  Directory tmp, {
+  String name = 'report.tachibk',
+}) async {
+  final File? backup = await tester.runAsync(
+    () => _writeFixture(tmp, name: name),
+  );
+  return backup!;
+}
+
+Future<void> _openReportDialog(WidgetTester tester, File backup) async {
+  FilePicker? previous;
+  try {
+    previous = FilePicker.platform;
+  } catch (_) {
+    previous = null;
+  }
+  FilePicker.platform = _RecordingFilePicker(resultPath: backup.path);
+  addTearDown(() {
+    if (previous != null) FilePicker.platform = previous;
+  });
+
+  await tester.tap(find.text('import backup'));
+  await _pumpUntil(tester, find.text('备份导入完成'));
+  await tester.pumpAndSettle();
+}
+
+class _RecordingFilePicker extends FilePicker {
+  _RecordingFilePicker({required this.resultPath});
+
+  final String resultPath;
+
+  @override
+  Future<FilePickerResult?> pickFiles({
+    String? dialogTitle,
+    String? initialDirectory,
+    FileType type = FileType.any,
+    List<String>? allowedExtensions,
+    Function(FilePickerStatus)? onFileLoading,
+    bool allowCompression = true,
+    int compressionQuality = 30,
+    bool allowMultiple = false,
+    bool withData = false,
+    bool withReadStream = false,
+    bool lockParentWindow = false,
+    bool readSequential = false,
+  }) async {
+    return FilePickerResult(<PlatformFile>[
+      PlatformFile(
+        name: p.basename(resultPath),
+        path: resultPath,
+        size: File(resultPath).lengthSync(),
+      ),
+    ]);
+  }
+}
+
+/// Two library entries, one category, one chapter with history, one non-MyComic
+/// preference and one extension store. The (`sourceId` 123, 再漫画) source is not
+/// installed, so the report must warn about it.
+Future<File> _writeFixture(Directory tmp, {String name = 'report.tachibk'}) {
+  return writeFixtureBackup(
+    tmp,
+    name: name,
+    sources: const <FixtureSource>[FixtureSource(id: 123, name: '再漫画')],
+    categories: const <FixtureCategory>[
+      FixtureCategory(name: 'Action', order: 0, id: 10),
+    ],
+    preferences: const <FixturePreference>[
+      FixturePreference(
+        key: 'mihon.theme',
+        type: FixturePreferenceType.stringValue,
+        value: 'dark',
+      ),
+    ],
+    extensionStores: const <FixtureExtensionStore>[
+      FixtureExtensionStore(
+        indexUrl: 'https://example.test/index.pb',
+        name: 'Example',
+      ),
+    ],
+    mangas: const <FixtureManga>[
+      FixtureManga(
+        source: 123,
+        url: '/manga/alpha',
+        title: 'Alpha',
+        categoryOrders: <int>[0],
+        chapters: <FixtureChapter>[
+          FixtureChapter(
+            url: '/chapter/a1',
+            name: 'Chapter 1',
+            read: true,
+            lastPageRead: 5,
+            dateFetch: 1700000000500,
+          ),
+        ],
+        history: <FixtureHistory>[
+          FixtureHistory(url: '/chapter/a1', lastRead: 1700000001000),
+        ],
+      ),
+      FixtureManga(
+        source: 123,
+        url: '/manga/beta',
+        title: 'Beta',
+        chapters: <FixtureChapter>[
+          FixtureChapter(url: '/chapter/b1', name: 'Chapter 1'),
+        ],
+      ),
+    ],
+  );
+}
+
+void main() {
+  late Directory tmp;
+  late AppPaths paths;
+  late FushiDatabase db;
+  late _TestAppModel appModel;
+
+  setUp(() async {
+    LocaleSettings.setLocale(AppLocale.zhCn);
+    SharedPreferences.setMockInitialValues(<String, Object>{});
+    tmp = await Directory.systemTemp.createTemp('mycomic-import-report-');
+    AppPaths.debugTestEnvironment = <String, String>{
+      'FUSHI_TEST_ROOT': tmp.path,
+    };
+    // The import flow builds its own service with the default book directory.
+    EpubStorage.debugBaseDirectoryOverride = tmp.path;
+    paths = await AppPaths.resolve();
+    db = FushiDatabase.forTesting(NativeDatabase.memory());
+    appModel = _TestAppModel(db, paths);
+  });
+
+  tearDown(() async {
+    EpubStorage.debugBaseDirectoryOverride = null;
+    AppPaths.debugTestEnvironment = null;
+    LocaleSettings.setLocale(AppLocale.en);
+    await db.close();
+    if (await tmp.exists()) {
+      await tmp.delete(recursive: true);
+    }
+  });
+
+  testWidgets(
+    'report dialog pads its body, groups the two cards and hides zero diagnostics',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(_harness(appModel));
+      await tester.pumpAndSettle();
+
+      final File backup = await _writeFixtureInTest(tester, tmp);
+      await _openReportDialog(tester, backup);
+
+      // Hero header: title + processed-total subtitle.
+      expect(find.text('备份导入完成'), findsOneWidget);
+      expect(find.text('共处理 2 部作品'), findsOneWidget);
+      expect(find.byType(FushiDialogHeroIcon), findsOneWidget);
+
+      // Body padding: the first card is inset from the sheet on both sides.
+      final Rect sheet = tester.getRect(find.byType(FushiModalSheetFrame));
+      final Rect card = tester.getRect(find.byType(FushiCard).first);
+      expect(
+        card.left - sheet.left,
+        greaterThanOrEqualTo(16),
+        reason: '正文卡片不能贴在弹窗左边缘',
+      );
+      expect(
+        sheet.right - card.right,
+        greaterThanOrEqualTo(16),
+        reason: '正文卡片不能贴在弹窗右边缘',
+      );
+
+      // Grouping: library card first, settings card second.
+      expect(find.text('书架与阅读'), findsOneWidget);
+      expect(find.text('设置与来源'), findsOneWidget);
+      expect(
+        find.text('书架：新增 2，合并 0，跳过 0，失败 0'),
+        findsOneWidget,
+        reason: '书架主计数始终显示',
+      );
+      expect(find.textContaining('分类：新建 1，已存在 0'), findsOneWidget);
+      expect(find.textContaining('阅读进度：'), findsOneWidget);
+      expect(find.textContaining('历史：'), findsOneWidget);
+      expect(find.textContaining('应用设置：补齐 0，跳过 1'), findsOneWidget);
+      expect(find.textContaining('已跳过的非 MyComic 设置：1'), findsOneWidget);
+      expect(find.textContaining('扩展仓库：新增 1'), findsOneWidget);
+
+      final double libraryTop = tester.getTopLeft(find.text('书架与阅读')).dy;
+      final double entriesTop = tester
+          .getTopLeft(find.text('书架：新增 2，合并 0，跳过 0，失败 0'))
+          .dy;
+      final double settingsTop = tester.getTopLeft(find.text('设置与来源')).dy;
+      final double storesTop = tester
+          .getTopLeft(find.textContaining('扩展仓库：新增 1'))
+          .dy;
+      expect(entriesTop, greaterThan(libraryTop));
+      expect(settingsTop, greaterThan(entriesTop));
+      expect(storesTop, greaterThan(settingsTop));
+
+      // Zero-only diagnostics stay hidden.
+      expect(find.text('已跳过的分类（名称为空）：0'), findsNothing);
+      expect(find.text('不在书架（仅阅读记录）：0'), findsNothing);
+      expect(find.text('未入架历史：恢复 0，跳过 0'), findsNothing);
+      expect(find.text('追踪：新增 0，合并 0，跳过 0'), findsNothing);
+      expect(find.text('来源偏好：导入 0，跳过 0'), findsNothing);
+      expect(find.textContaining('缺少漫画 URL 的条目：0'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('missing sources render as a warning notice without actions', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(_harness(appModel));
+    await tester.pumpAndSettle();
+
+    final File backup = await _writeFixtureInTest(
+      tester,
+      tmp,
+      name: 'missing.tachibk',
+    );
+    await _openReportDialog(tester, backup);
+
+    expect(find.byType(FushiInlineNotice), findsOneWidget);
+    final FushiInlineNotice notice = tester.widget<FushiInlineNotice>(
+      find.byType(FushiInlineNotice),
+    );
+    expect(notice.severity, FushiNoticeSeverity.warning);
+    expect(notice.actions, isEmpty, reason: '缺失来源提示不得带跳转扩展商店按钮');
+    expect(notice.trailing, isNull);
+    expect(find.textContaining('缺少来源（1）：再漫画'), findsOneWidget);
+    expect(find.textContaining('安装对应扩展后即可阅读'), findsOneWidget);
+    expect(find.textContaining('打开扩展商店'), findsNothing);
+
+    // The only action is the footer's 完成 button.
+    expect(find.text(t.dialog_done), findsOneWidget);
+    expect(find.byType(FushiFilledButton), findsOneWidget);
+  });
+
+  testWidgets('no warning notice when every source is installed', (
+    WidgetTester tester,
+  ) async {
+    await db
+        .into(db.mangaOnlineSources)
+        .insert(
+          MangaOnlineSourcesCompanion.insert(
+            extensionPackage: 'com.example.ext',
+            sourceId: '123',
+            name: '再漫画',
+            language: 'zh',
+          ),
+        );
+    await tester.pumpWidget(_harness(appModel));
+    await tester.pumpAndSettle();
+
+    final File backup = await _writeFixtureInTest(
+      tester,
+      tmp,
+      name: 'installed.tachibk',
+    );
+    await _openReportDialog(tester, backup);
+
+    expect(find.byType(FushiInlineNotice), findsNothing);
+    expect(find.textContaining('缺少来源'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('report dialog scrolls instead of overflowing a short window', (
+    WidgetTester tester,
+  ) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(480, 360);
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(_harness(appModel));
+    await tester.pumpAndSettle();
+
+    final File backup = await _writeFixtureInTest(
+      tester,
+      tmp,
+      name: 'short.tachibk',
+    );
+    await _openReportDialog(tester, backup);
+
+    expect(
+      find.descendant(
+        of: find.byType(FushiModalSheetFrame),
+        matching: find.byType(SingleChildScrollView),
+      ),
+      findsOneWidget,
+      reason: '正文应只有一层滚动视图',
+    );
+    expect(tester.takeException(), isNull, reason: '窄窗口不得布局溢出');
+
+    await tester.ensureVisible(find.textContaining('扩展仓库：新增 1'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
+}
