@@ -144,6 +144,21 @@ class MihonBackupImportReportDialog extends StatelessWidget {
     lines.add(
       t.backup_import_mihon_summary_history(count: report.historyRowsWritten),
     );
+    // Ticket 11: post-import download matching. No disk copy for any imported
+    // Manga is the normal case, so the zero line stays hidden like the other
+    // diagnostics.
+    if (report.downloadMangaMatched +
+            report.downloadMangaSkipped +
+            report.downloadChaptersRelinked >
+        0) {
+      lines.add(
+        t.backup_import_mihon_summary_downloads(
+          matched: report.downloadMangaMatched,
+          chapters: report.downloadChaptersRelinked,
+          skipped: report.downloadMangaSkipped,
+        ),
+      );
+    }
     if (report.isEmpty) lines.add(t.backup_import_mihon_empty);
 
     if (report.nonLibraryHistoryImported + report.nonLibraryHistorySkipped >

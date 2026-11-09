@@ -11,6 +11,7 @@ import 'package:fushi_engine/media/tracking/media_tracking_repository.dart'
         TrackingMediaType,
         TrackingProgressMode;
 
+import 'package:fushi/src/backup_import/import_download_relinker.dart';
 import 'package:fushi/src/backup_import/mihon_backup_parser.dart';
 import 'package:fushi/src/media/manga/history/manga_history.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
@@ -142,6 +143,10 @@ class MihonBackupImportReport {
     required this.appPreferencesSkippedByReason,
     required this.nonLibraryHistoryImported,
     required this.nonLibraryHistorySkippedByReason,
+    required this.downloadMangaMatched,
+    required this.downloadMangaSkipped,
+    required this.downloadChaptersRelinked,
+    required this.downloadChaptersSkipped,
     required this.chapterStatesWritten,
     required this.historyRowsWritten,
     required this.trackingMappingsImported,
@@ -208,6 +213,21 @@ class MihonBackupImportReport {
 
   /// `favorite=false` entries whose History was not written, grouped by why.
   final Map<MihonBackupHistorySkipReason, int> nonLibraryHistorySkippedByReason;
+
+  /// Imported Manga whose `downloads` / `local` folder was matched by
+  /// `pages.json` identity and re-linked after the import.
+  final int downloadMangaMatched;
+
+  /// Imported Manga with several identity-proven folders (no guessing) or a
+  /// failed re-link.
+  final int downloadMangaSkipped;
+
+  /// Chapter mappings written or refreshed by the post-import re-link.
+  final int downloadChaptersRelinked;
+
+  /// Chapters inside a matched folder that were left untouched because the
+  /// container choice was ambiguous.
+  final int downloadChaptersSkipped;
 
   /// Chapter progress rows written or merged (read + partially read + history).
   final int chapterStatesWritten;
@@ -300,12 +320,21 @@ class MihonBackupImportReport {
 class MihonBackupImportService {
   MihonBackupImportService({
     required this.database,
+    this.downloadsRoot,
+    this.localComicRoot,
     Future<String> Function(String bookKey)? bookDirectory,
     int Function()? now,
   }) : _bookDirectory = bookDirectory ?? MangaStorage.bookPath,
        _now = now ?? (() => DateTime.now().millisecondsSinceEpoch);
 
   final FushiDatabase database;
+
+  /// 当前 Content root 的 Download library 根；null = 不执行导入后自动匹配。
+  final Directory? downloadsRoot;
+
+  /// 当前 Content root 的 Local source 根；null = 不扫描 `local`。
+  final Directory? localComicRoot;
+
   final Future<String> Function(String bookKey) _bookDirectory;
   final int Function() _now;
 
@@ -402,6 +431,7 @@ class MihonBackupImportService {
     int failed = 0;
     int chapterStatesWritten = 0;
     int historyRowsWritten = 0;
+    final Set<String> importedBookKeys = <String>{};
     int trackingMappingsImported = 0;
     int trackingMappingsMerged = 0;
     int trackingSkipped = 0;
@@ -566,6 +596,9 @@ class MihonBackupImportService {
               tagIdByCategoryOrder: tagIdByCategoryOrder,
             );
           }
+          // Collect only rows whose whole entry (chapters, progress, History,
+          // tags) applied successfully; the re-link runs after the transaction.
+          importedBookKeys.add(row.bookKey);
         } on Object {
           failed++;
           failedByReason.update(
@@ -603,6 +636,26 @@ class MihonBackupImportService {
       await database.setPrefs(appPreferences.values);
     });
 
+    // Ticket 11: after a successful import, re-link only the imported rows
+    // against the current Content root's `downloads` and manifest-backed
+    // `local`. This never creates Library entries and never scans autobackup;
+    // a failure here must not undo the committed import.
+    ImportDownloadRelinkReport downloadRelink =
+        const ImportDownloadRelinkReport();
+    if (importedBookKeys.isNotEmpty) {
+      try {
+        downloadRelink = await relinkImportedMangaDownloads(
+          database: database,
+          bookKeys: importedBookKeys,
+          downloadsRoot: downloadsRoot,
+          localComicRoot: localComicRoot,
+        );
+      } on Object {
+        // The import is already committed; the report simply carries no
+        // download counts. Running the manual rebuild retries the same match.
+      }
+    }
+
     stopwatch.stop();
     return MihonBackupImportReport(
       totalEntries: data.mangas.length,
@@ -625,6 +678,10 @@ class MihonBackupImportService {
           Map<MihonBackupHistorySkipReason, int>.unmodifiable(
             nonLibraryHistorySkipped,
           ),
+      downloadMangaMatched: downloadRelink.mangaMatched,
+      downloadMangaSkipped: downloadRelink.mangaSkipped,
+      downloadChaptersRelinked: downloadRelink.chaptersRelinked,
+      downloadChaptersSkipped: downloadRelink.chaptersSkipped,
       chapterStatesWritten: chapterStatesWritten,
       historyRowsWritten: historyRowsWritten,
       trackingMappingsImported: trackingMappingsImported,

@@ -21,6 +21,8 @@ import 'package:fushi/src/utils/components/fushi_material_components.dart';
 import 'package:fushi/src/utils/components/glass/fushi_glass_buttons.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi_engine/epub/epub_storage.dart';
+import 'package:fushi_engine/media/manga/download_library_storage.dart';
+import 'package:fushi_engine/media/manga/mokuro_payload.dart';
 
 import '../helpers/test_platform_services.dart';
 import 'mihon_backup_fixture.dart';
@@ -100,7 +102,13 @@ Future<File> _writeFixtureInTest(
   return backup!;
 }
 
-Future<void> _openReportDialog(WidgetTester tester, File backup) async {
+/// [realIo] lets the import's disk scan (downloads/local manifest probes) run on
+/// the real event loop; the fake clock alone never completes those futures.
+Future<void> _openReportDialog(
+  WidgetTester tester,
+  File backup, {
+  bool realIo = false,
+}) async {
   FilePicker? previous;
   try {
     previous = FilePicker.platform;
@@ -113,7 +121,17 @@ Future<void> _openReportDialog(WidgetTester tester, File backup) async {
   });
 
   await tester.tap(find.text('import backup'));
-  await _pumpUntil(tester, find.text('备份导入完成'));
+  if (realIo) {
+    await tester.runAsync(() async {
+      for (int i = 0; i < 120; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        await tester.pump(const Duration(milliseconds: 20));
+        if (find.text('备份导入完成').evaluate().isNotEmpty) return;
+      }
+    });
+  } else {
+    await _pumpUntil(tester, find.text('备份导入完成'));
+  }
   await tester.pumpAndSettle();
 }
 
@@ -344,6 +362,86 @@ void main() {
     expect(find.text('未入架历史：恢复 1，跳过 0'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'import relinks matching downloads and reports matched/skipped counts',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(_harness(appModel));
+      await tester.pumpAndSettle();
+
+      final File backup = (await tester.runAsync(() async {
+        final File file = await writeFixtureBackup(
+          tmp,
+          name: 'downloads-match.tachibk',
+          sources: const <FixtureSource>[FixtureSource(id: 123, name: '再漫画')],
+          mangas: const <FixtureManga>[
+            FixtureManga(
+              source: 123,
+              url: '/manga/alpha',
+              title: 'Alpha',
+              chapters: <FixtureChapter>[
+                FixtureChapter(url: '/chapter/a1', name: 'Chapter 1'),
+                FixtureChapter(url: '/chapter/a2', name: 'Chapter 2'),
+              ],
+            ),
+          ],
+        );
+        final Directory mangaDir = Directory(
+          p.join(paths.downloadsRoot.path, '再漫画', 'Alpha'),
+        );
+        for (final ({String key, String name, String folder}) chapter
+            in <({String key, String name, String folder})>[
+              (key: '/chapter/a1', name: 'Chapter 1', folder: 'Chapter 1'),
+              (key: '/chapter/a2', name: 'Chapter 2', folder: 'Chapter 2'),
+            ]) {
+          final Directory chapterDir = Directory(
+            p.join(mangaDir.path, chapter.folder),
+          );
+          await chapterDir.create(recursive: true);
+          await File(p.join(chapterDir.path, '001.jpg')).writeAsString('page');
+          await writePagesManifestAtomically(
+            chapterDir,
+            MangaPagesManifest(
+              sourceRuntime: 'mihon',
+              sourceId: '123',
+              sourceName: '再漫画',
+              extensionPackage: 'org.example.fixture',
+              mangaKey: '/manga/alpha',
+              mangaTitle: 'Alpha',
+              chapterKey: chapter.key,
+              chapterName: chapter.name,
+              payload: const MokuroPayload(
+                images: <MokuroImage>[
+                  MokuroImage(
+                    url: '001.jpg',
+                    size: MokuroSize(100, 150),
+                    blocks: <MokuroBlock>[],
+                  ),
+                ],
+              ),
+              downloadedAt: DateTime.utc(2026, 11, 7),
+            ),
+          );
+        }
+        return file;
+      }))!;
+      await _openReportDialog(tester, backup, realIo: true);
+
+      expect(find.text('下载匹配：匹配 1 部，写入 2 章，跳过 0 部'), findsOneWidget);
+      final EpubBookRow row = (await db.getAllEpubBooks()).single;
+      expect(
+        p.equals(
+          row.extractDir,
+          p.join(paths.downloadsRoot.path, '再漫画', 'Alpha'),
+        ),
+        isTrue,
+      );
+      final Map<String, MangaChapterDirRow> mappings = await db
+          .getMangaChapterDirRowsForBook(row.bookKey);
+      expect(mappings.keys, <String>{'/chapter/a1', '/chapter/a2'});
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('missing sources render as a warning notice without actions', (
     WidgetTester tester,

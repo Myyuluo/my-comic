@@ -12,6 +12,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fushi/src/utils/components/glass/fushi_icon.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi/src/media/manga/download/download_identity.dart';
+import 'package:fushi/src/media/manga/download/download_library_changes.dart';
 import 'package:fushi/src/media/manga/download/download_library_index.dart';
 import 'package:fushi/src/media/manga/download/manga_download_service.dart';
 import 'package:fushi/src/media/manga/history/manga_history.dart';
@@ -428,16 +429,30 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
   void initState() {
     super.initState();
     _newestFirst = _appModelOrNull?.mangaChapterListNewestFirst ?? true;
+    // 票 12：重建下载索引可能在页面打开期间写映射 / 关联，完成后立刻重算
+    // 已下载状态（manifest 扫描缓存同时失效），不需要重新进入页面。
+    DownloadLibraryChanges.instance.addListener(_onDownloadLibraryChanged);
     unawaited(_load());
   }
 
   @override
   void dispose() {
+    DownloadLibraryChanges.instance.removeListener(_onDownloadLibraryChanged);
     unawaited(_jobsWatch?.cancel());
     _jobsWatch = null;
     unawaited(_localVolumeChanges?.cancel());
     _scroll.dispose();
     super.dispose();
+  }
+
+  /// Rebuild download index 完成：作废 manifest 扫描缓存并重算下载状态。
+  ///
+  /// 只清缓存不够——页面可能正停在同一身份 / 章节表上，任务表没有变化就不会
+  /// 自动重算。这里直接触发一轮 [_refreshDownloadState]。
+  void _onDownloadLibraryChanged() {
+    _manifestScanKey = null;
+    if (!mounted) return;
+    unawaited(_refreshDownloadState());
   }
 
   /// 重算下载状态位并（首次）订阅任务表。
