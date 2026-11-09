@@ -152,6 +152,69 @@ Future<MangaPagesManifest?> readFirstDownloadMangaManifest(
   return null;
 }
 
+/// 一个 Manga 文件夹的轻量身份探针：只读第一份可解析的 `pages.json`。
+///
+/// 已下载状态查询会先探测所有文件夹的身份，只有身份匹配的文件夹才去读完整
+/// 章表 / 检查完整性，避免为了一个作品扫全库的每一章。
+class DownloadMangaFolderProbe {
+  const DownloadMangaFolderProbe({required this.directory, this.manifest});
+
+  final Directory directory;
+  final MangaPagesManifest? manifest;
+
+  String get mangaFolderName => p.basename(directory.path);
+}
+
+/// 探测 `downloads/<source>/<manga>` 下每个 Manga 文件夹的身份。
+Future<List<DownloadMangaFolderProbe>> probeDownloadLibraryFolders(
+  Directory root,
+) async {
+  final List<DownloadMangaFolderProbe> probes = <DownloadMangaFolderProbe>[];
+  for (final Directory sourceDir in await listDownloadChildDirectories(root)) {
+    probes.addAll(await probeDownloadMangaFolders(sourceDir));
+  }
+  return probes;
+}
+
+/// 探测一个目录下直接子目录（Manga 文件夹）的第一份 manifest。
+Future<List<DownloadMangaFolderProbe>> probeDownloadMangaFolders(
+  Directory parent,
+) async {
+  final List<DownloadMangaFolderProbe> probes = <DownloadMangaFolderProbe>[];
+  for (final Directory mangaDir in await listDownloadChildDirectories(parent)) {
+    probes.add(
+      DownloadMangaFolderProbe(
+        directory: mangaDir,
+        manifest: await readFirstDownloadMangaManifest(mangaDir),
+      ),
+    );
+  }
+  return probes;
+}
+
+/// 探测 Local source 根（`local/<manga>`）的 Manga 文件夹身份。
+///
+/// 单章作品的 `pages.json` 直接住在 Manga 目录根，因此首个章节容器没有
+/// manifest 时再看 Manga 根。
+Future<List<DownloadMangaFolderProbe>> probeLocalMangaFolders(
+  Directory localRoot,
+) async {
+  final List<DownloadMangaFolderProbe> probes = <DownloadMangaFolderProbe>[];
+  for (final Directory mangaDir in await listDownloadChildDirectories(
+    localRoot,
+  )) {
+    probes.add(
+      DownloadMangaFolderProbe(
+        directory: mangaDir,
+        manifest:
+            await readFirstDownloadMangaManifest(mangaDir) ??
+            await readPagesManifest(mangaDir),
+      ),
+    );
+  }
+  return probes;
+}
+
 /// 第一层直接子目录；点号目录（`.staging` 等）忽略。按小写名字排序。
 Future<List<Directory>> listDownloadChildDirectories(Directory parent) async {
   if (!await parent.exists()) return const <Directory>[];

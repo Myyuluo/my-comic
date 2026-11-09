@@ -18,6 +18,10 @@ import 'package:fushi_engine/media/manga/download_library_storage.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_layout.dart';
 import 'package:path/path.dart' as p;
 
+import 'package:fushi/src/media/manga/download/chapter_container_on_disk.dart';
+import 'package:fushi/src/media/manga/download/download_identity.dart';
+import 'package:fushi/src/media/manga/download/download_library_scanner.dart';
+import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi/src/storage/app_paths.dart';
 
 /// 一个已定位的章节载体：文件夹章节或 CBZ 压缩包章节。
@@ -76,9 +80,20 @@ class MangaDownloadLibraryBook {
 
 /// 按数据库映射解析章节载体与「已下载」判据。
 class DownloadLibraryIndex {
-  const DownloadLibraryIndex(this.database);
+  const DownloadLibraryIndex(
+    this.database, {
+    this.downloadsRoot,
+    this.localComicRoot,
+  });
 
   final FushiDatabase database;
+
+  /// 当前 Content root 的 Download library 根；null = 生产解析 / 测试注入的
+  /// EpubStorage 根派生。
+  final Directory? downloadsRoot;
+
+  /// 当前 Content root 的 Local source 根；null = 不扫描 `local`。
+  final Directory? localComicRoot;
 
   /// 定位 [chapterKey] 的章目录。
   ///
@@ -140,7 +155,9 @@ class DownloadLibraryIndex {
   /// 与 `OnlineMangaLibraryService._downloadsRoot` 同一条测试缝：`EpubStorage` 测试根是
   /// `<tmp>/fushi_books`，Download library 派生到同级 `<tmp>/downloads`。
   Future<Directory> _downloadsRoot() async =>
-      _debugDownloadsRoot() ?? AppPaths.downloadsRootDirectory();
+      downloadsRoot ??
+      _debugDownloadsRoot() ??
+      AppPaths.downloadsRootDirectory();
 
   /// 测试注入的 EpubStorage 根派生出的 Download library 根；生产 / 未注入为 null。
   Directory? _debugDownloadsRoot() {
@@ -181,6 +198,43 @@ class DownloadLibraryIndex {
     }
     return downloaded;
   }
+
+  /// 任意在线条目的已下载章（ticket 07）：不要求 Library 行。
+  ///
+  /// 有行时先走记录的映射（`extractDir` + `manga_chapter_dirs`，最精确）；
+  /// 映射没覆盖到的章再按 entry 身份扫描 `downloads` 与 `local` 的
+  /// `pages.json`。没有 manifest 的目录不按标题/文件夹名猜测；多个目录都能
+  /// 证明同一身份时同样不猜（[MangaDownloadDiskIndex.downloadedChapterKeys]）。
+  Future<Set<String>> downloadedChapterKeysForEntry(
+    OnlineMangaLibraryEntry entry, {
+    EpubBookRow? row,
+    Iterable<String>? chapterKeys,
+  }) async {
+    final Set<String> wanted = <String>{
+      ...(chapterKeys ??
+          entry.chapters.map((OnlineMangaChapter chapter) => chapter.key)),
+    };
+    if (wanted.isEmpty) return <String>{};
+    final Set<String> downloaded = row == null
+        ? <String>{}
+        : await downloadedChapterKeys(row.bookKey, wanted);
+    if (downloaded.length == wanted.length) return downloaded;
+    final MangaDownloadIdentity identity = MangaDownloadIdentity.ofEntry(entry);
+    final MangaDownloadDiskIndex disk = await scanDisks(
+      identities: <MangaDownloadIdentity>[identity],
+    );
+    downloaded.addAll(disk.downloadedChapterKeys(identity, wanted));
+    return downloaded;
+  }
+
+  /// 扫描当前 Content root 的 `downloads` 与 `local`（只读 manifest 身份）。
+  Future<MangaDownloadDiskIndex> scanDisks({
+    required Iterable<MangaDownloadIdentity> identities,
+  }) async => MangaDownloadDiskIndex.scan(
+    downloadsRoot: await _downloadsRoot(),
+    localComicRoot: localComicRoot,
+    identities: identities,
+  );
 
   /// 这批书里哪些**至少有一章完整落盘**（书架「已下载」筛选 / 页签数量的
   /// 批量口径，ticket 06）。
@@ -275,5 +329,140 @@ class DownloadLibraryIndex {
       }
     }
     await database.deleteMangaChapterDir(bookKey, chapterKey);
+  }
+}
+
+/// 当前 Content root 下 `downloads` 与 `local` 的 manifest 身份索引。
+///
+/// 只认 `pages.json` 证明的身份，目录名（标题）不参与匹配。扫描分两段：
+/// 1. 每个 Manga 文件夹只读第一份 manifest 做身份探针；
+/// 2. 只有被某个查询身份匹配到的文件夹才读完整章表并检查完整性。
+/// 这样查一部作品的已下载状态不会把全库每一章都验证一遍。
+class MangaDownloadDiskIndex {
+  const MangaDownloadDiskIndex._(this._entries);
+
+  static Future<MangaDownloadDiskIndex> scan({
+    required Directory? downloadsRoot,
+    required Directory? localComicRoot,
+    required Iterable<MangaDownloadIdentity> identities,
+  }) async {
+    final List<MangaDownloadIdentity> wanted = identities.toList(
+      growable: false,
+    );
+    final List<({MangaDownloadIdentity identity, Set<String> chapterKeys})>
+    entries = <({MangaDownloadIdentity identity, Set<String> chapterKeys})>[];
+    if (wanted.isEmpty) return MangaDownloadDiskIndex._(entries);
+
+    // (探针, 是否是 local 根)。downloads 的 manifest 只在章节容器里；
+    // local 还要接受单章作品把 pages.json 放在 Manga 目录根。
+    final List<({List<DownloadMangaFolderProbe> probes, bool local})> roots =
+        <({List<DownloadMangaFolderProbe> probes, bool local})>[
+          if (downloadsRoot != null)
+            (
+              probes: await probeDownloadLibraryFolders(downloadsRoot),
+              local: false,
+            ),
+          if (localComicRoot != null)
+            (probes: await probeLocalMangaFolders(localComicRoot), local: true),
+        ];
+    for (final ({List<DownloadMangaFolderProbe> probes, bool local}) root
+        in roots) {
+      // 探针只包含有 manifest 的目录：无 manifest 的目录不参与匹配。
+      final List<DownloadMangaFolderOnDisk> probeFolders =
+          <DownloadMangaFolderOnDisk>[
+            for (final DownloadMangaFolderProbe probe in root.probes)
+              if (probe.manifest != null)
+                DownloadMangaFolderOnDisk(
+                  directory: probe.directory,
+                  chapters: <ChapterContainerOnDisk>[
+                    ChapterContainerOnDisk.folder(
+                      containerName: probe.mangaFolderName,
+                      directory: probe.directory,
+                      manifest: probe.manifest,
+                    ),
+                  ],
+                ),
+          ];
+      if (probeFolders.isEmpty) continue;
+      for (final MangaDownloadIdentity identity in wanted) {
+        final DownloadMangaFolderOnDisk? folder =
+            matchDownloadMangaFolderByIdentity(probeFolders, identity).folder;
+        if (folder == null) continue;
+        entries.add((
+          identity: identity,
+          chapterKeys: await _completeChapterKeys(
+            folder.directory,
+            identity,
+            includeMangaRootManifest: root.local,
+          ),
+        ));
+      }
+    }
+    return MangaDownloadDiskIndex._(entries);
+  }
+
+  final List<({MangaDownloadIdentity identity, Set<String> chapterKeys})>
+  _entries;
+
+  /// 由 manifest 证明属于 [identity]、且容器完整落盘的章。
+  ///
+  /// 没有 manifest / `pages.json` 不完整的章不算已下载；调用方再按当前章表
+  /// 取交集。
+  Set<String> downloadedChapterKeys(
+    MangaDownloadIdentity identity,
+    Iterable<String> chapterKeys,
+  ) {
+    final Set<String> wanted = chapterKeys.toSet();
+    if (wanted.isEmpty) return <String>{};
+    final Set<String> downloaded = <String>{};
+    for (final ({MangaDownloadIdentity identity, Set<String> chapterKeys}) entry
+        in _entries) {
+      if (!_sameIdentity(entry.identity, identity)) continue;
+      for (final String chapterKey in entry.chapterKeys) {
+        if (wanted.contains(chapterKey)) downloaded.add(chapterKey);
+      }
+    }
+    return downloaded;
+  }
+
+  static bool _sameIdentity(MangaDownloadIdentity a, MangaDownloadIdentity b) =>
+      a.runtime == b.runtime &&
+      a.sourceIdKey == b.sourceIdKey &&
+      a.seriesKey == b.seriesKey &&
+      downloadExtensionPackagesCompatible(
+        a.extensionPackage,
+        b.extensionPackage,
+      );
+
+  static Future<Set<String>> _completeChapterKeys(
+    Directory mangaFolder,
+    MangaDownloadIdentity identity, {
+    required bool includeMangaRootManifest,
+  }) async {
+    final Set<String> keys = <String>{};
+    for (final ChapterContainerOnDisk chapter
+        in await scanDownloadChapterContainers(
+          mangaFolder,
+          readComplete: true,
+        )) {
+      final MangaPagesManifest? manifest = chapter.manifest;
+      if (manifest == null ||
+          !chapter.complete ||
+          !identity.matchesManifest(manifest)) {
+        continue;
+      }
+      keys.add(manifest.chapterKey);
+    }
+    if (includeMangaRootManifest) {
+      final MangaPagesManifest? rootManifest = await readPagesManifest(
+        mangaFolder,
+      );
+      if (rootManifest != null &&
+          identity.matchesManifest(rootManifest) &&
+          await readDownloadLibraryChapterPayload(mangaFolder) != null) {
+        keys.add(rootManifest.chapterKey);
+      }
+    }
+    return keys;
   }
 }
