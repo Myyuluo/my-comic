@@ -215,10 +215,13 @@ class LocalSourceArchiveReaderSession implements MangaReaderSession {
   }
 
   /// 删掉 [cacheRoot] 下所有不属于活会话的条目（残目录 / 散落文件）。
-  static Future<void> pruneStaleLocalSourceArchiveCaches(
+  ///
+  /// 返回删除失败次数；活跃会话目录永远保留，不算失败。
+  static Future<int> pruneStaleLocalSourceArchiveCaches(
     Directory cacheRoot,
   ) async {
-    if (!await cacheRoot.exists()) return;
+    if (!await cacheRoot.exists()) return 0;
+    int failures = 0;
     await for (final FileSystemEntity entity in cacheRoot.list()) {
       if (entity is Directory &&
           _activeDirectories.contains(p.canonicalize(entity.path))) {
@@ -228,8 +231,10 @@ class LocalSourceArchiveReaderSession implements MangaReaderSession {
         await entity.delete(recursive: true);
       } on Object {
         // 缓存清理 best effort：个别文件被占用不影响阅读。
+        failures++;
       }
     }
+    return failures;
   }
 
   static final Set<String> _activeDirectories = <String>{};
