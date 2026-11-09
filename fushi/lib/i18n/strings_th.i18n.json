@@ -4457,6 +4457,7 @@
   "manga_section_display": "Display and zoom",
   "manga_section_spread_panels": "Spreads and panels",
   "manga_section_viewing": "การดูและการพลิกหน้า",
+  "manga_series_add_to_shelf_after_download": "Download complete. Add \"$title\" to your library?",
   "manga_series_all_read": "อ่านครบทุกตอนแล้ว",
   "manga_series_auto_download": "ดาวน์โหลดตอนใหม่อัตโนมัติ",
   "manga_series_auto_ocr": "จดจำหลังดาวน์โหลด",

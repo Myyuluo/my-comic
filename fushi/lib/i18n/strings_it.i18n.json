@@ -4457,6 +4457,7 @@
   "manga_section_display": "Display and zoom",
   "manga_section_spread_panels": "Spreads and panels",
   "manga_section_viewing": "Visualizzazione e cambio pagina",
+  "manga_series_add_to_shelf_after_download": "Download complete. Add \"$title\" to your library?",
   "manga_series_all_read": "Tutti i capitoli sono stati letti",
   "manga_series_auto_download": "Scarica automaticamente i nuovi capitoli",
   "manga_series_auto_ocr": "Riconosci dopo il download",

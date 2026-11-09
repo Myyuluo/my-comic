@@ -4457,6 +4457,7 @@
   "manga_section_display": "Display and zoom",
   "manga_section_spread_panels": "Spreads and panels",
   "manga_section_viewing": "العرض وتقليب الصفحات",
+  "manga_series_add_to_shelf_after_download": "Download complete. Add \"$title\" to your library?",
   "manga_series_all_read": "تمت قراءة جميع الفصول",
   "manga_series_auto_download": "تنزيل الفصول الجديدة تلقائيًا",
   "manga_series_auto_ocr": "التعرف بعد التنزيل",
