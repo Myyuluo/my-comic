@@ -4409,6 +4409,7 @@
   "manga_series_next_chapter": "Capitolo successivo",
   "manga_series_no_chapters": "Ancora nessun capitolo",
   "manga_series_no_chapters_in_language": "Questa fonte elenca solo capitoli in ${language}",
+  "manga_series_no_chapters_match_filter": "No chapters match the current filters",
   "manga_series_ocr_all_downloaded": "Riconosci tutti gli scaricati",
   "manga_series_ocr_all_none": "Nessun capitolo scaricato richiede il riconoscimento",
   "manga_series_ocr_no_engine": "Nessun motore OCR disponibile",
