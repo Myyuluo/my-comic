@@ -18,6 +18,8 @@ import 'package:fushi/src/media/manga/library/manga_chapter_download_state.dart'
 import 'package:fushi/src/media/manga/library/manga_chapter_list.dart';
 import 'package:fushi/src/media/manga/library/manga_download_planner.dart';
 import 'package:fushi/src/media/manga/library/manga_resume_point.dart';
+import 'package:fushi/src/media/manga/library/manga_shelf_removal_dialog.dart';
+import 'package:fushi/src/media/manga/library/manga_shelf_removal_service.dart';
 import 'package:fushi/src/media/manga/manga_cover_placeholder.dart';
 import 'package:fushi/src/media/manga/manga_global_search_page.dart';
 import 'package:fushi/src/media/manga/mihon/mihon_enabled_sources.dart';
@@ -31,7 +33,6 @@ import 'package:fushi/src/utils/misc/reveal_in_file_manager.dart'
     show currentRevealHost, revealFirstOf;
 import 'package:fushi/src/media/display_title.dart';
 import 'package:fushi/src/media/media_item.dart';
-import 'package:fushi/src/media/online/online_shelf_removal.dart';
 import 'package:fushi/src/media/online/online_source_error_text.dart';
 import 'package:fushi/src/media/online/online_work_detail.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
@@ -49,7 +50,6 @@ import 'package:fushi/src/utils/misc/error_details_dialog.dart';
 import 'package:fushi/utils.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_layout.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_library.dart';
-import 'package:fushi_engine/sync/deletion_propagation.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 /// 作品页要显示**哪一部**作品。
@@ -1263,7 +1263,8 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
       return;
     }
     if (entry == null) return;
-    final DeleteDecision? decision = await _confirmRemoveFromLibrary(appModel);
+    final MangaLibraryRemovalDecision? decision =
+        await _confirmRemoveFromLibrary();
     if (decision == null || !mounted) return;
     setState(() => _busy = true);
     try {
@@ -1281,16 +1282,14 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
           await downloads.remove(job.jobId);
         }
       }
-      final DeleteBookResult result = await ReaderFushiSource.instance
-          .deleteBook(
-            db: appModel.database,
-            bookKey: row.bookKey,
-            scope: decision.scope,
-            deleteLocalFiles: decision.deleteLocalFiles,
-            deleteStatistics: decision.deleteStatistics,
-          );
+      final MangaLibraryRemovalResult result = await removeMangaFromLibrary(
+        db: appModel.database,
+        bookKey: row.bookKey,
+        deleteLocalFiles: decision.deleteLocalFiles,
+        deleteStatistics: decision.deleteStatistics,
+      );
       if (!mounted) return;
-      if (!result.deleted) {
+      if (!result.removed) {
         final String reason = result.failureReason ?? '';
         FushiToast.show(
           msg: reason.isEmpty
@@ -1325,37 +1324,37 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     }
   }
 
-  /// Local source 的「移出书架」：只删 Library 记录并立墓碑，**不删文件**
-  /// （ADR 0013）。删除本地文件是设置/作品页之外的单独动作（ticket 06 只提供
-  /// [LocalSourceLibrary.deleteLocalFiles] 的显式确认入口）。
+  /// Local source 的「移出书架」：与在线作品页同一个统一弹窗。默认只删 Library
+  /// 记录并立墓碑（ADR 0013）；勾选「同时删除本地文件」时先删 Local source root
+  /// 里的原作文件夹/文件，成功后才删行。文件删除失败时作品留在架上并提示。
   Future<void> _removeLocalSourceFromLibrary(
     EpubBookRow row,
     AppModel appModel,
   ) async {
-    final bool confirmed = await showFushiConfirmDialog(
-      context: context,
-      title: t.manga_series_remove_from_bookshelf,
-      message: t.manga_series_remove_local_confirm,
-      cancelLabel: t.dialog_cancel,
-      confirmLabel: t.dialog_ok,
-      destructive: true,
-    );
-    if (!confirmed || !mounted) return;
+    final MangaLibraryRemovalDecision? decision =
+        await _confirmRemoveFromLibrary();
+    if (decision == null || !mounted) return;
     setState(() => _busy = true);
     try {
-      final bool removed = await LocalSourceLibrary(
+      final MangaLibraryRemovalResult result = await removeMangaFromLibrary(
         db: appModel.database,
-        root: appModel.appPaths.localComicRoot,
-      ).removeFromLibrary(row.bookKey);
+        bookKey: row.bookKey,
+        localSourceRoot: appModel.appPaths.localComicRoot,
+        deleteLocalFiles: decision.deleteLocalFiles,
+        deleteStatistics: decision.deleteStatistics,
+      );
       if (!mounted) return;
-      if (!removed) {
+      if (!result.removed) {
+        final String reason = result.failureReason ?? '';
         FushiToast.show(
-          msg: t.epub_delete_error,
+          msg: reason.isEmpty
+              ? t.epub_delete_error
+              : '${t.epub_delete_error}: $reason',
           severity: ToastSeverity.error,
         );
         return;
       }
-      // Local source 的章节表住在刚删掉的行里；回书架，磁盘文件原样保留。
+      // Local source 的章节表住在刚删掉的行里；回书架。
       final NavigatorState navigator = Navigator.of(context);
       if (navigator.canPop()) navigator.pop();
     } on Object catch (error, stack) {
@@ -1451,12 +1450,10 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     }
   }
 
-  /// 与书架长按删除同一个确认框（[confirmRemoveOnlineWorkFromShelf]）。
-  Future<DeleteDecision?> _confirmRemoveFromLibrary(AppModel appModel) =>
-      confirmRemoveOnlineWorkFromShelf(
-        context: context,
-        appModel: appModel,
-        title: t.manga_series_remove_from_bookshelf,
+  /// 在线与本地 Manga 共用的统一移出弹窗（票 01）。
+  Future<MangaLibraryRemovalDecision?> _confirmRemoveFromLibrary() =>
+      showMangaShelfRemovalDialog(
+        context,
         message: t.manga_series_remove_confirm,
         localFilesSubtitle: t.delete_local_files_download_desc,
         statisticsSubtitle: t.delete_statistics_manga_desc,

@@ -383,7 +383,7 @@ void main() {
     expect(Directory(extractDir).existsSync(), isFalse, reason: '漫画目录删除');
   });
 
-  testWidgets('删除整部作品（含已下载文件）→ 历史条目一并级联删除', (
+  testWidgets('删除整部作品（含已下载文件）→ 历史条目仍保留', (
     WidgetTester tester,
   ) async {
     tester.view.physicalSize = const Size(900, 1800);
@@ -435,8 +435,8 @@ void main() {
 
     expect(
       await loadMangaHistory(db),
-      isEmpty,
-      reason: '作品连同文件删除后不得留下点开即失败的历史条目',
+      hasLength(1),
+      reason: '移出书架不删除 History（票 01）',
     );
   });
 
