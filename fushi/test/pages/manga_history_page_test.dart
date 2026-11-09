@@ -428,6 +428,71 @@ void main() {
     expect(adapter.refreshCalls, greaterThanOrEqualTo(1));
   });
 
+  testWidgets('Library 行在点击前被删除：给错误提示，卡片保留，不崩溃', (
+    WidgetTester tester,
+  ) async {
+    const String bookKey = 'shelf_deleted_after_load';
+    await _insertBook(db, tmp, bookKey: bookKey, title: 'Deleted after load');
+    await _insertHistory(
+      db,
+      mediaSource: 'reader_manga',
+      mediaId: ReaderFushiSource.mediaIdentifierFor(bookKey),
+      openedAt: 100,
+      title: 'Deleted after load',
+      bookKey: bookKey,
+    );
+
+    await tester.pumpWidget(
+      _harness(_HistoryTestAppModel(database: db), navKey),
+    );
+    await _settle(tester);
+    await tester.runAsync(() => db.deleteEpubBook(bookKey));
+
+    await tester.tap(find.text('Deleted after load'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+
+    expect(find.text(t.manga_series_source_disabled), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('manga_series_title')),
+      findsNothing,
+      reason: '行已不存在时不得进入必然报错的作品页',
+    );
+    expect(find.text('Deleted after load'), findsOneWidget, reason: '历史条目保留');
+    expect(await loadMangaHistory(db), hasLength(1));
+    await tester.pump(const Duration(seconds: 3));
+  });
+
+  testWidgets('本地图源历史条目已无 Library 行：点击给错误提示，卡片保留', (
+    WidgetTester tester,
+  ) async {
+    await _insertHistory(
+      db,
+      mediaSource: kMangaHistoryLocalSource,
+      mediaId: 'Missing series',
+      openedAt: 100,
+      title: 'Missing local series',
+      localRelativePath: 'Missing series',
+    );
+
+    await tester.pumpWidget(
+      _harness(_HistoryTestAppModel(database: db), navKey),
+    );
+    await _settle(tester);
+    await tester.tap(find.text('Missing local series'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+
+    expect(find.text(t.manga_series_source_disabled), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('manga_series_title')),
+      findsNothing,
+    );
+    expect(find.text('Missing local series'), findsOneWidget);
+    expect(await loadMangaHistory(db), hasLength(1));
+    await tester.pump(const Duration(seconds: 3));
+  });
+
   testWidgets('来源不可用：点击给错误提示，卡片保留', (WidgetTester tester) async {
     final _FakeHistoryAdapter adapter = _FakeHistoryAdapter(supported: false);
     final OnlineMangaLibraryService service = OnlineMangaLibraryService(

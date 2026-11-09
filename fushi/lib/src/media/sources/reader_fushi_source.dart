@@ -16,6 +16,7 @@ import 'package:fushi/src/media/audiobook/lyrics_player/lyrics_theme_host.dart';
 import 'package:fushi/src/focus/fushi_focus_controller.dart';
 import 'package:fushi_audio/fushi_audio.dart';
 import 'package:fushi/src/media/audiobook/book_import_dialog.dart';
+import 'package:fushi/src/media/manga/history/manga_history.dart';
 import 'package:fushi/src/media/manga/interconnect/interconnect_manga_source.dart'
     show InterconnectMangaCatalog;
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
@@ -1153,6 +1154,15 @@ class ReaderFushiSource extends ReaderMediaSource {
               await db.syncDeletionBookKeyOf(bookKey)
           : bookKey;
 
+      // 票 10：删除整部作品时是否连落盘文件一起销毁。在线漫画只有勾选「同时
+      // 删除本地文件」才删已下载章节；受管本地漫画（导入卷 / PDF 转漫画）的
+      // extractDir 是应用副本，始终随书删除。文件保留 = 仅移出书架，历史保留。
+      final bool onlineMangaWork =
+          bookRow != null &&
+          OnlineMangaLibraryEntry.tryParse(bookRow.sourceMetadata) != null;
+      final bool deletesWorkFiles =
+          bookRow != null && (deleteLocalFiles || !onlineMangaWork);
+
       // TODO-1195 part B: a user shelf delete records a tombstone so a later
       // backup MERGE import never resurrects this book from an old backup.
       final int deletedRows = await db.deleteEpubBook(bookKey, tombstone: true);
@@ -1167,6 +1177,19 @@ class ReaderFushiSource extends ReaderMediaSource {
               'book', syncTombstoneKey, DateTime.now().millisecondsSinceEpoch);
         } catch (_) {
           // best-effort：删除墓碑记账失败不影响书已删。
+        }
+      }
+
+      // 票 10：整部作品连同文件删除后，历史页没有可回退的目标，级联删掉它的
+      // 历史行，避免留下点开即失败的记录。仅移出书架（文件保留）与 Local
+      // source 移出分支不会走到这里，历史按用户诉求保留。与上面的墓碑记账同
+      // 纪律：历史清理失败只记日志，不翻转「书已删」的结果。
+      if (deletedRows > 0 && deletesWorkFiles) {
+        try {
+          await deleteMangaHistoryForBook(db, bookRow);
+        } catch (e, stack) {
+          ErrorLogService.instance
+              .log('ReaderFushiSource.deleteBook.history', e, stack);
         }
       }
 
