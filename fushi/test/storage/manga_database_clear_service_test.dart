@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:drift/drift.dart' show Value;
@@ -72,18 +73,21 @@ void main() {
     return (await db.getEpubBook(bookKey))!;
   }
 
-  Future<void> insertHistory(String mediaSource, String mediaId) =>
-      db.upsertMediaOpenHistory(
-        MediaOpenHistoryCompanion(
-          mediaType: const Value<String>('reader_media_type'),
-          mediaSource: Value<String>(mediaSource),
-          mediaId: Value<String>(mediaId),
-          openedAt: const Value<int>(1),
-          position: const Value<int>(0),
-          duration: const Value<int>(0),
-          snapshotJson: const Value<String>('{}'),
-        ),
-      );
+  Future<void> insertHistory(
+    String mediaSource,
+    String mediaId, {
+    String snapshotJson = '{}',
+  }) => db.upsertMediaOpenHistory(
+    MediaOpenHistoryCompanion(
+      mediaType: const Value<String>('reader_media_type'),
+      mediaSource: Value<String>(mediaSource),
+      mediaId: Value<String>(mediaId),
+      openedAt: const Value<int>(1),
+      position: const Value<int>(0),
+      duration: const Value<int>(0),
+      snapshotJson: Value<String>(snapshotJson),
+    ),
+  );
 
   Future<void> insertOnlineHistory(EpubBookRow book) async {
     final OnlineMangaLibraryEntry entry = OnlineMangaLibraryEntry.tryParse(
@@ -564,6 +568,75 @@ void main() {
     expect(downloadFile.existsSync(), isTrue, reason: '不删除下载库文件');
     expect(localPage.existsSync(), isTrue, reason: '不删除本地图源文件');
   });
+
+  test(
+    '按快照 bookKey 解析到被清理作品的 History 也删除，书架作品的快照行保留',
+    () async {
+      await insertSource(
+        extensionPackage: 'org.example.a',
+        sourceId: '101',
+        name: 'Source A',
+      );
+      final EpubBookRow removed = await insertBook(
+        bookKey: 'removed-snapshot',
+        inLibrary: false,
+        sourceMetadata: onlineMetadata(seriesKey: '/removed'),
+      );
+      final EpubBookRow library = await insertBook(
+        bookKey: 'kept-snapshot',
+        sourceMetadata: onlineMetadata(seriesKey: '/kept'),
+      );
+      // 旧导入 / 旧扩展包身份无法命中 canonical，但快照 bookKey 能解析到
+      // 对应作品（loadMangaHistory 的同一条回退规则）。
+      final String removedKey = 'manga_online:["mihon","org.old","101"]'
+          '\u0000/removed';
+      final String keptKey = 'manga_online:["mihon","org.old","101"]'
+          '\u0000/kept';
+      await insertHistory(
+        'manga_online:["mihon","org.old","101"]',
+        '/removed',
+        snapshotJson: jsonEncode(
+          MangaHistorySnapshot(
+            title: 'Removed',
+            bookKey: removed.bookKey,
+          ).toJson(),
+        ),
+      );
+      await insertHistory(
+        'manga_online:["mihon","org.old","101"]',
+        '/kept',
+        snapshotJson: jsonEncode(
+          MangaHistorySnapshot(
+            title: 'Kept',
+            bookKey: library.bookKey,
+          ).toJson(),
+        ),
+      );
+
+      final List<MangaDatabaseClearSource> sources = await service()
+          .measureSources();
+      expect(
+        sources.single.historyEntries,
+        1,
+        reason: '快照 bookKey 命中的被清理作品 History 计入数量',
+      );
+
+      final MangaDatabaseClearCounts report = await service().run(
+        sourceKeys: <String>{sources.single.key},
+        keepRead: false,
+      );
+      expect(report.works, 1);
+      expect(report.historyEntries, 1, reason: '只删除被清理作品的快照 History');
+
+      final Set<String> remaining = <String>{
+        for (final MediaOpenHistoryRow row
+            in await db.select(db.mediaOpenHistory).get())
+          '${row.mediaSource}\u0000${row.mediaId}',
+      };
+      expect(remaining, isNot(contains(removedKey)));
+      expect(remaining, contains(keptKey), reason: '书架作品的 History 保留');
+    },
+  );
 
   test('关闭保留开关时删除所选 Source 的全部非书架作品与 History', () async {
     await insertSource(
