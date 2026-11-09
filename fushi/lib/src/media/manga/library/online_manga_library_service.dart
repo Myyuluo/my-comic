@@ -97,21 +97,53 @@ class OnlineMangaLibraryService {
     seriesKey: entry.series.key,
   );
 
-  Future<EpubBookRow?> find(OnlineMangaLibraryEntry entry) =>
-      database.getEpubBook(bookKeyOf(entry));
+  Future<EpubBookRow?> find(OnlineMangaLibraryEntry entry) async {
+    final EpubBookRow? exact = await database.getEpubBook(bookKeyOf(entry));
+    if (exact != null) return exact;
+    return _findSameSourceSeries(entry);
+  }
+
+  /// 占位来源条目的去重回退。
+  ///
+  /// 导入时扩展未安装的条目以 `mihon.unavailable` 占位包落库；扩展安装后从
+  /// 来源浏览同一部作品，扩展包变成真实值，bookKey 因此不同。这里按
+  /// `(运行时, 数字 sourceId, series key)` 找已是同一部作品的存量行，避免
+  /// 从已安装来源再入库时出现两条书架条目。命中行原样返回，身份不改写。
+  Future<EpubBookRow?> _findSameSourceSeries(
+    OnlineMangaLibraryEntry entry,
+  ) async {
+    final String? wantedSourceId = normalizedMangaSourceId(entry.sourceId);
+    if (wantedSourceId == null || entry.series.key.isEmpty) return null;
+    EpubBookRow? fallback;
+    for (final EpubBookRow row in await database.getAllEpubBooks()) {
+      final OnlineMangaLibraryEntry? candidate =
+          OnlineMangaLibraryEntry.tryParse(row.sourceMetadata);
+      if (candidate == null ||
+          candidate.runtime != entry.runtime ||
+          candidate.series.key != entry.series.key ||
+          normalizedMangaSourceId(candidate.sourceId) != wantedSourceId) {
+        continue;
+      }
+      // 同一扩展包的候选优先（通常就是安装后第一次写出的真实身份）。
+      if (candidate.extensionPackage == entry.extensionPackage) return row;
+      fallback ??= row;
+    }
+    return fallback;
+  }
 
   /// 入库（已在库则只刷新，不重复建行）。
   Future<EpubBookRow> add(OnlineMangaLibraryEntry entry) async {
     final String bookKey = bookKeyOf(entry);
-    final EpubBookRow? existing = await database.getEpubBook(bookKey);
+    EpubBookRow? existing = await database.getEpubBook(bookKey);
+    existing ??= await _findSameSourceSeries(entry);
     if (existing != null) {
       await refresh(
-        bookKey: bookKey,
+        bookKey: existing.bookKey,
         existing: OnlineMangaLibraryEntry.tryParse(existing.sourceMetadata),
         series: entry.series,
         chapters: entry.chapters,
       );
-      final EpubBookRow row = (await database.getEpubBook(bookKey))!;
+      final EpubBookRow row = (await database.getEpubBook(existing.bookKey))!;
       return row;
     }
 

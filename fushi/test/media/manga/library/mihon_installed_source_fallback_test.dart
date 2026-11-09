@@ -1,0 +1,319 @@
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:drift/drift.dart' show Value;
+import 'package:drift/native.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:fushi/src/backup_import/mihon_backup_import_service.dart';
+import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
+import 'package:fushi/src/media/manga/library/online_manga_runtime_adapter.dart';
+import 'package:fushi/src/media/manga/mihon/mihon_manager.dart';
+import 'package:fushi/src/media/manga/mihon/mihon_models.dart';
+import 'package:fushi/src/media/manga/mihon/mihon_runtime.dart';
+import 'package:fushi_core/fushi_core.dart';
+
+/// 票 03：导入时扩展未安装 → 条目持久化为 `mihon.unavailable` 占位来源；
+/// 扩展安装/启用后，Mihon 来源解析按数字 `sourceId` 回退到真实 Source，
+/// 刷新、页流、下载、封面与来源名都能用，且不改写条目身份。
+void main() {
+  const String realPackage = 'eu.kanate.tachiyomi.extension.zh.zaimanhua';
+  const String realSourceId = '524579092615598717';
+  const String realSourceName = '再漫画';
+  const String seriesKey = '/manga/123456';
+
+  late Directory root;
+  late FushiDatabase database;
+  late MihonManager manager;
+  late _SourceRuntime runtime;
+
+  MangaOnlineSourceRow sourceRow({
+    String extensionPackage = realPackage,
+    String sourceId = realSourceId,
+    String name = realSourceName,
+    bool enabled = true,
+  }) => MangaOnlineSourceRow(
+    mediaKind: 'manga',
+    extensionPackage: extensionPackage,
+    sourceId: sourceId,
+    name: name,
+    language: 'zh',
+    baseUrl: 'https://example.invalid',
+    enabled: enabled,
+    pinned: false,
+    sortOrder: 0,
+  );
+
+  Future<void> seedSource(MangaOnlineSourceRow row) async {
+    await database.upsertMangaExtension(
+      MangaExtensionsCompanion.insert(
+        packageName: row.extensionPackage,
+        name: '${row.extensionPackage} extension',
+        versionCode: 1,
+        versionName: '1.0.0',
+        libVersion: '1.6',
+        language: 'zh',
+        apkPath: 'extensions/${row.extensionPackage}.ext',
+        apkSha256: 'apk-sha',
+        signerSha256: 'signer-sha',
+        enabled: const Value<bool>(true),
+        installedAt: 1,
+      ),
+    );
+    await database.replaceMangaOnlineSources(
+      row.extensionPackage,
+      <MangaOnlineSourcesCompanion>[
+        MangaOnlineSourcesCompanion.insert(
+          extensionPackage: row.extensionPackage,
+          sourceId: row.sourceId,
+          name: row.name,
+          language: row.language,
+          baseUrl: Value<String>(row.baseUrl),
+          enabled: Value<bool>(row.enabled),
+        ),
+      ],
+    );
+  }
+
+  OnlineMangaLibraryEntry placeholderEntry({
+    String sourceId = realSourceId,
+    String key = seriesKey,
+    List<OnlineMangaChapter> chapters = const <OnlineMangaChapter>[],
+  }) => OnlineMangaLibraryEntry(
+    runtime: OnlineMangaRuntimeKind.mihon,
+    extensionPackage: kUnavailableMihonExtensionPackage,
+    sourceId: sourceId,
+    series: OnlineMangaSeries(
+      key: key,
+      title: 'Fixture series',
+      coverUrl: 'https://example.invalid/cover.jpg',
+      raw: <String, Object?>{'url': key, 'title': 'Fixture series'},
+    ),
+    chapters: chapters,
+  );
+
+  setUp(() async {
+    root = await Directory.systemTemp.createTemp('fushi-installed-fallback-');
+    database = FushiDatabase.forTesting(NativeDatabase.memory());
+    runtime = _SourceRuntime();
+    manager = MihonManager(
+      database: database,
+      rootDirectory: root,
+      runtime: runtime,
+    );
+  });
+
+  tearDown(() async {
+    manager.dispose();
+    await database.close();
+    if (await root.exists()) await root.delete(recursive: true);
+  });
+
+  test('来源名解析按数字 sourceId 回退到已启用的真实 Source', () async {
+    await seedSource(sourceRow());
+    await manager.initialise();
+
+    final String? label = await MihonLibraryAdapter(
+      manager,
+    ).sourceLabel(placeholderEntry());
+
+    expect(label, realSourceName);
+  });
+
+  test('刷新、页流与封面走同一回退规则，条目身份不变', () async {
+    await seedSource(sourceRow());
+    await manager.initialise();
+    final MihonLibraryAdapter adapter = MihonLibraryAdapter(manager);
+    final OnlineMangaLibraryEntry entry = placeholderEntry(
+      chapters: const <OnlineMangaChapter>[
+        OnlineMangaChapter(
+          key: '/chapter/1',
+          name: 'Chapter 1',
+          raw: <String, Object?>{'url': '/chapter/1', 'name': 'Chapter 1'},
+        ),
+      ],
+    );
+    final String identityBefore = entry.encode();
+
+    final OnlineMangaRefreshResult refreshed = await adapter.refresh(entry);
+    expect(runtime.lastDetailsSource?.id, realSourceId);
+    expect(runtime.lastDetailsSource?.name, realSourceName);
+    expect(refreshed.series.key, seriesKey);
+    expect(refreshed.chapters.single.key, '/chapter/1');
+
+    final List<OnlineMangaPageRef> pages = await adapter.resolveChapterPages(
+      entry: entry,
+      chapter: entry.chapters.single,
+    );
+    expect(runtime.lastPagesSource?.id, realSourceId);
+    expect(pages.single, isA<MihonMangaPageRef>());
+
+    final List<int> cover = await adapter.fetchCover(
+      entry,
+      'https://example.invalid/cover.jpg',
+    );
+    expect(runtime.lastCoverSource?.id, realSourceId);
+    expect(cover, <int>[0xff, 0xd8, 0xff]);
+
+    expect(
+      entry.encode(),
+      identityBefore,
+      reason: '运行时回退不得改写 extensionPackage / sourceId / bookKey 身份',
+    );
+  });
+
+  test('精确匹配优先：同数字 sourceId 的另一个扩展不参与竞争', () async {
+    await seedSource(
+      sourceRow(extensionPackage: 'org.example.exact', name: 'Exact source'),
+    );
+    await seedSource(
+      sourceRow(extensionPackage: 'org.example.other', name: 'Other source'),
+    );
+    await manager.initialise();
+
+    final OnlineMangaLibraryEntry exact = OnlineMangaLibraryEntry(
+      runtime: OnlineMangaRuntimeKind.mihon,
+      extensionPackage: 'org.example.exact',
+      sourceId: realSourceId,
+      series: placeholderEntry().series,
+      chapters: const <OnlineMangaChapter>[],
+    );
+
+    expect(
+      await MihonLibraryAdapter(manager).sourceLabel(exact),
+      'Exact source',
+    );
+  });
+
+  test('数字 sourceId 按数值比较：前导零不影响回退', () async {
+    await seedSource(sourceRow());
+    await manager.initialise();
+
+    final String? label = await MihonLibraryAdapter(
+      manager,
+    ).sourceLabel(placeholderEntry(sourceId: '0$realSourceId'));
+
+    expect(label, realSourceName);
+  });
+
+  test('同一数字 sourceId 命中多个已启用扩展：歧义，不随意选择', () async {
+    await seedSource(
+      sourceRow(extensionPackage: 'org.example.one', name: 'Source one'),
+    );
+    await seedSource(
+      sourceRow(extensionPackage: 'org.example.two', name: 'Source two'),
+    );
+    await manager.initialise();
+    final MihonLibraryAdapter adapter = MihonLibraryAdapter(manager);
+
+    expect(await adapter.sourceLabel(placeholderEntry()), isNull);
+    await expectLater(
+      adapter.refresh(placeholderEntry()),
+      throwsA(
+        isA<OnlineMangaUnavailable>().having(
+          (OnlineMangaUnavailable error) => error.reason,
+          'reason',
+          OnlineMangaUnavailableReason.sourceDisabled,
+        ),
+      ),
+    );
+  });
+
+  test('真正没有对应 sourceId 的已启用来源：仍按来源缺失失败', () async {
+    await seedSource(sourceRow(sourceId: '111111111111111111'));
+    await manager.initialise();
+    final MihonLibraryAdapter adapter = MihonLibraryAdapter(manager);
+
+    expect(await adapter.sourceLabel(placeholderEntry()), isNull);
+    await expectLater(
+      adapter.refresh(placeholderEntry()),
+      throwsA(
+        isA<OnlineMangaUnavailable>().having(
+          (OnlineMangaUnavailable error) => error.reason,
+          'reason',
+          OnlineMangaUnavailableReason.sourceDisabled,
+        ),
+      ),
+    );
+  });
+
+  test('来源行被停用：不参与回退，仍按来源缺失失败', () async {
+    await seedSource(sourceRow(enabled: false));
+    await manager.initialise();
+    final MihonLibraryAdapter adapter = MihonLibraryAdapter(manager);
+
+    expect(await adapter.sourceLabel(placeholderEntry()), isNull);
+    await expectLater(
+      adapter.refresh(placeholderEntry()),
+      throwsA(
+        isA<OnlineMangaUnavailable>().having(
+          (OnlineMangaUnavailable error) => error.reason,
+          'reason',
+          OnlineMangaUnavailableReason.sourceDisabled,
+        ),
+      ),
+    );
+  });
+}
+
+class _SourceRuntime extends Fake implements MihonRuntime {
+  MihonSource? lastDetailsSource;
+  MihonSource? lastPagesSource;
+  MihonSource? lastCoverSource;
+
+  @override
+  Future<MihonManga> getDetails(
+    MihonExtensionRef extension,
+    MihonSource source,
+    MihonManga manga, {
+    List<MihonPreference> preferences = const <MihonPreference>[],
+  }) async {
+    lastDetailsSource = source;
+    return MihonManga(
+      url: manga.url,
+      title: 'Fixture series',
+      coverUrl: 'https://example.invalid/cover.jpg',
+    );
+  }
+
+  @override
+  Future<List<MihonChapter>> getChapters(
+    MihonExtensionRef extension,
+    MihonSource source,
+    MihonManga manga, {
+    List<MihonPreference> preferences = const <MihonPreference>[],
+  }) async => const <MihonChapter>[
+    MihonChapter(
+      url: '/chapter/1',
+      name: 'Chapter 1',
+      uploadedAt: 1,
+      number: 1,
+    ),
+  ];
+
+  @override
+  Future<List<MihonPage>> getPages(
+    MihonExtensionRef extension,
+    MihonSource source,
+    MihonChapter chapter, {
+    List<MihonPreference> preferences = const <MihonPreference>[],
+  }) async {
+    lastPagesSource = source;
+    return const <MihonPage>[
+      MihonPage(index: 0, url: 'https://example.invalid/page-1.jpg'),
+    ];
+  }
+
+  @override
+  Future<Uint8List> fetchSourceImage(
+    MihonExtensionRef extension,
+    MihonSource source,
+    String url, {
+    List<MihonPreference> preferences = const <MihonPreference>[],
+  }) async {
+    lastCoverSource = source;
+    return Uint8List.fromList(<int>[0xff, 0xd8, 0xff]);
+  }
+
+  @override
+  Future<void> dispose() async {}
+}
