@@ -1179,6 +1179,7 @@
   "backup_create_library_manga": "Manga in library",
   "backup_create_progress": "$processed / $total processed",
   "backup_create_saved_path": "Saved to $path",
+  "backup_create_tracking": "Tracking",
   "backup_export": "Exportar copia de seguridad",
   "backup_export_books_all": "Todos los libros",
   "backup_export_books_selected": "$count libros seleccionados",

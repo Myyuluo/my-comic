@@ -123,6 +123,40 @@ void main() {
     expect(_tile(tester, const Key('create_backup_include_library')).value, isTrue);
   });
 
+  testWidgets('进度记录 starts selected and depends on 书架中的作品', (
+    WidgetTester tester,
+  ) async {
+    final _TestAppModel appModel = _TestAppModel(db, paths);
+    await tester.pumpWidget(_harness(appModel, const CreateBackupPage()));
+    await tester.pumpAndSettle();
+
+    expect(find.text('进度记录'), findsOneWidget);
+    expect(
+      _tile(tester, const Key('create_backup_include_tracking')).value,
+      isTrue,
+      reason: '进度记录 defaults to checked',
+    );
+    expect(
+      _tile(tester, const Key('create_backup_include_tracking')).enabled,
+      isNot(false),
+    );
+
+    await tester.tap(find.byKey(const Key('create_backup_include_library')));
+    await tester.pumpAndSettle();
+    expect(
+      _tile(tester, const Key('create_backup_include_tracking')).enabled,
+      isFalse,
+      reason: '进度记录 cannot be exported without 书架中的作品',
+    );
+
+    await tester.tap(find.byKey(const Key('create_backup_include_library')));
+    await tester.pumpAndSettle();
+    expect(
+      _tile(tester, const Key('create_backup_include_tracking')).enabled,
+      isNot(false),
+    );
+  });
+
   testWidgets('unchecking「书架中的作品」disables chapters and the create button', (
     WidgetTester tester,
   ) async {
