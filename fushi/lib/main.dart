@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:fushi/src/media/manga/library/manga_add_to_shelf_prompt.dart';
 import 'package:fushi/src/media/media_item_factory.dart';
 import 'dart:ui' show AppExitResponse, PlatformDispatcher;
 import 'package:cupertino_ui/cupertino_ui.dart';
@@ -2473,7 +2474,12 @@ class _FushiReaderAppState extends ConsumerState<FushiReaderApp>
   AppModel get appModel => ref.watch(appProvider);
 
   /// The application will open to this page upon startup.
-  Widget get home => _isMainIntent ? const HomePage() : const Scaffold();
+  ///
+  /// 全局「下载完成后加入书架？」提示挂在主界面根部：非书架下载可以在作品页
+  /// 之外完成（下载页重试 / 后台队列），提示不能依赖作品页是否打开。
+  Widget get home => _isMainIntent
+      ? const MangaAddToShelfPromptHost(child: HomePage())
+      : const Scaffold();
 
   ThemeMode get themeMode => appModel.themeMode;
 

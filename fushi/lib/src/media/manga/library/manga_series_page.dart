@@ -247,17 +247,6 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
   Set<String> _downloaded = const <String>{};
   StreamSubscription<void>? _jobsWatch;
 
-  /// 上一次看到的本章节任务状态（票 05：非书架作品下载完成提示）。
-  ///
-  /// 只有页面打开期间观测到「非 done → done」才提示；打开页面前就已经下完的
-  /// 章节不再追问。首次取任务只记基线。
-  Map<String, String> _observedJobStatuses = const <String, String>{};
-  bool _jobStatusBaselineReady = false;
-
-  /// 本次打开作品页已经问过「加入书架？」。批量下载会逐章完成，只提示一次，
-  /// 不反复打扰；下次打开作品页再下载仍可再次询问。
-  bool _addToShelfPromptShown = false;
-
   /// manifest 扫描缓存（ticket 07）：任务表进度更新不会改变身份/状态签名，
   /// 不必每次都把整个 `downloads` + `local` 重扫一遍。
   Set<String> _manifestDownloaded = const <String>{};
@@ -550,56 +539,10 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     }
     final Set<String> downloaded = <String>{...mapped, ..._manifestDownloaded};
     if (!mounted || revision != _downloadStateRevision) return;
-    // 票 05：任务状态基线只由最后一轮重算推进，避免并发旧结果吞掉完成事件。
-    final Map<String, String> jobStatuses = <String, String>{
-      for (final MapEntry<String, MangaDownloadJobRow> job in jobs.entries)
-        job.key: job.value.status,
-    };
-    final bool completedNow =
-        _jobStatusBaselineReady &&
-        jobStatuses.entries.any(
-          (MapEntry<String, String> job) =>
-              job.value == MangaDownloadJobStatus.done &&
-              _observedJobStatuses[job.key] != MangaDownloadJobStatus.done,
-        );
-    _observedJobStatuses = jobStatuses;
-    _jobStatusBaselineReady = true;
     setState(() {
       _jobs = jobs;
       _downloaded = downloaded;
     });
-    // 票 05：非书架作品下载完成后给一次可选「加入书架？」提示，绝不自动加入。
-    // 书架成员不需要这个入口；本次打开页只问一次，批量逐章完成不反复打扰。
-    if (completedNow && _row?.isInLibrary == false && !_addToShelfPromptShown) {
-      _showAddToShelfAfterDownloadPrompt();
-    }
-  }
-
-  /// 非书架作品刚下完一章时的可选提示（票 05）。
-  ///
-  /// 用非模态 SnackBar 而不是对话框：不打断阅读，也不替用户做决定；点「加入
-  /// 书架」才走现有 [_addToLibrary]（翻转同一条非书架行的 membership）。
-  void _showAddToShelfAfterDownloadPrompt() {
-    final ScaffoldMessengerState? messenger = ScaffoldMessenger.maybeOf(
-      context,
-    );
-    if (messenger == null) return;
-    _addToShelfPromptShown = true;
-    messenger.showSnackBar(
-      FushiSnackBar(
-        key: const ValueKey<String>('manga_series_add_to_shelf_after_download'),
-        content: Text(
-          t.manga_series_add_to_shelf_after_download(title: _displayTitle),
-        ),
-        duration: const Duration(seconds: 6),
-        // 带 action 的 SnackBar 默认常驻；这里是「可选提示」，让它自己退场。
-        persist: false,
-        action: SnackBarAction(
-          label: t.mihon_add_to_bookshelf,
-          onPressed: () => unawaited(_addToLibrary()),
-        ),
-      ),
-    );
   }
 
   /// 用户主动删掉下载后：让 manifest 扫描缓存失效，并立即把章节行切回未下载。
