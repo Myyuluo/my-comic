@@ -399,7 +399,7 @@ void main() {
     expect(await db.getEpubBook(bookB), isNotNull);
   });
 
-  testWidgets('批量移出默认只移出书架：进度/已读/标签删除，History、文件与统计保留，排队任务停止', (
+  testWidgets('批量移出默认只清 membership：进度/已读/下载任务/History/文件保留，Tag 删除', (
     WidgetTester tester,
   ) async {
     const String bookKey = 'manga:batch:defaults';
@@ -456,18 +456,23 @@ void main() {
     await selectBooks(tester, <String>[bookKey]);
     await openBatchDeleteDialog(tester);
     await tester.tap(find.text(t.dialog_delete));
-    await pumpUntil(tester, () async => await db.getEpubBook(bookKey) == null);
+    await pumpUntil(
+      tester,
+      () async => (await db.getEpubBook(bookKey))?.isInLibrary == false,
+    );
 
-    expect(await db.getEpubBook(bookKey), isNull, reason: 'Library 条目已删');
+    final EpubBookRow? after = await db.getEpubBook(bookKey);
+    expect(after, isNotNull, reason: '移出不删除 Manga 行');
+    expect(after!.isInLibrary, isFalse, reason: 'Library membership 已清除');
     expect(
       await db.getMangaChapterStates(row.uid),
-      isEmpty,
-      reason: 'Chapter 已读标记随移出删除',
+      hasLength(1),
+      reason: 'Chapter 已读标记保留',
     );
     expect(
       await ReaderPositionRepository(db).findByBookUid(row.uid),
-      isNull,
-      reason: 'Reading progress 随移出删除',
+      isNotNull,
+      reason: 'Reading progress 保留',
     );
     expect(
       await db.getTagsForBook(bookKey),
@@ -493,9 +498,14 @@ void main() {
       reason: '未勾选「同时删除本地文件」时已下载章节保留',
     );
     expect(
+      await db.getMangaChapterDir(bookKey, '/chapter/1'),
+      isNotNull,
+      reason: '下载索引保留',
+    );
+    expect(
       await db.getMangaDownloadJob(jobId),
-      isNull,
-      reason: '在线 Manga 的排队任务必须在移出前停止并取消',
+      isNotNull,
+      reason: '默认移出保留下载任务',
     );
     await flushToast(tester);
   });
@@ -543,9 +553,16 @@ void main() {
 
     // 菜单项的 DELETE 与弹窗按钮同文案；弹窗在最上层，取最后一个。
     await tester.tap(find.text(t.dialog_delete).last);
-    await pumpUntil(tester, () async => await db.getEpubBook(bookKey) == null);
+    await pumpUntil(
+      tester,
+      () async => (await db.getEpubBook(bookKey))?.isInLibrary == false,
+    );
 
-    expect(await db.getEpubBook(bookKey), isNull);
+    expect(
+      (await db.getEpubBook(bookKey))?.isInLibrary,
+      isFalse,
+      reason: '单卡移出只清 membership',
+    );
     expect(chapterDir.existsSync(), isTrue, reason: '默认不删已下载章节');
     expect(await loadMangaHistory(db), hasLength(1), reason: 'History 保留');
     await flushToast(tester);
@@ -580,14 +597,18 @@ void main() {
     await tester.tap(find.text(t.dialog_delete));
     await pumpUntil(
       tester,
-      () async => await db.getEpubBook(onlineKey) == null,
+      () async => (await db.getEpubBook(onlineKey))?.isInLibrary == false,
     );
     await pumpUntil(
       tester,
       () async => await db.getEpubBook(localRow.bookKey) == null,
     );
 
-    expect(await db.getEpubBook(onlineKey), isNull);
+    expect(
+      (await db.getEpubBook(onlineKey))?.isInLibrary,
+      isFalse,
+      reason: '在线作品删文件后保留非书架行',
+    );
     expect(await db.getEpubBook(localRow.bookKey), isNull);
     expect(
       Directory(onlineRow.extractDir).existsSync(),
@@ -652,10 +673,14 @@ void main() {
         t.local_source_batch_remove_done(success: 1, failed: 1);
     await pumpUntilFound(tester, find.text(summary));
 
-    expect(await db.getEpubBook(onlineKey), isNull, reason: '成功作品已移出');
     expect(
-      await db.getEpubBook(localKey),
-      isNotNull,
+      (await db.getEpubBook(onlineKey))?.isInLibrary,
+      isFalse,
+      reason: '成功作品已移出书架',
+    );
+    expect(
+      (await db.getEpubBook(localKey))?.isInLibrary,
+      isTrue,
       reason: '文件删除失败的作品必须留在 Library',
     );
     expect(
@@ -690,10 +715,14 @@ void main() {
       await tester.tap(find.text(t.dialog_delete));
       await pumpUntil(
         tester,
-        () async => await db.getEpubBook(bookKey) == null,
+        () async => (await db.getEpubBook(bookKey))?.isInLibrary == false,
       );
 
-      expect(await db.getEpubBook(bookKey), isNull, reason: 'Library 条目已删');
+      expect(
+        (await db.getEpubBook(bookKey))?.isInLibrary,
+        isFalse,
+        reason: '受管漫画卷移出只清 membership',
+      );
       expect(
         Directory(row.extractDir).existsSync(),
         isTrue,
@@ -783,13 +812,17 @@ void main() {
     await tester.tap(find.text(t.dialog_delete));
     await pumpUntil(
       tester,
-      () async => await db.getEpubBook(visibleKey) == null,
+      () async => (await db.getEpubBook(visibleKey))?.isInLibrary == false,
     );
 
-    expect(await db.getEpubBook(visibleKey), isNull, reason: '可见项被删除');
     expect(
-      await db.getEpubBook(hiddenKey),
-      isNotNull,
+      (await db.getEpubBook(visibleKey))?.isInLibrary,
+      isFalse,
+      reason: '可见项被移出书架',
+    );
+    expect(
+      (await db.getEpubBook(hiddenKey))?.isInLibrary,
+      isTrue,
       reason: '被筛选隐藏的选中项不参与本次删除',
     );
     await flushToast(tester);

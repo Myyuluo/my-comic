@@ -495,7 +495,7 @@ void main() {
     expect(find.byType(BatchActionBar), findsOneWidget);
   });
 
-  testWidgets('批量移出书架只删条目并写墓碑、保留 local 文件；tombstone 作品可重新加入', (
+  testWidgets('批量移出书架只清 membership、保留 local 文件与行，不写墓碑', (
     WidgetTester tester,
   ) async {
     final Directory alphaDir = writeManga('Alpha');
@@ -509,15 +509,17 @@ void main() {
     expect(batchBar(tester).selectedCount, 2);
 
     await openRemoveDialog(tester);
-    // 两个选项保持默认（不勾）：确认后只移出书架，保留 local 文件。
+    // 两个选项保持默认（不勾）：确认后只移出书架，保留 local 文件与行。
     await confirmRemoveDialog(tester);
 
+    final EpubBookRow? alpha = await db.getEpubBook(alphaKey);
+    expect(alpha, isNotNull, reason: '移出不删除 Manga 行');
+    expect(alpha!.isInLibrary, isFalse, reason: 'membership 清除');
     expect(
-      await db.getAllEpubBooks(),
-      isEmpty,
-      reason: '只移出已入架的 Alpha；Beta 本来未入架，不受影响',
+      await db.getBookTombstoneKeys(),
+      isNot(contains(alphaKey)),
+      reason: '非破坏移出不写墓碑',
     );
-    expect(await db.getBookTombstoneKeys(), contains(alphaKey));
     expect(
       File(p.join(alphaDir.path, 'Ch 1', '001.jpg')).existsSync(),
       isTrue,
@@ -530,7 +532,7 @@ void main() {
       findsOneWidget,
     );
 
-    // tombstone 作品算未入架，仍在网格里。
+    // 移出后算未入架，仍在网格里。
     await tester.runAsync(() async {
       await tester.tap(
         find.byKey(
@@ -543,14 +545,20 @@ void main() {
     expect(find.text('Alpha'), findsOneWidget);
     expect(find.text('Beta'), findsOneWidget);
 
-    // 显式重新加入墓碑作品：重新登记并清墓碑。
+    // 显式重新加入：复用同一条非书架记录，只把 membership 翻回 true。
     await tapSelectToggle(tester);
     await tester.tap(cardFor(alphaDir));
     await tester.pumpAndSettle();
     await runBatchAction(tester, 'local_source_batch_add');
 
-    expect(await db.getEpubBook(alphaKey), isNotNull);
-    expect(await db.getBookTombstoneKeys(), isNot(contains(alphaKey)));
+    final EpubBookRow? readded = await db.getEpubBook(alphaKey);
+    expect(readded, isNotNull);
+    expect(readded!.isInLibrary, isTrue, reason: '显式加入翻回 membership');
+    expect(readded.uid, alpha.uid, reason: '重新加入复用同一条记录与 uid');
+    expect(
+      File(p.join(alphaDir.path, 'Ch 1', '001.jpg')).existsSync(),
+      isTrue,
+    );
 
     await tester.pump(const Duration(seconds: 3));
   });
@@ -635,8 +643,15 @@ void main() {
     await openRemoveDialog(tester);
     await confirmRemoveDialog(tester, deleteStatistics: true);
 
-    expect(await db.getEpubBook(alphaKey), isNull);
-    expect(await db.getEpubBook(betaKey), isNull);
+    expect(
+      (await db.getEpubBook(alphaKey))?.isInLibrary,
+      isFalse,
+      reason: '删统计只清 membership，不删行',
+    );
+    expect(
+      (await db.getEpubBook(betaKey))?.isInLibrary,
+      isFalse,
+    );
     expect(
       File(p.join(alphaDir.path, 'Ch 1', '001.jpg')).existsSync(),
       isTrue,
@@ -696,11 +711,15 @@ void main() {
     await confirmRemoveDialog(tester, deleteLocalFiles: true);
 
     expect(
-      await db.getEpubBook(alphaKey),
-      isNotNull,
+      (await db.getEpubBook(alphaKey))?.isInLibrary,
+      isTrue,
       reason: '文件删除失败时该作品必须留在 Library',
     );
-    expect(await db.getEpubBook(betaKey), isNull, reason: '其余作品照常移出');
+    expect(
+      await db.getEpubBook(betaKey),
+      isNull,
+      reason: '本地作品删文件时连行一起删除',
+    );
     expect(alphaDir.existsSync(), isTrue);
     expect(betaDir.existsSync(), isFalse);
     expect(await db.getBookTombstoneKeys(), contains(betaKey));
@@ -874,7 +893,7 @@ void main() {
     LocaleSettings.setLocale(AppLocale.zhCn);
     expect(
       t.manga_batch_remove_confirm(count: 3),
-      '确定把选中的 3 部作品移出书架？阅读进度与已读标记会一并删除。',
+      '确定把选中的 3 部作品移出书架？阅读进度、已读标记、已下载章节与 History 会保留。',
     );
     expect(
       t.delete_statistics_manga_batch_desc,
