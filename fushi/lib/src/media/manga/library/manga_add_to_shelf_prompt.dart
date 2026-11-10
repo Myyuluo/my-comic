@@ -9,8 +9,6 @@ import 'package:fushi/src/media/manga/library/online_manga_library_service.dart'
 import 'package:fushi/src/media/online/online_source_error_text.dart';
 import 'package:fushi/src/media/tags/tag_picker_sheet.dart';
 import 'package:fushi/src/models/app_model.dart';
-import 'package:fushi/src/utils/misc/error_log_service.dart';
-import 'package:fushi/src/utils/misc/fushi_toast.dart';
 import 'package:fushi/utils.dart';
 import 'package:fushi_core/fushi_core.dart';
 
@@ -121,9 +119,7 @@ class _MangaAddToShelfPromptHostState
       if (completedAt != null && completedAt < _mountedAtMs) continue;
       if (!_promptedBookKeys.add(job.bookKey)) continue;
 
-      final EpubBookRow? row = await appModel.database.getEpubBook(
-        job.bookKey,
-      );
+      final EpubBookRow? row = await appModel.database.getEpubBook(job.bookKey);
       if (!mounted) return;
       if (row == null || row.isInLibrary) continue;
       _showPrompt(appModel, row);
@@ -167,8 +163,9 @@ class _MangaAddToShelfPromptHostState
     }
     final EpubBookRow? current = await appModel.database.getEpubBook(bookKey);
     if (!mounted || current == null || current.isInLibrary) return;
-    final OnlineMangaLibraryEntry? entry =
-        OnlineMangaLibraryEntry.tryParse(current.sourceMetadata);
+    final OnlineMangaLibraryEntry? entry = OnlineMangaLibraryEntry.tryParse(
+      current.sourceMetadata,
+    );
     if (entry == null) return;
 
     // 与作品页「加入书架」一致：已有 Tag 时先选择标签；取消则不加入。
