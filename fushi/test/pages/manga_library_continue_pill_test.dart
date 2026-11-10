@@ -1,8 +1,10 @@
 import 'package:flutter/gestures.dart';
+import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:fushi/i18n/strings.g.dart';
 import 'package:fushi/media.dart';
+import 'package:fushi/src/models/theme_notifier.dart' show buildFushiThemeData;
 import 'package:fushi/src/utils/components/glass/fushi_icon.dart';
 import 'package:fushi/src/utils/components/fushi_floating_chrome.dart'
     show FushiFloatingChromeBar;
@@ -60,7 +62,8 @@ void main() {
   Future<void> pumpPage(
     WidgetTester tester, {
     Size size = const Size(1400, 1200),
-  }) => harness.pumpPage(tester, size: size);
+    ThemeData? theme,
+  }) => harness.pumpPage(tester, size: size, theme: theme);
 
   Finder pillFinder() =>
       find.byKey(const ValueKey<String>('reader_shelf_continue_pill'));
@@ -83,6 +86,11 @@ void main() {
       find.descendant(of: find.byType(FushiFloatingChromeBar), matching: pill),
       findsOneWidget,
       reason: '胶囊占主 chrome 行的页签位（标签栏原来的位置）',
+    );
+    expect(
+      tester.getSize(pill).height,
+      56,
+      reason: 'MD3 桌面顶部 chrome 行高度不变（两行书名不撑高胶囊）',
     );
 
     final BuildContext context = tester.element(pill);
@@ -146,7 +154,7 @@ void main() {
     );
   });
 
-  testWidgets('胶囊不显示书名与进度；整颗可点走原继续阅读打开路径，悬停 tooltip 显示书名', (
+  testWidgets('胶囊第二行显示书名；整颗可点走原继续阅读打开路径，悬停 tooltip 显示书名', (
     WidgetTester tester,
   ) async {
     final String uid = await seedManga(
@@ -161,11 +169,43 @@ void main() {
     final Finder pill = pillFinder();
     expect(pill, findsOneWidget);
 
-    // 不显示书名与进度（保持参考图的紧凑形态）。
+    // 第二行书名：显示名，小号灰黑色，不抢主色「继续阅读」的重心。
+    final Finder pillTitle = find.byKey(
+      const ValueKey<String>('reader_shelf_continue_pill_title'),
+    );
+    expect(pillTitle, findsOneWidget, reason: '「继续阅读」下方显示当前作品书名');
+    final Text pillTitleText = tester.widget<Text>(pillTitle);
+    expect(pillTitleText.data, '漫画一', reason: '书名行显示当前作品');
+    final BuildContext pillContext = tester.element(pill);
+    final FushiDesignTokens tokens = FushiDesignTokens.of(pillContext);
     expect(
-      find.descendant(of: pill, matching: find.text('漫画一')),
-      findsNothing,
-      reason: '胶囊不显示书名',
+      pillTitleText.style?.color,
+      tokens.surfaces.onVariant,
+      reason: '书名用小号灰黑色（onVariant），不是主色',
+    );
+    expect(
+      pillTitleText.style?.fontSize,
+      Theme.of(pillContext).textTheme.labelSmall?.fontSize,
+      reason: '书名用 labelSmall 小号字',
+    );
+    // 宽度约束到「继续阅读」四个字的实际渲染宽度。
+    final double labelWidth = tester
+        .getSize(
+          find.descendant(
+            of: pill,
+            matching: find.text(t.book_continue_reading),
+          ),
+        )
+        .width;
+    expect(
+      tester.getSize(pillTitle).width,
+      closeTo(labelWidth, 1.0),
+      reason: '书名行宽度与「继续阅读」一致',
+    );
+    expect(
+      tester.renderObject<RenderParagraph>(pillTitle).didExceedMaxLines,
+      isFalse,
+      reason: '短书名不截断',
     );
     expect(
       find.descendant(of: pill, matching: find.textContaining('%')),
@@ -221,6 +261,103 @@ void main() {
     );
   });
 
+  testWidgets('超长书名按「继续阅读」宽度省略号截断，完整书名仍在 tooltip', (
+    WidgetTester tester,
+  ) async {
+    const String longTitle = '这是一个非常非常非常非常非常长的漫画书名用来验证省略号截断行为';
+    final String uid = await seedManga(
+      'm-long',
+      longTitle,
+      position: 5,
+      duration: 10,
+    );
+    await seedRecency(uid, 1000);
+    await pumpPage(tester);
+
+    final Finder pill = pillFinder();
+    expect(pill, findsOneWidget);
+    final Finder pillTitle = find.byKey(
+      const ValueKey<String>('reader_shelf_continue_pill_title'),
+    );
+    expect(pillTitle, findsOneWidget);
+
+    final Text pillTitleText = tester.widget<Text>(pillTitle);
+    expect(pillTitleText.maxLines, 1, reason: '书名保持单行');
+    expect(
+      pillTitleText.overflow,
+      TextOverflow.ellipsis,
+      reason: '超出宽度显示省略号',
+    );
+
+    final double labelWidth = tester
+        .getSize(
+          find.descendant(
+            of: pill,
+            matching: find.text(t.book_continue_reading),
+          ),
+        )
+        .width;
+    expect(
+      tester.getSize(pillTitle).width,
+      closeTo(labelWidth, 1.0),
+      reason: '超长书名仍受「继续阅读」宽度约束',
+    );
+    expect(
+      tester.renderObject<RenderParagraph>(pillTitle).didExceedMaxLines,
+      isTrue,
+      reason: '超长书名实际被省略号截断',
+    );
+
+    // tooltip 仍保留完整书名。
+    expect(
+      find.ancestor(of: pill, matching: find.byTooltip(longTitle)),
+      findsOneWidget,
+      reason: '完整书名保留在悬停 tooltip',
+    );
+  });
+
+  testWidgets('Apple 设计下胶囊增高到两行高度且不被裁切，chrome 随内容适配', (
+    WidgetTester tester,
+  ) async {
+    final String uid = await seedManga(
+      'm-apple',
+      '苹果漫画',
+      position: 5,
+      duration: 10,
+    );
+    await seedRecency(uid, 1000);
+    await pumpPage(
+      tester,
+      theme: buildFushiThemeData(
+        scheme: ColorScheme.fromSeed(
+          seedColor: Colors.teal,
+          brightness: Brightness.dark,
+        ),
+        textTheme: Typography.material2021().white,
+        glassDesign: true,
+      ),
+    );
+
+    final Finder pill = pillFinder();
+    expect(pill, findsOneWidget, reason: 'Apple 设计下胶囊照常渲染');
+    expect(
+      tester.getSize(pill).height,
+      48,
+      reason: 'Apple 渲染路径把胶囊表面增高到 48 容纳两行书名',
+    );
+    expect(
+      find.byKey(const ValueKey<String>('reader_shelf_continue_pill_title')),
+      findsOneWidget,
+      reason: 'Apple 设计下书名行仍可见',
+    );
+    expect(tester.takeException(), isNull, reason: '两行书名不被裁切');
+    expect(
+      tester.getSize(find.byType(FushiFloatingChromeBar)).height,
+      greaterThanOrEqualTo(48),
+      reason: 'chrome 行随增高的胶囊自适应',
+    );
+  });
+
   testWidgets('整颗胶囊可点：悬浮面内衬（留白）也是继续阅读点击目标', (
     WidgetTester tester,
   ) async {
@@ -244,7 +381,7 @@ void main() {
     );
   });
 
-  testWidgets('胶囊 tooltip 书名经显示名 override（编辑弹窗改名）', (
+  testWidgets('胶囊书名行与 tooltip 都经显示名 override（编辑弹窗改名）', (
     WidgetTester tester,
   ) async {
     final String uid = await seedManga(
@@ -268,6 +405,19 @@ void main() {
 
     final Finder pill = pillFinder();
     expect(pill, findsOneWidget);
+    final Text pillTitle = tester.widget<Text>(
+      find.byKey(const ValueKey<String>('reader_shelf_continue_pill_title')),
+    );
+    expect(
+      pillTitle.data,
+      '改名漫画',
+      reason: '书名行应用编辑弹窗写入的 override，不直读 DB 原名',
+    );
+    expect(
+      find.descendant(of: pill, matching: find.text('原名')),
+      findsNothing,
+      reason: '改名后书名行不得再显示 DB 原始书名',
+    );
     expect(
       find.ancestor(of: pill, matching: find.byTooltip('改名漫画')),
       findsOneWidget,
