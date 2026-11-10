@@ -81,10 +81,10 @@ Future<Set<String>> computeMangaShelfDownloadedBookKeys(
         bookKey,
   ];
   if (pendingManifestScan.isNotEmpty) {
-    final Map<String, MangaDownloadIdentity> identities =
-        <String, MangaDownloadIdentity>{
+    final Map<String, MangaDownloadDiskQuery> queries =
+        <String, MangaDownloadDiskQuery>{
           for (final String bookKey in pendingManifestScan)
-            bookKey: MangaDownloadIdentity.ofEntry(
+            bookKey: MangaDownloadDiskQuery.ofEntry(
               onlineEntries[bookKey]!.entry,
             ),
         };
@@ -92,12 +92,12 @@ Future<Set<String>> computeMangaShelfDownloadedBookKeys(
       database,
       downloadsRoot: downloadsRoot,
       localComicRoot: localSourceRoot,
-    ).scanDisks(identities: identities.values);
+    ).scanDisks(queries: queries.values);
     for (final String bookKey in pendingManifestScan) {
       final ({OnlineMangaLibraryEntry entry, Set<String> chapterKeys}) info =
           onlineEntries[bookKey]!;
       if (disk
-          .downloadedChapterKeys(identities[bookKey]!, info.chapterKeys)
+          .downloadedChapterKeys(queries[bookKey]!.identity, info.chapterKeys)
           .isNotEmpty) {
         downloaded.add(bookKey);
       }

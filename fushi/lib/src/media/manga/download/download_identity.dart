@@ -110,6 +110,24 @@ class MangaDownloadIdentity {
       Object.hash(runtime, sourceIdKey, seriesKey, extensionPackage.trim());
 }
 
+/// 一次磁盘身份查询：要匹配的下载身份 + 作品标题。
+///
+/// 同一 Source 下标题完全相同的不同作品共享一个漫画目录，因此一个目录里可能
+/// 有多个身份的 `pages.json`。扫描时用 [title] 判断第一个 manifest 属于别的
+/// 同名作品时是否还要继续读该目录（见 `probeDownloadLibraryFolders`）。
+class MangaDownloadDiskQuery {
+  const MangaDownloadDiskQuery({required this.identity, required this.title});
+
+  factory MangaDownloadDiskQuery.ofEntry(OnlineMangaLibraryEntry entry) =>
+      MangaDownloadDiskQuery(
+        identity: MangaDownloadIdentity.ofEntry(entry),
+        title: entry.series.title,
+      );
+
+  final MangaDownloadIdentity identity;
+  final String title;
+}
+
 /// 一个 Source 的下载身份（不含 Manga）：`runtime + 数字 sourceId`，
 /// 扩展包兼容规则同 [downloadExtensionPackagesCompatible]。
 ///

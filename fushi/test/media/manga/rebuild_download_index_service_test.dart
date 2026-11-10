@@ -2093,10 +2093,10 @@ void main() {
     );
   });
 
-  test('同一目录里 pages.json 身份互相冲突时跳过并报告，不猜', () async {
+  test('共享目录里多个作品身份：Rebuild 各建条目并只映射自己的章', () async {
     final OnlineMangaLibraryEntry first = entryFor(
       seriesKey: '/series/first',
-      title: 'First series',
+      title: 'Shared title',
       chapters: const <OnlineMangaChapter>[
         OnlineMangaChapter(
           key: '/c/1',
@@ -2107,7 +2107,7 @@ void main() {
     );
     final OnlineMangaLibraryEntry second = entryFor(
       seriesKey: '/series/second',
-      title: 'Second series',
+      title: 'Shared title',
       chapters: const <OnlineMangaChapter>[
         OnlineMangaChapter(
           key: '/c/1',
@@ -2121,34 +2121,159 @@ void main() {
       sourceId: first.sourceId,
     );
     final Directory mangaDir = Directory(
-      p.join(downloadsRoot.path, 'Example Source', 'Mixed identities'),
+      p.join(downloadsRoot.path, 'Example Source', 'Shared title'),
     );
     await writeChapter(
       mangaDir: mangaDir,
-      folderName: 'Chapter 1',
+      folderName: 'A first',
       entry: first,
       chapter: first.chapters.single,
     );
     await writeChapter(
       mangaDir: mangaDir,
-      folderName: 'Chapter 2',
+      folderName: 'B second',
       entry: second,
       chapter: second.chapters.single,
     );
 
     final RebuildDownloadIndexReport report = await service().run();
 
-    expect(report.booksAdded, 0);
-    expect(report.booksSkipped, 1);
-    expect(report.chaptersSkipped, 2);
-    expect(await db.getAllEpubBooks(), isEmpty);
+    expect(report.booksAdded, 2, reason: '共享目录里的每个作品身份各建一条');
+    expect(report.booksAddedOnline, 2);
+    expect(report.booksSkipped, 0, reason: '共享目录不再整目录跳过');
+    expect(report.chaptersAdded, 2);
+    expect(await db.getAllEpubBooks(), hasLength(2));
+
+    final List<EpubBookRow> rows = await db.getAllEpubBooks();
+    for (final EpubBookRow row in rows) {
+      expect(
+        p.equals(row.extractDir, mangaDir.path),
+        isTrue,
+        reason: '两部作品都指向同一个共享目录',
+      );
+    }
+    final EpubBookRow firstRow = rows.firstWhere((EpubBookRow row) {
+      final OnlineMangaLibraryEntry entry = OnlineMangaLibraryEntry.tryParse(
+        row.sourceMetadata,
+      )!;
+      return entry.series.key == '/series/first';
+    });
+    final EpubBookRow secondRow = rows.firstWhere((EpubBookRow row) {
+      final OnlineMangaLibraryEntry entry = OnlineMangaLibraryEntry.tryParse(
+        row.sourceMetadata,
+      )!;
+      return entry.series.key == '/series/second';
+    });
     expect(
-      File(p.join(mangaDir.path, 'Chapter 1', '001.jpg')).existsSync(),
+      (await db.getMangaChapterDirRowsForBook(firstRow.bookKey))
+          .values
+          .single
+          .folderName,
+      'A first',
+    );
+    expect(
+      (await db.getMangaChapterDirRowsForBook(secondRow.bookKey))
+          .values
+          .single
+          .folderName,
+      'B second',
+    );
+    expect(await db.getMangaChapterDir(firstRow.bookKey, '/c/1'), isNotNull);
+    expect(await db.getMangaChapterDir(secondRow.bookKey, '/c/1'), isNotNull);
+    expect(
+      File(p.join(mangaDir.path, 'A first', '001.jpg')).existsSync(),
       isTrue,
     );
     expect(
-      File(p.join(mangaDir.path, 'Chapter 2', '001.jpg')).existsSync(),
+      File(p.join(mangaDir.path, 'B second', '001.jpg')).existsSync(),
       isTrue,
+    );
+  });
+
+  test('共享目录中已有两部作品条目：Rebuild 分别重链各自的章', () async {
+    final OnlineMangaLibraryEntry first = entryFor(
+      seriesKey: '/series/first',
+      title: 'Shared title',
+      chapters: const <OnlineMangaChapter>[
+        OnlineMangaChapter(
+          key: '/c/1',
+          name: 'Chapter 1',
+          raw: <String, Object?>{},
+        ),
+      ],
+    );
+    final OnlineMangaLibraryEntry second = entryFor(
+      seriesKey: '/series/second',
+      title: 'Shared title',
+      chapters: const <OnlineMangaChapter>[
+        OnlineMangaChapter(
+          key: '/c/1',
+          name: 'Chapter 1',
+          raw: <String, Object?>{},
+        ),
+      ],
+    );
+    final Directory mangaDir = Directory(
+      p.join(downloadsRoot.path, 'Example Source', 'Shared title'),
+    );
+    final EpubBookRow firstRow = await insertOnlineBook(
+      bookKey: onlineMangaBookKeyFor(
+        runtime: first.runtime,
+        extensionPackage: first.extensionPackage,
+        sourceId: first.sourceId,
+        seriesKey: first.series.key,
+      ),
+      entry: first,
+      extractDir: mangaDir.path,
+    );
+    final EpubBookRow secondRow = await insertOnlineBook(
+      bookKey: onlineMangaBookKeyFor(
+        runtime: second.runtime,
+        extensionPackage: second.extensionPackage,
+        sourceId: second.sourceId,
+        seriesKey: second.series.key,
+      ),
+      entry: second,
+      extractDir: mangaDir.path,
+    );
+    await writeChapter(
+      mangaDir: mangaDir,
+      folderName: 'A first',
+      entry: first,
+      chapter: first.chapters.single,
+    );
+    await writeChapter(
+      mangaDir: mangaDir,
+      folderName: 'B second',
+      entry: second,
+      chapter: second.chapters.single,
+    );
+
+    final RebuildDownloadIndexReport report = await service().run();
+
+    expect(report.booksMatched, 2);
+    expect(report.booksMissing, 0);
+    expect(
+      (await db.getMangaChapterDirRowsForBook(firstRow.bookKey))
+          .values
+          .single
+          .folderName,
+      'A first',
+    );
+    expect(
+      (await db.getMangaChapterDirRowsForBook(secondRow.bookKey))
+          .values
+          .single
+          .folderName,
+      'B second',
+    );
+    expect(
+      (await db.getMangaChapterDirRowsForBook(firstRow.bookKey)).keys,
+      <String>{'/c/1'},
+    );
+    expect(
+      (await db.getMangaChapterDirRowsForBook(secondRow.bookKey)).keys,
+      <String>{'/c/1'},
     );
   });
 }

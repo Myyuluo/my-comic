@@ -54,13 +54,17 @@ void main() {
     if (await root.exists()) await root.delete(recursive: true);
   });
 
-  MangaPagesManifest manifestFor(String chapterKey) => MangaPagesManifest(
+  MangaPagesManifest manifestFor(
+    String chapterKey, {
+    String mangaKey = '/series/fixture',
+    String mangaTitle = 'Fixture series',
+  }) => MangaPagesManifest(
     sourceRuntime: 'mihon',
     sourceId: '1',
     sourceName: 'Example Source',
     extensionPackage: 'org.example.fixture',
-    mangaKey: '/series/fixture',
-    mangaTitle: 'Fixture series',
+    mangaKey: mangaKey,
+    mangaTitle: mangaTitle,
     chapterKey: chapterKey,
     chapterName: 'Chapter 1',
     payload: const MokuroPayload(
@@ -396,15 +400,24 @@ void main() {
     Future<void> writeManifestChapter(
       String mangaDirPath,
       String containerName,
-      String chapterKey,
-    ) async {
+      String chapterKey, {
+      String mangaKey = '/series/fixture',
+      String mangaTitle = 'Fixture series',
+    }) async {
       final Directory chapterDir = downloadChapterDirectory(
         mangaDirPath,
         containerName,
       );
       await chapterDir.create(recursive: true);
       await File(p.join(chapterDir.path, '001.jpg')).writeAsBytes(<int>[1]);
-      await writePagesManifestAtomically(chapterDir, manifestFor(chapterKey));
+      await writePagesManifestAtomically(
+        chapterDir,
+        manifestFor(
+          chapterKey,
+          mangaKey: mangaKey,
+          mangaTitle: mangaTitle,
+        ),
+      );
     }
 
     test('无 Library 行时按 pages.json 身份从 downloads 识别已下载章', () async {
@@ -453,6 +466,57 @@ void main() {
       ).downloadedChapterKeysForEntry(entry);
 
       expect(downloaded, isEmpty, reason: '无 manifest 不得按标题猜测');
+    });
+
+    test('共享目录：第一部作品的 manifest 排在前时仍按身份识别另一部', () async {
+      const OnlineMangaLibraryEntry other = OnlineMangaLibraryEntry(
+        runtime: OnlineMangaRuntimeKind.mihon,
+        extensionPackage: 'org.example.fixture',
+        sourceId: '1',
+        series: OnlineMangaSeries(
+          key: '/series/other',
+          title: 'Fixture series',
+          raw: <String, Object?>{'url': '/series/other'},
+        ),
+        chapters: <OnlineMangaChapter>[
+          OnlineMangaChapter(
+            key: '/other/1',
+            name: 'Chapter 1',
+            raw: <String, Object?>{'url': '/other/1'},
+          ),
+        ],
+      );
+      final String sharedDir = p.join(
+        root.path,
+        'downloads',
+        'Example Source',
+        'Fixture series',
+      );
+      // 按名字排序时 "A ..." 在前，所以第一份 manifest 属于另一部同名作品。
+      await writeManifestChapter(
+        sharedDir,
+        'A other work',
+        '/other/1',
+        mangaKey: '/series/other',
+      );
+      await writeManifestChapter(
+        sharedDir,
+        'B fixture work',
+        '/c/1',
+        mangaKey: '/series/fixture',
+      );
+
+      final DownloadLibraryIndex index = DownloadLibraryIndex(db);
+      expect(
+        await index.downloadedChapterKeysForEntry(entry),
+        <String>{'/c/1'},
+        reason: '共享目录里只认本作品身份证明的章',
+      );
+      expect(
+        await index.downloadedChapterKeysForEntry(other),
+        <String>{'/other/1'},
+        reason: '另一部同名作品也只认自己的章',
+      );
     });
 
     test('多个目录的 manifest 都匹配同一作品时不猜', () async {

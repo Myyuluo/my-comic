@@ -32,6 +32,16 @@ class DownloadMangaFolderOnDisk {
   final MangaPagesManifest? rootManifest;
 
   String get mangaFolderName => p.basename(directory.path);
+
+  /// 目录里能证明身份的所有 manifest（章节容器 + 单章根 manifest）。
+  Iterable<MangaPagesManifest> get manifests sync* {
+    final MangaPagesManifest? root = rootManifest;
+    if (root != null) yield root;
+    for (final ChapterContainerOnDisk chapter in chapters) {
+      final MangaPagesManifest? manifest = chapter.manifest;
+      if (manifest != null) yield manifest;
+    }
+  }
 }
 
 /// 扫描整个 Download library 根（`downloads/<source>/<manga>`）。
@@ -167,11 +177,25 @@ class DownloadMangaFolderProbe {
   const DownloadMangaFolderProbe({
     required this.directory,
     this.manifest,
+    this.additionalManifests = const <MangaPagesManifest>[],
     this.manifestAtMangaRoot = false,
   });
 
   final Directory directory;
   final MangaPagesManifest? manifest;
+
+  /// 共享目录里为其他同名作品继续读到的 manifest（不含 [manifest]）。
+  ///
+  /// 只有查询带标题、且第一份 manifest 属于同一标题的**另一部**作品时才非空；
+  /// 普通单作品目录仍是零额外读盘。
+  final List<MangaPagesManifest> additionalManifests;
+
+  /// 目录里读到的全部 manifest（第一份 + [additionalManifests]）。
+  Iterable<MangaPagesManifest> get manifests sync* {
+    final MangaPagesManifest? first = manifest;
+    if (first != null) yield first;
+    yield* additionalManifests;
+  }
 
   /// [manifest] 是否来自漫画目录根的 `pages.json`（单章 Local source 作品）。
   ///
@@ -186,8 +210,8 @@ class DownloadMangaFolderProbe {
   /// [DownloadMangaFolderOnDisk.rootManifest]，绝不伪造成名为漫画目录的章容器
   /// （那样会写出不可用的 `<manga>/<manga>` 映射）。
   DownloadMangaFolderOnDisk toFolder() {
-    final MangaPagesManifest? value = manifest;
-    if (value == null) {
+    final List<MangaPagesManifest> all = manifests.toList(growable: false);
+    if (all.isEmpty) {
       return DownloadMangaFolderOnDisk(
         directory: directory,
         chapters: const <ChapterContainerOnDisk>[],
@@ -197,47 +221,102 @@ class DownloadMangaFolderProbe {
       return DownloadMangaFolderOnDisk(
         directory: directory,
         chapters: const <ChapterContainerOnDisk>[],
-        rootManifest: value,
+        rootManifest: all.first,
       );
     }
     return DownloadMangaFolderOnDisk(
       directory: directory,
       chapters: <ChapterContainerOnDisk>[
-        ChapterContainerOnDisk.folder(
-          containerName: mangaFolderName,
-          directory: directory,
-          manifest: value,
-        ),
+        for (int index = 0; index < all.length; index++)
+          ChapterContainerOnDisk.folder(
+            // 合成容器只是身份证据，名字不参与真磁盘映射。
+            containerName: index == 0
+                ? mangaFolderName
+                : '$mangaFolderName#${all[index].chapterKey}',
+            directory: directory,
+            manifest: all[index],
+          ),
       ],
     );
   }
 }
 
 /// 探测 `downloads/<source>/<manga>` 下每个 Manga 文件夹的身份。
+///
+/// [queries] 非空时按「同 Source 同标题可共享目录」补读 manifest：第一份
+/// manifest 属于另一部同名作品时继续读该目录，直到找到查询身份或目录读完。
+/// 没有同名疑点时仍只读第一份 manifest。
 Future<List<DownloadMangaFolderProbe>> probeDownloadLibraryFolders(
-  Directory root,
-) async {
+  Directory root, {
+  List<MangaDownloadDiskQuery> queries = const <MangaDownloadDiskQuery>[],
+}) async {
   final List<DownloadMangaFolderProbe> probes = <DownloadMangaFolderProbe>[];
   for (final Directory sourceDir in await listDownloadChildDirectories(root)) {
-    probes.addAll(await probeDownloadMangaFolders(sourceDir));
+    probes.addAll(await probeDownloadMangaFolders(sourceDir, queries: queries));
   }
   return probes;
 }
 
-/// 探测一个目录下直接子目录（Manga 文件夹）的第一份 manifest。
+/// 探测一个目录下直接子目录（Manga 文件夹）的 manifest 身份证据。
+///
+/// 见 [probeDownloadLibraryFolders]：普通目录只读第一份 manifest；共享目录
+/// （同名作品）按 [queries] 的需要继续读。
 Future<List<DownloadMangaFolderProbe>> probeDownloadMangaFolders(
-  Directory parent,
-) async {
+  Directory parent, {
+  List<MangaDownloadDiskQuery> queries = const <MangaDownloadDiskQuery>[],
+}) async {
   final List<DownloadMangaFolderProbe> probes = <DownloadMangaFolderProbe>[];
   for (final Directory mangaDir in await listDownloadChildDirectories(parent)) {
-    probes.add(
-      DownloadMangaFolderProbe(
-        directory: mangaDir,
-        manifest: await readFirstDownloadMangaManifest(mangaDir),
-      ),
-    );
+    probes.add(await _probeDownloadMangaFolder(mangaDir, queries));
   }
   return probes;
+}
+
+/// 读一个 Manga 文件夹的 manifest 身份证据。
+///
+/// 只读到「够用」为止：没有查询时只读第一份（保持旧的低成本探测）；有查询时
+/// 若第一份 manifest 是同一标题的另一部作品，就继续读，因为共享目录里本作品
+/// 的容器可能排在后面。标题不同则说明不是共享目录，停止。
+Future<DownloadMangaFolderProbe> _probeDownloadMangaFolder(
+  Directory mangaDir,
+  List<MangaDownloadDiskQuery> queries,
+) async {
+  final List<MangaPagesManifest> found = <MangaPagesManifest>[];
+  for (final FileSystemEntity entity
+      in await listDownloadChapterContainers(mangaDir)) {
+    final MangaPagesManifest? manifest = entity is Directory
+        ? await readPagesManifest(entity)
+        : await readDownloadLibraryArchiveManifest(entity as File);
+    if (manifest == null) continue;
+    found.add(manifest);
+    if (!_probeNeedsMoreManifests(queries, found)) break;
+  }
+  if (found.isEmpty) return DownloadMangaFolderProbe(directory: mangaDir);
+  return DownloadMangaFolderProbe(
+    directory: mangaDir,
+    manifest: found.first,
+    additionalManifests: found.skip(1).toList(growable: false),
+  );
+}
+
+/// [found] 是否还不足以回答 [queries]，需要继续读同一目录的 manifest。
+///
+/// 继续的唯一理由：某个查询身份还没被证明，而目录里已出现的 manifest 标题与
+/// 该查询标题完全相同——共享目录只发生在同标题作品之间。不同标题目录直接
+/// 判定「没有」。
+bool _probeNeedsMoreManifests(
+  List<MangaDownloadDiskQuery> queries,
+  List<MangaPagesManifest> found,
+) {
+  if (queries.isEmpty) return false;
+  final Set<String> foundTitles = <String>{
+    for (final MangaPagesManifest manifest in found) manifest.mangaTitle.trim(),
+  };
+  for (final MangaDownloadDiskQuery query in queries) {
+    if (found.any(query.identity.matchesManifest)) continue;
+    if (foundTitles.contains(query.title.trim())) return true;
+  }
+  return false;
 }
 
 /// 探测 Local source 根（`local/<manga>`）的 Manga 文件夹身份。
@@ -347,14 +426,7 @@ List<DownloadMangaFolderOnDisk> matchingDownloadMangaFolders(
 /// 目录里能证明身份的所有 manifest（章节容器 + 单章根 manifest）。
 Iterable<MangaPagesManifest> _folderManifests(
   DownloadMangaFolderOnDisk folder,
-) sync* {
-  final MangaPagesManifest? root = folder.rootManifest;
-  if (root != null) yield root;
-  for (final ChapterContainerOnDisk chapter in folder.chapters) {
-    final MangaPagesManifest? manifest = chapter.manifest;
-    if (manifest != null) yield manifest;
-  }
-}
+) => folder.manifests;
 
 /// 在 [folders] 里找能由 [identity] 的 `pages.json` 证明的漫画目录。
 ///

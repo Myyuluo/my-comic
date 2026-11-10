@@ -293,6 +293,7 @@ void main() {
     String mangaDir, {
     required String sourceId,
     required String seriesKey,
+    String mangaTitle = 'Fixture series',
     String chapterDirName = 'Chapter 1',
     String chapterKey = '/chapter/1',
     String chapterName = 'Chapter 1',
@@ -315,7 +316,7 @@ void main() {
         sourceName: 'Fixture',
         extensionPackage: extensionPackage,
         mangaKey: seriesKey,
-        mangaTitle: 'Fixture series',
+        mangaTitle: mangaTitle,
         chapterKey: chapterKey,
         chapterName: chapterName,
         payload: const MokuroPayload(
@@ -762,7 +763,7 @@ void main() {
     expect(Directory(beta.extractDir).existsSync(), isFalse);
   });
 
-  test('同一 Source 下同名 Manga 用确定 (2) 后缀', () async {
+  test('同一 Source 下同名不同作品共用同一漫画目录，不生成 (2)', () async {
     final EpubBookRow first = await service.add(
       entryVariant(
         sourceId: '1',
@@ -784,7 +785,101 @@ void main() {
     );
     expect(
       second.extractDir,
-      p.join(root.path, 'downloads', 'Fixture', 'Same title (2)'),
+      first.extractDir,
+      reason: '同一 Source 下标题完全相同的不同作品共用目录，与 Mihon 一致',
+    );
+    expect(
+      Directory(
+        p.join(root.path, 'downloads', 'Fixture', 'Same title (2)'),
+      ).existsSync(),
+      isFalse,
+      reason: '不同身份不因同名新建 (2) 目录',
+    );
+    expect(
+      Directory(first.extractDir).existsSync(),
+      isFalse,
+      reason: '入库仍然只解析路径，不创建目录',
+    );
+  });
+
+  test('清库后同名不同作品按磁盘 manifest 标题复用同一目录', () async {
+    final EpubBookRow first = await service.add(
+      entryVariant(
+        sourceId: '1',
+        seriesKey: '/series/a',
+        title: 'Same title',
+      ),
+    );
+    await Directory(first.extractDir).create(recursive: true);
+    await writeSourceManifest(
+      first.extractDir,
+      sourceId: '1',
+      seriesKey: '/series/a',
+      mangaTitle: 'Same title',
+      writePage: true,
+    );
+    await database.deleteEpubBook(first.bookKey);
+
+    final EpubBookRow second = await service.add(
+      entryVariant(
+        sourceId: '1',
+        seriesKey: '/series/b',
+        title: 'Same title',
+      ),
+    );
+
+    expect(
+      second.extractDir,
+      first.extractDir,
+      reason: 'manifest 标题证明这是同名作品，清库重开后仍然共享目录',
+    );
+    expect(
+      await database.getMangaChapterDir(second.bookKey, '/chapter/1'),
+      isNull,
+      reason: '共享目录里另一部作品的章节不得写进本作品的映射',
+    );
+    expect(
+      File(
+        p.join(first.extractDir, 'Chapter 1', '001.jpg'),
+      ).existsSync(),
+      isTrue,
+      reason: '共享不得删除另一部作品已下载的章',
+    );
+  });
+
+  test('净化后同名但标题不同的作品仍按 (2) 安全规则分目录', () async {
+    final EpubBookRow first = await service.add(
+      entryVariant(
+        sourceId: '1',
+        seriesKey: '/series/slash',
+        title: 'Same/title',
+      ),
+    );
+    await Directory(first.extractDir).create(recursive: true);
+    await writeSourceManifest(
+      first.extractDir,
+      sourceId: '1',
+      seriesKey: '/series/slash',
+      mangaTitle: 'Same/title',
+      writePage: true,
+    );
+
+    final EpubBookRow second = await service.add(
+      entryVariant(
+        sourceId: '1',
+        seriesKey: '/series/colon',
+        title: 'Same:title',
+      ),
+    );
+
+    expect(
+      first.extractDir,
+      p.join(root.path, 'downloads', 'Fixture', 'Same_title'),
+    );
+    expect(
+      second.extractDir,
+      p.join(root.path, 'downloads', 'Fixture', 'Same_title (2)'),
+      reason: '标题不同（只是净化后同名）不共享目录，保持原有冲突后缀',
     );
   });
 

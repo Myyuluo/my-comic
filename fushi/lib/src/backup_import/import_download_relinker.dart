@@ -63,11 +63,40 @@ Future<ImportDownloadRelinkReport> relinkImportedMangaDownloads({
     return const ImportDownloadRelinkReport();
   }
 
+  // 先解析本次导入的所有条目：探针需要标题来识别「同 Source 同标题共享目录」，
+  // 不能只看每个文件夹的第一份 manifest。
+  final List<
+    ({String bookKey, EpubBookRow row, OnlineMangaLibraryEntry entry})
+  >
+  books = <({String bookKey, EpubBookRow row, OnlineMangaLibraryEntry entry})>[];
+  for (final String bookKey in wanted) {
+    final EpubBookRow? row = await database.getEpubBook(bookKey);
+    if (row == null) continue;
+    final OnlineMangaLibraryEntry? entry = OnlineMangaLibraryEntry.tryParse(
+      row.sourceMetadata,
+    );
+    if (entry == null) continue;
+    books.add((bookKey: bookKey, row: row, entry: entry));
+  }
+  if (books.isEmpty) return const ImportDownloadRelinkReport();
+
   final List<DownloadMangaFolderOnDisk> downloadFolders = !scanDownloads
       ? const <DownloadMangaFolderOnDisk>[]
       : <DownloadMangaFolderOnDisk>[
           for (final DownloadMangaFolderProbe probe
-              in await probeDownloadLibraryFolders(downloadsRoot))
+              in await probeDownloadLibraryFolders(
+                downloadsRoot,
+                queries: <MangaDownloadDiskQuery>[
+                  for (final ({
+                    String bookKey,
+                    EpubBookRow row,
+                    OnlineMangaLibraryEntry entry,
+                  })
+                  book
+                      in books)
+                    MangaDownloadDiskQuery.ofEntry(book.entry),
+                ],
+              ))
             probe.toFolder(),
         ];
   final List<DownloadMangaFolderOnDisk> localFolders = !scanLocal
@@ -87,13 +116,16 @@ Future<ImportDownloadRelinkReport> relinkImportedMangaDownloads({
   int chaptersRelinked = 0;
   int chaptersSkipped = 0;
 
-  for (final String bookKey in wanted) {
-    final EpubBookRow? row = await database.getEpubBook(bookKey);
-    if (row == null) continue;
-    final OnlineMangaLibraryEntry? entry = OnlineMangaLibraryEntry.tryParse(
-      row.sourceMetadata,
-    );
-    if (entry == null) continue;
+  for (final ({
+    String bookKey,
+    EpubBookRow row,
+    OnlineMangaLibraryEntry entry,
+  })
+  book
+      in books) {
+    final String bookKey = book.bookKey;
+    final EpubBookRow row = book.row;
+    final OnlineMangaLibraryEntry entry = book.entry;
 
     final MangaDownloadIdentity identity = MangaDownloadIdentity.ofEntry(entry);
     final DownloadMangaFolderIdentityMatch match =

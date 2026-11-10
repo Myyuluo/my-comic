@@ -221,19 +221,24 @@ class DownloadLibraryIndex {
     if (downloaded.length == wanted.length) return downloaded;
     final MangaDownloadIdentity identity = MangaDownloadIdentity.ofEntry(entry);
     final MangaDownloadDiskIndex disk = await scanDisks(
-      identities: <MangaDownloadIdentity>[identity],
+      queries: <MangaDownloadDiskQuery>[
+        MangaDownloadDiskQuery.ofEntry(entry),
+      ],
     );
     downloaded.addAll(disk.downloadedChapterKeys(identity, wanted));
     return downloaded;
   }
 
   /// 扫描当前 Content root 的 `downloads` 与 `local`（只读 manifest 身份）。
+  ///
+  /// [queries] 带标题：同 Source 同标题的作品共享目录时，扫描会继续读同一
+  /// 文件夹里的其余 manifest，确保每部作品都能按自己的 `pages.json` 命中。
   Future<MangaDownloadDiskIndex> scanDisks({
-    required Iterable<MangaDownloadIdentity> identities,
+    required Iterable<MangaDownloadDiskQuery> queries,
   }) async => MangaDownloadDiskIndex.scan(
     downloadsRoot: await _downloadsRoot(),
     localComicRoot: localComicRoot,
-    identities: identities,
+    queries: queries,
   );
 
   /// 这批书里哪些**至少有一章完整落盘**（书架「已下载」筛选 / 页签数量的
@@ -366,7 +371,12 @@ class DownloadLibraryIndex {
     final MangaDownloadIdentity identity = MangaDownloadIdentity.ofEntry(entry);
     final List<DownloadMangaFolderOnDisk> folders = <DownloadMangaFolderOnDisk>[
       for (final DownloadMangaFolderProbe probe
-          in await probeDownloadLibraryFolders(await _downloadsRoot()))
+          in await probeDownloadLibraryFolders(
+            await _downloadsRoot(),
+            queries: <MangaDownloadDiskQuery>[
+              MangaDownloadDiskQuery.ofEntry(entry),
+            ],
+          ))
         probe.toFolder(),
     ];
     // 共享匹配器负责「恰好一个匹配 / 扩展包 tie-breaker / 多个不猜」；
@@ -405,11 +415,9 @@ class MangaDownloadDiskIndex {
   static Future<MangaDownloadDiskIndex> scan({
     required Directory? downloadsRoot,
     required Directory? localComicRoot,
-    required Iterable<MangaDownloadIdentity> identities,
+    required Iterable<MangaDownloadDiskQuery> queries,
   }) async {
-    final List<MangaDownloadIdentity> wanted = identities.toList(
-      growable: false,
-    );
+    final List<MangaDownloadDiskQuery> wanted = queries.toList(growable: false);
     final List<({MangaDownloadIdentity identity, Set<String> chapterKeys})>
     entries = <({MangaDownloadIdentity identity, Set<String> chapterKeys})>[];
     if (wanted.isEmpty) return MangaDownloadDiskIndex._(entries);
@@ -420,7 +428,11 @@ class MangaDownloadDiskIndex {
         <({List<DownloadMangaFolderProbe> probes, bool local})>[
           if (downloadsRoot != null)
             (
-              probes: await probeDownloadLibraryFolders(downloadsRoot),
+              probes: await probeDownloadLibraryFolders(
+                downloadsRoot,
+                // 共享目录：第一份 manifest 可能属于另一部同名作品。
+                queries: wanted,
+              ),
               local: false,
             ),
           if (localComicRoot != null)
@@ -435,15 +447,18 @@ class MangaDownloadDiskIndex {
               if (probe.manifest != null) probe.toFolder(),
           ];
       if (probeFolders.isEmpty) continue;
-      for (final MangaDownloadIdentity identity in wanted) {
+      for (final MangaDownloadDiskQuery query in wanted) {
         final DownloadMangaFolderOnDisk? folder =
-            matchDownloadMangaFolderByIdentity(probeFolders, identity).folder;
+            matchDownloadMangaFolderByIdentity(
+              probeFolders,
+              query.identity,
+            ).folder;
         if (folder == null) continue;
         entries.add((
-          identity: identity,
+          identity: query.identity,
           chapterKeys: await _completeChapterKeys(
             folder.directory,
-            identity,
+            query.identity,
             includeMangaRootManifest: root.local,
           ),
         ));
