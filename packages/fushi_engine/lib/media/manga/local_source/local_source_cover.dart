@@ -27,6 +27,187 @@ const int kLocalSourceCoverWidth = 600;
 /// 生成封面的 JPEG 质量。
 const int kLocalSourceCoverJpegQuality = 85;
 
+/// 第一页生成封面 sidecar 的 sentinel 前缀（ticket 02）。
+///
+/// 书架封面缓存（`MangaShelfCoverCache` 的 `.url` 侧车）既可能存远程签名 URL，
+/// 也可能存本地第一页 sentinel。前缀让展示层区分「真实来源封面」与「生成封面」，
+/// 从而在 Source 恢复后让真实封面优先。
+const String kLocalSourceGeneratedCoverSentinelPrefix = 'local-first-page:';
+
+/// 是否是本地第一页生成封面的 sentinel（而不是远程封面 URL）。
+bool isLocalSourceGeneratedCoverSentinel(String? value) =>
+    value != null && value.startsWith(kLocalSourceGeneratedCoverSentinelPrefix);
+
+/// 生成封面用的章节容器：文件夹章节目录或 CBZ 文件。
+///
+/// 只描述磁盘位置；读取与解码由 [generateLocalSourceFirstPageCover] 负责。
+class LocalSourceCoverContainer {
+  const LocalSourceCoverContainer.folder(this.path) : isArchive = false;
+
+  const LocalSourceCoverContainer.archive(this.path) : isArchive = true;
+
+  /// 容器绝对路径：文件夹章节目录，或 `.cbz` 文件。
+  final String path;
+
+  final bool isArchive;
+}
+
+/// 第一页生成封面的只读结果。
+class LocalSourceGeneratedCover {
+  const LocalSourceGeneratedCover({
+    required this.bytes,
+    required this.sentinel,
+  });
+
+  /// 缩放后的 JPEG 字节（宽 600、质量 85）。
+  final Uint8List bytes;
+
+  /// 容器本地文件 sentinel：规范路径 + 大小 + mtime。
+  ///
+  /// 写入 Program state 的 shelf cover 缓存 sidecar；容器替换或更新后 sentinel
+  /// 变化，缓存据此重新生成。
+  final String sentinel;
+}
+
+/// 从 [container] 的第一页生成封面字节，**不写任何文件**。
+///
+/// 复用 Local source 的页表规则：CBZ 取包根 `pages.json` 排出的第一页（缺失 /
+/// 损坏时回退图片名自然序），文件夹章节同样 `pages.json` 优先、否则自然序扫描
+/// 图片。`ComicInfo.xml` 等非图片条目天然被跳过。
+///
+/// 第一页缺失、容器读不了或解码失败返回 null；调用方保留占位并记日志。
+/// 已选中的第一页损坏时不会偷偷换下一页——那会让封面随损坏情况漂移。
+Future<LocalSourceGeneratedCover?> generateLocalSourceFirstPageCover(
+  LocalSourceCoverContainer container,
+) async {
+  if (container.isArchive) {
+    return _generateCoverFromArchive(container.path);
+  }
+  return _generateCoverFromFolder(container.path);
+}
+
+/// 只计算 [container] 第一页的 sentinel，不读取图片字节。
+///
+/// 书架每次重算时用它判断已缓存的生成封面是否过期；只有 sentinel 变化才重新
+/// 解码/编码，避免每帧都读一遍第一页。
+Future<String?> localSourceFirstPageCoverSentinel(
+  LocalSourceCoverContainer container,
+) async {
+  if (container.isArchive) {
+    LocalSourceArchive? archive;
+    try {
+      archive = LocalSourceArchive.open(container.path);
+      final List<LocalSourceArchivePage> pages = readLocalSourceArchivePages(
+        archive,
+      );
+      if (pages.isEmpty) return null;
+      final FileStat stat = await File(container.path).stat();
+      return _coverSentinel(canonicalPath: container.path, stat: stat);
+    } on Object {
+      return null;
+    } finally {
+      archive?.close();
+    }
+  }
+  try {
+    final List<LocalSourcePage> pages = await readLocalSourceChapterPages(
+      container.path,
+      isRootChapter: false,
+    );
+    if (pages.isEmpty) return null;
+    final File? pageFile = pages.first.file;
+    if (pageFile == null || !await pageFile.exists()) return null;
+    final FileStat stat = await pageFile.stat();
+    return _coverSentinel(canonicalPath: container.path, stat: stat);
+  } on Object {
+    return null;
+  }
+}
+
+Future<LocalSourceGeneratedCover?> _generateCoverFromArchive(
+  String archivePath,
+) async {
+  LocalSourceArchive? archive;
+  try {
+    archive = LocalSourceArchive.open(archivePath);
+    final List<LocalSourceArchivePage> pages = readLocalSourceArchivePages(
+      archive,
+    );
+    if (pages.isEmpty) return null;
+    final Uint8List? pageBytes = archive.readEntry(pages.first.relativePath);
+    if (pageBytes == null) return null;
+    final Uint8List? encoded = encodeLocalSourceCoverBytes(pageBytes);
+    if (encoded == null) return null;
+    final File file = File(archivePath);
+    final FileStat stat = await file.stat();
+    return LocalSourceGeneratedCover(
+      bytes: encoded,
+      sentinel: _coverSentinel(canonicalPath: file.path, stat: stat),
+    );
+  } on Object {
+    return null;
+  } finally {
+    archive?.close();
+  }
+}
+
+Future<LocalSourceGeneratedCover?> _generateCoverFromFolder(
+  String directoryPath,
+) async {
+  try {
+    final List<LocalSourcePage> pages = await readLocalSourceChapterPages(
+      directoryPath,
+      isRootChapter: false,
+    );
+    if (pages.isEmpty) return null;
+    final File? pageFile = pages.first.file;
+    if (pageFile == null) return null;
+    if (!await pageFile.exists()) return null;
+    final Uint8List pageBytes = await pageFile.readAsBytes();
+    final Uint8List? encoded = encodeLocalSourceCoverBytes(pageBytes);
+    if (encoded == null) return null;
+    final FileStat stat = await pageFile.stat();
+    // 文件夹容器没有稳定的「文件大小」，用实际第一页文件的 stat 判断内容变化；
+    // 容器路径仍是 sentinel 的规范路径。
+    return LocalSourceGeneratedCover(
+      bytes: encoded,
+      sentinel: _coverSentinel(canonicalPath: directoryPath, stat: stat),
+    );
+  } on Object {
+    return null;
+  }
+}
+
+String _coverSentinel({
+  required String canonicalPath,
+  required FileStat stat,
+}) =>
+    '$kLocalSourceGeneratedCoverSentinelPrefix'
+    '${p.canonicalize(canonicalPath)}|${stat.size}|'
+    '${stat.modified.millisecondsSinceEpoch}';
+
+/// 解码 → 按 EXIF 摆正 → 宽 600（不放大）→ JPEG 质量 85。
+/// 解不出 / 编码失败返回 null。
+Uint8List? encodeLocalSourceCoverBytes(Uint8List bytes) {
+  try {
+    final img.Image? decoded = img.decodeImage(bytes);
+    if (decoded == null || decoded.width <= 0 || decoded.height <= 0) {
+      return null;
+    }
+    final img.Image oriented = img.bakeOrientation(decoded);
+    final img.Image out = oriented.width > kLocalSourceCoverWidth
+        ? img.copyResize(
+            oriented,
+            width: kLocalSourceCoverWidth,
+            interpolation: img.Interpolation.average,
+          )
+        : oriented;
+    return img.encodeJpg(out, quality: kLocalSourceCoverJpegQuality);
+  } on Object {
+    return null;
+  }
+}
+
 /// 一次封面补齐尝试的结局。
 enum LocalSourceCoverOutcome {
   /// 已写入新的 `cover.jpg`。
@@ -87,7 +268,7 @@ class LocalSourceCoverService {
         outcome: LocalSourceCoverOutcome.unavailable,
       );
     }
-    final Uint8List? encoded = _encodeCover(pageBytes);
+    final Uint8List? encoded = encodeLocalSourceCoverBytes(pageBytes);
     if (encoded == null) {
       return const LocalSourceCoverResult(
         outcome: LocalSourceCoverOutcome.unavailable,
@@ -213,28 +394,6 @@ class LocalSourceCoverService {
       if (!await pageFile.exists()) return null;
       return await pageFile.readAsBytes();
     } on FileSystemException {
-      return null;
-    }
-  }
-
-  /// 解码 → 按 EXIF 摆正 → 宽 600（不放大）→ JPEG 质量 85。
-  /// 解不出 / 编码失败返回 null。
-  Uint8List? _encodeCover(Uint8List bytes) {
-    try {
-      final img.Image? decoded = img.decodeImage(bytes);
-      if (decoded == null || decoded.width <= 0 || decoded.height <= 0) {
-        return null;
-      }
-      final img.Image oriented = img.bakeOrientation(decoded);
-      final img.Image out = oriented.width > kLocalSourceCoverWidth
-          ? img.copyResize(
-              oriented,
-              width: kLocalSourceCoverWidth,
-              interpolation: img.Interpolation.average,
-            )
-          : oriented;
-      return img.encodeJpg(out, quality: kLocalSourceCoverJpegQuality);
-    } on Object {
       return null;
     }
   }

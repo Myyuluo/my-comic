@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:archive/archive_io.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter/painting.dart'
@@ -11,6 +13,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi/media.dart';
 import 'package:fushi/models.dart';
 import 'package:fushi_dictionary/fushi_dictionary.dart';
+import 'package:fushi/src/media/manga/library/manga_first_page_cover_service.dart';
 import 'package:fushi/src/media/manga/library/manga_shelf_cover_cache.dart';
 import 'package:fushi/src/media/manga/library/manga_shelf_cover_revision.dart';
 import 'package:fushi/src/media/manga/library/manga_shelf_cover_service.dart';
@@ -19,6 +22,8 @@ import 'package:fushi/src/media/manga/library/online_manga_library_service.dart'
 import 'package:fushi/src/media/manga/library/online_manga_runtime_adapter.dart';
 import 'package:fushi/src/utils/net/app_http_image.dart';
 import 'package:fushi_core/fushi_core.dart';
+import 'package:fushi_engine/media/manga/local_source/local_source_cover.dart';
+import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 
 import '../../helpers/test_platform_services.dart';
@@ -196,6 +201,7 @@ void main() {
     String bookKey = 'book-1',
     String? coverUrl = 'https://example.test/expired-signature.jpg',
     bool localCover = false,
+    List<OnlineMangaChapter> chapters = const <OnlineMangaChapter>[],
   }) async {
     final Directory extractDir = Directory(p.join(root.path, 'books', bookKey))
       ..createSync(recursive: true);
@@ -214,7 +220,7 @@ void main() {
         coverUrl: coverUrl,
         raw: const <String, Object?>{},
       ),
-      chapters: const <OnlineMangaChapter>[],
+      chapters: chapters,
     );
     await db.insertEpubBook(
       EpubBooksCompanion.insert(
@@ -230,6 +236,23 @@ void main() {
       ),
     );
     return extractDir.path;
+  }
+
+  File writeCbz(String path, Map<String, List<int>> entries) {
+    final Archive archive = Archive();
+    entries.forEach((String name, List<int> bytes) {
+      archive.addFile(ArchiveFile(name, bytes.length, bytes));
+    });
+    final File file = File(path);
+    file.parent.createSync(recursive: true);
+    file.writeAsBytesSync(ZipEncoder().encode(archive)!);
+    return file;
+  }
+
+  List<int> pngBytes({required img.Color color}) {
+    final img.Image image = img.Image(width: 900, height: 1200)
+      ..clear(color);
+    return img.encodePng(image);
   }
 
   Future<void> updateCoverUrl(String bookKey, String coverUrl) async {
@@ -411,7 +434,7 @@ void main() {
     expect(container.read(provider).valueOrNull!.single.imageUrl, url);
   });
 
-  test('持久封面缓存优先于本地封面文件，签名 URL 过期后书架仍显示', () async {
+  test('本地封面文件优先于持久封面缓存；真实远程字节保留在 Program state', () async {
     final String extractDir = await insertOnlineBook(
       localCover: true,
       coverUrl: 'https://example.test/expired-signature.jpg',
@@ -427,8 +450,8 @@ void main() {
     expect(item.imageUrl, startsWith('file://'));
     expect(
       Uri.parse(item.imageUrl!).toFilePath(),
-      cache.coverPathFor('book-1').path,
-      reason: '书架必须先命中按 bookKey 的持久封面缓存，而不是本地封面文件',
+      p.join(extractDir, 'cover.jpg'),
+      reason: 'ticket 02 的优先级：本地 cover.* 文件先于持久字节缓存',
     );
     expect(
       cache.coverPathFor('book-1').readAsBytesSync(),
@@ -720,8 +743,8 @@ void main() {
     final MediaItem second = await resolveShelfBook('book-1');
     expect(
       Uri.parse(second.imageUrl!).toFilePath(),
-      cache.coverPathFor('book-1').path,
-      reason: '持久缓存落盘后重新解析优先命中缓存',
+      p.join(localDir, 'cover.jpg'),
+      reason: '本地 cover.* 始终优先于持久字节缓存（ticket 02 封面优先级）',
     );
   });
 
@@ -755,5 +778,338 @@ void main() {
     expect(await bounded.storedSourceUrl('oldest'), isNull);
     expect(await bounded.storedSourceUrl('middle'), isNotNull);
     expect(downloadsDir.existsSync(), isFalse);
+  });
+
+  test('源未安装 + CBZ：书架懒生成第一页封面，revision 后立即显示', () async {
+    adapter.sourceAvailable = false;
+    const String bookKey = 'generated-book';
+    const String chapterKey = '/chapter/1';
+    final String extractDir = await insertOnlineBook(
+      bookKey: bookKey,
+      coverUrl: null,
+      chapters: const <OnlineMangaChapter>[
+        OnlineMangaChapter(
+          key: chapterKey,
+          name: 'Chapter 1',
+          number: 1,
+          raw: <String, Object?>{},
+        ),
+      ],
+    );
+    final File cbz = writeCbz(
+      p.join(extractDir, 'Ch 1.cbz'),
+      <String, List<int>>{
+        'ComicInfo.xml': utf8.encode('<ComicInfo/>'),
+        '001.png': pngBytes(color: img.ColorRgb8(255, 0, 0)),
+      },
+    );
+    await db.upsertMangaChapterDir(
+      bookKey: bookKey,
+      chapterKey: chapterKey,
+      folderName: 'Ch 1.cbz',
+      containerKind: MangaChapterContainerKind.archive,
+      updatedAt: 1,
+    );
+    final int before = MangaShelfCoverRevision.value;
+
+    final MediaItem first = await resolveShelfBook(bookKey);
+    expect(first.imageUrl, isNull, reason: '生成完成前书架显示占位，不阻塞渲染');
+    await ReaderFushiSource.debugWaitForShelfCoverRefreshes();
+    expect(
+      MangaShelfCoverRevision.value,
+      before + 1,
+      reason: '生成封面写入缓存后必须 bump revision，书架 provider 重算',
+    );
+
+    final MediaItem second = await resolveShelfBook(bookKey);
+    expect(second.imageUrl, startsWith('file://'));
+    expect(
+      Uri.parse(second.imageUrl!).toFilePath(),
+      cache.coverPathFor(bookKey).path,
+      reason: '书架卡必须使用 Program state 的第一页生成封面缓存',
+    );
+    final File cover = cache.coverPathFor(bookKey);
+    expect(img.decodeJpg(cover.readAsBytesSync())!.width, 600);
+    expect(
+      File(p.join(extractDir, 'cover.jpg')).existsSync(),
+      isFalse,
+      reason: '不得往 Content root / Download library 写 cover.jpg',
+    );
+    expect(cbz.existsSync(), isTrue, reason: '不得移动或解压原 CBZ');
+  });
+
+  test('本地 cover.* 优先于生成封面：有本地封面时不生成、不写缓存', () async {
+    adapter.sourceAvailable = false;
+    const String bookKey = 'local-priority';
+    const String chapterKey = '/chapter/1';
+    final String extractDir = await insertOnlineBook(
+      bookKey: bookKey,
+      coverUrl: null,
+      localCover: true,
+      chapters: const <OnlineMangaChapter>[
+        OnlineMangaChapter(
+          key: chapterKey,
+          name: 'Chapter 1',
+          number: 1,
+          raw: <String, Object?>{},
+        ),
+      ],
+    );
+    writeCbz(p.join(extractDir, 'Ch 1.cbz'), <String, List<int>>{
+      '001.png': pngBytes(color: img.ColorRgb8(255, 0, 0)),
+    });
+    await db.upsertMangaChapterDir(
+      bookKey: bookKey,
+      chapterKey: chapterKey,
+      folderName: 'Ch 1.cbz',
+      containerKind: MangaChapterContainerKind.archive,
+      updatedAt: 1,
+    );
+
+    final MediaItem item = await resolveShelfBook(bookKey);
+    await ReaderFushiSource.debugWaitForShelfCoverRefreshes();
+
+    expect(
+      Uri.parse(item.imageUrl!).toFilePath(),
+      p.join(extractDir, 'cover.jpg'),
+      reason: '本地 cover.* 必须优先于第一页生成封面',
+    );
+    expect(
+      await cache.hasCover(bookKey),
+      isFalse,
+      reason: '已有本地封面时不应生成/缓存第一页封面',
+    );
+    expect(MangaShelfCoverRevision.value, 0);
+  });
+
+  test('来源可用且当前封面 URL 存在：使用来源封面，不生成第一页封面', () async {
+    adapter.sourceAvailable = true;
+    const String bookKey = 'remote-priority';
+    const String chapterKey = '/chapter/1';
+    final String extractDir = await insertOnlineBook(
+      bookKey: bookKey,
+      coverUrl: 'https://example.test/current.jpg',
+      chapters: const <OnlineMangaChapter>[
+        OnlineMangaChapter(
+          key: chapterKey,
+          name: 'Chapter 1',
+          number: 1,
+          raw: <String, Object?>{},
+        ),
+      ],
+    );
+    writeCbz(p.join(extractDir, 'Ch 1.cbz'), <String, List<int>>{
+      '001.png': pngBytes(color: img.ColorRgb8(255, 0, 0)),
+    });
+    await db.upsertMangaChapterDir(
+      bookKey: bookKey,
+      chapterKey: chapterKey,
+      folderName: 'Ch 1.cbz',
+      containerKind: MangaChapterContainerKind.archive,
+      updatedAt: 1,
+    );
+
+    final MediaItem item = await resolveShelfBook(bookKey);
+    expect(item.imageUrl, 'https://example.test/current.jpg');
+    await ReaderFushiSource.debugWaitForShelfCoverRefreshes();
+
+    expect(
+      await cache.storedSourceUrl(bookKey),
+      'https://example.test/current.jpg',
+      reason: '来源当前封面优先；持久缓存侧车应是 URL 而不是本地 sentinel',
+    );
+    expect(
+      await (MangaFirstPageCoverService(
+        database: db,
+        cache: cache,
+      )).cachedGeneratedCoverUrl(bookKey),
+      isNull,
+    );
+    expect(
+      File(p.join(extractDir, 'cover.jpg')).existsSync(),
+      isFalse,
+    );
+  });
+
+  test('容器更新后重新生成封面，revision 让书架拿到新图', () async {
+    adapter.sourceAvailable = false;
+    const String bookKey = 'container-change';
+    const String chapterKey = '/chapter/1';
+    final String extractDir = await insertOnlineBook(
+      bookKey: bookKey,
+      coverUrl: null,
+      chapters: const <OnlineMangaChapter>[
+        OnlineMangaChapter(
+          key: chapterKey,
+          name: 'Chapter 1',
+          number: 1,
+          raw: <String, Object?>{},
+        ),
+      ],
+    );
+    final File cbz = writeCbz(
+      p.join(extractDir, 'Ch 1.cbz'),
+      <String, List<int>>{
+        '001.png': pngBytes(color: img.ColorRgb8(255, 0, 0)),
+      },
+    );
+    await db.upsertMangaChapterDir(
+      bookKey: bookKey,
+      chapterKey: chapterKey,
+      folderName: 'Ch 1.cbz',
+      containerKind: MangaChapterContainerKind.archive,
+      updatedAt: 1,
+    );
+
+    await resolveShelfBook(bookKey);
+    await ReaderFushiSource.debugWaitForShelfCoverRefreshes();
+    final File cover = cache.coverPathFor(bookKey);
+    expect(img.decodeJpg(cover.readAsBytesSync())!.getPixel(10, 10).r,
+        greaterThan(200));
+    final int firstRevision = MangaShelfCoverRevision.value;
+    final String firstSentinel = (await cache.storedSourceUrl(bookKey))!;
+
+    await Future<void>.delayed(const Duration(seconds: 1));
+    writeCbz(p.join(extractDir, 'Ch 1.cbz'), <String, List<int>>{
+      '001.png': pngBytes(color: img.ColorRgb8(0, 0, 255)),
+    });
+    expect(cbz.existsSync(), isTrue);
+
+    await resolveShelfBook(bookKey);
+    await ReaderFushiSource.debugWaitForShelfCoverRefreshes();
+
+    expect(MangaShelfCoverRevision.value, greaterThan(firstRevision));
+    expect(await cache.storedSourceUrl(bookKey), isNot(firstSentinel));
+    expect(
+      img.decodeJpg(cover.readAsBytesSync())!.getPixel(10, 10).b,
+      greaterThan(200),
+      reason: '容器变化后书架必须显示重新生成的第一页封面',
+    );
+  });
+
+  test('坏页 / 坏容器保留占位：不崩溃、不写缓存、不 bump revision', () async {
+    adapter.sourceAvailable = false;
+    const String bookKey = 'broken-page';
+    const String chapterKey = '/chapter/1';
+    final String extractDir = await insertOnlineBook(
+      bookKey: bookKey,
+      coverUrl: null,
+      chapters: const <OnlineMangaChapter>[
+        OnlineMangaChapter(
+          key: chapterKey,
+          name: 'Chapter 1',
+          number: 1,
+          raw: <String, Object?>{},
+        ),
+      ],
+    );
+    File(p.join(extractDir, 'Ch 1.cbz'))
+      ..createSync(recursive: true)
+      ..writeAsBytesSync(<int>[1, 2, 3]);
+    await db.upsertMangaChapterDir(
+      bookKey: bookKey,
+      chapterKey: chapterKey,
+      folderName: 'Ch 1.cbz',
+      containerKind: MangaChapterContainerKind.archive,
+      updatedAt: 1,
+    );
+
+    final MediaItem item = await resolveShelfBook(bookKey);
+    await ReaderFushiSource.debugWaitForShelfCoverRefreshes();
+
+    expect(item.imageUrl, isNull, reason: '坏容器不得让书架崩溃，保持占位');
+    expect(await cache.hasCover(bookKey), isFalse);
+    expect(MangaShelfCoverRevision.value, 0);
+  });
+
+  test('来源恢复可用并成功取得真实封面后替换生成封面', () async {
+    adapter.sourceAvailable = false;
+    const String bookKey = 'source-recovered';
+    const String chapterKey = '/chapter/1';
+    const String remoteUrl = 'https://example.test/recovered.jpg';
+    final String extractDir = await insertOnlineBook(
+      bookKey: bookKey,
+      coverUrl: remoteUrl,
+      chapters: const <OnlineMangaChapter>[
+        OnlineMangaChapter(
+          key: chapterKey,
+          name: 'Chapter 1',
+          number: 1,
+          raw: <String, Object?>{},
+        ),
+      ],
+    );
+    writeCbz(p.join(extractDir, 'Ch 1.cbz'), <String, List<int>>{
+      '001.png': pngBytes(color: img.ColorRgb8(255, 0, 0)),
+    });
+    await db.upsertMangaChapterDir(
+      bookKey: bookKey,
+      chapterKey: chapterKey,
+      folderName: 'Ch 1.cbz',
+      containerKind: MangaChapterContainerKind.archive,
+      updatedAt: 1,
+    );
+
+    await resolveShelfBook(bookKey);
+    await ReaderFushiSource.debugWaitForShelfCoverRefreshes();
+    final MediaItem generated = await resolveShelfBook(bookKey);
+    expect(
+      Uri.parse(generated.imageUrl!).toFilePath(),
+      cache.coverPathFor(bookKey).path,
+    );
+    expect(
+      isLocalSourceGeneratedCoverSentinel(await cache.storedSourceUrl(bookKey)),
+      isTrue,
+    );
+
+    // 来源恢复：设备上来源可用，当前封面 URL 能取到真实字节。可用性判定在
+    // 一次书架解析内按来源缓存；重新装配服务模拟下一次解析 / 重启。
+    adapter.sourceAvailable = true;
+    service = MangaShelfCoverService(
+      cache: cache,
+      serviceFor: (OnlineMangaRuntimeKind _) => library,
+    );
+    ReaderFushiSource.debugShelfCoverService = service;
+    final MediaItem withRemote = await resolveShelfBook(bookKey);
+    expect(withRemote.imageUrl, remoteUrl, reason: '来源当前封面重新高于生成封面');
+    await ReaderFushiSource.debugWaitForShelfCoverRefreshes();
+
+    expect(
+      await cache.storedSourceUrl(bookKey),
+      remoteUrl,
+      reason: '成功取得真实封面后替换生成封面的 sentinel',
+    );
+    expect(
+      await (MangaFirstPageCoverService(
+        database: db,
+        cache: cache,
+      )).cachedGeneratedCoverUrl(bookKey),
+      isNull,
+    );
+    final MediaItem real = await resolveShelfBook(bookKey);
+    expect(
+      Uri.parse(real.imageUrl!).toFilePath(),
+      cache.coverPathFor(bookKey).path,
+      reason: '真实封面字节落盘后书架命中同一缓存文件的新内容',
+    );
+  });
+
+  test('生成封面不影响真实封面缓存的读取；来源缺失时使用生成封面', () async {
+    final String extractDir = await insertOnlineBook(
+      bookKey: 'no-remote',
+      coverUrl: null,
+    );
+    await cache.store(
+      bookKey: 'no-remote',
+      sourceUrl: 'https://example.test/stale.jpg',
+      bytes: _pngBytes,
+    );
+    final MediaItem item = await resolveShelfBook('no-remote');
+    expect(
+      Uri.parse(item.imageUrl!).toFilePath(),
+      cache.coverPathFor('no-remote').path,
+      reason: '来源缺失但已有真实持久缓存时继续显示缓存，不生成第一页',
+    );
+    expect(Directory(extractDir).existsSync(), isTrue);
   });
 }

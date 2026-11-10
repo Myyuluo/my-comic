@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:archive/archive_io.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:material_ui/material_ui.dart';
@@ -8,7 +10,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi/i18n/strings.g.dart';
 import 'package:fushi/models.dart';
+import 'package:fushi/src/media/manga/library/manga_first_page_cover_service.dart';
 import 'package:fushi/src/media/manga/library/manga_series_page.dart';
+import 'package:fushi/src/media/manga/library/manga_shelf_cover_cache.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_service.dart';
 import 'package:fushi/src/media/manga/library/online_manga_runtime_adapter.dart';
@@ -19,6 +23,7 @@ import 'package:fushi/src/platform/platform_providers.dart';
 import 'package:fushi/src/utils/net/app_http_image.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi_engine/epub/epub_storage.dart';
+import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 
 import '../../helpers/pump_until.dart';
@@ -34,8 +39,12 @@ class _FakeAdapter implements OnlineMangaRuntimeAdapter {
   @override
   bool get isSupportedOnThisPlatform => true;
 
+  /// null = 来源未安装 / 停用（作品页按缺失来源降级）。
+  String? sourceLabelValue = 'Fake';
+
   @override
-  Future<String?> sourceLabel(OnlineMangaLibraryEntry entry) async => 'Fake';
+  Future<String?> sourceLabel(OnlineMangaLibraryEntry entry) async =>
+      sourceLabelValue;
 
   int refreshCalls = 0;
 
@@ -154,6 +163,7 @@ void main() {
   });
 
   tearDown(() async {
+    MangaFirstPageCoverService.debugServiceOverride = null;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
           const MethodChannel('plugins.flutter.io/path_provider'),
@@ -190,6 +200,23 @@ void main() {
       ),
     );
     return (bookKey: bookKey, extractDir: extractDir);
+  }
+
+  File writeCbz(String path, Map<String, List<int>> entries) {
+    final Archive archive = Archive();
+    entries.forEach((String name, List<int> bytes) {
+      archive.addFile(ArchiveFile(name, bytes.length, bytes));
+    });
+    final File file = File(path);
+    file.parent.createSync(recursive: true);
+    file.writeAsBytesSync(ZipEncoder().encode(archive)!);
+    return file;
+  }
+
+  List<int> pngBytes() {
+    final img.Image image = img.Image(width: 900, height: 1200)
+      ..clear(img.ColorRgb8(255, 0, 0));
+    return img.encodePng(image);
   }
 
   Future<void> pumpTarget(
@@ -543,6 +570,115 @@ void main() {
         reason: '详情已成功：章节失败也要先把新封面 URL 落库',
       );
       expect(kept.chapters, hasLength(1), reason: '旧章节不清空');
+    });
+  });
+
+  testWidgets('来源未安装 + 本地 CBZ：作品页显示第一页生成封面，不请求过期远程封面', (
+    WidgetTester tester,
+  ) async {
+    final _FakeAdapter adapter = _FakeAdapter()..sourceLabelValue = null;
+    final OnlineMangaLibraryService library = OnlineMangaLibraryService(
+      database: db,
+      rootDirectory: Directory(p.join(root.path, 'legacy')),
+      adapter: adapter,
+    );
+    final _TestAppModel appModel = _TestAppModel(db, library, root);
+    final MangaShelfCoverCache cache = MangaShelfCoverCache(
+      Directory(p.join(root.path, 'cache', 'shelf_covers')),
+    );
+    MangaFirstPageCoverService.debugServiceOverride =
+        MangaFirstPageCoverService(database: db, cache: cache);
+
+    await tester.runAsync(() async {
+      final ({String bookKey, String extractDir}) row =
+          await insertImportedSeries(
+            coverUrl: 'https://example.test/expired-signature.jpg',
+          );
+      writeCbz(p.join(row.extractDir, 'Ch 1.cbz'), <String, List<int>>{
+        'ComicInfo.xml': utf8.encode('<ComicInfo/>'),
+        '001.png': pngBytes(),
+      });
+
+      await pumpSeriesPage(tester, appModel, row.bookKey);
+      final File cover = cache.coverPathFor(row.bookKey);
+      await pumpUntilFound(
+        tester,
+        find.byWidgetPredicate(
+          (Widget widget) =>
+              widget is Image &&
+              widget.image is FileImage &&
+              (widget.image as FileImage).file.path == cover.path,
+        ),
+      );
+
+      expect(
+        img.decodeJpg(cover.readAsBytesSync())!.width,
+        600,
+        reason: '作品页必须显示从第一页生成的封面字节',
+      );
+      expect(find.byType(MangaCoverPlaceholder), findsNothing);
+      expect(
+        File(p.join(row.extractDir, 'cover.jpg')).existsSync(),
+        isFalse,
+        reason: '生成封面只落 Program state 缓存，不写 Content root',
+      );
+      expect(
+        tester
+            .widgetList<Image>(find.byType(Image))
+            .any((Image image) => image.image is AppCachedHttpImage),
+        isFalse,
+        reason: '来源未安装时不得请求过期远程封面',
+      );
+    });
+  });
+
+  testWidgets('来源未安装但已有持久封面字节：作品页先显示缓存，不回退占位', (
+    WidgetTester tester,
+  ) async {
+    final _FakeAdapter adapter = _FakeAdapter()..sourceLabelValue = null;
+    final OnlineMangaLibraryService library = OnlineMangaLibraryService(
+      database: db,
+      rootDirectory: Directory(p.join(root.path, 'legacy')),
+      adapter: adapter,
+    );
+    final _TestAppModel appModel = _TestAppModel(db, library, root);
+    final MangaShelfCoverCache cache = MangaShelfCoverCache(
+      Directory(p.join(root.path, 'cache', 'shelf_covers')),
+    );
+    MangaFirstPageCoverService.debugServiceOverride =
+        MangaFirstPageCoverService(database: db, cache: cache);
+
+    await tester.runAsync(() async {
+      final ({String bookKey, String extractDir}) row =
+          await insertImportedSeries(
+            coverUrl: 'https://example.test/expired-signature.jpg',
+          );
+      await cache.store(
+        bookKey: row.bookKey,
+        sourceUrl: 'https://example.test/expired-signature.jpg',
+        bytes: pngBytes(),
+      );
+
+      await pumpSeriesPage(tester, appModel, row.bookKey);
+      final String coverPath = cache.coverPathFor(row.bookKey).path;
+      await pumpUntilFound(
+        tester,
+        find.byWidgetPredicate(
+          (Widget widget) =>
+              widget is Image &&
+              widget.image is FileImage &&
+              (widget.image as FileImage).file.path == coverPath,
+        ),
+      );
+
+      expect(find.byType(MangaCoverPlaceholder), findsNothing);
+      expect(
+        tester
+            .widgetList<Image>(find.byType(Image))
+            .any((Image image) => image.image is AppCachedHttpImage),
+        isFalse,
+        reason: '来源未安装时先显示持久缓存，不发起远程封面请求',
+      );
     });
   });
 }

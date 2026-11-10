@@ -22,6 +22,7 @@ import 'package:fushi/src/media/manga/interconnect/interconnect_manga_source.dar
     show InterconnectMangaCatalog;
 import 'package:fushi/src/media/manga/library/manga_adjacent_chapter.dart'
     show mangaReadingOrder;
+import 'package:fushi/src/media/manga/library/manga_first_page_cover_service.dart';
 import 'package:fushi/src/media/manga/library/manga_shelf_cover_cache.dart';
 import 'package:fushi/src/media/manga/library/manga_shelf_cover_revision.dart';
 import 'package:fushi/src/media/manga/library/manga_shelf_cover_service.dart';
@@ -655,11 +656,24 @@ class ReaderFushiSource extends ReaderMediaSource {
     final Map<String, Map<String, MangaChapterStateRow>> chapterStates =
         await db.getMangaChapterStatesForBookUids(books.map((b) => b.uid));
 
-    // 票 07：书架封面先查按 bookKey 的 Program state 持久字节缓存；没有时才走
-    // 本地封面文件 / 远程 URL。缓存根不可用（启动早期）时传 null，行为回落。
+    // 票 02：书架封面优先级为本地 cover.* → 来源当前封面（含按 bookKey 的
+    // Program state 持久字节缓存）→ 第一页生成封面 → 占位。缓存根不可用
+    // （启动早期）时传 null，行为回落。
     final MangaShelfCoverService? shelfCoverService = _shelfCoverServiceFor(
       appModel,
     );
+    // ticket 02：第一页生成封面与书架持久缓存共用同一份 Program state 缓存
+    // 目录；缺封面时懒生成，成功后经 ticket 01 的 revision 刷新书架。
+    final MangaFirstPageCoverService? firstPageCoverService =
+        shelfCoverService != null
+        ? MangaFirstPageCoverService(
+            database: db,
+            cache: shelfCoverService.cache,
+          )
+        : MangaFirstPageCoverService.forAppCache(
+            database: db,
+            cacheRoot: appModel.appPathsOrNull?.cacheRoot,
+          );
 
     // HBK-AUDIT-128: previously this was a serial for-loop where every book
     // awaited up to four File.exists() cover probes one after another, so
@@ -676,6 +690,7 @@ class ReaderFushiSource extends ReaderMediaSource {
               : chapterStates[book.uid] ??
                     const <String, MangaChapterStateRow>{},
           shelfCoverService: shelfCoverService,
+          firstPageCoverService: firstPageCoverService,
         ),
       ),
     );
@@ -727,6 +742,19 @@ class ReaderFushiSource extends ReaderMediaSource {
     OnlineMangaLibraryEntry entry,
   ) {
     final Future<void> pending = service.refreshIfNeeded(entry, bookKey);
+    _pendingShelfCoverRefreshes.add(pending);
+    unawaited(
+      pending.whenComplete(() => _pendingShelfCoverRefreshes.remove(pending)),
+    );
+  }
+
+  /// 第一页生成封面的后台订阅（ticket 02）：与远程封面刷新共用同一份 pending
+  /// 集合，测试用 [debugWaitForShelfCoverRefreshes] 等它们落盘。
+  static void _scheduleFirstPageCoverGeneration(
+    MangaFirstPageCoverService service,
+    EpubBookRow book,
+  ) {
+    final Future<void> pending = service.generateIfNeeded(book);
     _pendingShelfCoverRefreshes.add(pending);
     unawaited(
       pending.whenComplete(() => _pendingShelfCoverRefreshes.remove(pending)),
@@ -852,6 +880,7 @@ class ReaderFushiSource extends ReaderMediaSource {
     Map<String, MangaChapterStateRow> chapterStates =
         const <String, MangaChapterStateRow>{},
     MangaShelfCoverService? shelfCoverService,
+    MangaFirstPageCoverService? firstPageCoverService,
   }) async {
     int position = 0;
     int duration = 1;
@@ -941,17 +970,26 @@ class ReaderFushiSource extends ReaderMediaSource {
     position = prog.position;
     duration = prog.duration;
 
-    // 票 07：在线条目的书架封面解析顺序——
-    // 按 bookKey 的持久封面缓存 → 本地封面文件 → 已保存的远程封面 URL
-    // （现有 HTTP 图片缓存）→ 占位。
-    final String? cachedShelfCover = onlineEntry == null
-        ? null
-        : await shelfCoverService?.cachedCoverUrl(book.bookKey);
-    String? imageUrl;
-    if (cachedShelfCover != null) {
-      imageUrl = cachedShelfCover;
-    } else {
-      imageUrl = await _resolveCoverUrl(book);
+    // 票 02：书架封面解析顺序——
+    // 本地 `cover.*` 文件 → 可用 Source 的当前封面（含按 bookKey 的持久字节
+    // 缓存）→ 第一页生成封面 → 占位。
+    String? imageUrl = await _resolveCoverUrl(book);
+    if (imageUrl == null && onlineEntry != null && shelfCoverService != null) {
+      final String? cachedShelfCover = await shelfCoverService.cachedCoverUrl(
+        book.bookKey,
+      );
+      // 持久缓存与生成封面共用一份文件；生成封面优先级低于来源当前封面，
+      // 因此只有 sidecar 是真实 URL 时才在这里采用。
+      final bool cachedIsGenerated =
+          cachedShelfCover != null &&
+          firstPageCoverService != null &&
+          await firstPageCoverService.cachedGeneratedCoverUrl(book.bookKey) !=
+              null;
+      if (cachedShelfCover != null && !cachedIsGenerated) {
+        imageUrl = cachedShelfCover;
+      }
+    }
+    if (imageUrl == null && onlineEntry != null) {
       // 导入的在线漫画（Mihon 备份）通常没有本地封面文件，备份只带远程
       // `series.coverUrl`。本地探测全落空时回退到它，交给 `MediaItem.imageUrl`
       // 的现有 HTTP 图片缓存（`AppCachedHttpImage`）懒加载。
@@ -960,14 +998,22 @@ class ReaderFushiSource extends ReaderMediaSource {
       // 显示占位（票 09）。可用性判定只读数据库，不联网、不逐本抓封面。它**不**
       // 写入 [_lastGoodCoverUrlByBookKey]：那份进程缓存只存磁盘上真实存在过的
       // `file://` URL（BUG-513），混入远程地址会破坏离线语义。
-      if (imageUrl == null) {
-        final String? remoteCoverUrl = onlineEntry?.series.coverUrl?.trim();
-        if (remoteCoverUrl != null &&
-            remoteCoverUrl.isNotEmpty &&
-            await _canUseShelfRemoteCover(shelfCoverService, onlineEntry)) {
-          imageUrl = remoteCoverUrl;
-        }
+      final String? remoteCoverUrl = onlineEntry.series.coverUrl?.trim();
+      if (remoteCoverUrl != null &&
+          remoteCoverUrl.isNotEmpty &&
+          await _canUseShelfRemoteCover(shelfCoverService, onlineEntry)) {
+        imageUrl = remoteCoverUrl;
       }
+    }
+    // 本地 / 来源封面都不可用：先显示已有生成缓存，并在后台按容器 sentinel
+    // 检查是否需要重新生成；成功后 bump ticket 01 的 revision。
+    if (imageUrl == null &&
+        format == BookFormat.manga &&
+        firstPageCoverService != null) {
+      imageUrl = await firstPageCoverService.cachedGeneratedCoverUrl(
+        book.bookKey,
+      );
+      _scheduleFirstPageCoverGeneration(firstPageCoverService, book);
     }
     // 只要没有持久字节缓存或来源 URL 变了，就在后台刷新一份；即使当前显示的是
     // 本地封面也一样（本地封面不影响持久缓存对新签名 URL 的自愈）。失败保留
