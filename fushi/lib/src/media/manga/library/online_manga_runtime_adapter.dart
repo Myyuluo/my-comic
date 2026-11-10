@@ -576,7 +576,8 @@ class MihonLibraryAdapter
         preferences: context.preferences,
       );
       return <OnlineMangaChapter>[
-        for (final MihonChapter chapter in chapters) _chapterFrom(chapter),
+        for (int index = 0; index < chapters.length; index++)
+          _chapterFrom(chapters[index], sourceOrder: index),
       ];
     } on Object catch (error) {
       final int? contentId = ComicoMagazineComicQuirk.contentIdOf(seriesKey);
@@ -605,9 +606,10 @@ class MihonLibraryAdapter
         throw error;
       }
       return <OnlineMangaChapter>[
-        for (final MihonChapter chapter in chapters)
+        for (int index = 0; index < chapters.length; index++)
           _chapterFrom(
-            chapter,
+            chapters[index],
+            sourceOrder: index,
             extraRaw: const <String, Object?>{
               ComicoMagazineComicQuirk.rawMarkerKey:
                   ComicoMagazineComicQuirk.rawMarkerValue,
@@ -812,8 +814,11 @@ class MihonLibraryAdapter
     );
   }
 
+  /// [sourceOrder] 由调用方按源列表下标给出（0 = 最新一话）；单独取一章
+  /// （[chapterOf]）时没有列表上下文，保持 null，由章节号 / 日期回退。
   static OnlineMangaChapter _chapterFrom(
     MihonChapter chapter, {
+    int? sourceOrder,
     Map<String, Object?> extraRaw = const <String, Object?>{},
   }) => OnlineMangaChapter(
     key: chapter.url,
@@ -821,6 +826,7 @@ class MihonLibraryAdapter
     scanlator: chapter.scanlator,
     number: chapter.number,
     uploadedAt: chapter.uploadedAt <= 0 ? null : chapter.uploadedAt,
+    sourceOrder: sourceOrder,
     locked: OnlineMangaChapter.isLockedChapterName(chapter.name),
     raw: <String, Object?>{...chapter.toJson(), ...extraRaw},
   );

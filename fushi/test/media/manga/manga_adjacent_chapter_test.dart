@@ -6,14 +6,21 @@ import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 
 import '../../helpers/source_guard.dart';
 
-OnlineMangaChapter _chapter(String key, {double? number, String? scanlator}) =>
-    OnlineMangaChapter(
-      key: key,
-      name: key,
-      number: number,
-      scanlator: scanlator,
-      raw: const <String, Object?>{},
-    );
+OnlineMangaChapter _chapter(
+  String key, {
+  double? number,
+  String? scanlator,
+  int? uploadedAt,
+  int? sourceOrder,
+}) => OnlineMangaChapter(
+  key: key,
+  name: key,
+  number: number,
+  scanlator: scanlator,
+  uploadedAt: uploadedAt,
+  sourceOrder: sourceOrder,
+  raw: const <String, Object?>{},
+);
 
 void main() {
   // 源顺序是新→旧：下标 0 = 最新一话。
@@ -206,6 +213,220 @@ void main() {
           1,
         );
       });
+    });
+  });
+
+  group('reading order is independent of the stored array order', () {
+    test(
+      'imported chapters with known numbers read 1 → 2 → 3 by sourceOrder',
+      () {
+        // 备份数组顺序（旧→新）不是契约：这里再打乱一次，只用 sourceOrder 定位。
+        final List<OnlineMangaChapter> imported = <OnlineMangaChapter>[
+          _chapter('c2', number: 2, sourceOrder: 1),
+          _chapter('c3', number: 3, sourceOrder: 0),
+          _chapter('c1', number: 1, sourceOrder: 2),
+        ];
+
+        expect(
+          resolveAdjacentMangaChapter(
+            chapters: imported,
+            currentIndex: 2, // c1
+            forward: true,
+          ),
+          0, // c2
+        );
+        expect(
+          resolveAdjacentMangaChapter(
+            chapters: imported,
+            currentIndex: 0, // c2
+            forward: true,
+          ),
+          1, // c3
+        );
+        expect(
+          resolveAdjacentMangaChapter(
+            chapters: imported,
+            currentIndex: 1, // c3 = newest
+            forward: true,
+          ),
+          isNull,
+          reason: '真正最后一话才提示「已经是最新一章」',
+        );
+        expect(
+          resolveAdjacentMangaChapter(
+            chapters: imported,
+            currentIndex: 0, // c2
+            forward: false,
+          ),
+          2, // c1
+        );
+        expect(
+          resolveAdjacentMangaChapter(
+            chapters: imported,
+            currentIndex: 2, // c1 = oldest
+            forward: false,
+          ),
+          isNull,
+        );
+      },
+    );
+
+    test('unknown numbers and dates still read by sourceOrder', () {
+      final List<OnlineMangaChapter> customTitles = <OnlineMangaChapter>[
+        _chapter('extra-b', sourceOrder: 1),
+        _chapter('extra-c', sourceOrder: 2),
+        _chapter('extra-a', sourceOrder: 0),
+      ];
+
+      expect(
+        resolveAdjacentMangaChapter(
+          chapters: customTitles,
+          currentIndex: 2, // extra-a = sourceOrder 0 = newest
+          forward: true,
+        ),
+        isNull,
+        reason: '真正最后一话才提示「已经是最新一章」',
+      );
+      expect(
+        resolveAdjacentMangaChapter(
+          chapters: customTitles,
+          currentIndex: 2,
+          forward: false,
+        ),
+        0,
+        reason: 'extra-a（最新）往回翻 → extra-b',
+      );
+      expect(
+        resolveAdjacentMangaChapter(
+          chapters: customTitles,
+          currentIndex: 0, // extra-b = sourceOrder 1
+          forward: true,
+        ),
+        2,
+        reason: 'extra-b 往后读 → extra-a（最新）',
+      );
+      expect(
+        resolveAdjacentMangaChapter(
+          chapters: customTitles,
+          currentIndex: 0,
+          forward: false,
+        ),
+        1,
+        reason: 'extra-b 往回翻 → extra-c（最旧）',
+      );
+      expect(
+        resolveAdjacentMangaChapter(
+          chapters: customTitles,
+          currentIndex: 1, // extra-c = sourceOrder 2 = oldest
+          forward: false,
+        ),
+        isNull,
+        reason: '第一话之前没有上一话',
+      );
+    });
+
+    test('missing sourceOrder falls back to chapter number', () {
+      final List<OnlineMangaChapter> byNumber = <OnlineMangaChapter>[
+        _chapter('c3', number: 3),
+        _chapter('c1', number: 1),
+        _chapter('c2', number: 2),
+      ];
+
+      expect(
+        resolveAdjacentMangaChapter(
+          chapters: byNumber,
+          currentIndex: 1, // c1
+          forward: true,
+        ),
+        2, // c2
+      );
+      expect(
+        resolveAdjacentMangaChapter(
+          chapters: byNumber,
+          currentIndex: 2, // c2
+          forward: true,
+        ),
+        0, // c3
+      );
+      expect(
+        resolveAdjacentMangaChapter(
+          chapters: byNumber,
+          currentIndex: 1,
+          forward: false,
+        ),
+        isNull,
+      );
+    });
+
+    test(
+      'all-zero sourceOrder (unknown) also falls back to chapter number',
+      () {
+        final List<OnlineMangaChapter> unknownOrder = <OnlineMangaChapter>[
+          _chapter('c3', number: 3, sourceOrder: 0),
+          _chapter('c1', number: 1, sourceOrder: 0),
+          _chapter('c2', number: 2, sourceOrder: 0),
+        ];
+
+        expect(
+          resolveAdjacentMangaChapter(
+            chapters: unknownOrder,
+            currentIndex: 1, // c1
+            forward: true,
+          ),
+          2, // c2
+        );
+      },
+    );
+
+    test('missing numbers fall back to upload date', () {
+      final List<OnlineMangaChapter> byDate = <OnlineMangaChapter>[
+        _chapter('c3', uploadedAt: 300),
+        _chapter('c1', uploadedAt: 100),
+        _chapter('c2', uploadedAt: 200),
+      ];
+
+      expect(
+        resolveAdjacentMangaChapter(
+          chapters: byDate,
+          currentIndex: 1, // c1 (oldest upload)
+          forward: true,
+        ),
+        2, // c2
+      );
+      expect(
+        resolveAdjacentMangaChapter(
+          chapters: byDate,
+          currentIndex: 1,
+          forward: false,
+        ),
+        isNull,
+      );
+    });
+
+    test('online source order (sourceOrder = list index) does not regress', () {
+      final List<OnlineMangaChapter> online = <OnlineMangaChapter>[
+        _chapter('c4', number: 4, sourceOrder: 0),
+        _chapter('c3', number: 3, sourceOrder: 1),
+        _chapter('c2', number: 2, sourceOrder: 2),
+        _chapter('c1', number: 1, sourceOrder: 3),
+      ];
+
+      expect(
+        resolveAdjacentMangaChapter(
+          chapters: online,
+          currentIndex: 2,
+          forward: true,
+        ),
+        1,
+      );
+      expect(
+        resolveAdjacentMangaChapter(
+          chapters: online,
+          currentIndex: 2,
+          forward: false,
+        ),
+        3,
+      );
     });
   });
 

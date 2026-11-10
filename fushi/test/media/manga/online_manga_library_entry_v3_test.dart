@@ -103,6 +103,61 @@ void main() {
       );
     });
 
+    test('章节 sourceOrder 随章节 JSON 往返；未知时不写字段', () {
+      const OnlineMangaLibraryEntry entry = OnlineMangaLibraryEntry(
+        runtime: OnlineMangaRuntimeKind.mihon,
+        extensionPackage: 'org.example.fixture',
+        sourceId: '1',
+        series: OnlineMangaSeries(
+          key: '/series/fixture',
+          title: 'Fixture series',
+          raw: <String, Object?>{},
+        ),
+        chapters: <OnlineMangaChapter>[
+          OnlineMangaChapter(
+            key: '/chapter/3',
+            name: 'Chapter 3',
+            sourceOrder: 0,
+            raw: <String, Object?>{},
+          ),
+          OnlineMangaChapter(
+            key: '/chapter/2',
+            name: 'Chapter 2',
+            sourceOrder: 1,
+            raw: <String, Object?>{},
+          ),
+          OnlineMangaChapter(
+            key: '/chapter/1',
+            name: 'Chapter 1',
+            raw: <String, Object?>{},
+          ),
+        ],
+      );
+
+      final String encoded = entry.encode();
+      final Map<String, Object?> json =
+          (jsonDecode(encoded) as Map<Object?, Object?>)
+              .cast<String, Object?>();
+      final List<Object?> rawChapters = json['chapters']! as List<Object?>;
+      expect(
+        (rawChapters[0]! as Map<Object?, Object?>)['sourceOrder'],
+        0,
+        reason: '0 是有效顺序（最新一话），不能被当成缺失',
+      );
+      expect(
+        (rawChapters[2]! as Map<Object?, Object?>).containsKey('sourceOrder'),
+        isFalse,
+        reason: '未知顺序不写字段，留给章节号/日期回退',
+      );
+
+      final OnlineMangaLibraryEntry parsed =
+          OnlineMangaLibraryEntry.tryParse(encoded)!;
+      expect(
+        parsed.chapters.map((OnlineMangaChapter c) => c.sourceOrder),
+        <int?>[0, 1, null],
+      );
+    });
+
     test('v2 JSON（没有订阅两键）仍解析，两位缺省 false', () {
       final OnlineMangaLibraryEntry parsed =
           OnlineMangaLibraryEntry.tryParse(jsonEncode(v2Json()))!;
