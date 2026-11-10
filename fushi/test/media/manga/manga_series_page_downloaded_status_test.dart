@@ -453,7 +453,7 @@ void main() {
     addTearDown(tester.view.reset);
 
     await tester.runAsync(() async {
-      await library.ensureNonLibrary(_entry);
+      await library.add(_entry);
     });
     final _TestAppModel appModel = _TestAppModel(
       db,

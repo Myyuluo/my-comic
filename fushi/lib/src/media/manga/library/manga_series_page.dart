@@ -2802,11 +2802,6 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
                     Text(text, style: theme.textTheme.bodyMedium),
-                    const SizedBox(height: 2),
-                    Text(
-                      t.manga_series_offline_hint,
-                      style: theme.textTheme.bodySmall,
-                    ),
                   ],
                 ),
               ),

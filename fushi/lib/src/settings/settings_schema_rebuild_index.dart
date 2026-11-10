@@ -11,11 +11,12 @@ import 'package:fushi/utils.dart';
 
 /// 设置 →「存储与下载」的「重建下载索引」小节（storage-layout 票 09）。
 ///
-/// 只增加必要入口：确认框 → 进度（可取消）→ 结果摘要。视觉全部复用现有设置
+/// 整行可点的动作行：确认框 → 进度（可取消）→ 结果摘要。视觉全部复用现有设置
 /// 组件、对话框壳与进度指示器，不改变设计/美术（ADR 0008）。
 ///
 /// 服务只接收**当前** Content root 的 `downloads` / `local`，所以入口不会
-/// 读旧 Content root，也不会扫描 `autobackup`。
+/// 读旧 Content root，也不会扫描 `autobackup`。动作只重链书架中已有的漫画，
+/// 不发现、不新增作品（「检索已下载」负责后者）。
 SettingsSection buildRebuildDownloadIndexSection() {
   return SettingsSection(
     id: 'storage.rebuild.section',
@@ -23,13 +24,17 @@ SettingsSection buildRebuildDownloadIndexSection() {
     title: t.rebuild_download_index_section,
     visible: (SettingsContext ctx) => isDesktopPlatform,
     items: <SettingsItem>[
-      SettingsStatusItem(
+      SettingsActionItem(
         id: 'storage.rebuild_index',
         title: t.rebuild_download_index_title,
         subtitle: t.rebuild_download_index_subtitle,
         icon: FushiIcons.refresh,
-        actionLabel: t.rebuild_download_index_button,
-        onAction: _rebuildDownloadIndex,
+        cli: const SettingsCliAction.unsupported(
+          'Rebuilding the download index shows a confirmation and progress '
+          'dialog: Settings → Storage & downloads → Download index → '
+          'Rebuild download index.',
+        ),
+        onTap: _rebuildDownloadIndex,
       ),
     ],
   );
@@ -156,11 +161,10 @@ Future<void> _showRebuildReport(
             <String>[
               if (report.cancelled) t.rebuild_download_index_report_cancelled,
               t.rebuild_download_index_report_body(
+                scanned: report.booksScanned,
                 matched: report.booksMatched,
-                added: report.booksAdded,
-                local: report.booksAddedLocal,
                 books: report.booksRelinked,
-                chapters: report.chaptersAdded + report.chaptersRelinked,
+                chapters: report.chaptersRelinked,
                 missingBooks: report.booksMissing,
                 missingChapters: report.chaptersMissing,
                 skippedBooks: report.booksSkipped,
@@ -223,27 +227,28 @@ class RebuildDownloadIndexProgressDialog extends StatelessWidget {
         ),
         body: ValueListenableBuilder<RebuildDownloadIndexProgress?>(
           valueListenable: progressNotifier,
-          builder: (
-            BuildContext context,
-            RebuildDownloadIndexProgress? progress,
-            Widget? _,
-          ) {
-            final String label = progress?.currentTitle ?? '';
-            return Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: <Widget>[
-                FushiLinearProgressIndicator(value: progress?.fraction),
-                SizedBox(height: tokens.spacing.gap),
-                Text(
-                  label,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: tokens.type.listSubtitle,
-                ),
-              ],
-            );
-          },
+          builder:
+              (
+                BuildContext context,
+                RebuildDownloadIndexProgress? progress,
+                Widget? _,
+              ) {
+                final String label = progress?.currentTitle ?? '';
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    FushiLinearProgressIndicator(value: progress?.fraction),
+                    SizedBox(height: tokens.spacing.gap),
+                    Text(
+                      label,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: tokens.type.listSubtitle,
+                    ),
+                  ],
+                );
+              },
         ),
         footer: Wrap(
           alignment: WrapAlignment.end,

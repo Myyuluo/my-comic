@@ -1062,6 +1062,62 @@ mixin _FushiDbContentMisc
     };
   }
 
+  /// 多本书的章状态批量读取（书架列书用：一次查询，不随书架条目数增长）。
+  ///
+  /// 返回 `bookUid → (chapterKey → 行)`。空 uid 直接跳过（异常旧行没有章状态）。
+  /// SQLite 的变量上限随版本不同，按 500 本一批分块查。
+  Future<Map<String, Map<String, MangaChapterStateRow>>>
+  getMangaChapterStatesForBookUids(Iterable<String> bookUids) async {
+    final List<String> uids = <String>{
+      for (final String uid in bookUids)
+        if (uid.isNotEmpty) uid,
+    }.toList(growable: false);
+    if (uids.isEmpty) {
+      return const <String, Map<String, MangaChapterStateRow>>{};
+    }
+    final Map<String, Map<String, MangaChapterStateRow>> byBook =
+        <String, Map<String, MangaChapterStateRow>>{};
+    const int chunkSize = 500;
+    for (int start = 0; start < uids.length; start += chunkSize) {
+      final int end = start + chunkSize < uids.length
+          ? start + chunkSize
+          : uids.length;
+      final List<MangaChapterStateRow> rows =
+          await (select(mangaChapterStates)
+                ..where((t) => t.bookUid.isIn(uids.sublist(start, end))))
+              .get();
+      for (final MangaChapterStateRow row in rows) {
+        final Map<String, MangaChapterStateRow> states =
+            byBook[row.bookUid] ??= <String, MangaChapterStateRow>{};
+        states[row.chapterKey] = row;
+      }
+    }
+    return byBook;
+  }
+
+  /// 每本书最近一次章级活动的时刻（`max(manga_chapter_states.updated_at)`）。
+  ///
+  /// 「最近阅读」的补充证据：导入备份可能带回章级状态而没有
+  /// `reader_positions` 行；此时章状态的 `updatedAt` 是唯一可用的时间戳。
+  /// `reader_positions` 仍优先——调用方只在没有位置行时采用本表。
+  Future<Map<String, int>> getLatestMangaChapterStateUpdatedAtByBookUid() async {
+    final Expression<int> latest = mangaChapterStates.updatedAt.max();
+    final List<TypedResult> rows = await (selectOnly(mangaChapterStates)
+          ..addColumns(<Expression<Object>>[
+            mangaChapterStates.bookUid,
+            latest,
+          ])
+          ..groupBy(<Expression<Object>>[mangaChapterStates.bookUid]))
+        .get();
+    final Map<String, int> result = <String, int>{};
+    for (final TypedResult row in rows) {
+      final String? uid = row.read(mangaChapterStates.bookUid);
+      final int? at = row.read(latest);
+      if (uid != null && uid.isNotEmpty && at != null) result[uid] = at;
+    }
+    return result;
+  }
+
   /// 书架漫画未读角标的批量快照（**两条查询**，不随卡片 / 章节数量增长）。
   ///
   /// 章节身份来源取 `format='manga'` 的书行；已读状态只取 `readAt` 非空的行
