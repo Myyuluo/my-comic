@@ -324,17 +324,83 @@ class DownloadLibraryIndex {
       bookKey: bookKey,
       chapterKey: chapterKey,
     );
+    Directory? mangaDir;
     if (container != null) {
       if (container.isArchive) {
         final File file = container.archiveFile!;
+        mangaDir = file.parent;
         if (await file.exists()) await file.delete();
       } else {
         final Directory directory = container.directory!;
+        mangaDir = directory.parent;
         if (await directory.exists()) await directory.delete(recursive: true);
       }
     }
     await database.deleteMangaChapterDir(bookKey, chapterKey);
+    if (mangaDir != null) {
+      await _cleanupEmptyDirectories(mangaDir, deletedBookKey: bookKey);
+    }
   }
+
+  /// 删除容器后清理空目录：空的 manga 目录与整个空 source 目录。
+  ///
+  /// 只清理当前 Download library 根下、刚被删空的目录；非空目录、Download
+  /// library 根本身与 `local` 下的任何内容都不动。删除使用非递归模式：检查后
+  /// 又被写入（并发下载 / 用户）时删除失败即放弃，绝不误删内容。
+  ///
+  /// 清理前检查目录是否仍被**其他作品**引用（同名共享目录里的另一部作品即使
+  /// 此刻没有容器，也会在下次开始下载时复用这个目录）。共享目录里还有别的
+  /// 作品容器时目录非空，天然不会被删。
+  Future<void> _cleanupEmptyDirectories(
+    Directory mangaDir, {
+    String? deletedBookKey,
+  }) async {
+    final Directory root = await _downloadsRoot();
+    if (!_isStrictlyWithin(mangaDir, root)) return;
+    if (!await _isEmptyDirectory(mangaDir)) return;
+    if (await _hasOtherWorkReference(mangaDir, deletedBookKey)) return;
+    if (!await _deleteEmptyDirectory(mangaDir)) return;
+    final Directory sourceDir = mangaDir.parent;
+    if (!_isStrictlyWithin(sourceDir, root)) return;
+    if (!await _isEmptyDirectory(sourceDir)) return;
+    if (await _hasOtherWorkReference(sourceDir, deletedBookKey)) return;
+    await _deleteEmptyDirectory(sourceDir);
+  }
+
+  /// [directory] 是否仍被 [exceptBookKey] 之外的作品行引用（目录本身或子目录）。
+  Future<bool> _hasOtherWorkReference(
+    Directory directory,
+    String? exceptBookKey,
+  ) async {
+    for (final EpubBookMeta book in await database.getEpubBookMetas()) {
+      if (book.bookKey == exceptBookKey) continue;
+      if (isLocalSourcePathWithinRoot(book.extractDir, directory)) return true;
+    }
+    return false;
+  }
+
+  /// 目录存在且为空。
+  static Future<bool> _isEmptyDirectory(Directory directory) async {
+    try {
+      return await directory.exists() &&
+          await directory.list(followLinks: false).isEmpty;
+    } on FileSystemException {
+      return false;
+    }
+  }
+
+  /// 非递归删除空目录；删除失败（被占用 / 竞态写入）静默放弃。
+  static Future<bool> _deleteEmptyDirectory(Directory directory) async {
+    try {
+      await directory.delete();
+      return true;
+    } on FileSystemException {
+      return false;
+    }
+  }
+
+  static bool _isStrictlyWithin(Directory directory, Directory root) =>
+      p.isWithin(p.canonicalize(root.path), p.canonicalize(directory.path));
 
   /// 删除一章的下载：有行 / 映射时按记录删；没有行或映射没覆盖时按 [entry]
   /// 的下载身份在 `downloads` 里找唯一能证明身份的漫画文件夹，再删其中
@@ -361,13 +427,18 @@ class DownloadLibraryIndex {
       // 映射已失效 / 从未写过：清掉残留行，再按身份找磁盘容器。
       await database.deleteMangaChapterDir(row.bookKey, chapterKey);
     }
-    await _deleteChapterByIdentity(entry, chapterKey);
+    await _deleteChapterByIdentity(
+      entry,
+      chapterKey,
+      deletedBookKey: row?.bookKey,
+    );
   }
 
   Future<void> _deleteChapterByIdentity(
     OnlineMangaLibraryEntry entry,
-    String chapterKey,
-  ) async {
+    String chapterKey, {
+    String? deletedBookKey,
+  }) async {
     final MangaDownloadIdentity identity = MangaDownloadIdentity.ofEntry(entry);
     final List<DownloadMangaFolderOnDisk> folders = <DownloadMangaFolderOnDisk>[
       for (final DownloadMangaFolderProbe probe
@@ -384,6 +455,7 @@ class DownloadLibraryIndex {
     final DownloadMangaFolderOnDisk? folder =
         matchDownloadMangaFolderByIdentity(folders, identity).folder;
     if (folder == null) return;
+    bool deleted = false;
     for (final ChapterContainerOnDisk container
         in await scanDownloadChapterContainers(folder.directory)) {
       final MangaPagesManifest? manifest = container.manifest;
@@ -394,11 +466,23 @@ class DownloadLibraryIndex {
       }
       final Directory? directory = container.directory;
       if (directory != null) {
-        if (await directory.exists()) await directory.delete(recursive: true);
+        if (await directory.exists()) {
+          await directory.delete(recursive: true);
+          deleted = true;
+        }
         continue;
       }
       final File? archive = container.archiveFile;
-      if (archive != null && await archive.exists()) await archive.delete();
+      if (archive != null && await archive.exists()) {
+        await archive.delete();
+        deleted = true;
+      }
+    }
+    if (deleted) {
+      await _cleanupEmptyDirectories(
+        folder.directory,
+        deletedBookKey: deletedBookKey,
+      );
     }
   }
 }

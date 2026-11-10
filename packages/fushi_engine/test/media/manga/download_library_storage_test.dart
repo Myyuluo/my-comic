@@ -219,6 +219,49 @@ void main() {
     );
   });
 
+  test('章节容器名冲突：扫译组或短哈希后缀，不使用 (2)', () async {
+    final String mangaDir = p.join(root.path, 'downloads', 'src', 'manga');
+    final Set<String> taken = <String>{'chapter 1'};
+    Future<bool> isTaken(String candidate) async =>
+        taken.contains(candidate.toLowerCase());
+
+    Future<String> folderName() => uniqueDownloadChapterFolderName(
+      mangaDir: mangaDir,
+      base: 'Chapter 1',
+      identity: '/chapter/b',
+      qualifier: 'Group B',
+      isTaken: isTaken,
+    );
+
+    // 扫译组仍是首选的人眼可读后缀。
+    expect(await folderName(), 'Chapter 1 [Group B]');
+
+    // 扫译组也被占：改用稳定身份的短哈希，而不是 (2)。
+    taken.add('chapter 1 [group b]');
+    final String hashed = await folderName();
+    expect(hashed, matches(RegExp(r'^Chapter 1~[0-9a-f]{8}$')));
+    expect(hashed, isNot(contains('(2)')));
+    expect(await folderName(), hashed, reason: '同一章的哈希后缀必须稳定');
+
+    // 极端：同身份残留的半成品占用了哈希名，继续换哈希，仍不用 (2)。
+    taken.add(hashed.toLowerCase());
+    final String second = await folderName();
+    expect(second, isNot(hashed));
+    expect(second, matches(RegExp(r'^Chapter 1~[0-9a-f]{8}$')));
+    expect(second, isNot(contains('(2)')));
+
+    // CBZ 与文件夹共用同一冲突口径（扩展名不参与哈希）。
+    final Set<String> archives = <String>{'chapter 1.cbz'};
+    final String archive = await uniqueDownloadChapterArchiveName(
+      mangaDir: mangaDir,
+      base: 'Chapter 1',
+      identity: '/chapter/b',
+      isTaken: (String name) async => archives.contains(name.toLowerCase()),
+    );
+    expect(archive, matches(RegExp(r'^Chapter 1~[0-9a-f]{8}\.cbz$')));
+    expect(archive, isNot(contains('(2)')));
+  });
+
   test('staging 是 manga 目录下的点号目录', () {
     final String mangaDir = p.join(root.path, 'src', 'manga');
     expect(

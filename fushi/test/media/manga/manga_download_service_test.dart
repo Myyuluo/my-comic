@@ -537,7 +537,7 @@ void main() {
     downloads.dispose();
   });
 
-  test('目标章目录已存在时不覆盖：内容进确定后缀，映射指向实际目录', () async {
+  test('目标章目录已存在时不覆盖：内容进短哈希后缀，映射指向实际目录', () async {
     final Directory existing = downloadChapterDirectory(bookDir, 'Chapter 1');
     await existing.create(recursive: true);
     final File sentinel = File(p.join(existing.path, 'keep.txt'));
@@ -558,9 +558,10 @@ void main() {
       bookKey,
       '/chapter/1',
     );
-    expect(mapping?.folderName, 'Chapter 1 (2)');
+    expect(mapping?.folderName, matches(RegExp(r'^Chapter 1~[0-9a-f]{8}$')));
+    expect(mapping?.folderName, isNot(contains('(2)')));
     expect(
-      downloadChapterDirectory(bookDir, 'Chapter 1 (2)').existsSync(),
+      downloadChapterDirectory(bookDir, mapping!.folderName).existsSync(),
       isTrue,
     );
     expect(
@@ -778,7 +779,7 @@ void main() {
     downloads.dispose();
   });
 
-  test('同名 .cbz 已存在（属于别的章）：不覆盖，改用确定后缀', () async {
+  test('同名 .cbz 已存在（属于别的章）：不覆盖，改用短哈希后缀', () async {
     // 入库不再建目录；模拟磁盘上已有别的章留下的 .cbz。
     await Directory(bookDir).create(recursive: true);
     final File existing = File(p.join(bookDir, 'Chapter 1.cbz'));
@@ -798,12 +799,13 @@ void main() {
       bookKey,
       '/chapter/1',
     );
-    expect(mapping?.folderName, 'Chapter 1 (2).cbz');
-    expect(mapping?.containerKindEnum, MangaChapterContainerKind.archive);
     expect(
-      File(p.join(bookDir, 'Chapter 1 (2).cbz')).existsSync(),
-      isTrue,
+      mapping?.folderName,
+      matches(RegExp(r'^Chapter 1~[0-9a-f]{8}\.cbz$')),
     );
+    expect(mapping?.folderName, isNot(contains('(2)')));
+    expect(mapping?.containerKindEnum, MangaChapterContainerKind.archive);
+    expect(File(p.join(bookDir, mapping!.folderName)).existsSync(), isTrue);
     expect(
       await DownloadLibraryIndex(
         db,
@@ -1026,7 +1028,7 @@ void main() {
     downloads.dispose();
   });
 
-  test('重复章节名且无扫译组：确定 (2) 后缀', () async {
+  test('重复章节名且无扫译组：确定短哈希后缀，不出现 (2)', () async {
     const OnlineMangaChapter first = OnlineMangaChapter(
       key: '/chapter/a',
       name: 'Chapter 1',
@@ -1056,14 +1058,18 @@ void main() {
       (await db.getMangaChapterDir(row.bookKey, first.key))?.folderName,
       'Chapter 1',
     );
+    final String? secondFolder =
+        (await db.getMangaChapterDir(row.bookKey, second.key))?.folderName;
+    expect(secondFolder, matches(RegExp(r'^Chapter 1~[0-9a-f]{8}$')));
+    expect(secondFolder, isNot(contains('(2)')));
     expect(
-      (await db.getMangaChapterDir(row.bookKey, second.key))?.folderName,
-      'Chapter 1 (2)',
+      downloadChapterDirectory(row.extractDir, secondFolder!).existsSync(),
+      isTrue,
     );
     downloads.dispose();
   });
 
-  test('已有章目录属于另一章（大小写不同）：不认领、不覆盖，改用 (2)', () async {
+  test('已有章目录属于另一章（大小写不同）：不认领、不覆盖，改用短哈希后缀', () async {
     const OnlineMangaChapter other = OnlineMangaChapter(
       key: '/chapter/other',
       name: 'Chapter 1',
@@ -1112,11 +1118,14 @@ void main() {
     await downloads.start();
     await downloads.whenIdle;
 
+    final String? folder =
+        (await db.getMangaChapterDir(bookKey, '/chapter/1'))?.folderName;
     expect(
-      (await db.getMangaChapterDir(bookKey, '/chapter/1'))?.folderName,
-      'Chapter 1 (2)',
+      folder,
+      matches(RegExp(r'^Chapter 1~[0-9a-f]{8}$')),
       reason: '大小写不同且属于另一章：不得认领为本章内容',
     );
+    expect(folder, isNot(contains('(2)')));
     expect(
       (await readPagesManifest(foreignDir))?.chapterKey,
       other.key,
