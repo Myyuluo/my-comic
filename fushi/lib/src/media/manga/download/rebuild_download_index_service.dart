@@ -22,6 +22,11 @@
 /// 图源扫描规则补写缺失的可见 `cover.jpg`（已有封面绝不覆盖，见
 /// [LocalSourceCoverService]）。
 ///
+/// 重链成功的书架成员会在同一次运行里预热第一页生成封面（ticket 03）：只调用
+/// [MangaFirstPageCoverService]，字节写入 Program state 的 shelf cover 缓存，
+/// 不写 Content root / Download library；已有本地 `cover.*`、持久真实封面或
+/// 可用远程封面的作品跳过；封面失败只计入报告，不阻断重建。
+///
 /// 只接收当前 Content root 的 `downloads` 与 `local` 两个根，因此结构上
 /// 不可能读取旧 Content root，也不会扫描 `autobackup`。
 library;
@@ -42,7 +47,9 @@ import 'package:fushi/src/media/manga/download/download_identity.dart';
 import 'package:fushi/src/media/manga/download/download_library_changes.dart';
 import 'package:fushi/src/media/manga/download/download_library_scanner.dart';
 import 'package:fushi/src/media/manga/download/download_manga_relinker.dart';
+import 'package:fushi/src/media/manga/library/manga_first_page_cover_service.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
+import 'package:fushi/src/utils/misc/error_log_service.dart';
 
 /// 一次重建的进度快照。
 class RebuildDownloadIndexProgress {
@@ -87,6 +94,10 @@ class RebuildDownloadIndexReport {
     required this.chaptersRelinked,
     required this.chaptersMissing,
     required this.chaptersSkipped,
+    this.coversGenerated = 0,
+    this.coversUpdated = 0,
+    this.coversSkipped = 0,
+    this.coversFailed = 0,
     required this.failed,
     required this.cancelled,
   });
@@ -101,6 +112,10 @@ class RebuildDownloadIndexReport {
       chaptersRelinked = 0,
       chaptersMissing = 0,
       chaptersSkipped = 0,
+      coversGenerated = 0,
+      coversUpdated = 0,
+      coversSkipped = 0,
+      coversFailed = 0,
       failed = 0,
       cancelled = false;
 
@@ -135,6 +150,20 @@ class RebuildDownloadIndexReport {
   /// 因歧义跳过的章节数。
   final int chaptersSkipped;
 
+  /// 本次重建为书架作品新生成的第一页封面数。
+  final int coversGenerated;
+
+  /// 本次重建因本地容器变化而更新的生成封面数。
+  final int coversUpdated;
+
+  /// 已具备可用封面（本地 / 远程 / 已缓存）或没有完整本地容器而跳过的封面数。
+  final int coversSkipped;
+
+  /// 找到容器但第一页读不出 / 解码失败 / 写盘失败的封面数。
+  ///
+  /// 封面失败只记在这里，不增加 [failed]：重建本身仍然成功。
+  final int coversFailed;
+
   /// 单本处理失败数；失败不中断其余书目。
   final int failed;
 
@@ -148,6 +177,8 @@ class RebuildDownloadIndexService {
     required this.database,
     required this.downloadsRoot,
     required this.localComicRoot,
+    this.firstPageCoverService,
+    this.isRemoteCoverAvailable,
   });
 
   final FushiDatabase database;
@@ -157,6 +188,19 @@ class RebuildDownloadIndexService {
 
   /// 当前 Content root 的 Local source root。
   final Directory localComicRoot;
+
+  /// 第一页生成封面服务（ticket 02）；为 null 时重建不预热封面。
+  ///
+  /// 生成字节只写入 Program state 的 shelf cover 缓存，不写 Content root。
+  final MangaFirstPageCoverService? firstPageCoverService;
+
+  /// 在线条目的来源是否可用（已安装且启用）；用于判断 `series.coverUrl`
+  /// 是否可作为「可用远程封面」优先于生成封面。
+  ///
+  /// 只读数据库、不联网。未提供时按远程封面不可用处理（宁可生成缓存，
+  /// 也不让源未安装的导入作品继续显示占位）。
+  final Future<bool> Function(OnlineMangaLibraryEntry entry)?
+  isRemoteCoverAvailable;
 
   Future<RebuildDownloadIndexReport> run({
     RebuildDownloadIndexCancelToken? cancelToken,
@@ -215,6 +259,10 @@ class RebuildDownloadIndexService {
     int chaptersRelinked = 0;
     int chaptersMissing = 0;
     int chaptersSkipped = 0;
+    int coversGenerated = 0;
+    int coversUpdated = 0;
+    int coversSkipped = 0;
+    int coversFailed = 0;
     int failed = 0;
     bool cancelled = false;
 
@@ -267,6 +315,24 @@ class RebuildDownloadIndexService {
         chaptersRelinked += outcome.chaptersRelinked;
         chaptersMissing += outcome.chaptersMissing;
         chaptersSkipped += outcome.chaptersSkipped;
+        if (outcome.matched) {
+          // 只对当前 Content root 里找到的 Library 成员预热：找不到 / 歧义 /
+          // 非书架的作品不生成封面。封面失败不增加书目失败。
+          final MangaFirstPageCoverOutcome? cover = await _warmShelfCover(book);
+          switch (cover) {
+            case MangaFirstPageCoverOutcome.generated:
+              coversGenerated++;
+            case MangaFirstPageCoverOutcome.updated:
+              coversUpdated++;
+            case MangaFirstPageCoverOutcome.unchanged:
+            case MangaFirstPageCoverOutcome.unavailable:
+              coversSkipped++;
+            case MangaFirstPageCoverOutcome.failed:
+              coversFailed++;
+            case null:
+              break;
+          }
+        }
       } on Object {
         failed++;
       }
@@ -299,9 +365,54 @@ class RebuildDownloadIndexService {
       chaptersRelinked: chaptersRelinked,
       chaptersMissing: chaptersMissing,
       chaptersSkipped: chaptersSkipped,
+      coversGenerated: coversGenerated,
+      coversUpdated: coversUpdated,
+      coversSkipped: coversSkipped,
+      coversFailed: coversFailed,
       failed: failed,
       cancelled: cancelled,
     );
+  }
+
+  /// 为一部已重链的书目预热第一页封面（ticket 03）。
+  ///
+  /// 返回 null 表示这本书不参与封面统计（没有封面服务或不是漫画）。只调用
+  /// ticket 02 的生成服务：它自己检查本地 `cover.*`、持久真实封面、缓存
+  /// sentinel 与完整容器。可用远程封面优先，不生成覆盖它。任何封面异常都在
+  /// 这里吞掉并计为 [MangaFirstPageCoverOutcome.failed]，不影响重建。
+  Future<MangaFirstPageCoverOutcome?> _warmShelfCover(
+    _BookCandidate book,
+  ) async {
+    final MangaFirstPageCoverService? service = firstPageCoverService;
+    if (service == null) return null;
+    try {
+      final EpubBookRow row = book.row;
+      if (BookFormat.parseOrEpub(row.format) != BookFormat.manga) return null;
+      final OnlineMangaLibraryEntry? online = book.online;
+      if (online != null) {
+        final String? remoteUrl = online.series.coverUrl?.trim();
+        if (remoteUrl != null && remoteUrl.isNotEmpty) {
+          final Future<bool> Function(OnlineMangaLibraryEntry entry)? check =
+              isRemoteCoverAvailable;
+          final bool usable = check == null ? false : await check(online);
+          if (usable) {
+            // 来源可用的当前封面优先于第一页生成封面。
+            return MangaFirstPageCoverOutcome.unavailable;
+          }
+        }
+      }
+      // 重链可能已更新 extractDir；用库里的最新行找容器。
+      final EpubBookRow? current = await database.getEpubBook(row.bookKey);
+      if (current == null) return null;
+      return await service.warmUp(current);
+    } on Object catch (error, stack) {
+      ErrorLogService.instance.log(
+        'RebuildDownloadIndexService.coverWarmup',
+        error,
+        stack,
+      );
+      return MangaFirstPageCoverOutcome.failed;
+    }
   }
 
   // ── 在线条目 ────────────────────────────────────────────────────────
