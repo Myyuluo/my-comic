@@ -390,10 +390,11 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
   }) {
     final ShelfReadStatus? filter = _readStatusFilter;
     if (filter == null) return true;
+    final bool completionKnown = bookKey != null && bookKey.isNotEmpty;
     return classifyShelfReadStatus(
-          completed: bookKey != null &&
-              bookKey.isNotEmpty &&
-              _completedBookKeys.contains(bookKey),
+          completed:
+              completionKnown && _completedBookKeys.contains(bookKey),
+          completedKnown: completionKnown,
           position: progress?.position ?? 0,
           duration: progress?.duration ?? 0,
         ) ==

@@ -163,16 +163,26 @@ enum ShelfReadStatus { unread, reading, finished }
 ///   → 读完，不受进度约束；
 /// * `duration<=0`（无进度维度，如纯字幕书）→ 未读；
 /// * `position>=duration` → 读完；`0<position<duration` → 在读；其余未读。
+///
+/// [completedKnown] = 调用方知道 [completed] 是**真实值**（包括「确实为
+/// false」）。此时 `position>=duration` 不再自动判读完：完成只由
+/// `EpubBooks.completedAt` 决定，进度到 100% 但未标记完成的书按
+/// `position>0` 判在读（见 manga-shelf-download-ux 票 01）。默认 false 保留
+/// 旧调用方的纯进度回退。
 ShelfReadStatus classifyShelfReadStatus({
   required bool completed,
+  bool completedKnown = false,
   required int position,
   required int duration,
 }) {
   if (completed) return ShelfReadStatus.finished;
   if (duration <= 0 || position <= 0) return ShelfReadStatus.unread;
-  return position >= duration
-      ? ShelfReadStatus.finished
-      : ShelfReadStatus.reading;
+  if (position >= duration) {
+    return completedKnown
+        ? ShelfReadStatus.reading
+        : ShelfReadStatus.finished;
+  }
+  return ShelfReadStatus.reading;
 }
 
 /// 书架概览统计（在读数 / 读完数 / 在读候选列表）。
@@ -202,7 +212,8 @@ class ShelfProgressTally<T> {
 /// null，用户手动标记或读到末尾自动写入）。命中即计读完、不进在读候选，且**不受
 /// 进度约束**——跳过后记/附录、进度停在 99% 的手动标记书也能计入 Completed，正是
 /// 「读到最后一字才算完成」这一临时派生判据无法覆盖的场景。未传则退回纯进度派生
-/// （旧行为，向后兼容）。
+/// （旧行为，向后兼容）。传了 = 调用方知道每本书的完成状态，进度到 100% 但未标记
+/// 完成的书按在读算（[classifyShelfReadStatus] 的 `completedKnown`）。
 ShelfProgressTally<T> tallyShelfProgress<T>(
   Iterable<T> epubBackedBooks,
   int Function(T) position,
@@ -215,6 +226,7 @@ ShelfProgressTally<T> tallyShelfProgress<T>(
   for (final T book in epubBackedBooks) {
     switch (classifyShelfReadStatus(
       completed: isCompleted != null && isCompleted(book),
+      completedKnown: isCompleted != null,
       position: position(book),
       duration: duration(book),
     )) {

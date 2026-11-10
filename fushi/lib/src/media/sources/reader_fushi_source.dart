@@ -19,6 +19,8 @@ import 'package:fushi/src/media/audiobook/book_import_dialog.dart';
 import 'package:fushi/src/media/manga/history/manga_history.dart';
 import 'package:fushi/src/media/manga/interconnect/interconnect_manga_source.dart'
     show InterconnectMangaCatalog;
+import 'package:fushi/src/media/manga/library/manga_adjacent_chapter.dart'
+    show mangaReadingOrder;
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_metadata.dart';
 import 'package:fushi/src/reader/page_turn_animation.dart';
@@ -86,12 +88,23 @@ final srtBooksProvider = FutureProvider<List<SrtBook>>((ref) {
 /// [epubBookUidByKeyProvider] 换算再查。BUG-777：继续阅读 hero 与书架「最近阅读」
 /// 排序的唯一 recency 真相源；关书时与 [fushiBooksProvider] 同点失效
 /// （[ReaderFushiSource.onSourceExit]），不会陈旧。
+///
+/// 章状态时间戳只作**补充证据**：`reader_positions` 是主证据，章状态仅在
+/// 完全没有位置行时兜底（例如导入备份带回了 `manga_chapter_states` 却没有
+/// `reader_positions`）。已有位置行时不能取两者 max——无痕阅读会推进章状态
+/// `updatedAt`、同时冻结位置时间戳，取 max 会让无痕阅读顶出「最近阅读」。
 final bookLastReadAtProvider = FutureProvider<Map<String, int>>((ref) async {
   final FushiDatabase db = ref.watch(appProvider).database;
   final List<ReaderPositionRow> rows = await db.getAllReaderPositions();
-  return <String, int>{
+  final Map<String, int> lastReadAt = <String, int>{
     for (final ReaderPositionRow r in rows) r.bookUid: r.updatedAt,
   };
+  final Map<String, int> chapterActivity =
+      await db.getLatestMangaChapterStateUpdatedAtByBookUid();
+  for (final MapEntry<String, int> entry in chapterActivity.entries) {
+    lastReadAt.putIfAbsent(entry.key, () => entry.value);
+  }
+  return lastReadAt;
 });
 
 /// 「读完」的书的 bookKey 集合（`EpubBooks.completedAt` 非 null：手动标记或读到
@@ -622,6 +635,9 @@ class ReaderFushiSource extends ReaderMediaSource {
     // 重叠不了 SQL，书架延迟仍随库大小线性增长（N 次往返 + N 次语句准备）。
     final Map<String, ReaderPosition> positions =
         await ReaderPositionRepository(db).findAllByBookUid();
+    // 章状态也一次批量取完（在线漫画的进度 / 续读唯一真源）。
+    final Map<String, Map<String, MangaChapterStateRow>> chapterStates =
+        await db.getMangaChapterStatesForBookUids(books.map((b) => b.uid));
 
     // HBK-AUDIT-128: previously this was a serial for-loop where every book
     // awaited up to four File.exists() cover probes one after another, so
@@ -633,6 +649,10 @@ class ReaderFushiSource extends ReaderMediaSource {
         (EpubBookRow book) => _bookToMediaItem(
           book,
           book.uid.isEmpty ? null : positions[book.uid],
+          book.uid.isEmpty
+              ? const <String, MangaChapterStateRow>{}
+              : chapterStates[book.uid] ??
+                    const <String, MangaChapterStateRow>{},
         ),
       ),
     );
@@ -649,23 +669,66 @@ class ReaderFushiSource extends ReaderMediaSource {
     final ReaderPosition? pos = book.uid.isEmpty
         ? null
         : await ReaderPositionRepository(db).findByBookUid(book.uid);
-    return _bookToMediaItem(book, pos);
+    final Map<String, MangaChapterStateRow> chapterStates = book.uid.isEmpty
+        ? const <String, MangaChapterStateRow>{}
+        : await db.getMangaChapterStates(book.uid);
+    return _bookToMediaItem(book, pos, chapterStates);
   }
 
-  /// 在线漫画的章级进度。
+  /// 进度条里每章占的横向单位数（position / duration = 百分比）。章状态只有
+  /// 页级信息，整数 position/duration 需要放大才能表达章内位置。
+  static const int _kMangaChapterProgressUnits = 1000;
+
+  /// 在线漫画的章级进度：**章状态 + 规范阅读顺序**，不再用
+  /// `currentChapterIndex`（那只记「最后一次选中哪章」，不是进度）。
   ///
-  /// 「读到第几话」= 从**末尾**往回数：源按新→旧返回，列表 0 是最新一话，所以
-  /// 下标越大越旧。没选过章 = 一话都没开始读，position 0。
+  /// 「当前章」= 最近动过的章（`updatedAt` 最大，与
+  /// `continueMangaChapterIndex` 同一口径）；position = 该章在阅读顺序里的
+  /// 位置 × 每章单位 + 章内进度。章内进度：已读完 = 整章；否则按页数 / webtoon
+  /// 千分比折算（至少 1 个单位，表示「翻开过」）。没有章状态 = 未开始。
   static ({int position, int duration}) _onlineMangaProgress(
     OnlineMangaLibraryEntry entry,
+    Map<String, MangaChapterStateRow> states,
   ) {
     final int total = entry.chapters.length;
     if (total == 0) return (position: 0, duration: 1);
-    final int? selected = entry.currentChapterIndex;
-    if (selected == null || selected < 0 || selected >= total) {
-      return (position: 0, duration: total);
+    final int duration = total * _kMangaChapterProgressUnits;
+    if (states.isEmpty) return (position: 0, duration: duration);
+    final List<OnlineMangaChapter> ordered = mangaReadingOrder(entry.chapters);
+    int bestIndex = -1;
+    int bestUpdatedAt = -1;
+    for (int i = 0; i < ordered.length; i++) {
+      final MangaChapterStateRow? state = states[ordered[i].key];
+      if (state == null) continue;
+      if (state.updatedAt > bestUpdatedAt ||
+          (state.updatedAt == bestUpdatedAt && i > bestIndex)) {
+        bestUpdatedAt = state.updatedAt;
+        bestIndex = i;
+      }
     }
-    return (position: (total - selected).clamp(0, total), duration: total);
+    if (bestIndex < 0) return (position: 0, duration: duration);
+    final int within = _mangaChapterProgressUnits(
+      states[ordered[bestIndex].key]!,
+    );
+    final int position = bestIndex * _kMangaChapterProgressUnits + within;
+    return (position: position.clamp(0, duration), duration: duration);
+  }
+
+  /// 章内进度折算成 position 单位（1..每章单位数）。已读完的章算整章。
+  static int _mangaChapterProgressUnits(MangaChapterStateRow state) {
+    const int units = _kMangaChapterProgressUnits;
+    if (state.readAt != null) return units;
+    if (state.pageCount != null && state.pageCount! > 0) {
+      final double fraction = state.lastFraction >= 0
+          ? state.lastFraction / 1000
+          : (state.lastPage + 1) / state.pageCount!;
+      return (fraction.clamp(0.0, 1.0) * units).round().clamp(1, units);
+    }
+    if (state.lastFraction >= 0) {
+      return ((state.lastFraction / 1000) * units).round().clamp(1, units);
+    }
+    // 页数未知（导入备份的章状态）：有页号 = 读到过半，至少算翻开了。
+    return state.lastPage > 0 ? units ~/ 2 : 1;
   }
 
   /// 本地图源的章级进度。
@@ -697,8 +760,10 @@ class ReaderFushiSource extends ReaderMediaSource {
   /// reader position (already keyed by uid by the caller; null = never read).
   Future<MediaItem> _bookToMediaItem(
     EpubBookRow book,
-    ReaderPosition? pos,
-  ) async {
+    ReaderPosition? pos, [
+    Map<String, MangaChapterStateRow> chapterStates =
+        const <String, MangaChapterStateRow>{},
+  ]) async {
     int position = 0;
     int duration = 1;
 
@@ -746,7 +811,7 @@ class ReaderFushiSource extends ReaderMediaSource {
         ? LocalSourceMetadata.tryParse(book.sourceMetadata)
         : null;
     final ({int position, int duration}) prog = onlineEntry != null
-        ? _onlineMangaProgress(onlineEntry)
+        ? _onlineMangaProgress(onlineEntry, chapterStates)
         : localSource != null
         ? _localSourceMangaProgress(book, localSource)
         : pageBased
