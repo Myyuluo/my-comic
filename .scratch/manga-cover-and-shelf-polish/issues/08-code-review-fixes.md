@@ -71,3 +71,10 @@
 
 - 未新增数据库 schema；未改 Backup；未写 Content root / Download library；未移动、复制或删除用户文件；生成封面仍只落 Program state 的 shelf cover 缓存。
 - diff 仅涉及 i18n 工具与测试、封面续签 / 解析 / 生成 / 重建预热、书架封面 provider、设置页重建入口，以及对应测试和本 ticket 文件。
+
+### Merge 与最终验证
+
+- Merge commit：`63267923f0b97e2f2b7bab038bc49f0ee44a0ee5` `Merge ticket 08: code review fixes`（`git merge --no-ff worktree-agent-a59f3ac26d44e54c7`；基线 integration tip `6e9a4601`；无冲突）。
+- 最终测试（merge 后，`dart run slang` 先行通过）：fushi 相关套件 204 tests 全部通过（`test/tools/i18n_sync_ops_test.dart`、`test/i18n`、`test/media/sources/manga_shelf_cover_resolution_test.dart`、`test/media/manga/manga_first_page_cover_test.dart`、`test/media/manga/rebuild_download_index_service_test.dart`、`test/media/manga/manga_series_page_cover_test.dart`、`test/media/media_cover_write_guard_test.dart`、`test/pages/manga_library_continue_pill_test.dart`、`test/settings/settings_rebuild_download_index_test.dart`）。
+- 引擎：`packages/fushi_engine` 的 `local_source_cover_bytes_test` + `local_source_cover_test` 共 19 tests 全部通过。
+- 无新增失败；未 push。
