@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:path/path.dart' as p;
+
 import 'package:fushi/i18n/strings.g.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi_engine/epub/epub_storage.dart';
@@ -149,7 +151,7 @@ Future<MangaLibraryRemovalResult> removeMangaFromLibrary({
         (row.extractDir.isNotEmpty &&
             isLocalSourcePathWithinRoot(
               row.extractDir,
-              downloadsRoot ?? await AppPaths.downloadsRootDirectory(),
+              await _resolveDownloadsRoot(downloadsRoot),
             ))) {
       // 在线 / 受管本地卷：先停正在写这个目录的任务，再删文件。
       //
@@ -246,4 +248,18 @@ Future<MangaLibraryRemovalResult> removeMangaFromLibrary({
     );
   }
   return MangaLibraryRemovalResult.removed(await db.getEpubBook(bookKey));
+}
+
+/// 「删除本地文件」只能删当前 Download library 内的文件。
+///
+/// 与 `DownloadLibraryIndex` 同一条根解析：显式注入优先；测试壳里
+/// `EpubStorage` 根的同级 `downloads` 与 Download library 一致；生产回落
+/// AppPaths 的 Content root。
+Future<Directory> _resolveDownloadsRoot(Directory? injected) async {
+  if (injected != null) return injected;
+  final String? bookBase = EpubStorage.debugBaseDirectoryOverridePath;
+  if (bookBase != null && bookBase.isNotEmpty) {
+    return Directory(p.join(p.dirname(bookBase), 'downloads'));
+  }
+  return AppPaths.downloadsRootDirectory();
 }

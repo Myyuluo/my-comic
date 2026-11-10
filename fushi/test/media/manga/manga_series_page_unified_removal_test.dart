@@ -85,6 +85,9 @@ class _TestAppModel extends AppModel {
   AppPaths get appPaths => _paths;
 
   @override
+  AppPaths? get appPathsOrNull => _paths;
+
+  @override
   OnlineMangaLibraryService onlineMangaLibraryService(
     OnlineMangaRuntimeKind runtime,
   ) => _library;
