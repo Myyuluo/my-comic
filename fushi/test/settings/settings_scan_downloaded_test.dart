@@ -15,10 +15,11 @@ import 'package:fushi/src/settings/settings_schema_rebuild_index.dart';
 
 import '../helpers/test_platform_services.dart';
 
-/// 设置 →「存储与下载 → 下载索引」的「检索已下载」入口。
+/// 设置 →「存储与下载 → 备份索引」的「检索已下载」入口。
 ///
 /// 整行可点的动作行（确认 → 进度/取消 → 结果摘要），与「重建下载索引」同一套
 /// 组件与对话框壳；执行体通过测试缝替换，避免 widget 测试碰真实数据库/文件系统。
+/// Ticket 06：并入「备份索引」合并分组，item id 与桌面可见性保持原样（下移到行）。
 void main() {
   setUp(() {
     LocaleSettings.setLocale(AppLocale.zhCn);
@@ -31,7 +32,7 @@ void main() {
 
   SettingsSection scanSection() =>
       buildDownloadsDestination().sections.singleWhere(
-        (SettingsSection section) => section.id == 'storage.rebuild.section',
+        (SettingsSection section) => section.id == 'system.section.backup',
       );
 
   SettingsActionItem scanItem() =>
@@ -100,19 +101,25 @@ void main() {
         failed: value.failed,
       );
 
-  testWidgets('下载索引下显示「检索已下载」整行动作入口，副标题精确', (WidgetTester tester) async {
+  testWidgets('备份索引下显示「检索已下载」整行动作入口，副标题精确', (WidgetTester tester) async {
     final SettingsContext settings = await captureContext(tester);
     final SettingsSection section = scanSection();
 
     expect(section.isVisible(settings), isTrue);
+    expect(section.title, '备份索引');
     expect(section.items.map((SettingsItem item) => item.id), <String>[
+      'system.import_mihon_backup',
+      'system.export_mihon_backup',
       'storage.rebuild_index',
       'storage.scan_downloaded',
-    ], reason: '同一个下载索引小节下的第二个动作');
+    ], reason: '合并分组内的固定顺序：导入、创建、重建、检索');
     final SettingsActionItem item = scanItem();
+    expect(item.id, 'storage.scan_downloaded', reason: 'item id 是稳定控制通道键');
     expect(item.title, '检索已下载');
     expect(item.subtitle, '扫描 downloads 中已下载但未加入书架的漫画并加入书架。');
     expect(item.cli, isNotNull, reason: '动作行必须声明控制通道入口');
+    expect(item.visible, isNotNull, reason: '检索行自身保留桌面可见性');
+    expect(item.isVisible(settings), isTrue, reason: '桌面测试主机上检索行可见');
   });
 
   testWidgets('确认后显示可取消进度并给出结果摘要', (WidgetTester tester) async {
