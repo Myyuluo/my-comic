@@ -350,6 +350,9 @@ void main() {
       Uri.parse(cached.imageUrl!).toFilePath(),
       cache.coverPathFor('book-1').path,
     );
+    // 第一次解析触发的后台检查先收尾，避免它的残留请求混进下面的断言。
+    await ReaderFushiSource.debugWaitForShelfCoverRefreshes();
+    adapter.fetchedCoverUrls.clear();
 
     await cache.clear();
     expect(await cache.hasCover('book-1'), isFalse);
@@ -358,6 +361,7 @@ void main() {
 
     final List<MediaItem> items = await ReaderFushiSource.instance
         .getBooksFromDb(appModel: appModel);
+    await ReaderFushiSource.debugWaitForShelfCoverRefreshes();
     final MediaItem fallback = items.singleWhere(
       (MediaItem item) => item.mediaIdentifier.endsWith('book-1'),
     );
