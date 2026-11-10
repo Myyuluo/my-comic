@@ -63,8 +63,9 @@ typedef OnlineMangaAutoDownload = Future<void> Function(
 /// **串行**而不是并发：几十条书架条目并发打同一个源站等于自制一次小型压测，
 /// 而这是后台任务，快几秒对用户没有任何意义。
 ///
-/// 单条失败（源挂了、Cloudflare 拦截、章节列表返回空）只跳过这一条：一条书架
-/// 条目的源出问题，不该让后面几十条都查不成。
+/// 单条失败（源挂了、Cloudflare 拦截、章节列表抓取失败）只跳过这一条：一条
+/// 书架条目的源出问题，不该让后面几十条都查不成。章节列表**返回空**不算失败
+/// （票 06：详情/封面仍会落库，旧章节保留），这条照常计入刷新数。
 Future<int> runOnlineMangaUpdateProbe({
   required FushiDatabase database,
   required OnlineMangaLibraryService Function(OnlineMangaRuntimeKind) serviceFor,
@@ -78,11 +79,19 @@ Future<int> runOnlineMangaUpdateProbe({
   for (final ({EpubBookRow book, OnlineMangaLibraryEntry entry}) row
       in onlineMangaLibraryRows(books)) {
     try {
-      final OnlineMangaLibraryEntry updated =
+      final OnlineMangaRefreshOutcome outcome =
           await serviceFor(row.entry.runtime).refreshFromSource(
         bookKey: row.book.bookKey,
         entry: row.entry,
       );
+      final chaptersError = outcome.chaptersError;
+      if (chaptersError != null) {
+        // 详情已经落库（封面可自愈），但章节没拉全：这一条按失败处理，跳过
+        // 自动追更——拿旧章节 diff 出不了任何新章。
+        onError?.call(chaptersError, row.book.bookKey);
+        continue;
+      }
+      final OnlineMangaLibraryEntry updated = outcome.entry;
       refreshed++;
       if (autoDownload != null && row.entry.autoDownload) {
         final List<OnlineMangaChapter> fresh = newlyAppearedChapters(

@@ -275,12 +275,12 @@ void main() {
       expect(afterSet.chapters, hasLength(2));
 
       // 假 adapter 返回同一份章节；refresh 走 copyWith，两位必须活下来。
-      final OnlineMangaLibraryEntry refreshed = await service.refreshFromSource(
+      final OnlineMangaRefreshOutcome refreshed = await service.refreshFromSource(
         bookKey: row.bookKey,
         entry: afterSet,
       );
-      expect(refreshed.subscribed, isTrue);
-      expect(refreshed.autoDownload, isTrue);
+      expect(refreshed.entry.subscribed, isTrue);
+      expect(refreshed.entry.autoDownload, isTrue);
       final OnlineMangaLibraryEntry afterRefresh = await stored(row.bookKey);
       expect(afterRefresh.subscribed, isTrue, reason: '刷新不能把订阅冲掉');
       expect(afterRefresh.autoDownload, isTrue);

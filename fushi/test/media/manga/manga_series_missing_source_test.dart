@@ -23,6 +23,7 @@ import 'package:fushi_audio/fushi_audio.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi_engine/epub/epub_storage.dart';
 import 'package:path/path.dart' as p;
+import 'package:transparent_image/transparent_image.dart';
 
 import '../../helpers/pump_until.dart';
 import '../../helpers/test_platform_services.dart';
@@ -317,6 +318,54 @@ void main() {
       isFalse,
       reason: '来源未安装不生成 downloads/{numeric sourceId} 目录',
     );
+  });
+
+  testWidgets('来源缺失：书架有本地封面时继续显示，不请求远程封面', (
+    WidgetTester tester,
+  ) async {
+    sizeView(tester);
+    final OnlineMangaLibraryService library = OnlineMangaLibraryService(
+      database: db,
+      rootDirectory: Directory(p.join(root.path, 'legacy')),
+      adapter: _MissingSourceAdapter(),
+    );
+    final _TestAppModel appModel = _TestAppModel(db, library, root);
+    late EpubBookRow row;
+
+    await tester.runAsync(() async {
+      row = await library.add(
+        _placeholderEntry(
+          sourceName: '再漫画',
+          coverUrl: 'https://example.test/missing-source-cover.jpg',
+        ),
+      );
+      final File localCover = File(p.join(row.extractDir, 'cover.jpg'));
+      localCover.createSync(recursive: true);
+      localCover.writeAsBytesSync(kTransparentImage);
+      await tester.pumpWidget(_harness(appModel, row.bookKey));
+      await pumpUntilFound(tester, find.text('Chapter 1'));
+      await _settle(tester);
+    });
+
+    final List<Image> images = tester
+        .widgetList<Image>(find.byType(Image))
+        .toList(growable: false);
+    expect(
+      images.any(
+        (Image image) =>
+            image.image is FileImage &&
+            (image.image as FileImage).file.path ==
+                p.join(row.extractDir, 'cover.jpg'),
+      ),
+      isTrue,
+      reason: '来源缺失不影响已落盘的本地封面',
+    );
+    expect(
+      images.any((Image image) => image.image is AppCachedHttpImage),
+      isFalse,
+      reason: '来源缺失时不得因为描述符里有 coverUrl 就发起远程封面请求',
+    );
+    expect(find.byType(MangaCoverPlaceholder), findsNothing);
   });
 
   testWidgets('旧条目没有来源名称：退化为「来源未安装」', (WidgetTester tester) async {
