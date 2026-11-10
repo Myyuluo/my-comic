@@ -67,13 +67,21 @@ Future<List<DownloadMangaFolderOnDisk>> scanDownloadSourceFolders(
   for (final Directory mangaDir in await listDownloadChildDirectories(
     sourceDir,
   )) {
+    final List<ChapterContainerOnDisk> chapters =
+        await scanDownloadChapterContainers(
+          mangaDir,
+          readComplete: readComplete,
+        );
+    // 单章作品把 pages.json 直接放在漫画目录根，没有章容器（ticket 06）：
+    // 只有在这种裸目录里才读根 manifest，正常下载目录保持零额外读盘。
+    final MangaPagesManifest? rootManifest = chapters.isEmpty
+        ? await readPagesManifest(mangaDir)
+        : null;
     folders.add(
       DownloadMangaFolderOnDisk(
         directory: mangaDir,
-        chapters: await scanDownloadChapterContainers(
-          mangaDir,
-          readComplete: readComplete,
-        ),
+        chapters: chapters,
+        rootManifest: rootManifest,
       ),
     );
   }
@@ -123,7 +131,8 @@ Future<List<ChapterContainerOnDisk>> scanDownloadChapterContainers(
     final String containerName = p.basename(entity.path);
     if (entity is Directory) {
       final MangaPagesManifest? manifest = await readPagesManifest(entity);
-      final bool complete = readComplete &&
+      final bool complete =
+          readComplete &&
           manifest != null &&
           await readDownloadLibraryChapterPayload(entity) != null;
       chapters.add(
@@ -137,7 +146,8 @@ Future<List<ChapterContainerOnDisk>> scanDownloadChapterContainers(
     } else if (entity is File) {
       final MangaPagesManifest? manifest =
           await readDownloadLibraryArchiveManifest(entity);
-      final bool complete = readComplete &&
+      final bool complete =
+          readComplete &&
           manifest != null &&
           await isDownloadLibraryArchiveComplete(entity);
       chapters.add(
@@ -159,8 +169,9 @@ Future<List<ChapterContainerOnDisk>> scanDownloadChapterContainers(
 Future<MangaPagesManifest?> readFirstDownloadMangaManifest(
   Directory mangaDir,
 ) async {
-  for (final FileSystemEntity entity
-      in await listDownloadChapterContainers(mangaDir)) {
+  for (final FileSystemEntity entity in await listDownloadChapterContainers(
+    mangaDir,
+  )) {
     final MangaPagesManifest? manifest = entity is Directory
         ? await readPagesManifest(entity)
         : await readDownloadLibraryArchiveManifest(entity as File);
@@ -282,8 +293,9 @@ Future<DownloadMangaFolderProbe> _probeDownloadMangaFolder(
   List<MangaDownloadDiskQuery> queries,
 ) async {
   final List<MangaPagesManifest> found = <MangaPagesManifest>[];
-  for (final FileSystemEntity entity
-      in await listDownloadChapterContainers(mangaDir)) {
+  for (final FileSystemEntity entity in await listDownloadChapterContainers(
+    mangaDir,
+  )) {
     final MangaPagesManifest? manifest = entity is Directory
         ? await readPagesManifest(entity)
         : await readDownloadLibraryArchiveManifest(entity as File);
@@ -291,7 +303,16 @@ Future<DownloadMangaFolderProbe> _probeDownloadMangaFolder(
     found.add(manifest);
     if (!_probeNeedsMoreManifests(queries, found)) break;
   }
-  if (found.isEmpty) return DownloadMangaFolderProbe(directory: mangaDir);
+  if (found.isEmpty) {
+    // 单章作品把 pages.json 直接放在漫画目录根（ticket 06）：章节容器里没有
+    // manifest 时，根 manifest 仍能证明目录身份。
+    final MangaPagesManifest? rootManifest = await readPagesManifest(mangaDir);
+    return DownloadMangaFolderProbe(
+      directory: mangaDir,
+      manifest: rootManifest,
+      manifestAtMangaRoot: rootManifest != null,
+    );
+  }
   return DownloadMangaFolderProbe(
     directory: mangaDir,
     manifest: found.first,
@@ -382,19 +403,19 @@ class DownloadMangaFolderIdentityMatch {
   const DownloadMangaFolderIdentityMatch.found(
     DownloadMangaFolderOnDisk this.folder, {
     this.matches = const <DownloadMangaFolderOnDisk>[],
-  })   : ambiguous = false,
-        candidates = const <DownloadMangaFolderOnDisk>[];
+  }) : ambiguous = false,
+       candidates = const <DownloadMangaFolderOnDisk>[];
 
   const DownloadMangaFolderIdentityMatch.none()
-      : folder = null,
-        ambiguous = false,
-        candidates = const <DownloadMangaFolderOnDisk>[],
-        matches = const <DownloadMangaFolderOnDisk>[];
+    : folder = null,
+      ambiguous = false,
+      candidates = const <DownloadMangaFolderOnDisk>[],
+      matches = const <DownloadMangaFolderOnDisk>[];
 
   const DownloadMangaFolderIdentityMatch.ambiguous(this.candidates)
-      : folder = null,
-        ambiguous = true,
-        matches = candidates;
+    : folder = null,
+      ambiguous = true,
+      matches = candidates;
 
   /// 恰好一个可复用目录。
   final DownloadMangaFolderOnDisk? folder;
@@ -443,8 +464,7 @@ DownloadMangaFolderIdentityMatch matchDownloadMangaFolderByIdentity(
   );
   final List<DownloadMangaFolderOnDisk> exact = <DownloadMangaFolderOnDisk>[
     for (final DownloadMangaFolderOnDisk folder in matches)
-      if (_folderManifests(folder).any(identity.matchesManifestPackage))
-        folder,
+      if (_folderManifests(folder).any(identity.matchesManifestPackage)) folder,
   ];
   if (exact.length == 1) {
     return DownloadMangaFolderIdentityMatch.found(
