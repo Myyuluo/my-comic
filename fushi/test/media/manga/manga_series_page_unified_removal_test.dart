@@ -245,7 +245,10 @@ void main() {
     library = OnlineMangaLibraryService(
       database: db,
       rootDirectory: Directory(p.join(root.path, 'legacy')),
-      downloadsRootDirectory: Directory(p.join(root.path, 'downloads')),
+      // 与 AppPaths 解析出的 Download library 根一致（FUSHI_TEST_ROOT 下是
+      // `<root>/content/downloads`）；移出时「删除本地文件」只允许删这个根
+      // 内的文件。
+      downloadsRootDirectory: paths.downloadsRoot,
       adapter: _FakeAdapter(),
     );
   });
