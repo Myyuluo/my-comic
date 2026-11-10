@@ -438,8 +438,9 @@ class MihonBackupImportService {
     // One transaction for the whole import: a backup with thousands of entries
     // otherwise pays one fsync per row/chapter-state, which on Windows turns a
     // few seconds of SQLite work into tens of minutes. Directory creation is
-    // deliberately deferred to first open (`ensureBookDirectory`) so importing
-    // 5k+ entries does not create 5k folders synchronously.
+    // deliberately deferred to the download worker (`ensureBookDirectory`) when
+    // a chapter download actually starts (ticket 02) — importing or browsing
+    // 5k+ entries never creates folders synchronously.
     await database.transaction(() async {
       int processed = 0;
       for (final MihonBackupManga manga in data.mangas) {
@@ -850,9 +851,9 @@ class MihonBackupImportService {
       sourceId: sourceId,
       seriesKey: mangaUrl,
     );
-    // Path only; the directory is created lazily by `ensureBookDirectory`
-    // when the user first opens the entry. Creating thousands of folders (and
-    // their placeholder manga.json files) during import is pure latency.
+    // Path only; the directory is created lazily by `ensureBookDirectory` in
+    // the download worker when a chapter download actually starts (ticket 02).
+    // Importing or browsing never creates folders (or placeholder manga.json).
     final String directoryPath = await _bookDirectory(bookKey);
 
     await database.insertEpubBook(

@@ -392,6 +392,12 @@ void main() {
     expect(row.inLibrary, isFalse, reason: '源页打开不得自动加入书架');
     expect(row.uid, isNotEmpty, reason: '非书架行也要有稳定 uid');
     expect(row.format, BookFormat.manga.dbValue);
+    expect(row.coverPath, isNull, reason: '浏览作品页不写封面');
+    expect(
+      Directory(p.join(root.path, 'downloads')).existsSync(),
+      isFalse,
+      reason: '打开在线源作品详情页不得创建下载目录',
+    );
     final OnlineMangaLibraryEntry stored = OnlineMangaLibraryEntry.tryParse(
       row.sourceMetadata,
     )!;
@@ -451,6 +457,11 @@ void main() {
 
     expect(appModel.opened, hasLength(1), reason: '点章应打开阅读器');
     expect(appModel.launchPageBuilder, isNotNull);
+    expect(
+      Directory(p.join(root.path, 'downloads')).existsSync(),
+      isFalse,
+      reason: '在线阅读（未下载章直读）不得创建下载目录',
+    );
 
     final EpubBookRow afterTap = (await db.getEpubBook(bookKey))!;
     expect(afterTap.inLibrary, isFalse, reason: '阅读不得把作品自动加入书架');

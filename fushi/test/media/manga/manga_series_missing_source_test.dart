@@ -12,11 +12,13 @@ import 'package:fushi/src/media/manga/library/manga_series_page.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_service.dart';
 import 'package:fushi/src/media/manga/library/online_manga_runtime_adapter.dart';
+import 'package:fushi/src/media/manga/manga_cover_placeholder.dart';
 import 'package:fushi/src/media/media_item.dart';
 import 'package:fushi/src/media/media_source.dart';
 import 'package:fushi/src/models/preferences_repository.dart';
 import 'package:fushi/src/platform/platform_providers.dart';
 import 'package:fushi/src/utils/misc/fushi_toast.dart';
+import 'package:fushi/src/utils/net/app_http_image.dart';
 import 'package:fushi_audio/fushi_audio.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi_engine/epub/epub_storage.dart';
@@ -153,19 +155,22 @@ const List<OnlineMangaChapter> _chapters = <OnlineMangaChapter>[
   ),
 ];
 
-OnlineMangaLibraryEntry _placeholderEntry({String? sourceName}) =>
-    OnlineMangaLibraryEntry(
-      runtime: OnlineMangaRuntimeKind.mihon,
-      extensionPackage: kUnavailableMihonExtensionPackage,
-      sourceId: '524579092615598717',
-      sourceName: sourceName,
-      series: const OnlineMangaSeries(
-        key: '/series/fixture',
-        title: 'Fixture series',
-        raw: <String, Object?>{'url': '/series/fixture'},
-      ),
-      chapters: _chapters,
-    );
+OnlineMangaLibraryEntry _placeholderEntry({
+  String? sourceName,
+  String? coverUrl,
+}) => OnlineMangaLibraryEntry(
+  runtime: OnlineMangaRuntimeKind.mihon,
+  extensionPackage: kUnavailableMihonExtensionPackage,
+  sourceId: '524579092615598717',
+  sourceName: sourceName,
+  series: OnlineMangaSeries(
+    key: '/series/fixture',
+    title: 'Fixture series',
+    coverUrl: coverUrl,
+    raw: const <String, Object?>{'url': '/series/fixture'},
+  ),
+  chapters: _chapters,
+);
 
 /// 导入时 Source 已安装（真实包名）但后来被停用：身份不再是占位包，运行时
 /// 解析同样失败。UI 仍须按「来源未安装」展示。
@@ -269,6 +274,49 @@ void main() {
     expect(books, hasLength(1));
     expect(books.single.bookKey, row.bookKey);
     expect(books.single.uid, row.uid);
+  });
+
+  testWidgets('来源缺失：不创建下载目录、不请求远程封面，显示灰封面', (
+    WidgetTester tester,
+  ) async {
+    sizeView(tester);
+    final OnlineMangaLibraryService library = OnlineMangaLibraryService(
+      database: db,
+      rootDirectory: Directory(p.join(root.path, 'legacy')),
+      adapter: _MissingSourceAdapter(),
+    );
+    final _TestAppModel appModel = _TestAppModel(db, library, root);
+
+    await tester.runAsync(() async {
+      // 备份里有远程封面 URL；来源缺失时它不能触发任何封面请求。
+      final EpubBookRow row = await library.add(
+        _placeholderEntry(
+          sourceName: '再漫画',
+          coverUrl: 'https://example.test/missing-source-cover.jpg',
+        ),
+      );
+      await tester.pumpWidget(_harness(appModel, row.bookKey));
+      await pumpUntilFound(tester, find.text('Chapter 1'));
+      await _settle(tester);
+    });
+
+    expect(
+      tester
+          .widgetList<Image>(find.byType(Image))
+          .any((Image image) => image.image is AppCachedHttpImage),
+      isFalse,
+      reason: '来源未安装时不得请求远程封面',
+    );
+    expect(
+      find.byType(MangaCoverPlaceholder),
+      findsOneWidget,
+      reason: '来源未安装显示灰封面占位',
+    );
+    expect(
+      Directory(p.join(root.path, 'downloads')).existsSync(),
+      isFalse,
+      reason: '来源未安装不生成 downloads/{numeric sourceId} 目录',
+    );
   });
 
   testWidgets('旧条目没有来源名称：退化为「来源未安装」', (WidgetTester tester) async {
