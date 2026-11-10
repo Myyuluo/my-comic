@@ -96,6 +96,7 @@ bool isDashboardContinueBook(MediaItem item, Set<String> completedBookKeys) {
           item.mediaIdentifier;
   return classifyShelfReadStatus(
         completed: completedBookKeys.contains(bookKey),
+        completedKnown: true,
         position: item.position,
         duration: item.duration,
       ) ==
