@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -21,8 +22,11 @@ import 'package:fushi/src/media/manga/interconnect/interconnect_manga_source.dar
     show InterconnectMangaCatalog;
 import 'package:fushi/src/media/manga/library/manga_adjacent_chapter.dart'
     show mangaReadingOrder;
+import 'package:fushi/src/media/manga/library/manga_shelf_cover_cache.dart';
+import 'package:fushi/src/media/manga/library/manga_shelf_cover_service.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_metadata.dart';
+import 'package:fushi/src/storage/app_paths.dart';
 import 'package:fushi/src/reader/page_turn_animation.dart';
 import 'package:fushi/src/reader/reader_chrome_floating.dart';
 import 'package:fushi/src/reader/highlight_stroke_style.dart';
@@ -639,6 +643,12 @@ class ReaderFushiSource extends ReaderMediaSource {
     final Map<String, Map<String, MangaChapterStateRow>> chapterStates =
         await db.getMangaChapterStatesForBookUids(books.map((b) => b.uid));
 
+    // 票 07：书架封面先查按 bookKey 的 Program state 持久字节缓存；没有时才走
+    // 本地封面文件 / 远程 URL。缓存根不可用（启动早期）时传 null，行为回落。
+    final MangaShelfCoverService? shelfCoverService = _shelfCoverServiceFor(
+      appModel,
+    );
+
     // HBK-AUDIT-128: previously this was a serial for-loop where every book
     // awaited up to four File.exists() cover probes one after another, so
     // shelf latency scaled linearly with library size. Map each book to a
@@ -649,12 +659,65 @@ class ReaderFushiSource extends ReaderMediaSource {
         (EpubBookRow book) => _bookToMediaItem(
           book,
           book.uid.isEmpty ? null : positions[book.uid],
-          book.uid.isEmpty
+          chapterStates: book.uid.isEmpty
               ? const <String, MangaChapterStateRow>{}
               : chapterStates[book.uid] ??
                     const <String, MangaChapterStateRow>{},
+          shelfCoverService: shelfCoverService,
         ),
       ),
+    );
+  }
+
+  /// 书架持久封面缓存的测试缝。
+  ///
+  /// 生产环境按 [AppModel.appPathsOrNull] 的 Program state 缓存根装配；测试
+  /// 注入临时目录 + 可控运行时适配器，避免依赖真实 `userdata`。
+  @visibleForTesting
+  static MangaShelfCoverService? debugShelfCoverService;
+
+  /// 后台封面刷新是 unawaited 的：测试需要等它们落盘后再断言。
+  static final Set<Future<void>> _pendingShelfCoverRefreshes =
+      <Future<void>>{};
+
+  @visibleForTesting
+  static Future<void> debugWaitForShelfCoverRefreshes() async {
+    while (_pendingShelfCoverRefreshes.isNotEmpty) {
+      await Future.wait<void>(
+        _pendingShelfCoverRefreshes.toList(growable: false),
+      );
+    }
+  }
+
+  MangaShelfCoverService? _shelfCoverServiceFor(AppModel appModel) {
+    final MangaShelfCoverService? override = debugShelfCoverService;
+    if (override != null) return override;
+    final AppPaths? paths = appModel.appPathsOrNull;
+    if (paths == null) return null;
+    return MangaShelfCoverService(
+      cache: MangaShelfCoverCache(
+        Directory(p.join(paths.cacheRoot.path, kMangaShelfCoverCacheDirName)),
+      ),
+      serviceFor: (OnlineMangaRuntimeKind runtime) {
+        try {
+          return appModel.onlineMangaLibraryService(runtime);
+        } on Object {
+          return null;
+        }
+      },
+    );
+  }
+
+  /// 后台刷新订阅：只保留 future 以便测试等待，不阻塞书架渲染。
+  static void _scheduleShelfCoverRefresh(
+    MangaShelfCoverService service,
+    String bookKey,
+    OnlineMangaLibraryEntry entry,
+  ) {
+    final Future<void> pending = service.refreshIfNeeded(entry, bookKey);
+    _pendingShelfCoverRefreshes.add(pending);
+    unawaited(
+      pending.whenComplete(() => _pendingShelfCoverRefreshes.remove(pending)),
     );
   }
 
@@ -672,7 +735,7 @@ class ReaderFushiSource extends ReaderMediaSource {
     final Map<String, MangaChapterStateRow> chapterStates = book.uid.isEmpty
         ? const <String, MangaChapterStateRow>{}
         : await db.getMangaChapterStates(book.uid);
-    return _bookToMediaItem(book, pos, chapterStates);
+    return _bookToMediaItem(book, pos, chapterStates: chapterStates);
   }
 
   /// 进度条里每章占的横向单位数（position / duration = 百分比）。章状态只有
@@ -760,10 +823,11 @@ class ReaderFushiSource extends ReaderMediaSource {
   /// reader position (already keyed by uid by the caller; null = never read).
   Future<MediaItem> _bookToMediaItem(
     EpubBookRow book,
-    ReaderPosition? pos, [
+    ReaderPosition? pos, {
     Map<String, MangaChapterStateRow> chapterStates =
         const <String, MangaChapterStateRow>{},
-  ]) async {
+    MangaShelfCoverService? shelfCoverService,
+  }) async {
     int position = 0;
     int duration = 1;
 
@@ -852,17 +916,41 @@ class ReaderFushiSource extends ReaderMediaSource {
     position = prog.position;
     duration = prog.duration;
 
-    String? imageUrl = await _resolveCoverUrl(book);
-    // 导入的在线漫画（Mihon 备份）通常没有本地封面文件，备份只带远程
-    // `series.coverUrl`。本地探测全落空时回退到它，交给 `MediaItem.imageUrl`
-    // 的现有 HTTP 图片缓存（`AppCachedHttpImage`）懒加载；来源是否安装无关紧要。
-    // 它**不**写入 [_lastGoodCoverUrlByBookKey]：那份进程缓存只存磁盘上真实
-    // 存在过的 `file://` URL（BUG-513），混入远程地址会破坏离线语义。
-    if (imageUrl == null) {
-      final String? remoteCoverUrl = onlineEntry?.series.coverUrl?.trim();
-      if (remoteCoverUrl != null && remoteCoverUrl.isNotEmpty) {
-        imageUrl = remoteCoverUrl;
+    // 票 07：在线条目的书架封面解析顺序——
+    // 按 bookKey 的持久封面缓存 → 本地封面文件 → 已保存的远程封面 URL
+    // （现有 HTTP 图片缓存）→ 占位。
+    final String? cachedShelfCover = onlineEntry == null
+        ? null
+        : await shelfCoverService?.cachedCoverUrl(book.bookKey);
+    String? imageUrl;
+    bool usedLocalCover = false;
+    if (cachedShelfCover != null) {
+      imageUrl = cachedShelfCover;
+    } else {
+      imageUrl = await _resolveCoverUrl(book);
+      usedLocalCover = imageUrl != null;
+      // 导入的在线漫画（Mihon 备份）通常没有本地封面文件，备份只带远程
+      // `series.coverUrl`。本地探测全落空时回退到它，交给 `MediaItem.imageUrl`
+      // 的现有 HTTP 图片缓存（`AppCachedHttpImage`）懒加载；来源是否安装无关紧要。
+      // 它**不**写入 [_lastGoodCoverUrlByBookKey]：那份进程缓存只存磁盘上真实
+      // 存在过的 `file://` URL（BUG-513），混入远程地址会破坏离线语义。
+      if (imageUrl == null) {
+        final String? remoteCoverUrl = onlineEntry?.series.coverUrl?.trim();
+        if (remoteCoverUrl != null && remoteCoverUrl.isNotEmpty) {
+          imageUrl = remoteCoverUrl;
+        }
       }
+    }
+    // 已有持久缓存时也要检查来源 URL 是否换了新签名；没有缓存且没有本地封面
+    // 时，用当前远程 URL 在后台补一份持久字节。失败保留旧缓存 / 远程回退。
+    if (onlineEntry != null &&
+        shelfCoverService != null &&
+        (cachedShelfCover != null || !usedLocalCover)) {
+      _scheduleShelfCoverRefresh(
+        shelfCoverService,
+        book.bookKey,
+        onlineEntry,
+      );
     }
 
     return MediaItem(

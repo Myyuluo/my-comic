@@ -1428,6 +1428,7 @@
   "cache_clear_step_memory_images": "内存图片缓存",
   "cache_clear_step_mihon_covers": "Mihon 封面",
   "cache_clear_step_remote_covers": "远端封面",
+  "cache_clear_step_shelf_covers": "书架封面",
   "cache_clear_step_stream": "在线页缓存",
   "cache_clear_step_thumbnails": "缩略图",
   "cache_clear_step_webview": "WebView 缓存",

@@ -4,10 +4,14 @@ import 'dart:io';
 import 'package:material_ui/material_ui.dart';
 import 'package:path/path.dart' as p;
 
+import 'package:fushi/src/media/manga/library/manga_shelf_cover_cache.dart'
+    show kMangaShelfCoverCacheDirName;
 import 'package:fushi/src/media/manga/mihon/manga_page_provider.dart'
     show LocalSourceArchiveReaderSession, kLocalSourceArchiveCacheDirName;
 import 'package:fushi/src/media/manga/mihon/online_manga_reader_session.dart'
     show OnlineMangaReaderSession, kMangaStreamCacheDirName;
+import 'package:fushi/src/media/sources/reader_fushi_source.dart'
+    show fushiBooksProvider;
 import 'package:fushi/src/settings/settings_actions.dart';
 import 'package:fushi/src/settings/settings_context.dart';
 import 'package:fushi/src/settings/settings_destination.dart';
@@ -204,6 +208,9 @@ Future<void> clearMangaCache(SettingsContext settings) async {
   }
 
   if (!settings.context.mounted) return;
+  // 票 07：书架封面的持久字节可能刚被清掉，让书架数据管线重算 MediaItem，
+  // 回退到远程 URL / 占位；不清下载库、History 或阅读进度。
+  settings.ref.invalidate(fushiBooksProvider);
   final String freed = FushiByteFormat.bytes(report.freedBytes);
   // 失败与「当前平台跳过 WebView 清理」都不能宣称全部成功。
   if (report.hasPartial) {
@@ -252,6 +259,15 @@ MangaCacheClearService _buildDefaultMangaCacheClearService(
         ),
         pruneInactive:
             LocalSourceArchiveReaderSession.pruneStaleLocalSourceArchiveCaches,
+      ),
+      MangaCacheDirectoryClearStep(
+        id: 'shelf_covers',
+        label: t.cache_clear_step_shelf_covers,
+        // 票 07：书架按 bookKey 持久化的在线封面字节。清除后书架回退到
+        // 远程 URL 或占位，不触碰下载库与本地封面文件。
+        roots: <Directory>[
+          Directory(p.join(paths.cacheRoot.path, kMangaShelfCoverCacheDirName)),
+        ],
       ),
       MangaCacheDirectoryClearStep(
         id: 'remote_covers',

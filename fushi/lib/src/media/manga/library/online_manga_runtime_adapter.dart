@@ -219,6 +219,14 @@ abstract interface class OnlineMangaRuntimeAdapter {
   Future<List<int>> fetchCover(OnlineMangaLibraryEntry entry, String url);
 }
 
+/// 能判断来源当前是否可解析（已安装且启用）的适配器。
+///
+/// 书架持久封面缓存只在来源可用时才经运行时抓字节；来源缺失 / 停用时必须直接
+/// 使用已有缓存或占位，不发起任何扩展网络请求（票 07）。
+abstract interface class OnlineMangaSourceAvailability {
+  Future<bool> isSourceAvailable(OnlineMangaLibraryEntry entry);
+}
+
 /// Optional OCR sidecar capability. Sources that do not implement this are
 /// never queried for sidecars.
 abstract interface class MangaOcrSidecarProvider {
@@ -337,7 +345,8 @@ class MihonLibraryAdapter
         OnlineMangaWebUrlCapable,
         OnlineMangaSourceLanguageProvider,
         OnlineMangaLanguageScoped,
-        OnlineMangaPageCancellable {
+        OnlineMangaPageCancellable,
+        OnlineMangaSourceAvailability {
   const MihonLibraryAdapter(
     this.manager, {
     this.presetContext,
@@ -384,6 +393,24 @@ class MihonLibraryAdapter
   @override
   bool get isSupportedOnThisPlatform =>
       presetContext != null || MihonRuntimeFactory.isSupported;
+
+  /// 来源是否已安装且启用（或调用方已预置源上下文）。
+  ///
+  /// 只读 Source 表，不联网、不拉起扩展商店刷新：书架首屏会为每本在线书调用
+  /// 它，不能因此变成一个昂贵的联网操作。真正取封面时 [fetchCover] 自己会走
+  /// `_context` 完成运行时初始化。
+  @override
+  Future<bool> isSourceAvailable(OnlineMangaLibraryEntry entry) async {
+    if (presetContext != null) return true;
+    if (!MihonRuntimeFactory.isSupported) return false;
+    try {
+      await manager.reload();
+      _sourceRow(entry);
+      return true;
+    } on Object {
+      return false;
+    }
+  }
 
   @override
   Future<String?> sourceLabel(OnlineMangaLibraryEntry entry) async {

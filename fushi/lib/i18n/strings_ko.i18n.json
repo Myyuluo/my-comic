@@ -1428,6 +1428,7 @@
   "cache_clear_step_memory_images": "In-memory images",
   "cache_clear_step_mihon_covers": "Mihon covers",
   "cache_clear_step_remote_covers": "Remote covers",
+  "cache_clear_step_shelf_covers": "Shelf covers",
   "cache_clear_step_stream": "Online page cache",
   "cache_clear_step_thumbnails": "Thumbnails",
   "cache_clear_step_webview": "WebView cache",
