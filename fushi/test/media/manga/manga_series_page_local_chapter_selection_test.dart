@@ -131,6 +131,32 @@ void main() {
     return (await db.getEpubBook(bookKey))!;
   }
 
+  testWidgets('本地图源章节不参与批量下载：动作存在但始终置灰', (WidgetTester tester) async {
+    sizeView(tester);
+    final EpubBookRow row = await insertLocalSourceRow();
+    late AppModel appModel;
+    await tester.runAsync(() async {
+      appModel = _TestAppModel(db, paths, tmp);
+      await tester.pumpWidget(_harness(appModel, row.bookKey));
+      await pumpUntilFound(tester, find.text('Ch 1'));
+    });
+
+    await tester.longPress(_chapterRow('Ch 1'));
+    await tester.tap(_chapterRow('Ch 2'));
+    await tester.pump(const Duration(milliseconds: 300));
+
+    final Finder downloadSelected = find.byKey(
+      const ValueKey<String>('manga_series_batch_download_selected'),
+    );
+    expect(downloadSelected, findsOneWidget);
+    expect(
+      tester.widget<FushiIconButton>(downloadSelected).enabled,
+      isFalse,
+      reason: '本地图源文件不是在线下载，批量下载动作不可用',
+    );
+    expect(await db.listMangaDownloadJobs(), isEmpty, reason: '本地章节不会进入在线下载队列');
+  });
+
   testWidgets('本地图源章节可批量标记已读 / 未读，只写章级 readAt', (WidgetTester tester) async {
     sizeView(tester);
     final EpubBookRow row = await insertLocalSourceRow();
