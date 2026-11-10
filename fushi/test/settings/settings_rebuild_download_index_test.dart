@@ -69,6 +69,10 @@ void main() {
     int booksSkipped = 2,
     int booksAmbiguous = 1,
     int skippedChapters = 2,
+    int coversGenerated = 2,
+    int coversUpdated = 1,
+    int coversSkipped = 3,
+    int coversFailed = 1,
     int failed = 1,
     bool cancelled = false,
   }) => RebuildDownloadIndexReport(
@@ -81,23 +85,35 @@ void main() {
     chaptersRelinked: chaptersRelinked,
     chaptersMissing: chaptersMissing,
     chaptersSkipped: skippedChapters,
+    coversGenerated: coversGenerated,
+    coversUpdated: coversUpdated,
+    coversSkipped: coversSkipped,
+    coversFailed: coversFailed,
     failed: failed,
     cancelled: cancelled,
   );
 
   String expectedReportText(RebuildDownloadIndexReport value) =>
-      t.rebuild_download_index_report_body(
-        scanned: value.booksScanned,
-        matched: value.booksMatched,
-        books: value.booksRelinked,
-        chapters: value.chaptersRelinked,
-        missingBooks: value.booksMissing,
-        missingChapters: value.chaptersMissing,
-        skippedBooks: value.booksSkipped,
-        ambiguous: value.booksAmbiguous,
-        skippedChapters: value.chaptersSkipped,
-        failed: value.failed,
-      );
+      <String>[
+        t.rebuild_download_index_report_body(
+          scanned: value.booksScanned,
+          matched: value.booksMatched,
+          books: value.booksRelinked,
+          chapters: value.chaptersRelinked,
+          missingBooks: value.booksMissing,
+          missingChapters: value.chaptersMissing,
+          skippedBooks: value.booksSkipped,
+          ambiguous: value.booksAmbiguous,
+          skippedChapters: value.chaptersSkipped,
+          failed: value.failed,
+        ),
+        t.rebuild_download_index_report_covers(
+          generated: value.coversGenerated,
+          updated: value.coversUpdated,
+          skipped: value.coversSkipped,
+          failed: value.coversFailed,
+        ),
+      ].join('\n\n');
 
   testWidgets('备份索引页显示「重建下载索引」整行动作入口', (WidgetTester tester) async {
     final SettingsContext settings = await captureContext(tester);

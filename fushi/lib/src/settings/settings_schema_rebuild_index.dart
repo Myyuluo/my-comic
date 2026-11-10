@@ -236,6 +236,12 @@ Future<void> _showRebuildReport(
       skippedChapters: report.chaptersSkipped,
       failed: report.failed,
     ),
+    t.rebuild_download_index_report_covers(
+      generated: report.coversGenerated,
+      updated: report.coversUpdated,
+      skipped: report.coversSkipped,
+      failed: report.coversFailed,
+    ),
   ].join('\n\n'),
 );
 
