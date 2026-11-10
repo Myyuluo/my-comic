@@ -414,7 +414,7 @@ abstract class MediaSource {
           // cacheKey；签名封面 URL 切换后，旧 URL 的失败 / 旧图条目仍会占着
           // 同一个 key 并压制新封面。URL 入键让新旧封面天然互不命中，旧条目
           // 交由既有容量淘汰清理。
-          cacheKey: '${item.uniqueKey}\u0000$remoteUrl',
+          cacheKey: '${item.uniqueKey}|$remoteUrl',
         );
       }
     }
