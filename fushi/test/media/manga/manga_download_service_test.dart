@@ -253,9 +253,20 @@ void main() {
     expect(queued.status, MangaDownloadJobStatus.queued);
     expect(queued.runtime, 'mihon');
     expect(queued.chapterTitle, 'Chapter 1');
+    expect(
+      Directory(bookDir).existsSync(),
+      isFalse,
+      reason: '入队本身不物化 Download library 目录',
+    );
 
     await downloads.start();
     await downloads.whenIdle;
+
+    expect(
+      Directory(bookDir).existsSync(),
+      isTrue,
+      reason: '真正开始章节下载时才创建 downloads/{source}/{manga}',
+    );
 
     final MangaDownloadJobRow done = await jobOf('/chapter/1');
     expect(done.status, MangaDownloadJobStatus.done);
@@ -661,6 +672,8 @@ void main() {
   });
 
   test('同名 .cbz 已存在（属于别的章）：不覆盖，改用确定后缀', () async {
+    // 入库不再建目录；模拟磁盘上已有别的章留下的 .cbz。
+    await Directory(bookDir).create(recursive: true);
     final File existing = File(p.join(bookDir, 'Chapter 1.cbz'));
     await existing.writeAsString('do not touch');
 
