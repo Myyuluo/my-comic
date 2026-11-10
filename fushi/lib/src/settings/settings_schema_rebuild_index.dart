@@ -4,6 +4,8 @@ import 'package:material_ui/material_ui.dart';
 
 import 'package:fushi/src/media/manga/download/rebuild_download_index_service.dart';
 import 'package:fushi/src/media/manga/download/scan_downloaded_manga_service.dart';
+import 'package:fushi/src/media/manga/library/manga_first_page_cover_service.dart';
+import 'package:fushi/src/media/manga/library/manga_shelf_cover_service.dart';
 import 'package:fushi/src/settings/settings_actions.dart';
 import 'package:fushi/src/settings/settings_context.dart';
 import 'package:fushi/src/settings/settings_destination.dart';
@@ -68,10 +70,33 @@ Future<RebuildDownloadIndexReport> _runRebuildDownloadIndex(
   void Function(RebuildDownloadIndexProgress progress)? onProgress,
 ) {
   final paths = settings.appModel.appPaths;
+  // Ticket 03：重链书架成员时为缺封面的作品预热第一页封面。生成字节只写
+  // Program state 的 shelf cover 缓存；来源可用性只读数据库，用来判断远程
+  // 封面是否优先于生成封面。
+  final MangaFirstPageCoverService? firstPageCoverService =
+      MangaFirstPageCoverService.forAppCache(
+        database: settings.appModel.database,
+        cacheRoot: paths.cacheRoot,
+      );
+  final MangaShelfCoverService? shelfCoverService =
+      firstPageCoverService == null
+      ? null
+      : MangaShelfCoverService(
+          cache: firstPageCoverService.cache,
+          serviceFor: (runtime) {
+            try {
+              return settings.appModel.onlineMangaLibraryService(runtime);
+            } on Object {
+              return null;
+            }
+          },
+        );
   return RebuildDownloadIndexService(
     database: settings.appModel.database,
     downloadsRoot: paths.downloadsRoot,
     localComicRoot: paths.localComicRoot,
+    firstPageCoverService: firstPageCoverService,
+    isRemoteCoverAvailable: shelfCoverService?.isSourceAvailable,
   ).run(cancelToken: cancelToken, onProgress: onProgress);
 }
 
