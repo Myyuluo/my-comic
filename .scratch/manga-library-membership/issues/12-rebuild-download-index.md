@@ -31,3 +31,5 @@
 - **测试：** `test/media/manga/rebuild_download_index_service_test.dart`（非书架行、local manifest 关联、重复偏好/歧义、墓碑、幂等）、`test/media/manga/manga_series_page_downloaded_status_test.dart`（页面打开期间重建后实时刷新）、`test/settings/settings_rebuild_download_index_test.dart`、`test/media/manga/download_library_index_test.dart`、`test/pages/manga_nonlibrary_reading_test.dart` 共 66 个测试通过。
 
 **已知限制：** 在线行经 local manifest 关联后，`extractDir` 指向 `local/`。后续重建的「沿用 recorded `extractDir`」规则与文件名回退都只覆盖当前 `downloads` 根内的路径，因此该关联只能靠 `pages.json` 身份再次命中；若该本地目录的 `pages.json` 消失或不可解析，重建会把作品报为 missing/skipped，而不会按记录的 local `extractDir` 直接复用（重复副本偏好仍会优先记录路径）。
+
+**ticket 15 修正（local 单章根 manifest）：** 单章作品把 `pages.json` 放在 `local/<manga>` 根时，重建只把目录关联为 `extractDir` 并计为 `booksMatched`；根 manifest 不当作章节容器，不写 `<manga>/<manga>` 假映射、也不计 `chaptersRelinked`。已下载状态仍由 manifest 扫描提供（根 manifest 算一章）。
