@@ -60,7 +60,8 @@ void main() {
         'system.section.backup',
         'storage.rebuild.section',
       ],
-      reason: '批量导入退役 + 备份分组搬入 + 下载开关后：'
+      reason:
+          '批量导入退役 + 备份分组搬入 + 下载开关后：'
           '存储位置 → 下载 → 备份 → 下载索引',
     );
     expect(
@@ -97,7 +98,8 @@ void main() {
     );
     expect(
       destination.sections.last.items.map((SettingsItem item) => item.id),
-      <String>['storage.rebuild_index'],
+      <String>['storage.rebuild_index', 'storage.scan_downloaded'],
+      reason: '下载索引同时提供重建（只重链书架）与检索已下载（发现并加入）',
     );
     expect(
       destination.sections
