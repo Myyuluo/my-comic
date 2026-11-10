@@ -58,3 +58,9 @@
 
 - 未新增数据库 schema；未改 Backup 导出 / 导入格式；未写 Content root / Download library；未移动、复制或删除用户文件。
 - 本 ticket 的 diff 仅涉及 `GLOSSARY.md`、ADR 0023、17 个 i18n json、设置页重建报告与对应测试，以及本 ticket 文件。
+
+### Merge 验证（integration/manga-cover-and-shelf-polish）
+
+- Merge commit：`613f368f89c2e3e7737739e74773f83cc93e9a5a`（`Merge ticket 07: domain docs, i18n, and verification`，`--no-ff`）；合并前 integration tip 为 `8bb18562`，无冲突。
+- 合并后 `dart run slang` 重新生成 `lib/i18n/strings.g.dart`，再运行指定套件：`test/i18n`、`test/settings/settings_rebuild_download_index_test.dart`、`test/media/manga/rebuild_download_index_service_test.dart`、`test/media/manga/manga_first_page_cover_test.dart`、`test/media/sources/manga_shelf_cover_resolution_test.dart`、`test/pages/manga_library_continue_pill_test.dart`，共 141 tests，全部通过。
+- 未新增既有失败：`test/media/cover_write_sink_bug_2496_guard_test.dart` 等历史失败未在本批范围内运行，保持原记录；本次未跑全量历史套件。
