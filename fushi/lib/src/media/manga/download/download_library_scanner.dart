@@ -19,10 +19,17 @@ class DownloadMangaFolderOnDisk {
   const DownloadMangaFolderOnDisk({
     required this.directory,
     required this.chapters,
+    this.rootManifest,
   });
 
   final Directory directory;
   final List<ChapterContainerOnDisk> chapters;
+
+  /// 单章 Local source 作品把 `pages.json` 直接放在漫画目录根时的 manifest。
+  ///
+  /// 它不是章节容器：不能写进 `manga_chapter_dirs`（`<manga>/<manga>` 路径
+  /// 不存在），但可以证明目录身份，并让 manifest 扫描把这一章算作已下载。
+  final MangaPagesManifest? rootManifest;
 
   String get mangaFolderName => p.basename(directory.path);
 }
@@ -157,12 +164,53 @@ Future<MangaPagesManifest?> readFirstDownloadMangaManifest(
 /// 已下载状态查询会先探测所有文件夹的身份，只有身份匹配的文件夹才去读完整
 /// 章表 / 检查完整性，避免为了一个作品扫全库的每一章。
 class DownloadMangaFolderProbe {
-  const DownloadMangaFolderProbe({required this.directory, this.manifest});
+  const DownloadMangaFolderProbe({
+    required this.directory,
+    this.manifest,
+    this.manifestAtMangaRoot = false,
+  });
 
   final Directory directory;
   final MangaPagesManifest? manifest;
 
+  /// [manifest] 是否来自漫画目录根的 `pages.json`（单章 Local source 作品）。
+  ///
+  /// 根 manifest 只能证明目录身份；它不是一个可用的章容器。
+  final bool manifestAtMangaRoot;
+
   String get mangaFolderName => p.basename(directory.path);
+
+  /// 把探针结果转成共享匹配器使用的目录描述。
+  ///
+  /// 普通章节 manifest 合成为一个轻量容器参与身份匹配；根 manifest 放进
+  /// [DownloadMangaFolderOnDisk.rootManifest]，绝不伪造成名为漫画目录的章容器
+  /// （那样会写出不可用的 `<manga>/<manga>` 映射）。
+  DownloadMangaFolderOnDisk toFolder() {
+    final MangaPagesManifest? value = manifest;
+    if (value == null) {
+      return DownloadMangaFolderOnDisk(
+        directory: directory,
+        chapters: const <ChapterContainerOnDisk>[],
+      );
+    }
+    if (manifestAtMangaRoot) {
+      return DownloadMangaFolderOnDisk(
+        directory: directory,
+        chapters: const <ChapterContainerOnDisk>[],
+        rootManifest: value,
+      );
+    }
+    return DownloadMangaFolderOnDisk(
+      directory: directory,
+      chapters: <ChapterContainerOnDisk>[
+        ChapterContainerOnDisk.folder(
+          containerName: mangaFolderName,
+          directory: directory,
+          manifest: value,
+        ),
+      ],
+    );
+  }
 }
 
 /// 探测 `downloads/<source>/<manga>` 下每个 Manga 文件夹的身份。
@@ -203,12 +251,23 @@ Future<List<DownloadMangaFolderProbe>> probeLocalMangaFolders(
   for (final Directory mangaDir in await listDownloadChildDirectories(
     localRoot,
   )) {
+    final MangaPagesManifest? chapterManifest =
+        await readFirstDownloadMangaManifest(mangaDir);
+    if (chapterManifest != null) {
+      probes.add(
+        DownloadMangaFolderProbe(
+          directory: mangaDir,
+          manifest: chapterManifest,
+        ),
+      );
+      continue;
+    }
+    final MangaPagesManifest? rootManifest = await readPagesManifest(mangaDir);
     probes.add(
       DownloadMangaFolderProbe(
         directory: mangaDir,
-        manifest:
-            await readFirstDownloadMangaManifest(mangaDir) ??
-            await readPagesManifest(mangaDir),
+        manifest: rootManifest,
+        manifestAtMangaRoot: rootManifest != null,
       ),
     );
   }
@@ -282,13 +341,20 @@ List<DownloadMangaFolderOnDisk> matchingDownloadMangaFolders(
   MangaDownloadIdentity identity,
 ) => <DownloadMangaFolderOnDisk>[
   for (final DownloadMangaFolderOnDisk folder in folders)
-    if (folder.chapters.any(
-      (ChapterContainerOnDisk chapter) =>
-          chapter.manifest != null &&
-          identity.matchesManifest(chapter.manifest!),
-    ))
-      folder,
+    if (_folderManifests(folder).any(identity.matchesManifest)) folder,
 ];
+
+/// 目录里能证明身份的所有 manifest（章节容器 + 单章根 manifest）。
+Iterable<MangaPagesManifest> _folderManifests(
+  DownloadMangaFolderOnDisk folder,
+) sync* {
+  final MangaPagesManifest? root = folder.rootManifest;
+  if (root != null) yield root;
+  for (final ChapterContainerOnDisk chapter in folder.chapters) {
+    final MangaPagesManifest? manifest = chapter.manifest;
+    if (manifest != null) yield manifest;
+  }
+}
 
 /// 在 [folders] 里找能由 [identity] 的 `pages.json` 证明的漫画目录。
 ///
@@ -305,11 +371,7 @@ DownloadMangaFolderIdentityMatch matchDownloadMangaFolderByIdentity(
   );
   final List<DownloadMangaFolderOnDisk> exact = <DownloadMangaFolderOnDisk>[
     for (final DownloadMangaFolderOnDisk folder in matches)
-      if (folder.chapters.any(
-        (ChapterContainerOnDisk chapter) =>
-            chapter.manifest != null &&
-            identity.matchesManifestPackage(chapter.manifest!),
-      ))
+      if (_folderManifests(folder).any(identity.matchesManifestPackage))
         folder,
   ];
   if (exact.length == 1) {

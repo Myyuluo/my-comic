@@ -1,14 +1,18 @@
 import 'dart:io';
 
+import 'package:path/path.dart' as p;
+
 import 'package:fushi/i18n/strings.g.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi_engine/epub/epub_storage.dart';
+import 'package:fushi_engine/media/manga/local_source/local_source_layout.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_library.dart';
 import 'package:fushi_engine/sync/deletion_propagation.dart';
 
 import 'package:fushi/src/media/manga/download/manga_download_service.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi/src/media/sources/reader_fushi_source.dart';
+import 'package:fushi/src/storage/app_paths.dart';
 
 /// 移出书架失败的原因。
 ///
@@ -78,7 +82,10 @@ class MangaLibraryRemovalResult {
 /// - 在线作品勾选「同时删除本地文件」：删除 Download library 里的已下载文件与
 ///   下载索引（任务 + 章目录映射），但**保留非书架行与阅读状态**，之后可重新
 ///   下载。文件删除失败时直接返回失败、**不碰** membership——否则会留下
-///   「书架里没有、文件还在」的中间状态。
+///   「书架里没有、文件还在」的中间状态。只有 `extractDir` 能证明位于当前
+///   Download library 根（`downloads`）内时才删文件；重建/导入可能把在线行
+///   关联到 `local` 里带 `pages.json` 的原作目录，那些文件绝不删除，跳过删
+///   文件与下载索引后仍按非破坏语义移出书架。
 /// - 本地作品（Local source / 受管本地卷）勾选「同时删除本地文件」：删除原作
 ///   文件后连 Manga 行与阅读/已读/下载状态一起删除（不留下指向已删除文件的
 ///   孤儿）；History 仍保留。文件删除失败时作品留在 Library。
@@ -93,6 +100,7 @@ Future<MangaLibraryRemovalResult> removeMangaFromLibrary({
   required FushiDatabase db,
   required String bookKey,
   Directory? localSourceRoot,
+  Directory? downloadsRoot,
   bool deleteLocalFiles = false,
   bool deleteStatistics = false,
   DeleteScope scope = DeleteScope.keepLocalOnly,
@@ -139,8 +147,18 @@ Future<MangaLibraryRemovalResult> removeMangaFromLibrary({
           '$error',
         );
       }
-    } else {
+    } else if (managedLocalVolume ||
+        (row.extractDir.isNotEmpty &&
+            isLocalSourcePathWithinRoot(
+              row.extractDir,
+              await _resolveDownloadsRoot(downloadsRoot),
+            ))) {
       // 在线 / 受管本地卷：先停正在写这个目录的任务，再删文件。
+      //
+      // 在线行只有在 `extractDir` 能证明位于当前 Download library 根内时才
+      // 走这里。Ticket 12 允许把在线行关联到 `local` 里带 `pages.json` 的
+      // 目录；那些是用户的原作文件，绝不是可删的下载副本，因此落到下面的
+      // else 分支跳过删除（行与阅读状态照常保留，仅移出书架）。
       if (downloadService != null) {
         final Map<String, MangaDownloadJobRow> jobs = await downloadService
             .jobsForBook(bookKey);
@@ -163,6 +181,10 @@ Future<MangaLibraryRemovalResult> removeMangaFromLibrary({
       // 会重新下载、详情页也会显示旧的已下载状态。非书架行本身保留。
       await db.deleteMangaDownloadJobsForBook(bookKey);
       await db.deleteMangaChapterDirsForBook(bookKey);
+    } else {
+      // 在线行的 `extractDir` 指向 `local` 或其他非 Download library 位置
+      // （重建/导入按 manifest 身份关联过）。不删文件、也不清下载索引，避免
+      // 误删 Local source 原作或留下「记录说已删除、文件还在」的假象。
     }
   }
 
@@ -226,4 +248,18 @@ Future<MangaLibraryRemovalResult> removeMangaFromLibrary({
     );
   }
   return MangaLibraryRemovalResult.removed(await db.getEpubBook(bookKey));
+}
+
+/// 「删除本地文件」只能删当前 Download library 内的文件。
+///
+/// 与 `DownloadLibraryIndex` 同一条根解析：显式注入优先；测试壳里
+/// `EpubStorage` 根的同级 `downloads` 与 Download library 一致；生产回落
+/// AppPaths 的 Content root。
+Future<Directory> _resolveDownloadsRoot(Directory? injected) async {
+  if (injected != null) return injected;
+  final String? bookBase = EpubStorage.debugBaseDirectoryOverridePath;
+  if (bookBase != null && bookBase.isNotEmpty) {
+    return Directory(p.join(p.dirname(bookBase), 'downloads'));
+  }
+  return AppPaths.downloadsRootDirectory();
 }

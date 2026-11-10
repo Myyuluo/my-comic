@@ -687,6 +687,8 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
               // 测试壳 / 极端早期可能还没解析 AppPaths；在线与受管本地卷不需要
               // 这个根，只有 Local source 删原作时才必须（缺失会如实报失败）。
               localSourceRoot: appModel.appPathsOrNull?.localComicRoot,
+              // 在线作品只有目录能证明位于 Download library 根内时才删文件。
+              downloadsRoot: appModel.appPathsOrNull?.downloadsRoot,
               deleteLocalFiles: deleteLocalFiles,
               deleteStatistics: deleteStatistics,
               downloadService: appModel.mangaDownloadService,
@@ -949,6 +951,7 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
         db: appModel.database,
         bookKey: bookKey,
         localSourceRoot: appModel.appPathsOrNull?.localComicRoot,
+        downloadsRoot: appModel.appPathsOrNull?.downloadsRoot,
         deleteLocalFiles: decision.deleteLocalFiles,
         deleteStatistics: decision.deleteStatistics,
         downloadService: appModel.mangaDownloadService,

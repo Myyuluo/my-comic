@@ -131,8 +131,12 @@ void main() {
     String title, {
     Directory? extractDir,
   }) async {
+    // 与 AppPaths 解析出的 Download library 根一致：移出时只有这个根内的
+    // 文件才允许按「同时删除本地文件」删除。
     final Directory dir = extractDir ??
-        Directory(p.join(root.path, 'downloads', title.replaceAll(' ', '_')));
+        Directory(
+          p.join(paths.downloadsRoot.path, title.replaceAll(' ', '_')),
+        );
     dir.createSync(recursive: true);
     File(p.join(dir.path, '001.jpg')).writeAsBytesSync(<int>[1, 2, 3]);
     final String sourceMetadata = OnlineMangaLibraryEntry(

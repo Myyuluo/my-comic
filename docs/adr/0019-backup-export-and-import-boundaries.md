@@ -59,4 +59,4 @@ ADR 0005 原计划在 JVM sidecar 中复用 Mihon 备份模型，v1 只导入；
 
 - **导出**：备份中的 `favorite=true` 条目只来自书架成员；「所有已读作品」仍把非书架已读作品写成 `favorite=false`，以保留阅读记录。
 - **导入**：`favorite=false` 条目现在会创建或合并一条持久化的非书架 Manga（Library membership=false），恢复章节、阅读进度与已读，有阅读记录时恢复 History，但**永不创建 Library 条目**，也不恢复 Tag、订阅或 Tracking。原文「只恢复其最新一条 History」按此扩展理解；「本机已有更新的 History 时不覆盖、作品已在本机 Library 时复用其身份」不变。
-- **导入后下载匹配**：对成功导入的 Manga，在 `downloads` 与带 manifest 的 `local` 中按 `pages.json` 身份匹配并复用已有文件夹、写入章节映射；不额外创建 Library 条目；全量重建仍是用户手动触发的动作。
+- **导入后下载匹配**：对成功导入的 Manga，在 `downloads` 与带 manifest 的 `local` 中按 `pages.json` 身份匹配并复用已有文件夹、写入章节映射；不额外创建 Library 条目；全量重建仍是用户手动触发的动作。两个根一起参与匹配：各有一个匹配目录时计为跳过（歧义），不偏向其中任一根。单章 Local source 作品的根 `pages.json` 只关联漫画目录（`extractDir`），报告计为 matched，但不写不可用的章映射、也不计 `downloadChaptersRelinked`；下载状态由 manifest 扫描提供（见 ADR 0012）。

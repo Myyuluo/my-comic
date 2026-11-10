@@ -85,6 +85,9 @@ class _TestAppModel extends AppModel {
   AppPaths get appPaths => _paths;
 
   @override
+  AppPaths? get appPathsOrNull => _paths;
+
+  @override
   OnlineMangaLibraryService onlineMangaLibraryService(
     OnlineMangaRuntimeKind runtime,
   ) => _library;
@@ -245,7 +248,10 @@ void main() {
     library = OnlineMangaLibraryService(
       database: db,
       rootDirectory: Directory(p.join(root.path, 'legacy')),
-      downloadsRootDirectory: Directory(p.join(root.path, 'downloads')),
+      // 与 AppPaths 解析出的 Download library 根一致（FUSHI_TEST_ROOT 下是
+      // `<root>/content/downloads`）；移出时「删除本地文件」只允许删这个根
+      // 内的文件。
+      downloadsRootDirectory: paths.downloadsRoot,
       adapter: _FakeAdapter(),
     );
   });
@@ -560,6 +566,63 @@ void main() {
       reason: '即使删了文件，History 也保留',
     );
   });
+
+  testWidgets(
+    '在线作品页：extractDir 指向 local 原作时勾选「删除本地文件」不删原作，只移出书架',
+    (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(900, 1800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final _TestAppModel appModel = _TestAppModel(db, library, paths, root);
+
+      late EpubBookRow row;
+      late Directory localOriginal;
+      await tester.runAsync(() async {
+        row = await library.add(_entry());
+        // Ticket 12：重建/导入可以把在线行的 extractDir 关联到 local 中带
+        // pages.json 的目录。这里的文件是用户的原作，不是可删的下载副本。
+        localOriginal = Directory(
+          p.join(paths.localComicRoot.path, 'Local original'),
+        );
+        await localOriginal.create(recursive: true);
+        await File(
+          p.join(localOriginal.path, '001.jpg'),
+        ).writeAsBytes(<int>[1, 2, 3]);
+        await db.updateEpubBookContentPaths(
+          row.bookKey,
+          extractDir: localOriginal.path,
+        );
+        row = (await db.getEpubBook(row.bookKey))!;
+        await _writeDownloadedChapter(db, row.bookKey, localOriginal.path);
+        await _openRemovalDialog(tester, appModel, row.bookKey);
+        await tester.tap(find.text(t.delete_local_files));
+        await tester.pump();
+        await tester.tap(find.text(t.dialog_delete));
+        await _pumpUntil(
+          tester,
+          find.byKey(const ValueKey<String>('manga_series_add_to_bookshelf')),
+        );
+      });
+
+      expect(
+        localOriginal.existsSync(),
+        isTrue,
+        reason: 'local 原作绝不因在线作品的「删除本地文件」被删除',
+      );
+      expect(
+        File(p.join(localOriginal.path, '001.jpg')).existsSync(),
+        isTrue,
+        reason: 'local 原作文件保留',
+      );
+      final EpubBookRow after = (await db.getEpubBook(row.bookKey))!;
+      expect(after.isInLibrary, isFalse, reason: '作品仍按非破坏语义移出书架');
+      expect(
+        await db.getMangaChapterDir(row.bookKey, '/chapter/1'),
+        isNotNull,
+        reason: '文件没有删除时下载索引原样保留',
+      );
+    },
+  );
 
   testWidgets('在线作品页：勾选「同时删除统计数据」→ 统计与墓碑写入，已下载文件保留', (
     WidgetTester tester,

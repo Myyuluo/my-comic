@@ -142,7 +142,17 @@ class MangaDatabaseClearService {
     final Set<String> readUids = await _readBearingUids(
       works.map((_ClearWork work) => work.uid),
     );
-    final Set<String> historyKeys = await _existingHistoryKeys();
+    final List<_HistoryRow> historyRows = await _loadHistoryRows();
+    final Set<String> historyKeys = <String>{
+      for (final _HistoryRow row in historyRows) row.key,
+    };
+    final Map<String, Set<String>> snapshotHistoryKeysByBook =
+        <String, Set<String>>{};
+    for (final _HistoryRow row in historyRows) {
+      final String? bookKey = row.snapshotBookKey;
+      if (bookKey == null || bookKey.isEmpty) continue;
+      (snapshotHistoryKeysByBook[bookKey] ??= <String>{}).add(row.key);
+    }
     final _OnlineSourceNameResolver names = _OnlineSourceNameResolver(
       await database.getMangaOnlineSources(mediaKind: 'manga'),
     );
@@ -158,12 +168,15 @@ class MangaDatabaseClearService {
       builder.nonLibraryWorks++;
       final bool read = readUids.contains(work.uid);
       if (read) builder.readWorks++;
-      for (final MangaHistoryIdentity identity in work.historyIdentities) {
-        if (!historyKeys.contains(identity.key)) continue;
-        if (builder.matchedHistoryKeys.add(identity.key)) {
+      for (final String key in _historyKeysForWork(
+        work,
+        historyKeys,
+        snapshotHistoryKeysByBook,
+      )) {
+        if (builder.matchedHistoryKeys.add(key)) {
           builder.historyEntries++;
         }
-        if (read && builder.matchedReadHistoryKeys.add(identity.key)) {
+        if (read && builder.matchedReadHistoryKeys.add(key)) {
           builder.readHistoryEntries++;
         }
       }
@@ -198,13 +211,15 @@ class MangaDatabaseClearService {
       );
 
       final List<_ClearWork> removed = <_ClearWork>[];
-      final Set<String> historyKeysToDelete = <String>{};
+      final Set<String> removedBookKeys = <String>{};
+      final Set<String> removedHistoryKeys = <String>{};
       for (final _ClearWork work in works) {
         final _SourceRef source = _sourceRefFor(work, names);
         if (!sourceKeys.contains(source.key)) continue;
         if (keepRead && readUids.contains(work.uid)) continue;
         removed.add(work);
-        historyKeysToDelete.addAll(
+        removedBookKeys.add(work.bookKey);
+        removedHistoryKeys.addAll(
           work.historyIdentities.map(
             (MangaHistoryIdentity identity) => identity.key,
           ),
@@ -238,6 +253,27 @@ class MangaDatabaseClearService {
         ),
       );
       await debugBeforeStep?.call(MangaDatabaseClearStep.history);
+      // 身份（canonical + 旧 reader_manga）命中的行之外，历史页还会按快照
+      // `bookKey` 把行解析到作品（loadMangaHistory 的回退规则）。被清理作品的
+      // 这类行同样要删；但若该行的身份属于任何保留作品（书架 / 未选 Source /
+      // 读过的作品），身份解析优先，绝不能误删。
+      final Set<String> keptHistoryKeys = await _historyIdentityKeysForBooks(
+        excludedBookKeys: removedBookKeys,
+      );
+      final Set<String> historyKeysToDelete = <String>{
+        ...removedHistoryKeys.where(
+          (String key) => !keptHistoryKeys.contains(key),
+        ),
+      };
+      for (final _HistoryRow row in await _loadHistoryRows()) {
+        final String? snapshotBookKey = row.snapshotBookKey;
+        if (snapshotBookKey == null ||
+            !removedBookKeys.contains(snapshotBookKey)) {
+          continue;
+        }
+        if (keptHistoryKeys.contains(row.key)) continue;
+        historyKeysToDelete.add(row.key);
+      }
       int historyDeleted = 0;
       for (final String key in historyKeysToDelete) {
         final int separator = key.indexOf('\u0000');
@@ -370,19 +406,74 @@ class MangaDatabaseClearService {
     return result;
   }
 
-  /// 现有 History 身份的集合（`mediaSource\u0000mediaId`）。
-  Future<Set<String>> _existingHistoryKeys() async {
+  /// 现有漫画 History 行：主键身份与快照里的 `bookKey`。
+  ///
+  /// 快照 `bookKey` 是历史页在身份匹配不到时的回退解析依据；清理数据库必须
+  /// 用同一判据判断一行属于哪部作品，否则会留下「作品已删、历史还在」的行。
+  Future<List<_HistoryRow>> _loadHistoryRows() async {
     final $MediaOpenHistoryTable table = database.mediaOpenHistory;
     final List<TypedResult> rows =
         await (database.selectOnly(table)..addColumns(<Expression<Object>>[
               table.mediaSource,
               table.mediaId,
+              table.snapshotJson,
             ]))
             .get();
-    return <String>{
+    return <_HistoryRow>[
       for (final TypedResult row in rows)
-        '${row.read(table.mediaSource)}\u0000${row.read(table.mediaId)}',
-    };
+        _HistoryRow(
+          key:
+              '${row.read(table.mediaSource)}\u0000'
+              '${row.read(table.mediaId)}',
+          snapshotBookKey: MangaHistorySnapshot.tryParse(
+            row.read(table.snapshotJson),
+          )?.bookKey,
+        ),
+    ];
+  }
+
+  /// 一部作品在 [historyKeys] / 快照索引里能命中的 History 行主键。
+  Iterable<String> _historyKeysForWork(
+    _ClearWork work,
+    Set<String> historyKeys,
+    Map<String, Set<String>> snapshotHistoryKeysByBook,
+  ) sync* {
+    for (final MangaHistoryIdentity identity in work.historyIdentities) {
+      if (historyKeys.contains(identity.key)) yield identity.key;
+    }
+    final Set<String>? snapshotKeys = snapshotHistoryKeysByBook[work.bookKey];
+    if (snapshotKeys != null && snapshotKeys.isNotEmpty) {
+      yield* snapshotKeys;
+    }
+  }
+
+  /// [excludedBookKeys] 之外所有作品的历史身份（canonical + 旧 reader_manga）。
+  ///
+  /// 用来保护「身份属于保留作品、快照 bookKey 却指向被清理作品」的历史行。
+  Future<Set<String>> _historyIdentityKeysForBooks({
+    required Set<String> excludedBookKeys,
+  }) async {
+    final $EpubBooksTable table = database.epubBooks;
+    final List<TypedResult> rows =
+        await (database.selectOnly(table)..addColumns(<Expression<Object>>[
+              table.bookKey,
+              table.format,
+              table.sourceMetadata,
+            ]))
+            .get();
+    final Set<String> keys = <String>{};
+    for (final TypedResult row in rows) {
+      final String bookKey = row.read(table.bookKey)!;
+      if (excludedBookKeys.contains(bookKey)) continue;
+      final MangaHistoryIdentity? canonical = mangaHistoryIdentityForMangaRow(
+        bookKey: bookKey,
+        sourceMetadata: row.read(table.sourceMetadata),
+        format: row.read(table.format) ?? BookFormat.manga.dbValue,
+      );
+      if (canonical != null) keys.add(canonical.key);
+      keys.add(mangaHistoryLegacyReaderIdentity(bookKey).key);
+    }
+    return keys;
   }
 
   /// 删除没有任何现存作品行归属的阅读状态（`reader_positions` 与
@@ -463,6 +554,14 @@ class _ClearWork {
   final String uid;
   final String? sourceMetadata;
   final List<MangaHistoryIdentity> historyIdentities;
+}
+
+/// 一条现有 History 行：主键身份 + 快照可回退解析的作品键。
+class _HistoryRow {
+  const _HistoryRow({required this.key, this.snapshotBookKey});
+
+  final String key;
+  final String? snapshotBookKey;
 }
 
 class _SourceRef {

@@ -1678,6 +1678,90 @@ void main() {
     expect(await db.getAllEpubBooks(), hasLength(1));
   });
 
+  test(
+    'local 单章作品根 pages.json：关联目录但不合成假章容器、不计 relinked',
+    () async {
+      const String bookKey = 'mihon-root-manifest';
+      final OnlineMangaLibraryEntry entry = entryFor(
+        chapters: const <OnlineMangaChapter>[
+          OnlineMangaChapter(
+            key: '/c/1',
+            name: 'Chapter 1',
+            raw: <String, Object?>{},
+          ),
+        ],
+      );
+      await insertOnlineBook(
+        bookKey: bookKey,
+        entry: entry,
+        extractDir: p.join(
+          oldContent.path,
+          'downloads',
+          'Example Source',
+          'Fixture series',
+        ),
+        inLibrary: false,
+      );
+      // 单章作品把 pages.json 直接放在 local/<manga> 根；没有章节子目录。
+      final Directory localMangaDir = Directory(
+        p.join(localComicRoot.path, 'Single chapter'),
+      );
+      await localMangaDir.create(recursive: true);
+      await File(
+        p.join(localMangaDir.path, '001.jpg'),
+      ).writeAsBytes(<int>[1, 2, 3]);
+      await writePagesManifestAtomically(
+        localMangaDir,
+        manifestFor(entry, entry.chapters.single),
+      );
+      // 下载索引曾认为这一章已下载：根 manifest 存在且页齐时不能报 Missing。
+      await markDownloaded(bookKey, '/c/1');
+
+      final RebuildDownloadIndexReport report = await service().run();
+
+      expect(report.booksMatched, 1);
+      expect(
+        report.chaptersRelinked,
+        0,
+        reason: '根 pages.json 不是章容器，不能计为已写入映射',
+      );
+      expect(
+        report.chaptersMissing,
+        0,
+        reason: '根 manifest + 页图齐全时章确实已下载，不能报 Missing',
+      );
+      final EpubBookRow after = (await db.getEpubBook(bookKey))!;
+      expect(
+        p.equals(after.extractDir, localMangaDir.path),
+        isTrue,
+        reason: '仍要把作品目录（extractDir）关联到 local 文件夹',
+      );
+      expect(
+        await db.getMangaChapterDir(bookKey, '/c/1'),
+        isNull,
+        reason: '不能写 <manga>/<manga> 这种不可用的章映射',
+      );
+      // 已下载状态仍由共享 manifest 扫描提供（根 manifest 也算一章）。
+      final Set<String> downloaded = await DownloadLibraryIndex(
+        db,
+        downloadsRoot: downloadsRoot,
+        localComicRoot: localComicRoot,
+      ).downloadedChapterKeysForEntry(
+        entry,
+        row: after,
+        chapterKeys: const <String>['/c/1'],
+      );
+      expect(downloaded, <String>{'/c/1'});
+
+      // 幂等：第二次重建不再改写。
+      final RebuildDownloadIndexReport second = await service().run();
+      expect(second.booksMatched, 1);
+      expect(second.booksRelinked, 0);
+      expect(second.chaptersRelinked, 0);
+      expect(await db.getMangaChapterDir(bookKey, '/c/1'), isNull);
+    },
+  );
+
   test('membership=false 的 Manga 行也按 pages.json 身份 re-link', () async {
     const String bookKey = 'mihon-fixture';
     final OnlineMangaLibraryEntry entry = entryFor();

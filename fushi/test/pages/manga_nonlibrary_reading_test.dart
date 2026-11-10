@@ -9,6 +9,7 @@ import 'package:fushi/i18n/strings.g.dart';
 import 'package:fushi/models.dart';
 import 'package:fushi/src/media/detail/media_detail_kit.dart';
 import 'package:fushi/src/media/manga/history/manga_history.dart';
+import 'package:fushi/src/media/manga/library/manga_add_to_shelf_prompt.dart';
 import 'package:fushi/src/media/manga/library/manga_series_page.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_service.dart';
@@ -209,7 +210,13 @@ Widget _harness(AppModel appModel, Widget home) => ProviderScope(
     platformServicesProvider.overrideWithValue(testPlatformServices()),
     appProvider.overrideWith((ref) => appModel),
   ],
-  child: TranslationProvider(child: MaterialApp(home: home)),
+  child: TranslationProvider(
+    child: MaterialApp(
+      // 下载完成提示由全局宿主负责（票 15 finding 4）：测试壳也必须挂上它，
+      // 否则页面不再自己弹提示。
+      home: MangaAddToShelfPromptHost(child: home),
+    ),
+  ),
 );
 
 const List<OnlineMangaChapter> _chapters = <OnlineMangaChapter>[
