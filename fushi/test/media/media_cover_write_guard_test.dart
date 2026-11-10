@@ -88,28 +88,9 @@ enum CoverDeriverRole {
 
 /// [CoverDeriverRole.rawWritesNonCoverAssets] 各文件里**允许**裸写的函数全名单。
 ///
-/// 语义与 BUG-1394 的 `allowedRawWriters` 一致：新增一个裸写函数、或把这些函数改
-/// 去写封面，都会让登记与实际不符而转红。
-const Map<String, Set<String>> kNonCoverRawWriters = <String, Set<String>>{
-  // B4 拆分后视频域在 videos.part.dart：派生点（importVideo）与裸写点
-  // （_moveFileInto，已提为该 part 的顶层 helper）都在这一个文件里。
-  '../packages/fushi_engine/lib/sync/local_library_host_service/videos.part.dart': <String>{
-    // 上传落地：搬的是视频本体（1 处）与外挂字幕（1 处），都不是封面。
-    // 本文件的封面路只派生 coversDir 交给 CoverMetaStore/extractVideoCover。
-    '_moveFileInto',
-  },
-  // 下载管线（#1427 起派生 coversDir 做新集提醒配图的来源准入）：三处裸写分别是
-  // torrent metainfo 与两条字幕 sidecar 的落地，都不是封面。
-  '../packages/fushi_engine/lib/media/video/download/video_download_pipeline_service.dart':
-      <String>{
-    // 手动入队时把 .torrent 的 metainfo 字节落到任务目录。
-    'enqueueManual',
-    // 旧版暂存字幕搬到片子旁边（copy + rename）。
-    '_installLegacyStagedSubtitles',
-    // 新字幕 sidecar 的原子安装（临时文件 writeAsBytes + rename）。
-    '_installSidecarAtTargetAtomically',
-  },
-};
+/// manga-only shell（ff3f2df0）移除了视频 / 游戏 / 互联视频域；当前没有文件以
+/// `rawWritesNonCoverAssets` 角色登记。保留空表：新增登记仍需逐函数列名。
+const Map<String, Set<String>> kNonCoverRawWriters = <String, Set<String>>{};
 
 /// **封面目的地派生点的完整注册表**（TODO-2715 ③）。
 ///
@@ -121,116 +102,13 @@ const Map<String, Set<String>> kNonCoverRawWriters = <String, Set<String>>{
 /// 静态扫描追不了跨文件的路径变量流，所以这里改守**入口**：能派生封面目的地的文件
 /// 是一个封闭集合，新增一个就红，评审时必须回答「它把这个路径交给谁写？」。
 /// 每条登记同时是一条可证伪断言（见下面的三条角色断言），不是一句散文。
+///
+/// manga-only shell（ff3f2df0）移除了 `kCoverDestMarker` 匹配的视频 / 游戏封面
+/// 目的地派生点；书架持久封面缓存按 bookKey 落在 Program state，不使用这些派生
+/// 函数，因此当前注册表为空。新增任何封面目的地派生点仍必须登记。
 const Map<String, (CoverDeriverRole, String)> kCoverPathDerivers =
-    <String, (CoverDeriverRole, String)>{
-  'lib/src/media/media_cover_service.dart': (
-    CoverDeriverRole.writesViaService,
-    'app 收口 API：applyCover* 薄委派到引擎 cover_file_writer（写盘 + 经 '
-        'evictImageCacheForFile 钩子驱逐在同一函数里）；本文件自己不再裸写。',
-  ),
-  '../packages/fushi_engine/lib/foundation/engine_paths.dart': (
-    CoverDeriverRole.derivesPathOnly,
-    '引擎侧三根目录抽象的定义处（videoCoversDirectory 等），只定义不落盘。',
-  ),
-  'lib/src/media/video/online/anime_source_library.dart': (
-    CoverDeriverRole.writesViaService,
-    '在线视频源入库集（2026-09-27 浏览阶段 2b）：封面经扩展取回字节后，作品共用封面 / '
-        '合集封面的目的地在这里派生（animeSourceWorkCoverFileName / videoCoverFileName / '
-        'VideoStorage.coversDir），落盘一律经 MediaCoverService.applyCoverBytes，'
-        '本文件不裸写。',
-  ),
-  'lib/src/media/torrent/anime_download_importer.dart': (
-    CoverDeriverRole.derivesPathOnly,
-    'BUG-1394 那条跨文件洞的派生半边：它算出目的地后交给 video_cover_extractor '
-        '落盘，自己一个字节都不写。当年正因为「派生在这、裸写在那」，逐文件判据两边'
-        '都不命中；现在这半边由本注册表钉住，写盘那半边由 writesViaService 钉住。',
-  ),
-  'lib/src/media/video/scraper/cover_scraper_service.dart': (
-    CoverDeriverRole.writesViaService,
-    '本地 sidecar 封面复制走 applyCoverFile。',
-  ),
-  'lib/src/media/video/scraper/member_cover_cleanup.dart': (
-    CoverDeriverRole.writesViaService,
-    '成员封面清理/重取，重取那半走 applyCover*。',
-  ),
-  'lib/src/media/video/cover_ui/video_scrape_actions.dart': (
-    CoverDeriverRole.derivesPathOnly,
-    '运行时依赖组装层只派生 coversDir，并把封面目录注入 CoverMetaStore 与 '
-        'CoverScraperService；实际 sidecar 图片由服务经 '
-        'MediaCoverService.applyCoverFile 落盘。',
-  ),
-  '../packages/fushi_engine/lib/media/video/video_book_repository.dart': (
-    CoverDeriverRole.derivesPathOnly,
-    '仓储层只解析封面路径供读取/展示，不落盘。',
-  ),
-  '../packages/fushi_engine/lib/media/video/metadata/video_source_scrape_coordinator.dart': (
-    CoverDeriverRole.writesViaService,
-    '演职员头像落地（Shoko AutoDownloadStaffImages）：派生 <video_covers>/people/ '
-        '目的地后经引擎 writeCoverBytesAtomically 收口写盘；作品图片 sidecar 走 '
-        'SidecarWriter，本文件自己一个字节都不裸写。',
-  ),
-  '../packages/fushi_engine/lib/media/video/video_cover_extractor.dart': (
-    CoverDeriverRole.writesViaService,
-    'ffmpeg 子进程直写目标路径（Dart 侧无字节）；下载路已走 applyCoverBytes。'
-        '本文件的裸写边界由下面第 ③ 条逐函数名单钉死。',
-  ),
-  'lib/src/media/video/video_import_dialog.dart': (
-    CoverDeriverRole.writesViaService,
-    '导入弹窗重取封面，字节走 applyCover*。',
-  ),
-  'lib/src/media/video/iptv_playlist_import.dart': (
-    CoverDeriverRole.writesViaService,
-    'IPTV 频道台标（tvg-logo）补封面：派生 <video_covers>/<uid> 目的地，字节经引擎 '
-        'writeCoverBytesAtomically 收口写盘，本文件自己不裸写。',
-  ),
-  '../packages/fushi_engine/lib/media/video/video_storage.dart': (
-    CoverDeriverRole.derivesPathOnly,
-    '路径派生的定义处之一，自身不落盘。',
-  ),
-  'lib/src/mining/galgame_cover_resolver.dart': (
-    CoverDeriverRole.writesViaService,
-    'galgame 封面解析/落盘，字节走 applyCover*。',
-  ),
-  'lib/src/storage/app_paths.dart': (
-    CoverDeriverRole.derivesPathOnly,
-    '目录派生的定义处，自身不落盘。',
-  ),
-  'lib/main.dart': (
-    CoverDeriverRole.derivesPathOnly,
-    '「用 Fushi 打开」外部视频建行时派生 coversDir 交给 CoverMetaStore 做来源准入，'
-        '抽帧仍由 extractVideoCover 落盘；main 自己一个字节都不写。',
-  ),
-  // BUG-2569 起 `source_library_scanner.dart` **不再**在此列：扫描入库不碰封面了
-  // （不派生 coversDir、不抽帧），封面统一由书架的补齐产线负责。它此前每个文件最坏
-  // 两段 30s ffmpeg，串行 + 进程级排他锁 + UI isolate，把导入拖成几十分钟。
-  'lib/src/media/video/metadata/video_scrape_cleanup_service.dart': (
-    CoverDeriverRole.writesViaService,
-    '「清理全部刮削记录」删封面：隔离/删除由本文件自己按 ledger SHA 校验后执行，'
-        '删成功后的解码缓存驱逐走 MediaCoverService.applyCoverRemoval——删同样是'
-        '「这条路径上的图变了」，不驱逐就会在清理后继续画一张已不存在的封面。',
-  ),
-  'lib/src/pages/implementations/home_video_page.dart': (
-    CoverDeriverRole.writesViaService,
-    '库页手选/重取封面时派生 coversDir 做来源准入与指针更新，抽帧那条仍由服务侧'
-        '落盘；BUG-2463 起多一条「把 host 下发的封面镜像到 remote_videos/」，'
-        'bookUid 稳定 ⇒ 重下即同路径覆盖，故字节经 '
-        'MediaCoverService.applyCoverBytes 收口（写盘 + 驱逐同一函数）。',
-  ),
-  '../packages/fushi_engine/lib/sync/local_library_host_service/videos.part.dart': (
-    CoverDeriverRole.rawWritesNonCoverAssets,
-    '互联 host 收上传：派生 coversDir 只为 CoverMetaStore 的自动抽帧准入，封面字节'
-        '由 extractVideoCover 写。文件里的裸写是 _moveFileInto 搬上传的视频本体与'
-        '字幕，与封面无关（逐函数名单见 kNonCoverRawWriters）。',
-  ),
-  '../packages/fushi_engine/lib/media/video/download/video_download_pipeline_service.dart':
-      (
-    CoverDeriverRole.rawWritesNonCoverAssets,
-    '订阅新集提醒的配图：派生 coversDir 只为 CoverMetaStore 判「这本书的封面是不是'
-        '自动抽帧来的、能不能覆盖」，真正的封面字节由 extractVideoCover 写（它自己'
-        '按 writesViaService 登记）。文件里的裸写是 torrent metainfo 与字幕 sidecar，'
-        '与封面无关（逐函数名单见 kNonCoverRawWriters）。',
-  ),
-};
+    <String, (CoverDeriverRole, String)>{};
+
 
 /// [path] 里出现裸写调用的函数名集合（判据与 BUG-1394 的逐函数名单同一套：
 /// 先等长掩码注释，再按「缩进 ≤2 的声明行」归属行到函数）。
@@ -391,9 +269,6 @@ void main() {
     const Set<String> allowed = <String>{
       // 收口自身。
       'lib/src/media/media_cover_service.dart',
-      // 导入期首写产线（ffmpeg 子进程直写目标路径），见其库注释。缩略图下载路
-      // 已收口，本条豁免的实际边界由下面第 ③ 条逐函数钉死（BUG-1394）。
-      '../packages/fushi_engine/lib/media/video/video_cover_extractor.dart',
     };
     final List<String> offenders = <String>[];
     for (final File f in dartFiles()) {
@@ -440,10 +315,6 @@ void main() {
         // BUG-2496：ffmpeg 写 staged 文件后由这里校验 + rename 发布 + 驱逐。
         'publishStagedCoverFile',
       },
-      // ffmpeg 两条路由子进程写 staged 文件、经 publishStagedCoverFile 发布，
-      // Dart 侧无字节；下载路已改走 MediaCoverService.applyCoverBytes，故本文件
-      // 不该再有任何裸写。
-      '../packages/fushi_engine/lib/media/video/video_cover_extractor.dart': <String>{},
     };
     final RegExp rawWrite =
         RegExp(r'writeAsBytes\(|\.copy\(|\.rename\(|openWrite\(');
