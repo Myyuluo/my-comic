@@ -60,3 +60,19 @@ ADR 0005 原计划在 JVM sidecar 中复用 Mihon 备份模型，v1 只导入；
 - **导出**：备份中的 `favorite=true` 条目只来自书架成员；「所有已读作品」仍把非书架已读作品写成 `favorite=false`，以保留阅读记录。
 - **导入**：`favorite=false` 条目现在会创建或合并一条持久化的非书架 Manga（Library membership=false），恢复章节、阅读进度与已读，有阅读记录时恢复 History，但**永不创建 Library 条目**，也不恢复 Tag、订阅或 Tracking。原文「只恢复其最新一条 History」按此扩展理解；「本机已有更新的 History 时不覆盖、作品已在本机 Library 时复用其身份」不变。
 - **导入后下载匹配**：对成功导入的 Manga，在 `downloads` 与带 manifest 的 `local` 中按 `pages.json` 身份匹配并复用已有文件夹、写入章节映射；不额外创建 Library 条目；全量重建仍是用户手动触发的动作。两个根一起参与匹配：各有一个匹配目录时计为跳过（歧义），不偏向其中任一根。单章 Local source 作品的根 `pages.json` 只关联漫画目录（`extractDir`），报告计为 matched，但不写不可用的章映射、也不计 `downloadChaptersRelinked`；下载状态由 manifest 扫描提供（见 ADR 0012）。
+
+## Amendment 2026-11-10（manga-download-materialization，来源未安装）
+
+来源未安装或停用的 Manga 不再触发 Download library 物化，也不再请求来源封面：
+
+- 不创建 `downloads/{source}/{manga}` 目录，不生成以数字 `sourceId` 命名的目录；目录只在章节下载真正开始时创建。
+- 作品页在来源解析完成前或解析失败时显示灰占位，不请求远程封面。本条取代 2026-11-10（manga-backup-import-ux）中「远程封面不依赖 Source 是否安装」在 Manga 作品页上的表述；书架仍按本地封面 → 备份描述符的远程封面地址 / 图片缓存 → 占位的既有顺序展示。
+- 已有本地封面与已下载 Chapter 保持可读；本地容器按 `pages.json` 身份或容器名关联，离线阅读与删除下载照常；`local` 原件不参与删除。
+- 安装并启用对应 Extension 后，重新打开或刷新作品页时运行时重新解析来源，封面与在线章节能力自动恢复，不需要重新导入、重启或迁移条目身份。
+- 作品页保留「来源未安装」提示；不自动安装 Extension。
+
+**Consequences**
+
+- 来源未安装时不会产生数字 `sourceId` 目录或来源封面请求；已有本地文件不受影响。
+- 安装或启用 Extension 后恢复来源能力，条目的来源身份与下载映射不变。
+- 书架封面仍可能来自备份描述符中的远程地址；该地址失效或缓存被清除时回退占位。
