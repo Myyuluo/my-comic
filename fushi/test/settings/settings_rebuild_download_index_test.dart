@@ -105,7 +105,11 @@ void main() {
     expect(section.isVisible(settings), isTrue);
     expect(section.title, '下载索引');
     // 整行可点的动作行，不再是带行尾按钮的状态行。
-    final SettingsActionItem item = section.items.single as SettingsActionItem;
+    final SettingsActionItem item =
+        section.items.singleWhere(
+              (SettingsItem item) => item.id == 'storage.rebuild_index',
+            )
+            as SettingsActionItem;
     expect(item.id, 'storage.rebuild_index');
     expect(item.title, '重建下载索引');
     expect(
@@ -161,7 +165,10 @@ void main() {
         };
 
     final SettingsActionItem item =
-        rebuildSection().items.single as SettingsActionItem;
+        rebuildSection().items.singleWhere(
+              (SettingsItem item) => item.id == 'storage.rebuild_index',
+            )
+            as SettingsActionItem;
     final Future<void> action = Future<void>.sync(() => item.onTap(settings));
     await tester.pump();
     await tester.pumpAndSettle();
@@ -207,7 +214,10 @@ void main() {
         };
 
     final SettingsActionItem item =
-        rebuildSection().items.single as SettingsActionItem;
+        rebuildSection().items.singleWhere(
+              (SettingsItem item) => item.id == 'storage.rebuild_index',
+            )
+            as SettingsActionItem;
     final Future<void> action = Future<void>.sync(() => item.onTap(settings));
     await tester.pump();
     await tester.pumpAndSettle();
