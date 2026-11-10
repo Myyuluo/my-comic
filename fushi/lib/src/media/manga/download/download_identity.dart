@@ -83,6 +83,31 @@ class MangaDownloadIdentity {
     }
     return manifestPackage == entryPackage;
   }
+
+  /// 两个身份是否指向同一部作品（核心身份 + 扩展包兼容规则）。
+  ///
+  /// 与 [==] 的区别同 [DownloadSourceIdentity]：`==` 是严格相等（扩展包也
+  /// 必须一致），[matches] 采用占位包兼容的领域判据，供索引查询使用。
+  bool matches(MangaDownloadIdentity other) =>
+      runtime == other.runtime &&
+      sourceIdKey == other.sourceIdKey &&
+      seriesKey == other.seriesKey &&
+      downloadExtensionPackagesCompatible(
+        extensionPackage,
+        other.extensionPackage,
+      );
+
+  @override
+  bool operator ==(Object other) =>
+      other is MangaDownloadIdentity &&
+      other.runtime == runtime &&
+      other.sourceIdKey == sourceIdKey &&
+      other.seriesKey == seriesKey &&
+      other.extensionPackage.trim() == extensionPackage.trim();
+
+  @override
+  int get hashCode =>
+      Object.hash(runtime, sourceIdKey, seriesKey, extensionPackage.trim());
 }
 
 /// 一个 Source 的下载身份（不含 Manga）：`runtime + 数字 sourceId`，

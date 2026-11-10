@@ -1069,6 +1069,113 @@ void main() {
     );
   });
 
+  test(
+    'auto-relinks a single-chapter local folder with root pages.json without a fake mapping',
+    () async {
+      final Directory downloadsRoot = Directory(p.join(tmp.path, 'downloads'));
+      final Directory localComicRoot = Directory(p.join(tmp.path, 'local'));
+      final Directory mangaDir = Directory(
+        p.join(localComicRoot.path, 'Single chapter'),
+      );
+      await mangaDir.create(recursive: true);
+      await File(p.join(mangaDir.path, '001.jpg')).writeAsString('page');
+      // Single-chapter local works keep pages.json at the manga folder root.
+      await writePagesManifestAtomically(
+        mangaDir,
+        manifestFor('/c/1', 'C1', mangaKey: '/manga/x'),
+      );
+
+      final File backup = await writeFixtureBackup(
+        tmp,
+        name: 'local-root-manifest.tachibk',
+        sources: const <FixtureSource>[FixtureSource(id: 1, name: 'Example')],
+        mangas: const <FixtureManga>[
+          FixtureManga(
+            source: 1,
+            url: '/manga/x',
+            title: 'X',
+            favorite: false,
+            chapters: <FixtureChapter>[FixtureChapter(url: '/c/1', name: 'C1')],
+          ),
+        ],
+      );
+      final MihonBackupImportReport report = await service(
+        downloadsRoot: downloadsRoot,
+        localComicRoot: localComicRoot,
+      ).importFile(backup);
+
+      expect(report.downloadMangaMatched, 1, reason: '根 manifest 证明身份即算匹配');
+      expect(
+        report.downloadChaptersRelinked,
+        0,
+        reason: '根 manifest 不是章容器，不能计为已写入映射',
+      );
+      final EpubBookRow row = (await db.getAllEpubBooks()).single;
+      expect(p.equals(row.extractDir, mangaDir.path), isTrue);
+      expect(
+        await db.getMangaChapterDirRowsForBook(row.bookKey),
+        isEmpty,
+        reason: '不能写 <manga>/<manga> 这种不可用的章映射',
+      );
+    },
+  );
+
+  test(
+    'skips when downloads and local each prove the same identity (no silent preference)',
+    () async {
+      final Directory downloadsRoot = Directory(p.join(tmp.path, 'downloads'));
+      final Directory localComicRoot = Directory(p.join(tmp.path, 'local'));
+      await writeChapter(
+        Directory(p.join(downloadsRoot.path, 'Example', 'X')),
+        'Ch 1',
+        chapterKey: '/c/1',
+      );
+      await writeChapter(
+        Directory(p.join(localComicRoot.path, 'Y')),
+        'Ch 1',
+        chapterKey: '/c/1',
+      );
+
+      final File backup = await writeFixtureBackup(
+        tmp,
+        name: 'ambiguous-two-roots.tachibk',
+        sources: const <FixtureSource>[FixtureSource(id: 1, name: 'Example')],
+        mangas: const <FixtureManga>[
+          FixtureManga(
+            source: 1,
+            url: '/manga/x',
+            title: 'X',
+            favorite: false,
+            chapters: <FixtureChapter>[FixtureChapter(url: '/c/1', name: 'C1')],
+          ),
+        ],
+      );
+      final MihonBackupImportReport report = await service(
+        downloadsRoot: downloadsRoot,
+        localComicRoot: localComicRoot,
+      ).importFile(backup);
+
+      expect(report.downloadMangaMatched, 0);
+      expect(
+        report.downloadMangaSkipped,
+        1,
+        reason: '两个根各有一个匹配目录 = 歧义，必须跳过而不是偏向 downloads',
+      );
+      final EpubBookRow row = (await db.getAllEpubBooks()).single;
+      expect(
+        await db.getMangaChapterDirRowsForBook(row.bookKey),
+        isEmpty,
+        reason: '歧义时不写任何映射',
+      );
+      expect(
+        p.isWithin(downloadsRoot.path, row.extractDir),
+        isFalse,
+        reason: '歧义时不改指 extractDir',
+      );
+      expect(p.isWithin(localComicRoot.path, row.extractDir), isFalse);
+    },
+  );
+
   test('skips when several folders prove the same download identity', () async {
     final Directory downloadsRoot = Directory(p.join(tmp.path, 'downloads'));
     final Directory localComicRoot = Directory(p.join(tmp.path, 'local'));

@@ -364,22 +364,15 @@ class DownloadLibraryIndex {
     String chapterKey,
   ) async {
     final MangaDownloadIdentity identity = MangaDownloadIdentity.ofEntry(entry);
-    final List<DownloadMangaFolderProbe> probes =
-        await probeDownloadLibraryFolders(await _downloadsRoot());
-    final List<DownloadMangaFolderProbe> matches = <DownloadMangaFolderProbe>[
-      for (final DownloadMangaFolderProbe probe in probes)
-        if (probe.manifest != null && identity.matchesManifest(probe.manifest!))
-          probe,
+    final List<DownloadMangaFolderOnDisk> folders = <DownloadMangaFolderOnDisk>[
+      for (final DownloadMangaFolderProbe probe
+          in await probeDownloadLibraryFolders(await _downloadsRoot()))
+        probe.toFolder(),
     ];
-    final List<DownloadMangaFolderProbe> exact = <DownloadMangaFolderProbe>[
-      for (final DownloadMangaFolderProbe probe in matches)
-        if (identity.matchesManifestPackage(probe.manifest!)) probe,
-    ];
-    final DownloadMangaFolderProbe? folder = exact.length == 1
-        ? exact.single
-        : exact.isEmpty && matches.length == 1
-        ? matches.single
-        : null;
+    // 共享匹配器负责「恰好一个匹配 / 扩展包 tie-breaker / 多个不猜」；
+    // 删除路径不再自己抄一遍，避免与已下载状态使用不同的判据。
+    final DownloadMangaFolderOnDisk? folder =
+        matchDownloadMangaFolderByIdentity(folders, identity).folder;
     if (folder == null) return;
     for (final ChapterContainerOnDisk container
         in await scanDownloadChapterContainers(folder.directory)) {
@@ -439,17 +432,7 @@ class MangaDownloadDiskIndex {
       final List<DownloadMangaFolderOnDisk> probeFolders =
           <DownloadMangaFolderOnDisk>[
             for (final DownloadMangaFolderProbe probe in root.probes)
-              if (probe.manifest != null)
-                DownloadMangaFolderOnDisk(
-                  directory: probe.directory,
-                  chapters: <ChapterContainerOnDisk>[
-                    ChapterContainerOnDisk.folder(
-                      containerName: probe.mangaFolderName,
-                      directory: probe.directory,
-                      manifest: probe.manifest,
-                    ),
-                  ],
-                ),
+              if (probe.manifest != null) probe.toFolder(),
           ];
       if (probeFolders.isEmpty) continue;
       for (final MangaDownloadIdentity identity in wanted) {
@@ -485,22 +468,13 @@ class MangaDownloadDiskIndex {
     final Set<String> downloaded = <String>{};
     for (final ({MangaDownloadIdentity identity, Set<String> chapterKeys}) entry
         in _entries) {
-      if (!_sameIdentity(entry.identity, identity)) continue;
+      if (!entry.identity.matches(identity)) continue;
       for (final String chapterKey in entry.chapterKeys) {
         if (wanted.contains(chapterKey)) downloaded.add(chapterKey);
       }
     }
     return downloaded;
   }
-
-  static bool _sameIdentity(MangaDownloadIdentity a, MangaDownloadIdentity b) =>
-      a.runtime == b.runtime &&
-      a.sourceIdKey == b.sourceIdKey &&
-      a.seriesKey == b.seriesKey &&
-      downloadExtensionPackagesCompatible(
-        a.extensionPackage,
-        b.extensionPackage,
-      );
 
   static Future<Set<String>> _completeChapterKeys(
     Directory mangaFolder,

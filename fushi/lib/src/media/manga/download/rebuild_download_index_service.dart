@@ -347,12 +347,16 @@ class RebuildDownloadIndexService {
           <String, MangaPagesManifest>{};
       for (final DownloadMangaFolderOnDisk folder
           in downloadScan.localFolders) {
-        for (final ChapterContainerOnDisk chapter in folder.chapters) {
-          final MangaPagesManifest? manifest = chapter.manifest;
-          if (manifest == null) continue;
-          localManifests[_canonicalPath(folder.directory.path)] = manifest;
-          break;
+        // 单章作品的身份证据是漫画目录根的 pages.json，不是章节容器。
+        MangaPagesManifest? manifest = folder.rootManifest;
+        if (manifest == null) {
+          for (final ChapterContainerOnDisk chapter in folder.chapters) {
+            manifest = chapter.manifest;
+            if (manifest != null) break;
+          }
         }
+        if (manifest == null) continue;
+        localManifests[_canonicalPath(folder.directory.path)] = manifest;
       }
       // local 里尚未登记的本地作品。已立墓碑的也留在候选里：处理时计入
       // skipped 并报告用户「主动移出书架」的选择被尊重。
@@ -1201,40 +1205,25 @@ class RebuildDownloadIndexService {
   ///
   /// 只收第一份 `pages.json` 可解析的目录：无 manifest 的本地目录不按标题
   /// 猜测、不参与在线身份匹配。扫描完整的章节容器（含完整性）以便关联后立即
-  /// 写映射；单章作品把 `pages.json` 放在作品根，也补一个根容器参与匹配。
+  /// 写映射；单章作品把 `pages.json` 放在作品根，用
+  /// [DownloadMangaFolderProbe.toFolder] 把它保留为**目录身份**，不伪造成
+  /// 名为漫画目录的章容器（否则会写出不可用的 `<manga>/<manga>` 映射）。
   Future<List<DownloadMangaFolderOnDisk>> _scanLocalManifestFolders() async {
     final List<DownloadMangaFolderOnDisk> folders = <DownloadMangaFolderOnDisk>[];
     for (final DownloadMangaFolderProbe probe
         in await probeLocalMangaFolders(localComicRoot)) {
       if (probe.manifest == null) continue;
+      final DownloadMangaFolderOnDisk probed = probe.toFolder();
       final List<ChapterContainerOnDisk> chapters =
           await scanDownloadChapterContainers(
             probe.directory,
             readComplete: true,
           );
-      final MangaPagesManifest? rootManifest = await readPagesManifest(
-        probe.directory,
-      );
-      if (rootManifest != null &&
-          !chapters.any(
-            (ChapterContainerOnDisk chapter) =>
-                chapter.manifest?.chapterKey == rootManifest.chapterKey,
-          )) {
-        chapters.add(
-          ChapterContainerOnDisk.folder(
-            containerName: probe.mangaFolderName,
-            directory: probe.directory,
-            manifest: rootManifest,
-            complete:
-                await readDownloadLibraryChapterPayload(probe.directory) !=
-                null,
-          ),
-        );
-      }
       folders.add(
         DownloadMangaFolderOnDisk(
           directory: probe.directory,
           chapters: chapters,
+          rootManifest: probed.rootManifest,
         ),
       );
     }
