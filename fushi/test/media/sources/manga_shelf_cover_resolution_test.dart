@@ -70,7 +70,10 @@ class _FakeAdapter
       throw StateError('the shelf must not fetch pages');
 }
 
-/// 一个最小可用的 PNG 头部 + 可辨认的负载，代表扩展网络栈返回的字节。
+/// 一个最小可用的 PNG 头部 + IEND 尾，代表扩展网络栈返回的字节。
+///
+/// 持久缓存经 `MediaCoverService.applyCoverBytes` 落盘，写侧统一校验
+/// 「完整可解码图片」（PNG 必须以 IEND chunk 收尾）；夹具必须过同一道门。
 const List<int> _pngBytes = <int>[
   0x89,
   0x50,
@@ -83,6 +86,14 @@ const List<int> _pngBytes = <int>[
   0x01,
   0x02,
   0x03,
+  0x49, // I
+  0x45, // E
+  0x4E, // N
+  0x44, // D
+  0xAE,
+  0x42,
+  0x60,
+  0x82,
 ];
 
 class _TestAppModel extends AppModel {

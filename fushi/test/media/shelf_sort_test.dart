@@ -78,15 +78,17 @@ void main() {
     final String source = File(
       'lib/src/pages/implementations/reader_fushi_history_page.dart',
     ).readAsStringSync();
-    final int start = source.indexOf('ShelfSortKey _shelfGroupSortKey(');
+    final int start = source.indexOf('ShelfSortKey _shelfSlotSortKey(');
     expect(start, isNonNegative);
-    final String titleOf = source.substring(
-      source.indexOf('String titleOf(', start),
-      source.indexOf('int recentOf(', start),
-    );
+    final int end = source.indexOf('void _toggleFilter(', start);
+    expect(end, isNonNegative);
+    final String titleOf = source.substring(start, end);
     expect(titleOf, contains('displayTitleForBook('));
-    expect(titleOf, isNot(contains('s.epub?.title')));
-    expect(titleOf, isNot(contains('s.srt?.title')));
+    // 原始列只可作 displayTitleForBook 的 rawTitle 参数，不可直接赋给 title。
+    expect(titleOf, isNot(contains('title = srt.title')));
+    expect(titleOf, isNot(contains('title = epub.title')));
+    expect(titleOf, isNot(contains('title = s.epub?.title')));
+    expect(titleOf, isNot(contains('title = s.srt?.title')));
   });
 
   group('compareShelfSortKeys', () {

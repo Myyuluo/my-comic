@@ -1010,6 +1010,12 @@ const Map<String, String> kCoveredElsewhere = <String, String>{
   // 生效点同样在 native session 下发，由编解码测试覆盖。
   'downloads/Peer encryption':
       'test/media/torrent/anime_download_config_backend_test.dart',
+  // 「保存为CBZ压缩包」：写 prefsRepo（changed=true），生效点在下载任务**开始时**
+  // 的 MangaDownloadService（CBZ 容器 vs 文件夹容器），设置页 harness 里没有下载
+  // 任务，观测不到。默认值 / 落库 / 开关写穿与容器形态由专项用例逐条咬住。
+  'downloads/Save as CBZ archive':
+      'test/settings/download_cbz_setting_test.dart（默认开启 / 落库 / 开关写穿） + '
+      'test/media/manga/manga_download_service_test.dart（CBZ 与文件夹容器、运行中任务保持原形态）',
   // 设备/集成 backlog（消费点真机/WebView/Android-only，widget 测不到）
   'reading/Spread direction': 'DEVICE: spread page order in WebView',
   'reading/Highlight text on tap': 'DEVICE: WebView onTap lookup',

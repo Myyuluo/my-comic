@@ -157,8 +157,12 @@ Manga/Chapter 与磁盘上已下载文件及其状态之间的映射，覆盖书
 _Avoid_: 漫画索引、书库、缓存
 
 **Rebuild download index（重建下载索引）**:
-用户触发的恢复扫描：扫描当前 Content root 的 Download library 与 Local source root，按 Download identity 把文件关联到已有 Manga（含非书架；身份不足时按文件名回退），并为未索引内容补建条目。多个目录都能证明同一身份时不猜，优先已记录目录或唯一最新完整副本，否则跳过并在报告中说明；只增改，不删除或重命名文件与映射。
+用户触发的恢复扫描：扫描当前 Content root 的 Download library 与 Local source root，按 Download identity 只把磁盘内容重新关联到 Library 中已有的 Manga（身份不足时按文件名回退）；不新增 Manga、不改变 Library membership、不分配 Tag，也不读取或改写非书架 Manga。发现尚未加入 Library 的作品由 Scan downloaded 负责。多个目录都能证明同一身份时不猜，优先已记录目录或唯一最新完整副本，否则跳过并在报告中说明；只增改，不删除或重命名文件与映射。
 _Avoid_: 导入、恢复备份、同步
+
+**Scan downloaded（检索已下载）**:
+用户手动触发的发现扫描：只读取当前 Content root 的 `downloads`，把已下载但尚未加入 Library 的作品加入 Library。只收至少有一个完整 Chapter container 的作品；歧义副本跳过并在报告中说明。已有非书架记录时复用同一条记录并提升为 Library 成员，保留阅读状态与 History；源未安装时原地登记为指向该 `downloads` 目录的 Local 条目；主动移出 Library 的作品在用户显式执行本动作时重新加入并清除移出标记（tombstone）。它不移动、复制或删除文件，也不重新关联已在 Library 的 Manga；后者属于 Rebuild download index。
+_Avoid_: 自动入库、导入、重建索引
 
 **Downloaded（已下载）**:
 下载状态：该 Chapter 在本地有可读内容。判据来自磁盘关联与可读性，与 Library membership、Source 是否安装以及数据库映射是否存在无关。由 Download identity 证明归属的 Chapter container 需要完整；用户提供、按容器名与 Chapter 关联且没有 Download identity 的容器只要可读也算；单章作品放在 Manga 目录根的章节内容同样算已下载。Local source root 下的用户原件可以被关联与阅读，但永不删除；删除只作用于 Download library 中由应用管理的容器。
@@ -173,7 +177,7 @@ _Avoid_: 文件缺失
 _Avoid_: 未下载
 
 **Unindexed（未索引）**:
-磁盘上存在 Chapter 内容，但还没有对应的 Manga/Download index 条目。
+磁盘上存在 Chapter 内容，但还没有对应的 Manga/Download index 条目。未索引内容不会由 Rebuild download index 自动登记；用户显式运行 Scan downloaded 时可从 `downloads` 中发现并加入 Library。
 _Avoid_: 未下载、孤儿
 
 **Cache（缓存）**:
@@ -209,7 +213,7 @@ _Avoid_: 自动备份、应用快照
 _Avoid_: 备份目录、autobackup（那是目录名）
 
 **Import（导入）**:
-把 Backup 读入 my-comic：恢复 Library 与阅读数据，并补齐本机缺失的 my-comic 设置。Merge 语义，按 Manga 与 Source 去重；未收藏的作品会恢复为非书架 Manga（含章节、阅读进度、已读与可恢复的 History），绝不进入 Library。导入后会尝试把已下载文件与可识别身份的本地文件关联到导入作品，不额外创建 Library 条目；「重建下载索引」仍是手动全量扫描。
+把 Backup 读入 my-comic：恢复 Library 与阅读数据，并补齐本机缺失的 my-comic 设置。Merge 语义，按 Manga 与 Source 去重；未收藏的作品会恢复为非书架 Manga（含章节、阅读进度、已读与可恢复的 History），绝不进入 Library。导入后会尝试把已下载文件与可识别身份的本地文件关联到导入作品，不额外创建 Library 条目；「重建下载索引」仍是用户手动触发、只重链书架成员，`downloads` 中尚未加入书架的作品由「检索已下载」发现。
 _Avoid_: 恢复（除非特指 Mihon 的 restore 行为）、同步
 
 **Export（导出）**:

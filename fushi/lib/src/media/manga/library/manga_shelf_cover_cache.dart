@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 
-import 'package:fushi/src/utils/cover_image.dart';
+import 'package:fushi/src/media/media_cover_service.dart';
 
 /// Program state 缓存根下承载书架持久封面字节的目录名。
 ///
@@ -91,8 +91,9 @@ class MangaShelfCoverCache {
 
   /// 写入一份封面字节与它对应的源 URL。空字节视为失败，不覆盖旧缓存。
   ///
-  /// 写盘走临时文件 + rename，崩溃不会留下截断的封面；同路径覆盖写后驱逐
-  /// Flutter ImageCache 的旧解码，避免书架重建时命中换图前的图像。
+  /// 落盘走 [MediaCoverService.applyCoverBytes]：原子写（临时文件 + rename）与
+  /// 「同路径覆盖写后驱逐 Flutter ImageCache 旧解码」由同一个收口函数保证，
+  /// 不在本文件手写 evict（`media_cover_write_guard_test` 的结构性要求）。
   Future<bool> store({
     required String bookKey,
     required String sourceUrl,
@@ -100,30 +101,16 @@ class MangaShelfCoverCache {
   }) async {
     if (bytes.isEmpty) return false;
     final File target = coverPathFor(bookKey);
-    File? temporary;
     try {
       await directory.create(recursive: true);
-      temporary = File(
-        '${target.path}.tmp-${DateTime.now().microsecondsSinceEpoch}',
+      await MediaCoverService.applyCoverBytes(
+        bytes: bytes,
+        destPath: target.path,
       );
-      await temporary.writeAsBytes(bytes, flush: true);
-      await temporary.rename(target.path);
       await _sourceUrlPathFor(bookKey).writeAsString(sourceUrl, flush: true);
-    } on FileSystemException {
-      try {
-        if (temporary != null && await temporary.exists()) {
-          await temporary.delete();
-        }
-      } on FileSystemException {
-        // 清理竞态忽略；容量整理会处理遗留临时文件。
-      }
-      return false;
-    }
-    // 同路径覆盖写：书架/首页可能已经缓存了旧解码，必须双键驱逐。
-    try {
-      await evictLocalCoverCache(target.path);
     } on Object {
-      // 没有 Flutter binding 的纯 Dart 环境（诊断工具）忽略即可。
+      // 写盘失败、字节不是完整可解码图片或没有 Flutter binding：不覆盖旧缓存。
+      return false;
     }
     await trim();
     return true;
@@ -141,7 +128,9 @@ class MangaShelfCoverCache {
       }
     }
     try {
-      await evictLocalCoverCache(coverPathFor(bookKey).path);
+      await MediaCoverService.applyCoverRemoval(
+        destPath: coverPathFor(bookKey).path,
+      );
     } on Object {
       // 同上：无 binding 环境忽略。
     }
