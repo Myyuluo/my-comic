@@ -31,6 +31,7 @@ import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 
 import 'package:fushi_engine/media/manga/local_source/local_source_archive.dart';
+import 'package:fushi_engine/media/manga/local_source/local_source_layout.dart';
 import 'package:fushi_engine/media/manga/mokuro_payload.dart';
 import 'package:fushi_engine/utils/archive/native_zip.dart';
 import 'package:fushi_engine/utils/misc/safe_file_name.dart';
@@ -123,10 +124,7 @@ String _truncateDownloadLibrarySegment(String name, int maxLength) {
 /// [pathReserve] 是留给后续子路径（如 `.staging/<jobId>/<page>`）的长度。
 /// 父路径本身已经很长时返回不小于 1 的值；此时只能保证段合法，无法保证
 /// 完整路径仍在上限内（Content root 极端深的情况）。
-int downloadLibrarySegmentBudget(
-  String parentPath, {
-  int pathReserve = 0,
-}) {
+int downloadLibrarySegmentBudget(String parentPath, {int pathReserve = 0}) {
   final int available =
       kDownloadLibraryMaxPathLength - parentPath.length - 1 - pathReserve;
   if (available < 1) return 1;
@@ -179,10 +177,11 @@ Directory downloadSourceDirectory({
 }) => Directory(
   p.join(
     downloadsRoot,
-    folderName ?? downloadSourceFolderName(
-      downloadsRoot: downloadsRoot,
-      sourceName: sourceName,
-    ),
+    folderName ??
+        downloadSourceFolderName(
+          downloadsRoot: downloadsRoot,
+          sourceName: sourceName,
+        ),
   ),
 );
 
@@ -205,10 +204,11 @@ Directory downloadMangaDirectory({
   return Directory(
     p.join(
       sourceDirPath,
-      mangaFolderName ?? downloadMangaFolderName(
-        sourceDirPath: sourceDirPath,
-        title: mangaTitle,
-      ),
+      mangaFolderName ??
+          downloadMangaFolderName(
+            sourceDirPath: sourceDirPath,
+            title: mangaTitle,
+          ),
     ),
   );
 }
@@ -455,25 +455,24 @@ class MangaPagesManifest {
   final DateTime downloadedAt;
 
   Map<String, Object?> toJson() => <String, Object?>{
-        'version': kDownloadPagesVersion,
-        'source': <String, Object?>{
-          'runtime': sourceRuntime,
-          'id': sourceId,
-          'name': sourceName,
-          'extensionPackage': extensionPackage,
-        },
-        'manga': <String, Object?>{'key': mangaKey, 'title': mangaTitle},
-        'chapter': <String, Object?>{
-          'key': chapterKey,
-          'name': chapterName,
-          if (chapterNumber != null) 'number': chapterNumber,
-          if (scanlator != null && scanlator!.isNotEmpty)
-            'scanlator': scanlator,
-          if (chapterUrl != null && chapterUrl!.isNotEmpty) 'url': chapterUrl,
-        },
-        'pages': mangaPayloadToJson(payload)['pages'],
-        'downloadedAt': downloadedAt.toUtc().toIso8601String(),
-      };
+    'version': kDownloadPagesVersion,
+    'source': <String, Object?>{
+      'runtime': sourceRuntime,
+      'id': sourceId,
+      'name': sourceName,
+      'extensionPackage': extensionPackage,
+    },
+    'manga': <String, Object?>{'key': mangaKey, 'title': mangaTitle},
+    'chapter': <String, Object?>{
+      'key': chapterKey,
+      'name': chapterName,
+      if (chapterNumber != null) 'number': chapterNumber,
+      if (scanlator != null && scanlator!.isNotEmpty) 'scanlator': scanlator,
+      if (chapterUrl != null && chapterUrl!.isNotEmpty) 'url': chapterUrl,
+    },
+    'pages': mangaPayloadToJson(payload)['pages'],
+    'downloadedAt': downloadedAt.toUtc().toIso8601String(),
+  };
 
   /// 从 `pages.json` 文本解析；形状不合法返回 null（调用方按未下载处理）。
   static MangaPagesManifest? tryParse(String jsonStr) {
@@ -651,6 +650,44 @@ Future<MokuroPayload?> readDownloadLibraryArchivePayload(
 Future<bool> isDownloadLibraryArchiveComplete(File archiveFile) async =>
     await readDownloadLibraryArchivePayload(archiveFile) != null;
 
+/// 没有可用 `pages.json` 的文件夹章节是否仍可读。
+///
+/// Ticket 06：用户提供的容器按容器名与章节关联后，不要求 `pages.json`
+/// 完整性校验；只要目录里能枚举出至少一页图片，就按已下载处理。与阅读器
+/// 读普通文件夹同一口径（`pages.json` 优先，缺失/损坏时扫描图片）。
+Future<bool> isDownloadLibraryFolderReadable(Directory chapterDir) async {
+  if (!await chapterDir.exists()) return false;
+  try {
+    return (await readLocalSourceChapterPages(
+      chapterDir.path,
+      isRootChapter: false,
+    )).isNotEmpty;
+  } on Object {
+    return false;
+  }
+}
+
+/// 没有可用 `pages.json` 的 CBZ 章节是否仍可读。
+///
+/// 与 [isDownloadLibraryFolderReadable] 同口径：包内至少有一张图片条目即视为
+/// 可读；包不存在 / 不是 ZIP / 没有页图返回 false。
+Future<bool> isDownloadLibraryArchiveReadable(File archiveFile) async {
+  if (!await archiveFile.exists()) return false;
+  final LocalSourceArchive archive;
+  try {
+    archive = LocalSourceArchive.open(archiveFile.path);
+  } on Object {
+    return false;
+  }
+  try {
+    return readLocalSourceArchivePages(archive).isNotEmpty;
+  } on Object {
+    return false;
+  } finally {
+    archive.close();
+  }
+}
+
 /// 把 staging 里的平铺页图与 `pages.json` 写成 CBZ 的**临时**包。
 ///
 /// 只收 staging 根下的常规文件：跳过点号文件与 `.tmp`（页图先写 `.tmp` 再改名，
@@ -663,7 +700,9 @@ Future<void> writeDownloadChapterArchive({
 }) async {
   final List<File> pages = <File>[];
   File? manifest;
-  await for (final FileSystemEntity entity in staging.list(followLinks: false)) {
+  await for (final FileSystemEntity entity in staging.list(
+    followLinks: false,
+  )) {
     if (entity is! File) continue;
     final String name = p.basename(entity.path);
     if (name.startsWith('.') || name.toLowerCase().endsWith('.tmp')) continue;

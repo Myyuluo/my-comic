@@ -16,6 +16,7 @@ import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi_engine/epub/epub_storage.dart';
 import 'package:fushi_engine/media/manga/download_library_storage.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_layout.dart';
+import 'package:fushi_engine/media/manga/mokuro_payload.dart';
 import 'package:path/path.dart' as p;
 
 import 'package:fushi/src/media/manga/download/chapter_container_on_disk.dart';
@@ -34,18 +35,34 @@ class MangaChapterContainer {
     required this.manifestFile,
     required this.imagesDirectory,
   }) : kind = MangaChapterContainerKind.folder,
-       archiveFile = null;
+       archiveFile = null,
+       isMangaRoot = false;
+
+  /// 单章作品的根容器：`pages.json` 直接住在漫画目录根。
+  ///
+  /// 它不是一个章子目录（不能写 `<manga>/<manga>` 映射），但渲染与阅读都按
+  /// 「目录根 + 根 manifest」处理。
+  const MangaChapterContainer.mangaRoot({
+    required Directory this.directory,
+    required File this.manifestFile,
+  }) : kind = MangaChapterContainerKind.folder,
+       archiveFile = null,
+       imagesDirectory = directory,
+       isMangaRoot = true;
 
   const MangaChapterContainer.archive({required this.archiveFile})
     : kind = MangaChapterContainerKind.archive,
       directory = null,
       manifestFile = null,
-      imagesDirectory = null;
+      imagesDirectory = null,
+      isMangaRoot = false;
 
   /// 取 [MangaChapterContainerKind]。
   final MangaChapterContainerKind kind;
 
   /// 章节目录（`downloads/{source}/{manga}/{chapter}`）；archive 为 null。
+  ///
+  /// 根 manifest 单章作品返回漫画目录本身。
   final Directory? directory;
 
   /// CBZ 压缩包（`downloads/{source}/{manga}/{chapter}.cbz`）；folder 为 null。
@@ -56,6 +73,9 @@ class MangaChapterContainer {
 
   /// 页图根：folder 容器就是章目录本身（页图平铺）；archive 为 null。
   final Directory? imagesDirectory;
+
+  /// 是否是单章作品根 manifest 的容器（不是章子目录）。
+  final bool isMangaRoot;
 
   bool get isArchive => kind == MangaChapterContainerKind.archive;
 }
@@ -147,7 +167,50 @@ class DownloadLibraryIndex {
         }
       }
     }
-    return null;
+    // 单章作品把 pages.json 直接放在漫画目录根：没有章子目录映射，但这一章
+    // 确实可读（ticket 06）。只对当前行自己的漫画目录生效，且必须由 manifest
+    // 证明属于同一部作品。
+    return _resolveMangaRootManifest(
+      row,
+      chapterKey,
+      downloadsRoot: currentDownloadsRoot,
+    );
+  }
+
+  /// 根 manifest 单章作品的容器；不是 / 读不了返回 null。
+  Future<MangaChapterContainer?> _resolveMangaRootManifest(
+    EpubBookRow row,
+    String chapterKey, {
+    required Directory downloadsRoot,
+  }) async {
+    final Directory mangaDir = Directory(row.extractDir);
+    if (!await mangaDir.exists()) return null;
+    final bool withinDownloads = isLocalSourcePathWithinRoot(
+      row.extractDir,
+      downloadsRoot,
+    );
+    bool withinLocal = false;
+    if (!withinDownloads) {
+      final Directory? localRoot = await _resolvedLocalComicRoot();
+      withinLocal =
+          localRoot != null &&
+          isLocalSourcePathWithinRoot(row.extractDir, localRoot);
+    }
+    if (!withinDownloads && !withinLocal) return null;
+    final OnlineMangaLibraryEntry? entry = OnlineMangaLibraryEntry.tryParse(
+      row.sourceMetadata,
+    );
+    if (entry == null) return null;
+    final MangaPagesManifest? manifest = await readPagesManifest(mangaDir);
+    if (manifest == null || manifest.chapterKey != chapterKey) return null;
+    if (!MangaDownloadIdentity.ofEntry(entry).matchesManifest(manifest)) {
+      return null;
+    }
+    if (await readDownloadLibraryChapterPayload(mangaDir) == null) return null;
+    return MangaChapterContainer.mangaRoot(
+      directory: mangaDir,
+      manifestFile: downloadPagesManifestFile(mangaDir),
+    );
   }
 
   /// 当前 Content root 下的 Download library 根。
@@ -166,9 +229,26 @@ class DownloadLibraryIndex {
     return Directory(p.join(p.dirname(legacyBase), 'downloads'));
   }
 
-  /// 这一章是否**完整**下载（容器存在且 manifest + 全部页齐）。
+  /// 当前 Content root 下的 Local source 根；解析不了返回 null。
+  Future<Directory?> _resolvedLocalComicRoot() async {
+    final Directory? injected = localComicRoot;
+    if (injected != null) return injected;
+    final String? legacyBase = EpubStorage.debugBaseDirectoryOverridePath;
+    if (legacyBase != null) {
+      return Directory(p.join(p.dirname(legacyBase), 'local'));
+    }
+    try {
+      return await AppPaths.localComicRootDirectory();
+    } on Object {
+      return null;
+    }
+  }
+
+  /// 这一章是否已下载（容器存在且可读）。
   ///
-  /// 文件夹章节检查章目录里的页文件；CBZ 章节检查包内条目。
+  /// 有 `pages.json` 的容器按完整性判（manifest + 全部页齐）；没有可用
+  /// `pages.json` 的用户容器（ticket 06）只要可读即算已下载——它可能正是
+  /// 按容器名关联上的普通文件夹或 CBZ。容器存在但读不出任何页仍不算。
   Future<bool> isChapterDownloaded({
     required String bookKey,
     required String chapterKey,
@@ -178,11 +258,26 @@ class DownloadLibraryIndex {
       chapterKey: chapterKey,
     );
     if (container == null) return false;
+    return _isContainerDownloaded(container);
+  }
+
+  /// [container] 是否可读（有 manifest 时仍要求完整）。
+  Future<bool> _isContainerDownloaded(MangaChapterContainer container) async {
+    // 根 manifest 容器由 [_resolveMangaRootManifest] 验证过身份与页负载。
+    if (container.isMangaRoot) return true;
     if (container.isArchive) {
-      return await isDownloadLibraryArchiveComplete(container.archiveFile!);
+      final File file = container.archiveFile!;
+      final MangaPagesManifest? manifest =
+          await readDownloadLibraryArchiveManifest(file);
+      if (manifest != null) return await isDownloadLibraryArchiveComplete(file);
+      return await isDownloadLibraryArchiveReadable(file);
     }
-    return await readDownloadLibraryChapterPayload(container.directory!) !=
-        null;
+    final Directory directory = container.directory!;
+    final MangaPagesManifest? manifest = await readPagesManifest(directory);
+    if (manifest != null) {
+      return await readDownloadLibraryChapterPayload(directory) != null;
+    }
+    return await isDownloadLibraryFolderReadable(directory);
   }
 
   /// 一批章里哪些已完整下载（作品页 / 章节选择器一次算全量）。
@@ -221,9 +316,7 @@ class DownloadLibraryIndex {
     if (downloaded.length == wanted.length) return downloaded;
     final MangaDownloadIdentity identity = MangaDownloadIdentity.ofEntry(entry);
     final MangaDownloadDiskIndex disk = await scanDisks(
-      queries: <MangaDownloadDiskQuery>[
-        MangaDownloadDiskQuery.ofEntry(entry),
-      ],
+      queries: <MangaDownloadDiskQuery>[MangaDownloadDiskQuery.ofEntry(entry)],
     );
     downloaded.addAll(disk.downloadedChapterKeys(identity, wanted));
     return downloaded;
@@ -284,24 +377,30 @@ class DownloadLibraryIndex {
         if (mapping == null) continue;
         final String containerPath = p.join(extractDir, mapping.folderName);
         if (!isLocalSourcePathWithinRoot(containerPath, mangaDir)) continue;
-        final bool complete;
-        if (mapping.containerKindEnum == MangaChapterContainerKind.archive) {
-          final File file = downloadChapterArchiveFile(
-            extractDir,
-            mapping.folderName,
-          );
-          complete =
-              await file.exists() &&
-              await isDownloadLibraryArchiveComplete(file);
-        } else {
-          final Directory directory = downloadChapterDirectory(
-            extractDir,
-            mapping.folderName,
-          );
-          complete =
-              await directory.exists() &&
-              await readDownloadLibraryChapterPayload(directory) != null;
-        }
+        // 与单章判据共用同一份「已下载」口径（ticket 06）：有 manifest 的
+        // 要求完整；用户提供的无 manifest 容器只要可读即算。
+        final MangaChapterContainer container =
+            mapping.containerKindEnum == MangaChapterContainerKind.archive
+            ? MangaChapterContainer.archive(
+                archiveFile: downloadChapterArchiveFile(
+                  extractDir,
+                  mapping.folderName,
+                ),
+              )
+            : MangaChapterContainer.folder(
+                directory: downloadChapterDirectory(
+                  extractDir,
+                  mapping.folderName,
+                ),
+                manifestFile: downloadPagesManifestFile(
+                  downloadChapterDirectory(extractDir, mapping.folderName),
+                ),
+                imagesDirectory: downloadChapterDirectory(
+                  extractDir,
+                  mapping.folderName,
+                ),
+              );
+        final bool complete = await _isContainerDownloaded(container);
         if (complete) {
           downloaded.add(entry.key);
           break;
@@ -326,7 +425,12 @@ class DownloadLibraryIndex {
     );
     Directory? mangaDir;
     if (container != null) {
-      if (container.isArchive) {
+      if (container.isMangaRoot) {
+        // 单章作品的负载直接住在漫画目录根：只删根 manifest 与它声明的页，
+        // 绝不递归删除目录（共享目录里可能还有别的作品 / 用户文件）。
+        mangaDir = container.directory!;
+        await _deleteMangaRootPayload(mangaDir);
+      } else if (container.isArchive) {
         final File file = container.archiveFile!;
         mangaDir = file.parent;
         if (await file.exists()) await file.delete();
@@ -340,6 +444,38 @@ class DownloadLibraryIndex {
     if (mangaDir != null) {
       await _cleanupEmptyDirectories(mangaDir, deletedBookKey: bookKey);
     }
+  }
+
+  /// 删除单章作品根 manifest 的下载负载：声明页 + `pages.json`。
+  ///
+  /// 只删根目录内由 manifest 声明的文件；`cover.jpg` 等既有文件、子目录里的
+  /// 其他作品容器都原样保留。返回是否真的删了东西。
+  Future<bool> _deleteMangaRootPayload(
+    Directory mangaDir, {
+    MangaPagesManifest? manifest,
+  }) async {
+    final MangaPagesManifest? pages =
+        manifest ?? await readPagesManifest(mangaDir);
+    if (pages == null) return false;
+    final String root = p.canonicalize(mangaDir.path);
+    bool deleted = false;
+    for (final MokuroImage image in pages.payload.images) {
+      final String relative = normalizeMangaUrl(image.url);
+      if (relative.isEmpty) continue;
+      final String candidate = p.canonicalize(p.join(root, relative));
+      if (!p.isWithin(root, candidate)) continue;
+      final File file = File(candidate);
+      if (await file.exists()) {
+        await file.delete();
+        deleted = true;
+      }
+    }
+    final File manifestFile = downloadPagesManifestFile(mangaDir);
+    if (await manifestFile.exists()) {
+      await manifestFile.delete();
+      deleted = true;
+    }
+    return deleted;
   }
 
   /// 删除容器后清理空目录：空的 manga 目录与整个空 source 目录。
@@ -478,6 +614,20 @@ class DownloadLibraryIndex {
         deleted = true;
       }
     }
+    // 单章作品根 manifest：没有章容器可删，清空根负载（页 + pages.json），
+    // 但保留目录里的其他文件与其他作品容器。
+    final MangaPagesManifest? rootManifest = await readPagesManifest(
+      folder.directory,
+    );
+    if (rootManifest != null &&
+        rootManifest.chapterKey == chapterKey &&
+        identity.matchesManifest(rootManifest)) {
+      final bool rootDeleted = await _deleteMangaRootPayload(
+        folder.directory,
+        manifest: rootManifest,
+      );
+      deleted = deleted || rootDeleted;
+    }
     if (deleted) {
       await _cleanupEmptyDirectories(
         folder.directory,
@@ -543,7 +693,8 @@ class MangaDownloadDiskIndex {
           chapterKeys: await _completeChapterKeys(
             folder.directory,
             query.identity,
-            includeMangaRootManifest: root.local,
+            // 单章作品的根 pages.json 在两个根下都能证明这一章可读。
+            includeMangaRootManifest: true,
           ),
         ));
       }
