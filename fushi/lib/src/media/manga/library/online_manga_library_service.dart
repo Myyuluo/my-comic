@@ -19,6 +19,7 @@ import 'package:fushi/src/media/manga/download/download_library_scanner.dart';
 import 'package:fushi/src/media/manga/download/download_manga_relinker.dart';
 import 'package:fushi_engine/epub/epub_storage.dart';
 import 'package:fushi_engine/media/manga/download_library_storage.dart';
+import 'package:fushi_engine/media/manga/local_source/local_source_layout.dart';
 
 import 'package:fushi_engine/updates/update_feed_kind.dart';
 import 'package:fushi/src/updates/update_feed_service.dart';
@@ -279,6 +280,10 @@ class OnlineMangaLibraryService {
       chapterCount: chapters.length,
       chaptersJson: _chaptersJson(chapters),
     );
+    // 清库只删记录：重开时行可能是用「只有标题」的源页 seed 建出来的，磁盘目录
+    // 已按 pages.json 身份复用，但 seed 没有章节，映射建不出来。章节表刷新后
+    // 再走一次 re-link，章节列表才能立即显示已下载、删除下载无需手动重建索引。
+    await _relinkDownloadFolderAfterRefresh(bookKey: bookKey, entry: updated);
     await _publishNewChapters(
       bookKey: bookKey,
       title: series.title,
@@ -321,6 +326,46 @@ class OnlineMangaLibraryService {
           }),
         ),
     ]);
+  }
+
+  /// 章节表刷新后按当前章表重链已有下载目录（票 05）。
+  ///
+  /// 「清除数据库」只删记录；重新打开作品时 `_insert` 能按 `pages.json` 身份
+  /// 复用磁盘目录并写 `extractDir`，但源网格 seed 往往没有章节，映射仍建不
+  /// 出来。章节表拉齐后必须再 re-link 一次，批量 / 单章删除与「已下载」状态
+  /// 才能直接使用，不需要用户手动运行「重建下载索引」。
+  ///
+  /// 只处理当前 Download library 根内、真实存在的漫画目录：`local` 原件与旧
+  /// 布局路径不碰；re-link 只写映射 / extractDir，不创建、删除或重命名文件。
+  Future<void> _relinkDownloadFolderAfterRefresh({
+    required String bookKey,
+    required OnlineMangaLibraryEntry entry,
+  }) async {
+    if (entry.chapters.isEmpty) return;
+    final EpubBookRow? row = await database.getEpubBook(bookKey);
+    if (row == null) return;
+    final String extractDir = row.extractDir.trim();
+    if (extractDir.isEmpty) return;
+    final Directory downloadsRoot = await _downloadsRoot();
+    if (!isLocalSourcePathWithinRoot(extractDir, downloadsRoot)) return;
+    final Directory mangaFolder = Directory(extractDir);
+    if (!await mangaFolder.exists()) return;
+    try {
+      await relinkDownloadMangaFolder(
+        database: database,
+        row: row,
+        entry: entry,
+        mangaFolder: mangaFolder,
+      );
+    } on Object catch (error, stack) {
+      // 重链只是下载状态 / 删除的辅助修复；磁盘或映射异常不能让章节刷新失败。
+      // 下一次刷新会幂等重试，已写下的映射保留。
+      ErrorLogService.instance.log(
+        'OnlineMangaLibraryService.relinkAfterRefresh',
+        error,
+        stack,
+      );
+    }
   }
 
   /// 联网刷新一条书架条目，成功则落库。

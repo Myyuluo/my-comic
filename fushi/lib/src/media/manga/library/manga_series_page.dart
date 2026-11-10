@@ -2057,10 +2057,12 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
 
   /// 批量删除的适用子集：当前可见且选中的「已完成」在线下载。
   ///
-  /// 本地图源章节的磁盘文件属于用户文件，永远不参与；排队中 / 下载中 /
-  /// 暂停 / 文件缺失也都不算「已完成」，只认磁盘判据为已下载的章。
+  /// 只要求是在线条目，不要求 Manga 行 / Library membership / 数据库映射：
+  /// 「已下载」由 [_refreshDownloadState] 合并映射与磁盘 `pages.json` 身份扫描
+  /// 得出（票 05：清库后仍可直接批量删除）。本地图源章节的磁盘文件属于用户
+  /// 文件，永远不参与；排队中 / 下载中 / 暂停 / 文件缺失也都不算「已完成」。
   List<OnlineMangaChapter> get _deletableSelectedChapters {
-    if (_entry == null || _bookKey == null) return const <OnlineMangaChapter>[];
+    if (_entry == null) return const <OnlineMangaChapter>[];
     return <OnlineMangaChapter>[
       for (final OnlineMangaChapter chapter in _selectedVisibleChapters)
         if (_downloadStateOf(chapter) == MangaChapterDownloadState.downloaded)
@@ -2071,10 +2073,15 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
   /// 批量删除选中的已完成在线下载：只动 Download library 里由应用管理的
   /// 文件，不碰本地图源用户文件。删除前二次确认；删完章节回到「未下载」，
   /// 章级已读标记与阅读进度原样保留。
+  ///
+  /// 与单章删除复用同一条身份回退（[DownloadLibraryIndex.deleteChapterForEntry]）：
+  /// 有映射按映射删，没有映射 / 没有 Manga 行时按 entry 的下载身份在
+  /// `downloads` 里找唯一匹配的容器；`local` 根永远不参与删除。
   Future<void> _batchDeleteDownloads() async {
     final EpubBookRow? row = _row;
+    final OnlineMangaLibraryEntry? entry = _entry;
     final AppModel? appModel = _appModelOrNull;
-    if (row == null || appModel == null || _batchRunning) return;
+    if (entry == null || appModel == null || _batchRunning) return;
     final List<OnlineMangaChapter> targets = _deletableSelectedChapters;
     if (targets.isEmpty) return;
     final bool confirmed = await showFushiConfirmDialog(
@@ -2091,11 +2098,14 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     try {
       final DownloadLibraryIndex index = DownloadLibraryIndex(
         appModel.database,
+        downloadsRoot: appModel.appPathsOrNull?.downloadsRoot,
+        localComicRoot: appModel.appPathsOrNull?.localComicRoot,
       );
       for (final OnlineMangaChapter chapter in targets) {
-        await index.deleteChapter(
-          bookKey: row.bookKey,
+        await index.deleteChapterForEntry(
+          entry: entry,
           chapterKey: chapter.key,
+          row: row,
         );
         deletedChapterKeys.add(chapter.key);
         // done 任务行是「这章曾经下载过」的持久标记。用户主动删除下载时必须
