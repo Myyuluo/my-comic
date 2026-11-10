@@ -391,10 +391,13 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
     final ShelfReadStatus? filter = _readStatusFilter;
     if (filter == null) return true;
     final bool completionKnown = bookKey != null && bookKey.isNotEmpty;
+    final ShelfCompletion completion = !completionKnown
+        ? ShelfCompletion.unknown
+        : _completedBookKeys.contains(bookKey)
+        ? ShelfCompletion.complete
+        : ShelfCompletion.incomplete;
     return classifyShelfReadStatus(
-          completed:
-              completionKnown && _completedBookKeys.contains(bookKey),
-          completedKnown: completionKnown,
+          completion: completion,
           position: progress?.position ?? 0,
           duration: progress?.duration ?? 0,
         ) ==
@@ -1673,8 +1676,10 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
       (MediaItem item) => item.position,
       (MediaItem item) => item.duration,
       // 与阅读状态筛选同一判据：标了读完的书不再当「在读」顶进继续阅读。
-      isCompleted: (MediaItem item) =>
-          _completedBookKeys.contains(_parseBookKey(item.mediaIdentifier)),
+      completionOf: (MediaItem item) =>
+          _completedBookKeys.contains(_parseBookKey(item.mediaIdentifier))
+          ? ShelfCompletion.complete
+          : ShelfCompletion.incomplete,
     );
     return pickShelfContinueHero(
       tally.inProgress,

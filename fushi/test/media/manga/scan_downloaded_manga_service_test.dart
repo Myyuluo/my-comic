@@ -117,6 +117,8 @@ void main() {
   Future<void> installSource({
     String extensionPackage = 'org.example.fixture',
     String sourceId = '1',
+    bool extensionEnabled = true,
+    bool sourceEnabled = true,
   }) async {
     await db.upsertMangaExtension(
       MangaExtensionsCompanion.insert(
@@ -129,6 +131,7 @@ void main() {
         apkPath: 'fixture.apk',
         apkSha256: 'sha',
         signerSha256: 'signer',
+        enabled: Value<bool>(extensionEnabled),
         installedAt: 1,
       ),
     );
@@ -140,8 +143,15 @@ void main() {
           sourceId: sourceId,
           name: 'Example Source',
           language: 'en',
+          enabled: Value<bool>(sourceEnabled),
         ),
       ],
+    );
+    // replace 会保留已有源的设置；显式改启用位才能覆盖同一 Source 的旧状态。
+    await db.updateMangaOnlineSourceSettings(
+      extensionPackage: extensionPackage,
+      sourceId: sourceId,
+      enabled: sourceEnabled,
     );
   }
 
@@ -340,6 +350,57 @@ void main() {
       isTrue,
       reason: '文件继续留在 downloads 原地',
     );
+  });
+
+  test('扩展或在线源被停用时按「源未安装」降级本地条目并计入报告', () async {
+    final List<Directory> mangaDirs = <Directory>[];
+    for (final ({String label, bool extensionEnabled, bool sourceEnabled}) flags
+        in <({String label, bool extensionEnabled, bool sourceEnabled})>[
+          (
+            label: 'disabled-extension',
+            extensionEnabled: false,
+            sourceEnabled: true,
+          ),
+          (
+            label: 'disabled-source',
+            extensionEnabled: true,
+            sourceEnabled: false,
+          ),
+        ]) {
+      final OnlineMangaLibraryEntry entry = entryFor(
+        seriesKey: '/series/${flags.label}',
+      );
+      await installSource(
+        extensionPackage: entry.extensionPackage,
+        sourceId: entry.sourceId,
+        extensionEnabled: flags.extensionEnabled,
+        sourceEnabled: flags.sourceEnabled,
+      );
+      final Directory mangaDir = Directory(
+        p.join(downloadsRoot.path, 'Example Source', flags.label),
+      );
+      mangaDirs.add(mangaDir);
+      await writeChapter(
+        mangaDir: mangaDir,
+        folderName: 'Chapter 1',
+        entry: entry,
+        chapter: entry.chapters[0],
+      );
+    }
+
+    final ScanDownloadedMangaReport report = await service().run();
+
+    expect(report.addedOnline, 0, reason: '停用的源不得建在线条目');
+    expect(report.addedLocal, 2);
+    expect(report.addedLocalSourceMissing, 2);
+    for (final Directory mangaDir in mangaDirs) {
+      final EpubBookRow row = (await db.getEpubBook(
+        localSourceBookKeyFor(mangaDir.path),
+      ))!;
+      expect(row.isInLibrary, isTrue);
+      expect(OnlineMangaLibraryEntry.tryParse(row.sourceMetadata), isNull);
+      expect(LocalSourceMetadata.tryParse(row.sourceMetadata), isNotNull);
+    }
   });
 
   test('已有非书架记录原地提升为书架成员：保留进度、章节与下载映射，不新建行', () async {

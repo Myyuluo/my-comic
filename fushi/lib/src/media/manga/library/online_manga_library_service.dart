@@ -42,10 +42,28 @@ OnlineMangaLibraryService mihonOnlineLibraryService(MihonManager manager) =>
 /// [entry]（票 06）。[chaptersError] 非空表示这次章节列表没拿到，此时
 /// [entry] 里的章节是上一次成功刷新留下的旧列表，不是空列表。
 class OnlineMangaRefreshOutcome {
-  const OnlineMangaRefreshOutcome({required this.entry, this.chaptersError});
+  const OnlineMangaRefreshOutcome({
+    required this.entry,
+    this.chaptersError,
+    this.chaptersRefreshed = true,
+  });
 
   final OnlineMangaLibraryEntry entry;
   final OnlineMangaUnavailable? chaptersError;
+
+  /// 章节列表是否真的刷新过。
+  ///
+  /// 与 [chaptersError] 不同：源返回空章节列表时详情/封面仍会落库（票 06），
+  /// 但章节列表没有刷新、沿用了旧缓存；自动更新探测必须把这种情况按失败处理，
+  /// 不能计入一次成功刷新，也不能拿旧章节去 diff 新章。
+  final bool chaptersRefreshed;
+
+  /// 空章节列表、沿用旧缓存时必须向调用方报告的原因。
+  static const OnlineMangaUnavailable emptyChaptersError =
+      OnlineMangaUnavailable(
+        OnlineMangaUnavailableReason.runtimeFailure,
+        'Source returned no chapters; keeping the existing list.',
+      );
 }
 
 /// 在线漫画书架条目的读写口，**与运行时无关**。
@@ -438,13 +456,19 @@ class OnlineMangaLibraryService {
   }) async {
     try {
       final OnlineMangaRefreshResult result = await adapter.refresh(entry);
+      // 源返回空列表而本地已有章节：详情/封面照常落库，但章节没刷新。
+      final bool chaptersRefreshed =
+          !(result.chapters.isEmpty && entry.chapters.isNotEmpty);
       final OnlineMangaLibraryEntry? updated = await refresh(
         bookKey: bookKey,
         existing: entry,
         series: result.series,
         chapters: result.chapters,
       );
-      return OnlineMangaRefreshOutcome(entry: updated ?? entry);
+      return OnlineMangaRefreshOutcome(
+        entry: updated ?? entry,
+        chaptersRefreshed: chaptersRefreshed,
+      );
     } on OnlineMangaUnavailable catch (error) {
       final OnlineMangaSeries? details = error.series;
       if (details == null) rethrow;
@@ -458,6 +482,7 @@ class OnlineMangaLibraryService {
       return OnlineMangaRefreshOutcome(
         entry: updated ?? entry,
         chaptersError: error,
+        chaptersRefreshed: false,
       );
     }
   }
@@ -689,8 +714,9 @@ class OnlineMangaLibraryService {
         p.relative(directory, from: rootPath),
       );
       if (segments.isEmpty) continue;
-      final OnlineMangaLibraryEntry? claimed =
-          OnlineMangaLibraryEntry.tryParse(row.sourceMetadata);
+      final OnlineMangaLibraryEntry? claimed = OnlineMangaLibraryEntry.tryParse(
+        row.sourceMetadata,
+      );
       claims.add(
         _DownloadLibraryClaim(
           sourceFolder: segments.first,
@@ -822,16 +848,15 @@ class OnlineMangaLibraryService {
           reusedFolder: shared,
         );
       }
-      final List<_DownloadLibraryClaim> sharedClaims =
-          <_DownloadLibraryClaim>[
-            for (final _DownloadLibraryClaim claim in claims)
-              if (claim.mangaFolder != null &&
-                  _sameFolderName(claim.sourceFolder, sourceFolder) &&
-                  (claim.sourceIdentity == null ||
-                      claim.sourceIdentity!.matches(sourceIdentity)) &&
-                  claim.mangaTitle.trim() == entryTitle)
-                claim,
-          ];
+      final List<_DownloadLibraryClaim> sharedClaims = <_DownloadLibraryClaim>[
+        for (final _DownloadLibraryClaim claim in claims)
+          if (claim.mangaFolder != null &&
+              _sameFolderName(claim.sourceFolder, sourceFolder) &&
+              (claim.sourceIdentity == null ||
+                  claim.sourceIdentity!.matches(sourceIdentity)) &&
+              claim.mangaTitle.trim() == entryTitle)
+            claim,
+      ];
       if (sharedClaims.isNotEmpty) {
         final _DownloadLibraryClaim preferred = sharedClaims.firstWhere(
           (_DownloadLibraryClaim claim) =>
@@ -910,8 +935,7 @@ class OnlineMangaLibraryService {
     )) {
       final String folderName = p.basename(sourceDir.path);
       if (skipFolderNames.contains(folderName.toLowerCase())) continue;
-      final Set<DownloadSourceIdentity> identities =
-          <DownloadSourceIdentity>{};
+      final Set<DownloadSourceIdentity> identities = <DownloadSourceIdentity>{};
       for (final Directory mangaDir in await listDownloadChildDirectories(
         sourceDir,
       )) {

@@ -43,19 +43,31 @@ List<OnlineMangaChapter> mangaReadingOrder(List<OnlineMangaChapter> chapters) {
   );
 }
 
-/// [chapters] 里下标 [index] 的章是否是**规范阅读顺序的最后一章**（最新一话）。
+/// 判断「最后一章」时使用的章节顺序。
+enum MangaChapterOrdering {
+  /// 在线 / 导入条目的规范阅读顺序：sourceOrder → 话数 → 上传时间，与存储
+  /// 数组顺序无关（[mangaReadingOrder]）。
+  canonical,
+
+  /// 本地图源扫描的自然顺序（第 1 话 → 第 N 话）。
+  natural,
+}
+
+/// [chapters] 里下标 [index] 的章是否是**该顺序的最后一章**。
 ///
-/// 在线条目按 [mangaReadingOrder]（sourceOrder / 话数 / 上传时间，与存储数组
-/// 顺序无关）；本地图源的 [naturalOrder] 用扫描的自然顺序（第 1 话 → 第 N 话），
-/// 与阅读器 `_adjacentChapterIndex` 的本地分支一致。用于「读到哪一章的末页
-/// 才算整部作品读完」——旧实现任何一章读到末页都写书级 `completedAt`。
+/// [MangaChapterOrdering.canonical] 用于在线 / 导入条目，按 [mangaReadingOrder]
+/// 推导；[MangaChapterOrdering.natural] 用于本地图源，与阅读器
+/// `_adjacentChapterIndex` 的本地分支一致。用于「读到哪一章的末页才算整部作品
+/// 读完」——旧实现任何一章读到末页都写书级 `completedAt`。
 bool isLastMangaChapterInReadingOrder({
   required List<OnlineMangaChapter> chapters,
   required int index,
-  bool naturalOrder = false,
+  MangaChapterOrdering ordering = MangaChapterOrdering.canonical,
 }) {
   if (index < 0 || index >= chapters.length) return false;
-  if (naturalOrder) return index == chapters.length - 1;
+  if (ordering == MangaChapterOrdering.natural) {
+    return index == chapters.length - 1;
+  }
   if (chapters.length <= 1) return true;
   return mangaReadingOrder(chapters).last.key == chapters[index].key;
 }

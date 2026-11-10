@@ -5694,7 +5694,7 @@
   "scan_downloaded_confirm_title": "检索已下载？",
   "scan_downloaded_failed": "检索已下载失败：$message",
   "scan_downloaded_progress_title": "正在检索已下载",
-  "scan_downloaded_report_body": "扫描 $scanned 个目录；加入在线条目 $online 部、本地条目 $local 部（其中 $sourceMissing 部因来源未安装降级）。\\n提升非书架记录 $promoted 部；复活墓碑 $revived 部。\\n跳过：不完整 $incomplete 个、歧义 $ambiguous 部。失败：$failed 部。",
+  "scan_downloaded_report_body": "扫描 $scanned 个目录；加入在线条目 $online 部、本地条目 $local 部（其中 $sourceMissing 部因来源未安装降级）。\n提升非书架记录 $promoted 部；复活墓碑 $revived 部。\n跳过：不完整 $incomplete 个、歧义 $ambiguous 部。失败：$failed 部。",
   "scan_downloaded_report_cancelled": "已取消，以下是已完成的部分：",
   "scan_downloaded_report_title": "检索完成",
   "scan_downloaded_subtitle": "扫描 downloads 中已下载但未加入书架的漫画并加入书架。",

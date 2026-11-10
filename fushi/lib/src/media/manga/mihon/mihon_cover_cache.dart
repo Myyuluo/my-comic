@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 
+import 'package:fushi/src/media/manga/cover_cache_eviction.dart';
 import 'package:fushi/src/media/manga/mihon/mihon_models.dart';
 import 'package:fushi/src/utils/net/transient_fetch_retry.dart';
 
@@ -26,13 +27,13 @@ const int kMangaCoverCacheDefaultMaxAgeDays = 180;
 class MihonCoverCache {
   MihonCoverCache(
     this.directory, {
-    this.maxEntries = 512,
-    this.maxBytes = 64 * 1024 * 1024,
+    this.maxEntries = kCoverCacheMaxEntries,
+    this.maxBytes = kCoverCacheMaxBytes,
     this.maxAge = const Duration(days: kMangaCoverCacheDefaultMaxAgeDays),
     this.retryBackoff = kCoverFetchRetryBackoff,
     this.retryWait = retryWaitReal,
-  })  : assert(maxEntries > 0),
-        assert(maxBytes > 0);
+  }) : assert(maxEntries > 0),
+       assert(maxBytes > 0);
 
   final Directory directory;
   final int maxEntries;
@@ -176,38 +177,10 @@ class MihonCoverCache {
     return next;
   }
 
-  Future<void> _trim() async {
-    try {
-      if (!await directory.exists()) return;
-      final List<File> files = await directory
-          .list()
-          .where((FileSystemEntity entity) => entity is File)
-          .cast<File>()
-          .toList();
-      final List<({File file, DateTime modified, int length})> ranked =
-          <({File file, DateTime modified, int length})>[];
-      int totalBytes = 0;
-      for (final File file in files) {
-        final FileStat stat = await file.stat();
-        totalBytes += stat.size;
-        ranked.add((file: file, modified: stat.modified, length: stat.size));
-      }
-      if (ranked.length <= maxEntries && totalBytes <= maxBytes) return;
-      // 按写入时间升序淘汰。这里刻意不做 LRU：把访问也算进排序需要在命中时回写
-      // mtime，那会同时重置 maxAge 的过期时钟（常看的封面永不刷新），而 atime 在
-      // Windows 上默认不更新、不可信。
-      ranked.sort((left, right) => left.modified.compareTo(right.modified));
-      int remaining = ranked.length;
-      for (final ({File file, DateTime modified, int length}) entry in ranked) {
-        if (remaining <= maxEntries && totalBytes <= maxBytes) break;
-        await entry.file.delete();
-        remaining--;
-        totalBytes -= entry.length;
-      }
-    } on FileSystemException {
-      // 并发清理/权限变化不应影响封面显示。
-    }
-  }
+  CoverCacheEvictionPolicy get _eviction =>
+      CoverCacheEvictionPolicy(maxEntries: maxEntries, maxBytes: maxBytes);
+
+  Future<void> _trim() => _eviction.trim(directory);
 }
 
 /// 一次共享的封面取回；订阅者只影响「是否还有人要」，不影响结果本身。
@@ -257,7 +230,6 @@ String mihonCoverCacheKey({
   required String extensionPackage,
   required String sourceId,
   required String url,
-}) =>
-    sha256
-        .convert(utf8.encode('$extensionPackage\u0000$sourceId\u0000$url'))
-        .toString();
+}) => sha256
+    .convert(utf8.encode('$extensionPackage\u0000$sourceId\u0000$url'))
+    .toString();

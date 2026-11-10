@@ -42,7 +42,10 @@ void main() {
     sortOrder: 0,
   );
 
-  Future<void> seedSource(MangaOnlineSourceRow row) async {
+  Future<void> seedSource(
+    MangaOnlineSourceRow row, {
+    bool extensionEnabled = true,
+  }) async {
     await database.upsertMangaExtension(
       MangaExtensionsCompanion.insert(
         packageName: row.extensionPackage,
@@ -54,7 +57,7 @@ void main() {
         apkPath: 'extensions/${row.extensionPackage}.ext',
         apkSha256: 'apk-sha',
         signerSha256: 'signer-sha',
-        enabled: const Value<bool>(true),
+        enabled: Value<bool>(extensionEnabled),
         installedAt: 1,
       ),
     );
@@ -70,6 +73,12 @@ void main() {
           enabled: Value<bool>(row.enabled),
         ),
       ],
+    );
+    // replace 会保留已有源的设置；显式改启用位才能覆盖同一 Source 的旧状态。
+    await database.updateMangaOnlineSourceSettings(
+      extensionPackage: row.extensionPackage,
+      sourceId: row.sourceId,
+      enabled: row.enabled,
     );
   }
 
@@ -105,6 +114,27 @@ void main() {
     manager.dispose();
     await database.close();
     if (await root.exists()) await root.delete(recursive: true);
+  });
+
+  test('来源可用性要求扩展与在线源两侧都启用', () async {
+    await seedSource(sourceRow());
+    await manager.initialise();
+    final MihonLibraryAdapter adapter = MihonLibraryAdapter(manager);
+    expect(await adapter.isSourceAvailable(placeholderEntry()), isTrue);
+
+    await seedSource(sourceRow(enabled: false));
+    expect(
+      await adapter.isSourceAvailable(placeholderEntry()),
+      isFalse,
+      reason: '在线源停用等同于来源不可用',
+    );
+
+    await seedSource(sourceRow(), extensionEnabled: false);
+    expect(
+      await adapter.isSourceAvailable(placeholderEntry()),
+      isFalse,
+      reason: '扩展停用时即使源行仍为 enabled，来源也不可用',
+    );
   });
 
   test('来源名解析按数字 sourceId 回退到已启用的真实 Source', () async {

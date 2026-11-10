@@ -721,6 +721,19 @@ class ReaderFushiSource extends ReaderMediaSource {
     );
   }
 
+  /// 在线条目能否回退到已保存的远程封面 URL。
+  ///
+  /// 有封面服务时必须确认来源已安装且启用；服务缺失（启动早期缓存根不可用）
+  /// 时无法判定，保持旧的远程回退行为。该判定只查数据库，不发起网络请求。
+  static Future<bool> _canUseShelfRemoteCover(
+    MangaShelfCoverService? service,
+    OnlineMangaLibraryEntry? entry,
+  ) async {
+    if (entry == null) return false;
+    if (service == null) return true;
+    return service.isSourceAvailable(entry);
+  }
+
   /// 按 bookKey 解析出 [MediaItem]（TODO-291：首页「正在听书」迷你条「回到书」用，
   /// 此处没有现成的 MediaItem，需按 key 重建）。书不存在返回 null。
   Future<MediaItem?> mediaItemForBookKey(String bookKey) async {
@@ -923,29 +936,31 @@ class ReaderFushiSource extends ReaderMediaSource {
         ? null
         : await shelfCoverService?.cachedCoverUrl(book.bookKey);
     String? imageUrl;
-    bool usedLocalCover = false;
     if (cachedShelfCover != null) {
       imageUrl = cachedShelfCover;
     } else {
       imageUrl = await _resolveCoverUrl(book);
-      usedLocalCover = imageUrl != null;
       // 导入的在线漫画（Mihon 备份）通常没有本地封面文件，备份只带远程
       // `series.coverUrl`。本地探测全落空时回退到它，交给 `MediaItem.imageUrl`
-      // 的现有 HTTP 图片缓存（`AppCachedHttpImage`）懒加载；来源是否安装无关紧要。
-      // 它**不**写入 [_lastGoodCoverUrlByBookKey]：那份进程缓存只存磁盘上真实
-      // 存在过的 `file://` URL（BUG-513），混入远程地址会破坏离线语义。
+      // 的现有 HTTP 图片缓存（`AppCachedHttpImage`）懒加载。
+      //
+      // 来源未安装 / 停用时不得回退远程 URL：此时几乎必然请求失败，书架应直接
+      // 显示占位（票 09）。可用性判定只读数据库，不联网、不逐本抓封面。它**不**
+      // 写入 [_lastGoodCoverUrlByBookKey]：那份进程缓存只存磁盘上真实存在过的
+      // `file://` URL（BUG-513），混入远程地址会破坏离线语义。
       if (imageUrl == null) {
         final String? remoteCoverUrl = onlineEntry?.series.coverUrl?.trim();
-        if (remoteCoverUrl != null && remoteCoverUrl.isNotEmpty) {
+        if (remoteCoverUrl != null &&
+            remoteCoverUrl.isNotEmpty &&
+            await _canUseShelfRemoteCover(shelfCoverService, onlineEntry)) {
           imageUrl = remoteCoverUrl;
         }
       }
     }
-    // 已有持久缓存时也要检查来源 URL 是否换了新签名；没有缓存且没有本地封面
-    // 时，用当前远程 URL 在后台补一份持久字节。失败保留旧缓存 / 远程回退。
-    if (onlineEntry != null &&
-        shelfCoverService != null &&
-        (cachedShelfCover != null || !usedLocalCover)) {
+    // 只要没有持久字节缓存或来源 URL 变了，就在后台刷新一份；即使当前显示的是
+    // 本地封面也一样（本地封面不影响持久缓存对新签名 URL 的自愈）。失败保留
+    // 旧缓存 / 本地 / 远程回退。
+    if (onlineEntry != null && shelfCoverService != null) {
       _scheduleShelfCoverRefresh(
         shelfCoverService,
         book.bookKey,
