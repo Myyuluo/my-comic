@@ -118,8 +118,9 @@ void main() {
 
   ShelfReadStatus statusOf(MediaItem item, {bool completed = false}) =>
       classifyShelfReadStatus(
-        completed: completed,
-        completedKnown: true,
+        completion: completed
+            ? ShelfCompletion.complete
+            : ShelfCompletion.incomplete,
         position: item.position,
         duration: item.duration,
       );

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 
+import 'package:fushi/src/media/manga/cover_cache_eviction.dart';
 import 'package:fushi/src/media/media_cover_service.dart';
 
 /// Program state 缓存根下承载书架持久封面字节的目录名。
@@ -24,8 +25,8 @@ const String kMangaShelfCoverCacheDirName = 'shelf_covers';
 class MangaShelfCoverCache {
   MangaShelfCoverCache(
     this.directory, {
-    this.maxEntries = 512,
-    this.maxBytes = 64 * 1024 * 1024,
+    this.maxEntries = kCoverCacheMaxEntries,
+    this.maxBytes = kCoverCacheMaxBytes,
   }) : assert(maxEntries > 0),
        assert(maxBytes > 0);
 
@@ -147,70 +148,20 @@ class MangaShelfCoverCache {
     }
   }
 
+  /// 两类封面缓存共用的 512 条 / 64 MiB mtime 淘汰策略；书架条目带 `.url`
+  /// 侧车，淘汰时一起清理。
+  CoverCacheEvictionPolicy get _eviction => CoverCacheEvictionPolicy(
+    maxEntries: maxEntries,
+    maxBytes: maxBytes,
+    entrySuffix: '.cover',
+    sidecarSuffix: '.url',
+  );
+
   /// 当前磁盘占用（含源 URL 侧车与遗留临时文件）。
-  Future<int> measureBytes() async {
-    try {
-      if (!await directory.exists()) return 0;
-      int total = 0;
-      await for (final FileSystemEntity entity in directory.list(
-        recursive: false,
-      )) {
-        if (entity is! File) continue;
-        try {
-          total += await entity.length();
-        } on FileSystemException {
-          // 并发删除时跳过。
-        }
-      }
-      return total;
-    } on FileSystemException {
-      return 0;
-    }
-  }
+  Future<int> measureBytes() => _eviction.measureBytes(directory);
 
   /// 容量整理：超过条数或字节上限时，按写入时间升序淘汰最旧封面。
-  Future<void> trim() async {
-    try {
-      if (!await directory.exists()) return;
-      final List<File> files = await directory
-          .list()
-          .where((FileSystemEntity entity) => entity is File)
-          .cast<File>()
-          .toList();
-      final List<({File file, DateTime modified, int length})> covers =
-          <({File file, DateTime modified, int length})>[];
-      int totalBytes = 0;
-      for (final File file in files) {
-        final FileStat stat = await file.stat();
-        totalBytes += stat.size;
-        if (file.path.endsWith('.cover')) {
-          covers.add((file: file, modified: stat.modified, length: stat.size));
-        }
-      }
-      if (covers.length <= maxEntries && totalBytes <= maxBytes) return;
-      covers.sort((left, right) => left.modified.compareTo(right.modified));
-      int remaining = covers.length;
-      for (final ({File file, DateTime modified, int length}) entry in covers) {
-        if (remaining <= maxEntries && totalBytes <= maxBytes) break;
-        final File sourceUrl = File(
-          '${entry.file.path.substring(0, entry.file.path.length - '.cover'.length)}.url',
-        );
-        try {
-          if (await sourceUrl.exists()) {
-            totalBytes -= await sourceUrl.length();
-            await sourceUrl.delete();
-          }
-        } on FileSystemException {
-          // 侧车清理失败不阻止封面淘汰。
-        }
-        await entry.file.delete();
-        remaining--;
-        totalBytes -= entry.length;
-      }
-    } on FileSystemException {
-      // 并发清理 / 权限变化不影响封面显示。
-    }
-  }
+  Future<void> trim() => _eviction.trim(directory);
 
   static String _keyOf(String bookKey) =>
       sha256.convert(utf8.encode(bookKey)).toString();

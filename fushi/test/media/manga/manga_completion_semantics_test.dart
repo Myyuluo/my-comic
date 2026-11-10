@@ -230,7 +230,7 @@ void main() {
       isLastMangaChapterInReadingOrder(
         chapters: natural,
         index: 1,
-        naturalOrder: true,
+        ordering: MangaChapterOrdering.natural,
       ),
       isTrue,
     );
@@ -238,7 +238,7 @@ void main() {
       isLastMangaChapterInReadingOrder(
         chapters: natural,
         index: 0,
-        naturalOrder: true,
+        ordering: MangaChapterOrdering.natural,
       ),
       isFalse,
     );

@@ -5694,7 +5694,7 @@
   "scan_downloaded_confirm_title": "Scan downloaded?",
   "scan_downloaded_failed": "Could not scan downloaded manga: $message",
   "scan_downloaded_progress_title": "Scanning downloaded manga",
-  "scan_downloaded_report_body": "Scanned $scanned folder(s); added $online online work(s) and $local local work(s) ($sourceMissing downgraded because the source is not installed).\\nPromoted $promoted work(s) from outside the library; revived $revived tombstoned work(s).\\nSkipped: $incomplete incomplete folder(s), $ambiguous ambiguous work(s). Failed: $failed.",
+  "scan_downloaded_report_body": "Scanned $scanned folder(s); added $online online work(s) and $local local work(s) ($sourceMissing downgraded because the source is not installed).\nPromoted $promoted work(s) from outside the library; revived $revived tombstoned work(s).\nSkipped: $incomplete incomplete folder(s), $ambiguous ambiguous work(s). Failed: $failed.",
   "scan_downloaded_report_cancelled": "Scan cancelled. Results so far:",
   "scan_downloaded_report_title": "Scan complete",
   "scan_downloaded_subtitle": "Scan downloads for downloaded manga that is not in your library and add it to your library.",

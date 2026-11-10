@@ -75,20 +75,39 @@ Future<RebuildDownloadIndexReport> _runRebuildDownloadIndex(
   ).run(cancelToken: cancelToken, onProgress: onProgress);
 }
 
-/// 确认 → 进度（可取消）→ 结果摘要。全程只触发服务，文件操作都在服务里。
-Future<void> _rebuildDownloadIndex(SettingsContext settings) async {
+/// 两个下载索引动作共用的「确认 → 可取消进度 → 结果摘要」流程。
+///
+/// 动作差异全部通过参数传入：确认文案、进度标题/图标、执行体、失败提示与
+/// 报告正文。进度快照的两个字段（fraction / 当前作品名）用访问器读取，两个
+/// 服务各自的 Progress 类型不需要互相认识。
+Future<void> _runDownloadIndexAction<TProgress, TReport>({
+  required SettingsContext settings,
+  required String confirmTitle,
+  required String confirmBody,
+  required String confirmLabel,
+  required String progressTitle,
+  required IconData progressIcon,
+  required double? Function(TProgress? progress) progressFraction,
+  required String? Function(TProgress? progress) progressLabel,
+  required void Function() requestCancel,
+  required Future<TReport> Function(
+    void Function(TProgress progress) onProgress,
+  )
+  run,
+  required String Function(Object error) failureMessage,
+  required Future<void> Function(TReport report) showReport,
+}) async {
   final bool confirmed = await showSettingsConfirmationDialog(
     settings,
-    title: t.rebuild_download_index_confirm_title,
-    body: t.rebuild_download_index_confirm_body,
-    confirmLabel: t.rebuild_download_index_button,
+    title: confirmTitle,
+    body: confirmBody,
+    confirmLabel: confirmLabel,
   );
   if (!confirmed || !settings.context.mounted) return;
 
-  final RebuildDownloadIndexCancelToken cancelToken =
-      RebuildDownloadIndexCancelToken();
-  final ValueNotifier<RebuildDownloadIndexProgress?> progressNotifier =
-      ValueNotifier<RebuildDownloadIndexProgress?>(null);
+  final ValueNotifier<TProgress?> progressNotifier = ValueNotifier<TProgress?>(
+    null,
+  );
   bool progressDialogOpen = true;
   if (settings.context.mounted) {
     unawaited(
@@ -97,10 +116,14 @@ Future<void> _rebuildDownloadIndex(SettingsContext settings) async {
         barrierDismissible: false,
         builder: (BuildContext ctx) => PopScope(
           canPop: false,
-          child: RebuildDownloadIndexProgressDialog(
+          child: _DownloadIndexProgressDialog<TProgress>(
+            title: progressTitle,
+            leadingIcon: progressIcon,
             progressNotifier: progressNotifier,
+            fraction: progressFraction,
+            label: progressLabel,
             onCancel: () {
-              cancelToken.cancel();
+              requestCancel();
               Navigator.pop(ctx);
             },
           ),
@@ -109,13 +132,10 @@ Future<void> _rebuildDownloadIndex(SettingsContext settings) async {
     );
   }
 
-  final RebuildDownloadIndexReport report;
+  final TReport report;
   try {
-    report = await (debugRunRebuildDownloadIndex ?? _runRebuildDownloadIndex)(
-      settings,
-      cancelToken,
-      (RebuildDownloadIndexProgress progress) =>
-          progressNotifier.value = progress,
+    report = await run(
+      (TProgress progress) => progressNotifier.value = progress,
     );
   } on Object catch (error) {
     if (progressDialogOpen && settings.context.mounted) {
@@ -124,7 +144,7 @@ Future<void> _rebuildDownloadIndex(SettingsContext settings) async {
     progressNotifier.dispose();
     if (settings.context.mounted) {
       FushiToast.show(
-        msg: t.rebuild_download_index_failed(message: '$error'),
+        msg: failureMessage(error),
         severity: ToastSeverity.error,
       );
     }
@@ -136,13 +156,70 @@ Future<void> _rebuildDownloadIndex(SettingsContext settings) async {
   }
   progressNotifier.dispose();
   if (!settings.context.mounted) return;
-  await _showRebuildReport(settings, report);
+  await showReport(report);
+}
+
+/// 确认 → 进度（可取消）→ 结果摘要。全程只触发服务，文件操作都在服务里。
+Future<void> _rebuildDownloadIndex(SettingsContext settings) async {
+  final RebuildDownloadIndexCancelToken cancelToken =
+      RebuildDownloadIndexCancelToken();
+  await _runDownloadIndexAction<
+    RebuildDownloadIndexProgress,
+    RebuildDownloadIndexReport
+  >(
+    settings: settings,
+    confirmTitle: t.rebuild_download_index_confirm_title,
+    confirmBody: t.rebuild_download_index_confirm_body,
+    confirmLabel: t.rebuild_download_index_button,
+    progressTitle: t.rebuild_download_index_progress_title,
+    progressIcon: FushiIcons.refresh,
+    progressFraction: (RebuildDownloadIndexProgress? progress) =>
+        progress?.fraction,
+    progressLabel: (RebuildDownloadIndexProgress? progress) =>
+        progress?.currentTitle,
+    requestCancel: cancelToken.cancel,
+    run: (void Function(RebuildDownloadIndexProgress) onProgress) =>
+        (debugRunRebuildDownloadIndex ?? _runRebuildDownloadIndex)(
+          settings,
+          cancelToken,
+          onProgress,
+        ),
+    failureMessage: (Object error) =>
+        t.rebuild_download_index_failed(message: '$error'),
+    showReport: (RebuildDownloadIndexReport report) =>
+        _showRebuildReport(settings, report),
+  );
 }
 
 Future<void> _showRebuildReport(
   SettingsContext settings,
   RebuildDownloadIndexReport report,
-) async {
+) => _showDownloadIndexReport(
+  settings: settings,
+  title: t.rebuild_download_index_report_title,
+  body: <String>[
+    if (report.cancelled) t.rebuild_download_index_report_cancelled,
+    t.rebuild_download_index_report_body(
+      scanned: report.booksScanned,
+      matched: report.booksMatched,
+      books: report.booksRelinked,
+      chapters: report.chaptersRelinked,
+      missingBooks: report.booksMissing,
+      missingChapters: report.chaptersMissing,
+      skippedBooks: report.booksSkipped,
+      ambiguous: report.booksAmbiguous,
+      skippedChapters: report.chaptersSkipped,
+      failed: report.failed,
+    ),
+  ].join('\n\n'),
+);
+
+/// 两个动作共用的结果摘要对话框壳；正文由各自报告的字段拼接。
+Future<void> _showDownloadIndexReport({
+  required SettingsContext settings,
+  required String title,
+  required String body,
+}) async {
   await showAppDialog<void>(
     context: settings.context,
     builder: (BuildContext ctx) {
@@ -156,7 +233,7 @@ Future<void> _showRebuildReport(
         ),
         scrollable: false,
         child: FushiModalSheetFrame(
-          title: t.rebuild_download_index_report_title,
+          title: title,
           scrollable: true,
           bodyPadding: EdgeInsets.fromLTRB(
             tokens.spacing.card,
@@ -170,24 +247,7 @@ Future<void> _showRebuildReport(
             tokens.spacing.card,
             tokens.spacing.card,
           ),
-          body: Text(
-            <String>[
-              if (report.cancelled) t.rebuild_download_index_report_cancelled,
-              t.rebuild_download_index_report_body(
-                scanned: report.booksScanned,
-                matched: report.booksMatched,
-                books: report.booksRelinked,
-                chapters: report.chaptersRelinked,
-                missingBooks: report.booksMissing,
-                missingChapters: report.chaptersMissing,
-                skippedBooks: report.booksSkipped,
-                ambiguous: report.booksAmbiguous,
-                skippedChapters: report.chaptersSkipped,
-                failed: report.failed,
-              ),
-            ].join('\n\n'),
-            style: tokens.type.listSubtitle,
-          ),
+          body: Text(body, style: tokens.type.listSubtitle),
           footer: Wrap(
             alignment: WrapAlignment.end,
             children: <Widget>[
@@ -228,142 +288,77 @@ Future<ScanDownloadedMangaReport> _runScanDownloaded(
 
 /// 检索确认 → 进度（可取消）→ 结果摘要。全程只触发服务，文件操作都在服务里。
 Future<void> _scanDownloaded(SettingsContext settings) async {
-  final bool confirmed = await showSettingsConfirmationDialog(
-    settings,
-    title: t.scan_downloaded_confirm_title,
-    body: t.scan_downloaded_confirm_body,
-    confirmLabel: t.scan_downloaded_button,
-  );
-  if (!confirmed || !settings.context.mounted) return;
-
   final ScanDownloadedMangaCancelToken cancelToken =
       ScanDownloadedMangaCancelToken();
-  final ValueNotifier<ScanDownloadedMangaProgress?> progressNotifier =
-      ValueNotifier<ScanDownloadedMangaProgress?>(null);
-  bool progressDialogOpen = true;
-  if (settings.context.mounted) {
-    unawaited(
-      showAppDialog<void>(
-        context: settings.context,
-        barrierDismissible: false,
-        builder: (BuildContext ctx) => PopScope(
-          canPop: false,
-          child: ScanDownloadedMangaProgressDialog(
-            progressNotifier: progressNotifier,
-            onCancel: () {
-              cancelToken.cancel();
-              Navigator.pop(ctx);
-            },
-          ),
+  await _runDownloadIndexAction<
+    ScanDownloadedMangaProgress,
+    ScanDownloadedMangaReport
+  >(
+    settings: settings,
+    confirmTitle: t.scan_downloaded_confirm_title,
+    confirmBody: t.scan_downloaded_confirm_body,
+    confirmLabel: t.scan_downloaded_button,
+    progressTitle: t.scan_downloaded_progress_title,
+    progressIcon: FushiIcons.search,
+    progressFraction: (ScanDownloadedMangaProgress? progress) =>
+        progress?.fraction,
+    progressLabel: (ScanDownloadedMangaProgress? progress) =>
+        progress?.currentTitle,
+    requestCancel: cancelToken.cancel,
+    run: (void Function(ScanDownloadedMangaProgress) onProgress) =>
+        (debugRunScanDownloadedManga ?? _runScanDownloaded)(
+          settings,
+          cancelToken,
+          onProgress,
         ),
-      ).whenComplete(() => progressDialogOpen = false),
-    );
-  }
-
-  final ScanDownloadedMangaReport report;
-  try {
-    report = await (debugRunScanDownloadedManga ?? _runScanDownloaded)(
-      settings,
-      cancelToken,
-      (ScanDownloadedMangaProgress progress) =>
-          progressNotifier.value = progress,
-    );
-  } on Object catch (error) {
-    if (progressDialogOpen && settings.context.mounted) {
-      Navigator.of(settings.context).pop();
-    }
-    progressNotifier.dispose();
-    if (settings.context.mounted) {
-      FushiToast.show(
-        msg: t.scan_downloaded_failed(message: '$error'),
-        severity: ToastSeverity.error,
-      );
-    }
-    return;
-  }
-  // 用户点取消时进度框已经自己关掉，别再 pop 一次（那会把设置页也弹掉）。
-  if (progressDialogOpen && settings.context.mounted) {
-    Navigator.of(settings.context).pop();
-  }
-  progressNotifier.dispose();
-  if (!settings.context.mounted) return;
-  await _showScanReport(settings, report);
+    failureMessage: (Object error) =>
+        t.scan_downloaded_failed(message: '$error'),
+    showReport: (ScanDownloadedMangaReport report) =>
+        _showScanReport(settings, report),
+  );
 }
 
 Future<void> _showScanReport(
   SettingsContext settings,
   ScanDownloadedMangaReport report,
-) async {
-  await showAppDialog<void>(
-    context: settings.context,
-    builder: (BuildContext ctx) {
-      final FushiDesignTokens tokens = FushiDesignTokens.of(ctx);
-      return FushiDialogFrame(
-        maxWidth: 440,
-        maxHeightFactor: 0.86,
-        insetPadding: EdgeInsets.symmetric(
-          horizontal: tokens.spacing.card,
-          vertical: tokens.spacing.card,
-        ),
-        scrollable: false,
-        child: FushiModalSheetFrame(
-          title: t.scan_downloaded_report_title,
-          scrollable: true,
-          bodyPadding: EdgeInsets.fromLTRB(
-            tokens.spacing.card,
-            0,
-            tokens.spacing.card,
-            tokens.spacing.gap,
-          ),
-          footerPadding: EdgeInsets.fromLTRB(
-            tokens.spacing.card,
-            tokens.spacing.gap,
-            tokens.spacing.card,
-            tokens.spacing.card,
-          ),
-          body: Text(
-            <String>[
-              if (report.cancelled) t.scan_downloaded_report_cancelled,
-              t.scan_downloaded_report_body(
-                scanned: report.foldersScanned,
-                online: report.addedOnline,
-                local: report.addedLocal,
-                sourceMissing: report.addedLocalSourceMissing,
-                promoted: report.promoted,
-                revived: report.revivedTombstones,
-                incomplete: report.skippedIncomplete,
-                ambiguous: report.skippedAmbiguous,
-                failed: report.failed,
-              ),
-            ].join('\n\n'),
-            style: tokens.type.listSubtitle,
-          ),
-          footer: Wrap(
-            alignment: WrapAlignment.end,
-            children: <Widget>[
-              adaptiveDialogAction(
-                context: ctx,
-                isDefaultAction: true,
-                onPressed: () => Navigator.pop(ctx),
-                child: Text(t.dialog_done),
-              ),
-            ],
-          ),
-        ),
-      );
-    },
-  );
-}
+) => _showDownloadIndexReport(
+  settings: settings,
+  title: t.scan_downloaded_report_title,
+  body: <String>[
+    if (report.cancelled) t.scan_downloaded_report_cancelled,
+    t.scan_downloaded_report_body(
+      scanned: report.foldersScanned,
+      online: report.addedOnline,
+      local: report.addedLocal,
+      sourceMissing: report.addedLocalSourceMissing,
+      promoted: report.promoted,
+      revived: report.revivedTombstones,
+      incomplete: report.skippedIncomplete,
+      ambiguous: report.skippedAmbiguous,
+      failed: report.failed,
+    ),
+  ].join('\n\n'),
+);
 
-/// 检索进度框：线性进度 + 当前作品名 + 取消。复用现有对话框壳与进度组件。
-class ScanDownloadedMangaProgressDialog extends StatelessWidget {
-  const ScanDownloadedMangaProgressDialog({
+/// 下载索引动作共用的进度框：线性进度 + 当前作品名 + 取消。
+///
+/// 进度快照由各服务自己的类型承载，通过 [fraction] / [label] 访问器读取，
+/// 对话框本身不依赖具体服务。
+class _DownloadIndexProgressDialog<TProgress> extends StatelessWidget {
+  const _DownloadIndexProgressDialog({
+    required this.title,
+    required this.leadingIcon,
     required this.progressNotifier,
+    required this.fraction,
+    required this.label,
     required this.onCancel,
-    super.key,
   });
 
-  final ValueNotifier<ScanDownloadedMangaProgress?> progressNotifier;
+  final String title;
+  final IconData leadingIcon;
+  final ValueNotifier<TProgress?> progressNotifier;
+  final double? Function(TProgress? progress) fraction;
+  final String? Function(TProgress? progress) label;
   final VoidCallback onCancel;
 
   @override
@@ -374,8 +369,8 @@ class ScanDownloadedMangaProgressDialog extends StatelessWidget {
       maxHeightFactor: 0.72,
       scrollable: false,
       child: FushiModalSheetFrame(
-        title: t.scan_downloaded_progress_title,
-        leadingIcon: FushiIcons.search,
+        title: title,
+        leadingIcon: leadingIcon,
         bodyPadding: EdgeInsets.fromLTRB(
           tokens.spacing.card,
           0,
@@ -388,103 +383,25 @@ class ScanDownloadedMangaProgressDialog extends StatelessWidget {
           tokens.spacing.card,
           tokens.spacing.card,
         ),
-        body: ValueListenableBuilder<ScanDownloadedMangaProgress?>(
+        body: ValueListenableBuilder<TProgress?>(
           valueListenable: progressNotifier,
-          builder:
-              (
-                BuildContext context,
-                ScanDownloadedMangaProgress? progress,
-                Widget? _,
-              ) {
-                final String label = progress?.currentTitle ?? '';
-                return Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    FushiLinearProgressIndicator(value: progress?.fraction),
-                    SizedBox(height: tokens.spacing.gap),
-                    Text(
-                      label,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: tokens.type.listSubtitle,
-                    ),
-                  ],
-                );
-              },
-        ),
-        footer: Wrap(
-          alignment: WrapAlignment.end,
-          children: <Widget>[
-            adaptiveDialogAction(
-              context: context,
-              onPressed: onCancel,
-              child: Text(t.dialog_cancel),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// 重建进度框：线性进度 + 当前作品名 + 取消。复用现有对话框壳与进度组件。
-class RebuildDownloadIndexProgressDialog extends StatelessWidget {
-  const RebuildDownloadIndexProgressDialog({
-    required this.progressNotifier,
-    required this.onCancel,
-    super.key,
-  });
-
-  final ValueNotifier<RebuildDownloadIndexProgress?> progressNotifier;
-  final VoidCallback onCancel;
-
-  @override
-  Widget build(BuildContext context) {
-    final FushiDesignTokens tokens = FushiDesignTokens.of(context);
-    return FushiDialogFrame(
-      maxWidth: 420,
-      maxHeightFactor: 0.72,
-      scrollable: false,
-      child: FushiModalSheetFrame(
-        title: t.rebuild_download_index_progress_title,
-        leadingIcon: FushiIcons.refresh,
-        bodyPadding: EdgeInsets.fromLTRB(
-          tokens.spacing.card,
-          0,
-          tokens.spacing.card,
-          tokens.spacing.gap,
-        ),
-        footerPadding: EdgeInsets.fromLTRB(
-          tokens.spacing.card,
-          tokens.spacing.gap,
-          tokens.spacing.card,
-          tokens.spacing.card,
-        ),
-        body: ValueListenableBuilder<RebuildDownloadIndexProgress?>(
-          valueListenable: progressNotifier,
-          builder:
-              (
-                BuildContext context,
-                RebuildDownloadIndexProgress? progress,
-                Widget? _,
-              ) {
-                final String label = progress?.currentTitle ?? '';
-                return Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    FushiLinearProgressIndicator(value: progress?.fraction),
-                    SizedBox(height: tokens.spacing.gap),
-                    Text(
-                      label,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: tokens.type.listSubtitle,
-                    ),
-                  ],
-                );
-              },
+          builder: (BuildContext context, TProgress? progress, Widget? _) {
+            final String currentLabel = label(progress) ?? '';
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                FushiLinearProgressIndicator(value: fraction(progress)),
+                SizedBox(height: tokens.spacing.gap),
+                Text(
+                  currentLabel,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: tokens.type.listSubtitle,
+                ),
+              ],
+            );
+          },
         ),
         footer: Wrap(
           alignment: WrapAlignment.end,

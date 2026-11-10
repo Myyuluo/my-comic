@@ -95,8 +95,9 @@ bool isDashboardContinueBook(MediaItem item, Set<String> completedBookKeys) {
       ReaderFushiSource.parseBookKey(item.mediaIdentifier) ??
           item.mediaIdentifier;
   return classifyShelfReadStatus(
-        completed: completedBookKeys.contains(bookKey),
-        completedKnown: true,
+        completion: completedBookKeys.contains(bookKey)
+            ? ShelfCompletion.complete
+            : ShelfCompletion.incomplete,
         position: item.position,
         duration: item.duration,
       ) ==

@@ -30,15 +30,15 @@ import 'package:fushi/src/updates/update_feed_service.dart';
 ///
 /// Library membership = false 的非书架行不算「书架里的」：它们不参与后台更新
 /// 探测，也不触发订阅自动下载。
-List<({EpubBookRow book, OnlineMangaLibraryEntry entry})> onlineMangaLibraryRows(
-  Iterable<EpubBookRow> books,
-) {
+List<({EpubBookRow book, OnlineMangaLibraryEntry entry})>
+onlineMangaLibraryRows(Iterable<EpubBookRow> books) {
   final List<({EpubBookRow book, OnlineMangaLibraryEntry entry})> out =
       <({EpubBookRow book, OnlineMangaLibraryEntry entry})>[];
   for (final EpubBookRow book in books) {
     if (!book.isInLibrary) continue;
-    final OnlineMangaLibraryEntry? entry =
-        OnlineMangaLibraryEntry.tryParse(book.sourceMetadata);
+    final OnlineMangaLibraryEntry? entry = OnlineMangaLibraryEntry.tryParse(
+      book.sourceMetadata,
+    );
     if (entry != null) out.add((book: book, entry: entry));
   }
   return out;
@@ -47,10 +47,11 @@ List<({EpubBookRow book, OnlineMangaLibraryEntry entry})> onlineMangaLibraryRows
 /// 订阅自动下载的入队口：`entry.autoDownload` 为真的条目刷新出新章时调用，
 /// [chapters] 按章序（旧 → 新）。生产是 `MangaDownloadService.enqueueChapters`；
 /// 测试注入记录器。
-typedef OnlineMangaAutoDownload = Future<void> Function(
-  OnlineMangaLibraryEntry entry,
-  List<OnlineMangaChapter> chapters,
-);
+typedef OnlineMangaAutoDownload =
+    Future<void> Function(
+      OnlineMangaLibraryEntry entry,
+      List<OnlineMangaChapter> chapters,
+    );
 
 /// 在线漫画库检查：逐条联网刷新，新章提醒由
 /// `OnlineMangaLibraryService.refresh` 自己投递（那里是唯一的提醒 diff 点）。
@@ -63,12 +64,14 @@ typedef OnlineMangaAutoDownload = Future<void> Function(
 /// **串行**而不是并发：几十条书架条目并发打同一个源站等于自制一次小型压测，
 /// 而这是后台任务，快几秒对用户没有任何意义。
 ///
-/// 单条失败（源挂了、Cloudflare 拦截、章节列表抓取失败）只跳过这一条：一条
-/// 书架条目的源出问题，不该让后面几十条都查不成。章节列表**返回空**不算失败
-/// （票 06：详情/封面仍会落库，旧章节保留），这条照常计入刷新数。
+/// 单条失败（源挂了、Cloudflare 拦截、章节列表抓取失败或返回空）只跳过这一
+/// 条：一条书架条目的源出问题，不该让后面几十条都查不成。空章节列表沿用票 06
+/// 之前的失败语义——详情/封面仍会落库、旧章节保留，但这条不计入刷新数，也不
+/// 拿旧章节去做自动追更 diff。
 Future<int> runOnlineMangaUpdateProbe({
   required FushiDatabase database,
-  required OnlineMangaLibraryService Function(OnlineMangaRuntimeKind) serviceFor,
+  required OnlineMangaLibraryService Function(OnlineMangaRuntimeKind)
+  serviceFor,
   OnlineMangaAutoDownload? autoDownload,
   void Function(Object error, String bookKey)? onError,
 }) async {
@@ -79,16 +82,18 @@ Future<int> runOnlineMangaUpdateProbe({
   for (final ({EpubBookRow book, OnlineMangaLibraryEntry entry}) row
       in onlineMangaLibraryRows(books)) {
     try {
-      final OnlineMangaRefreshOutcome outcome =
-          await serviceFor(row.entry.runtime).refreshFromSource(
-        bookKey: row.book.bookKey,
-        entry: row.entry,
-      );
+      final OnlineMangaRefreshOutcome outcome = await serviceFor(
+        row.entry.runtime,
+      ).refreshFromSource(bookKey: row.book.bookKey, entry: row.entry);
       final chaptersError = outcome.chaptersError;
-      if (chaptersError != null) {
-        // 详情已经落库（封面可自愈），但章节没拉全：这一条按失败处理，跳过
-        // 自动追更——拿旧章节 diff 出不了任何新章。
-        onError?.call(chaptersError, row.book.bookKey);
+      if (chaptersError != null || !outcome.chaptersRefreshed) {
+        // 详情已经落库（封面可自愈），但章节没拉全 / 源返回空列表：这一条按
+        // 失败处理，跳过自动追更——拿旧章节 diff 出不了任何新章。空章节列表
+        // 沿用票 06 之前的失败语义，不计入 refreshed。
+        onError?.call(
+          chaptersError ?? OnlineMangaRefreshOutcome.emptyChaptersError,
+          row.book.bookKey,
+        );
         continue;
       }
       final OnlineMangaLibraryEntry updated = outcome.entry;

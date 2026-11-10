@@ -13,7 +13,7 @@
 ///
 /// 只查询 `membership=true` 的 Manga：非书架行不被读取、改写、重链或删除。
 /// 不新增 Manga、不改 Library membership、不分配 Tag；发现新作品的职责属于
-/// 「检索已下载」（见 `download_manga_recovery.dart` 的复用模块）。
+/// 「检索已下载」（见 `download_manga_discovery.dart` 的发现模块）。
 /// 本服务不引入「本机章节」概念：源章节列表为空时不会把磁盘容器合成为章节。
 ///
 /// 找不到文件的章节**不删除记录**：书目行与任务行原样保留，磁盘判据返回

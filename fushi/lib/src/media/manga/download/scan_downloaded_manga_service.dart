@@ -29,7 +29,7 @@ import 'package:fushi_engine/media/manga/local_source/local_source_library.dart'
 import 'package:fushi/src/media/manga/download/chapter_container_on_disk.dart';
 import 'package:fushi/src/media/manga/download/download_library_changes.dart';
 import 'package:fushi/src/media/manga/download/download_library_scanner.dart';
-import 'package:fushi/src/media/manga/download/download_manga_recovery.dart';
+import 'package:fushi/src/media/manga/download/download_manga_discovery.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 
 /// 一次检索的进度快照。
@@ -173,11 +173,9 @@ class ScanDownloadedMangaService {
       existingBookKeys,
     );
 
-    int addedOnline = 0;
-    int addedLocal = 0;
-    int addedLocalSourceMissing = 0;
-    int promoted = 0;
-    int revivedTombstones = 0;
+    // 逐个目录的发现结果统一 merge：字段一多，手工逐项累加极易漏掉新增字段。
+    DownloadMangaDiscoveryOutcome discovery =
+        const DownloadMangaDiscoveryOutcome();
     int skippedIncomplete = 0;
     int failed = 0;
     bool cancelled = false;
@@ -199,27 +197,25 @@ class ScanDownloadedMangaService {
         if (!await _hasCompleteChapter(folder)) {
           skippedIncomplete += 1;
         } else if (_isAmbiguousRootManifest(folder, ambiguousOnlineBookKeys)) {
-          // 单章根 manifest 没有章节容器可交给恢复模块逐身份过滤；整个目录
+          // 单章根 manifest 没有章节容器可交给发现模块逐身份过滤；整个目录
           // 属于同一个歧义身份，直接跳过（歧义数已按身份计入报告）。
         } else {
-          final DownloadMangaRecoveryOutcome outcome =
-              await DownloadMangaRecovery(
+          final DownloadMangaDiscoveryOutcome outcome =
+              await DownloadMangaDiscovery(
                 database: database,
                 downloadsRoot: downloadsRoot,
-              ).recover(
+              ).discover(
                 folder,
                 installedSources: installedSources,
-                tombstonedBookKeys: tombstones,
-                existingBookKeys: libraryBookKeys,
-                existingNonLibraryBookKeys: nonLibraryBookKeys,
-                skippedOnlineBookKeys: ambiguousOnlineBookKeys,
+                bookKeys: DownloadMangaBookKeys(
+                  tombstonedBookKeys: tombstones,
+                  existingBookKeys: libraryBookKeys,
+                  existingNonLibraryBookKeys: nonLibraryBookKeys,
+                  skippedOnlineBookKeys: ambiguousOnlineBookKeys,
+                ),
                 reviveTombstoned: true,
               );
-          addedOnline += outcome.addedOnline;
-          addedLocal += outcome.addedLocal;
-          addedLocalSourceMissing += outcome.addedLocalSourceMissing;
-          promoted += outcome.promoted;
-          revivedTombstones += outcome.revivedTombstones;
+          discovery = discovery.merge(outcome);
           await _refreshBookKeySets(
             folder,
             libraryBookKeys,
@@ -249,11 +245,11 @@ class ScanDownloadedMangaService {
 
     return ScanDownloadedMangaReport(
       foldersScanned: folders.length,
-      addedOnline: addedOnline,
-      addedLocal: addedLocal,
-      addedLocalSourceMissing: addedLocalSourceMissing,
-      promoted: promoted,
-      revivedTombstones: revivedTombstones,
+      addedOnline: discovery.addedOnline,
+      addedLocal: discovery.addedLocal,
+      addedLocalSourceMissing: discovery.addedLocalSourceMissing,
+      promoted: discovery.promoted,
+      revivedTombstones: discovery.revivedTombstones,
       skippedIncomplete: skippedIncomplete,
       skippedAmbiguous: ambiguousOnlineBookKeys.length,
       failed: failed,

@@ -405,8 +405,15 @@ class MihonLibraryAdapter
     if (!MihonRuntimeFactory.isSupported) return false;
     try {
       await manager.reload();
-      _sourceRow(entry);
-      return true;
+      final MangaOnlineSourceRow row = _sourceRow(entry);
+      // 扩展与在线源两侧都必须启用：停用的扩展等同于来源不可用，即使源行
+      // 自己的 enabled 仍为 true。
+      for (final MangaExtensionRow extension in manager.installed) {
+        if (extension.packageName == row.extensionPackage) {
+          return extension.enabled;
+        }
+      }
+      return false;
     } on Object {
       return false;
     }

@@ -8,18 +8,18 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
 import 'package:fushi/src/media/manga/download/download_library_scanner.dart';
-import 'package:fushi/src/media/manga/download/download_manga_recovery.dart';
+import 'package:fushi/src/media/manga/download/download_manga_discovery.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi_engine/media/manga/download_library_storage.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_library.dart';
 import 'package:fushi_engine/media/manga/mokuro_payload.dart';
 
-/// 「检索已下载」（票 03）要复用的发现 / 恢复辅助模块。
+/// 「检索已下载」（票 03）的发现模块。
 ///
-/// 行为与 Rebuild 曾经的内联 orphan recovery 完全一致：按 `pages.json` 身份建
-/// 在线条目、源未安装 / 无 manifest 时登记为指向 `downloads` 目录的本地条目；
-/// 只收完整章节，尊重 tombstone 与已有 Manga 行；不移动 / 复制 / 删除文件。
+/// 按 `pages.json` 身份建在线条目、源未安装 / 停用 / 无 manifest 时登记为指向
+/// `downloads` 目录的本地条目；只收完整章节，尊重 tombstone 与已有 Manga 行；
+/// 不移动 / 复制 / 删除文件。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -28,7 +28,7 @@ void main() {
   late FushiDatabase db;
 
   setUp(() async {
-    root = await Directory.systemTemp.createTemp('download_manga_recovery_');
+    root = await Directory.systemTemp.createTemp('download_manga_discovery_');
     downloadsRoot = Directory(p.join(root.path, 'downloads'))
       ..createSync(recursive: true);
     db = FushiDatabase.forTesting(NativeDatabase.memory());
@@ -136,6 +136,8 @@ void main() {
   Future<void> installSource({
     String extensionPackage = 'org.example.fixture',
     String sourceId = '1',
+    bool extensionEnabled = true,
+    bool sourceEnabled = true,
   }) async {
     await db.upsertMangaExtension(
       MangaExtensionsCompanion.insert(
@@ -148,6 +150,7 @@ void main() {
         apkPath: 'fixture.apk',
         apkSha256: 'sha',
         signerSha256: 'signer',
+        enabled: Value<bool>(extensionEnabled),
         installedAt: 1,
       ),
     );
@@ -159,13 +162,20 @@ void main() {
           sourceId: sourceId,
           name: 'Example Source',
           language: 'en',
+          enabled: Value<bool>(sourceEnabled),
         ),
       ],
     );
+    // replace 会保留已有源的设置；显式改启用位才能覆盖同一 Source 的旧状态。
+    await db.updateMangaOnlineSourceSettings(
+      extensionPackage: extensionPackage,
+      sourceId: sourceId,
+      enabled: sourceEnabled,
+    );
   }
 
-  /// 模拟票 03 的调用方式：扫描 `downloads`，逐个目录恢复。
-  Future<DownloadMangaRecoveryOutcome> recoverAll({
+  /// 模拟票 03 的调用方式：扫描 `downloads`，逐个目录发现。
+  Future<DownloadMangaDiscoveryOutcome> discoverAll({
     Set<String> tombstones = const <String>{},
   }) async {
     final DownloadMangaInstalledSources installed =
@@ -173,22 +183,24 @@ void main() {
     final Set<String> existingBookKeys = <String>{
       for (final EpubBookRow row in await db.getAllEpubBooks()) row.bookKey,
     };
-    final DownloadMangaRecovery recovery = DownloadMangaRecovery(
+    final DownloadMangaDiscovery discovery = DownloadMangaDiscovery(
       database: db,
       downloadsRoot: downloadsRoot,
     );
-    DownloadMangaRecoveryOutcome total = const DownloadMangaRecoveryOutcome();
+    DownloadMangaDiscoveryOutcome total = const DownloadMangaDiscoveryOutcome();
     for (final DownloadMangaFolderOnDisk folder
         in await scanDownloadLibraryFolders(
           downloadsRoot,
           readComplete: true,
         )) {
       total = total.merge(
-        await recovery.recover(
+        await discovery.discover(
           folder,
           installedSources: installed,
-          tombstonedBookKeys: tombstones,
-          existingBookKeys: existingBookKeys,
+          bookKeys: DownloadMangaBookKeys(
+            tombstonedBookKeys: tombstones,
+            existingBookKeys: existingBookKeys,
+          ),
         ),
       );
     }
@@ -218,7 +230,7 @@ void main() {
       complete: false,
     );
 
-    final DownloadMangaRecoveryOutcome first = await recoverAll();
+    final DownloadMangaDiscoveryOutcome first = await discoverAll();
 
     expect(first.added, 1);
     expect(first.addedOnline, 1);
@@ -232,12 +244,12 @@ void main() {
       seriesKey: entry.series.key,
     );
     final EpubBookRow row = (await db.getEpubBook(bookKey))!;
-    final OnlineMangaLibraryEntry recovered = OnlineMangaLibraryEntry.tryParse(
+    final OnlineMangaLibraryEntry discovered = OnlineMangaLibraryEntry.tryParse(
       row.sourceMetadata,
     )!;
-    expect(recovered.series.title, entry.series.title);
+    expect(discovered.series.title, entry.series.title);
     expect(
-      recovered.chapters.map((OnlineMangaChapter chapter) => chapter.key),
+      discovered.chapters.map((OnlineMangaChapter chapter) => chapter.key),
       <String>['/c/1'],
     );
     expect(p.equals(row.extractDir, mangaDir.path), isTrue);
@@ -247,7 +259,7 @@ void main() {
     );
     expect(await db.getMangaChapterDir(bookKey, '/c/2'), isNull);
 
-    final DownloadMangaRecoveryOutcome second = await recoverAll();
+    final DownloadMangaDiscoveryOutcome second = await discoverAll();
     expect(second.added, 0, reason: '已存在的身份不再重复建条目');
     expect(await db.getAllEpubBooks(), hasLength(1));
   });
@@ -271,7 +283,7 @@ void main() {
       chapter: entry.chapters[1],
     );
 
-    final DownloadMangaRecoveryOutcome outcome = await recoverAll();
+    final DownloadMangaDiscoveryOutcome outcome = await discoverAll();
 
     expect(outcome.added, 1);
     expect(outcome.addedOnline, 0);
@@ -299,6 +311,47 @@ void main() {
     );
   });
 
+  for (final ({String label, bool extensionEnabled, bool sourceEnabled})
+      disabled
+      in <({String label, bool extensionEnabled, bool sourceEnabled})>[
+        (label: '扩展被停用', extensionEnabled: false, sourceEnabled: true),
+        (label: '在线源被停用', extensionEnabled: true, sourceEnabled: false),
+      ]) {
+    test('${disabled.label}：按源未安装降级为本地条目并计入 addedLocalSourceMissing', () async {
+      final OnlineMangaLibraryEntry entry = entryFor();
+      await installSource(
+        extensionPackage: entry.extensionPackage,
+        sourceId: entry.sourceId,
+        extensionEnabled: disabled.extensionEnabled,
+        sourceEnabled: disabled.sourceEnabled,
+      );
+      final Directory mangaDir = Directory(
+        p.join(downloadsRoot.path, 'Example Source', 'Fixture series'),
+      );
+      await writeChapter(
+        mangaDir: mangaDir,
+        folderName: 'Chapter 1',
+        entry: entry,
+        chapter: entry.chapters[0],
+      );
+
+      final DownloadMangaDiscoveryOutcome outcome = await discoverAll();
+
+      expect(outcome.added, 1);
+      expect(outcome.addedOnline, 0, reason: '停用的扩展 / 源不得建在线条目');
+      expect(outcome.addedLocal, 1);
+      expect(
+        outcome.addedLocalSourceMissing,
+        1,
+        reason: '停用源按「源未安装」处理，报告单列降级数量',
+      );
+      final EpubBookRow row = (await db.getAllEpubBooks()).single;
+      expect(OnlineMangaLibraryEntry.tryParse(row.sourceMetadata), isNull);
+      expect(LocalSourceMetadata.tryParse(row.sourceMetadata), isNotNull);
+      expect(row.bookKey, localSourceBookKeyFor(mangaDir.path));
+    });
+  }
+
   test('没有 pages.json 的目录：按图片扫描登记为本地条目', () async {
     final Directory mangaDir = Directory(
       p.join(downloadsRoot.path, 'Manual Source', 'Manual manga'),
@@ -310,7 +363,7 @@ void main() {
       File(p.join(chapterDir.path, '002.jpg')).writeAsStringSync('page-2');
     }
 
-    final DownloadMangaRecoveryOutcome outcome = await recoverAll();
+    final DownloadMangaDiscoveryOutcome outcome = await discoverAll();
 
     expect(outcome.added, 1);
     expect(outcome.addedOnline, 0);
@@ -375,7 +428,7 @@ void main() {
       chapter: second.chapters.single,
     );
 
-    final DownloadMangaRecoveryOutcome outcome = await recoverAll();
+    final DownloadMangaDiscoveryOutcome outcome = await discoverAll();
 
     expect(outcome.added, 2, reason: '共享目录里的每个身份各建一条');
     expect(outcome.addedOnline, 2);
@@ -434,7 +487,7 @@ void main() {
       ..createSync(recursive: true);
     File(p.join(manualChapter.path, '001.jpg')).writeAsStringSync('page');
 
-    final DownloadMangaRecoveryOutcome outcome = await recoverAll(
+    final DownloadMangaDiscoveryOutcome outcome = await discoverAll(
       tombstones: <String>{
         onlineBookKey,
         localSourceBookKeyFor(manualDir.path),
@@ -488,7 +541,7 @@ void main() {
       chapter: entry.chapters[0],
     );
 
-    final DownloadMangaRecoveryOutcome outcome = await recoverAll();
+    final DownloadMangaDiscoveryOutcome outcome = await discoverAll();
 
     expect(outcome.added, 0);
     expect(outcome.chaptersAdded, 0);
@@ -496,7 +549,7 @@ void main() {
     expect(
       (await db.getEpubBook(bookKey))!.extractDir,
       p.join(downloadsRoot.path, 'elsewhere'),
-      reason: '已有行走重建索引的重链路径，恢复模块不改写它',
+      reason: '已有行走重建索引的重链路径，发现模块不改写它',
     );
   });
 }

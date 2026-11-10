@@ -4052,7 +4052,9 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
         isLastMangaChapterInReadingOrder(
           chapters: shelfEntry.chapters,
           index: _shelfChapterIndex,
-          naturalOrder: shelfEntry.runtime == OnlineMangaRuntimeKind.local,
+          ordering: shelfEntry.runtime == OnlineMangaRuntimeKind.local
+              ? MangaChapterOrdering.natural
+              : MangaChapterOrdering.canonical,
         );
     if (atLastPage && isLastChapter && history.autoMarkBookCompleted) {
       try {

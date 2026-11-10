@@ -367,8 +367,9 @@ void main() {
 
     await cache.clear();
     expect(await cache.hasCover('book-1'), isFalse);
-    // 清空后不再让后台抓取把缓存立刻补回来——断言的是用户清缓存后的回退。
-    adapter.sourceAvailable = false;
+    // 来源仍可用：后台会按新 URL 重试，但返回空字节视为失败，不得重建缓存；
+    // 断言的是用户清缓存后的展示回退。
+    adapter.fetchCoverBytes = (_) async => <int>[];
 
     final List<MediaItem> items = await ReaderFushiSource.instance
         .getBooksFromDb(appModel: appModel);
@@ -383,13 +384,17 @@ void main() {
     expect(
       fallback.imageUrl,
       'https://example.test/remote-after-clear.jpg',
-      reason: '持久缓存清空后，书架回退到已保存的远程封面 URL（现有 HTTP 图片缓存）',
+      reason: '持久缓存清空且来源可用时，书架回退到已保存的远程封面 URL（现有 HTTP 图片缓存）',
     );
     expect(placeholder.imageUrl, isNull, reason: '既无缓存、无本地封面、也无远程 URL 时交给占位封面');
-    expect(adapter.fetchedCoverUrls, isEmpty, reason: '清除缓存本身不应触发来源请求');
+    expect(
+      await cache.hasCover('book-1'),
+      isFalse,
+      reason: '后台刷新失败（空字节）不得重建持久缓存',
+    );
   });
 
-  test('来源未安装/未启用时不做运行时抓取；已有持久缓存或本地封面仍显示', () async {
+  test('来源未安装/未启用时不做运行时抓取；不回退远程 URL，已有缓存或本地封面仍显示', () async {
     adapter.sourceAvailable = false;
     const String remote = 'https://example.test/missing-source.jpg';
     await insertOnlineBook(bookKey: 'no-cache', coverUrl: remote);
@@ -412,7 +417,11 @@ void main() {
     await ReaderFushiSource.debugWaitForShelfCoverRefreshes();
 
     expect(adapter.fetchedCoverUrls, isEmpty, reason: '来源缺失时不得向扩展运行时请求封面字节');
-    expect(noCacheBook.imageUrl, remote, reason: '没有持久缓存时书架仍可用已保存的远程 URL 兜底');
+    expect(
+      noCacheBook.imageUrl,
+      isNull,
+      reason: '来源未安装/未启用时不得使用已保存的远程 URL，应交给占位封面',
+    );
     expect(
       await cache.hasCover('no-cache'),
       isFalse,
@@ -431,9 +440,48 @@ void main() {
     expect(
       Uri.parse(localBook.imageUrl!).toFilePath(),
       p.join(localDir, 'cover.jpg'),
-      reason: '来源缺失时已有本地封面继续显示',
+      reason: '来源缺失时已有本地封面继续显示，且不读取远程 URL',
     );
     expect(downloadsDir.existsSync(), isFalse);
+  });
+
+  test('本地封面存在但没有持久缓存：仍按当前 URL 后台刷新字节，显示仍优先本地封面', () async {
+    const String url = 'https://example.test/new-signature-with-local.jpg';
+    final String localDir = await insertOnlineBook(
+      bookKey: 'book-1',
+      coverUrl: url,
+      localCover: true,
+    );
+
+    final MediaItem first = await resolveShelfBook('book-1');
+    expect(
+      Uri.parse(first.imageUrl!).toFilePath(),
+      p.join(localDir, 'cover.jpg'),
+      reason: '有本地封面时显示仍优先本地文件',
+    );
+    expect(
+      await cache.hasCover('book-1'),
+      isFalse,
+      reason: '刷新是后台进行的，书架解析当下还没有持久字节',
+    );
+
+    await ReaderFushiSource.debugWaitForShelfCoverRefreshes();
+
+    expect(adapter.fetchedCoverUrls, <String>[
+      url,
+    ], reason: '本地封面存在 + 无持久缓存 + 新 URL 时也必须调度后台刷新');
+    expect(
+      cache.coverPathFor('book-1').readAsBytesSync(),
+      _pngBytes,
+      reason: '后台刷新成功后持久缓存立即可用',
+    );
+
+    final MediaItem second = await resolveShelfBook('book-1');
+    expect(
+      Uri.parse(second.imageUrl!).toFilePath(),
+      cache.coverPathFor('book-1').path,
+      reason: '持久缓存落盘后重新解析优先命中缓存',
+    );
   });
 
   test('封面缓存按条数上限淘汰最旧条目，对应侧车一起清理', () async {
