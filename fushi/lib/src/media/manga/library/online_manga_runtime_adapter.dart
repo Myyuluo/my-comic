@@ -396,13 +396,15 @@ class MihonLibraryAdapter
 
   /// 来源是否已安装且启用（或调用方已预置源上下文）。
   ///
-  /// 只查 Source 表，不联网；用于书架封面的运行时抓取前置判据。
+  /// 只读 Source 表，不联网、不拉起扩展商店刷新：书架首屏会为每本在线书调用
+  /// 它，不能因此变成一个昂贵的联网操作。真正取封面时 [fetchCover] 自己会走
+  /// `_context` 完成运行时初始化。
   @override
   Future<bool> isSourceAvailable(OnlineMangaLibraryEntry entry) async {
     if (presetContext != null) return true;
     if (!MihonRuntimeFactory.isSupported) return false;
     try {
-      await manager.initialise();
+      await manager.reload();
       _sourceRow(entry);
       return true;
     } on Object {
