@@ -109,7 +109,7 @@ _Avoid_: 标签、用户标签、分类（未指明来源时）
 _Avoid_: 子标签、标签页、分类页签
 
 **继续阅读胶囊（Continue reading pill）**:
-漫画页顶部 chrome 行里的紧凑继续阅读入口：圆形封面、主色「继续阅读」文字与主色圆形播放钮，不显示书名与进度；悬停时以 tooltip 显示书名。整颗胶囊可点击并打开当前的继续阅读作品；没有继续阅读条目时不显示。它取代了旧布局里网格顶部的继续阅读大卡片。
+漫画页顶部 chrome 行里的紧凑继续阅读入口：圆形封面、主色「继续阅读」文字、下方小号灰黑色的书名第二行与主色圆形播放钮，不显示进度。书名使用显示标题（含改名覆盖），宽度受本地化「继续阅读」主标签的实际渲染宽度约束，单行、超出显示省略号；完整书名保留在悬停 tooltip 中。整颗胶囊（含第二行与播放钮区域）可点击并打开当前的继续阅读作品；没有继续阅读条目时不显示。它取代了旧布局里网格顶部的继续阅读大卡片。
 _Avoid_: 继续阅读大卡片、继续阅读 hero（旧布局的网格顶部大卡片）
 
 **下载页（Downloads page）**:
@@ -180,8 +180,12 @@ _Avoid_: 未下载
 磁盘上存在 Chapter 内容，但还没有对应的 Manga/Download index 条目。未索引内容不会由 Rebuild download index 自动登记；用户显式运行 Scan downloaded 时可从 `downloads` 中发现并加入 Library。
 _Avoid_: 未下载、孤儿
 
+**Generated cover（生成封面）**:
+书架缺少可用封面时，从本地 Chapter container 的第一页临时生成的封面：按 Chapter reading order 取第一个完整容器，CBZ 取归档内第一张图片，文件夹章节取自然排序第一张图片，跳过 `ComicInfo.xml` 等非图片文件，缩放到封面尺寸并编码为 JPEG。生成封面只存在于 Program state 的 Cache（`<programState>/cache/shelf_covers`，按 bookKey 归属），不是 Download library 的内容：不写入 Content root、不创建下载目录、不改 `cover_path`，也不进入 Backup。缓存 sidecar 记录容器的规范路径、大小与 mtime；容器替换或更新后自动重新生成。封面优先级为本地 `cover.*` 文件 → 可用 Source 的当前封面（含持久字节缓存）→ 生成封面 → 占位；Source 恢复可用并取得真实封面后，真实封面替换生成封面。第一页不可读、容器不完整或解码失败时保留占位，不崩溃，也不阻断重建、书架或阅读。
+_Avoid_: 下载封面、离线封面、封面文件
+
 **Cache（缓存）**:
-应用为了加速在线源与阅读会话而保留的可再生临时数据，例如封面与页面图片、网页响应、压缩包解包临时文件。封面属于 Cache：应用不把封面写入 Download library，已有的本地封面文件保持原位、不自动删除；离线或清除缓存后，依赖远程封面的书架与作品页显示占位封面，重新联网或重新打开后自动恢复。缓存不是 Download，也不包含 Local source 的用户文件；清除缓存不改变 History、Reading progress 或 Download library。
+应用为了加速在线源与阅读会话而保留的可再生临时数据，例如封面与页面图片、网页响应、压缩包解包临时文件。封面属于 Cache：应用不把封面写入 Download library，已有的本地封面文件保持原位、不自动删除；书架持久封面与 Generated cover 都存放在 Program state 的缓存目录，生成封面在本地容器变化时重新生成，清除缓存会一并删除并在需要时重建。离线或清除缓存后，书架与作品页使用本地或生成封面；都没有时显示占位，重新联网或重新打开后自动恢复。缓存不是 Download，也不包含 Local source 的用户文件；清除缓存不改变 History、Reading progress 或 Download library。
 _Avoid_: 下载、离线文件、书库
 
 **Clear cache（清除缓存）**:
