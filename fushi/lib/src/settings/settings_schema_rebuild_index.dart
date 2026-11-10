@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:material_ui/material_ui.dart';
 
 import 'package:fushi/src/media/manga/download/rebuild_download_index_service.dart';
+import 'package:fushi/src/media/manga/download/scan_downloaded_manga_service.dart';
 import 'package:fushi/src/settings/settings_actions.dart';
 import 'package:fushi/src/settings/settings_context.dart';
 import 'package:fushi/src/settings/settings_destination.dart';
@@ -35,6 +36,18 @@ SettingsSection buildRebuildDownloadIndexSection() {
           'Rebuild download index.',
         ),
         onTap: _rebuildDownloadIndex,
+      ),
+      // 「检索已下载」（票 03）：只发现并加入 `downloads` 中尚未入库的完整作品。
+      SettingsActionItem(
+        id: 'storage.scan_downloaded',
+        title: t.scan_downloaded_title,
+        subtitle: t.scan_downloaded_subtitle,
+        icon: FushiIcons.search,
+        cli: const SettingsCliAction.unsupported(
+          'Scanning downloads shows a confirmation and progress dialog: '
+          'Settings → Storage & downloads → Download index → Scan downloaded.',
+        ),
+        onTap: _scanDownloaded,
       ),
     ],
   );
@@ -190,6 +203,229 @@ Future<void> _showRebuildReport(
       );
     },
   );
+}
+
+/// 测试缝：替换真正的「检索已下载」执行体（避免 widget 测试碰真实数据库 / 文件系统）。
+@visibleForTesting
+Future<ScanDownloadedMangaReport> Function(
+  SettingsContext settings,
+  ScanDownloadedMangaCancelToken cancelToken,
+  void Function(ScanDownloadedMangaProgress progress)? onProgress,
+)?
+debugRunScanDownloadedManga;
+
+Future<ScanDownloadedMangaReport> _runScanDownloaded(
+  SettingsContext settings,
+  ScanDownloadedMangaCancelToken cancelToken,
+  void Function(ScanDownloadedMangaProgress progress)? onProgress,
+) {
+  final paths = settings.appModel.appPaths;
+  return ScanDownloadedMangaService(
+    database: settings.appModel.database,
+    downloadsRoot: paths.downloadsRoot,
+  ).run(cancelToken: cancelToken, onProgress: onProgress);
+}
+
+/// 检索确认 → 进度（可取消）→ 结果摘要。全程只触发服务，文件操作都在服务里。
+Future<void> _scanDownloaded(SettingsContext settings) async {
+  final bool confirmed = await showSettingsConfirmationDialog(
+    settings,
+    title: t.scan_downloaded_confirm_title,
+    body: t.scan_downloaded_confirm_body,
+    confirmLabel: t.scan_downloaded_button,
+  );
+  if (!confirmed || !settings.context.mounted) return;
+
+  final ScanDownloadedMangaCancelToken cancelToken =
+      ScanDownloadedMangaCancelToken();
+  final ValueNotifier<ScanDownloadedMangaProgress?> progressNotifier =
+      ValueNotifier<ScanDownloadedMangaProgress?>(null);
+  bool progressDialogOpen = true;
+  if (settings.context.mounted) {
+    unawaited(
+      showAppDialog<void>(
+        context: settings.context,
+        barrierDismissible: false,
+        builder: (BuildContext ctx) => PopScope(
+          canPop: false,
+          child: ScanDownloadedMangaProgressDialog(
+            progressNotifier: progressNotifier,
+            onCancel: () {
+              cancelToken.cancel();
+              Navigator.pop(ctx);
+            },
+          ),
+        ),
+      ).whenComplete(() => progressDialogOpen = false),
+    );
+  }
+
+  final ScanDownloadedMangaReport report;
+  try {
+    report = await (debugRunScanDownloadedManga ?? _runScanDownloaded)(
+      settings,
+      cancelToken,
+      (ScanDownloadedMangaProgress progress) =>
+          progressNotifier.value = progress,
+    );
+  } on Object catch (error) {
+    if (progressDialogOpen && settings.context.mounted) {
+      Navigator.of(settings.context).pop();
+    }
+    progressNotifier.dispose();
+    if (settings.context.mounted) {
+      FushiToast.show(
+        msg: t.scan_downloaded_failed(message: '$error'),
+        severity: ToastSeverity.error,
+      );
+    }
+    return;
+  }
+  // 用户点取消时进度框已经自己关掉，别再 pop 一次（那会把设置页也弹掉）。
+  if (progressDialogOpen && settings.context.mounted) {
+    Navigator.of(settings.context).pop();
+  }
+  progressNotifier.dispose();
+  if (!settings.context.mounted) return;
+  await _showScanReport(settings, report);
+}
+
+Future<void> _showScanReport(
+  SettingsContext settings,
+  ScanDownloadedMangaReport report,
+) async {
+  await showAppDialog<void>(
+    context: settings.context,
+    builder: (BuildContext ctx) {
+      final FushiDesignTokens tokens = FushiDesignTokens.of(ctx);
+      return FushiDialogFrame(
+        maxWidth: 440,
+        maxHeightFactor: 0.86,
+        insetPadding: EdgeInsets.symmetric(
+          horizontal: tokens.spacing.card,
+          vertical: tokens.spacing.card,
+        ),
+        scrollable: false,
+        child: FushiModalSheetFrame(
+          title: t.scan_downloaded_report_title,
+          scrollable: true,
+          bodyPadding: EdgeInsets.fromLTRB(
+            tokens.spacing.card,
+            0,
+            tokens.spacing.card,
+            tokens.spacing.gap,
+          ),
+          footerPadding: EdgeInsets.fromLTRB(
+            tokens.spacing.card,
+            tokens.spacing.gap,
+            tokens.spacing.card,
+            tokens.spacing.card,
+          ),
+          body: Text(
+            <String>[
+              if (report.cancelled) t.scan_downloaded_report_cancelled,
+              t.scan_downloaded_report_body(
+                scanned: report.foldersScanned,
+                online: report.addedOnline,
+                local: report.addedLocal,
+                sourceMissing: report.addedLocalSourceMissing,
+                promoted: report.promoted,
+                revived: report.revivedTombstones,
+                incomplete: report.skippedIncomplete,
+                ambiguous: report.skippedAmbiguous,
+                failed: report.failed,
+              ),
+            ].join('\n\n'),
+            style: tokens.type.listSubtitle,
+          ),
+          footer: Wrap(
+            alignment: WrapAlignment.end,
+            children: <Widget>[
+              adaptiveDialogAction(
+                context: ctx,
+                isDefaultAction: true,
+                onPressed: () => Navigator.pop(ctx),
+                child: Text(t.dialog_done),
+              ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+}
+
+/// 检索进度框：线性进度 + 当前作品名 + 取消。复用现有对话框壳与进度组件。
+class ScanDownloadedMangaProgressDialog extends StatelessWidget {
+  const ScanDownloadedMangaProgressDialog({
+    required this.progressNotifier,
+    required this.onCancel,
+    super.key,
+  });
+
+  final ValueNotifier<ScanDownloadedMangaProgress?> progressNotifier;
+  final VoidCallback onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    final FushiDesignTokens tokens = FushiDesignTokens.of(context);
+    return FushiDialogFrame(
+      maxWidth: 420,
+      maxHeightFactor: 0.72,
+      scrollable: false,
+      child: FushiModalSheetFrame(
+        title: t.scan_downloaded_progress_title,
+        leadingIcon: FushiIcons.search,
+        bodyPadding: EdgeInsets.fromLTRB(
+          tokens.spacing.card,
+          0,
+          tokens.spacing.card,
+          tokens.spacing.gap,
+        ),
+        footerPadding: EdgeInsets.fromLTRB(
+          tokens.spacing.card,
+          tokens.spacing.gap,
+          tokens.spacing.card,
+          tokens.spacing.card,
+        ),
+        body: ValueListenableBuilder<ScanDownloadedMangaProgress?>(
+          valueListenable: progressNotifier,
+          builder:
+              (
+                BuildContext context,
+                ScanDownloadedMangaProgress? progress,
+                Widget? _,
+              ) {
+                final String label = progress?.currentTitle ?? '';
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    FushiLinearProgressIndicator(value: progress?.fraction),
+                    SizedBox(height: tokens.spacing.gap),
+                    Text(
+                      label,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: tokens.type.listSubtitle,
+                    ),
+                  ],
+                );
+              },
+        ),
+        footer: Wrap(
+          alignment: WrapAlignment.end,
+          children: <Widget>[
+            adaptiveDialogAction(
+              context: context,
+              onPressed: onCancel,
+              child: Text(t.dialog_cancel),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 /// 重建进度框：线性进度 + 当前作品名 + 取消。复用现有对话框壳与进度组件。

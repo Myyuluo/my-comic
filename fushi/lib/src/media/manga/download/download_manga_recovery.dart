@@ -7,7 +7,11 @@
 ///  - 源已安装时建在线条目，并把**完整**章节写进 `manga_chapter_dirs`；
 ///  - 源未安装或目录没有 `pages.json` 时，原地登记为指向该 `downloads` 目录的
 ///    本地条目；
-///  - `book_tombstones` 里的身份与已有 Manga 行一律跳过，绝不复活 / 重复登记。
+///  - 默认跳过 `book_tombstones` 里的身份与已有 Manga 行，绝不复活 / 重复登记。
+///
+/// 「检索已下载」在用户显式执行时通过可选项关闭这些跳过：
+/// [recover] 的 `reviveTombstoned` 复活并清除墓碑；`existingNonLibraryBookKeys`
+/// 把已有非书架行原地提升为书架成员，保留阅读进度、已读、History 与下载映射。
 ///
 /// 模块只增改数据库行，不移动、复制、删除或重命名任何用户文件。
 library;
@@ -34,6 +38,8 @@ class DownloadMangaRecoveryOutcome {
     this.addedOnline = 0,
     this.addedLocal = 0,
     this.addedLocalSourceMissing = 0,
+    this.promoted = 0,
+    this.revivedTombstones = 0,
     this.skipped = 0,
     this.skippedTombstoned = 0,
     this.chaptersAdded = 0,
@@ -51,6 +57,15 @@ class DownloadMangaRecoveryOutcome {
 
   /// [addedLocal] 中因为源未安装而降级的数量。
   final int addedLocalSourceMissing;
+
+  /// 已有非书架行（`membership=false`）被原地提升为书架成员的数目。
+  ///
+  /// 提升只写 `in_library`，同一行的阅读进度、已读、History 与下载映射原样
+  /// 保留，不新建行。
+  final int promoted;
+
+  /// 在显式复活模式下重新加入书架、并清除墓碑的作品数。
+  final int revivedTombstones;
 
   /// 因 `book_tombstones`（主动移出书架）而跳过的目录 / 身份数。
   final int skipped;
@@ -72,6 +87,8 @@ class DownloadMangaRecoveryOutcome {
         addedLocal: addedLocal + other.addedLocal,
         addedLocalSourceMissing:
             addedLocalSourceMissing + other.addedLocalSourceMissing,
+        promoted: promoted + other.promoted,
+        revivedTombstones: revivedTombstones + other.revivedTombstones,
         skipped: skipped + other.skipped,
         skippedTombstoned: skippedTombstoned + other.skippedTombstoned,
         chaptersAdded: chaptersAdded + other.chaptersAdded,
@@ -127,13 +144,22 @@ class DownloadMangaRecovery {
 
   /// 恢复一个漫画目录。
   ///
-  /// [tombstonedBookKeys]：主动移出书架的作品身份；[existingBookKeys]：已存在
-  /// 的 Manga 行（在线或本地身份）；两者命中的目录 / 身份都跳过，不重复登记。
+  /// [tombstonedBookKeys]：主动移出书架的作品身份；[existingBookKeys]：已在
+  /// 书架的 Manga 行（在线或本地身份）；[existingNonLibraryBookKeys]：已有但
+  /// `membership=false` 的行；[skippedOnlineBookKeys]：同身份有多个副本、无法
+  /// 安全决定归属的在线身份。默认命中的墓碑 / 已有行都跳过，不重复登记。
+  ///
+  /// 显式扫描（「检索已下载」）可以传入 [reviveTombstoned] 与
+  /// [existingNonLibraryBookKeys]：墓碑作品复活并清除墓碑，非书架行原地提升
+  /// 为书架成员（只写 membership，保留阅读进度、已读、History 与下载映射）。
   Future<DownloadMangaRecoveryOutcome> recover(
     DownloadMangaFolderOnDisk folder, {
     required DownloadMangaInstalledSources installedSources,
-    required Set<String> tombstonedBookKeys,
-    required Set<String> existingBookKeys,
+    Set<String> tombstonedBookKeys = const <String>{},
+    Set<String> existingBookKeys = const <String>{},
+    Set<String> existingNonLibraryBookKeys = const <String>{},
+    Set<String> skippedOnlineBookKeys = const <String>{},
+    bool reviveTombstoned = false,
   }) async {
     final Map<String, List<ChapterContainerOnDisk>> groups =
         <String, List<ChapterContainerOnDisk>>{};
@@ -151,27 +177,76 @@ class DownloadMangaRecovery {
           .add(chapter);
     }
     final String localBookKey = localSourceBookKeyFor(folder.directory.path);
-    // 主动移出书架的作品（在线身份或降级后的本地身份）一律不复活；没有
+    final bool localTombstoned = tombstonedBookKeys.contains(localBookKey);
+
+    if (existingBookKeys.contains(localBookKey)) {
+      return const DownloadMangaRecoveryOutcome();
+    }
+    if (existingNonLibraryBookKeys.contains(localBookKey)) {
+      // 显式「检索已下载」：同一条记录原地提升，不新建行、不重链章节。
+      await database.updateEpubBookInLibrary(localBookKey, inLibrary: true);
+      if (localTombstoned) {
+        await database.clearBookTombstone(localBookKey);
+      }
+      return DownloadMangaRecoveryOutcome(
+        promoted: 1,
+        revivedTombstones: localTombstoned ? 1 : 0,
+      );
+    }
+    // 主动移出书架的作品（在线身份或降级后的本地身份）默认不复活；没有
     // pages.json 的目录也一样——它们可能正是上次降级登记后又被移出的作品。
-    if (tombstonedBookKeys.contains(localBookKey)) {
+    if (localTombstoned && !reviveTombstoned) {
       return const DownloadMangaRecoveryOutcome(
         skipped: 1,
         skippedTombstoned: 1,
       );
     }
-    if (existingBookKeys.contains(localBookKey)) {
-      return const DownloadMangaRecoveryOutcome();
-    }
+
+    int added = 0;
+    int addedOnline = 0;
+    int addedLocal = 0;
+    int addedLocalSourceMissing = 0;
+    int promoted = 0;
+    int skipped = 0;
+    int skippedTombstoned = 0;
+    int chaptersAdded = 0;
+    int chaptersSkipped = 0;
+    final Set<String> revivedKeys = <String>{};
+    final Set<String> tombstonesToClear = <String>{};
+
     if (groups.isEmpty) {
-      return _recoverAsLocal(folder);
+      final DownloadMangaRecoveryOutcome local = await _recoverAsLocal(folder);
+      added += local.added;
+      addedLocal += local.addedLocal;
+      addedLocalSourceMissing += local.addedLocalSourceMissing;
+      chaptersAdded += local.chaptersAdded;
+      chaptersSkipped += local.chaptersSkipped;
+      if (local.added > 0 && localTombstoned) {
+        tombstonesToClear.add(localBookKey);
+        revivedKeys.add(localBookKey);
+      }
+      await _clearTombstones(tombstonesToClear);
+      return DownloadMangaRecoveryOutcome(
+        added: added,
+        addedOnline: addedOnline,
+        addedLocal: addedLocal,
+        addedLocalSourceMissing: addedLocalSourceMissing,
+        promoted: promoted,
+        revivedTombstones: revivedKeys.length,
+        skipped: skipped,
+        skippedTombstoned: skippedTombstoned,
+        chaptersAdded: chaptersAdded,
+        chaptersSkipped: chaptersSkipped,
+      );
     }
 
-    DownloadMangaRecoveryOutcome total = const DownloadMangaRecoveryOutcome();
     // 源未安装的组无法各自建本地条目（本地 bookKey 由目录路径派生，一个目录
     // 只能有一行）；把它们合并成一个只含这些容器的本地条目，至少不丢内容、
     // 也不覆盖已安装身份。
     final List<ChapterContainerOnDisk> uninstalledContainers =
         <ChapterContainerOnDisk>[];
+    final Set<String> uninstalledRevivedKeys = <String>{};
+    bool folderAddedOrPromoted = false;
     for (final List<ChapterContainerOnDisk> group in groups.values) {
       final MangaPagesManifest manifest = group.first.manifest!;
       final OnlineMangaRuntimeKind? runtime = OnlineMangaRuntimeKind.fromWire(
@@ -185,13 +260,31 @@ class DownloadMangaRecovery {
               sourceId: manifest.sourceId,
               seriesKey: manifest.mangaKey,
             );
-      if (onlineBookKey != null && tombstonedBookKeys.contains(onlineBookKey)) {
-        total = total.merge(
-          const DownloadMangaRecoveryOutcome(skipped: 1, skippedTombstoned: 1),
-        );
+      final bool onlineTombstoned =
+          onlineBookKey != null && tombstonedBookKeys.contains(onlineBookKey);
+
+      if (onlineBookKey != null && existingBookKeys.contains(onlineBookKey)) {
         continue;
       }
-      if (onlineBookKey != null && existingBookKeys.contains(onlineBookKey)) {
+      if (onlineBookKey != null &&
+          existingNonLibraryBookKeys.contains(onlineBookKey)) {
+        await database.updateEpubBookInLibrary(onlineBookKey, inLibrary: true);
+        promoted += 1;
+        folderAddedOrPromoted = true;
+        if (onlineTombstoned) {
+          tombstonesToClear.add(onlineBookKey);
+          revivedKeys.add(onlineBookKey);
+        }
+        continue;
+      }
+      // 同身份的多个副本无法安全决定归属：跳过该身份，不猜。
+      if (onlineBookKey != null &&
+          skippedOnlineBookKeys.contains(onlineBookKey)) {
+        continue;
+      }
+      if (onlineTombstoned && !reviveTombstoned) {
+        skipped += 1;
+        skippedTombstoned += 1;
         continue;
       }
 
@@ -200,29 +293,83 @@ class DownloadMangaRecovery {
           installedSources.has(manifest.extensionPackage, manifest.sourceId);
       if (!installed) {
         uninstalledContainers.addAll(group);
+        if (onlineBookKey != null && onlineTombstoned) {
+          uninstalledRevivedKeys.add(onlineBookKey);
+        }
         continue;
       }
-      total = total.merge(await _createOnlineEntry(folder, group, runtime!));
+      final DownloadMangaRecoveryOutcome online = await _createOnlineEntry(
+        folder,
+        group,
+        runtime!,
+      );
+      added += online.added;
+      addedOnline += online.addedOnline;
+      addedLocal += online.addedLocal;
+      addedLocalSourceMissing += online.addedLocalSourceMissing;
+      chaptersAdded += online.chaptersAdded;
+      chaptersSkipped += online.chaptersSkipped;
+      if (online.added > 0) {
+        folderAddedOrPromoted = true;
+        if (onlineTombstoned) {
+          tombstonesToClear.add(onlineBookKey);
+          revivedKeys.add(onlineBookKey);
+        }
+      }
     }
 
     if (uninstalledContainers.isNotEmpty) {
       final MangaPagesManifest first = uninstalledContainers.first.manifest!;
-      total = total.merge(
-        await _recoverAsLocal(
-          folder,
-          onlyCompleteManifestChapters: true,
-          title: first.mangaTitle.trim().isEmpty
-              ? folder.mangaFolderName
-              : first.mangaTitle,
-          sourceMissing: true,
-          containerNames: <String>{
-            for (final ChapterContainerOnDisk chapter in uninstalledContainers)
-              chapter.containerName.toLowerCase(),
-          },
-        ),
+      final DownloadMangaRecoveryOutcome local = await _recoverAsLocal(
+        folder,
+        onlyCompleteManifestChapters: true,
+        title: first.mangaTitle.trim().isEmpty
+            ? folder.mangaFolderName
+            : first.mangaTitle,
+        sourceMissing: true,
+        containerNames: <String>{
+          for (final ChapterContainerOnDisk chapter in uninstalledContainers)
+            chapter.containerName.toLowerCase(),
+        },
       );
+      added += local.added;
+      addedLocal += local.addedLocal;
+      addedLocalSourceMissing += local.addedLocalSourceMissing;
+      chaptersAdded += local.chaptersAdded;
+      chaptersSkipped += local.chaptersSkipped;
+      if (local.added > 0) {
+        folderAddedOrPromoted = true;
+        tombstonesToClear.addAll(uninstalledRevivedKeys);
+        revivedKeys.addAll(uninstalledRevivedKeys);
+      }
     }
-    return total;
+
+    // 这个目录曾经以「降级本地条目」存在并被主动移出：作品回来后连同旧墓碑
+    // 一起清除（与在线身份的墓碑算同一个作品，只计一次复活）。
+    if (localTombstoned && reviveTombstoned && folderAddedOrPromoted) {
+      tombstonesToClear.add(localBookKey);
+      if (revivedKeys.isEmpty) revivedKeys.add(localBookKey);
+    }
+    await _clearTombstones(tombstonesToClear);
+
+    return DownloadMangaRecoveryOutcome(
+      added: added,
+      addedOnline: addedOnline,
+      addedLocal: addedLocal,
+      addedLocalSourceMissing: addedLocalSourceMissing,
+      promoted: promoted,
+      revivedTombstones: revivedKeys.length,
+      skipped: skipped,
+      skippedTombstoned: skippedTombstoned,
+      chaptersAdded: chaptersAdded,
+      chaptersSkipped: chaptersSkipped,
+    );
+  }
+
+  Future<void> _clearTombstones(Set<String> bookKeys) async {
+    for (final String bookKey in bookKeys) {
+      await database.clearBookTombstone(bookKey);
+    }
   }
 
   /// 源未安装 / 没有 `pages.json` 时，把下载目录降级为指向该文件夹的本地条目。
