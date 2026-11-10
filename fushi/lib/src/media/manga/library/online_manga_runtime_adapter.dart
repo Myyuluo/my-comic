@@ -205,7 +205,10 @@ abstract interface class OnlineMangaRuntimeAdapter {
   /// 取一页字节。只接受本运行时自己在 [resolveChapterPages] 里造的引用。
   Future<Uint8List> fetchChapterPage(OnlineMangaPageRef page);
 
-  /// 取封面字节（入库时落盘一份，之后书架离线可见）。
+  /// 取封面字节。
+  ///
+  /// 票 02 起封面不再在入库/浏览时落盘：书架与作品页走本地已有封面 →
+  /// 远程 `series.coverUrl` / Cache → 占位。保留该能力供显式封面场景使用。
   Future<List<int>> fetchCover(OnlineMangaLibraryEntry entry, String url);
 }
 

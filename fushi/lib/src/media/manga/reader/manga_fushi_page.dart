@@ -2098,9 +2098,9 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
       if (chapterIndex < 0) {
         throw StateError('The manga has no chapters');
       }
-      // 一次性目录迁移：旧条目从 `<runtimeRoot>/library` 搬进 `fushi_books`，
-      // 章目录才有地方落（设计稿 2026-09-12 §2.1）。
-      row = await service.ensureBookDirectory(row);
+      // 票 02：阅读不得创建或重指 Download library 目录。目录只在下载 worker
+      // 真正开始章节下载时物化；已下载章经 `DownloadLibraryIndex` 的映射解析，
+      // 旧布局 `extractDir` 保持原样（用户自行搬移后运行重建索引）。
       if (_sourceReviewActive) {
         entry = entry.copyWith(currentChapterIndex: chapterIndex);
       } else if (entry.currentChapterIndex != chapterIndex) {

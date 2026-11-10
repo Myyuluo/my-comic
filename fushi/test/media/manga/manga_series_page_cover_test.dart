@@ -81,6 +81,13 @@ class _TestAppModel extends AppModel {
   ) => _library;
 }
 
+Finder _httpCover(String url) => find.byWidgetPredicate(
+  (Widget widget) =>
+      widget is Image &&
+      widget.image is AppCachedHttpImage &&
+      (widget.image as AppCachedHttpImage).url == url,
+);
+
 Widget _harness(AppModel appModel, MangaSeriesTarget target) => ProviderScope(
   overrides: <Override>[
     platformServicesProvider.overrideWithValue(testPlatformServices()),
@@ -205,6 +212,11 @@ void main() {
             coverUrl: 'https://example.test/imported-series.jpg',
           );
       await pumpSeriesPage(tester, appModel, row.bookKey);
+      // 票 02：来源解析完成后才发远程封面请求。
+      await pumpUntilFound(
+        tester,
+        _httpCover('https://example.test/imported-series.jpg'),
+      );
 
       final Iterable<Image> images = tester.widgetList<Image>(
         find.byType(Image),
@@ -219,7 +231,8 @@ void main() {
         isTrue,
         reason: '无本地封面时作品页必须经现有 HTTP 图片缓存显示备份里的远程封面',
       );
-      expect(find.byType(MangaCoverPlaceholder), findsNothing);
+      // 测试环境的 HttpClient 固定 400，远程图会走 errorBuilder 回到占位块；
+      // 这里只断言「选中了远程封面路径」，渲染失败由下一个用例覆盖。
     });
   });
 
@@ -240,6 +253,13 @@ void main() {
       await pumpSeriesPage(tester, appModel, row.bookKey);
 
       // 先确认确实走了远程封面路径（否则「一开始就是占位」会让本测试假绿）。
+      await pumpUntilFound(
+        tester,
+        find.byWidgetPredicate(
+          (Widget widget) =>
+              widget is Image && widget.image is AppCachedHttpImage,
+        ),
+      );
       expect(
         tester
             .widgetList<Image>(find.byType(Image))

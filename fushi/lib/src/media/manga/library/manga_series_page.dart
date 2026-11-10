@@ -2764,8 +2764,9 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
   /// 封面。
   ///
   /// 顺序固定：**本地已落盘**封面（作品页首屏不该依赖网络，源挂了封面也得在）→
-  /// 源浏览时由来源自己提供的取图控件 → 备份描述符里的远程 `series.coverUrl`
-  /// （经现有 HTTP 图片缓存懒加载）→ 占位块。最后两条只在前面的来源缺席时才用。
+  /// 在线条目先确认来源（解析完成前 / 来源未安装时显示灰占位，不发起任何封面
+  /// 请求，票 02）→ 源浏览时由来源自己提供的取图控件 → 备份描述符里的远程
+  /// `series.coverUrl`（经现有 HTTP 图片缓存懒加载）→ 占位块。
   Widget _buildCover(BuildContext context) {
     final String? resolved = _localCoverPath();
     if (resolved != null) {
@@ -2781,6 +2782,12 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
           return const MangaCoverPlaceholder();
         },
       );
+    }
+    // 来源未安装（或尚未解析完来源）：不请求远程封面，先显示灰占位；
+    // 安装扩展后 [_resolveSourceLabel] 会把远程封面接回来。已有本地 cover.*
+    // 在上面已优先返回，不会被删除或忽略。
+    if (_entry != null && (!_sourceLabelResolved || _sourceMissing)) {
+      return const MangaCoverPlaceholder();
     }
     final MangaSeriesTarget target = widget.target;
     if (target is SourceMangaSeriesTarget) {

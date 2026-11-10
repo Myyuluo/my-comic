@@ -50,8 +50,12 @@ class _FakeAdapter implements OnlineMangaRuntimeAdapter {
   @override
   bool get isSupportedOnThisPlatform => true;
 
+  /// null = 来源未安装（阅读本地已下载章不该依赖它）。
+  String? sourceLabelText = 'Fake';
+
   @override
-  Future<String?> sourceLabel(OnlineMangaLibraryEntry entry) async => 'Fake';
+  Future<String?> sourceLabel(OnlineMangaLibraryEntry entry) async =>
+      sourceLabelText;
 
   @override
   Future<OnlineMangaRefreshResult> refresh(
@@ -213,6 +217,19 @@ OnlineMangaLibraryEntry _entry() => const OnlineMangaLibraryEntry(
       chapters: _chapters,
     );
 
+/// 导入时来源未安装的条目：占位扩展包 + 数字 sourceId。
+OnlineMangaLibraryEntry _placeholderEntry() => const OnlineMangaLibraryEntry(
+      runtime: OnlineMangaRuntimeKind.mihon,
+      extensionPackage: kUnavailableMihonExtensionPackage,
+      sourceId: '524579092615598717',
+      series: OnlineMangaSeries(
+        key: '/series/fixture',
+        title: 'Fixture series',
+        raw: <String, Object?>{'url': '/series/fixture'},
+      ),
+      chapters: _chapters,
+    );
+
 /// 在 Download library 写一章：`downloads/{source}/{manga}/{chapter}/` 平铺页图
 /// + `pages.json` + 数据库映射。
 Future<Directory> _writeDownloadedChapter(
@@ -309,6 +326,8 @@ Future<File> _writeDownloadedArchiveChapter(
     archive.addFile(ArchiveFile('pages.json', manifest.length, manifest));
   }
   final File file = downloadChapterArchiveFile(bookDir, containerName);
+  // 入库不再建目录；这里模拟磁盘上已有下载的 CBZ。
+  await file.parent.create(recursive: true);
   await file.writeAsBytes(ZipEncoder().encode(archive)!);
   await db.upsertMangaChapterDir(
     bookKey: bookKey,
@@ -620,6 +639,7 @@ void main() {
         row.extractDir,
         'Chapter 1.cbz',
       );
+      await broken.parent.create(recursive: true);
       await broken.writeAsString('not a zip');
       await db.upsertMangaChapterDir(
         bookKey: bookKey,
@@ -742,6 +762,11 @@ void main() {
     ))!;
     expect(downloaded, isFalse);
     expect(
+      Directory(bookDir).existsSync(),
+      isFalse,
+      reason: '浏览 + 在线直读不得创建 downloads/{source}/{manga}',
+    );
+    expect(
       downloadChapterDirectory(bookDir, 'Chapter 1').existsSync(),
       isFalse,
       reason: '直读页只进临时缓存，不碰下载章目录',
@@ -759,6 +784,106 @@ void main() {
           .currentChapter
           ?.key,
       '/chapter/1',
+    );
+  });
+
+  testWidgets('旧布局 extractDir：阅读不重指、不创建 Download library 目录',
+      (WidgetTester tester) async {
+    tester.view.physicalSize = const Size(600, 1000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    adapter.serve = true;
+    final _MangaTestAppModel appModel =
+        _MangaTestAppModel(db, library, root);
+
+    late String bookKey;
+    late String legacyDir;
+    await tester.runAsync(() async {
+      final EpubBookRow row = await library.add(_entry());
+      bookKey = row.bookKey;
+      // 旧布局：`<runtimeRoot>/library/<bookKey>`，不在当前 downloads 根下。
+      legacyDir = p.join(root.path, 'fushi_books', bookKey);
+      await Directory(legacyDir).create(recursive: true);
+      await db.updateEpubBookContentPaths(bookKey, extractDir: legacyDir);
+
+      await tester.pumpWidget(_harness(appModel, bookKey));
+      await _pumpUntil(
+        tester,
+        find.byKey(const ValueKey<String>('manga_content_ready')),
+      );
+    });
+
+    final EpubBookRow after = (await db.getEpubBook(bookKey))!;
+    expect(
+      after.extractDir,
+      legacyDir,
+      reason: '只阅读不得把旧 extractDir 重指到 Download library',
+    );
+    expect(
+      Directory(p.join(root.path, 'downloads')).existsSync(),
+      isFalse,
+      reason: '阅读不得创建 downloads/{source}/{manga}',
+    );
+  });
+
+  testWidgets('来源未安装：已有本地下载章仍可阅读，且不创建新目录', (
+    WidgetTester tester,
+  ) async {
+    tester.view.physicalSize = const Size(600, 1000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    adapter
+      ..serve = false
+      ..sourceLabelText = null;
+    final _MangaTestAppModel appModel =
+        _MangaTestAppModel(db, library, root);
+
+    late String bookKey;
+    late String bookDir;
+    await tester.runAsync(() async {
+      final EpubBookRow row = await library.add(_placeholderEntry());
+      bookKey = row.bookKey;
+      expect(
+        Directory(row.extractDir).existsSync(),
+        isFalse,
+        reason: '入库不物化目录（含数字 sourceId 目录）',
+      );
+      // 已有本地下载：按当前 Download library 的可读目录关联（如导入后重链的
+      // 结果），来源未安装不影响读取。
+      bookDir = p.join(
+        root.path,
+        'downloads',
+        'Fixture',
+        'Fixture series',
+      );
+      await db.updateEpubBookContentPaths(bookKey, extractDir: bookDir);
+      await _writeDownloadedChapter(
+        db,
+        bookKey: bookKey,
+        bookDir: bookDir,
+        chapterKey: '/chapter/1',
+      );
+
+      await tester.pumpWidget(_harness(appModel, bookKey));
+      await _pumpUntil(
+        tester,
+        find.byKey(const ValueKey<String>('manga_content_ready')),
+      );
+    });
+
+    expect(
+      find.byKey(const ValueKey<String>('manga_chapter_not_downloaded')),
+      findsNothing,
+    );
+    expect(
+      adapter.resolveCalls,
+      0,
+      reason: '来源未安装时读本地章不得请求来源页表',
+    );
+    expect(
+      Directory(p.join(bookDir, '.staging')).existsSync(),
+      isFalse,
+      reason: '阅读已有本地章不产生下载 staging',
     );
   });
 }
