@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 
+import 'package:fushi/src/media/detail/media_detail_kit.dart';
 import 'package:fushi/src/media/manga/library/manga_chapter_list.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi/src/media/manga/reader/manga_chapter_drawer.dart';
@@ -94,9 +95,7 @@ void main() {
     expect(visible(tester, row(200)), isFalse);
   });
 
-  testWidgets('排序初值来自偏好：旧→新时第 1 话在最前，仍定位到当前章', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('排序初值来自偏好：旧→新时第 1 话在最前，仍定位到当前章', (WidgetTester tester) async {
     await pumpDrawer(tester, newestFirst: false);
     expect(visible(tester, row(20)), isTrue);
     expect(
@@ -118,13 +117,14 @@ void main() {
     );
     await settle(tester);
     expect(changes, <bool>[false]);
-    expect(tester.getRect(row(20)).top, greaterThan(tester.getRect(row(19)).top));
+    expect(
+      tester.getRect(row(20)).top,
+      greaterThan(tester.getRect(row(19)).top),
+    );
     expect(visible(tester, row(20)), isTrue);
   });
 
-  testWidgets('窄抽屉：排序与跳到当前平铺，顶部 / 底部收进「⋯」并可用', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('窄抽屉：排序与跳到当前平铺，顶部 / 底部收进「⋯」并可用', (WidgetTester tester) async {
     await pumpDrawer(tester);
     expect(
       find.byKey(const ValueKey<String>('manga_chapter_drawer_sort')),
@@ -154,10 +154,7 @@ void main() {
     await settle(tester);
     await tester.tap(find.text(t.manga_chapter_list_jump_bottom));
     await settle(tester);
-    expect(
-      drawerScroll(tester).pixels,
-      drawerScroll(tester).maxScrollExtent,
-    );
+    expect(drawerScroll(tester).pixels, drawerScroll(tester).maxScrollExtent);
     expect(visible(tester, row(1)), isTrue);
 
     await tester.tap(
@@ -237,6 +234,28 @@ void main() {
     expect(
       find.byKey(const ValueKey<String>('manga_chapter_sort')),
       findsOneWidget,
+    );
+  });
+
+  testWidgets('抽屉不显示「共 X 章」章节标题，也不再显示号码胶囊', (WidgetTester tester) async {
+    await pumpDrawer(tester);
+    expect(
+      find.byType(MediaDetailSectionHeader),
+      findsNothing,
+      reason: 'showHeader: false 时阅读器抽屉不出现列表区块标题',
+    );
+    expect(
+      find.text(t.manga_series_chapters_count(count: 200)),
+      findsNothing,
+      reason: '抽屉顶部只有自己的「章节」标题，不显示可见数量',
+    );
+    final Iterable<MediaDetailItemRow> rows = tester
+        .widgetList<MediaDetailItemRow>(find.byType(MediaDetailItemRow));
+    expect(rows, isNotEmpty);
+    expect(
+      rows.every((MediaDetailItemRow row) => row.number == null),
+      isTrue,
+      reason: '阅读器抽屉与作品页共用列表，话数胶囊一并移除',
     );
   });
 
