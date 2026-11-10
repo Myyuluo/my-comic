@@ -15,11 +15,11 @@ import 'package:fushi/src/settings/settings_schema_rebuild_index.dart';
 
 import '../helpers/test_platform_services.dart';
 
-/// Ticket 09：设置 →「存储与下载」的「重建下载索引」入口。
+/// 设置 →「存储与下载」的「重建下载索引」入口。
 ///
-/// 只增加必要入口（确认 → 进度/取消 → 结果摘要），复用现有设置组件与对话框壳；
-/// 重建服务只接收当前 Content root 的两个根，测试缝替换执行体以免 widget 测试
-/// 碰真实数据库/文件系统。
+/// 整行可点的动作行（确认 → 进度/取消 → 结果摘要），复用现有设置组件与对话框
+/// 壳；重建服务只接收当前 Content root 的两个根，测试缝替换执行体以免 widget
+/// 测试碰真实数据库/文件系统。
 void main() {
   setUp(() {
     LocaleSettings.setLocale(AppLocale.zhCn);
@@ -59,11 +59,9 @@ void main() {
   }
 
   RebuildDownloadIndexReport report({
+    int booksScanned = 4,
     int booksMatched = 1,
-    int booksAdded = 1,
-    int booksAddedLocal = 1,
     int booksRelinked = 1,
-    int chaptersAdded = 1,
     int chaptersRelinked = 2,
     int booksMissing = 1,
     int chaptersMissing = 3,
@@ -73,15 +71,12 @@ void main() {
     int failed = 1,
     bool cancelled = false,
   }) => RebuildDownloadIndexReport(
-    booksScanned: booksAdded + booksRelinked + booksMissing,
-    booksAdded: booksAdded,
-    booksAddedLocal: booksAddedLocal,
+    booksScanned: booksScanned,
     booksMatched: booksMatched,
     booksRelinked: booksRelinked,
     booksMissing: booksMissing,
     booksSkipped: booksSkipped,
     booksAmbiguous: booksAmbiguous,
-    chaptersAdded: chaptersAdded,
     chaptersRelinked: chaptersRelinked,
     chaptersMissing: chaptersMissing,
     chaptersSkipped: skippedChapters,
@@ -91,11 +86,10 @@ void main() {
 
   String expectedReportText(RebuildDownloadIndexReport value) =>
       t.rebuild_download_index_report_body(
+        scanned: value.booksScanned,
         matched: value.booksMatched,
-        added: value.booksAdded,
-        local: value.booksAddedLocal,
         books: value.booksRelinked,
-        chapters: value.chaptersAdded + value.chaptersRelinked,
+        chapters: value.chaptersRelinked,
         missingBooks: value.booksMissing,
         missingChapters: value.chaptersMissing,
         skippedBooks: value.booksSkipped,
@@ -104,17 +98,22 @@ void main() {
         failed: value.failed,
       );
 
-  testWidgets('存储与下载页显示「重建下载索引」小节与入口', (WidgetTester tester) async {
+  testWidgets('存储与下载页显示「重建下载索引」整行动作入口', (WidgetTester tester) async {
     final SettingsContext settings = await captureContext(tester);
     final SettingsSection section = rebuildSection();
 
     expect(section.isVisible(settings), isTrue);
     expect(section.title, '下载索引');
-    final SettingsStatusItem item = section.items.single as SettingsStatusItem;
+    // 整行可点的动作行，不再是带行尾按钮的状态行。
+    final SettingsActionItem item = section.items.single as SettingsActionItem;
     expect(item.id, 'storage.rebuild_index');
     expect(item.title, '重建下载索引');
-    expect(item.actionLabel, '重建');
-    expect(item.resolveAction(settings), isNotNull);
+    expect(
+      item.subtitle,
+      '重新关联书架中已有漫画的下载章节，适用于导入备份后有本地下载章节却显示未下载；'
+      '不会删除记录或文件。',
+    );
+    expect(item.cli, isNotNull, reason: '动作行必须声明控制通道入口');
     expect(
       buildDownloadsDestination().sections.map(
         (SettingsSection section) => section.id,
@@ -161,11 +160,9 @@ void main() {
           return report();
         };
 
-    final SettingsStatusItem item =
-        rebuildSection().items.single as SettingsStatusItem;
-    final Future<void> action = Future<void>.sync(
-      () => item.resolveAction(settings)!(settings),
-    );
+    final SettingsActionItem item =
+        rebuildSection().items.single as SettingsActionItem;
+    final Future<void> action = Future<void>.sync(() => item.onTap(settings));
     await tester.pump();
     await tester.pumpAndSettle();
 
@@ -209,11 +206,9 @@ void main() {
           return pending.future;
         };
 
-    final SettingsStatusItem item =
-        rebuildSection().items.single as SettingsStatusItem;
-    final Future<void> action = Future<void>.sync(
-      () => item.resolveAction(settings)!(settings),
-    );
+    final SettingsActionItem item =
+        rebuildSection().items.single as SettingsActionItem;
+    final Future<void> action = Future<void>.sync(() => item.onTap(settings));
     await tester.pump();
     await tester.pumpAndSettle();
     await tester.tap(find.text('重建'));
