@@ -94,3 +94,9 @@
   结果：`All tests passed!`（289 tests）。
 - `dart analyze` 对全部改动文件：无新增 issue。大型遗留文件（`manga_fushi_page.dart`、`home_dashboard_page.dart`、`reader_fushi_history_page.dart`）仍有本 ticket 前既存的 unused / 旧 API warning，未在本 ticket 扩大范围处理。
 - 未跑全量历史套件（ticket 08 已记录大量与本批无关的 manga-only 历史失败）；本 ticket 相关测试全绿，未新增全量失败。
+
+### Merge 记录
+
+- Merge commit：`9101638f9f2ab5965c6288cc295cf790bc21077f`（`Merge ticket 09: code review fixes`），无冲突。
+- 合并后复验（Flutter 3.47.6，先 `dart run slang`）：ticket 09 验证套件（含 `test/i18n` 整目录）`All tests passed!`（289 tests）。
+- `dart analyze` 17 个改动 Dart lib 文件：22 个 warning / info 均为 `manga_fushi_page.dart`、`home_dashboard_page.dart`、`reader_fushi_history_page.dart` 的既存问题，无新增。
