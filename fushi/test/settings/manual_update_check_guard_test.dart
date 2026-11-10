@@ -2,37 +2,27 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-/// TODO-898：手动「立即检查更新」按钮源码守卫。
+/// TODO-898：应用更新手动检查源码守卫（manga-only shell 之后）。
 ///
 /// 不变量：
-/// - 系统设置在 `t.section_update` 分区有 `id: 'system.check_update_now'` 动作项。
-/// - 编排函数 `checkAppUpdateNow`（`updates/app_update_check.dart`，设置页与更新
-///   中心共用）传 `neverRemind: false` + `autoInstall: false`（手动语义，防回归成
-///   「点一下就静默自动装」/「被免提醒吞掉」）。
+/// - 上游 Fushi 的 `system.check_update_now` / `system.update_auto_install`
+///   设置行已随 manga-only shell 移除，不得重新出现在系统设置 schema。
+/// - 编排函数 `checkAppUpdateNow`（`updates/app_update_check.dart`，更新中心与
+///   反馈流程共用）传 `neverRemind: false` + `autoInstall: false`（手动语义，防
+///   回归成「点一下就静默自动装」/「被免提醒吞掉」）。
 /// - 防连点靠模块级 `_manualCheckInFlight` 旗标。
 /// - 更新中心的 app 新版本条目落到同一条应用内链路，不 `launchUrl` 跳浏览器。
 /// - `UpdateChecker.scheduleCheck` 仍带默认 null 的 onUpToDate/onError 回调
 ///   （向后兼容，自动检查零变化）。
 void main() {
-  test('system settings expose a manual check-update action in update section',
-      () {
+  test('manga-only system settings do not expose app-update rows', () {
+    // ff3f2df0（manga-only shell）移除了上游 Fushi 的应用更新设置分区；应用
+    // 更新入口只保留在更新中心与反馈流程。这个守卫防止把已移除的设置行加回来。
     final String src =
         File('lib/src/settings/settings_schema_system.dart').readAsStringSync();
-    final String systemDest = _functionSource(
-      src,
-      'SettingsDestination buildSystemDestination() {',
-      'Future<void> _exportStudyDiagLog(',
-    );
-    final int updateSectionIdx = systemDest.indexOf('title: t.section_update,');
-    expect(updateSectionIdx, isNonNegative,
-        reason: 'update section must exist');
-    final int actionIdx = systemDest.indexOf("id: 'system.check_update_now'");
-    expect(actionIdx, isNonNegative,
-        reason: 'manual check-update action must exist');
-    expect(actionIdx, greaterThan(updateSectionIdx),
-        reason: '按钮必须落在更新分区内（在 section_update 之后出现）');
-    expect(systemDest, contains('title: t.settings_check_update_now'));
-    expect(systemDest, contains('onTap: _checkUpdateNow'));
+    expect(src, isNot(contains("id: 'system.check_update_now'")));
+    expect(src, isNot(contains("id: 'system.update_auto_install'")));
+    expect(src, isNot(contains('title: t.settings_check_update_now')));
   });
 
   test('manual orchestration uses manual semantics (no silent auto-install)',
@@ -44,10 +34,8 @@ void main() {
       'Future<void> checkAppUpdateNow(',
       'UpdateChannel appUpdateChannelOf(',
     );
-    // 设置页按钮必须委托到这条共用编排，不再各自复制一份。
-    final String settings =
-        File('lib/src/settings/settings_schema_system.dart').readAsStringSync();
-    expect(settings, contains('checkAppUpdateNow('));
+    // 应用更新设置入口已随 manga-only shell 移除；手动编排由更新中心 /
+    // 反馈流程调用。
     expect(orchestration, contains('neverRemind: false'), reason: '手动检查无视免提醒');
     expect(orchestration, contains('autoInstall: false'),
         reason: '手动检查走确认弹窗，不静默自动装');
