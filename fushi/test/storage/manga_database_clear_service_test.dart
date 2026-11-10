@@ -588,9 +588,9 @@ void main() {
       );
       // 旧导入 / 旧扩展包身份无法命中 canonical，但快照 bookKey 能解析到
       // 对应作品（loadMangaHistory 的同一条回退规则）。
-      final String removedKey = 'manga_online:["mihon","org.old","101"]'
+      const String removedKey = 'manga_online:["mihon","org.old","101"]'
           '\u0000/removed';
-      final String keptKey = 'manga_online:["mihon","org.old","101"]'
+      const String keptKey = 'manga_online:["mihon","org.old","101"]'
           '\u0000/kept';
       await insertHistory(
         'manga_online:["mihon","org.old","101"]',
