@@ -2,11 +2,14 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:archive/archive.dart';
 import 'package:crypto/crypto.dart';
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi_audio/fushi_audio.dart';
 import 'package:fushi_core/fushi_core.dart';
+import 'package:fushi/src/media/manga/download/download_library_index.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_service.dart';
 import 'package:fushi/src/media/manga/library/online_manga_runtime_adapter.dart';
@@ -90,16 +93,38 @@ void main() {
     if (await root.exists()) await root.delete(recursive: true);
   });
 
-  test('入库写出漫画身份、封面与描述符，重复入库不建第二行', () async {
+  test('订阅只属于书架：membership=false 的条目拒绝写订阅位', () async {
+    final EpubBookRow row = await service.add(entryFor(chapters: chapters));
+    final OnlineMangaLibraryEntry entry = OnlineMangaLibraryEntry.tryParse(
+      (await database.getEpubBook(row.bookKey))!.sourceMetadata,
+    )!;
+    await (database.update(database.epubBooks)
+          ..where((t) => t.bookKey.equals(row.bookKey)))
+        .write(const EpubBooksCompanion(inLibrary: Value<bool>(false)));
+
+    await expectLater(
+      service.setSubscription(
+        bookKey: row.bookKey,
+        entry: entry,
+        subscribed: true,
+        autoDownload: true,
+      ),
+      throwsStateError,
+      reason: '非书架作品不能订阅 / 自动追更',
+    );
+  });
+
+  test('入库写出漫画身份与描述符，不创建目录、不请求封面', () async {
     final EpubBookRow row = await service.add(entryFor(chapters: chapters));
 
     expect(row.bookKey, startsWith('mihon-'));
     expect(row.format, 'manga');
-    expect(row.coverPath, 'cover.png');
+    expect(row.coverPath, isNull, reason: '封面属于 Cache；入库不再写 cover.*');
+    expect(adapter.coverCalls, 0, reason: '入库/浏览不得请求封面');
     expect(
-      File(p.join(row.extractDir, 'cover.png')).existsSync(),
-      isTrue,
-      reason: '封面必须落盘，否则作品页首屏就得依赖网络',
+      Directory(row.extractDir).existsSync(),
+      isFalse,
+      reason: 'Download library 只在真正开始章节下载时物化',
     );
 
     final OnlineMangaLibraryEntry parsed =
@@ -115,14 +140,48 @@ void main() {
     expect(await database.getAllEpubBooks(), hasLength(1));
   });
 
+  test('已有 cover.* 不因再次入库 / 刷新被删除或清空', () async {
+    final EpubBookRow row = await service.add(entryFor(chapters: chapters));
+    final File existingCover = File(p.join(row.extractDir, 'cover.jpg'));
+    await existingCover.parent.create(recursive: true);
+    await existingCover.writeAsBytes(<int>[0xFF, 0xD8, 0xFF]);
+    await (database.update(database.epubBooks)
+          ..where((t) => t.bookKey.equals(row.bookKey)))
+        .write(const EpubBooksCompanion(
+          coverPath: Value<String?>('cover.jpg'),
+        ));
+
+    final EpubBookRow again = await service.add(entryFor(chapters: chapters));
+
+    expect(again.coverPath, 'cover.jpg', reason: '刷新不改写已有封面路径');
+    expect(existingCover.existsSync(), isTrue, reason: '已有封面文件不得被删除');
+    expect(adapter.coverCalls, 0, reason: '刷新也不抓取封面');
+  });
+
+  test('打开在线源作品页 ensureNonLibrary 只写库：不建目录、不请求封面', () async {
+    final EpubBookRow row = await service.ensureNonLibrary(
+      entryFor(chapters: chapters),
+    );
+
+    expect(row.inLibrary, isFalse);
+    expect(row.coverPath, isNull);
+    expect(adapter.coverCalls, 0, reason: '浏览作品页不得抓取封面');
+    expect(
+      Directory(p.join(root.path, 'downloads')).existsSync(),
+      isFalse,
+      reason: '浏览作品页不得创建 downloads/{source}/{manga}',
+    );
+  });
+
   OnlineMangaLibraryEntry entryVariant({
     required String sourceId,
     required String seriesKey,
     required String title,
+    String extensionPackage = 'org.example.fixture',
   }) =>
       OnlineMangaLibraryEntry(
         runtime: OnlineMangaRuntimeKind.mihon,
-        extensionPackage: 'org.example.fixture',
+        extensionPackage: extensionPackage,
         sourceId: sourceId,
         series: OnlineMangaSeries(
           key: seriesKey,
@@ -147,6 +206,52 @@ void main() {
   }) => _LanguageFixtureAdapter()
     ..sourceLabelText = label
     ..sourceLanguageText = language;
+
+  test('占位来源条目：按 (sourceId, series key) 命中，不从已安装来源重复入库',
+      () async {
+    final OnlineMangaLibraryEntry placeholder = OnlineMangaLibraryEntry(
+      runtime: OnlineMangaRuntimeKind.mihon,
+      // 导入时扩展未安装：身份保留真实数字 sourceId，扩展包是占位值。
+      extensionPackage: 'mihon.unavailable',
+      sourceId: '524579092615598717',
+      series: const OnlineMangaSeries(
+        key: '/series/fixture',
+        title: 'Fixture series',
+        raw: <String, Object?>{'url': '/series/fixture'},
+      ),
+      chapters: chapters,
+    );
+    final EpubBookRow existing = await service.add(placeholder);
+
+    // 安装扩展后从来源浏览到同一部作品：扩展包变为真实值，sourceId、key 不变。
+    final OnlineMangaLibraryEntry browsed = OnlineMangaLibraryEntry(
+      runtime: OnlineMangaRuntimeKind.mihon,
+      extensionPackage: 'org.example.fixture',
+      sourceId: '524579092615598717',
+      series: const OnlineMangaSeries(
+        key: '/series/fixture',
+        title: 'Fixture series',
+        raw: <String, Object?>{'url': '/series/fixture'},
+      ),
+      chapters: chapters,
+    );
+
+    final EpubBookRow? found = await service.find(browsed);
+    expect(found?.bookKey, existing.bookKey,
+        reason: '数字 sourceId + series key 相同就是同一部作品');
+    expect(await database.getAllEpubBooks(), hasLength(1));
+    expect(found!.uid, existing.uid, reason: '命中已有行，不新建身份/进度载体');
+
+    await service.add(browsed);
+    expect(await database.getAllEpubBooks(), hasLength(1),
+        reason: 'add 也不能为同一部作品建第二行');
+    final OnlineMangaLibraryEntry kept =
+        OnlineMangaLibraryEntry.tryParse(
+          (await database.getEpubBook(existing.bookKey))!.sourceMetadata,
+        )!;
+    expect(kept.extensionPackage, 'mihon.unavailable',
+        reason: '运行时回退不改写存量条目的扩展包身份');
+  });
 
   test('两个同名 Source 的下载落在不同目录，第二个带短源 ID 后缀', () async {
     final EpubBookRow first = await service.add(
@@ -175,7 +280,11 @@ void main() {
       reason: '同名 Source 用短源 ID 后缀区分，仍然可读',
     );
     expect(p.basename(second.extractDir), 'Fixture series');
-    expect(Directory(second.extractDir).existsSync(), isTrue);
+    expect(
+      Directory(second.extractDir).existsSync(),
+      isFalse,
+      reason: '入库只解析路径，不创建目录',
+    );
   });
 
   /// 在漫画目录里写一章带稳定身份的 `pages.json`：模拟「作品已移出书架但
@@ -184,23 +293,32 @@ void main() {
     String mangaDir, {
     required String sourceId,
     required String seriesKey,
+    String mangaTitle = 'Fixture series',
+    String chapterDirName = 'Chapter 1',
+    String chapterKey = '/chapter/1',
+    String chapterName = 'Chapter 1',
+    String extensionPackage = 'org.example.fixture',
+    bool writePage = false,
   }) async {
     final Directory chapterDir = downloadChapterDirectory(
       mangaDir,
-      'Chapter 1',
+      chapterDirName,
     );
     await chapterDir.create(recursive: true);
+    if (writePage) {
+      await File(p.join(chapterDir.path, '001.jpg')).writeAsString('page');
+    }
     await writePagesManifestAtomically(
       chapterDir,
       MangaPagesManifest(
         sourceRuntime: 'mihon',
         sourceId: sourceId,
         sourceName: 'Fixture',
-        extensionPackage: 'org.example.fixture',
+        extensionPackage: extensionPackage,
         mangaKey: seriesKey,
-        mangaTitle: 'Fixture series',
-        chapterKey: '/chapter/1',
-        chapterName: 'Chapter 1',
+        mangaTitle: mangaTitle,
+        chapterKey: chapterKey,
+        chapterName: chapterName,
         payload: const MokuroPayload(
           images: <MokuroImage>[
             MokuroImage(
@@ -214,6 +332,339 @@ void main() {
       ),
     );
   }
+
+  test('pages.json 证明同一作品时复用已有漫画文件夹（改过名也不生成 (2)）', () async {
+    final EpubBookRow original = await service.add(
+      entryVariant(
+        sourceId: '1001',
+        seriesKey: '/series/first',
+        title: 'Fixture series',
+      ),
+    );
+    final Directory renamed = Directory(
+      p.join(root.path, 'downloads', 'Fixture', 'Old folder name'),
+    );
+    // 入库不再建目录；这里模拟「用户/旧版本已下载过」的磁盘状态。
+    await Directory(original.extractDir).create(recursive: true);
+    await renamed.parent.create(recursive: true);
+    await Directory(original.extractDir).rename(renamed.path);
+    await writeSourceManifest(
+      renamed.path,
+      sourceId: '1001',
+      seriesKey: '/series/first',
+      writePage: true,
+    );
+    // 旧行为（移出书架删除行）会把它当成「磁盘上已占用的同名目录」→ (2)。
+    await database.deleteEpubBook(original.bookKey);
+
+    final EpubBookRow readded = await service.add(
+      entryVariant(
+        sourceId: '1001',
+        seriesKey: '/series/first',
+        title: 'Fixture series',
+      ),
+    );
+
+    expect(readded.extractDir, renamed.path);
+    expect(
+      Directory(
+        p.join(root.path, 'downloads', 'Fixture', 'Fixture series (2)'),
+      ).existsSync(),
+      isFalse,
+      reason: 'pages.json 已经证明该文件夹就是这部作品，不应再生成重复目录',
+    );
+    expect(
+      File(p.join(renamed.path, 'Chapter 1', '001.jpg')).existsSync(),
+      isTrue,
+      reason: '复用不得删除或移动已有章节文件',
+    );
+  });
+
+  /// 手工制作一个 CBZ 章节：包根平铺 `001.jpg` + `pages.json`。
+  Future<File> writeArchiveManifest({
+    required String mangaDir,
+    required String fileName,
+    required String sourceId,
+    required String seriesKey,
+    String chapterKey = '/chapter/1',
+    String chapterName = 'Chapter 1',
+    String extensionPackage = 'org.example.fixture',
+  }) async {
+    final MangaPagesManifest manifest = MangaPagesManifest(
+      sourceRuntime: 'mihon',
+      sourceId: sourceId,
+      sourceName: 'Fixture',
+      extensionPackage: extensionPackage,
+      mangaKey: seriesKey,
+      mangaTitle: 'Fixture series',
+      chapterKey: chapterKey,
+      chapterName: chapterName,
+      payload: const MokuroPayload(
+        images: <MokuroImage>[
+          MokuroImage(
+            url: '001.jpg',
+            size: MokuroSize(100, 150),
+            blocks: <MokuroBlock>[],
+          ),
+        ],
+      ),
+      downloadedAt: DateTime.utc(2026, 11, 7),
+    );
+    final Archive archive = Archive();
+    final List<int> page = utf8.encode('page');
+    archive.addFile(ArchiveFile('001.jpg', page.length, page));
+    final List<int> manifestBytes = utf8.encode(jsonEncode(manifest.toJson()));
+    archive.addFile(
+      ArchiveFile(kDownloadPagesFileName, manifestBytes.length, manifestBytes),
+    );
+    await Directory(mangaDir).create(recursive: true);
+    final File file = downloadChapterArchiveFile(mangaDir, fileName);
+    await file.writeAsBytes(ZipEncoder().encode(archive)!);
+    return file;
+  }
+
+  test('CBZ 章节内的 pages.json 也参与身份复用与映射', () async {
+    final Directory existing = Directory(
+      p.join(root.path, 'downloads', 'Fixture', 'Old folder name'),
+    );
+    final File archive = await writeArchiveManifest(
+      mangaDir: existing.path,
+      fileName: 'Chapter 1.cbz',
+      sourceId: '1001',
+      seriesKey: '/series/first',
+    );
+
+    final EpubBookRow row = await service.add(
+      entryVariant(
+        sourceId: '1001',
+        seriesKey: '/series/first',
+        title: 'Fixture series',
+      ),
+    );
+
+    expect(
+      row.extractDir,
+      existing.path,
+      reason: 'CBZ 包内 pages.json 足以证明文件夹属于这部作品',
+    );
+    expect(archive.existsSync(), isTrue);
+    final MangaChapterDirRow? mapping = await database.getMangaChapterDir(
+      row.bookKey,
+      '/chapter/1',
+    );
+    expect(mapping?.folderName, 'Chapter 1.cbz');
+    expect(mapping?.containerKindEnum, MangaChapterContainerKind.archive);
+    expect(
+      await DownloadLibraryIndex(
+        database,
+      ).isChapterDownloaded(bookKey: row.bookKey, chapterKey: '/chapter/1'),
+      isTrue,
+    );
+  });
+
+  test('多个文件夹都匹配同一身份：不猜，保持冲突后缀且不改动已有目录', () async {
+    final Directory first = Directory(
+      p.join(root.path, 'downloads', 'Fixture', 'Fixture series'),
+    );
+    final Directory second = Directory(
+      p.join(root.path, 'downloads', 'Fixture', 'Fixture series (2)'),
+    );
+    await writeSourceManifest(
+      first.path,
+      sourceId: '1001',
+      seriesKey: '/series/first',
+      writePage: true,
+    );
+    await writeSourceManifest(
+      second.path,
+      sourceId: '1001',
+      seriesKey: '/series/first',
+      writePage: true,
+    );
+    final File sentinelFirst = File(p.join(first.path, 'keep.txt'));
+    final File sentinelSecond = File(p.join(second.path, 'keep.txt'));
+    await sentinelFirst.writeAsString('first');
+    await sentinelSecond.writeAsString('second');
+
+    final EpubBookRow row = await service.add(
+      entryVariant(
+        sourceId: '1001',
+        seriesKey: '/series/first',
+        title: 'Fixture series',
+      ),
+    );
+
+    expect(
+      row.extractDir,
+      p.join(root.path, 'downloads', 'Fixture', 'Fixture series (3)'),
+      reason: '两个目录都能证明同一身份时不得猜其中一个，按冲突规则另建目录',
+    );
+    expect(await sentinelFirst.readAsString(), 'first');
+    expect(await sentinelSecond.readAsString(), 'second');
+    expect(
+      await database.getMangaChapterDir(row.bookKey, '/chapter/1'),
+      isNull,
+      reason: '没有选定目录，不得把任何候选章的映射写进新条目',
+    );
+  });
+
+  test('扩展包只做 tie-breaker：多匹配时选真实包一致的目录', () async {
+    final Directory placeholder = Directory(
+      p.join(root.path, 'downloads', 'Fixture', 'Placeholder copy'),
+    );
+    final Directory real = Directory(
+      p.join(root.path, 'downloads', 'Fixture', 'Real copy'),
+    );
+    await writeSourceManifest(
+      placeholder.path,
+      sourceId: '1001',
+      seriesKey: '/series/first',
+      extensionPackage: 'mihon.unavailable',
+      writePage: true,
+    );
+    await writeSourceManifest(
+      real.path,
+      sourceId: '1001',
+      seriesKey: '/series/first',
+      writePage: true,
+    );
+
+    final EpubBookRow row = await service.add(
+      entryVariant(
+        sourceId: '1001',
+        seriesKey: '/series/first',
+        title: 'Fixture series',
+      ),
+    );
+
+    expect(
+      row.extractDir,
+      real.path,
+      reason: '两个目录核心身份相同时，扩展包 tie-breaker 选中真实包命中的那个',
+    );
+  });
+
+  test('条目是占位扩展包时，真实包 manifest 仍视为同一身份', () async {
+    final Directory existing = Directory(
+      p.join(root.path, 'downloads', 'Fixture', 'Old folder name'),
+    );
+    await writeSourceManifest(
+      existing.path,
+      sourceId: '1001',
+      seriesKey: '/series/first',
+      writePage: true,
+    );
+
+    final EpubBookRow row = await service.add(
+      entryVariant(
+        sourceId: '1001',
+        seriesKey: '/series/first',
+        title: 'Fixture series',
+        extensionPackage: 'mihon.unavailable',
+      ),
+    );
+
+    expect(
+      row.extractDir,
+      existing.path,
+      reason: 'mihon.unavailable 与真实包在数字 sourceId + seriesKey 下是同一身份',
+    );
+  });
+
+  test('没有 manifest 的现有漫画目录仍按 (2) 安全规则，不覆盖', () async {
+    final Directory existing = Directory(
+      p.join(root.path, 'downloads', 'Fixture', 'Fixture series'),
+    );
+    final Directory chapter = Directory(p.join(existing.path, 'Chapter 1'));
+    await chapter.create(recursive: true);
+    final File sentinel = File(p.join(chapter.path, '001.jpg'));
+    await sentinel.writeAsString('keep me');
+
+    final EpubBookRow row = await service.add(
+      entryVariant(
+        sourceId: '1001',
+        seriesKey: '/series/first',
+        title: 'Fixture series',
+      ),
+    );
+
+    expect(
+      row.extractDir,
+      p.join(root.path, 'downloads', 'Fixture', 'Fixture series (2)'),
+      reason: '没有 pages.json 无法证明归属，保持原有 (2) 安全规则',
+    );
+    expect(await sentinel.readAsString(), 'keep me');
+    expect(
+      await database.getMangaChapterDir(row.bookKey, '/chapter/1'),
+      isNull,
+      reason: '无法证明归属的章不得进下载索引',
+    );
+  });
+
+  test('复用文件夹后立即重建章节映射：已下载章节马上可查', () async {
+    final EpubBookRow original = await service.add(
+      entryVariant(
+        sourceId: '1001',
+        seriesKey: '/series/first',
+        title: 'Fixture series',
+      ),
+    );
+    final Directory reused = Directory(
+      p.join(root.path, 'downloads', 'Fixture', 'Old folder name'),
+    );
+    await Directory(original.extractDir).create(recursive: true);
+    await reused.parent.create(recursive: true);
+    await Directory(original.extractDir).rename(reused.path);
+    // 两章都已落盘。
+    await writeSourceManifest(
+      reused.path,
+      sourceId: '1001',
+      seriesKey: '/series/first',
+      chapterDirName: 'Chapter 2',
+      chapterKey: '/chapter/2',
+      chapterName: 'Chapter 2',
+      writePage: true,
+    );
+    await writeSourceManifest(
+      reused.path,
+      sourceId: '1001',
+      seriesKey: '/series/first',
+      chapterDirName: 'Chapter 1',
+      chapterKey: '/chapter/1',
+      chapterName: 'Chapter 1',
+      writePage: true,
+    );
+    await database.deleteEpubBook(original.bookKey);
+
+    final EpubBookRow readded = await service.add(
+      entryVariant(
+        sourceId: '1001',
+        seriesKey: '/series/first',
+        title: 'Fixture series',
+      ),
+    );
+
+    final MangaChapterDirRow? first = await database.getMangaChapterDir(
+      readded.bookKey,
+      '/chapter/1',
+    );
+    final MangaChapterDirRow? second = await database.getMangaChapterDir(
+      readded.bookKey,
+      '/chapter/2',
+    );
+    expect(first?.folderName, 'Chapter 1');
+    expect(second?.folderName, 'Chapter 2');
+
+    final DownloadLibraryIndex index = DownloadLibraryIndex(database);
+    expect(
+      await index.downloadedChapterKeys(readded.bookKey, <String>[
+        '/chapter/1',
+        '/chapter/2',
+      ]),
+      <String>{'/chapter/1', '/chapter/2'},
+      reason: '复用并 re-link 后详情页必须立即显示已下载，而不是等手动重建索引',
+    );
+  });
 
   test('源已移出书架但 downloads/<source> 仍在：同名新源仍加短源 ID 后缀', () async {
     final EpubBookRow first = await service.add(
@@ -308,11 +759,11 @@ void main() {
       beta.extractDir,
       p.join(root.path, 'downloads', 'Beta', 'Same title'),
     );
-    expect(Directory(alpha.extractDir).existsSync(), isTrue);
-    expect(Directory(beta.extractDir).existsSync(), isTrue);
+    expect(Directory(alpha.extractDir).existsSync(), isFalse);
+    expect(Directory(beta.extractDir).existsSync(), isFalse);
   });
 
-  test('同一 Source 下同名 Manga 用确定 (2) 后缀', () async {
+  test('同一 Source 下同名不同作品共用同一漫画目录，不生成 (2)', () async {
     final EpubBookRow first = await service.add(
       entryVariant(
         sourceId: '1',
@@ -334,7 +785,101 @@ void main() {
     );
     expect(
       second.extractDir,
-      p.join(root.path, 'downloads', 'Fixture', 'Same title (2)'),
+      first.extractDir,
+      reason: '同一 Source 下标题完全相同的不同作品共用目录，与 Mihon 一致',
+    );
+    expect(
+      Directory(
+        p.join(root.path, 'downloads', 'Fixture', 'Same title (2)'),
+      ).existsSync(),
+      isFalse,
+      reason: '不同身份不因同名新建 (2) 目录',
+    );
+    expect(
+      Directory(first.extractDir).existsSync(),
+      isFalse,
+      reason: '入库仍然只解析路径，不创建目录',
+    );
+  });
+
+  test('清库后同名不同作品按磁盘 manifest 标题复用同一目录', () async {
+    final EpubBookRow first = await service.add(
+      entryVariant(
+        sourceId: '1',
+        seriesKey: '/series/a',
+        title: 'Same title',
+      ),
+    );
+    await Directory(first.extractDir).create(recursive: true);
+    await writeSourceManifest(
+      first.extractDir,
+      sourceId: '1',
+      seriesKey: '/series/a',
+      mangaTitle: 'Same title',
+      writePage: true,
+    );
+    await database.deleteEpubBook(first.bookKey);
+
+    final EpubBookRow second = await service.add(
+      entryVariant(
+        sourceId: '1',
+        seriesKey: '/series/b',
+        title: 'Same title',
+      ),
+    );
+
+    expect(
+      second.extractDir,
+      first.extractDir,
+      reason: 'manifest 标题证明这是同名作品，清库重开后仍然共享目录',
+    );
+    expect(
+      await database.getMangaChapterDir(second.bookKey, '/chapter/1'),
+      isNull,
+      reason: '共享目录里另一部作品的章节不得写进本作品的映射',
+    );
+    expect(
+      File(
+        p.join(first.extractDir, 'Chapter 1', '001.jpg'),
+      ).existsSync(),
+      isTrue,
+      reason: '共享不得删除另一部作品已下载的章',
+    );
+  });
+
+  test('净化后同名但标题不同的作品仍按 (2) 安全规则分目录', () async {
+    final EpubBookRow first = await service.add(
+      entryVariant(
+        sourceId: '1',
+        seriesKey: '/series/slash',
+        title: 'Same/title',
+      ),
+    );
+    await Directory(first.extractDir).create(recursive: true);
+    await writeSourceManifest(
+      first.extractDir,
+      sourceId: '1',
+      seriesKey: '/series/slash',
+      mangaTitle: 'Same/title',
+      writePage: true,
+    );
+
+    final EpubBookRow second = await service.add(
+      entryVariant(
+        sourceId: '1',
+        seriesKey: '/series/colon',
+        title: 'Same:title',
+      ),
+    );
+
+    expect(
+      first.extractDir,
+      p.join(root.path, 'downloads', 'Fixture', 'Same_title'),
+    );
+    expect(
+      second.extractDir,
+      p.join(root.path, 'downloads', 'Fixture', 'Same_title (2)'),
+      reason: '标题不同（只是净化后同名）不共享目录，保持原有冲突后缀',
     );
   });
 
@@ -432,7 +977,7 @@ void main() {
       p.dirname(row.extractDir),
       p.join(root.path, 'downloads', '六漫画 (ZH-HANS)'),
     );
-    expect(Directory(row.extractDir).existsSync(), isTrue);
+    expect(Directory(row.extractDir).existsSync(), isFalse);
   });
 
   test('语言为空 / all / multi 视为无语言：源目录不写后缀', () async {
@@ -599,30 +1144,20 @@ void main() {
     );
   });
 
-  test('BUG-2496：源返回 HTML 错误页当封面 → 不落盘、coverPath 为空、入库照常', () async {
+  test('封面不再属于 Download library：入库不抓取、不落 cover.* 文件', () async {
+    // 即使源能返回坏字节，也不该走到封面抓取/落盘（BUG-2496 的旧路径已移除）。
     adapter.coverBytes = utf8.encode('<html><body>403 Forbidden</body></html>');
 
     final EpubBookRow row = await service.add(entryFor(chapters: chapters));
 
     expect(row.coverPath, isNull);
-    final List<String> coverFiles = Directory(row.extractDir)
-        .listSync()
-        .map((FileSystemEntity e) => p.basename(e.path))
-        .where((String name) => name.startsWith('cover'))
-        .toList();
-    expect(coverFiles, isEmpty,
-        reason: 'HTML 不得再以 cover.jpg 落盘——渲染层只判 existsSync，'
-            '坏文件每次重建都报 Invalid image data');
-    expect(row.format, 'manga', reason: '封面坏了不能挡住「追这部作品」');
-  });
-
-  test('BUG-2496：截断 PNG（只有魔数）同样不落盘', () async {
-    adapter.coverBytes = kTransparentImage.sublist(0, 8);
-
-    final EpubBookRow row = await service.add(entryFor(chapters: chapters));
-
-    expect(row.coverPath, isNull);
-    expect(File(p.join(row.extractDir, 'cover.png')).existsSync(), isFalse);
+    expect(adapter.coverCalls, 0, reason: '入库不得请求封面');
+    expect(
+      Directory(row.extractDir).existsSync(),
+      isFalse,
+      reason: '没有目录就不该有任何 cover.* 文件',
+    );
+    expect(row.format, 'manga', reason: '封面缺失不能挡住「追这部作品」');
   });
 
   // 合集（collection）功能已随 my-comic v1 移除：互联在线漫画不再收养主合集。
@@ -843,8 +1378,7 @@ void main() {
     );
   });
 
-  test('新条目落 Download library：downloads/{source}/{manga}，无占位 manga.json',
-      () async {
+  test('新条目指向 Download library 路径，目录只在下载侧物化时才创建', () async {
     final EpubBookRow row = await service.add(entryFor(chapters: chapters));
 
     expect(
@@ -853,8 +1387,8 @@ void main() {
     );
     expect(
       Directory(p.join(root.path, 'downloads', 'Fixture')).existsSync(),
-      isTrue,
-      reason: 'source 层必须存在',
+      isFalse,
+      reason: '浏览/入库不创建 source 层',
     );
     expect(
       Directory(p.join(row.extractDir, 'chapters')).existsSync(),
@@ -866,8 +1400,11 @@ void main() {
       isFalse,
       reason: '章节身份在各自 pages.json，不再写书根占位',
     );
+    // 下载 worker 是唯一的物化入口：开始下载时才建目录。
     expect(await service.ensureBookDirectory(row), row,
-        reason: '已在标准位置：零改动');
+        reason: '已在标准位置：不改 extractDir');
+    expect(Directory(row.extractDir).existsSync(), isTrue,
+        reason: '下载侧 ensureBookDirectory 必须建出目录');
   });
 
   test('漫画改名不自动重命名或重指向已建立的下载目录', () async {
@@ -900,6 +1437,53 @@ void main() {
     expect(Directory(originalDir).existsSync(), isTrue);
   });
 
+  test('ensureBookDirectory 复用磁盘 manifest 证明的旧文件夹并立即 re-link', () async {
+    final EpubBookRow added = await service.add(
+      entryVariant(
+        sourceId: '1001',
+        seriesKey: '/series/first',
+        title: 'Fixture series',
+      ),
+    );
+    // 用户之前下载过，文件夹可能已改过名。
+    final Directory reused = Directory(
+      p.join(root.path, 'downloads', 'Fixture', 'Legacy folder'),
+    );
+    await Directory(added.extractDir).create(recursive: true);
+    await reused.parent.create(recursive: true);
+    await Directory(added.extractDir).rename(reused.path);
+    await writeSourceManifest(
+      reused.path,
+      sourceId: '1001',
+      seriesKey: '/series/first',
+      writePage: true,
+    );
+    // 旧行还指向 Download library 之外的旧布局。
+    final Directory legacy = Directory(
+      p.join(root.path, 'library', added.bookKey),
+    );
+    await legacy.create(recursive: true);
+    await database.updateEpubBookContentPaths(
+      added.bookKey,
+      extractDir: legacy.path,
+    );
+
+    final EpubBookRow ensured = await service.ensureBookDirectory(
+      (await database.getEpubBook(added.bookKey))!,
+    );
+
+    expect(
+      ensured.extractDir,
+      reused.path,
+      reason: '旧行重指向时优先复用 manifest 证明的已有文件夹',
+    );
+    expect(
+      await database.getMangaChapterDir(added.bookKey, '/chapter/1'),
+      isNotNull,
+      reason: '复用后立即 re-link，不能等用户手动重建索引',
+    );
+  });
+
   test('ensureBookDirectory 把旧行重指向 Download library，不搬旧目录（fresh start）',
       () async {
     final EpubBookRow added = await service.add(entryFor(chapters: chapters));
@@ -908,6 +1492,7 @@ void main() {
       p.join(root.path, 'library', added.bookKey),
     );
     await legacy.parent.create(recursive: true);
+    await Directory(added.extractDir).create(recursive: true);
     await Directory(added.extractDir).rename(legacy.path);
     File(p.join(legacy.path, 'note.txt')).writeAsStringSync('keep me');
     await database.updateEpubBookContentPaths(
@@ -1087,15 +1672,19 @@ class _FixtureAdapter implements OnlineMangaRuntimeAdapter {
   Future<Uint8List> fetchChapterPage(OnlineMangaPageRef page) =>
       throw UnimplementedError();
 
+  /// 封面被请求的次数；入库/浏览路径必须保持 0（封面属于 Cache）。
+  int coverCalls = 0;
+
   @override
   Future<List<int>> fetchCover(
     OnlineMangaLibraryEntry entry,
     String url,
-  ) async =>
-      coverBytes;
+  ) async {
+    coverCalls++;
+    return coverBytes;
+  }
 
-  /// 默认是完整 1×1 PNG（BUG-2496 起写侧收口拒收只有魔数的截断 PNG）；用例可换成
-  /// HTML / 截断字节验证「不落盘、coverPath 为空」。
+  /// 默认是完整 1×1 PNG；用例可换成坏字节，验证即使源可返回坏封面也不会被抓取。
   List<int> coverBytes = kTransparentImage;
 }
 

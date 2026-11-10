@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:fushi_core/fushi_core.dart';
+import 'package:fushi/i18n/strings.g.dart';
 
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi/src/media/manga/download/manga_download_sidecar.dart';
@@ -79,6 +80,11 @@ class OnlineMangaUnavailable implements Exception {
   /// 包装方专门写了说明（如「对端还没下载这一章」），按文本归一而不是退回
   /// [cause]。
   String get userMessage {
+    // 来源被卸载 / 停用是用户可自行解决的状态，但内部 message 是英文
+    // （`The manga source is missing or disabled`），不能直接甩给用户。
+    if (reason == OnlineMangaUnavailableReason.sourceDisabled) {
+      return t.online_source_error_source_disabled;
+    }
     final Object? nested = cause;
     if (nested != null && message == '$nested') {
       return describeOnlineSourceError(nested);
@@ -199,7 +205,10 @@ abstract interface class OnlineMangaRuntimeAdapter {
   /// 取一页字节。只接受本运行时自己在 [resolveChapterPages] 里造的引用。
   Future<Uint8List> fetchChapterPage(OnlineMangaPageRef page);
 
-  /// 取封面字节（入库时落盘一份，之后书架离线可见）。
+  /// 取封面字节。
+  ///
+  /// 票 02 起封面不再在入库/浏览时落盘：书架与作品页走本地已有封面 →
+  /// 远程 `series.coverUrl` / Cache → 占位。保留该能力供显式封面场景使用。
   Future<List<int>> fetchCover(OnlineMangaLibraryEntry entry, String url);
 }
 
@@ -567,7 +576,8 @@ class MihonLibraryAdapter
         preferences: context.preferences,
       );
       return <OnlineMangaChapter>[
-        for (final MihonChapter chapter in chapters) _chapterFrom(chapter),
+        for (int index = 0; index < chapters.length; index++)
+          _chapterFrom(chapters[index], sourceOrder: index),
       ];
     } on Object catch (error) {
       final int? contentId = ComicoMagazineComicQuirk.contentIdOf(seriesKey);
@@ -596,9 +606,10 @@ class MihonLibraryAdapter
         throw error;
       }
       return <OnlineMangaChapter>[
-        for (final MihonChapter chapter in chapters)
+        for (int index = 0; index < chapters.length; index++)
           _chapterFrom(
-            chapter,
+            chapters[index],
+            sourceOrder: index,
             extraRaw: const <String, Object?>{
               ComicoMagazineComicQuirk.rawMarkerKey:
                   ComicoMagazineComicQuirk.rawMarkerValue,
@@ -721,6 +732,8 @@ class MihonLibraryAdapter
   }
 
   MangaOnlineSourceRow _sourceRow(OnlineMangaLibraryEntry entry) {
+    // 1. 精确匹配（扩展包 + sourceId）且启用。占位来源 `mihon.unavailable`
+    // 永远不会命中这里。
     for (final MangaOnlineSourceRow row in manager.sources) {
       if (row.extensionPackage == entry.extensionPackage &&
           row.sourceId == entry.sourceId &&
@@ -728,6 +741,32 @@ class MihonLibraryAdapter
         return row;
       }
     }
+
+    // 2. 按数字 sourceId 回退到已启用的 Source。导入时扩展未安装的条目存的是
+    // 占位扩展包；安装后真实 Source 的 sourceId 不变，条目无需改写即可读。
+    // 同一 sourceId 命中多个包时视为歧义——宁可继续报「来源不可用」，也不
+    // 随意挑一个可能完全不同的站点。
+    final String? wantedSourceId = normalizedMangaSourceId(entry.sourceId);
+    if (wantedSourceId != null) {
+      final Map<String, MangaOnlineSourceRow> byPackage =
+          <String, MangaOnlineSourceRow>{};
+      for (final MangaOnlineSourceRow row in manager.sources) {
+        if (!row.enabled ||
+            normalizedMangaSourceId(row.sourceId) != wantedSourceId) {
+          continue;
+        }
+        byPackage.putIfAbsent(row.extensionPackage, () => row);
+      }
+      if (byPackage.length > 1) {
+        throw OnlineMangaUnavailable(
+          OnlineMangaUnavailableReason.sourceDisabled,
+          'The manga source ID ${entry.sourceId} is ambiguous across '
+          'extensions: ${byPackage.keys.join(', ')}',
+        );
+      }
+      if (byPackage.length == 1) return byPackage.values.single;
+    }
+
     throw const OnlineMangaUnavailable(
       OnlineMangaUnavailableReason.sourceDisabled,
       'The manga source is missing or disabled',
@@ -775,8 +814,11 @@ class MihonLibraryAdapter
     );
   }
 
+  /// [sourceOrder] 由调用方按源列表下标给出（0 = 最新一话）；单独取一章
+  /// （[chapterOf]）时没有列表上下文，保持 null，由章节号 / 日期回退。
   static OnlineMangaChapter _chapterFrom(
     MihonChapter chapter, {
+    int? sourceOrder,
     Map<String, Object?> extraRaw = const <String, Object?>{},
   }) => OnlineMangaChapter(
     key: chapter.url,
@@ -784,6 +826,7 @@ class MihonLibraryAdapter
     scanlator: chapter.scanlator,
     number: chapter.number,
     uploadedAt: chapter.uploadedAt <= 0 ? null : chapter.uploadedAt,
+    sourceOrder: sourceOrder,
     locked: OnlineMangaChapter.isLockedChapterName(chapter.name),
     raw: <String, Object?>{...chapter.toJson(), ...extraRaw},
   );

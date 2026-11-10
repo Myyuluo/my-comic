@@ -46,7 +46,7 @@ class MangaShelfReadSnapshot {
     required this.readChapterKeysByBookUid,
   });
 
-  /// 全部 `format='manga'` 书行的章节身份来源。
+  /// 书架中（`in_library = true`）`format='manga'` 书行的章节身份来源。
   final List<MangaShelfChapterSource> books;
 
   /// `bookUid → 已读（readAt 非空）的章节键集合`。未出现在表里的书 = 一章未读。

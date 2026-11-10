@@ -28,3 +28,27 @@ CBZ 从「后续也可」变为新下载的默认形态：设置新增「保存�
 新下载的 Source 目录名改为 `源名 (LANG)`：语言取 Source 的语言原值并大写，保留子标签（`zh-Hans` → `ZH-HANS`）；语言为空、`all` 或 `multi` 时不写语言后缀。已有 Source 目录不重命名，继续按源身份复用；`pages.json.source.name` 仍保存裸源名，语言只体现在目录名上。目录名的净化、截断与同名冲突后缀规则不变。
 
 原文（Consequences 小节）中的 `localcomic` 按 `local` 理解：本地源根目录已更名为 `local`，见 ADR 0013 的 2026-11-08（local-source-polish）修订。该句的语义不变——`downloads` 不是 Mihon 本地源根，`local` 才是 Local source。
+
+## Amendment 2026-11-10（manga-library-membership，文件夹身份复用）
+
+重新加入同一部在线作品时，Download library 不再必然生成 ` (2)` 副本：
+
+- 建立或加入一部在线 Manga 时，在目标 Source 目录下读取每个 Manga 文件夹的章节容器（文件夹章节与 `.cbz` 章节）里的 `pages.json`，用 Download identity（运行时、数字 Source ID、series/manga key；扩展包名仅作 tie-breaker，占位扩展包与真实包兼容）判断归属。恰好一个文件夹匹配（或无法唯一确定时，恰有一个带相同真实扩展包）→ 复用该文件夹；仍无法唯一确定 → 不猜，保持 ` (2)` 冲突后缀；没有任何 manifest 能证明归属 → 沿用原有的 ` (2)` 安全规则，绝不覆盖无法证明归属的用户目录。
+- 复用后立即重建该作品的章节映射，作品页 / 详情页马上显示已下载，不必先运行 Rebuild download index。
+- `local` 中带 `pages.json` 的文件夹也能按同一身份关联到在线 Manga；没有 manifest 的 `local` 文件夹不做标题或文件夹名匹配。
+- 单章 Local source 作品把 `pages.json` 直接放在 `local/<manga>` 根：这份 manifest 只证明漫画目录（`extractDir`）身份，**不是**章节容器；导入后重链与 Rebuild 只关联目录，不写 `manga_chapter_dirs` 的假映射（`<manga>/<manga>` 不存在），也不把它计为 `chaptersRelinked`；根 manifest 与页图齐全时该章也不算 `chaptersMissing`。已下载状态仍由共享 manifest 扫描提供（根 manifest 算一章）。
+- `downloads` 与 `local` 一起参与身份匹配；两个根各有一个目录能证明同一身份时视为歧义并跳过（报告 skipped），不会静默偏向 `downloads`。
+- 已有的重复文件夹（含 ` (2)`）不自动删除、合并或重命名；Rebuild download index 报告重复副本，并只在已记录目录或唯一最新完整副本可判定时采用，否则跳过。
+
+以上复用只依据 `pages.json` 记录的 Download identity，不使用标题匹配；`downloads/{source}/{manga}` 的可读目录规则与 Source 目录命名规则不变。
+
+## Amendment 2026-11-10（manga-download-materialization，惰性物化与共享目录）
+
+Download library 的物化时机、封面归属与作品归属收敛为以下决定：
+
+- **惰性物化**：浏览作品页、阅读在线章节、导入作品与重建索引都只写数据库或映射，不创建 `downloads/{source}/{manga}`；目录只在章节下载任务真正开始时由下载侧创建。阅读器不得为打开旧条目创建或重指漫画目录。
+- **封面退出 Download library**：入库与刷新不再抓取或写入封面文件；封面只由 Cache / 远程封面地址提供。书架与作品页按「已有的本地封面 → 远程封面地址 / Cache → 占位」解析；已有 `cover.*` 保持原位、不自动删除。来源未安装时作品页显示灰占位且不请求远程封面（见 ADR 0019 修订）。
+- **同标题共享目录**：同一 Source 下标题完全相同的不同作品共用一个 Manga 目录，不再因身份不同生成 ` (2)`；标题不同但净化后同名仍沿用冲突后缀。章容器名冲突使用扫译组后缀或稳定短哈希，不使用 `(2)`。
+- **按容器归属与重链**：目录名不是身份；每个 Chapter container 的 `pages.json`（单章作品的根 manifest）决定它属于哪部作品。导入后重链、Rebuild download index、已下载状态与删除都逐容器按 Download identity 匹配，不把共享目录当成单一身份；无法证明归属的目录不被覆盖或猜测。
+- **清库后自动重链**：Clear database 仍只删记录、不删文件；重新打开作品并刷新章节后，按容器 manifest 身份或容器名自动恢复漫画目录与章节映射，章节列表立即显示已下载，不需要手动运行 Rebuild download index。
+- **已下载状态按磁盘可读性判定**：与 Library membership、Source 是否安装、数据库映射是否存在无关。有 `pages.json` 的容器要求完整；用户提供、按容器名关联且没有 `pages.json` 的容器只要可读即算；单章作品的根 `pages.json` 与页负载也算。删除与空目录清理只作用于 `downloads`；`local` 原件不参与删除；空目录仅在无其他作品引用时清理。

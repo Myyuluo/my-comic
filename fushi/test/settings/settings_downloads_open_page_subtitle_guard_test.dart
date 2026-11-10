@@ -83,7 +83,12 @@ void main() {
     );
     expect(
       destination.sections.first.items.map((SettingsItem item) => item.id),
-      <String>['storage.content_root', 'storage.program_state_root'],
+      <String>[
+        'storage.content_root',
+        'storage.program_state_root',
+        'storage.clear_cache',
+        'storage.clear_database',
+      ],
     );
     expect(
       destination.sections[2].items.map((SettingsItem item) => item.id),

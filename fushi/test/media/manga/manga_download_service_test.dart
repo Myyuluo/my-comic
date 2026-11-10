@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -252,9 +253,20 @@ void main() {
     expect(queued.status, MangaDownloadJobStatus.queued);
     expect(queued.runtime, 'mihon');
     expect(queued.chapterTitle, 'Chapter 1');
+    expect(
+      Directory(bookDir).existsSync(),
+      isFalse,
+      reason: '入队本身不物化 Download library 目录',
+    );
 
     await downloads.start();
     await downloads.whenIdle;
+
+    expect(
+      Directory(bookDir).existsSync(),
+      isTrue,
+      reason: '真正开始章节下载时才创建 downloads/{source}/{manga}',
+    );
 
     final MangaDownloadJobRow done = await jobOf('/chapter/1');
     expect(done.status, MangaDownloadJobStatus.done);
@@ -324,6 +336,169 @@ void main() {
     downloads.dispose();
   });
 
+  test('同名不同作品共用下载目录：各自下载、映射与状态互不串作品', () async {
+    const OnlineMangaLibraryEntry secondEntry = OnlineMangaLibraryEntry(
+      runtime: OnlineMangaRuntimeKind.mihon,
+      extensionPackage: 'org.example.fixture',
+      sourceId: '1',
+      series: OnlineMangaSeries(
+        key: '/series/fixture-two',
+        title: 'Fixture series',
+        raw: <String, Object?>{'url': '/series/fixture-two'},
+      ),
+      chapters: <OnlineMangaChapter>[
+        OnlineMangaChapter(
+          key: '/chapter/other-1',
+          name: 'Other Chapter 1',
+          number: 1,
+          raw: <String, Object?>{'url': '/chapter/other-1'},
+        ),
+      ],
+    );
+    final EpubBookRow secondRow = await library.add(secondEntry);
+    expect(
+      secondRow.extractDir,
+      bookDir,
+      reason: '同一 Source 下标题相同的不同作品共用同一漫画目录',
+    );
+    expect(
+      Directory(p.join(root.path, 'downloads', 'Fake', 'Fixture series (2)'))
+          .existsSync(),
+      isFalse,
+      reason: '不同身份不因同名生成 (2) 目录',
+    );
+
+    final MangaDownloadService downloads = build();
+    addTearDown(downloads.dispose);
+    await downloads.enqueueChapter(
+      entry: _entry(),
+      chapter: _chapters.last,
+      autoOcr: false,
+    );
+    await downloads.enqueueChapter(
+      entry: secondEntry,
+      chapter: secondEntry.chapters.single,
+      autoOcr: false,
+    );
+    await downloads.start();
+    await downloads.whenIdle;
+
+    // 两章都下载完成，文件住在同一个漫画目录的不同容器里。
+    final Directory firstChapter = downloadChapterDirectory(bookDir, 'Chapter 1');
+    final Directory secondChapter = downloadChapterDirectory(
+      bookDir,
+      'Other Chapter 1',
+    );
+    expect(firstChapter.existsSync(), isTrue);
+    expect(secondChapter.existsSync(), isTrue);
+    expect(
+      Directory(p.join(root.path, 'downloads', 'Fake', 'Fixture series (2)'))
+          .existsSync(),
+      isFalse,
+    );
+
+    // 章节映射各归各的作品：不把对方的容器写进自己的映射。
+    final DownloadLibraryIndex index = DownloadLibraryIndex(db);
+    expect(
+      await index.isChapterDownloaded(
+        bookKey: bookKey,
+        chapterKey: '/chapter/1',
+      ),
+      isTrue,
+    );
+    expect(
+      await index.isChapterDownloaded(
+        bookKey: secondRow.bookKey,
+        chapterKey: '/chapter/other-1',
+      ),
+      isTrue,
+    );
+    expect(await db.getMangaChapterDir(bookKey, '/chapter/other-1'), isNull);
+    expect(
+      await db.getMangaChapterDir(secondRow.bookKey, '/chapter/1'),
+      isNull,
+      reason: '共享目录不得把另一部作品的章映射到本作品',
+    );
+
+    // 阅读解析：每部作品都打开自己的容器，不串到对方的章。
+    expect(
+      (await index.resolveChapter(
+        bookKey: bookKey,
+        chapterKey: '/chapter/1',
+      ))?.directory?.path,
+      firstChapter.path,
+    );
+    expect(
+      (await index.resolveChapter(
+        bookKey: secondRow.bookKey,
+        chapterKey: '/chapter/other-1',
+      ))?.directory?.path,
+      secondChapter.path,
+    );
+
+    // 容器里的 pages.json 仍证明各自的作品身份。
+    final MangaPagesManifest? secondManifest =
+        await readPagesManifest(secondChapter);
+    expect(secondManifest?.mangaKey, '/series/fixture-two');
+    expect(secondManifest?.mangaTitle, 'Fixture series');
+  });
+
+  test('非书架占位行：入队按下载身份复用它，worker 不需要 Library membership', () async {
+    // 导入时来源未安装 → 占位包；安装后从源页拿到的条目是真实包 + 规范化后的
+    // 数字 sourceId。两者是同一部作品，任务必须挂到已有的非书架行上。
+    const OnlineMangaLibraryEntry placeholder =
+        OnlineMangaLibraryEntry(
+          runtime: OnlineMangaRuntimeKind.mihon,
+          extensionPackage: kUnavailableMihonExtensionPackage,
+          sourceId: '42',
+          series: OnlineMangaSeries(
+            key: '/series/placeholder',
+            title: 'Placeholder series',
+            raw: <String, Object?>{'url': '/series/placeholder'},
+          ),
+          chapters: _chapters,
+        );
+    final EpubBookRow row = await library.ensureNonLibrary(placeholder);
+    expect(row.isInLibrary, isFalse);
+    final OnlineMangaLibraryEntry installed = OnlineMangaLibraryEntry(
+      runtime: OnlineMangaRuntimeKind.mihon,
+      extensionPackage: 'org.example.installed',
+      sourceId: '042',
+      series: placeholder.series,
+      chapters: _chapters,
+    );
+
+    final MangaDownloadService downloads = build();
+    addTearDown(downloads.dispose);
+    final MangaDownloadJobRow job = await downloads.enqueueChapter(
+      entry: installed,
+      chapter: _chapters.last,
+      autoOcr: false,
+    );
+    expect(
+      job.bookKey,
+      row.bookKey,
+      reason: '非书架作品按下载身份复用已有行，不另起孤儿 bookKey',
+    );
+
+    await downloads.start();
+    await downloads.whenIdle;
+
+    final MangaDownloadJobRow done =
+        (await db.getMangaDownloadJob(job.jobId))!;
+    expect(done.status, MangaDownloadJobStatus.done);
+    expect(
+      (await db.getEpubBook(row.bookKey))!.isInLibrary,
+      isFalse,
+      reason: '下载不要求 Library membership，也不得自动加入书架',
+    );
+    expect(
+      await db.getMangaChapterDir(row.bookKey, '/chapter/1'),
+      isNotNull,
+      reason: '下载索引与 worker 解析非书架行后写入映射',
+    );
+  });
+
   test('下载中只有 .staging 有内容：正式章目录与索引要等整章 rename 后才出现', () async {
     adapter.gate = Completer<void>();
     final MangaDownloadService downloads = build();
@@ -362,7 +537,7 @@ void main() {
     downloads.dispose();
   });
 
-  test('目标章目录已存在时不覆盖：内容进确定后缀，映射指向实际目录', () async {
+  test('目标章目录已存在时不覆盖：内容进短哈希后缀，映射指向实际目录', () async {
     final Directory existing = downloadChapterDirectory(bookDir, 'Chapter 1');
     await existing.create(recursive: true);
     final File sentinel = File(p.join(existing.path, 'keep.txt'));
@@ -383,9 +558,10 @@ void main() {
       bookKey,
       '/chapter/1',
     );
-    expect(mapping?.folderName, 'Chapter 1 (2)');
+    expect(mapping?.folderName, matches(RegExp(r'^Chapter 1~[0-9a-f]{8}$')));
+    expect(mapping?.folderName, isNot(contains('(2)')));
     expect(
-      downloadChapterDirectory(bookDir, 'Chapter 1 (2)').existsSync(),
+      downloadChapterDirectory(bookDir, mapping!.folderName).existsSync(),
       isTrue,
     );
     expect(
@@ -515,6 +691,52 @@ void main() {
     cbzService.dispose();
   });
 
+  test('占位扩展包 manifest 仍被认领：数字 sourceId + series key 相同，不重下', () async {
+    final MangaDownloadService folderService = build(saveAsCbz: () => false);
+    addTearDown(folderService.dispose);
+    await folderService.enqueueChapter(
+      entry: _entry(),
+      chapter: _chapters.last,
+      autoOcr: false,
+    );
+    await folderService.start();
+    await folderService.whenIdle;
+
+    // 模拟导入占位身份写出的 pages.json（真实包条目仍应认领同一章）。
+    final Directory folder = downloadChapterDirectory(bookDir, 'Chapter 1');
+    final File manifestFile = downloadPagesManifestFile(folder);
+    final Map<String, Object?> json =
+        (jsonDecode(await manifestFile.readAsString()) as Map)
+            .cast<String, Object?>();
+    final Map<String, Object?> source =
+        (json['source'] as Map).cast<String, Object?>();
+    source['extensionPackage'] = 'mihon.unavailable';
+    json['source'] = source;
+    await manifestFile.writeAsString(jsonEncode(json));
+    await db.deleteMangaChapterDir(bookKey, '/chapter/1');
+    final Map<int, int> fetchedBefore = Map<int, int>.of(adapter.fetchCounts);
+
+    final MangaDownloadService again = build(saveAsCbz: () => false);
+    addTearDown(again.dispose);
+    await again.enqueueChapter(
+      entry: _entry(),
+      chapter: _chapters.last,
+      autoOcr: false,
+    );
+    await again.start();
+    await again.whenIdle;
+
+    expect(
+      adapter.fetchCounts,
+      fetchedBefore,
+      reason: 'mihon.unavailable 与真实包是同一身份，完整容器应直接认领',
+    );
+    expect(
+      (await db.getMangaChapterDir(bookKey, '/chapter/1'))?.folderName,
+      'Chapter 1',
+    );
+  });
+
   test('格式在任务开始运行时确定：运行中的任务保持，排队任务读真正开始时的值', () async {
     bool saveAsCbz = true;
     adapter.gate = Completer<void>();
@@ -557,7 +779,9 @@ void main() {
     downloads.dispose();
   });
 
-  test('同名 .cbz 已存在（属于别的章）：不覆盖，改用确定后缀', () async {
+  test('同名 .cbz 已存在（属于别的章）：不覆盖，改用短哈希后缀', () async {
+    // 入库不再建目录；模拟磁盘上已有别的章留下的 .cbz。
+    await Directory(bookDir).create(recursive: true);
     final File existing = File(p.join(bookDir, 'Chapter 1.cbz'));
     await existing.writeAsString('do not touch');
 
@@ -575,12 +799,13 @@ void main() {
       bookKey,
       '/chapter/1',
     );
-    expect(mapping?.folderName, 'Chapter 1 (2).cbz');
-    expect(mapping?.containerKindEnum, MangaChapterContainerKind.archive);
     expect(
-      File(p.join(bookDir, 'Chapter 1 (2).cbz')).existsSync(),
-      isTrue,
+      mapping?.folderName,
+      matches(RegExp(r'^Chapter 1~[0-9a-f]{8}\.cbz$')),
     );
+    expect(mapping?.folderName, isNot(contains('(2)')));
+    expect(mapping?.containerKindEnum, MangaChapterContainerKind.archive);
+    expect(File(p.join(bookDir, mapping!.folderName)).existsSync(), isTrue);
     expect(
       await DownloadLibraryIndex(
         db,
@@ -803,7 +1028,7 @@ void main() {
     downloads.dispose();
   });
 
-  test('重复章节名且无扫译组：确定 (2) 后缀', () async {
+  test('重复章节名且无扫译组：确定短哈希后缀，不出现 (2)', () async {
     const OnlineMangaChapter first = OnlineMangaChapter(
       key: '/chapter/a',
       name: 'Chapter 1',
@@ -833,14 +1058,18 @@ void main() {
       (await db.getMangaChapterDir(row.bookKey, first.key))?.folderName,
       'Chapter 1',
     );
+    final String? secondFolder =
+        (await db.getMangaChapterDir(row.bookKey, second.key))?.folderName;
+    expect(secondFolder, matches(RegExp(r'^Chapter 1~[0-9a-f]{8}$')));
+    expect(secondFolder, isNot(contains('(2)')));
     expect(
-      (await db.getMangaChapterDir(row.bookKey, second.key))?.folderName,
-      'Chapter 1 (2)',
+      downloadChapterDirectory(row.extractDir, secondFolder!).existsSync(),
+      isTrue,
     );
     downloads.dispose();
   });
 
-  test('已有章目录属于另一章（大小写不同）：不认领、不覆盖，改用 (2)', () async {
+  test('已有章目录属于另一章（大小写不同）：不认领、不覆盖，改用短哈希后缀', () async {
     const OnlineMangaChapter other = OnlineMangaChapter(
       key: '/chapter/other',
       name: 'Chapter 1',
@@ -889,11 +1118,14 @@ void main() {
     await downloads.start();
     await downloads.whenIdle;
 
+    final String? folder =
+        (await db.getMangaChapterDir(bookKey, '/chapter/1'))?.folderName;
     expect(
-      (await db.getMangaChapterDir(bookKey, '/chapter/1'))?.folderName,
-      'Chapter 1 (2)',
+      folder,
+      matches(RegExp(r'^Chapter 1~[0-9a-f]{8}$')),
       reason: '大小写不同且属于另一章：不得认领为本章内容',
     );
+    expect(folder, isNot(contains('(2)')));
     expect(
       (await readPagesManifest(foreignDir))?.chapterKey,
       other.key,
@@ -1231,6 +1463,116 @@ void main() {
     expect(again.jobId, job.jobId, reason: 'job_id 由身份三元组派生，稳定');
     expect(again.status, MangaDownloadJobStatus.queued);
     downloads.dispose();
+  });
+
+  group('取消失败任务（ticket 09）', () {
+    Future<void> insertFailedJob({
+      required String jobId,
+      required String chapterKey,
+      required String chapterTitle,
+      required int createdAt,
+    }) =>
+        db.upsertMangaDownloadJob(
+          MangaDownloadJobsCompanion.insert(
+            jobId: jobId,
+            kind: MangaDownloadJobKind.chapter,
+            bookKey: bookKey,
+            chapterKey: chapterKey,
+            runtime: 'mihon',
+            title: 'Fixture series',
+            chapterTitle: chapterTitle,
+            status: const Value<String>(MangaDownloadJobStatus.failed),
+            pagesDone: const Value<int>(1),
+            pagesTotal: const Value<int>(3),
+            attemptCount: const Value<int>(3),
+            autoOcr: const Value<bool>(false),
+            createdAt: createdAt,
+            updatedAt: createdAt,
+          ),
+        );
+
+    test('删除任务行、staging、临时包与映射容器，其他任务不受影响', () async {
+      final MangaDownloadService downloads = build(saveAsCbz: () => true);
+      addTearDown(downloads.dispose);
+      await insertFailedJob(
+        jobId: 'failed-1',
+        chapterKey: '/chapter/1',
+        chapterTitle: 'Chapter 1',
+        createdAt: 1,
+      );
+      await insertFailedJob(
+        jobId: 'failed-2',
+        chapterKey: '/chapter/2',
+        chapterTitle: 'Chapter 2',
+        createdAt: 2,
+      );
+
+      final Directory staging = downloadStagingDirectory(bookDir, 'failed-1');
+      await staging.create(recursive: true);
+      await File(
+        p.join(staging.path, downloadPageFileName(0, '.png')),
+      ).writeAsBytes(_FakeAdapter.pngOf(0));
+      final File temp = File(p.join(bookDir, 'Chapter 1.cbz.tmp'));
+      await temp.writeAsString('partial archive');
+      final Directory mapped = downloadChapterDirectory(bookDir, 'Chapter 1');
+      await mapped.create(recursive: true);
+      await db.upsertMangaChapterDir(
+        bookKey: bookKey,
+        chapterKey: '/chapter/1',
+        folderName: 'Chapter 1',
+        updatedAt: 1,
+      );
+
+      final Directory otherStaging = downloadStagingDirectory(
+        bookDir,
+        'failed-2',
+      );
+      await otherStaging.create(recursive: true);
+
+      expect(await downloads.discardFailed('failed-1'), isTrue);
+
+      expect(await db.getMangaDownloadJob('failed-1'), isNull);
+      expect(staging.existsSync(), isFalse, reason: '删除 .staging/<jobId>');
+      expect(temp.existsSync(), isFalse, reason: '删除失败的 .cbz.tmp');
+      expect(mapped.existsSync(), isFalse, reason: '删除可能存在的映射容器');
+      expect(
+        await db.getMangaChapterDir(bookKey, '/chapter/1'),
+        isNull,
+        reason: '映射行一并清理',
+      );
+      expect(
+        await db.getMangaDownloadJob('failed-2'),
+        isNotNull,
+        reason: '其他任务不受影响',
+      );
+      expect(
+        otherStaging.existsSync(),
+        isTrue,
+        reason: '其他任务的 staging 不被清理',
+      );
+      expect(
+        await downloads.discardFailed('failed-1'),
+        isFalse,
+        reason: '已删除的任务幂等 no-op',
+      );
+    });
+
+    test('非失败任务不被取消失败路径删除', () async {
+      final MangaDownloadService downloads = build();
+      addTearDown(downloads.dispose);
+      final MangaDownloadJobRow job = await downloads.enqueueChapter(
+        entry: _entry(),
+        chapter: _chapters.last,
+        autoOcr: false,
+      );
+      final Directory staging = downloadStagingDirectory(bookDir, job.jobId);
+      await staging.create(recursive: true);
+
+      expect(await downloads.discardFailed(job.jobId), isFalse);
+
+      expect(await db.getMangaDownloadJob(job.jobId), isNotNull);
+      expect(staging.existsSync(), isTrue);
+    });
   });
 
   test('重启：running 行复位成 queued 续跑', () async {

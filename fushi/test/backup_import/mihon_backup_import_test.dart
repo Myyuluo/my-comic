@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi_core/fushi_core.dart';
@@ -8,7 +9,12 @@ import 'package:path/path.dart' as p;
 
 import 'package:fushi/src/backup_import/mihon_backup_import_service.dart';
 import 'package:fushi/src/backup_import/mihon_backup_parser.dart';
+import 'package:fushi/src/media/manga/history/manga_history.dart';
+import 'package:fushi/src/media/manga/library/manga_adjacent_chapter.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
+import 'package:fushi/src/pages/implementations/manga_tag_tabs.dart';
+import 'package:fushi_engine/media/manga/download_library_storage.dart';
+import 'package:fushi_engine/media/manga/mokuro_payload.dart';
 
 import 'mihon_backup_fixture.dart';
 
@@ -31,8 +37,13 @@ void main() {
     }
   });
 
-  MihonBackupImportService service() => MihonBackupImportService(
+  MihonBackupImportService service({
+    Directory? downloadsRoot,
+    Directory? localComicRoot,
+  }) => MihonBackupImportService(
     database: db,
+    downloadsRoot: downloadsRoot,
+    localComicRoot: localComicRoot,
     bookDirectory: (String bookKey) async {
       final Directory dir = Directory(p.join(tmp.path, 'books', bookKey));
       await dir.create(recursive: true);
@@ -41,12 +52,66 @@ void main() {
     now: () => now,
   );
 
-  test('imports library entries, categories and reading progress', () async {
+  MangaPagesManifest manifestFor(
+    String chapterKey,
+    String chapterName, {
+    String sourceId = '1',
+    String mangaKey = '/manga/x',
+    String mangaTitle = 'X',
+  }) => MangaPagesManifest(
+    sourceRuntime: 'mihon',
+    sourceId: sourceId,
+    sourceName: 'Example',
+    extensionPackage: 'org.example.fixture',
+    mangaKey: mangaKey,
+    mangaTitle: mangaTitle,
+    chapterKey: chapterKey,
+    chapterName: chapterName,
+    payload: const MokuroPayload(
+      images: <MokuroImage>[
+        MokuroImage(
+          url: '001.jpg',
+          size: MokuroSize(100, 150),
+          blocks: <MokuroBlock>[],
+        ),
+      ],
+    ),
+    downloadedAt: DateTime.utc(2026, 11, 7),
+  );
+
+  Future<Directory> writeChapter(
+    Directory mangaDir,
+    String folderName, {
+    required String chapterKey,
+    String chapterName = 'Chapter',
+    String sourceId = '1',
+    String mangaKey = '/manga/x',
+    String mangaTitle = 'X',
+  }) async {
+    final Directory chapterDir = Directory(p.join(mangaDir.path, folderName));
+    await chapterDir.create(recursive: true);
+    await File(p.join(chapterDir.path, '001.jpg')).writeAsString('page');
+    await writePagesManifestAtomically(
+      chapterDir,
+      manifestFor(
+        chapterKey,
+        chapterName,
+        sourceId: sourceId,
+        mangaKey: mangaKey,
+        mangaTitle: mangaTitle,
+      ),
+    );
+    return chapterDir;
+  }
+
+  test('imports library entries, categories as tags and progress', () async {
     final File backup = await writeFixtureBackup(
       tmp,
       categories: const <FixtureCategory>[
         FixtureCategory(name: 'Action', order: 0, id: 10),
         FixtureCategory(name: 'Drama', order: 1, id: 20),
+        // Blank category names cannot become Tags and are reported as skipped.
+        FixtureCategory(name: '   ', order: 9, id: 30),
       ],
       sources: const <FixtureSource>[
         FixtureSource(id: 123, name: 'Source A'),
@@ -115,11 +180,13 @@ void main() {
 
     expect(report.totalEntries, 3);
     expect(report.importedEntries, 2);
+    expect(report.nonLibraryEntriesImported, 1);
     expect(report.mergedEntries, 0);
-    expect(report.skippedEntries, 1);
+    expect(report.skippedEntries, 0);
     expect(report.failedEntries, 0);
     expect(report.categoriesCreated, 2);
-    expect(report.chapterStatesWritten, 3);
+    expect(report.categoriesSkipped, 1);
+    expect(report.chapterStatesWritten, 4);
     expect(
       report.missingSources.map((MihonBackupSourceIssue s) => s.sourceId),
       <int>{123, 456},
@@ -129,8 +196,16 @@ void main() {
       for (final EpubBookMeta meta in await db.getEpubBookMetas())
         (await db.getEpubBook(meta.bookKey))!,
     ];
-    expect(books, hasLength(2));
+    expect(books, hasLength(3));
     expect(books.map((EpubBookRow b) => b.format), everyElement('manga'));
+    // Only favorite=true entries belong to the shelf.
+    expect(
+      books
+          .where((EpubBookRow b) => b.inLibrary)
+          .map((EpubBookRow b) => b.title)
+          .toSet(),
+      <String>{'Alpha', 'Beta'},
+    );
 
     final EpubBookRow alpha = books.singleWhere(
       (EpubBookRow b) => b.title == 'Alpha',
@@ -169,22 +244,257 @@ void main() {
         .getMangaChapterStates(beta.uid);
     expect(betaStates['/chapter/b1']!.readAt, 1700000003000);
 
-    final List<MediaCollectionRow> collections = await db
-        .getAllMediaCollections();
-    expect(collections.map((MediaCollectionRow c) => c.name).toSet(), <String>{
+    final List<BookTagRow> tags = await db.getAllTags();
+    expect(tags.map((BookTagRow tag) => tag.name).toSet(), <String>{
       'Action',
       'Drama',
     });
-    final MediaCollectionRow action = collections.singleWhere(
-      (MediaCollectionRow c) => c.name == 'Action',
+    final BookTagRow actionTag = tags.singleWhere(
+      (BookTagRow tag) => tag.name == 'Action',
     );
-    final List<MediaCollectionItemRow> members = await db.getCollectionItems(
-      action.id,
+    final BookTagRow dramaTag = tags.singleWhere(
+      (BookTagRow tag) => tag.name == 'Drama',
     );
-    expect(members, hasLength(1));
-    expect(members.single.mediaType, MediaKind.epub.dbValue);
-    expect(members.single.entryKey, alpha.uid);
+    expect(actionTag.sortOrder, 0);
+    expect(dramaTag.sortOrder, 1);
+    expect(actionTag.colorValue, 0xFF9E9E9E);
+    expect(dramaTag.colorValue, 0xFF9E9E9E);
+
+    final List<BookTagRow> alphaTags = await db.getTagsForBook(alpha.bookKey);
+    expect(alphaTags.map((BookTagRow tag) => tag.name), <String>['Action']);
+    expect(
+      mangaBookBelongsToTab(alphaTags, const MangaShelfTabSelection()),
+      isFalse,
+      reason: 'a categorised manga leaves the 书架 tab',
+    );
+    expect(
+      mangaBookBelongsToTab(alphaTags, MangaTagTabSelection(actionTag.id)),
+      isTrue,
+    );
+    final List<BookTagRow> betaTags = await db.getTagsForBook(beta.bookKey);
+    expect(betaTags.map((BookTagRow tag) => tag.name), <String>['Drama']);
+
+    // Categories no longer become hidden collections.
+    expect(await db.getAllMediaCollections(), isEmpty);
+    expect(await db.getAllTagAssignments(), hasLength(2));
   });
+
+  test(
+    'fills missing MyComic app settings without overwriting local values',
+    () async {
+      await db.setPrefs(<String, String>{
+        'shelf_sort_mode': PrefCodec.encode('author'),
+      });
+
+      final File backup = await writeFixtureBackup(
+        tmp,
+        mangas: const <FixtureManga>[],
+        preferences: <FixturePreference>[
+          // Locally present: the backup must not overwrite it.
+          const FixturePreference(
+            key: 'shelf_sort_mode',
+            type: FixturePreferenceType.stringValue,
+            value: 'title',
+          ),
+          const FixturePreference(
+            key: 'auto_search',
+            type: FixturePreferenceType.booleanValue,
+            value: false,
+          ),
+          const FixturePreference(
+            key: 'popup_dictionary_columns',
+            type: FixturePreferenceType.intValue,
+            value: 3,
+          ),
+          const FixturePreference(
+            key: 'srs_mining_deck_id',
+            type: FixturePreferenceType.longValue,
+            value: 1700000000123,
+          ),
+          const FixturePreference(
+            key: 'floating_lyric_font_size',
+            type: FixturePreferenceType.floatValue,
+            value: 20.5,
+          ),
+          const FixturePreference(
+            key: 'audio_sources',
+            type: FixturePreferenceType.stringSetValue,
+            value: <String>['https://a.test', 'https://b.test'],
+          ),
+          // Known dynamic key family: per-book audiobook position.
+          const FixturePreference(
+            key: 'audiobook_pos_book-1',
+            type: FixturePreferenceType.intValue,
+            value: 1234,
+          ),
+          // Known but device-local (AI provider config): belongs to the
+          // exporting machine and must not be adopted here.
+          const FixturePreference(
+            key: 'ai_providers',
+            type: FixturePreferenceType.stringValue,
+            value: '[]',
+          ),
+          // Mihon's own key: MyComic must never write it into its settings.
+          const FixturePreference(
+            key: 'theme_mode',
+            type: FixturePreferenceType.stringValue,
+            value: 'dark',
+          ),
+        ],
+      );
+
+      final MihonBackupImportReport report = await service().importFile(backup);
+
+      expect(report.appPreferencesImported, 6);
+      expect(
+        report.appPreferencesSkippedByReason[MihonBackupAppPreferenceSkipReason
+            .alreadyPresent],
+        1,
+      );
+      expect(
+        report.appPreferencesSkippedByReason[MihonBackupAppPreferenceSkipReason
+            .notMyComicKey],
+        1,
+      );
+      expect(
+        report.appPreferencesSkippedByReason[MihonBackupAppPreferenceSkipReason
+            .deviceLocal],
+        1,
+      );
+
+      final Map<String, String> prefs = await db.getAllPrefs();
+      expect(
+        PrefCodec.decode<String>(prefs['shelf_sort_mode']!, ''),
+        'author',
+        reason: 'an existing local value wins over the backup',
+      );
+      expect(PrefCodec.decode<bool>(prefs['auto_search']!, true), isFalse);
+      expect(PrefCodec.decode<int>(prefs['popup_dictionary_columns']!, 0), 3);
+      expect(
+        PrefCodec.decode<int>(prefs['srs_mining_deck_id']!, 0),
+        1700000000123,
+      );
+      expect(
+        PrefCodec.decode<double>(prefs['floating_lyric_font_size']!, 0.0),
+        closeTo(20.5, 1e-9),
+      );
+      expect(
+        PrefCodec.decode<List<String>>(prefs['audio_sources']!, <String>[]),
+        <String>['https://a.test', 'https://b.test'],
+      );
+      expect(PrefCodec.decode<int>(prefs['audiobook_pos_book-1']!, 0), 1234);
+      expect(prefs.containsKey('theme_mode'), isFalse);
+      expect(prefs.containsKey('ai_providers'), isFalse);
+    },
+  );
+
+  test(
+    'rejects an unknown app preference value type without writing data',
+    () async {
+      final File backup = await writeFixtureBackup(
+        tmp,
+        mangas: const <FixtureManga>[
+          FixtureManga(source: 123, url: '/manga/alpha', title: 'Alpha'),
+        ],
+        preferences: const <FixturePreference>[
+          FixturePreference(
+            key: 'shelf_sort_mode',
+            type: FixturePreferenceType.unsupportedValue,
+            value: 'title',
+          ),
+        ],
+      );
+
+      await expectLater(
+        service().importFile(backup),
+        throwsA(isA<MihonBackupFormatException>()),
+      );
+
+      expect(await db.getEpubBookMetas(), isEmpty);
+      expect(await db.getAllPrefs(), isEmpty);
+    },
+  );
+
+  test(
+    'rejects an unsupported app preference value type even on an unknown key, before any write',
+    () async {
+      final File backup = await writeFixtureBackup(
+        tmp,
+        categories: const <FixtureCategory>[
+          FixtureCategory(name: 'Action', order: 0, id: 10),
+        ],
+        mangas: const <FixtureManga>[
+          FixtureManga(source: 123, url: '/manga/alpha', title: 'Alpha'),
+        ],
+        preferences: const <FixturePreference>[
+          // Mihon's own key: previously skipped as not-MyComic without looking
+          // at the value type, so an unsupported type slipped through.
+          FixturePreference(
+            key: 'theme_mode',
+            type: FixturePreferenceType.unsupportedValue,
+            value: 'dark',
+          ),
+        ],
+      );
+
+      await expectLater(
+        service().importFile(backup),
+        throwsA(isA<MihonBackupFormatException>()),
+      );
+
+      expect(
+        await db.getAllTags(),
+        isEmpty,
+        reason: 'validation runs before Tag writes',
+      );
+      expect(await db.getEpubBookMetas(), isEmpty);
+      expect(await db.getAllPrefs(), isEmpty);
+    },
+  );
+
+  test(
+    'rejects an unsupported source preference value type before any write',
+    () async {
+      final File backup = await writeFixtureBackup(
+        tmp,
+        categories: const <FixtureCategory>[
+          FixtureCategory(name: 'Action', order: 0, id: 10),
+        ],
+        mangas: const <FixtureManga>[
+          FixtureManga(source: 123, url: '/manga/alpha', title: 'Alpha'),
+        ],
+        sourcePreferences: const <FixtureSourcePreferences>[
+          FixtureSourcePreferences(
+            sourceKey: 'source_123',
+            prefs: <FixturePreference>[
+              FixturePreference(
+                key: 'unknown_shape',
+                type: FixturePreferenceType.unsupportedValue,
+                value: 'value',
+              ),
+            ],
+          ),
+        ],
+      );
+
+      await expectLater(
+        service().importFile(backup),
+        throwsA(isA<MihonBackupFormatException>()),
+      );
+
+      expect(
+        await db.getAllTags(),
+        isEmpty,
+        reason: 'validation runs before Tag writes',
+      );
+      expect(await db.getEpubBookMetas(), isEmpty);
+      expect(
+        await db.select(db.mangaSourcePreferences).get(),
+        isEmpty,
+        reason: 'no source preference rows are written',
+      );
+    },
+  );
 
   test(
     're-import merges by source + manga url without duplicating rows',
@@ -275,6 +585,8 @@ void main() {
         await fixture(changed: false),
       );
       expect(first.importedEntries, 2);
+      expect(first.categoriesCreated, 2);
+      expect(first.categoriesMatched, 0);
 
       final MihonBackupImportReport second = await service().importFile(
         await fixture(changed: true),
@@ -283,10 +595,14 @@ void main() {
       expect(second.totalEntries, 3);
       expect(second.importedEntries, 0);
       expect(second.mergedEntries, 2);
-      expect(second.skippedEntries, 1);
+      expect(second.nonLibraryEntriesImported, 0);
+      expect(second.nonLibraryEntriesMerged, 1);
+      expect(second.skippedEntries, 0);
       expect(second.failedEntries, 0);
+      expect(second.categoriesCreated, 0);
+      expect(second.categoriesMatched, 2);
 
-      expect(await db.getEpubBookMetas(), hasLength(2));
+      expect(await db.getAllEpubBooks(), hasLength(3));
       final String alphaKey = (await db.getEpubBookMetas())
           .singleWhere((EpubBookMeta meta) => meta.title == 'Alpha')
           .bookKey;
@@ -311,13 +627,165 @@ void main() {
       expect(states['/chapter/a2']!.readAt, 1700000009000);
       expect(states['/chapter/a3']!.lastPage, 2);
 
-      final MediaCollectionRow action = (await db.getAllMediaCollections())
-          .singleWhere((MediaCollectionRow c) => c.name == 'Action');
-      expect(await db.getCollectionItems(action.id), hasLength(1));
+      final List<BookTagRow> alphaTags = await db.getTagsForBook(
+        alphaRow.bookKey,
+      );
+      expect(alphaTags.map((BookTagRow tag) => tag.name).toSet(), <String>{
+        'Action',
+        'Drama',
+      });
+      expect(await db.getAllTagAssignments(), hasLength(3));
+      expect(await db.getAllMediaCollections(), isEmpty);
     },
   );
 
-  test('skips non-library entries and accepts an empty backup', () async {
+  test(
+    'reuses existing tags and leaves existing collections untouched',
+    () async {
+      final int actionTagId = await db.createTag('Action', 0xFF123456);
+      final String legacyBookKey = await db.insertEpubBook(
+        EpubBooksCompanion.insert(
+          bookKey: 'legacy-book',
+          title: 'Legacy',
+          epubPath: 'manga.json',
+          extractDir: 'legacy',
+          chapterCount: 0,
+          chaptersJson: '[]',
+          importedAt: 1,
+        ),
+      );
+      final EpubBookRow legacyBook = (await db.getEpubBook(legacyBookKey))!;
+      final int legacyCollectionId = await db.createMediaCollection('Action');
+      await db.addToCollection(
+        legacyCollectionId,
+        MediaKind.epub,
+        legacyBook.uid,
+      );
+
+      final File backup = await writeFixtureBackup(
+        tmp,
+        categories: const <FixtureCategory>[
+          FixtureCategory(name: 'Action', order: 0, id: 10),
+          FixtureCategory(name: 'Drama', order: 3, id: 20),
+        ],
+        sources: const <FixtureSource>[
+          FixtureSource(id: 123, name: 'Source A'),
+        ],
+        mangas: const <FixtureManga>[
+          FixtureManga(
+            source: 123,
+            url: '/manga/alpha',
+            title: 'Alpha',
+            categoryOrders: <int>[0, 3],
+          ),
+        ],
+      );
+
+      final MihonBackupImportReport report = await service().importFile(backup);
+
+      expect(report.categoriesCreated, 1);
+      expect(report.categoriesMatched, 1);
+      final List<BookTagRow> tags = await db.getAllTags();
+      expect(tags, hasLength(2));
+      final BookTagRow action = tags.singleWhere(
+        (BookTagRow tag) => tag.name == 'Action',
+      );
+      expect(action.id, actionTagId);
+      expect(
+        action.sortOrder,
+        0,
+        reason: 'tag order comes from the backup category order',
+      );
+      expect(
+        action.colorValue,
+        0xFF123456,
+        reason: 'a reused tag keeps its own color',
+      );
+      final BookTagRow drama = tags.singleWhere(
+        (BookTagRow tag) => tag.name == 'Drama',
+      );
+      expect(drama.sortOrder, 3);
+      expect(drama.colorValue, 0xFF9E9E9E);
+
+      // Old hidden collections survive unchanged; import adds no new ones.
+      final List<MediaCollectionRow> collections = await db
+          .getAllMediaCollections();
+      expect(collections, hasLength(1));
+      expect(collections.single.id, legacyCollectionId);
+      expect(collections.single.name, 'Action');
+      final List<MediaCollectionItemRow> members = await db.getCollectionItems(
+        legacyCollectionId,
+      );
+      expect(members, hasLength(1));
+      expect(members.single.mediaType, MediaKind.epub.dbValue);
+      expect(members.single.entryKey, legacyBook.uid);
+
+      final String importedBookKey = (await db.getEpubBookMetas())
+          .singleWhere((EpubBookMeta meta) => meta.title == 'Alpha')
+          .bookKey;
+      final List<BookTagRow> importedTags = await db.getTagsForBook(
+        importedBookKey,
+      );
+      expect(importedTags.map((BookTagRow tag) => tag.name).toSet(), <String>{
+        'Action',
+        'Drama',
+      });
+      expect(
+        mangaBookBelongsToTab(importedTags, const MangaShelfTabSelection()),
+        isFalse,
+      );
+      expect(
+        mangaBookBelongsToTab(importedTags, MangaTagTabSelection(action.id)),
+        isTrue,
+      );
+    },
+  );
+
+  test('repeated import keeps tag assignments idempotent', () async {
+    final File backup = await writeFixtureBackup(
+      tmp,
+      categories: const <FixtureCategory>[
+        FixtureCategory(name: 'Action', order: 0, id: 10),
+        FixtureCategory(name: 'Drama', order: 1, id: 20),
+      ],
+      sources: const <FixtureSource>[FixtureSource(id: 123, name: 'Source A')],
+      mangas: const <FixtureManga>[
+        FixtureManga(
+          source: 123,
+          url: '/manga/alpha',
+          title: 'Alpha',
+          categoryOrders: <int>[0, 1],
+        ),
+        FixtureManga(
+          source: 123,
+          url: '/manga/beta',
+          title: 'Beta',
+          categoryOrders: <int>[1],
+        ),
+      ],
+    );
+
+    final MihonBackupImportReport first = await service().importFile(backup);
+    expect(first.categoriesCreated, 2);
+    expect(first.categoriesMatched, 0);
+    final Set<String> assignmentsAfterFirst = <String>{
+      for (final TagAssignmentRow row in await db.getAllTagAssignments())
+        '${row.entryKey}:${row.tagId}',
+    };
+    expect(assignmentsAfterFirst, hasLength(3));
+
+    final MihonBackupImportReport second = await service().importFile(backup);
+    expect(second.categoriesCreated, 0);
+    expect(second.categoriesMatched, 2);
+    expect(await db.getAllTags(), hasLength(2));
+    final Set<String> assignmentsAfterSecond = <String>{
+      for (final TagAssignmentRow row in await db.getAllTagAssignments())
+        '${row.entryKey}:${row.tagId}',
+    };
+    expect(assignmentsAfterSecond, assignmentsAfterFirst);
+  });
+
+  test('imports favorite=false entries as non-library rows', () async {
     final File onlyRead = await writeFixtureBackup(
       tmp,
       name: 'read-only.tachibk',
@@ -334,23 +802,553 @@ void main() {
               name: 'C1',
               read: true,
               lastPageRead: 3,
+              dateFetch: 1700000001000,
             ),
+          ],
+          history: <FixtureHistory>[
+            FixtureHistory(url: '/c/1', lastRead: 1700000002000),
           ],
         ),
       ],
     );
-    final MihonBackupImportReport skippedReport = await service().importFile(
-      onlyRead,
-    );
-    expect(skippedReport.totalEntries, 1);
-    expect(skippedReport.importedEntries, 0);
-    expect(skippedReport.skippedEntries, 1);
-    expect(
-      skippedReport.skippedByReason[MihonBackupSkipReason.notInLibrary],
-      1,
-    );
-    expect(await db.getEpubBookMetas(), isEmpty);
+    final MihonBackupImportReport first = await service().importFile(onlyRead);
 
+    expect(first.totalEntries, 1);
+    expect(first.importedEntries, 0);
+    expect(first.nonLibraryEntriesImported, 1);
+    expect(first.skippedEntries, 0);
+    expect(first.failedEntries, 0);
+    // Non-library rows never enter the shelf.
+    expect(await db.getLibraryEpubBooks(), isEmpty);
+    expect(await db.getEpubBookMetas(), hasLength(1));
+
+    final EpubBookRow row = (await db.getAllEpubBooks()).single;
+    expect(row.inLibrary, isFalse);
+    expect(row.format, 'manga');
+    final OnlineMangaLibraryEntry entry = OnlineMangaLibraryEntry.tryParse(
+      row.sourceMetadata,
+    )!;
+    expect(entry.series.key, '/manga/x');
+    expect(entry.chapters, hasLength(1));
+
+    // Chapters, read marks and progress belong to the non-library row.
+    final Map<String, MangaChapterStateRow> states = await db
+        .getMangaChapterStates(row.uid);
+    expect(states, hasLength(1));
+    expect(states['/c/1']!.lastPage, 3);
+    expect(states['/c/1']!.readAt, 1700000002000);
+    final ReaderPositionRow? position = await db.getReaderPosition(row.uid);
+    expect(position, isNotNull);
+    expect(position!.updatedAt, 1700000002000);
+
+    // Re-import merges into the same non-library row.
+    final MihonBackupImportReport second = await service().importFile(onlyRead);
+    expect(second.nonLibraryEntriesImported, 0);
+    expect(second.nonLibraryEntriesMerged, 1);
+    expect(second.failedEntries, 0);
+    final List<EpubBookRow> rows = await db.getAllEpubBooks();
+    expect(rows, hasLength(1));
+    expect(rows.single.inLibrary, isFalse);
+  });
+
+  test(
+    'auto-relinks matching downloads after import and reports the result',
+    () async {
+      final Directory downloadsRoot = Directory(p.join(tmp.path, 'downloads'));
+      final Directory localComicRoot = Directory(p.join(tmp.path, 'local'));
+      final Directory mangaDir = Directory(
+        p.join(downloadsRoot.path, 'Example', 'X'),
+      );
+      await writeChapter(mangaDir, 'Ch 1', chapterKey: '/c/1');
+      await writeChapter(mangaDir, 'Ch 2', chapterKey: '/c/2');
+
+      final File backup = await writeFixtureBackup(
+        tmp,
+        name: 'downloads-match.tachibk',
+        sources: const <FixtureSource>[FixtureSource(id: 1, name: 'Example')],
+        mangas: const <FixtureManga>[
+          FixtureManga(
+            source: 1,
+            url: '/manga/x',
+            title: 'X',
+            favorite: false,
+            chapters: <FixtureChapter>[
+              FixtureChapter(url: '/c/1', name: 'C1'),
+              FixtureChapter(url: '/c/2', name: 'C2'),
+            ],
+          ),
+        ],
+      );
+      final MihonBackupImportReport report = await service(
+        downloadsRoot: downloadsRoot,
+        localComicRoot: localComicRoot,
+      ).importFile(backup);
+
+      expect(report.nonLibraryEntriesImported, 1);
+      expect(report.downloadMangaMatched, 1);
+      expect(report.downloadMangaSkipped, 0);
+      expect(report.downloadChaptersRelinked, 2);
+
+      final EpubBookRow row = (await db.getAllEpubBooks()).single;
+      expect(p.equals(row.extractDir, mangaDir.path), isTrue);
+      final Map<String, MangaChapterDirRow> mappings = await db
+          .getMangaChapterDirRowsForBook(row.bookKey);
+      expect(mappings.keys, <String>{'/c/1', '/c/2'});
+      expect(mappings['/c/1']!.folderName, 'Ch 1');
+      expect(mappings['/c/2']!.folderName, 'Ch 2');
+      // The existing folder is reused: no `(2)` copy is created.
+      expect(
+        [
+          for (final FileSystemEntity entity in await Directory(
+            p.join(downloadsRoot.path, 'Example'),
+          ).list().toList())
+            p.basename(entity.path),
+        ],
+        <String>['X'],
+      );
+      // Auto re-link never creates a Library/shelf entry.
+      expect(await db.getLibraryEpubBooks(), isEmpty);
+    },
+  );
+
+  test('auto-relinks two same-title works sharing one download folder', () async {
+    final Directory downloadsRoot = Directory(p.join(tmp.path, 'downloads'));
+    final Directory localComicRoot = Directory(p.join(tmp.path, 'local'));
+    final Directory shared = Directory(
+      p.join(downloadsRoot.path, 'Example', 'Same title'),
+    );
+    // 两章同住一个文件夹。探针读到第一份 manifest（A）后，还必须因为 B 与
+    // 它同标题而继续读，才能让两部作品都命中共享文件夹。
+    await writeChapter(
+      shared,
+      'A Ch 1',
+      chapterKey: '/c/a1',
+      mangaKey: '/manga/x',
+      mangaTitle: 'Same title',
+    );
+    await writeChapter(
+      shared,
+      'B Ch 1',
+      chapterKey: '/c/b1',
+      mangaKey: '/manga/y',
+      mangaTitle: 'Same title',
+    );
+
+    final File backup = await writeFixtureBackup(
+      tmp,
+      name: 'shared-folder.tachibk',
+      sources: const <FixtureSource>[FixtureSource(id: 1, name: 'Example')],
+      mangas: const <FixtureManga>[
+        FixtureManga(
+          source: 1,
+          url: '/manga/x',
+          title: 'Same title',
+          favorite: false,
+          chapters: <FixtureChapter>[
+            FixtureChapter(url: '/c/a1', name: 'A 1'),
+          ],
+        ),
+        FixtureManga(
+          source: 1,
+          url: '/manga/y',
+          title: 'Same title',
+          favorite: false,
+          chapters: <FixtureChapter>[
+            FixtureChapter(url: '/c/b1', name: 'B 1'),
+          ],
+        ),
+      ],
+    );
+    final MihonBackupImportReport report = await service(
+      downloadsRoot: downloadsRoot,
+      localComicRoot: localComicRoot,
+    ).importFile(backup);
+
+    expect(report.downloadMangaMatched, 2);
+    expect(report.downloadMangaSkipped, 0);
+    expect(report.downloadChaptersRelinked, 2);
+
+    final List<EpubBookRow> rows = await db.getAllEpubBooks();
+    expect(rows, hasLength(2));
+    final EpubBookRow aRow = rows.firstWhere((EpubBookRow row) {
+      final OnlineMangaLibraryEntry entry = OnlineMangaLibraryEntry.tryParse(
+        row.sourceMetadata,
+      )!;
+      return entry.series.key == '/manga/x';
+    });
+    final EpubBookRow bRow = rows.firstWhere((EpubBookRow row) {
+      final OnlineMangaLibraryEntry entry = OnlineMangaLibraryEntry.tryParse(
+        row.sourceMetadata,
+      )!;
+      return entry.series.key == '/manga/y';
+    });
+    expect(p.equals(aRow.extractDir, shared.path), isTrue);
+    expect(p.equals(bRow.extractDir, shared.path), isTrue);
+
+    final Map<String, MangaChapterDirRow> aMappings =
+        await db.getMangaChapterDirRowsForBook(aRow.bookKey);
+    final Map<String, MangaChapterDirRow> bMappings =
+        await db.getMangaChapterDirRowsForBook(bRow.bookKey);
+    expect(aMappings.keys, <String>{'/c/a1'});
+    expect(aMappings['/c/a1']!.folderName, 'A Ch 1');
+    expect(bMappings.keys, <String>{'/c/b1'});
+    expect(bMappings['/c/b1']!.folderName, 'B Ch 1');
+    expect(
+      Directory(p.join(downloadsRoot.path, 'Example', 'Same title (2)'))
+          .existsSync(),
+      isFalse,
+      reason: '同名共享目录不应生成 (2) 副本',
+    );
+  });
+
+  test('re-import keeps auto-linked downloads idempotent', () async {
+    final Directory downloadsRoot = Directory(p.join(tmp.path, 'downloads'));
+    final Directory localComicRoot = Directory(p.join(tmp.path, 'local'));
+    final Directory mangaDir = Directory(
+      p.join(downloadsRoot.path, 'Example', 'X'),
+    );
+    await writeChapter(mangaDir, 'Ch 1', chapterKey: '/c/1');
+    await writeChapter(mangaDir, 'Ch 2', chapterKey: '/c/2');
+
+    final File backup = await writeFixtureBackup(
+      tmp,
+      name: 'downloads-idempotent.tachibk',
+      sources: const <FixtureSource>[FixtureSource(id: 1, name: 'Example')],
+      mangas: const <FixtureManga>[
+        FixtureManga(
+          source: 1,
+          url: '/manga/x',
+          title: 'X',
+          favorite: false,
+          chapters: <FixtureChapter>[
+            FixtureChapter(url: '/c/1', name: 'C1'),
+            FixtureChapter(url: '/c/2', name: 'C2'),
+          ],
+        ),
+      ],
+    );
+    final MihonBackupImportService importService = service(
+      downloadsRoot: downloadsRoot,
+      localComicRoot: localComicRoot,
+    );
+
+    final MihonBackupImportReport first = await importService.importFile(
+      backup,
+    );
+    expect(first.downloadChaptersRelinked, 2);
+    final EpubBookRow row = (await db.getAllEpubBooks()).single;
+    final Map<String, MangaChapterDirRow> firstMappings = await db
+        .getMangaChapterDirRowsForBook(row.bookKey);
+
+    final MihonBackupImportReport second = await importService.importFile(
+      backup,
+    );
+    expect(second.nonLibraryEntriesImported, 0);
+    expect(second.nonLibraryEntriesMerged, 1);
+    expect(second.downloadMangaMatched, 1);
+    expect(second.downloadChaptersRelinked, 0, reason: '已有相同映射时重复导入不应重写');
+
+    final List<EpubBookRow> rows = await db.getAllEpubBooks();
+    expect(rows, hasLength(1));
+    final Map<String, MangaChapterDirRow> secondMappings = await db
+        .getMangaChapterDirRowsForBook(row.bookKey);
+    expect(secondMappings.length, firstMappings.length);
+    for (final String chapterKey in <String>['/c/1', '/c/2']) {
+      expect(
+        secondMappings[chapterKey]!.folderName,
+        firstMappings[chapterKey]!.folderName,
+      );
+      expect(
+        secondMappings[chapterKey]!.containerKind,
+        firstMappings[chapterKey]!.containerKind,
+      );
+    }
+  });
+
+  test(
+    'auto-relinks a local folder whose pages.json proves the identity',
+    () async {
+      final Directory downloadsRoot = Directory(p.join(tmp.path, 'downloads'));
+      final Directory localComicRoot = Directory(p.join(tmp.path, 'local'));
+      final Directory mangaDir = Directory(p.join(localComicRoot.path, 'Y'));
+      await writeChapter(
+        mangaDir,
+        'Ch 1',
+        chapterKey: '/c/1',
+        mangaKey: '/manga/y',
+      );
+      await writeChapter(
+        mangaDir,
+        'Ch 2',
+        chapterKey: '/c/2',
+        mangaKey: '/manga/y',
+      );
+
+      final File backup = await writeFixtureBackup(
+        tmp,
+        name: 'local-match.tachibk',
+        sources: const <FixtureSource>[FixtureSource(id: 1, name: 'Example')],
+        mangas: const <FixtureManga>[
+          FixtureManga(
+            source: 1,
+            url: '/manga/y',
+            title: 'Y',
+            favorite: false,
+            chapters: <FixtureChapter>[
+              FixtureChapter(url: '/c/1', name: 'C1'),
+              FixtureChapter(url: '/c/2', name: 'C2'),
+            ],
+          ),
+        ],
+      );
+      final MihonBackupImportReport report = await service(
+        downloadsRoot: downloadsRoot,
+        localComicRoot: localComicRoot,
+      ).importFile(backup);
+
+      expect(report.downloadMangaMatched, 1);
+      expect(report.downloadMangaSkipped, 0);
+      expect(report.downloadChaptersRelinked, 2);
+
+      final EpubBookRow row = (await db.getAllEpubBooks()).single;
+      expect(p.equals(row.extractDir, mangaDir.path), isTrue);
+      final Map<String, MangaChapterDirRow> mappings = await db
+          .getMangaChapterDirRowsForBook(row.bookKey);
+      expect(mappings.keys, <String>{'/c/1', '/c/2'});
+      expect(mappings['/c/1']!.folderName, 'Ch 1');
+      expect(mappings['/c/2']!.folderName, 'Ch 2');
+      expect(await db.getLibraryEpubBooks(), isEmpty);
+    },
+  );
+
+  test('does not match local folders without a manifest by title', () async {
+    final Directory downloadsRoot = Directory(p.join(tmp.path, 'downloads'));
+    final Directory localComicRoot = Directory(p.join(tmp.path, 'local'));
+    // Same title as the backup entry, but no pages.json proves the identity.
+    final Directory chapterDir = Directory(
+      p.join(localComicRoot.path, 'X', 'Ch 1'),
+    );
+    await chapterDir.create(recursive: true);
+    await File(p.join(chapterDir.path, '001.jpg')).writeAsString('page');
+
+    final File backup = await writeFixtureBackup(
+      tmp,
+      name: 'local-no-manifest.tachibk',
+      sources: const <FixtureSource>[FixtureSource(id: 1, name: 'Example')],
+      mangas: const <FixtureManga>[
+        FixtureManga(
+          source: 1,
+          url: '/manga/x',
+          title: 'X',
+          favorite: false,
+          chapters: <FixtureChapter>[FixtureChapter(url: '/c/1', name: 'C1')],
+        ),
+      ],
+    );
+    final MihonBackupImportReport report = await service(
+      downloadsRoot: downloadsRoot,
+      localComicRoot: localComicRoot,
+    ).importFile(backup);
+
+    expect(report.downloadMangaMatched, 0);
+    expect(report.downloadMangaSkipped, 0);
+    expect(report.downloadChaptersRelinked, 0);
+
+    final EpubBookRow row = (await db.getAllEpubBooks()).single;
+    expect(p.isWithin(localComicRoot.path, row.extractDir), isFalse);
+    expect(
+      await db.getMangaChapterDirRowsForBook(row.bookKey),
+      isEmpty,
+      reason: '没有 manifest 的本地目录不按标题猜测关联',
+    );
+  });
+
+  test(
+    'auto-relinks a single-chapter local folder with root pages.json without a fake mapping',
+    () async {
+      final Directory downloadsRoot = Directory(p.join(tmp.path, 'downloads'));
+      final Directory localComicRoot = Directory(p.join(tmp.path, 'local'));
+      final Directory mangaDir = Directory(
+        p.join(localComicRoot.path, 'Single chapter'),
+      );
+      await mangaDir.create(recursive: true);
+      await File(p.join(mangaDir.path, '001.jpg')).writeAsString('page');
+      // Single-chapter local works keep pages.json at the manga folder root.
+      await writePagesManifestAtomically(
+        mangaDir,
+        manifestFor('/c/1', 'C1', mangaKey: '/manga/x'),
+      );
+
+      final File backup = await writeFixtureBackup(
+        tmp,
+        name: 'local-root-manifest.tachibk',
+        sources: const <FixtureSource>[FixtureSource(id: 1, name: 'Example')],
+        mangas: const <FixtureManga>[
+          FixtureManga(
+            source: 1,
+            url: '/manga/x',
+            title: 'X',
+            favorite: false,
+            chapters: <FixtureChapter>[FixtureChapter(url: '/c/1', name: 'C1')],
+          ),
+        ],
+      );
+      final MihonBackupImportReport report = await service(
+        downloadsRoot: downloadsRoot,
+        localComicRoot: localComicRoot,
+      ).importFile(backup);
+
+      expect(report.downloadMangaMatched, 1, reason: '根 manifest 证明身份即算匹配');
+      expect(
+        report.downloadChaptersRelinked,
+        0,
+        reason: '根 manifest 不是章容器，不能计为已写入映射',
+      );
+      final EpubBookRow row = (await db.getAllEpubBooks()).single;
+      expect(p.equals(row.extractDir, mangaDir.path), isTrue);
+      expect(
+        await db.getMangaChapterDirRowsForBook(row.bookKey),
+        isEmpty,
+        reason: '不能写 <manga>/<manga> 这种不可用的章映射',
+      );
+    },
+  );
+
+  test(
+    'skips when downloads and local each prove the same identity (no silent preference)',
+    () async {
+      final Directory downloadsRoot = Directory(p.join(tmp.path, 'downloads'));
+      final Directory localComicRoot = Directory(p.join(tmp.path, 'local'));
+      await writeChapter(
+        Directory(p.join(downloadsRoot.path, 'Example', 'X')),
+        'Ch 1',
+        chapterKey: '/c/1',
+      );
+      await writeChapter(
+        Directory(p.join(localComicRoot.path, 'Y')),
+        'Ch 1',
+        chapterKey: '/c/1',
+      );
+
+      final File backup = await writeFixtureBackup(
+        tmp,
+        name: 'ambiguous-two-roots.tachibk',
+        sources: const <FixtureSource>[FixtureSource(id: 1, name: 'Example')],
+        mangas: const <FixtureManga>[
+          FixtureManga(
+            source: 1,
+            url: '/manga/x',
+            title: 'X',
+            favorite: false,
+            chapters: <FixtureChapter>[FixtureChapter(url: '/c/1', name: 'C1')],
+          ),
+        ],
+      );
+      final MihonBackupImportReport report = await service(
+        downloadsRoot: downloadsRoot,
+        localComicRoot: localComicRoot,
+      ).importFile(backup);
+
+      expect(report.downloadMangaMatched, 0);
+      expect(
+        report.downloadMangaSkipped,
+        1,
+        reason: '两个根各有一个匹配目录 = 歧义，必须跳过而不是偏向 downloads',
+      );
+      final EpubBookRow row = (await db.getAllEpubBooks()).single;
+      expect(
+        await db.getMangaChapterDirRowsForBook(row.bookKey),
+        isEmpty,
+        reason: '歧义时不写任何映射',
+      );
+      expect(
+        p.isWithin(downloadsRoot.path, row.extractDir),
+        isFalse,
+        reason: '歧义时不改指 extractDir',
+      );
+      expect(p.isWithin(localComicRoot.path, row.extractDir), isFalse);
+    },
+  );
+
+  test('skips when several folders prove the same download identity', () async {
+    final Directory downloadsRoot = Directory(p.join(tmp.path, 'downloads'));
+    final Directory localComicRoot = Directory(p.join(tmp.path, 'local'));
+    final Directory first = Directory(
+      p.join(downloadsRoot.path, 'Example', 'X'),
+    );
+    final Directory second = Directory(
+      p.join(downloadsRoot.path, 'Example', 'X (2)'),
+    );
+    await writeChapter(first, 'Ch 1', chapterKey: '/c/1');
+    await writeChapter(second, 'Ch 1', chapterKey: '/c/1');
+
+    final File backup = await writeFixtureBackup(
+      tmp,
+      name: 'ambiguous-downloads.tachibk',
+      sources: const <FixtureSource>[FixtureSource(id: 1, name: 'Example')],
+      mangas: const <FixtureManga>[
+        FixtureManga(
+          source: 1,
+          url: '/manga/x',
+          title: 'X',
+          favorite: false,
+          chapters: <FixtureChapter>[FixtureChapter(url: '/c/1', name: 'C1')],
+        ),
+      ],
+    );
+    final MihonBackupImportReport report = await service(
+      downloadsRoot: downloadsRoot,
+      localComicRoot: localComicRoot,
+    ).importFile(backup);
+
+    expect(report.downloadMangaMatched, 0);
+    expect(report.downloadMangaSkipped, 1);
+    expect(report.downloadChaptersRelinked, 0);
+
+    final EpubBookRow row = (await db.getAllEpubBooks()).single;
+    expect(
+      await db.getMangaChapterDirRowsForBook(row.bookKey),
+      isEmpty,
+      reason: '多个候选目录时不得猜一个',
+    );
+  });
+
+  test('relinks library entries as well, without adding extra rows', () async {
+    final Directory downloadsRoot = Directory(p.join(tmp.path, 'downloads'));
+    final Directory localComicRoot = Directory(p.join(tmp.path, 'local'));
+    final Directory mangaDir = Directory(
+      p.join(downloadsRoot.path, 'Example', 'X'),
+    );
+    await writeChapter(mangaDir, 'Ch 1', chapterKey: '/c/1');
+
+    final File backup = await writeFixtureBackup(
+      tmp,
+      name: 'library-downloads-match.tachibk',
+      sources: const <FixtureSource>[FixtureSource(id: 1, name: 'Example')],
+      mangas: const <FixtureManga>[
+        FixtureManga(
+          source: 1,
+          url: '/manga/x',
+          title: 'X',
+          chapters: <FixtureChapter>[FixtureChapter(url: '/c/1', name: 'C1')],
+        ),
+      ],
+    );
+    final MihonBackupImportReport report = await service(
+      downloadsRoot: downloadsRoot,
+      localComicRoot: localComicRoot,
+    ).importFile(backup);
+
+    expect(report.importedEntries, 1);
+    expect(report.downloadMangaMatched, 1);
+    expect(report.downloadChaptersRelinked, 1);
+    // Exactly the imported Library row; auto-matching never inserts another.
+    expect(await db.getLibraryEpubBooks(), hasLength(1));
+    final EpubBookRow row = (await db.getAllEpubBooks()).single;
+    expect(p.equals(row.extractDir, mangaDir.path), isTrue);
+  });
+
+  test('accepts an empty backup', () async {
     final File empty = await writeFixtureBackup(
       tmp,
       mangas: const <FixtureManga>[],
@@ -485,7 +1483,78 @@ void main() {
     expect(position!.updatedAt, 1700000009000);
   });
 
-  test('imports history into media_open_history', () async {
+  test(
+    'persists Mihon sourceOrder on imported chapters and chapter JSON',
+    () async {
+      final File backup = await writeFixtureBackup(
+        tmp,
+        sources: const <FixtureSource>[
+          FixtureSource(id: 123, name: 'Source A'),
+        ],
+        mangas: const <FixtureManga>[
+          FixtureManga(
+            source: 123,
+            url: '/manga/alpha',
+            title: 'Alpha',
+            // 备份的章数组顺序不保证是「最新在前」；顺序只信 sourceOrder。
+            chapters: <FixtureChapter>[
+              FixtureChapter(
+                url: '/chapter/a1',
+                name: 'Chapter 1',
+                chapterNumber: 1,
+                sourceOrder: 2,
+              ),
+              FixtureChapter(
+                url: '/chapter/a2',
+                name: 'Chapter 2',
+                chapterNumber: 2,
+                sourceOrder: 1,
+              ),
+              FixtureChapter(
+                url: '/chapter/a3',
+                name: 'Chapter 3',
+                chapterNumber: 3,
+                sourceOrder: 0,
+              ),
+            ],
+          ),
+        ],
+      );
+
+      final MihonBackupImportReport report = await service().importFile(backup);
+      expect(report.importedEntries, 1);
+
+      final EpubBookMeta meta = (await db.getEpubBookMetas()).single;
+      final EpubBookRow book = (await db.getEpubBook(meta.bookKey))!;
+      final OnlineMangaLibraryEntry entry = OnlineMangaLibraryEntry.tryParse(
+        book.sourceMetadata,
+      )!;
+      expect(
+        <String, int?>{
+          for (final OnlineMangaChapter chapter in entry.chapters)
+            chapter.key: chapter.sourceOrder,
+        },
+        <String, int?>{'/chapter/a1': 2, '/chapter/a2': 1, '/chapter/a3': 0},
+      );
+      expect(entry.chapters.map((OnlineMangaChapter c) => c.key), <String>[
+        '/chapter/a1',
+        '/chapter/a2',
+        '/chapter/a3',
+      ], reason: '导入保留备份数组顺序，排序由阅读/显示各自按 sourceOrder 做');
+
+      final List<Object?> chapterJson =
+          jsonDecode(book.chaptersJson) as List<Object?>;
+      expect(
+        chapterJson.map(
+          (Object? item) => (item! as Map<String, Object?>)['sourceOrder'],
+        ),
+        <Object?>[2, 1, 0],
+        reason: 'chaptersJson 与 sourceMetadata 必须同时带上 sourceOrder',
+      );
+    },
+  );
+
+  test('imported chapter order drives 1 → 2 → 3 reader switching', () async {
     final File backup = await writeFixtureBackup(
       tmp,
       sources: const <FixtureSource>[FixtureSource(id: 123, name: 'Source A')],
@@ -494,21 +1563,299 @@ void main() {
           source: 123,
           url: '/manga/alpha',
           title: 'Alpha',
-          author: 'Author A',
+          // 旧→新存储，sourceOrder 反着给（0 = 最新一话）。
           chapters: <FixtureChapter>[
-            FixtureChapter(url: '/chapter/a1', name: 'Chapter 1'),
-            FixtureChapter(url: '/chapter/a2', name: 'Chapter 2'),
+            FixtureChapter(
+              url: '/chapter/a1',
+              name: 'Chapter 1',
+              chapterNumber: 1,
+              sourceOrder: 2,
+            ),
+            FixtureChapter(
+              url: '/chapter/a2',
+              name: 'Chapter 2',
+              chapterNumber: 2,
+              sourceOrder: 1,
+            ),
+            FixtureChapter(
+              url: '/chapter/a3',
+              name: 'Chapter 3',
+              chapterNumber: 3,
+              sourceOrder: 0,
+            ),
+          ],
+        ),
+      ],
+    );
+
+    await service().importFile(backup);
+    final EpubBookMeta meta = (await db.getEpubBookMetas()).single;
+    final OnlineMangaLibraryEntry entry = OnlineMangaLibraryEntry.tryParse(
+      (await db.getEpubBook(meta.bookKey))!.sourceMetadata,
+    )!;
+    final int a1 = entry.indexOfChapterKey('/chapter/a1');
+    final int a2 = entry.indexOfChapterKey('/chapter/a2');
+    final int a3 = entry.indexOfChapterKey('/chapter/a3');
+
+    expect(
+      resolveAdjacentMangaChapter(
+        chapters: entry.chapters,
+        currentIndex: a1,
+        forward: true,
+      ),
+      a2,
+      reason: '读完第 1 话进入第 2 话',
+    );
+    expect(
+      resolveAdjacentMangaChapter(
+        chapters: entry.chapters,
+        currentIndex: a2,
+        forward: true,
+      ),
+      a3,
+      reason: '第 2 话进入第 3 话',
+    );
+    expect(
+      resolveAdjacentMangaChapter(
+        chapters: entry.chapters,
+        currentIndex: a3,
+        forward: true,
+      ),
+      isNull,
+      reason: '只有真正最后一话才提示「已经是最新一章」',
+    );
+    expect(
+      resolveAdjacentMangaChapter(
+        chapters: entry.chapters,
+        currentIndex: a2,
+        forward: false,
+      ),
+      a1,
+      reason: '往回翻进入上一话',
+    );
+  });
+
+  test(
+    're-import fills sourceOrder on existing chapters idempotently',
+    () async {
+      // 旧版本导入留下的描述符：章节没有 sourceOrder 字段。
+      final OnlineMangaLibraryEntry legacy = OnlineMangaLibraryEntry(
+        runtime: OnlineMangaRuntimeKind.mihon,
+        extensionPackage: kUnavailableMihonExtensionPackage,
+        sourceId: '123',
+        series: const OnlineMangaSeries(
+          key: '/manga/alpha',
+          title: 'Alpha',
+          raw: <String, Object?>{'url': '/manga/alpha'},
+        ),
+        chapters: const <OnlineMangaChapter>[
+          OnlineMangaChapter(
+            key: '/chapter/a1',
+            name: 'Chapter 1',
+            number: 1,
+            raw: <String, Object?>{'url': '/chapter/a1'},
+          ),
+        ],
+      );
+      final String bookKey = onlineMangaBookKeyFor(
+        runtime: OnlineMangaRuntimeKind.mihon,
+        extensionPackage: kUnavailableMihonExtensionPackage,
+        sourceId: '123',
+        seriesKey: '/manga/alpha',
+      );
+      await db.insertEpubBook(
+        EpubBooksCompanion.insert(
+          bookKey: bookKey,
+          title: 'Alpha',
+          epubPath: 'manga.json',
+          extractDir: p.join(tmp.path, 'books', bookKey),
+          chapterCount: 1,
+          chaptersJson: jsonEncode(<Map<String, Object?>>[
+            for (final OnlineMangaChapter chapter in legacy.chapters)
+              chapter.toJson(),
+          ]),
+          sourceMetadata: Value<String>(legacy.encode()),
+          importedAt: 1,
+          format: const Value<String>('manga'),
+        ),
+      );
+
+      final File backup = await writeFixtureBackup(
+        tmp,
+        sources: const <FixtureSource>[
+          FixtureSource(id: 123, name: 'Source A'),
+        ],
+        mangas: const <FixtureManga>[
+          FixtureManga(
+            source: 123,
+            url: '/manga/alpha',
+            title: 'Alpha',
+            chapters: <FixtureChapter>[
+              FixtureChapter(
+                url: '/chapter/a1',
+                name: 'Chapter 1',
+                chapterNumber: 1,
+                sourceOrder: 1,
+              ),
+              FixtureChapter(
+                url: '/chapter/a2',
+                name: 'Chapter 2',
+                chapterNumber: 2,
+                sourceOrder: 0,
+              ),
+            ],
+          ),
+        ],
+      );
+
+      final MihonBackupImportReport first = await service().importFile(backup);
+      expect(first.importedEntries, 0);
+      expect(first.mergedEntries, 1);
+      expect(await db.getAllEpubBooks(), hasLength(1));
+
+      Future<OnlineMangaLibraryEntry> stored() async =>
+          OnlineMangaLibraryEntry.tryParse(
+            ((await db.getEpubBook(bookKey))!).sourceMetadata,
+          )!;
+      expect(
+        <String, int?>{
+          for (final OnlineMangaChapter chapter in (await stored()).chapters)
+            chapter.key: chapter.sourceOrder,
+        },
+        <String, int?>{'/chapter/a1': 1, '/chapter/a2': 0},
+        reason: '已有章节补齐 sourceOrder，备份新增章节也带上',
+      );
+      final String chapterJsonAfterFirst = (await db.getEpubBook(
+        bookKey,
+      ))!.chaptersJson;
+      expect(chapterJsonAfterFirst, contains('"sourceOrder":1'));
+      expect(chapterJsonAfterFirst, contains('"sourceOrder":0'));
+
+      final MihonBackupImportReport second = await service().importFile(backup);
+      expect(second.importedEntries, 0);
+      expect(second.mergedEntries, 1);
+      expect(await db.getAllEpubBooks(), hasLength(1));
+      expect((await stored()).chapters, hasLength(2));
+      expect(
+        <String, int?>{
+          for (final OnlineMangaChapter chapter in (await stored()).chapters)
+            chapter.key: chapter.sourceOrder,
+        },
+        <String, int?>{'/chapter/a1': 1, '/chapter/a2': 0},
+        reason: '重复导入不重复建行、不改变已补齐的顺序',
+      );
+    },
+  );
+
+  test(
+    'imports history with the canonical online identity and snapshot',
+    () async {
+      final File backup = await writeFixtureBackup(
+        tmp,
+        sources: const <FixtureSource>[
+          FixtureSource(id: 123, name: 'Source A'),
+        ],
+        mangas: const <FixtureManga>[
+          FixtureManga(
+            source: 123,
+            url: '/manga/alpha',
+            title: 'Alpha',
+            author: 'Author A',
+            thumbnailUrl: 'https://example.test/alpha.jpg',
+            chapters: <FixtureChapter>[
+              FixtureChapter(url: '/chapter/a1', name: 'Chapter 1'),
+              FixtureChapter(url: '/chapter/a2', name: 'Chapter 2'),
+            ],
+            history: <FixtureHistory>[
+              FixtureHistory(
+                url: '/chapter/a1',
+                lastRead: 1700000001000,
+                readDuration: 1000,
+              ),
+              FixtureHistory(
+                url: '/chapter/a2',
+                lastRead: 1700000009000,
+                readDuration: 5000,
+              ),
+            ],
+          ),
+        ],
+      );
+
+      final MihonBackupImportReport report = await service().importFile(backup);
+      expect(report.historyRowsWritten, 1);
+
+      final EpubBookMeta meta = (await db.getEpubBookMetas()).single;
+      final EpubBookRow book = (await db.getEpubBook(meta.bookKey))!;
+      final OnlineMangaLibraryEntry entry = OnlineMangaLibraryEntry.tryParse(
+        book.sourceMetadata,
+      )!;
+      final List<MediaOpenHistoryRow> history = await db
+          .getAllMediaOpenHistory();
+      expect(history, hasLength(1));
+      final MediaOpenHistoryRow row = history.single;
+      expect(row.mediaType, 'reader_media_type');
+      // History identity is the same stable online identity the reader writes:
+      // it survives leaving/rejoining the shelf and extension-package changes.
+      expect(row.mediaSource, mangaHistoryOnlineSourceKey(entry));
+      expect(row.mediaId, '/manga/alpha');
+      expect(row.openedAt, 1700000009000);
+      expect(row.duration, 2);
+      expect(row.position, 1);
+      final Map<String, Object?> snapshot =
+          (jsonDecode(row.snapshotJson) as Map<Object?, Object?>)
+              .cast<String, Object?>();
+      expect(snapshot['title'], 'Alpha');
+      expect(snapshot['author'], 'Author A');
+      expect(snapshot['imageUrl'], 'https://example.test/alpha.jpg');
+      final Map<String, Object?> marker =
+          (snapshot['mangaHistory'] as Map<Object?, Object?>)
+              .cast<String, Object?>();
+      expect(marker['kind'], 'manga-history');
+      expect(marker['bookKey'], book.bookKey);
+      final Map<String, Object?> online =
+          (marker['online'] as Map<Object?, Object?>).cast<String, Object?>();
+      expect(online['runtime'], 'mihon');
+      expect(online['sourceId'], '123');
+      expect(online['seriesKey'], '/manga/alpha');
+      expect(online['coverUrl'], 'https://example.test/alpha.jpg');
+      final Map<String, Object?> mihonHistory =
+          (snapshot['mihon_history'] as Map<Object?, Object?>)
+              .cast<String, Object?>();
+      expect(mihonHistory['chapter_url'], '/chapter/a2');
+      expect(mihonHistory['read_duration'], 5000);
+
+      // Re-import refreshes the same recent-history row instead of duplicating it.
+      await service().importFile(backup);
+      expect(await db.getAllMediaOpenHistory(), hasLength(1));
+    },
+  );
+
+  test('restores read-only works as non-library rows with History', () async {
+    final File backup = await writeFixtureBackup(
+      tmp,
+      sources: const <FixtureSource>[FixtureSource(id: 456, name: 'Source B')],
+      mangas: const <FixtureManga>[
+        FixtureManga(
+          source: 456,
+          url: '/manga/beta',
+          title: 'Beta',
+          author: 'Author B',
+          thumbnailUrl: 'https://example.test/beta.jpg',
+          favorite: false,
+          chapters: <FixtureChapter>[
+            FixtureChapter(
+              url: '/chapter/b1',
+              name: 'Chapter 1',
+              read: true,
+              lastPageRead: 4,
+            ),
           ],
           history: <FixtureHistory>[
             FixtureHistory(
-              url: '/chapter/a1',
-              lastRead: 1700000001000,
-              readDuration: 1000,
-            ),
-            FixtureHistory(
-              url: '/chapter/a2',
-              lastRead: 1700000009000,
-              readDuration: 5000,
+              url: '/chapter/b1',
+              lastRead: 1700000099000,
+              readDuration: 12000,
             ),
           ],
         ),
@@ -516,33 +1863,118 @@ void main() {
     );
 
     final MihonBackupImportReport report = await service().importFile(backup);
-    expect(report.historyRowsWritten, 1);
 
-    final EpubBookMeta meta = (await db.getEpubBookMetas()).single;
-    final EpubBookRow book = (await db.getEpubBook(meta.bookKey))!;
-    final List<MediaOpenHistoryRow> history = await db.getAllMediaOpenHistory();
-    expect(history, hasLength(1));
-    final MediaOpenHistoryRow row = history.single;
-    expect(row.mediaType, 'reader_media_type');
-    expect(row.mediaSource, 'reader_manga');
-    expect(row.mediaId, 'fushi://book/${book.bookKey}');
-    expect(row.openedAt, 1700000009000);
-    expect(row.duration, 2);
-    expect(row.position, 1);
+    expect(report.importedEntries, 0);
+    expect(report.nonLibraryEntriesImported, 1);
+    expect(report.skippedEntries, 0);
+    expect(report.nonLibraryHistoryImported, 1);
+    expect(await db.getLibraryEpubBooks(), isEmpty);
+    final EpubBookRow row = (await db.getAllEpubBooks()).single;
+    expect(row.inLibrary, isFalse);
+
+    // The restored row is visible on the History page and keeps the metadata
+    // needed to reopen the work's source page.
+    final List<MangaHistoryEntry> entries = await loadMangaHistory(db);
+    expect(entries, hasLength(1));
+    final MangaHistoryEntry entry = entries.single;
+    expect(entry.title, 'Beta');
+    expect(entry.openedAt, 1700000099000);
+    expect(entry.bookKey, row.bookKey);
+    expect(entry.mediaId, '/manga/beta');
+    expect(entry.coverUrl, 'https://example.test/beta.jpg');
+    expect(entry.snapshot!.author, 'Author B');
+    expect(entry.online, isNotNull);
+    expect(entry.online!.runtime, OnlineMangaRuntimeKind.mihon);
+    expect(entry.online!.sourceId, '456');
+    expect(entry.online!.seriesKey, '/manga/beta');
+    expect(
+      entry.mediaSource,
+      mangaHistoryOnlineSourceKey(
+        OnlineMangaLibraryEntry.tryParse(row.sourceMetadata)!,
+      ),
+    );
+
+    final MediaOpenHistoryRow historyRow =
+        (await db.getAllMediaOpenHistory()).single;
     final Map<String, Object?> snapshot =
-        (jsonDecode(row.snapshotJson) as Map<Object?, Object?>)
+        (jsonDecode(historyRow.snapshotJson) as Map<Object?, Object?>)
             .cast<String, Object?>();
-    expect(snapshot['title'], 'Alpha');
-    expect(snapshot['author'], 'Author A');
+    final Map<String, Object?> marker =
+        (snapshot['mangaHistory'] as Map<Object?, Object?>)
+            .cast<String, Object?>();
+    expect(marker['kind'], 'manga-history');
+    expect(marker['bookKey'], row.bookKey);
     final Map<String, Object?> mihonHistory =
         (snapshot['mihon_history'] as Map<Object?, Object?>)
             .cast<String, Object?>();
-    expect(mihonHistory['chapter_url'], '/chapter/a2');
-    expect(mihonHistory['read_duration'], 5000);
+    expect(mihonHistory['chapter_url'], '/chapter/b1');
+    expect(mihonHistory['read_at'], 1700000099000);
+    expect(mihonHistory['read_duration'], 12000);
 
-    // Re-import refreshes the same recent-history row instead of duplicating it.
-    await service().importFile(backup);
+    // Merge semantics: importing the same backup again keeps one row.
+    final MihonBackupImportReport second = await service().importFile(backup);
+    expect(second.nonLibraryEntriesImported, 0);
+    expect(second.nonLibraryEntriesMerged, 1);
+    expect(second.nonLibraryHistoryImported, 0);
+    expect(
+      second.nonLibraryHistorySkippedByReason[MihonBackupHistorySkipReason
+          .alreadyNewer],
+      1,
+    );
     expect(await db.getAllMediaOpenHistory(), hasLength(1));
+    expect(await db.getAllEpubBooks(), hasLength(1));
+  });
+
+  test('reports why read-only works restore no History', () async {
+    final File backup = await writeFixtureBackup(
+      tmp,
+      sources: const <FixtureSource>[FixtureSource(id: 456, name: 'Source B')],
+      mangas: const <FixtureManga>[
+        // Read state without a History row: no read timestamp to restore.
+        FixtureManga(
+          source: 456,
+          url: '/manga/no-history',
+          title: 'No History',
+          favorite: false,
+          chapters: <FixtureChapter>[
+            FixtureChapter(url: '/chapter/n1', name: 'Chapter 1', read: true),
+          ],
+        ),
+        // History without a manga URL: nothing to attach it to.
+        FixtureManga(
+          source: 456,
+          url: '   ',
+          title: 'No URL',
+          favorite: false,
+          history: <FixtureHistory>[
+            FixtureHistory(url: '/chapter/u1', lastRead: 1700000088000),
+          ],
+        ),
+      ],
+    );
+
+    final MihonBackupImportReport report = await service().importFile(backup);
+
+    expect(report.nonLibraryHistoryImported, 0);
+    expect(report.nonLibraryEntriesImported, 1);
+    expect(report.failedEntries, 1);
+    expect(report.failedByReason[MihonBackupFailureReason.missingUrl], 1);
+    expect(
+      report.nonLibraryHistorySkippedByReason[MihonBackupHistorySkipReason
+          .noHistory],
+      1,
+    );
+    expect(
+      report.nonLibraryHistorySkippedByReason[MihonBackupHistorySkipReason
+          .missingUrl],
+      1,
+    );
+    expect(await db.getAllMediaOpenHistory(), isEmpty);
+    // The readable entry still becomes a non-library row; only the URL-less
+    // entry has no stable identity to persist.
+    final EpubBookRow row = (await db.getAllEpubBooks()).single;
+    expect(row.inLibrary, isFalse);
+    expect(row.title, 'No History');
   });
 
   test('imports Bangumi tracking and skips unsupported trackers', () async {

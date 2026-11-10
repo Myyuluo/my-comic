@@ -285,6 +285,10 @@ class MediaTrackingRepository {
         position.bookUid: position,
     };
     for (final EpubBookMeta book in await _db.getEpubBookMetas()) {
+      // Tracking is a Library-only feature (ADR 0020): non-library Manga may be
+      // read (and therefore have progress / History) but must not be suggested
+      // as a mapping target.
+      if (!book.inLibrary) continue;
       final ReaderPositionRow? position =
           book.uid.isEmpty ? null : positions[book.uid];
       final DateTime? completedAt = book.completedAt;

@@ -38,6 +38,10 @@ import 'package:fushi_engine/media/manga/local_source/local_source_layout.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_library.dart';
 
 import 'package:fushi/src/media/manga/download/chapter_container_on_disk.dart';
+import 'package:fushi/src/media/manga/download/download_identity.dart';
+import 'package:fushi/src/media/manga/download/download_library_changes.dart';
+import 'package:fushi/src/media/manga/download/download_library_scanner.dart';
+import 'package:fushi/src/media/manga/download/download_manga_relinker.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 
 /// 一次重建的进度快照。
@@ -79,10 +83,12 @@ class RebuildDownloadIndexReport {
     this.booksAddedOnline = 0,
     this.booksAddedLocal = 0,
     this.booksAddedLocalSourceMissing = 0,
+    this.booksMatched = 0,
     required this.booksRelinked,
     required this.booksMissing,
     required this.booksSkipped,
     this.booksSkippedTombstoned = 0,
+    this.booksAmbiguous = 0,
     this.chaptersAdded = 0,
     required this.chaptersRelinked,
     required this.chaptersMissing,
@@ -97,10 +103,12 @@ class RebuildDownloadIndexReport {
       booksAddedOnline = 0,
       booksAddedLocal = 0,
       booksAddedLocalSourceMissing = 0,
+      booksMatched = 0,
       booksRelinked = 0,
       booksMissing = 0,
       booksSkipped = 0,
       booksSkippedTombstoned = 0,
+      booksAmbiguous = 0,
       chaptersAdded = 0,
       chaptersRelinked = 0,
       chaptersMissing = 0,
@@ -124,6 +132,12 @@ class RebuildDownloadIndexReport {
   /// [booksAddedLocal] 中因为源未安装而降级的数量（指向 `downloads` 里的目录）。
   final int booksAddedLocalSourceMissing;
 
+  /// 在磁盘上找到对应文件夹（`pages.json` 身份或文件名回退）的书目数。
+  ///
+  /// 与 [booksRelinked] 不同：已经指向正确目录、没有需要改写记录的第二次重建
+  /// 也计为 matched。
+  final int booksMatched;
+
   /// `extractDir` 或章映射实际被更新的书目数。
   final int booksRelinked;
 
@@ -135,6 +149,9 @@ class RebuildDownloadIndexReport {
 
   /// [booksSkipped] 中因 `book_tombstones`（主动移出书架）而跳过的数量。
   final int booksSkippedTombstoned;
+
+  /// [booksSkipped] 中因为多个重复副本无法安全决定而跳过的数量。
+  final int booksAmbiguous;
 
   /// 新恢复条目里被标记/登记的章节数。
   final int chaptersAdded;
@@ -183,6 +200,20 @@ class RebuildDownloadIndexService {
     RebuildDownloadIndexCancelToken? cancelToken,
     void Function(RebuildDownloadIndexProgress progress)? onProgress,
   }) async {
+    try {
+      return await _run(cancelToken: cancelToken, onProgress: onProgress);
+    } finally {
+      // 票 12：完成后通知已打开的作品详情页重算已下载状态。异常 / 取消时也发：
+      // 已经写下的部分关联同样可能改变页面显示。
+      DownloadLibraryChanges.instance.notifyChanged();
+    }
+  }
+
+  /// 实际重建流程；[run] 负责在结束时广播「下载索引可能变了」。
+  Future<RebuildDownloadIndexReport> _run({
+    RebuildDownloadIndexCancelToken? cancelToken,
+    void Function(RebuildDownloadIndexProgress progress)? onProgress,
+  }) async {
     final List<EpubBookRow> rows = await database.getAllEpubBooks();
     final List<_BookCandidate> books = <_BookCandidate>[];
     for (final EpubBookRow row in rows) {
@@ -223,10 +254,12 @@ class RebuildDownloadIndexService {
     int booksAddedOnline = 0;
     int booksAddedLocal = 0;
     int booksAddedLocalSourceMissing = 0;
+    int booksMatched = 0;
     int booksRelinked = 0;
     int booksMissing = 0;
     int booksSkipped = 0;
     int booksSkippedTombstoned = 0;
+    int booksAmbiguous = 0;
     int chaptersAdded = 0;
     int chaptersRelinked = 0;
     int chaptersMissing = 0;
@@ -268,17 +301,21 @@ class RebuildDownloadIndexService {
         if (outcome.cancelled) {
           cancelled = true;
           // 取消发生在书内：保留这本书已经写下的部分更新，报告截止到这里。
+          if (outcome.matched) booksMatched++;
           booksRelinked += outcome.relinked ? 1 : 0;
           chaptersRelinked += outcome.chaptersRelinked;
           chaptersMissing += outcome.chaptersMissing;
           chaptersSkipped += outcome.chaptersSkipped;
           if (outcome.missing) booksMissing++;
           if (outcome.skipped) booksSkipped++;
+          if (outcome.ambiguous) booksAmbiguous++;
           break;
         }
+        if (outcome.matched) booksMatched++;
         if (outcome.relinked) booksRelinked++;
         if (outcome.missing) booksMissing++;
         if (outcome.skipped) booksSkipped++;
+        if (outcome.ambiguous) booksAmbiguous++;
         chaptersRelinked += outcome.chaptersRelinked;
         chaptersMissing += outcome.chaptersMissing;
         chaptersSkipped += outcome.chaptersSkipped;
@@ -304,6 +341,23 @@ class RebuildDownloadIndexService {
         for (final EpubBookRow row in latestRows)
           _canonicalPath(row.extractDir),
       };
+      // local 里带 manifest 的目录证明自己属于某个在线作品：墓碑不复活，
+      // 已有在线行覆盖时也不登记重复的本地条目。
+      final Map<String, MangaPagesManifest> localManifests =
+          <String, MangaPagesManifest>{};
+      for (final DownloadMangaFolderOnDisk folder
+          in downloadScan.localFolders) {
+        // 单章作品的身份证据是漫画目录根的 pages.json，不是章节容器。
+        MangaPagesManifest? manifest = folder.rootManifest;
+        if (manifest == null) {
+          for (final ChapterContainerOnDisk chapter in folder.chapters) {
+            manifest = chapter.manifest;
+            if (manifest != null) break;
+          }
+        }
+        if (manifest == null) continue;
+        localManifests[_canonicalPath(folder.directory.path)] = manifest;
+      }
       // local 里尚未登记的本地作品。已立墓碑的也留在候选里：处理时计入
       // skipped 并报告用户「主动移出书架」的选择被尊重。
       final List<LocalSourceManga> localRecoveryCandidates = <LocalSourceManga>[
@@ -317,9 +371,10 @@ class RebuildDownloadIndexService {
               !ambiguousPaths.contains(_canonicalPath(manga.directoryPath)))
             manga,
       ];
-      final List<_DownloadMangaFolder> downloadRecoveryCandidates =
-          <_DownloadMangaFolder>[
-            for (final _DownloadMangaFolder folder in downloadScan.folders)
+      final List<DownloadMangaFolderOnDisk> downloadRecoveryCandidates =
+          <DownloadMangaFolderOnDisk>[
+            for (final DownloadMangaFolderOnDisk folder
+                in downloadScan.downloadsFolders)
               if (!latestExtractDirs.contains(
                     _canonicalPath(folder.directory.path),
                   ) &&
@@ -352,6 +407,30 @@ class RebuildDownloadIndexService {
           booksSkipped++;
           booksSkippedTombstoned++;
           continue;
+        }
+        final MangaPagesManifest? manifest =
+            localManifests[_canonicalPath(manga.directoryPath)];
+        if (manifest != null) {
+          final OnlineMangaRuntimeKind? runtime =
+              OnlineMangaRuntimeKind.fromWire(manifest.sourceRuntime);
+          final String? onlineBookKey = runtime == null
+              ? null
+              : onlineMangaBookKeyFor(
+                  runtime: runtime,
+                  extensionPackage: manifest.extensionPackage,
+                  sourceId: manifest.sourceId,
+                  seriesKey: manifest.mangaKey,
+                );
+          if (onlineBookKey != null && tombstones.contains(onlineBookKey)) {
+            // 文件证明自己属于一部被主动移出书架的在线作品：绝不借本地条目复活。
+            booksSkipped++;
+            booksSkippedTombstoned++;
+            continue;
+          }
+          if (onlineBookKey != null && latestBookKeys.contains(onlineBookKey)) {
+            // 已有在线 Manga 行覆盖这个身份：不再补建重复的本地条目。
+            continue;
+          }
         }
         try {
           // 先补齐封面再登记：扫描结果里的 `coverRelativePath` 对 CBZ 作品为空，
@@ -390,7 +469,7 @@ class RebuildDownloadIndexService {
           cancelled = true;
           break;
         }
-        final _DownloadMangaFolder folder = downloadRecoveryCandidates[index];
+        final DownloadMangaFolderOnDisk folder = downloadRecoveryCandidates[index];
         onProgress?.call(
           RebuildDownloadIndexProgress(
             completed: downloadOffset + index,
@@ -442,10 +521,12 @@ class RebuildDownloadIndexService {
       booksAddedOnline: booksAddedOnline,
       booksAddedLocal: booksAddedLocal,
       booksAddedLocalSourceMissing: booksAddedLocalSourceMissing,
+      booksMatched: booksMatched,
       booksRelinked: booksRelinked,
       booksMissing: booksMissing,
       booksSkipped: booksSkipped,
       booksSkippedTombstoned: booksSkippedTombstoned,
+      booksAmbiguous: booksAmbiguous,
       chaptersAdded: chaptersAdded,
       chaptersRelinked: chaptersRelinked,
       chaptersMissing: chaptersMissing,
@@ -484,160 +565,65 @@ class RebuildDownloadIndexService {
         relinked: false,
         missing: !match.ambiguous && indexedChapterCount > 0,
         skipped: match.ambiguous,
+        ambiguous: match.ambiguous,
         chaptersMissing: match.ambiguous ? 0 : indexedChapterCount,
         chaptersSkipped: match.ambiguous ? indexedChapterCount : 0,
         ambiguousPaths: match.ambiguous
             ? <String>{
-                for (final _DownloadMangaFolder candidate in match.candidates)
+                for (final DownloadMangaFolderOnDisk candidate in match.candidates)
                   _canonicalPath(candidate.directory.path),
               }
             : const <String>{},
       );
     }
-    final _DownloadMangaFolder folder = match.folder!;
-    bool relinked = false;
-    final bool moved = !_samePath(row.extractDir, folder.directory.path);
-    if (moved) {
-      await database.updateEpubBookContentPaths(
-        row.bookKey,
-        extractDir: folder.directory.path,
-      );
-      relinked = true;
-    }
-
-    // 1) pages.json 稳定 ID 优先。
-    final Map<String, List<ChapterContainerOnDisk>> idCandidates =
-        <String, List<ChapterContainerOnDisk>>{};
-    for (final ChapterContainerOnDisk diskChapter in folder.chapters) {
-      final MangaPagesManifest? manifest = diskChapter.manifest;
-      if (manifest == null) continue;
-      if (!_manifestBelongsTo(manifest, entry)) continue;
-      final int chapterIndex = entry.indexOfChapterKey(manifest.chapterKey);
-      if (chapterIndex < 0) continue;
-      idCandidates
-          .putIfAbsent(manifest.chapterKey, () => <ChapterContainerOnDisk>[])
-          .add(diskChapter);
-    }
-    final Map<String, ChapterContainerOnDisk> byId =
-        <String, ChapterContainerOnDisk>{};
-    final Set<String> ambiguousIds = <String>{};
-    for (final MapEntry<String, List<ChapterContainerOnDisk>> item
-        in idCandidates.entries) {
-      if (item.value.length == 1) {
-        byId[item.key] = item.value.single;
-      } else {
-        ambiguousIds.add(item.key);
-      }
-    }
-    final Set<String> idClaimedContainerNames = <String>{
-      for (final ChapterContainerOnDisk container in byId.values)
-        container.containerName.toLowerCase(),
-    };
-
-    final Map<String, ChapterContainerOnDisk> existingContainers =
-        <String, ChapterContainerOnDisk>{
-          for (final ChapterContainerOnDisk chapter in folder.chapters)
-            chapter.containerName.toLowerCase(): chapter,
-        };
-
-    final Map<String, ChapterContainerOnDisk> matches =
-        <String, ChapterContainerOnDisk>{...byId};
-    final Set<String> usedContainerNames = <String>{...idClaimedContainerNames};
-    int chaptersMissing = 0;
-    int chaptersSkipped = ambiguousIds.length;
-    for (final OnlineMangaChapter chapter in entry.chapters) {
-      if (cancelToken?.isCancelled ?? false) {
-        // 取消只停在这一章之前；已写下的 extractDir 保留，映射在循环后统一落库，
-        // 因此这里不需要回滚任何东西（下一次幂等重建会补齐）。
-        return _BookOutcome(
-          relinked: relinked,
-          chaptersMissing: chaptersMissing,
-          chaptersSkipped: chaptersSkipped,
-          cancelled: true,
-        );
-      }
-      if (matches.containsKey(chapter.key)) continue;
-      if (ambiguousIds.contains(chapter.key)) continue;
-
-      // 2a) 已有映射（应用自己写下的名称映射）仍指向本漫画目录里的容器。
-      final String? mappedName = existingMappings[chapter.key]?.folderName;
-      ChapterContainerOnDisk? candidate;
-      if (mappedName != null) {
-        final ChapterContainerOnDisk? mapped =
-            existingContainers[mappedName.toLowerCase()];
-        if (mapped != null) {
-          final bool claimedByOther = idClaimedContainerNames.contains(
-            mapped.containerName.toLowerCase(),
-          );
-          if (!claimedByOther) candidate = mapped;
-        }
-      }
-
-      // 2b) 没有可用映射时按容器名回退（无稳定身份 / pages.json 丢失）。
-      if (candidate == null) {
-        final List<ChapterContainerOnDisk> nameCandidates = folder.chapters
-            .where(
-              (ChapterContainerOnDisk item) =>
-                  !usedContainerNames.contains(
-                    item.containerName.toLowerCase(),
-                  ) &&
-                  _chapterContainerNameMatches(item.containerName, chapter),
-            )
-            .toList();
-        if (nameCandidates.length == 1) {
-          candidate = nameCandidates.single;
-        } else if (nameCandidates.length > 1) {
-          final List<ChapterContainerOnDisk> completeCandidates =
-              nameCandidates
-                  .where((ChapterContainerOnDisk item) => item.complete)
-                  .toList();
-          if (completeCandidates.length == 1) {
-            candidate = completeCandidates.single;
-          } else {
-            chaptersSkipped++;
-            continue;
-          }
-        }
-      }
-
-      if (candidate != null) {
-        matches[chapter.key] = candidate;
-        usedContainerNames.add(candidate.containerName.toLowerCase());
-      } else {
-        // 只有「下载索引认为已下载」的章才算 Missing；从未下载的章不是缺失。
-        if (indexedChapterKeys.contains(chapter.key)) chaptersMissing++;
-        // 映射指向的目录已被 pages.json 证明属于别的章：原样保留这条映射，
-        // 不删除。上面的 `claimedByOther` 已保证本轮的匹配不会用它，所以留着
-        // 只会让这一章继续显示 Missing；下次重建若目录/ID 变化还可能自愈。
-        // Rebuild 的契约是只增改，绝不删记录（spec 规则 4）。
-      }
-    }
-
-    int chaptersRelinked = 0;
-    for (final MapEntry<String, ChapterContainerOnDisk> match
-        in matches.entries) {
-      final MangaChapterDirRow? previous = existingMappings[match.key];
-      if (previous != null &&
-          previous.folderName == match.value.containerName &&
-          previous.containerKindEnum == match.value.kind) {
-        continue;
-      }
-      await database.upsertMangaChapterDir(
-        bookKey: row.bookKey,
-        chapterKey: match.key,
-        folderName: match.value.containerName,
-        containerKind: match.value.kind,
-        updatedAt: DateTime.now().millisecondsSinceEpoch,
-      );
-      chaptersRelinked++;
-    }
-    return _BookOutcome(
-      relinked: relinked || chaptersRelinked > 0,
-      missing: chaptersMissing > 0,
-      chaptersRelinked: chaptersRelinked,
-      chaptersMissing: chaptersMissing,
-      chaptersSkipped: chaptersSkipped,
+    final DownloadMangaFolderOnDisk folder = match.folder!;
+    // 单章 Local source 作品的根 pages.json 不是章容器：不写映射，但章确实
+    // 已下载（manifest + 页齐）。把它从「曾认为已下载」集合里排除，避免报告
+    // 成 Missing；已下载状态仍由 manifest 扫描提供。
+    final Set<String> rootManifestPresentKeys =
+        await _rootManifestPresentChapterKeys(folder, entry);
+    // 文件夹定位之后的重链逻辑与「复用现有下载文件夹」共用一份实现：
+    // pages.json 稳定 ID 优先，已有映射 / 容器名回退兜底，只增改不删除。
+    final DownloadMangaRelinkResult result = await relinkDownloadMangaFolder(
+      database: database,
+      row: row,
+      entry: entry,
+      mangaFolder: folder.directory,
+      chapters: folder.chapters,
+      indexedChapterKeys: indexedChapterKeys.difference(
+        rootManifestPresentKeys,
+      ),
+      isCancelled: () => cancelToken?.isCancelled ?? false,
     );
+    return _BookOutcome(
+      matched: true,
+      relinked: result.relinked,
+      missing: !result.cancelled && result.chaptersMissing > 0,
+      chaptersRelinked: result.chaptersRelinked,
+      chaptersMissing: result.chaptersMissing,
+      chaptersSkipped: result.chaptersSkipped,
+      cancelled: result.cancelled,
+      ambiguousPaths: <String>{
+        for (final DownloadMangaFolderOnDisk duplicate in match.duplicates)
+          _canonicalPath(duplicate.directory.path),
+      },
+    );
+  }
+
+  /// 根 manifest 已完整落盘的章 key（不写映射，但也不该报 Missing）。
+  Future<Set<String>> _rootManifestPresentChapterKeys(
+    DownloadMangaFolderOnDisk folder,
+    OnlineMangaLibraryEntry entry,
+  ) async {
+    final MangaPagesManifest? rootManifest = folder.rootManifest;
+    if (rootManifest == null) return const <String>{};
+    if (!MangaDownloadIdentity.ofEntry(entry).matchesManifest(rootManifest)) {
+      return const <String>{};
+    }
+    if (await readDownloadLibraryChapterPayload(folder.directory) == null) {
+      return const <String>{};
+    }
+    return <String>{rootManifest.chapterKey};
   }
 
   // ── Local source 条目 ───────────────────────────────────────────────
@@ -678,6 +664,7 @@ class RebuildDownloadIndexService {
       return _BookOutcome(
         missing: !match.ambiguous,
         skipped: match.ambiguous,
+        ambiguous: match.ambiguous,
         chaptersMissing: match.ambiguous ? 0 : existing.length,
         chaptersSkipped: match.ambiguous ? existing.length : 0,
         ambiguousPaths: match.ambiguous
@@ -729,8 +716,12 @@ class RebuildDownloadIndexService {
         ),
     ];
     final String chaptersJson = encodeLocalSourceChapters(scanned);
+    // 重建索引只刷新磁盘描述；当前章是阅读状态，原样保留。
     final LocalSourceMetadata updatedMetadata = LocalSourceMetadata(
       relativePath: found.relativePath,
+      currentChapterKey: LocalSourceMetadata.tryParse(
+        row.sourceMetadata,
+      )?.currentChapterKey,
     );
     final String? coverPath = localSourceCoverRelativePath(found);
     final bool moved = !_samePath(row.extractDir, found.directoryPath);
@@ -755,6 +746,7 @@ class RebuildDownloadIndexService {
       );
     }
     return _BookOutcome(
+      matched: true,
       relinked: changed,
       chaptersRelinked: moved ? scanned.length : 0,
     );
@@ -767,27 +759,47 @@ class RebuildDownloadIndexService {
     OnlineMangaLibraryEntry entry,
     _DownloadScan scan,
   ) {
-    // 1) `pages.json` 稳定 ID：任何一章的 manifest 能证明这个目录属于本书。
-    final List<_DownloadMangaFolder> idMatches = <_DownloadMangaFolder>[
-      for (final _DownloadMangaFolder folder in scan.folders)
-        if (folder.chapters.any(
-          (ChapterContainerOnDisk chapter) =>
-              chapter.manifest != null &&
-              _manifestBelongsTo(chapter.manifest!, entry),
-        ))
-          folder,
-    ];
-    if (idMatches.length == 1) {
-      return _MangaFolderMatch(idMatches.single);
+    // 1) `pages.json` 稳定 ID：与文件夹复用共用同一份身份判据（含占位包容忍
+    //    与扩展包 tie-breaker）。`local` 里带 manifest 的目录与 `downloads`
+    //    一起参与匹配，把本地已有文件关联回在线 Manga。多个目录都匹配 =
+    //    歧义，不猜。
+    final List<DownloadMangaFolderOnDisk> identityMatches =
+        matchingDownloadMangaFolders(
+          scan.allFolders,
+          MangaDownloadIdentity.ofEntry(entry),
+        );
+    if (identityMatches.length == 1) {
+      return _MangaFolderMatch(identityMatches.single);
     }
-    if (idMatches.length > 1) {
-      return _MangaFolderMatch.ambiguous(idMatches);
+    if (identityMatches.length > 1) {
+      // 重复副本（`(2)` 等）按规范只做两个安全偏好：已记录目录、最新完整
+      // 副本；两者都决定不了就跳过并报告，绝不猜。
+      final DownloadMangaFolderOnDisk? preferred = _preferDuplicateCopy(
+        row,
+        identityMatches,
+      );
+      if (preferred != null) {
+        return _MangaFolderMatch(
+          preferred,
+          duplicates: <DownloadMangaFolderOnDisk>[
+            for (final DownloadMangaFolderOnDisk candidate
+                in identityMatches)
+              if (!_samePath(
+                candidate.directory.path,
+                preferred.directory.path,
+              ))
+                candidate,
+          ],
+        );
+      }
+      return _MangaFolderMatch.ambiguous(identityMatches);
     }
 
-    // 2) 库里的 extractDir 仍是**当前**根内的有效目录：沿用应用自己写下的映射。
+    // 2) 库里的 extractDir 仍是**当前**下载根内的有效目录：沿用应用自己写下的
+    //    映射。`local` 路径不参与文件名/路径回退（规范：无 manifest 不做匹配）。
     final String recordedPath = p.normalize(row.extractDir);
     if (isLocalSourcePathWithinRoot(recordedPath, downloadsRoot)) {
-      for (final _DownloadMangaFolder folder in scan.folders) {
+      for (final DownloadMangaFolderOnDisk folder in scan.allFolders) {
         if (_samePath(folder.directory.path, recordedPath)) {
           return _MangaFolderMatch(folder);
         }
@@ -795,18 +807,68 @@ class RebuildDownloadIndexService {
     }
 
     // 3) 文件夹名回退（标题净化后的大小写不敏感比较）。多候选 = 歧义，不猜。
+    //    只回退 `downloads` 里的旧目录；`local` 无 manifest 的目录绝不算。
     final String expected = sanitizeDownloadLibrarySegment(
       entry.series.title,
     ).toLowerCase();
-    final List<_DownloadMangaFolder> nameMatches = <_DownloadMangaFolder>[
-      for (final _DownloadMangaFolder folder in scan.folders)
-        if (folder.mangaFolderName.toLowerCase() == expected) folder,
-    ];
+    final List<DownloadMangaFolderOnDisk> nameMatches =
+        <DownloadMangaFolderOnDisk>[
+          for (final DownloadMangaFolderOnDisk folder
+              in scan.downloadsFolders)
+            if (folder.mangaFolderName.toLowerCase() == expected) folder,
+        ];
     if (nameMatches.length == 1) return _MangaFolderMatch(nameMatches.single);
     if (nameMatches.length > 1) {
       return _MangaFolderMatch.ambiguous(nameMatches);
     }
     return const _MangaFolderMatch.none();
+  }
+
+  /// 多个重复副本之间做安全选择：已记录目录优先，否则最新完整副本。
+  ///
+  /// 都没有明显胜者（时间并列 / 没有完整副本）时返回 null，由调用方按歧义
+  /// 跳过并报告——绝不猜测。
+  DownloadMangaFolderOnDisk? _preferDuplicateCopy(
+    EpubBookRow row,
+    List<DownloadMangaFolderOnDisk> candidates,
+  ) {
+    final String recorded = _canonicalPath(row.extractDir);
+    for (final DownloadMangaFolderOnDisk candidate in candidates) {
+      if (_canonicalPath(candidate.directory.path) == recorded) {
+        return candidate;
+      }
+    }
+    DateTime? newest;
+    DownloadMangaFolderOnDisk? winner;
+    bool tied = false;
+    for (final DownloadMangaFolderOnDisk candidate in candidates) {
+      final DateTime? at = _newestCompleteDownloadedAt(candidate);
+      if (at == null) continue;
+      if (newest == null || at.isAfter(newest)) {
+        newest = at;
+        winner = candidate;
+        tied = false;
+      } else if (at.isAtSameMomentAs(newest)) {
+        tied = true;
+      }
+    }
+    if (winner == null || tied) return null;
+    return winner;
+  }
+
+  /// 目录里最新一个**完整**章节容器的 `downloadedAt`（没有完整章 = null）。
+  static DateTime? _newestCompleteDownloadedAt(
+    DownloadMangaFolderOnDisk folder,
+  ) {
+    DateTime? newest;
+    for (final ChapterContainerOnDisk container in folder.chapters) {
+      final MangaPagesManifest? manifest = container.manifest;
+      if (!container.complete || manifest == null) continue;
+      if (newest == null || manifest.downloadedAt.isAfter(newest)) {
+        newest = manifest.downloadedAt;
+      }
+    }
+    return newest;
   }
 
   /// 记录路径是否在当前 Download library 根内（源未安装的降级条目）。
@@ -865,14 +927,16 @@ class RebuildDownloadIndexService {
   }
 
   /// 恢复一个 `downloads/{source}/{manga}` 里书架没有的作品。
+  ///
+  /// 一个目录里可以有多个作品身份：同一 Source 下标题相同的不同作品共享
+  /// 漫画目录。这里按 `pages.json` 的 `(runtime, extension, sourceId, mangaKey)`
+  /// 逐个身份建条目、写各自章节映射，不因目录里身份多于一个就整目录跳过。
   Future<_RecoveryOutcome> _recoverDownloadManga(
-    _DownloadMangaFolder folder,
+    DownloadMangaFolderOnDisk folder,
     _InstalledSources installedSources,
     Set<String> tombstones,
     Set<String> existingBookKeys,
   ) async {
-    // 一部作品下的 `pages.json` 必须只指向同一个 Source/Manga 身份；混合身份
-    // 不猜，整本跳过并报告。
     final Map<String, List<ChapterContainerOnDisk>> groups =
         <String, List<ChapterContainerOnDisk>>{};
     for (final ChapterContainerOnDisk chapter in folder.chapters) {
@@ -897,63 +961,82 @@ class RebuildDownloadIndexService {
     if (existingBookKeys.contains(localBookKey)) {
       return const _RecoveryOutcome();
     }
-    if (groups.length > 1) {
-      return _RecoveryOutcome(
-        skipped: 1,
-        chaptersSkipped: folder.chapters.length,
-      );
-    }
     if (groups.isEmpty) {
       return _recoverDownloadMangaAsLocal(folder);
     }
 
-    final List<ChapterContainerOnDisk> group = groups.values.single;
-    final MangaPagesManifest manifest = group.first.manifest!;
-    final OnlineMangaRuntimeKind? runtime = OnlineMangaRuntimeKind.fromWire(
-      manifest.sourceRuntime,
-    );
-    final String? onlineBookKey = runtime == null
-        ? null
-        : onlineMangaBookKeyFor(
-            runtime: runtime,
-            extensionPackage: manifest.extensionPackage,
-            sourceId: manifest.sourceId,
-            seriesKey: manifest.mangaKey,
-          );
-    if (onlineBookKey != null && tombstones.contains(onlineBookKey)) {
-      return _RecoveryOutcome(skipped: 1, skippedTombstoned: 1);
-    }
-    if (onlineBookKey != null && existingBookKeys.contains(onlineBookKey)) {
-      return const _RecoveryOutcome();
+    _RecoveryOutcome total = const _RecoveryOutcome();
+    // 源未安装的组无法各自建本地条目（本地 bookKey 由目录路径派生，一个目录
+    // 只能有一行）；把它们合并成一个只含这些容器的本地条目，至少不丢内容、
+    // 也不覆盖已安装身份。
+    final List<ChapterContainerOnDisk> uninstalledContainers =
+        <ChapterContainerOnDisk>[];
+    for (final List<ChapterContainerOnDisk> group in groups.values) {
+      final MangaPagesManifest manifest = group.first.manifest!;
+      final OnlineMangaRuntimeKind? runtime = OnlineMangaRuntimeKind.fromWire(
+        manifest.sourceRuntime,
+      );
+      final String? onlineBookKey = runtime == null
+          ? null
+          : onlineMangaBookKeyFor(
+              runtime: runtime,
+              extensionPackage: manifest.extensionPackage,
+              sourceId: manifest.sourceId,
+              seriesKey: manifest.mangaKey,
+            );
+      if (onlineBookKey != null && tombstones.contains(onlineBookKey)) {
+        total = total.merge(
+          _RecoveryOutcome(skipped: 1, skippedTombstoned: 1),
+        );
+        continue;
+      }
+      if (onlineBookKey != null && existingBookKeys.contains(onlineBookKey)) {
+        continue;
+      }
+
+      final bool installed =
+          runtime == OnlineMangaRuntimeKind.mihon &&
+          installedSources.has(manifest.extensionPackage, manifest.sourceId);
+      if (!installed) {
+        uninstalledContainers.addAll(group);
+        continue;
+      }
+      total = total.merge(await _createOnlineEntry(folder, group, runtime!));
     }
 
-    final bool installed =
-        runtime == OnlineMangaRuntimeKind.mihon &&
-        installedSources.has(manifest.extensionPackage, manifest.sourceId);
-    if (!installed) {
-      return _recoverDownloadMangaAsLocal(
-        folder,
-        onlyCompleteManifestChapters: true,
-        title: manifest.mangaTitle.trim().isEmpty
-            ? folder.mangaFolderName
-            : manifest.mangaTitle,
-        sourceMissing: true,
+    if (uninstalledContainers.isNotEmpty) {
+      final MangaPagesManifest first = uninstalledContainers.first.manifest!;
+      total = total.merge(
+        await _recoverDownloadMangaAsLocal(
+          folder,
+          onlyCompleteManifestChapters: true,
+          title: first.mangaTitle.trim().isEmpty
+              ? folder.mangaFolderName
+              : first.mangaTitle,
+          sourceMissing: true,
+          containerNames: <String>{
+            for (final ChapterContainerOnDisk chapter in uninstalledContainers)
+              chapter.containerName.toLowerCase(),
+          },
+        ),
       );
     }
-    return _createOnlineEntry(folder, group, runtime!);
+    return total;
   }
 
   /// 源未安装 / 没有 `pages.json` 时，把下载目录降级为指向该文件夹的本地条目。
   Future<_RecoveryOutcome> _recoverDownloadMangaAsLocal(
-    _DownloadMangaFolder folder, {
+    DownloadMangaFolderOnDisk folder, {
     bool onlyCompleteManifestChapters = false,
     String? title,
     bool sourceMissing = false,
+    Set<String>? containerNames,
   }) async {
     final LocalSourceManga? scanned = await _scanDownloadMangaAsLocal(
       folder,
       onlyCompleteManifestChapters: onlyCompleteManifestChapters,
       title: title,
+      containerNames: containerNames,
     );
     if (scanned == null) return const _RecoveryOutcome();
     final bool added = await LocalSourceLibrary(
@@ -971,9 +1054,10 @@ class RebuildDownloadIndexService {
 
   /// 用图片扫描（`pages.json` 缺失/不可用）把下载漫画目录读成一部本地作品。
   Future<LocalSourceManga?> _scanDownloadMangaAsLocal(
-    _DownloadMangaFolder folder, {
+    DownloadMangaFolderOnDisk folder, {
     required bool onlyCompleteManifestChapters,
     String? title,
+    Set<String>? containerNames,
   }) async {
     final String relativePath = p
         .relative(folder.directory.path, from: downloadsRoot.path)
@@ -991,7 +1075,9 @@ class RebuildDownloadIndexService {
     };
     final List<LocalSourceChapter> complete = <LocalSourceChapter>[
       for (final LocalSourceChapter chapter in scanned.chapters)
-        if (completeContainers.contains(chapter.relativePath.toLowerCase()))
+        if (completeContainers.contains(chapter.relativePath.toLowerCase()) &&
+            (containerNames == null ||
+                containerNames.contains(chapter.relativePath.toLowerCase())))
           chapter,
     ];
     if (complete.isEmpty) return null;
@@ -1007,7 +1093,7 @@ class RebuildDownloadIndexService {
   /// 源已安装：按 `pages.json` 的稳定身份创建在线条目，并把完整下载的章写进
   /// `manga_chapter_dirs`（`epub_books.extractDir` 指向漫画目录）。
   Future<_RecoveryOutcome> _createOnlineEntry(
-    _DownloadMangaFolder folder,
+    DownloadMangaFolderOnDisk folder,
     List<ChapterContainerOnDisk> group,
     OnlineMangaRuntimeKind runtime,
   ) async {
@@ -1114,7 +1200,7 @@ class RebuildDownloadIndexService {
   /// 在线条目的封面：优先漫画目录里的 `cover.*`，否则取第一张完整下载的页图
   /// （相对漫画目录，与 `ReaderFushiSource.resolveCoverFilePath` 的解析一致）。
   static String? _downloadMangaCoverRelative(
-    _DownloadMangaFolder folder,
+    DownloadMangaFolderOnDisk folder,
     Iterable<ChapterContainerOnDisk> chapters,
   ) {
     for (final String name in const <String>[
@@ -1154,117 +1240,41 @@ class RebuildDownloadIndexService {
 
   // ── 扫描 ────────────────────────────────────────────────────────────
 
-  Future<_DownloadScan> _scanDownloadLibrary() async {
-    final List<_DownloadMangaFolder> folders = <_DownloadMangaFolder>[];
-    if (!await downloadsRoot.exists()) {
-      return _DownloadScan(folders);
-    }
-    final List<Directory> sourceDirs = await _childDirectories(downloadsRoot);
-    for (final Directory sourceDir in sourceDirs) {
-      final List<Directory> mangaDirs = await _childDirectories(sourceDir);
-      for (final Directory mangaDir in mangaDirs) {
-        final List<ChapterContainerOnDisk> chapters =
-            <ChapterContainerOnDisk>[];
-        for (final FileSystemEntity entity in await _childChapterContainers(
-          mangaDir,
-        )) {
-          final String containerName = p.basename(entity.path);
-          if (entity is Directory) {
-            final MangaPagesManifest? manifest = await readPagesManifest(
-              entity,
-            );
-            final bool complete =
-                manifest != null &&
-                await readDownloadLibraryChapterPayload(entity) != null;
-            chapters.add(
-              ChapterContainerOnDisk.folder(
-                containerName: containerName,
-                directory: entity,
-                manifest: manifest,
-                complete: complete,
-              ),
-            );
-          } else if (entity is File) {
-            final MangaPagesManifest? manifest =
-                await readDownloadLibraryArchiveManifest(entity);
-            final bool complete =
-                manifest != null &&
-                await isDownloadLibraryArchiveComplete(entity);
-            chapters.add(
-              ChapterContainerOnDisk.archive(
-                containerName: containerName,
-                archiveFile: entity,
-                manifest: manifest,
-                complete: complete,
-              ),
-            );
-          }
-        }
-        folders.add(
-          _DownloadMangaFolder(
-            directory: mangaDir,
-            mangaFolderName: p.basename(mangaDir.path),
-            chapters: chapters,
-          ),
-        );
-      }
-    }
-    return _DownloadScan(folders);
-  }
+  Future<_DownloadScan> _scanDownloadLibrary() async => _DownloadScan(
+    downloadsFolders: await scanDownloadLibraryFolders(
+      downloadsRoot,
+      readComplete: true,
+    ),
+    localFolders: await _scanLocalManifestFolders(),
+  );
 
-  /// 第一层直接子目录；点号目录（`.staging` 等）忽略。
-  static Future<List<Directory>> _childDirectories(Directory parent) async {
-    if (!await parent.exists()) return const <Directory>[];
-    final List<Directory> dirs = <Directory>[];
-    try {
-      await for (final FileSystemEntity entity in parent.list(
-        followLinks: false,
-      )) {
-        if (entity is Directory &&
-            !p.basename(entity.path).startsWith('.')) {
-          dirs.add(entity);
-        }
-      }
-    } on FileSystemException {
-      return const <Directory>[];
+  /// `local` 里带 manifest 的作品目录。
+  ///
+  /// 只收第一份 `pages.json` 可解析的目录：无 manifest 的本地目录不按标题
+  /// 猜测、不参与在线身份匹配。扫描完整的章节容器（含完整性）以便关联后立即
+  /// 写映射；单章作品把 `pages.json` 放在作品根，用
+  /// [DownloadMangaFolderProbe.toFolder] 把它保留为**目录身份**，不伪造成
+  /// 名为漫画目录的章容器（否则会写出不可用的 `<manga>/<manga>` 映射）。
+  Future<List<DownloadMangaFolderOnDisk>> _scanLocalManifestFolders() async {
+    final List<DownloadMangaFolderOnDisk> folders = <DownloadMangaFolderOnDisk>[];
+    for (final DownloadMangaFolderProbe probe
+        in await probeLocalMangaFolders(localComicRoot)) {
+      if (probe.manifest == null) continue;
+      final DownloadMangaFolderOnDisk probed = probe.toFolder();
+      final List<ChapterContainerOnDisk> chapters =
+          await scanDownloadChapterContainers(
+            probe.directory,
+            readComplete: true,
+          );
+      folders.add(
+        DownloadMangaFolderOnDisk(
+          directory: probe.directory,
+          chapters: chapters,
+          rootManifest: probed.rootManifest,
+        ),
+      );
     }
-    dirs.sort(
-      (Directory a, Directory b) =>
-          p.basename(a.path).toLowerCase().compareTo(
-            p.basename(b.path).toLowerCase(),
-          ),
-    );
-    return dirs;
-  }
-
-  /// 漫画目录下的章节容器：子目录（文件夹章节）与 `.cbz` 文件（压缩包章节）；
-  /// 点号条目（`.staging` 等）忽略。按小写名字排序，保证扫描确定。
-  static Future<List<FileSystemEntity>> _childChapterContainers(
-    Directory parent,
-  ) async {
-    if (!await parent.exists()) return const <FileSystemEntity>[];
-    final List<FileSystemEntity> entries = <FileSystemEntity>[];
-    try {
-      await for (final FileSystemEntity entity in parent.list(
-        followLinks: false,
-      )) {
-        final String name = p.basename(entity.path);
-        if (name.startsWith('.')) continue;
-        if (entity is Directory ||
-            (entity is File && isDownloadChapterArchiveName(name))) {
-          entries.add(entity);
-        }
-      }
-    } on FileSystemException {
-      return const <FileSystemEntity>[];
-    }
-    entries.sort(
-      (FileSystemEntity a, FileSystemEntity b) => p
-          .basename(a.path)
-          .toLowerCase()
-          .compareTo(p.basename(b.path).toLowerCase()),
-    );
-    return entries;
+    return folders;
   }
 }
 
@@ -1284,9 +1294,11 @@ class _BookCandidate {
 
 class _BookOutcome {
   const _BookOutcome({
+    this.matched = false,
     this.relinked = false,
     this.missing = false,
     this.skipped = false,
+    this.ambiguous = false,
     this.chaptersRelinked = 0,
     this.chaptersMissing = 0,
     this.chaptersSkipped = 0,
@@ -1294,9 +1306,16 @@ class _BookOutcome {
     this.ambiguousPaths = const <String>{},
   });
 
+  /// 磁盘上找到了这部作品的文件夹（身份或文件名回退）。
+  final bool matched;
+
   final bool relinked;
   final bool missing;
   final bool skipped;
+
+  /// [skipped] 中因为重复副本无法安全决定而跳过的。
+  final bool ambiguous;
+
   final int chaptersRelinked;
   final int chaptersMissing;
   final int chaptersSkipped;
@@ -1328,6 +1347,19 @@ class _RecoveryOutcome {
   final int skippedTombstoned;
   final int chaptersAdded;
   final int chaptersSkipped;
+
+  /// 合并一个目录里多个作品身份的恢复结果。
+  _RecoveryOutcome merge(_RecoveryOutcome other) => _RecoveryOutcome(
+    added: added + other.added,
+    addedOnline: addedOnline + other.addedOnline,
+    addedLocal: addedLocal + other.addedLocal,
+    addedLocalSourceMissing:
+        addedLocalSourceMissing + other.addedLocalSourceMissing,
+    skipped: skipped + other.skipped,
+    skippedTombstoned: skippedTombstoned + other.skippedTombstoned,
+    chaptersAdded: chaptersAdded + other.chaptersAdded,
+    chaptersSkipped: chaptersSkipped + other.chaptersSkipped,
+  );
 }
 
 /// 已安装扩展 + 在线源的查询结果。
@@ -1346,40 +1378,46 @@ class _InstalledSources {
 }
 
 class _DownloadScan {
-  const _DownloadScan(this.folders);
-
-  final List<_DownloadMangaFolder> folders;
-}
-
-class _DownloadMangaFolder {
-  const _DownloadMangaFolder({
-    required this.directory,
-    required this.mangaFolderName,
-    required this.chapters,
+  const _DownloadScan({
+    required this.downloadsFolders,
+    required this.localFolders,
   });
 
-  final Directory directory;
-  final String mangaFolderName;
-  final List<ChapterContainerOnDisk> chapters;
+  /// `downloads/<source>/<manga>` 下的全部漫画目录。
+  final List<DownloadMangaFolderOnDisk> downloadsFolders;
+
+  /// `local/<manga>` 下带 `pages.json` 的漫画目录（票 12 在线关联用）。
+  final List<DownloadMangaFolderOnDisk> localFolders;
+
+  /// 在线 Manga 身份匹配的候选：两个根一起算身份，重复副本一起评估。
+  List<DownloadMangaFolderOnDisk> get allFolders =>
+      <DownloadMangaFolderOnDisk>[...downloadsFolders, ...localFolders];
 }
 
 class _MangaFolderMatch {
-  const _MangaFolderMatch(this.folder)
-    : ambiguous = false,
-      candidates = const <_DownloadMangaFolder>[];
+  const _MangaFolderMatch(
+    this.folder, {
+    this.duplicates = const <DownloadMangaFolderOnDisk>[],
+  })  : ambiguous = false,
+        candidates = const <DownloadMangaFolderOnDisk>[];
 
   const _MangaFolderMatch.ambiguous(this.candidates)
     : folder = null,
-      ambiguous = true;
+      ambiguous = true,
+      duplicates = const <DownloadMangaFolderOnDisk>[];
 
   const _MangaFolderMatch.none()
     : folder = null,
       ambiguous = false,
-      candidates = const <_DownloadMangaFolder>[];
+      candidates = const <DownloadMangaFolderOnDisk>[],
+      duplicates = const <DownloadMangaFolderOnDisk>[];
 
-  final _DownloadMangaFolder? folder;
+  final DownloadMangaFolderOnDisk? folder;
   final bool ambiguous;
-  final List<_DownloadMangaFolder> candidates;
+  final List<DownloadMangaFolderOnDisk> candidates;
+
+  /// 身份相同的未采用副本；不能被 orphan recovery 当成新作品补建条目。
+  final List<DownloadMangaFolderOnDisk> duplicates;
 }
 
 class _LocalMangaMatch {
@@ -1402,54 +1440,6 @@ class _LocalMangaMatch {
 }
 
 // ── 纯 helper ─────────────────────────────────────────────────────────
-
-/// `pages.json` 的身份是否属于这条在线书架条目。
-bool _manifestBelongsTo(
-  MangaPagesManifest manifest,
-  OnlineMangaLibraryEntry entry,
-) {
-  if (manifest.sourceRuntime != entry.runtime.wireValue) return false;
-  if (manifest.sourceId != entry.sourceId) return false;
-  if (manifest.mangaKey != entry.series.key) return false;
-  // 老描述符可能没有扩展包信息；有就比，没有不比。
-  if (entry.extensionPackage.isNotEmpty &&
-      manifest.extensionPackage != entry.extensionPackage) {
-    return false;
-  }
-  return true;
-}
-
-/// 容器名是否像这一章的展示名。
-///
-/// 只用于 `pages.json` 缺稳定身份时的兜底：比较净化后的章名；允许下载器在重名 /
-/// 同扫译组时追加的 `[扫译组]` 与 ` (2)` 后缀。CBZ 容器名先去掉 `.cbz` 扩展名
-/// 再比。大小写不敏感（Windows 语义）。
-bool _chapterContainerNameMatches(
-  String containerName,
-  OnlineMangaChapter chapter,
-) {
-  final String rawName = chapter.name.trim().isEmpty
-      ? chapter.key
-      : chapter.name;
-  final String base = sanitizeDownloadLibrarySegment(rawName).toLowerCase();
-  final String lower =
-      (isDownloadChapterArchiveName(containerName)
-              ? p.basenameWithoutExtension(containerName)
-              : containerName)
-          .toLowerCase();
-  if (lower == base) return true;
-  final String scanlator = chapter.scanlator?.trim() ?? '';
-  if (scanlator.isNotEmpty) {
-    final String qualifier = sanitizeDownloadLibrarySegment(
-      scanlator,
-      maxLength: 32,
-    ).toLowerCase();
-    if (lower == '$base [$qualifier]') return true;
-  }
-  return RegExp(
-    '^${RegExp.escape(base)}(?: \\[.+\\])? \\(\\d+\\)\$',
-  ).hasMatch(lower);
-}
 
 bool _samePath(String a, String b) => p.equals(p.canonicalize(a), p.canonicalize(b));
 

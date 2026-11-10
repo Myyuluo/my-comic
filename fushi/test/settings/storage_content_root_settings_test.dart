@@ -86,7 +86,7 @@ void main() {
   SettingsItem itemNamed(SettingsSection section, String id) =>
       section.items.singleWhere((SettingsItem item) => item.id == id);
 
-  testWidgets('存储与下载只显示存储位置与程序数据位置', (WidgetTester tester) async {
+  testWidgets('存储与下载显示存储位置、程序数据位置与清除缓存', (WidgetTester tester) async {
     LocaleSettings.setLocale(AppLocale.zhCn);
     final SettingsContext settings = await captureContext(tester);
     final SettingsSection section = locationSection();
@@ -95,6 +95,8 @@ void main() {
     expect(section.items.map((SettingsItem item) => item.id).toList(), <String>[
       'storage.content_root',
       'storage.program_state_root',
+      'storage.clear_cache',
+      'storage.clear_database',
     ]);
 
     final SettingsStatusItem contentRoot =

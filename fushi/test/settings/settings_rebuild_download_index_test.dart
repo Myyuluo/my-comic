@@ -59,6 +59,7 @@ void main() {
   }
 
   RebuildDownloadIndexReport report({
+    int booksMatched = 1,
     int booksAdded = 1,
     int booksAddedLocal = 1,
     int booksRelinked = 1,
@@ -66,24 +67,31 @@ void main() {
     int chaptersRelinked = 2,
     int booksMissing = 1,
     int chaptersMissing = 3,
+    int booksSkipped = 2,
+    int booksAmbiguous = 1,
+    int skippedChapters = 2,
+    int failed = 1,
     bool cancelled = false,
   }) => RebuildDownloadIndexReport(
     booksScanned: booksAdded + booksRelinked + booksMissing,
     booksAdded: booksAdded,
     booksAddedLocal: booksAddedLocal,
+    booksMatched: booksMatched,
     booksRelinked: booksRelinked,
     booksMissing: booksMissing,
-    booksSkipped: 0,
+    booksSkipped: booksSkipped,
+    booksAmbiguous: booksAmbiguous,
     chaptersAdded: chaptersAdded,
     chaptersRelinked: chaptersRelinked,
     chaptersMissing: chaptersMissing,
-    chaptersSkipped: 0,
-    failed: 0,
+    chaptersSkipped: skippedChapters,
+    failed: failed,
     cancelled: cancelled,
   );
 
   String expectedReportText(RebuildDownloadIndexReport value) =>
       t.rebuild_download_index_report_body(
+        matched: value.booksMatched,
         added: value.booksAdded,
         local: value.booksAddedLocal,
         books: value.booksRelinked,
@@ -91,7 +99,9 @@ void main() {
         missingBooks: value.booksMissing,
         missingChapters: value.chaptersMissing,
         skippedBooks: value.booksSkipped,
+        ambiguous: value.booksAmbiguous,
         skippedChapters: value.chaptersSkipped,
+        failed: value.failed,
       );
 
   testWidgets('存储与下载页显示「重建下载索引」小节与入口', (WidgetTester tester) async {

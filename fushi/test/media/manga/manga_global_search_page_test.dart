@@ -1,9 +1,33 @@
+import 'package:flutter/services.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi/i18n/strings.g.dart';
+import 'package:fushi_core/fushi_core.dart';
 
 import 'package:fushi/src/media/manga/manga_global_search_page.dart';
 import 'package:fushi/src/pages/implementations/media_library_shell.dart';
+
+const MangaOnlineSourceRow _sourceRow = MangaOnlineSourceRow(
+  mediaKind: 'manga',
+  extensionPackage: 'org.example.fixture',
+  sourceId: '1',
+  name: 'Good',
+  language: 'en',
+  baseUrl: 'https://example.com',
+  enabled: true,
+  pinned: false,
+  sortOrder: 0,
+);
+
+Widget _searchPageHarness({String? initialQuery}) => TranslationProvider(
+  child: MaterialApp(
+    home: MangaGlobalSearchPage(
+      mihonManager: null,
+      mihonSources: const <MangaOnlineSourceRow>[_sourceRow],
+      initialQuery: initialQuery,
+    ),
+  ),
+);
 
 void main() {
   setUp(() => LocaleSettings.setLocale(AppLocale.zhCn));
@@ -68,6 +92,102 @@ void main() {
       ),
     );
   }
+
+  testWidgets('Manga 全局搜索框首字输入后焦点仍在', (WidgetTester tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      TranslationProvider(
+        child: MaterialApp(
+          home: MangaGlobalSearchPage(
+            mihonManager: null,
+            mihonSources: const <Never>[],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final Finder field = find.byKey(
+      const ValueKey<String>('manga_global_search_field'),
+    );
+    expect(field, findsOneWidget);
+    await tester.showKeyboard(field);
+    await tester.pump();
+    expect(
+      tester.widget<TextField>(field).focusNode?.hasFocus,
+      isTrue,
+      reason: '前置条件：搜索框已聚焦',
+    );
+
+    // 模拟 IME 输入第一个字符，不走 tester.enterText 的重新聚焦路径。
+    tester.testTextInput.enterText('a');
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.widget<TextField>(field).focusNode?.hasFocus,
+      isTrue,
+      reason: '首字输入后焦点必须保持在搜索框',
+    );
+  });
+
+  testWidgets('输入不触发搜索，提交后才出现来源分区（submit-only）', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(_searchPageHarness());
+    await tester.pumpAndSettle();
+
+    expect(find.text(t.manga_global_search_prompt), findsOneWidget);
+    final Finder field = find.byKey(
+      const ValueKey<String>('manga_global_search_field'),
+    );
+    await tester.enterText(field, 'one');
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(t.manga_global_search_prompt),
+      findsOneWidget,
+      reason: '键入只改文本，不得触发全源搜索',
+    );
+    expect(find.text('Good'), findsNothing);
+
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Good'),
+      findsOneWidget,
+      reason: '提交后来源分区才出现（空宿主按错误状态呈现）',
+    );
+    expect(find.text(t.manga_global_search_prompt), findsNothing);
+  });
+
+  testWidgets('initialQuery 进入即自动搜索', (WidgetTester tester) async {
+    await tester.pumpWidget(_searchPageHarness(initialQuery: 'one'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Good'), findsOneWidget);
+    expect(find.text(t.manga_global_search_prompt), findsNothing);
+  });
+
+  testWidgets('Esc 清空搜索框并保留焦点', (WidgetTester tester) async {
+    await tester.pumpWidget(_searchPageHarness());
+    await tester.pumpAndSettle();
+
+    final Finder field = find.byKey(
+      const ValueKey<String>('manga_global_search_field'),
+    );
+    await tester.showKeyboard(field);
+    await tester.enterText(field, 'one');
+    await tester.pump();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+
+    final TextField textField = tester.widget<TextField>(field);
+    expect(textField.controller?.text, isEmpty, reason: 'Esc 清空搜索框');
+    expect(textField.focusNode?.hasFocus, isTrue, reason: '清空后焦点仍在搜索框');
+  });
 
   testWidgets(
       'no sources: empty state names the Import tab and its button lands on it',

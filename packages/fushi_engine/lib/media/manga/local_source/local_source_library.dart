@@ -95,6 +95,44 @@ class LocalSourceLibrary {
     return true;
   }
 
+  /// 移出书架前删除 Local source 原作文件，**不删数据库行**。
+  ///
+  /// 与 [deleteLocalFiles]（独立动作）不同，本方法只处理磁盘，由调用方在成功后再
+  /// 删 Library 行——文件删除失败时作品必须仍留在架上。文件本来就不存在视为已
+  /// 删除；路径越界时不碰文件并返回 [LocalSourceDeleteReason.outsideLocalSourceRoot]。
+  Future<LocalSourceDeleteResult> deleteOriginalFilesBeforeLibraryRemoval(
+    String bookKey,
+  ) async {
+    final EpubBookRow? row = await db.getEpubBook(bookKey);
+    if (row == null) {
+      return const LocalSourceDeleteResult(LocalSourceDeleteReason.notFound);
+    }
+    if (LocalSourceMetadata.tryParse(row.sourceMetadata) == null) {
+      return const LocalSourceDeleteResult(
+        LocalSourceDeleteReason.notLocalSource,
+      );
+    }
+    final FileSystemEntityType type = await FileSystemEntity.type(
+      row.extractDir,
+    );
+    if (type == FileSystemEntityType.notFound) {
+      return const LocalSourceDeleteResult(LocalSourceDeleteReason.deleted);
+    }
+    final String rootCanon = p.canonicalize(root.path);
+    final String dirCanon = p.canonicalize(row.extractDir);
+    if (!p.isWithin(rootCanon, dirCanon)) {
+      return const LocalSourceDeleteResult(
+        LocalSourceDeleteReason.outsideLocalSourceRoot,
+      );
+    }
+    if (type == FileSystemEntityType.directory) {
+      await Directory(row.extractDir).delete(recursive: true);
+    } else {
+      await File(row.extractDir).delete();
+    }
+    return const LocalSourceDeleteResult(LocalSourceDeleteReason.deleted);
+  }
+
   /// 「删除本地文件」——单独的用户动作，[confirmed] 必须为 true。
   ///
   /// 只允许删除 `local` 之内的已登记目录；路径越界时拒绝且不动文件/记录。
@@ -152,8 +190,12 @@ class LocalSourceLibrary {
             ),
         ]);
     final String? coverPath = localSourceCoverRelativePath(manga);
+    // 扫描刷新只重写「磁盘上有什么」；当前章属于阅读状态，必须原样保留。
     final String sourceMetadata = LocalSourceMetadata(
       relativePath: manga.relativePath,
+      currentChapterKey: LocalSourceMetadata.tryParse(
+        existing?.sourceMetadata,
+      )?.currentChapterKey,
     ).encode();
 
     if (existing == null) {
@@ -176,6 +218,8 @@ class LocalSourceLibrary {
     }
 
     // 刷新只覆盖内容描述；uid / importedAt / 进度 / 已读状态全部保留。
+    // 显式登记同时把 membership 翻回 true（票 03/04）：移出书架后行仍在，重新
+    // 加入必须复用同一条记录，而不是静默留在非书架状态。
     await (db.update(
       db.epubBooks,
     )..where((t) => t.bookKey.equals(bookKey))).write(
@@ -188,10 +232,42 @@ class LocalSourceLibrary {
         chaptersJson: Value<String>(chaptersJson),
         format: const Value<String>('manga'),
         sourceMetadata: Value<String>(sourceMetadata),
+        inLibrary: const Value<bool>(true),
       ),
     );
     return false;
   }
+}
+
+/// 记下 Local source 的当前阅读章（相对路径，即章节 key）；null = 清除。
+///
+/// 只改 `sourceMetadata` 这一个 JSON 字段，不碰章状态 / 阅读位置 / 其他列，
+/// 所以不需要迁移。返回是否真的写入（相同值 / 非 Local source 条目 = false）。
+Future<bool> updateLocalSourceCurrentChapter({
+  required FushiDatabase db,
+  required String bookKey,
+  required String? chapterKey,
+}) async {
+  final EpubBookRow? row = await db.getEpubBook(bookKey);
+  if (row == null) return false;
+  final LocalSourceMetadata? metadata = LocalSourceMetadata.tryParse(
+    row.sourceMetadata,
+  );
+  if (metadata == null) return false;
+  final String? normalized = chapterKey == null || chapterKey.isEmpty
+      ? null
+      : chapterKey;
+  if (metadata.currentChapterKey == normalized) return false;
+  await (db.update(
+    db.epubBooks,
+  )..where((t) => t.bookKey.equals(bookKey))).write(
+    EpubBooksCompanion(
+      sourceMetadata: Value<String>(
+        metadata.withCurrentChapterKey(normalized).encode(),
+      ),
+    ),
+  );
+  return true;
 }
 
 /// Local source 作品身份：绝对目录路径（小写、规范）的摘要。

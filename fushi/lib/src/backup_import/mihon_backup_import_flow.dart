@@ -4,8 +4,10 @@ import 'package:file_picker/file_picker.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'package:fushi/i18n/strings.g.dart';
+import 'package:fushi/src/backup_import/mihon_backup_import_report_dialog.dart';
 import 'package:fushi/src/backup_import/mihon_backup_import_service.dart';
 import 'package:fushi/src/backup_import/mihon_backup_parser.dart';
+import 'package:fushi/src/pages/implementations/tag_filter_sheet.dart';
 import 'package:fushi/src/settings/settings_context.dart';
 import 'package:fushi/src/storage/app_paths.dart';
 import 'package:fushi/src/utils/adaptive/adaptive_widgets.dart';
@@ -58,15 +60,35 @@ Future<void> runMihonBackupImport(SettingsContext settings) async {
     barrierDismissible: false,
     builder: (BuildContext _) => _MihonBackupImportProgressDialog(
       file: File(path),
-      service: MihonBackupImportService(database: settings.appModel.database),
+      service: MihonBackupImportService(
+        database: settings.appModel.database,
+        // Ticket 11: the import re-links only the imported Manga against the
+        // current Content root's download/local roots. Both are resolved by the
+        // time Settings can open the importer.
+        downloadsRoot: settings.appModel.appPaths.downloadsRoot,
+        localComicRoot: settings.appModel.appPaths.localComicRoot,
+      ),
     ),
   );
   if (outcome == null || !context.mounted) return;
 
+  // Ticket 05：导入会把 Mihon 分类写成 Tag、把分类归属写成 Tag 分配，而漫画页的
+  // 标签页签 / 数量 / 作品归属读的是缓存型 FutureProvider（不是 Drift stream）。
+  // 不在这里失效，用户必须进一次「管理标签」再退出才能看到新页签。复用标签管理
+  // 页（漫画部分）的同一组失效语义；放在报告弹窗**之前**，弹窗背后的书架即已是
+  // 最新。分类可以在没有任何 Library 条目时单独写 Tag 表，所以除了非空报告，
+  // 分类写入也必须触发刷新（[MihonBackupImportReport.isEmpty] 不覆盖分类）。
+  // 失败 / 取消没有报告——不刷新。ADR 0016 的「书架 = 无 Tag」归属规则由现有
+  // 页签筛选继续保证，不在此处干预。
+  final MihonBackupImportReport? report = outcome.report;
+  if (report != null && (!report.isEmpty || report.hasCategoryTagWrites)) {
+    invalidateMangaTagProviders(settings.ref);
+  }
+
   await showAppDialog<void>(
     context: context,
     builder: (BuildContext dialogContext) => outcome.report != null
-        ? _MihonBackupImportReportDialog(report: outcome.report!)
+        ? MihonBackupImportReportDialog(report: outcome.report!)
         : _MihonBackupImportErrorDialog(error: outcome.error!),
   );
 }
@@ -150,220 +172,6 @@ class _MihonBackupImportProgressDialogState
               style: tokens.type.listSubtitle,
             ),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _MihonBackupImportReportDialog extends StatelessWidget {
-  const _MihonBackupImportReportDialog({required this.report});
-
-  final MihonBackupImportReport report;
-
-  @override
-  Widget build(BuildContext context) {
-    final FushiDesignTokens tokens = FushiDesignTokens.of(context);
-    final List<Widget> lines = <Widget>[
-      Text(
-        t.backup_import_mihon_summary_entries(
-          imported: report.importedEntries,
-          merged: report.mergedEntries,
-          skipped: report.skippedEntries,
-          failed: report.failedEntries,
-        ),
-        style: tokens.type.listSubtitle,
-      ),
-      const SizedBox(height: 8),
-      Text(
-        t.backup_import_mihon_summary_categories(
-          created: report.categoriesCreated,
-          matched: report.categoriesMatched,
-        ),
-        style: tokens.type.listSubtitle,
-      ),
-      const SizedBox(height: 8),
-      Text(
-        t.backup_import_mihon_summary_progress(
-          count: report.chapterStatesWritten,
-        ),
-        style: tokens.type.listSubtitle,
-      ),
-      const SizedBox(height: 8),
-      Text(
-        t.backup_import_mihon_summary_history(count: report.historyRowsWritten),
-        style: tokens.type.listSubtitle,
-      ),
-      if (report.trackingMappingsImported +
-              report.trackingMappingsMerged +
-              report.trackingSkipped >
-          0) ...[
-        const SizedBox(height: 8),
-        Text(
-          t.backup_import_mihon_summary_tracking(
-            imported: report.trackingMappingsImported,
-            merged: report.trackingMappingsMerged,
-            skipped: report.trackingSkipped,
-          ),
-          style: tokens.type.listSubtitle,
-        ),
-        if (report.trackingInvalidRemoteIds > 0) ...[
-          const SizedBox(height: 8),
-          Text(
-            t.backup_import_mihon_tracking_invalid(
-              count: report.trackingInvalidRemoteIds,
-            ),
-            style: tokens.type.listSubtitle,
-          ),
-        ],
-        if (report.unsupportedTrackers.isNotEmpty) ...[
-          const SizedBox(height: 8),
-          Text(
-            t.backup_import_mihon_tracking_unsupported(
-              names: report.unsupportedTrackers
-                  .map(
-                    (MihonBackupTrackerIssue issue) =>
-                        '${issue.name} (${issue.count})',
-                  )
-                  .join(', '),
-            ),
-            style: tokens.type.listSubtitle,
-          ),
-        ],
-      ],
-      if (report.extensionStoresImported +
-              report.extensionStoresMerged +
-              report.extensionStoresSkipped >
-          0) ...[
-        const SizedBox(height: 8),
-        Text(
-          t.backup_import_mihon_summary_extension_stores(
-            imported: report.extensionStoresImported,
-            merged: report.extensionStoresMerged,
-            skipped: report.extensionStoresSkipped,
-          ),
-          style: tokens.type.listSubtitle,
-        ),
-        if (report.extensionStoresSkipped > 0) ...[
-          const SizedBox(height: 8),
-          Text(
-            t.backup_import_mihon_extension_stores_skipped(
-              count: report.extensionStoresSkipped,
-            ),
-            style: tokens.type.listSubtitle,
-          ),
-        ],
-        if (report.extensionStoresFailed > 0) ...[
-          const SizedBox(height: 8),
-          Text(
-            t.backup_import_mihon_extension_stores_failed(
-              count: report.extensionStoresFailed,
-            ),
-            style: tokens.type.listSubtitle,
-          ),
-        ],
-      ],
-      if (report.sourcePreferencesImported + report.sourcePreferencesSkipped >
-          0) ...[
-        const SizedBox(height: 8),
-        Text(
-          t.backup_import_mihon_summary_source_preferences(
-            imported: report.sourcePreferencesImported,
-            skipped: report.sourcePreferencesSkipped,
-          ),
-          style: tokens.type.listSubtitle,
-        ),
-        if (report.sourcePreferencesSkipped > 0) ...[
-          const SizedBox(height: 8),
-          Text(
-            t.backup_import_mihon_source_preferences_skipped(
-              count: report.sourcePreferencesSkipped,
-            ),
-            style: tokens.type.listSubtitle,
-          ),
-        ],
-        if (report.sourcePreferencesFailed > 0) ...[
-          const SizedBox(height: 8),
-          Text(
-            t.backup_import_mihon_source_preferences_failed(
-              count: report.sourcePreferencesFailed,
-            ),
-            style: tokens.type.listSubtitle,
-          ),
-        ],
-        if (report.sourcePreferencesForMissingSources > 0) ...[
-          const SizedBox(height: 8),
-          Text(
-            t.backup_import_mihon_source_preferences_missing(
-              count: report.sourcePreferencesForMissingSources,
-            ),
-            style: tokens.type.listSubtitle,
-          ),
-        ],
-      ],
-      if (report.skippedByReason[MihonBackupSkipReason.notInLibrary] !=
-          null) ...[
-        const SizedBox(height: 8),
-        Text(
-          t.backup_import_mihon_skip_not_in_library(
-            count: report.skippedByReason[MihonBackupSkipReason.notInLibrary]!,
-          ),
-          style: tokens.type.listSubtitle,
-        ),
-      ],
-      if (report.failedByReason[MihonBackupFailureReason.missingUrl] !=
-          null) ...[
-        const SizedBox(height: 8),
-        Text(
-          t.backup_import_mihon_fail_missing_url(
-            count: report.failedByReason[MihonBackupFailureReason.missingUrl]!,
-          ),
-          style: tokens.type.listSubtitle,
-        ),
-      ],
-      if (report.failedByReason[MihonBackupFailureReason.databaseError] !=
-          null) ...[
-        const SizedBox(height: 8),
-        Text(
-          t.backup_import_mihon_fail_database(
-            count:
-                report.failedByReason[MihonBackupFailureReason.databaseError]!,
-          ),
-          style: tokens.type.listSubtitle,
-        ),
-      ],
-      if (report.missingSources.isNotEmpty) ...[
-        const SizedBox(height: 8),
-        Text(
-          t.backup_import_mihon_missing_sources(
-            count: report.missingSources.length,
-            names: report.missingSources
-                .map((MihonBackupSourceIssue issue) => issue.sourceName)
-                .join(', '),
-          ),
-          style: tokens.type.listSubtitle,
-        ),
-      ],
-      if (report.isEmpty) ...[
-        const SizedBox(height: 8),
-        Text(t.backup_import_mihon_empty, style: tokens.type.listSubtitle),
-      ],
-    ];
-    return FushiDialogFrame(
-      maxWidth: 520,
-      child: FushiModalSheetFrame(
-        title: t.backup_import_mihon_done_title,
-        leadingIcon: Icons.check_circle_outline,
-        scrollable: true,
-        body: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: lines,
-        ),
-        footer: adaptiveDialogAction(
-          context: context,
-          isDefaultAction: true,
-          onPressed: () => Navigator.of(context).pop(),
-          child: Text(t.dialog_done),
         ),
       ),
     );

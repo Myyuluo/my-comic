@@ -500,6 +500,17 @@ class EpubBooks extends Table {
   /// `epubPath`=PDF 绝对路径、`extractDir`=占位、`chapterCount`=页数、`chaptersJson`=`'[]'`。
   TextColumn get format => text().withDefault(const Constant('epub'))();
 
+  /// Library membership（v5，manga-library-membership 票 01）：这一行是否是
+  /// **书架成员**。`true` = 在书架；`false` = 非书架作品——行仍然持久化，供
+  /// 阅读进度、Chapter 已读、History、下载与下载索引使用，只是不出现在书架 /
+  /// Home 继续阅读 / Tag 页签 / 订阅与更新探测 / 备份「书架中的作品」里。
+  ///
+  /// 这是书架归属的**唯一判据**：`format='manga'` 只描述阅读器/书身份，不再
+  /// 表示在书架。默认 `true` 让 v5 之前的存量行零破坏迁移为在书架；新插入行
+  /// 不显式携带时同样默认在书架（加入书架路径），非书架行由后续票显式写
+  /// `false`。判据/读取口径见 `library_membership.dart`。
+  BoolColumn get inLibrary => boolean().withDefault(const Constant(true))();
+
   /// 漫画阅读模式覆盖（漫画 OCR，v53）：`null`=按页图长宽比自动判定（默认，横长跨页
   /// 走 `'spread'` 双页布局、纵长走 `'webtoon'` 长条纵向连读）；非 null 为用户手动覆盖，
   /// 取值 `'spread'`（跨页/翻页）或 `'webtoon'`（长条纵向）。仅 `format='manga'` 的行有意义，

@@ -47,6 +47,16 @@ final bookTagMapProvider =
   return _tagMapForKind(ref.watch(appProvider).database, TagHostKind.epub);
 });
 
+/// 失效漫画侧的两个标签缓存（标签池 + 漫画归属）。
+///
+/// 漫画页的标签页签 / 数量 / 作品归属读的是缓存型 `FutureProvider`。导入流程
+/// 与标签管理页的漫画部分共用这一条语义；SRT / 视频 / 游戏 / 合集的映射不由
+/// 这里触碰，需要它们的页面自己追加失效，避免无关媒体被重建。
+void invalidateMangaTagProviders(WidgetRef ref) {
+  ref.invalidate(allTagsProvider);
+  ref.invalidate(bookTagMapProvider);
+}
+
 /// SRT 书 → 标签列表（v77 起 keyed by SrtBooks.uid，弃本机自增 int id）。
 final srtBookTagMapProvider =
     FutureProvider<Map<String, List<BookTagRow>>>((ref) async {

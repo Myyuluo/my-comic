@@ -37,6 +37,8 @@ import 'package:fushi/src/media/manga/interconnect/interconnect_manga_source.dar
 import 'package:fushi/src/media/manga/download/download_library_index.dart';
 import 'package:fushi/src/media/manga/library/manga_download_planner.dart';
 import 'package:fushi/src/media/manga/library/manga_shelf_download_state.dart';
+import 'package:fushi/src/media/manga/library/manga_shelf_removal_dialog.dart';
+import 'package:fushi/src/media/manga/library/manga_shelf_removal_service.dart';
 import 'package:fushi/src/media/manga/library/manga_shelf_unread.dart';
 import 'package:fushi/src/media/manga/library/manga_series_page.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
@@ -1053,7 +1055,11 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
                                 FutureBuilder<void>(
                               future: _shelfMapsFuture,
                               builder: (context, _) =>
-                                  buildBody(filtered, remoteSnapshot),
+                                  buildBody(
+                                    filtered,
+                                    remoteSnapshot,
+                                    _mangaOnly ? shelfBooks : null,
+                                  ),
                             ),
                           ),
                         );
@@ -1612,11 +1618,17 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
   Widget buildBody(
     List<MediaItem> books, [
     AsyncSnapshot<_RemoteBookState?>? remoteSnapshot,
+    List<MediaItem>? continueReadingBooks,
   ]) {
     final List<SrtBook> srtBooks = _mangaOnly
         ? const <SrtBook>[]
         : ref.watch(srtBooksProvider).valueOrNull ?? const <SrtBook>[];
-    return _buildBodyWithSrtBooks(books, srtBooks, remoteSnapshot);
+    return _buildBodyWithSrtBooks(
+      books,
+      srtBooks,
+      remoteSnapshot,
+      continueReadingBooks: continueReadingBooks,
+    );
   }
 
   /// UI v2：书架顶部「继续阅读 hero + 书库概览」条（对齐视频页）。
@@ -1934,8 +1946,9 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
   Widget _buildBodyWithSrtBooks(
     List<MediaItem> books,
     List<SrtBook> allSrtBooks,
-    AsyncSnapshot<_RemoteBookState?>? remoteSnapshot,
-  ) {
+    AsyncSnapshot<_RemoteBookState?>? remoteSnapshot, {
+    List<MediaItem>? continueReadingBooks,
+  }) {
     final FushiDesignTokens tokens = FushiDesignTokens.of(context);
     // BUG-963：这三张「从 EPUB 借用」的展示映射（封面 / 有 EPUB 背书门控 / 借用进度）
     // 必须以**未筛选的全量 EpubBooks 行**为源，而不是筛选后的 `books`。标签筛选只裁剪
@@ -1971,14 +1984,14 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
     };
     // 阅读状态筛选在这里而不在搜索那一层：读完判据 [_completedBookKeys] 由
     // [_loadShelfMaps] 异步预取，只有本函数（_shelfMapsFuture 完成后）读得到真值。
-    // 继续阅读 hero 也吃这份列表——筛「未读」时不该再顶着一本在读的书。
-    // （展示列表过滤走 books.where；借用映射仍只遍历上面的全量列表，BUG-963。）
+    // 搜索 / 阅读状态 / 下载筛选用同一谓词，展示列表过滤走 books.where；借用映射
+    // 仍只遍历上面的全量列表，BUG-963。
     //
     // 漫画页（ticket 06）把搜索 / 阅读状态 / 漫画下载三项收进同一个谓词
     // [_mangaItemPassesActiveFilters]，与页签数量共用，避免「数量说有、切过去
     // 却没有」。它依赖 [_loadShelfMaps] 的异步快照，故必须在本 FutureBuilder
     // 之后应用。
-    final List<MediaItem> shelfBooks = books
+    List<MediaItem> applyActiveFilters(List<MediaItem> source) => source
         .where((MediaItem item) => _mangaOnly
             ? _mangaItemPassesActiveFilters(item)
             : _matchesReadStatusFilter(
@@ -1986,16 +1999,23 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
                 progress: (position: item.position, duration: item.duration),
               ))
         .toList();
+    final List<MediaItem> shelfBooks = applyActiveFilters(books);
+    // 继续阅读胶囊 / 旧 hero 的候选来自全量书架，不随标签页签切换
+    // （2026-11-09 用户明确要求：点击始终进入全局最后阅读的漫画）；搜索 / 阅读
+    // 状态 / 漫画下载筛选仍然生效。
+    final List<MediaItem> continueReadingCandidates = applyActiveFilters(
+      continueReadingBooks ?? books,
+    );
     // 漫画页在库页壳里时，主 chrome 行标签栏原来的页签位由继续阅读胶囊占据
     // （ticket 03）。胶囊数据与打开路径都在本书架里，所以像标签行一样登记给壳；
-    // 候选列表与网格顶部旧 hero 完全相同（同一组筛选谓词），续读落点不变。
-    // 独立使用（无壳）时槽位为 null，此时仍画网格顶部的旧 hero，行为不变。
+    // 网格仍按标签页签过滤，胶囊候选忽略标签页签。独立使用（无壳）时槽位为
+    // null，此时仍画网格顶部的旧 hero，行为不变。
     final MediaLibraryChromeTabsSlot? chromeTabs = _mangaOnly
         ? MediaLibraryShellScope.maybeOf(context)?.chromeTabsSlot
         : null;
     _syncContinueReadingPillClaim(
       chromeTabs,
-      _pickContinueReadingItem(shelfBooks),
+      _pickContinueReadingItem(continueReadingCandidates),
     );
     final List<MediaItem> epubBooks = srtBookKeys.isEmpty
         ? shelfBooks
@@ -2172,7 +2192,9 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
                 if (chromeTabs == null &&
                     (epubBooks.isNotEmpty || srtBooks.isNotEmpty))
                   SliverToBoxAdapter(
-                    child: _buildShelfOverviewSection(shelfBooks),
+                    child: _buildShelfOverviewSection(
+                      continueReadingCandidates,
+                    ),
                   ),
                 // TODO-902: 书架不再按类型分区，SRT 有声书卡与 EPUB 卡混排进同一
                 // 网格（卡片本身的类型标识保留）。远端占位书同样作为单卡混排。
@@ -2658,14 +2680,14 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
               : Icons.subtitles_outlined,
           onPressed: () => _toggleFloatingLyricFromShelf(bookKey),
         ),
-      // 漫画卡：删除排在列表末位（不再单列危险区），但保留危险红色；
-      // 点击仍走 [_confirmDeleteEpub] 的原有确认流程。
+      // 漫画卡：删除排在列表末位（不再单列危险区），但保留危险红色。
+      // 票 02：点击走与作品页 / 批量删除共用的统一移出弹窗。
       if (isManga)
         DialogListAction(
           label: t.dialog_delete,
           icon: FushiIcons.delete,
           destructive: true,
-          onPressed: () => _confirmDeleteEpub(item, bookKey),
+          onPressed: () => _confirmMangaShelfDelete(bookKey),
         ),
     ];
   }

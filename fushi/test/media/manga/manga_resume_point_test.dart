@@ -163,6 +163,93 @@ void main() {
     });
   });
 
+  // `.tachibk` 导入作品的存储数组顺序不是契约：续读方向必须按 sourceOrder
+  // （0 = 最新）构造的阅读顺序，而不是「数组前一格 / 后一格」。
+  group('导入章节的续读方向', () {
+    final OnlineMangaLibraryEntry imported = OnlineMangaLibraryEntry(
+      runtime: OnlineMangaRuntimeKind.mihon,
+      extensionPackage: 'org.example',
+      sourceId: '1',
+      series: const OnlineMangaSeries(
+        key: '/imported',
+        title: 'Imported',
+        raw: <String, Object?>{},
+      ),
+      chapters: const <OnlineMangaChapter>[
+        OnlineMangaChapter(
+          key: '/i/2',
+          name: '2',
+          number: 2,
+          sourceOrder: 1,
+          raw: <String, Object?>{},
+        ),
+        OnlineMangaChapter(
+          key: '/i/3',
+          name: '3',
+          number: 3,
+          sourceOrder: 0,
+          raw: <String, Object?>{},
+        ),
+        OnlineMangaChapter(
+          key: '/i/1',
+          name: '1',
+          number: 1,
+          sourceOrder: 2,
+          raw: <String, Object?>{},
+        ),
+      ],
+    );
+
+    test('一次没读过：从第 1 话开始，而不是存储数组末尾', () {
+      expect(mangaInitialChapterIndex(imported), 2);
+      for (final MangaResumeTarget target in MangaResumeTarget.values) {
+        expect(
+          continueMangaChapterIndex(
+            imported,
+            const <String, MangaChapterStateRow>{},
+            target: target,
+          ),
+          2,
+        );
+      }
+    });
+
+    test('读完的章前进到阅读顺序的下一话，不是数组前一格', () {
+      final Map<String, MangaChapterStateRow> states =
+          <String, MangaChapterStateRow>{
+            '/i/1': state('/i/1', updatedAt: 9, lastPage: 19, readAt: 9),
+          };
+      for (final MangaResumeTarget target in MangaResumeTarget.values) {
+        expect(
+          continueMangaChapterIndex(imported, states, target: target),
+          0,
+          reason: '${target.name}：第 1 话读完进入第 2 话（存储下标 0）',
+        );
+      }
+    });
+
+    test('读完第 2 话进入第 3 话；最新一话读完停在原地', () {
+      final Map<String, MangaChapterStateRow> secondDone =
+          <String, MangaChapterStateRow>{
+            '/i/2': state('/i/2', updatedAt: 9, lastPage: 19, readAt: 9),
+          };
+      final Map<String, MangaChapterStateRow> newestDone =
+          <String, MangaChapterStateRow>{
+            '/i/3': state('/i/3', updatedAt: 9, lastPage: 19, readAt: 9),
+          };
+      for (final MangaResumeTarget target in MangaResumeTarget.values) {
+        expect(
+          continueMangaChapterIndex(imported, secondDone, target: target),
+          1,
+        );
+        expect(
+          continueMangaChapterIndex(imported, newestDone, target: target),
+          1,
+        );
+      }
+    });
+  });
+
   // BUG-3246：首页「继续」等直接开书（没点名章）以前用 currentChapterIndex（最后一次
   // 选的章），与作品页「继续阅读」的偏好判据分叉——读完第 2 话退出，作品页继续去第 3
   // 话、直接开书却回到第 2 话第 1 页。

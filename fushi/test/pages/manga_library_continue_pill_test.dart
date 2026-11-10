@@ -401,4 +401,81 @@ void main() {
       reason: '横向拖动可见胶囊的其余部分',
     );
   });
+
+  testWidgets('胶囊始终指向全局最近阅读，不随标签页签切换', (
+    WidgetTester tester,
+  ) async {
+    final String shelfUid = await seedManga(
+      'm-shelf',
+      '无标签漫画',
+      position: 5,
+      duration: 10,
+    );
+    final String taggedUid = await seedManga(
+      'm-tagged',
+      '标签漫画',
+      position: 5,
+      duration: 10,
+    );
+    final String otherTaggedUid = await seedManga(
+      'm-other-tag',
+      '第二标签漫画',
+      position: 5,
+      duration: 10,
+    );
+    // 全局最近阅读是无标签那本；两个标签各有自己的最近阅读。
+    await seedRecency(shelfUid, 3000);
+    await seedRecency(taggedUid, 2000);
+    await seedRecency(otherTaggedUid, 1000);
+    final int tagId = await harness.db.createTag('连载', 0xFF112233);
+    final int otherTagId = await harness.db.createTag('完结', 0xFF445566);
+    await harness.db.addTagToBook('m-tagged', tagId);
+    await harness.db.addTagToBook('m-other-tag', otherTagId);
+    await pumpPage(tester);
+
+    final Finder pill = pillFinder();
+    expect(
+      find.ancestor(of: pill, matching: find.byTooltip('无标签漫画')),
+      findsOneWidget,
+      reason: '初始显示全局最近阅读',
+    );
+
+    await tester.tap(
+      find.byKey(ValueKey<String>('manga_tag_tab_$tagId')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('标签漫画'), findsOneWidget, reason: '网格已切到该标签的漫画');
+    expect(
+      find.ancestor(of: pill, matching: find.byTooltip('无标签漫画')),
+      findsOneWidget,
+      reason: '胶囊不随标签页签切换，仍指向全局最近阅读',
+    );
+    await tester.tap(pill);
+    await tester.pump();
+    expect(appModel.opened, hasLength(1));
+    expect(
+      appModel.opened.single?.mediaIdentifier,
+      ReaderFushiSource.mediaIdentifierFor('m-shelf'),
+      reason: '点击胶囊始终打开全局最近阅读',
+    );
+
+    appModel.opened.clear();
+    await tester.tap(
+      find.byKey(ValueKey<String>('manga_tag_tab_$otherTagId')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('第二标签漫画'), findsOneWidget, reason: '网格已切到另一个标签');
+    expect(
+      find.ancestor(of: pill, matching: find.byTooltip('无标签漫画')),
+      findsOneWidget,
+      reason: '切换另一个标签后胶囊仍不变',
+    );
+    await tester.tap(pill);
+    await tester.pump();
+    expect(
+      appModel.opened.single?.mediaIdentifier,
+      ReaderFushiSource.mediaIdentifierFor('m-shelf'),
+    );
+  });
 }

@@ -16,6 +16,7 @@ import 'package:fushi/src/media/audiobook/lyrics_player/lyrics_theme_host.dart';
 import 'package:fushi/src/focus/fushi_focus_controller.dart';
 import 'package:fushi_audio/fushi_audio.dart';
 import 'package:fushi/src/media/audiobook/book_import_dialog.dart';
+import 'package:fushi/src/media/manga/history/manga_history.dart';
 import 'package:fushi/src/media/manga/interconnect/interconnect_manga_source.dart'
     show InterconnectMangaCatalog;
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
@@ -52,10 +53,21 @@ final _srtBookUidsProvider = StreamProvider<List<String>>((ref) {
       .distinct(listEquals);
 });
 
+/// 书架成员 bookKey 集合的响应式来源（v5 Library membership）。与
+/// [_epubBookKeysProvider] 分开：`getBooksFromDb` 只列书架行，membership
+/// 翻转（加入 / 移出书架）也必须让书架重算，而全量 key 集合并不变化。
+final _libraryEpubBookKeysProvider = StreamProvider<List<String>>((ref) {
+  return ref
+      .watch(appProvider)
+      .database
+      .watchLibraryEpubBookKeys()
+      .distinct(listEquals);
+});
+
 final fushiBooksProvider =
     FutureProvider.family<List<MediaItem>, Language>((ref, language) {
-  // BUG-793：订阅 EPUB 书集合变化，任意导入路径落库后自动重算书架。
-  ref.watch(_epubBookKeysProvider);
+  // BUG-793：订阅书架成员集合变化，任意导入 / 删除 / membership 翻转后自动重算。
+  ref.watch(_libraryEpubBookKeysProvider);
   return ReaderFushiSource.instance.getBooksFromDb(
     appModel: ref.watch(appProvider),
   );
@@ -594,11 +606,17 @@ class ReaderFushiSource extends ReaderMediaSource {
 
   // ── Book listing from Drift ─────────────────────────────────────────
 
+  /// 书架列书：**只列 Library membership = true 的 Manga 行**。
+  ///
+  /// 书架归属不再等于「`epub_books` 里有这行」：非书架行仍持久化，供阅读 /
+  /// History / 下载使用，但不进书架、Home 继续阅读与 Tag 页签。需要全部行
+  /// （阅读器、History、下载索引）的调用方直接用 `getAllEpubBooks`，不要借
+  /// 这里。
   Future<List<MediaItem>> getBooksFromDb({
     required AppModel appModel,
   }) async {
     final FushiDatabase db = appModel.database;
-    final List<EpubBookRow> books = await db.getAllEpubBooks();
+    final List<EpubBookRow> books = await db.getLibraryEpubBooks();
     // 阅读位置一次整表取完（书 uid → 位置）。之前每本各查一次
     // `findByBookUid`：Drift 在单连接上串行执行，`Future.wait` 只能重叠 await、
     // 重叠不了 SQL，书架延迟仍随库大小线性增长（N 次往返 + N 次语句准备）。
@@ -650,6 +668,30 @@ class ReaderFushiSource extends ReaderMediaSource {
     return (position: (total - selected).clamp(0, total), duration: total);
   }
 
+  /// 本地图源的章级进度。
+  ///
+  /// 章节总数必须从 `chaptersJson` 推导——`EpubBooks.chapterCount` 对本地图源
+  /// 存的是**总页数**（[LocalSourceManga.pageCount]），拿来当章数会让进度条与
+  /// 未读角标全错。章节按扫描的自然顺序（第 1 话→第 N 话），当前进度 =
+  /// `currentChapterKey` 的位置 + 1；没读过 = 0。
+  static ({int position, int duration}) _localSourceMangaProgress(
+    EpubBookRow book,
+    LocalSourceMetadata metadata,
+  ) {
+    final List<LocalSourceChapterRecord> chapters = decodeLocalSourceChapters(
+      book.chaptersJson,
+    );
+    final int total = chapters.length;
+    if (total == 0) return (position: 0, duration: 1);
+    final String? currentKey = metadata.currentChapterKey;
+    if (currentKey == null) return (position: 0, duration: total);
+    final int index = chapters.indexWhere(
+      (LocalSourceChapterRecord chapter) => chapter.key == currentKey,
+    );
+    if (index < 0) return (position: 0, duration: total);
+    return (position: index + 1, duration: total);
+  }
+
   /// Resolve a single [EpubBookRow] into a [MediaItem], probing its cover
   /// concurrently with sibling books (HBK-AUDIT-128). [pos] is the book's
   /// reader position (already keyed by uid by the caller; null = never read).
@@ -677,7 +719,7 @@ class ReaderFushiSource extends ReaderMediaSource {
     }
     final int totalChars = sectionChars.fold<int>(0, (a, b) => a + b);
 
-    // 书架列书 format-agnostic（本方法列全部 EpubBooks 行），但打开路由按 `format`
+    // 书架列书 format-agnostic（本方法列全部**书架成员**行），但打开路由按 `format`
     // 三态分流 mediaSourceIdentifier：`'pdf'` → [ReaderPdfSource]（进 ReaderPdfPage）、
     // `'manga'` → [MangaFushiSource]（进 MangaFushiPage）、其余 → 本源（EPUB 阅读器）。
     // 缺这条分流，PDF/漫画行会用 EPUB 阅读器打开并在解压/解析路径崩溃。媒体标识前缀
@@ -699,8 +741,14 @@ class ReaderFushiSource extends ReaderMediaSource {
     final OnlineMangaLibraryEntry? onlineEntry = pageBased
         ? OnlineMangaLibraryEntry.tryParse(book.sourceMetadata)
         : null;
+    final LocalSourceMetadata? localSource =
+        pageBased && onlineEntry == null
+        ? LocalSourceMetadata.tryParse(book.sourceMetadata)
+        : null;
     final ({int position, int duration}) prog = onlineEntry != null
         ? _onlineMangaProgress(onlineEntry)
+        : localSource != null
+        ? _localSourceMangaProgress(book, localSource)
         : pageBased
             // PDF Phase 3 / 漫画同款：进度单位是**页**（sectionIndex=当前页 0-based，
             // chapterCount=总页数）。chaptersJson='[]' 无字数，走 computeBookProgress 会恒回
@@ -739,7 +787,18 @@ class ReaderFushiSource extends ReaderMediaSource {
     position = prog.position;
     duration = prog.duration;
 
-    final String? imageUrl = await _resolveCoverUrl(book);
+    String? imageUrl = await _resolveCoverUrl(book);
+    // 导入的在线漫画（Mihon 备份）通常没有本地封面文件，备份只带远程
+    // `series.coverUrl`。本地探测全落空时回退到它，交给 `MediaItem.imageUrl`
+    // 的现有 HTTP 图片缓存（`AppCachedHttpImage`）懒加载；来源是否安装无关紧要。
+    // 它**不**写入 [_lastGoodCoverUrlByBookKey]：那份进程缓存只存磁盘上真实
+    // 存在过的 `file://` URL（BUG-513），混入远程地址会破坏离线语义。
+    if (imageUrl == null) {
+      final String? remoteCoverUrl = onlineEntry?.series.coverUrl?.trim();
+      if (remoteCoverUrl != null && remoteCoverUrl.isNotEmpty) {
+        imageUrl = remoteCoverUrl;
+      }
+    }
 
     return MediaItem(
       mediaIdentifier: mediaIdentifierFor(book.bookKey),
@@ -1039,6 +1098,10 @@ class ReaderFushiSource extends ReaderMediaSource {
   /// [deleteStatistics]（默认 false，对应删除弹窗「同时删除统计数据」）：true 时在删
   /// 行**之前**把这本书攒下的统计一并删掉（[deleteBookStatistics]）——标题与 srt uid
   /// 都住在即将被删的行上，行一删就无从定位。
+  /// [removeFromLibraryOnly]（默认 false）：统一「移出书架」流程专用。调用方已经
+  /// 自行处理作品文件，且 History 必须保留；因此跳过工作文件清理与「整部作品
+  /// 删除时级联删历史」路径。受管漫画卷（无在线 / Local source 描述符）也不会
+  /// 被误判成「整部作品删除」。
   Future<DeleteBookResult> deleteBook({
     required FushiDatabase db,
     required String bookKey,
@@ -1046,6 +1109,7 @@ class ReaderFushiSource extends ReaderMediaSource {
     DeleteScope scope = DeleteScope.keepLocalOnly,
     bool deleteLocalFiles = false,
     bool deleteStatistics = false,
+    bool removeFromLibraryOnly = false,
   }) async {
     try {
       // 原件位置在 audiobooks / srt_books 行上，deleteEpubBook 的事务会把它们
@@ -1123,6 +1187,17 @@ class ReaderFushiSource extends ReaderMediaSource {
               await db.syncDeletionBookKeyOf(bookKey)
           : bookKey;
 
+      // 票 10：删除整部作品时是否连落盘文件一起销毁。在线漫画只有勾选「同时
+      // 删除本地文件」才删已下载章节；受管本地漫画（导入卷 / PDF 转漫画）的
+      // extractDir 是应用副本，始终随书删除。文件保留 = 仅移出书架，历史保留。
+      final bool onlineMangaWork =
+          bookRow != null &&
+          OnlineMangaLibraryEntry.tryParse(bookRow.sourceMetadata) != null;
+      final bool deletesWorkFiles =
+          bookRow != null &&
+          !removeFromLibraryOnly &&
+          (deleteLocalFiles || !onlineMangaWork);
+
       // TODO-1195 part B: a user shelf delete records a tombstone so a later
       // backup MERGE import never resurrects this book from an old backup.
       final int deletedRows = await db.deleteEpubBook(bookKey, tombstone: true);
@@ -1137,6 +1212,19 @@ class ReaderFushiSource extends ReaderMediaSource {
               'book', syncTombstoneKey, DateTime.now().millisecondsSinceEpoch);
         } catch (_) {
           // best-effort：删除墓碑记账失败不影响书已删。
+        }
+      }
+
+      // 票 10：整部作品连同文件删除后，历史页没有可回退的目标，级联删掉它的
+      // 历史行，避免留下点开即失败的记录。仅移出书架（文件保留）与 Local
+      // source 移出分支不会走到这里，历史按用户诉求保留。与上面的墓碑记账同
+      // 纪律：历史清理失败只记日志，不翻转「书已删」的结果。
+      if (deletedRows > 0 && deletesWorkFiles) {
+        try {
+          await deleteMangaHistoryForBook(db, bookRow);
+        } catch (e, stack) {
+          ErrorLogService.instance
+              .log('ReaderFushiSource.deleteBook.history', e, stack);
         }
       }
 
@@ -1161,7 +1249,7 @@ class ReaderFushiSource extends ReaderMediaSource {
         // （`downloads/{source}/{manga}`）：只有用户勾选「同时删除已下载文件」
         // 才删；否则保留文件（DB 记录已删 → 未索引，重建索引可找回）。本地卷 /
         // 导入漫画的 extractDir 仍是应用管理的副本，随书删除。
-        if (bookRow != null) {
+        if (bookRow != null && !removeFromLibraryOnly) {
           final bool onlineManga =
               OnlineMangaLibraryEntry.tryParse(bookRow.sourceMetadata) != null;
           if (!onlineManga || deleteLocalFiles) {

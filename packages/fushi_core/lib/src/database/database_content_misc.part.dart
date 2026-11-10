@@ -82,9 +82,34 @@ mixin _FushiDbContentMisc
   Future<int> clearClipboardHistory() => delete(clipboardHistory).go();
 
   // ── epub books ──────────────────────────────────────────────────
+  /// **全部** Manga/书行（不看 Library membership）。阅读器、章节状态、
+  /// History、下载、下载索引与重建索引必须用这条——非书架行同样属于它们。
+  ///
+  /// 书架专属读取点不要用这条，改用 [getLibraryEpubBooks]。
   Future<List<EpubBookRow>> getAllEpubBooks() =>
       (select(epubBooks)..orderBy([(t) => OrderingTerm.desc(t.importedAt)]))
           .get();
+
+  /// 书架成员行（`in_library = true`），排序与 [getAllEpubBooks] 相同。
+  ///
+  /// Library membership 的唯一数据层读取口径；判据本身见
+  /// `library_membership.dart` 的 `EpubBookRow.isInLibrary`。
+  Future<List<EpubBookRow>> getLibraryEpubBooks() => (select(epubBooks)
+        ..where((t) => t.inLibrary.equals(true))
+        ..orderBy([(t) => OrderingTerm.desc(t.importedAt)]))
+      .get();
+
+  /// 书架成员 bookKey 集合的响应式流（供 `fushiBooksProvider` 在导入 /
+  /// 删除 / membership 翻转后自动重算）。非书架行不出现。
+  Stream<List<String>> watchLibraryEpubBookKeys() => (selectOnly(epubBooks)
+        ..addColumns(<Expression<Object>>[epubBooks.bookKey])
+        ..where(epubBooks.inLibrary.equals(true)))
+      .watch()
+      .map(
+        (List<TypedResult> rows) => rows
+            .map((TypedResult row) => row.read(epubBooks.bookKey)!)
+            .toList(growable: false),
+      );
 
   /// 全部书的瘦投影（[EpubBookMeta]，与 [getAllEpubBooks] 同序：importedAt 降序）。
   ///
@@ -103,6 +128,7 @@ mixin _FushiDbContentMisc
             epubBooks.localAddedAt,
             epubBooks.extractDir,
             epubBooks.completedAt,
+            epubBooks.inLibrary,
           ])
           ..orderBy(<OrderingTerm>[OrderingTerm.desc(epubBooks.importedAt)]);
     final List<TypedResult> rows = await query.get();
@@ -117,6 +143,7 @@ mixin _FushiDbContentMisc
             localAddedAt: row.read(epubBooks.localAddedAt),
             extractDir: row.read(epubBooks.extractDir)!,
             completedAt: row.read(epubBooks.completedAt),
+            inLibrary: row.read(epubBooks.inLibrary)!,
           ),
         )
         .toList(growable: false);
@@ -614,14 +641,24 @@ mixin _FushiDbContentMisc
           await deleteStudySegmentsForMedia(
               mediaKind: kActivityMediaBook, mediaKey: bookKey);
         }
-        await (delete(readingStatistics)..where((t) => t.title.equals(title)))
-            .go();
-        await (delete(lookupMiningCounters)
-              ..where((t) =>
-                  t.title.equals(title) &
-                  t.sourceType.equals(FushiDatabase.statSourceBook)))
-            .go();
-        await insertStatisticsTombstone(title, FushiDatabase.statSourceBook);
+        // my-comic 的漫画-only live schema 只有 study_segments，没有这两张旧投影
+        // 表。无守卫的 delete 会在「表不存在」上抛异常并回滚整个事务，连已经删掉
+        // 的 study_segments 也一起回滚——「同时删除统计数据」会静默失效。
+        if (await hasTable(FushiSchemaTables.readingStatistics)) {
+          await (delete(readingStatistics)
+                ..where((t) => t.title.equals(title)))
+              .go();
+        }
+        if (await hasTable(FushiSchemaTables.lookupMiningCounters)) {
+          await (delete(lookupMiningCounters)
+                ..where((t) =>
+                    t.title.equals(title) &
+                    t.sourceType.equals(FushiDatabase.statSourceBook)))
+              .go();
+        }
+        if (await hasTable(FushiSchemaTables.statisticsTombstones)) {
+          await insertStatisticsTombstone(title, FushiDatabase.statSourceBook);
+        }
       });
 
   /// 删除某视频的纯统计：观看时长/字幕字数（video_watch_statistics）与查词/制卡
@@ -971,6 +1008,19 @@ mixin _FushiDbContentMisc
         chaptersJson: Value(chaptersJson),
       ));
 
+  /// 显式加入书架 / 移出书架：只写 Library membership（`in_library`）。
+  ///
+  /// 同一行的 bookKey、uid、extractDir、章节、阅读进度、已读、下载映射与
+  /// History 都原样保留；非书架行与书架行是同一条 Manga 记录。
+  ///
+  /// 返回实际更新的行数（0 = bookKey 不存在）。
+  Future<int> updateEpubBookInLibrary(
+    String bookKey, {
+    required bool inLibrary,
+  }) =>
+      (update(epubBooks)..where((t) => t.bookKey.equals(bookKey)))
+          .write(EpubBooksCompanion(inLibrary: Value<bool>(inLibrary)));
+
   /// Persist the non-sensitive restart descriptor for a Mihon-backed manga.
   ///
   /// Online manga deliberately reuse [EpubBooks] so the existing shelf,
@@ -1028,7 +1078,10 @@ mixin _FushiDbContentMisc
             epubBooks.author,
             epubBooks.extractDir,
           ])
-          ..where(epubBooks.format.equals(BookFormat.manga.dbValue)))
+          ..where(
+            epubBooks.format.equals(BookFormat.manga.dbValue) &
+                epubBooks.inLibrary.equals(true),
+          ))
         .get();
     final List<TypedResult> readRows = await (selectOnly(mangaChapterStates)
           ..addColumns(<Expression<Object>>[

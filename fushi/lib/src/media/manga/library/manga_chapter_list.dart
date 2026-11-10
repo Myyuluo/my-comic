@@ -4,10 +4,13 @@ import 'package:material_ui/material_ui.dart';
 
 import 'package:fushi/src/focus/fushi_focus_scroll.dart';
 import 'package:fushi/src/media/detail/media_detail_kit.dart';
+import 'package:fushi/src/media/selection/media_selection_controller.dart';
+import 'package:fushi/src/media/selection/selection_gestures.dart';
 import 'package:fushi/src/utils/components/fushi_staggered_entrance.dart';
 import 'package:fushi/src/utils/components/glass/fushi_icon.dart';
 import 'package:fushi/src/utils/fushi_icons.dart';
 import 'package:fushi_core/fushi_core.dart';
+import 'package:fushi/src/media/manga/library/manga_adjacent_chapter.dart';
 import 'package:fushi/src/media/manga/library/manga_chapter_download_state.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi/src/media/manga/library/online_manga_runtime_adapter.dart'
@@ -30,15 +33,40 @@ String mangaChapterDownloadFailedLabel(String? lastError) {
   return '${t.manga_chapter_download_status_failed} · $reason';
 }
 
+/// 章节下载三态筛选（ticket 06）：全部 → 已下载 → 未下载 → 全部。
+///
+/// 状态由作品页持有（会话内，不持久化），与「只看未读」AND 联动。「已下载」只认
+/// 磁盘上可读的章；排队中 / 下载中 / 暂停 / 文件缺失都算未下载。本地图源章节由
+/// 宿主作为已下载传入，因此恒为已下载。
+enum MangaChapterDownloadFilter {
+  all,
+  downloaded,
+  notDownloaded;
+
+  /// 点按循环：全部 → 已下载 → 未下载 → 全部。
+  MangaChapterDownloadFilter get next => switch (this) {
+    all => downloaded,
+    downloaded => notDownloaded,
+    notDownloaded => all,
+  };
+
+  /// chip 上显示当前状态的文字。
+  String get label => switch (this) {
+    all => t.home_filter_all,
+    downloaded => t.shelf_filter_download_downloaded,
+    notDownloaded => t.shelf_filter_download_not_downloaded,
+  };
+}
+
 /// 章节列表。
 ///
 /// 作品页和阅读器里的「章节」弹层用**同一个** widget：两处对「已读怎么显示、
 /// 当前章怎么高亮、排序默认哪个方向、下载状态怎么标」的答案必须一致，各写一份
 /// 必然漂移。
 ///
-/// 2026-10 M3E：行是作品详情骨架的分段列表行（[MediaDetailItemRow]）——话数
-/// 序号胶囊、已读 = tertiary 对勾 + 标题降调、读了一半 = 行内进度条、当前章整行
-/// primaryContainer、下载状态图标（排队 / 转圈 / 已下载 / 失败）；错峰进场。
+/// 2026-10 M3E：行是作品详情骨架的分段列表行（[MediaDetailItemRow]）——已读 =
+/// tertiary 对勾 + 标题降调、读了一半 = 行内进度条、下载状态图标（排队 / 转圈 /
+/// 已下载 / 失败）；错峰进场。票 08 起行首不再有话数序号胶囊，多选态仍画选择标记。
 class MangaChapterList extends StatelessWidget {
   const MangaChapterList({
     required this.entry,
@@ -51,11 +79,16 @@ class MangaChapterList extends StatelessWidget {
     this.currentChapterAnchorKey,
     this.onSortToggled,
     this.onJumpToCurrent,
+    this.downloadFilter = MangaChapterDownloadFilter.all,
+    this.onDownloadFilterToggled,
     this.onUnreadOnlyToggled,
     this.onToggleRead,
     this.onMarkUpToRead,
+    this.onChapterLongPress,
+    this.selectedChapterKeys,
     this.showHeader = true,
     this.downloadedChapterKeys = const <String>{},
+    this.undeletableDownloadedChapterKeys = const <String>{},
     this.missingChapterKeys = const <String>{},
     this.jobsByChapterKey = const <String, MangaDownloadJobRow>{},
     this.onDownload,
@@ -73,9 +106,11 @@ class MangaChapterList extends StatelessWidget {
   final OnlineMangaLibraryEntry? entry;
   final Map<String, MangaChapterStateRow> states;
 
-  /// 源按新→旧返回，所以 `true` = 保持源顺序，`false` = 反转成第 1 话在前。
+  /// `true` = 最新一话在前（导入作品按 `sourceOrder`，在线源按列表顺序），
+  /// `false` = 反转成第 1 话在前。见 [visibleChapters]。
   final bool newestFirst;
   final bool unreadOnly;
+  final MangaChapterDownloadFilter downloadFilter;
   final String? currentChapterKey;
 
   /// 挂在当前章那一行上的 key：宿主拿它 `FushiFocusScroll.ensureVisible` 定位到当前章
@@ -89,8 +124,20 @@ class MangaChapterList extends StatelessWidget {
   /// 区块标题里的「跳到当前章节」；null = 不出现（没有当前章 / 宿主不支持）。
   final VoidCallback? onJumpToCurrent;
   final VoidCallback? onUnreadOnlyToggled;
+
+  /// 下载筛选 chip 的点击回调；null = 不出现（阅读器章节弹层不提供该筛选）。
+  final VoidCallback? onDownloadFilterToggled;
   final void Function(OnlineMangaChapter chapter)? onToggleRead;
   final void Function(OnlineMangaChapter chapter)? onMarkUpToRead;
+
+  /// 长按章节（未进入多选时由宿主接去进入多选）。null = 不接。
+  final void Function(OnlineMangaChapter chapter)? onChapterLongPress;
+
+  /// 多选态下已选中的章节 key；null = 未进入多选（行不画选择标记，点击保持
+  /// [onChapterTap] 的普通语义）。非 null 时每一行都画行首选择标记，选中行铺
+  /// primaryContainer 底，供作品页的多选态使用。
+  final Set<String>? selectedChapterKeys;
+
   final bool showHeader;
 
   /// 下载状态位（设计稿 2026-09-12 §5）。两份输入合成一个状态：
@@ -98,6 +145,11 @@ class MangaChapterList extends StatelessWidget {
   /// [jobsByChapterKey] 是任务表里的行；下载中 / 排队 / 失败看任务行，已下载看
   /// 磁盘。默认都空 = 每章都显示成「未下载」（阅读器内的章节选择器只给磁盘那份）。
   final Set<String> downloadedChapterKeys;
+
+  /// 虽显示「已下载」但不提供「删除下载」的章：文件不在当前 Download library
+  /// 的管理范围内（例如 Local source root 下的用户原件）。菜单据此隐藏动作，
+  /// 避免一条看似普通的删除悄悄清掉用户自己的文件。
+  final Set<String> undeletableDownloadedChapterKeys;
 
   /// 宿主明确判定为 Missing 的章（ticket 08：Local source 作品切到新 Content
   /// root 后仍留在书架里，旧目录不再属于当前 `local`）。命中时覆盖普通
@@ -131,15 +183,13 @@ class MangaChapterList extends StatelessWidget {
 
   /// 一章的下载状态：磁盘判据优先（真正决定能不能读），其次看任务行；
   /// `done` 任务 + 磁盘缺文件 = Missing（Ticket 02）。
-  MangaChapterDownloadState _downloadStateOf(OnlineMangaChapter chapter) {
-    if (missingChapterKeys.contains(chapter.key)) {
-      return MangaChapterDownloadState.missing;
-    }
-    return mangaChapterDownloadState(
-      downloaded: downloadedChapterKeys.contains(chapter.key),
-      job: jobsByChapterKey[chapter.key],
-    );
-  }
+  MangaChapterDownloadState _downloadStateOf(OnlineMangaChapter chapter) =>
+      downloadStateOf(
+        chapter: chapter,
+        downloadedChapterKeys: downloadedChapterKeys,
+        missingChapterKeys: missingChapterKeys,
+        jobsByChapterKey: jobsByChapterKey,
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -150,15 +200,11 @@ class MangaChapterList extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        if (showHeader) _buildHeader(context, chapters.length),
+        if (showHeader) _buildHeader(context, visible.length),
         if (chapters.isEmpty)
           _buildEmptyChapters(context)
         else if (visible.isEmpty)
-          _buildEmpty(
-            context,
-            t.manga_series_all_read,
-            icon: FushiIcons.success,
-          )
+          _buildFilterEmpty(context, chapters)
         else
           for (int i = 0; i < visible.length; i++)
             _buildRow(context, visible[i], i, visible.length),
@@ -166,22 +212,83 @@ class MangaChapterList extends StatelessWidget {
     );
   }
 
-  List<OnlineMangaChapter> _visibleChapters(List<OnlineMangaChapter> chapters) {
-    final Iterable<OnlineMangaChapter> filtered = unreadOnly
-        ? chapters.where(
-            (OnlineMangaChapter chapter) => states[chapter.key]?.readAt == null,
-          )
-        : chapters;
-    final List<OnlineMangaChapter> ordered = filtered.toList(growable: false);
-    if (newestFirst) return ordered;
-    return ordered.reversed.toList(growable: false);
+  List<OnlineMangaChapter> _visibleChapters(
+    List<OnlineMangaChapter> chapters,
+  ) => visibleChapters(
+    chapters: chapters,
+    states: states,
+    newestFirst: newestFirst,
+    unreadOnly: unreadOnly,
+    downloadFilter: downloadFilter,
+    downloadStateOf: _downloadStateOf,
+  );
+
+  /// 当前筛选（只看未读 + 下载状态）+ 排序之后真正渲染出来的章节
+  /// （顺序 = 屏幕顺序）。
+  ///
+  /// 作品页的多选状态机用同一份结果登记「可见序」：全选 / 反选与批量动作都只
+  /// 作用于这份列表，不能各自再推一遍筛选判据（两处推导迟早漂开）。
+  static List<OnlineMangaChapter> visibleChapters({
+    required List<OnlineMangaChapter> chapters,
+    required Map<String, MangaChapterStateRow> states,
+    required bool newestFirst,
+    required bool unreadOnly,
+    MangaChapterDownloadFilter downloadFilter = MangaChapterDownloadFilter.all,
+    MangaChapterDownloadState Function(OnlineMangaChapter chapter)?
+    downloadStateOf,
+  }) {
+    Iterable<OnlineMangaChapter> filtered = chapters;
+    if (unreadOnly) {
+      filtered = filtered.where(
+        (OnlineMangaChapter chapter) => states[chapter.key]?.readAt == null,
+      );
+    }
+    // 下载筛选与「只看未读」AND 联动。「已下载」只认磁盘上可读的章——missing
+    // （任务表 done 但文件没了）以及排队 / 下载中 / 暂停都不算。
+    if (downloadFilter != MangaChapterDownloadFilter.all &&
+        downloadStateOf != null) {
+      filtered = filtered.where((OnlineMangaChapter chapter) {
+        final bool downloaded =
+            downloadStateOf(chapter) == MangaChapterDownloadState.downloaded;
+        return downloadFilter == MangaChapterDownloadFilter.downloaded
+            ? downloaded
+            : !downloaded;
+      });
+    }
+    // 显示顺序与存储数组顺序无关：先构造规范阅读顺序（第 1 话 → 第 N 话），
+    // 「最新在前」就是它的反转。导入作品按 sourceOrder，缺失时回退章节号 /
+    // 上传日期；完全没有顺序信息的条目保持现有源顺序（见 mangaReadingOrder）。
+    final List<OnlineMangaChapter> readingOrder = mangaReadingOrder(
+      filtered.toList(growable: false),
+    );
+    if (newestFirst) {
+      return readingOrder.reversed.toList(growable: false);
+    }
+    return readingOrder;
   }
 
-  /// 区块标题：「章节」+ 计数胶囊，行尾排序与只看未读。
-  Widget _buildHeader(BuildContext context, int total) {
+  /// 一章的下载状态（静态版，ticket 06）：作品页登记可见序、判定批量动作作用
+  /// 域时与列表内部用完全相同的口径。
+  static MangaChapterDownloadState downloadStateOf({
+    required OnlineMangaChapter chapter,
+    required Set<String> downloadedChapterKeys,
+    required Set<String> missingChapterKeys,
+    required Map<String, MangaDownloadJobRow> jobsByChapterKey,
+  }) {
+    if (missingChapterKeys.contains(chapter.key)) {
+      return MangaChapterDownloadState.missing;
+    }
+    return mangaChapterDownloadState(
+      downloaded: downloadedChapterKeys.contains(chapter.key),
+      job: jobsByChapterKey[chapter.key],
+    );
+  }
+
+  /// 区块标题：「共 X 章」，X 为当前筛选后的可见章节数（票 08），行尾排序、
+  /// 下载筛选与只看未读。空列表也是「共 0 章」；不再单独画数字徽章。
+  Widget _buildHeader(BuildContext context, int visibleCount) {
     return MediaDetailSectionHeader(
-      t.mihon_chapters_title,
-      count: total,
+      t.manga_series_chapters_count(count: visibleCount),
       padding: const EdgeInsets.fromLTRB(0, 16, 0, 8),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
@@ -209,6 +316,15 @@ class MangaChapterList extends StatelessWidget {
               onPressed: onJumpToCurrent,
               icon: const FushiIcon(FushiIcons.myLocation),
             ),
+          if (onDownloadFilterToggled != null) ...<Widget>[
+            const SizedBox(width: 4),
+            FushiSelectableChip(
+              key: const ValueKey<String>('manga_chapter_download_filter'),
+              label: downloadFilter.label,
+              selected: downloadFilter != MangaChapterDownloadFilter.all,
+              onSelected: (_) => onDownloadFilterToggled!(),
+            ),
+          ],
           if (onUnreadOnlyToggled != null) ...<Widget>[
             const SizedBox(width: 4),
             FushiSelectableChip(
@@ -221,6 +337,27 @@ class MangaChapterList extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  /// 筛选后没有可见章：确实全部读完时沿用「所有章节都已读完」（只看未读的既有
+  /// 语义）；否则是下载筛选没有匹配，用通用文案，不把筛选结果说成「都读完了」。
+  Widget _buildFilterEmpty(
+    BuildContext context,
+    List<OnlineMangaChapter> chapters,
+  ) {
+    final bool allRead =
+        unreadOnly &&
+        chapters.every(
+          (OnlineMangaChapter chapter) => states[chapter.key]?.readAt != null,
+        );
+    if (allRead) {
+      return _buildEmpty(
+        context,
+        t.manga_series_all_read,
+        icon: FushiIcons.success,
+      );
+    }
+    return _buildEmpty(context, t.manga_series_no_chapters_match_filter);
   }
 
   Widget _buildEmptyChapters(BuildContext context) {
@@ -298,62 +435,65 @@ class MangaChapterList extends StatelessWidget {
     // 相邻章节常有相同下载状态，列表身份必须取章节 key；状态探针放在每章内部，
     // 避免重复 sibling key，且排序 / 下载状态变化时保留该章的进场状态。
     final GlobalKey? anchor = current ? currentChapterAnchorKey : null;
+    final Set<String>? selectedKeys = selectedChapterKeys;
+    final bool selectionMode = selectedKeys != null;
+    final bool selected = selectionMode && selectedKeys.contains(chapter.key);
+    Widget row = MediaDetailItemRow(
+      index: index,
+      count: count,
+      title: chapter.name,
+      // 票 08：所有章节列表都不再画话数胶囊——导入作品的标题常是「第 N 话」，
+      // 行首再放一个 N 是重复；`chapter.number` 仍保留给排序 / 去重 / Mihon 映射。
+      subtitle: _buildSubtitle(chapter, state, partial),
+      // 当前章把标题与副标题文字染成 primary，不再铺整行底色（2026-11）。
+      current: current,
+      completed: read,
+      progress: partial && pageCount != null && pageCount > 0
+          ? (lastPage + 1) / pageCount
+          : null,
+      downloadState: switch (download) {
+        MangaChapterDownloadState.notDownloaded =>
+          MediaDetailDownloadState.none,
+        MangaChapterDownloadState.queued => MediaDetailDownloadState.queued,
+        MangaChapterDownloadState.downloading =>
+          MediaDetailDownloadState.downloading,
+        MangaChapterDownloadState.downloaded =>
+          MediaDetailDownloadState.downloaded,
+        MangaChapterDownloadState.failed => MediaDetailDownloadState.failed,
+        MangaChapterDownloadState.missing => MediaDetailDownloadState.missing,
+      },
+      downloadProgress:
+          download == MangaChapterDownloadState.downloading && pagesTotal > 0
+          ? ((job?.pagesDone ?? 0) / pagesTotal).clamp(0.0, 1.0)
+          : null,
+      // 多选态：行首换成选择标记，选中行铺 primaryContainer 底。
+      selected: selectionMode ? selected : null,
+      onLongPress: onChapterLongPress == null
+          ? null
+          : () => onChapterLongPress!(chapter),
+      trailing: _buildMenu(chapter, download),
+      onTap: () => onChapterTap(chapter),
+    );
+    // 多选态给每行贴「我是哪一章」的标记，供 SelectionDragArea 按坐标反查并
+    // 长按扫选（只看未读筛掉的行不在树上，自然扫不到）。
+    if (selectionMode) {
+      row = SelectionSlotTarget(
+        slot: SelectionSlot.loose(chapter.key),
+        child: row,
+      );
+    }
     return FushiStaggeredEntrance(
       key: ValueKey<String>('manga_chapter_${chapter.key}'),
       index: index,
       child: KeyedSubtree(
         key: ValueKey<String>('manga_chapter_download_${download.name}'),
-        child: _anchored(
-          anchor,
-          MediaDetailItemRow(
-            index: index,
-            count: count,
-            title: chapter.name,
-            number: _numberLabel(chapter),
-            subtitle: _buildSubtitle(chapter, state, partial),
-            // 几百话的表里一个行尾小图标扫不到，整行底色才是能一眼定位的信号。
-            current: current,
-            completed: read,
-            progress: partial && pageCount != null && pageCount > 0
-                ? (lastPage + 1) / pageCount
-                : null,
-            downloadState: switch (download) {
-              MangaChapterDownloadState.notDownloaded =>
-                MediaDetailDownloadState.none,
-              MangaChapterDownloadState.queued =>
-                MediaDetailDownloadState.queued,
-              MangaChapterDownloadState.downloading =>
-                MediaDetailDownloadState.downloading,
-              MangaChapterDownloadState.downloaded =>
-                MediaDetailDownloadState.downloaded,
-              MangaChapterDownloadState.failed =>
-                MediaDetailDownloadState.failed,
-              MangaChapterDownloadState.missing =>
-                MediaDetailDownloadState.missing,
-            },
-            downloadProgress:
-                download == MangaChapterDownloadState.downloading &&
-                    pagesTotal > 0
-                ? ((job?.pagesDone ?? 0) / pagesTotal).clamp(0.0, 1.0)
-                : null,
-            trailing: _buildMenu(chapter, download),
-            onTap: () => onChapterTap(chapter),
-          ),
-        ),
+        child: _anchored(anchor, row),
       ),
     );
   }
 
   static Widget _anchored(GlobalKey? anchor, Widget child) =>
       anchor == null ? child : KeyedSubtree(key: anchor, child: child);
-
-  /// 序号胶囊里的话数：整数话不带小数点；源没给（Mihon 用 -1 表示未知）就不画。
-  static String? _numberLabel(OnlineMangaChapter chapter) {
-    final double? number = chapter.number;
-    if (number == null || number < 0) return null;
-    if (number == number.truncateToDouble()) return '${number.toInt()}';
-    return '$number';
-  }
 
   String? _buildSubtitle(
     OnlineMangaChapter chapter,
@@ -464,6 +604,7 @@ class MangaChapterList extends StatelessWidget {
             label: t.media_file_location_open,
           ),
         if (onDeleteDownload != null &&
+            !undeletableDownloadedChapterKeys.contains(chapter.key) &&
             (download == MangaChapterDownloadState.downloaded ||
                 download == MangaChapterDownloadState.missing))
           FushiPopupMenuItem<String>(

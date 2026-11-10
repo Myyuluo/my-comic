@@ -241,6 +241,12 @@ function Invoke-Flutter {
         [string[]] $Arguments
     )
     Push-Location $FushiDir
+    # Windows PowerShell 5.1 turns a native command's stderr into a
+    # NativeCommandError when ErrorActionPreference is Stop. Flutter writes
+    # normal notices (e.g. the storage mirror announcement) to stderr, so keep
+    # this invocation non-terminating and rely on $LASTEXITCODE instead.
+    $previousErrorAction = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
     try {
         & $Flutter @Arguments 2>&1 | ForEach-Object {
             Write-Host $_
@@ -250,6 +256,7 @@ function Invoke-Flutter {
             throw "flutter $($Arguments -join ' ') failed with exit code $LASTEXITCODE"
         }
     } finally {
+        $ErrorActionPreference = $previousErrorAction
         Pop-Location
     }
 }
@@ -264,6 +271,9 @@ function Invoke-Dart {
         throw "dart.bat was not found next to $Flutter"
     }
     Push-Location $FushiDir
+    # See Invoke-Flutter: keep native stderr from becoming a terminating error.
+    $previousErrorAction = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
     try {
         & $dart @Arguments 2>&1 | ForEach-Object {
             Write-Host $_
@@ -273,6 +283,7 @@ function Invoke-Dart {
             throw "dart $($Arguments -join ' ') failed with exit code $LASTEXITCODE"
         }
     } finally {
+        $ErrorActionPreference = $previousErrorAction
         Pop-Location
     }
 }

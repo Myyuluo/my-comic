@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:fushi/src/media/import/real_path_directory_picker.dart';
 import 'package:fushi/src/settings/settings_context.dart';
 import 'package:fushi/src/settings/settings_destination.dart';
+import 'package:fushi/src/settings/settings_schema_cache_clear.dart';
+import 'package:fushi/src/settings/settings_schema_database_clear.dart';
 import 'package:fushi/src/storage/app_paths.dart';
 import 'package:fushi/src/storage/content_root_switch.dart';
 import 'package:fushi/src/utils/fushi_icons.dart';
@@ -19,6 +21,9 @@ import 'package:fushi/utils.dart';
 ///    成功后重启应用生效；打开使用现有 reveal-in-file-manager 原语，目录不存在
 ///    时先创建，失败复用现有提示。
 ///  - `程序数据位置`：Program state root，只读，使用回退位置时在副标题标注。
+///  - `清除缓存`：显式缓存目录的占用与清理入口（ticket 11）。
+///  - `清理数据库`：按 Source 清理未入书架的作品、其章节/进度/已读/下载索引与
+///    History；默认保留有阅读记录的作品（ticket 13）。
 ///
 /// 2026-11-08（ticket 03）：移除 downloads / local / autobackup 三个重复的
 /// 子文件夹入口。本构建器与 SRS 备份页共用，SRS 上的同名入口同步消失。
@@ -29,6 +34,12 @@ SettingsSection buildContentRootsSection() {
     title: t.settings_section_data_storage,
     footer: t.data_storage_content_root_footer,
     visible: (SettingsContext ctx) => isDesktopPlatform,
+    // 「清除缓存」的占用是异步测量的运行期状态：分组渲染时触发一次，结果
+    // 变化只重建本分组（不靠宿主整页 setState）。
+    liveListenable: (SettingsContext ctx) {
+      ensureMangaCacheUsageMeasured(ctx);
+      return mangaCacheUsageBytes;
+    },
     items: <SettingsItem>[
       SettingsStatusItem(
         id: 'storage.content_root',
@@ -47,6 +58,8 @@ SettingsSection buildContentRootsSection() {
         // 只读：没有 actionLabel / onAction。
         subtitleBuilder: _programStateRootSubtitle,
       ),
+      buildClearCacheSettingsItem(),
+      buildClearDatabaseSettingsItem(),
     ],
   );
 }

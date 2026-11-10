@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
 
 import 'package:fushi/src/focus/fushi_focus_controller.dart';
+import 'package:fushi/src/media/manga/library/manga_shelf_removal_dialog.dart';
+import 'package:fushi/src/media/manga/library/manga_shelf_removal_service.dart';
 import 'package:fushi/src/media/manga/library/manga_series_page.dart';
 import 'package:fushi/src/media/manga/manga_cover_placeholder.dart';
 import 'package:fushi/src/media/media_search_text.dart';
@@ -13,6 +15,7 @@ import 'package:fushi/src/media/online/cover_browse_shared.dart';
 import 'package:fushi/src/media/online/online_source_error_text.dart';
 import 'package:fushi/src/media/selection/media_selection_controller.dart';
 import 'package:fushi/src/media/selection/selection_gestures.dart';
+import 'package:fushi/src/media/tags/tag_picker_sheet.dart';
 import 'package:fushi/src/models/app_model.dart';
 import 'package:fushi/src/utils/components/batch_action_bar.dart';
 import 'package:fushi/src/utils/components/glass/fushi_icon.dart';
@@ -51,8 +54,9 @@ enum LocalSourceShelfFilter {
 /// 单部作品不在这里隐式登记：普通单击进作品页（未入库的走
 /// [LocalSourceMangaSeriesTarget]），用户在作品页显式「加入书架」才写 Library；
 /// 批量入口（右上「选择」或鼠标长按卡片）进入选择模式后，可把选中的未入架作品
-/// 批量加入书架、把已入架作品批量移出书架（只删条目 + 墓碑，**不删 `local`
-/// 文件**）。封面由 ticket 04 的 [LocalSourceCoverService] 在后台逐部补齐。
+/// 批量加入书架、把已入架作品批量移出书架。批量移出先弹统一确认弹窗，默认只删
+/// 条目 + 墓碑、**保留 `local` 原作**；勾选后才删除原作文件 / 阅读统计。封面由
+/// ticket 04 的 [LocalSourceCoverService] 在后台逐部补齐。
 class LocalSourceBrowsePage extends ConsumerStatefulWidget {
   const LocalSourceBrowsePage({super.key});
 
@@ -132,8 +136,11 @@ class _LocalSourceBrowsePageState extends ConsumerState<LocalSourceBrowsePage> {
   Future<void> _loadLibraryKeys() async {
     final List<EpubBookMeta> metas = await _appModel.database
         .getEpubBookMetas();
+    // 「在书架」按 Library membership 判：移出书架后行仍在（保留阅读状态），
+    // 但本地图源页要把它当非书架作品展示。
     _libraryKeys = <String>{
-      for (final EpubBookMeta meta in metas) meta.bookKey,
+      for (final EpubBookMeta meta in metas)
+        if (meta.isInLibrary) meta.bookKey,
     };
   }
 
@@ -193,10 +200,12 @@ class _LocalSourceBrowsePageState extends ConsumerState<LocalSourceBrowsePage> {
   /// 卡片点击：选择模式内切换选中（Shift = 区间选）；普通模式打开作品页。
   void _handleCardTap(LocalSourceManga manga) {
     if (_selectionMode) {
-      setState(() => _selection.applyTap(
-        SelectionSlot.loose(manga.directoryPath),
-        selectionTapKind(),
-      ));
+      setState(
+        () => _selection.applyTap(
+          SelectionSlot.loose(manga.directoryPath),
+          selectionTapKind(),
+        ),
+      );
       return;
     }
     unawaited(_openManga(manga));
@@ -215,17 +224,21 @@ class _LocalSourceBrowsePageState extends ConsumerState<LocalSourceBrowsePage> {
   }
 
   void _selectAll() {
-    setState(() => _selection.selectAll(
-      loose: _selection.visibleLooseKeys,
-      collections: const <int>[],
-    ));
+    setState(
+      () => _selection.selectAll(
+        loose: _selection.visibleLooseKeys,
+        collections: const <int>[],
+      ),
+    );
   }
 
   void _invertSelection() {
-    setState(() => _selection.invert(
-      loose: _selection.visibleLooseKeys,
-      collections: const <int>[],
-    ));
+    setState(
+      () => _selection.invert(
+        loose: _selection.visibleLooseKeys,
+        collections: const <int>[],
+      ),
+    );
   }
 
   /// 当前可见列表里被选中的作品（批量动作的作用域；不可见项不参与）。
@@ -240,12 +253,17 @@ class _LocalSourceBrowsePageState extends ConsumerState<LocalSourceBrowsePage> {
 
   /// 批量「加入书架」：只登记选中且未入架的作品（tombstone 算未入架，插入行
   /// 会清墓碑）；已入架的不重复登记。
+  ///
+  /// 票 05：已有 Tag 时只弹一次选择器，所选 Tag 应用到本批所有新加入的作品；
+  /// 关闭弹窗（null）则整批取消，不登记、不写 Tag 分配。
   Future<void> _batchAddToLibrary() async {
     if (_batchRunning) return;
     final List<LocalSourceManga> targets = _selectedWorks()
         .where((LocalSourceManga manga) => !_isInLibrary(manga))
         .toList(growable: false);
     if (targets.isEmpty) return;
+    final Set<int>? selectedTagIds = await _pickTagsForBatch(targets);
+    if (selectedTagIds == null || !mounted) return;
     setState(() => _batchRunning = true);
     final LocalSourceLibrary library = LocalSourceLibrary(
       db: _appModel.database,
@@ -264,6 +282,27 @@ class _LocalSourceBrowsePageState extends ConsumerState<LocalSourceBrowsePage> {
           error,
           stack,
         );
+        continue; // 加入失败不留 Tag 分配。
+      }
+      if (selectedTagIds.isEmpty) continue;
+      try {
+        await _appModel.database.setTagsForBook(
+          localSourceBookKeyFor(manga.directoryPath),
+          selectedTagIds,
+        );
+      } on Object catch (error, stack) {
+        // 作品已入架：标签写入失败只提示，不改写入架结果。
+        ErrorLogService.instance.log(
+          'LocalSourceBrowse.batchAddToLibraryTags',
+          error,
+          stack,
+        );
+        if (mounted) {
+          FushiToast.show(
+            msg: describeOnlineSourceError(error),
+            severity: ToastSeverity.error,
+          );
+        }
       }
     }
     await _finishBatch(
@@ -273,27 +312,69 @@ class _LocalSourceBrowsePageState extends ConsumerState<LocalSourceBrowsePage> {
     );
   }
 
-  /// 批量「移出书架」：只删除选中且已入架的书架条目并写 tombstone，
-  /// **绝不删除 `local` 文件**（与作品页的单部移出同一路径）。
+  /// 批量加入前的标签选择（票 05）。返回 null = 取消整批；空集合 = 按未打标签
+  /// 直接加入（或全局还没有任何 Tag）。选择器只返回选中集合，Tag 分配在每部
+  /// 作品登记成功后统一写入。
+  Future<Set<int>?> _pickTagsForBatch(List<LocalSourceManga> targets) async {
+    final List<BookTagRow> tags;
+    try {
+      tags = await _appModel.database.getAllTags();
+    } on Object catch (error, stack) {
+      // 标签读不出来不该挡住批量加入本身：按未打标签直接加入。
+      ErrorLogService.instance.log(
+        'LocalSourceBrowse.addTagLookup',
+        error,
+        stack,
+      );
+      return const <int>{};
+    }
+    if (tags.isEmpty) return const <int>{};
+    if (!mounted) return null;
+    return showTagPickerSelection(
+      context,
+      targets: TagTargets(
+        media: <MediaRef>[
+          for (final LocalSourceManga manga in targets)
+            MediaRef(
+              kind: MediaKind.epub,
+              entryKey: localSourceBookKeyFor(manga.directoryPath),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// 批量「移出书架」：先弹票 01 的统一确认弹窗（批量数量 = 本次适用的已入架
+  /// 作品数），取消不产生任何变化。确认后逐作品独立调用共享移出服务：默认只删
+  /// Library 条目并写 tombstone、**保留 `local` 原作**；勾选「同时删除本地文件」
+  /// 时先删原作再删行，删除失败的作品留在 Library 并计入失败数。History 不删。
   Future<void> _batchRemoveFromLibrary() async {
     if (_batchRunning) return;
     final List<LocalSourceManga> targets = _selectedWorks()
         .where(_isInLibrary)
         .toList(growable: false);
     if (targets.isEmpty) return;
+    final MangaLibraryRemovalDecision? decision =
+        await showMangaShelfRemovalDialog(
+          context,
+          message: t.manga_batch_remove_confirm(count: targets.length),
+          localFilesSubtitle: t.delete_local_files_download_desc,
+          statisticsSubtitle: t.delete_statistics_manga_batch_desc,
+        );
+    if (decision == null || !mounted) return;
     setState(() => _batchRunning = true);
-    final LocalSourceLibrary library = LocalSourceLibrary(
-      db: _appModel.database,
-      root: _appModel.appPaths.localComicRoot,
-    );
     int success = 0;
     int failed = 0;
     for (final LocalSourceManga manga in targets) {
       try {
-        final bool removed = await library.removeFromLibrary(
-          localSourceBookKeyFor(manga.directoryPath),
+        final MangaLibraryRemovalResult result = await removeMangaFromLibrary(
+          db: _appModel.database,
+          bookKey: localSourceBookKeyFor(manga.directoryPath),
+          localSourceRoot: _appModel.appPaths.localComicRoot,
+          deleteLocalFiles: decision.deleteLocalFiles,
+          deleteStatistics: decision.deleteStatistics,
         );
-        if (removed) {
+        if (result.removed) {
           success++;
         } else {
           failed++;
@@ -411,9 +492,7 @@ class _LocalSourceBrowsePageState extends ConsumerState<LocalSourceBrowsePage> {
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
                 child: FushiSearchBar(
-                  fieldKey: const ValueKey<String>(
-                    'local_source_search_field',
-                  ),
+                  fieldKey: const ValueKey<String>('local_source_search_field'),
                   focusId: const FushiFocusId('local-source-browse-search'),
                   controller: _searchController,
                   focusNode: _searchFocus,
@@ -458,8 +537,9 @@ class _LocalSourceBrowsePageState extends ConsumerState<LocalSourceBrowsePage> {
   /// （加入只看未入架、移出只看已入架，混合选择各按适用子集执行）。
   Widget _buildBatchActionBar(BuildContext context) {
     final List<LocalSourceManga> selected = _selectedWorks();
-    final bool hasAddable =
-        selected.any((LocalSourceManga manga) => !_isInLibrary(manga));
+    final bool hasAddable = selected.any(
+      (LocalSourceManga manga) => !_isInLibrary(manga),
+    );
     final bool hasRemovable = selected.any(_isInLibrary);
     return BatchActionBar(
       selectedCount: _selection.length,
@@ -503,7 +583,9 @@ class _LocalSourceBrowsePageState extends ConsumerState<LocalSourceBrowsePage> {
         LibrarySectionTab<LocalSourceShelfFilter>(
           value: LocalSourceShelfFilter.notInLibrary,
           label: t.local_source_filter_not_in_library,
-          labelKey: const ValueKey<String>('local_source_filter_not_in_library'),
+          labelKey: const ValueKey<String>(
+            'local_source_filter_not_in_library',
+          ),
         ),
         LibrarySectionTab<LocalSourceShelfFilter>(
           value: LocalSourceShelfFilter.inLibrary,
@@ -619,7 +701,8 @@ class _LocalSourceBrowsePageState extends ConsumerState<LocalSourceBrowsePage> {
             File(p.join(manga.directoryPath, relative)),
             fit: BoxFit.cover,
             // 坏封面 / 扫描后被移走的文件退回占位，不让网格解码报错。
-            errorBuilder: (_, Object error, __) => const MangaCoverPlaceholder(),
+            errorBuilder: (_, Object error, __) =>
+                const MangaCoverPlaceholder(),
           );
     if (!_selectionMode) return cover;
     final FushiDesignTokens tokens = FushiDesignTokens.of(context);
@@ -637,7 +720,6 @@ class _LocalSourceBrowsePageState extends ConsumerState<LocalSourceBrowsePage> {
       ],
     );
   }
-
 }
 
 /// Local source root 读不了（目录不存在 / 无权限）时抛给浏览页的错误态。

@@ -4,8 +4,6 @@ import 'dart:io';
 import 'package:drift/drift.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi_engine/media/manga/manga_storage.dart';
-import 'package:fushi_engine/media/media_pref_keys.dart'
-    show readerBookMediaIdentifierFor;
 import 'package:fushi_engine/media/tracking/media_tracking_repository.dart'
     show
         kTrackingProviderBangumi,
@@ -13,18 +11,45 @@ import 'package:fushi_engine/media/tracking/media_tracking_repository.dart'
         TrackingMediaType,
         TrackingProgressMode;
 
+import 'package:fushi/src/backup_import/import_download_relinker.dart';
 import 'package:fushi/src/backup_import/mihon_backup_parser.dart';
+import 'package:fushi/src/media/manga/history/manga_history.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
+import 'package:fushi/src/models/preference_keys.dart';
+import 'package:fushi/src/sync/sync_repository.dart' show SyncRepository;
+import 'package:fushi/src/utils/misc/trimmed_text.dart';
 
-/// 占位 extension package：备份里的 Source 尚未安装时，书架条目仍要有一个稳定
-/// 身份，否则每次导入都会因为 package 不同而新建一行。
-///
-/// 已知限制（后续 ticket 收口）：扩展安装后 `MihonLibraryAdapter` 用真实 package
-/// 匹配源，本条目的身份不会自动改写；「安装缺失源后接管备份条目」不在 ticket 06
-/// 的最小路径内。
-const String kUnavailableMihonExtensionPackage = 'mihon.unavailable';
+/// [kUnavailableMihonExtensionPackage] 住在书架条目模型里（它是写入用户库的
+/// 身份值，作品页也要用它判断占位来源）；这里重新导出，保持既有导入/导出方
+/// 的 import 不变。
+export 'package:fushi/src/media/manga/library/online_manga_library_entry.dart'
+    show kUnavailableMihonExtensionPackage;
 
-enum MihonBackupSkipReason { notInLibrary }
+/// Why a top-level `BackupPreference` was not applied to MyComic's settings.
+enum MihonBackupAppPreferenceSkipReason {
+  /// The key is not one of MyComic's own app preference keys (Mihon native or
+  /// completely unknown).
+  notMyComicKey,
+
+  /// The key describes another installation (device id, local paths, sync
+  /// baselines). Restoring it would make this device impersonate the exporter.
+  deviceLocal,
+
+  /// This device already has a value for the key; local settings win.
+  alreadyPresent,
+}
+
+/// Why a `favorite=false` (non-library) entry wrote no History.
+enum MihonBackupHistorySkipReason {
+  /// The entry carries no History rows, so there is no read timestamp.
+  noHistory,
+
+  /// The entry has no manga URL, so its History cannot be identified.
+  missingUrl,
+
+  /// A canonical History row is at least as new as the backup's.
+  alreadyNewer,
+}
 
 enum MihonBackupFailureReason { missingUrl, databaseError }
 
@@ -37,7 +62,13 @@ class MihonBackupSourceIssue {
   });
 
   final int sourceId;
-  final String sourceName;
+
+  /// 备份里记录的 Source 显示名；旧备份可能没有名称。
+  ///
+  /// 缺失来源的 UI 文案在名称为空时使用本地化的「来源未安装」，绝不把数字
+  /// sourceId 拼成用户可见名称。
+  final String? sourceName;
+
   final int entryCount;
 
   /// Source preferences kept for this source even though its extension is not
@@ -95,11 +126,22 @@ class MihonBackupImportReport {
   const MihonBackupImportReport({
     required this.totalEntries,
     required this.importedEntries,
+    required this.nonLibraryEntriesImported,
+    required this.nonLibraryEntriesMerged,
     required this.mergedEntries,
     required this.skippedEntries,
     required this.failedEntries,
     required this.categoriesCreated,
     required this.categoriesMatched,
+    required this.categoriesSkipped,
+    required this.appPreferencesImported,
+    required this.appPreferencesSkippedByReason,
+    required this.nonLibraryHistoryImported,
+    required this.nonLibraryHistorySkippedByReason,
+    required this.downloadMangaMatched,
+    required this.downloadMangaSkipped,
+    required this.downloadChaptersRelinked,
+    required this.downloadChaptersSkipped,
     required this.chapterStatesWritten,
     required this.historyRowsWritten,
     required this.trackingMappingsImported,
@@ -115,7 +157,6 @@ class MihonBackupImportReport {
     required this.sourcePreferencesForMissingSources,
     required this.sourcePreferencesSkipped,
     required this.sourcePreferencesFailed,
-    required this.skippedByReason,
     required this.failedByReason,
     required this.missingSources,
     required this.elapsed,
@@ -123,24 +164,70 @@ class MihonBackupImportReport {
 
   final int totalEntries;
 
-  /// New library rows.
+  /// New library rows (`favorite=true`).
   final int importedEntries;
+
+  /// New non-library rows created from `favorite=false` entries. They persist
+  /// with `in_library = false` so their chapters, read marks, progress and
+  /// History survive, but they never appear on the shelf.
+  final int nonLibraryEntriesImported;
+
+  /// `favorite=false` entries merged into an existing Manga row.
+  final int nonLibraryEntriesMerged;
 
   /// Entries already in the library, matched by (source, manga url). Their
   /// reading progress and category membership were merged in place.
   final int mergedEntries;
 
-  /// Entries intentionally not imported (Mihon "read, not in library" rows).
+  /// Entries skipped without creating or merging a row. Non-library entries no
+  /// longer land here: they become persistent `in_library = false` rows.
   final int skippedEntries;
 
   final int failedEntries;
+
+  /// Tags created from Backup categories (Mihon categories import as Tags).
   final int categoriesCreated;
+
+  /// Backup categories matched an existing Tag by trimmed name and reused it.
   final int categoriesMatched;
+
+  /// Backup categories skipped because their name is blank.
+  final int categoriesSkipped;
+
+  /// MyComic app settings written because this device lacked the key.
+  final int appPreferencesImported;
+
+  /// App settings left untouched, grouped by why.
+  final Map<MihonBackupAppPreferenceSkipReason, int>
+  appPreferencesSkippedByReason;
+
+  /// `media_open_history` rows written for `favorite=false` (non-library)
+  /// entries.
+  final int nonLibraryHistoryImported;
+
+  /// `favorite=false` entries whose History was not written, grouped by why.
+  final Map<MihonBackupHistorySkipReason, int> nonLibraryHistorySkippedByReason;
+
+  /// Imported Manga whose `downloads` / `local` folder was matched by
+  /// `pages.json` identity and re-linked after the import.
+  final int downloadMangaMatched;
+
+  /// Imported Manga with several identity-proven folders (no guessing) or a
+  /// failed re-link.
+  final int downloadMangaSkipped;
+
+  /// Chapter mappings written or refreshed by the post-import re-link.
+  final int downloadChaptersRelinked;
+
+  /// Chapters inside a matched folder that were left untouched because the
+  /// container choice was ambiguous.
+  final int downloadChaptersSkipped;
 
   /// Chapter progress rows written or merged (read + partially read + history).
   final int chapterStatesWritten;
 
-  /// `media_open_history` rows written (one per library entry with history).
+  /// `media_open_history` rows written (one per entry with a read timestamp,
+  /// whether it is a Library or non-library row).
   final int historyRowsWritten;
 
   /// New Bangumi tracking mappings written.
@@ -181,7 +268,6 @@ class MihonBackupImportReport {
   /// Preferences that failed to persist (database error); the import continued.
   final int sourcePreferencesFailed;
 
-  final Map<MihonBackupSkipReason, int> skippedByReason;
   final Map<MihonBackupFailureReason, int> failedByReason;
 
   /// Sources from the backup that are not installed (or disabled) on this
@@ -195,9 +281,26 @@ class MihonBackupImportReport {
       totalEntries == 0 &&
       extensionStoresImported == 0 &&
       extensionStoresMerged == 0 &&
-      sourcePreferencesImported == 0;
+      sourcePreferencesImported == 0 &&
+      appPreferencesImported == 0 &&
+      nonLibraryEntriesImported == 0 &&
+      nonLibraryEntriesMerged == 0 &&
+      nonLibraryHistoryImported == 0;
 
   int get successfulEntries => importedEntries + mergedEntries;
+
+  /// 备份里的分类至少创建或匹配了一个 Tag（匹配也可能更新 Tag 排序）。
+  ///
+  /// 分类可以在没有任何 Library 条目时单独写 Tag 表，因此导入流程不能只用
+  /// [isEmpty] 判断「标签有没有变化」——[isEmpty] 不覆盖分类写入。
+  bool get hasCategoryTagWrites =>
+      categoriesCreated > 0 || categoriesMatched > 0;
+
+  int get appPreferencesSkipped => appPreferencesSkippedByReason.values
+      .fold<int>(0, (int sum, int count) => sum + count);
+
+  int get nonLibraryHistorySkipped => nonLibraryHistorySkippedByReason.values
+      .fold<int>(0, (int sum, int count) => sum + count);
 }
 
 /// Imports a Mihon v0.21.3 `.tachibk` backup into the my-comic library.
@@ -208,12 +311,21 @@ class MihonBackupImportReport {
 class MihonBackupImportService {
   MihonBackupImportService({
     required this.database,
+    this.downloadsRoot,
+    this.localComicRoot,
     Future<String> Function(String bookKey)? bookDirectory,
     int Function()? now,
   }) : _bookDirectory = bookDirectory ?? MangaStorage.bookPath,
        _now = now ?? (() => DateTime.now().millisecondsSinceEpoch);
 
   final FushiDatabase database;
+
+  /// 当前 Content root 的 Download library 根；null = 不执行导入后自动匹配。
+  final Directory? downloadsRoot;
+
+  /// 当前 Content root 的 Local source 根；null = 不扫描 `local`。
+  final Directory? localComicRoot;
+
   final Future<String> Function(String bookKey) _bookDirectory;
   final int Function() _now;
 
@@ -225,6 +337,16 @@ class MihonBackupImportService {
     final MihonBackupData data = MihonBackupParser.parseFile(file);
     final int importNow = _now();
 
+    // No partial import: an unknown preference value type anywhere in field 104
+    // or 105 aborts the whole file before the first write. This includes keys
+    // MyComic does not recognise — Mihon itself refuses an unknown serial name,
+    // and silently skipping it would leave the user with a half-restored file.
+    _ensureSupportedPreferenceTypes(data.preferences);
+    for (final MihonBackupSourcePreferences container
+        in data.sourcePreferences) {
+      _ensureSupportedPreferenceTypes(container.preferences);
+    }
+
     final List<MangaOnlineSourceRow> installed = await database
         .getMangaOnlineSources(mediaKind: 'manga');
     final Map<int, MangaOnlineSourceRow> installedBySourceId =
@@ -233,47 +355,72 @@ class MihonBackupImportService {
             if (int.tryParse(row.sourceId) case final int id) id: row,
         };
 
-    // Categories are resolved by *order*, matching Mihon's restore behavior:
-    // BackupManga.categories stores order values, not category ids.
-    final Map<int, MihonBackupCategory> categoriesByOrder =
-        <int, MihonBackupCategory>{
-          for (final MihonBackupCategory category in data.categories)
-            if (category.name.trim().isNotEmpty) category.order: category,
-        };
+    // App settings are planned (and validated) before the first write. An
+    // unknown preference value type aborts the whole import instead of
+    // applying half a backup (Mihon itself refuses to restore an unknown
+    // serial name). This must stay above Tag creation below, which writes.
+    final _AppPreferencePlan appPreferences = _planAppPreferences(
+      data.preferences,
+      await database.getAllPrefs(),
+    );
 
-    final Map<String, int> collectionsByName = <String, int>{
-      for (final MediaCollectionRow collection
-          in await database.getAllMediaCollections())
-        collection.name: collection.id,
+    // Mihon categories import as Tags. Resolve/create each one by trimmed name
+    // and align its sort order with the category order, so a MyComic-generated
+    // backup (Tags exported as categories) round-trips. Per-manga
+    // BackupManga.categories stores category *orders*, not ids.
+    final List<BookTagRow> existingTags = await database.getAllTags();
+    final Map<String, int> tagIdByName = <String, int>{
+      for (final BookTagRow tag in existingTags) tag.name: tag.id,
     };
+    final Map<String, int> tagSortOrderByName = <String, int>{
+      for (final BookTagRow tag in existingTags) tag.name: tag.sortOrder,
+    };
+    final Map<int, int> tagIdByCategoryOrder = <int, int>{};
     int categoriesCreated = 0;
     int categoriesMatched = 0;
+    int categoriesSkipped = 0;
     for (final MihonBackupCategory category in data.categories) {
       final String name = category.name.trim();
-      if (name.isEmpty) continue;
-      final int? existingId = collectionsByName[name];
-      if (existingId != null) {
-        categoriesMatched++;
+      if (name.isEmpty) {
+        categoriesSkipped++;
         continue;
       }
-      final int id = await database.createMediaCollection(name);
-      collectionsByName[name] = id;
-      categoriesCreated++;
+      final int? existingTagId = tagIdByName[name];
+      final int tagId;
+      if (existingTagId == null) {
+        tagId = await database.getOrCreateTagByName(name);
+        tagIdByName[name] = tagId;
+        categoriesCreated++;
+      } else {
+        tagId = existingTagId;
+        categoriesMatched++;
+      }
+      if (tagSortOrderByName[name] != category.order) {
+        await (database.update(database.bookTags)
+              ..where((t) => t.id.equals(tagId)))
+            .write(BookTagsCompanion(sortOrder: Value<int>(category.order)));
+        tagSortOrderByName[name] = category.order;
+      }
+      tagIdByCategoryOrder[category.order] = tagId;
     }
 
     final Map<String, _ExistingEntry> existing = await _loadExistingEntries();
     final Map<int, _MissingSourceBuilder> missing =
         <int, _MissingSourceBuilder>{};
-    final Map<MihonBackupSkipReason, int> skippedByReason =
-        <MihonBackupSkipReason, int>{};
     final Map<MihonBackupFailureReason, int> failedByReason =
         <MihonBackupFailureReason, int>{};
+    final Map<MihonBackupHistorySkipReason, int> nonLibraryHistorySkipped =
+        <MihonBackupHistorySkipReason, int>{};
+    int nonLibraryHistoryImported = 0;
     int imported = 0;
+    int nonLibraryEntriesImported = 0;
+    int nonLibraryEntriesMerged = 0;
     int merged = 0;
     int skipped = 0;
     int failed = 0;
     int chapterStatesWritten = 0;
     int historyRowsWritten = 0;
+    final Set<String> importedBookKeys = <String>{};
     int trackingMappingsImported = 0;
     int trackingMappingsMerged = 0;
     int trackingSkipped = 0;
@@ -291,8 +438,9 @@ class MihonBackupImportService {
     // One transaction for the whole import: a backup with thousands of entries
     // otherwise pays one fsync per row/chapter-state, which on Windows turns a
     // few seconds of SQLite work into tens of minutes. Directory creation is
-    // deliberately deferred to first open (`ensureBookDirectory`) so importing
-    // 5k+ entries does not create 5k folders synchronously.
+    // deliberately deferred to the download worker (`ensureBookDirectory`) when
+    // a chapter download actually starts (ticket 02) — importing or browsing
+    // 5k+ entries never creates folders synchronously.
     await database.transaction(() async {
       int processed = 0;
       for (final MihonBackupManga manga in data.mangas) {
@@ -307,16 +455,6 @@ class MihonBackupImportService {
           );
         }
 
-        if (!manga.favorite) {
-          skipped++;
-          skippedByReason.update(
-            MihonBackupSkipReason.notInLibrary,
-            (int value) => value + 1,
-            ifAbsent: () => 1,
-          );
-          continue;
-        }
-
         final String url = manga.url.trim();
         if (url.isEmpty) {
           failed++;
@@ -325,6 +463,16 @@ class MihonBackupImportService {
             (int value) => value + 1,
             ifAbsent: () => 1,
           );
+          if (!manga.favorite) {
+            // A read work without a manga URL cannot get a stable row. Still
+            // report why its History was not restored.
+            _increment(
+              nonLibraryHistorySkipped,
+              _hasPositiveHistory(manga)
+                  ? MihonBackupHistorySkipReason.missingUrl
+                  : MihonBackupHistorySkipReason.noHistory,
+            );
+          }
           continue;
         }
 
@@ -335,34 +483,58 @@ class MihonBackupImportService {
                 manga.source,
                 () => _MissingSourceBuilder(
                   sourceId: manga.source,
-                  sourceName:
-                      data.sourceNames[manga.source] ??
-                      'Source ${manga.source}',
+                  sourceName: trimmedOrNull(data.sourceNames[manga.source]),
                 ),
               )
               .entryCount++;
         }
         final String extensionPackage =
             source?.extensionPackage ?? kUnavailableMihonExtensionPackage;
+        // 只有真正未安装（无 Source 行）的条目才把备份里的名称写进描述符。
+        // 已安装 / 已停用的来源由 Source 表提供名称；备份缺名称时保持 null，
+        // UI 退化为「来源未安装」。
+        final String? sourceName = source == null
+            ? trimmedOrNull(data.sourceNames[manga.source])
+            : null;
         final String identityKey = _identityKey(manga.source, url);
 
         try {
           final _ExistingEntry? duplicate = existing[identityKey];
-          final EpubBookRow row;
+          EpubBookRow row;
           if (duplicate == null) {
             row = await _insertEntry(
               manga,
               extensionPackage: extensionPackage,
+              sourceName: sourceName,
               importNow: importNow,
+              inLibrary: manga.favorite,
             );
             existing[identityKey] = _ExistingEntry(
               row: row,
               entry: OnlineMangaLibraryEntry.tryParse(row.sourceMetadata),
             );
-            imported++;
+            if (manga.favorite) {
+              imported++;
+            } else {
+              nonLibraryEntriesImported++;
+            }
           } else {
             row = await _mergeChaptersIntoExisting(duplicate, manga);
-            merged++;
+            if (manga.favorite) {
+              merged++;
+              if (!row.inLibrary) {
+                // The backup says this work belongs to the shelf: flip the
+                // existing non-library row instead of inserting a duplicate.
+                await (database.update(
+                  database.epubBooks,
+                )..where((t) => t.bookKey.equals(row.bookKey))).write(
+                  const EpubBooksCompanion(inLibrary: Value<bool>(true)),
+                );
+                row = (await database.getEpubBook(row.bookKey))!;
+              }
+            } else {
+              nonLibraryEntriesMerged++;
+            }
           }
 
           chapterStatesWritten += await _applyReadingProgress(
@@ -370,30 +542,53 @@ class MihonBackupImportService {
             manga: manga,
             importNow: importNow,
           );
-          historyRowsWritten += await _applyHistory(row: row, manga: manga);
-          final _TrackingWriteResult tracking = await _applyTracking(
+          final _HistoryWriteResult history = await _applyHistory(
             row: row,
             manga: manga,
-            importNow: importNow,
           );
-          trackingMappingsImported += tracking.imported;
-          trackingMappingsMerged += tracking.merged;
-          trackingSkipped += tracking.skipped;
-          trackingInvalidRemoteIds += tracking.invalidRemoteIds;
-          for (final MapEntry<int, int> entry
-              in tracking.skippedByTracker.entries) {
-            skippedTrackers.update(
-              entry.key,
-              (int value) => value + entry.value,
-              ifAbsent: () => entry.value,
+          if (history.written) {
+            historyRowsWritten++;
+            if (!manga.favorite) nonLibraryHistoryImported++;
+          } else if (!manga.favorite) {
+            if (!history.hadHistory) {
+              _increment(
+                nonLibraryHistorySkipped,
+                MihonBackupHistorySkipReason.noHistory,
+              );
+            } else if (history.alreadyNewer) {
+              _increment(
+                nonLibraryHistorySkipped,
+                MihonBackupHistorySkipReason.alreadyNewer,
+              );
+            }
+          }
+          if (manga.favorite) {
+            final _TrackingWriteResult tracking = await _applyTracking(
+              row: row,
+              manga: manga,
+              importNow: importNow,
+            );
+            trackingMappingsImported += tracking.imported;
+            trackingMappingsMerged += tracking.merged;
+            trackingSkipped += tracking.skipped;
+            trackingInvalidRemoteIds += tracking.invalidRemoteIds;
+            for (final MapEntry<int, int> entry
+                in tracking.skippedByTracker.entries) {
+              skippedTrackers.update(
+                entry.key,
+                (int value) => value + entry.value,
+                ifAbsent: () => entry.value,
+              );
+            }
+            await _applyTags(
+              row: row,
+              manga: manga,
+              tagIdByCategoryOrder: tagIdByCategoryOrder,
             );
           }
-          await _applyCategories(
-            row: row,
-            manga: manga,
-            categoriesByOrder: categoriesByOrder,
-            collectionsByName: collectionsByName,
-          );
+          // Collect only rows whose whole entry (chapters, progress, History,
+          // tags) applied successfully; the re-link runs after the transaction.
+          importedBookKeys.add(row.bookKey);
         } on Object {
           failed++;
           failedByReason.update(
@@ -425,17 +620,58 @@ class MihonBackupImportService {
       sourcePreferencesForMissingSources += preferences.forMissingSources;
       sourcePreferencesSkipped += preferences.skipped;
       sourcePreferencesFailed += preferences.failed;
+
+      // Fills only the keys this device lacks; `setPrefs` also bumps the
+      // cross-process prefs-version signal in the same transaction.
+      await database.setPrefs(appPreferences.values);
     });
+
+    // Ticket 11: after a successful import, re-link only the imported rows
+    // against the current Content root's `downloads` and manifest-backed
+    // `local`. This never creates Library entries and never scans autobackup;
+    // a failure here must not undo the committed import.
+    ImportDownloadRelinkReport downloadRelink =
+        const ImportDownloadRelinkReport();
+    if (importedBookKeys.isNotEmpty) {
+      try {
+        downloadRelink = await relinkImportedMangaDownloads(
+          database: database,
+          bookKeys: importedBookKeys,
+          downloadsRoot: downloadsRoot,
+          localComicRoot: localComicRoot,
+        );
+      } on Object {
+        // The import is already committed; the report simply carries no
+        // download counts. Running the manual rebuild retries the same match.
+      }
+    }
 
     stopwatch.stop();
     return MihonBackupImportReport(
       totalEntries: data.mangas.length,
       importedEntries: imported,
+      nonLibraryEntriesImported: nonLibraryEntriesImported,
+      nonLibraryEntriesMerged: nonLibraryEntriesMerged,
       mergedEntries: merged,
       skippedEntries: skipped,
       failedEntries: failed,
       categoriesCreated: categoriesCreated,
       categoriesMatched: categoriesMatched,
+      categoriesSkipped: categoriesSkipped,
+      appPreferencesImported: appPreferences.values.length,
+      appPreferencesSkippedByReason:
+          Map<MihonBackupAppPreferenceSkipReason, int>.unmodifiable(
+            appPreferences.skippedByReason,
+          ),
+      nonLibraryHistoryImported: nonLibraryHistoryImported,
+      nonLibraryHistorySkippedByReason:
+          Map<MihonBackupHistorySkipReason, int>.unmodifiable(
+            nonLibraryHistorySkipped,
+          ),
+      downloadMangaMatched: downloadRelink.mangaMatched,
+      downloadMangaSkipped: downloadRelink.mangaSkipped,
+      downloadChaptersRelinked: downloadRelink.chaptersRelinked,
+      downloadChaptersSkipped: downloadRelink.chaptersSkipped,
       chapterStatesWritten: chapterStatesWritten,
       historyRowsWritten: historyRowsWritten,
       trackingMappingsImported: trackingMappingsImported,
@@ -463,9 +699,6 @@ class MihonBackupImportService {
       sourcePreferencesForMissingSources: sourcePreferencesForMissingSources,
       sourcePreferencesSkipped: sourcePreferencesSkipped,
       sourcePreferencesFailed: sourcePreferencesFailed,
-      skippedByReason: Map<MihonBackupSkipReason, int>.unmodifiable(
-        skippedByReason,
-      ),
       failedByReason: Map<MihonBackupFailureReason, int>.unmodifiable(
         failedByReason,
       ),
@@ -481,6 +714,98 @@ class MihonBackupImportService {
 
   String _identityKey(int sourceId, String mangaUrl) =>
       '$sourceId${String.fromCharCode(0)}$mangaUrl';
+
+  static void _ensureSupportedPreferenceTypes(
+    Iterable<MihonBackupPreference> preferences,
+  ) {
+    for (final MihonBackupPreference preference in preferences) {
+      if (preference.value.type == MihonBackupPreferenceType.unsupported) {
+        throw MihonBackupFormatException(
+          MihonBackupFormatError.corrupt,
+          'unsupported value type for preference "${preference.key}"',
+        );
+      }
+    }
+  }
+
+  static void _increment<T>(Map<T, int> counts, T key) {
+    counts.update(key, (int value) => value + 1, ifAbsent: () => 1);
+  }
+
+  /// Decides which top-level `BackupPreference` rows become MyComic settings.
+  ///
+  /// Only MyComic's own keys are eligible: the static [kKnownPreferenceKeys]
+  /// registry plus the registered dynamic-prefix families. Mihon's native keys
+  /// (and anything unknown) are reported as [notMyComicKey] instead of being
+  /// written into the `preferences` table. Device-local keys describe the
+  /// exporting machine and are skipped even though they are "known". Existing
+  /// local values always win (spec: 只补齐本机缺失的键).
+  ///
+  /// Throws [MihonBackupFormatException] for an unknown value type on a known
+  /// key. This runs before the first write, so a rejected file leaves no
+  /// partial import behind.
+  _AppPreferencePlan _planAppPreferences(
+    List<MihonBackupPreference> preferences,
+    Map<String, String> existing,
+  ) {
+    final Map<String, String> values = <String, String>{};
+    final Map<MihonBackupAppPreferenceSkipReason, int> skippedByReason =
+        <MihonBackupAppPreferenceSkipReason, int>{};
+    final Set<String> present = existing.keys.toSet();
+    for (final MihonBackupPreference preference in preferences) {
+      final String key = preference.key;
+      if (key.isEmpty || !_isKnownAppPreferenceKey(key)) {
+        _increment(
+          skippedByReason,
+          MihonBackupAppPreferenceSkipReason.notMyComicKey,
+        );
+        continue;
+      }
+      // Validate first: an unknown standard type must abort even when this
+      // device happens to already have the key.
+      final String encoded = _encodeAppPreferenceValue(preference);
+      if (SyncRepository.deviceLocalPrefKeys.contains(key)) {
+        _increment(
+          skippedByReason,
+          MihonBackupAppPreferenceSkipReason.deviceLocal,
+        );
+        continue;
+      }
+      if (!present.add(key)) {
+        _increment(
+          skippedByReason,
+          MihonBackupAppPreferenceSkipReason.alreadyPresent,
+        );
+        continue;
+      }
+      values[key] = encoded;
+    }
+    return _AppPreferencePlan(values: values, skippedByReason: skippedByReason);
+  }
+
+  static bool _isKnownAppPreferenceKey(String key) =>
+      kKnownPreferenceKeys.contains(key) ||
+      kKnownPreferenceKeyPrefixes.any(key.startsWith);
+
+  /// Re-encodes a backup preference value in MyComic's [PrefCodec] format.
+  ///
+  /// All six standard Mihon envelopes map 1:1. An unknown serial name (or a
+  /// value whose runtime type does not match its envelope) aborts the import:
+  /// writing a guess would silently corrupt a setting.
+  static String _encodeAppPreferenceValue(MihonBackupPreference preference) {
+    final MihonBackupPreferenceType type = preference.value.type;
+    final Object? value = preference.value.value;
+    if (!MihonBackupPreferenceTypes.matchesValue(type, value)) {
+      throw MihonBackupFormatException(
+        MihonBackupFormatError.corrupt,
+        'unsupported value type for preference "${preference.key}"',
+      );
+    }
+    return PrefCodec.encode(value);
+  }
+
+  static bool _hasPositiveHistory(MihonBackupManga manga) =>
+      manga.history.any((MihonBackupHistory history) => history.lastRead > 0);
 
   Future<Map<String, _ExistingEntry>> _loadExistingEntries() async {
     final List<EpubBookRow> rows = await database
@@ -509,13 +834,16 @@ class MihonBackupImportService {
   Future<EpubBookRow> _insertEntry(
     MihonBackupManga manga, {
     required String extensionPackage,
+    required String? sourceName,
     required int importNow,
+    required bool inLibrary,
   }) async {
     final String sourceId = '${manga.source}';
     final String mangaUrl = manga.url.trim();
     final OnlineMangaLibraryEntry entry = _entryFromBackup(
       manga,
       extensionPackage: extensionPackage,
+      sourceName: sourceName,
     );
     final String bookKey = onlineMangaBookKeyFor(
       runtime: OnlineMangaRuntimeKind.mihon,
@@ -523,9 +851,9 @@ class MihonBackupImportService {
       sourceId: sourceId,
       seriesKey: mangaUrl,
     );
-    // Path only; the directory is created lazily by `ensureBookDirectory`
-    // when the user first opens the entry. Creating thousands of folders (and
-    // their placeholder manga.json files) during import is pure latency.
+    // Path only; the directory is created lazily by `ensureBookDirectory` in
+    // the download worker when a chapter download actually starts (ticket 02).
+    // Importing or browsing never creates folders (or placeholder manga.json).
     final String directoryPath = await _bookDirectory(bookKey);
 
     await database.insertEpubBook(
@@ -540,6 +868,7 @@ class MihonBackupImportService {
         sourceMetadata: Value<String?>(entry.encode()),
         importedAt: manga.dateAdded > 0 ? manga.dateAdded : importNow,
         format: const Value<String>('manga'),
+        inLibrary: Value<bool>(inLibrary),
       ),
     );
     return (await database.getEpubBook(bookKey))!;
@@ -666,14 +995,29 @@ class MihonBackupImportService {
   /// `media_open_history` has one row per media item, so per-chapter history
   /// entries collapse to the newest read. The per-chapter timestamps still
   /// feed `manga_chapter_states` (above), independently of this row.
-  Future<int> _applyHistory({
+  ///
+  /// The row uses the same canonical identity the reader writes
+  /// ([mangaHistoryIdentityForBook]) plus a full [MangaHistorySnapshot], so the
+  /// History page can resolve the Manga row, show a cover and reopen the source
+  /// even when the work is not in the Library. Earlier imports wrote a bare
+  /// snapshot under the legacy `reader_manga`/`fushi://book/<bookKey>`
+  /// identity; those rows are left untouched (nothing is deleted) and the
+  /// History page still understands them.
+  Future<_HistoryWriteResult> _applyHistory({
     required EpubBookRow row,
     required MihonBackupManga manga,
   }) async {
-    if (manga.history.isEmpty) return 0;
+    if (!_hasPositiveHistory(manga)) {
+      return const _HistoryWriteResult(hadHistory: false);
+    }
     MihonBackupHistory latest = manga.history.first;
     for (final MihonBackupHistory candidate in manga.history) {
       if (candidate.lastRead > latest.lastRead) latest = candidate;
+    }
+
+    final MangaHistoryIdentity? identity = mangaHistoryIdentityForBook(row);
+    if (identity == null) {
+      return const _HistoryWriteResult(hadHistory: true);
     }
 
     final OnlineMangaLibraryEntry? entry = OnlineMangaLibraryEntry.tryParse(
@@ -685,43 +1029,49 @@ class MihonBackupImportService {
     final int position = selected == null || selected < 0 || selected >= total
         ? 0
         : (total - selected).clamp(0, total);
-    final String mediaId = readerBookMediaIdentifierFor(row.bookKey);
 
     final MediaOpenHistoryRow? existing =
         await (database.select(database.mediaOpenHistory)..where(
               (t) =>
-                  t.mediaSource.equals('reader_manga') &
-                  t.mediaId.equals(mediaId),
+                  t.mediaSource.equals(identity.mediaSource) &
+                  t.mediaId.equals(identity.mediaId),
             ))
             .getSingleOrNull();
-    final bool writeRow =
-        existing == null || latest.lastRead >= existing.openedAt;
-
-    if (writeRow) {
-      final String snapshot = jsonEncode(<String, Object?>{
-        'title': row.title,
-        'author': row.author,
-        if (manga.thumbnailUrl != null) 'imageUrl': manga.thumbnailUrl,
-        'mihon_history': <String, Object?>{
-          'chapter_url': latest.url,
-          'read_at': latest.lastRead,
-          'read_duration': latest.readDuration,
-        },
-      });
-      await database.upsertMediaOpenHistory(
-        MediaOpenHistoryCompanion(
-          mediaType: const Value<String>('reader_media_type'),
-          mediaSource: const Value<String>('reader_manga'),
-          mediaId: Value<String>(mediaId),
-          openedAt: Value<int>(latest.lastRead),
-          position: Value<int>(position),
-          duration: Value<int>(duration),
-          snapshotJson: Value<String>(snapshot),
-        ),
-      );
+    if (existing != null && existing.openedAt >= latest.lastRead) {
+      return const _HistoryWriteResult(hadHistory: true, alreadyNewer: true);
     }
 
-    return writeRow ? 1 : 0;
+    final MangaHistoryOnlineRef? online = entry == null
+        ? null
+        : MangaHistoryOnlineRef.fromEntry(entry);
+    final String? imageUrl =
+        trimmedOrNull(manga.thumbnailUrl) ?? trimmedOrNull(online?.coverUrl);
+    final MangaHistorySnapshot snapshot = MangaHistorySnapshot(
+      title: row.title,
+      author: row.author,
+      imageUrl: imageUrl,
+      bookKey: row.bookKey,
+      online: online,
+      // The exporter reads this typed block back (chapter URL + duration).
+      mihonHistory: MangaHistoryMihonEntry(
+        chapterUrl: latest.url,
+        lastRead: latest.lastRead,
+        readDuration: latest.readDuration,
+      ),
+    );
+
+    await database.upsertMediaOpenHistory(
+      MediaOpenHistoryCompanion(
+        mediaType: const Value<String>('reader_media_type'),
+        mediaSource: Value<String>(identity.mediaSource),
+        mediaId: Value<String>(identity.mediaId),
+        openedAt: Value<int>(latest.lastRead),
+        position: Value<int>(position),
+        duration: Value<int>(duration),
+        snapshotJson: Value<String>(jsonEncode(snapshot.toJson())),
+      ),
+    );
+    return const _HistoryWriteResult(hadHistory: true, written: true);
   }
 
   /// Map the trackers Fushi actually supports (Bangumi). Everything else is
@@ -1012,7 +1362,7 @@ class MihonBackupImportService {
                   sourceId,
                   () => _MissingSourceBuilder(
                     sourceId: sourceId,
-                    sourceName: sourceNames[sourceId] ?? 'Source $sourceId',
+                    sourceName: trimmedOrNull(sourceNames[sourceId]),
                   ),
                 )
                 .preferenceCount +=
@@ -1068,35 +1418,32 @@ class MihonBackupImportService {
   }
 
   static String _preferenceTypeName(MihonBackupPreferenceType type) =>
-      switch (type) {
-        MihonBackupPreferenceType.string => 'text',
-        MihonBackupPreferenceType.boolean => 'checkBox',
-        MihonBackupPreferenceType.stringSet => 'multiSelect',
-        MihonBackupPreferenceType.integer ||
-        MihonBackupPreferenceType.long ||
-        MihonBackupPreferenceType.float ||
-        MihonBackupPreferenceType.unsupported => 'unsupported',
-      };
+      MihonBackupPreferenceTypes.sourcePreferenceTypeName(type);
 
-  Future<void> _applyCategories({
+  /// Assign every category order in the backup Manga to its resolved Tag.
+  ///
+  /// Tag assignments use `bookKey` (the key the manga shelf and tag picker use),
+  /// so an imported Manga with any Tag leaves the 书架 tab and appears under
+  /// each assigned Tag. Assignments upsert by their composite primary key, so
+  /// re-importing the same Backup never duplicates a Tag on a Manga; Tags the
+  /// user added locally but the Backup does not mention are preserved.
+  Future<void> _applyTags({
     required EpubBookRow row,
     required MihonBackupManga manga,
-    required Map<int, MihonBackupCategory> categoriesByOrder,
-    required Map<String, int> collectionsByName,
+    required Map<int, int> tagIdByCategoryOrder,
   }) async {
     final Set<int> seen = <int>{};
     for (final int order in manga.categoryOrders) {
-      final MihonBackupCategory? category = categoriesByOrder[order];
-      if (category == null) continue;
-      final int? collectionId = collectionsByName[category.name.trim()];
-      if (collectionId == null || !seen.add(collectionId)) continue;
-      await database.addToCollection(collectionId, MediaKind.epub, row.uid);
+      final int? tagId = tagIdByCategoryOrder[order];
+      if (tagId == null || !seen.add(tagId)) continue;
+      await database.addTagToBook(row.bookKey, tagId);
     }
   }
 
   OnlineMangaLibraryEntry _entryFromBackup(
     MihonBackupManga manga, {
     required String extensionPackage,
+    String? sourceName,
   }) {
     final List<OnlineMangaChapter> chapters = <OnlineMangaChapter>[
       for (final MihonBackupChapter chapter in manga.chapters)
@@ -1128,6 +1475,7 @@ class MihonBackupImportService {
       ),
       chapters: List<OnlineMangaChapter>.unmodifiable(chapters),
       currentChapterIndex: _currentChapterIndex(manga),
+      sourceName: sourceName,
     );
   }
 
@@ -1140,6 +1488,8 @@ class MihonBackupImportService {
       scanlator: chapter.scanlator,
       number: chapter.chapterNumber == 0 ? null : chapter.chapterNumber,
       uploadedAt: uploadedAt == 0 ? null : uploadedAt,
+      // 0 是有效顺序（最新一话）；proto3 省略 0，解析器已按默认值补回。
+      sourceOrder: chapter.sourceOrder,
       locked: OnlineMangaChapter.isLockedChapterName(chapter.name),
       raw: <String, Object?>{
         'url': chapterUrl,
@@ -1203,6 +1553,10 @@ class MihonBackupImportService {
       changed = true;
       if (uploadedAt != null) raw['date_upload'] = uploadedAt;
     }
+    // 旧版本导入的章没有 sourceOrder：重新导入同一备份时补齐。本地已有值优先，
+    // 重复导入因此幂等；备份里的 sourceOrder 是源顺序的唯一依据。
+    final int sourceOrder = local.sourceOrder ?? backup.sourceOrder;
+    if (sourceOrder != local.sourceOrder) changed = true;
     if (scanlator != null) {
       changed = put('scanlator', scanlator, onlyIfAbsent: true) || changed;
     }
@@ -1223,6 +1577,7 @@ class MihonBackupImportService {
       scanlator: scanlator,
       number: number,
       uploadedAt: uploadedAt,
+      sourceOrder: sourceOrder,
       locked: local.locked,
     );
   }
@@ -1265,11 +1620,23 @@ class _ExistingEntry {
   final OnlineMangaLibraryEntry? entry;
 }
 
+/// App settings resolved before the import writes anything.
+class _AppPreferencePlan {
+  const _AppPreferencePlan({
+    required this.values,
+    required this.skippedByReason,
+  });
+
+  /// `preferences` rows to fill, already encoded with [PrefCodec].
+  final Map<String, String> values;
+  final Map<MihonBackupAppPreferenceSkipReason, int> skippedByReason;
+}
+
 class _MissingSourceBuilder {
   _MissingSourceBuilder({required this.sourceId, required this.sourceName});
 
   final int sourceId;
-  final String sourceName;
+  final String? sourceName;
   int entryCount = 0;
   int preferenceCount = 0;
 
@@ -1279,6 +1646,24 @@ class _MissingSourceBuilder {
     entryCount: entryCount,
     preferenceCount: preferenceCount,
   );
+}
+
+/// What [MihonBackupImportService._applyHistory] did for one backup entry.
+class _HistoryWriteResult {
+  const _HistoryWriteResult({
+    required this.hadHistory,
+    this.written = false,
+    this.alreadyNewer = false,
+  });
+
+  /// The backup carried at least one History row with a read timestamp.
+  final bool hadHistory;
+
+  /// A `media_open_history` row was written.
+  final bool written;
+
+  /// A canonical History row exists at the same or a newer timestamp.
+  final bool alreadyNewer;
 }
 
 class _TrackingWriteResult {

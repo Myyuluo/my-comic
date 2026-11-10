@@ -156,6 +156,7 @@ Future<void> _showRebuildReport(
             <String>[
               if (report.cancelled) t.rebuild_download_index_report_cancelled,
               t.rebuild_download_index_report_body(
+                matched: report.booksMatched,
                 added: report.booksAdded,
                 local: report.booksAddedLocal,
                 books: report.booksRelinked,
@@ -163,7 +164,9 @@ Future<void> _showRebuildReport(
                 missingBooks: report.booksMissing,
                 missingChapters: report.chaptersMissing,
                 skippedBooks: report.booksSkipped,
+                ambiguous: report.booksAmbiguous,
                 skippedChapters: report.chaptersSkipped,
+                failed: report.failed,
               ),
             ].join('\n\n'),
             style: tokens.type.listSubtitle,

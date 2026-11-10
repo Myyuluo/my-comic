@@ -2,6 +2,10 @@ import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
+import 'package:fushi_engine/media/manga/local_source/local_source_metadata.dart'
+    show LocalSourceChapterRecord;
+
+import 'package:fushi/src/utils/misc/trimmed_text.dart';
 
 /// 提供这条书架条目的在线漫画运行时。
 ///
@@ -38,6 +42,13 @@ enum OnlineMangaRuntimeKind {
     return null;
   }
 }
+
+/// 占位 extension package：备份里的 Source 尚未安装时，书架条目仍要有一个稳定
+/// 身份，否则每次导入都会因为 package 不同而新建一行。
+///
+/// 运行时的数字 sourceId 回退（票 03）让安装扩展后无需改写这个占位值即可阅读。
+/// 它也会被写进用户库，**永不可改**。
+const String kUnavailableMihonExtensionPackage = 'mihon.unavailable';
 
 /// 互联漫画源在书架身份里占的「扩展包」位。
 ///
@@ -77,6 +88,46 @@ String onlineMangaBookKeyFor({
   return '${runtime.wireValue}-${digest.substring(0, 32)}';
 }
 
+/// 数字 sourceId 的规范形式；不是纯十进制数字时返回 null。
+///
+/// Mihon 的源 id 是 Long，以十进制字符串跨桥保存。导入占位条目和安装后的真实
+/// Source 可能用不同字符串形式（如带前导零）表示同一个 id；来源解析与重复检测
+/// 都必须按数字比较，而不是按字面比较。互联等非数字 sourceId 没有回退语义。
+String? normalizedMangaSourceId(String sourceId) {
+  final BigInt? value = BigInt.tryParse(sourceId.trim());
+  return value?.toString();
+}
+
+/// 把 Local source 的章节表借成共享章节列表 / 章级状态用的条目形态。
+///
+/// [OnlineMangaRuntimeKind.local] 不是在线运行时：没有 service / adapter，也不
+/// 会写进 `sourceMetadata`。作品页的展示条目与阅读器的章级上下文共用这一份
+/// 转换，避免三处各抄一遍构造。
+OnlineMangaLibraryEntry localSourceMangaLibraryEntry({
+  required String seriesKey,
+  required String title,
+  required List<LocalSourceChapterRecord> chapters,
+  int? currentChapterIndex,
+}) => OnlineMangaLibraryEntry(
+  runtime: OnlineMangaRuntimeKind.local,
+  extensionPackage: '',
+  sourceId: '',
+  series: OnlineMangaSeries(
+    key: seriesKey,
+    title: title,
+    raw: const <String, Object?>{},
+  ),
+  chapters: <OnlineMangaChapter>[
+    for (final LocalSourceChapterRecord chapter in chapters)
+      OnlineMangaChapter(
+        key: chapter.key,
+        name: chapter.name,
+        raw: const <String, Object?>{},
+      ),
+  ],
+  currentChapterIndex: currentChapterIndex,
+);
+
 /// 归一化后的章节。
 ///
 /// [raw] 保留**运行时原生 payload**，因为翻页最终还是要把它交回
@@ -92,6 +143,7 @@ class OnlineMangaChapter {
     this.scanlator,
     this.number,
     this.uploadedAt,
+    this.sourceOrder,
     this.locked = false,
   });
 
@@ -123,6 +175,13 @@ class OnlineMangaChapter {
   /// 上传时刻（毫秒）。0 或缺失记 null，避免 UI 把「未知」显示成 1970。
   final int? uploadedAt;
 
+  /// 源列表里的位置，**0 = 最新一话**（Mihon `BackupChapter.sourceOrder`）。
+  ///
+  /// 阅读顺序按它降序（第 1 话 → 第 N 话）；null = 旧数据 / 本地源没有这个
+  /// 信息，回退章节号与上传时间。在线源适配器按列表下标写入，导入时从备份
+  /// 持久化。不要用它决定存储数组顺序：`chapters` 的数组顺序不是契约。
+  final int? sourceOrder;
+
   /// 源站标记为锁定（要登录并购买 / 租借才能取页，BUG-2479）。
   ///
   /// Mihon 取自章名前缀约定（[isLockedChapterName]），Aidoku 取自章节 `locked`
@@ -138,6 +197,7 @@ class OnlineMangaChapter {
     if (scanlator != null) 'scanlator': scanlator,
     if (number != null) 'number': number,
     if (uploadedAt != null) 'uploadedAt': uploadedAt,
+    if (sourceOrder != null) 'sourceOrder': sourceOrder,
     if (locked) 'locked': true,
     'raw': raw,
   };
@@ -153,6 +213,7 @@ class OnlineMangaChapter {
       scanlator: json['scanlator']?.toString(),
       number: (json['number'] as num?)?.toDouble(),
       uploadedAt: uploadedAt == null || uploadedAt <= 0 ? null : uploadedAt,
+      sourceOrder: (json['sourceOrder'] as num?)?.toInt(),
       locked: json['locked'] == true,
       raw: raw is Map<Object?, Object?>
           ? raw.cast<String, Object?>()
@@ -284,6 +345,10 @@ class OnlineMangaSeries {
 ///
 /// v3（设计稿 2026-09-12 §2.3）只在 v2 上加两个可选位 [subscribed] / [autoDownload]
 /// （缺省 false），**不加 DB 列**。
+///
+/// 之后又以向后兼容的方式追加了可选 [sourceName]（导入时备份记录的来源名，
+/// 缺省 null）：它同样只出现在 JSON 描述符里，不新增 DB 列；旧描述符没有该字段
+/// 时照常解析为 null。
 @immutable
 class OnlineMangaLibraryEntry {
   const OnlineMangaLibraryEntry({
@@ -295,6 +360,7 @@ class OnlineMangaLibraryEntry {
     this.currentChapterIndex,
     this.subscribed = false,
     this.autoDownload = false,
+    this.sourceName,
   });
 
   /// v1：只有 Mihon 的旧描述符。仍然解析，永不再写出。
@@ -330,6 +396,23 @@ class OnlineMangaLibraryEntry {
   /// 可在作品页菜单里单独关。
   final bool autoDownload;
 
+  /// 备份里记录的 Source 显示名（可选）。
+  ///
+  /// 只在导入时 Source 尚未安装、条目落成 [kUnavailableMihonExtensionPackage]
+  /// 占位身份时写入；来源安装后名称由 Source 表解析，这个字段只作为缺失来源的
+  /// 友好降级文案（「来源未安装：<名称>」）。旧条目没有该字段，读取为 null。
+  final String? sourceName;
+
+  /// 条目仍以导入时写入的 [kUnavailableMihonExtensionPackage] 占位身份保存。
+  ///
+  /// 它表示「导入时 Source 未安装」，不是当前是否缺失的唯一判据——扩展安装后
+  /// 运行时可按 sourceId 回退到真实 Source；反过来，已安装但停用的 Source 没有
+  /// 这个标记也属于缺失来源。作品页用它决定是否用备份名称兜底，运行时可解析性
+  /// 由来源解析结果单独判断。
+  bool get hasUnavailableSourcePlaceholder =>
+      runtime == OnlineMangaRuntimeKind.mihon &&
+      extensionPackage == kUnavailableMihonExtensionPackage;
+
   OnlineMangaChapter? get currentChapter {
     final int? index = currentChapterIndex;
     if (index == null || index < 0 || index >= chapters.length) return null;
@@ -346,6 +429,7 @@ class OnlineMangaLibraryEntry {
     bool clearCurrentChapter = false,
     bool? subscribed,
     bool? autoDownload,
+    String? sourceName,
   }) => OnlineMangaLibraryEntry(
     runtime: runtime,
     extensionPackage: extensionPackage,
@@ -357,6 +441,7 @@ class OnlineMangaLibraryEntry {
         : currentChapterIndex ?? this.currentChapterIndex,
     subscribed: subscribed ?? this.subscribed,
     autoDownload: autoDownload ?? this.autoDownload,
+    sourceName: sourceName ?? this.sourceName,
   );
 
   Map<String, Object?> toJson() => <String, Object?>{
@@ -372,6 +457,7 @@ class OnlineMangaLibraryEntry {
     'currentChapterIndex': currentChapterIndex,
     'subscribed': subscribed,
     'autoDownload': autoDownload,
+    if (sourceName != null) 'sourceName': sourceName,
   };
 
   String encode() => jsonEncode(toJson());
@@ -423,6 +509,7 @@ class OnlineMangaLibraryEntry {
       // v3 两位；v2 没有 → false。
       subscribed: json['subscribed'] == true,
       autoDownload: json['autoDownload'] == true,
+      sourceName: trimmedOrNull(json['sourceName']),
     );
   }
 

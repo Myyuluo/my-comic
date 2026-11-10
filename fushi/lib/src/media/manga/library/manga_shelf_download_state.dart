@@ -3,7 +3,9 @@
 ///
 /// 口径（spec「排序与筛选与搜索」）：
 /// - 在线漫画：Download library 里至少一章**完整**落盘（判据委托
-///   [DownloadLibraryIndex.booksWithAnyCompleteChapter]）；
+///   [DownloadLibraryIndex.booksWithAnyCompleteChapter]）。Ticket 07 起，映射
+///   没证明已下载时再按 entry 身份扫 `downloads` / `local` 的 manifest——与
+///   作品页共用 [MangaDownloadDiskIndex]，且无 manifest 的目录不按标题匹配；
 /// - 本地图源：漫画目录里至少一章**真的读得出来**（文件夹含页图或可解析的
 ///   `.cbz`；单章作品的章就是漫画目录本身）。只看目录存在会让「章文件全被删、
 ///   只剩空目录」的作品仍算已下载（复审 finding 11），判据复用 Local source 的
@@ -16,8 +18,10 @@ library;
 
 import 'dart:io';
 
+import 'package:fushi/src/media/manga/download/download_identity.dart';
 import 'package:fushi/src/media/manga/download/download_library_index.dart';
 import 'package:fushi/src/media/manga/library/manga_shelf_chapter_source.dart';
+import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_layout.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_metadata.dart';
@@ -35,6 +39,11 @@ Future<Set<String>> computeMangaShelfDownloadedBookKeys(
 }) async {
   final Map<String, MangaDownloadLibraryBook> online =
       <String, MangaDownloadLibraryBook>{};
+  // 映射查不到「已下载」时，用同一份 entry 身份扫描 downloads / local 的
+  // manifest（ticket 07）。与作品页共用 [MangaDownloadDiskIndex]。
+  final Map<String, ({OnlineMangaLibraryEntry entry, Set<String> chapterKeys})>
+  onlineEntries =
+      <String, ({OnlineMangaLibraryEntry entry, Set<String> chapterKeys})>{};
   final List<({MangaShelfChapterSource book, LocalSourceMetadata metadata})>
       localBooks =
       <({MangaShelfChapterSource book, LocalSourceMetadata metadata})>[];
@@ -52,6 +61,13 @@ Future<Set<String>> computeMangaShelfDownloadedBookKeys(
       extractDir: book.extractDir,
       chapterKeys: chapterKeys,
     );
+    final OnlineMangaLibraryEntry? entry = book.onlineEntry;
+    if (entry != null) {
+      onlineEntries[book.bookKey] = (
+        entry: entry,
+        chapterKeys: chapterKeys.toSet(),
+      );
+    }
   }
   final Set<String> downloaded = online.isEmpty
       ? <String>{}
@@ -59,6 +75,34 @@ Future<Set<String>> computeMangaShelfDownloadedBookKeys(
           online,
           currentDownloadsRoot: downloadsRoot,
         );
+  final List<String> pendingManifestScan = <String>[
+    for (final String bookKey in online.keys)
+      if (!downloaded.contains(bookKey) && onlineEntries.containsKey(bookKey))
+        bookKey,
+  ];
+  if (pendingManifestScan.isNotEmpty) {
+    final Map<String, MangaDownloadDiskQuery> queries =
+        <String, MangaDownloadDiskQuery>{
+          for (final String bookKey in pendingManifestScan)
+            bookKey: MangaDownloadDiskQuery.ofEntry(
+              onlineEntries[bookKey]!.entry,
+            ),
+        };
+    final MangaDownloadDiskIndex disk = await DownloadLibraryIndex(
+      database,
+      downloadsRoot: downloadsRoot,
+      localComicRoot: localSourceRoot,
+    ).scanDisks(queries: queries.values);
+    for (final String bookKey in pendingManifestScan) {
+      final ({OnlineMangaLibraryEntry entry, Set<String> chapterKeys}) info =
+          onlineEntries[bookKey]!;
+      if (disk
+          .downloadedChapterKeys(queries[bookKey]!.identity, info.chapterKeys)
+          .isNotEmpty) {
+        downloaded.add(bookKey);
+      }
+    }
+  }
   for (final ({MangaShelfChapterSource book, LocalSourceMetadata metadata})
       local
       in localBooks) {

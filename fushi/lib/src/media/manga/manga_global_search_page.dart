@@ -4,6 +4,7 @@ import 'package:fushi/src/media/manga/mihon/mihon_cloudflare_action.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:fushi/src/focus/fushi_focus_controller.dart';
 
+import 'package:fushi/src/utils/components/fushi_search.dart';
 import 'package:fushi/src/utils/components/glass/fushi_icon.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi/src/media/manga/manga_global_search_runner.dart';
@@ -179,15 +180,15 @@ class _MangaGlobalSearchPageState extends State<MangaGlobalSearchPage> {
       title: t.manga_global_search_title,
       headerBottom: Padding(
         padding: const EdgeInsets.only(top: 8),
-        // 2026-10 体验优化：统一为 FushiSearchField；仍是「提交才搜」（全源扇出
-        // 代价高，不做边打边搜），onChanged 空转。
-        child: FushiSearchField(
+        // 共享搜索行为层（FushiSearchBar）：焦点 / IME 组字 / Esc 清空 / 清空钮
+        // 均由它统一处理。仍是「提交才搜」——不接 onQueryChanged，全源扇出代价高，
+        // 不做边打边搜。
+        child: FushiSearchBar(
           fieldKey: const ValueKey<String>('manga_global_search_field'),
           focusId: const FushiFocusId('manga-global-search'),
           controller: _searchController,
           focusNode: _searchFocus,
           hintText: t.manga_global_search_hint,
-          onChanged: (String _) {},
           onSubmitted: (String _) => unawaited(_search()),
           onClear: _searchController.clear,
         ),

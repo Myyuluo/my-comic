@@ -173,13 +173,22 @@ class MangaLibraryPageHarness<M extends AppModel> {
 
   /// 在 [title]/[child] 外壳里挂 [child]：与生产一致的外壳标题 / 内联标题
   /// scope + 受控 provider。
-  Widget buildScaffold({required String title, required Widget child}) {
+  ///
+  /// [overrideBooks] = false 时不覆写 [fushiBooksProvider]：页面走真实的
+  /// `ReaderFushiSource.getBooksFromDb` + 真 DB（Library membership 过滤等
+  /// 数据层行为的页面级验证用）。
+  Widget buildScaffold({
+    required String title,
+    required Widget child,
+    bool overrideBooks = true,
+  }) {
     return ProviderScope(
       overrides: <Override>[
         appProvider.overrideWith((ref) => appModel),
-        fushiBooksProvider.overrideWith(
-          (ref, language) => Future<List<MediaItem>>.value(mangaItems),
-        ),
+        if (overrideBooks)
+          fushiBooksProvider.overrideWith(
+            (ref, language) => Future<List<MediaItem>>.value(mangaItems),
+          ),
         srtBooksProvider.overrideWith(
           (ref) => Future<List<SrtBook>>.value(const <SrtBook>[]),
         ),
@@ -198,10 +207,16 @@ class MangaLibraryPageHarness<M extends AppModel> {
   }
 
   /// 漫画页（壳 + 书架页）的完整 app。
-  Widget buildApp() =>
-      buildScaffold(title: t.manga_library, child: const MangaLibraryPage());
+  Widget buildApp({bool overrideBooks = true}) => buildScaffold(
+    title: t.manga_library,
+    child: const MangaLibraryPage(),
+    overrideBooks: overrideBooks,
+  );
 
   /// 设置测试窗口尺寸后挂 [buildApp] 并 settle。
+  ///
+  /// 只适用于受控书架列表（[buildApp] 默认 override）；真实 provider 的页面
+  /// 加载动效无限循环，测试需自行固定帧推进（见 `manga_library_membership_test`）。
   Future<void> pumpPage(
     WidgetTester tester, {
     Size size = const Size(1400, 1200),

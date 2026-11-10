@@ -12,7 +12,8 @@ import 'package:fushi/utils.dart';
 ///
 /// 设计要点（Linus 式「PDF 只是第二种书身份」）：
 /// - PDF 与 EPUB **共用一张 `EpubBooks` 表、一块书架、一套删除/进度管线**。书架列书仍走
-///   [ReaderFushiSource.getBooksFromDb]（列全部行，format-agnostic）；PDF 行靠
+///   [ReaderFushiSource.getBooksFromDb]（只列 Library membership 行，
+///   format-agnostic）；PDF 行靠
 ///   `EpubBooks.format=='pdf'` 在 [ReaderFushiSource] 的 `_bookToMediaItem` 里被打上
 ///   `mediaSourceIdentifier: `[kUniqueKey]，从而在**打开时**被路由到本源、进 [ReaderPdfPage]，
 ///   而不是 EPUB 的 [ReaderFushiPage]。

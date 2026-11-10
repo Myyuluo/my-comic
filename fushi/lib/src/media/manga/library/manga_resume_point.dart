@@ -1,5 +1,7 @@
 import 'package:fushi_core/fushi_core.dart';
 
+import 'package:fushi/src/media/manga/library/manga_adjacent_chapter.dart'
+    show kMangaNextChapterStep, mangaReadingOrder;
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 
 /// 在线漫画「重新打开时回到哪里」（偏好 `manga_resume_target`）。
@@ -31,14 +33,19 @@ extension MangaResumeTargetKey on MangaResumeTarget {
   };
 }
 
-/// 新读者从哪一章开始：选过章就是那一章，否则最旧的一话（源按新→旧返回，
-/// 最旧 = 列表末尾）。
+/// 新读者从哪一章开始：选过章就是那一章，否则最旧的一话。
+///
+/// 「最旧」取自 [mangaReadingOrder]（`sourceOrder` 降序，缺失时章节号 / 日期，
+/// 再缺失时源的新→旧数组约定），所以导入作品的存储数组顺序不影响结果。
 int mangaInitialChapterIndex(OnlineMangaLibraryEntry entry) {
   final int? selected = entry.currentChapterIndex;
   if (selected != null && selected >= 0 && selected < entry.chapters.length) {
     return selected;
   }
-  return entry.chapters.isEmpty ? -1 : entry.chapters.length - 1;
+  if (entry.chapters.isEmpty) return -1;
+  final OnlineMangaChapter oldest = mangaReadingOrder(entry.chapters).first;
+  final int index = entry.indexOfChapterKey(oldest.key);
+  return index >= 0 ? index : entry.chapters.length - 1;
 }
 
 /// [state] 这一章是否「停在了末尾」：读完过，且最后停下的页就是最后一页（页数
@@ -81,8 +88,21 @@ int continueMangaChapterIndex(
     MangaResumeTarget.lastPosition => mangaChapterStoppedAtEnd(best),
   };
   if (!advance) return bestIndex;
-  // 列表是新→旧，「更新的一话」= 下标 -1。
-  return bestIndex > 0 ? bestIndex - 1 : bestIndex;
+  // 「更新的一话」= 规范阅读顺序里的下一格（源数组顺序不参与）。
+  final List<OnlineMangaChapter> readingOrder = mangaReadingOrder(
+    entry.chapters,
+  );
+  final String currentKey = entry.chapters[bestIndex].key;
+  final int position = readingOrder.indexWhere(
+    (OnlineMangaChapter chapter) => chapter.key == currentKey,
+  );
+  if (position < 0 || position + kMangaNextChapterStep >= readingOrder.length) {
+    return bestIndex;
+  }
+  final int next = entry.indexOfChapterKey(
+    readingOrder[position + kMangaNextChapterStep].key,
+  );
+  return next >= 0 ? next : bestIndex;
 }
 
 /// 阅读器打开一部在线漫画时落到哪一章。

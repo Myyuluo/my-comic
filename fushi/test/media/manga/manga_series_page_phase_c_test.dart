@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -303,6 +304,48 @@ void main() {
     });
     jobs = await db.listMangaDownloadJobs();
     expect(jobs, hasLength(2), reason: '已排队的章不重复入队');
+  });
+
+  testWidgets('非书架条目（membership=false）没有订阅 / 自动追更入口', (
+    WidgetTester tester,
+  ) async {
+    sizeView(tester);
+    final _TestAppModel appModel = _TestAppModel(db, library, root);
+    late String bookKey;
+
+    await tester.runAsync(() async {
+      final EpubBookRow row = await library.add(_entry());
+      bookKey = row.bookKey;
+      // 订阅位先落下（模拟移出书架时订阅位尚未清理的存量数据），再把
+      // Library membership 翻成 false：入口必须按 membership 消失。
+      await library.setSubscription(
+        bookKey: row.bookKey,
+        entry: OnlineMangaLibraryEntry.tryParse(row.sourceMetadata)!,
+        subscribed: true,
+        autoDownload: true,
+      );
+      await (db.update(db.epubBooks)
+            ..where((t) => t.bookKey.equals(bookKey)))
+          .write(const EpubBooksCompanion(inLibrary: Value<bool>(false)));
+
+      await tester.pumpWidget(_harness(appModel, bookKey));
+      await _pumpUntil(tester, find.byKey(_moreKey));
+    });
+
+    expect(
+      find.byKey(const ValueKey<String>('manga_series_subscribe')),
+      findsNothing,
+      reason: '非书架作品不能订阅 / 自动追更',
+    );
+    await tester.runAsync(() async {
+      await tester.tap(find.byKey(_moreKey));
+      await _settle(tester);
+    });
+    expect(
+      find.byKey(const ValueKey<String>('manga_series_auto_download')),
+      findsNothing,
+      reason: '非书架作品没有「新章自动下载」',
+    );
   });
 
   testWidgets('订阅：书签开 → subscribed+autoDownload；菜单关自动下载；书签关两位都关', (

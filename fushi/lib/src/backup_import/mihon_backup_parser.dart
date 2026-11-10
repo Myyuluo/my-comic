@@ -2,6 +2,10 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:fushi/src/backup_import/mihon_backup_preference_types.dart';
+
+export 'mihon_backup_preference_types.dart';
+
 /// Why a `.tachibk` file could not be read.
 enum MihonBackupFormatError {
   /// Zero-byte file.
@@ -82,6 +86,7 @@ class MihonBackupParser {
     final List<MihonBackupManga> mangas = <MihonBackupManga>[];
     final List<MihonBackupCategory> categories = <MihonBackupCategory>[];
     final Map<int, String> sourceNames = <int, String>{};
+    final List<MihonBackupPreference> preferences = <MihonBackupPreference>[];
     final List<MihonBackupSourcePreferences> sourcePreferences =
         <MihonBackupSourcePreferences>[];
     final List<MihonBackupExtensionStore> extensionStores =
@@ -108,6 +113,8 @@ class MihonBackupParser {
         if (source.name.isNotEmpty) {
           sourceNames[source.id] = source.name;
         }
+      } else if (field == 104 && wireType == 2) {
+        preferences.add(_readPreference(_ProtoReader(reader.readBytes())));
       } else if (field == 105 && wireType == 2) {
         sourcePreferences.add(
           _readSourcePreferences(_ProtoReader(reader.readBytes())),
@@ -125,6 +132,7 @@ class MihonBackupParser {
       mangas: List<MihonBackupManga>.unmodifiable(mangas),
       categories: List<MihonBackupCategory>.unmodifiable(categories),
       sourceNames: Map<int, String>.unmodifiable(sourceNames),
+      preferences: List<MihonBackupPreference>.unmodifiable(preferences),
       sourcePreferences: List<MihonBackupSourcePreferences>.unmodifiable(
         sourcePreferences,
       ),
@@ -349,15 +357,8 @@ class MihonBackupParser {
     }
 
     final String simpleName = serialName.split('.').last;
-    final MihonBackupPreferenceType type = switch (simpleName) {
-      'StringPreferenceValue' => MihonBackupPreferenceType.string,
-      'BooleanPreferenceValue' => MihonBackupPreferenceType.boolean,
-      'IntPreferenceValue' => MihonBackupPreferenceType.integer,
-      'LongPreferenceValue' => MihonBackupPreferenceType.long,
-      'FloatPreferenceValue' => MihonBackupPreferenceType.float,
-      'StringSetPreferenceValue' => MihonBackupPreferenceType.stringSet,
-      _ => MihonBackupPreferenceType.unsupported,
-    };
+    final MihonBackupPreferenceType type =
+        MihonBackupPreferenceTypes.fromSerialName(simpleName);
     if (payload == null) {
       return MihonBackupPreferenceValue(type: type);
     }
@@ -466,6 +467,7 @@ class MihonBackupParser {
     int dateFetch = 0;
     int dateUpload = 0;
     double chapterNumber = 0;
+    int sourceOrder = 0;
 
     while (!reader.isAtEnd) {
       final int tag = reader.readTag();
@@ -490,6 +492,8 @@ class MihonBackupParser {
           dateUpload = reader.readVarint();
         case 9 when wireType == 5:
           chapterNumber = reader.readFloat32();
+        case 10 when wireType == 0:
+          sourceOrder = reader.readVarint();
         default:
           reader.skip(wireType);
       }
@@ -505,6 +509,7 @@ class MihonBackupParser {
       dateFetch: dateFetch,
       dateUpload: dateUpload,
       chapterNumber: chapterNumber,
+      sourceOrder: sourceOrder,
     );
   }
 
@@ -590,6 +595,7 @@ class MihonBackupData {
     required this.mangas,
     required this.categories,
     required this.sourceNames,
+    this.preferences = const <MihonBackupPreference>[],
     this.sourcePreferences = const <MihonBackupSourcePreferences>[],
     this.extensionStores = const <MihonBackupExtensionStore>[],
   });
@@ -599,6 +605,10 @@ class MihonBackupData {
 
   /// Backup source id → display name from `BackupSource` (field 101).
   final Map<int, String> sourceNames;
+
+  /// Top-level `BackupPreferences` entries (field 104). MyComic writes its own
+  /// app preference keys here without mapping them to Mihon key names.
+  final List<MihonBackupPreference> preferences;
 
   /// Top-level `BackupSourcePreferences` entries (field 105).
   final List<MihonBackupSourcePreferences> sourcePreferences;
@@ -662,6 +672,7 @@ class MihonBackupChapter {
     required this.dateFetch,
     required this.dateUpload,
     required this.chapterNumber,
+    this.sourceOrder = 0,
   });
 
   final String url;
@@ -673,6 +684,10 @@ class MihonBackupChapter {
   final int dateFetch;
   final int dateUpload;
   final double chapterNumber;
+
+  /// `BackupChapter.sourceOrder` (proto field 10): the chapter's position in
+  /// the source list. Preserved on export so Mihon keeps the reading order.
+  final int sourceOrder;
 }
 
 class MihonBackupHistory {
@@ -762,25 +777,6 @@ class MihonBackupPreference {
 
   final String key;
   final MihonBackupPreferenceValue value;
-}
-
-enum MihonBackupPreferenceType {
-  string,
-  boolean,
-  integer,
-  long,
-  float,
-  stringSet,
-  unsupported,
-}
-
-class MihonBackupPreferenceValue {
-  const MihonBackupPreferenceValue({required this.type, this.value});
-
-  final MihonBackupPreferenceType type;
-
-  /// `String`, `bool`, `int`, `double` or `List<String>` depending on [type].
-  final Object? value;
 }
 
 /// `BackupExtensionStore` (top-level field 106). Unlike the source preference

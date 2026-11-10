@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
@@ -7,19 +9,19 @@ import 'package:fushi/models.dart';
 import 'package:fushi/src/media/sources/reader_fushi_source.dart';
 import 'package:fushi/src/settings/settings_context.dart';
 import 'package:fushi/src/settings/settings_destination.dart';
+import 'package:fushi/src/pages/implementations/create_backup_page.dart';
 import 'package:fushi/src/settings/settings_schema_downloads.dart';
 import 'package:fushi/src/settings/settings_schema_system.dart';
 import 'package:fushi/src/settings/settings_schema_widgets.dart';
 
 import '../helpers/test_platform_services.dart';
 
-/// Ticket 11: Settings exposes the `.tachibk` export entry as a visible but
-/// disabled/placeholder row until v1.5. No Automatic backup (scheduled) entry
-/// is offered in v1.
+/// Ticket 07: the former 「导出 Mihon 备份」 placeholder row becomes
+/// 「创建备份」 and opens the create-backup page (tickets 08–12 fill in more
+/// sections there). No Automatic backup (scheduled) entry is offered.
 ///
 /// Ticket 03: the whole Backup group moved from 「系统与关于」 to 「存储与下载」；
-/// item copy / enabled state stay verbatim, and the import picker keeps
-/// defaulting to the Backup directory (covered by
+/// the import picker keeps defaulting to the Backup directory (covered by
 /// test/backup_import/backup_directory_test.dart).
 void main() {
   late SettingsContext settings;
@@ -79,8 +81,11 @@ void main() {
   );
 
   testWidgets(
-    'Backup section has import plus a disabled .tachibk export entry',
+    'Backup section has import plus an enabled create-backup entry',
     (WidgetTester tester) async {
+      final AppLocale original = LocaleSettings.currentLocale;
+      addTearDown(() => LocaleSettings.setLocale(original));
+      LocaleSettings.setLocale(AppLocale.zhCn);
       await captureContext(tester);
 
       final SettingsSection section = backupSection();
@@ -88,7 +93,7 @@ void main() {
       expect(items.map((SettingsItem item) => item.id).toList(), <String>[
         'system.import_mihon_backup',
         'system.export_mihon_backup',
-      ]);
+      ], reason: '备份分组的行与顺序保持不变');
 
       final SettingsActionItem importItem =
           items.firstWhere(
@@ -96,16 +101,17 @@ void main() {
               )
               as SettingsActionItem;
       expect(importItem.isEnabled(settings), isTrue);
-      expect(importItem.subtitle, t.backup_import_mihon_subtitle);
+      expect(importItem.title, '导入备份');
+      expect(importItem.subtitle, '本应用支持导入Mihon的备份文件，请选择您的.tachibk文件。');
 
       final SettingsActionItem exportItem =
           items.firstWhere(
                 (SettingsItem item) => item.id == 'system.export_mihon_backup',
               )
               as SettingsActionItem;
-      expect(exportItem.title, t.backup_export_mihon_title);
-      expect(exportItem.subtitle, t.backup_export_mihon_subtitle);
-      expect(exportItem.isEnabled(settings), isFalse);
+      expect(exportItem.title, '创建备份', reason: 'ticket 07 启用并更名创建备份');
+      expect(exportItem.subtitle, '将书架数据导出为.tachibk文件。');
+      expect(exportItem.isEnabled(settings), isTrue);
       expect(exportItem.cli?.unsupportedHint, isNotNull);
 
       // v1 does not offer Automatic backup: no scheduled-backup toggle exists.
@@ -120,6 +126,29 @@ void main() {
       );
     },
   );
+
+  testWidgets('create-backup row uses the new copy and opens its page', (
+    WidgetTester tester,
+  ) async {
+    final AppLocale original = LocaleSettings.currentLocale;
+    addTearDown(() => LocaleSettings.setLocale(original));
+    LocaleSettings.setLocale(AppLocale.zhCn);
+    await captureContext(tester);
+
+    final SettingsActionItem exportItem =
+        backupSection().items.firstWhere(
+              (SettingsItem item) => item.id == 'system.export_mihon_backup',
+            )
+            as SettingsActionItem;
+    expect(exportItem.title, '创建备份');
+    expect(exportItem.subtitle, '将书架数据导出为.tachibk文件。');
+    expect(exportItem.isEnabled(settings), isTrue);
+
+    // Do not await: pushSettingsPage completes only when the page is popped.
+    unawaited(Future<void>.sync(() => exportItem.onTap(settings)));
+    await tester.pumpAndSettle();
+    expect(find.byType(CreateBackupPage), findsOneWidget);
+  });
 
   testWidgets('disabled action row is greyed out and cannot be tapped', (
     WidgetTester tester,

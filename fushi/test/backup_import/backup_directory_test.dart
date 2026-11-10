@@ -6,13 +6,16 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:fushi/i18n/strings.g.dart';
 import 'package:fushi/models.dart';
 import 'package:fushi_core/fushi_core.dart' show FushiDatabase;
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:fushi/src/backup_export/mihon_backup_exporter.dart';
 import 'package:fushi/src/backup_import/mihon_backup_import_flow.dart';
 import 'package:fushi/src/media/sources/reader_fushi_source.dart';
+import 'package:fushi/src/pages/implementations/create_backup_page.dart';
 import 'package:fushi/src/settings/settings_context.dart';
 import 'package:fushi/src/storage/app_paths.dart';
 import 'package:fushi/src/sync/backup_service.dart';
@@ -74,6 +77,9 @@ void main() {
 
   test('import picker defaults to <Content root>/autobackup and selects '
       '.tachibk files there', () async {
+    final AppLocale original = LocaleSettings.currentLocale;
+    addTearDown(() => LocaleSettings.setLocale(original));
+    LocaleSettings.setLocale(AppLocale.zhCn);
     final AppPaths paths = await AppPaths.resolve();
     final Directory expected = Directory(
       p.join(platformDocuments.path, 'MyComic', 'autobackup'),
@@ -96,6 +102,7 @@ void main() {
 
     expect(picked, backup.path);
     expect(picker.lastInitialDirectory, expected.path);
+    expect(picker.lastDialogTitle, '导入备份');
     expect(picker.lastType, FileType.custom);
     expect(picker.lastAllowedExtensions, <String>['tachibk']);
     expect(picker.lastAllowMultiple, isFalse);
@@ -151,6 +158,31 @@ void main() {
     expect(paths.autobackupRoot.path, expected.path);
     expect(expected.existsSync(), isTrue);
     expect(mihonBackupPickerInitialDirectory(paths), expected.path);
+  });
+
+  test('create-backup save dialog starts in the Backup directory with a '
+      '.tachibk name', () async {
+    final AppPaths paths = await AppPaths.resolve();
+    final String fileName = mihonBackupDefaultFileName(
+      DateTime(2026, 11, 9, 20, 5),
+    );
+    expect(fileName, 'my-comic_2026-11-09_20-05.tachibk');
+
+    final _RecordingSaveFilePicker picker = _RecordingSaveFilePicker(
+      resultPath: p.join(paths.autobackupRoot.path, fileName),
+    );
+    final String? picked = await pickMihonBackupSavePath(
+      initialDirectory: paths.autobackupRoot.path,
+      fileName: fileName,
+      picker: picker,
+    );
+
+    expect(picked, p.join(paths.autobackupRoot.path, fileName));
+    expect(picker.lastInitialDirectory, paths.autobackupRoot.path);
+    expect(picker.lastFileName, fileName);
+    expect(picker.lastType, FileType.custom);
+    expect(picker.lastAllowedExtensions, <String>['tachibk']);
+    expect(picker.lastDialogTitle, t.backup_export_mihon_title);
   });
 
   test('.fushi.zip remains an App snapshot, not a .tachibk Backup', () async {
@@ -214,11 +246,42 @@ class _PathsAppModel extends AppModel {
   AppPaths get appPaths => _paths;
 }
 
+class _RecordingSaveFilePicker extends FilePicker {
+  _RecordingSaveFilePicker({this.resultPath});
+
+  final String? resultPath;
+
+  String? lastDialogTitle;
+  String? lastFileName;
+  String? lastInitialDirectory;
+  FileType? lastType;
+  List<String>? lastAllowedExtensions;
+
+  @override
+  Future<String?> saveFile({
+    String? dialogTitle,
+    String? fileName,
+    String? initialDirectory,
+    FileType type = FileType.any,
+    List<String>? allowedExtensions,
+    Uint8List? bytes,
+    bool lockParentWindow = false,
+  }) async {
+    lastDialogTitle = dialogTitle;
+    lastFileName = fileName;
+    lastInitialDirectory = initialDirectory;
+    lastType = type;
+    lastAllowedExtensions = allowedExtensions;
+    return resultPath;
+  }
+}
+
 class _RecordingFilePicker extends FilePicker {
   _RecordingFilePicker({this.resultPath});
 
   final String? resultPath;
 
+  String? lastDialogTitle;
   String? lastInitialDirectory;
   FileType? lastType;
   List<String>? lastAllowedExtensions;
@@ -239,6 +302,7 @@ class _RecordingFilePicker extends FilePicker {
     bool lockParentWindow = false,
     bool readSequential = false,
   }) async {
+    lastDialogTitle = dialogTitle;
     lastInitialDirectory = initialDirectory;
     lastType = type;
     lastAllowedExtensions = allowedExtensions;

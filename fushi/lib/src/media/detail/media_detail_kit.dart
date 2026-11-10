@@ -1301,11 +1301,11 @@ enum MediaDetailDownloadState {
 
 /// 章节 / 分集的分段列表行（M3E segmented list，组首尾大圆角、行间 2px 缝）：
 ///
-/// - 行首：[leading]（缩略图）或 [number] 序号胶囊（续看那条用 primary 实色）；
+/// - 行首：[leading]（缩略图）或 [number] 序号胶囊（常态配色）；
 /// - 标题 + 副标题 + 元信息（播出日 · 时长）；已看完的标题降为 onSurfaceVariant；
 /// - 观看进度（[progress]）：底部 primary 细条（M3E 波浪）；
 /// - 状态：已看 = tertiary 实心对勾；下载 = 排队 / 转圈 / 已下载 / 失败图标；
-/// - [current]：续看的那条整行 primaryContainer 高亮；
+/// - [current]：续看的那条把标题与副标题文字染成 primary，行背景 / 序号胶囊保持常态；
 /// - [selected] 非 null = 多选模式（行首对勾圆，点行切换选择）。
 class MediaDetailItemRow extends StatelessWidget {
   const MediaDetailItemRow({
@@ -1358,14 +1358,9 @@ class MediaDetailItemRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ColorScheme cs = Theme.of(context).colorScheme;
-    final bool apple = isGlassDesign(context);
-    final bool eink = isEinkTheme(context);
     final FushiTypography type = context.fushiType;
-    final bool highlight = current && !eink;
-    final Color fg = highlight && !apple ? cs.onPrimaryContainer : cs.onSurface;
-    final Color fgVariant = highlight && !apple
-        ? cs.onPrimaryContainer.withValues(alpha: 0.78)
-        : cs.onSurfaceVariant;
+    final Color fg = cs.onSurface;
+    final Color fgVariant = cs.onSurfaceVariant;
     final String? subtitle = this.subtitle?.trim();
     final List<String> meta = <String>[
       for (final String part in this.meta)
@@ -1373,20 +1368,19 @@ class MediaDetailItemRow extends StatelessWidget {
     ];
     final double? progress = this.progress;
     final bool? selected = this.selected;
+    // 多选选中行：primaryContainer 底 + onPrimaryContainer 前景（2026-11 章节
+    // 多选，与参考图的浅蓝选中行一致）。已读对勾 / 下载状态图标保留各自语义色。
+    final bool selectedRow = selected == true;
+    final Color? selectedFg = selectedRow ? cs.onPrimaryContainer : null;
     final Widget? leadingSlot = selected != null
-        ? _SelectionMark(selected: selected)
-        : leading ??
-              (number == null
-                  ? null
-                  : _NumberPill(number: number!, current: current));
+        ? _SelectionMark(selected: selected, foreground: selectedFg)
+        : leading ?? (number == null ? null : _NumberPill(number: number!));
     final Widget? status = _buildStatus(context, cs, trailing != null);
     return FushiGroupedListItem(
       index: index,
       count: count,
       margin: margin,
-      color: highlight
-          ? (apple ? cs.primary.withValues(alpha: 0.14) : cs.primaryContainer)
-          : null,
+      color: selectedRow ? cs.primaryContainer : null,
       selected: selected ?? false,
       onTap: onTap,
       onLongPress: onLongPress,
@@ -1409,13 +1403,11 @@ class MediaDetailItemRow extends StatelessWidget {
                     title,
                     maxLines: titleMaxLines,
                     overflow: TextOverflow.ellipsis,
-                    style:
-                        (current
-                                ? type.titleMediumEmphasized
-                                : type.titleMedium)
-                            .copyWith(
-                              color: completed && !current ? fgVariant : fg,
-                            ),
+                    style: type.titleMedium.copyWith(
+                      color:
+                          selectedFg ??
+                          (current ? cs.primary : (completed ? fgVariant : fg)),
+                    ),
                   ),
                   if (subtitle != null && subtitle.isNotEmpty) ...<Widget>[
                     const SizedBox(height: 2),
@@ -1423,7 +1415,9 @@ class MediaDetailItemRow extends StatelessWidget {
                       subtitle,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: type.bodyMedium.copyWith(color: fgVariant),
+                      style: type.bodyMedium.copyWith(
+                        color: selectedFg ?? (current ? cs.primary : fgVariant),
+                      ),
                     ),
                   ],
                   if (meta.isNotEmpty) ...<Widget>[
@@ -1433,7 +1427,7 @@ class MediaDetailItemRow extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: type.labelMedium.tabular.copyWith(
-                        color: fgVariant,
+                        color: selectedFg ?? fgVariant,
                       ),
                     ),
                   ],
@@ -1443,7 +1437,7 @@ class MediaDetailItemRow extends StatelessWidget {
                       child: FushiLinearProgressIndicator(
                         value: progress.clamp(0.0, 1.0),
                         minHeight: 4,
-                        color: cs.primary,
+                        color: selectedFg ?? cs.primary,
                       ),
                     ),
                 ],
@@ -1520,23 +1514,20 @@ class MediaDetailItemRow extends StatelessWidget {
   }
 }
 
-/// 序号胶囊：常态 secondaryContainer，续看那条 primary 实色。
+/// 序号胶囊：常态 secondaryContainer（Apple 为 tertiaryFill）。
 class _NumberPill extends StatelessWidget {
-  const _NumberPill({required this.number, required this.current});
+  const _NumberPill({required this.number});
 
   final String number;
-  final bool current;
 
   @override
   Widget build(BuildContext context) {
     final ColorScheme cs = Theme.of(context).colorScheme;
     final bool apple = isGlassDesign(context);
-    final Color fill = current
-        ? cs.primary
-        : (apple ? appleColorsOf(context).tertiaryFill : cs.secondaryContainer);
-    final Color fg = current
-        ? cs.onPrimary
-        : (apple ? cs.onSurface : cs.onSecondaryContainer);
+    final Color fill = apple
+        ? appleColorsOf(context).tertiaryFill
+        : cs.secondaryContainer;
+    final Color fg = apple ? cs.onSurface : cs.onSecondaryContainer;
     return ConstrainedBox(
       constraints: const BoxConstraints(minWidth: 40, minHeight: 32),
       child: DecoratedBox(
@@ -1561,9 +1552,12 @@ class _NumberPill extends StatelessWidget {
 
 /// 多选模式的行首选择标记（spring 缩放切换实心对勾）。
 class _SelectionMark extends StatelessWidget {
-  const _SelectionMark({required this.selected});
+  const _SelectionMark({required this.selected, this.foreground});
 
   final bool selected;
+
+  /// 选中行的前景色（primaryContainer 底上用 onPrimaryContainer）。
+  final Color? foreground;
 
   @override
   Widget build(BuildContext context) {
@@ -1578,7 +1572,7 @@ class _SelectionMark extends StatelessWidget {
         selected ? FushiIcons.filled(FushiIcons.success) : FushiIcons.addCircle,
         key: ValueKey<bool>(selected),
         size: 24,
-        color: selected ? cs.primary : cs.onSurfaceVariant,
+        color: foreground ?? (selected ? cs.primary : cs.onSurfaceVariant),
       ),
     );
   }

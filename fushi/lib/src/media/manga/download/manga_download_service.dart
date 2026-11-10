@@ -28,6 +28,7 @@ import 'package:drift/drift.dart' show Value;
 import 'package:path/path.dart' as p;
 
 import 'package:fushi/src/media/manga/download/chapter_container_on_disk.dart';
+import 'package:fushi/src/media/manga/download/download_identity.dart';
 import 'package:fushi/src/media/manga/download/download_library_index.dart';
 import 'package:fushi/src/media/manga/library/online_manga_chapter_updates.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
@@ -225,7 +226,11 @@ class MangaDownloadService {
   ///
   /// 幂等：已 `done` 且目录判据为真 → 原样返回不重下；`queued` / `running` →
   /// 原样返回；`failed` / `cancelled` / 已 done 但目录被删 → 重置成 `queued`。
-  /// 条目必须已在书架（`bookKey` 由条目身份推导，与作品页入库用的同一条）。
+  ///
+  /// 不要求 Library membership：先用共享的下载身份 [OnlineMangaLibraryService.find]
+  /// 解析已有 Manga 行（含占位扩展包 / 规范化数字 sourceId 的回退），没有行时
+  /// 按票 02 的语义补一条 membership=false 的非书架行。任务因此始终挂在真实
+  /// `bookKey` 上，worker / 下载索引无需自己猜身份。
   ///
   /// [autoOcr] 只保留入队 API 的形状（作品页 / CLI 调用方仍传值），**当前不生效**：
   /// ADR 0002 已删除 OCR 模块，ticket 04 随之移除了 `MangaDownloadOcrHook` 完成
@@ -236,7 +241,10 @@ class MangaDownloadService {
     required OnlineMangaChapter chapter,
     required bool autoOcr,
   }) async {
-    final String bookKey = OnlineMangaLibraryService.bookKeyOf(entry);
+    final OnlineMangaLibraryService service = _serviceFor(entry.runtime);
+    final EpubBookRow row =
+        await service.find(entry) ?? await service.ensureNonLibrary(entry);
+    final String bookKey = row.bookKey;
     final String jobId = mangaDownloadJobId(
       kind: MangaDownloadJobKind.chapter,
       bookKey: bookKey,
@@ -316,6 +324,29 @@ class MangaDownloadService {
       await _database.deleteMangaDownloadJob(jobId);
       await _deleteChapterDirectory(row);
     }
+  }
+
+  /// 取消失败的任务（下载页失败行的「取消」）：删除任务行并清理半成品
+  /// （`.staging/<jobId>`、残留的 `.cbz.tmp`、可能存在的映射容器）。不弹确认，
+  /// 由调用方 toast。
+  ///
+  /// 只处理 `failed` 行；其他状态 / 不存在的行一律 no-op 并返回 false——失败行
+  /// 的「取消」绝不能误删排队或正在下载的任务。任务行删除后列表立即消失；
+  /// 若同章刚被重试领取（仍在 worker 里），先发中止信号交给现有取消收尾。
+  Future<bool> discardFailed(String jobId) async {
+    final MangaDownloadJobRow? row = await _database.getMangaDownloadJob(jobId);
+    if (row == null || row.status != MangaDownloadJobStatus.failed) {
+      return false;
+    }
+    final _ActiveJob? active = _active;
+    if (active != null && active.jobId == jobId) {
+      active.token.cancelled = true;
+      await _database.deleteMangaDownloadJob(jobId);
+      return true;
+    }
+    await _database.deleteMangaDownloadJob(jobId);
+    await _deleteChapterDirectory(row);
+    return true;
   }
 
   /// 重试 `failed` / `cancelled` 的任务。全局暂停期间重试的行以 `paused` 入队，
@@ -560,7 +591,8 @@ class MangaDownloadService {
     final OnlineMangaLibraryService service = _serviceFor(runtime);
     EpubBookRow? row = await _database.getEpubBook(job.bookKey);
     if (row == null) {
-      throw StateError('The manga is no longer in the library: ${job.bookKey}');
+      // 非书架行同样算「有行」；只有行真的被清理掉时才是这里的错误。
+      throw StateError('The manga row no longer exists: ${job.bookKey}');
     }
     final OnlineMangaLibraryEntry? entry = OnlineMangaLibraryEntry.tryParse(
       row.sourceMetadata,
@@ -750,6 +782,7 @@ class MangaDownloadService {
         staging: staging,
         mangaDir: mangaDir,
         desiredContainerName: target.containerName,
+        identity: chapter.key,
         qualifier: _chapterScanlatorQualifier(chapter),
         token: token,
       );
@@ -758,6 +791,7 @@ class MangaDownloadService {
         staging: staging,
         mangaDir: mangaDir,
         desiredFolderName: target.containerName,
+        identity: chapter.key,
         qualifier: _chapterScanlatorQualifier(chapter),
       );
     }
@@ -780,7 +814,7 @@ class MangaDownloadService {
   /// 2. 否则扫描 manga 目录：任一同身份的完整容器（文件夹或 `.cbz`）也可认领
   ///    ——升级前已有的文件夹章节原样采纳，绝不因开关而转换。
   /// 3. 其余一律视为已占用：同名不同章（哪怕大小写不同）、半成品、外来目录/
-  ///    文件——绝不覆盖，按 `[扫译组]` / `(2)` 后缀另起名字。
+  ///    文件——绝不覆盖，按 `[扫译组]` / 短哈希后缀另起名字（不用 `(2)`）。
   ///
   /// 新下载的容器类型由任务开始运行时捕获的 [saveAsCbz] 决定。
   Future<_ChapterTarget> _prepareChapterTarget({
@@ -831,6 +865,7 @@ class MangaDownloadService {
       final String containerName = await uniqueDownloadChapterArchiveName(
         mangaDir: mangaDir,
         base: _chapterRawName(chapter),
+        identity: chapter.key,
         qualifier: qualifier,
         isTaken: (String name) => _chapterNameTaken(mangaDir, name),
       );
@@ -845,11 +880,12 @@ class MangaDownloadService {
       mangaDirPath: mangaDir,
       raw: _chapterRawName(chapter),
     );
-    final String folderName = await uniqueDownloadLibraryFolderName(
+    final String folderName = await uniqueDownloadChapterFolderName(
+      mangaDir: mangaDir,
       base: base,
+      identity: chapter.key,
       qualifier: qualifier,
       isTaken: (String candidate) => _chapterNameTaken(mangaDir, candidate),
-      maxLength: downloadLibrarySegmentBudget(mangaDir),
     );
     return _ChapterTarget(
       containerName: folderName,
@@ -864,7 +900,7 @@ class MangaDownloadService {
     return name.isEmpty ? chapter.key : name;
   }
 
-  /// 同名章的优先区分后缀：扫译组；无扫译组时退回 `(2)` 序号。
+  /// 同名章的优先区分后缀：扫译组；无扫译组时退回稳定身份的短哈希。
   static String? _chapterScanlatorQualifier(OnlineMangaChapter chapter) {
     final String scanlator = chapter.scanlator?.trim() ?? '';
     if (scanlator.isEmpty) return null;
@@ -945,10 +981,9 @@ class MangaDownloadService {
     OnlineMangaChapter chapter,
   ) =>
       manifest != null &&
-      manifest.sourceRuntime == entry.runtime.wireValue &&
-      manifest.extensionPackage == entry.extensionPackage &&
-      manifest.sourceId == entry.sourceId &&
-      manifest.mangaKey == entry.series.key &&
+      // 与文件夹复用 / Rebuild 共用同一份下载身份：数字 sourceId + seriesKey，
+      // 扩展包只做兼容 / tie-breaker（占位包与真实包视为同一身份）。
+      MangaDownloadIdentity.ofEntry(entry).matchesManifest(manifest) &&
       manifest.chapterKey == chapter.key;
 
   /// 把 staging 目录整章 rename 到正式章目录；目标被占时用确定后缀，绝不覆盖。
@@ -956,13 +991,15 @@ class MangaDownloadService {
     required Directory staging,
     required String mangaDir,
     required String desiredFolderName,
+    required String identity,
     String? qualifier,
   }) async {
     final int maxLength = downloadLibrarySegmentBudget(mangaDir);
     while (true) {
-      final String candidate = await uniqueDownloadLibraryFolderName(
+      final String candidate = await uniqueDownloadChapterName(
         base: desiredFolderName,
         qualifier: qualifier,
+        identity: identity,
         isTaken: (String name) => _chapterNameTaken(mangaDir, name),
         maxLength: maxLength,
       );
@@ -989,6 +1026,7 @@ class MangaDownloadService {
     required Directory staging,
     required String mangaDir,
     required String desiredContainerName,
+    required String identity,
     required _CancelToken token,
     String? qualifier,
   }) async {
@@ -1003,6 +1041,7 @@ class MangaDownloadService {
       final String candidateName = await uniqueDownloadChapterArchiveName(
         mangaDir: mangaDir,
         base: desiredBase,
+        identity: identity,
         qualifier: qualifier,
         isTaken: (String name) => _chapterNameTaken(mangaDir, name),
       );
@@ -1146,12 +1185,51 @@ class MangaDownloadService {
         await staging.delete(recursive: true);
         await _cleanupStagingParent(staging);
       }
+      await _deleteArchiveTempsForJob(job, row.extractDir);
     } on Object catch (error, stack) {
       ErrorLogService.instance.log(
         'MangaDownloadService.deleteChapter ${job.jobId}',
         error,
         stack,
       );
+    }
+  }
+
+  /// 删除本任务遗留的 `{chapter}.cbz.tmp`。
+  ///
+  /// 正常情况下失败收尾已按 [_archiveTempJobId] 删掉临时包；进程在压缩中途退出
+  /// 时路径只留在磁盘上，内存里没有记录。这里按任务标题推导本章的临时包名，
+  /// 只清本章的 `.cbz.tmp`（支持 `[扫译组]` / `~短哈希` / 旧 `(2)` 后缀），
+  /// 不影响其他任务的临时文件。
+  Future<void> _deleteArchiveTempsForJob(
+    MangaDownloadJobRow job,
+    String mangaDir,
+  ) async {
+    final Directory directory = Directory(mangaDir);
+    if (!await directory.exists()) return;
+    final String raw = job.chapterTitle.trim().isNotEmpty
+        ? job.chapterTitle
+        : job.chapterKey;
+    final int budget = downloadLibrarySegmentBudget(mangaDir);
+    final int baseBudget = budget > kDownloadArchiveExtension.length
+        ? budget - kDownloadArchiveExtension.length
+        : 1;
+    final String base = sanitizeDownloadLibrarySegment(
+      raw,
+      maxLength: baseBudget,
+    );
+    final RegExp expected = RegExp(
+      '^${RegExp.escape(base)}(?: \\[[^\\]]+\\]|~[0-9a-f]{8}| \\(\\d+\\))*'
+      '${RegExp.escape('$kDownloadArchiveExtension.tmp')}\$',
+      caseSensitive: false,
+    );
+    await for (final FileSystemEntity entity in directory.list(
+      followLinks: false,
+    )) {
+      if (entity is! File) continue;
+      if (expected.hasMatch(p.basename(entity.path))) {
+        await _deleteFileQuietly(entity);
+      }
     }
   }
 

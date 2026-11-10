@@ -171,9 +171,10 @@ mixin _FushiDbLibrary on _$FushiDatabase, _FushiDbTagsSync {
   /// [mediaCount] 列记的是「上次扫描新增条目数」（去重跳过的已存在书不计），
   /// 不能当总数显示。这里直接 COUNT 反向指向本来源的 epub_books / video_books
   /// 行：[mediaKind]=='book' → epub_books，'video' → video_books，
-  /// 'manga' → epub_books 中 `format='manga'` 的漫画行（漫画与书是不同的
-  /// MediaSources 行，sourceId 天然互不污染；format 过滤只是把值域契约显式化），
-  /// 其它种类返回 0。
+  /// 'manga' → epub_books 中 `format='manga'` **且在书架（membership=true）**
+  /// 的漫画行（漫画与书是不同的 MediaSources 行，sourceId 天然互不污染；
+  /// format 过滤只是把值域契约显式化，书架归属由 `in_library` 决定），其它
+  /// 种类返回 0。
   Future<int> countMediaBySourceId(int sourceId, String mediaKind) async {
     final Expression<int> cnt = countAll();
     if (mediaKind == 'book') {
@@ -186,7 +187,8 @@ mixin _FushiDbLibrary on _$FushiDatabase, _FushiDbTagsSync {
     if (mediaKind == 'manga') {
       final TypedResult row = await (selectOnly(epubBooks)
             ..where(epubBooks.sourceId.equals(sourceId) &
-                epubBooks.format.equals('manga'))
+                epubBooks.format.equals('manga') &
+                epubBooks.inLibrary.equals(true))
             ..addColumns(<Expression<Object>>[cnt]))
           .getSingle();
       return row.read(cnt) ?? 0;

@@ -11,21 +11,31 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:fushi/src/utils/components/glass/fushi_icon.dart';
 import 'package:fushi_core/fushi_core.dart';
+import 'package:fushi/src/media/manga/download/download_identity.dart';
+import 'package:fushi/src/media/manga/download/download_library_changes.dart';
 import 'package:fushi/src/media/manga/download/download_library_index.dart';
 import 'package:fushi/src/media/manga/download/manga_download_service.dart';
+import 'package:fushi/src/media/manga/history/manga_history.dart';
+import 'package:fushi/src/media/manga/library/manga_chapter_download_state.dart';
 import 'package:fushi/src/media/manga/library/manga_chapter_list.dart';
 import 'package:fushi/src/media/manga/library/manga_download_planner.dart';
 import 'package:fushi/src/media/manga/library/manga_resume_point.dart';
+import 'package:fushi/src/media/manga/library/manga_shelf_removal_dialog.dart';
+import 'package:fushi/src/media/manga/library/manga_shelf_removal_service.dart';
 import 'package:fushi/src/media/manga/manga_cover_placeholder.dart';
 import 'package:fushi/src/media/manga/manga_global_search_page.dart';
 import 'package:fushi/src/media/manga/mihon/mihon_enabled_sources.dart';
 import 'package:fushi/src/media/manga/mihon/mihon_manager.dart';
 import 'package:fushi/src/media/manga/mihon/mihon_runtime_factory.dart';
+import 'package:fushi/src/media/selection/media_selection_controller.dart';
+import 'package:fushi/src/media/selection/selection_gestures.dart';
+import 'package:fushi/src/media/tags/tag_picker_sheet.dart';
+import 'package:fushi/src/utils/components/batch_action_bar.dart';
+import 'package:fushi/src/utils/components/section_visibility.dart';
 import 'package:fushi/src/utils/misc/reveal_in_file_manager.dart'
     show currentRevealHost, revealFirstOf;
 import 'package:fushi/src/media/display_title.dart';
 import 'package:fushi/src/media/media_item.dart';
-import 'package:fushi/src/media/online/online_shelf_removal.dart';
 import 'package:fushi/src/media/online/online_source_error_text.dart';
 import 'package:fushi/src/media/online/online_work_detail.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
@@ -39,11 +49,12 @@ import 'package:fushi/src/media/sources/reader_fushi_source.dart';
 import 'package:fushi/src/models/app_model.dart';
 import 'package:fushi/src/utils/components/fushi_staggered_entrance.dart';
 import 'package:fushi/src/utils/fushi_icons.dart';
+import 'package:fushi/src/utils/net/app_http_image.dart';
 import 'package:fushi/src/utils/misc/error_details_dialog.dart';
+import 'package:fushi/src/utils/misc/trimmed_text.dart';
 import 'package:fushi/utils.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_layout.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_library.dart';
-import 'package:fushi_engine/sync/deletion_propagation.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 /// 作品页要显示**哪一部**作品。
@@ -178,6 +189,23 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
       const <String, MangaChapterStateRow>{};
   String? _sourceLabel;
 
+  /// 来源名解析是否已经结束（成功拿到名称，或确认解析不到）。
+  ///
+  /// 只在确认解析不到后才显示「来源未安装」提示块：安装扩展后经数字 sourceId
+  /// 回退能解析出真实名称（票 03），那期间不该闪一下缺失提示。来源标签本身
+  /// 仍即时降级，不露出 `mihon.unavailable`。
+  bool _sourceLabelResolved = false;
+
+  /// 运行时确认解析不到来源（未安装、已停用或 sourceId 歧义）。
+  ///
+  /// 只对 Mihon 条目有意义：占位来源是「导入时未安装」，而已安装但停用的
+  /// Source 没有占位包，也必须按缺失来源展示。
+  bool _sourceMissing = false;
+
+  /// 缺失来源的友好名称：优先 Source 表（停用的 Source 行仍有名称），否则
+  /// 用描述符里持久化的备份名称。只在 [_sourceMissing] 或占位条目时使用。
+  String? _missingSourceName;
+
   bool _loading = true;
   bool _refreshing = false;
 
@@ -194,6 +222,18 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
   bool _newestFirst = true;
   bool _unreadOnly = false;
 
+  /// 章节下载筛选（ticket 06）：与「只看未读」一样是会话内状态，不持久化。
+  MangaChapterDownloadFilter _downloadFilter = MangaChapterDownloadFilter.all;
+
+  /// 章节多选状态机（与书架 / 本地图源页共用 [MediaSelectionController]）。
+  /// 选择状态放在作品页级，不放进会随下载状态重建的章节行子树里。选中键 = 章节 key。
+  final MediaSelectionController _selection = MediaSelectionController();
+
+  /// 批量已读 / 未读进行中：防止重复点击与并发写库。
+  bool _batchRunning = false;
+
+  bool get _selectionMode => _selection.active;
+
   /// 正文滚动（窄屏整页 / 宽屏右栏）：快速滚动条与「跳到当前章节」都挂在它上。
   final ScrollController _scroll = ScrollController();
   final GlobalKey _currentChapterAnchor = GlobalKey(
@@ -205,7 +245,20 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
   Map<String, MangaDownloadJobRow> _jobs =
       const <String, MangaDownloadJobRow>{};
   Set<String> _downloaded = const <String>{};
+
+  /// [_downloaded] 中可由「删除下载」删除的章（容器在当前 Download library
+  /// 根内）。Local source root 下的用户原件显示已下载但不可删。
+  Set<String> _deletableDownloaded = const <String>{};
   StreamSubscription<void>? _jobsWatch;
+
+  /// manifest 扫描缓存（ticket 07）：任务表进度更新不会改变身份/状态签名，
+  /// 不必每次都把整个 `downloads` + `local` 重扫一遍。
+  Set<String> _manifestDownloaded = const <String>{};
+  String? _manifestScanKey;
+
+  /// 并发重算的代号：任务表事件与页面加载/刷新可能同时触发，只让最后一轮
+  /// 写回状态，避免旧结果覆盖新一轮章节表。
+  int _downloadStateRevision = 0;
 
   /// 本地卷的阅读位置（`sectionIndex` = 页号，阅读器 `_persistPosition` 写）。
   ReaderPosition? _localPosition;
@@ -274,9 +327,40 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
   /// 未入库的本地图源扫描结果（本地图源网格 → 作品页，尚未登记）。
   bool get _isScannedLocal => _scannedLocal != null;
 
-  /// 本地图源下一章：优先第一个未读完的章，全读完则停在最后一章。
+  /// 本地图源「继续阅读」落到哪一章。
+  ///
+  /// 先回到上次读到的章（`currentChapterKey`）；按「重新打开位置」偏好已经读完
+  /// 这一章时前进到下一个未读章。后面没有未读章就停在当前章（读到最后一话时
+  /// 就是最后一章），**不**回落到更早的未读章——与在线源
+  /// [continueMangaChapterIndex] 的「读到最新一话就停在原地」一致。只有没有
+  /// 当前章（`currentChapterKey` 缺失或失配）时才从第一个未读章开始，全读完
+  /// 停在最后一章。本地顺序是第 1 话→第 N 话，前进方向与在线源相反（下标 +1）。
   int get _localResumeIndex {
     if (_localChapters.isEmpty) return -1;
+    final MangaResumeTarget target = MangaResumeTargetKey.fromKey(
+      _appModelOrNull?.mangaResumeTarget ?? kMangaResumeTargetDefault,
+    );
+    final String? currentKey = _localSource?.currentChapterKey;
+    if (currentKey != null) {
+      final int currentIndex = _localChapters.indexWhere(
+        (LocalSourceChapterRecord chapter) => chapter.key == currentKey,
+      );
+      if (currentIndex >= 0) {
+        final MangaChapterStateRow? state = _states[currentKey];
+        final bool advance =
+            state != null &&
+            switch (target) {
+              MangaResumeTarget.furthestProgress => state.readAt != null,
+              MangaResumeTarget.lastPosition => mangaChapterStoppedAtEnd(state),
+            };
+        if (!advance) return currentIndex;
+        for (int i = currentIndex + 1; i < _localChapters.length; i++) {
+          if (_states[_localChapters[i].key]?.readAt == null) return i;
+        }
+        // 后面没有未读章：停在当前章（当前章即最后一章时也就是最后一章）。
+        return currentIndex;
+      }
+    }
     final int unread = _localChapters.indexWhere(
       (LocalSourceChapterRecord chapter) =>
           _states[chapter.key]?.readAt == null,
@@ -290,44 +374,25 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     if (_localChapters.isEmpty) return null;
     final LocalSourceManga? scanned = _scannedLocal;
     if (scanned != null) {
-      return OnlineMangaLibraryEntry(
-        runtime: OnlineMangaRuntimeKind.local,
-        extensionPackage: '',
-        sourceId: '',
-        series: OnlineMangaSeries(
-          key: localSourceBookKeyFor(scanned.directoryPath),
-          title: scanned.title,
-          raw: const <String, Object?>{},
-        ),
-        chapters: <OnlineMangaChapter>[
-          for (final LocalSourceChapterRecord chapter in _localChapters)
-            OnlineMangaChapter(
-              key: chapter.key,
-              name: chapter.name,
-              raw: const <String, Object?>{},
-            ),
-        ],
+      return localSourceMangaLibraryEntry(
+        seriesKey: localSourceBookKeyFor(scanned.directoryPath),
+        title: scanned.title,
+        chapters: _localChapters,
       );
     }
     final EpubBookRow? row = _row;
     if (_localSource == null || row == null) return null;
-    return OnlineMangaLibraryEntry(
-      runtime: OnlineMangaRuntimeKind.local,
-      extensionPackage: '',
-      sourceId: '',
-      series: OnlineMangaSeries(
-        key: row.bookKey,
-        title: row.title,
-        raw: const <String, Object?>{},
-      ),
-      chapters: <OnlineMangaChapter>[
-        for (final LocalSourceChapterRecord chapter in _localChapters)
-          OnlineMangaChapter(
-            key: chapter.key,
-            name: chapter.name,
-            raw: const <String, Object?>{},
-          ),
-      ],
+    final String? currentKey = _localSource!.currentChapterKey;
+    final int currentIndex = currentKey == null
+        ? -1
+        : _localChapters.indexWhere(
+            (LocalSourceChapterRecord chapter) => chapter.key == currentKey,
+          );
+    return localSourceMangaLibraryEntry(
+      seriesKey: row.bookKey,
+      title: row.title,
+      chapters: _localChapters,
+      currentChapterIndex: currentIndex >= 0 ? currentIndex : null,
     );
   }
 
@@ -357,11 +422,15 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
   void initState() {
     super.initState();
     _newestFirst = _appModelOrNull?.mangaChapterListNewestFirst ?? true;
+    // 票 12：重建下载索引可能在页面打开期间写映射 / 关联，完成后立刻重算
+    // 已下载状态（manifest 扫描缓存同时失效），不需要重新进入页面。
+    DownloadLibraryChanges.instance.addListener(_onDownloadLibraryChanged);
     unawaited(_load());
   }
 
   @override
   void dispose() {
+    DownloadLibraryChanges.instance.removeListener(_onDownloadLibraryChanged);
     unawaited(_jobsWatch?.cancel());
     _jobsWatch = null;
     unawaited(_localVolumeChanges?.cancel());
@@ -369,13 +438,27 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     super.dispose();
   }
 
-  /// 重算下载状态位并（首次）订阅任务表。只对在库条目有意义：未入库的作品既没有
-  /// 任务也没有章目录。
+  /// Rebuild download index 完成：作废 manifest 扫描缓存并重算下载状态。
+  ///
+  /// 只清缓存不够——页面可能正停在同一身份 / 章节表上，任务表没有变化就不会
+  /// 自动重算。这里直接触发一轮 [_refreshDownloadState]。
+  void _onDownloadLibraryChanged() {
+    _manifestScanKey = null;
+    if (!mounted) return;
+    unawaited(_refreshDownloadState());
+  }
+
+  /// 重算下载状态位并（首次）订阅任务表。
+  ///
+  /// Ticket 07：不再要求 Library 行。有行时走记录的章节映射；没有映射 / 没有
+  /// 行的章再按 entry 身份扫描 `downloads` 与 `local` 的 `pages.json`（无
+  /// manifest 的目录不按标题猜测）。
   Future<void> _refreshDownloadState() async {
+    final int revision = ++_downloadStateRevision;
     final EpubBookRow? row = _row;
     final OnlineMangaLibraryEntry? entry = _entry;
     final AppModel? appModel = _appModelOrNull;
-    if (row == null || appModel == null) return;
+    if (appModel == null) return;
 
     // Local source（ADR 0013）：作品目录必须仍在**当前** `local` 根内。
     // 切换 Content root 后库里的旧路径不重基，这里把整部作品的章标成 Missing，
@@ -384,6 +467,7 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     // Ticket 10：源未安装时恢复出来的本地条目指向当前 `downloads` 根里的漫画
     // 目录，同样算「在当前内容根内」，不能整本标 Missing。
     if (_isLocalSource) {
+      if (row == null) return;
       final bool withinLocal = isLocalSourcePathWithinRoot(
         row.extractDir,
         appModel.appPaths.localComicRoot,
@@ -398,7 +482,7 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
       final Set<String> next = missing
           ? _localChapters.map((LocalSourceChapterRecord c) => c.key).toSet()
           : const <String>{};
-      if (!mounted) return;
+      if (!mounted || revision != _downloadStateRevision) return;
       final bool changed =
           _localMissingChapterKeys.length != next.length ||
           !_localMissingChapterKeys.containsAll(next);
@@ -420,19 +504,80 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
         );
       },
     );
+    // 非书架 / 无行时任务仍按 entry 身份推导出的 bookKey 落库。
+    final String bookKey =
+        row?.bookKey ?? OnlineMangaLibraryService.bookKeyOf(entry);
     final Map<String, MangaDownloadJobRow> jobs = await downloads.jobsForBook(
-      row.bookKey,
+      bookKey,
     );
-    final Set<String> downloaded = await DownloadLibraryIndex(appModel.database)
-        .downloadedChapterKeys(
-          row.bookKey,
-          entry.chapters.map((OnlineMangaChapter chapter) => chapter.key),
-        );
-    if (!mounted) return;
+    final List<String> chapterKeys = <String>[
+      for (final OnlineMangaChapter chapter in entry.chapters) chapter.key,
+    ];
+    final DownloadLibraryIndex index = DownloadLibraryIndex(
+      appModel.database,
+      downloadsRoot: appModel.appPathsOrNull?.downloadsRoot,
+      localComicRoot: appModel.appPathsOrNull?.localComicRoot,
+    );
+    final Set<String> mapped = row == null
+        ? <String>{}
+        : await index.downloadedChapterKeys(bookKey, chapterKeys);
+    // 身份 + 章节表 + 任务状态签名：进度更新（pagesDone）不触发全库重扫；
+    // 章节表刷新、完成 / 取消 / 删除等状态变化会。
+    final String scanKey =
+        '${entry.runtime.wireValue}\u0000${entry.extensionPackage}\u0000'
+        '${entry.sourceId}\u0000${entry.series.key}\u0000'
+        '${chapterKeys.join('\u0001')}\u0000'
+        '${<String>[for (final MangaDownloadJobRow job in jobs.values) '${job.jobId}:${job.status}'].join('|')}';
+    if (_manifestScanKey != scanKey) {
+      final MangaDownloadIdentity identity = MangaDownloadIdentity.ofEntry(
+        entry,
+      );
+      final Set<String> scanned = chapterKeys.isEmpty
+          ? const <String>{}
+          : (await index.scanDisks(
+              queries: <MangaDownloadDiskQuery>[
+                MangaDownloadDiskQuery.ofEntry(entry),
+              ],
+            )).downloadedChapterKeys(identity, chapterKeys);
+      if (!mounted || revision != _downloadStateRevision) return;
+      _manifestDownloaded = scanned;
+      _manifestScanKey = scanKey;
+    }
+    final Set<String> downloaded = <String>{...mapped, ..._manifestDownloaded};
+    // 可删性独立于「已下载」：Local source 根下的用户原件也算已下载，但删除
+    // 下载不得提供会清掉用户文件的操作。
+    final Set<String> deletable = await index.deletableChapterKeysForEntry(
+      entry,
+      row: row,
+      downloadedChapterKeys: downloaded,
+    );
+    if (!mounted || revision != _downloadStateRevision) return;
     setState(() {
       _jobs = jobs;
       _downloaded = downloaded;
+      _deletableDownloaded = deletable;
     });
+  }
+
+  /// 用户主动删掉下载后：让 manifest 扫描缓存失效，并立即把章节行切回未下载。
+  ///
+  /// 删除后的重算是异步的（要探磁盘），不能让已删的章在等待期间继续显示
+  /// 「已下载」；下一轮 [_refreshDownloadState] 会从映射 + manifest 重建。
+  void _forgetDownloadedChapters(Iterable<String> chapterKeys) {
+    _manifestScanKey = null;
+    final Set<String> keys = chapterKeys.toSet();
+    _manifestDownloaded = _manifestDownloaded.difference(keys);
+    if (keys.isEmpty) return;
+    void apply() {
+      _downloaded = _downloaded.difference(keys);
+      _deletableDownloaded = _deletableDownloaded.difference(keys);
+    }
+
+    if (mounted) {
+      setState(apply);
+    } else {
+      apply();
+    }
   }
 
   Future<void> _enqueueChapter(OnlineMangaChapter chapter) async {
@@ -440,11 +585,12 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     final AppModel? appModel = _appModelOrNull;
     if (entry == null || appModel == null) return;
     try {
-      await appModel.mangaDownloadService.enqueueChapter(
-        entry: entry,
-        chapter: chapter,
-        autoOcr: false,
-      );
+      final MangaDownloadJobRow job = await appModel.mangaDownloadService
+          .enqueueChapter(entry: entry, chapter: chapter, autoOcr: false);
+      // 票 08：源页可能还没有行（书架半边暂时不可用）；入队会按下载身份补一条
+      // 非书架行。把这条真实行接回页面，任务列表 / 已下载状态 / 删除下载与
+      // 「加入书架？」提示才有稳定的 bookKey。
+      await _adoptDownloadRow(job.bookKey);
       if (mounted) FushiToast.show(msg: t.manga_chapter_download_queued);
     } on Object catch (error, stack) {
       ErrorLogService.instance.log('MangaSeriesPage.enqueue', error, stack);
@@ -456,6 +602,31 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
       }
     }
     await _refreshDownloadState();
+  }
+
+  /// 入队后把任务真实使用的 Manga 行接回页面状态。
+  Future<void> _adoptDownloadRow(String bookKey) async {
+    final AppModel? appModel = _appModelOrNull;
+    if (appModel == null) return;
+    final EpubBookRow? row = await appModel.database.getEpubBook(bookKey);
+    if (!mounted || row == null || _row?.bookKey == row.bookKey) return;
+    setState(() => _row = row);
+  }
+
+  /// 批量入队后按 entry 的下载身份找回真实行（占位包 / 数字 sourceId 回退）。
+  Future<void> _syncDownloadRow() async {
+    final OnlineMangaLibraryEntry? entry = _entry;
+    final AppModel? appModel = _appModelOrNull;
+    if (entry == null || appModel == null) return;
+    final OnlineMangaLibraryService? service =
+        _service ?? _shelfServiceFor(entry);
+    final EpubBookRow? row = service != null
+        ? await service.find(entry)
+        : await appModel.database.getEpubBook(
+            OnlineMangaLibraryService.bookKeyOf(entry),
+          );
+    if (!mounted || row == null || _row?.bookKey == row.bookKey) return;
+    setState(() => _row = row);
   }
 
   Future<void> _retryChapterDownload(OnlineMangaChapter chapter) async {
@@ -502,8 +673,12 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
   /// 先确认（写明章名），删完给 Toast。
   Future<void> _deleteChapterDownload(OnlineMangaChapter chapter) async {
     final EpubBookRow? row = _row;
+    final OnlineMangaLibraryEntry? entry = _entry;
     final AppModel? appModel = _appModelOrNull;
-    if (row == null || appModel == null) return;
+    if (appModel == null || entry == null) return;
+    // 菜单已对不可删的章隐藏；这里再挡一次并发状态变化，避免 job 行被清掉后
+    // 页面把仍然存在的用户文件显示成「未下载」。
+    if (!_deletableDownloaded.contains(chapter.key)) return;
     final bool confirmed = await showFushiConfirmDialog(
       context: context,
       title: t.manga_chapter_download_delete_action,
@@ -514,9 +689,13 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     );
     if (!confirmed || !mounted) return;
     try {
+      // 票 08：非书架 / 无 Library 行也能删。有映射按映射删；没有时按 entry
+      // 的下载身份找唯一匹配的目录，不按标题猜。
       await DownloadLibraryIndex(
         appModel.database,
-      ).deleteChapter(bookKey: row.bookKey, chapterKey: chapter.key);
+        downloadsRoot: appModel.appPathsOrNull?.downloadsRoot,
+        localComicRoot: appModel.appPathsOrNull?.localComicRoot,
+      ).deleteChapterForEntry(entry: entry, chapterKey: chapter.key, row: row);
       // Ticket 02：done 任务行是「这章曾经下载过」的持久标记。用户主动删除
       // 下载时必须一起清掉，否则磁盘判据变 false、任务仍 done → 被误显示成
       // Missing。缺失文件本身（便携拷贝没带 content）不走这里，保留 Missing。
@@ -524,6 +703,7 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
       if (job != null) {
         await appModel.mangaDownloadService.remove(job.jobId);
       }
+      _forgetDownloadedChapters(<String>[chapter.key]);
       if (mounted) FushiToast.show(msg: t.storage_entry_delete_done);
     } on Object catch (error, stack) {
       ErrorLogService.instance.log(
@@ -546,7 +726,7 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
   Future<void> _downloadAll() async {
     final OnlineMangaLibraryEntry? entry = _entry;
     final AppModel? appModel = _appModelOrNull;
-    if (entry == null || appModel == null || _bookKey == null) return;
+    if (entry == null || appModel == null) return;
     // 锁定章（未登录 / 未购买）入队必败，整批跳过并说清楚跳了几个；用户登录并
     // 刷新后它们会脱锁，再点一次即可（BUG-2479）。规划规则与书架批量下载共用
     // [planMangaChapterDownload]（review D2）。
@@ -575,6 +755,7 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
         chapters: pending,
         autoOcr: false,
       );
+      await _syncDownloadRow();
       if (mounted) {
         FushiToast.show(
           msg: t.manga_series_download_all_queued(count: pending.length),
@@ -914,6 +1095,10 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
       _adapter = service?.adapter;
       _states = states;
       _localPosition = position;
+      _sourceLabel = null;
+      _sourceLabelResolved = false;
+      _sourceMissing = false;
+      _missingSourceName = null;
     });
     if (entry != null && service != null) {
       unawaited(_resolveSourceLabel(service.adapter, entry));
@@ -968,6 +1153,9 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
       _service = null;
       _adapter = null;
       _sourceLabel = null;
+      _sourceLabelResolved = false;
+      _sourceMissing = false;
+      _missingSourceName = null;
     });
   }
 
@@ -993,9 +1181,15 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     // 展示照旧，只是入库按钮不可用。
     final OnlineMangaLibraryService? shelf = service ?? _shelfServiceFor(seed);
     EpubBookRow? existing;
+    bool hadRow = false;
     if (shelf != null) {
       try {
         existing = await shelf.find(seed);
+        hadRow = existing != null;
+        // 票 02：打开在线源作品页就确保一条 membership=false 的 Manga 行
+        // （已有则复用）。阅读进度、已读、History 与下载从此有稳定归属，
+        // 但作品不进书架；首屏仍按下面的刷新策略决定是否联网。
+        existing ??= await shelf.ensureNonLibrary(seed);
       } on Object catch (error, stack) {
         ErrorLogService.instance.log('MangaSeriesPage.find', error, stack);
       }
@@ -1013,11 +1207,19 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
       _adapter = adapter;
       _service = shelf;
       _sourceLabel = sourceLabel;
+      _sourceLabelResolved = sourceLabel != null && sourceLabel.isNotEmpty;
+      _sourceMissing = false;
+      _missingSourceName = null;
       _states = states;
     });
-    // 未入库的来源作品首屏是空的，自动拉一次；已入库则与书架路径同一规则：
-    // 有缓存就不联网，缓存章节为空才兜底。
-    if (existing == null || entry.chapters.isEmpty) {
+    // 来源页未提供名称时（如从 History 打开）自己解析一次：来源可用就显示真实
+    // 名称，缺失 / 停用则与书架路径一样按缺失来源降级，而不是露出扩展包名。
+    if (sourceLabel == null || sourceLabel.isEmpty) {
+      unawaited(_resolveSourceLabel(adapter, entry));
+    }
+    // 首次打开（行刚建出来）首屏是空的，自动拉一次；已有行则与书架路径同一
+    // 规则：有缓存就不联网，缓存章节为空才兜底。
+    if (!hadRow || entry.chapters.isEmpty) {
       unawaited(_refreshFromSource(silent: true));
     }
     unawaited(_refreshDownloadState());
@@ -1036,8 +1238,21 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     OnlineMangaRuntimeAdapter adapter,
     OnlineMangaLibraryEntry entry,
   ) async {
-    final String? label = await adapter.sourceLabel(entry);
-    if (mounted && label != null) setState(() => _sourceLabel = label);
+    final String? label = trimmedOrNull(await adapter.sourceLabel(entry));
+    // 运行时解析不到来源：再问 Source 表要名字（停用的 Source 行仍有名称），
+    // 都没有时才退化为「来源未安装」。非 Mihon 运行时不套用缺失语义。
+    final bool missing =
+        label == null && entry.runtime == OnlineMangaRuntimeKind.mihon;
+    final String? knownName = missing
+        ? trimmedOrNull(await _service?.knownSourceName(entry))
+        : null;
+    if (!mounted) return;
+    setState(() {
+      _sourceLabel = label;
+      _sourceMissing = missing;
+      _missingSourceName = knownName;
+      _sourceLabelResolved = true;
+    });
   }
 
   /// 联网刷新作品详情 + 章节列表。
@@ -1078,6 +1293,9 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
           );
           _refreshSucceeded = true;
         });
+        // 章节列表变了：已下载状态的章集合也要按新章节身份重算（首次打开
+        // 源页时 seed 往往只有标题，下载判据要等这次刷新后的章节表）。
+        unawaited(_refreshDownloadState());
         return;
       }
       final OnlineMangaLibraryEntry updated = await service.refreshFromSource(
@@ -1091,6 +1309,7 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
         if (row != null) _row = row;
         _refreshSucceeded = true;
       });
+      unawaited(_refreshDownloadState());
     } on OnlineMangaUnavailable catch (error, stack) {
       // 这条**才是**在线漫画的主流失败路径：adapter 已经把 Mihon/Aidoku 的运行时
       // 与网络异常全包成了 OnlineMangaUnavailable，兜底的 `on Object` 基本收不到
@@ -1137,10 +1356,22 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     }
     final OnlineMangaLibraryService? service = _service;
     final OnlineMangaLibraryEntry? entry = _entry;
-    if (service == null || entry == null || _busy || _row != null) return;
+    // 票 02 起源作品页一打开就有非书架行；票 03 把「加入书架」改为翻转这条
+    // 行的 membership（行不存在时才创建 Library 行）。已在书架则不再重复加入。
+    if (service == null || entry == null || _busy) return;
+    if (_row?.isInLibrary ?? false) return;
+    // 票 04：已有 Tag 时先选标签；取消（null）则不创建 / 不翻转。
+    // 目标键用现有行的真实身份（同源回退时它可能与 seed 推导出的键不同）。
+    final Set<int>? selectedTagIds = await _pickTagsBeforeLibraryAdd(
+      _row?.bookKey ?? OnlineMangaLibraryService.bookKeyOf(entry),
+    );
+    if (selectedTagIds == null || !mounted) return;
     setState(() => _busy = true);
     try {
       final EpubBookRow row = await service.add(entry);
+      if (!mounted) return;
+      // 条目已入架；标签分配在创建成功后统一写入，加入失败时不会留下分配。
+      await _applySelectedTags(row.bookKey, selectedTagIds);
       if (!mounted) return;
       setState(() {
         _row = row;
@@ -1160,12 +1391,68 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     }
   }
 
+  /// 加入书架前的标签选择（票 04/05）。返回 null = 用户取消本次加入；空集合 =
+  /// 用户确认按未打标签加入（或全局还没有任何 Tag，直接加入）。
+  ///
+  /// 只选不写：选中的 Tag 由调用方在 Library 条目创建成功后统一写入，取消或
+  /// 加入失败都不会留下 Tag 分配。
+  Future<Set<int>?> _pickTagsBeforeLibraryAdd(String bookKey) async {
+    final AppModel? appModel = _appModelOrNull;
+    if (appModel == null) return const <int>{};
+    final List<BookTagRow> tags;
+    try {
+      tags = await appModel.database.getAllTags();
+    } on Object catch (error, stack) {
+      // 标签读不出来不该挡住「加入书架」本身：按未打标签直接加入。
+      ErrorLogService.instance.log(
+        'MangaSeriesPage.addTagLookup',
+        error,
+        stack,
+      );
+      return const <int>{};
+    }
+    if (tags.isEmpty) return const <int>{};
+    if (!mounted) return null;
+    return showTagPickerSelection(
+      context,
+      targets: TagTargets(
+        media: <MediaRef>[MediaRef(kind: MediaKind.epub, entryKey: bookKey)],
+      ),
+    );
+  }
+
+  /// 写入加入书架时选中的 Tag。条目已入架，失败只提示，不撤销条目。
+  Future<void> _applySelectedTags(String bookKey, Set<int> tagIds) async {
+    final AppModel? appModel = _appModelOrNull;
+    if (appModel == null || tagIds.isEmpty) return;
+    try {
+      await appModel.database.setTagsForBook(bookKey, tagIds);
+    } on Object catch (error, stack) {
+      ErrorLogService.instance.log('MangaSeriesPage.addTags', error, stack);
+      if (mounted) {
+        FushiToast.show(
+          msg: describeOnlineSourceError(error),
+          severity: ToastSeverity.error,
+        );
+      }
+    }
+  }
+
   /// 未入库本地作品显式「加入书架」。
+  ///
+  /// 票 05：已有 Tag 时先选标签；取消（null）则不登记。标签在登记成功后统一
+  /// 写入；点章节的静默登记走 [_openChapterAt] → [_registerScannedLocal]，没有
+  /// 这一步，保持未打标签。
   Future<void> _addScannedLocalToLibrary(LocalSourceManga manga) async {
     if (_busy) return;
+    final String bookKey = localSourceBookKeyFor(manga.directoryPath);
+    final Set<int>? selectedTagIds = await _pickTagsBeforeLibraryAdd(bookKey);
+    if (selectedTagIds == null || !mounted) return;
     setState(() => _busy = true);
     try {
-      await _registerScannedLocal(manga);
+      final String? registeredKey = await _registerScannedLocal(manga);
+      if (registeredKey == null) return;
+      await _applySelectedTags(registeredKey, selectedTagIds);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -1216,13 +1503,13 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     }
   }
 
-  /// 移出书架 = 删这本书（DB 行 + 章节状态 + 下载任务行 + 章目录映射，
-  /// `deleteEpubBook` 一个事务级联）。Download library 里的已下载文件默认**保留**
-  /// （票 04：确认框询问「同时删除本地文件」，勾选才删），避免「移出书架」误删
-  /// 用户内容；Library 记录已删，文件成为未索引内容，重建索引可找回。
+  /// 移出书架 = 只清 Library membership（票 04）：Manga/Chapter、阅读进度、
+  /// 已读标记、下载任务、章目录映射、下载文件夹与 History 全部保留；Tag 分配与
+  /// 订阅 / 自动追更移除。Download library 里的已下载文件默认保留，勾选「同时
+  /// 删除本地文件」才删文件与下载索引（行与阅读状态仍保留，之后可重新下载）。
   ///
-  /// 删完页面**不关**、退回「未入库」态：条目本身（作品 + 章节列表）还在手上，
-  /// 用户可以立刻重新加入或换源；关页面反而把他丢回不知道哪一层的列表。
+  /// 移出后页面**不关**、切回非书架态：条目本身（作品 + 章节列表 + 已下载状态）
+  /// 还在手上，用户可以立刻重新加入；关页面反而把他丢回不知道哪一层的列表。
   Future<void> _removeFromLibrary() async {
     final EpubBookRow? row = _row;
     final OnlineMangaLibraryEntry? entry = _entry;
@@ -1233,35 +1520,25 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
       return;
     }
     if (entry == null) return;
-    final DeleteDecision? decision = await _confirmRemoveFromLibrary(appModel);
+    final MangaLibraryRemovalDecision? decision =
+        await _confirmRemoveFromLibrary();
     if (decision == null || !mounted) return;
     setState(() => _busy = true);
     try {
-      // 先停引用再销毁实体：正在下载这本书的任务还握着目录句柄。下载用 remove
-      // （等正在飞的那个真停）而不是 cancel（只置标志就返回，worker 还在往目录里
-      // 写页，随后的目录删除会撞 errno 32 留孤儿）。任务行随后由 deleteEpubBook
-      // 级联删，这里删掉也无妨。
-      final MangaDownloadService downloads = appModel.mangaDownloadService;
-      final Map<String, MangaDownloadJobRow> jobs = await downloads.jobsForBook(
-        row.bookKey,
+      // 下载任务的停止由 removeMangaFromLibrary 统一负责（单一 owner）：它先
+      // remove 排队中 / 下载中的任务（等正在飞的那个真停），再删文件与行。页面
+      // 不再维护第二份停止循环。
+      final MangaLibraryRemovalResult result = await removeMangaFromLibrary(
+        db: appModel.database,
+        bookKey: row.bookKey,
+        downloadsRoot: appModel.appPathsOrNull?.downloadsRoot,
+        deleteLocalFiles: decision.deleteLocalFiles,
+        deleteStatistics: decision.deleteStatistics,
+        downloadService: appModel.mangaDownloadService,
       );
-      for (final MangaDownloadJobRow job in jobs.values) {
-        if (job.status == MangaDownloadJobStatus.queued ||
-            job.status == MangaDownloadJobStatus.running) {
-          await downloads.remove(job.jobId);
-        }
-      }
-      final DeleteBookResult result = await ReaderFushiSource.instance
-          .deleteBook(
-            db: appModel.database,
-            bookKey: row.bookKey,
-            scope: decision.scope,
-            deleteLocalFiles: decision.deleteLocalFiles,
-            deleteStatistics: decision.deleteStatistics,
-          );
       if (!mounted) return;
-      if (!result.deleted) {
-        final String reason = result.failureReason ?? '';
+      if (!result.removed) {
+        final String reason = result.failureMessage;
         FushiToast.show(
           msg: reason.isEmpty
               ? t.epub_delete_error
@@ -1270,18 +1547,31 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
         );
         return;
       }
-      setState(() {
-        _row = null;
-        _states = const <String, MangaChapterStateRow>{};
-        _downloaded = const <String>{};
-        _jobs = const <String, MangaDownloadJobRow>{};
-        // 丢掉三样只属于「在库」的状态：当前章、订阅、自动下载。
-        _entry = entry.copyWith(
-          clearCurrentChapter: true,
-          subscribed: false,
-          autoDownload: false,
-        );
-      });
+      final EpubBookRow? remaining = result.row;
+      if (remaining != null) {
+        // 非破坏移出：行还在，阅读状态 / 已读 / 下载状态原样保留，只切回非书架态。
+        setState(() {
+          _row = remaining;
+          _entry =
+              OnlineMangaLibraryEntry.tryParse(remaining.sourceMetadata) ??
+              entry.copyWith(subscribed: false, autoDownload: false);
+        });
+        await _refreshDownloadState();
+      } else {
+        // 兜底：行已不存在时退回未入库态。
+        setState(() {
+          _row = null;
+          _states = const <String, MangaChapterStateRow>{};
+          _downloaded = const <String>{};
+          _deletableDownloaded = const <String>{};
+          _jobs = const <String, MangaDownloadJobRow>{};
+          _entry = entry.copyWith(
+            clearCurrentChapter: true,
+            subscribed: false,
+            autoDownload: false,
+          );
+        });
+      }
     } on Object catch (error, stack) {
       ErrorLogService.instance.log('MangaSeriesPage.remove', error, stack);
       if (mounted) {
@@ -1295,37 +1585,44 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     }
   }
 
-  /// Local source 的「移出书架」：只删 Library 记录并立墓碑，**不删文件**
-  /// （ADR 0013）。删除本地文件是设置/作品页之外的单独动作（ticket 06 只提供
-  /// [LocalSourceLibrary.deleteLocalFiles] 的显式确认入口）。
+  /// Local source 的「移出书架」：与在线作品页同一个统一弹窗。默认只清 Library
+  /// membership（票 04）：行、阅读状态与 `local` 原作都保留。勾选「同时删除本地
+  /// 文件」时先删 Local source root 里的原作文件夹/文件，成功后才连行与状态一起
+  /// 删除并立墓碑（ADR 0013）；文件删除失败时作品留在架上并提示。
   Future<void> _removeLocalSourceFromLibrary(
     EpubBookRow row,
     AppModel appModel,
   ) async {
-    final bool confirmed = await showFushiConfirmDialog(
-      context: context,
-      title: t.manga_series_remove_from_bookshelf,
-      message: t.manga_series_remove_local_confirm,
-      cancelLabel: t.dialog_cancel,
-      confirmLabel: t.dialog_ok,
-      destructive: true,
-    );
-    if (!confirmed || !mounted) return;
+    final MangaLibraryRemovalDecision? decision =
+        await _confirmRemoveFromLibrary();
+    if (decision == null || !mounted) return;
     setState(() => _busy = true);
     try {
-      final bool removed = await LocalSourceLibrary(
+      final MangaLibraryRemovalResult result = await removeMangaFromLibrary(
         db: appModel.database,
-        root: appModel.appPaths.localComicRoot,
-      ).removeFromLibrary(row.bookKey);
+        bookKey: row.bookKey,
+        localSourceRoot: appModel.appPaths.localComicRoot,
+        deleteLocalFiles: decision.deleteLocalFiles,
+        deleteStatistics: decision.deleteStatistics,
+        downloadService: appModel.mangaDownloadService,
+      );
       if (!mounted) return;
-      if (!removed) {
+      if (!result.removed) {
+        final String reason = result.failureMessage;
         FushiToast.show(
-          msg: t.epub_delete_error,
+          msg: reason.isEmpty
+              ? t.epub_delete_error
+              : '${t.epub_delete_error}: $reason',
           severity: ToastSeverity.error,
         );
         return;
       }
-      // Local source 的章节表住在刚删掉的行里；回书架，磁盘文件原样保留。
+      // 非破坏移出时行仍在（章节表也还在）；删文件移出时行已删——两种情况都回
+      // Local source 页，由该页重新判定「已入架 / 未入架」。
+      final EpubBookRow? remaining = result.row;
+      if (remaining != null) {
+        setState(() => _row = remaining);
+      }
       final NavigatorState navigator = Navigator.of(context);
       if (navigator.canPop()) navigator.pop();
     } on Object catch (error, stack) {
@@ -1389,6 +1686,19 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
         );
         return;
       }
+      // 票 10：Local source 的「删除本地文件」= 删除整部作品（含文件）。作品行
+      // 已删、磁盘文件也没了，历史页再没有可回退的目标，级联清掉它的历史行。
+      // 与 deleteBook 同一纪律：历史清理失败只记日志，不翻转文件已删的结果。
+      try {
+        await deleteMangaHistoryForBook(appModel.database, row);
+      } catch (error, stack) {
+        ErrorLogService.instance.log(
+          'MangaSeriesPage.deleteLocalSourceHistory',
+          error,
+          stack,
+        );
+      }
+      if (!mounted) return;
       final NavigatorState navigator = Navigator.of(context);
       if (navigator.canPop()) navigator.pop();
     } on Object catch (error, stack) {
@@ -1408,12 +1718,10 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     }
   }
 
-  /// 与书架长按删除同一个确认框（[confirmRemoveOnlineWorkFromShelf]）。
-  Future<DeleteDecision?> _confirmRemoveFromLibrary(AppModel appModel) =>
-      confirmRemoveOnlineWorkFromShelf(
-        context: context,
-        appModel: appModel,
-        title: t.manga_series_remove_from_bookshelf,
+  /// 在线与本地 Manga 共用的统一移出弹窗（票 01）。
+  Future<MangaLibraryRemovalDecision?> _confirmRemoveFromLibrary() =>
+      showMangaShelfRemovalDialog(
+        context,
         message: t.manga_series_remove_confirm,
         localFilesSubtitle: t.delete_local_files_download_desc,
         statisticsSubtitle: t.delete_statistics_manga_desc,
@@ -1478,8 +1786,9 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     try {
       String? bookKey = _bookKey;
       if (bookKey == null) {
-        // 从源里直接点章：先入库再读，否则进度、已读标记、断点续读全都无处可落。
-        final EpubBookRow row = await service.add(entry);
+        // 从源里直接点章：确保一条**非书架**行再读（票 02：阅读不等于收藏）。
+        // 进度、已读标记、断点续读按 bookKey/uid 落在这条行上。
+        final EpubBookRow row = await service.ensureNonLibrary(entry);
         entry = OnlineMangaLibraryEntry.tryParse(row.sourceMetadata) ?? entry;
         bookKey = row.bookKey;
         if (!mounted) return;
@@ -1618,6 +1927,383 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     unawaited(_refreshDownloadState());
   }
 
+  /// 当前展示的章节条目：在线描述符优先，本地图源借展示条目。
+  OnlineMangaLibraryEntry? get _displayEntry => _entry ?? _localDisplayEntry;
+
+  /// 与共享章节列表内部完全相同的下载状态口径（ticket 06）：多选的可见域必须
+  /// 跟着下载筛选走。
+  MangaChapterDownloadState _downloadStateOf(OnlineMangaChapter chapter) =>
+      MangaChapterList.downloadStateOf(
+        chapter: chapter,
+        downloadedChapterKeys: _isLocalSource
+            ? _localChapters
+                  .map((LocalSourceChapterRecord chapter) => chapter.key)
+                  .toSet()
+            : _downloaded,
+        missingChapterKeys: _isLocalSource
+            ? _localMissingChapterKeys
+            : const <String>{},
+        jobsByChapterKey: _jobs,
+      );
+
+  /// 当前筛选（只看未读 + 下载状态）+ 排序后真正渲染出来的章节
+  /// （顺序 = 屏幕顺序）。
+  List<OnlineMangaChapter> get _visibleChapters =>
+      MangaChapterList.visibleChapters(
+        chapters: _displayEntry?.chapters ?? const <OnlineMangaChapter>[],
+        states: _states,
+        newestFirst: _newestFirst,
+        unreadOnly: _unreadOnly,
+        downloadFilter: _downloadFilter,
+        downloadStateOf: _downloadStateOf,
+      );
+
+  /// 每帧把可见章节序登记给选择状态机：全选 / 反选与批量动作只认这份可见序。
+  ///
+  /// 可见序是 build 期算出来的，批量栏在同一帧更早的位置已读过选中集，会慢一
+  /// 拍；可见序变了且正在多选时补一帧（与书架 / 本地图源页同一约定）。
+  void _syncVisibleSelectionOrder() {
+    final bool changed = _selection.setVisibleOrder(
+      loose: <String>[
+        for (final OnlineMangaChapter chapter in _visibleChapters) chapter.key,
+      ],
+      collections: const <int>[],
+    );
+    if (!changed || !_selectionMode) return;
+    WidgetsBinding.instance.addPostFrameCallback((Duration _) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  void _exitSelectionMode() {
+    if (!_selectionMode) return;
+    setState(_selection.exit);
+  }
+
+  /// 多选态内单击章节：切换选中；取消最后一项 = 清空选择，退出多选。
+  /// 非多选态保持原语义：打开该章。
+  void _handleChapterTap(OnlineMangaChapter chapter) {
+    if (_selectionMode) {
+      setState(() {
+        _selection.toggle(SelectionSlot.loose(chapter.key));
+        if (_selection.isEmpty) _selection.exit();
+      });
+      return;
+    }
+    final int index = _displayEntry?.indexOfChapterKey(chapter.key) ?? -1;
+    if (index >= 0) unawaited(_openChapterAt(index));
+  }
+
+  /// 长按章节进入多选并选中它。多选态内的长按交给 [SelectionDragArea] 扫选，
+  /// 所以章节行在多选态不挂这个回调。
+  void _handleChapterLongPress(OnlineMangaChapter chapter) {
+    if (_batchRunning) return;
+    setState(() => _selection.enterWith(SelectionSlot.loose(chapter.key)));
+  }
+
+  void _selectAllChapters() {
+    setState(
+      () => _selection.selectAll(
+        loose: _selection.visibleLooseKeys,
+        collections: const <int>[],
+      ),
+    );
+  }
+
+  void _invertChapterSelection() {
+    setState(() {
+      _selection.invert(
+        loose: _selection.visibleLooseKeys,
+        collections: const <int>[],
+      );
+      if (_selection.isEmpty) _selection.exit();
+    });
+  }
+
+  /// 当前可见且选中的章节（批量动作的作用域；被筛选隐藏的选中项不参与）。
+  List<OnlineMangaChapter> get _selectedVisibleChapters {
+    final Set<String> keys = _selection.looseKeys;
+    if (keys.isEmpty) return const <OnlineMangaChapter>[];
+    return <OnlineMangaChapter>[
+      for (final OnlineMangaChapter chapter in _visibleChapters)
+        if (keys.contains(chapter.key)) chapter,
+    ];
+  }
+
+  /// 批量下载只适用于在线、来源可解析的条目：本地图源 / 本地卷（[_entry] 为
+  /// null）没有在线下载；来源未安装（运行时解析失败）或解析尚未结束时不能发起。
+  bool get _batchDownloadSourceAvailable =>
+      _entry != null && _sourceLabelResolved && !_sourceMissing;
+
+  /// 批量下载的规划：当前可见且选中的在线章节交给与「下载全部」共享的
+  /// [planMangaChapterDownload]，由它跳过已下载、已排队 / 下载中 / 暂停与锁定
+  /// 章。混合选择因此只处理可下载子集；遍历顺序不变，入队顺序仍是旧→新。
+  ({List<OnlineMangaChapter> pending, int lockedSkipped})
+  get _batchDownloadPlan {
+    final OnlineMangaLibraryEntry? entry = _entry;
+    if (entry == null || !_batchDownloadSourceAvailable) {
+      return (pending: const <OnlineMangaChapter>[], lockedSkipped: 0);
+    }
+    final Set<String> selectedKeys = <String>{
+      for (final OnlineMangaChapter chapter in _selectedVisibleChapters)
+        chapter.key,
+    };
+    if (selectedKeys.isEmpty) {
+      return (pending: const <OnlineMangaChapter>[], lockedSkipped: 0);
+    }
+    return planMangaChapterDownload(
+      entry: entry,
+      downloadedChapterKeys: _downloaded,
+      jobsByChapterKey: _jobs,
+      chapterKeys: selectedKeys,
+    );
+  }
+
+  /// 批量下载选中的适用章节：不弹确认，直接复用「下载全部」的 planner 与
+  /// [MangaDownloadService.enqueueChapters] 路径（CBZ 设置与下载顺序由下载
+  /// 服务沿用）。入队后立刻重算任务表，章节行与下载页随即显示排队状态。
+  Future<void> _batchDownloadSelected() async {
+    final OnlineMangaLibraryEntry? entry = _entry;
+    final AppModel? appModel = _appModelOrNull;
+    if (entry == null || appModel == null || _batchRunning) return;
+    final ({List<OnlineMangaChapter> pending, int lockedSkipped}) plan =
+        _batchDownloadPlan;
+    final List<OnlineMangaChapter> pending = plan.pending;
+    if (pending.isEmpty) return;
+    if (plan.lockedSkipped > 0) {
+      FushiToast.show(
+        msg: t.manga_series_download_all_locked_skipped(
+          count: plan.lockedSkipped,
+        ),
+      );
+    }
+    setState(() => _batchRunning = true);
+    try {
+      await appModel.mangaDownloadService.enqueueChapters(
+        entry: entry,
+        chapters: pending,
+        autoOcr: false,
+      );
+      await _syncDownloadRow();
+      if (mounted) {
+        FushiToast.show(
+          msg: t.manga_series_download_all_queued(count: pending.length),
+        );
+      }
+    } on Object catch (error, stack) {
+      ErrorLogService.instance.log(
+        'MangaSeriesPage.batchDownloadSelected',
+        error,
+        stack,
+      );
+      if (mounted) {
+        FushiToast.show(
+          msg: describeOnlineSourceError(error),
+          severity: ToastSeverity.error,
+        );
+      }
+    } finally {
+      await _refreshDownloadState();
+      if (mounted) {
+        _syncVisibleSelectionOrder();
+        setState(() => _batchRunning = false);
+      }
+    }
+  }
+
+  /// 批量标记已读 / 未读：只写章级 `readAt`，与单章菜单同一套数据库动作，不
+  /// 改书级 `completedAt`，也不弹确认。混合选择只处理适用子集。
+  Future<void> _batchMarkRead({required bool read}) async {
+    final String? bookUid = _bookUid;
+    if (bookUid == null || _batchRunning) return;
+    final List<OnlineMangaChapter> targets = _selectedVisibleChapters
+        .where(
+          (OnlineMangaChapter chapter) => read
+              ? _states[chapter.key]?.readAt == null
+              : _states[chapter.key]?.readAt != null,
+        )
+        .toList(growable: false);
+    if (targets.isEmpty) return;
+    setState(() => _batchRunning = true);
+    try {
+      if (read) {
+        await _appModel.database.markMangaChaptersRead(
+          bookUid: bookUid,
+          chapterKeys: <String>[
+            for (final OnlineMangaChapter chapter in targets) chapter.key,
+          ],
+        );
+      } else {
+        // 逐章清除与单章「标为未读」是同一个动作（保留 lastPage / 页数）。
+        for (final OnlineMangaChapter chapter in targets) {
+          await _appModel.database.clearMangaChapterRead(
+            bookUid: bookUid,
+            chapterKey: chapter.key,
+          );
+        }
+      }
+      await _reloadChapterStates();
+      _syncVisibleSelectionOrder();
+    } finally {
+      if (mounted) {
+        setState(() {
+          _batchRunning = false;
+          // 「只看未读」下标记已读会让选中项从可见集消失；清空后退出多选，
+          // 不让用户停在一个没有批量栏、点一下却只是勾选的状态里。
+          if (_selectionMode && _selection.isEmpty) _selection.exit();
+        });
+      }
+    }
+  }
+
+  /// 批量删除的适用子集：当前可见且选中的「已完成」在线下载。
+  ///
+  /// 只要求是在线条目，不要求 Manga 行 / Library membership / 数据库映射：
+  /// 「已下载」由 [_refreshDownloadState] 合并映射与磁盘 `pages.json` 身份扫描
+  /// 得出（票 05：清库后仍可直接批量删除）。本地图源章节的磁盘文件属于用户
+  /// 文件，永远不参与；Local source root 下的用户原件虽显示已下载，但不在
+  /// [_deletableDownloaded] 里，同样置灰；排队中 / 下载中 / 暂停 / 文件缺失
+  /// 也都不算「已完成」。
+  List<OnlineMangaChapter> get _deletableSelectedChapters {
+    if (_entry == null) return const <OnlineMangaChapter>[];
+    return <OnlineMangaChapter>[
+      for (final OnlineMangaChapter chapter in _selectedVisibleChapters)
+        if (_downloadStateOf(chapter) == MangaChapterDownloadState.downloaded &&
+            _deletableDownloaded.contains(chapter.key))
+          chapter,
+    ];
+  }
+
+  /// 批量删除选中的已完成在线下载：只动 Download library 里由应用管理的
+  /// 文件，不碰本地图源用户文件。删除前二次确认；删完章节回到「未下载」，
+  /// 章级已读标记与阅读进度原样保留。
+  ///
+  /// 与单章删除复用同一条身份回退（[DownloadLibraryIndex.deleteChapterForEntry]）：
+  /// 有映射按映射删，没有映射 / 没有 Manga 行时按 entry 的下载身份在
+  /// `downloads` 里找唯一匹配的容器；`local` 根永远不参与删除。
+  Future<void> _batchDeleteDownloads() async {
+    final EpubBookRow? row = _row;
+    final OnlineMangaLibraryEntry? entry = _entry;
+    final AppModel? appModel = _appModelOrNull;
+    if (entry == null || appModel == null || _batchRunning) return;
+    final List<OnlineMangaChapter> targets = _deletableSelectedChapters;
+    if (targets.isEmpty) return;
+    final bool confirmed = await showFushiConfirmDialog(
+      context: context,
+      title: t.manga_series_delete_downloads,
+      message: t.manga_series_delete_downloads_confirm(count: targets.length),
+      icon: FushiIcons.delete,
+      confirmLabel: t.dialog_delete,
+      destructive: true,
+    );
+    if (!confirmed || !mounted) return;
+    setState(() => _batchRunning = true);
+    final Set<String> deletedChapterKeys = <String>{};
+    try {
+      final DownloadLibraryIndex index = DownloadLibraryIndex(
+        appModel.database,
+        downloadsRoot: appModel.appPathsOrNull?.downloadsRoot,
+        localComicRoot: appModel.appPathsOrNull?.localComicRoot,
+      );
+      for (final OnlineMangaChapter chapter in targets) {
+        await index.deleteChapterForEntry(
+          entry: entry,
+          chapterKey: chapter.key,
+          row: row,
+        );
+        deletedChapterKeys.add(chapter.key);
+        // done 任务行是「这章曾经下载过」的持久标记。用户主动删除下载时必须
+        // 一起清掉，否则磁盘判据变 false、任务仍 done → 被误显示成 Missing。
+        final MangaDownloadJobRow? job = _jobs[chapter.key];
+        if (job != null) {
+          await appModel.mangaDownloadService.remove(job.jobId);
+        }
+      }
+      if (mounted) FushiToast.show(msg: t.storage_entry_delete_done);
+    } on Object catch (error, stack) {
+      ErrorLogService.instance.log(
+        'MangaSeriesPage.batchDeleteDownloads',
+        error,
+        stack,
+      );
+      if (mounted) {
+        FushiToast.show(
+          msg: describeOnlineSourceError(error),
+          severity: ToastSeverity.error,
+        );
+      }
+    } finally {
+      _forgetDownloadedChapters(deletedChapterKeys);
+      await _refreshDownloadState();
+      if (mounted) {
+        _syncVisibleSelectionOrder();
+        setState(() {
+          _batchRunning = false;
+          // 下载筛选为「已下载」时，删掉的章会从可见集消失；清空后退出多选，
+          // 不让用户停在一个没有批量栏、点一下却只是勾选的状态里。
+          if (_selectionMode && _selection.isEmpty) _selection.exit();
+        });
+      }
+    }
+  }
+
+  /// 底部批量栏：已选 N / 全选 / 反选 + 标记已读（圆形空心对勾）/ 标记未读
+  /// （圆形实心对勾）/ 下载选中（下载图标）/ 删除已下载（垃圾桶）。全部已选
+  /// 已读时已读置灰，全部未读时未读置灰；没有可下载的选中在线章节时下载置灰
+  /// （本地源、来源未安装同样如此）；没有可删的已完成在线下载时垃圾桶置灰。
+  Widget _buildBatchActionBar(BuildContext context) {
+    final List<OnlineMangaChapter> selected = _selectedVisibleChapters;
+    final bool canMarkRead =
+        _bookUid != null &&
+        selected.any(
+          (OnlineMangaChapter chapter) => _states[chapter.key]?.readAt == null,
+        );
+    final bool canMarkUnread =
+        _bookUid != null &&
+        selected.any(
+          (OnlineMangaChapter chapter) => _states[chapter.key]?.readAt != null,
+        );
+    // 与点击时的规划同源：已下载 / 已排队 / 下载中 / 暂停 / 锁定章都不会入队，
+    // 所以没有 pending 时动作置灰；混合选择仍只处理适用子集。
+    final bool canDownloadSelected = _batchDownloadPlan.pending.isNotEmpty;
+    final bool canDeleteDownloads = _deletableSelectedChapters.isNotEmpty;
+    return BatchActionBar(
+      selectedCount: _selection.length,
+      onSelectAll: _selectAllChapters,
+      onInvertSelection: _invertChapterSelection,
+      actions: <Widget>[
+        FushiIconButton(
+          key: const ValueKey<String>('manga_series_batch_mark_read'),
+          enabled: canMarkRead && !_batchRunning,
+          onTap: () => unawaited(_batchMarkRead(read: true)),
+          icon: FushiIcons.success,
+          tooltip: t.manga_series_mark_read,
+        ),
+        FushiIconButton(
+          key: const ValueKey<String>('manga_series_batch_mark_unread'),
+          enabled: canMarkUnread && !_batchRunning,
+          onTap: () => unawaited(_batchMarkRead(read: false)),
+          icon: FushiIcons.filled(FushiIcons.success),
+          tooltip: t.manga_series_mark_unread,
+        ),
+        FushiIconButton(
+          key: const ValueKey<String>('manga_series_batch_download_selected'),
+          enabled: canDownloadSelected && !_batchRunning,
+          onTap: () => unawaited(_batchDownloadSelected()),
+          icon: FushiIcons.download,
+          tooltip: t.manga_online_download_selected,
+        ),
+        FushiIconButton(
+          key: const ValueKey<String>('manga_series_batch_delete_downloads'),
+          enabled: canDeleteDownloads && !_batchRunning,
+          onTap: () => unawaited(_batchDeleteDownloads()),
+          icon: FushiIcons.delete,
+          tooltip: t.manga_series_delete_downloads,
+        ),
+      ],
+    );
+  }
+
   Future<void> _toggleChapterRead(OnlineMangaChapter chapter) async {
     final String? bookUid = _bookUid;
     if (bookUid == null) return;
@@ -1638,18 +2324,27 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
 
   /// 标记「这一章及更早的全部」为已读。
   ///
-  /// 「更早」= 列表里**它之后**的所有章：源按新→旧返回，所以下标越大越旧。
+  /// 「更早」按**阅读顺序**算，与列表当前排序无关：
+  /// * 在线源按新→旧返回，所以列表里**它之后**（下标更大）的章更旧；
+  /// * 本地源按自然顺序（第 1 话→第 N 话）返回，所以**它之前**（下标更小）的
+  ///   章更早。
+  ///
+  /// 本地源没有在线描述符，借用作品页的展示条目取章节 key。
   Future<void> _markUpToRead(OnlineMangaChapter chapter) async {
     final String? bookUid = _bookUid;
-    final OnlineMangaLibraryEntry? entry = _entry;
+    final OnlineMangaLibraryEntry? entry = _entry ?? _localDisplayEntry;
     if (bookUid == null || entry == null) return;
     final int index = entry.indexOfChapterKey(chapter.key);
     if (index < 0) return;
+    final bool localOrder = entry.runtime == OnlineMangaRuntimeKind.local;
     await _appModel.database.markMangaChaptersRead(
       bookUid: bookUid,
       chapterKeys: <String>[
-        for (int i = index; i < entry.chapters.length; i++)
-          entry.chapters[i].key,
+        if (localOrder)
+          for (int i = 0; i <= index; i++) entry.chapters[i].key
+        else
+          for (int i = index; i < entry.chapters.length; i++)
+            entry.chapters[i].key,
       ],
     );
     await _reloadChapterStates();
@@ -1676,21 +2371,80 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     final String title = _displayTitle;
     // 正文铺到悬浮页头底下（脚手架默认 extendBodyBehindHeader）：封面模糊背景
     // 一直画到窗口顶端，页头只是胶囊。
-    return FushiPageScaffold(
-      // hero 里已有大标题：顶栏标题等它滚出视口再淡入（不同屏重复）。
-      revealTitleAfterScroll: kMediaDetailTitleRevealOffset,
-      title: title,
-      body: _buildBody(context),
+    return SectionPopScope(
+      // 多选态吃返回键 / ESC：先退出多选，再允许离开作品页。
+      intercepting: _selectionMode,
+      onIntercept: _exitSelectionMode,
+      child: SelectionDragArea(
+        // 多选态才接管长按扫选；非多选态章行长按归自己（进入多选）。
+        enabled: _selectionMode,
+        onDragBegin: (SelectionSlot slot) =>
+            setState(() => _selection.beginRangeDrag(slot)),
+        onDragUpdate: (SelectionSlot slot) =>
+            setState(() => _selection.updateRangeDrag(slot)),
+        onDragEnd: () => setState(_selection.endRangeDrag),
+        child: FushiPageScaffold(
+          // hero 里已有大标题：顶栏标题等它滚出视口再淡入（不同屏重复）。
+          revealTitleAfterScroll: kMediaDetailTitleRevealOffset,
+          title: title,
+          body: _buildBody(context),
+          // 批量栏作为底部栏参与布局（不遮住最后一章）。没有可见选中项时隐藏；
+          // 退出多选的收起动画继续画上一帧（计数不会先闪成 0）。
+          bottomNavigationBar: BatchActionBarHost(
+            visible: _selectionMode && _selection.isNotEmpty,
+            builder: _buildBatchActionBar,
+          ),
+        ),
+      ),
     );
   }
 
   /// hero 标题上方的来源名（本地卷 / 源名 / 扩展包名）。
+  ///
+  /// 缺失来源不显示内部占位值 `mihon.unavailable`，也不回退到原始扩展包名：
+  /// 有 Source 表名称或备份名称时显示「来源未安装：<名称>」，否则只显示
+  /// 「来源未安装」。来源安装后若运行时能经数字 sourceId 回退解析出真实名称
+  /// （票 03），真实名称优先。
   String? _subtitle() {
     if (_isScannedLocal) return t.local_source_title;
     if (_isLocal) return t.manga_series_local_volume;
-    final String? label = _sourceLabel;
-    if (label != null && label.isNotEmpty) return label;
-    return _entry?.extensionPackage;
+    final String? label = trimmedOrNull(_sourceLabel);
+    if (label != null) return label;
+    final OnlineMangaLibraryEntry? entry = _entry;
+    if (entry == null) return null;
+    if (entry.runtime == OnlineMangaRuntimeKind.mihon) {
+      // 占位身份即时降级；已安装但停用的 Source 在解析确认失败后同样按缺失
+      // 展示。解析结束前的短暂空档不露出原始扩展包名。
+      if (entry.hasUnavailableSourcePlaceholder || _sourceMissing) {
+        return _missingSourceLabel(entry);
+      }
+      return null;
+    }
+    return entry.extensionPackage;
+  }
+
+  /// 缺失来源的文案：优先 Source 表名称（停用也保留），其次备份名称；都没有时
+  /// 只给「来源未安装」。
+  String _missingSourceLabel(OnlineMangaLibraryEntry entry) {
+    final String? name =
+        trimmedOrNull(_missingSourceName) ?? trimmedOrNull(entry.sourceName);
+    return name == null
+        ? t.manga_series_source_missing
+        : t.manga_series_source_missing_named(name: name);
+  }
+
+  /// 来源解析已经确认失败（未安装、停用或 sourceId 歧义）：作品页要主动解释
+  /// 离线边界。
+  ///
+  /// 解析结束前不显示（安装扩展后经 sourceId 回退能拿到真实来源，避免闪一下）；
+  /// 来源标签本身即时降级，不露出内部占位值或原始扩展包名。
+  bool get _showsMissingSourceNotice {
+    final OnlineMangaLibraryEntry? entry = _entry;
+    return entry != null &&
+        entry.runtime == OnlineMangaRuntimeKind.mihon &&
+        _sourceLabelResolved &&
+        _sourceMissing &&
+        trimmedOrNull(_sourceLabel) == null;
   }
 
   /// 页面上是不是一点内容都没有。
@@ -1719,7 +2473,7 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     final double page = FushiDesignTokens.of(context).spacing.page;
     // 宽屏两栏：左 hero（封面 / 标题 / 操作 / 简介）独立滚动，右章节列表；窄屏
     // 单列。BUG-2440 的底部安全区由 MediaDetailLayout 的尾部 SliverSafeArea 补。
-    return FushiEntranceScope(
+    final Widget content = FushiEntranceScope(
       child: MangaChapterFastScrollbar(
         controller: _scroll,
         notificationPredicate: _isBodyScroll,
@@ -1749,15 +2503,29 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
         ),
       ),
     );
+    // 多选态点空白处退出（章节行 / 筛选 chip / 按钮自己的点击会赢下手势竞技场，
+    // 不会误触退出）。非多选态不注册识别器，行为与之前完全一致。
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onTap: _selectionMode ? _exitSelectionMode : null,
+      child: content,
+    );
   }
 
   /// 章节区：刷新中顶一条波浪进度（原 AppBar 刷新钮的转圈挪进了「⋯」菜单，
   /// 进行中的反馈落在被刷新的列表上）+ 共享的 [MangaChapterList]。
   Widget _buildChapterList(BuildContext context) {
+    // 每帧把当前筛选 / 排序后的可见章节序登记给多选状态机（全选 / 反选 /
+    // 批量动作的唯一定义域）。
+    _syncVisibleSelectionOrder();
     // Local source 条目没有在线描述符，但共享章节列表只消费 `entry.chapters`；
     // 借一个展示用条目，回调仍走本地分支（[_openChapterAt] 不碰在线 service）。
-    final OnlineMangaLibraryEntry? displayEntry = _entry ?? _localDisplayEntry;
+    final OnlineMangaLibraryEntry? displayEntry = _displayEntry;
     final bool online = _entry != null;
+    // 在线源用描述符里的选中章；本地图源读 LocalSourceMetadata.currentChapterKey
+    //（打开 / 换章时由阅读器写回）。
+    final String? currentChapterKey =
+        _entry?.currentChapter?.key ?? _localSource?.currentChapterKey;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
@@ -1772,24 +2540,23 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
           states: _states,
           newestFirst: _newestFirst,
           unreadOnly: _unreadOnly,
-          currentChapterKey: _entry?.currentChapter?.key,
+          currentChapterKey: currentChapterKey,
           currentChapterAnchorKey: _currentChapterAnchor,
           onSortToggled: _toggleSort,
-          onJumpToCurrent: _entry?.currentChapter == null
+          onJumpToCurrent: currentChapterKey == null
               ? null
               : () => scrollToMangaChapterAnchor(
                   _currentChapterAnchor,
                   duration: fushiMotionDuration(context, FushiMotion.medium),
                 ),
           onUnreadOnlyToggled: () => setState(() => _unreadOnly = !_unreadOnly),
-          onChapterTap: (OnlineMangaChapter chapter) {
-            final int index =
-                (_entry ?? _localDisplayEntry)?.indexOfChapterKey(
-                  chapter.key,
-                ) ??
-                -1;
-            if (index >= 0) unawaited(_openChapterAt(index));
-          },
+          downloadFilter: _downloadFilter,
+          onDownloadFilterToggled: () =>
+              setState(() => _downloadFilter = _downloadFilter.next),
+          onChapterTap: _handleChapterTap,
+          // 多选态里长按归 SelectionDragArea（扫选），行自身不再接长按。
+          onChapterLongPress: _selectionMode ? null : _handleChapterLongPress,
+          selectedChapterKeys: _selectionMode ? _selection.looseKeys : null,
           onToggleRead: _bookUid == null
               ? null
               : (OnlineMangaChapter chapter) =>
@@ -1805,6 +2572,9 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
                     .map((LocalSourceChapterRecord chapter) => chapter.key)
                     .toSet()
               : _downloaded,
+          undeletableDownloadedChapterKeys: _isLocalSource
+              ? const <String>{}
+              : _downloaded.difference(_deletableDownloaded),
           missingChapterKeys: _isLocalSource
               ? _localMissingChapterKeys
               : const <String>{},
@@ -1812,15 +2582,18 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
           languageScope: _languageScope,
           onSiblingSourceTap: (OnlineMangaSiblingSource sibling) =>
               unawaited(_openSiblingSource(sibling)),
-          onDownload: !online || _bookKey == null
+          // 票 08：下载 / 重试 / 删除下载只要求在线条目，不要求页面上已有
+          // Library 行——入队会按下载身份补非书架行，删除按记录映射或 entry
+          // 身份找容器。定位文件仍需要有行/映射，保持原有门控。
+          onDownload: !online
               ? null
               : (OnlineMangaChapter chapter) =>
                     unawaited(_enqueueChapter(chapter)),
-          onRetryDownload: !online || _bookKey == null
+          onRetryDownload: !online
               ? null
               : (OnlineMangaChapter chapter) =>
                     unawaited(_retryChapterDownload(chapter)),
-          onDeleteDownload: !online || _bookKey == null
+          onDeleteDownload: !online
               ? null
               : (OnlineMangaChapter chapter) =>
                     unawaited(_deleteChapterDownload(chapter)),
@@ -2023,7 +2796,6 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
   /// 类型标签 + 可展开简介（+ 刷新失败提示条）。
   Widget _buildHeader(BuildContext context) {
     final OnlineMangaSeries? series = _entry?.series;
-    final OnlineMangaUnavailable? refreshError = _refreshError;
     final String title = _displayTitle;
     final String? authorLine = _authorLine;
     return OnlineWorkHeader(
@@ -2059,10 +2831,28 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
       primaryAction: _buildPrimaryAction(),
       secondaryActions: _buildSecondaryActions(),
       moreItems: _buildMoreItems(),
-      extra: refreshError == null
-          ? null
-          : _buildRefreshBanner(context, refreshError),
+      extra: _buildHeaderExtra(context),
     );
+  }
+
+  /// hero 简介后的附加提示。
+  ///
+  /// 来源确认缺失时给「只有本机已保存章节」的说明（不新增安装/跳转按钮，用户
+  /// 自行去扩展页安装）；否则沿用原有的刷新失败横幅。
+  Widget? _buildHeaderExtra(BuildContext context) {
+    final OnlineMangaLibraryEntry? entry = _entry;
+    if (entry != null && _showsMissingSourceNotice) {
+      return FushiInlineNotice(
+        key: const ValueKey<String>('manga_series_missing_source_notice'),
+        severity: FushiNoticeSeverity.warning,
+        title: _missingSourceLabel(entry),
+        message: t.manga_series_source_missing_hint,
+      );
+    }
+    final OnlineMangaUnavailable? refreshError = _refreshError;
+    return refreshError == null
+        ? null
+        : _buildRefreshBanner(context, refreshError);
   }
 
   /// 本地已落盘封面的路径；未入库 / 无封面为 null。
@@ -2094,11 +2884,19 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     return path == null ? null : FileImage(File(path));
   }
 
+  /// 备份里保存的远程封面 URL（导入条目）。来源未安装也能用——它不经过 Source，
+  /// 只是描述符里的一个地址。
+  String? _remoteCoverUrl() {
+    final String? url = _entry?.series.coverUrl?.trim();
+    return url == null || url.isEmpty ? null : url;
+  }
+
   /// 封面。
   ///
-  /// 入库条目一律走**本地已落盘**的封面：作品页的首屏不该依赖网络，源挂了封面
-  /// 也得在。没有本地封面（刚从源进来还没入库）才回退到占位块——真正的远端取图
-  /// 由源浏览页的封面缓存负责，作品页不自己再开一条取图路径。
+  /// 顺序固定：**本地已落盘**封面（作品页首屏不该依赖网络，源挂了封面也得在）→
+  /// 在线条目先确认来源（解析完成前 / 来源未安装时显示灰占位，不发起任何封面
+  /// 请求，票 02）→ 源浏览时由来源自己提供的取图控件 → 备份描述符里的远程
+  /// `series.coverUrl`（经现有 HTTP 图片缓存懒加载）→ 占位块。
   Widget _buildCover(BuildContext context) {
     final String? resolved = _localCoverPath();
     if (resolved != null) {
@@ -2115,10 +2913,31 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
         },
       );
     }
+    // 来源未安装（或尚未解析完来源）：不请求远程封面，先显示灰占位；
+    // 安装扩展后 [_resolveSourceLabel] 会把远程封面接回来。已有本地 cover.*
+    // 在上面已优先返回，不会被删除或忽略。
+    if (_entry != null && (!_sourceLabelResolved || _sourceMissing)) {
+      return const MangaCoverPlaceholder();
+    }
     final MangaSeriesTarget target = widget.target;
     if (target is SourceMangaSeriesTarget) {
       final Widget Function(BuildContext)? builder = target.remoteCoverBuilder;
       if (builder != null) return builder(context);
+    }
+    final String? remoteUrl = _remoteCoverUrl();
+    if (remoteUrl != null) {
+      return Image(
+        image: AppCachedHttpImage(remoteUrl),
+        fit: BoxFit.cover,
+        // 远程封面过期 / 防盗链 / 网络失败只影响这一部作品：回到同一占位块。
+        errorBuilder: (_, Object error, __) {
+          ErrorLogService.instance.logDiagnostic(
+            'MangaSeriesPage.coverDecode',
+            '$remoteUrl: $error',
+          );
+          return const MangaCoverPlaceholder();
+        },
+      );
     }
     return const MangaCoverPlaceholder();
   }
@@ -2206,9 +3025,10 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     if (_scannedLocal != null) return <Widget>[];
     if (_isLocal) {
       // my-comic：端上 OCR 已移除，本地卷详情页不再提供识别 / OCR 设置入口。
-      // Local source 作品必须能「移出书架」且不删文件（ADR 0013）；受管本地卷
-      // （mokuro/PDF 转漫画）沿用书架长按菜单的删除路径，这里不加按钮。
-      if (_isLocalSource && _row != null) {
+      // Local source 作品在书架时必须能「移出书架」且默认不删文件（ADR 0013）；
+      // 移出后（membership=false）按钮消失（票 04）。受管本地卷（mokuro/PDF
+      // 转漫画）沿用书架长按菜单的删除路径，这里不加按钮。
+      if (_isLocalSource && (_row?.isInLibrary ?? false)) {
         return <Widget>[
           MediaDetailSecondaryButton(
             buttonKey: const ValueKey<String>(
@@ -2224,12 +3044,15 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
       return <Widget>[];
     }
     final OnlineMangaLibraryEntry? entry = _entry;
-    final bool inLibrary = _row != null;
+    // 加入 / 移出按 Library membership 判断：票 02 起源作品页一打开就有行，
+    // 「有行」不再等于「在书架」。票 08：下载全部也不再要求页面先有行——入队
+    // 会按下载身份补一条非书架行。
+    final bool isLibraryMember = _row?.isInLibrary ?? false;
     final OnlineMangaLoginTarget? login = _loginTarget;
     return <Widget>[
       // 同一个位置、同一个按钮：不在库是「加入」，在库是「移出」（用户诉求：加了
       // 要能取消）。移出走书架同一条 deleteBook 路径，连已下载章节一起删。
-      if (inLibrary)
+      if (isLibraryMember)
         MediaDetailSecondaryButton(
           buttonKey: const ValueKey<String>(
             'manga_series_remove_from_bookshelf',
@@ -2246,15 +3069,14 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
           label: t.mihon_add_to_bookshelf,
           onPressed: _busy ? null : () => unawaited(_addToLibrary()),
         ),
-      // 下载动作只对在库条目有意义：任务表按 bookKey 记，没有行就没地方挂任务。
-      if (inLibrary)
+      if (entry != null)
         MediaDetailSecondaryButton(
           buttonKey: const ValueKey<String>('manga_series_download_all'),
           icon: FushiIcons.download,
           label: t.manga_series_download_all,
           onPressed: _busy ? null : () => unawaited(_downloadAll()),
         ),
-      if (entry != null && inLibrary && _service != null)
+      if (entry != null && isLibraryMember && _service != null)
         MediaDetailSecondaryButton(
           buttonKey: const ValueKey<String>('manga_series_subscribe'),
           icon: entry.subscribed ? FushiIcons.bookmark : FushiIcons.bookmarkAdd,
@@ -2315,7 +3137,8 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     }
     final OnlineMangaLibraryEntry? entry = _entry;
     final Object? adapter = _adapter;
-    final bool inLibrary = _row != null;
+    // 自动追更（新章自动下载）只对书架成员开放。
+    final bool isLibraryMember = _row?.isInLibrary ?? false;
     return <MediaDetailMenuItem>[
       // 源站网页入口：只有在线源（Mihon）有网页可去，本地卷 / 互联对端没有。
       if (entry != null && adapter is OnlineMangaWebUrlCapable)
@@ -2333,7 +3156,10 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
           enabled: !_refreshing,
           onSelected: () => unawaited(_refreshFromSource()),
         ),
-      if (entry != null && inLibrary && _service != null && entry.subscribed)
+      if (entry != null &&
+          isLibraryMember &&
+          _service != null &&
+          entry.subscribed)
         MediaDetailMenuItem(
           key: const ValueKey<String>('manga_series_auto_download'),
           icon: entry.autoDownload

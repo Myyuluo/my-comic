@@ -22,7 +22,6 @@ import 'package:fushi/src/models/preferences_repository.dart';
 import 'package:fushi/src/pages/implementations/reader_fushi_history_page.dart';
 import 'package:fushi/src/utils/components/fushi_icon_button.dart';
 import 'package:fushi/src/utils/fushi_icons.dart';
-import 'package:fushi/utils.dart' show FushiFilledButton;
 import 'package:fushi_audio/fushi_audio.dart';
 import 'package:fushi_core/fushi_core.dart';
 
@@ -306,7 +305,7 @@ void main() {
     expect(position!.sectionIndex, 0, reason: '重置后阅读位置必须回到第 0 节');
   });
 
-  testWidgets('37 表 schema：批量删除打开确认框并真正删除选中漫画', (WidgetTester tester) async {
+  testWidgets('37 表 schema：批量删除打开确认框并把选中漫画移出书架', (WidgetTester tester) async {
     const String bookKey = 'manga:schema:delete';
     await seedManga(bookKey, 'Delete Manga');
 
@@ -320,35 +319,33 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(
-      find.byType(ReaderHistoryDeleteDialog),
+      find.text(t.manga_series_remove_from_bookshelf),
       findsOneWidget,
-      reason: '批量删除必须真的弹出确认框',
+      reason: '批量删除必须真的弹出票 01 的统一确认框',
     );
     expect(
       find.text(t.delete_local_files_audio_desc),
       findsNothing,
-      reason: '37 表 schema 没有 audiobooks/srt_books：不应摆出可删原件的勾选',
+      reason: '统一弹窗不再使用有声书专用「原始音频」文案',
     );
 
-    await tester.tap(
-      find.descendant(
-        of: find.byType(ReaderHistoryDeleteDialog),
-        matching: find.byType(FushiFilledButton),
-      ),
-    );
+    await tester.tap(find.text(t.dialog_delete));
     await tester.pump();
-    // 删除带真实文件 IO 与进度弹窗：用 runAsync 放真时间、pump 推帧，
-    // 交替直到 DB 行真的消失。
-    for (int i = 0; i < 200 && await db.getEpubBook(bookKey) != null; i++) {
+    // 移出带真实文件 IO 与进度弹窗：用 runAsync 放真时间、pump 推帧，
+    // 交替直到 membership 真的清除。
+    for (int i = 0;
+        i < 200 &&
+            (await db.getEpubBook(bookKey))?.isInLibrary != false;
+        i++) {
       await tester.runAsync(
         () => Future<void>.delayed(const Duration(milliseconds: 20)),
       );
       await tester.pump(const Duration(milliseconds: 20));
     }
     expect(
-      await db.getEpubBook(bookKey),
-      isNull,
-      reason: '确认后选中的漫画必须从 epub_books 删除',
+      (await db.getEpubBook(bookKey))?.isInLibrary,
+      isFalse,
+      reason: '确认后选中的漫画必须清掉 Library membership（行保留）',
     );
   });
 

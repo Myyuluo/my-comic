@@ -551,8 +551,11 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
     );
   }
 
-  /// 批量删除选中散卡（EPUB / 漫画 / SRT）。
-  /// 2026-11-05：合集已删除，不再有「解散合集」分支。
+  /// 批量移出漫画书架（选中散卡里的 EPUB / 漫画 / SRT）。
+  ///
+  /// 票 02：与作品页共用票 01 的统一弹窗（标题、说明、两个默认不勾选的选项），
+  /// 不再有粉/蓝披露块、「记住这些选择」与同步范围。目标在弹窗前定死；被当前
+  /// 搜索 / 标签筛选隐藏的选中项继续提示，且不参与本次删除。
   Future<void> _batchDeleteConfirm() async {
     // 先剔幽灵键再取数：确认框里的 N 必须是真会被删的条数。
     if (!await _pruneStaleSelection() || !mounted) return;
@@ -562,7 +565,8 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
     final Set<String> targetKeys = _selectedLocalKeys;
     final int mediaCount = targetKeys.length;
     if (mediaCount == 0) return;
-    final String baseMessage = t.batch_delete_confirm(n: mediaCount);
+    final String baseMessage =
+        t.manga_series_remove_confirm_batch(n: mediaCount);
     // 勾过但被当前搜索/标签筛选挡住的那些不会被删，必须说出来。
     // 只数本地键：远端占位键不是删除对象（BUG-2458 审查 #4）。
     final int hidden = _selection.hiddenSelectedCountWhere(
@@ -571,38 +575,12 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
     final String message = hidden == 0
         ? baseMessage
         : '$baseMessage\n\n${t.batch_hidden_by_filter_note(n: hidden)}';
-    // TODO-2470 死角②：本机没有任何删除传播通道时不摆那个兑现不了的勾选框。
-    final bool canSyncEverywhere =
-        await hasDeletionPropagationChannel(SyncRepository(appModel.database));
-    // 「同时删除本地文件」只在选中散卡里至少有一条**显式登记了 app 目录之外的
-    // 原始音频**时才摆出来（书本体没有可删原件，见 ReaderFushiSource.deleteBook）。
-    final bool anyLocalFiles = await _selectionHasLocalFiles();
-    // 「同时删除统计数据」只在选中散卡里至少有一本**带 bookKey** 的书时摆出来；
-    // 全是纯字幕书就不摆（执行时也跳过它们，见下面的删除循环）。
-    final bool anyStatisticsTarget =
-        await _selectionHasStatisticsTarget(targetKeys);
-    final DeletePromptPreferenceStore preferenceStore =
-        DeletePromptPreferenceStore(appModel.database);
-    final DeletePromptRememberedChoices? rememberedChoices =
-        await preferenceStore.load();
-    if (!mounted) return;
-    final DeleteDecision? decision = await showAppDialog<DeleteDecision>(
-      context: context,
-      builder: (ctx) => ReaderHistoryDeleteDialog(
-        title: t.dialog_delete,
-        message: message,
-        disclosure: buildDeletionDisclosure(
-          target: DeletionDisclosureTarget.shelfBook,
-        ),
-        showSyncScope: canSyncEverywhere,
-        localFilesSubtitle:
-            anyLocalFiles ? t.delete_local_files_audio_desc : null,
-        // 全是纯字幕书时不摆统计删除。
-        statisticsSubtitle: anyStatisticsTarget ? _statisticsSubtitle : null,
-        rememberedChoices: rememberedChoices,
-        onPersistChoices: preferenceStore.write,
-        onConfirm: (DeleteDecision d) => Navigator.pop(ctx, d),
-      ),
+    final MangaLibraryRemovalDecision? decision =
+        await showMangaShelfRemovalDialog(
+      context,
+      message: message,
+      localFilesSubtitle: t.delete_local_files_download_desc,
+      statisticsSubtitle: t.delete_statistics_manga_batch_desc,
     );
     if (decision == null || !mounted) return;
 
@@ -641,18 +619,20 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
   }
 
   /// [_batchDeleteConfirm] 确认后的执行体（2026-10 体验优化拆出，外层负责忙碌态）。
-  /// 每处理完一张卡把 [progress] +1。
+  ///
+  /// 票 02：逐作品独立处理——每部先停在线下载任务，再按作品来源删文件（在线已下载
+  /// 章节 / Local source 原作），成功后才删数据库；失败的作品留在 Library。成功与
+  /// 失败分别计数并如实报告。每处理完一张卡把 [progress] +1。
   Future<void> _runBatchDelete({
     required Set<String> targetKeys,
-    required DeleteDecision decision,
+    required MangaLibraryRemovalDecision decision,
     required ValueNotifier<int> progress,
   }) async {
-    final DeleteScope scope = decision.scope;
     final bool deleteLocalFiles = decision.deleteLocalFiles;
     final bool deleteStatistics = decision.deleteStatistics;
 
-    int deleted = 0;
-    LocalFileDeleteReport localFiles = const LocalFileDeleteReport();
+    int succeeded = 0;
+    int failed = 0;
     // 目标集在确认框弹出前就定死（[targetKeys]），不重新读 `_selectedKeys`。
     final Set<String> toDelete = targetKeys;
     // my-comic 的漫画-only live schema（37 表）没有 srt_books：表不存在时选中集
@@ -672,43 +652,66 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
       }
       await appModel.audiobookSession.stopIfPlayingAny(sessionKeys);
     }
-    for (final key in toDelete) {
+    for (final String key in toDelete) {
       if (key.startsWith('srt_')) {
         // 缺表守卫（见上面 [hasSrtBooks]）：不查询不存在的 srt_books。
-        if (!hasSrtBooks) continue;
-        final String uid = key.substring(4);
-        final SrtBookRepository repo = SrtBookRepository(appModel.database);
-        final SrtBook? book = await repo.findByUid(uid);
-        if (book != null) {
-          // BUG-3101：配对了 EPUB 的字幕书由 deleteBook 整本删（srt 行随事务级联
-          // 删除），纯字幕书走 repo（scope 落地为 srtbook 墓碑）——只走一条路径，
-          // 计数按这条路径的真实结果（以前 deleteBook 后再按 uid 删一次，回报 0 行，
-          // 「已删除 N 本」少算）。纯字幕书刻意不删统计：它的统计只能按 title 定位，
-          // 会连坐同名 EPUB（见 [_selectionHasStatisticsTarget]）。
-          final DeleteBookResult removed =
-              await ReaderFushiSource.instance.deleteSrtShelfBook(
-            db: appModel.database,
-            book: book,
-            scope: scope,
-            deleteLocalFiles: deleteLocalFiles,
-            deleteStatistics: deleteStatistics,
-          );
-          localFiles = localFiles.merge(removed.localFiles);
-          if (removed.deleted) deleted++;
+        if (hasSrtBooks) {
+          final SrtBook? book = await SrtBookRepository(
+            appModel.database,
+          ).findByUid(key.substring(4));
+          if (book != null) {
+            // SRT 不是漫画：保留原有单条删除路径与计数。统一弹窗没有同步范围，
+            // 这里恒 keepLocalOnly（my-comic 无字幕表，此分支不可达）。
+            final DeleteBookResult removed =
+                await ReaderFushiSource.instance.deleteSrtShelfBook(
+              db: appModel.database,
+              book: book,
+              scope: DeleteScope.keepLocalOnly,
+              deleteLocalFiles: deleteLocalFiles,
+              deleteStatistics: deleteStatistics,
+            );
+            if (removed.deleted) {
+              succeeded++;
+            } else {
+              failed++;
+            }
+          }
         }
       } else {
         final String? bookKey = _parseBookKey(key);
         if (bookKey != null) {
-          final DeleteBookResult result =
-              await ReaderFushiSource.instance.deleteBook(
-            db: appModel.database,
-            bookKey: bookKey,
-            scope: scope,
-            deleteLocalFiles: deleteLocalFiles,
-            deleteStatistics: deleteStatistics,
-          );
-          localFiles = localFiles.merge(result.localFiles);
-          if (result.deleted) deleted++;
+          try {
+            final MangaLibraryRemovalResult result = await removeMangaFromLibrary(
+              db: appModel.database,
+              bookKey: bookKey,
+              // 测试壳 / 极端早期可能还没解析 AppPaths；在线与受管本地卷不需要
+              // 这个根，只有 Local source 删原作时才必须（缺失会如实报失败）。
+              localSourceRoot: appModel.appPathsOrNull?.localComicRoot,
+              // 在线作品只有目录能证明位于 Download library 根内时才删文件。
+              downloadsRoot: appModel.appPathsOrNull?.downloadsRoot,
+              deleteLocalFiles: deleteLocalFiles,
+              deleteStatistics: deleteStatistics,
+              downloadService: appModel.mangaDownloadService,
+            );
+            if (result.removed) {
+              succeeded++;
+            } else {
+              failed++;
+              ErrorLogService.instance.log(
+                'ReaderHistory.batchRemoveFromLibrary',
+                '${result.failure?.name ?? 'remove failed'}'
+                '${result.detail == null ? '' : ': ${result.detail}'}',
+              );
+            }
+          } on Object catch (error, stack) {
+            // 单部失败不影响其余作品（服务内已保证文件失败时 DB 行保留）。
+            failed++;
+            ErrorLogService.instance.log(
+              'ReaderHistory.batchRemoveFromLibrary',
+              error,
+              stack,
+            );
+          }
         }
       }
       progress.value++;
@@ -720,62 +723,13 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
     ref.invalidate(srtBookTagMapProvider);
     _shelfMapsFuture = _loadShelfMaps();
     _exitSelectionMode();
-    // BUG-439 诚实计数：只报真实删掉的本数。
     FushiToast.show(
-      msg: t.batch_delete_success(n: deleted),
-      severity: deleted > 0 ? ToastSeverity.success : ToastSeverity.warning,
+      msg: t.local_source_batch_remove_done(
+        success: succeeded,
+        failed: failed,
+      ),
+      severity: failed == 0 ? ToastSeverity.success : ToastSeverity.warning,
     );
-    reportLocalFileDeleteFailures(
-      localFiles,
-      source: 'ReaderHistory.batchDeleteLocalFiles',
-    );
-  }
-
-  /// 选中散卡里是否至少有一本能安全删统计的书：EPUB / PDF / 漫画（bookKey 选择
-  /// 键），或配对了 EPUB 的字幕书（bookKey 非空）。纯字幕书（bookKey 空）不算——
-  /// 它的 legacy 统计与墓碑只能按 title 定位，删它会连坐同名 EPUB 的统计。
-  Future<bool> _selectionHasStatisticsTarget(Set<String> keys) async {
-    final FushiDatabase db = appModel.database;
-    for (final String key in keys) {
-      if (!key.startsWith('srt_')) {
-        if (_parseBookKey(key) != null) return true;
-        continue;
-      }
-      final SrtBook? book =
-          await SrtBookRepository(db).findByUid(key.substring(4));
-      if (book != null &&
-          ReaderFushiSource.srtBookOffersStatisticsDeletion(book)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  /// 选中的散卡里有没有任何一条有可删的本机原件（批删确认框据此决定摆不摆
-  /// 「同时删除本地文件」）。纯字幕书看自己的音频列，EPUB 看附带有声书 / 配对字幕书。
-  Future<bool> _selectionHasLocalFiles() async {
-    final FushiDatabase db = appModel.database;
-    for (final String key in _selectedLocalKeys) {
-      if (key.startsWith('srt_')) {
-        final SrtBook? book =
-            await SrtBookRepository(db).findByUid(key.substring(4));
-        if (book == null) continue;
-        if (await resolveAudiobookHasLocalFiles(book.audioPaths)) return true;
-        if (book.bookKey.isNotEmpty &&
-            await ReaderFushiSource.instance
-                .hasLocalFiles(db: db, bookKey: book.bookKey)) {
-          return true;
-        }
-      } else {
-        final String? bookKey = _parseBookKey(key);
-        if (bookKey != null &&
-            await ReaderFushiSource.instance
-                .hasLocalFiles(db: db, bookKey: bookKey)) {
-          return true;
-        }
-      }
-    }
-    return false;
   }
 
   /// 批量操作前把选中集收敛到真实存在的条目上，真剔掉了就明说。
@@ -784,8 +738,9 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
   /// 变化剪枝，多选态期间同步下架 / 别处删除都会留下幽灵键，落库时撞外键——打标签
   /// 会把弹窗卡死在 loading、组合会静默失败、确认框数字是虚数。
   ///
-  /// 存在性全集取**全库**而非可见集：被搜索或标签筛掉的书仍然存在，用户先勾后筛
-  /// 是合法用法，不该被悄悄剔掉。
+  /// 存在性全集取**全部书架成员**而非可见集：被搜索或标签筛掉的书仍然存在，用户
+  /// 先勾后筛是合法用法，不该被悄悄剔掉；但已移出书架（membership=false）的行
+  /// 不再是书架动作的合法目标。
   ///
   /// 返回剔完后是否还有东西可做。
   Future<bool> _pruneStaleSelection() async {
@@ -811,8 +766,10 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
     final _RemoteBookState? remoteState = _lastRemoteState;
     final int dropped = _selection.retainExisting(
       loose: <String>{
+        // 书架批量动作只作用于书架成员：移出书架的选中项不再可操作。
         for (final EpubBookMeta row in epubBooks)
-          ReaderFushiSource.mediaIdentifierFor(row.bookKey),
+          if (row.isInLibrary)
+            ReaderFushiSource.mediaIdentifierFor(row.bookKey),
         for (final SrtBook book in srtBooks) 'srt_${book.uid}',
         if (remoteState != null) ...<String>[
           for (final RemoteBookInfo book in remoteState.books)
@@ -971,6 +928,65 @@ extension _ReaderHistoryBooks on _ReaderFushiHistoryPageState {
         break;
     }
     _rebuild(() {});
+  }
+
+  /// 漫画卡长按菜单「删除」= 从漫画书架移出（票 02）。
+  ///
+  /// 与作品页、书架批量共用票 01 的统一弹窗：标题、单本说明、两个默认不勾选的
+  /// 选项。在线漫画先停下载任务，勾选「同时删除本地文件」时删 Download library
+  /// 里的已下载章节；本地 Manga 则删 Local source root 里的原作。文件成功后
+  /// 才删库，失败时作品留在书架。History 保留。
+  Future<void> _confirmMangaShelfDelete(String bookKey) async {
+    Navigator.pop(context);
+    final MangaLibraryRemovalDecision? decision =
+        await showMangaShelfRemovalDialog(
+      context,
+      message: t.manga_series_remove_confirm,
+      localFilesSubtitle: t.delete_local_files_download_desc,
+      statisticsSubtitle: t.delete_statistics_manga_desc,
+    );
+    if (decision == null || !mounted) return;
+    try {
+      final MangaLibraryRemovalResult result = await removeMangaFromLibrary(
+        db: appModel.database,
+        bookKey: bookKey,
+        localSourceRoot: appModel.appPathsOrNull?.localComicRoot,
+        downloadsRoot: appModel.appPathsOrNull?.downloadsRoot,
+        deleteLocalFiles: decision.deleteLocalFiles,
+        deleteStatistics: decision.deleteStatistics,
+        downloadService: appModel.mangaDownloadService,
+      );
+      if (!mounted) return;
+      if (!result.removed) {
+        final String reason = result.failureMessage;
+        FushiToast.show(
+          msg: reason.isEmpty
+              ? t.epub_delete_error
+              : '${t.epub_delete_error}: $reason',
+          severity: ToastSeverity.error,
+        );
+        return;
+      }
+      FushiToast.show(
+        msg: t.batch_delete_success(n: 1),
+        severity: ToastSeverity.success,
+      );
+      _refreshSrtBooks();
+      ref.invalidate(fushiBooksProvider(JapaneseLanguage.instance));
+      _rebuild(() {});
+    } on Object catch (error, stack) {
+      ErrorLogService.instance.log(
+        'ReaderHistory.removeMangaFromLibrary',
+        error,
+        stack,
+      );
+      if (mounted) {
+        FushiToast.show(
+          msg: t.epub_delete_error,
+          severity: ToastSeverity.error,
+        );
+      }
+    }
   }
 
   Future<void> _confirmDeleteEpub(MediaItem item, String bookKey) async {

@@ -201,16 +201,10 @@ void main() {
         epubPath: '',
         extractDir: extractDir,
         chapterCount: chapterKeys.length,
-        chaptersJson: encodeLocalSourceChapters(
-          <LocalSourceChapterRecord>[
-            for (final String key in chapterKeys)
-              LocalSourceChapterRecord(
-                key: key,
-                name: key,
-                relativePath: key,
-              ),
-          ],
-        ),
+        chaptersJson: encodeLocalSourceChapters(<LocalSourceChapterRecord>[
+          for (final String key in chapterKeys)
+            LocalSourceChapterRecord(key: key, name: key, relativePath: key),
+        ]),
         sourceMetadata: Value<String?>(
           const LocalSourceMetadata(relativePath: 'manga/local').encode(),
         ),
@@ -269,8 +263,10 @@ void main() {
     );
   }
 
-  /// 半成品：有映射、有页图，但 `pages.json` 还没落——不算已下载。
-  Future<void> writeHalfCompleteChapter(
+  /// 用户提供的无 manifest 容器：有映射、有页图，没有 `pages.json`。
+  ///
+  /// Ticket 06：按容器名关联后只要可读就视为已下载。
+  Future<void> writeNoManifestChapter(
     String bookKey, {
     required String chapterKey,
     String? folderName,
@@ -302,6 +298,48 @@ void main() {
       chapterKey: chapterKey,
       folderName: folderName ?? folderFor(chapterKey),
       updatedAt: 1,
+    );
+  }
+
+  /// Ticket 07：完整章 + `pages.json`，但**不写映射**——只能按 manifest 身份
+  /// 认出已下载。身份用这本书自己的描述符（不是共享夹具里的固定 series key）。
+  Future<void> writeManifestOnlyChapter(
+    String bookKey, {
+    required String chapterKey,
+    String? folderName,
+  }) async {
+    final EpubBookRow row = (await db.getEpubBook(bookKey))!;
+    final OnlineMangaLibraryEntry entry = OnlineMangaLibraryEntry.tryParse(
+      row.sourceMetadata,
+    )!;
+    final Directory chapterDir = downloadChapterDirectory(
+      row.extractDir,
+      folderName ?? folderFor(chapterKey),
+    );
+    await chapterDir.create(recursive: true);
+    await File(p.join(chapterDir.path, '001.jpg')).writeAsBytes(<int>[1]);
+    await writePagesManifestAtomically(
+      chapterDir,
+      MangaPagesManifest(
+        sourceRuntime: entry.runtime.wireValue,
+        sourceId: entry.sourceId,
+        sourceName: 'Example Source',
+        extensionPackage: entry.extensionPackage,
+        mangaKey: entry.series.key,
+        mangaTitle: entry.series.title,
+        chapterKey: chapterKey,
+        chapterName: chapterKey,
+        payload: const MokuroPayload(
+          images: <MokuroImage>[
+            MokuroImage(
+              url: '001.jpg',
+              size: MokuroSize(100, 150),
+              blocks: <MokuroBlock>[],
+            ),
+          ],
+        ),
+        downloadedAt: DateTime.utc(2026, 11, 7),
+      ),
     );
   }
 
@@ -363,9 +401,7 @@ void main() {
       find.byKey(ValueKey<String>('manga_tag_tab_$tagId'));
 
   String countText(WidgetTester tester, String scope) => tester
-      .widget<Text>(
-        find.byKey(ValueKey<String>('manga_tag_tab_count_$scope')),
-      )
+      .widget<Text>(find.byKey(ValueKey<String>('manga_tag_tab_count_$scope')))
       .data!;
 
   Future<void> search(WidgetTester tester, String query) async {
@@ -460,9 +496,7 @@ void main() {
     expect(countText(tester, 'shelf'), '0', reason: '搜索结果为零也显示数量');
   });
 
-  testWidgets('搜索匹配作者行：作者优先、画师兜底；本地图源只匹配标题和作者', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('搜索匹配作者行：作者优先、画师兜底；本地图源只匹配标题和作者', (WidgetTester tester) async {
     final Directory localDir = Directory(
       p.join(contentRoot.path, 'local', 'LocalTitle'),
     );
@@ -517,7 +551,7 @@ void main() {
     expect(mangaCard('m1'), findsOneWidget, reason: '在线漫画仍按源分类命中');
   });
 
-  testWidgets('「漫画下载」单选组：全部/已下载/未下载，Missing 与半成品不算已下载', (
+  testWidgets('「漫画下载」单选组：全部/已下载/未下载，Missing 不算、无 manifest 可读容器算', (
     WidgetTester tester,
   ) async {
     final Directory localPresent = Directory(
@@ -528,7 +562,9 @@ void main() {
     );
     await tester.runAsync(() async {
       // 本地图源「已下载」= 至少一章真的读得出来：给存在的那本放一章页图。
-      await Directory(p.join(localPresent.path, 'vol1')).create(recursive: true);
+      await Directory(
+        p.join(localPresent.path, 'vol1'),
+      ).create(recursive: true);
       await File(
         p.join(localPresent.path, 'vol1', '001.jpg'),
       ).writeAsBytes(<int>[1]);
@@ -546,10 +582,10 @@ void main() {
       await writeMissingChapterMapping('m2', chapterKey: '/c/2');
       await seedOnlineManga(
         bookKey: 'm3',
-        title: '半成品',
+        title: '无 manifest',
         chapters: <String>['/c/3'],
       );
-      await writeHalfCompleteChapter('m3', chapterKey: '/c/3');
+      await writeNoManifestChapter('m3', chapterKey: '/c/3');
       await seedLocalSourceManga(
         bookKey: 'm4',
         title: '本地存在',
@@ -564,7 +600,7 @@ void main() {
     mangaItems.addAll(<MediaItem>[
       mangaItem('m1', '完整下载'),
       mangaItem('m2', '文件缺失'),
-      mangaItem('m3', '半成品'),
+      mangaItem('m3', '无 manifest'),
       mangaItem('m4', '本地存在', position: 50),
       mangaItem('m5', '本地缺失'),
     ]);
@@ -576,11 +612,7 @@ void main() {
       find.byKey(const ValueKey<String>('library_sort_menu_button')),
     );
     await tester.pumpAndSettle();
-    for (final String name in <String>[
-      'all',
-      'downloaded',
-      'not_downloaded',
-    ]) {
+    for (final String name in <String>['all', 'downloaded', 'not_downloaded']) {
       expect(
         find.byKey(ValueKey<String>('shelf_filter_download_$name')),
         findsOneWidget,
@@ -595,18 +627,22 @@ void main() {
 
     expect(mangaCard('m1'), findsOneWidget, reason: '完整落盘的在线漫画算已下载');
     expect(mangaCard('m4'), findsOneWidget, reason: '本地图源至少一章可读算已下载');
+    expect(
+      mangaCard('m3'),
+      findsOneWidget,
+      reason: '无 manifest 的用户容器按容器名关联后只要可读就算已下载',
+    );
     expect(mangaCard('m2'), findsNothing, reason: 'Missing 不计为已下载');
-    expect(mangaCard('m3'), findsNothing, reason: '半成品（无 pages.json）不算已下载');
     expect(mangaCard('m5'), findsNothing, reason: '本地图源目录不存在不算已下载');
-    expect(countText(tester, 'shelf'), '2');
+    expect(countText(tester, 'shelf'), '3');
 
     await pickDownloadFilter(tester, 'not_downloaded');
     expect(mangaCard('m2'), findsOneWidget);
-    expect(mangaCard('m3'), findsOneWidget);
+    expect(mangaCard('m3'), findsNothing);
     expect(mangaCard('m5'), findsOneWidget);
     expect(mangaCard('m1'), findsNothing);
     expect(mangaCard('m4'), findsNothing);
-    expect(countText(tester, 'shelf'), '3');
+    expect(countText(tester, 'shelf'), '2');
 
     await pickDownloadFilter(tester, 'all');
     expect(countText(tester, 'shelf'), '5', reason: '选回「全部」应恢复全部条目');
@@ -619,12 +655,44 @@ void main() {
     expect(countText(tester, 'shelf'), '1');
 
     await pickReadStatus(tester, 'all');
-    expect(countText(tester, 'shelf'), '2', reason: '下载筛选保持生效');
+    expect(countText(tester, 'shelf'), '3', reason: '下载筛选保持生效');
   });
 
-  testWidgets('下载筛选与当前页签 AND；搜索词切页签保留且数量同步重算', (
+  testWidgets('只有 manifest、没有映射的下载目录按身份算已下载（与作品页一致）', (
     WidgetTester tester,
   ) async {
+    await tester.runAsync(() async {
+      await seedOnlineManga(
+        bookKey: 'm1',
+        title: '只有 manifest',
+        chapters: <String>['/c/1'],
+      );
+      await writeManifestOnlyChapter(
+        'm1',
+        chapterKey: '/c/1',
+        folderName: 'Ch 1',
+      );
+    });
+    mangaItems.add(mangaItem('m1', '只有 manifest'));
+    await pumpShelf(tester, mangaItems);
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('library_sort_menu_button')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey<String>('shelf_filter_download_downloaded')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      mangaCard('m1'),
+      findsOneWidget,
+      reason: '书架与作品页同一份 pages.json 身份判据',
+    );
+  });
+
+  testWidgets('下载筛选与当前页签 AND；搜索词切页签保留且数量同步重算', (WidgetTester tester) async {
     final Directory localDir = Directory(
       p.join(contentRoot.path, 'local', 'ShelfOnly'),
     );
@@ -632,7 +700,9 @@ void main() {
     await tester.runAsync(() async {
       // 本地图源「已下载」按可读章节判定：至少放一章页图。
       await Directory(p.join(localDir.path, 'vol1')).create(recursive: true);
-      await File(p.join(localDir.path, 'vol1', '001.jpg')).writeAsBytes(<int>[1]);
+      await File(
+        p.join(localDir.path, 'vol1', '001.jpg'),
+      ).writeAsBytes(<int>[1]);
       await seedOnlineManga(
         bookKey: 'm1',
         title: '下载的连载',
@@ -703,9 +773,7 @@ void main() {
     expect(mangaCard('m3'), findsNothing, reason: 'm3 已下载，被「未下载」筛掉');
   });
 
-  testWidgets('停留在书架：后台下载完成后「已下载」筛选与页签数量自动刷新', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('停留在书架：后台下载完成后「已下载」筛选与页签数量自动刷新', (WidgetTester tester) async {
     await tester.runAsync(() async {
       await seedOnlineManga(
         bookKey: 'm1',
@@ -751,9 +819,7 @@ void main() {
     expect(mangaCard('m1'), findsOneWidget);
   });
 
-  testWidgets('本地图源「已下载」要求至少一章真的可读，目录存在不算', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('本地图源「已下载」要求至少一章真的可读，目录存在不算', (WidgetTester tester) async {
     final Directory rootChapter = Directory(
       p.join(contentRoot.path, 'local', 'RootChapter'),
     );
