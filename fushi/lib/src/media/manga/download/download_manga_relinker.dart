@@ -111,6 +111,12 @@ Future<DownloadMangaRelinkResult> relinkDownloadMangaFolder({
           !identity.matchesManifest(container.manifest!))
         container.containerName.toLowerCase(),
   };
+  // 目录里出现另一部作品的 manifest = 这是一个共享目录。无 manifest 的容器
+  // 在共享目录里没有可证明的归属：名称对同 Title 的每部作品都成立，不能猜给
+  // 任何一方（否则删除 A 会连带删掉 B 映射的同一个容器）。
+  final bool folderIsShared = foreignContainerNames.isNotEmpty;
+  bool ownershipProvable(ChapterContainerOnDisk container) =>
+      container.manifest != null || !folderIsShared;
 
   final Map<String, ChapterContainerOnDisk> existingContainers =
       <String, ChapterContainerOnDisk>{
@@ -148,7 +154,7 @@ Future<DownloadMangaRelinkResult> relinkDownloadMangaFolder({
         final bool claimedByOther =
             idClaimedContainerNames.contains(mappedName) ||
             foreignContainerNames.contains(mappedName);
-        if (!claimedByOther) candidate = mapped;
+        if (!claimedByOther && ownershipProvable(mapped)) candidate = mapped;
       }
     }
 
@@ -163,6 +169,7 @@ Future<DownloadMangaRelinkResult> relinkDownloadMangaFolder({
                 !foreignContainerNames.contains(
                   item.containerName.toLowerCase(),
                 ) &&
+                ownershipProvable(item) &&
                 _chapterContainerNameMatches(item.containerName, chapter),
           )
           .toList();
@@ -220,8 +227,9 @@ Future<DownloadMangaRelinkResult> relinkDownloadMangaFolder({
 /// 容器名是否像这一章的展示名。
 ///
 /// 只用于 `pages.json` 缺稳定身份时的兜底：比较净化后的章名；允许下载器在重名 /
-/// 同扫译组时追加的 `[扫译组]` 与 ` (2)` 后缀。CBZ 容器名先去掉 `.cbz` 扩展名
-/// 再比。大小写不敏感（Windows 语义）。
+/// 同扫译组时追加的 `[扫译组]`、旧 ` (2)` 序号，以及新命名的 `~<8 位哈希>` 后缀
+/// （见 `uniqueDownloadChapterName`）。CBZ 容器名先去掉 `.cbz` 扩展名再比。
+/// 大小写不敏感（Windows 语义）。
 bool _chapterContainerNameMatches(
   String containerName,
   OnlineMangaChapter chapter,
@@ -243,7 +251,7 @@ bool _chapterContainerNameMatches(
     if (lower == '$base [$qualifier]') return true;
   }
   return RegExp(
-    '^${RegExp.escape(base)}(?: \\[.+\\])? \\(\\d+\\)\$',
+    '^${RegExp.escape(base)}(?: \\[.+\\])?(?: \\(\\d+\\)|~[0-9a-f]{8})\$',
   ).hasMatch(lower);
 }
 

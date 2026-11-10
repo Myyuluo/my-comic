@@ -296,6 +296,33 @@ void main() {
       expect(volume.series.raw['chaptered'], isFalse);
     });
 
+    test('refresh 按源列表下标写入 sourceOrder（0 = 最新）', () async {
+      final InterconnectLibraryAdapter adapter =
+          InterconnectLibraryAdapter(backend: backend);
+      final OnlineMangaRefreshResult refreshed =
+          await adapter.refresh(entryOf(csm()));
+
+      expect(
+        refreshed.chapters.map((OnlineMangaChapter c) => c.sourceOrder),
+        <int>[0, 1],
+        reason: '章节阅读顺序依赖 sourceOrder，与 Mihon 适配器同一口径',
+      );
+
+      // 单卷条目刷新后仍是一章：列表下标 0。
+      final OnlineMangaRefreshResult volume = await adapter.refresh(
+        entryOf(
+          const RemoteBookInfo(
+            title: 'よつばと！1',
+            bookKey: 'yotsuba-1',
+            hasContent: false,
+            format: 'manga',
+            hasMangaContent: true,
+          ),
+        ),
+      );
+      expect(volume.chapters.single.sourceOrder, 0);
+    });
+
     test('按章解析页表 → 走 /chapters/<digest>/… 端点取到该章该页的字节', () async {
       final InterconnectLibraryAdapter adapter =
           InterconnectLibraryAdapter(backend: backend);

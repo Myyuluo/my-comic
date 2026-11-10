@@ -210,6 +210,68 @@ void main() {
     expect(File(p.join(chapter2.path, '001.jpg')).existsSync(), isTrue);
   });
 
+  test('根 manifest 单章作品旁有 saved/ 子目录：清库重开仍复用原目录，不建 (2)', () async {
+    final EpubBookRow original = await library.ensureNonLibrary(
+      entryWith(chapters),
+    );
+    final Directory mangaDir = Directory(original.extractDir)
+      ..createSync(recursive: true);
+    // 单章作品：pages.json + 页图在漫画目录根。
+    await File(p.join(mangaDir.path, '001.jpg')).writeAsBytes(<int>[1]);
+    await writePagesManifestAtomically(
+      mangaDir,
+      MangaPagesManifest(
+        sourceRuntime: 'mihon',
+        sourceId: '1',
+        sourceName: 'Fixture',
+        extensionPackage: 'org.example.fixture',
+        mangaKey: '/series/fixture',
+        mangaTitle: 'Fixture series',
+        chapterKey: '/chapter/1',
+        chapterName: 'Chapter 1',
+        payload: const MokuroPayload(
+          images: <MokuroImage>[
+            MokuroImage(
+              url: '001.jpg',
+              size: MokuroSize(100, 150),
+              blocks: <MokuroBlock>[],
+            ),
+          ],
+        ),
+        downloadedAt: DateTime.utc(2026, 11, 10),
+      ),
+    );
+    // 阅读器「保存页面」会在漫画目录根写 saved/：它没有章节身份，不能把根
+    // manifest 挡在扫描之外。
+    final Directory saved = Directory(p.join(mangaDir.path, 'saved'))
+      ..createSync(recursive: true);
+    File(p.join(saved.path, 'page.jpg')).writeAsBytesSync(<int>[9]);
+    await db.deleteEpubBook(original.bookKey);
+
+    final OnlineMangaLibraryEntry seed = entryWith(
+      const <OnlineMangaChapter>[],
+    );
+    final EpubBookRow reopened = await library.ensureNonLibrary(seed);
+
+    expect(
+      reopened.extractDir,
+      original.extractDir,
+      reason: '根 manifest 身份仍能证明目录属于这部作品',
+    );
+    expect(
+      Directory(
+        p.join(p.dirname(original.extractDir), 'Fixture series (2)'),
+      ).existsSync(),
+      isFalse,
+      reason: 'saved/ 子目录不能导致另建 (2) 目录',
+    );
+    expect(
+      File(p.join(mangaDir.path, 'pages.json')).existsSync(),
+      isTrue,
+      reason: '用户目录与单章下载负载原样保留',
+    );
+  });
+
   test('重链同时按容器名回退：没有 pages.json 的容器也写映射', () async {
     final EpubBookRow original = await library.ensureNonLibrary(
       entryWith(chapters),

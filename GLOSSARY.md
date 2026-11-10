@@ -145,11 +145,11 @@ _Avoid_: 取消（取消会删除任务与未完成的部分）、停止
 _Avoid_: 批量转换、自动压缩、打包下载
 
 **Download library（在线下载库）**:
-由应用管理的已下载在线 Chapter 集合，按 Source → Manga → Chapter 组织在 Content root 下。它只包含实际下载产生的 Chapter container：浏览作品页、阅读在线章节、导入与重建索引都不会创建空目录，目录只在章节下载真正开始时物化。新开始的下载默认把 Chapter 保存为 `.cbz` 压缩包（见 Save as CBZ）；已有的文件夹章节保持原样，两种 Chapter container 共存。封面不属于 Download library：封面由 Cache / 远程封面地址提供，已有的本地封面文件保持原位、不自动删除。同一 Source 下标题完全相同的不同作品共用一个 Manga 目录；目录里的每个 Chapter container 由自己的 `pages.json` 证明所属作品，阅读、下载状态与删除互不串作品。删除只作用于本作品自己的容器，空目录只有在不再被任何作品引用时才清理；Local source 的用户原件不属于 Download library，永不删除。书架与非书架 Manga 共用同一套 Download library 与 Download index。
+由应用管理的已下载在线 Chapter 集合，按 Source → Manga → Chapter 组织在 Content root 下。它只包含实际下载产生的 Chapter container：浏览作品页、阅读在线章节、导入与重建索引都不会创建空目录，目录只在章节下载真正开始时物化。新开始的下载默认把 Chapter 保存为 `.cbz` 压缩包（见 Save as CBZ）；已有的文件夹章节保持原样，两种 Chapter container 共存。封面不属于 Download library：封面由 Cache / 远程封面地址提供，已有的本地封面文件保持原位、不自动删除。同一 Source 下标题完全相同的不同作品共用一个 Manga 目录；目录里的每个 Chapter container 按自己的 Download identity 归属到正确作品，阅读、下载状态与删除互不串作品。删除只作用于本作品自己的容器，空目录只有在不再被任何作品引用时才清理；Local source 的用户原件不属于 Download library，永不删除。书架与非书架 Manga 共用同一套 Download library 与 Download index。
 _Avoid_: 下载文件夹、下载目录（与「下载页」混淆）
 
 **Download identity（下载身份）**:
-在线 Manga 在 Download library 中的稳定身份，由运行时、数字 Source ID 与 series/manga key 组成；扩展包名只作 tie-breaker。文件夹复用、已下载状态与 Rebuild download index 都使用这一判据，目录名不参与。同一 Source 下标题相同的不同作品可以共用一个 Manga 目录，此时每个 Chapter container 按自己的 `pages.json` 归属到对应身份。
+在线 Manga 在 Download library 中的稳定身份，由运行时、数字 Source ID 与 series/manga key 组成；扩展包名只作 tie-breaker。文件夹复用、已下载状态与 Rebuild download index 都使用这一判据，目录名不参与。同一 Source 下标题相同的不同作品可以共用一个 Manga 目录，此时每个 Chapter container 仍按 Download identity 归属到对应身份。
 _Avoid_: 标题匹配、文件夹名身份
 
 **Download index（下载索引）**:
@@ -161,7 +161,7 @@ _Avoid_: 漫画索引、书库、缓存
 _Avoid_: 导入、恢复备份、同步
 
 **Downloaded（已下载）**:
-下载状态：该 Chapter 在本地有可读内容。判据来自磁盘关联与可读性，与 Library membership、Source 是否安装以及数据库映射是否存在无关。按 `pages.json` 身份关联的 Chapter container 需要完整；用户提供、按容器名与 Chapter 关联且没有 `pages.json` 的容器只要可读也算；单章作品放在漫画目录根的 `pages.json` 与页负载同样算已下载。`local` 根下的用户原件可以被关联与阅读，但永不删除；删除只作用于 Download library 中由应用管理的容器。
+下载状态：该 Chapter 在本地有可读内容。判据来自磁盘关联与可读性，与 Library membership、Source 是否安装以及数据库映射是否存在无关。由 Download identity 证明归属的 Chapter container 需要完整；用户提供、按容器名与 Chapter 关联且没有 Download identity 的容器只要可读也算；单章作品放在 Manga 目录根的章节内容同样算已下载。Local source root 下的用户原件可以被关联与阅读，但永不删除；删除只作用于 Download library 中由应用管理的容器。
 _Avoid_: 在线可读、缓存
 
 **Not downloaded（未下载）**:

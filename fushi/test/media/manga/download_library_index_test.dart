@@ -548,6 +548,45 @@ void main() {
     );
   });
 
+  test('共享目录：无 manifest 容器被多个作品映射时删除不猜', () async {
+    const String otherBookKey = 'other-work';
+    await db.insertEpubBook(
+      EpubBooksCompanion.insert(
+        bookKey: otherBookKey,
+        title: 'Fixture series',
+        epubPath: 'pages.json',
+        extractDir: mangaDir,
+        chapterCount: 1,
+        chaptersJson: '[]',
+        importedAt: 2,
+        format: const Value<String>('manga'),
+      ),
+    );
+    // 用户放进共享目录的无 manifest 容器：两个作品都曾按容器名映射到它。
+    final Directory shared = downloadChapterDirectory(mangaDir, 'Chapter 1');
+    await shared.create(recursive: true);
+    await File(p.join(shared.path, '001.jpg')).writeAsBytes(<int>[1]);
+    for (final String key in <String>[bookKey, otherBookKey]) {
+      await db.upsertMangaChapterDir(
+        bookKey: key,
+        chapterKey: '/c/1',
+        folderName: 'Chapter 1',
+        updatedAt: 1,
+      );
+    }
+
+    await DownloadLibraryIndex(
+      db,
+    ).deleteChapter(bookKey: bookKey, chapterKey: '/c/1');
+
+    expect(
+      File(p.join(shared.path, '001.jpg')).existsSync(),
+      isTrue,
+      reason: '归属不明的容器只能由唯一映射证明，删除不得连带删掉另一部作品的文件',
+    );
+    expect(shared.existsSync(), isTrue);
+  });
+
   test('空的 manga 目录仍被其他作品引用时不清理', () async {
     final Directory chapterDir = await writeNewLayoutChapter('Chapter 1');
     // 同名共享目录里的另一部作品还没有下载任何章，但它的行引用着这个目录。
@@ -862,6 +901,78 @@ void main() {
     expect(container!.isMangaRoot, isTrue);
     expect(container.directory!.path, mangaDir);
     expect(container.manifestFile!.path, p.join(mangaDir, 'pages.json'));
+    expect(
+      await index.isChapterDownloaded(bookKey: bookKey, chapterKey: '/c/1'),
+      isTrue,
+    );
+  });
+
+  /// 把当前行重链到 Local source root 下的根 manifest 单章作品（用户原件）。
+  Future<Directory> writeLocalRootManifestChapter() async {
+    final Directory localMangaDir = Directory(
+      p.join(root.path, 'local', 'Fixture series'),
+    );
+    await localMangaDir.create(recursive: true);
+    await File(p.join(localMangaDir.path, '001.jpg')).writeAsBytes(<int>[3]);
+    await writePagesManifestAtomically(localMangaDir, manifestFor('/c/1'));
+    await db.updateEpubBookMihonState(
+      bookKey,
+      sourceMetadata: rootManifestEntry.encode(),
+      chapterCount: 1,
+      chaptersJson: '[]',
+    );
+    await db.updateEpubBookContentPaths(
+      bookKey,
+      extractDir: localMangaDir.path,
+    );
+    return localMangaDir;
+  }
+
+  test('local 根根 manifest 重链后：单章删除拒绝，用户原件保留', () async {
+    final Directory localMangaDir = await writeLocalRootManifestChapter();
+    final DownloadLibraryIndex index = DownloadLibraryIndex(db);
+    expect(
+      await index.isChapterDownloaded(bookKey: bookKey, chapterKey: '/c/1'),
+      isTrue,
+      reason: 'Local source root 下的用户原件仍可关联与阅读',
+    );
+
+    await index.deleteChapter(bookKey: bookKey, chapterKey: '/c/1');
+
+    expect(
+      File(p.join(localMangaDir.path, '001.jpg')).existsSync(),
+      isTrue,
+      reason: 'local 根下的用户原件永不删除',
+    );
+    expect(
+      File(p.join(localMangaDir.path, 'pages.json')).existsSync(),
+      isTrue,
+      reason: '根 manifest 也属于用户原件，删除下载不得清空它',
+    );
+    expect(
+      await index.isChapterDownloaded(bookKey: bookKey, chapterKey: '/c/1'),
+      isTrue,
+      reason: '拒绝删除后已下载状态不变',
+    );
+  });
+
+  test('local 根根 manifest 重链后：批量删除拒绝，用户原件保留', () async {
+    final Directory localMangaDir = await writeLocalRootManifestChapter();
+    final EpubBookRow row = (await db.getEpubBook(bookKey))!;
+    final DownloadLibraryIndex index = DownloadLibraryIndex(db);
+
+    await index.deleteChapterForEntry(
+      entry: rootManifestEntry,
+      chapterKey: '/c/1',
+      row: row,
+    );
+
+    expect(
+      File(p.join(localMangaDir.path, '001.jpg')).existsSync(),
+      isTrue,
+      reason: '批量删除与单章删除同一路径，都不得碰 local 原件',
+    );
+    expect(File(p.join(localMangaDir.path, 'pages.json')).existsSync(), isTrue);
     expect(
       await index.isChapterDownloaded(bookKey: bookKey, chapterKey: '/c/1'),
       isTrue,

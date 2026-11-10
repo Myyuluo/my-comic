@@ -24,6 +24,7 @@ import 'package:fushi/src/platform/platform_providers.dart';
 import 'package:fushi/src/storage/app_paths.dart';
 import 'package:fushi/src/utils/components/batch_action_bar.dart';
 import 'package:fushi/src/utils/components/fushi_icon_button.dart';
+import 'package:fushi/src/utils/components/fushi_material_components.dart';
 import 'package:fushi_audio/fushi_audio.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi_engine/epub/epub_storage.dart';
@@ -766,6 +767,88 @@ void main() {
       expect(state?.readAt, 1);
       expect(state?.lastPage, 5);
       expect(state?.pageCount, 10);
+    });
+
+    testWidgets('重链到 local 根根 manifest 的章不提供删除下载动作', (
+      WidgetTester tester,
+    ) async {
+      sizeView(tester);
+      final _TestAppModel appModel = _TestAppModel(db, root, library: library);
+      late EpubBookRow row;
+      late Directory localMangaDir;
+      await tester.runAsync(() async {
+        row = await library.add(_entry());
+        // 模拟 Rebuild/Import 把在线作品重链到 Local source root 下的单章
+        // 用户原件：pages.json + 页图直接住在作品目录根。
+        localMangaDir = Directory(p.join(root.path, 'local', 'Fixture series'))
+          ..createSync(recursive: true);
+        File(p.join(localMangaDir.path, '001.jpg')).writeAsBytesSync(<int>[1]);
+        await writePagesManifestAtomically(
+          localMangaDir,
+          MangaPagesManifest(
+            sourceRuntime: 'mihon',
+            sourceId: '1',
+            sourceName: 'Fake',
+            extensionPackage: 'org.example.fixture',
+            mangaKey: '/series/fixture',
+            mangaTitle: 'Fixture series',
+            chapterKey: '/chapter/1',
+            chapterName: 'Chapter 1',
+            payload: const MokuroPayload(
+              images: <MokuroImage>[
+                MokuroImage(
+                  url: '001.jpg',
+                  size: MokuroSize(100, 150),
+                  blocks: <MokuroBlock>[],
+                ),
+              ],
+            ),
+            downloadedAt: DateTime.utc(2026, 11, 8),
+          ),
+        );
+        await db.updateEpubBookContentPaths(
+          row.bookKey,
+          extractDir: localMangaDir.path,
+        );
+        await tester.pumpWidget(_harness(appModel, row.bookKey));
+        await pumpUntilFound(
+          tester,
+          find.byKey(
+            const ValueKey<String>('manga_chapter_download_downloaded'),
+          ),
+        );
+      });
+
+      // 单章菜单不出现「删除下载」：local 原件不属于 Download library。
+      await tester.tap(
+        find.descendant(
+          of: _chapterRow('Chapter 1'),
+          matching: find.byType(FushiOverflowMenu<String>),
+        ),
+      );
+      await _settle(tester);
+      expect(
+        find.text(t.manga_chapter_download_delete_action),
+        findsNothing,
+        reason: '不能提供会静默删除 local 用户原件的动作',
+      );
+      await tester.tapAt(const Offset(5, 5));
+      await _settle(tester);
+
+      // 批量删除同样不可用。
+      await tester.longPress(_chapterRow('Chapter 1'));
+      await _settle(tester);
+      expect(find.byKey(_deleteDownloadsKey), findsOneWidget);
+      expect(
+        _enabled(tester, _deleteDownloadsKey),
+        isFalse,
+        reason: '批量删除不得作用于 local 用户原件',
+      );
+      expect(File(p.join(localMangaDir.path, '001.jpg')).existsSync(), isTrue);
+      expect(
+        File(p.join(localMangaDir.path, 'pages.json')).existsSync(),
+        isTrue,
+      );
     });
 
     testWidgets('批量删除最后一章后清理空的 manga 与 source 目录', (WidgetTester tester) async {

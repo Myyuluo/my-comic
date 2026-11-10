@@ -72,11 +72,16 @@ Future<List<DownloadMangaFolderOnDisk>> scanDownloadSourceFolders(
           mangaDir,
           readComplete: readComplete,
         );
-    // 单章作品把 pages.json 直接放在漫画目录根，没有章容器（ticket 06）：
-    // 只有在这种裸目录里才读根 manifest，正常下载目录保持零额外读盘。
-    final MangaPagesManifest? rootManifest = chapters.isEmpty
-        ? await readPagesManifest(mangaDir)
-        : null;
+    // 单章作品把 pages.json 直接放在漫画目录根（ticket 06）：只要没有任何章
+    // 容器带 manifest 就读根 manifest。不能只看 `chapters.isEmpty`——阅读器保存
+    // 页面会写没有身份的 `saved/` 子目录；把它当章容器会让根 manifest 消失，
+    // 与身份探针（无子 manifest 时读根 manifest）判据不一致。
+    final MangaPagesManifest? rootManifest =
+        chapters.any(
+          (ChapterContainerOnDisk chapter) => chapter.manifest != null,
+        )
+        ? null
+        : await readPagesManifest(mangaDir);
     folders.add(
       DownloadMangaFolderOnDisk(
         directory: mangaDir,
@@ -166,6 +171,8 @@ Future<List<ChapterContainerOnDisk>> scanDownloadChapterContainers(
 /// 一个漫画目录里第一个可解析的 `pages.json`（含 `.cbz` 内）。
 ///
 /// Source 级归属只需要一处证据；扫到第一个就停，避免为每个 Manga 读完整章表。
+/// 单章作品放在漫画目录根的 manifest 由调用方另行探测（见
+/// `probeLocalMangaFolders`），这里只看章容器。
 Future<MangaPagesManifest?> readFirstDownloadMangaManifest(
   Directory mangaDir,
 ) async {

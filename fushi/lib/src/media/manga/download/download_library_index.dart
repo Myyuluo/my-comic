@@ -415,6 +415,10 @@ class DownloadLibraryIndex {
   /// 文件夹章节删章节目录；CBZ 章节删压缩包文件。容器不存在时静默
   /// （任务取消 / 重复删除）。旧哈希布局已不再解析，映射行仍清掉，避免留下
   /// 指向不存在容器的记录。
+  ///
+  /// 删除只作用于**当前 Download library 根**内、且能证明属于目标作品的容器：
+  /// Local source 根下的用户原件一律拒绝（不删文件、保留映射）；共享目录里
+  /// 只由另一部作品映射的无 manifest 容器同样拒绝，不猜归属。
   Future<void> deleteChapter({
     required String bookKey,
     required String chapterKey,
@@ -425,6 +429,13 @@ class DownloadLibraryIndex {
     );
     Directory? mangaDir;
     if (container != null) {
+      final Directory downloadsRoot = await _downloadsRoot();
+      if (!_isContainerWithinDownloads(container, downloadsRoot)) {
+        // local 根下的用户原件（含单章根 manifest）不属于「删除下载」。
+        return;
+      }
+      final EpubBookRow? row = await database.getEpubBook(bookKey);
+      if (!await _isContainerOwnedBy(row, container)) return;
       if (container.isMangaRoot) {
         // 单章作品的负载直接住在漫画目录根：只删根 manifest 与它声明的页，
         // 绝不递归删除目录（共享目录里可能还有别的作品 / 用户文件）。
@@ -444,6 +455,121 @@ class DownloadLibraryIndex {
     if (mangaDir != null) {
       await _cleanupEmptyDirectories(mangaDir, deletedBookKey: bookKey);
     }
+  }
+
+  /// [container] 是否位于当前 Download library 根内（可被「删除下载」管理）。
+  bool _isContainerWithinDownloads(
+    MangaChapterContainer container,
+    Directory downloadsRoot,
+  ) {
+    final String? path =
+        container.archiveFile?.path ?? container.directory?.path;
+    if (path == null) return false;
+    return _isStrictlyWithinPath(path, downloadsRoot);
+  }
+
+  /// [container] 是否能证明属于 [row] 对应的作品（删除前的安全闸）。
+  ///
+  /// - 根 manifest 容器已由 [resolveChapter] 校验身份；
+  /// - 有身份的章节容器：`pages.json` 必须匹配目标作品；
+  /// - 无 manifest / 行没有描述符的历史数据：只能由**唯一**映射证明归属——
+  ///   同一物理容器被另一部作品也映射时视为归属不明，拒绝删除。
+  Future<bool> _isContainerOwnedBy(
+    EpubBookRow? row,
+    MangaChapterContainer container,
+  ) async {
+    if (container.isMangaRoot) return true;
+    final MangaPagesManifest? manifest = container.isArchive
+        ? await readDownloadLibraryArchiveManifest(container.archiveFile!)
+        : await readPagesManifest(container.directory!);
+    if (manifest != null) {
+      final OnlineMangaLibraryEntry? entry = row == null
+          ? null
+          : OnlineMangaLibraryEntry.tryParse(row.sourceMetadata);
+      if (entry != null) {
+        return MangaDownloadIdentity.ofEntry(entry).matchesManifest(manifest);
+      }
+      // 行没有在线描述符（历史数据）：继续用唯一映射证明。
+    }
+    if (row == null) return false;
+    return _isContainerMappedOnlyBy(row.bookKey, container);
+  }
+
+  /// 除 [bookKey] 外是否还有作品映射到同一物理容器。
+  Future<bool> _isContainerMappedOnlyBy(
+    String bookKey,
+    MangaChapterContainer container,
+  ) async {
+    final String? path =
+        container.archiveFile?.path ?? container.directory?.path;
+    if (path == null) return false;
+    final String target = p.canonicalize(path);
+    final Map<String, String> extractDirs = <String, String>{
+      for (final EpubBookRow row in await database.getAllEpubBooks())
+        row.bookKey: row.extractDir,
+    };
+    for (final MangaChapterDirRow mapping
+        in await database.getAllMangaChapterDirRows()) {
+      if (mapping.bookKey == bookKey) continue;
+      final String? extractDir = extractDirs[mapping.bookKey];
+      if (extractDir == null) continue;
+      final String mapped = p.canonicalize(
+        p.join(extractDir, mapping.folderName),
+      );
+      if (mapped == target) return false;
+    }
+    return true;
+  }
+
+  /// 这批**已下载**章里哪些可以由「删除下载」删除。
+  ///
+  /// 与 [deleteChapterForEntry] 同一判据：映射解析到当前 `downloads` 根内的
+  /// 容器才算可删；解析不到映射的章再按身份扫描 `downloads`（不含 `local`）。
+  /// Local source 根下的用户原件、旧 Content root 的路径一律不算；UI 据此不
+  /// 提供会静默删除用户文件的操作。
+  Future<Set<String>> deletableChapterKeysForEntry(
+    OnlineMangaLibraryEntry entry, {
+    EpubBookRow? row,
+    required Iterable<String> downloadedChapterKeys,
+  }) async {
+    final Set<String> wanted = downloadedChapterKeys.toSet();
+    if (wanted.isEmpty) return <String>{};
+    final Directory downloadsRoot = await _downloadsRoot();
+    final Set<String> deletable = <String>{};
+    final Set<String> mapped = <String>{};
+    if (row != null) {
+      for (final String chapterKey in wanted) {
+        final MangaChapterContainer? container = await resolveChapter(
+          bookKey: row.bookKey,
+          chapterKey: chapterKey,
+        );
+        if (container == null) continue;
+        mapped.add(chapterKey);
+        if (_isContainerWithinDownloads(container, downloadsRoot) &&
+            await _isContainerOwnedBy(row, container)) {
+          deletable.add(chapterKey);
+        }
+      }
+    }
+    // 没有映射的章走删除路径的同一份身份扫描（只扫 downloads）：有身份证明
+    // 的容器即使没有数据库映射也能安全删除。
+    final Set<String> unmapped = wanted.difference(mapped);
+    if (unmapped.isNotEmpty) {
+      final MangaDownloadDiskIndex disk = await MangaDownloadDiskIndex.scan(
+        downloadsRoot: downloadsRoot,
+        localComicRoot: null,
+        queries: <MangaDownloadDiskQuery>[
+          MangaDownloadDiskQuery.ofEntry(entry),
+        ],
+      );
+      deletable.addAll(
+        disk.downloadedChapterKeys(
+          MangaDownloadIdentity.ofEntry(entry),
+          unmapped,
+        ),
+      );
+    }
+    return deletable;
   }
 
   /// 删除单章作品根 manifest 的下载负载：声明页 + `pages.json`。
@@ -537,6 +663,9 @@ class DownloadLibraryIndex {
 
   static bool _isStrictlyWithin(Directory directory, Directory root) =>
       p.isWithin(p.canonicalize(root.path), p.canonicalize(directory.path));
+
+  static bool _isStrictlyWithinPath(String path, Directory root) =>
+      p.isWithin(p.canonicalize(root.path), p.canonicalize(path));
 
   /// 删除一章的下载：有行 / 映射时按记录删；没有行或映射没覆盖时按 [entry]
   /// 的下载身份在 `downloads` 里找唯一能证明身份的漫画文件夹，再删其中
