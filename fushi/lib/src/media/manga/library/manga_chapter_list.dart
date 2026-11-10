@@ -88,6 +88,7 @@ class MangaChapterList extends StatelessWidget {
     this.selectedChapterKeys,
     this.showHeader = true,
     this.downloadedChapterKeys = const <String>{},
+    this.undeletableDownloadedChapterKeys = const <String>{},
     this.missingChapterKeys = const <String>{},
     this.jobsByChapterKey = const <String, MangaDownloadJobRow>{},
     this.onDownload,
@@ -144,6 +145,11 @@ class MangaChapterList extends StatelessWidget {
   /// [jobsByChapterKey] 是任务表里的行；下载中 / 排队 / 失败看任务行，已下载看
   /// 磁盘。默认都空 = 每章都显示成「未下载」（阅读器内的章节选择器只给磁盘那份）。
   final Set<String> downloadedChapterKeys;
+
+  /// 虽显示「已下载」但不提供「删除下载」的章：文件不在当前 Download library
+  /// 的管理范围内（例如 Local source root 下的用户原件）。菜单据此隐藏动作，
+  /// 避免一条看似普通的删除悄悄清掉用户自己的文件。
+  final Set<String> undeletableDownloadedChapterKeys;
 
   /// 宿主明确判定为 Missing 的章（ticket 08：Local source 作品切到新 Content
   /// root 后仍留在书架里，旧目录不再属于当前 `local`）。命中时覆盖普通
@@ -598,6 +604,7 @@ class MangaChapterList extends StatelessWidget {
             label: t.media_file_location_open,
           ),
         if (onDeleteDownload != null &&
+            !undeletableDownloadedChapterKeys.contains(chapter.key) &&
             (download == MangaChapterDownloadState.downloaded ||
                 download == MangaChapterDownloadState.missing))
           FushiPopupMenuItem<String>(

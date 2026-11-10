@@ -13,3 +13,5 @@
 - [ ] 读完第 1 话进入第 2 话，第 2 话进入第 3 话；只有真正最后一话提示「已经是最新一章」。
 - [ ] 重新导入同一 `.tachibk` 幂等并补齐 `sourceOrder`；已有作品无需手工修数据。
 - [ ] 页面级与相邻章节测试覆盖新导入、重新导入、无章节号/日期的作品、在线源不回归；`flutter analyze` 与 Windows 构建通过。
+
+**已接受的偏差（导出）：** 备份导出写入标准的 Mihon `BackupChapter.sourceOrder`（`chapter.sourceOrder ?? 列表下标`），而不是保持导出代码完全不变。这是 MyComic→MyComic 往返保留阅读顺序所需；它只填充 Mihon 既有字段，在线条目导出的值就是源列表下标，与 Mihon 行为一致，Mihon 兼容性不受影响。其余导出行为保持不变。

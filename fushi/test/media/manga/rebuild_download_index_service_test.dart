@@ -444,6 +444,86 @@ void main() {
     expect(File(p.join(userChapter.path, '001.jpg')).existsSync(), isTrue);
   });
 
+  test('带哈希后缀的章节文件夹（pages.json 损坏）：重建按容器名关联', () async {
+    const String bookKey = 'mihon-hashed-folder';
+    final OnlineMangaLibraryEntry entry = entryFor();
+    await insertOnlineBook(
+      bookKey: bookKey,
+      entry: entry,
+      extractDir: p.join(
+        oldContent.path,
+        'downloads',
+        'Example Source',
+        'Fixture series',
+      ),
+    );
+    final Directory mangaDir = Directory(
+      p.join(downloadsRoot.path, 'Example Source', 'Fixture series'),
+    );
+    // 新命名在章名冲突时追加 `~<8 位哈希>`；pages.json 损坏 = 无稳定身份。
+    final Directory hashedChapter = downloadChapterDirectory(
+      mangaDir.path,
+      'Chapter 1~a1b2c3d4',
+    );
+    await hashedChapter.create(recursive: true);
+    await File(p.join(hashedChapter.path, '001.jpg')).writeAsString('page');
+    await File(p.join(hashedChapter.path, 'pages.json')).writeAsString('{bad');
+
+    final RebuildDownloadIndexReport report = await service().run();
+
+    expect(report.chaptersRelinked, 1);
+    expect(
+      (await db.getMangaChapterDir(bookKey, '/c/1'))?.folderName,
+      'Chapter 1~a1b2c3d4',
+      reason: '没有可用 pages.json 时，哈希后缀容器名也要能回退关联',
+    );
+    expect(
+      await DownloadLibraryIndex(
+        db,
+      ).isChapterDownloaded(bookKey: bookKey, chapterKey: '/c/1'),
+      isTrue,
+    );
+  });
+
+  test('带哈希后缀的章节 CBZ（没有 pages.json）：重建按容器名关联', () async {
+    const String bookKey = 'mihon-hashed-cbz';
+    final OnlineMangaLibraryEntry entry = entryFor();
+    await insertOnlineBook(
+      bookKey: bookKey,
+      entry: entry,
+      extractDir: p.join(
+        oldContent.path,
+        'downloads',
+        'Example Source',
+        'Fixture series',
+      ),
+    );
+    final Directory mangaDir = Directory(
+      p.join(downloadsRoot.path, 'Example Source', 'Fixture series'),
+    );
+    await mangaDir.create(recursive: true);
+    final Archive archive = Archive();
+    final List<int> page = utf8.encode('page');
+    archive.addFile(ArchiveFile('001.jpg', page.length, page));
+    final File hashedArchive = downloadChapterArchiveFile(
+      mangaDir.path,
+      'Chapter 2~a1b2c3d4.cbz',
+    );
+    await hashedArchive.writeAsBytes(ZipEncoder().encode(archive)!);
+
+    final RebuildDownloadIndexReport report = await service().run();
+
+    expect(report.chaptersRelinked, 1);
+    expect(
+      (await db.getMangaChapterDir(bookKey, '/c/2'))?.folderName,
+      'Chapter 2~a1b2c3d4.cbz',
+    );
+    final MangaChapterContainer? container = await DownloadLibraryIndex(
+      db,
+    ).resolveChapter(bookKey: bookKey, chapterKey: '/c/2');
+    expect(container?.isArchive, isTrue);
+  });
+
   test('没有 pages.json 的用户 CBZ：重建按容器名关联，可定位且可阅读', () async {
     const String bookKey = 'mihon-user-cbz';
     final OnlineMangaLibraryEntry entry = entryFor();
@@ -2360,6 +2440,102 @@ void main() {
     expect(
       File(p.join(mangaDir.path, 'B second', '001.jpg')).existsSync(),
       isTrue,
+    );
+  });
+
+  test('共享目录里无 manifest 的容器不按名称认领；删除 A 不动它', () async {
+    const List<OnlineMangaChapter> sharedChapters = <OnlineMangaChapter>[
+      OnlineMangaChapter(
+        key: '/c/1',
+        name: 'Chapter 1',
+        raw: <String, Object?>{},
+      ),
+      OnlineMangaChapter(
+        key: '/c/2',
+        name: 'Chapter 2',
+        raw: <String, Object?>{},
+      ),
+    ];
+    final OnlineMangaLibraryEntry first = entryFor(
+      seriesKey: '/series/first',
+      title: 'Shared title',
+      chapters: sharedChapters,
+    );
+    final OnlineMangaLibraryEntry second = entryFor(
+      seriesKey: '/series/second',
+      title: 'Shared title',
+      chapters: sharedChapters,
+    );
+    final Directory mangaDir = Directory(
+      p.join(downloadsRoot.path, 'Example Source', 'Shared title'),
+    );
+    final EpubBookRow firstRow = await insertOnlineBook(
+      bookKey: onlineMangaBookKeyFor(
+        runtime: first.runtime,
+        extensionPackage: first.extensionPackage,
+        sourceId: first.sourceId,
+        seriesKey: first.series.key,
+      ),
+      entry: first,
+      extractDir: mangaDir.path,
+    );
+    final EpubBookRow secondRow = await insertOnlineBook(
+      bookKey: onlineMangaBookKeyFor(
+        runtime: second.runtime,
+        extensionPackage: second.extensionPackage,
+        sourceId: second.sourceId,
+        seriesKey: second.series.key,
+      ),
+      entry: second,
+      extractDir: mangaDir.path,
+    );
+    // 两部作品各自用 pages.json 证明 /c/1 的容器。
+    await writeChapter(
+      mangaDir: mangaDir,
+      folderName: 'A first',
+      entry: first,
+      chapter: sharedChapters.first,
+    );
+    await writeChapter(
+      mangaDir: mangaDir,
+      folderName: 'B second',
+      entry: second,
+      chapter: sharedChapters.first,
+    );
+    // 用户放进共享目录的 /c/2：没有 pages.json，名字对两部作品都成立。
+    final Directory ambiguous = downloadChapterDirectory(
+      mangaDir.path,
+      'Chapter 2',
+    );
+    await ambiguous.create(recursive: true);
+    await File(p.join(ambiguous.path, '001.jpg')).writeAsString('user page');
+
+    await service().run();
+
+    expect(
+      (await db.getMangaChapterDirRowsForBook(firstRow.bookKey)).keys,
+      <String>{'/c/1'},
+      reason: '共享目录里无身份的容器归属不明，不猜给 A',
+    );
+    expect(
+      (await db.getMangaChapterDirRowsForBook(secondRow.bookKey)).keys,
+      <String>{'/c/1'},
+      reason: '共享目录里无身份的容器归属不明，不猜给 B',
+    );
+
+    await DownloadLibraryIndex(
+      db,
+    ).deleteChapter(bookKey: firstRow.bookKey, chapterKey: '/c/2');
+
+    expect(
+      File(p.join(ambiguous.path, '001.jpg')).existsSync(),
+      isTrue,
+      reason: '删除 A 不得删掉 B 可能引用的无 manifest 容器',
+    );
+    expect(
+      File(p.join(mangaDir.path, 'B second', '001.jpg')).existsSync(),
+      isTrue,
+      reason: 'B 自己的容器也不受影响',
     );
   });
 

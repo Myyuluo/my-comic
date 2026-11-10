@@ -245,6 +245,10 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
   Map<String, MangaDownloadJobRow> _jobs =
       const <String, MangaDownloadJobRow>{};
   Set<String> _downloaded = const <String>{};
+
+  /// [_downloaded] 中可由「删除下载」删除的章（容器在当前 Download library
+  /// 根内）。Local source root 下的用户原件显示已下载但不可删。
+  Set<String> _deletableDownloaded = const <String>{};
   StreamSubscription<void>? _jobsWatch;
 
   /// manifest 扫描缓存（ticket 07）：任务表进度更新不会改变身份/状态签名，
@@ -540,10 +544,18 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
       _manifestScanKey = scanKey;
     }
     final Set<String> downloaded = <String>{...mapped, ..._manifestDownloaded};
+    // 可删性独立于「已下载」：Local source 根下的用户原件也算已下载，但删除
+    // 下载不得提供会清掉用户文件的操作。
+    final Set<String> deletable = await index.deletableChapterKeysForEntry(
+      entry,
+      row: row,
+      downloadedChapterKeys: downloaded,
+    );
     if (!mounted || revision != _downloadStateRevision) return;
     setState(() {
       _jobs = jobs;
       _downloaded = downloaded;
+      _deletableDownloaded = deletable;
     });
   }
 
@@ -556,7 +568,11 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     final Set<String> keys = chapterKeys.toSet();
     _manifestDownloaded = _manifestDownloaded.difference(keys);
     if (keys.isEmpty) return;
-    void apply() => _downloaded = _downloaded.difference(keys);
+    void apply() {
+      _downloaded = _downloaded.difference(keys);
+      _deletableDownloaded = _deletableDownloaded.difference(keys);
+    }
+
     if (mounted) {
       setState(apply);
     } else {
@@ -660,6 +676,9 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     final OnlineMangaLibraryEntry? entry = _entry;
     final AppModel? appModel = _appModelOrNull;
     if (appModel == null || entry == null) return;
+    // 菜单已对不可删的章隐藏；这里再挡一次并发状态变化，避免 job 行被清掉后
+    // 页面把仍然存在的用户文件显示成「未下载」。
+    if (!_deletableDownloaded.contains(chapter.key)) return;
     final bool confirmed = await showFushiConfirmDialog(
       context: context,
       title: t.manga_chapter_download_delete_action,
@@ -1544,6 +1563,7 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
           _row = null;
           _states = const <String, MangaChapterStateRow>{};
           _downloaded = const <String>{};
+          _deletableDownloaded = const <String>{};
           _jobs = const <String, MangaDownloadJobRow>{};
           _entry = entry.copyWith(
             clearCurrentChapter: true,
@@ -2141,12 +2161,15 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
   /// 只要求是在线条目，不要求 Manga 行 / Library membership / 数据库映射：
   /// 「已下载」由 [_refreshDownloadState] 合并映射与磁盘 `pages.json` 身份扫描
   /// 得出（票 05：清库后仍可直接批量删除）。本地图源章节的磁盘文件属于用户
-  /// 文件，永远不参与；排队中 / 下载中 / 暂停 / 文件缺失也都不算「已完成」。
+  /// 文件，永远不参与；Local source root 下的用户原件虽显示已下载，但不在
+  /// [_deletableDownloaded] 里，同样置灰；排队中 / 下载中 / 暂停 / 文件缺失
+  /// 也都不算「已完成」。
   List<OnlineMangaChapter> get _deletableSelectedChapters {
     if (_entry == null) return const <OnlineMangaChapter>[];
     return <OnlineMangaChapter>[
       for (final OnlineMangaChapter chapter in _selectedVisibleChapters)
-        if (_downloadStateOf(chapter) == MangaChapterDownloadState.downloaded)
+        if (_downloadStateOf(chapter) == MangaChapterDownloadState.downloaded &&
+            _deletableDownloaded.contains(chapter.key))
           chapter,
     ];
   }
@@ -2549,6 +2572,9 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
                     .map((LocalSourceChapterRecord chapter) => chapter.key)
                     .toSet()
               : _downloaded,
+          undeletableDownloadedChapterKeys: _isLocalSource
+              ? const <String>{}
+              : _downloaded.difference(_deletableDownloaded),
           missingChapterKeys: _isLocalSource
               ? _localMissingChapterKeys
               : const <String>{},

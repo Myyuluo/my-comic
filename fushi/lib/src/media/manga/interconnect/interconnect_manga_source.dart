@@ -122,23 +122,34 @@ class InterconnectMangaCatalog {
   /// [key] 用对端 bookKey 而不是常量 `'volume'`：`manga_chapter_states` 的主键是
   /// (bookUid, chapterKey)，用书自己的键能保证同一本在任何时候都定位到同一行，也
   /// 免得将来对端真的分出章节时与旧行撞键。
-  static OnlineMangaChapter chapterFor(String seriesKey) => OnlineMangaChapter(
+  ///
+  /// [sourceOrder] 由刷新调用方按源列表下标给出（0 = 最新一话），与 Mihon 适配器
+  /// 同一口径；单独构造一章（加入书架前的种子条目）没有列表上下文，保持 null。
+  static OnlineMangaChapter chapterFor(String seriesKey, {int? sourceOrder}) =>
+      OnlineMangaChapter(
         key: seriesKey,
         name: '',
+        sourceOrder: sourceOrder,
         raw: <String, Object?>{'bookKey': seriesKey},
       );
 
   /// 对端章表里的一章 → 书架章节。key / name / number / scanlator / uploadedAt 逐字
   /// 透传（对端的 `chaptersJson` 就是这几列），`raw` 只记页数供作品页显示。
-  static OnlineMangaChapter chapterFromRemote(RemoteMangaChapterInfo chapter) =>
-      OnlineMangaChapter(
-        key: chapter.key,
-        name: chapter.name,
-        number: chapter.number,
-        scanlator: chapter.scanlator,
-        uploadedAt: chapter.uploadedAt,
-        raw: <String, Object?>{'pageCount': chapter.pageCount},
-      );
+  ///
+  /// [sourceOrder] 是这一章在对端章表里的下标（0 = 最新一话）：阅读器按它构造
+  /// 升序阅读顺序，不依赖数组顺序。
+  static OnlineMangaChapter chapterFromRemote(
+    RemoteMangaChapterInfo chapter, {
+    int? sourceOrder,
+  }) => OnlineMangaChapter(
+    key: chapter.key,
+    name: chapter.name,
+    number: chapter.number,
+    scanlator: chapter.scanlator,
+    uploadedAt: chapter.uploadedAt,
+    sourceOrder: sourceOrder,
+    raw: <String, Object?>{'pageCount': chapter.pageCount},
+  );
 }
 
 /// 把已配对的互联对端接进书架 / 作品页 / 阅读器的那条契约实现。
@@ -177,11 +188,17 @@ class InterconnectLibraryAdapter implements OnlineMangaRuntimeAdapter {
     // 形状——对端把一本单卷漫画换成在线条目（或反过来）时刷新即收敛。
     final List<OnlineMangaChapter> chapters = manifest.hasChapters
         ? <OnlineMangaChapter>[
-            for (final RemoteMangaChapterInfo chapter in manifest.chapters)
-              InterconnectMangaCatalog.chapterFromRemote(chapter),
+            for (int index = 0; index < manifest.chapters.length; index++)
+              InterconnectMangaCatalog.chapterFromRemote(
+                manifest.chapters[index],
+                sourceOrder: index,
+              ),
           ]
         : <OnlineMangaChapter>[
-            InterconnectMangaCatalog.chapterFor(entry.series.key),
+            InterconnectMangaCatalog.chapterFor(
+              entry.series.key,
+              sourceOrder: 0,
+            ),
           ];
     return OnlineMangaRefreshResult(
       series: OnlineMangaSeries(
