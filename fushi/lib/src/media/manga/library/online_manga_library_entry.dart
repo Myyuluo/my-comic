@@ -143,6 +143,7 @@ class OnlineMangaChapter {
     this.scanlator,
     this.number,
     this.uploadedAt,
+    this.sourceOrder,
     this.locked = false,
   });
 
@@ -174,6 +175,13 @@ class OnlineMangaChapter {
   /// 上传时刻（毫秒）。0 或缺失记 null，避免 UI 把「未知」显示成 1970。
   final int? uploadedAt;
 
+  /// 源列表里的位置，**0 = 最新一话**（Mihon `BackupChapter.sourceOrder`）。
+  ///
+  /// 阅读顺序按它降序（第 1 话 → 第 N 话）；null = 旧数据 / 本地源没有这个
+  /// 信息，回退章节号与上传时间。在线源适配器按列表下标写入，导入时从备份
+  /// 持久化。不要用它决定存储数组顺序：`chapters` 的数组顺序不是契约。
+  final int? sourceOrder;
+
   /// 源站标记为锁定（要登录并购买 / 租借才能取页，BUG-2479）。
   ///
   /// Mihon 取自章名前缀约定（[isLockedChapterName]），Aidoku 取自章节 `locked`
@@ -189,6 +197,7 @@ class OnlineMangaChapter {
     if (scanlator != null) 'scanlator': scanlator,
     if (number != null) 'number': number,
     if (uploadedAt != null) 'uploadedAt': uploadedAt,
+    if (sourceOrder != null) 'sourceOrder': sourceOrder,
     if (locked) 'locked': true,
     'raw': raw,
   };
@@ -204,6 +213,7 @@ class OnlineMangaChapter {
       scanlator: json['scanlator']?.toString(),
       number: (json['number'] as num?)?.toDouble(),
       uploadedAt: uploadedAt == null || uploadedAt <= 0 ? null : uploadedAt,
+      sourceOrder: (json['sourceOrder'] as num?)?.toInt(),
       locked: json['locked'] == true,
       raw: raw is Map<Object?, Object?>
           ? raw.cast<String, Object?>()

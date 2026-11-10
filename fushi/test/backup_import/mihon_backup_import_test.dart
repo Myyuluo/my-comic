@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi_core/fushi_core.dart';
@@ -9,6 +10,7 @@ import 'package:path/path.dart' as p;
 import 'package:fushi/src/backup_import/mihon_backup_import_service.dart';
 import 'package:fushi/src/backup_import/mihon_backup_parser.dart';
 import 'package:fushi/src/media/manga/history/manga_history.dart';
+import 'package:fushi/src/media/manga/library/manga_adjacent_chapter.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi/src/pages/implementations/manga_tag_tabs.dart';
 import 'package:fushi_engine/media/manga/download_library_storage.dart';
@@ -84,6 +86,7 @@ void main() {
     String chapterName = 'Chapter',
     String sourceId = '1',
     String mangaKey = '/manga/x',
+    String mangaTitle = 'X',
   }) async {
     final Directory chapterDir = Directory(p.join(mangaDir.path, folderName));
     await chapterDir.create(recursive: true);
@@ -95,6 +98,7 @@ void main() {
         chapterName,
         sourceId: sourceId,
         mangaKey: mangaKey,
+        mangaTitle: mangaTitle,
       ),
     );
     return chapterDir;
@@ -907,6 +911,96 @@ void main() {
     },
   );
 
+  test('auto-relinks two same-title works sharing one download folder', () async {
+    final Directory downloadsRoot = Directory(p.join(tmp.path, 'downloads'));
+    final Directory localComicRoot = Directory(p.join(tmp.path, 'local'));
+    final Directory shared = Directory(
+      p.join(downloadsRoot.path, 'Example', 'Same title'),
+    );
+    // 两章同住一个文件夹。探针读到第一份 manifest（A）后，还必须因为 B 与
+    // 它同标题而继续读，才能让两部作品都命中共享文件夹。
+    await writeChapter(
+      shared,
+      'A Ch 1',
+      chapterKey: '/c/a1',
+      mangaKey: '/manga/x',
+      mangaTitle: 'Same title',
+    );
+    await writeChapter(
+      shared,
+      'B Ch 1',
+      chapterKey: '/c/b1',
+      mangaKey: '/manga/y',
+      mangaTitle: 'Same title',
+    );
+
+    final File backup = await writeFixtureBackup(
+      tmp,
+      name: 'shared-folder.tachibk',
+      sources: const <FixtureSource>[FixtureSource(id: 1, name: 'Example')],
+      mangas: const <FixtureManga>[
+        FixtureManga(
+          source: 1,
+          url: '/manga/x',
+          title: 'Same title',
+          favorite: false,
+          chapters: <FixtureChapter>[
+            FixtureChapter(url: '/c/a1', name: 'A 1'),
+          ],
+        ),
+        FixtureManga(
+          source: 1,
+          url: '/manga/y',
+          title: 'Same title',
+          favorite: false,
+          chapters: <FixtureChapter>[
+            FixtureChapter(url: '/c/b1', name: 'B 1'),
+          ],
+        ),
+      ],
+    );
+    final MihonBackupImportReport report = await service(
+      downloadsRoot: downloadsRoot,
+      localComicRoot: localComicRoot,
+    ).importFile(backup);
+
+    expect(report.downloadMangaMatched, 2);
+    expect(report.downloadMangaSkipped, 0);
+    expect(report.downloadChaptersRelinked, 2);
+
+    final List<EpubBookRow> rows = await db.getAllEpubBooks();
+    expect(rows, hasLength(2));
+    final EpubBookRow aRow = rows.firstWhere((EpubBookRow row) {
+      final OnlineMangaLibraryEntry entry = OnlineMangaLibraryEntry.tryParse(
+        row.sourceMetadata,
+      )!;
+      return entry.series.key == '/manga/x';
+    });
+    final EpubBookRow bRow = rows.firstWhere((EpubBookRow row) {
+      final OnlineMangaLibraryEntry entry = OnlineMangaLibraryEntry.tryParse(
+        row.sourceMetadata,
+      )!;
+      return entry.series.key == '/manga/y';
+    });
+    expect(p.equals(aRow.extractDir, shared.path), isTrue);
+    expect(p.equals(bRow.extractDir, shared.path), isTrue);
+
+    final Map<String, MangaChapterDirRow> aMappings =
+        await db.getMangaChapterDirRowsForBook(aRow.bookKey);
+    final Map<String, MangaChapterDirRow> bMappings =
+        await db.getMangaChapterDirRowsForBook(bRow.bookKey);
+    expect(aMappings.keys, <String>{'/c/a1'});
+    expect(aMappings['/c/a1']!.folderName, 'A Ch 1');
+    expect(bMappings.keys, <String>{'/c/b1'});
+    expect(bMappings['/c/b1']!.folderName, 'B Ch 1');
+    expect(
+      Directory(p.join(downloadsRoot.path, 'Example', 'Same title (2)'))
+          .existsSync(),
+      isFalse,
+      reason: '同名共享目录不应生成 (2) 副本',
+    );
+  });
+
   test('re-import keeps auto-linked downloads idempotent', () async {
     final Directory downloadsRoot = Directory(p.join(tmp.path, 'downloads'));
     final Directory localComicRoot = Directory(p.join(tmp.path, 'local'));
@@ -1388,6 +1482,270 @@ void main() {
     expect(position, isNotNull);
     expect(position!.updatedAt, 1700000009000);
   });
+
+  test(
+    'persists Mihon sourceOrder on imported chapters and chapter JSON',
+    () async {
+      final File backup = await writeFixtureBackup(
+        tmp,
+        sources: const <FixtureSource>[
+          FixtureSource(id: 123, name: 'Source A'),
+        ],
+        mangas: const <FixtureManga>[
+          FixtureManga(
+            source: 123,
+            url: '/manga/alpha',
+            title: 'Alpha',
+            // 备份的章数组顺序不保证是「最新在前」；顺序只信 sourceOrder。
+            chapters: <FixtureChapter>[
+              FixtureChapter(
+                url: '/chapter/a1',
+                name: 'Chapter 1',
+                chapterNumber: 1,
+                sourceOrder: 2,
+              ),
+              FixtureChapter(
+                url: '/chapter/a2',
+                name: 'Chapter 2',
+                chapterNumber: 2,
+                sourceOrder: 1,
+              ),
+              FixtureChapter(
+                url: '/chapter/a3',
+                name: 'Chapter 3',
+                chapterNumber: 3,
+                sourceOrder: 0,
+              ),
+            ],
+          ),
+        ],
+      );
+
+      final MihonBackupImportReport report = await service().importFile(backup);
+      expect(report.importedEntries, 1);
+
+      final EpubBookMeta meta = (await db.getEpubBookMetas()).single;
+      final EpubBookRow book = (await db.getEpubBook(meta.bookKey))!;
+      final OnlineMangaLibraryEntry entry = OnlineMangaLibraryEntry.tryParse(
+        book.sourceMetadata,
+      )!;
+      expect(
+        <String, int?>{
+          for (final OnlineMangaChapter chapter in entry.chapters)
+            chapter.key: chapter.sourceOrder,
+        },
+        <String, int?>{'/chapter/a1': 2, '/chapter/a2': 1, '/chapter/a3': 0},
+      );
+      expect(entry.chapters.map((OnlineMangaChapter c) => c.key), <String>[
+        '/chapter/a1',
+        '/chapter/a2',
+        '/chapter/a3',
+      ], reason: '导入保留备份数组顺序，排序由阅读/显示各自按 sourceOrder 做');
+
+      final List<Object?> chapterJson =
+          jsonDecode(book.chaptersJson) as List<Object?>;
+      expect(
+        chapterJson.map(
+          (Object? item) => (item! as Map<String, Object?>)['sourceOrder'],
+        ),
+        <Object?>[2, 1, 0],
+        reason: 'chaptersJson 与 sourceMetadata 必须同时带上 sourceOrder',
+      );
+    },
+  );
+
+  test('imported chapter order drives 1 → 2 → 3 reader switching', () async {
+    final File backup = await writeFixtureBackup(
+      tmp,
+      sources: const <FixtureSource>[FixtureSource(id: 123, name: 'Source A')],
+      mangas: const <FixtureManga>[
+        FixtureManga(
+          source: 123,
+          url: '/manga/alpha',
+          title: 'Alpha',
+          // 旧→新存储，sourceOrder 反着给（0 = 最新一话）。
+          chapters: <FixtureChapter>[
+            FixtureChapter(
+              url: '/chapter/a1',
+              name: 'Chapter 1',
+              chapterNumber: 1,
+              sourceOrder: 2,
+            ),
+            FixtureChapter(
+              url: '/chapter/a2',
+              name: 'Chapter 2',
+              chapterNumber: 2,
+              sourceOrder: 1,
+            ),
+            FixtureChapter(
+              url: '/chapter/a3',
+              name: 'Chapter 3',
+              chapterNumber: 3,
+              sourceOrder: 0,
+            ),
+          ],
+        ),
+      ],
+    );
+
+    await service().importFile(backup);
+    final EpubBookMeta meta = (await db.getEpubBookMetas()).single;
+    final OnlineMangaLibraryEntry entry = OnlineMangaLibraryEntry.tryParse(
+      (await db.getEpubBook(meta.bookKey))!.sourceMetadata,
+    )!;
+    final int a1 = entry.indexOfChapterKey('/chapter/a1');
+    final int a2 = entry.indexOfChapterKey('/chapter/a2');
+    final int a3 = entry.indexOfChapterKey('/chapter/a3');
+
+    expect(
+      resolveAdjacentMangaChapter(
+        chapters: entry.chapters,
+        currentIndex: a1,
+        forward: true,
+      ),
+      a2,
+      reason: '读完第 1 话进入第 2 话',
+    );
+    expect(
+      resolveAdjacentMangaChapter(
+        chapters: entry.chapters,
+        currentIndex: a2,
+        forward: true,
+      ),
+      a3,
+      reason: '第 2 话进入第 3 话',
+    );
+    expect(
+      resolveAdjacentMangaChapter(
+        chapters: entry.chapters,
+        currentIndex: a3,
+        forward: true,
+      ),
+      isNull,
+      reason: '只有真正最后一话才提示「已经是最新一章」',
+    );
+    expect(
+      resolveAdjacentMangaChapter(
+        chapters: entry.chapters,
+        currentIndex: a2,
+        forward: false,
+      ),
+      a1,
+      reason: '往回翻进入上一话',
+    );
+  });
+
+  test(
+    're-import fills sourceOrder on existing chapters idempotently',
+    () async {
+      // 旧版本导入留下的描述符：章节没有 sourceOrder 字段。
+      final OnlineMangaLibraryEntry legacy = OnlineMangaLibraryEntry(
+        runtime: OnlineMangaRuntimeKind.mihon,
+        extensionPackage: kUnavailableMihonExtensionPackage,
+        sourceId: '123',
+        series: const OnlineMangaSeries(
+          key: '/manga/alpha',
+          title: 'Alpha',
+          raw: <String, Object?>{'url': '/manga/alpha'},
+        ),
+        chapters: const <OnlineMangaChapter>[
+          OnlineMangaChapter(
+            key: '/chapter/a1',
+            name: 'Chapter 1',
+            number: 1,
+            raw: <String, Object?>{'url': '/chapter/a1'},
+          ),
+        ],
+      );
+      final String bookKey = onlineMangaBookKeyFor(
+        runtime: OnlineMangaRuntimeKind.mihon,
+        extensionPackage: kUnavailableMihonExtensionPackage,
+        sourceId: '123',
+        seriesKey: '/manga/alpha',
+      );
+      await db.insertEpubBook(
+        EpubBooksCompanion.insert(
+          bookKey: bookKey,
+          title: 'Alpha',
+          epubPath: 'manga.json',
+          extractDir: p.join(tmp.path, 'books', bookKey),
+          chapterCount: 1,
+          chaptersJson: jsonEncode(<Map<String, Object?>>[
+            for (final OnlineMangaChapter chapter in legacy.chapters)
+              chapter.toJson(),
+          ]),
+          sourceMetadata: Value<String>(legacy.encode()),
+          importedAt: 1,
+          format: const Value<String>('manga'),
+        ),
+      );
+
+      final File backup = await writeFixtureBackup(
+        tmp,
+        sources: const <FixtureSource>[
+          FixtureSource(id: 123, name: 'Source A'),
+        ],
+        mangas: const <FixtureManga>[
+          FixtureManga(
+            source: 123,
+            url: '/manga/alpha',
+            title: 'Alpha',
+            chapters: <FixtureChapter>[
+              FixtureChapter(
+                url: '/chapter/a1',
+                name: 'Chapter 1',
+                chapterNumber: 1,
+                sourceOrder: 1,
+              ),
+              FixtureChapter(
+                url: '/chapter/a2',
+                name: 'Chapter 2',
+                chapterNumber: 2,
+                sourceOrder: 0,
+              ),
+            ],
+          ),
+        ],
+      );
+
+      final MihonBackupImportReport first = await service().importFile(backup);
+      expect(first.importedEntries, 0);
+      expect(first.mergedEntries, 1);
+      expect(await db.getAllEpubBooks(), hasLength(1));
+
+      Future<OnlineMangaLibraryEntry> stored() async =>
+          OnlineMangaLibraryEntry.tryParse(
+            ((await db.getEpubBook(bookKey))!).sourceMetadata,
+          )!;
+      expect(
+        <String, int?>{
+          for (final OnlineMangaChapter chapter in (await stored()).chapters)
+            chapter.key: chapter.sourceOrder,
+        },
+        <String, int?>{'/chapter/a1': 1, '/chapter/a2': 0},
+        reason: '已有章节补齐 sourceOrder，备份新增章节也带上',
+      );
+      final String chapterJsonAfterFirst = (await db.getEpubBook(
+        bookKey,
+      ))!.chaptersJson;
+      expect(chapterJsonAfterFirst, contains('"sourceOrder":1'));
+      expect(chapterJsonAfterFirst, contains('"sourceOrder":0'));
+
+      final MihonBackupImportReport second = await service().importFile(backup);
+      expect(second.importedEntries, 0);
+      expect(second.mergedEntries, 1);
+      expect(await db.getAllEpubBooks(), hasLength(1));
+      expect((await stored()).chapters, hasLength(2));
+      expect(
+        <String, int?>{
+          for (final OnlineMangaChapter chapter in (await stored()).chapters)
+            chapter.key: chapter.sourceOrder,
+        },
+        <String, int?>{'/chapter/a1': 1, '/chapter/a2': 0},
+        reason: '重复导入不重复建行、不改变已补齐的顺序',
+      );
+    },
+  );
 
   test(
     'imports history with the canonical online identity and snapshot',

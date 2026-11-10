@@ -927,14 +927,16 @@ class RebuildDownloadIndexService {
   }
 
   /// 恢复一个 `downloads/{source}/{manga}` 里书架没有的作品。
+  ///
+  /// 一个目录里可以有多个作品身份：同一 Source 下标题相同的不同作品共享
+  /// 漫画目录。这里按 `pages.json` 的 `(runtime, extension, sourceId, mangaKey)`
+  /// 逐个身份建条目、写各自章节映射，不因目录里身份多于一个就整目录跳过。
   Future<_RecoveryOutcome> _recoverDownloadManga(
     DownloadMangaFolderOnDisk folder,
     _InstalledSources installedSources,
     Set<String> tombstones,
     Set<String> existingBookKeys,
   ) async {
-    // 一部作品下的 `pages.json` 必须只指向同一个 Source/Manga 身份；混合身份
-    // 不猜，整本跳过并报告。
     final Map<String, List<ChapterContainerOnDisk>> groups =
         <String, List<ChapterContainerOnDisk>>{};
     for (final ChapterContainerOnDisk chapter in folder.chapters) {
@@ -959,50 +961,67 @@ class RebuildDownloadIndexService {
     if (existingBookKeys.contains(localBookKey)) {
       return const _RecoveryOutcome();
     }
-    if (groups.length > 1) {
-      return _RecoveryOutcome(
-        skipped: 1,
-        chaptersSkipped: folder.chapters.length,
-      );
-    }
     if (groups.isEmpty) {
       return _recoverDownloadMangaAsLocal(folder);
     }
 
-    final List<ChapterContainerOnDisk> group = groups.values.single;
-    final MangaPagesManifest manifest = group.first.manifest!;
-    final OnlineMangaRuntimeKind? runtime = OnlineMangaRuntimeKind.fromWire(
-      manifest.sourceRuntime,
-    );
-    final String? onlineBookKey = runtime == null
-        ? null
-        : onlineMangaBookKeyFor(
-            runtime: runtime,
-            extensionPackage: manifest.extensionPackage,
-            sourceId: manifest.sourceId,
-            seriesKey: manifest.mangaKey,
-          );
-    if (onlineBookKey != null && tombstones.contains(onlineBookKey)) {
-      return _RecoveryOutcome(skipped: 1, skippedTombstoned: 1);
-    }
-    if (onlineBookKey != null && existingBookKeys.contains(onlineBookKey)) {
-      return const _RecoveryOutcome();
+    _RecoveryOutcome total = const _RecoveryOutcome();
+    // 源未安装的组无法各自建本地条目（本地 bookKey 由目录路径派生，一个目录
+    // 只能有一行）；把它们合并成一个只含这些容器的本地条目，至少不丢内容、
+    // 也不覆盖已安装身份。
+    final List<ChapterContainerOnDisk> uninstalledContainers =
+        <ChapterContainerOnDisk>[];
+    for (final List<ChapterContainerOnDisk> group in groups.values) {
+      final MangaPagesManifest manifest = group.first.manifest!;
+      final OnlineMangaRuntimeKind? runtime = OnlineMangaRuntimeKind.fromWire(
+        manifest.sourceRuntime,
+      );
+      final String? onlineBookKey = runtime == null
+          ? null
+          : onlineMangaBookKeyFor(
+              runtime: runtime,
+              extensionPackage: manifest.extensionPackage,
+              sourceId: manifest.sourceId,
+              seriesKey: manifest.mangaKey,
+            );
+      if (onlineBookKey != null && tombstones.contains(onlineBookKey)) {
+        total = total.merge(
+          _RecoveryOutcome(skipped: 1, skippedTombstoned: 1),
+        );
+        continue;
+      }
+      if (onlineBookKey != null && existingBookKeys.contains(onlineBookKey)) {
+        continue;
+      }
+
+      final bool installed =
+          runtime == OnlineMangaRuntimeKind.mihon &&
+          installedSources.has(manifest.extensionPackage, manifest.sourceId);
+      if (!installed) {
+        uninstalledContainers.addAll(group);
+        continue;
+      }
+      total = total.merge(await _createOnlineEntry(folder, group, runtime!));
     }
 
-    final bool installed =
-        runtime == OnlineMangaRuntimeKind.mihon &&
-        installedSources.has(manifest.extensionPackage, manifest.sourceId);
-    if (!installed) {
-      return _recoverDownloadMangaAsLocal(
-        folder,
-        onlyCompleteManifestChapters: true,
-        title: manifest.mangaTitle.trim().isEmpty
-            ? folder.mangaFolderName
-            : manifest.mangaTitle,
-        sourceMissing: true,
+    if (uninstalledContainers.isNotEmpty) {
+      final MangaPagesManifest first = uninstalledContainers.first.manifest!;
+      total = total.merge(
+        await _recoverDownloadMangaAsLocal(
+          folder,
+          onlyCompleteManifestChapters: true,
+          title: first.mangaTitle.trim().isEmpty
+              ? folder.mangaFolderName
+              : first.mangaTitle,
+          sourceMissing: true,
+          containerNames: <String>{
+            for (final ChapterContainerOnDisk chapter in uninstalledContainers)
+              chapter.containerName.toLowerCase(),
+          },
+        ),
       );
     }
-    return _createOnlineEntry(folder, group, runtime!);
+    return total;
   }
 
   /// 源未安装 / 没有 `pages.json` 时，把下载目录降级为指向该文件夹的本地条目。
@@ -1011,11 +1030,13 @@ class RebuildDownloadIndexService {
     bool onlyCompleteManifestChapters = false,
     String? title,
     bool sourceMissing = false,
+    Set<String>? containerNames,
   }) async {
     final LocalSourceManga? scanned = await _scanDownloadMangaAsLocal(
       folder,
       onlyCompleteManifestChapters: onlyCompleteManifestChapters,
       title: title,
+      containerNames: containerNames,
     );
     if (scanned == null) return const _RecoveryOutcome();
     final bool added = await LocalSourceLibrary(
@@ -1036,6 +1057,7 @@ class RebuildDownloadIndexService {
     DownloadMangaFolderOnDisk folder, {
     required bool onlyCompleteManifestChapters,
     String? title,
+    Set<String>? containerNames,
   }) async {
     final String relativePath = p
         .relative(folder.directory.path, from: downloadsRoot.path)
@@ -1053,7 +1075,9 @@ class RebuildDownloadIndexService {
     };
     final List<LocalSourceChapter> complete = <LocalSourceChapter>[
       for (final LocalSourceChapter chapter in scanned.chapters)
-        if (completeContainers.contains(chapter.relativePath.toLowerCase()))
+        if (completeContainers.contains(chapter.relativePath.toLowerCase()) &&
+            (containerNames == null ||
+                containerNames.contains(chapter.relativePath.toLowerCase())))
           chapter,
     ];
     if (complete.isEmpty) return null;
@@ -1323,6 +1347,19 @@ class _RecoveryOutcome {
   final int skippedTombstoned;
   final int chaptersAdded;
   final int chaptersSkipped;
+
+  /// 合并一个目录里多个作品身份的恢复结果。
+  _RecoveryOutcome merge(_RecoveryOutcome other) => _RecoveryOutcome(
+    added: added + other.added,
+    addedOnline: addedOnline + other.addedOnline,
+    addedLocal: addedLocal + other.addedLocal,
+    addedLocalSourceMissing:
+        addedLocalSourceMissing + other.addedLocalSourceMissing,
+    skipped: skipped + other.skipped,
+    skippedTombstoned: skippedTombstoned + other.skippedTombstoned,
+    chaptersAdded: chaptersAdded + other.chaptersAdded,
+    chaptersSkipped: chaptersSkipped + other.chaptersSkipped,
+  );
 }
 
 /// 已安装扩展 + 在线源的查询结果。

@@ -31,6 +31,7 @@ import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
 
 import 'package:fushi_engine/media/manga/local_source/local_source_archive.dart';
+import 'package:fushi_engine/media/manga/local_source/local_source_layout.dart';
 import 'package:fushi_engine/media/manga/mokuro_payload.dart';
 import 'package:fushi_engine/utils/archive/native_zip.dart';
 import 'package:fushi_engine/utils/misc/safe_file_name.dart';
@@ -123,10 +124,7 @@ String _truncateDownloadLibrarySegment(String name, int maxLength) {
 /// [pathReserve] 是留给后续子路径（如 `.staging/<jobId>/<page>`）的长度。
 /// 父路径本身已经很长时返回不小于 1 的值；此时只能保证段合法，无法保证
 /// 完整路径仍在上限内（Content root 极端深的情况）。
-int downloadLibrarySegmentBudget(
-  String parentPath, {
-  int pathReserve = 0,
-}) {
+int downloadLibrarySegmentBudget(String parentPath, {int pathReserve = 0}) {
   final int available =
       kDownloadLibraryMaxPathLength - parentPath.length - 1 - pathReserve;
   if (available < 1) return 1;
@@ -179,10 +177,11 @@ Directory downloadSourceDirectory({
 }) => Directory(
   p.join(
     downloadsRoot,
-    folderName ?? downloadSourceFolderName(
-      downloadsRoot: downloadsRoot,
-      sourceName: sourceName,
-    ),
+    folderName ??
+        downloadSourceFolderName(
+          downloadsRoot: downloadsRoot,
+          sourceName: sourceName,
+        ),
   ),
 );
 
@@ -205,10 +204,11 @@ Directory downloadMangaDirectory({
   return Directory(
     p.join(
       sourceDirPath,
-      mangaFolderName ?? downloadMangaFolderName(
-        sourceDirPath: sourceDirPath,
-        title: mangaTitle,
-      ),
+      mangaFolderName ??
+          downloadMangaFolderName(
+            sourceDirPath: sourceDirPath,
+            title: mangaTitle,
+          ),
     ),
   );
 }
@@ -239,11 +239,14 @@ String fitDownloadLibrarySegmentWithSuffix({
   return '$stem$tail';
 }
 
-/// 取第一个未被占用的目录名。
+/// 取第一个未被占用的 Manga/Source 目录名。
 ///
 /// 首选 [base]；被占时若有 [qualifier]（扫译组）先试 `base [qualifier]`，
 /// 再退到 `base [qualifier] (2)…` / `base (2)…`。比较是否占用由 [isTaken]
 /// 决定（调用方负责大小写不敏感）。
+///
+/// 只用于 Manga/Source 目录（不同标题净化后同名时保留 `(2)` 区分，ticket 03
+/// 的既定规则）。章节容器名冲突用 [uniqueDownloadChapterName]，不用 `(2)`。
 Future<String> uniqueDownloadLibraryFolderName({
   required String base,
   String? qualifier,
@@ -299,14 +302,75 @@ String downloadChapterArchiveName(String raw) {
 File downloadChapterArchiveFile(String mangaDir, String containerName) =>
     File(p.join(mangaDir, containerName));
 
+/// 选一个未占用的章节文件夹容器名。
+///
+/// 冲突消解见 [uniqueDownloadChapterName]：扫译组后缀优先，其次稳定身份的
+/// 短哈希；不使用 `(2)`。[mangaDir] 只用于路径长度预算。
+Future<String> uniqueDownloadChapterFolderName({
+  required String mangaDir,
+  required String base,
+  required String identity,
+  String? qualifier,
+  required Future<bool> Function(String name) isTaken,
+}) {
+  final int budget = downloadLibrarySegmentBudget(mangaDir);
+  return uniqueDownloadChapterName(
+    base: sanitizeDownloadLibrarySegment(base, maxLength: budget),
+    qualifier: qualifier,
+    identity: identity,
+    isTaken: isTaken,
+    maxLength: budget,
+  );
+}
+
+/// 选一个未占用的章节容器名（不含扩展名）。
+///
+/// 首选 [base]；被占时先试扫译组 `base [扫译组]`，仍冲突时改用由 [identity]
+/// （通常是章 key）派生的短哈希 `base~<8 位哈希>`。哈希保证同名章重复尝试得到
+/// 同一名字，且同一章残留半成品占住哈希名时继续换哈希——全程不使用 `(2)`
+/// 序号（Mihon 式章节命名）。
+Future<String> uniqueDownloadChapterName({
+  required String base,
+  String? qualifier,
+  required String identity,
+  required Future<bool> Function(String candidate) isTaken,
+  int maxLength = kDownloadLibraryMaxSegmentLength,
+}) async {
+  if (!await isTaken(base)) return base;
+  final String preferred = qualifier == null || qualifier.isEmpty
+      ? base
+      : fitDownloadLibrarySegmentWithSuffix(
+          base: base,
+          suffix: ' [$qualifier]',
+          maxLength: maxLength,
+        );
+  if (preferred != base && !await isTaken(preferred)) return preferred;
+  final String hashed = fitDownloadLibrarySegmentWithSuffix(
+    base: base,
+    suffix: '~${downloadLibraryShortHash(identity)}',
+    maxLength: maxLength,
+  );
+  if (!await isTaken(hashed)) return hashed;
+  // 同身份的残缺容器占住了哈希名：继续用加盐哈希，仍然不回到 (2)。
+  for (int attempt = 2; ; attempt++) {
+    final String candidate = fitDownloadLibrarySegmentWithSuffix(
+      base: base,
+      suffix: '~${downloadLibraryShortHash('$identity\u0000$attempt')}',
+      maxLength: maxLength,
+    );
+    if (!await isTaken(candidate)) return candidate;
+  }
+}
+
 /// 选一个未占用的 CBZ 章节容器名（含 `.cbz`）。
 ///
-/// 与文件夹命名共用同一套冲突消解：净化 [base]（长度预算先减去扩展名）后按
-/// `[扫译组]` / `(2)` 递增；[isTaken] 收到的候选名**已带扩展名**，调用方按
-/// 完整文件名（大小写不敏感）判断占用。
+/// 与文件夹命名共用同一套冲突消解（见 [uniqueDownloadChapterName]）；
+/// [isTaken] 收到的候选名**已带扩展名**，调用方按完整文件名（大小写不敏感）
+/// 判断占用。
 Future<String> uniqueDownloadChapterArchiveName({
   required String mangaDir,
   required String base,
+  required String identity,
   String? qualifier,
   required Future<bool> Function(String name) isTaken,
 }) async {
@@ -314,9 +378,10 @@ Future<String> uniqueDownloadChapterArchiveName({
   final int baseBudget = budget > kDownloadArchiveExtension.length
       ? budget - kDownloadArchiveExtension.length
       : 1;
-  final String unique = await uniqueDownloadLibraryFolderName(
+  final String unique = await uniqueDownloadChapterName(
     base: sanitizeDownloadLibrarySegment(base, maxLength: baseBudget),
     qualifier: qualifier,
+    identity: identity,
     isTaken: (String candidate) =>
         isTaken(downloadChapterArchiveName(candidate)),
     maxLength: baseBudget,
@@ -390,25 +455,24 @@ class MangaPagesManifest {
   final DateTime downloadedAt;
 
   Map<String, Object?> toJson() => <String, Object?>{
-        'version': kDownloadPagesVersion,
-        'source': <String, Object?>{
-          'runtime': sourceRuntime,
-          'id': sourceId,
-          'name': sourceName,
-          'extensionPackage': extensionPackage,
-        },
-        'manga': <String, Object?>{'key': mangaKey, 'title': mangaTitle},
-        'chapter': <String, Object?>{
-          'key': chapterKey,
-          'name': chapterName,
-          if (chapterNumber != null) 'number': chapterNumber,
-          if (scanlator != null && scanlator!.isNotEmpty)
-            'scanlator': scanlator,
-          if (chapterUrl != null && chapterUrl!.isNotEmpty) 'url': chapterUrl,
-        },
-        'pages': mangaPayloadToJson(payload)['pages'],
-        'downloadedAt': downloadedAt.toUtc().toIso8601String(),
-      };
+    'version': kDownloadPagesVersion,
+    'source': <String, Object?>{
+      'runtime': sourceRuntime,
+      'id': sourceId,
+      'name': sourceName,
+      'extensionPackage': extensionPackage,
+    },
+    'manga': <String, Object?>{'key': mangaKey, 'title': mangaTitle},
+    'chapter': <String, Object?>{
+      'key': chapterKey,
+      'name': chapterName,
+      if (chapterNumber != null) 'number': chapterNumber,
+      if (scanlator != null && scanlator!.isNotEmpty) 'scanlator': scanlator,
+      if (chapterUrl != null && chapterUrl!.isNotEmpty) 'url': chapterUrl,
+    },
+    'pages': mangaPayloadToJson(payload)['pages'],
+    'downloadedAt': downloadedAt.toUtc().toIso8601String(),
+  };
 
   /// 从 `pages.json` 文本解析；形状不合法返回 null（调用方按未下载处理）。
   static MangaPagesManifest? tryParse(String jsonStr) {
@@ -586,6 +650,44 @@ Future<MokuroPayload?> readDownloadLibraryArchivePayload(
 Future<bool> isDownloadLibraryArchiveComplete(File archiveFile) async =>
     await readDownloadLibraryArchivePayload(archiveFile) != null;
 
+/// 没有可用 `pages.json` 的文件夹章节是否仍可读。
+///
+/// Ticket 06：用户提供的容器按容器名与章节关联后，不要求 `pages.json`
+/// 完整性校验；只要目录里能枚举出至少一页图片，就按已下载处理。与阅读器
+/// 读普通文件夹同一口径（`pages.json` 优先，缺失/损坏时扫描图片）。
+Future<bool> isDownloadLibraryFolderReadable(Directory chapterDir) async {
+  if (!await chapterDir.exists()) return false;
+  try {
+    return (await readLocalSourceChapterPages(
+      chapterDir.path,
+      isRootChapter: false,
+    )).isNotEmpty;
+  } on Object {
+    return false;
+  }
+}
+
+/// 没有可用 `pages.json` 的 CBZ 章节是否仍可读。
+///
+/// 与 [isDownloadLibraryFolderReadable] 同口径：包内至少有一张图片条目即视为
+/// 可读；包不存在 / 不是 ZIP / 没有页图返回 false。
+Future<bool> isDownloadLibraryArchiveReadable(File archiveFile) async {
+  if (!await archiveFile.exists()) return false;
+  final LocalSourceArchive archive;
+  try {
+    archive = LocalSourceArchive.open(archiveFile.path);
+  } on Object {
+    return false;
+  }
+  try {
+    return readLocalSourceArchivePages(archive).isNotEmpty;
+  } on Object {
+    return false;
+  } finally {
+    archive.close();
+  }
+}
+
 /// 把 staging 里的平铺页图与 `pages.json` 写成 CBZ 的**临时**包。
 ///
 /// 只收 staging 根下的常规文件：跳过点号文件与 `.tmp`（页图先写 `.tmp` 再改名，
@@ -598,7 +700,9 @@ Future<void> writeDownloadChapterArchive({
 }) async {
   final List<File> pages = <File>[];
   File? manifest;
-  await for (final FileSystemEntity entity in staging.list(followLinks: false)) {
+  await for (final FileSystemEntity entity in staging.list(
+    followLinks: false,
+  )) {
     if (entity is! File) continue;
     final String name = p.basename(entity.path);
     if (name.startsWith('.') || name.toLowerCase().endsWith('.tmp')) continue;

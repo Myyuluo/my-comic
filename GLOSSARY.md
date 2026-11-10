@@ -25,7 +25,7 @@ _Avoid_: 插件、addon
 _Avoid_: 扩展、插件
 
 **Missing source（缺失来源）**:
-被一部 Manga 引用、但对应 Source 未安装或未启用的状态。该 Manga 记录仍保留（在书架或作为非书架 Manga）；备份带来的远程封面与本机已有封面仍可显示，已下载 Chapter 仍可离线阅读，但刷新章节、加载在线页面与下载需要先安装并启用对应 Extension。用户界面统一用「来源未安装」表达此状态，已知名称时显示「来源未安装：<名称>」。运行时按数字 sourceId 解析到已安装的 Source，不改写条目的来源身份，因此 Reading progress、Chapter 状态、History、Tag 与下载映射都无需迁移；同一数字 sourceId 命中多个已启用的 Source 时按缺失处理，不随意选择。
+被一部 Manga 引用、但对应 Source 未安装或未启用的状态。该 Manga 记录仍保留（在书架或作为非书架 Manga）；不会为它创建 Download library 目录，也不生成以数字 sourceId 命名的目录。作品页在来源解析完成前或解析失败时显示灰占位，不发起远程封面请求；本机已有封面仍显示。已下载 Chapter 仍可离线阅读，但刷新章节、加载在线页面与下载需要先安装并启用对应 Extension。安装并启用 Extension 后，运行时重新解析来源，封面与在线章节能力自动恢复，不需要重新导入或迁移条目身份。用户界面统一用「来源未安装」表达此状态，已知名称时显示「来源未安装：<名称>」。运行时按数字 sourceId 解析到已安装的 Source，不改写条目的来源身份，因此 Reading progress、Chapter 状态、History、Tag 与下载映射都无需迁移；同一数字 sourceId 命中多个已启用的 Source 时按缺失处理，不随意选择。
 _Avoid_: mihon.unavailable（内部占位值，不是领域术语）、来源失效、未知来源
 
 **Extension store（扩展仓库）**:
@@ -59,6 +59,10 @@ _Avoid_: 话
 **Chapter container（章节载体）**:
 Chapter 的磁盘形态：平铺页图的文件夹，或包含页图的 CBZ 压缩包。在线下载默认生成 CBZ；既有文件夹章节继续以文件夹存在，两种形态共存。
 _Avoid_: 章节文件夹（只指一种）、压缩包（泛指）
+
+**Chapter reading order（章节阅读顺序）**:
+Chapter 的规范先后顺序，用于阅读器「上一话 / 下一话」与作品页「最新在前 / 第一话在前」的排序。导入作品以 Mihon 的 `sourceOrder` 为准（0 = 最新），缺失时回退 Chapter 号与上传时间；阅读器始终在升序的阅读顺序列表上取 `index ± 1` 换章，不依赖导入数组顺序或当前显示顺序。在线源在刷新时按源列表位置补 `sourceOrder`。已有导入作品重新导入同一 Backup 即可补齐 `sourceOrder`，不需要手工修数据。
+_Avoid_: 数组顺序、显示顺序
 
 **Page（页）**:
 Chapter 中的一页图片。
@@ -141,11 +145,11 @@ _Avoid_: 取消（取消会删除任务与未完成的部分）、停止
 _Avoid_: 批量转换、自动压缩、打包下载
 
 **Download library（在线下载库）**:
-由应用管理的已下载在线 Chapter 集合，按 Source → Manga → Chapter 组织在 Content root 下。新开始的下载默认把 Chapter 保存为 `.cbz` 压缩包（见 Save as CBZ）；已有的文件夹章节保持原样，两种 Chapter container 共存。书架与非书架 Manga 共用同一套 Download library 与 Download index。
+由应用管理的已下载在线 Chapter 集合，按 Source → Manga → Chapter 组织在 Content root 下。它只包含实际下载产生的 Chapter container：浏览作品页、阅读在线章节、导入与重建索引都不会创建空目录，目录只在章节下载真正开始时物化。新开始的下载默认把 Chapter 保存为 `.cbz` 压缩包（见 Save as CBZ）；已有的文件夹章节保持原样，两种 Chapter container 共存。封面不属于 Download library：封面由 Cache / 远程封面地址提供，已有的本地封面文件保持原位、不自动删除。同一 Source 下标题完全相同的不同作品共用一个 Manga 目录；目录里的每个 Chapter container 按自己的 Download identity 归属到正确作品，阅读、下载状态与删除互不串作品。删除只作用于本作品自己的容器，空目录只有在不再被任何作品引用时才清理；Local source 的用户原件不属于 Download library，永不删除。书架与非书架 Manga 共用同一套 Download library 与 Download index。
 _Avoid_: 下载文件夹、下载目录（与「下载页」混淆）
 
 **Download identity（下载身份）**:
-在线 Manga 在 Download library 中的稳定身份，由运行时、数字 Source ID 与 series/manga key 组成；扩展包名只作 tie-breaker。文件夹复用、已下载状态与 Rebuild download index 都使用这一判据，目录名不参与。
+在线 Manga 在 Download library 中的稳定身份，由运行时、数字 Source ID 与 series/manga key 组成；扩展包名只作 tie-breaker。文件夹复用、已下载状态与 Rebuild download index 都使用这一判据，目录名不参与。同一 Source 下标题相同的不同作品可以共用一个 Manga 目录，此时每个 Chapter container 仍按 Download identity 归属到对应身份。
 _Avoid_: 标题匹配、文件夹名身份
 
 **Download index（下载索引）**:
@@ -156,12 +160,16 @@ _Avoid_: 漫画索引、书库、缓存
 用户触发的恢复扫描：扫描当前 Content root 的 Download library 与 Local source root，按 Download identity 把文件关联到已有 Manga（含非书架；身份不足时按文件名回退），并为未索引内容补建条目。多个目录都能证明同一身份时不猜，优先已记录目录或唯一最新完整副本，否则跳过并在报告中说明；只增改，不删除或重命名文件与映射。
 _Avoid_: 导入、恢复备份、同步
 
+**Downloaded（已下载）**:
+下载状态：该 Chapter 在本地有可读内容。判据来自磁盘关联与可读性，与 Library membership、Source 是否安装以及数据库映射是否存在无关。由 Download identity 证明归属的 Chapter container 需要完整；用户提供、按容器名与 Chapter 关联且没有 Download identity 的容器只要可读也算；单章作品放在 Manga 目录根的章节内容同样算已下载。Local source root 下的用户原件可以被关联与阅读，但永不删除；删除只作用于 Download library 中由应用管理的容器。
+_Avoid_: 在线可读、缓存
+
 **Not downloaded（未下载）**:
 下载状态：该 Chapter 从未下载到本地。
 _Avoid_: 文件缺失
 
 **Missing（文件缺失）**:
-下载状态：Download index 认为该 Chapter 已下载，但文件在预期位置不存在。
+下载状态：下载记录或 Download index 认为该 Chapter 已下载，但文件在预期位置不存在或已不可读。
 _Avoid_: 未下载
 
 **Unindexed（未索引）**:
@@ -169,7 +177,7 @@ _Avoid_: 未下载
 _Avoid_: 未下载、孤儿
 
 **Cache（缓存）**:
-应用为了加速在线源与阅读会话而保留的可再生临时数据，例如封面与页面图片、网页响应、压缩包解包临时文件。缓存不是 Download，也不包含 Local source 的用户文件；清除缓存不改变 History、Reading progress 或 Download library。
+应用为了加速在线源与阅读会话而保留的可再生临时数据，例如封面与页面图片、网页响应、压缩包解包临时文件。封面属于 Cache：应用不把封面写入 Download library，已有的本地封面文件保持原位、不自动删除；离线或清除缓存后，依赖远程封面的书架与作品页显示占位封面，重新联网或重新打开后自动恢复。缓存不是 Download，也不包含 Local source 的用户文件；清除缓存不改变 History、Reading progress 或 Download library。
 _Avoid_: 下载、离线文件、书库
 
 **Clear cache（清除缓存）**:
@@ -177,7 +185,7 @@ _Avoid_: 下载、离线文件、书库
 _Avoid_: 清理下载、重置应用
 
 **Clear database（清理数据库）**:
-「设置 → 存储与下载 → 数据存储位置」里的动作，按 Mihon 的 Clear database 语义：列出有非书架 Manga 的 Source 及数量供多选，默认保留有已读章节或阅读进度的作品；删除所选 Source 的非书架 Manga 记录及其章节、阅读进度、已读、下载索引与被清理作品的 History，并清理无归属的阅读状态。保留书架作品与其 History、下载文件、Local source 文件、设置、源、扩展与 Tracking 数据；它不等同于恢复出厂设置。
+「设置 → 存储与下载 → 数据存储位置」里的动作，按 Mihon 的 Clear database 语义：列出有非书架 Manga 的 Source 及数量供多选，默认保留有已读章节或阅读进度的作品；删除所选 Source 的非书架 Manga 记录及其章节、阅读进度、已读、下载索引与被清理作品的 History，并清理无归属的阅读状态。它只删除数据库记录，不删除磁盘文件：已下载文件保留，重新打开同一作品时会按 Chapter container 的身份或容器名自动恢复下载关联与已下载状态，不需要手动运行 Rebuild download index；多选批量删除仍可直接使用。保留书架作品与其 History、下载文件、Local source 文件、设置、源、扩展与 Tracking 数据；它不等同于恢复出厂设置。
 _Avoid_: 清除数据库（旧称）、恢复出厂设置、重置应用、清除缓存
 
 **Tracking（追踪）**:

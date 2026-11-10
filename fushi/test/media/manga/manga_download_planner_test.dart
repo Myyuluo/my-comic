@@ -100,6 +100,51 @@ void main() {
     expect(plan.lockedSkipped, 1);
   });
 
+  test('批量下载只规划选中子集，仍按旧→新且只统计子集内的锁定章', () {
+    final OnlineMangaLibraryEntry entry = OnlineMangaLibraryEntry(
+      runtime: OnlineMangaRuntimeKind.mihon,
+      extensionPackage: 'org.example.fixture',
+      sourceId: '1',
+      series: const OnlineMangaSeries(
+        key: '/series/fixture',
+        title: 'Fixture',
+        raw: <String, Object?>{'url': '/series/fixture'},
+      ),
+      // 源按新→旧返回；/6 没被选中（且锁定），不参与本次批量下载。
+      chapters: <OnlineMangaChapter>[
+        _chapter('/chapter/6', locked: true),
+        _chapter('/chapter/5'),
+        _chapter('/chapter/4', locked: true),
+        _chapter('/chapter/3'),
+        _chapter('/chapter/2'),
+        _chapter('/chapter/1'),
+      ],
+    );
+
+    final ({List<OnlineMangaChapter> pending, int lockedSkipped}) plan =
+        planMangaChapterDownload(
+          entry: entry,
+          downloadedChapterKeys: const <String>{'/chapter/1'},
+          jobsByChapterKey: <String, MangaDownloadJobRow>{
+            '/chapter/5': _job('/chapter/5', MangaDownloadJobStatus.running),
+          },
+          chapterKeys: const <String>{
+            '/chapter/5',
+            '/chapter/4',
+            '/chapter/3',
+            '/chapter/2',
+            '/chapter/1',
+          },
+        );
+
+    expect(
+      plan.pending.map((OnlineMangaChapter chapter) => chapter.key).toList(),
+      <String>['/chapter/2', '/chapter/3'],
+      reason: '只规划选中且可下载的章，顺序仍与「下载全部」一致（旧→新）',
+    );
+    expect(plan.lockedSkipped, 1, reason: '只统计选中子集里的锁定章；未选中的锁定章不计入');
+  });
+
   test('全局暂停中的章不重复入队（恢复时自然开跑）', () {
     final OnlineMangaLibraryEntry entry = OnlineMangaLibraryEntry(
       runtime: OnlineMangaRuntimeKind.mihon,

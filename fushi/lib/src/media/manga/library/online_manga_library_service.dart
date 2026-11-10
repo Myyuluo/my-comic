@@ -10,7 +10,6 @@ import 'package:fushi/src/media/manga/library/manga_resume_point.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi/src/media/manga/library/online_manga_runtime_adapter.dart';
 import 'package:fushi/src/media/manga/manga_source_language.dart';
-import 'package:fushi/src/media/media_cover_service.dart';
 import 'package:fushi/src/media/manga/mihon/mihon_manager.dart';
 import 'package:fushi/src/storage/app_paths.dart';
 import 'package:fushi/src/utils/misc/error_log_service.dart';
@@ -19,9 +18,8 @@ import 'package:fushi/src/media/manga/download/download_identity.dart';
 import 'package:fushi/src/media/manga/download/download_library_scanner.dart';
 import 'package:fushi/src/media/manga/download/download_manga_relinker.dart';
 import 'package:fushi_engine/epub/epub_storage.dart';
-import 'package:fushi_engine/media/cover_file_writer.dart'
-    show CoverImageInvalidException;
 import 'package:fushi_engine/media/manga/download_library_storage.dart';
+import 'package:fushi_engine/media/manga/local_source/local_source_layout.dart';
 
 import 'package:fushi_engine/updates/update_feed_kind.dart';
 import 'package:fushi/src/updates/update_feed_service.dart';
@@ -165,13 +163,17 @@ class OnlineMangaLibraryService {
   ///
   /// 这里**不联网刷新**：首屏章节缓存由作品页自己的刷新策略决定，打开源作品
   /// 页不该被一次全量刷新挡住。
+  ///
+  /// 票 02：只写数据库行，**不创建目录、不抓取封面**。目录只在下载 worker
+  /// 真正开始章节下载时创建；封面只由 Cache / 远程 `series.coverUrl` 提供。
   Future<EpubBookRow> ensureNonLibrary(OnlineMangaLibraryEntry entry) async =>
       await find(entry) ?? await _insert(entry, inLibrary: false);
 
   /// 插入一条新的 Manga 行（bookKey 尚不存在时）。
   ///
-  /// Download library：`downloads/{source}/{manga}`。章节是它的直接子目录，
-  /// 每章自己的 `pages.json` 才是身份；书根不再写占位 manga.json。
+  /// Download library：只把 `downloads/{source}/{manga}` 路径写进 `extractDir`，
+  /// **不创建目录、不写封面**（票 02 惰性物化）。章节是它的直接子目录，每章
+  /// 自己的 `pages.json` 才是身份；书根不再写占位 manga.json。
   /// 同名 Source / 同名 Manga 在这里解决（短源 ID / `(2)` 后缀），绝不覆盖。
   Future<EpubBookRow> _insert(
     OnlineMangaLibraryEntry entry, {
@@ -184,44 +186,12 @@ class OnlineMangaLibraryService {
           downloadsRoot: await _downloadsRoot(),
         );
     final Directory directory = resolution.directory;
-    await directory.create(recursive: true);
-
-    String? coverPath;
-    final String? coverUrl = entry.series.coverUrl;
-    if (coverUrl != null && coverUrl.isNotEmpty) {
-      try {
-        final List<int> bytes = await adapter.fetchCover(entry, coverUrl);
-        // BUG-2496：未知魔数（源返回的 Cloudflare 拦截页 / HTML 错误页）直接不落盘，
-        // 不再回落成 `cover.jpg`——那种文件一到渲染层就是 `Invalid image data`。
-        final String? extension = _imageExtension(bytes);
-        if (extension == null) {
-          throw const CoverImageInvalidException(
-            'online manga cover is not PNG/WebP/GIF/JPEG',
-          );
-        }
-        final String coverFile = p.join(directory.path, 'cover$extension');
-        // 收口再查一次完整性（截断 JPEG/PNG）+ 原子写 + 驱逐解码缓存。
-        await MediaCoverService.applyCoverBytes(
-          bytes: bytes,
-          destPath: coverFile,
-        );
-        coverPath = p.basename(coverFile);
-      } on CoverImageInvalidException catch (e) {
-        ErrorLogService.instance.logDiagnostic(
-          'OnlineMangaLibraryService.cover',
-          e,
-        );
-      } on Object {
-        // 封面失败不能挡住「追这部作品」。作品页仍会经源的运行时按需取图。
-      }
-    }
 
     await database.insertEpubBook(
       EpubBooksCompanion.insert(
         bookKey: bookKey,
         title: entry.series.title,
         author: Value<String?>(entry.series.byline),
-        coverPath: Value<String?>(coverPath),
         epubPath: kDownloadPagesFileName,
         extractDir: directory.path,
         chapterCount: entry.chapters.length,
@@ -310,6 +280,10 @@ class OnlineMangaLibraryService {
       chapterCount: chapters.length,
       chaptersJson: _chaptersJson(chapters),
     );
+    // 清库只删记录：重开时行可能是用「只有标题」的源页 seed 建出来的，磁盘目录
+    // 已按 pages.json 身份复用，但 seed 没有章节，映射建不出来。章节表刷新后
+    // 再走一次 re-link，章节列表才能立即显示已下载、删除下载无需手动重建索引。
+    await _relinkDownloadFolderAfterRefresh(bookKey: bookKey, entry: updated);
     await _publishNewChapters(
       bookKey: bookKey,
       title: series.title,
@@ -352,6 +326,46 @@ class OnlineMangaLibraryService {
           }),
         ),
     ]);
+  }
+
+  /// 章节表刷新后按当前章表重链已有下载目录（票 05）。
+  ///
+  /// 「清除数据库」只删记录；重新打开作品时 `_insert` 能按 `pages.json` 身份
+  /// 复用磁盘目录并写 `extractDir`，但源网格 seed 往往没有章节，映射仍建不
+  /// 出来。章节表拉齐后必须再 re-link 一次，批量 / 单章删除与「已下载」状态
+  /// 才能直接使用，不需要用户手动运行「重建下载索引」。
+  ///
+  /// 只处理当前 Download library 根内、真实存在的漫画目录：`local` 原件与旧
+  /// 布局路径不碰；re-link 只写映射 / extractDir，不创建、删除或重命名文件。
+  Future<void> _relinkDownloadFolderAfterRefresh({
+    required String bookKey,
+    required OnlineMangaLibraryEntry entry,
+  }) async {
+    if (entry.chapters.isEmpty) return;
+    final EpubBookRow? row = await database.getEpubBook(bookKey);
+    if (row == null) return;
+    final String extractDir = row.extractDir.trim();
+    if (extractDir.isEmpty) return;
+    final Directory downloadsRoot = await _downloadsRoot();
+    if (!isLocalSourcePathWithinRoot(extractDir, downloadsRoot)) return;
+    final Directory mangaFolder = Directory(extractDir);
+    if (!await mangaFolder.exists()) return;
+    try {
+      await relinkDownloadMangaFolder(
+        database: database,
+        row: row,
+        entry: entry,
+        mangaFolder: mangaFolder,
+      );
+    } on Object catch (error, stack) {
+      // 重链只是下载状态 / 删除的辅助修复；磁盘或映射异常不能让章节刷新失败。
+      // 下一次刷新会幂等重试，已写下的映射保留。
+      ErrorLogService.instance.log(
+        'OnlineMangaLibraryService.relinkAfterRefresh',
+        error,
+        stack,
+      );
+    }
   }
 
   /// 联网刷新一条书架条目，成功则落库。
@@ -425,8 +439,11 @@ class OnlineMangaLibraryService {
     return updated;
   }
 
-  /// 保证这条在线条目的漫画目录住在 Download library：
+  /// 下载侧的目录物化入口：保证这条在线条目的漫画目录住在 Download library
   /// `<content>/downloads/{source}/{manga}`，返回**当前**行。
+  ///
+  /// **只有下载 worker 可以在真正开始章节下载时调用**（票 02）：浏览作品页、
+  /// 打开阅读器都不得调用，否则会创建空目录或把旧布局 `extractDir` 重指。
   ///
   /// fresh-start：旧布局（`<runtimeRoot>/library` / `<content>/fushi_books`）
   /// **不搬移、不复制**，只把 `extractDir` 重指向新布局。ticket 12 已删除旧
@@ -602,6 +619,7 @@ class OnlineMangaLibraryService {
           sourceIdentity: claimed == null
               ? null
               : DownloadSourceIdentity.fromEntry(claimed),
+          mangaTitle: row.title,
         ),
       );
     }
@@ -627,6 +645,7 @@ class OnlineMangaLibraryService {
             sourceFolder: disk.key,
             mangaFolder: null,
             sourceIdentity: diskIdentity,
+            mangaTitle: '',
           ),
         );
       }
@@ -697,6 +716,64 @@ class OnlineMangaLibraryService {
       sourceDirPath: sourceDirPath,
       title: entry.series.title,
     );
+
+    // 同名共享：同一 Source 下标题完全相同的不同作品共用同一个漫画目录
+    // （Mihon 做法），不因身份不同生成 `(2)`。只有「标题完全相同」才共享：
+    // 标题不同、仅净化后同名仍走冲突后缀。
+    // 证据顺序：磁盘 manifest 优先（目录可能已被用户改名），没有可读 manifest
+    // 时回退到库里同 Source 同标题的行（同标题作品还没开始下载，惰性物化）。
+    final String entryTitle = entry.series.title.trim();
+    if (entryTitle.isNotEmpty && !identityMatch.ambiguous) {
+      final List<DownloadMangaFolderOnDisk> sharedOnDisk =
+          <DownloadMangaFolderOnDisk>[
+            for (final DownloadMangaFolderOnDisk folder in diskFolders)
+              if (folder.manifests.any(
+                (MangaPagesManifest manifest) =>
+                    manifest.mangaTitle.trim() == entryTitle &&
+                    DownloadSourceIdentity.fromManifest(
+                      manifest,
+                    ).matches(sourceIdentity),
+              ))
+                folder,
+          ];
+      if (sharedOnDisk.length == 1) {
+        final DownloadMangaFolderOnDisk shared = sharedOnDisk.single;
+        return _DownloadMangaDirectoryResolution(
+          directory: shared.directory,
+          reusedFolder: shared,
+        );
+      }
+      final List<_DownloadLibraryClaim> sharedClaims =
+          <_DownloadLibraryClaim>[
+            for (final _DownloadLibraryClaim claim in claims)
+              if (claim.mangaFolder != null &&
+                  _sameFolderName(claim.sourceFolder, sourceFolder) &&
+                  (claim.sourceIdentity == null ||
+                      claim.sourceIdentity!.matches(sourceIdentity)) &&
+                  claim.mangaTitle.trim() == entryTitle)
+                claim,
+          ];
+      if (sharedClaims.isNotEmpty) {
+        final _DownloadLibraryClaim preferred = sharedClaims.firstWhere(
+          (_DownloadLibraryClaim claim) =>
+              _sameFolderName(claim.mangaFolder!, baseMangaFolder),
+          orElse: () => sharedClaims.first,
+        );
+        final String sharedFolderName = preferred.mangaFolder!;
+        DownloadMangaFolderOnDisk? sharedFolder;
+        for (final DownloadMangaFolderOnDisk folder in diskFolders) {
+          if (_sameFolderName(folder.mangaFolderName, sharedFolderName)) {
+            sharedFolder = folder;
+            break;
+          }
+        }
+        return _DownloadMangaDirectoryResolution(
+          directory: Directory(p.join(sourceDirPath, sharedFolderName)),
+          reusedFolder: sharedFolder,
+        );
+      }
+    }
+
     final Set<String> claimedMangaFolders = <String>{
       for (final _DownloadLibraryClaim claim in claims)
         if (claim.mangaFolder != null &&
@@ -787,31 +864,6 @@ class OnlineMangaLibraryService {
       jsonEncode(<Map<String, Object?>>[
         for (final OnlineMangaChapter chapter in chapters) chapter.toJson(),
       ]);
-
-  /// 按魔数定封面扩展名；不是 PNG / WebP / GIF / JPEG 返回 null（调用方不落盘）。
-  static String? _imageExtension(List<int> bytes) {
-    if (bytes.length >= 8 &&
-        bytes[0] == 0x89 &&
-        bytes[1] == 0x50 &&
-        bytes[2] == 0x4e &&
-        bytes[3] == 0x47) {
-      return '.png';
-    }
-    if (bytes.length >= 12 &&
-        String.fromCharCodes(bytes.skip(8).take(4)) == 'WEBP') {
-      return '.webp';
-    }
-    if (bytes.length >= 6 && String.fromCharCodes(bytes.take(3)) == 'GIF') {
-      return '.gif';
-    }
-    if (bytes.length >= 3 &&
-        bytes[0] == 0xff &&
-        bytes[1] == 0xd8 &&
-        bytes[2] == 0xff) {
-      return '.jpg';
-    }
-    return null;
-  }
 }
 
 /// `_resolveDownloadMangaDirectory` 的结果：目录，以及它是否由磁盘 manifest
@@ -834,6 +886,7 @@ class _DownloadLibraryClaim {
     required this.sourceFolder,
     required this.mangaFolder,
     required this.sourceIdentity,
+    required this.mangaTitle,
   });
 
   final String sourceFolder;
@@ -841,4 +894,7 @@ class _DownloadLibraryClaim {
 
   /// null = 该行的描述符不可解析（例如本地条目）；不作为同源复用的依据。
   final DownloadSourceIdentity? sourceIdentity;
+
+  /// 该行登记的作品标题；同 Source 同标题的不同作品共享漫画目录。
+  final String mangaTitle;
 }

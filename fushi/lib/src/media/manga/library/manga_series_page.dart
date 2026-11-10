@@ -245,6 +245,10 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
   Map<String, MangaDownloadJobRow> _jobs =
       const <String, MangaDownloadJobRow>{};
   Set<String> _downloaded = const <String>{};
+
+  /// [_downloaded] 中可由「删除下载」删除的章（容器在当前 Download library
+  /// 根内）。Local source root 下的用户原件显示已下载但不可删。
+  Set<String> _deletableDownloaded = const <String>{};
   StreamSubscription<void>? _jobsWatch;
 
   /// manifest 扫描缓存（ticket 07）：任务表进度更新不会改变身份/状态签名，
@@ -531,17 +535,27 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
       final Set<String> scanned = chapterKeys.isEmpty
           ? const <String>{}
           : (await index.scanDisks(
-              identities: <MangaDownloadIdentity>[identity],
+              queries: <MangaDownloadDiskQuery>[
+                MangaDownloadDiskQuery.ofEntry(entry),
+              ],
             )).downloadedChapterKeys(identity, chapterKeys);
       if (!mounted || revision != _downloadStateRevision) return;
       _manifestDownloaded = scanned;
       _manifestScanKey = scanKey;
     }
     final Set<String> downloaded = <String>{...mapped, ..._manifestDownloaded};
+    // 可删性独立于「已下载」：Local source 根下的用户原件也算已下载，但删除
+    // 下载不得提供会清掉用户文件的操作。
+    final Set<String> deletable = await index.deletableChapterKeysForEntry(
+      entry,
+      row: row,
+      downloadedChapterKeys: downloaded,
+    );
     if (!mounted || revision != _downloadStateRevision) return;
     setState(() {
       _jobs = jobs;
       _downloaded = downloaded;
+      _deletableDownloaded = deletable;
     });
   }
 
@@ -554,7 +568,11 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     final Set<String> keys = chapterKeys.toSet();
     _manifestDownloaded = _manifestDownloaded.difference(keys);
     if (keys.isEmpty) return;
-    void apply() => _downloaded = _downloaded.difference(keys);
+    void apply() {
+      _downloaded = _downloaded.difference(keys);
+      _deletableDownloaded = _deletableDownloaded.difference(keys);
+    }
+
     if (mounted) {
       setState(apply);
     } else {
@@ -658,6 +676,9 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     final OnlineMangaLibraryEntry? entry = _entry;
     final AppModel? appModel = _appModelOrNull;
     if (appModel == null || entry == null) return;
+    // 菜单已对不可删的章隐藏；这里再挡一次并发状态变化，避免 job 行被清掉后
+    // 页面把仍然存在的用户文件显示成「未下载」。
+    if (!_deletableDownloaded.contains(chapter.key)) return;
     final bool confirmed = await showFushiConfirmDialog(
       context: context,
       title: t.manga_chapter_download_delete_action,
@@ -1542,6 +1563,7 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
           _row = null;
           _states = const <String, MangaChapterStateRow>{};
           _downloaded = const <String>{};
+          _deletableDownloaded = const <String>{};
           _jobs = const <String, MangaDownloadJobRow>{};
           _entry = entry.copyWith(
             clearCurrentChapter: true,
@@ -2008,6 +2030,87 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     ];
   }
 
+  /// 批量下载只适用于在线、来源可解析的条目：本地图源 / 本地卷（[_entry] 为
+  /// null）没有在线下载；来源未安装（运行时解析失败）或解析尚未结束时不能发起。
+  bool get _batchDownloadSourceAvailable =>
+      _entry != null && _sourceLabelResolved && !_sourceMissing;
+
+  /// 批量下载的规划：当前可见且选中的在线章节交给与「下载全部」共享的
+  /// [planMangaChapterDownload]，由它跳过已下载、已排队 / 下载中 / 暂停与锁定
+  /// 章。混合选择因此只处理可下载子集；遍历顺序不变，入队顺序仍是旧→新。
+  ({List<OnlineMangaChapter> pending, int lockedSkipped})
+  get _batchDownloadPlan {
+    final OnlineMangaLibraryEntry? entry = _entry;
+    if (entry == null || !_batchDownloadSourceAvailable) {
+      return (pending: const <OnlineMangaChapter>[], lockedSkipped: 0);
+    }
+    final Set<String> selectedKeys = <String>{
+      for (final OnlineMangaChapter chapter in _selectedVisibleChapters)
+        chapter.key,
+    };
+    if (selectedKeys.isEmpty) {
+      return (pending: const <OnlineMangaChapter>[], lockedSkipped: 0);
+    }
+    return planMangaChapterDownload(
+      entry: entry,
+      downloadedChapterKeys: _downloaded,
+      jobsByChapterKey: _jobs,
+      chapterKeys: selectedKeys,
+    );
+  }
+
+  /// 批量下载选中的适用章节：不弹确认，直接复用「下载全部」的 planner 与
+  /// [MangaDownloadService.enqueueChapters] 路径（CBZ 设置与下载顺序由下载
+  /// 服务沿用）。入队后立刻重算任务表，章节行与下载页随即显示排队状态。
+  Future<void> _batchDownloadSelected() async {
+    final OnlineMangaLibraryEntry? entry = _entry;
+    final AppModel? appModel = _appModelOrNull;
+    if (entry == null || appModel == null || _batchRunning) return;
+    final ({List<OnlineMangaChapter> pending, int lockedSkipped}) plan =
+        _batchDownloadPlan;
+    final List<OnlineMangaChapter> pending = plan.pending;
+    if (pending.isEmpty) return;
+    if (plan.lockedSkipped > 0) {
+      FushiToast.show(
+        msg: t.manga_series_download_all_locked_skipped(
+          count: plan.lockedSkipped,
+        ),
+      );
+    }
+    setState(() => _batchRunning = true);
+    try {
+      await appModel.mangaDownloadService.enqueueChapters(
+        entry: entry,
+        chapters: pending,
+        autoOcr: false,
+      );
+      await _syncDownloadRow();
+      if (mounted) {
+        FushiToast.show(
+          msg: t.manga_series_download_all_queued(count: pending.length),
+        );
+      }
+    } on Object catch (error, stack) {
+      ErrorLogService.instance.log(
+        'MangaSeriesPage.batchDownloadSelected',
+        error,
+        stack,
+      );
+      if (mounted) {
+        FushiToast.show(
+          msg: describeOnlineSourceError(error),
+          severity: ToastSeverity.error,
+        );
+      }
+    } finally {
+      await _refreshDownloadState();
+      if (mounted) {
+        _syncVisibleSelectionOrder();
+        setState(() => _batchRunning = false);
+      }
+    }
+  }
+
   /// 批量标记已读 / 未读：只写章级 `readAt`，与单章菜单同一套数据库动作，不
   /// 改书级 `completedAt`，也不弹确认。混合选择只处理适用子集。
   Future<void> _batchMarkRead({required bool read}) async {
@@ -2055,13 +2158,18 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
 
   /// 批量删除的适用子集：当前可见且选中的「已完成」在线下载。
   ///
-  /// 本地图源章节的磁盘文件属于用户文件，永远不参与；排队中 / 下载中 /
-  /// 暂停 / 文件缺失也都不算「已完成」，只认磁盘判据为已下载的章。
+  /// 只要求是在线条目，不要求 Manga 行 / Library membership / 数据库映射：
+  /// 「已下载」由 [_refreshDownloadState] 合并映射与磁盘 `pages.json` 身份扫描
+  /// 得出（票 05：清库后仍可直接批量删除）。本地图源章节的磁盘文件属于用户
+  /// 文件，永远不参与；Local source root 下的用户原件虽显示已下载，但不在
+  /// [_deletableDownloaded] 里，同样置灰；排队中 / 下载中 / 暂停 / 文件缺失
+  /// 也都不算「已完成」。
   List<OnlineMangaChapter> get _deletableSelectedChapters {
-    if (_entry == null || _bookKey == null) return const <OnlineMangaChapter>[];
+    if (_entry == null) return const <OnlineMangaChapter>[];
     return <OnlineMangaChapter>[
       for (final OnlineMangaChapter chapter in _selectedVisibleChapters)
-        if (_downloadStateOf(chapter) == MangaChapterDownloadState.downloaded)
+        if (_downloadStateOf(chapter) == MangaChapterDownloadState.downloaded &&
+            _deletableDownloaded.contains(chapter.key))
           chapter,
     ];
   }
@@ -2069,10 +2177,15 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
   /// 批量删除选中的已完成在线下载：只动 Download library 里由应用管理的
   /// 文件，不碰本地图源用户文件。删除前二次确认；删完章节回到「未下载」，
   /// 章级已读标记与阅读进度原样保留。
+  ///
+  /// 与单章删除复用同一条身份回退（[DownloadLibraryIndex.deleteChapterForEntry]）：
+  /// 有映射按映射删，没有映射 / 没有 Manga 行时按 entry 的下载身份在
+  /// `downloads` 里找唯一匹配的容器；`local` 根永远不参与删除。
   Future<void> _batchDeleteDownloads() async {
     final EpubBookRow? row = _row;
+    final OnlineMangaLibraryEntry? entry = _entry;
     final AppModel? appModel = _appModelOrNull;
-    if (row == null || appModel == null || _batchRunning) return;
+    if (entry == null || appModel == null || _batchRunning) return;
     final List<OnlineMangaChapter> targets = _deletableSelectedChapters;
     if (targets.isEmpty) return;
     final bool confirmed = await showFushiConfirmDialog(
@@ -2089,11 +2202,14 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     try {
       final DownloadLibraryIndex index = DownloadLibraryIndex(
         appModel.database,
+        downloadsRoot: appModel.appPathsOrNull?.downloadsRoot,
+        localComicRoot: appModel.appPathsOrNull?.localComicRoot,
       );
       for (final OnlineMangaChapter chapter in targets) {
-        await index.deleteChapter(
-          bookKey: row.bookKey,
+        await index.deleteChapterForEntry(
+          entry: entry,
           chapterKey: chapter.key,
+          row: row,
         );
         deletedChapterKeys.add(chapter.key);
         // done 任务行是「这章曾经下载过」的持久标记。用户主动删除下载时必须
@@ -2132,8 +2248,9 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
   }
 
   /// 底部批量栏：已选 N / 全选 / 反选 + 标记已读（圆形空心对勾）/ 标记未读
-  /// （圆形实心对勾）/ 删除已下载（垃圾桶）。全部已选已读时已读置灰，全部
-  /// 未读时未读置灰；没有可删的已完成在线下载时垃圾桶置灰。
+  /// （圆形实心对勾）/ 下载选中（下载图标）/ 删除已下载（垃圾桶）。全部已选
+  /// 已读时已读置灰，全部未读时未读置灰；没有可下载的选中在线章节时下载置灰
+  /// （本地源、来源未安装同样如此）；没有可删的已完成在线下载时垃圾桶置灰。
   Widget _buildBatchActionBar(BuildContext context) {
     final List<OnlineMangaChapter> selected = _selectedVisibleChapters;
     final bool canMarkRead =
@@ -2146,6 +2263,9 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
         selected.any(
           (OnlineMangaChapter chapter) => _states[chapter.key]?.readAt != null,
         );
+    // 与点击时的规划同源：已下载 / 已排队 / 下载中 / 暂停 / 锁定章都不会入队，
+    // 所以没有 pending 时动作置灰；混合选择仍只处理适用子集。
+    final bool canDownloadSelected = _batchDownloadPlan.pending.isNotEmpty;
     final bool canDeleteDownloads = _deletableSelectedChapters.isNotEmpty;
     return BatchActionBar(
       selectedCount: _selection.length,
@@ -2165,6 +2285,13 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
           onTap: () => unawaited(_batchMarkRead(read: false)),
           icon: FushiIcons.filled(FushiIcons.success),
           tooltip: t.manga_series_mark_unread,
+        ),
+        FushiIconButton(
+          key: const ValueKey<String>('manga_series_batch_download_selected'),
+          enabled: canDownloadSelected && !_batchRunning,
+          onTap: () => unawaited(_batchDownloadSelected()),
+          icon: FushiIcons.download,
+          tooltip: t.manga_online_download_selected,
         ),
         FushiIconButton(
           key: const ValueKey<String>('manga_series_batch_delete_downloads'),
@@ -2445,6 +2572,9 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
                     .map((LocalSourceChapterRecord chapter) => chapter.key)
                     .toSet()
               : _downloaded,
+          undeletableDownloadedChapterKeys: _isLocalSource
+              ? const <String>{}
+              : _downloaded.difference(_deletableDownloaded),
           missingChapterKeys: _isLocalSource
               ? _localMissingChapterKeys
               : const <String>{},
@@ -2764,8 +2894,9 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
   /// 封面。
   ///
   /// 顺序固定：**本地已落盘**封面（作品页首屏不该依赖网络，源挂了封面也得在）→
-  /// 源浏览时由来源自己提供的取图控件 → 备份描述符里的远程 `series.coverUrl`
-  /// （经现有 HTTP 图片缓存懒加载）→ 占位块。最后两条只在前面的来源缺席时才用。
+  /// 在线条目先确认来源（解析完成前 / 来源未安装时显示灰占位，不发起任何封面
+  /// 请求，票 02）→ 源浏览时由来源自己提供的取图控件 → 备份描述符里的远程
+  /// `series.coverUrl`（经现有 HTTP 图片缓存懒加载）→ 占位块。
   Widget _buildCover(BuildContext context) {
     final String? resolved = _localCoverPath();
     if (resolved != null) {
@@ -2781,6 +2912,12 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
           return const MangaCoverPlaceholder();
         },
       );
+    }
+    // 来源未安装（或尚未解析完来源）：不请求远程封面，先显示灰占位；
+    // 安装扩展后 [_resolveSourceLabel] 会把远程封面接回来。已有本地 cover.*
+    // 在上面已优先返回，不会被删除或忽略。
+    if (_entry != null && (!_sourceLabelResolved || _sourceMissing)) {
+      return const MangaCoverPlaceholder();
     }
     final MangaSeriesTarget target = widget.target;
     if (target is SourceMangaSeriesTarget) {

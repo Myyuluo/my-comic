@@ -321,7 +321,7 @@ void main() {
     expect(_rowWidget(tester, 'Chapter 3').selected, isTrue);
 
     // 章节区标题是非交互文字：点它 = 点空白处。
-    await tester.tap(find.text(t.mihon_chapters_title));
+    await tester.tap(find.text(t.manga_series_chapters_count(count: 3)));
     await _settle(tester);
     expect(_rowWidget(tester, 'Chapter 3').selected, isNull);
     expect(find.byKey(_markReadKey), findsNothing);

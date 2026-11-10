@@ -4464,6 +4464,7 @@
   "manga_series_auto_download": "Auto-download new chapters",
   "manga_series_auto_ocr": "Recognize after download",
   "manga_series_chapters_action": "Chapters",
+  "manga_series_chapters_count": "${count} chapters",
   "manga_series_delete_downloads": "Delete downloads",
   "manga_series_delete_downloads_confirm": "Delete downloaded files for $count chapter(s)? This cannot be undone.",
   "manga_series_delete_local_files": "Delete local files",

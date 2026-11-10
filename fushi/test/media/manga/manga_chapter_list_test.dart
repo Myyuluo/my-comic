@@ -5,6 +5,8 @@ import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi/src/media/detail/media_detail_kit.dart';
 import 'package:fushi/src/media/manga/library/manga_chapter_list.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
+import 'package:fushi/src/utils/components/glass/fushi_icon.dart';
+import 'package:fushi/src/utils/fushi_icons.dart';
 import 'package:fushi/utils.dart';
 
 /// 章节列表被**两个**界面共用（作品页正文 + 阅读器里的章节弹层）。两处对
@@ -58,9 +60,11 @@ void main() {
         const <String, MangaChapterStateRow>{},
     bool newestFirst = true,
     bool unreadOnly = false,
+    MangaChapterDownloadFilter downloadFilter = MangaChapterDownloadFilter.all,
     String? currentChapterKey,
     Set<String> downloadedChapterKeys = const <String>{},
     Set<String> missingChapterKeys = const <String>{},
+    Set<String>? selectedChapterKeys,
     ThemeData? theme,
     void Function(OnlineMangaChapter)? onChapterTap,
   }) async {
@@ -74,9 +78,11 @@ void main() {
               states: states,
               newestFirst: newestFirst,
               unreadOnly: unreadOnly,
+              downloadFilter: downloadFilter,
               currentChapterKey: currentChapterKey,
               downloadedChapterKeys: downloadedChapterKeys,
               missingChapterKeys: missingChapterKeys,
+              selectedChapterKeys: selectedChapterKeys,
               onChapterTap: onChapterTap ?? (OnlineMangaChapter _) {},
             ),
           ),
@@ -137,6 +143,93 @@ void main() {
       'Chapter 2',
       'Chapter 3',
     ], reason: '「最早在前」必须真的翻转，而不是只改按钮文案');
+  });
+
+  testWidgets('导入章节按 sourceOrder 显示：最新在前，第一话在前正确反转', (
+    WidgetTester tester,
+  ) async {
+    // 备份数组顺序（旧→新）不是显示契约：sourceOrder 0 = 最新一话。
+    const List<OnlineMangaChapter> imported = <OnlineMangaChapter>[
+      OnlineMangaChapter(
+        key: '/c/2',
+        name: 'Chapter 2',
+        sourceOrder: 1,
+        raw: <String, Object?>{},
+      ),
+      OnlineMangaChapter(
+        key: '/c/3',
+        name: 'Chapter 3',
+        sourceOrder: 0,
+        raw: <String, Object?>{},
+      ),
+      OnlineMangaChapter(
+        key: '/c/1',
+        name: 'Chapter 1',
+        sourceOrder: 2,
+        raw: <String, Object?>{},
+      ),
+    ];
+
+    await pumpList(tester, entry: entryWith(imported));
+    expect(visibleTitles(tester), <String>[
+      'Chapter 3',
+      'Chapter 2',
+      'Chapter 1',
+    ]);
+
+    await pumpList(tester, entry: entryWith(imported), newestFirst: false);
+    expect(visibleTitles(tester), <String>[
+      'Chapter 1',
+      'Chapter 2',
+      'Chapter 3',
+    ]);
+
+    final List<String> tapped = <String>[];
+    await pumpList(
+      tester,
+      entry: entryWith(imported),
+      onChapterTap: (OnlineMangaChapter chapter) => tapped.add(chapter.key),
+    );
+    await tester.tap(find.text('Chapter 2'));
+    await tester.pump();
+    expect(tapped, <String>['/c/2'], reason: '显示排序不改变章节身份');
+  });
+
+  testWidgets('没有 sourceOrder 时按章节号显示最新在前', (WidgetTester tester) async {
+    final List<OnlineMangaChapter> byNumber = <OnlineMangaChapter>[
+      const OnlineMangaChapter(
+        key: '/c/2',
+        name: 'Chapter 2',
+        number: 2,
+        raw: <String, Object?>{},
+      ),
+      const OnlineMangaChapter(
+        key: '/c/3',
+        name: 'Chapter 3',
+        number: 3,
+        raw: <String, Object?>{},
+      ),
+      const OnlineMangaChapter(
+        key: '/c/1',
+        name: 'Chapter 1',
+        number: 1,
+        raw: <String, Object?>{},
+      ),
+    ];
+
+    await pumpList(tester, entry: entryWith(byNumber));
+    expect(visibleTitles(tester), <String>[
+      'Chapter 3',
+      'Chapter 2',
+      'Chapter 1',
+    ]);
+
+    await pumpList(tester, entry: entryWith(byNumber), newestFirst: false);
+    expect(visibleTitles(tester), <String>[
+      'Chapter 1',
+      'Chapter 2',
+      'Chapter 3',
+    ]);
   });
 
   // 2026-10 M3E：行是 MediaDetailItemRow。已读 = 行尾 tertiary 对勾（key
@@ -269,7 +362,7 @@ void main() {
     );
   });
 
-  testWidgets('当前章行无背景，序号胶囊保持常态配色', (WidgetTester tester) async {
+  testWidgets('当前章行无背景，且不再有号码胶囊', (WidgetTester tester) async {
     await pumpList(
       tester,
       entry: entryWith(chapters),
@@ -289,24 +382,14 @@ void main() {
     );
     expect(shell.color, isNull, reason: '整行底色（含 Apple 的半透明前景罩）必须移除');
 
-    final ColorScheme cs = Theme.of(
-      tester.element(find.text('Chapter 1')),
-    ).colorScheme;
-    final DecoratedBox pill = tester.widget<DecoratedBox>(
-      find
-          .ancestor(of: find.text('2'), matching: find.byType(DecoratedBox))
-          .first,
+    final MediaDetailItemRow row = tester.widget<MediaDetailItemRow>(
+      currentRow,
     );
+    expect(row.number, isNull, reason: '章节号胶囊在所有章节列表里都不再渲染');
     expect(
-      (pill.decoration as BoxDecoration).color,
-      cs.secondaryContainer,
-      reason: '序号胶囊恢复常态底，不再用 primary 实色',
-    );
-    final Text pillNumber = tester.widget<Text>(find.text('2'));
-    expect(
-      pillNumber.style?.color,
-      cs.onSecondaryContainer,
-      reason: '序号文字不再反色',
+      find.descendant(of: currentRow, matching: find.text('2')),
+      findsNothing,
+      reason: '画面上不能只剩一个孤立的章号',
     );
   });
 
@@ -377,17 +460,27 @@ void main() {
     );
   });
 
-  testWidgets('章节行带话数序号、分段排布且不被撑高', (WidgetTester tester) async {
+  testWidgets('章节行不再带话数序号、分段排布且不被撑高', (WidgetTester tester) async {
     await pumpList(tester, entry: entryWith(chapters));
     final List<MediaDetailItemRow> rows = tester
         .widgetList<MediaDetailItemRow>(find.byType(MediaDetailItemRow))
         .toList();
     expect(rows, hasLength(3));
-    expect(rows.map((MediaDetailItemRow row) => row.number), <String>[
-      '3',
-      '2',
-      '1',
-    ], reason: '整数话不带小数点');
+    expect(
+      rows.every((MediaDetailItemRow row) => row.number == null),
+      isTrue,
+      reason: '导入作品的「第 N 话」标题已经带号码，行首胶囊不再重复',
+    );
+    for (final String number in <String>['3', '2', '1']) {
+      expect(
+        find.descendant(
+          of: find.byType(MediaDetailItemRow),
+          matching: find.text(number),
+        ),
+        findsNothing,
+        reason: '行内不应出现号码胶囊文字 $number',
+      );
+    }
     expect(
       rows.map((MediaDetailItemRow row) => (row.index, row.count)),
       <(int, int)>[(0, 3), (1, 3), (2, 3)],
@@ -404,6 +497,49 @@ void main() {
     expect(first.height, lessThanOrEqualTo(88));
   });
 
+  testWidgets('多选模式保留勾选标记，同时不再显示号码胶囊', (WidgetTester tester) async {
+    await pumpList(
+      tester,
+      entry: entryWith(chapters),
+      selectedChapterKeys: <String>{'/c/2'},
+    );
+    final List<MediaDetailItemRow> rows = tester
+        .widgetList<MediaDetailItemRow>(find.byType(MediaDetailItemRow))
+        .toList();
+    expect(
+      rows.map((MediaDetailItemRow row) => row.number),
+      everyElement(isNull),
+      reason: '多选模式也不能把号码胶囊带回来',
+    );
+    expect(rows.map((MediaDetailItemRow row) => row.selected), <bool?>[
+      false,
+      true,
+      false,
+    ], reason: '行首选择标记保留：选中行 true，未选中行 false（null = 非多选态）');
+    List<IconData?> iconsIn(String title) => tester
+        .widgetList<FushiIcon>(
+          find.descendant(
+            of: find.ancestor(
+              of: find.text(title),
+              matching: find.byType(MediaDetailItemRow),
+            ),
+            matching: find.byType(FushiIcon),
+          ),
+        )
+        .map((FushiIcon icon) => icon.icon)
+        .toList();
+    expect(
+      iconsIn('Chapter 2'),
+      contains(FushiIcons.filled(FushiIcons.success)),
+      reason: '选中行仍显示实心勾选标记',
+    );
+    expect(
+      iconsIn('Chapter 1'),
+      contains(FushiIcons.addCircle),
+      reason: '未选中行仍显示空心选择圈',
+    );
+  });
+
   testWidgets('只看未读会滤掉已读的章', (WidgetTester tester) async {
     await pumpList(
       tester,
@@ -414,6 +550,102 @@ void main() {
       },
     );
     expect(visibleTitles(tester), <String>['Chapter 2', 'Chapter 1']);
+  });
+
+  testWidgets('章节标题显示「只看未读」后的可见数量', (WidgetTester tester) async {
+    await pumpList(
+      tester,
+      entry: entryWith(chapters),
+      unreadOnly: true,
+      states: <String, MangaChapterStateRow>{
+        '/c/3': _state(chapterKey: '/c/3', readAt: 1),
+      },
+    );
+    expect(find.text(t.manga_series_chapters_count(count: 2)), findsOneWidget);
+    expect(find.text(t.manga_series_chapters_count(count: 3)), findsNothing);
+  });
+
+  testWidgets('章节标题跟随「全部 / 已下载 / 未下载」筛选', (WidgetTester tester) async {
+    await pumpList(
+      tester,
+      entry: entryWith(chapters),
+      downloadedChapterKeys: <String>{'/c/2'},
+    );
+    expect(find.text(t.manga_series_chapters_count(count: 3)), findsOneWidget);
+
+    await pumpList(
+      tester,
+      entry: entryWith(chapters),
+      downloadedChapterKeys: <String>{'/c/2'},
+      downloadFilter: MangaChapterDownloadFilter.downloaded,
+    );
+    expect(find.text(t.manga_series_chapters_count(count: 1)), findsOneWidget);
+
+    await pumpList(
+      tester,
+      entry: entryWith(chapters),
+      downloadedChapterKeys: <String>{'/c/2'},
+      downloadFilter: MangaChapterDownloadFilter.notDownloaded,
+    );
+    expect(find.text(t.manga_series_chapters_count(count: 2)), findsOneWidget);
+  });
+
+  testWidgets('「只看未读」与下载筛选 AND 后计数', (WidgetTester tester) async {
+    await pumpList(
+      tester,
+      entry: entryWith(chapters),
+      unreadOnly: true,
+      downloadFilter: MangaChapterDownloadFilter.downloaded,
+      downloadedChapterKeys: <String>{'/c/1', '/c/2'},
+      states: <String, MangaChapterStateRow>{
+        '/c/1': _state(chapterKey: '/c/1', readAt: 1),
+        '/c/3': _state(chapterKey: '/c/3', readAt: 1),
+      },
+    );
+    expect(find.text(t.manga_series_chapters_count(count: 1)), findsOneWidget);
+  });
+
+  testWidgets('空列表显示「共 0 章」', (WidgetTester tester) async {
+    await pumpList(tester, entry: entryWith(const <OnlineMangaChapter>[]));
+    expect(find.text(t.manga_series_chapters_count(count: 0)), findsOneWidget);
+    expect(find.text(t.manga_series_no_chapters), findsOneWidget);
+  });
+
+  testWidgets('筛选无结果时标题显示 0，而不是总数', (WidgetTester tester) async {
+    await pumpList(
+      tester,
+      entry: entryWith(chapters),
+      downloadFilter: MangaChapterDownloadFilter.downloaded,
+    );
+    expect(find.text(t.manga_series_chapters_count(count: 0)), findsOneWidget);
+    expect(find.text(t.manga_series_no_chapters_match_filter), findsOneWidget);
+  });
+
+  testWidgets('切换排序不改变章节数量', (WidgetTester tester) async {
+    await pumpList(tester, entry: entryWith(chapters), newestFirst: true);
+    expect(find.text(t.manga_series_chapters_count(count: 3)), findsOneWidget);
+
+    await pumpList(tester, entry: entryWith(chapters), newestFirst: false);
+    expect(
+      find.text(t.manga_series_chapters_count(count: 3)),
+      findsOneWidget,
+      reason: '计数只反映筛选结果，排序只改变顺序',
+    );
+  });
+
+  testWidgets('标题沿用章节标题字体，且没有单独的数字徽章', (WidgetTester tester) async {
+    await pumpList(tester, entry: entryWith(chapters));
+    final Finder title = find.text(t.manga_series_chapters_count(count: 3));
+    final MediaDetailSectionHeader header = tester
+        .widget<MediaDetailSectionHeader>(
+          find.byType(MediaDetailSectionHeader),
+        );
+    expect(header.count, isNull, reason: '数字徽章已并入「共 X 章」标题');
+    expect(
+      tester.widget<Text>(title).style,
+      tester.element(title).fushiType.titleLargeEmphasized,
+      reason: '沿用原章节标题的 typography',
+    );
   });
 
   testWidgets('全读完 + 只看未读 → 提示「都读完了」，而不是空白', (WidgetTester tester) async {

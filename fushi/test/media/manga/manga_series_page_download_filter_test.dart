@@ -33,7 +33,8 @@ import '../../helpers/test_platform_services.dart';
 ///
 /// 语义钉在页面级（真实 DB + 可控源）：筛选是作品页会话内状态，与「只看未读」
 /// AND 联动；「已下载」只认磁盘上可读的章，排队 / 下载中 / 暂停 / 文件缺失都算
-/// 未下载；本地图源章节恒为已下载；计数徽章始终显示章节总数。
+/// 未下载；本地图源章节恒为已下载。Ticket 08 起标题为「共 X 章」，X 跟随筛选后
+/// 的可见数量，空列表为「共 0 章」，且行首不再有话数胶囊。
 class _FakeAdapter implements OnlineMangaRuntimeAdapter {
   @override
   OnlineMangaRuntimeKind get kind => OnlineMangaRuntimeKind.mihon;
@@ -246,6 +247,20 @@ List<String> _visibleChapterTitles() => <String>[
     if (find.text(name).evaluate().isNotEmpty) name,
 ];
 
+Finder _chapterCountTitle(int count) =>
+    find.text(t.manga_series_chapters_count(count: count));
+
+void _expectNoNumberPills(WidgetTester tester) {
+  final Iterable<MediaDetailItemRow> rows = tester
+      .widgetList<MediaDetailItemRow>(find.byType(MediaDetailItemRow));
+  expect(rows, isNotEmpty);
+  expect(
+    rows.every((MediaDetailItemRow row) => row.number == null),
+    isTrue,
+    reason: '票 08：章节列表不再渲染话数胶囊',
+  );
+}
+
 void main() {
   group('在线源', () {
     late Directory root;
@@ -271,7 +286,7 @@ void main() {
       if (root.existsSync()) root.deleteSync(recursive: true);
     });
 
-    testWidgets('下载筛选按 全部 → 已下载 → 未下载 → 全部 循环，计数徽章始终显示总数', (
+    testWidgets('下载筛选按 全部 → 已下载 → 未下载 → 全部 循环，标题跟随可见数量', (
       WidgetTester tester,
     ) async {
       tester.view.physicalSize = const Size(900, 1400);
@@ -299,11 +314,14 @@ void main() {
         'Chapter 2',
         'Chapter 1',
       ]);
+      expect(_chapterCountTitle(4), findsOneWidget);
+      _expectNoNumberPills(tester);
 
       await tester.tap(_filterChip());
       await tester.pump();
       expect(_chipLabel(t.shelf_filter_download_downloaded), findsOneWidget);
       expect(_visibleChapterTitles(), <String>['Chapter 1']);
+      expect(_chapterCountTitle(1), findsOneWidget);
 
       await tester.tap(_filterChip());
       await tester.pump();
@@ -316,6 +334,7 @@ void main() {
         'Chapter 3',
         'Chapter 2',
       ]);
+      expect(_chapterCountTitle(3), findsOneWidget);
 
       await tester.tap(_filterChip());
       await tester.pump();
@@ -326,14 +345,18 @@ void main() {
         'Chapter 2',
         'Chapter 1',
       ]);
+      expect(_chapterCountTitle(4), findsOneWidget);
 
-      // 计数徽章在每一种筛选下都显示章节总数。
+      // 单独的数字徽章已并入「共 X 章」标题。
+      final Iterable<MediaDetailSectionHeader> headers = tester
+          .widgetList<MediaDetailSectionHeader>(
+            find.byType(MediaDetailSectionHeader),
+          );
       expect(
-        find.descendant(
-          of: find.byType(MediaDetailSectionHeader),
-          matching: find.text('4'),
+        headers.every(
+          (MediaDetailSectionHeader header) => header.count == null,
         ),
-        findsOneWidget,
+        isTrue,
       );
     });
 
@@ -379,6 +402,7 @@ void main() {
       expect(_visibleChapterTitles(), <String>[
         'Chapter 1',
       ], reason: '排队 / 暂停 / 缺失都不算已下载');
+      expect(_chapterCountTitle(1), findsOneWidget);
 
       await tester.tap(_filterChip());
       await tester.pump();
@@ -387,6 +411,7 @@ void main() {
         'Chapter 3',
         'Chapter 2',
       ]);
+      expect(_chapterCountTitle(3), findsOneWidget);
     });
 
     testWidgets('下载筛选与「只看未读」AND 联动', (WidgetTester tester) async {
@@ -429,6 +454,7 @@ void main() {
         'Chapter 2',
         'Chapter 1',
       ], reason: '已下载且已读的章仍然显示');
+      expect(_chapterCountTitle(2), findsOneWidget);
 
       await tester.tap(
         find.byKey(const ValueKey<String>('manga_chapter_unread_only')),
@@ -437,15 +463,17 @@ void main() {
       expect(_visibleChapterTitles(), <String>[
         'Chapter 2',
       ], reason: '已下载 AND 未读');
+      expect(_chapterCountTitle(1), findsOneWidget);
 
       await tester.tap(_filterChip());
       await tester.pump();
       expect(_visibleChapterTitles(), <String>[
         'Chapter 3',
       ], reason: '未下载 AND 未读；第 4 话未下载但已读，被只看未读滤掉');
+      expect(_chapterCountTitle(1), findsOneWidget);
     });
 
-    testWidgets('筛选无结果时显示空态，计数徽章仍是总数', (WidgetTester tester) async {
+    testWidgets('筛选无结果时显示空态，标题显示「共 0 章」', (WidgetTester tester) async {
       tester.view.physicalSize = const Size(900, 1400);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
@@ -472,12 +500,9 @@ void main() {
         reason: '没有已下载的章不代表所有章节都读完了',
       );
       expect(
-        find.descendant(
-          of: find.byType(MediaDetailSectionHeader),
-          matching: find.text('4'),
-        ),
+        _chapterCountTitle(0),
         findsOneWidget,
-        reason: '计数徽章继续显示章节总数，不随筛选变化',
+        reason: '筛选无结果时计数为 0，而不是章节总数',
       );
     });
   });
@@ -548,9 +573,11 @@ void main() {
       });
 
       expect(_filterChip(), findsOneWidget);
+      expect(_chapterCountTitle(1), findsOneWidget);
       await tester.tap(_filterChip());
       await tester.pump();
       expect(find.text('Ch 1'), findsOneWidget, reason: '本地图源的章在磁盘上原地可读，恒为已下载');
+      expect(_chapterCountTitle(1), findsOneWidget);
 
       await tester.tap(_filterChip());
       await tester.pump();
@@ -559,6 +586,7 @@ void main() {
         find.text(t.manga_series_no_chapters_match_filter),
         findsOneWidget,
       );
+      expect(_chapterCountTitle(0), findsOneWidget);
     });
   });
 }
