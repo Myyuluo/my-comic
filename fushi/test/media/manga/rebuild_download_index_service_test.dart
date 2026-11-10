@@ -1714,6 +1714,8 @@ void main() {
         localMangaDir,
         manifestFor(entry, entry.chapters.single),
       );
+      // 下载索引曾认为这一章已下载：根 manifest 存在且页齐时不能报 Missing。
+      await markDownloaded(bookKey, '/c/1');
 
       final RebuildDownloadIndexReport report = await service().run();
 
@@ -1722,6 +1724,11 @@ void main() {
         report.chaptersRelinked,
         0,
         reason: '根 pages.json 不是章容器，不能计为已写入映射',
+      );
+      expect(
+        report.chaptersMissing,
+        0,
+        reason: '根 manifest + 页图齐全时章确实已下载，不能报 Missing',
       );
       final EpubBookRow after = (await db.getEpubBook(bookKey))!;
       expect(

@@ -13,6 +13,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 
 import 'package:fushi_core/fushi_core.dart';
+import 'package:fushi_engine/media/manga/download_library_storage.dart';
 
 import 'package:fushi/src/media/manga/download/download_identity.dart';
 import 'package:fushi/src/media/manga/download/download_library_scanner.dart';
@@ -97,8 +98,8 @@ Future<ImportDownloadRelinkReport> relinkImportedMangaDownloads({
     final MangaDownloadIdentity identity = MangaDownloadIdentity.ofEntry(entry);
     final DownloadMangaFolderIdentityMatch match =
         matchDownloadMangaFolderByIdentity(allFolders, identity);
-    final Directory? folder = match.folder?.directory;
-    if (folder == null) {
+    final DownloadMangaFolderOnDisk? matched = match.folder;
+    if (matched == null) {
       // 没有目录 = 未下载，不是 skip；只有「有候选但无法安全决定」才报告。
       if (match.ambiguous) mangaSkipped++;
       continue;
@@ -107,13 +108,21 @@ Future<ImportDownloadRelinkReport> relinkImportedMangaDownloads({
     try {
       final Map<String, MangaChapterDirRow> existing = await database
           .getMangaChapterDirRowsForBook(bookKey);
+      // 根 manifest 已完整落盘的章不写映射，但也不能因为旧映射缺失而误报。
+      final Set<String> indexed = existing.keys.toSet();
+      final MangaPagesManifest? rootManifest = matched.rootManifest;
+      if (rootManifest != null &&
+          identity.matchesManifest(rootManifest) &&
+          await readDownloadLibraryChapterPayload(matched.directory) != null) {
+        indexed.remove(rootManifest.chapterKey);
+      }
       final DownloadMangaRelinkResult result = await relinkDownloadMangaFolder(
         database: database,
         row: row,
         entry: entry,
-        mangaFolder: folder,
-        chapters: await scanDownloadChapterContainers(folder),
-        indexedChapterKeys: existing.keys.toSet(),
+        mangaFolder: matched.directory,
+        chapters: await scanDownloadChapterContainers(matched.directory),
+        indexedChapterKeys: indexed,
       );
       mangaMatched++;
       chaptersRelinked += result.chaptersRelinked;

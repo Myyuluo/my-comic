@@ -36,7 +36,7 @@ CBZ 从「后续也可」变为新下载的默认形态：设置新增「保存�
 - 建立或加入一部在线 Manga 时，在目标 Source 目录下读取每个 Manga 文件夹的章节容器（文件夹章节与 `.cbz` 章节）里的 `pages.json`，用 Download identity（运行时、数字 Source ID、series/manga key；扩展包名仅作 tie-breaker，占位扩展包与真实包兼容）判断归属。恰好一个文件夹匹配（或无法唯一确定时，恰有一个带相同真实扩展包）→ 复用该文件夹；仍无法唯一确定 → 不猜，保持 ` (2)` 冲突后缀；没有任何 manifest 能证明归属 → 沿用原有的 ` (2)` 安全规则，绝不覆盖无法证明归属的用户目录。
 - 复用后立即重建该作品的章节映射，作品页 / 详情页马上显示已下载，不必先运行 Rebuild download index。
 - `local` 中带 `pages.json` 的文件夹也能按同一身份关联到在线 Manga；没有 manifest 的 `local` 文件夹不做标题或文件夹名匹配。
-- 单章 Local source 作品把 `pages.json` 直接放在 `local/<manga>` 根：这份 manifest 只证明漫画目录（`extractDir`）身份，**不是**章节容器；导入后重链与 Rebuild 只关联目录，不写 `manga_chapter_dirs` 的假映射（`<manga>/<manga>` 不存在），也不把它计为 `chaptersRelinked`。已下载状态仍由共享 manifest 扫描提供（根 manifest 算一章）。
+- 单章 Local source 作品把 `pages.json` 直接放在 `local/<manga>` 根：这份 manifest 只证明漫画目录（`extractDir`）身份，**不是**章节容器；导入后重链与 Rebuild 只关联目录，不写 `manga_chapter_dirs` 的假映射（`<manga>/<manga>` 不存在），也不把它计为 `chaptersRelinked`；根 manifest 与页图齐全时该章也不算 `chaptersMissing`。已下载状态仍由共享 manifest 扫描提供（根 manifest 算一章）。
 - `downloads` 与 `local` 一起参与身份匹配；两个根各有一个目录能证明同一身份时视为歧义并跳过（报告 skipped），不会静默偏向 `downloads`。
 - 已有的重复文件夹（含 ` (2)`）不自动删除、合并或重命名；Rebuild download index 报告重复副本，并只在已记录目录或唯一最新完整副本可判定时采用，否则跳过。
 

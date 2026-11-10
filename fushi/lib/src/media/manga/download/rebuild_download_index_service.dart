@@ -577,6 +577,11 @@ class RebuildDownloadIndexService {
       );
     }
     final DownloadMangaFolderOnDisk folder = match.folder!;
+    // 单章 Local source 作品的根 pages.json 不是章容器：不写映射，但章确实
+    // 已下载（manifest + 页齐）。把它从「曾认为已下载」集合里排除，避免报告
+    // 成 Missing；已下载状态仍由 manifest 扫描提供。
+    final Set<String> rootManifestPresentKeys =
+        await _rootManifestPresentChapterKeys(folder, entry);
     // 文件夹定位之后的重链逻辑与「复用现有下载文件夹」共用一份实现：
     // pages.json 稳定 ID 优先，已有映射 / 容器名回退兜底，只增改不删除。
     final DownloadMangaRelinkResult result = await relinkDownloadMangaFolder(
@@ -585,7 +590,9 @@ class RebuildDownloadIndexService {
       entry: entry,
       mangaFolder: folder.directory,
       chapters: folder.chapters,
-      indexedChapterKeys: indexedChapterKeys,
+      indexedChapterKeys: indexedChapterKeys.difference(
+        rootManifestPresentKeys,
+      ),
       isCancelled: () => cancelToken?.isCancelled ?? false,
     );
     return _BookOutcome(
@@ -601,6 +608,22 @@ class RebuildDownloadIndexService {
           _canonicalPath(duplicate.directory.path),
       },
     );
+  }
+
+  /// 根 manifest 已完整落盘的章 key（不写映射，但也不该报 Missing）。
+  Future<Set<String>> _rootManifestPresentChapterKeys(
+    DownloadMangaFolderOnDisk folder,
+    OnlineMangaLibraryEntry entry,
+  ) async {
+    final MangaPagesManifest? rootManifest = folder.rootManifest;
+    if (rootManifest == null) return const <String>{};
+    if (!MangaDownloadIdentity.ofEntry(entry).matchesManifest(rootManifest)) {
+      return const <String>{};
+    }
+    if (await readDownloadLibraryChapterPayload(folder.directory) == null) {
+      return const <String>{};
+    }
+    return <String>{rootManifest.chapterKey};
   }
 
   // ── Local source 条目 ───────────────────────────────────────────────
