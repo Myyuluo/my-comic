@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:drift/drift.dart' show Value;
@@ -12,6 +13,7 @@ import 'package:fushi/media.dart';
 import 'package:fushi/models.dart';
 import 'package:fushi_dictionary/fushi_dictionary.dart';
 import 'package:fushi/src/media/manga/library/manga_shelf_cover_cache.dart';
+import 'package:fushi/src/media/manga/library/manga_shelf_cover_renewal.dart';
 import 'package:fushi/src/media/manga/library/manga_shelf_cover_revision.dart';
 import 'package:fushi/src/media/manga/library/manga_shelf_cover_service.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
@@ -44,6 +46,13 @@ class _FakeAdapter
   /// 非空时替换默认的成功返回，用于失败 / headers-cookie 场景。
   Future<List<int>> Function(String url)? fetchCoverBytes;
 
+  /// 详情刷新调用次数。书架默认**不得**刷新元数据；只有封面续签可以。
+  int refreshCalls = 0;
+
+  /// 非空时替换默认的「书架不得刷新元数据」异常。
+  Future<OnlineMangaRefreshResult> Function(OnlineMangaLibraryEntry entry)?
+  refreshScript;
+
   @override
   Future<bool> isSourceAvailable(OnlineMangaLibraryEntry entry) async =>
       sourceAvailable;
@@ -63,8 +72,15 @@ class _FakeAdapter
   Future<String?> sourceLabel(OnlineMangaLibraryEntry entry) async => 'Fake';
 
   @override
-  Future<OnlineMangaRefreshResult> refresh(OnlineMangaLibraryEntry entry) =>
-      throw StateError('the shelf must not refresh metadata');
+  Future<OnlineMangaRefreshResult> refresh(
+    OnlineMangaLibraryEntry entry,
+  ) async {
+    refreshCalls++;
+    final Future<OnlineMangaRefreshResult> Function(OnlineMangaLibraryEntry)?
+    script = refreshScript;
+    if (script != null) return script(entry);
+    throw StateError('the shelf must not refresh metadata');
+  }
 
   @override
   Future<List<OnlineMangaPageRef>> resolveChapterPages({
@@ -101,6 +117,25 @@ const List<int> _pngBytes = <int>[
   0x42,
   0x60,
   0x82,
+];
+
+/// 续签后新 URL 返回的字节：另一份可解码图片，用来区分「旧字节原样保留」与
+/// 「新字节已落盘」。JPEG 头 + EOI 尾，过写侧同一道完整性校验。
+const List<int> _renewedCoverBytes = <int>[
+  0xFF,
+  0xD8,
+  0xFF,
+  0xE0,
+  0x00,
+  0x10,
+  0x4A,
+  0x46,
+  0x49,
+  0x46,
+  0x00,
+  0x01,
+  0xFF,
+  0xD9,
 ];
 
 /// 只占用 ImageCache 键、不真正解码的占位 completer。
@@ -161,6 +196,7 @@ void main() {
   setUp(() async {
     ReaderFushiSource.debugResetCoverCache();
     MangaShelfCoverRevision.debugReset();
+    MangaShelfCoverRenewalThrottle.debugReset();
     root = await Directory.systemTemp.createTemp('manga_shelf_cover_');
     cacheDir = Directory(
       p.join(root.path, 'userdata', 'cache', 'shelf_covers'),
@@ -196,6 +232,7 @@ void main() {
     String bookKey = 'book-1',
     String? coverUrl = 'https://example.test/expired-signature.jpg',
     bool localCover = false,
+    List<OnlineMangaChapter> chapters = const <OnlineMangaChapter>[],
   }) async {
     final Directory extractDir = Directory(p.join(root.path, 'books', bookKey))
       ..createSync(recursive: true);
@@ -214,7 +251,7 @@ void main() {
         coverUrl: coverUrl,
         raw: const <String, Object?>{},
       ),
-      chapters: const <OnlineMangaChapter>[],
+      chapters: chapters,
     );
     await db.insertEpubBook(
       EpubBooksCompanion.insert(
@@ -222,8 +259,10 @@ void main() {
         title: 'Series',
         epubPath: p.join(extractDir.path, 'pages.json'),
         extractDir: extractDir.path,
-        chapterCount: 0,
-        chaptersJson: '[]',
+        chapterCount: chapters.length,
+        chaptersJson: jsonEncode(<Map<String, Object?>>[
+          for (final OnlineMangaChapter chapter in chapters) chapter.toJson(),
+        ]),
         importedAt: DateTime.now().millisecondsSinceEpoch,
         format: const Value<String>('manga'),
         sourceMetadata: Value<String?>(entry.encode()),
@@ -269,6 +308,199 @@ void main() {
     final EpubBookRow row = (await db.getEpubBook(bookKey))!;
     return OnlineMangaLibraryEntry.tryParse(row.sourceMetadata)!;
   }
+
+  OnlineMangaSeries seriesWithCover(
+    OnlineMangaLibraryEntry entry,
+    String coverUrl,
+  ) => OnlineMangaSeries(
+    key: entry.series.key,
+    title: entry.series.title,
+    coverUrl: coverUrl,
+    raw: entry.series.raw,
+  );
+
+  test('旧封面 URL 取字节 403：自动详情续签，新 URL 落库、字节刷新、书架立即显示', () async {
+    const String oldUrl = 'https://example.test/expired-signature.jpg';
+    const String newUrl = 'https://example.test/renewed-signature.jpg';
+    await insertOnlineBook(coverUrl: oldUrl);
+    adapter.fetchCoverBytes = (String url) async {
+      if (url == newUrl) return _renewedCoverBytes;
+      throw const OnlineMangaUnavailable(
+        OnlineMangaUnavailableReason.runtimeFailure,
+        'HTTP 403',
+        stage: 'cover',
+      );
+    };
+    adapter.refreshScript = (OnlineMangaLibraryEntry entry) async =>
+        OnlineMangaRefreshResult(
+          series: seriesWithCover(entry, newUrl),
+          chapters: const <OnlineMangaChapter>[],
+        );
+    final int before = MangaShelfCoverRevision.value;
+
+    await resolveShelfBook('book-1');
+    await ReaderFushiSource.debugWaitForShelfCoverRefreshes();
+
+    expect(adapter.refreshCalls, 1, reason: '封面字节失败且来源可用时必须做一次详情-only 刷新');
+    expect(
+      (await readEntry('book-1')).series.coverUrl,
+      newUrl,
+      reason: '详情刷新拿到的新封面 URL 必须落库',
+    );
+    expect(
+      await cache.storedSourceUrl('book-1'),
+      newUrl,
+      reason: '持久字节的源 URL 侧车必须切到新签名',
+    );
+    expect(
+      cache.coverPathFor('book-1').readAsBytesSync(),
+      _renewedCoverBytes,
+      reason: '自动续签必须刷新持久封面字节',
+    );
+    expect(
+      MangaShelfCoverRevision.value,
+      before + 1,
+      reason: '新字节写入后必须 bump revision，书架 provider 立即重算',
+    );
+
+    final MediaItem refreshed = await resolveShelfBook('book-1');
+    expect(
+      Uri.parse(refreshed.imageUrl!).toFilePath(),
+      cache.coverPathFor('book-1').path,
+      reason: '续签后书架卡片必须改用新的持久缓存封面',
+    );
+  });
+
+  test('详情成功但章节刷新失败：新封面 URL 照常落库，旧章节列表保留', () async {
+    const String oldUrl = 'https://example.test/expired-signature.jpg';
+    const String newUrl = 'https://example.test/renewed-signature.jpg';
+    const OnlineMangaChapter chapter = OnlineMangaChapter(
+      key: '/chapter/1',
+      name: 'Chapter 1',
+      raw: <String, Object?>{},
+    );
+    await insertOnlineBook(
+      coverUrl: oldUrl,
+      chapters: const <OnlineMangaChapter>[chapter],
+    );
+    adapter.fetchCoverBytes = (String url) async {
+      if (url == newUrl) return _renewedCoverBytes;
+      throw const OnlineMangaUnavailable(
+        OnlineMangaUnavailableReason.runtimeFailure,
+        'HTTP 403',
+        stage: 'cover',
+      );
+    };
+    adapter.refreshScript = (OnlineMangaLibraryEntry entry) async {
+      throw OnlineMangaUnavailable(
+        OnlineMangaUnavailableReason.runtimeFailure,
+        'chapter list failed',
+        stage: 'chapters',
+        // 详情阶段已成功：错误里带着新封面 URL。
+        series: seriesWithCover(entry, newUrl),
+      );
+    };
+
+    await resolveShelfBook('book-1');
+    await ReaderFushiSource.debugWaitForShelfCoverRefreshes();
+
+    final OnlineMangaLibraryEntry entry = await readEntry('book-1');
+    expect(entry.series.coverUrl, newUrl, reason: '章节失败不得阻止详情阶段的新封面 URL 落库');
+    expect(entry.chapters.map((OnlineMangaChapter it) => it.key), <String>[
+      '/chapter/1',
+    ], reason: '章节刷新失败时必须保留旧章节列表，不能清空');
+    expect(
+      cache.coverPathFor('book-1').readAsBytesSync(),
+      _renewedCoverBytes,
+      reason: '详情成功即可刷新持久字节，不要求章节刷新成功',
+    );
+  });
+
+  test('旧 URL 返回不可解码字节（解码失败）也触发自动续签', () async {
+    const String oldUrl = 'https://example.test/html-error-page.jpg';
+    const String newUrl = 'https://example.test/renewed-signature.jpg';
+    await insertOnlineBook(coverUrl: oldUrl);
+    adapter.fetchCoverBytes = (String url) async {
+      if (url == newUrl) return _renewedCoverBytes;
+      // 扩展把 HTML 错误页当封面字节返回：写侧完整性校验会拒绝。
+      return utf8.encode('<html>expired signature</html>');
+    };
+    adapter.refreshScript = (OnlineMangaLibraryEntry entry) async =>
+        OnlineMangaRefreshResult(
+          series: seriesWithCover(entry, newUrl),
+          chapters: const <OnlineMangaChapter>[],
+        );
+
+    await resolveShelfBook('book-1');
+    await ReaderFushiSource.debugWaitForShelfCoverRefreshes();
+
+    expect(adapter.refreshCalls, 1, reason: '解码失败与 HTTP 失败一样属于封面字节获取失败，应触发续签');
+    expect(await cache.storedSourceUrl('book-1'), newUrl);
+    expect(cache.coverPathFor('book-1').readAsBytesSync(), _renewedCoverBytes);
+  });
+
+  test('自动续签每本书每次启动最多一次：连续失败不循环请求', () async {
+    await insertOnlineBook(coverUrl: 'https://example.test/always-403.jpg');
+    adapter.fetchCoverBytes = (String _) async =>
+        throw const OnlineMangaUnavailable(
+          OnlineMangaUnavailableReason.runtimeFailure,
+          'HTTP 403',
+          stage: 'cover',
+        );
+    adapter.refreshScript = (OnlineMangaLibraryEntry _) async =>
+        throw const OnlineMangaUnavailable(
+          OnlineMangaUnavailableReason.runtimeFailure,
+          'details unavailable',
+          stage: 'details',
+        );
+    final OnlineMangaLibraryEntry entry = await readEntry('book-1');
+
+    for (int i = 0; i < 3; i++) {
+      expect(
+        await service.refreshIfNeeded(entry, 'book-1'),
+        isFalse,
+        reason: '续签失败必须报告失败并保留旧缓存 / 占位',
+      );
+    }
+
+    expect(adapter.refreshCalls, 1, reason: '同一本书每次启动最多自动续签一次，失败不得形成请求循环');
+    expect(
+      await cache.lastRenewalAttempt('book-1'),
+      isNotNull,
+      reason: '失败也算一次尝试：尝试时间必须落盘，跨启动 24 小时冷却才能生效',
+    );
+  });
+
+  test('自动续签有 24 小时冷却：冷却窗内不请求，超过 24 小时可再尝试一次', () async {
+    const String url = 'https://example.test/always-403.jpg';
+    await insertOnlineBook(bookKey: 'cooled', coverUrl: url);
+    await insertOnlineBook(bookKey: 'expired', coverUrl: url);
+    adapter.fetchCoverBytes = (String _) async =>
+        throw const OnlineMangaUnavailable(
+          OnlineMangaUnavailableReason.runtimeFailure,
+          'HTTP 403',
+          stage: 'cover',
+        );
+    adapter.refreshScript = (OnlineMangaLibraryEntry _) async =>
+        throw const OnlineMangaUnavailable(
+          OnlineMangaUnavailableReason.runtimeFailure,
+          'details unavailable',
+          stage: 'details',
+        );
+    final DateTime now = DateTime.now();
+    // 上次已续签（失败也算一次尝试），冷却时间写入 Program state 缓存。
+    await cache.markRenewalAttempt('cooled', now);
+    await cache.markRenewalAttempt(
+      'expired',
+      now.subtract(const Duration(hours: 25)),
+    );
+
+    await service.refreshIfNeeded(await readEntry('cooled'), 'cooled');
+    expect(adapter.refreshCalls, 0, reason: '24 小时冷却窗内不得再次向源请求详情');
+
+    await service.refreshIfNeeded(await readEntry('expired'), 'expired');
+    expect(adapter.refreshCalls, 1, reason: '冷却过期后允许下一次尝试，但仍只请求一次');
+  });
 
   test('封面字节写入成功：refreshIfNeeded 报告成功并 bump 进程级封面 revision', () async {
     const String url = 'https://example.test/signed-cover.jpg';
@@ -658,6 +890,7 @@ void main() {
     await ReaderFushiSource.debugWaitForShelfCoverRefreshes();
 
     expect(adapter.fetchedCoverUrls, isEmpty, reason: '来源缺失时不得向扩展运行时请求封面字节');
+    expect(adapter.refreshCalls, 0, reason: '来源未安装/未启用时不得做详情刷新（自动续签必须跳过）');
     expect(
       noCacheBook.imageUrl,
       isNull,
