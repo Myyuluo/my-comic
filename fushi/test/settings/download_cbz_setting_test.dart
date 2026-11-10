@@ -17,7 +17,7 @@ import '../helpers/test_platform_services.dart';
 
 /// Ticket 08：「存储与下载 → 下载 → 保存为CBZ压缩包」。
 ///
-/// 守用户可见的几件事：开关位于数据存储位置与备份之间、默认开启（新安装与
+/// 守用户可见的几件事：开关位于「备份索引」下方、默认开启（新安装与
 /// 升级后的存量用户都读 true）、开关值真的落进偏好表；副标题说明关闭后的
 /// 保存形式（简中/繁中准确文案，英文及其它 locale 用英文基线）。
 void main() {
@@ -55,25 +55,25 @@ void main() {
     expect(reloaded.downloadSaveAsCbz, isFalse);
   });
 
-  test('「存储与下载」在数据存储位置与备份之间出现「下载」分组', () {
+  test('「存储与下载」在备份索引下方出现「下载」分组', () {
     final SettingsDestination destination = buildDownloadsDestination();
 
     expect(
       destination.sections.map((SettingsSection section) => section.id),
       <String?>[
         'storage.location.section',
-        'downloads.section.download',
         'system.section.backup',
-        'storage.rebuild.section',
+        'downloads.section.download',
       ],
-      reason: '分组顺序：数据存储位置 → 下载 → 备份 → 下载索引',
+      reason: 'ticket 06 分组顺序：数据存储位置 → 备份索引 → 下载',
     );
 
-    final SettingsSection section = destination.sections[1];
+    final SettingsSection section = destination.sections[2];
     expect(section.title, '下载');
     expect(section.items, hasLength(1));
 
-    final SettingsSwitchItem toggle = section.items.single as SettingsSwitchItem;
+    final SettingsSwitchItem toggle =
+        section.items.single as SettingsSwitchItem;
     expect(toggle.id, 'downloads.save_as_cbz');
     expect(toggle.title, '保存为CBZ压缩包');
     expect(
@@ -122,10 +122,7 @@ void main() {
     });
     final AppModel appModel = AppModel(testPlatformServices())
       ..wireDatabaseForTesting(db)
-      ..wireLocalAudioForTesting(
-        prefsRepo: prefs,
-        databaseDirectory: storeDir,
-      );
+      ..wireLocalAudioForTesting(prefsRepo: prefs, databaseDirectory: storeDir);
 
     late SettingsContext settingsContext;
     await tester.pumpWidget(
@@ -148,7 +145,7 @@ void main() {
     );
 
     final SettingsSwitchItem toggle =
-        buildDownloadsDestination().sections[1].items.single
+        buildDownloadsDestination().sections[2].items.single
             as SettingsSwitchItem;
     expect(toggle.value(settingsContext), isTrue, reason: '默认开启');
 

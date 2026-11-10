@@ -10,47 +10,47 @@ import 'package:fushi/src/settings/settings_destination.dart';
 import 'package:fushi/src/utils/fushi_icons.dart';
 import 'package:fushi/utils.dart';
 
-/// 设置 →「存储与下载」的「重建下载索引」小节（storage-layout 票 09）。
+/// 设置 →「存储与下载 → 备份索引」的下载索引动作行（storage-layout 票 09 /
+/// ticket 06）。
 ///
 /// 整行可点的动作行：确认框 → 进度（可取消）→ 结果摘要。视觉全部复用现有设置
 /// 组件、对话框壳与进度指示器，不改变设计/美术（ADR 0008）。
 ///
+/// 这两个行由 [buildBackupIndexSection] 并入「备份索引」分组；桌面可见性挂在
+/// **各自 item** 上，分组本身在所有平台可见，因此移动端仍保留备份功能。
+///
 /// 服务只接收**当前** Content root 的 `downloads` / `local`，所以入口不会
 /// 读旧 Content root，也不会扫描 `autobackup`。动作只重链书架中已有的漫画，
 /// 不发现、不新增作品（「检索已下载」负责后者）。
-SettingsSection buildRebuildDownloadIndexSection() {
-  return SettingsSection(
-    id: 'storage.rebuild.section',
-    presentation: SettingsSectionPresentation.alwaysExpanded,
-    title: t.rebuild_download_index_section,
-    visible: (SettingsContext ctx) => isDesktopPlatform,
-    items: <SettingsItem>[
-      SettingsActionItem(
-        id: 'storage.rebuild_index',
-        title: t.rebuild_download_index_title,
-        subtitle: t.rebuild_download_index_subtitle,
-        icon: FushiIcons.refresh,
-        cli: const SettingsCliAction.unsupported(
-          'Rebuilding the download index shows a confirmation and progress '
-          'dialog: Settings → Storage & downloads → Download index → '
-          'Rebuild download index.',
-        ),
-        onTap: _rebuildDownloadIndex,
+List<SettingsItem> buildDownloadIndexItems() {
+  return <SettingsItem>[
+    SettingsActionItem(
+      id: 'storage.rebuild_index',
+      title: t.rebuild_download_index_title,
+      subtitle: t.rebuild_download_index_subtitle,
+      icon: FushiIcons.refresh,
+      visible: (SettingsContext ctx) => isDesktopPlatform,
+      cli: const SettingsCliAction.unsupported(
+        'Rebuilding the download index shows a confirmation and progress '
+        'dialog: Settings → Storage & downloads → Backup index → '
+        'Rebuild download index.',
       ),
-      // 「检索已下载」（票 03）：只发现并加入 `downloads` 中尚未入库的完整作品。
-      SettingsActionItem(
-        id: 'storage.scan_downloaded',
-        title: t.scan_downloaded_title,
-        subtitle: t.scan_downloaded_subtitle,
-        icon: FushiIcons.search,
-        cli: const SettingsCliAction.unsupported(
-          'Scanning downloads shows a confirmation and progress dialog: '
-          'Settings → Storage & downloads → Download index → Scan downloaded.',
-        ),
-        onTap: _scanDownloaded,
+      onTap: _rebuildDownloadIndex,
+    ),
+    // 「检索已下载」（票 03）：只发现并加入 `downloads` 中尚未入库的完整作品。
+    SettingsActionItem(
+      id: 'storage.scan_downloaded',
+      title: t.scan_downloaded_title,
+      subtitle: t.scan_downloaded_subtitle,
+      icon: FushiIcons.search,
+      visible: (SettingsContext ctx) => isDesktopPlatform,
+      cli: const SettingsCliAction.unsupported(
+        'Scanning downloads shows a confirmation and progress dialog: '
+        'Settings → Storage & downloads → Backup index → Scan downloaded.',
       ),
-    ],
-  );
+      onTap: _scanDownloaded,
+    ),
+  ];
 }
 
 /// 测试缝：替换真正的重建执行体（避免 widget 测试碰真实数据库 / 文件系统）。
