@@ -25,11 +25,6 @@ import 'package:fushi/src/utils/misc/trimmed_text.dart';
 export 'package:fushi/src/media/manga/library/online_manga_library_entry.dart'
     show kUnavailableMihonExtensionPackage;
 
-/// Reserved for report-shape compatibility. `favorite=false` entries are now
-/// imported as persistent non-library rows, so the importer no longer emits
-/// this reason.
-enum MihonBackupSkipReason { notInLibrary }
-
 /// Why a top-level `BackupPreference` was not applied to MyComic's settings.
 enum MihonBackupAppPreferenceSkipReason {
   /// The key is not one of MyComic's own app preference keys (Mihon native or
@@ -162,7 +157,6 @@ class MihonBackupImportReport {
     required this.sourcePreferencesForMissingSources,
     required this.sourcePreferencesSkipped,
     required this.sourcePreferencesFailed,
-    required this.skippedByReason,
     required this.failedByReason,
     required this.missingSources,
     required this.elapsed,
@@ -274,9 +268,6 @@ class MihonBackupImportReport {
   /// Preferences that failed to persist (database error); the import continued.
   final int sourcePreferencesFailed;
 
-  /// Kept for report-shape compatibility. `favorite=false` entries are now
-  /// imported as non-library rows, so this map is empty.
-  final Map<MihonBackupSkipReason, int> skippedByReason;
   final Map<MihonBackupFailureReason, int> failedByReason;
 
   /// Sources from the backup that are not installed (or disabled) on this
@@ -416,8 +407,6 @@ class MihonBackupImportService {
     final Map<String, _ExistingEntry> existing = await _loadExistingEntries();
     final Map<int, _MissingSourceBuilder> missing =
         <int, _MissingSourceBuilder>{};
-    final Map<MihonBackupSkipReason, int> skippedByReason =
-        <MihonBackupSkipReason, int>{};
     final Map<MihonBackupFailureReason, int> failedByReason =
         <MihonBackupFailureReason, int>{};
     final Map<MihonBackupHistorySkipReason, int> nonLibraryHistorySkipped =
@@ -709,9 +698,6 @@ class MihonBackupImportService {
       sourcePreferencesForMissingSources: sourcePreferencesForMissingSources,
       sourcePreferencesSkipped: sourcePreferencesSkipped,
       sourcePreferencesFailed: sourcePreferencesFailed,
-      skippedByReason: Map<MihonBackupSkipReason, int>.unmodifiable(
-        skippedByReason,
-      ),
       failedByReason: Map<MihonBackupFailureReason, int>.unmodifiable(
         failedByReason,
       ),
