@@ -9,7 +9,10 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi_audio/fushi_audio.dart';
 import 'package:fushi_core/fushi_core.dart';
+import 'package:fushi/src/media/media_item.dart';
+import 'package:fushi/src/media/media_source.dart';
 import 'package:fushi/src/media/manga/download/download_library_index.dart';
+import 'package:fushi/src/media/sources/reader_fushi_source.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_service.dart';
 import 'package:fushi/src/media/manga/library/online_manga_runtime_adapter.dart';
@@ -78,6 +81,7 @@ void main() {
     // 2026-09-12 起在线条目直接落 `<fushi_books>/<bookKey>`；测试里把书根钉到临时目录。
     EpubStorage.debugBaseDirectoryOverride = root.path;
     database = FushiDatabase.forTesting(NativeDatabase.memory());
+    MediaSource.setDatabase(database);
     adapter = _FixtureAdapter();
     service = OnlineMangaLibraryService(
       database: database,
@@ -1193,29 +1197,117 @@ void main() {
     );
   });
 
-  test('刷出空章节列表不得覆盖书架：抛失败、库里旧描述符原样保留', () async {
+  test('刷出空章节列表：详情与封面 URL 仍落库，旧章节原样保留', () async {
     final EpubBookRow row = await service.add(entryFor(chapters: chapters));
     final OnlineMangaLibraryEntry stored =
         OnlineMangaLibraryEntry.tryParse(row.sourceMetadata)!;
     expect(stored.chapters, hasLength(2));
+    expect(stored.series.coverUrl, 'https://example.test/cover');
 
-    // Mihon 的 chapterListParse 撞 Cloudflare 拦截页时**返回空列表而不抛**。
-    await expectLater(
-      service.refresh(
-        bookKey: row.bookKey,
-        existing: stored,
-        series: stored.series,
-        chapters: const <OnlineMangaChapter>[],
-      ),
-      throwsA(isA<OnlineMangaUnavailable>()),
+    // Mihon 的 chapterListParse 撞 Cloudflare 拦截页时**返回空列表而不抛**；详情
+    // 那一步却可能已经成功。ticket 06：封面/元数据不能跟着章节一起被丢弃。
+    const OnlineMangaSeries freshSeries = OnlineMangaSeries(
+      key: '/series/fixture',
+      title: 'Fixture series (renamed)',
+      author: 'Fixture author',
+      coverUrl: 'https://example.test/cover?sig=fresh',
+      raw: <String, Object?>{'url': '/series/fixture'},
+    );
+    final OnlineMangaLibraryEntry? updated = await service.refresh(
+      bookKey: row.bookKey,
+      existing: stored,
+      series: freshSeries,
+      chapters: const <OnlineMangaChapter>[],
     );
 
     final EpubBookRow? after = await database.getEpubBook(row.bookKey);
     final OnlineMangaLibraryEntry kept =
         OnlineMangaLibraryEntry.tryParse(after!.sourceMetadata)!;
-    expect(kept.chapters, hasLength(2),
-        reason: '一次没抛异常的失败刷新不得把书架里的章节清空');
+    expect(
+      kept.series.coverUrl,
+      'https://example.test/cover?sig=fresh',
+      reason: '章节为空不再是整次刷新失败：新的详情/封面 URL 必须落库',
+    );
+    expect(kept.series.title, 'Fixture series (renamed)');
+    expect(
+      kept.chapters,
+      hasLength(2),
+      reason: '源返回空列表而本地已有章节时，保留旧章节缓存、不清空',
+    );
     expect(after.chapterCount, 2);
+    expect(updated?.series.coverUrl, 'https://example.test/cover?sig=fresh');
+  });
+
+  test('章节抓取失败：详情与封面 URL 仍落库、旧章节保留，调用方拿到章节错误', () async {
+    final EpubBookRow row = await service.add(entryFor(chapters: chapters));
+    final OnlineMangaLibraryEntry stored =
+        OnlineMangaLibraryEntry.tryParse(row.sourceMetadata)!;
+    expect(stored.chapters, hasLength(2));
+
+    const OnlineMangaSeries freshSeries = OnlineMangaSeries(
+      key: '/series/fixture',
+      title: 'Fixture series',
+      coverUrl: 'https://example.test/cover?sig=after-chapter-failure',
+      raw: <String, Object?>{'url': '/series/fixture'},
+    );
+    const OnlineMangaUnavailable chapterFailure = OnlineMangaUnavailable(
+      OnlineMangaUnavailableReason.runtimeFailure,
+      'Cloudflare challenge',
+      stage: 'chapters',
+      series: freshSeries,
+    );
+    adapter.refreshScript = (OnlineMangaLibraryEntry entry) async =>
+        throw chapterFailure;
+
+    final OnlineMangaRefreshOutcome outcome = await service.refreshFromSource(
+      bookKey: row.bookKey,
+      entry: stored,
+    );
+
+    expect(outcome.chaptersError, same(chapterFailure));
+    expect(outcome.entry.series.coverUrl, freshSeries.coverUrl);
+    final EpubBookRow? after = await database.getEpubBook(row.bookKey);
+    final OnlineMangaLibraryEntry kept =
+        OnlineMangaLibraryEntry.tryParse(after!.sourceMetadata)!;
+    expect(
+      kept.series.coverUrl,
+      freshSeries.coverUrl,
+      reason: '章节失败前详情已成功：新封面 URL 必须先落库，再向调用方报错',
+    );
+    expect(kept.chapters, hasLength(2), reason: '章节失败不得清空已有章节缓存');
+    expect(
+      Directory(p.join(root.path, 'downloads')).existsSync(),
+      isFalse,
+      reason: '封面/详情刷新不得创建 Download library 目录',
+    );
+  });
+
+  test('签名 URL 过期后：刷新落库的新 coverUrl 被书架封面解析采用', () async {
+    final EpubBookRow row = await service.add(entryFor(chapters: chapters));
+    final OnlineMangaLibraryEntry stored =
+        OnlineMangaLibraryEntry.tryParse(row.sourceMetadata)!;
+    expect(stored.series.coverUrl, 'https://example.test/cover');
+
+    const OnlineMangaSeries refreshedSeries = OnlineMangaSeries(
+      key: '/series/fixture',
+      title: 'Fixture series',
+      coverUrl: 'https://example.test/cover?sig=healed',
+      raw: <String, Object?>{'url': '/series/fixture'},
+    );
+    await service.refresh(
+      bookKey: row.bookKey,
+      existing: stored,
+      series: refreshedSeries,
+      chapters: chapters,
+    );
+
+    final MediaItem? item = await ReaderFushiSource.instance
+        .mediaItemForBookKey(row.bookKey);
+    expect(
+      item?.imageUrl,
+      'https://example.test/cover?sig=healed',
+      reason: '书架封面解析必须读到刷新后持久化的新签名 URL，而不是旧 URL',
+    );
   });
 
   test('刷新本来就空的条目仍照常落库（守卫只挡「有变没有」）', () async {
@@ -1657,9 +1749,22 @@ class _FixtureAdapter implements OnlineMangaRuntimeAdapter {
   Future<String?> sourceLabel(OnlineMangaLibraryEntry entry) async =>
       sourceLabelText;
 
+  /// 非空 = 用这次刷新替换默认的「原样返回」；抛错用例在这里模拟章节失败。
+  Future<OnlineMangaRefreshResult> Function(OnlineMangaLibraryEntry entry)?
+  refreshScript;
+
   @override
-  Future<OnlineMangaRefreshResult> refresh(OnlineMangaLibraryEntry entry) async =>
-      OnlineMangaRefreshResult(series: entry.series, chapters: entry.chapters);
+  Future<OnlineMangaRefreshResult> refresh(
+    OnlineMangaLibraryEntry entry,
+  ) async {
+    final Future<OnlineMangaRefreshResult> Function(OnlineMangaLibraryEntry)?
+    script = refreshScript;
+    if (script != null) return script(entry);
+    return OnlineMangaRefreshResult(
+      series: entry.series,
+      chapters: entry.chapters,
+    );
+  }
 
   @override
   Future<List<OnlineMangaPageRef>> resolveChapterPages({

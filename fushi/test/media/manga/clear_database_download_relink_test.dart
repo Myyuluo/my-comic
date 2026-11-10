@@ -180,11 +180,11 @@ void main() {
 
     // 详情页拉回章节表后自动重链，映射立即可用（无需手动重建索引）。
     adapter.fetchedChapters = chapters;
-    final OnlineMangaLibraryEntry refreshed = await library.refreshFromSource(
+    final OnlineMangaRefreshOutcome refreshed = await library.refreshFromSource(
       bookKey: reopened.bookKey,
       entry: seed,
     );
-    expect(refreshed.chapters, hasLength(2));
+    expect(refreshed.entry.chapters, hasLength(2));
     expect(
       (await db.getMangaChapterDir(reopened.bookKey, '/chapter/1'))?.folderName,
       'Chapter 1',

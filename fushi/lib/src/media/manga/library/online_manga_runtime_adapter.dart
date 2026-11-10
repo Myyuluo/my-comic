@@ -39,6 +39,7 @@ class OnlineMangaUnavailable implements Exception {
     this.cause,
     this.stage,
     this.sourceLabel,
+    this.series,
   });
 
   final OnlineMangaUnavailableReason reason;
@@ -53,6 +54,12 @@ class OnlineMangaUnavailable implements Exception {
 
   /// 出错时那个源的展示名，进诊断文本。
   final String? sourceLabel;
+
+  /// 详情阶段已经成功、只有后续阶段失败时，携带**可以落库**的系列描述。
+  ///
+  /// 票 06：封面 URL 常带时效签名，详情拿到的值即使章节列表失败也必须能写回
+  /// 书架；调用方据此把详情持久化后再照常展示这次失败。
+  final OnlineMangaSeries? series;
 
   /// 可复制诊断对话框用的全文。
   ///
@@ -528,35 +535,48 @@ class MihonLibraryAdapter
   ) async {
     final MihonSourceContext context = await _context(entry);
     final MihonManga request = MihonManga.fromJson(entry.series.raw);
-    // 三个阶段共用一个 catch，桥接层对它们返回的 code 可能完全一样，所以必须
-    // 自己记住断在哪一步（BUG-1767）。
-    String stage = 'details';
+    // 详情与章节分开兜底（票 06）：详情成功拿到的系列/封面 URL 必须能交回
+    // 调用方落库，不能因为章节列表抓取失败就一起丢掉。桥接层对两个阶段的错误
+    // code 可能完全一样，stage 仍要分开记（BUG-1767）。
+    final MihonManga details;
     try {
-      final MihonManga details = await manager.runtime.getDetails(
+      details = await manager.runtime.getDetails(
         context.extension,
         context.source,
         request,
         preferences: context.preferences,
-      );
-      stage = 'chapters';
-      final List<OnlineMangaChapter> chapters = await _chapters(
-        context,
-        details,
-        seriesKey: entry.series.key,
-      );
-      return OnlineMangaRefreshResult(
-        // `mangaDetailsParse` 返回的是增量、可能不带 url（BUG-1767），所以身份
-        // 一律用手上这条已知条目的 key，不读返回值的 url。
-        series: _seriesFrom(details, fallbackKey: entry.series.key),
-        chapters: chapters,
       );
     } on Object catch (error) {
       throw OnlineMangaUnavailable(
         OnlineMangaUnavailableReason.runtimeFailure,
         '$error',
         cause: error,
-        stage: stage,
+        stage: 'details',
         sourceLabel: context.source.name,
+      );
+    }
+    // `mangaDetailsParse` 返回的是增量、可能不带 url（BUG-1767），所以身份
+    // 一律用手上这条已知条目的 key，不读返回值的 url。
+    final OnlineMangaSeries series = _seriesFrom(
+      details,
+      fallbackKey: entry.series.key,
+    );
+    try {
+      final List<OnlineMangaChapter> chapters = await _chapters(
+        context,
+        details,
+        seriesKey: entry.series.key,
+      );
+      return OnlineMangaRefreshResult(series: series, chapters: chapters);
+    } on Object catch (error) {
+      throw OnlineMangaUnavailable(
+        OnlineMangaUnavailableReason.runtimeFailure,
+        '$error',
+        cause: error,
+        stage: 'chapters',
+        sourceLabel: context.source.name,
+        // 详情已经成功：把新封面 URL 等描述随错误带回去，调用方可先落库再报错。
+        series: series,
       );
     }
   }
