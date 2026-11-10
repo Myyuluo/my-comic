@@ -15,11 +15,12 @@ import 'package:fushi/src/settings/settings_schema_rebuild_index.dart';
 
 import '../helpers/test_platform_services.dart';
 
-/// 设置 →「存储与下载」的「重建下载索引」入口。
+/// 设置 →「存储与下载 → 备份索引」的「重建下载索引」入口。
 ///
 /// 整行可点的动作行（确认 → 进度/取消 → 结果摘要），复用现有设置组件与对话框
 /// 壳；重建服务只接收当前 Content root 的两个根，测试缝替换执行体以免 widget
-/// 测试碰真实数据库/文件系统。
+/// 测试碰真实数据库/文件系统。Ticket 06：下载索引与备份合并为「备份索引」，
+/// 重建入口保留原 item id，桌面可见性从 section 下移到本行。
 void main() {
   setUp(() {
     LocaleSettings.setLocale(AppLocale.zhCn);
@@ -32,7 +33,7 @@ void main() {
 
   SettingsSection rebuildSection() =>
       buildDownloadsDestination().sections.singleWhere(
-        (SettingsSection section) => section.id == 'storage.rebuild.section',
+        (SettingsSection section) => section.id == 'system.section.backup',
       );
 
   Future<SettingsContext> captureContext(WidgetTester tester) async {
@@ -98,19 +99,24 @@ void main() {
         failed: value.failed,
       );
 
-  testWidgets('存储与下载页显示「重建下载索引」整行动作入口', (WidgetTester tester) async {
+  testWidgets('备份索引页显示「重建下载索引」整行动作入口', (WidgetTester tester) async {
     final SettingsContext settings = await captureContext(tester);
     final SettingsSection section = rebuildSection();
 
-    expect(section.isVisible(settings), isTrue);
-    expect(section.title, '下载索引');
+    expect(
+      section.isVisible(settings),
+      isTrue,
+      reason: '合并后的备份索引分组在所有平台都渲染（备份行在移动端可见）',
+    );
+    expect(section.visible, isNull, reason: '桌面可见性不能挂在整组上');
+    expect(section.title, '备份索引');
     // 整行可点的动作行，不再是带行尾按钮的状态行。
     final SettingsActionItem item =
         section.items.singleWhere(
               (SettingsItem item) => item.id == 'storage.rebuild_index',
             )
             as SettingsActionItem;
-    expect(item.id, 'storage.rebuild_index');
+    expect(item.id, 'storage.rebuild_index', reason: 'item id 是稳定控制通道键');
     expect(item.title, '重建下载索引');
     expect(
       item.subtitle,
@@ -118,16 +124,18 @@ void main() {
       '不会删除记录或文件。',
     );
     expect(item.cli, isNotNull, reason: '动作行必须声明控制通道入口');
+    expect(item.visible, isNotNull, reason: '桌面可见性下移到重建行自身，不能把整组合并分组变成桌面专属');
+    expect(item.isVisible(settings), isTrue, reason: '桌面测试主机上重建行可见');
     expect(
       buildDownloadsDestination().sections.map(
         (SettingsSection section) => section.id,
       ),
       <String>[
         'storage.location.section',
-        'downloads.section.download',
         'system.section.backup',
-        'storage.rebuild.section',
+        'downloads.section.download',
       ],
+      reason: 'ticket 06：数据存储位置 → 备份索引 → 下载',
     );
   });
 

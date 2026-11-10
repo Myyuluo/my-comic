@@ -181,6 +181,7 @@ class MangaLibraryPageHarness<M extends AppModel> {
     required String title,
     required Widget child,
     bool overrideBooks = true,
+    ThemeData? theme,
   }) {
     return ProviderScope(
       overrides: <Override>[
@@ -195,6 +196,7 @@ class MangaLibraryPageHarness<M extends AppModel> {
       ],
       child: TranslationProvider(
         child: MaterialApp(
+          theme: theme,
           home: Scaffold(
             body: FushiShellTitleScope(
               title: title,
@@ -207,11 +209,13 @@ class MangaLibraryPageHarness<M extends AppModel> {
   }
 
   /// 漫画页（壳 + 书架页）的完整 app。
-  Widget buildApp({bool overrideBooks = true}) => buildScaffold(
-    title: t.manga_library,
-    child: const MangaLibraryPage(),
-    overrideBooks: overrideBooks,
-  );
+  Widget buildApp({bool overrideBooks = true, ThemeData? theme}) =>
+      buildScaffold(
+        title: t.manga_library,
+        child: const MangaLibraryPage(),
+        overrideBooks: overrideBooks,
+        theme: theme,
+      );
 
   /// 设置测试窗口尺寸后挂 [buildApp] 并 settle。
   ///
@@ -220,12 +224,13 @@ class MangaLibraryPageHarness<M extends AppModel> {
   Future<void> pumpPage(
     WidgetTester tester, {
     Size size = const Size(1400, 1200),
+    ThemeData? theme,
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    await tester.pumpWidget(buildApp());
+    await tester.pumpWidget(buildApp(theme: theme));
     await tester.pumpAndSettle();
   }
 }

@@ -1721,11 +1721,16 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
 
   /// 主 chrome 行的继续阅读胶囊（ticket 03，标签栏原来的页签位）。
   ///
-  /// 形态严格按参考图：圆形封面缩略图 + 主色「继续阅读」文案 + 主色圆形播放钮
-  /// （主色上的对比色播放图标），不显示书名与进度。整颗胶囊（含悬浮面的内衬）
-  /// 是一个点击目标，走与旧 hero 相同的继续阅读打开路径（[AppModel.openMedia]）；
-  /// 播放钮只是视觉强调，不单独接事件。悬停 tooltip 显示（应用改名 override 后
-  /// 的）书名。
+  /// 形态严格按参考图：圆形封面缩略图 + 主色「继续阅读」文案 + 下方小号灰黑色
+  /// 书名（ticket 05）+ 主色圆形播放钮（主色上的对比色播放图标）。不显示进度。
+  /// 整颗胶囊（含悬浮面的内衬）是一个点击目标，走与旧 hero 相同的继续阅读打开
+  /// 路径（[AppModel.openMedia]）；播放钮只是视觉强调，不单独接事件。悬停
+  /// tooltip 显示（应用改名 override 后的）完整书名。
+  ///
+  /// 书名行使用显示名（[MediaSource.getDisplayTitleFromMediaItem]），宽度按
+  /// 本地化「继续阅读」的实际渲染宽度用 [TextPainter] 测量后约束，单行省略；
+  /// 桌面 MD3 的 56 高 chrome 不变，Apple 设计系统把胶囊表面增高到 48 容纳
+  /// 两行（chrome 行按内容自适应，见 ADR 0016 修订）。
   ///
   /// 复用悬浮工具栏胶囊表面（[FushiFloatingToolbarSurface]）与胶囊段
   /// （[FushiCapsuleSegment]）的按压 / 悬停反馈，不引入新的视觉语言；窄窗放不下
@@ -1748,6 +1753,26 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
           color: accent,
           fontWeight: FontWeight.w600,
         );
+    // 书名行：小号灰黑色，视觉重心让给主色「继续阅读」；MD3 用 onVariant，
+    // Apple 用 secondaryLabel（与 Fushi 次级文字同一套色阶）。
+    final TextStyle titleStyle =
+        (theme.textTheme.labelSmall ?? const TextStyle()).copyWith(
+          color: apple
+              ? appleColorsOf(context).secondaryLabel
+              : tokens.surfaces.onVariant,
+        );
+    // 书名行的宽度约束 = 本地化「继续阅读」的实际渲染宽度。译文长度随 locale
+    // 变化，不能写死；与主标签同字阶 / 同文字缩放 / 同 locale 测量（先例见
+    // `fushiTopBarInlineItemWidth` / `FushiPageChromeTitle.naturalWidthOf`）。
+    final TextPainter labelPainter = TextPainter(
+      text: TextSpan(text: t.book_continue_reading, style: labelStyle),
+      textDirection: Directionality.maybeOf(context) ?? TextDirection.ltr,
+      textScaler: MediaQuery.textScalerOf(context),
+      locale: Localizations.maybeLocaleOf(context),
+      maxLines: 1,
+    )..layout();
+    final double labelWidth = labelPainter.width.ceilToDouble();
+    labelPainter.dispose();
     void open() => unawaited(_openMediaItem(item));
     return Align(
       alignment: AlignmentDirectional.centerStart,
@@ -1766,6 +1791,10 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
               onTap: open,
               child: FushiFloatingToolbarSurface(
                 key: const ValueKey<String>('reader_shelf_continue_pill'),
+                // Apple 默认悬浮高度（macOS 36 / iOS 44）放不下两行：内部胶囊段
+                // 40 + 上下内衬 8 需要 48。桌面 MD3 保持 56 的 chrome 高度不变；
+                // chrome 行按内容自适应（[FushiFloatingChromeBar] 的 Row 无定高）。
+                height: apple ? 48 : null,
                 padding: const EdgeInsets.symmetric(
                   horizontal: 6,
                   vertical: 4,
@@ -1789,11 +1818,30 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
                         ),
                       ),
                       SizedBox(width: tokens.spacing.gap),
-                      Text(
-                        t.book_continue_reading,
-                        maxLines: 1,
-                        softWrap: false,
-                        style: labelStyle,
+                      Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text(
+                            t.book_continue_reading,
+                            maxLines: 1,
+                            softWrap: false,
+                            style: labelStyle,
+                          ),
+                          SizedBox(
+                            width: labelWidth,
+                            child: Text(
+                              title,
+                              key: const ValueKey<String>(
+                                'reader_shelf_continue_pill_title',
+                              ),
+                              maxLines: 1,
+                              softWrap: false,
+                              overflow: TextOverflow.ellipsis,
+                              style: titleStyle,
+                            ),
+                          ),
+                        ],
                       ),
                       SizedBox(width: tokens.spacing.gap),
                       // 行尾播放钮：纯视觉强调（整颗胶囊就是点击目标），不单独
