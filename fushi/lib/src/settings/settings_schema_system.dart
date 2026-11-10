@@ -131,6 +131,120 @@ SettingsDestination buildSystemDestination() {
     summary: t.settings_destination_system_summary,
     icon: FushiIcons.system,
     sections: <SettingsSection>[
+      // v101 统一更新提醒。四个域各一个开关 + 系统通知总开关。
+      //
+      // 四个域开关**不经 `AppModel.updateFeedService`**，直接读写 pref 键：
+      // service 本身也只是这些键的读写者，走它等于给纯偏好项挂上整条 DB 依赖。
+      // **例外是「系统通知」总开关**：它的显示值要合并系统权限状态、打开时要
+      // 申请权限，这两件事只有 service 知道（BUG-2498）。所以渲染系统页的
+      // widget 测试必须 `wireDatabaseForTesting`——`updateFeedService` 首次访问
+      // 会解引用数据库。
+      SettingsSection(
+        id: 'system.section.update_notifications',
+        title: t.updates_notify_section,
+        items: <SettingsItem>[
+          for (final (
+                UpdateFeedKind kind,
+                String title,
+                String hint,
+                IconData icon,
+              )
+              in <(UpdateFeedKind, String, String, IconData)>[
+                (
+                  UpdateFeedKind.mangaChapter,
+                  t.updates_notify_manga_chapter,
+                  t.updates_notify_manga_chapter_hint,
+                  FushiIcons.manga,
+                ),
+                (
+                  UpdateFeedKind.mangaExtension,
+                  t.updates_notify_manga_extension,
+                  t.updates_notify_manga_extension_hint,
+                  FushiIcons.browserExtension,
+                ),
+              ])
+            SettingsSwitchItem(
+              id: 'system.updates.${kind.dbValue}',
+              title: title,
+              subtitle: hint,
+              icon: icon,
+              // 默认值按域（漫画新章关、扩展开），与
+              // `UpdateFeedService.isKindEnabled` 读同一份 [UpdateFeedKind.defaultEnabled]。
+              defaultValue: kind.defaultEnabled,
+              value: (SettingsContext settingsContext) =>
+                  settingsContext.appModel.prefsRepo.getPref(
+                        kind.enabledPrefKey,
+                        defaultValue: kind.defaultEnabled,
+                      )
+                      as bool,
+              onChanged: (SettingsContext settingsContext, bool value) async {
+                await settingsContext.appModel.prefsRepo.setPref(
+                  kind.enabledPrefKey,
+                  value,
+                );
+                settingsContext.refresh();
+              },
+            ),
+          // 扩展后台自动更新（默认关）：启动时把签名未变的漫画 / 视频扩展装成
+          // 仓库新版；碰过在线源的进程里推迟到下次启动。只在有 Mihon 宿主且
+          // 合规允许在线源的平台出现。
+          SettingsSwitchItem(
+            id: 'system.updates.extension_auto_update',
+            title: t.updates_extension_auto_update,
+            subtitle: t.updates_extension_auto_update_hint,
+            icon: FushiIcons.sync,
+            defaultValue: false,
+            visible: (_) =>
+                MihonRuntimeFactory.isSupported &&
+                StoreRestrictedCapability.onlineMangaSource.isAvailable,
+            value: (SettingsContext settingsContext) =>
+                settingsContext.appModel.mihonExtensionAutoUpdate,
+            onChanged: (SettingsContext settingsContext, bool value) async {
+              await settingsContext.appModel.setMihonExtensionAutoUpdate(value);
+              settingsContext.refresh();
+            },
+          ),
+          // 显示值 = 偏好开 && 系统已授权；打开 = 唯一会弹系统权限框的地方
+          // （BUG-2498：启动期不再申请，申请只跟着用户这一下）。
+          SettingsSwitchItem(
+            id: 'system.updates.system_notifications',
+            title: t.updates_system_notifications,
+            subtitle: t.updates_system_notifications_hint,
+            icon: Icons.notifications_active_outlined,
+            value: (SettingsContext settingsContext) => settingsContext
+                .appModel
+                .updateFeedService
+                .systemNotificationsActive,
+            onChanged: (SettingsContext settingsContext, bool value) async {
+              final UpdateFeedService feed =
+                  settingsContext.appModel.updateFeedService;
+              if (value) {
+                await feed.enableSystemNotifications();
+              } else {
+                await feed.disableSystemNotifications();
+              }
+              settingsContext.refresh();
+            },
+          ),
+          // 无痕阅读（设备本地偏好，默认关 = 记录 History）：只暂停新增 History
+          // 的可见信号（最近阅读排序 / 章节已读 / 书级完成），续读位置与「继续
+          // 阅读」当前章照常写；Tracking 与统计不受影响。开关值由阅读器每次落库
+          // 时现读，切换后无需重启。
+          SettingsSwitchItem(
+            id: 'system.incognito_reading',
+            title: t.reader_incognito_reading,
+            subtitle: t.reader_incognito_reading_hint,
+            icon: FushiIcons.visibilityOff,
+            defaultValue: false,
+            value: (SettingsContext settingsContext) =>
+                settingsContext.appModel.incognitoReading,
+            onChanged: (SettingsContext settingsContext, bool value) async {
+              await settingsContext.appModel.setIncognitoReading(value);
+              settingsContext.refresh();
+            },
+          ),
+        ],
+      ),
       SettingsSection(
         id: 'system.section.general',
         presentation: SettingsSectionPresentation.alwaysExpanded,
@@ -338,120 +452,6 @@ SettingsDestination buildSystemDestination() {
             onChanged: (SettingsContext c, String value) async {
               await c.appModel.setNetworkProxyPassword(value);
               resetSyncHttpClient();
-            },
-          ),
-        ],
-      ),
-      // v101 统一更新提醒。四个域各一个开关 + 系统通知总开关。
-      //
-      // 四个域开关**不经 `AppModel.updateFeedService`**，直接读写 pref 键：
-      // service 本身也只是这些键的读写者，走它等于给纯偏好项挂上整条 DB 依赖。
-      // **例外是「系统通知」总开关**：它的显示值要合并系统权限状态、打开时要
-      // 申请权限，这两件事只有 service 知道（BUG-2498）。所以渲染系统页的
-      // widget 测试必须 `wireDatabaseForTesting`——`updateFeedService` 首次访问
-      // 会解引用数据库。
-      SettingsSection(
-        id: 'system.section.update_notifications',
-        title: t.updates_notify_section,
-        items: <SettingsItem>[
-          for (final (
-                UpdateFeedKind kind,
-                String title,
-                String hint,
-                IconData icon,
-              )
-              in <(UpdateFeedKind, String, String, IconData)>[
-                (
-                  UpdateFeedKind.mangaChapter,
-                  t.updates_notify_manga_chapter,
-                  t.updates_notify_manga_chapter_hint,
-                  FushiIcons.manga,
-                ),
-                (
-                  UpdateFeedKind.mangaExtension,
-                  t.updates_notify_manga_extension,
-                  t.updates_notify_manga_extension_hint,
-                  FushiIcons.browserExtension,
-                ),
-              ])
-            SettingsSwitchItem(
-              id: 'system.updates.${kind.dbValue}',
-              title: title,
-              subtitle: hint,
-              icon: icon,
-              // 默认值按域（漫画新章关、扩展开），与
-              // `UpdateFeedService.isKindEnabled` 读同一份 [UpdateFeedKind.defaultEnabled]。
-              defaultValue: kind.defaultEnabled,
-              value: (SettingsContext settingsContext) =>
-                  settingsContext.appModel.prefsRepo.getPref(
-                        kind.enabledPrefKey,
-                        defaultValue: kind.defaultEnabled,
-                      )
-                      as bool,
-              onChanged: (SettingsContext settingsContext, bool value) async {
-                await settingsContext.appModel.prefsRepo.setPref(
-                  kind.enabledPrefKey,
-                  value,
-                );
-                settingsContext.refresh();
-              },
-            ),
-          // 扩展后台自动更新（默认关）：启动时把签名未变的漫画 / 视频扩展装成
-          // 仓库新版；碰过在线源的进程里推迟到下次启动。只在有 Mihon 宿主且
-          // 合规允许在线源的平台出现。
-          SettingsSwitchItem(
-            id: 'system.updates.extension_auto_update',
-            title: t.updates_extension_auto_update,
-            subtitle: t.updates_extension_auto_update_hint,
-            icon: FushiIcons.sync,
-            defaultValue: false,
-            visible: (_) =>
-                MihonRuntimeFactory.isSupported &&
-                StoreRestrictedCapability.onlineMangaSource.isAvailable,
-            value: (SettingsContext settingsContext) =>
-                settingsContext.appModel.mihonExtensionAutoUpdate,
-            onChanged: (SettingsContext settingsContext, bool value) async {
-              await settingsContext.appModel.setMihonExtensionAutoUpdate(value);
-              settingsContext.refresh();
-            },
-          ),
-          // 显示值 = 偏好开 && 系统已授权；打开 = 唯一会弹系统权限框的地方
-          // （BUG-2498：启动期不再申请，申请只跟着用户这一下）。
-          SettingsSwitchItem(
-            id: 'system.updates.system_notifications',
-            title: t.updates_system_notifications,
-            subtitle: t.updates_system_notifications_hint,
-            icon: Icons.notifications_active_outlined,
-            value: (SettingsContext settingsContext) => settingsContext
-                .appModel
-                .updateFeedService
-                .systemNotificationsActive,
-            onChanged: (SettingsContext settingsContext, bool value) async {
-              final UpdateFeedService feed =
-                  settingsContext.appModel.updateFeedService;
-              if (value) {
-                await feed.enableSystemNotifications();
-              } else {
-                await feed.disableSystemNotifications();
-              }
-              settingsContext.refresh();
-            },
-          ),
-          // 无痕阅读（设备本地偏好，默认关 = 记录 History）：只暂停新增 History
-          // 的可见信号（最近阅读排序 / 章节已读 / 书级完成），续读位置与「继续
-          // 阅读」当前章照常写；Tracking 与统计不受影响。开关值由阅读器每次落库
-          // 时现读，切换后无需重启。
-          SettingsSwitchItem(
-            id: 'system.incognito_reading',
-            title: t.reader_incognito_reading,
-            subtitle: t.reader_incognito_reading_hint,
-            icon: FushiIcons.visibilityOff,
-            defaultValue: false,
-            value: (SettingsContext settingsContext) =>
-                settingsContext.appModel.incognitoReading,
-            onChanged: (SettingsContext settingsContext, bool value) async {
-              await settingsContext.appModel.setIncognitoReading(value);
-              settingsContext.refresh();
             },
           ),
         ],
