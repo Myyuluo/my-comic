@@ -53,3 +53,4 @@
     结果：`All tests passed!`（317 tests）。
 - 数据库 schema：未改 `packages/fushi_core`、数据库或迁移文件（`git diff 0980acde..HEAD -- packages/fushi_core` 为空）；本批无 schema 变更。
 - 合并：`git merge integration/manga-shelf-download-ux` → `Already up to date`（integration HEAD `0980acde` 已是本分支祖先）。
+- 合入 integration（merger）：`git merge --no-ff worktree-agent-a2642d89d260b4def` → merge commit `8f56a677412657ca17d382cfc5cd50428e7bb1ef`；无冲突。合并后重跑本 ticket 相关测试（`test/i18n` 整套、封面解析/写入守卫、stale guard、scan/rebuild/continue-reading 代表测试）：`207 tests, All tests passed!`。
