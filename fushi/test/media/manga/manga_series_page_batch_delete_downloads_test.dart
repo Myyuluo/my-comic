@@ -168,14 +168,36 @@ OnlineMangaLibraryEntry _entry() => const OnlineMangaLibraryEntry(
   chapters: _chapters,
 );
 
+/// 同一 Source 下标题相同的另一部作品（ticket 03：共享同一个下载目录）。
+OnlineMangaLibraryEntry _otherEntry() => const OnlineMangaLibraryEntry(
+  runtime: OnlineMangaRuntimeKind.mihon,
+  extensionPackage: 'org.example.fixture',
+  sourceId: '1',
+  series: OnlineMangaSeries(
+    key: '/series/other',
+    title: 'Fixture series',
+    raw: <String, Object?>{'url': '/series/other'},
+  ),
+  chapters: <OnlineMangaChapter>[
+    OnlineMangaChapter(
+      key: '/other/1',
+      name: 'Other Chapter 1',
+      number: 1,
+      raw: <String, Object?>{'url': '/other/1'},
+    ),
+  ],
+);
+
 /// 在 Download library 里放一章完整下载（章目录 + pages.json + 页图 + 映射行）。
 Future<void> _writeDownloadedChapter(
   FushiDatabase db,
   String bookKey,
   String bookDir,
   String chapterKey,
-  String chapterName,
-) async {
+  String chapterName, {
+  String mangaKey = '/series/fixture',
+  String mangaTitle = 'Fixture series',
+}) async {
   final Directory chapterDir = downloadChapterDirectory(bookDir, chapterName);
   await chapterDir.create(recursive: true);
   await File(p.join(chapterDir.path, '001.jpg')).writeAsBytes(<int>[1]);
@@ -186,8 +208,8 @@ Future<void> _writeDownloadedChapter(
       sourceId: '1',
       sourceName: 'Fake',
       extensionPackage: 'org.example.fixture',
-      mangaKey: '/series/fixture',
-      mangaTitle: 'Fixture series',
+      mangaKey: mangaKey,
+      mangaTitle: mangaTitle,
       chapterKey: chapterKey,
       chapterName: chapterName,
       payload: const MokuroPayload(
@@ -466,7 +488,11 @@ void main() {
             !downloadChapterDirectory(
               row.extractDir,
               'Chapter 2',
-            ).existsSync();
+            ).existsSync() &&
+            _rowWidget(tester, 'Chapter 1').downloadState ==
+                MediaDetailDownloadState.none &&
+            _rowWidget(tester, 'Chapter 2').downloadState ==
+                MediaDetailDownloadState.none;
       });
 
       // 磁盘：适用子集的两章被删，未选 / 不适用的章不动。
@@ -523,6 +549,132 @@ void main() {
 
       // 没有适用项后垃圾桶置灰。
       expect(_enabled(tester, _deleteDownloadsKey), isFalse);
+    });
+
+    testWidgets('共享目录：批量删除只删本作品的章节，保留另一部作品的文件', (
+      WidgetTester tester,
+    ) async {
+      sizeView(tester);
+      final _TestAppModel appModel = _TestAppModel(db, root, library: library);
+      late EpubBookRow row;
+      late EpubBookRow otherRow;
+      late Directory otherChapterDir;
+      await tester.runAsync(() async {
+        row = await library.add(_entry());
+        otherRow = await library.add(_otherEntry());
+        expect(
+          p.equals(otherRow.extractDir, row.extractDir),
+          isTrue,
+          reason: '同一 Source 下同名作品共用下载目录',
+        );
+        await _writeDownloadedChapter(
+          db,
+          row.bookKey,
+          row.extractDir,
+          '/chapter/1',
+          'Chapter 1',
+        );
+        otherChapterDir = downloadChapterDirectory(
+          otherRow.extractDir,
+          'Other Chapter 1',
+        );
+        await _writeDownloadedChapter(
+          db,
+          otherRow.bookKey,
+          otherRow.extractDir,
+          '/other/1',
+          'Other Chapter 1',
+          mangaKey: '/series/other',
+        );
+        await tester.pumpWidget(_harness(appModel, row.bookKey));
+        await pumpUntilFound(tester, find.text('Chapter 1'));
+      });
+
+      await tester.longPress(_chapterRow('Chapter 1'));
+      await _settle(tester);
+      await tester.tap(find.byKey(_deleteDownloadsKey));
+      await _settle(tester);
+      await tester.tap(find.text(t.dialog_delete));
+      await _advanceUntil(tester, () {
+        return !downloadChapterDirectory(
+          row.extractDir,
+          'Chapter 1',
+        ).existsSync();
+      });
+
+      expect(
+        downloadChapterDirectory(row.extractDir, 'Chapter 1').existsSync(),
+        isFalse,
+      );
+      expect(
+        otherChapterDir.existsSync(),
+        isTrue,
+        reason: '共享目录里另一部作品的容器必须保留',
+      );
+      expect(
+        File(p.join(otherChapterDir.path, '001.jpg')).existsSync(),
+        isTrue,
+      );
+      expect(
+        await db.getMangaChapterDir(otherRow.bookKey, '/other/1'),
+        isNotNull,
+        reason: '另一部作品的映射不得被删除',
+      );
+      expect(
+        Directory(row.extractDir).existsSync(),
+        isTrue,
+        reason: '另一部作品还在使用共享目录',
+      );
+      expect(
+        _rowWidget(tester, 'Chapter 1').downloadState,
+        MediaDetailDownloadState.none,
+      );
+    });
+
+    testWidgets('批量删除最后一章后清理空的 manga 与 source 目录', (
+      WidgetTester tester,
+    ) async {
+      sizeView(tester);
+      final _TestAppModel appModel = _TestAppModel(db, root, library: library);
+      late EpubBookRow row;
+      await tester.runAsync(() async {
+        row = await library.add(_entry());
+        await _writeDownloadedChapter(
+          db,
+          row.bookKey,
+          row.extractDir,
+          '/chapter/1',
+          'Chapter 1',
+        );
+        await tester.pumpWidget(_harness(appModel, row.bookKey));
+        await pumpUntilFound(tester, find.text('Chapter 1'));
+      });
+
+      await tester.longPress(_chapterRow('Chapter 1'));
+      await _settle(tester);
+      await tester.tap(find.byKey(_deleteDownloadsKey));
+      await _settle(tester);
+      await tester.tap(find.text(t.dialog_delete));
+      await _advanceUntil(
+        tester,
+        () => !Directory(row.extractDir).existsSync(),
+      );
+
+      expect(
+        Directory(row.extractDir).existsSync(),
+        isFalse,
+        reason: '删完最后一章后空的 manga 目录应被清理',
+      );
+      expect(
+        Directory(p.dirname(row.extractDir)).existsSync(),
+        isFalse,
+        reason: '整个 source 目录也空了才清理 source',
+      );
+      expect(
+        Directory(p.join(root.path, 'downloads')).existsSync(),
+        isTrue,
+        reason: 'Download library 根目录保留',
+      );
     });
   });
 

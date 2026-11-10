@@ -239,11 +239,14 @@ String fitDownloadLibrarySegmentWithSuffix({
   return '$stem$tail';
 }
 
-/// 取第一个未被占用的目录名。
+/// 取第一个未被占用的 Manga/Source 目录名。
 ///
 /// 首选 [base]；被占时若有 [qualifier]（扫译组）先试 `base [qualifier]`，
 /// 再退到 `base [qualifier] (2)…` / `base (2)…`。比较是否占用由 [isTaken]
 /// 决定（调用方负责大小写不敏感）。
+///
+/// 只用于 Manga/Source 目录（不同标题净化后同名时保留 `(2)` 区分，ticket 03
+/// 的既定规则）。章节容器名冲突用 [uniqueDownloadChapterName]，不用 `(2)`。
 Future<String> uniqueDownloadLibraryFolderName({
   required String base,
   String? qualifier,
@@ -299,14 +302,75 @@ String downloadChapterArchiveName(String raw) {
 File downloadChapterArchiveFile(String mangaDir, String containerName) =>
     File(p.join(mangaDir, containerName));
 
+/// 选一个未占用的章节文件夹容器名。
+///
+/// 冲突消解见 [uniqueDownloadChapterName]：扫译组后缀优先，其次稳定身份的
+/// 短哈希；不使用 `(2)`。[mangaDir] 只用于路径长度预算。
+Future<String> uniqueDownloadChapterFolderName({
+  required String mangaDir,
+  required String base,
+  required String identity,
+  String? qualifier,
+  required Future<bool> Function(String name) isTaken,
+}) {
+  final int budget = downloadLibrarySegmentBudget(mangaDir);
+  return uniqueDownloadChapterName(
+    base: sanitizeDownloadLibrarySegment(base, maxLength: budget),
+    qualifier: qualifier,
+    identity: identity,
+    isTaken: isTaken,
+    maxLength: budget,
+  );
+}
+
+/// 选一个未占用的章节容器名（不含扩展名）。
+///
+/// 首选 [base]；被占时先试扫译组 `base [扫译组]`，仍冲突时改用由 [identity]
+/// （通常是章 key）派生的短哈希 `base~<8 位哈希>`。哈希保证同名章重复尝试得到
+/// 同一名字，且同一章残留半成品占住哈希名时继续换哈希——全程不使用 `(2)`
+/// 序号（Mihon 式章节命名）。
+Future<String> uniqueDownloadChapterName({
+  required String base,
+  String? qualifier,
+  required String identity,
+  required Future<bool> Function(String candidate) isTaken,
+  int maxLength = kDownloadLibraryMaxSegmentLength,
+}) async {
+  if (!await isTaken(base)) return base;
+  final String preferred = qualifier == null || qualifier.isEmpty
+      ? base
+      : fitDownloadLibrarySegmentWithSuffix(
+          base: base,
+          suffix: ' [$qualifier]',
+          maxLength: maxLength,
+        );
+  if (preferred != base && !await isTaken(preferred)) return preferred;
+  final String hashed = fitDownloadLibrarySegmentWithSuffix(
+    base: base,
+    suffix: '~${downloadLibraryShortHash(identity)}',
+    maxLength: maxLength,
+  );
+  if (!await isTaken(hashed)) return hashed;
+  // 同身份的残缺容器占住了哈希名：继续用加盐哈希，仍然不回到 (2)。
+  for (int attempt = 2; ; attempt++) {
+    final String candidate = fitDownloadLibrarySegmentWithSuffix(
+      base: base,
+      suffix: '~${downloadLibraryShortHash('$identity\u0000$attempt')}',
+      maxLength: maxLength,
+    );
+    if (!await isTaken(candidate)) return candidate;
+  }
+}
+
 /// 选一个未占用的 CBZ 章节容器名（含 `.cbz`）。
 ///
-/// 与文件夹命名共用同一套冲突消解：净化 [base]（长度预算先减去扩展名）后按
-/// `[扫译组]` / `(2)` 递增；[isTaken] 收到的候选名**已带扩展名**，调用方按
-/// 完整文件名（大小写不敏感）判断占用。
+/// 与文件夹命名共用同一套冲突消解（见 [uniqueDownloadChapterName]）；
+/// [isTaken] 收到的候选名**已带扩展名**，调用方按完整文件名（大小写不敏感）
+/// 判断占用。
 Future<String> uniqueDownloadChapterArchiveName({
   required String mangaDir,
   required String base,
+  required String identity,
   String? qualifier,
   required Future<bool> Function(String name) isTaken,
 }) async {
@@ -314,9 +378,10 @@ Future<String> uniqueDownloadChapterArchiveName({
   final int baseBudget = budget > kDownloadArchiveExtension.length
       ? budget - kDownloadArchiveExtension.length
       : 1;
-  final String unique = await uniqueDownloadLibraryFolderName(
+  final String unique = await uniqueDownloadChapterName(
     base: sanitizeDownloadLibrarySegment(base, maxLength: baseBudget),
     qualifier: qualifier,
+    identity: identity,
     isTaken: (String candidate) =>
         isTaken(downloadChapterArchiveName(candidate)),
     maxLength: baseBudget,

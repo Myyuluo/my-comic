@@ -782,6 +782,7 @@ class MangaDownloadService {
         staging: staging,
         mangaDir: mangaDir,
         desiredContainerName: target.containerName,
+        identity: chapter.key,
         qualifier: _chapterScanlatorQualifier(chapter),
         token: token,
       );
@@ -790,6 +791,7 @@ class MangaDownloadService {
         staging: staging,
         mangaDir: mangaDir,
         desiredFolderName: target.containerName,
+        identity: chapter.key,
         qualifier: _chapterScanlatorQualifier(chapter),
       );
     }
@@ -812,7 +814,7 @@ class MangaDownloadService {
   /// 2. 否则扫描 manga 目录：任一同身份的完整容器（文件夹或 `.cbz`）也可认领
   ///    ——升级前已有的文件夹章节原样采纳，绝不因开关而转换。
   /// 3. 其余一律视为已占用：同名不同章（哪怕大小写不同）、半成品、外来目录/
-  ///    文件——绝不覆盖，按 `[扫译组]` / `(2)` 后缀另起名字。
+  ///    文件——绝不覆盖，按 `[扫译组]` / 短哈希后缀另起名字（不用 `(2)`）。
   ///
   /// 新下载的容器类型由任务开始运行时捕获的 [saveAsCbz] 决定。
   Future<_ChapterTarget> _prepareChapterTarget({
@@ -863,6 +865,7 @@ class MangaDownloadService {
       final String containerName = await uniqueDownloadChapterArchiveName(
         mangaDir: mangaDir,
         base: _chapterRawName(chapter),
+        identity: chapter.key,
         qualifier: qualifier,
         isTaken: (String name) => _chapterNameTaken(mangaDir, name),
       );
@@ -877,11 +880,12 @@ class MangaDownloadService {
       mangaDirPath: mangaDir,
       raw: _chapterRawName(chapter),
     );
-    final String folderName = await uniqueDownloadLibraryFolderName(
+    final String folderName = await uniqueDownloadChapterFolderName(
+      mangaDir: mangaDir,
       base: base,
+      identity: chapter.key,
       qualifier: qualifier,
       isTaken: (String candidate) => _chapterNameTaken(mangaDir, candidate),
-      maxLength: downloadLibrarySegmentBudget(mangaDir),
     );
     return _ChapterTarget(
       containerName: folderName,
@@ -896,7 +900,7 @@ class MangaDownloadService {
     return name.isEmpty ? chapter.key : name;
   }
 
-  /// 同名章的优先区分后缀：扫译组；无扫译组时退回 `(2)` 序号。
+  /// 同名章的优先区分后缀：扫译组；无扫译组时退回稳定身份的短哈希。
   static String? _chapterScanlatorQualifier(OnlineMangaChapter chapter) {
     final String scanlator = chapter.scanlator?.trim() ?? '';
     if (scanlator.isEmpty) return null;
@@ -987,13 +991,15 @@ class MangaDownloadService {
     required Directory staging,
     required String mangaDir,
     required String desiredFolderName,
+    required String identity,
     String? qualifier,
   }) async {
     final int maxLength = downloadLibrarySegmentBudget(mangaDir);
     while (true) {
-      final String candidate = await uniqueDownloadLibraryFolderName(
+      final String candidate = await uniqueDownloadChapterName(
         base: desiredFolderName,
         qualifier: qualifier,
+        identity: identity,
         isTaken: (String name) => _chapterNameTaken(mangaDir, name),
         maxLength: maxLength,
       );
@@ -1020,6 +1026,7 @@ class MangaDownloadService {
     required Directory staging,
     required String mangaDir,
     required String desiredContainerName,
+    required String identity,
     required _CancelToken token,
     String? qualifier,
   }) async {
@@ -1034,6 +1041,7 @@ class MangaDownloadService {
       final String candidateName = await uniqueDownloadChapterArchiveName(
         mangaDir: mangaDir,
         base: desiredBase,
+        identity: identity,
         qualifier: qualifier,
         isTaken: (String name) => _chapterNameTaken(mangaDir, name),
       );
@@ -1191,8 +1199,8 @@ class MangaDownloadService {
   ///
   /// 正常情况下失败收尾已按 [_archiveTempJobId] 删掉临时包；进程在压缩中途退出
   /// 时路径只留在磁盘上，内存里没有记录。这里按任务标题推导本章的临时包名，
-  /// 只清本章的 `.cbz.tmp`（支持 `[扫译组]` / `(2)` 后缀），不影响其他任务的
-  /// 临时文件。
+  /// 只清本章的 `.cbz.tmp`（支持 `[扫译组]` / `~短哈希` / 旧 `(2)` 后缀），
+  /// 不影响其他任务的临时文件。
   Future<void> _deleteArchiveTempsForJob(
     MangaDownloadJobRow job,
     String mangaDir,
@@ -1211,7 +1219,7 @@ class MangaDownloadService {
       maxLength: baseBudget,
     );
     final RegExp expected = RegExp(
-      '^${RegExp.escape(base)}(?: \\[[^\\]]+\\]| \\(\\d+\\))*'
+      '^${RegExp.escape(base)}(?: \\[[^\\]]+\\]|~[0-9a-f]{8}| \\(\\d+\\))*'
       '${RegExp.escape('$kDownloadArchiveExtension.tmp')}\$',
       caseSensitive: false,
     );

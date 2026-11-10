@@ -93,6 +93,29 @@ void main() {
     return chapterDir;
   }
 
+  /// 在共享漫画目录里为另一部作品写一章（容器 + manifest + 映射）。
+  Future<Directory> writeSharedChapter({
+    required String otherBookKey,
+    required String mangaKey,
+    required String chapterKey,
+    required String folderName,
+  }) async {
+    final Directory chapterDir = downloadChapterDirectory(mangaDir, folderName);
+    await chapterDir.create(recursive: true);
+    await File(p.join(chapterDir.path, '001.jpg')).writeAsBytes(<int>[2]);
+    await writePagesManifestAtomically(
+      chapterDir,
+      manifestFor(chapterKey, mangaKey: mangaKey),
+    );
+    await db.upsertMangaChapterDir(
+      bookKey: otherBookKey,
+      chapterKey: chapterKey,
+      folderName: folderName,
+      updatedAt: 2,
+    );
+    return chapterDir;
+  }
+
   test('映射存在时解析到 downloads/{source}/{manga}/{chapter}，页图根是章目录', () async {
     final Directory chapterDir = await writeNewLayoutChapter('Chapter 1');
     final DownloadLibraryIndex index = DownloadLibraryIndex(db);
@@ -244,6 +267,61 @@ void main() {
     );
   });
 
+  test('共享目录：删作品 A 的章节不动作品 B 的容器、映射与目录', () async {
+    const String otherBookKey = 'other-work';
+    await db.insertEpubBook(
+      EpubBooksCompanion.insert(
+        bookKey: otherBookKey,
+        title: 'Fixture series',
+        epubPath: 'pages.json',
+        extractDir: mangaDir,
+        chapterCount: 1,
+        chaptersJson: '[]',
+        importedAt: 2,
+        format: const Value<String>('manga'),
+      ),
+    );
+    // 两部作品在同一共享目录里使用相同的章 key `/c/1`，容器名不同。
+    final Directory aChapter = await writeNewLayoutChapter('A chapter 1');
+    final Directory bChapter = await writeSharedChapter(
+      otherBookKey: otherBookKey,
+      mangaKey: '/series/other',
+      chapterKey: '/c/1',
+      folderName: 'B chapter 1',
+    );
+    final DownloadLibraryIndex index = DownloadLibraryIndex(db);
+
+    await index.deleteChapter(bookKey: bookKey, chapterKey: '/c/1');
+
+    expect(aChapter.existsSync(), isFalse, reason: '只删 A 自己映射的容器');
+    expect(bChapter.existsSync(), isTrue, reason: 'B 的容器必须保留');
+    expect(
+      File(p.join(bChapter.path, '001.jpg')).existsSync(),
+      isTrue,
+      reason: 'B 的页图必须保留',
+    );
+    expect(
+      (await readPagesManifest(bChapter))?.mangaKey,
+      '/series/other',
+      reason: 'B 的 manifest 不得被改写或删除',
+    );
+    expect(
+      await db.getMangaChapterDir(otherBookKey, '/c/1'),
+      isNotNull,
+      reason: 'B 的数据库映射必须保留',
+    );
+    expect(await db.getMangaChapterDir(bookKey, '/c/1'), isNull);
+    expect(
+      Directory(mangaDir).existsSync(),
+      isTrue,
+      reason: '共享目录里还有 B 的文件，不得清理',
+    );
+    expect(
+      Directory(p.join(root.path, 'downloads', 'Example Source')).existsSync(),
+      isTrue,
+    );
+  });
+
   test('删章走映射：删实际目录并清映射；不存在时静默', () async {
     final Directory chapterDir = await writeNewLayoutChapter('Chapter 1');
     final DownloadLibraryIndex index = DownloadLibraryIndex(db);
@@ -255,6 +333,252 @@ void main() {
     await expectLater(
       index.deleteChapter(bookKey: bookKey, chapterKey: '/c/1'),
       completes,
+    );
+  });
+
+  test('身份回退删除（无映射）同样清理空的 manga 与 source 目录', () async {
+    const OnlineMangaLibraryEntry entry = OnlineMangaLibraryEntry(
+      runtime: OnlineMangaRuntimeKind.mihon,
+      extensionPackage: 'org.example.fixture',
+      sourceId: '1',
+      series: OnlineMangaSeries(
+        key: '/series/fixture',
+        title: 'Fixture series',
+        raw: <String, Object?>{'url': '/series/fixture'},
+      ),
+      chapters: <OnlineMangaChapter>[
+        OnlineMangaChapter(
+          key: '/c/1',
+          name: 'Chapter 1',
+          raw: <String, Object?>{'url': '/c/1'},
+        ),
+      ],
+    );
+    // 磁盘上有完整容器，但数据库里没有映射（清库后重开 / 映射丢失）。
+    final Directory chapterDir = downloadChapterDirectory(
+      mangaDir,
+      'Chapter 1',
+    );
+    await chapterDir.create(recursive: true);
+    await File(p.join(chapterDir.path, '001.jpg')).writeAsBytes(<int>[1]);
+    await writePagesManifestAtomically(chapterDir, manifestFor('/c/1'));
+    final DownloadLibraryIndex index = DownloadLibraryIndex(db);
+
+    await index.deleteChapterForEntry(
+      entry: entry,
+      chapterKey: '/c/1',
+      row: await db.getEpubBook(bookKey),
+    );
+
+    expect(chapterDir.existsSync(), isFalse);
+    expect(
+      Directory(mangaDir).existsSync(),
+      isFalse,
+      reason: '身份回退路径也要清理刚删空的 manga 目录',
+    );
+    expect(
+      Directory(p.join(root.path, 'downloads', 'Example Source')).existsSync(),
+      isFalse,
+    );
+  });
+
+  test('身份回退删除共享目录：只删本作品身份匹配的容器', () async {
+    const OnlineMangaLibraryEntry entry = OnlineMangaLibraryEntry(
+      runtime: OnlineMangaRuntimeKind.mihon,
+      extensionPackage: 'org.example.fixture',
+      sourceId: '1',
+      series: OnlineMangaSeries(
+        key: '/series/fixture',
+        title: 'Fixture series',
+        raw: <String, Object?>{'url': '/series/fixture'},
+      ),
+      chapters: <OnlineMangaChapter>[
+        OnlineMangaChapter(
+          key: '/c/1',
+          name: 'Chapter 1',
+          raw: <String, Object?>{'url': '/c/1'},
+        ),
+      ],
+    );
+    const OnlineMangaLibraryEntry other = OnlineMangaLibraryEntry(
+      runtime: OnlineMangaRuntimeKind.mihon,
+      extensionPackage: 'org.example.fixture',
+      sourceId: '1',
+      series: OnlineMangaSeries(
+        key: '/series/other',
+        title: 'Fixture series',
+        raw: <String, Object?>{'url': '/series/other'},
+      ),
+      chapters: <OnlineMangaChapter>[
+        OnlineMangaChapter(
+          key: '/other/1',
+          name: 'Chapter 1',
+          raw: <String, Object?>{'url': '/other/1'},
+        ),
+      ],
+    );
+    Future<Directory> write(
+      String folderName,
+      String chapterKey,
+      String mangaKey,
+    ) async {
+      final Directory chapterDir = downloadChapterDirectory(
+        mangaDir,
+        folderName,
+      );
+      await chapterDir.create(recursive: true);
+      await File(p.join(chapterDir.path, '001.jpg')).writeAsBytes(<int>[1]);
+      await writePagesManifestAtomically(
+        chapterDir,
+        manifestFor(chapterKey, mangaKey: mangaKey),
+      );
+      return chapterDir;
+    }
+
+    // 另一部作品的容器名排序在前，扫描必须先找到本作品的 manifest。
+    final Directory otherChapter = await write(
+      'A other work',
+      '/other/1',
+      '/series/other',
+    );
+    final Directory fixtureChapter = await write(
+      'B fixture work',
+      '/c/1',
+      '/series/fixture',
+    );
+    // 模拟「清除数据库」：行与映射都不在，只剩磁盘上的 pages.json 身份。
+    await db.deleteEpubBook(bookKey);
+    final DownloadLibraryIndex index = DownloadLibraryIndex(db);
+
+    await index.deleteChapterForEntry(
+      entry: entry,
+      chapterKey: '/c/1',
+      row: null,
+    );
+
+    expect(fixtureChapter.existsSync(), isFalse, reason: '删掉本作品的容器');
+    expect(
+      otherChapter.existsSync(),
+      isTrue,
+      reason: '共享目录里另一部作品的容器必须保留',
+    );
+    expect(File(p.join(otherChapter.path, '001.jpg')).existsSync(), isTrue);
+    expect(
+      Directory(mangaDir).existsSync(),
+      isTrue,
+      reason: '另一部作品还在用共享目录',
+    );
+
+    // 另一部作品也删掉后才清理空目录。
+    await index.deleteChapterForEntry(
+      entry: other,
+      chapterKey: '/other/1',
+      row: null,
+    );
+    expect(otherChapter.existsSync(), isFalse);
+    expect(Directory(mangaDir).existsSync(), isFalse);
+    expect(
+      Directory(p.join(root.path, 'downloads', 'Example Source')).existsSync(),
+      isFalse,
+    );
+  });
+
+  test('空的 manga 目录仍被其他作品引用时不清理', () async {
+    final Directory chapterDir = await writeNewLayoutChapter('Chapter 1');
+    // 同名共享目录里的另一部作品还没有下载任何章，但它的行引用着这个目录。
+    await db.insertEpubBook(
+      EpubBooksCompanion.insert(
+        bookKey: 'other-work',
+        title: 'Fixture series',
+        epubPath: 'pages.json',
+        extractDir: mangaDir,
+        chapterCount: 1,
+        chaptersJson: '[]',
+        importedAt: 2,
+        format: const Value<String>('manga'),
+      ),
+    );
+    final DownloadLibraryIndex index = DownloadLibraryIndex(db);
+
+    await index.deleteChapter(bookKey: bookKey, chapterKey: '/c/1');
+
+    expect(chapterDir.existsSync(), isFalse);
+    expect(
+      Directory(mangaDir).existsSync(),
+      isTrue,
+      reason: '另一部作品仍引用该共享目录，即使它此刻是空的也不能删',
+    );
+    expect(
+      Directory(p.join(root.path, 'downloads', 'Example Source')).existsSync(),
+      isTrue,
+      reason: 'manga 目录保留时 source 目录也不能清理',
+    );
+  });
+
+  test('旧版本遗留的封面目录与随机字符串目录不自动删除', () async {
+    final Directory sourceDir = Directory(
+      p.join(root.path, 'downloads', 'Example Source'),
+    );
+    // 旧版本遗留：封面目录、随机字符串目录、以及一个空的随机字符串目录。
+    final Directory coverOnly = Directory(p.join(sourceDir.path, 'Cover dir'))
+      ..createSync(recursive: true);
+    final File cover = File(p.join(coverOnly.path, 'cover.jpg'))
+      ..writeAsBytesSync(<int>[9]);
+    final Directory randomName = Directory(p.join(sourceDir.path, 'x8f2a9c'))
+      ..createSync(recursive: true);
+    final File randomCover = File(p.join(randomName.path, 'cover.jpg'))
+      ..writeAsBytesSync(<int>[8]);
+    final Directory emptyRandom = Directory(p.join(sourceDir.path, 'q7d1e0'))
+      ..createSync(recursive: true);
+    final Directory chapterDir = await writeNewLayoutChapter('Chapter 1');
+    final DownloadLibraryIndex index = DownloadLibraryIndex(db);
+
+    await index.deleteChapter(bookKey: bookKey, chapterKey: '/c/1');
+
+    expect(chapterDir.existsSync(), isFalse);
+    expect(
+      Directory(mangaDir).existsSync(),
+      isFalse,
+      reason: '本作品的空 manga 目录仍可清理',
+    );
+    expect(coverOnly.existsSync(), isTrue, reason: '旧封面目录不得自动删除');
+    expect(cover.existsSync(), isTrue);
+    expect(randomName.existsSync(), isTrue, reason: '随机字符串目录不得自动删除');
+    expect(randomCover.existsSync(), isTrue);
+    expect(emptyRandom.existsSync(), isTrue, reason: '空的遗留目录也不主动扫描删除');
+    expect(
+      sourceDir.existsSync(),
+      isTrue,
+      reason: 'source 目录并非真的空了（遗留目录还在），不能删',
+    );
+    expect(
+      File(p.join(coverOnly.path, 'cover.jpg')).readAsBytesSync(),
+      <int>[9],
+      reason: '遗留文件内容不得被改写',
+    );
+  });
+
+  test('删最后一章后清理空的 manga 目录与 source 目录', () async {
+    final Directory chapterDir = await writeNewLayoutChapter('Chapter 1');
+    final DownloadLibraryIndex index = DownloadLibraryIndex(db);
+
+    await index.deleteChapter(bookKey: bookKey, chapterKey: '/c/1');
+
+    expect(chapterDir.existsSync(), isFalse);
+    expect(
+      Directory(mangaDir).existsSync(),
+      isFalse,
+      reason: '没有其他作品的容器时，空的 manga 目录一并清理',
+    );
+    expect(
+      Directory(p.join(root.path, 'downloads', 'Example Source')).existsSync(),
+      isFalse,
+      reason: '整个 source 目录也空了才删除 source',
+    );
+    expect(
+      Directory(p.join(root.path, 'downloads')).existsSync(),
+      isTrue,
+      reason: 'Download library 根目录不是清理对象',
     );
   });
 
@@ -338,6 +662,11 @@ void main() {
     await index.deleteChapter(bookKey: bookKey, chapterKey: '/c/1');
     expect(archiveFile.existsSync(), isFalse);
     expect(await db.getMangaChapterDir(bookKey, '/c/1'), isNull);
+    expect(
+      Directory(mangaDir).existsSync(),
+      isFalse,
+      reason: '最后一个 CBZ 删除后空的 manga 目录也清理',
+    );
 
     await expectLater(
       index.deleteChapter(bookKey: bookKey, chapterKey: '/c/1'),
