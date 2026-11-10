@@ -2010,6 +2010,87 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     ];
   }
 
+  /// 批量下载只适用于在线、来源可解析的条目：本地图源 / 本地卷（[_entry] 为
+  /// null）没有在线下载；来源未安装（运行时解析失败）或解析尚未结束时不能发起。
+  bool get _batchDownloadSourceAvailable =>
+      _entry != null && _sourceLabelResolved && !_sourceMissing;
+
+  /// 批量下载的规划：当前可见且选中的在线章节交给与「下载全部」共享的
+  /// [planMangaChapterDownload]，由它跳过已下载、已排队 / 下载中 / 暂停与锁定
+  /// 章。混合选择因此只处理可下载子集；遍历顺序不变，入队顺序仍是旧→新。
+  ({List<OnlineMangaChapter> pending, int lockedSkipped})
+  get _batchDownloadPlan {
+    final OnlineMangaLibraryEntry? entry = _entry;
+    if (entry == null || !_batchDownloadSourceAvailable) {
+      return (pending: const <OnlineMangaChapter>[], lockedSkipped: 0);
+    }
+    final Set<String> selectedKeys = <String>{
+      for (final OnlineMangaChapter chapter in _selectedVisibleChapters)
+        chapter.key,
+    };
+    if (selectedKeys.isEmpty) {
+      return (pending: const <OnlineMangaChapter>[], lockedSkipped: 0);
+    }
+    return planMangaChapterDownload(
+      entry: entry,
+      downloadedChapterKeys: _downloaded,
+      jobsByChapterKey: _jobs,
+      chapterKeys: selectedKeys,
+    );
+  }
+
+  /// 批量下载选中的适用章节：不弹确认，直接复用「下载全部」的 planner 与
+  /// [MangaDownloadService.enqueueChapters] 路径（CBZ 设置与下载顺序由下载
+  /// 服务沿用）。入队后立刻重算任务表，章节行与下载页随即显示排队状态。
+  Future<void> _batchDownloadSelected() async {
+    final OnlineMangaLibraryEntry? entry = _entry;
+    final AppModel? appModel = _appModelOrNull;
+    if (entry == null || appModel == null || _batchRunning) return;
+    final ({List<OnlineMangaChapter> pending, int lockedSkipped}) plan =
+        _batchDownloadPlan;
+    final List<OnlineMangaChapter> pending = plan.pending;
+    if (pending.isEmpty) return;
+    if (plan.lockedSkipped > 0) {
+      FushiToast.show(
+        msg: t.manga_series_download_all_locked_skipped(
+          count: plan.lockedSkipped,
+        ),
+      );
+    }
+    setState(() => _batchRunning = true);
+    try {
+      await appModel.mangaDownloadService.enqueueChapters(
+        entry: entry,
+        chapters: pending,
+        autoOcr: false,
+      );
+      await _syncDownloadRow();
+      if (mounted) {
+        FushiToast.show(
+          msg: t.manga_series_download_all_queued(count: pending.length),
+        );
+      }
+    } on Object catch (error, stack) {
+      ErrorLogService.instance.log(
+        'MangaSeriesPage.batchDownloadSelected',
+        error,
+        stack,
+      );
+      if (mounted) {
+        FushiToast.show(
+          msg: describeOnlineSourceError(error),
+          severity: ToastSeverity.error,
+        );
+      }
+    } finally {
+      await _refreshDownloadState();
+      if (mounted) {
+        _syncVisibleSelectionOrder();
+        setState(() => _batchRunning = false);
+      }
+    }
+  }
+
   /// 批量标记已读 / 未读：只写章级 `readAt`，与单章菜单同一套数据库动作，不
   /// 改书级 `completedAt`，也不弹确认。混合选择只处理适用子集。
   Future<void> _batchMarkRead({required bool read}) async {
@@ -2144,8 +2225,9 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
   }
 
   /// 底部批量栏：已选 N / 全选 / 反选 + 标记已读（圆形空心对勾）/ 标记未读
-  /// （圆形实心对勾）/ 删除已下载（垃圾桶）。全部已选已读时已读置灰，全部
-  /// 未读时未读置灰；没有可删的已完成在线下载时垃圾桶置灰。
+  /// （圆形实心对勾）/ 下载选中（下载图标）/ 删除已下载（垃圾桶）。全部已选
+  /// 已读时已读置灰，全部未读时未读置灰；没有可下载的选中在线章节时下载置灰
+  /// （本地源、来源未安装同样如此）；没有可删的已完成在线下载时垃圾桶置灰。
   Widget _buildBatchActionBar(BuildContext context) {
     final List<OnlineMangaChapter> selected = _selectedVisibleChapters;
     final bool canMarkRead =
@@ -2158,6 +2240,9 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
         selected.any(
           (OnlineMangaChapter chapter) => _states[chapter.key]?.readAt != null,
         );
+    // 与点击时的规划同源：已下载 / 已排队 / 下载中 / 暂停 / 锁定章都不会入队，
+    // 所以没有 pending 时动作置灰；混合选择仍只处理适用子集。
+    final bool canDownloadSelected = _batchDownloadPlan.pending.isNotEmpty;
     final bool canDeleteDownloads = _deletableSelectedChapters.isNotEmpty;
     return BatchActionBar(
       selectedCount: _selection.length,
@@ -2177,6 +2262,13 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
           onTap: () => unawaited(_batchMarkRead(read: false)),
           icon: FushiIcons.filled(FushiIcons.success),
           tooltip: t.manga_series_mark_unread,
+        ),
+        FushiIconButton(
+          key: const ValueKey<String>('manga_series_batch_download_selected'),
+          enabled: canDownloadSelected && !_batchRunning,
+          onTap: () => unawaited(_batchDownloadSelected()),
+          icon: FushiIcons.download,
+          tooltip: t.manga_online_download_selected,
         ),
         FushiIconButton(
           key: const ValueKey<String>('manga_series_batch_delete_downloads'),
