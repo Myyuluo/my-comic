@@ -160,6 +160,27 @@ void main() {
     );
   });
 
+  test('章节抓取失败：错误仍携带详情阶段拿到的系列与封面 URL', () async {
+    await seedSource(sourceRow());
+    await manager.initialise();
+    runtime.coverUrl = 'https://example.invalid/fresh-cover.jpg';
+    runtime.chaptersError = StateError('Cloudflare challenge');
+
+    await expectLater(
+      MihonLibraryAdapter(manager).refresh(placeholderEntry()),
+      throwsA(
+        isA<OnlineMangaUnavailable>()
+            .having((OnlineMangaUnavailable e) => e.stage, 'stage', 'chapters')
+            .having(
+              (OnlineMangaUnavailable e) => e.series?.coverUrl,
+              'series.coverUrl',
+              'https://example.invalid/fresh-cover.jpg',
+            ),
+      ),
+      reason: '详情已经成功时，章节失败不得让新的封面 URL 一起丢失（票 06）',
+    );
+  });
+
   test('刷新把源列表下标写成 sourceOrder（0 = 最新一话）', () async {
     await seedSource(sourceRow());
     await manager.initialise();
@@ -300,6 +321,11 @@ class _SourceRuntime extends Fake implements MihonRuntime {
   MihonSource? lastPagesSource;
   MihonSource? lastCoverSource;
 
+  String coverUrl = 'https://example.invalid/cover.jpg';
+
+  /// 非空 = `getChapters` 抛这个错误（模拟 Cloudflare / 站点抽风）。
+  Object? chaptersError;
+
   List<MihonChapter> chapters = const <MihonChapter>[
     MihonChapter(
       url: '/chapter/1',
@@ -320,7 +346,7 @@ class _SourceRuntime extends Fake implements MihonRuntime {
     return MihonManga(
       url: manga.url,
       title: 'Fixture series',
-      coverUrl: 'https://example.invalid/cover.jpg',
+      coverUrl: coverUrl,
     );
   }
 
@@ -330,7 +356,14 @@ class _SourceRuntime extends Fake implements MihonRuntime {
     MihonSource source,
     MihonManga manga, {
     List<MihonPreference> preferences = const <MihonPreference>[],
-  }) async => chapters;
+  }) async {
+    final Object? error = chaptersError;
+    if (error != null) {
+      // ignore: only_throw_errors — 测试要原样抛回编排好的错误对象。
+      throw error;
+    }
+    return chapters;
+  }
 
   @override
   Future<List<MihonPage>> getPages(

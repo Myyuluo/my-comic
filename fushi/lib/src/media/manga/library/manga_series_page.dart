@@ -1194,9 +1194,31 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
         ErrorLogService.instance.log('MangaSeriesPage.find', error, stack);
       }
     }
-    final OnlineMangaLibraryEntry entry = existing == null
-        ? seed
-        : OnlineMangaLibraryEntry.tryParse(existing.sourceMetadata) ?? seed;
+    final OnlineMangaLibraryEntry? stored = existing == null
+        ? null
+        : OnlineMangaLibraryEntry.tryParse(existing.sourceMetadata);
+    OnlineMangaLibraryEntry entry = stored ?? seed;
+    // 票 06：源搜索/详情页手里就是源**当前**的系列描述（封面 URL 每次带新签名）。
+    // 已有记录时直接合并回去——不联网、不碰章节，旧封面即可自愈。
+    if (hadRow && existing != null && stored != null && shelf != null) {
+      final String? before = trimmedOrNull(stored.series.coverUrl);
+      try {
+        entry = await shelf.mergeSeries(
+          bookKey: existing.bookKey,
+          existing: stored,
+          series: seed.series,
+        );
+      } on Object catch (error, stack) {
+        ErrorLogService.instance.log(
+          'MangaSeriesPage.mergeSeries',
+          error,
+          stack,
+        );
+      }
+      if (mounted && trimmedOrNull(entry.series.coverUrl) != before) {
+        ref.invalidate(fushiBooksProvider);
+      }
+    }
     final Map<String, MangaChapterStateRow> states = existing == null
         ? const <String, MangaChapterStateRow>{}
         : await _readChapterStates(existing);
@@ -1282,33 +1304,65 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     try {
       final String? bookKey = _bookKey;
       final OnlineMangaLibraryService? service = _service;
+      OnlineMangaLibraryEntry updated = entry;
+      OnlineMangaUnavailable? chaptersError;
+      StackTrace? chaptersStack;
       if (bookKey == null || service == null) {
         // 未入库（或够不着书架）：只拉，不落库。
-        final OnlineMangaRefreshResult result = await adapter.refresh(entry);
-        if (!mounted) return;
-        setState(() {
-          _entry = entry.copyWith(
+        try {
+          final OnlineMangaRefreshResult result = await adapter.refresh(entry);
+          updated = entry.copyWith(
             series: result.series,
-            chapters: result.chapters,
+            chapters: result.chapters.isEmpty && entry.chapters.isNotEmpty
+                ? entry.chapters
+                : result.chapters,
           );
-          _refreshSucceeded = true;
-        });
-        // 章节列表变了：已下载状态的章集合也要按新章节身份重算（首次打开
-        // 源页时 seed 往往只有标题，下载判据要等这次刷新后的章节表）。
-        unawaited(_refreshDownloadState());
-        return;
+        } on OnlineMangaUnavailable catch (error, stack) {
+          // 详情成功、章节失败：错误里带着刚拿到的封面 URL，页面照样先换新封面。
+          final OnlineMangaSeries? details = error.series;
+          if (details == null) rethrow;
+          updated = entry.copyWith(series: details);
+          chaptersError = error;
+          chaptersStack = stack;
+        }
+      } else {
+        final OnlineMangaRefreshOutcome outcome = await service
+            .refreshFromSource(bookKey: bookKey, entry: entry);
+        updated = outcome.entry;
+        chaptersError = outcome.chaptersError;
       }
-      final OnlineMangaLibraryEntry updated = await service.refreshFromSource(
-        bookKey: bookKey,
-        entry: entry,
-      );
-      final EpubBookRow? row = await service.database.getEpubBook(bookKey);
+      final EpubBookRow? row = bookKey == null || service == null
+          ? null
+          : await service.database.getEpubBook(bookKey);
       if (!mounted) return;
+      final bool coverChanged =
+          trimmedOrNull(entry.series.coverUrl) !=
+          trimmedOrNull(updated.series.coverUrl);
       setState(() {
         _entry = updated;
         if (row != null) _row = row;
-        _refreshSucceeded = true;
+        // 章节没拉到 = 刷新只完成了一半，空章节的语言解释与「刷新成功」都不成立。
+        _refreshSucceeded = chaptersError == null;
+        _refreshError = chaptersError;
       });
+      // 书架封面来自 fushiBooksProvider 里的 MediaItem：描述符换了新签名 URL
+      // 要让它重算，否则返回书架时仍显示过期 URL 的失败封面。
+      if (coverChanged) ref.invalidate(fushiBooksProvider);
+      if (chaptersError != null) {
+        ErrorLogService.instance.log(
+          'MangaSeriesPage.refresh[${chaptersError.reason.name}]',
+          chaptersError,
+          chaptersStack ?? StackTrace.current,
+        );
+        if (!silent) {
+          FushiToast.show(
+            msg: _loadErrorText(chaptersError),
+            severity: ToastSeverity.error,
+          );
+        }
+      }
+      // 章节列表变了：已下载状态的章集合也要按新章节身份重算（首次打开
+      // 源页时 seed 往往只有标题，下载判据要等这次刷新后的章节表）。
       unawaited(_refreshDownloadState());
     } on OnlineMangaUnavailable catch (error, stack) {
       // 这条**才是**在线漫画的主流失败路径：adapter 已经把 Mihon/Aidoku 的运行时
