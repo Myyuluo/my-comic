@@ -1,4 +1,5 @@
 import 'package:fushi/src/media/manga/library/manga_shelf_cover_cache.dart';
+import 'package:fushi/src/media/manga/library/manga_shelf_cover_revision.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_service.dart';
 import 'package:fushi/src/media/manga/library/online_manga_runtime_adapter.dart';
@@ -84,22 +85,36 @@ class MangaShelfCoverService {
 
   /// 若当前源 URL 与缓存来源不一致（或还没有缓存），后台取一份新字节。
   ///
-  /// 失败不抛出：书架展示必须等得起，也不能因为刷新失败清掉旧封面。
-  Future<void> refreshIfNeeded(
+  /// 返回 true 仅表示**本次真的写入了新的持久封面字节**；无缓存需要刷新、
+  /// 来源不可用、运行时解析失败、取字节失败或空字节都返回 false。失败不抛出：
+  /// 书架展示必须等得起，也不能因为刷新失败清掉旧封面。
+  ///
+  /// 成功写入后 bump [MangaShelfCoverRevision]：书架 provider 据此重新解析
+  /// `MediaItem`，卡片立即改用新的持久缓存封面。无新字节时保持静默，避免
+  /// 无意义的 provider 重建。
+  Future<bool> refreshIfNeeded(
     OnlineMangaLibraryEntry entry,
     String bookKey,
   ) async {
     final String? url = trimmedOrNull(entry.series.coverUrl);
-    if (url == null) return;
-    if (!await cache.needsRefresh(bookKey: bookKey, sourceUrl: url)) return;
+    if (url == null) return false;
+    if (!await cache.needsRefresh(bookKey: bookKey, sourceUrl: url)) {
+      return false;
+    }
     // 来源未安装 / 未启用时不做运行时抓取：已有字节（若有）原样保留。
-    if (!await isSourceAvailable(entry)) return;
+    if (!await isSourceAvailable(entry)) return false;
     final OnlineMangaLibraryService? service = _serviceFor(entry);
-    if (service == null) return;
+    if (service == null) return false;
 
     try {
       final List<int> bytes = await service.adapter.fetchCover(entry, url);
-      await cache.store(bookKey: bookKey, sourceUrl: url, bytes: bytes);
+      final bool stored = await cache.store(
+        bookKey: bookKey,
+        sourceUrl: url,
+        bytes: bytes,
+      );
+      if (stored) MangaShelfCoverRevision.bump();
+      return stored;
     } on Object catch (error, stack) {
       // 保留旧缓存：签名过期、Cloudflare、临时断网都不该让书架变空。
       ErrorLogService.instance.log(
@@ -107,6 +122,7 @@ class MangaShelfCoverService {
         error,
         stack,
       );
+      return false;
     }
   }
 }

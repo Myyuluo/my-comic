@@ -2531,7 +2531,12 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
           // 作品页里可能读了几章 / 手动标记了已读：返回书架时重取一次未读
           // 角标（与「标记为已读完」菜单同一条刷新路径）。阅读器关闭另有
           // mediaType.refreshTab 信号，两条路都落到 [_loadShelfMaps]。
+          //
+          // ticket 01：作品页也可能刷新了封面 / 自动续签了新的签名 URL，
+          // 因此必须让书架 provider 重新解析 `MediaItem`，不能只刷新 shelf maps
+          // ——否则卡片继续停在旧的空白或已失效远程封面。
           if (!mounted) return;
+          ref.invalidate(fushiBooksProvider(JapaneseLanguage.instance));
           setState(() {
             _shelfMapsFuture = _loadShelfMaps();
           });

@@ -1,16 +1,23 @@
+import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
+import 'package:flutter/painting.dart'
+    show ImageProvider, ImageStreamCompleter, PaintingBinding;
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi/media.dart';
 import 'package:fushi/models.dart';
+import 'package:fushi_dictionary/fushi_dictionary.dart';
 import 'package:fushi/src/media/manga/library/manga_shelf_cover_cache.dart';
+import 'package:fushi/src/media/manga/library/manga_shelf_cover_revision.dart';
 import 'package:fushi/src/media/manga/library/manga_shelf_cover_service.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_service.dart';
 import 'package:fushi/src/media/manga/library/online_manga_runtime_adapter.dart';
+import 'package:fushi/src/utils/net/app_http_image.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:path/path.dart' as p;
 
@@ -96,6 +103,9 @@ const List<int> _pngBytes = <int>[
   0x82,
 ];
 
+/// 只占用 ImageCache 键、不真正解码的占位 completer。
+class _PendingImageCompleter extends ImageStreamCompleter {}
+
 class _TestAppModel extends AppModel {
   _TestAppModel(this._db, this._library) : super(testPlatformServices());
 
@@ -112,7 +122,31 @@ class _TestAppModel extends AppModel {
 }
 
 void main() {
-  TestWidgetsFlutterBinding.ensureInitialized();
+  final TestWidgetsFlutterBinding binding =
+      TestWidgetsFlutterBinding.ensureInitialized();
+
+  // `AppCachedHttpImage` 构造即起磁盘缓存管理器，需要 path_provider 应答。
+  late Directory imageCacheDir;
+  setUpAll(() {
+    imageCacheDir = Directory.systemTemp.createTempSync(
+      'manga_shelf_cover_image_cache_',
+    );
+    binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      const MethodChannel('plugins.flutter.io/path_provider'),
+      (MethodCall call) async => imageCacheDir.path,
+    );
+  });
+  tearDownAll(() {
+    binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      const MethodChannel('plugins.flutter.io/path_provider'),
+      null,
+    );
+    if (imageCacheDir.existsSync()) {
+      try {
+        imageCacheDir.deleteSync(recursive: true);
+      } catch (_) {}
+    }
+  });
 
   late Directory root;
   late Directory cacheDir;
@@ -122,9 +156,11 @@ void main() {
   late OnlineMangaLibraryService library;
   late _TestAppModel appModel;
   late MangaShelfCoverCache cache;
+  late MangaShelfCoverService service;
 
   setUp(() async {
     ReaderFushiSource.debugResetCoverCache();
+    MangaShelfCoverRevision.debugReset();
     root = await Directory.systemTemp.createTemp('manga_shelf_cover_');
     cacheDir = Directory(
       p.join(root.path, 'userdata', 'cache', 'shelf_covers'),
@@ -140,16 +176,18 @@ void main() {
     );
     appModel = _TestAppModel(db, library);
     cache = MangaShelfCoverCache(cacheDir);
-    ReaderFushiSource.debugShelfCoverService = MangaShelfCoverService(
+    service = MangaShelfCoverService(
       cache: cache,
       serviceFor: (OnlineMangaRuntimeKind _) => library,
     );
+    ReaderFushiSource.debugShelfCoverService = service;
   });
 
   tearDown(() async {
     await ReaderFushiSource.debugWaitForShelfCoverRefreshes();
     ReaderFushiSource.debugShelfCoverService = null;
     ReaderFushiSource.debugResetCoverCache();
+    MangaShelfCoverRevision.debugReset();
     await db.close();
     if (root.existsSync()) root.deleteSync(recursive: true);
   });
@@ -226,6 +264,152 @@ void main() {
       (MediaItem item) => item.mediaIdentifier.endsWith(bookKey),
     );
   }
+
+  Future<OnlineMangaLibraryEntry> readEntry(String bookKey) async {
+    final EpubBookRow row = (await db.getEpubBook(bookKey))!;
+    return OnlineMangaLibraryEntry.tryParse(row.sourceMetadata)!;
+  }
+
+  test('封面字节写入成功：refreshIfNeeded 报告成功并 bump 进程级封面 revision', () async {
+    const String url = 'https://example.test/signed-cover.jpg';
+    await insertOnlineBook(coverUrl: url);
+    final OnlineMangaLibraryEntry entry = await readEntry('book-1');
+    final List<int> revisions = <int>[];
+    final StreamSubscription<int> subscription = MangaShelfCoverRevision.events
+        .listen(revisions.add);
+    addTearDown(subscription.cancel);
+    final int before = MangaShelfCoverRevision.value;
+
+    final bool stored = await service.refreshIfNeeded(entry, 'book-1');
+    await pumpEventQueue();
+
+    expect(stored, isTrue, reason: '字节成功写入 Program state 缓存时必须报告成功');
+    expect(
+      MangaShelfCoverRevision.value,
+      before + 1,
+      reason: '成功写入后必须 bump 进程级封面 revision，书架据此重算',
+    );
+    expect(revisions, <int>[before + 1], reason: '订阅者应恰好收到一次递增后的 revision');
+    expect(
+      cache.coverPathFor('book-1').readAsBytesSync(),
+      _pngBytes,
+      reason: 'revision 只应在持久字节真正落盘后 bump',
+    );
+  });
+
+  test('封面字节刷新失败或没有新字节：报告失败且不 bump revision', () async {
+    await insertOnlineBook(coverUrl: 'https://example.test/failing-cover.jpg');
+    final OnlineMangaLibraryEntry entry = await readEntry('book-1');
+    final List<int> revisions = <int>[];
+    final StreamSubscription<int> subscription = MangaShelfCoverRevision.events
+        .listen(revisions.add);
+    addTearDown(subscription.cancel);
+    final int before = MangaShelfCoverRevision.value;
+
+    adapter.fetchCoverBytes = (String url) async =>
+        throw const OnlineMangaUnavailable(
+          OnlineMangaUnavailableReason.runtimeFailure,
+          'expired signature',
+        );
+    expect(
+      await service.refreshIfNeeded(entry, 'book-1'),
+      isFalse,
+      reason: '运行时取字节失败时必须报告失败',
+    );
+
+    // 空字节同样视为失败：缓存层已有契约「空字节不覆盖旧封面」。
+    adapter.fetchCoverBytes = (String _) async => <int>[];
+    expect(
+      await service.refreshIfNeeded(entry, 'book-1'),
+      isFalse,
+      reason: '没有新字节时必须报告失败',
+    );
+    await pumpEventQueue();
+
+    expect(
+      MangaShelfCoverRevision.value,
+      before,
+      reason: '失败或空字节不得 bump revision',
+    );
+    expect(revisions, isEmpty, reason: '失败不得触发书架 provider 重建');
+    expect(await cache.hasCover('book-1'), isFalse);
+  });
+
+  ProviderContainer createShelfContainer() {
+    final ProviderContainer container = ProviderContainer(
+      overrides: <Override>[appProvider.overrideWith((Ref ref) => appModel)],
+    );
+    addTearDown(container.dispose);
+    return container;
+  }
+
+  test('字节写入成功后书架 provider 重新解析，卡片改用持久缓存封面', () async {
+    const String url = 'https://example.test/revision-cover.jpg';
+    await insertOnlineBook(coverUrl: url);
+    // 用 Completer 卡住后台取字节，确保首轮书架解析先以远程 URL 完成，
+    // 再让字节写入成功触发 revision——避免加载中的 provider 被 invalidate 的竞态。
+    final Completer<List<int>> pendingBytes = Completer<List<int>>();
+    adapter.fetchCoverBytes = (String _) => pendingBytes.future;
+    final ProviderContainer container = createShelfContainer();
+    final provider = fushiBooksProvider(JapaneseLanguage.instance);
+    // 书架页面始终有监听者；无监听时 provider 在加载中被 invalidate 不会重发值。
+    final ProviderSubscription<AsyncValue<List<MediaItem>>> subscription =
+        container.listen<AsyncValue<List<MediaItem>>>(provider, (_, __) {});
+    addTearDown(subscription.close);
+
+    final List<MediaItem> first = await container.read(provider.future);
+    expect(first.single.imageUrl, url, reason: '持久字节落盘前，书架先按已保存的远程 URL 回退');
+
+    // 书架解析触发的后台刷新成功后 bump revision；provider 必须重新解析。
+    pendingBytes.complete(_pngBytes);
+    await ReaderFushiSource.debugWaitForShelfCoverRefreshes();
+    final List<MediaItem> refreshed = await container.read(provider.future);
+
+    expect(
+      Uri.parse(refreshed.single.imageUrl!).toFilePath(),
+      cache.coverPathFor('book-1').path,
+      reason: 'revision 变化后书架必须重新解析 MediaItem，卡片读取新的持久缓存封面',
+    );
+  });
+
+  test('封面刷新失败不 bump revision，书架 provider 不重算', () async {
+    const String url = 'https://example.test/always-403.jpg';
+    await insertOnlineBook(coverUrl: url);
+    adapter.fetchCoverBytes = (String _) async =>
+        throw const OnlineMangaUnavailable(
+          OnlineMangaUnavailableReason.runtimeFailure,
+          'expired signature',
+        );
+    final ProviderContainer container = createShelfContainer();
+    final provider = fushiBooksProvider(JapaneseLanguage.instance);
+    final List<AsyncValue<List<MediaItem>>> states =
+        <AsyncValue<List<MediaItem>>>[];
+    final ProviderSubscription<AsyncValue<List<MediaItem>>> subscription =
+        container.listen<AsyncValue<List<MediaItem>>>(provider, (
+          AsyncValue<List<MediaItem>>? previous,
+          AsyncValue<List<MediaItem>> next,
+        ) {
+          states.add(next);
+        }, fireImmediately: true);
+    addTearDown(subscription.close);
+
+    final List<MediaItem> first = await container.read(provider.future);
+    expect(first.single.imageUrl, url);
+    // 初始 Drift 集合流事件落定后再取基线，避免把正常的首次加载算成重建。
+    await pumpEventQueue();
+    final int settledStates = states.length;
+
+    await ReaderFushiSource.debugWaitForShelfCoverRefreshes();
+    await pumpEventQueue();
+
+    expect(
+      states.length,
+      settledStates,
+      reason: '刷新失败不得 invalidate 书架 provider（无意义的重算）',
+    );
+    expect(MangaShelfCoverRevision.value, 0);
+    expect(container.read(provider).valueOrNull!.single.imageUrl, url);
+  });
 
   test('持久封面缓存优先于本地封面文件，签名 URL 过期后书架仍显示', () async {
     final String extractDir = await insertOnlineBook(
@@ -341,6 +525,63 @@ void main() {
     expect(
       Uri.parse(afterFailure.imageUrl!).toFilePath(),
       cache.coverPathFor('book-1').path,
+    );
+    expect(downloadsDir.existsSync(), isFalse);
+  });
+
+  test('切换封面 URL 后书架卡片不再命中旧网络封面缓存条目', () async {
+    const String oldUrl = 'https://example.test/old-signature.jpg';
+    const String newUrl = 'https://example.test/new-signature.jpg';
+    await insertOnlineBook(coverUrl: oldUrl);
+    // 取字节失败 → 没有持久字节缓存，书架继续显示远程 URL（正是旧缓存会
+    // 压制新封面的场景）。
+    adapter.fetchCoverBytes = (String _) async =>
+        throw const OnlineMangaUnavailable(
+          OnlineMangaUnavailableReason.runtimeFailure,
+          'expired signature',
+        );
+    final MediaItem first = await resolveShelfBook('book-1');
+    await ReaderFushiSource.debugWaitForShelfCoverRefreshes();
+    expect(first.imageUrl, oldUrl);
+
+    // 模拟书架卡片已经用旧 URL 渲染过：旧失败 / 旧图条目占住该 provider 键。
+    final ImageProvider<Object> oldThumbnail = MangaFushiSource.instance
+        .getDisplayThumbnailFromMediaItem(
+          appModel: appModel,
+          item: first,
+          noOverride: true,
+        );
+    expect(oldThumbnail, isA<AppCachedHttpImage>());
+    PaintingBinding.instance.imageCache.putIfAbsent(
+      oldThumbnail,
+      () => _PendingImageCompleter(),
+    );
+    expect(
+      PaintingBinding.instance.imageCache.containsKey(oldThumbnail),
+      isTrue,
+      reason: '先构造出「旧 URL 的图片缓存条目仍在」的状态',
+    );
+
+    await updateCoverUrl('book-1', newUrl);
+    final MediaItem second = await resolveShelfBook('book-1');
+    await ReaderFushiSource.debugWaitForShelfCoverRefreshes();
+
+    expect(second.imageUrl, newUrl, reason: '书架应按新的签名 URL 回退');
+    final ImageProvider<Object> newThumbnail = MangaFushiSource.instance
+        .getDisplayThumbnailFromMediaItem(
+          appModel: appModel,
+          item: second,
+          noOverride: true,
+        );
+    expect(
+      newThumbnail,
+      isNot(equals(oldThumbnail)),
+      reason: 'URL 切换后卡片的图片缓存键必须变化，旧条目不得压制新封面',
+    );
+    expect(
+      PaintingBinding.instance.imageCache.containsKey(newThumbnail),
+      isFalse,
+      reason: '新 URL 的缓存键不得命中旧的失败 / 旧图条目，必须重新取图',
     );
     expect(downloadsDir.existsSync(), isFalse);
   });
