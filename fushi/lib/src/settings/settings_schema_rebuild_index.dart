@@ -6,6 +6,8 @@ import 'package:fushi/src/media/manga/download/rebuild_download_index_service.da
 import 'package:fushi/src/media/manga/download/scan_downloaded_manga_service.dart';
 import 'package:fushi/src/media/manga/library/manga_first_page_cover_service.dart';
 import 'package:fushi/src/media/manga/library/manga_shelf_cover_service.dart';
+import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
+import 'package:fushi/src/media/manga/library/online_manga_library_service.dart';
 import 'package:fushi/src/settings/settings_actions.dart';
 import 'package:fushi/src/settings/settings_context.dart';
 import 'package:fushi/src/settings/settings_destination.dart';
@@ -78,25 +80,23 @@ Future<RebuildDownloadIndexReport> _runRebuildDownloadIndex(
         database: settings.appModel.database,
         cacheRoot: paths.cacheRoot,
       );
-  final MangaShelfCoverService? shelfCoverService =
-      firstPageCoverService == null
-      ? null
-      : MangaShelfCoverService(
-          cache: firstPageCoverService.cache,
-          serviceFor: (runtime) {
-            try {
-              return settings.appModel.onlineMangaLibraryService(runtime);
-            } on Object {
-              return null;
-            }
-          },
-        );
+  // 只借来源可用性 predicate：直接调用共享函数，不再为了这一个判断构造整个
+  // `MangaShelfCoverService`（也不需要它的缓存）。
+  OnlineMangaLibraryService? serviceFor(OnlineMangaRuntimeKind runtime) {
+    try {
+      return settings.appModel.onlineMangaLibraryService(runtime);
+    } on Object {
+      return null;
+    }
+  }
+
   return RebuildDownloadIndexService(
     database: settings.appModel.database,
     downloadsRoot: paths.downloadsRoot,
     localComicRoot: paths.localComicRoot,
     firstPageCoverService: firstPageCoverService,
-    isRemoteCoverAvailable: shelfCoverService?.isSourceAvailable,
+    isRemoteCoverAvailable: (entry) =>
+        isOnlineMangaSourceAvailable(serviceFor: serviceFor, entry: entry),
   ).run(cancelToken: cancelToken, onProgress: onProgress);
 }
 

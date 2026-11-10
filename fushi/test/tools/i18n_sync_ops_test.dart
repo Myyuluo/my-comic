@@ -31,12 +31,14 @@ void main() {
     List<String> args,
     Map<String, dynamic> json, {
     bool isZhCn = false,
+    String locale = 'en',
   }) {
     final I18nCommand command = parseI18nCommand(args);
     return applyI18nOps(
       json: json,
       ops: command.ops,
       isZhCn: isZhCn,
+      locale: locale,
       label: 'strings_test.i18n.json',
     );
   }
@@ -271,6 +273,121 @@ void main() {
       final Map<String, dynamic> original = table();
       run(<String>['--remove', 'alpha', '--add', 'new', 'N', 'N中'], original);
       expect(original, table(), reason: '入参被就地改掉会让「全读完再写」的原子性失效');
+    });
+  });
+
+  /// i18n 纪律：新增 key 的翻译必须走工具，不能手改 16 份 json。`--set` 按
+  /// locale 定向写值，一个调用里可重复 / 与其他 op 混用；写哪些文件由 locale
+  /// 决定，非目标文件在内存里原样返回（每个文件仍只读写一次）。
+  group('--set 按 locale 定向写入（不手改 json）', () {
+    test('--set 解析成 op，可重复并与其它 flag 按顺序混用', () {
+      final I18nCommand command = parseI18nCommand(<String>[
+        '--set',
+        'alpha',
+        'de',
+        'A-de',
+        '--remove',
+        'beta',
+        '--set',
+        'gamma',
+        'zh-HK',
+        'C-hk',
+      ]);
+      expect(command.ops, hasLength(3));
+      expect(command.ops[0], isA<SetKeyOp>());
+      final SetKeyOp first = command.ops[0] as SetKeyOp;
+      expect(first.key, 'alpha');
+      expect(first.locale, 'de');
+      expect(first.value, 'A-de');
+      expect(command.ops[1], isA<RemoveKeyOp>());
+      final SetKeyOp second = command.ops[2] as SetKeyOp;
+      expect(second.locale, 'zh-HK');
+      expect(second.value, 'C-hk');
+    });
+
+    test('只改目标 locale 的文件，其它 locale 原样返回', () {
+      final I18nApplyResult de = run(
+        <String>['--set', 'alpha', 'de', 'A-de'],
+        table(),
+        locale: 'de',
+      );
+      expect(de.json['alpha'], 'A-de');
+      expect(de.hitsPerOp, <int>[1]);
+
+      final I18nApplyResult en = run(
+        <String>['--set', 'alpha', 'de', 'A-de'],
+        table(),
+        locale: 'en',
+      );
+      expect(en.json, table(), reason: '英文基准文件不得被其它 locale 的 --set 改写');
+      expect(en.hitsPerOp, <int>[0]);
+      expect(en.changed, isFalse);
+    });
+
+    test('--set 已存在的 key 只换值、保持键序', () {
+      final I18nApplyResult result = run(
+        <String>['--set', 'beta', 'de', 'B-de'],
+        table(),
+        locale: 'de',
+      );
+      expect(result.json.keys.toList(), table().keys.toList());
+      expect(result.json['beta'], 'B-de');
+    });
+
+    test('--set 不存在的 key → I18nOpError（新增 key 必须走 --add）', () {
+      expect(
+        () =>
+            run(<String>['--set', 'missing', 'de', 'M'], table(), locale: 'de'),
+        throwsA(isA<I18nOpError>()),
+        reason: '只给一个 locale 补一个不存在的 key 会让 17 份文件 key 不齐',
+      );
+    });
+
+    test('--set 与当前值相同 → 不算改动（幂等，可重复执行）', () {
+      final I18nApplyResult result = run(
+        <String>['--set', 'alpha', 'de', 'A'],
+        table(),
+        locale: 'de',
+      );
+      expect(result.changed, isFalse);
+      expect(result.hitsPerOp, <int>[0]);
+    });
+
+    test('--set 与 --sort 按给出顺序执行', () {
+      final I18nApplyResult result = run(
+        <String>['--set', 'beta', 'zh-CN', 'B中', '--sort'],
+        <String, dynamic>{'gamma': 'C', 'beta': 'B', 'alpha': 'A'},
+        locale: 'zh-CN',
+      );
+      expect(result.json.keys.toList(), <String>['alpha', 'beta', 'gamma']);
+      expect(result.json['beta'], 'B中');
+      expect(result.hitsPerOp, <int>[1, 1]);
+    });
+
+    test('缺 operand / operand 是 flag 都报 usage error', () {
+      expect(
+        () => parseI18nCommand(<String>['--set', 'alpha', 'de']),
+        throwsA(isA<I18nUsageError>()),
+      );
+      expect(
+        () => parseI18nCommand(<String>['--set', 'alpha', 'de', '--sort']),
+        throwsA(isA<I18nUsageError>()),
+      );
+      expect(
+        () => parseI18nCommand(<String>['--set', 'alpha', '--set']),
+        throwsA(isA<I18nUsageError>()),
+      );
+    });
+
+    test('usage 文案包含 --set <key> <locale> <value>', () {
+      expect(usage, contains('--set <key> <locale> <value>'));
+    });
+
+    test('文件名 → locale：base 是 en，其余取 strings_<locale>.i18n.json', () {
+      expect(i18nLocaleOfPath('lib/i18n/strings.i18n.json'), 'en');
+      expect(i18nLocaleOfPath(r'lib\i18n\strings_zh-CN.i18n.json'), 'zh-CN');
+      expect(i18nLocaleOfPath('lib/i18n/strings_pt-BR.i18n.json'), 'pt-BR');
+      expect(i18nLocaleOfPath('lib/i18n/notes.txt'), isNull);
     });
   });
 

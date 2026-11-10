@@ -1710,7 +1710,9 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
       imageErrorBuilder: (_, __, ___) =>
           _coverPlaceholderIcon(Icons.menu_book_outlined),
       placeholder: MemoryImage(kTransparentImage),
-      image: mediaSource.getDisplayThumbnailFromMediaItem(
+      // 书架封面专用 provider：远程 URL 进入图片缓存键，签名轮换后不命中
+      // 旧失败条目；其他媒体类型仍走默认 cacheKey，不触发全量远程图重下载。
+      image: mediaSource.getShelfCoverImageProvider(
         appModel: appModel,
         item: item,
       ),

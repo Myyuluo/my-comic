@@ -2266,6 +2266,71 @@ void main() {
     );
   });
 
+  test('已记录 epub_books.cover_path（页路径）：重建不重复生成封面', () async {
+    const String bookKey = 'mihon-recorded-page-cover';
+    final OnlineMangaLibraryEntry entry = entryFor(
+      chapters: const <OnlineMangaChapter>[
+        OnlineMangaChapter(
+          key: '/c/1',
+          name: 'Chapter 1',
+          raw: <String, Object?>{},
+        ),
+      ],
+    );
+    await insertOnlineBook(
+      bookKey: bookKey,
+      entry: entry,
+      extractDir: p.join(
+        oldContent.path,
+        'downloads',
+        'Example Source',
+        'Fixture series',
+      ),
+    );
+    final Directory mangaDir = Directory(
+      p.join(downloadsRoot.path, 'Example Source', 'Fixture series'),
+    );
+    await writeArchiveChapter(
+      mangaDir: mangaDir,
+      fileName: 'Chapter 1.cbz',
+      entry: entry,
+      chapter: entry.chapters.single,
+      pageBytes: coverTestPageBytes(color: img.ColorRgb8(0, 255, 0)),
+    );
+    // 已记录封面 = 页图路径（本地登记 / 备份常见），不是根目录 cover.*。
+    final File page = File(p.join(mangaDir.path, 'pages', '001.jpg'))
+      ..createSync(recursive: true)
+      ..writeAsBytesSync(coverTestPageBytes(width: 64, height: 96));
+    await (db.update(
+      db.epubBooks,
+    )..where((t) => t.bookKey.equals(bookKey))).write(
+      EpubBooksCompanion(coverPath: const Value<String?>('pages/001.jpg')),
+    );
+    final MangaShelfCoverCache cache = coverCache();
+    final int revisionBefore = MangaShelfCoverRevision.value;
+
+    final RebuildDownloadIndexReport report = await service(
+      coverService: firstPageCoverService(),
+      isRemoteCoverAvailable: (OnlineMangaLibraryEntry _) async => false,
+    ).run();
+
+    expect(page.existsSync(), isTrue);
+    expect(
+      (await db.getEpubBook(bookKey))!.coverPath,
+      'pages/001.jpg',
+      reason: '重建不得把已记录封面改成别的路径',
+    );
+    expect(report.coversGenerated, 0, reason: '已有记录封面时不得重复生成');
+    expect(report.coversSkipped, 1);
+    expect(report.coversFailed, 0);
+    expect(
+      await cache.hasCover(bookKey),
+      isFalse,
+      reason: '已有记录封面时不得写第一页生成封面缓存',
+    );
+    expect(MangaShelfCoverRevision.value, revisionBefore);
+  });
+
   test('非书架作品不参与封面预热：不生成、不计入封面统计', () async {
     const String bookKey = 'mihon-nonlibrary-cover';
     final OnlineMangaLibraryEntry entry = entryFor();

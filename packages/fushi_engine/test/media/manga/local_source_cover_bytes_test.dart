@@ -203,4 +203,47 @@ void main() {
       greaterThan(200),
     );
   });
+
+  test('文件夹容器被替换但第一页 size/mtime 不变时 sentinel 仍变化', () async {
+    final Directory chapter = Directory(p.join(root.path, 'Replace', 'Ch 1'))
+      ..createSync(recursive: true);
+    final File firstPage = File(p.join(chapter.path, '001.png'))
+      ..writeAsBytesSync(pngBytes(color: img.ColorRgb8(255, 0, 0)));
+    File(
+      p.join(chapter.path, '002.png'),
+    ).writeAsBytesSync(pngBytes(color: img.ColorRgb8(0, 0, 255)));
+    final FileStat original = firstPage.statSync();
+    final String firstSentinel = (await localSourceFirstPageCoverSentinel(
+      LocalSourceCoverContainer.folder(chapter.path),
+    ))!;
+
+    await Future<void>.delayed(const Duration(seconds: 1));
+    // 整个替换容器：删目录后重建，然后**把第一页还原成相同的 size/mtime**。
+    // 只看第一页 stat 的旧 sentinel 会认为「没变化」；目录 fingerprint 必须能
+    // 感知这次替换。
+    chapter.deleteSync(recursive: true);
+    chapter.createSync(recursive: true);
+    firstPage.writeAsBytesSync(pngBytes(color: img.ColorRgb8(255, 0, 0)));
+    firstPage.setLastModifiedSync(original.modified);
+    File(
+      p.join(chapter.path, '003.png'),
+    ).writeAsBytesSync(pngBytes(color: img.ColorRgb8(0, 255, 0)));
+    final FileStat restored = firstPage.statSync();
+    expect(restored.size, original.size);
+    expect(
+      restored.modified.millisecondsSinceEpoch,
+      original.modified.millisecondsSinceEpoch,
+      reason: '夹具必须保持第一页 size/mtime 不变，才能复现旧 sentinel 的盲区',
+    );
+
+    final String secondSentinel = (await localSourceFirstPageCoverSentinel(
+      LocalSourceCoverContainer.folder(chapter.path),
+    ))!;
+
+    expect(
+      secondSentinel,
+      isNot(firstSentinel),
+      reason: '容器替换（目录 mtime / 文件列表变化）必须让 sentinel 变化并重新生成',
+    );
+  });
 }

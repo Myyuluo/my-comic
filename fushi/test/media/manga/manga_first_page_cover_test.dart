@@ -89,6 +89,7 @@ void main() {
     required String bookKey,
     required String extractDir,
     required String? sourceMetadata,
+    String? coverPath,
   }) async {
     await db.insertEpubBook(
       EpubBooksCompanion.insert(
@@ -101,6 +102,7 @@ void main() {
         importedAt: DateTime.now().millisecondsSinceEpoch,
         format: const Value<String>('manga'),
         sourceMetadata: Value<String?>(sourceMetadata),
+        coverPath: Value<String?>(coverPath),
       ),
     );
     return (await db.getEpubBook(bookKey))!;
@@ -279,6 +281,86 @@ void main() {
     expect(coverPixel(File(Uri.parse(url!).toFilePath())).r, greaterThan(200));
   });
 
+  test('映射容器不完整时按 reading order 回退到第一个仍可用的章节', () async {
+    // 自然扫描顺序：A first 在 B second 前；阅读顺序相反（/c/1 → B，/c/2 → A）。
+    // 两个映射容器都带一份「页表引用缺失页」的 manifest：完整性检查判为不完整，
+    // 但归档里实际有可读的第一页。旧实现落入目录扫描顺序，会错误地取 A。
+    Map<String, Object?> incompleteManifest({required String chapterKey}) =>
+        <String, Object?>{
+          'version': 1,
+          'source': <String, Object?>{
+            'runtime': 'mihon',
+            'id': '123',
+            'name': 'Source',
+            'extensionPackage': 'pkg',
+          },
+          'manga': <String, Object?>{'key': '/series/1', 'title': 'Manga'},
+          'chapter': <String, Object?>{'key': chapterKey, 'name': chapterKey},
+          'pages': <Object?>[
+            <String, Object?>{'url': 'missing.png'},
+          ],
+          'downloadedAt': '2026-01-01T00:00:00.000Z',
+        };
+    final List<int> manifestBytes = utf8.encode(
+      jsonEncode(incompleteManifest(chapterKey: '/chapter/1')),
+    );
+    writeCbz('downloads/Source/Manga/A first.cbz', <String, List<int>>{
+      'pages.json': manifestBytes,
+      '001.png': pngBytes(color: img.ColorRgb8(255, 0, 0)),
+    });
+    writeCbz('downloads/Source/Manga/B second.cbz', <String, List<int>>{
+      'pages.json': manifestBytes,
+      '001.png': pngBytes(color: img.ColorRgb8(0, 0, 255)),
+    });
+    const String bookKey = 'book-incomplete-order';
+    final String extractDir = p.join(root.path, 'downloads', 'Source', 'Manga');
+    final EpubBookRow row = await insertBook(
+      bookKey: bookKey,
+      extractDir: extractDir,
+      sourceMetadata: entry(
+        chapters: const <OnlineMangaChapter>[
+          OnlineMangaChapter(
+            key: '/chapter/1',
+            name: 'Chapter 1',
+            number: 1,
+            raw: <String, Object?>{},
+          ),
+          OnlineMangaChapter(
+            key: '/chapter/2',
+            name: 'Chapter 2',
+            number: 2,
+            raw: <String, Object?>{},
+          ),
+        ],
+      ).encode(),
+    );
+    await db.upsertMangaChapterDir(
+      bookKey: bookKey,
+      chapterKey: '/chapter/1',
+      folderName: 'B second.cbz',
+      containerKind: MangaChapterContainerKind.archive,
+      updatedAt: 1,
+    );
+    await db.upsertMangaChapterDir(
+      bookKey: bookKey,
+      chapterKey: '/chapter/2',
+      folderName: 'A first.cbz',
+      containerKind: MangaChapterContainerKind.archive,
+      updatedAt: 2,
+    );
+
+    final String? url = await service.ensureGeneratedCover(row);
+
+    expect(url, isNotNull);
+    final img.Pixel pixel = coverPixel(File(Uri.parse(url!).toFilePath()));
+    expect(
+      pixel.b,
+      greaterThan(200),
+      reason: '阅读顺序第一的 /chapter/1 映射到 B second（蓝）：不得按目录扫描顺序选 A first（红）',
+    );
+    expect(pixel.r, lessThan(60));
+  });
+
   test('无映射时回退扫描漫画目录，仍从第一个完整容器生成', () async {
     writeCbz('downloads/Source/Manga/Ch 1.cbz', <String, List<int>>{
       '001.png': pngBytes(color: img.ColorRgb8(255, 0, 0)),
@@ -312,6 +394,69 @@ void main() {
     expect(url, isNotNull);
     expect(coverPixel(File(Uri.parse(url!).toFilePath())).r, greaterThan(200));
     expect(File(p.join(extractDir, 'cover.jpg')).existsSync(), isFalse);
+  });
+
+  test('已记录 epub_books.cover_path（页路径）时不重复生成，也不计 generated', () async {
+    writePage(
+      'downloads/Source/Manga/pages/001.png',
+      color: img.ColorRgb8(255, 0, 0),
+    );
+    const String bookKey = 'book-recorded-page';
+    final String extractDir = p.join(root.path, 'downloads', 'Source', 'Manga');
+    final EpubBookRow row = await insertBook(
+      bookKey: bookKey,
+      extractDir: extractDir,
+      sourceMetadata: entry(
+        chapters: const <OnlineMangaChapter>[
+          OnlineMangaChapter(
+            key: '/chapter/1',
+            name: 'Chapter 1',
+            number: 1,
+            raw: <String, Object?>{},
+          ),
+        ],
+      ).encode(),
+      // 备份 / 本地登记常把封面记录成页图路径，而不是根目录 cover.*。
+      coverPath: 'pages/001.png',
+    );
+    await db.upsertMangaChapterDir(
+      bookKey: bookKey,
+      chapterKey: '/chapter/1',
+      folderName: 'Ch 1',
+      updatedAt: 1,
+    );
+    writePage(
+      'downloads/Source/Manga/Ch 1/001.png',
+      color: img.ColorRgb8(0, 0, 255),
+    );
+
+    expect(
+      await service.warmUp(row),
+      MangaFirstPageCoverOutcome.unavailable,
+      reason: '已有记录封面（页路径）时不得重复生成第一页封面',
+    );
+    expect(await cache.hasCover(bookKey), isFalse);
+    expect(MangaShelfCoverRevision.value, 0);
+  });
+
+  test('Local source 记录封面为页路径时不重复生成', () async {
+    writePage('local/Manga/Ch 1/001.png', color: img.ColorRgb8(255, 0, 0));
+    const String bookKey = 'local-recorded-page';
+    final String extractDir = p.join(root.path, 'local', 'Manga');
+    final EpubBookRow row = await insertBook(
+      bookKey: bookKey,
+      extractDir: extractDir,
+      sourceMetadata: const LocalSourceMetadata(relativePath: 'Manga').encode(),
+      coverPath: 'Ch 1/001.png',
+    );
+
+    expect(
+      await service.warmUp(row),
+      MangaFirstPageCoverOutcome.unavailable,
+      reason: 'Local source 的 coverPath 可能就是首章页图：已有封面记录不得再生成',
+    );
+    expect(await cache.hasCover(bookKey), isFalse);
+    expect(MangaShelfCoverRevision.value, 0);
   });
 
   test('第一页损坏 / 容器不完整：保留占位、不抛异常、不写缓存', () async {
