@@ -381,6 +381,22 @@ abstract class MediaSource {
     return item.mediaIdentifier;
   }
 
+  /// 书架卡 / 继续阅读胶囊的封面 provider。
+  ///
+  /// 与 [getDisplayThumbnailFromMediaItem] 唯一的区别是远程 URL 进入图片缓存键
+  /// （ticket 01 的签名轮换自愈）。**只有书架封面**走这里：把 URL 塞进共享
+  /// `cacheKey` 会让所有媒体类型的既有远程图缓存一次性键变化，触发全量重下载。
+  ImageProvider<Object> getShelfCoverImageProvider({
+    required AppModel appModel,
+    required MediaItem item,
+    bool noOverride = false,
+  }) => getDisplayThumbnailFromMediaItem(
+    appModel: appModel,
+    item: item,
+    noOverride: noOverride,
+    urlScopedCacheKey: true,
+  );
+
   /// Given a [MediaItem], return its thumbnail. Some media items may allow
   /// overriding of values for display purposes.
   ImageProvider<Object> getDisplayThumbnailFromMediaItem({
@@ -388,6 +404,7 @@ abstract class MediaSource {
     required MediaItem item,
     String? fallbackUrl,
     bool noOverride = false,
+    bool urlScopedCacheKey = false,
   }) {
     if (!noOverride) {
       final ImageProvider<Object>? overrideThumbnail =
@@ -409,12 +426,15 @@ abstract class MediaSource {
         final String remoteUrl = fallbackUrl ?? item.imageUrl!;
         return AppCachedHttpImage(
           remoteUrl,
-          // ticket 01：cacheKey 带上实际 URL，而不只是 item.uniqueKey。
+          // 默认 cacheKey 仍是 item.uniqueKey：其他媒体类型 / 入口的远程图缓存
+          // 键保持不变。书架封面经 [getShelfCoverImageProvider] 选择 URL 入键：
           // `CachedNetworkImageProvider` 的相等性与 CacheManager 文件键都看
           // cacheKey；签名封面 URL 切换后，旧 URL 的失败 / 旧图条目仍会占着
           // 同一个 key 并压制新封面。URL 入键让新旧封面天然互不命中，旧条目
           // 交由既有容量淘汰清理。
-          cacheKey: '${item.uniqueKey}|$remoteUrl',
+          cacheKey: urlScopedCacheKey
+              ? '${item.uniqueKey}|$remoteUrl'
+              : item.uniqueKey,
         );
       }
     }

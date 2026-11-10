@@ -47,40 +47,6 @@ class MangaShelfCoverCache {
   File _sourceUrlPathFor(String bookKey) =>
       File(p.join(directory.path, '${_keyOf(bookKey)}.url'));
 
-  /// 自动续签尝试时间的侧车路径（票 04 的 24 小时冷却）。
-  ///
-  /// 与 `.cover` / `.url` 同目录、同 bookKey 摘要；`clear()` 删除整个缓存目录时
-  /// 一并清除，用户主动清缓存后允许重新尝试续签。
-  File renewalAttemptPathFor(String bookKey) =>
-      File(p.join(directory.path, '${_keyOf(bookKey)}.renew'));
-
-  /// 上次自动续签尝试时刻；没有记录、记录损坏或读盘失败返回 null。
-  Future<DateTime?> lastRenewalAttempt(String bookKey) async {
-    try {
-      final File file = renewalAttemptPathFor(bookKey);
-      if (!await file.exists()) return null;
-      final int? millis = int.tryParse((await file.readAsString()).trim());
-      if (millis == null) return null;
-      return DateTime.fromMillisecondsSinceEpoch(millis);
-    } on FileSystemException {
-      return null;
-    }
-  }
-
-  /// 记录一次自动续签尝试（成功或失败都算），跨启动维持 24 小时冷却。
-  ///
-  /// 写盘失败按「没有冷却记录」处理：宁可下次启动多试一次，也不阻断封面自愈。
-  Future<void> markRenewalAttempt(String bookKey, DateTime at) async {
-    try {
-      await directory.create(recursive: true);
-      await renewalAttemptPathFor(
-        bookKey,
-      ).writeAsString('${at.millisecondsSinceEpoch}', flush: true);
-    } on FileSystemException {
-      // 尽力而为。
-    }
-  }
-
   /// 命中返回缓存文件的 `file://` URL；没有缓存或缓存为空返回 null。
   ///
   /// 这里**不**检查年龄：签名 URL 过期与缓存年龄无关，只要字节还在就继续显示；

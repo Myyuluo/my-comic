@@ -6,8 +6,10 @@
 /// [writeCoverBytesAtomically]（可解码校验 + 原子替换 + 解码缓存驱逐）。
 library;
 
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:drift/drift.dart';
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
@@ -117,8 +119,7 @@ Future<String?> localSourceFirstPageCoverSentinel(
     if (pages.isEmpty) return null;
     final File? pageFile = pages.first.file;
     if (pageFile == null || !await pageFile.exists()) return null;
-    final FileStat stat = await pageFile.stat();
-    return _coverSentinel(canonicalPath: container.path, stat: stat);
+    return await _folderCoverSentinel(container.path, pages);
   } on Object {
     return null;
   }
@@ -166,18 +167,19 @@ Future<LocalSourceGeneratedCover?> _generateCoverFromFolder(
     final Uint8List pageBytes = await pageFile.readAsBytes();
     final Uint8List? encoded = encodeLocalSourceCoverBytes(pageBytes);
     if (encoded == null) return null;
-    final FileStat stat = await pageFile.stat();
-    // 文件夹容器没有稳定的「文件大小」，用实际第一页文件的 stat 判断内容变化；
-    // 容器路径仍是 sentinel 的规范路径。
+    // 文件夹容器的 sentinel 必须覆盖整个目录内容，而不是只看第一页 stat：
+    // 替换容器时第一页的 size/mtime 可能被还原成原值（备份还原 / 复制工具都会
+    // 保留 mtime），只看第一页会让封面永远停在旧图。
     return LocalSourceGeneratedCover(
       bytes: encoded,
-      sentinel: _coverSentinel(canonicalPath: directoryPath, stat: stat),
+      sentinel: await _folderCoverSentinel(directoryPath, pages),
     );
   } on Object {
     return null;
   }
 }
 
+/// CBZ 容器 sentinel：规范路径 + 归档文件 size/mtime。
 String _coverSentinel({
   required String canonicalPath,
   required FileStat stat,
@@ -185,6 +187,59 @@ String _coverSentinel({
     '$kLocalSourceGeneratedCoverSentinelPrefix'
     '${p.canonicalize(canonicalPath)}|${stat.size}|'
     '${stat.modified.millisecondsSinceEpoch}';
+
+/// 文件夹容器 sentinel：规范路径 + 目录 mtime + 页数 + 每页
+/// `相对路径|size|mtime` 的摘要。
+///
+/// 仅看第一页 stat 无法感知「容器被替换但第一页 size/mtime 被保留」——目录
+/// mtime、页数与整份页表指纹一起构成容器身份。摘要把长度压到固定 64 字符，
+/// sidecar 不会随章节页数膨胀。
+Future<String> _folderCoverSentinel(
+  String directoryPath,
+  List<LocalSourcePage> pages,
+) async {
+  int directoryModified = 0;
+  try {
+    directoryModified = (await Directory(
+      directoryPath,
+    ).stat()).modified.millisecondsSinceEpoch;
+  } on FileSystemException {
+    // 目录读不了：按 0 处理，页表指纹仍能区分大多数变化。
+  }
+  final StringBuffer material = StringBuffer()
+    ..write(p.canonicalize(directoryPath))
+    ..write('|')
+    ..write(directoryModified)
+    ..write('|')
+    ..write(pages.length)
+    ..write('|');
+  for (final LocalSourcePage page in pages) {
+    int size = 0;
+    int modified = 0;
+    final File? file = page.file;
+    if (file != null) {
+      try {
+        final FileStat stat = await file.stat();
+        size = stat.size;
+        modified = stat.modified.millisecondsSinceEpoch;
+      } on FileSystemException {
+        // 读不了的单页按 0 处理；页面缺失本身会改变页表。
+      }
+    }
+    material
+      ..write(page.relativePath)
+      ..write('|')
+      ..write(size)
+      ..write('|')
+      ..write(modified)
+      ..write(';');
+  }
+  final String fingerprint = sha256
+      .convert(utf8.encode(material.toString()))
+      .toString();
+  return '$kLocalSourceGeneratedCoverSentinelPrefix'
+      '${p.canonicalize(directoryPath)}|${pages.length}|$fingerprint';
+}
 
 /// 解码 → 按 EXIF 摆正 → 宽 600（不放大）→ JPEG 质量 85。
 /// 解不出 / 编码失败返回 null。

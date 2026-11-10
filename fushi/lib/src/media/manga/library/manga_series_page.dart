@@ -18,6 +18,7 @@ import 'package:fushi/src/media/manga/download/manga_download_service.dart';
 import 'package:fushi/src/media/manga/history/manga_history.dart';
 import 'package:fushi/src/media/manga/library/manga_chapter_download_state.dart';
 import 'package:fushi/src/media/manga/library/manga_chapter_list.dart';
+import 'package:fushi/src/media/manga/library/manga_cover_resolution.dart';
 import 'package:fushi/src/media/manga/library/manga_download_planner.dart';
 import 'package:fushi/src/media/manga/library/manga_first_page_cover_service.dart';
 import 'package:fushi/src/media/manga/library/manga_resume_point.dart';
@@ -2960,8 +2961,23 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
       _clearGeneratedCoverState();
       return;
     }
+    final EpubBookRow? row = _row;
+    // 与书架 / 重建预热共用「已有更优先封面」判据：本地记录封面（含页路径）
+    // 与持久真实来源字节都不生成第一页封面。
+    final MangaCoverResolution? existing = row == null
+        ? null
+        : await service.resolveExistingCover(row);
+    if (existing?.hasExistingCover ?? false) {
+      if (mounted) {
+        setState(() {
+          _shelfCachedCoverUrl = existing!.realCachedUrl;
+          _generatedCoverUrl = null;
+        });
+      }
+      return;
+    }
     final String? bookKey = _bookKey;
-    if (bookKey != null) {
+    if (row == null && bookKey != null) {
       final String? realCached = await service.cachedRealCoverUrl(bookKey);
       if (realCached != null) {
         if (mounted) {
@@ -2989,7 +3005,6 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
       return;
     }
     String? generated;
-    final EpubBookRow? row = _row;
     if (row != null) {
       generated = await service.ensureGeneratedCover(row);
     } else {

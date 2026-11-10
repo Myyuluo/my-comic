@@ -22,6 +22,7 @@ import 'package:fushi/src/media/manga/interconnect/interconnect_manga_source.dar
     show InterconnectMangaCatalog;
 import 'package:fushi/src/media/manga/library/manga_adjacent_chapter.dart'
     show mangaReadingOrder;
+import 'package:fushi/src/media/manga/library/manga_cover_resolution.dart';
 import 'package:fushi/src/media/manga/library/manga_first_page_cover_service.dart';
 import 'package:fushi/src/media/manga/library/manga_shelf_cover_cache.dart';
 import 'package:fushi/src/media/manga/library/manga_shelf_cover_revision.dart';
@@ -1067,26 +1068,17 @@ class ReaderFushiSource extends ReaderMediaSource {
 
   /// Build the ordered candidate cover paths for a book: the declared cover
   /// path (if any) wins over the conventional `cover.jpg/jpeg/png` fallbacks.
+  ///
+  /// 实现住在 `manga_cover_resolution.dart`，与作品页 / 重建预热共用；这里保留
+  /// 静态入口只为既有调用方与测试（BUG-513 的候选顺序契约）。
   @visibleForTesting
   static List<String> coverCandidatePaths({
     required String extractDir,
     String? coverPath,
-  }) {
-    final List<String> candidates = <String>[];
-    if (coverPath != null && coverPath.isNotEmpty) {
-      String coverRel = coverPath;
-      if (coverRel.startsWith('/')) coverRel = coverRel.substring(1);
-      candidates.add(p.join(extractDir, coverRel));
-    }
-    for (final String name in const <String>[
-      'cover.jpg',
-      'cover.jpeg',
-      'cover.png',
-    ]) {
-      candidates.add(p.join(extractDir, name));
-    }
-    return candidates;
-  }
+  }) => mangaCoverCandidatePaths(
+    extractDir: extractDir,
+    coverPath: coverPath,
+  );
 
   /// Pure, injectable cover resolution (BUG-513). Probes [candidates]
   /// concurrently with [probe] and returns the `file://` URL of the first
@@ -1166,21 +1158,6 @@ class ReaderFushiSource extends ReaderMediaSource {
     return null;
   }
 
-  /// Real-filesystem child lister for [resolveCaseInsensitive]. Returns the
-  /// child entity paths of [dir], or an empty list if it is missing/unreadable.
-  static List<String> _listDirEntries(String dir) {
-    final Directory d = Directory(dir);
-    if (!d.existsSync()) return const <String>[];
-    try {
-      return d
-          .listSync(followLinks: false)
-          .map((FileSystemEntity e) => e.path)
-          .toList();
-    } catch (_) {
-      return const <String>[];
-    }
-  }
-
   /// Case-insensitive on-disk resolution of a book cover (TODO-1319 / BUG-612).
   ///
   /// Walks each relative candidate in [relPaths] segment by segment under
@@ -1190,51 +1167,18 @@ class ReaderFushiSource extends ReaderMediaSource {
   /// a coverPath whose case was mangled by a case-insensitive host still find
   /// the case-preserved extracted file on a case-sensitive device.
   ///
-  /// Pure + injectable ([listDir]) so it is unit-testable with a mock
-  /// filesystem; the instance path wires in [_listDirEntries].
+  /// 实现住在 `manga_cover_resolution.dart`（书架 / 作品页 / 重建预热共用）；
+  /// 这里保留静态入口与可注入 lister 的测试契约。
   @visibleForTesting
   static String? resolveCaseInsensitive({
     required String extractDir,
     required List<String> relPaths,
     required List<String> Function(String dir) listDir,
-  }) {
-    for (final String rel in relPaths) {
-      if (rel.isEmpty || p.isAbsolute(rel)) continue;
-      final List<String> segs = p
-          .split(rel)
-          .where((String s) => s.isNotEmpty && s != '.' && s != '/')
-          .toList();
-      if (segs.isEmpty) continue;
-      String current = extractDir;
-      bool resolvedAll = true;
-      for (final String seg in segs) {
-        final List<String> children = listDir(current);
-        String? match;
-        for (final String child in children) {
-          if (p.basename(child) == seg) {
-            match = child;
-            break;
-          }
-        }
-        if (match == null) {
-          final String segLower = seg.toLowerCase();
-          for (final String child in children) {
-            if (p.basename(child).toLowerCase() == segLower) {
-              match = child;
-              break;
-            }
-          }
-        }
-        if (match == null) {
-          resolvedAll = false;
-          break;
-        }
-        current = match;
-      }
-      if (resolvedAll) return current;
-    }
-    return null;
-  }
+  }) => resolveMangaCoverCandidate(
+    extractDir: extractDir,
+    relPaths: relPaths,
+    listDir: listDir,
+  );
 
   /// Resolve a book cover to its on-disk **file path** (not a `file://` URL),
   /// reusing the exact same case-insensitive resolution the library grid uses
@@ -1247,30 +1191,18 @@ class ReaderFushiSource extends ReaderMediaSource {
   /// still finds the case-preserved file on a case-sensitive device
   /// (Android/Linux). Returns null when no candidate resolves to a real file.
   ///
-  /// Static + wiring the real [_listDirEntries] lister so mining (which only
-  /// had a naive `File(join(extractDir, coverHref)).existsSync()` probe --
-  /// blind to case, hence the missing cover on Android) shares one resolution
-  /// with the grid instead of drifting.
+  /// 共享实现见 [resolveMangaCoverFilePath]：作品页 / 重建预热的
+  /// 「已有记录封面」判定与书架 / 制卡走同一份解析。
   ///
   /// Not `@visibleForTesting`: this is genuine production API consumed by both
   /// the shelf grid (`_resolveCoverUrl`) and card mining (`mining.part.dart`).
   static String? resolveCoverFilePath({
     required String extractDir,
     String? coverPath,
-  }) {
-    final String? resolved = resolveCaseInsensitive(
-      extractDir: extractDir,
-      relPaths: <String>[
-        if (coverPath != null && coverPath.isNotEmpty) coverPath,
-        'cover.jpg',
-        'cover.jpeg',
-        'cover.png',
-      ],
-      listDir: _listDirEntries,
-    );
-    if (resolved != null && File(resolved).existsSync()) return resolved;
-    return null;
-  }
+  }) => resolveMangaCoverFilePath(
+    extractDir: extractDir,
+    coverPath: coverPath,
+  );
 
   /// 删一本书（EPUB / PDF / 漫画 / 字幕书）攒下的统计：「同时删除统计数据」勾选的
   /// 落地，书架单删 / 批删 / 合集连删 / 漫画作品页移出书架共用。

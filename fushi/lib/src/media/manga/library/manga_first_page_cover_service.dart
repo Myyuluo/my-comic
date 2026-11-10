@@ -11,6 +11,7 @@ import 'package:fushi_engine/media/manga/local_source/local_source_layout.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_metadata.dart';
 
 import 'package:fushi/src/media/manga/library/manga_adjacent_chapter.dart';
+import 'package:fushi/src/media/manga/library/manga_cover_resolution.dart';
 import 'package:fushi/src/media/manga/library/manga_shelf_cover_cache.dart';
 import 'package:fushi/src/media/manga/library/manga_shelf_cover_revision.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
@@ -94,6 +95,20 @@ class MangaFirstPageCoverService {
     return url;
   }
 
+  /// 书架、作品页与重建预热共用的「已有更优先封面」判定。
+  ///
+  /// 本地已落盘封面（`cover_path`，可能是页图路径；或作品根目录 `cover.*`）
+  /// 与持久真实来源字节都优先于第一页生成封面。调用方（重建）再叠加「来源
+  /// 可用且当前封面 URL 存在」这一层；生成决策本身只有这一处。
+  Future<MangaCoverResolution> resolveExistingCover(EpubBookRow row) async =>
+      MangaCoverResolution(
+        localFilePath: resolveMangaCoverFilePath(
+          extractDir: row.extractDir,
+          coverPath: row.coverPath,
+        ),
+        realCachedUrl: await cachedRealCoverUrl(row.bookKey),
+      );
+
   /// 生成封面（已有、真实封面、本地 `cover.*` 或容器 sentinel 未变时 no-op）。
   ///
   /// 返回 true 仅表示本次真的写入了新的持久封面字节。失败不抛：作品页 / 书架
@@ -101,19 +116,28 @@ class MangaFirstPageCoverService {
   Future<bool> generateIfNeeded(EpubBookRow row) async =>
       (await warmUp(row)).wroteBytes;
 
-  /// 生成封面并返回本次结局（ticket 03：重建预热需要区分生成 / 更新 / 跳过 /
-  /// 失败）。与 [generateIfNeeded] 共用同一条按 bookKey 合并的生成链。
-  Future<MangaFirstPageCoverOutcome> warmUp(EpubBookRow row) {
-    final String key = '${cache.directory.path}\u0000${row.bookKey}';
+  /// 同一次会话内按 bookKey 合并生成链。
+  ///
+  /// key 带缓存目录：同一本书在不同 Program state（测试 / 切换根）下互不串。
+  /// future 完成（成功或失败）后从表里移除，后续解析可以重新检查容器变化。
+  Future<MangaFirstPageCoverOutcome> _runDeduped(
+    String bookKey,
+    Future<MangaFirstPageCoverOutcome> Function() run,
+  ) {
+    final String key = '${cache.directory.path}\u0000$bookKey';
     final Future<MangaFirstPageCoverOutcome>? existing = _inFlight[key];
     if (existing != null) return existing;
-    final Future<MangaFirstPageCoverOutcome> future = _generateIfNeeded(row)
-        .whenComplete(() {
-          _inFlight.remove(key);
-        });
+    final Future<MangaFirstPageCoverOutcome> future = run().whenComplete(() {
+      _inFlight.remove(key);
+    });
     _inFlight[key] = future;
     return future;
   }
+
+  /// 生成封面并返回本次结局（ticket 03：重建预热需要区分生成 / 更新 / 跳过 /
+  /// 失败）。与 [generateIfNeeded] 共用同一条按 bookKey 合并的生成链。
+  Future<MangaFirstPageCoverOutcome> warmUp(EpubBookRow row) =>
+      _runDeduped(row.bookKey, () => _generateIfNeeded(row));
 
   /// 作品页（未入库的本地图源扫描结果）懒生成入口。
   ///
@@ -123,15 +147,10 @@ class MangaFirstPageCoverService {
     required LocalSourceManga manga,
     required String bookKey,
   }) async {
-    final String key = '${cache.directory.path}\u0000$bookKey';
-    final Future<MangaFirstPageCoverOutcome>? existing = _inFlight[key];
-    final Future<MangaFirstPageCoverOutcome> future =
-        existing ??
-        _generateForScanned(manga: manga, bookKey: bookKey).whenComplete(() {
-          _inFlight.remove(key);
-        });
-    _inFlight[key] = future;
-    await future;
+    await _runDeduped(
+      bookKey,
+      () => _generateForScanned(manga: manga, bookKey: bookKey),
+    );
     return cachedGeneratedCoverUrl(bookKey);
   }
 
@@ -146,11 +165,9 @@ class MangaFirstPageCoverService {
       if (BookFormat.parseOrEpub(row.format) != BookFormat.manga) {
         return MangaFirstPageCoverOutcome.unavailable;
       }
-      if (await cachedRealCoverUrl(row.bookKey) != null) {
-        // 真实来源封面已经落盘：生成封面不得覆盖它。
-        return MangaFirstPageCoverOutcome.unavailable;
-      }
-      if (await _hasLocalCoverFile(row.extractDir)) {
+      // 共享优先级：本地记录封面（含页路径）/ 根目录 cover.* / 持久真实来源
+      // 字节任一存在时都不生成。重建预热与书架 / 作品页走同一处判据。
+      if ((await resolveExistingCover(row)).hasExistingCover) {
         return MangaFirstPageCoverOutcome.unavailable;
       }
       final _CoverContainerSelection selection = await _firstCoverContainer(
@@ -181,22 +198,22 @@ class MangaFirstPageCoverService {
     required String bookKey,
   }) async {
     try {
-      if (_hasCoverRelativePath(manga.directoryPath, manga.coverRelativePath)) {
+      if (resolveMangaCoverFilePath(
+            extractDir: manga.directoryPath,
+            coverPath: manga.coverRelativePath,
+          ) !=
+          null) {
         return MangaFirstPageCoverOutcome.unavailable;
       }
       final LocalSourceChapter? chapter = manga.chapters.isEmpty
           ? null
           : manga.chapters.first;
       if (chapter == null) return MangaFirstPageCoverOutcome.unavailable;
-      final String? path = chapter.isArchive
-          ? chapter.archiveFile?.path
-          : (chapter.relativePath.isEmpty
-                ? manga.directoryPath
-                : p.join(manga.directoryPath, chapter.relativePath));
-      if (path == null) return MangaFirstPageCoverOutcome.unavailable;
-      final LocalSourceCoverContainer container = chapter.isArchive
-          ? LocalSourceCoverContainer.archive(path)
-          : LocalSourceCoverContainer.folder(path);
+      final LocalSourceCoverContainer? container = _containerForScannedChapter(
+        manga,
+        chapter,
+      );
+      if (container == null) return MangaFirstPageCoverOutcome.unavailable;
       return await _generateForContainer(
         bookKey: bookKey,
         container: container,
@@ -300,20 +317,17 @@ class MangaFirstPageCoverService {
       if (mapping != null) {
         final String containerPath = p.join(row.extractDir, mapping.folderName);
         if (!isLocalSourcePathWithinRoot(containerPath, mangaDir)) continue;
-        final bool readable;
-        final LocalSourceCoverContainer container;
-        if (mapping.containerKindEnum == MangaChapterContainerKind.archive) {
-          final File file = File(containerPath);
-          if (!await file.exists()) continue;
-          readable = await _isArchiveReadable(file);
-          container = LocalSourceCoverContainer.archive(file.path);
-        } else {
-          final Directory directory = Directory(containerPath);
-          if (!await directory.exists()) continue;
-          readable = await _isFolderReadable(directory);
-          container = LocalSourceCoverContainer.folder(directory.path);
+        final LocalSourceCoverContainer? container = await _mappedContainer(
+          containerPath,
+          mapping.containerKindEnum,
+        );
+        if (container == null) continue;
+        // 「仍可用」= 第一页可读，而不是下载完整性（manifest 页齐）。不完整但
+        // 第一页还在的容器仍可生成封面；它同样按阅读顺序参与选择，绝不让
+        // 目录扫描顺序把后面的章顶到前面。
+        if (await _hasReadableFirstPage(container)) {
+          return _CoverContainerSelection(container);
         }
-        if (readable) return _CoverContainerSelection(container);
         if (!unreadable) {
           unreadable = true;
           ErrorLogService.instance.logDiagnostic(
@@ -335,8 +349,91 @@ class MangaFirstPageCoverService {
         );
       }
     }
+    if (mappings.isNotEmpty) {
+      // 映射容器都不可用时，仍按阅读顺序在扫描结果里找第一个「仍可用」的
+      // 章节（映射的 folderName 关联），不用扫描顺序猜。
+      final _CoverContainerSelection scanned =
+          await _firstScannedCoverContainerInReadingOrder(row, entry, mappings);
+      if (scanned.container != null) return scanned;
+      return _CoverContainerSelection.none(
+        sawUnreadableContainer: unreadable || scanned.sawUnreadableContainer,
+      );
+    }
     return _CoverContainerSelection.none(sawUnreadableContainer: unreadable);
   }
+
+  /// 解析映射指向的容器（归档文件 / 文件夹）；不存在或越界返回 null。
+  Future<LocalSourceCoverContainer?> _mappedContainer(
+    String containerPath,
+    MangaChapterContainerKind kind,
+  ) async {
+    if (kind == MangaChapterContainerKind.archive) {
+      final File file = File(containerPath);
+      if (!await file.exists()) return null;
+      return LocalSourceCoverContainer.archive(file.path);
+    }
+    final Directory directory = Directory(containerPath);
+    if (!await directory.exists()) return null;
+    return LocalSourceCoverContainer.folder(directory.path);
+  }
+
+  /// 容器是否仍可生成封面：第一页存在且页表可读（不要求 manifest 完整）。
+  Future<bool> _hasReadableFirstPage(
+    LocalSourceCoverContainer container,
+  ) async => await localSourceFirstPageCoverSentinel(container) != null;
+
+  /// 映射容器不可用时的阅读顺序回退：扫描作品目录，再按
+  /// [mangaReadingOrder] 逐章用 `manga_chapter_dirs.folderName` 关联回扫描
+  /// 章节，返回第一个第一页仍可读的容器。
+  Future<_CoverContainerSelection> _firstScannedCoverContainerInReadingOrder(
+    EpubBookRow row,
+    OnlineMangaLibraryEntry entry,
+    Map<String, MangaChapterDirRow> mappings,
+  ) async {
+    final Directory mangaDir = Directory(row.extractDir);
+    if (!await mangaDir.exists()) {
+      return const _CoverContainerSelection.none();
+    }
+    final LocalSourceMetadata? metadata = LocalSourceMetadata.tryParse(
+      row.sourceMetadata,
+    );
+    final LocalSourceManga? manga = await scanLocalSourceMangaDirectory(
+      mangaDir,
+      relativePath: metadata?.relativePath ?? p.basename(row.extractDir),
+    );
+    if (manga == null || manga.chapters.isEmpty) {
+      return _CoverContainerSelection.none(
+        sawUnreadableContainer: await _hasChapterCandidate(mangaDir),
+      );
+    }
+    final Map<String, LocalSourceChapter> byRelativePath =
+        <String, LocalSourceChapter>{
+          for (final LocalSourceChapter chapter in manga.chapters)
+            _normalizeContainerRelative(chapter.relativePath): chapter,
+        };
+    for (final OnlineMangaChapter chapter in mangaReadingOrder(
+      entry.chapters,
+    )) {
+      final MangaChapterDirRow? mapping = mappings[chapter.key];
+      if (mapping == null) continue;
+      final LocalSourceChapter? scanned =
+          byRelativePath[_normalizeContainerRelative(mapping.folderName)];
+      if (scanned == null) continue;
+      final LocalSourceCoverContainer? container = _containerForScannedChapter(
+        manga,
+        scanned,
+      );
+      if (container == null) continue;
+      if (await _hasReadableFirstPage(container)) {
+        return _CoverContainerSelection(container);
+      }
+    }
+    return const _CoverContainerSelection.none();
+  }
+
+  /// 映射 folderName / 扫描 relativePath 的关联键：统一分隔符与大小写。
+  String _normalizeContainerRelative(String value) =>
+      value.replaceAll('\\', '/').toLowerCase();
 
   Future<_CoverContainerSelection> _firstScannedCoverContainer(
     EpubBookRow row,
@@ -358,17 +455,30 @@ class MangaFirstPageCoverService {
       );
     }
     final LocalSourceChapter chapter = manga.chapters.first;
+    final LocalSourceCoverContainer? container = _containerForScannedChapter(
+      manga,
+      chapter,
+    );
+    if (container == null) return const _CoverContainerSelection.none();
+    return _CoverContainerSelection(container);
+  }
+
+  /// 扫描章节 → 封面容器（CBZ 文件或文件夹目录），保持同一套路径推导。
+  ///
+  /// 懒生成（`_generateForScanned`）与阅读顺序回退扫描共用，避免两处各拼一次
+  /// `relativePath`。
+  LocalSourceCoverContainer? _containerForScannedChapter(
+    LocalSourceManga manga,
+    LocalSourceChapter chapter,
+  ) {
     if (chapter.isArchive) {
       final File? file = chapter.archiveFile;
-      if (file == null) return const _CoverContainerSelection.none();
-      return _CoverContainerSelection(
-        LocalSourceCoverContainer.archive(file.path),
-      );
+      return file == null ? null : LocalSourceCoverContainer.archive(file.path);
     }
     final String path = chapter.relativePath.isEmpty
         ? manga.directoryPath
         : p.join(manga.directoryPath, chapter.relativePath);
-    return _CoverContainerSelection(LocalSourceCoverContainer.folder(path));
+    return LocalSourceCoverContainer.folder(path);
   }
 
   /// 目录里是否存在章节容器候选（章子目录或 CBZ 文件），但不一定可读。
@@ -389,45 +499,6 @@ class MangaFirstPageCoverService {
       // 目录读不了：按没有候选处理。
     }
     return false;
-  }
-
-  Future<bool> _isArchiveReadable(File file) async {
-    final MangaPagesManifest? manifest =
-        await readDownloadLibraryArchiveManifest(file);
-    if (manifest != null) return isDownloadLibraryArchiveComplete(file);
-    return isDownloadLibraryArchiveReadable(file);
-  }
-
-  Future<bool> _isFolderReadable(Directory directory) async {
-    final MangaPagesManifest? manifest = await readPagesManifest(directory);
-    if (manifest != null) {
-      return await readDownloadLibraryChapterPayload(directory) != null;
-    }
-    return isDownloadLibraryFolderReadable(directory);
-  }
-
-  /// 作品根目录已有 `cover.jpg/jpeg/png`（大小写不敏感）时不再生成。
-  Future<bool> _hasLocalCoverFile(String extractDir) async {
-    try {
-      await for (final FileSystemEntity entity in Directory(
-        extractDir,
-      ).list(followLinks: false)) {
-        if (entity is File &&
-            kLocalSourceCoverFileNames.contains(
-              p.basename(entity.path).toLowerCase(),
-            )) {
-          return true;
-        }
-      }
-    } on FileSystemException {
-      // 目录不存在 / 读不了：交给后续容器探测返回 null。
-    }
-    return false;
-  }
-
-  bool _hasCoverRelativePath(String directoryPath, String? relativePath) {
-    if (relativePath == null || relativePath.isEmpty) return false;
-    return File(p.join(directoryPath, relativePath)).existsSync();
   }
 }
 

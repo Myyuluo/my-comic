@@ -12,13 +12,18 @@
 ///                                                  # language's existing translation and moving
 ///                                                  # it to the new name's alphabetical position
 ///                                                  # (errors out if the new key already exists)
+///   dart tool/i18n_sync.dart --set key locale value
+///                                                  # write one key's value in one locale only
+///                                                  # (`locale` = file suffix, base EN = `en`);
+///                                                  # repeat once per translation instead of
+///                                                  # hand-editing 16 json files
 ///   dart tool/i18n_sync.dart --sort                # sort keys alphabetically in all files
 ///                                                  # (stable, idempotent)
 ///   dart tool/i18n_sync.dart --dry-run             # show what would change without writing
 ///
-/// `--add` / `--remove` / `--rename` / `--sort` may be repeated and mixed in one
-/// invocation; they run **in the order given**, each language file is read once,
-/// all operations are applied to it, and it is written once:
+/// `--add` / `--remove` / `--rename` / `--set` / `--sort` may be repeated and
+/// mixed in one invocation; they run **in the order given**, each language file
+/// is read once, all operations are applied to it, and it is written once:
 ///
 ///   dart tool/i18n_sync.dart --remove a --remove b --add c en zh
 ///
@@ -44,11 +49,12 @@ Usage:
   dart tool/i18n_sync.dart --add <key> <en> <zh>
   dart tool/i18n_sync.dart --remove <key>
   dart tool/i18n_sync.dart --rename <old_key> <new_key>
+  dart tool/i18n_sync.dart --set <key> <locale> <value>
   dart tool/i18n_sync.dart --sort
   dart tool/i18n_sync.dart --dry-run            preview without writing
 
---add / --remove / --rename / --sort may be repeated and mixed; they run in the
-order given.''';
+--add / --remove / --rename / --set / --sort may be repeated and mixed; they run
+in the order given.''';
 
 /// One key-table edit. A command line is an ordered list of these — repeating a
 /// flag repeats the op instead of silently discarding the extra operands.
@@ -93,6 +99,25 @@ final class RenameKeyOp extends I18nOp {
   String describe() => '--rename $oldKey $newKey';
 }
 
+final class SetKeyOp extends I18nOp {
+  const SetKeyOp({
+    required this.key,
+    required this.locale,
+    required this.value,
+  });
+
+  final String key;
+
+  /// Target language file: `en` is the base `strings.i18n.json`, anything else is
+  /// `strings_<locale>.i18n.json` (e.g. `zh-CN`, `pt-BR`).
+  final String locale;
+
+  final String value;
+
+  @override
+  String describe() => '--set $key $locale';
+}
+
 final class SortKeysOp extends I18nOp {
   const SortKeysOp();
 
@@ -133,6 +158,7 @@ const Set<String> _flags = <String>{
   '--add',
   '--remove',
   '--rename',
+  '--set',
   '--sort',
   '--dry-run',
 };
@@ -170,6 +196,12 @@ I18nCommand parseI18nCommand(List<String> args) {
       case '--rename':
         final List<String> operands = _takeOperands(args, i + 1, 2, token);
         ops.add(RenameKeyOp(oldKey: operands[0], newKey: operands[1]));
+        i += 1 + operands.length;
+      case '--set':
+        final List<String> operands = _takeOperands(args, i + 1, 3, token);
+        ops.add(
+          SetKeyOp(key: operands[0], locale: operands[1], value: operands[2]),
+        );
         i += 1 + operands.length;
       default:
         throw I18nUsageError('Error: unknown argument "$token".\n\n$usage');
@@ -237,6 +269,7 @@ I18nApplyResult applyI18nOps({
   required Map<String, dynamic> json,
   required List<I18nOp> ops,
   required bool isZhCn,
+  required String locale,
   required String label,
 }) {
   Map<String, dynamic> current = Map<String, dynamic>.of(json);
@@ -289,6 +322,27 @@ I18nApplyResult applyI18nOps({
         );
         hitsPerOp[i] = 1;
         log.add('  rename "$oldKey" -> "$newKey" in $label');
+      case SetKeyOp(
+        :final String key,
+        locale: final String targetLocale,
+        :final String value,
+      ):
+        // Locale-scoped write: every file is still read/applied/written once,
+        // but only the file whose locale matches is edited.
+        if (targetLocale != locale) continue;
+        if (!current.containsKey(key)) {
+          throw I18nOpError(
+            'Error: key "$key" not found in $label; use --add to create a new '
+            'key in every locale.',
+          );
+        }
+        if (current[key] == value) {
+          log.add('  skip $label (key "$key" already "$value")');
+          continue;
+        }
+        current[key] = value;
+        hitsPerOp[i] = 1;
+        log.add('  set "$key": "$value" -> $label');
       case SortKeysOp():
         final List<String> keys = current.keys.toList();
         final List<String> sortedKeys = List<String>.of(keys)..sort();
@@ -508,6 +562,20 @@ void main(List<String> args) {
 void _runOps(I18nCommand command) {
   final List<I18nOp> ops = command.ops;
   final List<File> files = _allI18nFiles();
+  // A `--set` for a locale that has no file is a typo, not a no-op: abort
+  // before reading/writing anything (all-or-nothing, like every other op).
+  final Set<String?> locales = <String?>{
+    for (final File file in files) i18nLocaleOfPath(file.path),
+  };
+  for (final I18nOp op in ops) {
+    if (op is SetKeyOp && !locales.contains(op.locale)) {
+      stderr.writeln(
+        'Error: unknown locale "${op.locale}" for --set ${op.key}; '
+        'available: ${locales.whereType<String>().join(", ")}.',
+      );
+      exit(1);
+    }
+  }
   final Map<String, I18nApplyResult> results = <String, I18nApplyResult>{};
   final List<int> totalHitsPerOp = List<int>.filled(ops.length, 0);
 
@@ -518,6 +586,7 @@ void _runOps(I18nCommand command) {
         json: _readJson(file),
         ops: ops,
         isZhCn: _isZhCn(file),
+        locale: i18nLocaleOfPath(file.path) ?? '',
         label: file.path,
       );
     } on I18nOpError catch (e) {
@@ -548,6 +617,7 @@ void _runOps(I18nCommand command) {
         stderr.writeln(
           'warning: key "$key" already exists in every i18n file (nothing added).',
         );
+      case SetKeyOp():
       case SortKeysOp():
         break;
     }
@@ -634,6 +704,21 @@ List<File> _allI18nFiles() {
       .where((f) => f.path.endsWith('.i18n.json'))
       .toList()
     ..sort((a, b) => a.path.compareTo(b.path));
+}
+
+/// Locale token of an i18n file path: `en` for the base file, otherwise the
+/// `strings_<locale>.i18n.json` suffix. Returns null for unrelated files.
+String? i18nLocaleOfPath(String path) {
+  final String name = path.replaceAll('\\', '/').split('/').last;
+  if (name == _baseFile) return 'en';
+  const String prefix = 'strings_';
+  const String suffix = '.i18n.json';
+  if (!name.startsWith(prefix) || !name.endsWith(suffix)) return null;
+  final String locale = name.substring(
+    prefix.length,
+    name.length - suffix.length,
+  );
+  return locale.isEmpty ? null : locale;
 }
 
 Map<String, dynamic> _readJson(File file) {
