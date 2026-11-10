@@ -3160,8 +3160,9 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
   /// 阅读顺序上的相邻章，按本书生效的「跳过已读 / 跳过重复章节」过滤；没有
   /// 可去的章返回 null。
   ///
-  /// 在线源按新→旧返回（方向见 [kMangaNextChapterStep]）；本地源按扫描的自然
-  /// 顺序（第 1 话→第 N 话），往后读是下标 +1——两种方向绝不能混用。
+  /// 在线条目（含 `.tachibk` 导入作品）先由 [resolveAdjacentMangaChapter] 按
+  /// `sourceOrder`（缺失时章节号 / 上传日期）构造规范阅读顺序，数组顺序不参与；
+  /// 本地源按扫描的自然顺序（第 1 话→第 N 话），往后读是下标 +1。
   Future<int?> _adjacentChapterIndex({required bool forward}) async {
     final OnlineMangaLibraryEntry? entry = _shelfEntry;
     final EpubBookRow? row = _bookRow;

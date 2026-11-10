@@ -1488,6 +1488,8 @@ class MihonBackupImportService {
       scanlator: chapter.scanlator,
       number: chapter.chapterNumber == 0 ? null : chapter.chapterNumber,
       uploadedAt: uploadedAt == 0 ? null : uploadedAt,
+      // 0 是有效顺序（最新一话）；proto3 省略 0，解析器已按默认值补回。
+      sourceOrder: chapter.sourceOrder,
       locked: OnlineMangaChapter.isLockedChapterName(chapter.name),
       raw: <String, Object?>{
         'url': chapterUrl,
@@ -1551,6 +1553,10 @@ class MihonBackupImportService {
       changed = true;
       if (uploadedAt != null) raw['date_upload'] = uploadedAt;
     }
+    // 旧版本导入的章没有 sourceOrder：重新导入同一备份时补齐。本地已有值优先，
+    // 重复导入因此幂等；备份里的 sourceOrder 是源顺序的唯一依据。
+    final int sourceOrder = local.sourceOrder ?? backup.sourceOrder;
+    if (sourceOrder != local.sourceOrder) changed = true;
     if (scanlator != null) {
       changed = put('scanlator', scanlator, onlyIfAbsent: true) || changed;
     }
@@ -1571,6 +1577,7 @@ class MihonBackupImportService {
       scanlator: scanlator,
       number: number,
       uploadedAt: uploadedAt,
+      sourceOrder: sourceOrder,
       locked: local.locked,
     );
   }

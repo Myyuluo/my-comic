@@ -1,10 +1,47 @@
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 
-/// 章节列表里「下一话」的下标偏移。
+/// 规范阅读顺序（第 1 话 → 第 N 话）里「下一话」的下标偏移。
 ///
-/// 源按**新→旧**返回（列表 0 = 最新一话），所以「读下一话」是下标 **-1**。
-/// 这个方向反直觉，所以收成一个具名常量，阅读器换章与预下载共用。
-const int kMangaNextChapterStep = -1;
+/// 阅读顺序是升序，所以下一话是下标 **+1**；源返回的新→旧顺序不是这个列表的
+/// 顺序，换章必须先经 [mangaReadingOrder]。
+const int kMangaNextChapterStep = 1;
+
+/// 章节的规范阅读顺序（第 1 话 → 第 N 话），与存储数组 / 屏幕显示顺序无关。
+///
+/// 排序依据（对齐 Mihon 的 source order 排序）：
+/// 1. [OnlineMangaChapter.sourceOrder] 降序（0 = 最新一话）；
+/// 2. 顺序相同或缺失时回退章节号升序；
+/// 3. 再回退上传时间升序（越早越旧）；
+/// 4. 仍无法区分时按输入下标降序——源的输入约定是新→旧，所以数组末尾最旧。
+///
+/// 第 4 条让「完全没有顺序信息」的在线条目保持现有阅读方向；导入条目只要带
+/// `sourceOrder`（或章节号 / 日期）就不依赖数组顺序。
+List<OnlineMangaChapter> mangaReadingOrder(List<OnlineMangaChapter> chapters) {
+  final List<(OnlineMangaChapter, int)> indexed = <(OnlineMangaChapter, int)>[
+    for (int i = 0; i < chapters.length; i++) (chapters[i], i),
+  ];
+  indexed.sort(((OnlineMangaChapter, int) a, (OnlineMangaChapter, int) b) {
+    final int? aOrder = a.$1.sourceOrder;
+    final int? bOrder = b.$1.sourceOrder;
+    if (aOrder != null && bOrder != null && aOrder != bOrder) {
+      return bOrder.compareTo(aOrder);
+    }
+    final double? aNumber = _knownNumber(a.$1);
+    final double? bNumber = _knownNumber(b.$1);
+    if (aNumber != null && bNumber != null && aNumber != bNumber) {
+      return aNumber.compareTo(bNumber);
+    }
+    final int? aUploaded = a.$1.uploadedAt;
+    final int? bUploaded = b.$1.uploadedAt;
+    if (aUploaded != null && bUploaded != null && aUploaded != bUploaded) {
+      return aUploaded.compareTo(bUploaded);
+    }
+    return b.$2.compareTo(a.$2);
+  });
+  return List<OnlineMangaChapter>.unmodifiable(
+    indexed.map(((OnlineMangaChapter, int) entry) => entry.$1),
+  );
+}
 
 /// 阅读顺序上与第 [currentIndex] 章相邻的章（[forward] = 往后读），返回它在
 /// [chapters] 里的下标；没有可去的章返回 null。
@@ -15,7 +52,9 @@ const int kMangaNextChapterStep = -1;
 ///   下一话若有多个版本，优先与当前章同一汉化组的那个，否则取阅读顺序上最先
 ///   遇到的那个。话数未知（null / 负数）的章不参与去重。
 ///
-/// [chapters] 必须是源顺序（新→旧），与 [OnlineMangaLibraryEntry.chapters] 一致。
+/// [chapters] 可以是任意存储顺序：阅读顺序由 [mangaReadingOrder] 按
+/// `sourceOrder`（缺失时章节号 / 上传日期）推导。返回值始终是 [chapters] 的
+/// 下标，调用方可以继续用 `entry.chapters[index]` 取章。
 int? resolveAdjacentMangaChapter({
   required List<OnlineMangaChapter> chapters,
   required int currentIndex,
@@ -28,6 +67,18 @@ int? resolveAdjacentMangaChapter({
   final int step = forward ? kMangaNextChapterStep : -kMangaNextChapterStep;
   final OnlineMangaChapter current = chapters[currentIndex];
   final double? currentNumber = _knownNumber(current);
+  final List<OnlineMangaChapter> ordered = mangaReadingOrder(chapters);
+  final int orderedCurrent = ordered.indexOf(current);
+  if (orderedCurrent < 0) return null;
+  // 规范顺序里的章 → 存储数组下标。用 identity map，避免长列表上反复 indexOf。
+  final Map<OnlineMangaChapter, int> originalIndexByChapter =
+      Map<OnlineMangaChapter, int>.identity();
+  for (int i = 0; i < chapters.length; i++) {
+    originalIndexByChapter[chapters[i]] = i;
+  }
+
+  int originalIndex(OnlineMangaChapter chapter) =>
+      originalIndexByChapter[chapter]!;
 
   bool eligible(OnlineMangaChapter chapter) {
     if (skipRead && readChapterKeys.contains(chapter.key)) return false;
@@ -39,24 +90,24 @@ int? resolveAdjacentMangaChapter({
     return true;
   }
 
-  for (int i = currentIndex + step; i >= 0 && i < chapters.length; i += step) {
-    final OnlineMangaChapter candidate = chapters[i];
+  for (int i = orderedCurrent + step; i >= 0 && i < ordered.length; i += step) {
+    final OnlineMangaChapter candidate = ordered[i];
     if (!eligible(candidate)) continue;
     final double? number = _knownNumber(candidate);
-    if (!skipDuplicate || number == null) return i;
+    if (!skipDuplicate || number == null) return originalIndex(candidate);
     // 同一话的多个版本：优先当前汉化组，否则就是第一个遇到的 [i]。
     final String? scanlator = _normalizedScanlator(current);
     if (scanlator == null || _normalizedScanlator(candidate) == scanlator) {
-      return i;
+      return originalIndex(candidate);
     }
-    for (int j = i + step; j >= 0 && j < chapters.length; j += step) {
-      final OnlineMangaChapter sibling = chapters[j];
+    for (int j = i + step; j >= 0 && j < ordered.length; j += step) {
+      final OnlineMangaChapter sibling = ordered[j];
       if (_knownNumber(sibling) != number) continue;
       if (eligible(sibling) && _normalizedScanlator(sibling) == scanlator) {
-        return j;
+        return originalIndex(sibling);
       }
     }
-    return i;
+    return originalIndex(candidate);
   }
   return null;
 }

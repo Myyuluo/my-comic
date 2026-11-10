@@ -4463,6 +4463,7 @@
   "manga_series_auto_download": "Unduh otomatis bab baru",
   "manga_series_auto_ocr": "Kenali setelah unduhan",
   "manga_series_chapters_action": "Bab",
+  "manga_series_chapters_count": "${count} chapters",
   "manga_series_delete_downloads": "Delete downloads",
   "manga_series_delete_downloads_confirm": "Delete downloaded files for $count chapter(s)? This cannot be undone.",
   "manga_series_delete_local_files": "删除本地文件",

@@ -240,7 +240,9 @@ class _LibraryExportSection {
           dateFetch: (raw['date_fetch'] as num?)?.toInt() ?? 0,
           dateUpload: chapter.uploadedAt ?? 0,
           chapterNumber: chapter.number ?? 0,
-          sourceOrder: index,
+          // 导入时持久化的 Mihon sourceOrder 必须原样导出；在线条目的
+          // sourceOrder 就是列表下标，旧数据缺失时同样回退下标。
+          sourceOrder: chapter.sourceOrder ?? index,
         ),
       );
     }

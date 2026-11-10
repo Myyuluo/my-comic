@@ -10,6 +10,7 @@ import 'package:fushi/src/utils/components/fushi_staggered_entrance.dart';
 import 'package:fushi/src/utils/components/glass/fushi_icon.dart';
 import 'package:fushi/src/utils/fushi_icons.dart';
 import 'package:fushi_core/fushi_core.dart';
+import 'package:fushi/src/media/manga/library/manga_adjacent_chapter.dart';
 import 'package:fushi/src/media/manga/library/manga_chapter_download_state.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi/src/media/manga/library/online_manga_runtime_adapter.dart'
@@ -63,9 +64,9 @@ enum MangaChapterDownloadFilter {
 /// 当前章怎么高亮、排序默认哪个方向、下载状态怎么标」的答案必须一致，各写一份
 /// 必然漂移。
 ///
-/// 2026-10 M3E：行是作品详情骨架的分段列表行（[MediaDetailItemRow]）——话数
-/// 序号胶囊、已读 = tertiary 对勾 + 标题降调、读了一半 = 行内进度条、当前章整行
-/// primaryContainer、下载状态图标（排队 / 转圈 / 已下载 / 失败）；错峰进场。
+/// 2026-10 M3E：行是作品详情骨架的分段列表行（[MediaDetailItemRow]）——已读 =
+/// tertiary 对勾 + 标题降调、读了一半 = 行内进度条、下载状态图标（排队 / 转圈 /
+/// 已下载 / 失败）；错峰进场。票 08 起行首不再有话数序号胶囊，多选态仍画选择标记。
 class MangaChapterList extends StatelessWidget {
   const MangaChapterList({
     required this.entry,
@@ -104,7 +105,8 @@ class MangaChapterList extends StatelessWidget {
   final OnlineMangaLibraryEntry? entry;
   final Map<String, MangaChapterStateRow> states;
 
-  /// 源按新→旧返回，所以 `true` = 保持源顺序，`false` = 反转成第 1 话在前。
+  /// `true` = 最新一话在前（导入作品按 `sourceOrder`，在线源按列表顺序），
+  /// `false` = 反转成第 1 话在前。见 [visibleChapters]。
   final bool newestFirst;
   final bool unreadOnly;
   final MangaChapterDownloadFilter downloadFilter;
@@ -192,7 +194,7 @@ class MangaChapterList extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        if (showHeader) _buildHeader(context, chapters.length),
+        if (showHeader) _buildHeader(context, visible.length),
         if (chapters.isEmpty)
           _buildEmptyChapters(context)
         else if (visible.isEmpty)
@@ -247,9 +249,16 @@ class MangaChapterList extends StatelessWidget {
             : !downloaded;
       });
     }
-    final List<OnlineMangaChapter> ordered = filtered.toList(growable: false);
-    if (newestFirst) return ordered;
-    return ordered.reversed.toList(growable: false);
+    // 显示顺序与存储数组顺序无关：先构造规范阅读顺序（第 1 话 → 第 N 话），
+    // 「最新在前」就是它的反转。导入作品按 sourceOrder，缺失时回退章节号 /
+    // 上传日期；完全没有顺序信息的条目保持现有源顺序（见 mangaReadingOrder）。
+    final List<OnlineMangaChapter> readingOrder = mangaReadingOrder(
+      filtered.toList(growable: false),
+    );
+    if (newestFirst) {
+      return readingOrder.reversed.toList(growable: false);
+    }
+    return readingOrder;
   }
 
   /// 一章的下载状态（静态版，ticket 06）：作品页登记可见序、判定批量动作作用
@@ -269,11 +278,11 @@ class MangaChapterList extends StatelessWidget {
     );
   }
 
-  /// 区块标题：「章节」+ 计数胶囊，行尾排序、下载筛选与只看未读。
-  Widget _buildHeader(BuildContext context, int total) {
+  /// 区块标题：「共 X 章」，X 为当前筛选后的可见章节数（票 08），行尾排序、
+  /// 下载筛选与只看未读。空列表也是「共 0 章」；不再单独画数字徽章。
+  Widget _buildHeader(BuildContext context, int visibleCount) {
     return MediaDetailSectionHeader(
-      t.mihon_chapters_title,
-      count: total,
+      t.manga_series_chapters_count(count: visibleCount),
       padding: const EdgeInsets.fromLTRB(0, 16, 0, 8),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
@@ -427,7 +436,8 @@ class MangaChapterList extends StatelessWidget {
       index: index,
       count: count,
       title: chapter.name,
-      number: _numberLabel(chapter),
+      // 票 08：所有章节列表都不再画话数胶囊——导入作品的标题常是「第 N 话」，
+      // 行首再放一个 N 是重复；`chapter.number` 仍保留给排序 / 去重 / Mihon 映射。
       subtitle: _buildSubtitle(chapter, state, partial),
       // 当前章把标题与副标题文字染成 primary，不再铺整行底色（2026-11）。
       current: current,
@@ -478,14 +488,6 @@ class MangaChapterList extends StatelessWidget {
 
   static Widget _anchored(GlobalKey? anchor, Widget child) =>
       anchor == null ? child : KeyedSubtree(key: anchor, child: child);
-
-  /// 序号胶囊里的话数：整数话不带小数点；源没给（Mihon 用 -1 表示未知）就不画。
-  static String? _numberLabel(OnlineMangaChapter chapter) {
-    final double? number = chapter.number;
-    if (number == null || number < 0) return null;
-    if (number == number.truncateToDouble()) return '${number.toInt()}';
-    return '$number';
-  }
 
   String? _buildSubtitle(
     OnlineMangaChapter chapter,

@@ -201,6 +201,63 @@ void main() {
     },
   );
 
+  test('exports the persisted sourceOrder instead of the storage index', () async {
+    await _seedSource(db, sourceId: '123', name: 'Source A');
+    // 导入作品的存储数组顺序不是「最新在前」：sourceOrder 才是源顺序。
+    await _seedManga(
+      db,
+      sourceId: '123',
+      url: '/manga/alpha',
+      title: 'Alpha',
+      chapters: const <OnlineMangaChapter>[
+        OnlineMangaChapter(
+          key: '/chapter/1',
+          name: 'Chapter 1',
+          number: 1,
+          sourceOrder: 2,
+          raw: <String, Object?>{'url': '/chapter/1'},
+        ),
+        OnlineMangaChapter(
+          key: '/chapter/2',
+          name: 'Chapter 2',
+          number: 2,
+          sourceOrder: 1,
+          raw: <String, Object?>{'url': '/chapter/2'},
+        ),
+        OnlineMangaChapter(
+          key: '/chapter/3',
+          name: 'Chapter 3',
+          number: 3,
+          sourceOrder: 0,
+          raw: <String, Object?>{'url': '/chapter/3'},
+        ),
+      ],
+    );
+
+    final File target = File(p.join(tmp.path, 'source-order.tachibk'));
+    await MihonBackupExporter(database: db).exportToFile(
+      target: target,
+      options: const MihonBackupExportOptions(
+        includeLibrary: true,
+        includeChapters: true,
+      ),
+    );
+
+    final MihonBackupManga exported =
+        MihonBackupParser.parseFile(target).mangas.single;
+    expect(
+      <String, int>{
+        for (final MihonBackupChapter chapter in exported.chapters)
+          chapter.url: chapter.sourceOrder,
+      },
+      <String, int>{
+        '/chapter/1': 2,
+        '/chapter/2': 1,
+        '/chapter/3': 0,
+      },
+    );
+  });
+
   test('includeChapters=false writes no chapter entries', () async {
     await _seedManga(
       db,
