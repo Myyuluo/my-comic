@@ -160,6 +160,47 @@ void main() {
     );
   });
 
+  test('刷新把源列表下标写成 sourceOrder（0 = 最新一话）', () async {
+    await seedSource(sourceRow());
+    await manager.initialise();
+    runtime.chapters = const <MihonChapter>[
+      MihonChapter(
+        url: '/chapter/3',
+        name: 'Chapter 3',
+        uploadedAt: 3,
+        number: 3,
+      ),
+      MihonChapter(
+        url: '/chapter/2',
+        name: 'Chapter 2',
+        uploadedAt: 2,
+        number: 2,
+      ),
+      MihonChapter(
+        url: '/chapter/1',
+        name: 'Chapter 1',
+        uploadedAt: 1,
+        number: 1,
+      ),
+    ];
+
+    final OnlineMangaRefreshResult refreshed = await MihonLibraryAdapter(
+      manager,
+    ).refresh(placeholderEntry());
+
+    expect(
+      refreshed.chapters.map((OnlineMangaChapter chapter) => chapter.key),
+      <String>['/chapter/3', '/chapter/2', '/chapter/1'],
+    );
+    expect(
+      refreshed.chapters.map(
+        (OnlineMangaChapter chapter) => chapter.sourceOrder,
+      ),
+      <int>[0, 1, 2],
+      reason: '适配器按列表下标补 sourceOrder，在线源换章方向不变',
+    );
+  });
+
   test('精确匹配优先：同数字 sourceId 的另一个扩展不参与竞争', () async {
     await seedSource(
       sourceRow(extensionPackage: 'org.example.exact', name: 'Exact source'),
@@ -259,6 +300,15 @@ class _SourceRuntime extends Fake implements MihonRuntime {
   MihonSource? lastPagesSource;
   MihonSource? lastCoverSource;
 
+  List<MihonChapter> chapters = const <MihonChapter>[
+    MihonChapter(
+      url: '/chapter/1',
+      name: 'Chapter 1',
+      uploadedAt: 1,
+      number: 1,
+    ),
+  ];
+
   @override
   Future<MihonManga> getDetails(
     MihonExtensionRef extension,
@@ -280,14 +330,7 @@ class _SourceRuntime extends Fake implements MihonRuntime {
     MihonSource source,
     MihonManga manga, {
     List<MihonPreference> preferences = const <MihonPreference>[],
-  }) async => const <MihonChapter>[
-    MihonChapter(
-      url: '/chapter/1',
-      name: 'Chapter 1',
-      uploadedAt: 1,
-      number: 1,
-    ),
-  ];
+  }) async => chapters;
 
   @override
   Future<List<MihonPage>> getPages(

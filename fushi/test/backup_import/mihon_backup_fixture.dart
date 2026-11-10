@@ -19,6 +19,7 @@ class FixtureChapter {
     this.dateFetch = 0,
     this.dateUpload = 0,
     this.chapterNumber = 0,
+    this.sourceOrder = 0,
   });
 
   final String url;
@@ -30,6 +31,9 @@ class FixtureChapter {
   final int dateFetch;
   final int dateUpload;
   final double chapterNumber;
+
+  /// Mihon `BackupChapter.sourceOrder`（proto field 10）：0 = 最新一话。
+  final int sourceOrder;
 }
 
 class FixtureHistory {
@@ -294,6 +298,8 @@ Uint8List _encodeChapter(FixtureChapter chapter) {
   if (chapter.dateFetch != 0) w.varint(7, chapter.dateFetch);
   if (chapter.dateUpload != 0) w.varint(8, chapter.dateUpload);
   if (chapter.chapterNumber != 0) w.float32(9, chapter.chapterNumber);
+  // Proto3 omits zero, exactly like Mihon's writer (0 is the newest chapter).
+  if (chapter.sourceOrder != 0) w.varint(10, chapter.sourceOrder);
   return w.takeBytes();
 }
 

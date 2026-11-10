@@ -139,6 +139,93 @@ void main() {
     ], reason: '「最早在前」必须真的翻转，而不是只改按钮文案');
   });
 
+  testWidgets('导入章节按 sourceOrder 显示：最新在前，第一话在前正确反转', (
+    WidgetTester tester,
+  ) async {
+    // 备份数组顺序（旧→新）不是显示契约：sourceOrder 0 = 最新一话。
+    const List<OnlineMangaChapter> imported = <OnlineMangaChapter>[
+      OnlineMangaChapter(
+        key: '/c/2',
+        name: 'Chapter 2',
+        sourceOrder: 1,
+        raw: <String, Object?>{},
+      ),
+      OnlineMangaChapter(
+        key: '/c/3',
+        name: 'Chapter 3',
+        sourceOrder: 0,
+        raw: <String, Object?>{},
+      ),
+      OnlineMangaChapter(
+        key: '/c/1',
+        name: 'Chapter 1',
+        sourceOrder: 2,
+        raw: <String, Object?>{},
+      ),
+    ];
+
+    await pumpList(tester, entry: entryWith(imported));
+    expect(visibleTitles(tester), <String>[
+      'Chapter 3',
+      'Chapter 2',
+      'Chapter 1',
+    ]);
+
+    await pumpList(tester, entry: entryWith(imported), newestFirst: false);
+    expect(visibleTitles(tester), <String>[
+      'Chapter 1',
+      'Chapter 2',
+      'Chapter 3',
+    ]);
+
+    final List<String> tapped = <String>[];
+    await pumpList(
+      tester,
+      entry: entryWith(imported),
+      onChapterTap: (OnlineMangaChapter chapter) => tapped.add(chapter.key),
+    );
+    await tester.tap(find.text('Chapter 2'));
+    await tester.pump();
+    expect(tapped, <String>['/c/2'], reason: '显示排序不改变章节身份');
+  });
+
+  testWidgets('没有 sourceOrder 时按章节号显示最新在前', (WidgetTester tester) async {
+    final List<OnlineMangaChapter> byNumber = <OnlineMangaChapter>[
+      const OnlineMangaChapter(
+        key: '/c/2',
+        name: 'Chapter 2',
+        number: 2,
+        raw: <String, Object?>{},
+      ),
+      const OnlineMangaChapter(
+        key: '/c/3',
+        name: 'Chapter 3',
+        number: 3,
+        raw: <String, Object?>{},
+      ),
+      const OnlineMangaChapter(
+        key: '/c/1',
+        name: 'Chapter 1',
+        number: 1,
+        raw: <String, Object?>{},
+      ),
+    ];
+
+    await pumpList(tester, entry: entryWith(byNumber));
+    expect(visibleTitles(tester), <String>[
+      'Chapter 3',
+      'Chapter 2',
+      'Chapter 1',
+    ]);
+
+    await pumpList(tester, entry: entryWith(byNumber), newestFirst: false);
+    expect(visibleTitles(tester), <String>[
+      'Chapter 1',
+      'Chapter 2',
+      'Chapter 3',
+    ]);
+  });
+
   // 2026-10 M3E：行是 MediaDetailItemRow。已读 = 行尾 tertiary 对勾（key
   // media-detail-item-completed）、读了一半 = 副标题「读到第 N 页」（知道总页数
   // 时另有行内进度条）、未读两样都没有。

@@ -10,6 +10,7 @@ import 'package:fushi/src/utils/components/fushi_staggered_entrance.dart';
 import 'package:fushi/src/utils/components/glass/fushi_icon.dart';
 import 'package:fushi/src/utils/fushi_icons.dart';
 import 'package:fushi_core/fushi_core.dart';
+import 'package:fushi/src/media/manga/library/manga_adjacent_chapter.dart';
 import 'package:fushi/src/media/manga/library/manga_chapter_download_state.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi/src/media/manga/library/online_manga_runtime_adapter.dart'
@@ -104,7 +105,8 @@ class MangaChapterList extends StatelessWidget {
   final OnlineMangaLibraryEntry? entry;
   final Map<String, MangaChapterStateRow> states;
 
-  /// 源按新→旧返回，所以 `true` = 保持源顺序，`false` = 反转成第 1 话在前。
+  /// `true` = 最新一话在前（导入作品按 `sourceOrder`，在线源按列表顺序），
+  /// `false` = 反转成第 1 话在前。见 [visibleChapters]。
   final bool newestFirst;
   final bool unreadOnly;
   final MangaChapterDownloadFilter downloadFilter;
@@ -247,9 +249,16 @@ class MangaChapterList extends StatelessWidget {
             : !downloaded;
       });
     }
-    final List<OnlineMangaChapter> ordered = filtered.toList(growable: false);
-    if (newestFirst) return ordered;
-    return ordered.reversed.toList(growable: false);
+    // 显示顺序与存储数组顺序无关：先构造规范阅读顺序（第 1 话 → 第 N 话），
+    // 「最新在前」就是它的反转。导入作品按 sourceOrder，缺失时回退章节号 /
+    // 上传日期；完全没有顺序信息的条目保持现有源顺序（见 mangaReadingOrder）。
+    final List<OnlineMangaChapter> readingOrder = mangaReadingOrder(
+      filtered.toList(growable: false),
+    );
+    if (newestFirst) {
+      return readingOrder.reversed.toList(growable: false);
+    }
+    return readingOrder;
   }
 
   /// 一章的下载状态（静态版，ticket 06）：作品页登记可见序、判定批量动作作用
