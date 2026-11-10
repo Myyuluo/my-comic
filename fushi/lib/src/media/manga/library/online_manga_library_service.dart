@@ -574,6 +574,7 @@ class OnlineMangaLibraryService {
           sourceIdentity: claimed == null
               ? null
               : DownloadSourceIdentity.fromEntry(claimed),
+          mangaTitle: row.title,
         ),
       );
     }
@@ -599,6 +600,7 @@ class OnlineMangaLibraryService {
             sourceFolder: disk.key,
             mangaFolder: null,
             sourceIdentity: diskIdentity,
+            mangaTitle: '',
           ),
         );
       }
@@ -669,6 +671,64 @@ class OnlineMangaLibraryService {
       sourceDirPath: sourceDirPath,
       title: entry.series.title,
     );
+
+    // 同名共享：同一 Source 下标题完全相同的不同作品共用同一个漫画目录
+    // （Mihon 做法），不因身份不同生成 `(2)`。只有「标题完全相同」才共享：
+    // 标题不同、仅净化后同名仍走冲突后缀。
+    // 证据顺序：磁盘 manifest 优先（目录可能已被用户改名），没有可读 manifest
+    // 时回退到库里同 Source 同标题的行（同标题作品还没开始下载，惰性物化）。
+    final String entryTitle = entry.series.title.trim();
+    if (entryTitle.isNotEmpty && !identityMatch.ambiguous) {
+      final List<DownloadMangaFolderOnDisk> sharedOnDisk =
+          <DownloadMangaFolderOnDisk>[
+            for (final DownloadMangaFolderOnDisk folder in diskFolders)
+              if (folder.manifests.any(
+                (MangaPagesManifest manifest) =>
+                    manifest.mangaTitle.trim() == entryTitle &&
+                    DownloadSourceIdentity.fromManifest(
+                      manifest,
+                    ).matches(sourceIdentity),
+              ))
+                folder,
+          ];
+      if (sharedOnDisk.length == 1) {
+        final DownloadMangaFolderOnDisk shared = sharedOnDisk.single;
+        return _DownloadMangaDirectoryResolution(
+          directory: shared.directory,
+          reusedFolder: shared,
+        );
+      }
+      final List<_DownloadLibraryClaim> sharedClaims =
+          <_DownloadLibraryClaim>[
+            for (final _DownloadLibraryClaim claim in claims)
+              if (claim.mangaFolder != null &&
+                  _sameFolderName(claim.sourceFolder, sourceFolder) &&
+                  (claim.sourceIdentity == null ||
+                      claim.sourceIdentity!.matches(sourceIdentity)) &&
+                  claim.mangaTitle.trim() == entryTitle)
+                claim,
+          ];
+      if (sharedClaims.isNotEmpty) {
+        final _DownloadLibraryClaim preferred = sharedClaims.firstWhere(
+          (_DownloadLibraryClaim claim) =>
+              _sameFolderName(claim.mangaFolder!, baseMangaFolder),
+          orElse: () => sharedClaims.first,
+        );
+        final String sharedFolderName = preferred.mangaFolder!;
+        DownloadMangaFolderOnDisk? sharedFolder;
+        for (final DownloadMangaFolderOnDisk folder in diskFolders) {
+          if (_sameFolderName(folder.mangaFolderName, sharedFolderName)) {
+            sharedFolder = folder;
+            break;
+          }
+        }
+        return _DownloadMangaDirectoryResolution(
+          directory: Directory(p.join(sourceDirPath, sharedFolderName)),
+          reusedFolder: sharedFolder,
+        );
+      }
+    }
+
     final Set<String> claimedMangaFolders = <String>{
       for (final _DownloadLibraryClaim claim in claims)
         if (claim.mangaFolder != null &&
@@ -781,6 +841,7 @@ class _DownloadLibraryClaim {
     required this.sourceFolder,
     required this.mangaFolder,
     required this.sourceIdentity,
+    required this.mangaTitle,
   });
 
   final String sourceFolder;
@@ -788,4 +849,7 @@ class _DownloadLibraryClaim {
 
   /// null = 该行的描述符不可解析（例如本地条目）；不作为同源复用的依据。
   final DownloadSourceIdentity? sourceIdentity;
+
+  /// 该行登记的作品标题；同 Source 同标题的不同作品共享漫画目录。
+  final String mangaTitle;
 }

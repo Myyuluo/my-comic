@@ -531,7 +531,9 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
       final Set<String> scanned = chapterKeys.isEmpty
           ? const <String>{}
           : (await index.scanDisks(
-              identities: <MangaDownloadIdentity>[identity],
+              queries: <MangaDownloadDiskQuery>[
+                MangaDownloadDiskQuery.ofEntry(entry),
+              ],
             )).downloadedChapterKeys(identity, chapterKeys);
       if (!mounted || revision != _downloadStateRevision) return;
       _manifestDownloaded = scanned;

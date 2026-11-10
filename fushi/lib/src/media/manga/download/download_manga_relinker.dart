@@ -103,6 +103,14 @@ Future<DownloadMangaRelinkResult> relinkDownloadMangaFolder({
     for (final ChapterContainerOnDisk container in byId.values)
       container.containerName.toLowerCase(),
   };
+  // 共享目录里被 `pages.json` 证明属于**另一部作品**的容器：名称回退绝不能
+  // 把它们认成本作品的章，否则同 Title 的两部作品会互相串章节。
+  final Set<String> foreignContainerNames = <String>{
+    for (final ChapterContainerOnDisk container in containers)
+      if (container.manifest != null &&
+          !identity.matchesManifest(container.manifest!))
+        container.containerName.toLowerCase(),
+  };
 
   final Map<String, ChapterContainerOnDisk> existingContainers =
       <String, ChapterContainerOnDisk>{
@@ -136,9 +144,10 @@ Future<DownloadMangaRelinkResult> relinkDownloadMangaFolder({
       final ChapterContainerOnDisk? mapped =
           existingContainers[mappedName.toLowerCase()];
       if (mapped != null) {
-        final bool claimedByOther = idClaimedContainerNames.contains(
-          mapped.containerName.toLowerCase(),
-        );
+        final String mappedName = mapped.containerName.toLowerCase();
+        final bool claimedByOther =
+            idClaimedContainerNames.contains(mappedName) ||
+            foreignContainerNames.contains(mappedName);
         if (!claimedByOther) candidate = mapped;
       }
     }
@@ -149,6 +158,9 @@ Future<DownloadMangaRelinkResult> relinkDownloadMangaFolder({
           .where(
             (ChapterContainerOnDisk item) =>
                 !usedContainerNames.contains(
+                  item.containerName.toLowerCase(),
+                ) &&
+                !foreignContainerNames.contains(
                   item.containerName.toLowerCase(),
                 ) &&
                 _chapterContainerNameMatches(item.containerName, chapter),

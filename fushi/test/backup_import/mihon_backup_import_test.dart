@@ -86,6 +86,7 @@ void main() {
     String chapterName = 'Chapter',
     String sourceId = '1',
     String mangaKey = '/manga/x',
+    String mangaTitle = 'X',
   }) async {
     final Directory chapterDir = Directory(p.join(mangaDir.path, folderName));
     await chapterDir.create(recursive: true);
@@ -97,6 +98,7 @@ void main() {
         chapterName,
         sourceId: sourceId,
         mangaKey: mangaKey,
+        mangaTitle: mangaTitle,
       ),
     );
     return chapterDir;
@@ -908,6 +910,96 @@ void main() {
       expect(await db.getLibraryEpubBooks(), isEmpty);
     },
   );
+
+  test('auto-relinks two same-title works sharing one download folder', () async {
+    final Directory downloadsRoot = Directory(p.join(tmp.path, 'downloads'));
+    final Directory localComicRoot = Directory(p.join(tmp.path, 'local'));
+    final Directory shared = Directory(
+      p.join(downloadsRoot.path, 'Example', 'Same title'),
+    );
+    // 两章同住一个文件夹。探针读到第一份 manifest（A）后，还必须因为 B 与
+    // 它同标题而继续读，才能让两部作品都命中共享文件夹。
+    await writeChapter(
+      shared,
+      'A Ch 1',
+      chapterKey: '/c/a1',
+      mangaKey: '/manga/x',
+      mangaTitle: 'Same title',
+    );
+    await writeChapter(
+      shared,
+      'B Ch 1',
+      chapterKey: '/c/b1',
+      mangaKey: '/manga/y',
+      mangaTitle: 'Same title',
+    );
+
+    final File backup = await writeFixtureBackup(
+      tmp,
+      name: 'shared-folder.tachibk',
+      sources: const <FixtureSource>[FixtureSource(id: 1, name: 'Example')],
+      mangas: const <FixtureManga>[
+        FixtureManga(
+          source: 1,
+          url: '/manga/x',
+          title: 'Same title',
+          favorite: false,
+          chapters: <FixtureChapter>[
+            FixtureChapter(url: '/c/a1', name: 'A 1'),
+          ],
+        ),
+        FixtureManga(
+          source: 1,
+          url: '/manga/y',
+          title: 'Same title',
+          favorite: false,
+          chapters: <FixtureChapter>[
+            FixtureChapter(url: '/c/b1', name: 'B 1'),
+          ],
+        ),
+      ],
+    );
+    final MihonBackupImportReport report = await service(
+      downloadsRoot: downloadsRoot,
+      localComicRoot: localComicRoot,
+    ).importFile(backup);
+
+    expect(report.downloadMangaMatched, 2);
+    expect(report.downloadMangaSkipped, 0);
+    expect(report.downloadChaptersRelinked, 2);
+
+    final List<EpubBookRow> rows = await db.getAllEpubBooks();
+    expect(rows, hasLength(2));
+    final EpubBookRow aRow = rows.firstWhere((EpubBookRow row) {
+      final OnlineMangaLibraryEntry entry = OnlineMangaLibraryEntry.tryParse(
+        row.sourceMetadata,
+      )!;
+      return entry.series.key == '/manga/x';
+    });
+    final EpubBookRow bRow = rows.firstWhere((EpubBookRow row) {
+      final OnlineMangaLibraryEntry entry = OnlineMangaLibraryEntry.tryParse(
+        row.sourceMetadata,
+      )!;
+      return entry.series.key == '/manga/y';
+    });
+    expect(p.equals(aRow.extractDir, shared.path), isTrue);
+    expect(p.equals(bRow.extractDir, shared.path), isTrue);
+
+    final Map<String, MangaChapterDirRow> aMappings =
+        await db.getMangaChapterDirRowsForBook(aRow.bookKey);
+    final Map<String, MangaChapterDirRow> bMappings =
+        await db.getMangaChapterDirRowsForBook(bRow.bookKey);
+    expect(aMappings.keys, <String>{'/c/a1'});
+    expect(aMappings['/c/a1']!.folderName, 'A Ch 1');
+    expect(bMappings.keys, <String>{'/c/b1'});
+    expect(bMappings['/c/b1']!.folderName, 'B Ch 1');
+    expect(
+      Directory(p.join(downloadsRoot.path, 'Example', 'Same title (2)'))
+          .existsSync(),
+      isFalse,
+      reason: '同名共享目录不应生成 (2) 副本',
+    );
+  });
 
   test('re-import keeps auto-linked downloads idempotent', () async {
     final Directory downloadsRoot = Directory(p.join(tmp.path, 'downloads'));

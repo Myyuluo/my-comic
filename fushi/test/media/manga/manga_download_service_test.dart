@@ -336,6 +336,113 @@ void main() {
     downloads.dispose();
   });
 
+  test('同名不同作品共用下载目录：各自下载、映射与状态互不串作品', () async {
+    const OnlineMangaLibraryEntry secondEntry = OnlineMangaLibraryEntry(
+      runtime: OnlineMangaRuntimeKind.mihon,
+      extensionPackage: 'org.example.fixture',
+      sourceId: '1',
+      series: OnlineMangaSeries(
+        key: '/series/fixture-two',
+        title: 'Fixture series',
+        raw: <String, Object?>{'url': '/series/fixture-two'},
+      ),
+      chapters: <OnlineMangaChapter>[
+        OnlineMangaChapter(
+          key: '/chapter/other-1',
+          name: 'Other Chapter 1',
+          number: 1,
+          raw: <String, Object?>{'url': '/chapter/other-1'},
+        ),
+      ],
+    );
+    final EpubBookRow secondRow = await library.add(secondEntry);
+    expect(
+      secondRow.extractDir,
+      bookDir,
+      reason: '同一 Source 下标题相同的不同作品共用同一漫画目录',
+    );
+    expect(
+      Directory(p.join(root.path, 'downloads', 'Fake', 'Fixture series (2)'))
+          .existsSync(),
+      isFalse,
+      reason: '不同身份不因同名生成 (2) 目录',
+    );
+
+    final MangaDownloadService downloads = build();
+    addTearDown(downloads.dispose);
+    await downloads.enqueueChapter(
+      entry: _entry(),
+      chapter: _chapters.last,
+      autoOcr: false,
+    );
+    await downloads.enqueueChapter(
+      entry: secondEntry,
+      chapter: secondEntry.chapters.single,
+      autoOcr: false,
+    );
+    await downloads.start();
+    await downloads.whenIdle;
+
+    // 两章都下载完成，文件住在同一个漫画目录的不同容器里。
+    final Directory firstChapter = downloadChapterDirectory(bookDir, 'Chapter 1');
+    final Directory secondChapter = downloadChapterDirectory(
+      bookDir,
+      'Other Chapter 1',
+    );
+    expect(firstChapter.existsSync(), isTrue);
+    expect(secondChapter.existsSync(), isTrue);
+    expect(
+      Directory(p.join(root.path, 'downloads', 'Fake', 'Fixture series (2)'))
+          .existsSync(),
+      isFalse,
+    );
+
+    // 章节映射各归各的作品：不把对方的容器写进自己的映射。
+    final DownloadLibraryIndex index = DownloadLibraryIndex(db);
+    expect(
+      await index.isChapterDownloaded(
+        bookKey: bookKey,
+        chapterKey: '/chapter/1',
+      ),
+      isTrue,
+    );
+    expect(
+      await index.isChapterDownloaded(
+        bookKey: secondRow.bookKey,
+        chapterKey: '/chapter/other-1',
+      ),
+      isTrue,
+    );
+    expect(await db.getMangaChapterDir(bookKey, '/chapter/other-1'), isNull);
+    expect(
+      await db.getMangaChapterDir(secondRow.bookKey, '/chapter/1'),
+      isNull,
+      reason: '共享目录不得把另一部作品的章映射到本作品',
+    );
+
+    // 阅读解析：每部作品都打开自己的容器，不串到对方的章。
+    expect(
+      (await index.resolveChapter(
+        bookKey: bookKey,
+        chapterKey: '/chapter/1',
+      ))?.directory?.path,
+      firstChapter.path,
+    );
+    expect(
+      (await index.resolveChapter(
+        bookKey: secondRow.bookKey,
+        chapterKey: '/chapter/other-1',
+      ))?.directory?.path,
+      secondChapter.path,
+    );
+
+    // 容器里的 pages.json 仍证明各自的作品身份。
+    final MangaPagesManifest? secondManifest =
+        await readPagesManifest(secondChapter);
+    expect(secondManifest?.mangaKey, '/series/fixture-two');
+    expect(secondManifest?.mangaTitle, 'Fixture series');
+  });
+
   test('非书架占位行：入队按下载身份复用它，worker 不需要 Library membership', () async {
     // 导入时来源未安装 → 占位包；安装后从源页拿到的条目是真实包 + 规范化后的
     // 数字 sourceId。两者是同一部作品，任务必须挂到已有的非书架行上。
