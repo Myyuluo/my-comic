@@ -406,9 +406,15 @@ abstract class MediaSource {
         // BUG-959: 按物理像素上限解码，避免 EPUB 原始封面(常 1600×2400)整帧撑爆 ImageCache。
         return resizedFileImage(File(filePath));
       } else {
+        final String remoteUrl = fallbackUrl ?? item.imageUrl!;
         return AppCachedHttpImage(
-          fallbackUrl ?? item.imageUrl!,
-          cacheKey: item.uniqueKey,
+          remoteUrl,
+          // ticket 01：cacheKey 带上实际 URL，而不只是 item.uniqueKey。
+          // `CachedNetworkImageProvider` 的相等性与 CacheManager 文件键都看
+          // cacheKey；签名封面 URL 切换后，旧 URL 的失败 / 旧图条目仍会占着
+          // 同一个 key 并压制新封面。URL 入键让新旧封面天然互不命中，旧条目
+          // 交由既有容量淘汰清理。
+          cacheKey: '${item.uniqueKey}\u0000$remoteUrl',
         );
       }
     }

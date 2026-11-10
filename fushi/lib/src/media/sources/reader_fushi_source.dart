@@ -23,6 +23,7 @@ import 'package:fushi/src/media/manga/interconnect/interconnect_manga_source.dar
 import 'package:fushi/src/media/manga/library/manga_adjacent_chapter.dart'
     show mangaReadingOrder;
 import 'package:fushi/src/media/manga/library/manga_shelf_cover_cache.dart';
+import 'package:fushi/src/media/manga/library/manga_shelf_cover_revision.dart';
 import 'package:fushi/src/media/manga/library/manga_shelf_cover_service.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_metadata.dart';
@@ -70,10 +71,21 @@ final _libraryEpubBookKeysProvider = StreamProvider<List<String>>((ref) {
       .distinct(listEquals);
 });
 
+/// 后台封面字节成功写入持久缓存后的 revision 视图（ticket 01）。
+///
+/// 书架卡片是 `MediaItem.imageUrl` 的快照；字节落盘本身不会改数据库，
+/// 只有重新解析 `MediaItem` 才能切到新的 `file://` 缓存封面。
+final _shelfCoverRevisionProvider = StreamProvider<int>((ref) {
+  return MangaShelfCoverRevision.events;
+});
+
 final fushiBooksProvider =
     FutureProvider.family<List<MediaItem>, Language>((ref, language) {
   // BUG-793：订阅书架成员集合变化，任意导入 / 删除 / membership 翻转后自动重算。
   ref.watch(_libraryEpubBookKeysProvider);
+  // ticket 01：后台封面字节成功写入后重算，卡片立即改用新的持久缓存封面。
+  // 服务只在成功写入新字节时 bump，失败 / 空字节不会造成无意义的重建。
+  ref.watch(_shelfCoverRevisionProvider);
   return ReaderFushiSource.instance.getBooksFromDb(
     appModel: ref.watch(appProvider),
   );
