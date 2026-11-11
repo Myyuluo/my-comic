@@ -68,15 +68,11 @@ void main() {
   });
 
   group('buildStableReleaseFromTag (302 tag -> API 同构 release map)', () {
-    test(
-        'stable release URL helpers prefer canonical repo with legacy fallback',
-        () {
+    test('stable release URL helpers point at the MyComic fork', () {
       expect(kStableReleasesLatestUrl,
-          'https://github.com/hajisensai/fushi/releases/latest');
-      expect(kLegacyStableReleasesLatestUrl,
-          'https://github.com/hajisensai/hibiki/releases/latest');
-      expect(stableReleasesLatestUrlForRepo(kLegacyGitHubRepo),
-          'https://github.com/hajisensai/hibiki/releases/latest');
+          'https://github.com/Myyuluo/my-comic/releases/latest');
+      expect(stableReleasesLatestUrlForRepo(kGitHubRepo),
+          'https://github.com/Myyuluo/my-comic/releases/latest');
     });
 
     test('用原始 tag（含 v）拼 download URL，version 去前导 v', () {
@@ -94,19 +90,18 @@ void main() {
               (a['name'] as String).endsWith('-windows-setup.exe'));
       expect(
         windows['browser_download_url'],
-        'https://github.com/hajisensai/fushi/releases/download/v0.4.1/fushi-0.4.1-windows-setup.exe',
+        'https://github.com/Myyuluo/my-comic/releases/download/v0.4.1/fushi-0.4.1-windows-setup.exe',
       );
     });
 
-    test('legacy repo override preserves installable fallback download URLs',
-        () {
+    test('explicit repo override builds download URLs for that repo', () {
       final Map<String, dynamic> release = buildStableReleaseFromTag(
         'v0.4.1',
-        repo: kLegacyGitHubRepo,
+        repo: 'example/fork',
       );
       expect(
         release['html_url'],
-        'https://github.com/hajisensai/hibiki/releases/tag/v0.4.1',
+        'https://github.com/example/fork/releases/tag/v0.4.1',
       );
       final List<dynamic> assets = release['assets'] as List<dynamic>;
       final Map<String, dynamic> windows = assets
@@ -115,7 +110,7 @@ void main() {
               (a['name'] as String).endsWith('-windows-setup.exe'));
       expect(
         windows['browser_download_url'],
-        'https://github.com/hajisensai/hibiki/releases/download/v0.4.1/fushi-0.4.1-windows-setup.exe',
+        'https://github.com/example/fork/releases/download/v0.4.1/fushi-0.4.1-windows-setup.exe',
       );
     });
 
@@ -134,7 +129,7 @@ void main() {
       final UpdateAsset? asset = await WindowsUpdater().selectAsset(assets);
       expect(
         asset?.url,
-        'https://github.com/hajisensai/fushi/releases/download/v0.4.1/fushi-0.4.1-windows-setup.exe',
+        'https://github.com/Myyuluo/my-comic/releases/download/v0.4.1/fushi-0.4.1-windows-setup.exe',
       );
     });
 
@@ -147,7 +142,7 @@ void main() {
       ).selectAsset(assets);
       expect(
         asset?.url,
-        'https://github.com/hajisensai/fushi/releases/download/v0.4.1/fushi-0.4.1-arm64-v8a.apk',
+        'https://github.com/Myyuluo/my-comic/releases/download/v0.4.1/fushi-0.4.1-arm64-v8a.apk',
       );
     });
   });

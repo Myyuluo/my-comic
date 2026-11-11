@@ -1,28 +1,15 @@
 part of 'update_checker.dart';
 
-/// 发布仓。改名 Fushi 后主名走新仓；GitHub 对仓库名大小写不敏感（实测
-/// `raw.githubusercontent.com/JestJS/Jest/...` 与 `jestjs/jest` 同为 200），故沿用
-/// 小写字面量，与仓库显示名 `Fushi` 无冲突。
-const String kGitHubRepo = 'hajisensai/fushi';
-
-/// 改名前的仓名，作回退位。**两个作用**：① 仓库还没实际改名的窗口期里，新构建靠它
-/// 仍能查到更新（[kGitHubRepoFallbacks] 会逐个试）；② 真改名后它由 GitHub 永久
-/// 重定向兜底。
+/// 发布仓：MyComic 自己的 fork。更新检查**只认这个仓**，不再回退上游 Fushi
+/// 仓库——上游 3.x 的 release 对 1.0.0 来说是「更新」，但那不是本应用的发布线。
 ///
-/// 取代了更早的 `hdjsadgfwtg/hibiki`——那个不是独立仓库，是本仓的**旧账号名**
-/// （`gh repo view hdjsadgfwtg/hibiki` 解析出的 nameWithOwner 就是
-/// `hajisensai/hibiki`），一直靠同一套重定向工作；留着它只是多一跳同目标的链路，
-/// 而 `hajisensai/hibiki` 是单跳、更近的名字。顺带说明这套重定向早已在生产验证过：
-/// 旧账号名连 `raw.githubusercontent.com/.../update-manifest/latest-stable.json`
-/// 都能 200，正是 GFW 下唯一可成功的那条检查路径。（那是当时的文件名；现在清单按产品族
-/// 分文件，本体读的是带 `-fushi` 后缀的那份，见 [kFushiManifestSuffix]。）
-const String kLegacyGitHubRepo = 'hajisensai/hibiki';
+/// 仓库没有可用 release（404 / 空列表 / 无匹配通道）时按「已是最新」处理：
+/// 更新检查返回空列表，`selectUpdateReleaseForCurrentPlatform` 选不出任何 release，
+/// 手动检查走 `onUpToDate` 而不是报错。
+const String kGitHubRepo = 'Myyuluo/my-comic';
 
 @visibleForTesting
-const List<String> kGitHubRepoFallbacks = <String>[
-  kGitHubRepo,
-  kLegacyGitHubRepo,
-];
+const List<String> kGitHubRepoFallbacks = <String>[kGitHubRepo];
 
 final RegExp _kBetaReleaseTagPattern = RegExp(r'^v\d+(?:\.\d+)*-beta\.\d+$');
 final RegExp _kDebugReleaseTagPattern =
@@ -1482,8 +1469,6 @@ class UpdateChecker {
 /// 对比：那个被镜像 403、检查注定失败。
 const String kStableReleasesLatestUrl =
     'https://github.com/$kGitHubRepo/releases/latest';
-const String kLegacyStableReleasesLatestUrl =
-    'https://github.com/$kLegacyGitHubRepo/releases/latest';
 
 @visibleForTesting
 String stableReleasesLatestUrlForRepo(String repo) =>
@@ -1588,14 +1573,10 @@ const String kFushiManifestSuffix = '-fushi';
 /// 纯 GFW 下 beta/debug 检查唯一可成功路径（`api.github.com/.../releases` 列表被镜像 403）。
 const String kBetaManifestUrl =
     'https://raw.githubusercontent.com/$kGitHubRepo/update-manifest/latest-beta$kFushiManifestSuffix.json';
-const String kLegacyBetaManifestUrl =
-    'https://raw.githubusercontent.com/$kLegacyGitHubRepo/update-manifest/latest-beta$kFushiManifestSuffix.json';
 
 /// debug 通道镜像清单（见 [kBetaManifestUrl]）。
 const String kDebugManifestUrl =
     'https://raw.githubusercontent.com/$kGitHubRepo/update-manifest/latest-debug$kFushiManifestSuffix.json';
-const String kLegacyDebugManifestUrl =
-    'https://raw.githubusercontent.com/$kLegacyGitHubRepo/update-manifest/latest-debug$kFushiManifestSuffix.json';
 
 /// stable 通道镜像清单（BUG-846「谁后用谁」）。CI `publish_update_manifest.sh` 的 formal 分支
 /// 已生成 `latest-stable.json`（`merge_update_manifest.py` 写顶层 `releaseSequence`）。客户端读它
@@ -1605,8 +1586,6 @@ const String kLegacyDebugManifestUrl =
 /// （BUG-1481，见 [kFushiManifestSuffix]）。
 const String kStableManifestUrl =
     'https://raw.githubusercontent.com/$kGitHubRepo/update-manifest/latest-stable$kFushiManifestSuffix.json';
-const String kLegacyStableManifestUrl =
-    'https://raw.githubusercontent.com/$kLegacyGitHubRepo/update-manifest/latest-stable$kFushiManifestSuffix.json';
 
 /// CI 生成镜像清单时识别的 schema 版本（TODO-705）。客户端只认该版本；
 /// 未来结构不兼容的变更递增该号，旧客户端不识别则安全回退 API 直连。
@@ -1626,15 +1605,12 @@ Map<String, String> manifestUrlsForChannel(UpdateChannel channel) {
   return switch (channel) {
     UpdateChannel.beta => const <String, String>{
         kGitHubRepo: kBetaManifestUrl,
-        kLegacyGitHubRepo: kLegacyBetaManifestUrl,
       },
     UpdateChannel.debug => const <String, String>{
         kGitHubRepo: kDebugManifestUrl,
-        kLegacyGitHubRepo: kLegacyDebugManifestUrl,
       },
     UpdateChannel.stable => const <String, String>{
         kGitHubRepo: kStableManifestUrl,
-        kLegacyGitHubRepo: kLegacyStableManifestUrl,
       },
   };
 }

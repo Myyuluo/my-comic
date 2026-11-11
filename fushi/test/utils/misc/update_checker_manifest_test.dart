@@ -43,39 +43,32 @@ String _manifestJson({
 
 void main() {
   group('manifestUrlForChannel (pure)', () {
-    test('beta/debug return their raw.githubusercontent manifest URLs', () {
-      expect(kGitHubRepo, 'hajisensai/fushi');
-      expect(kLegacyGitHubRepo, 'hajisensai/hibiki');
-      expect(kGitHubRepoFallbacks, <String>[
-        'hajisensai/fushi',
-        'hajisensai/hibiki',
-      ]);
+    test('beta/debug return fork manifest URLs without upstream fallback', () {
+      expect(kGitHubRepo, 'Myyuluo/my-comic');
+      expect(kGitHubRepoFallbacks, <String>['Myyuluo/my-comic'],
+          reason: '不得再回退到上游 3.x 仓库');
       expect(manifestUrlForChannel(UpdateChannel.beta), kBetaManifestUrl);
       expect(manifestUrlForChannel(UpdateChannel.debug), kDebugManifestUrl);
       expect(
         kBetaManifestUrl,
-        'https://raw.githubusercontent.com/hajisensai/fushi/update-manifest/latest-beta-fushi.json',
+        'https://raw.githubusercontent.com/Myyuluo/my-comic/update-manifest/latest-beta-fushi.json',
       );
       expect(
         kDebugManifestUrl,
-        'https://raw.githubusercontent.com/hajisensai/fushi/update-manifest/latest-debug-fushi.json',
+        'https://raw.githubusercontent.com/Myyuluo/my-comic/update-manifest/latest-debug-fushi.json',
       );
       expect(
         manifestUrlsForChannel(UpdateChannel.beta),
         const <String, String>{
-          'hajisensai/fushi':
-              'https://raw.githubusercontent.com/hajisensai/fushi/update-manifest/latest-beta-fushi.json',
-          'hajisensai/hibiki':
-              'https://raw.githubusercontent.com/hajisensai/hibiki/update-manifest/latest-beta-fushi.json',
+          'Myyuluo/my-comic':
+              'https://raw.githubusercontent.com/Myyuluo/my-comic/update-manifest/latest-beta-fushi.json',
         },
       );
       expect(
         manifestUrlsForChannel(UpdateChannel.debug),
         const <String, String>{
-          'hajisensai/fushi':
-              'https://raw.githubusercontent.com/hajisensai/fushi/update-manifest/latest-debug-fushi.json',
-          'hajisensai/hibiki':
-              'https://raw.githubusercontent.com/hajisensai/hibiki/update-manifest/latest-debug-fushi.json',
+          'Myyuluo/my-comic':
+              'https://raw.githubusercontent.com/Myyuluo/my-comic/update-manifest/latest-debug-fushi.json',
         },
       );
     });
@@ -86,15 +79,13 @@ void main() {
       expect(manifestUrlForChannel(UpdateChannel.stable), kStableManifestUrl);
       expect(
         kStableManifestUrl,
-        'https://raw.githubusercontent.com/hajisensai/fushi/update-manifest/latest-stable-fushi.json',
+        'https://raw.githubusercontent.com/Myyuluo/my-comic/update-manifest/latest-stable-fushi.json',
       );
       expect(
         manifestUrlsForChannel(UpdateChannel.stable),
         const <String, String>{
-          'hajisensai/fushi':
-              'https://raw.githubusercontent.com/hajisensai/fushi/update-manifest/latest-stable-fushi.json',
-          'hajisensai/hibiki':
-              'https://raw.githubusercontent.com/hajisensai/hibiki/update-manifest/latest-stable-fushi.json',
+          'Myyuluo/my-comic':
+              'https://raw.githubusercontent.com/Myyuluo/my-comic/update-manifest/latest-stable-fushi.json',
         },
       );
     });
@@ -161,16 +152,15 @@ void main() {
       expect(release.containsKey('releaseSequence'), isFalse);
     });
 
-    test('legacy manifest source keeps legacy release page fallback', () {
+    test('explicit repo override keeps that repo release page fallback', () {
       final Map<String, dynamic> release = buildReleaseFromManifest(
         _manifestJson(),
-        repo: kLegacyGitHubRepo,
+        repo: 'example/fork',
       )!;
       expect(
         release['html_url'],
-        // 传 legacy 源就该拿 legacy 仓的发布页——这条用例断的正是「不把回退源
-        // 的链接硬拗成主仓」，故期望值随 kLegacyGitHubRepo 走旧名。
-        'https://github.com/hajisensai/hibiki/releases/tag/v0.10.1-beta.162',
+        // 传哪个源就拿哪个源的发布页——不把 manifest 来源的链接硬拗成主仓。
+        'https://github.com/example/fork/releases/tag/v0.10.1-beta.162',
       );
     });
 

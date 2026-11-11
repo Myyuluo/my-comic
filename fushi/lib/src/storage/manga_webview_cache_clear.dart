@@ -10,9 +10,10 @@
 /// 执行后销毁。清理只在 Windows（WebView2 / CDP）上可用：其它平台把步骤标记为
 /// skipped，整体结果按部分成功提示，而不是静默当作清完了。
 ///
-/// 占用统计只读扫描 profile 数据目录下的**安全 cache 子目录**（Cache / Code
-/// Cache / GPUCache 等）；cookies / localStorage / IndexedDB / Preferences
-/// 等站点数据既不计入也不读取。
+/// 占用统计只读扫描 CDP `Network.clearBrowserCache` **确实会清理的 HTTP cache
+/// 子目录**；GPU / Shader / Dawn / Code Cache 等运行时组件与 cookies /
+/// localStorage / IndexedDB / Preferences 等站点数据既不计入也不读取。清理的
+/// `freedBytes` 取清理前后这些可清理目录的真实差值，不再硬编码 0。
 library;
 
 import 'dart:async';
@@ -59,15 +60,17 @@ class MangaWebViewCacheProfile {
   final String id;
   final MangaWebViewCacheSessionSource sessionSource;
 
-  /// 该 profile 下安全的 HTTP cache 子目录；[MangaWebViewCacheClearStep.measureBytes]
-  /// 只读扫描这些目录。为空 = 不参与占用统计（例如测试 fake / 解析不到 state 根）。
+  /// 该 profile 下 CDP 会清理的 HTTP cache 子目录；
+  /// [MangaWebViewCacheClearStep.measureBytes] 只读扫描这些目录。为空 = 不参与
+  /// 占用统计（例如测试 fake / 解析不到 state 根）。
   final List<Directory> cacheDirectories;
 }
 
 /// 依次清理每个 profile；单个 profile 失败不阻断其余 profile。
 ///
-/// [measureBytes] 汇总各 profile 的安全 cache 子目录大小；失败按
-/// [failedEntries] 计入部分成功提示，平台不支持时整个步骤报告 skipped。
+/// [measureBytes] 汇总各 profile 的 HTTP cache 子目录大小，[clear] 用清理前后
+/// 的差值报告真实释放量；失败按 [failedEntries] 计入部分成功提示，平台不支持时
+/// 整个步骤报告 skipped。
 class MangaWebViewCacheClearStep extends MangaCacheClearStep {
   const MangaWebViewCacheClearStep({
     required this.id,
@@ -98,10 +101,19 @@ class MangaWebViewCacheClearStep extends MangaCacheClearStep {
   @override
   Future<int> measureBytes() {
     if (!supported) return Future<int>.value(0);
-    return mangaCacheDirectorySize(<Directory>[
-      for (final MangaWebViewCacheProfile profile in profiles)
-        ...profile.cacheDirectories,
-    ]);
+    return _measureClearableBytes();
+  }
+
+  /// CDP 实际会清掉的 HTTP cache 总量。测量失败按 0 计，不影响清理本身。
+  Future<int> _measureClearableBytes() async {
+    try {
+      return await mangaCacheDirectorySize(<Directory>[
+        for (final MangaWebViewCacheProfile profile in profiles)
+          ...profile.cacheDirectories,
+      ]);
+    } on Object {
+      return 0;
+    }
   }
 
   @override
@@ -109,6 +121,7 @@ class MangaWebViewCacheClearStep extends MangaCacheClearStep {
     if (!supported) {
       return MangaCacheClearStepResult(id: id, freedBytes: 0, skipped: true);
     }
+    final int before = await _measureClearableBytes();
     int failures = 0;
     for (final MangaWebViewCacheProfile profile in profiles) {
       MangaWebViewCacheSession? session;
@@ -137,27 +150,26 @@ class MangaWebViewCacheClearStep extends MangaCacheClearStep {
         }
       }
     }
+    final int after = await _measureClearableBytes();
     return MangaCacheClearStepResult(
       id: id,
-      freedBytes: 0,
+      // 只报告清理前后可清理目录的真实差值。正常渲染重新填充的封面 / 图片
+      // 缓存会反映在之后的测量里，但不会被算作这次清理“未完成”或虚报释放量。
+      freedBytes: before > after ? before - after : 0,
       failedEntries: failures,
     );
   }
 }
 
-/// WebView2 user data folder 下可以安全统计的 HTTP cache 子目录（相对路径）。
+/// WebView2 user data folder 下 CDP `Network.clearBrowserCache` 确实会清理的
+/// HTTP cache 子目录（相对路径）。
 ///
-/// 刻意只列 cache 目录：cookies / localStorage / IndexedDB / Preferences 等
-/// 站点数据既不在统计范围，也不会被清理。
+/// 只列 HTTP cache：该 CDP 命令最终调用 `NetworkContext::ClearHttpCache`。
+/// GPU / Shader / Dawn / Code Cache 属于运行时组件、CDP 不清；cookies /
+/// localStorage / IndexedDB / Preferences 等站点数据也不在清理范围，因此它们
+/// 既不计入占用，也不会被删除。
 const List<String> kMangaWebViewSafeCacheSubdirectories = <String>[
   'EBWebView/Default/Cache',
-  'EBWebView/Default/Code Cache',
-  'EBWebView/Default/GPUCache',
-  'EBWebView/Default/DawnCache',
-  'EBWebView/Default/GrShaderCache',
-  'EBWebView/Default/ShaderCache',
-  'EBWebView/GrShaderCache',
-  'EBWebView/ShaderCache',
 ];
 
 /// 一个 WebView2 user data folder 下的安全 HTTP cache 子目录。
