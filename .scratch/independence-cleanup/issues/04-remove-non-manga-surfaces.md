@@ -2,7 +2,7 @@
 
 **What to build:** 删除应用层所有非漫画页面、服务/provider、CTL 端点、深链、运行时装配、原生库和测试；删除旧 Onboarding，为 07 的新向导腾出空间。保留漫画域与 `ModuleId`/`HomeTab` 兼容值。
 
-**Blocked by:** 03
+**Blocked by:** 02
 
 **Status:** ready-for-agent
 

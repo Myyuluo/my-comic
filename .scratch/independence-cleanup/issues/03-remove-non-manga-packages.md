@@ -2,7 +2,7 @@
 
 **What to build:** 删除不再属于漫画域的独立 workspace 包和 engine 子域，让依赖图和编译面只剩漫画功能。
 
-**Blocked by:** 02
+**Blocked by:** 04
 
 **Status:** ready-for-agent
 
