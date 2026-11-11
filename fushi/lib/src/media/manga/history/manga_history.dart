@@ -26,6 +26,8 @@ import 'package:fushi_engine/media/media_pref_keys.dart'
     show kReaderBookIdentifierPrefix;
 
 import 'package:fushi/src/media/display_title.dart';
+import 'package:fushi/src/media/manga/library/manga_first_page_cover_service.dart';
+import 'package:fushi/src/media/manga/library/manga_shelf_cover_service.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi/src/media/sources/manga_fushi_source.dart';
 import 'package:fushi/src/media/sources/reader_fushi_source.dart';
@@ -371,9 +373,17 @@ class MangaHistoryEntry {
 /// When both the legacy and the canonical row exist for the same Manga (after
 /// re-importing a repaired backup), only the newest entry is shown: History
 /// stays one row per Manga (ADR 0018).
-Future<List<MangaHistoryEntry>> loadMangaHistory(FushiDatabase db) async {
+Future<List<MangaHistoryEntry>> loadMangaHistory(
+  FushiDatabase db, {
+  MangaShelfCoverService? shelfCovers,
+}) async {
   final List<MediaOpenHistoryRow> rows = await db.getAllMediaOpenHistory();
   final List<EpubBookRow> books = await db.getAllEpubBooks();
+  // History 与书架共用同一份 Program state shelf cover 缓存：生成封面与真实
+  // 来源封面共用缓存文件，读取侧由同一个 service 区分，不另写缓存格式。
+  final MangaFirstPageCoverService? shelfCoverReader = shelfCovers == null
+      ? null
+      : MangaFirstPageCoverService(database: db, cache: shelfCovers.cache);
   final Map<String, EpubBookRow> byIdentity = <String, EpubBookRow>{};
   final Map<String, EpubBookRow> byBookKey = <String, EpubBookRow>{};
   for (final EpubBookRow book in books) {
@@ -423,19 +433,39 @@ Future<List<MangaHistoryEntry>> loadMangaHistory(FushiDatabase db) async {
       );
     }
     final String? imageUrl = snapshot?.imageUrl?.trim();
+    String? snapshotRemoteUrl;
     if (coverFilePath == null && imageUrl != null && imageUrl.isNotEmpty) {
       if (imageUrl.startsWith('file://')) {
         final String? path = Uri.tryParse(imageUrl)?.toFilePath();
         if (mangaHistoryCoverFileExists(path)) coverFilePath = path;
       } else {
-        coverUrl = imageUrl;
+        snapshotRemoteUrl = imageUrl;
       }
     }
+    // Program state shelf cover cache (real source bytes or first-page generated
+    // cover) sits between the Library/local cover and remote fallbacks, matching
+    // the shelf resolution. Generation only ever writes this cache; reading it
+    // here never touches Content root / Download library.
+    if (coverFilePath == null && book != null && shelfCoverReader != null) {
+      coverFilePath = await _cachedShelfCoverPath(
+        shelfCoverReader,
+        book.bookKey,
+      );
+    }
     // Fallback chain: local cover file → snapshot imageUrl → source metadata
-    // series cover → snapshot online cover → placeholder (null).
-    coverUrl ??=
-        _usableCoverUrl(onlineEntry?.series.coverUrl) ??
-        _usableCoverUrl(online?.coverUrl);
+    // series cover → snapshot online cover → placeholder (null). A resolved
+    // local / Program state cover is final: lower-priority remote URLs are not
+    // consulted once a file cover wins.
+    if (coverFilePath == null) {
+      final String? remoteCoverUrl =
+          snapshotRemoteUrl ??
+          _usableCoverUrl(onlineEntry?.series.coverUrl) ??
+          _usableCoverUrl(online?.coverUrl);
+      if (remoteCoverUrl != null &&
+          await _canUseHistoryRemoteCover(shelfCovers, onlineEntry, online)) {
+        coverUrl = remoteCoverUrl;
+      }
+    }
 
     final String snapshotTitle = snapshot?.title.trim() ?? '';
     final String title;
@@ -480,6 +510,41 @@ EpubBookRow? _bookForLegacyMediaId(
   if (row.mediaSource != MangaFushiSource.kUniqueKey) return null;
   if (!row.mediaId.startsWith(kReaderBookIdentifierPrefix)) return null;
   return byBookKey[row.mediaId.substring(kReaderBookIdentifierPrefix.length)];
+}
+
+/// 来源未安装 / 停用时，History 不得回退到必然失败的远程封面。
+///
+/// 没有调用方注入 shelf cover service（旧调用方 / 启动早期）时无法判定，保持
+/// 旧的远程回退行为。History 行可能已无 Library 行，此时用快照里的来源身份
+/// 探测可用性，判定口径与书架 [MangaShelfCoverService.isSourceAvailable] 一致。
+Future<bool> _canUseHistoryRemoteCover(
+  MangaShelfCoverService? shelfCovers,
+  OnlineMangaLibraryEntry? onlineEntry,
+  MangaHistoryOnlineRef? online,
+) async {
+  if (shelfCovers == null) return true;
+  final OnlineMangaLibraryEntry? probe = onlineEntry ?? online?.seed(title: '');
+  if (probe == null) return true;
+  return shelfCovers.isSourceAvailable(probe);
+}
+
+/// Program state shelf cover 缓存里的真实来源 / 第一页生成封面路径。
+///
+/// 两者共用同一份按 bookKey 的缓存文件，生成封面只靠 sidecar sentinel 区分；
+/// History 与书架一样两档都算「已有 Program state 封面」。没有命中返回 null。
+Future<String?> _cachedShelfCoverPath(
+  MangaFirstPageCoverService reader,
+  String bookKey,
+) async {
+  final String? url =
+      await reader.cachedRealCoverUrl(bookKey) ??
+      await reader.cachedGeneratedCoverUrl(bookKey);
+  if (url == null) return null;
+  final Uri? uri = Uri.tryParse(url);
+  final String? path = uri != null && uri.scheme == 'file'
+      ? uri.toFilePath()
+      : null;
+  return mangaHistoryCoverFileExists(path) ? path : null;
 }
 
 String? _usableCoverUrl(String? value) {
