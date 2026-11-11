@@ -386,13 +386,19 @@ class _HomePageState extends BasePageState<HomePage>
       if (!mounted) return;
       // Ticket 03：安装目录不可写时 Program state root 回退到
       // %LOCALAPPDATA%\MyComic\userdata，需明确告知便携状态不随安装目录走。
-      unawaited(
-        maybeShowProgramStateFallbackNotice(
+      // 全新安装首帧弹出三步漫画版新手引导（ticket 07）。门控见
+      // [AppModel.needsOnboarding]：已有用户 `first_time_setup` 已是 false，
+      // 不会被打扰；中途杀进程则下次启动继续弹。排在回退提示之后，避免两个
+      // 首帧路由互相压栈。
+      unawaited(() async {
+        await maybeShowProgramStateFallbackNotice(
           context: context,
           fallbackInUse: appModel.appPaths.programStateRootIsFallback,
           fallbackPath: appModel.appPaths.programStateRoot.path,
-        ),
-      );
+        );
+        if (!mounted) return;
+        await _maybeShowOnboarding();
+      }());
       // v101 后台更新检查（漫画新章 / 漫画扩展）。与上面的 app 版本检查并列放在
       // 启动期：用户最想知道「我不在的时候更新了什么」的时刻就是刚打开应用。
       // 各域自己的到期判据挡住频繁重启造成的重复请求。
@@ -402,6 +408,19 @@ class _HomePageState extends BasePageState<HomePage>
       // 从 navigator 的 context 装配引擎，HomePage 就绪之前拿不到。
       unawaited(appModel.startMangaDownloads());
     });
+  }
+
+  /// 首次启动弹出新手引导。fullscreenDialog 完全盖住首页；无论用户点「完成」
+  /// 还是「跳过」，向导自身负责写完成偏好并关闭本路由。
+  Future<void> _maybeShowOnboarding() async {
+    if (!mounted || !appModelNoUpdate.needsOnboarding) return;
+    await Navigator.of(context).push(
+      adaptivePageRoute<void>(
+        context: context,
+        builder: (_) => const OnboardingWizardPage(),
+        fullscreenDialog: true,
+      ),
+    );
   }
 
   void refresh() {

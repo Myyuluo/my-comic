@@ -364,6 +364,8 @@ const Set<String> kKnownPreferenceKeys = <String>{
   'network_proxy_p2p_mode',
   'network_proxy_password',
   'network_proxy_username',
+  // bool：三步漫画版新手引导是否已完成（默认 false = 新装显示）；完成/跳过时
+  // 与 first_time_setup=false 同事务写入。
   'onboarding_completed',
   'overlay_lookup_independent_size',
   'overlay_lookup_max_height',
