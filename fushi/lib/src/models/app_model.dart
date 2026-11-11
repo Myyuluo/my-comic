@@ -61,6 +61,8 @@ import 'package:fushi/src/reader/reader_settings.dart';
 import 'package:fushi_engine/models/dictionary_directory.dart';
 import 'package:fushi/src/models/media_history_repository.dart';
 import 'package:fushi/src/models/preferences_repository.dart';
+import 'package:fushi/src/onboarding/onboarding_steps.dart'
+    show shouldShowOnboarding;
 import 'package:fushi/src/media/manga/cookie/manga_cookie_jar.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi/src/media/manga/manga_view_prefs.dart';
@@ -2336,6 +2338,16 @@ class AppModel with ChangeNotifier {
   bool get onboardingCompleted => prefsRepo.onboardingCompleted;
   Future<void> setOnboardingCompleted({required bool value}) =>
       prefsRepo.setOnboardingCompleted(value: value);
+
+  /// 首帧是否显示三步新手引导。
+  ///
+  /// 只有「本次安装还没跑完首启（`first_time_setup`）」且「引导未完成」才显示；
+  /// 已有用户升级上来 `first_time_setup` 早已是 false，不被打扰。快捷方式落地
+  /// 也用这个有效状态：老用户等同已完成，新装用户在引导未完成时只切 tab。
+  bool get needsOnboarding => shouldShowOnboarding(
+    firstTimeSetup: isFirstTimeSetup,
+    onboardingCompleted: onboardingCompleted,
+  );
 
   /// 「功能模块」用户意愿的读写。**平台判据不在这里**——见 [moduleVisibility]。
   ///

@@ -211,6 +211,16 @@ SettingsDestination buildSystemDestination() {
             icon: FushiIcons.info,
             builder: _buildRuntimeAppVersionRow,
           ),
+          // Ticket 07：重新打开三步漫画版新手引导。复用现有导航行组件；
+          // 页面与首次启动是同一个 OnboardingWizardPage。
+          SettingsNavigationItem(
+            id: 'system.onboarding',
+            title: t.settings_onboarding_reopen_title,
+            subtitle: t.settings_onboarding_reopen_subtitle,
+            icon: FushiIcons.help,
+            showIcon: true,
+            builder: (_) => const OnboardingWizardPage(),
+          ),
           SettingsActionItem(
             id: 'system.github',
             title: t.options_github,
