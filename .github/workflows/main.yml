@@ -64,7 +64,8 @@ jobs:
           chmod +x ci/apply-patches.sh
           bash ci/apply-patches.sh
       # strings.g.dart is gitignored; generate it deterministically before
-      # analyze/test. Ticket 06 owns moving this into the release/build scripts.
+      # analyze/test (ticket 06; the release/golden/debug-build workflows do
+      # the same, and script/build_and_run.ps1 regenerates on every build).
       - name: Generate l10n
         working-directory: fushi
         run: dart run slang

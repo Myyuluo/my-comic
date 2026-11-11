@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../tool/i18n_sync.dart';
 
-/// 17 份 i18n json 的顶层 key 必须严格按字典序排列，且文件字节与
+/// 4 份 i18n json 的顶层 key 必须严格按字典序排列，且文件字节与
 /// `i18n_sync.dart` 的写出格式一致。
 ///
 /// 为什么钉死：旧做法把新 key 追加到文件末尾，任意两条加 key 的并发 PR 都改
@@ -24,7 +24,8 @@ void main() {
         ..sort((File a, File b) => a.path.compareTo(b.path));
 
   test('i18n 文件数量（防止扫描路径失效变成空壳）', () {
-    expect(files, hasLength(17));
+    // ticket 06：界面语言精简为 en、ja、zh-CN、zh-HK 四种。
+    expect(files, hasLength(4));
   });
 
   for (final File file in files) {

@@ -377,7 +377,7 @@ class AppModel with ChangeNotifier {
   /// 跑，slang 的 `t` 需要 Flutter binding），这里补上句子与按钮。
   ///
   /// 正文 = 副标题 · 发布时刻（`MM-dd HH:mm`，本地化无关——toast 一行放不下
-  /// 长格式，17 种语言一致）；多条时「第一条 等 N 项」。时刻只在**单条**时进正文：
+  /// 长格式，所有界面语言一致）；多条时「第一条 等 N 项」。时刻只在**单条**时进正文：
   /// 汇总条的时刻属于谁说不清。
   static UpdateNotificationText localizedUpdateNotificationText(
     UpdateFeedKind kind,
@@ -875,35 +875,88 @@ class AppModel with ChangeNotifier {
   /// performance. Initialised with [populateLocales] at startup.
   late Map<String, Locale> locales;
 
+  /// The UI locales shipped with MyComic, in fallback preference order.
+  ///
+  /// The first entry is the English fallback. Order matters for the generic
+  /// language-prefix match, but the traditional-Chinese variants are mapped
+  /// explicitly in [matchSupportedLocale] so they never fall through to
+  /// `zh-CN` by position alone.
+  static const List<Locale> supportedLocales = <Locale>[
+    Locale('en', 'US'),
+    Locale('zh', 'CN'),
+    Locale('zh', 'HK'),
+    Locale('ja'),
+  ];
+
+  /// Map [requested] onto one of [available] support locales, or `null` when
+  /// no shipped locale fits.
+  ///
+  /// Exact tags win first. Traditional-Chinese script/region variants that we
+  /// do not ship as their own locale (`zh-TW`, `zh-Hant`, `zh-Hant-TW`, …)
+  /// explicitly map to `zh-HK` — otherwise the generic language-prefix match
+  /// would send them to whichever `zh` locale comes first (`zh-CN`). Simplified
+  /// script variants map to `zh-CN` for the mirror-image reason.
+  static Locale? matchSupportedLocale(
+    Locale requested,
+    Map<String, Locale> available,
+  ) {
+    final Locale? exact = available[requested.toLanguageTag()];
+    if (exact != null) {
+      return exact;
+    }
+
+    if (requested.languageCode == 'zh') {
+      final bool traditional =
+          requested.scriptCode == 'Hant' || requested.countryCode == 'TW';
+      if (traditional) {
+        return available['zh-HK'];
+      }
+      if (requested.scriptCode == 'Hans') {
+        return available['zh-CN'];
+      }
+    }
+
+    for (final Locale locale in available.values) {
+      if (locale.languageCode == requested.languageCode) {
+        return locale;
+      }
+    }
+    return null;
+  }
+
+  /// Resolve the startup UI locale: saved preference → system locale →
+  /// language prefix → English fallback.
+  ///
+  /// A saved preference for a locale that is no longer shipped (e.g. `ko` from
+  /// an older build) is ignored and the system locale takes over. The system
+  /// locale goes through [matchSupportedLocale], so `zh-TW`/`zh-Hant` land on
+  /// `zh-HK`. The fallback is always English; Simplified Chinese is never
+  /// forced.
+  static Locale resolveAppLocale({
+    String? savedTag,
+    required Locale systemLocale,
+    required Map<String, Locale> available,
+  }) {
+    if (savedTag != null && savedTag.isNotEmpty) {
+      final Locale? saved = available[savedTag];
+      if (saved != null) {
+        return saved;
+      }
+    }
+
+    final Locale? systemMatch = matchSupportedLocale(systemLocale, available);
+    if (systemMatch != null) {
+      return systemMatch;
+    }
+
+    return available['en-US'] ?? available.values.first;
+  }
+
   /// Populate maps for locales at startup to optimise performance.
   void populateLocales() {
-    /// A list of locales that the app will support at runtime. This is not
-    /// related to supported target languages.
-    final List<Locale> availableLocales = List<Locale>.unmodifiable(
-      [
-        const Locale('en', 'US'),
-        const Locale('zh', 'CN'),
-        const Locale('zh', 'HK'),
-        const Locale('ja'),
-        const Locale('ko'),
-        const Locale('es'),
-        const Locale('fr'),
-        const Locale('de'),
-        const Locale('pt', 'BR'),
-        const Locale('ru'),
-        const Locale('vi'),
-        const Locale('th'),
-        const Locale('id'),
-        const Locale('ar'),
-        const Locale('nl'),
-        const Locale('it'),
-        const Locale('tr'),
-      ],
-    );
-
     locales = Map<String, Locale>.unmodifiable(
       Map<String, Locale>.fromEntries(
-        availableLocales.map(
+        supportedLocales.map(
           (locale) => MapEntry(locale.toLanguageTag(), locale),
         ),
       ),
@@ -1606,27 +1659,11 @@ class AppModel with ChangeNotifier {
 
   /// Get the current app locale from persisted preferences.
   /// Defaults to system locale if supported, otherwise en-US.
-  Locale get appLocale {
-    String? saved = _getPref('app_locale');
-    if (saved != null && saved.isNotEmpty && locales.containsKey(saved)) {
-      return locales[saved]!;
-    }
-
-    // Match system locale to available locales.
-    final systemLocale = PlatformDispatcher.instance.locale;
-    final systemTag = systemLocale.toLanguageTag();
-    if (locales.containsKey(systemTag)) {
-      return locales[systemTag]!;
-    }
-    // Try language-only match (e.g. "zh" matches "zh-CN").
-    for (final entry in locales.entries) {
-      if (entry.value.languageCode == systemLocale.languageCode) {
-        return entry.value;
-      }
-    }
-
-    return locales.values.first;
-  }
+  Locale get appLocale => resolveAppLocale(
+        savedTag: _getPref('app_locale'),
+        systemLocale: PlatformDispatcher.instance.locale,
+        available: locales,
+      );
 
   /// Persist a new app locale in preferences and switch the UI language.
   ///

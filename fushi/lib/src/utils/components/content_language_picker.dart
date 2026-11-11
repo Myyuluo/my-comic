@@ -20,7 +20,7 @@ import 'package:fushi/src/utils/components/fushi_design_tokens.dart';
 /// 可选的内容语言。`null` = 自动（用内容自己声明的语言）。
 ///
 /// 语言名用**各语言的自称**而不是按界面语言翻译：用户要认的是「这本是哪国语言
-/// 的」，自称在任何界面语言下都认得，也免掉 17 份翻译。BCP-47 标签一并显示，
+/// 的」，自称在任何界面语言下都认得，也免掉每种界面语言各一份翻译。BCP-47 标签一并显示，
 /// 让手动指定的结果可验证。
 const List<({String? tag, String label})> kContentLanguageOptions =
     <({String? tag, String label})>[
