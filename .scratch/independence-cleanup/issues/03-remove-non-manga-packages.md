@@ -2,7 +2,7 @@
 
 **What to build:** 删除不再属于漫画域的独立 workspace 包和 engine 子域，让依赖图和编译面只剩漫画功能。
 
-**Blocked by:** 04
+**Blocked by:** 04、05
 
 **Status:** ready-for-agent
 
@@ -14,4 +14,4 @@
 - [ ] 保留 `ModuleId`/`HomeTab` 旧枚举值与旧偏好键，不因删包改动兼容面。
 - [ ] 验证：`flutter analyze`、相关 `flutter test`、`flutter build windows --debug` 通过；无 import 指向已删除包。
 
-**Notes:** 参考 [spec](../spec.md) 与 [ADR 0024](../../../docs/adr/0024-windows-only-independent-identity.md)。如果某个被删子域仍被漫画代码共享，先抽出最小共享模块再删，不要连坐漫画功能。
+**Notes:** 参考 [spec](../spec.md) 与 [ADR 0024](../../../docs/adr/0024-windows-only-independent-identity.md)。如果某个被删子域仍被漫画代码共享，先抽出最小共享模块再删，不要连坐漫画功能。本 ticket 排在 05 之后，因为 05 会移除最后的 `fushi_dictionary` / 浏览器扩展消费者；不要在 05 合并前删包，否则编译会断。
