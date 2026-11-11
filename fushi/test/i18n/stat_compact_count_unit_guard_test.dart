@@ -23,28 +23,15 @@ import 'package:path/path.dart' as p;
 ///  2. 回潮：非 CJK 语言的 json 里不得再出现 万/萬/만 —— 二期的修法会在这里变红。
 const List<String> _myriadMarkers = <String>['万', '萬', '만'];
 
-/// 13 个非 CJK slang 源文件（相对 `fushi/` 工作目录）。ja / ko / zh-CN / zh-HK
-/// 刻意不在此列——它们的译文本来就可以出现这些字。
+/// 非 CJK slang 源文件（相对 `fushi/` 工作目录）。ja / zh-CN / zh-HK 刻意不在
+/// 此列——它们的译文本来就可以出现这些字。ticket 06 之后只剩英文 base。
 const List<String> _nonCjkLocaleFiles = <String>[
   'strings.i18n.json', // en（默认）
-  'strings_ar.i18n.json',
-  'strings_de.i18n.json',
-  'strings_es.i18n.json',
-  'strings_fr.i18n.json',
-  'strings_id.i18n.json',
-  'strings_it.i18n.json',
-  'strings_nl.i18n.json',
-  'strings_pt-BR.i18n.json',
-  'strings_ru.i18n.json',
-  'strings_th.i18n.json',
-  'strings_tr.i18n.json',
-  'strings_vi.i18n.json',
 ];
 
 const List<String> _allLocaleFiles = <String>[
   ..._nonCjkLocaleFiles,
   'strings_ja.i18n.json',
-  'strings_ko.i18n.json',
   'strings_zh-CN.i18n.json',
   'strings_zh-HK.i18n.json',
 ];
