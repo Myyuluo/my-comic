@@ -160,7 +160,7 @@ void main([List<String> args = const <String>[]]) {
         // 第一帧先画固定旧图标，直到用户重新打开设置页才刷新。
         startupAppIcon = await loadAppIconSelection();
       } catch (e) {
-        debugPrint('[Fushi] app icon preference restore failed: $e');
+        debugPrint('[MyComic] app icon preference restore failed: $e');
       }
       // BUG-2462：Windows 子窗 resize 闸门的确认信号。必须在 runApp 之前挂——
       // 首帧起 runner 就在等这条上报来确认它交付的第一个尺寸。
@@ -229,13 +229,13 @@ void main([List<String> args = const <String>[]]) {
                     ).readAsBytes();
                     await syncWindowsShortcutIcons(iconBytes);
                   } catch (e) {
-                    debugPrint('[Fushi] shortcut icon sync failed: $e');
+                    debugPrint('[MyComic] shortcut icon sync failed: $e');
                   }
                 }());
               }
             }
           } catch (e) {
-            debugPrint('[Fushi] window icon restore failed: $e');
+            debugPrint('[MyComic] window icon restore failed: $e');
           }
         }
       }
@@ -373,7 +373,7 @@ void main([List<String> args = const <String>[]]) {
             final WebViewPrewarmSession session = WebViewPrewarmSession(
               disposeWebView: () => warmup.dispose(),
               onFinished: (String reason) =>
-                  debugPrint('[Fushi] WebView engine pre-warm ended: $reason'),
+                  debugPrint('[MyComic] WebView engine pre-warm ended: $reason'),
             );
             try {
               // 桌面端等首帧，保证 Flutter view 已 attach（WebView2 前提）。
@@ -400,7 +400,7 @@ void main([List<String> args = const <String>[]]) {
               await warmup.run();
               session.armTimeout();
             } catch (e) {
-              debugPrint('[Fushi] WebView warmup failed (non-fatal): $e');
+              debugPrint('[MyComic] WebView warmup failed (non-fatal): $e');
               await session.finish('run failed: $e');
             }
           }),
@@ -676,7 +676,7 @@ class _FushiReaderAppState extends ConsumerState<FushiReaderApp>
         const Duration(milliseconds: 800),
       );
     } catch (e) {
-      debugPrint('[Fushi] desktop window placement save on exit failed: $e');
+      debugPrint('[MyComic] desktop window placement save on exit failed: $e');
     }
     // ⓪' 几何已落盘 → 立刻把主窗从屏幕上摘掉。**用户感知的「关闭」到此为止**，后面
     //    的 flush / WAL checkpoint / 原生 teardown 都在看不见的窗口背后跑完。hide
@@ -685,14 +685,14 @@ class _FushiReaderAppState extends ConsumerState<FushiReaderApp>
     try {
       await windowManager.hide().timeout(const Duration(milliseconds: 300));
     } catch (e) {
-      debugPrint('[Fushi] hide on exit failed: $e');
+      debugPrint('[MyComic] hide on exit failed: $e');
     }
     // 退出总预算看门狗。下面每步各有超时，但 ③ 的关库（内含下载管线收尾等待）与 ④
     // 的原生 WebView2 / DirectComposition teardown 历史上都出现过不归（BUG-192）。
     // 窗口此刻已不可见，进程再卡住就成了用户看不见也关不掉的僵尸——到点无条件终止。
     final Timer exitWatchdog = Timer(_exitWatchdogTimeout, () {
       debugPrint(
-        '[Fushi] exit watchdog fired after '
+        '[MyComic] exit watchdog fired after '
         '${exitWatch.elapsedMilliseconds}ms; forcing exit',
       );
       exit(0);
@@ -722,7 +722,7 @@ class _FushiReaderAppState extends ConsumerState<FushiReaderApp>
       await appModel.closeDatabase().timeout(_closeDatabaseOnExitTimeout);
     });
     debugPrint(
-      '[Fushi] exit teardown finished in ${exitWatch.elapsedMilliseconds}ms',
+      '[MyComic] exit teardown finished in ${exitWatch.elapsedMilliseconds}ms',
     );
     // ④ 进程级快杀（desktop lifecycle = exit(0)），跳过 destroy() 的同步插件拆除。
     //
@@ -746,19 +746,19 @@ class _FushiReaderAppState extends ConsumerState<FushiReaderApp>
       await run();
     } on TimeoutException {
       debugPrint(
-        '[Fushi] exit step "$label" timed out after '
+        '[MyComic] exit step "$label" timed out after '
         '${watch.elapsedMilliseconds}ms; continuing',
       );
       return;
     } catch (e) {
       debugPrint(
-        '[Fushi] exit step "$label" failed after '
+        '[MyComic] exit step "$label" failed after '
         '${watch.elapsedMilliseconds}ms: $e',
       );
       return;
     }
     debugPrint(
-      '[Fushi] exit step "$label" took ${watch.elapsedMilliseconds}ms',
+      '[MyComic] exit step "$label" took ${watch.elapsedMilliseconds}ms',
     );
   }
 
@@ -775,13 +775,13 @@ class _FushiReaderAppState extends ConsumerState<FushiReaderApp>
     try {
       await ExitFlushRegistry.instance.flushAll();
     } catch (e) {
-      debugPrint('[Fushi] lifecycle detach flush failed: $e');
+      debugPrint('[MyComic] lifecycle detach flush failed: $e');
     }
 
     try {
       await appModel.closeDatabase();
     } catch (e) {
-      debugPrint('[Fushi] database close on lifecycle detach failed: $e');
+      debugPrint('[MyComic] database close on lifecycle detach failed: $e');
     }
   }
 
@@ -890,7 +890,7 @@ class _FushiReaderAppState extends ConsumerState<FushiReaderApp>
       if (navigatorContext == null ||
           !UpdateChecker.canShowDialogFromContext(navigatorContext)) {
         debugPrint(
-          '[Fushi] windows update handoff reconcile deferred: '
+          '[MyComic] windows update handoff reconcile deferred: '
           'navigator context unavailable',
         );
         return;
@@ -952,12 +952,12 @@ class _FushiReaderAppState extends ConsumerState<FushiReaderApp>
       if (!mounted) return;
       await _revealStartupWindow();
     } catch (e) {
-      debugPrint('[Fushi] startup presentation release failed: $e');
+      debugPrint('[MyComic] startup presentation release failed: $e');
       if (!firstFrameAllowed) {
         try {
           binding.allowFirstFrame();
         } catch (e) {
-          debugPrint('[Fushi] startup first frame fallback failed: $e');
+          debugPrint('[MyComic] startup first frame fallback failed: $e');
         }
       }
       await _revealStartupWindowFallback();
@@ -974,7 +974,7 @@ class _FushiReaderAppState extends ConsumerState<FushiReaderApp>
     try {
       await windowManager.focus();
     } catch (e) {
-      debugPrint('[Fushi] startup window focus skipped: $e');
+      debugPrint('[MyComic] startup window focus skipped: $e');
     }
   }
 
@@ -982,7 +982,7 @@ class _FushiReaderAppState extends ConsumerState<FushiReaderApp>
     try {
       await _revealStartupWindow();
     } catch (e) {
-      debugPrint('[Fushi] startup window fallback show failed: $e');
+      debugPrint('[MyComic] startup window fallback show failed: $e');
     }
   }
 

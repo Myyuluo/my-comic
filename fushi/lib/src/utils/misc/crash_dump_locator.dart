@@ -6,7 +6,7 @@ import 'package:flutter/foundation.dart';
 ///
 /// native 侧（`fushi/windows/runner/crash_dump.cpp` 的 `WriteDumpFilter`）在进程
 /// 未捕获异常时，经 `SetUnhandledExceptionFilter` 把 minidump 写进应用自有目录
-/// `%LOCALAPPDATA%\Fushi\crashdumps\`，文件名 `hibiki-<pid>-<tickcount>.dmp`
+/// `%LOCALAPPDATA%\MyComic\crashdumps\`，文件名 `mycomic-<pid>-<tickcount>.dmp`
 /// （文件名前缀是 native 侧沿用的历史前缀）
 /// （两边硬钉同一确定路径，与 `wgc_capture.log` 同根，无 bundle id 推测）。
 ///
@@ -23,7 +23,7 @@ class CrashDumpLocator {
 
   /// dump 目录相对 `%LOCALAPPDATA%` 的子路径（native 端 crash_dump.cpp 用同一
   /// `%LOCALAPPDATA%\Fushi\crashdumps` 常量——两边硬钉，无 bundle id 推测）。
-  static const String _relativePath = r'Fushi\crashdumps';
+  static const String _relativePath = r'MyComic\crashdumps';
 
   /// minidump 文件扩展名（小写，匹配不区分大小写）。
   static const String dumpExtension = '.dmp';

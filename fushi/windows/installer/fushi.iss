@@ -14,30 +14,34 @@
 
 [Setup]
 AppId={{8F2C1A3E-7B4D-4E9A-9C21-0A1B2C3D4E5F}}
-AppName=Fushi
+AppName=MyComic
 AppVersion={#AppVersion}
-AppPublisher=Fushi
-DefaultDirName={localappdata}\Fushi
-DefaultGroupName=Fushi
+AppPublisher=MyComic
+DefaultDirName={localappdata}\MyComic
+DefaultGroupName=MyComic
 DisableProgramGroupPage=yes
 ; Fushi 改名：Inno 默认 UsePreviousGroup=yes，升级时从卸载键里读回上一次的
 ; 「Inno Setup: Icon Group」（旧安装写的是 Hibiki），于是 {group} 解析成
 ; ...\Programs\Hibiki，新建的 Fushi 快捷方式会落进一个叫 Hibiki 的文件夹里
 ; （实测用户机器上 Programs\Hibiki 现在是空目录，正是这条路径的产物）。
-; 关掉它，强制用 DefaultGroupName=Fushi；遗留的 Programs\Hibiki 在
-; CurStepChanged/ssPostInstall 里清理（先删旧 lnk，目录空了才 RemoveDir）。
+; 关掉它，强制用 DefaultGroupName=MyComic；遗留的 Programs\Hibiki / Programs\Fushi
+; 在 CurStepChanged/ssPostInstall 里清理（先删旧 lnk，目录空了才 RemoveDir）。
 ; DisableProgramGroupPage=yes 意味着用户从来无法自定义组名，所以这里不存在
 ; 「覆盖用户选择」的风险。
 UsePreviousGroup=no
+; ADR 0024 干净切换：同一个 AppId 升级时不要沿用旧的 `{localappdata}\Fushi`
+; 安装目录，否则 DefaultDirName=MyComic 在升级路径上失效。旧目录由用户按
+; 文档手动卸载/清理；本安装器不迁移 userdata。
+UsePreviousAppDir=no
 PrivilegesRequired=lowest
 OutputDir={#OutputDir}
-OutputBaseFilename=fushi-{#AppVersion}-windows-setup
+OutputBaseFilename=mycomic-{#AppVersion}-windows-setup
 Compression=lzma2
 SolidCompression=yes
 
-; 安装器自己的图标 = app 图标（兔子）。不设的话是 Inno 默认的下载箭头，
-; 于是「双击下载来的 setup.exe」和「桌面上的 Fushi」看着毫不相干。
-; 这份 ico 由 a32b885d65 换成兔子，7 档尺寸（16~256）齐全，直接可用。
+; 安装器自己的图标 = app 图标（MyComic M 标记）。不设的话是 Inno 默认的下载
+; 箭头，于是「双击下载来的 setup.exe」和「桌面上的 MyComic」看着毫不相干。
+; 这份 ico 与 assets/meta/icon.png 同源，7 档尺寸（16~256）齐全，直接可用。
 SetupIconFile=..\runner\resources\app_icon.ico
 ; 控制面板「应用和功能」里的图标同样取 app 自己的，不留 Inno 默认。
 UninstallDisplayIcon={app}\fushi.exe
@@ -65,8 +69,9 @@ WizardStyle=modern
 CloseApplications=no
 CloseApplicationsFilter=*.exe,*.dll
 RestartApplications=no
-; 过渡期双 mutex：老 Hibiki 实例还持有旧名互斥量时，升级安装同样要等它退出。
-AppMutex=FushiSingleInstanceMutex,HibikiSingleInstanceMutex
+; 新旧三个 mutex 名都列上：新实例持有 MyComic 名；升级期仍可能在跑持有 Fushi /
+; Hibiki 旧名的实例，安装器要等它们退出，避免静默更新撞上“应用正在运行”的 Abort。
+AppMutex=MyComicSingleInstanceMutex,FushiSingleInstanceMutex,HibikiSingleInstanceMutex
 
 [Languages]
 ; 统一成简体中文。改之前这个安装器是**中英混杂**的：向导自身的页标题、说明、按钮
@@ -85,7 +90,7 @@ AppMutex=FushiSingleInstanceMutex,HibikiSingleInstanceMutex
 Name: "chinesesimplified"; MessagesFile: "ChineseSimplified.isl"
 
 [Messages]
-WizardSelectDir=安装 Fushi
+WizardSelectDir=安装 MyComic
 SelectDirDesc=为程序选择一个安装位置。
 SelectDirLabel3=程序文件将保存在这里。
 SelectDirBrowseLabel=安装位置
@@ -109,12 +114,11 @@ ButtonBrowse=浏览(&R)
 ; 桌面图标位置得以保留（BUG-1014）。
 Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: "附加快捷方式："
 
-; 可选：把 Fushi 注册为视频文件的「打开方式」候选（不抢占系统默认播放器，
-; 只在资源管理器右键「打开方式」里出现 Fushi，并支持拖视频到 fushi.exe）。
-Name: "videoassoc"; Description: "将 Fushi 加入视频文件的「打开方式」（mkv / mp4 等）"; GroupDescription: "文件关联："
-; 同上，书 / 漫画文件（扩展名与 lib/src/media/import/external_book.dart 的
-; kExternalBookOpenExtensions 逐一对应，守卫 test/media/import/external_book_test.dart）。
-Name: "bookassoc"; Description: "将 Fushi 加入书和漫画文件的「打开方式」（epub / pdf / txt / cbz 等）"; GroupDescription: "文件关联："
+; 可选：把 MyComic 注册为视频文件的「打开方式」候选（不抢占系统默认播放器，
+; 只在资源管理器右键「打开方式」里出现 MyComic）。
+Name: "videoassoc"; Description: "将 MyComic 加入视频文件的「打开方式」（mkv / mp4 等）"; GroupDescription: "文件关联："
+; 同上，书 / 漫画文件的「打开方式」候选（epub / pdf / txt / cbz 等）。
+Name: "bookassoc"; Description: "将 MyComic 加入书和漫画文件的「打开方式」（epub / pdf / txt / cbz 等）"; GroupDescription: "文件关联："
 
 [InstallDelete]
 ; BUG-1449：galgame helper 现在以**普通文件**随包发在 {app}\voice_hook\<arch>\，
@@ -144,26 +148,22 @@ Type: filesandordirs; Name: "{app}\galgame_helper"
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "userdata\*"
 
 [Icons]
-Name: "{group}\Fushi"; Filename: "{app}\fushi.exe"
-; BUG-1014：只在桌面快捷方式尚不存在时创建（详见旧注释；改名后判 Fushi.lnk）。
-Name: "{userdesktop}\Fushi"; Filename: "{app}\fushi.exe"; Tasks: desktopicon; Check: ShouldCreateDesktopIcon
+Name: "{group}\MyComic"; Filename: "{app}\fushi.exe"
+; BUG-1014：只在桌面快捷方式尚不存在时创建（详见旧注释；改名后判 MyComic.lnk）。
+Name: "{userdesktop}\MyComic"; Filename: "{app}\fushi.exe"; Tasks: desktopicon; Check: ShouldCreateDesktopIcon
 
 [Registry]
-; Fushi 应用 ProgId：双击/「打开方式」时以 fushi.exe "<文件>" 启动。
+; MyComic 应用 ProgId：双击/「打开方式」时以 fushi.exe "<文件>" 启动。
 ; "%1" 即视频绝对路径，被 runner 经 set_dart_entrypoint_arguments 传给 Dart
 ; main(args)（见 lib/main.dart + windows/runner/utils.cpp::GetCommandLineArguments）。
-; BUG-1666：fushi:// URL 协议（Anki 卡片上的词典交叉引用 fushi://lookup?word=<词>）。
-; 点击后系统以 fushi.exe "<完整URL>" 启动：冷启动走 Dart main(args)，app 已开则由
-; 单实例守卫经 WM_COPYDATA 转交首实例（与外部视频同一条链路），Dart 侧
-; lookupWordFromDeepLink 解析后排队显式查词。无条件注册（不挂 videoassoc 任务）。
-Root: HKCU; Subkey: "Software\Classes\fushi"; ValueType: string; ValueData: "URL:Fushi Lookup"; Flags: uninsdeletekey
-Root: HKCU; Subkey: "Software\Classes\fushi"; ValueType: string; ValueName: "URL Protocol"; ValueData: ""
-Root: HKCU; Subkey: "Software\Classes\fushi\DefaultIcon"; ValueType: string; ValueData: "{app}\fushi.exe,0"
-Root: HKCU; Subkey: "Software\Classes\fushi\shell\open\command"; ValueType: string; ValueData: """{app}\fushi.exe"" ""%1"""
+;
+; 旧 fushi:// 深链协议已随查词功能删除；ADR 0024 的干净切换不兼容旧深链。
+; 升级时下面的旧协议键会被清除，避免“打开方式/默认应用”里留下坏条目。
+Root: HKCU; Subkey: "Software\Classes\fushi"; ValueType: none; Flags: deletekey
 
-Root: HKCU; Subkey: "Software\Classes\Fushi.Video"; ValueType: string; ValueData: "Fushi 视频"; Flags: uninsdeletekey; Tasks: videoassoc
-Root: HKCU; Subkey: "Software\Classes\Fushi.Video\DefaultIcon"; ValueType: string; ValueData: "{app}\fushi.exe,0"; Tasks: videoassoc
-Root: HKCU; Subkey: "Software\Classes\Fushi.Video\shell\open\command"; ValueType: string; ValueData: """{app}\fushi.exe"" ""%1"""; Tasks: videoassoc
+Root: HKCU; Subkey: "Software\Classes\MyComic.Video"; ValueType: string; ValueData: "MyComic 视频"; Flags: uninsdeletekey; Tasks: videoassoc
+Root: HKCU; Subkey: "Software\Classes\MyComic.Video\DefaultIcon"; ValueType: string; ValueData: "{app}\fushi.exe,0"; Tasks: videoassoc
+Root: HKCU; Subkey: "Software\Classes\MyComic.Video\shell\open\command"; ValueType: string; ValueData: """{app}\fushi.exe"" ""%1"""; Tasks: videoassoc
 
 ; 让 fushi.exe 出现在「打开方式」应用列表，并声明它支持的视频 / 书扩展名。
 ; 这个键两个关联任务共用：只勾其中一个也必须注册它。
@@ -179,19 +179,19 @@ Root: HKCU; Subkey: "Software\Classes\Applications\fushi.exe\SupportedTypes"; Va
 Root: HKCU; Subkey: "Software\Classes\Applications\fushi.exe\SupportedTypes"; ValueType: string; ValueName: ".mov"; ValueData: ""; Tasks: videoassoc
 Root: HKCU; Subkey: "Software\Classes\Applications\fushi.exe\SupportedTypes"; ValueType: string; ValueName: ".ts"; ValueData: ""; Tasks: videoassoc
 
-; 把 Fushi.Video 挂到各扩展名的 OpenWithProgids（追加候选，不改默认关联）。
-Root: HKCU; Subkey: "Software\Classes\.mkv\OpenWithProgids"; ValueType: string; ValueName: "Fushi.Video"; ValueData: ""; Flags: uninsdeletevalue; Tasks: videoassoc
-Root: HKCU; Subkey: "Software\Classes\.mp4\OpenWithProgids"; ValueType: string; ValueName: "Fushi.Video"; ValueData: ""; Flags: uninsdeletevalue; Tasks: videoassoc
-Root: HKCU; Subkey: "Software\Classes\.m4v\OpenWithProgids"; ValueType: string; ValueName: "Fushi.Video"; ValueData: ""; Flags: uninsdeletevalue; Tasks: videoassoc
-Root: HKCU; Subkey: "Software\Classes\.avi\OpenWithProgids"; ValueType: string; ValueName: "Fushi.Video"; ValueData: ""; Flags: uninsdeletevalue; Tasks: videoassoc
-Root: HKCU; Subkey: "Software\Classes\.webm\OpenWithProgids"; ValueType: string; ValueName: "Fushi.Video"; ValueData: ""; Flags: uninsdeletevalue; Tasks: videoassoc
-Root: HKCU; Subkey: "Software\Classes\.mov\OpenWithProgids"; ValueType: string; ValueName: "Fushi.Video"; ValueData: ""; Flags: uninsdeletevalue; Tasks: videoassoc
-Root: HKCU; Subkey: "Software\Classes\.ts\OpenWithProgids"; ValueType: string; ValueName: "Fushi.Video"; ValueData: ""; Flags: uninsdeletevalue; Tasks: videoassoc
+; 把 MyComic.Video 挂到各扩展名的 OpenWithProgids（追加候选，不改默认关联）。
+Root: HKCU; Subkey: "Software\Classes\.mkv\OpenWithProgids"; ValueType: string; ValueName: "MyComic.Video"; ValueData: ""; Flags: uninsdeletevalue; Tasks: videoassoc
+Root: HKCU; Subkey: "Software\Classes\.mp4\OpenWithProgids"; ValueType: string; ValueName: "MyComic.Video"; ValueData: ""; Flags: uninsdeletevalue; Tasks: videoassoc
+Root: HKCU; Subkey: "Software\Classes\.m4v\OpenWithProgids"; ValueType: string; ValueName: "MyComic.Video"; ValueData: ""; Flags: uninsdeletevalue; Tasks: videoassoc
+Root: HKCU; Subkey: "Software\Classes\.avi\OpenWithProgids"; ValueType: string; ValueName: "MyComic.Video"; ValueData: ""; Flags: uninsdeletevalue; Tasks: videoassoc
+Root: HKCU; Subkey: "Software\Classes\.webm\OpenWithProgids"; ValueType: string; ValueName: "MyComic.Video"; ValueData: ""; Flags: uninsdeletevalue; Tasks: videoassoc
+Root: HKCU; Subkey: "Software\Classes\.mov\OpenWithProgids"; ValueType: string; ValueName: "MyComic.Video"; ValueData: ""; Flags: uninsdeletevalue; Tasks: videoassoc
+Root: HKCU; Subkey: "Software\Classes\.ts\OpenWithProgids"; ValueType: string; ValueName: "MyComic.Video"; ValueData: ""; Flags: uninsdeletevalue; Tasks: videoassoc
 
-; 书 / 漫画：ProgId Fushi.Book + SupportedTypes + 各扩展名 OpenWithProgids 追加候选（不改默认关联）。
-Root: HKCU; Subkey: "Software\Classes\Fushi.Book"; ValueType: string; ValueData: "Fushi 书籍"; Flags: uninsdeletekey; Tasks: bookassoc
-Root: HKCU; Subkey: "Software\Classes\Fushi.Book\DefaultIcon"; ValueType: string; ValueData: "{app}\fushi.exe,0"; Tasks: bookassoc
-Root: HKCU; Subkey: "Software\Classes\Fushi.Book\shell\open\command"; ValueType: string; ValueData: """{app}\fushi.exe"" ""%1"""; Tasks: bookassoc
+; 书 / 漫画：ProgId MyComic.Book + SupportedTypes + 各扩展名 OpenWithProgids 追加候选（不改默认关联）。
+Root: HKCU; Subkey: "Software\Classes\MyComic.Book"; ValueType: string; ValueData: "MyComic 书籍"; Flags: uninsdeletekey; Tasks: bookassoc
+Root: HKCU; Subkey: "Software\Classes\MyComic.Book\DefaultIcon"; ValueType: string; ValueData: "{app}\fushi.exe,0"; Tasks: bookassoc
+Root: HKCU; Subkey: "Software\Classes\MyComic.Book\shell\open\command"; ValueType: string; ValueData: """{app}\fushi.exe"" ""%1"""; Tasks: bookassoc
 Root: HKCU; Subkey: "Software\Classes\Applications\fushi.exe\SupportedTypes"; ValueType: string; ValueName: ".epub"; ValueData: ""; Tasks: bookassoc
 Root: HKCU; Subkey: "Software\Classes\Applications\fushi.exe\SupportedTypes"; ValueType: string; ValueName: ".pdf"; ValueData: ""; Tasks: bookassoc
 Root: HKCU; Subkey: "Software\Classes\Applications\fushi.exe\SupportedTypes"; ValueType: string; ValueName: ".txt"; ValueData: ""; Tasks: bookassoc
@@ -199,13 +199,32 @@ Root: HKCU; Subkey: "Software\Classes\Applications\fushi.exe\SupportedTypes"; Va
 Root: HKCU; Subkey: "Software\Classes\Applications\fushi.exe\SupportedTypes"; ValueType: string; ValueName: ".cbr"; ValueData: ""; Tasks: bookassoc
 Root: HKCU; Subkey: "Software\Classes\Applications\fushi.exe\SupportedTypes"; ValueType: string; ValueName: ".cb7"; ValueData: ""; Tasks: bookassoc
 Root: HKCU; Subkey: "Software\Classes\Applications\fushi.exe\SupportedTypes"; ValueType: string; ValueName: ".mokuro"; ValueData: ""; Tasks: bookassoc
-Root: HKCU; Subkey: "Software\Classes\.epub\OpenWithProgids"; ValueType: string; ValueName: "Fushi.Book"; ValueData: ""; Flags: uninsdeletevalue; Tasks: bookassoc
-Root: HKCU; Subkey: "Software\Classes\.pdf\OpenWithProgids"; ValueType: string; ValueName: "Fushi.Book"; ValueData: ""; Flags: uninsdeletevalue; Tasks: bookassoc
-Root: HKCU; Subkey: "Software\Classes\.txt\OpenWithProgids"; ValueType: string; ValueName: "Fushi.Book"; ValueData: ""; Flags: uninsdeletevalue; Tasks: bookassoc
-Root: HKCU; Subkey: "Software\Classes\.cbz\OpenWithProgids"; ValueType: string; ValueName: "Fushi.Book"; ValueData: ""; Flags: uninsdeletevalue; Tasks: bookassoc
-Root: HKCU; Subkey: "Software\Classes\.cbr\OpenWithProgids"; ValueType: string; ValueName: "Fushi.Book"; ValueData: ""; Flags: uninsdeletevalue; Tasks: bookassoc
-Root: HKCU; Subkey: "Software\Classes\.cb7\OpenWithProgids"; ValueType: string; ValueName: "Fushi.Book"; ValueData: ""; Flags: uninsdeletevalue; Tasks: bookassoc
-Root: HKCU; Subkey: "Software\Classes\.mokuro\OpenWithProgids"; ValueType: string; ValueName: "Fushi.Book"; ValueData: ""; Flags: uninsdeletevalue; Tasks: bookassoc
+Root: HKCU; Subkey: "Software\Classes\.epub\OpenWithProgids"; ValueType: string; ValueName: "MyComic.Book"; ValueData: ""; Flags: uninsdeletevalue; Tasks: bookassoc
+Root: HKCU; Subkey: "Software\Classes\.pdf\OpenWithProgids"; ValueType: string; ValueName: "MyComic.Book"; ValueData: ""; Flags: uninsdeletevalue; Tasks: bookassoc
+Root: HKCU; Subkey: "Software\Classes\.txt\OpenWithProgids"; ValueType: string; ValueName: "MyComic.Book"; ValueData: ""; Flags: uninsdeletevalue; Tasks: bookassoc
+Root: HKCU; Subkey: "Software\Classes\.cbz\OpenWithProgids"; ValueType: string; ValueName: "MyComic.Book"; ValueData: ""; Flags: uninsdeletevalue; Tasks: bookassoc
+Root: HKCU; Subkey: "Software\Classes\.cbr\OpenWithProgids"; ValueType: string; ValueName: "MyComic.Book"; ValueData: ""; Flags: uninsdeletevalue; Tasks: bookassoc
+Root: HKCU; Subkey: "Software\Classes\.cb7\OpenWithProgids"; ValueType: string; ValueName: "MyComic.Book"; ValueData: ""; Flags: uninsdeletevalue; Tasks: bookassoc
+Root: HKCU; Subkey: "Software\Classes\.mokuro\OpenWithProgids"; ValueType: string; ValueName: "MyComic.Book"; ValueData: ""; Flags: uninsdeletevalue; Tasks: bookassoc
+
+; ── 旧 Fushi 品牌 ProgId 清理（rename 到 MyComic 后不再使用；无条件执行，
+;    否则「打开方式」里会同时留下 Fushi.Video / MyComic.Video 两个条目）──
+Root: HKCU; Subkey: "Software\Classes\Fushi.Video"; ValueType: none; Flags: deletekey
+Root: HKCU; Subkey: "Software\Classes\Fushi.Book"; ValueType: none; Flags: deletekey
+Root: HKCU; Subkey: "Software\Classes\.mkv\OpenWithProgids"; ValueType: none; ValueName: "Fushi.Video"; Flags: deletevalue
+Root: HKCU; Subkey: "Software\Classes\.mp4\OpenWithProgids"; ValueType: none; ValueName: "Fushi.Video"; Flags: deletevalue
+Root: HKCU; Subkey: "Software\Classes\.m4v\OpenWithProgids"; ValueType: none; ValueName: "Fushi.Video"; Flags: deletevalue
+Root: HKCU; Subkey: "Software\Classes\.avi\OpenWithProgids"; ValueType: none; ValueName: "Fushi.Video"; Flags: deletevalue
+Root: HKCU; Subkey: "Software\Classes\.webm\OpenWithProgids"; ValueType: none; ValueName: "Fushi.Video"; Flags: deletevalue
+Root: HKCU; Subkey: "Software\Classes\.mov\OpenWithProgids"; ValueType: none; ValueName: "Fushi.Video"; Flags: deletevalue
+Root: HKCU; Subkey: "Software\Classes\.ts\OpenWithProgids"; ValueType: none; ValueName: "Fushi.Video"; Flags: deletevalue
+Root: HKCU; Subkey: "Software\Classes\.epub\OpenWithProgids"; ValueType: none; ValueName: "Fushi.Book"; Flags: deletevalue
+Root: HKCU; Subkey: "Software\Classes\.pdf\OpenWithProgids"; ValueType: none; ValueName: "Fushi.Book"; Flags: deletevalue
+Root: HKCU; Subkey: "Software\Classes\.txt\OpenWithProgids"; ValueType: none; ValueName: "Fushi.Book"; Flags: deletevalue
+Root: HKCU; Subkey: "Software\Classes\.cbz\OpenWithProgids"; ValueType: none; ValueName: "Fushi.Book"; Flags: deletevalue
+Root: HKCU; Subkey: "Software\Classes\.cbr\OpenWithProgids"; ValueType: none; ValueName: "Fushi.Book"; Flags: deletevalue
+Root: HKCU; Subkey: "Software\Classes\.cb7\OpenWithProgids"; ValueType: none; ValueName: "Fushi.Book"; Flags: deletevalue
+Root: HKCU; Subkey: "Software\Classes\.mokuro\OpenWithProgids"; ValueType: none; ValueName: "Fushi.Book"; Flags: deletevalue
 
 ; ── 旧 Hibiki 注册表迁移清理（无条件执行，不挂 videoassoc：用户这次没勾关联
 ;    也要把指向已删除 hibiki.exe 的死键清掉，否则「打开方式」里留一个坏条目）──
@@ -232,7 +251,7 @@ Type: filesandordirs; Name: "{app}\userdata"
 Type: filesandordirs; Name: "{localappdata}\MyComic\userdata"
 
 [Run]
-Filename: "{app}\fushi.exe"; Description: "启动 Fushi"; Flags: nowait postinstall
+Filename: "{app}\fushi.exe"; Description: "启动 MyComic"; Flags: nowait postinstall
 
 [Code]
 // -- TODO-549: app-internal self-update "AppMutex deadlock" root-cause layer --
@@ -250,14 +269,15 @@ Filename: "{app}\fushi.exe"; Description: "启动 Fushi"; Flags: nowait postinst
 // file usage) and are completely independent from the AppMutex check
 // (CheckForMutexes), so they cannot suppress the mutex abort. The only layer
 // that runs BEFORE the AppMutex check and can own the timing is this
-// InitializeSetup: it actively terminates the running app (Fushi 改名过渡期
-// 新旧两个 exe 名与两个 mutex 名都要照顾) and its WebView2 child processes,
+// InitializeSetup: it actively terminates the running app (品牌切换过渡期
+// 新旧 exe 名与三个 mutex 名都要照顾) and its WebView2 child processes,
 // then bounded-polls until the mutex is truly released, then returns True; by
 // the time Inno runs CheckForMutexes the mutex is gone, so it passes quietly.
 // The [Setup] AppMutex= (both names) is kept as a fallback.
 
 const
-  FushiAppMutexName = 'FushiSingleInstanceMutex';
+  FushiAppMutexName = 'MyComicSingleInstanceMutex';
+  LegacyFushiAppMutexName = 'FushiSingleInstanceMutex';
   LegacyAppMutexName = 'HibikiSingleInstanceMutex';
   SyncMutexAccess = $00100000; { SYNCHRONIZE }
   MutexReleasePollAttempts = 40; { 40 * 250ms = up to ~10s waiting for the kernel to reclaim the mutex }
@@ -289,10 +309,12 @@ begin
     CloseHandle(Handle);
 end;
 
-{ 过渡期：新旧两个单实例互斥量任一存在都算「应用仍在运行」。 }
+{ 升级过渡期：新 MyComic、旧 Fushi、更早 Hibiki 三个单实例互斥量任一存在都算
+  「应用仍在运行」。 }
 function AppMutexExists(): Boolean;
 begin
   Result := NamedMutexExists(FushiAppMutexName) or
+            NamedMutexExists(LegacyFushiAppMutexName) or
             NamedMutexExists(LegacyAppMutexName);
 end;
 
@@ -486,8 +508,8 @@ begin
       实测现场里锁住 fushi_voice_hook.dll 的是**微信**（连开三天，于是每次自动更新都在
       这里中止，版本卡了五天，BUG-1708）。把占用者写死成游戏会让用户对着一个根本没开的
       东西找问题。只陈述事实：哪个文件被占用、它为什么会被别的进程持有、怎么放开。 }
-    Result := '检测到 Fushi 的捕获组件正被其它程序占用，无法更新：' + NL + Locked + NL + NL +
-      'Fushi 的语音捕获组件会注入到你选定的程序里（游戏，或任何你附着过的窗口），' + NL +
+    Result := '检测到 MyComic 的捕获组件正被其它程序占用，无法更新：' + NL + Locked + NL + NL +
+      'MyComic 的语音捕获组件会注入到你选定的程序里（游戏，或任何你附着过的窗口），' + NL +
       '并由该程序持有到它退出为止。请关闭最近附着过的程序（游戏请先存档），' + NL +
       '然后重新运行本安装程序。' + NL + NL +
       '（本次未改动任何文件，现有版本可继续使用。）';
@@ -495,13 +517,13 @@ begin
 end;
 
 // BUG-1014: preserve the user's desktop icon position across updates.
-// Return False (skip creating the desktop shortcut) when {userdesktop}\Fushi.lnk
+// Return False (skip creating the desktop shortcut) when {userdesktop}\MyComic.lnk
 // already exists, so an update never rewrites it -- Explorer keeps the remembered
 // grid position. On a first install the file is absent -> True -> the shortcut is
 // created as before (gated by the default-checked "desktopicon" task).
 function ShouldCreateDesktopIcon(): Boolean;
 begin
-  Result := not FileExists(ExpandConstant('{userdesktop}\Fushi.lnk'));
+  Result := not FileExists(ExpandConstant('{userdesktop}\MyComic.lnk'));
 end;
 
 // MD3 tokens and native control drawing (Inno Setup 6.6+).
@@ -669,22 +691,27 @@ begin
   DelTree(ExpandConstant('{app}\bluray'), True, True, True);
   DelTree(ExpandConstant('{app}\voice_hook'), True, True, True);
 
-  // 三处旧名快捷方式全部指向已删除的 hibiki.exe，都是死链接。
+  // 旧品牌快捷方式清理：Hibiki 与 Fushi 两代旧名都指向已不存在的入口。
   // 1) 桌面
   DeleteFile(ExpandConstant('{userdesktop}\Hibiki.lnk'));
-  // 2) 开始菜单程序组（UsePreviousGroup=no 之后 {group} 已是 Fushi 组；
-  //    这条覆盖「旧 lnk 与新组同目录」的情形，遗留的 Hibiki 组另行处理）。
+  DeleteFile(ExpandConstant('{userdesktop}\Fushi.lnk'));
+  // 2) 开始菜单程序组（UsePreviousGroup=no 之后 {group} 已是 MyComic 组；
+  //    这条覆盖「旧 lnk 与新组同目录」的情形，遗留的旧组另行处理）。
   DeleteFile(ExpandConstant('{group}\Hibiki.lnk'));
+  DeleteFile(ExpandConstant('{group}\Fushi.lnk'));
   // 3) 任务栏固定项——[InstallDelete] 从来没清过它，正是用户实测那个
   //    「任务栏图标点了没反应」的死链接来源。
   DeleteFile(ExpandConstant('{userappdata}\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar\Hibiki.lnk'));
+  DeleteFile(ExpandConstant('{userappdata}\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar\Fushi.lnk'));
 
-  // 遗留的 Programs\Hibiki 程序组：旧安装留下的 Hibiki.lnk，以及
-  // UsePreviousGroup=yes 时期误建在该组里的 Fushi.lnk。两个都删掉后目录空了才移除
-  // （RemoveDir 只删空目录，用户自己往里放的东西不会被波及）。
+  // 遗留的 Programs\Hibiki / Programs\Fushi 程序组：旧安装留下的 .lnk 删掉后
+  // 目录空了才移除（RemoveDir 只删空目录，用户自己往里放的东西不会被波及）。
   DeleteFile(ExpandConstant('{userprograms}\Hibiki\Hibiki.lnk'));
   DeleteFile(ExpandConstant('{userprograms}\Hibiki\Fushi.lnk'));
   RemoveDir(ExpandConstant('{userprograms}\Hibiki'));
+  DeleteFile(ExpandConstant('{userprograms}\Fushi\Fushi.lnk'));
+  DeleteFile(ExpandConstant('{userprograms}\Fushi\MyComic.lnk'));
+  RemoveDir(ExpandConstant('{userprograms}\Fushi'));
 end;
 
 function InitializeSetup(): Boolean;
@@ -744,8 +771,8 @@ begin
       Exit;
     CreatedByProbe := True;
   end;
-  Probe := AddBackslash(Dir) + '.fushi-setup-write-test';
-  if SaveStringToFile(Probe, 'fushi setup preflight', False) then
+  Probe := AddBackslash(Dir) + '.mycomic-setup-write-test';
+  if SaveStringToFile(Probe, 'mycomic setup preflight', False) then
   begin
     DeleteFile(Probe);
     Result := True;
@@ -770,7 +797,7 @@ begin
     begin
       MsgBox('当前权限无法写入所选目录：' + #13#10 + WizardDirValue + #13#10#13#10
         + '请改选用户可写的目录（推荐默认目录 '
-        + ExpandConstant('{localappdata}\Fushi') + '）。' + #13#10#13#10
+        + ExpandConstant('{localappdata}\MyComic') + '）。' + #13#10#13#10
         + '不建议装进需要管理员权限的目录：即使以管理员身份重装到该目录，'
         + '应用日常以普通权限运行，之后每次自动更新都需要再次提权。'
         + #13#10#13#10

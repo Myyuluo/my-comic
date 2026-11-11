@@ -111,7 +111,7 @@ void main() {
       );
       expect(
         semantics.any((Semantics node) =>
-            node.properties.button == true && node.properties.label == 'Fushi'),
+            node.properties.button == true && node.properties.label == 'MyComic'),
         isTrue,
         reason: '退回成 Semantics(image: true) 的纯装饰图标时必须红',
       );

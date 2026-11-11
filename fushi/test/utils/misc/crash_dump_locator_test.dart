@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi/src/utils/misc/crash_dump_locator.dart';
 
 /// TODO-607 P0-3/④：CrashDumpLocator 纯函数单测（host 可跑——不碰 native，只验
-/// 「定位 %LOCALAPPDATA%\Fushi\crashdumps + 列 .dmp 按 mtime 降序」）。
+/// 「定位 %LOCALAPPDATA%\MyComic\crashdumps + 列 .dmp 按 mtime 降序」）。
 void main() {
   group('CrashDumpLocator.resolveDumpDirectory', () {
     test('非 Windows 返回 null（minidump 仅 Windows runner 写）', () {
@@ -30,13 +30,13 @@ void main() {
       );
     });
 
-    test(r'Windows 下拼出 Fushi\crashdumps（与 native crash_dump.cpp 同确定路径）', () {
+    test(r'Windows 下拼出 MyComic\crashdumps（与 native crash_dump.cpp 同确定路径）', () {
       final Directory? dir = CrashDumpLocator.resolveDumpDirectory(
         isWindows: true,
         localAppData: r'C:\Users\x\AppData\Local',
       );
       expect(dir, isNotNull);
-      expect(dir!.path, r'C:\Users\x\AppData\Local\Fushi\crashdumps');
+      expect(dir!.path, r'C:\Users\x\AppData\Local\MyComic\crashdumps');
     });
   });
 
@@ -62,11 +62,11 @@ void main() {
 
     test('只列 .dmp、忽略其它文件，按修改时间降序（最近崩溃在前）', () {
       // 三个 dmp + 一个无关文件。
-      final File older = File('${tmp.path}/hibiki-100-1000.dmp')
+      final File older = File('${tmp.path}/mycomic-100-1000.dmp')
         ..writeAsStringSync('a');
-      final File newer = File('${tmp.path}/hibiki-200-2000.dmp')
+      final File newer = File('${tmp.path}/mycomic-200-2000.dmp')
         ..writeAsStringSync('b');
-      final File newest = File('${tmp.path}/hibiki-300-3000.dmp')
+      final File newest = File('${tmp.path}/mycomic-300-3000.dmp')
         ..writeAsStringSync('c');
       File('${tmp.path}/wgc_capture.log').writeAsStringSync('not a dump');
 
@@ -83,9 +83,9 @@ void main() {
       expect(
         names,
         <String>[
-          'hibiki-300-3000.dmp',
-          'hibiki-200-2000.dmp',
-          'hibiki-100-1000.dmp',
+          'mycomic-300-3000.dmp',
+          'mycomic-200-2000.dmp',
+          'mycomic-100-1000.dmp',
         ],
         reason: '按 mtime 降序：最近的崩溃排最前',
       );

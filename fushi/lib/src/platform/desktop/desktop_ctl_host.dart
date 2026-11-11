@@ -76,16 +76,16 @@ Future<CtlServer?> startDesktopCtlServer(
     testRoot: fushiTestRootPath(environment: env),
   );
   if (stateDir == null) {
-    debugPrint('[Fushi] ctl channel disabled: no per-user state dir');
+    debugPrint('[MyComic] ctl channel disabled: no per-user state dir');
     return null;
   }
   final CtlServer server = CtlServer(handler: handler, stateDir: stateDir);
   try {
     final CtlEndpoint endpoint = await server.start();
-    debugPrint('[Fushi] ctl channel listening on 127.0.0.1:${endpoint.port}');
+    debugPrint('[MyComic] ctl channel listening on 127.0.0.1:${endpoint.port}');
     return server;
   } on Object catch (error) {
-    debugPrint('[Fushi] ctl channel failed to start: $error');
+    debugPrint('[MyComic] ctl channel failed to start: $error');
     return null;
   }
 }

@@ -625,7 +625,7 @@ Future<void> _toggleWindowFullscreen() async {
     }
     await toggleDesktopWindowFullscreen();
   } catch (e) {
-    debugPrint('[Fushi] window fullscreen toggle skipped: $e');
+    debugPrint('[MyComic] window fullscreen toggle skipped: $e');
   }
 }
 
@@ -672,7 +672,7 @@ Future<bool?> readDesktopWindowFullscreen() async {
       return await windowManager.isFullScreen();
     }
   } catch (e) {
-    debugPrint('[Fushi] window fullscreen state unavailable: $e');
+    debugPrint('[MyComic] window fullscreen state unavailable: $e');
   }
   return null;
 }
@@ -731,7 +731,7 @@ Future<bool?> setDesktopWindowFullscreen(bool fullscreen) async {
       return await windowManager.isFullScreen();
     }
   } catch (e) {
-    debugPrint('[Fushi] window fullscreen change skipped: $e');
+    debugPrint('[MyComic] window fullscreen change skipped: $e');
   }
   return null;
 }

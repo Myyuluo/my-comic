@@ -65,13 +65,13 @@ class WindowsNativePreExit {
       // window_manager 的全插件 teardown，这一份仍被显式执行）。它的**首要作用**
       // ——SetProcessExiting() 短路 WGC 帧回调——在调用一进原生就已生效，剩下的
       // clear() 只是提前归还马上就要被 OS 回收的资源。等不到就放行，别让它拖住退出。
-      debugPrint('[Fushi] Windows native pre-exit hook timed out: $e');
+      debugPrint('[MyComic] Windows native pre-exit hook timed out: $e');
     } on MissingPluginException catch (e) {
-      debugPrint('[Fushi] Windows native pre-exit hook unavailable: $e');
+      debugPrint('[MyComic] Windows native pre-exit hook unavailable: $e');
     } on PlatformException catch (e) {
-      debugPrint('[Fushi] Windows native pre-exit hook failed: $e');
+      debugPrint('[MyComic] Windows native pre-exit hook failed: $e');
     } catch (e) {
-      debugPrint('[Fushi] Windows native pre-exit hook failed: $e');
+      debugPrint('[MyComic] Windows native pre-exit hook failed: $e');
     }
   }
 }

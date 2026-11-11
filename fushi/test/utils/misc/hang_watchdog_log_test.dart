@@ -20,7 +20,7 @@ void main() {
       expect(f, isNotNull);
       expect(
         f!.path,
-        r'C:\Users\u\AppData\Local\Fushi\crashdumps\hang_watchdog.log',
+        r'C:\Users\u\AppData\Local\MyComic\crashdumps\hang_watchdog.log',
         reason: '必须与 crash dump 同目录（诊断区「崩溃转储」页一处打包）、'
             '文件名与 hang_watchdog.cpp 硬钉一致',
       );

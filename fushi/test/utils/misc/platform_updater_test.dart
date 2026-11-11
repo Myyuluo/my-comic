@@ -18,17 +18,17 @@ void main() {
     test('picks the -windows-setup.exe asset', () async {
       final WindowsUpdater u = WindowsUpdater();
       final String? url = await _urlOf(u.selectAsset(_assets(<String>[
-        'fushi-0.4.2-arm64-v8a.apk',
-        'fushi-0.4.2-windows-setup.exe',
-        'fushi-0.4.2-linux-x86_64.AppImage',
+        'mycomic-0.4.2-arm64-v8a.apk',
+        'mycomic-0.4.2-windows-setup.exe',
+        'mycomic-0.4.2-linux-x86_64.AppImage',
       ])));
-      expect(url, 'https://example.com/fushi-0.4.2-windows-setup.exe');
+      expect(url, 'https://example.com/mycomic-0.4.2-windows-setup.exe');
     });
 
     test('returns null when no windows asset present', () async {
       final WindowsUpdater u = WindowsUpdater();
       final UpdateAsset? url =
-          await u.selectAsset(_assets(<String>['fushi-0.4.2-arm64-v8a.apk']));
+          await u.selectAsset(_assets(<String>['mycomic-0.4.2-arm64-v8a.apk']));
       expect(url, isNull);
     });
 
@@ -36,14 +36,14 @@ void main() {
       final WindowsUpdater u = WindowsUpdater();
       final String? url = await _urlOf(u.selectAsset(
         _assets(<String>[
-          'fushi-0.5.1-windows-setup.exe',
-          'fushi-0.5.1-debug.412-windows-setup.exe',
+          'mycomic-0.5.1-windows-setup.exe',
+          'mycomic-0.5.1-debug.412-windows-setup.exe',
         ]),
         channel: UpdateChannel.debug,
       ));
       expect(
         url,
-        'https://example.com/fushi-0.5.1-debug.412-windows-setup.exe',
+        'https://example.com/mycomic-0.5.1-debug.412-windows-setup.exe',
       );
     });
 
@@ -53,15 +53,15 @@ void main() {
           'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
       final UpdateAsset? asset = await u.selectAsset(<Map<String, dynamic>>[
         <String, dynamic>{
-          'name': 'fushi-0.4.2-windows-setup.exe',
+          'name': 'mycomic-0.4.2-windows-setup.exe',
           'browser_download_url':
-              'https://example.com/fushi-0.4.2-windows-setup.exe',
+              'https://example.com/mycomic-0.4.2-windows-setup.exe',
           'size': 12345,
           'digest': 'sha256:$digest',
         },
       ]);
 
-      expect(asset?.url, 'https://example.com/fushi-0.4.2-windows-setup.exe');
+      expect(asset?.url, 'https://example.com/mycomic-0.4.2-windows-setup.exe');
       expect(asset?.sizeBytes, 12345);
       expect(asset?.sha256Digest, digest);
     });
@@ -69,7 +69,7 @@ void main() {
     test('stable and beta ignore debug Windows setup assets', () async {
       final WindowsUpdater u = WindowsUpdater();
       final List<Map<String, dynamic>> assets = _assets(<String>[
-        'fushi-0.5.1-debug.412-windows-setup.exe',
+        'mycomic-0.5.1-debug.412-windows-setup.exe',
       ]);
 
       expect(
@@ -95,11 +95,11 @@ void main() {
         abiProvider: () async => <String>['arm64-v8a'],
       );
       final String? url = await _urlOf(u.selectAsset(_assets(<String>[
-        'fushi-0.4.2-armeabi-v7a.apk',
-        'fushi-0.4.2-arm64-v8a.apk',
-        'fushi-0.4.2-windows-setup.exe',
+        'mycomic-0.4.2-armeabi-v7a.apk',
+        'mycomic-0.4.2-arm64-v8a.apk',
+        'mycomic-0.4.2-windows-setup.exe',
       ])));
-      expect(url, 'https://example.com/fushi-0.4.2-arm64-v8a.apk');
+      expect(url, 'https://example.com/mycomic-0.4.2-arm64-v8a.apk');
     });
 
     test('stable and beta ignore debug APK assets', () async {
@@ -107,17 +107,17 @@ void main() {
         abiProvider: () async => <String>['arm64-v8a'],
       );
       final List<Map<String, dynamic>> assets = _assets(<String>[
-        'fushi-0.5.1-debug.412-abc1234-debug.apk',
-        'fushi-0.5.1-arm64-v8a.apk',
+        'mycomic-0.5.1-debug.412-abc1234-debug.apk',
+        'mycomic-0.5.1-arm64-v8a.apk',
       ]);
 
       expect(
         await _urlOf(u.selectAsset(assets, channel: UpdateChannel.stable)),
-        'https://example.com/fushi-0.5.1-arm64-v8a.apk',
+        'https://example.com/mycomic-0.5.1-arm64-v8a.apk',
       );
       expect(
         await _urlOf(u.selectAsset(assets, channel: UpdateChannel.beta)),
-        'https://example.com/fushi-0.5.1-arm64-v8a.apk',
+        'https://example.com/mycomic-0.5.1-arm64-v8a.apk',
       );
     });
 
@@ -129,16 +129,16 @@ void main() {
       expect(
         await _urlOf(u.selectAsset(
           _assets(<String>[
-            'fushi-0.5.1-arm64-v8a.apk',
-            'fushi-0.5.1-debug.412-abc1234-debug.apk',
+            'mycomic-0.5.1-arm64-v8a.apk',
+            'mycomic-0.5.1-debug.412-abc1234-debug.apk',
           ]),
           channel: UpdateChannel.debug,
         )),
-        'https://example.com/fushi-0.5.1-debug.412-abc1234-debug.apk',
+        'https://example.com/mycomic-0.5.1-debug.412-abc1234-debug.apk',
       );
       expect(
         await u.selectAsset(
-          _assets(<String>['fushi-0.5.1-arm64-v8a.apk']),
+          _assets(<String>['mycomic-0.5.1-arm64-v8a.apk']),
           channel: UpdateChannel.debug,
         ),
         isNull,
@@ -156,8 +156,8 @@ void main() {
         abiProvider: () async => <String>['x86_64'],
       );
       final UpdateAsset? picked = await u.selectAsset(_assets(<String>[
-        'fushi-0.4.2-armeabi-v7a.apk',
-        'fushi-0.4.2-arm64-v8a.apk',
+        'mycomic-0.4.2-armeabi-v7a.apk',
+        'mycomic-0.4.2-arm64-v8a.apk',
       ]));
       expect(picked, isNull);
     });
@@ -168,16 +168,16 @@ void main() {
         abiProvider: () async => <String>['x86_64'],
       );
       final String? url = await _urlOf(u.selectAsset(
-        _assets(<String>['fushi-0.4.2-universal.apk']),
+        _assets(<String>['mycomic-0.4.2-universal.apk']),
       ));
-      expect(url, 'https://example.com/fushi-0.4.2-universal.apk');
+      expect(url, 'https://example.com/mycomic-0.4.2-universal.apk');
     });
 
     test('returns null when no apk asset', () async {
       final AndroidUpdater u =
           AndroidUpdater(abiProvider: () async => <String>[]);
       final UpdateAsset? url = await u
-          .selectAsset(_assets(<String>['fushi-0.4.2-windows-setup.exe']));
+          .selectAsset(_assets(<String>['mycomic-0.4.2-windows-setup.exe']));
       expect(url, isNull);
     });
   });
@@ -215,7 +215,7 @@ void main() {
   group('windowsInstallerArgs', () {
     test('runs installer very-silently and skips initial prompt', () {
       final List<String> args =
-          windowsInstallerArgs(r'C:\tmp\fushi-0.4.2-windows-setup.exe');
+          windowsInstallerArgs(r'C:\tmp\mycomic-0.4.2-windows-setup.exe');
       expect(args, contains('/VERYSILENT'));
       expect(args, contains('/SP-'));
     });
@@ -223,7 +223,7 @@ void main() {
     test('does not ask Inno to close, force-close, or restart applications',
         () {
       final List<String> args =
-          windowsInstallerArgs(r'C:\tmp\fushi-0.4.2-windows-setup.exe');
+          windowsInstallerArgs(r'C:\tmp\mycomic-0.4.2-windows-setup.exe');
 
       expect(args, isNot(contains('/CLOSEAPPLICATIONS')));
       expect(args, isNot(contains('/FORCECLOSEAPPLICATIONS')));
@@ -236,19 +236,19 @@ void main() {
 
     test('suppresses Inno action dialogs and writes one install log', () {
       final List<String> args =
-          windowsInstallerArgs(r'C:\tmp\fushi-0.4.2-windows-setup.exe');
+          windowsInstallerArgs(r'C:\tmp\mycomic-0.4.2-windows-setup.exe');
 
       expect(args, contains('/SUPPRESSMSGBOXES'));
 
       final Iterable<String> logArgs =
           args.where((String arg) => arg.startsWith('/LOG='));
       expect(logArgs, hasLength(1));
-      expect(logArgs.single, contains('fushi-0.4.2-windows-setup.install.log'));
+      expect(logArgs.single, contains('mycomic-0.4.2-windows-setup.install.log'));
     });
 
     test('pins the installer target to the current executable directory', () {
       final List<String> args = windowsInstallerArgs(
-        r'C:\tmp\fushi-0.4.2-windows-setup.exe',
+        r'C:\tmp\mycomic-0.4.2-windows-setup.exe',
         targetInstallDir: r'D:\Portable\Hibiki',
       );
 
@@ -306,7 +306,7 @@ void main() {
 
       expect(script, contains('CloseApplications=no'));
       expect(script, contains('RestartApplications=no'));
-      expect(script, contains('AppMutex=FushiSingleInstanceMutex'));
+      expect(script, contains('AppMutex=MyComicSingleInstanceMutex'));
       expect(script, contains('CloseApplicationsFilter=*.exe,*.dll'));
       expect(script, contains('fushi_update_launcher.exe'));
     });
@@ -327,7 +327,7 @@ void main() {
       // Probes the single-instance mutex via OpenMutexW (not CreateMutex).
       expect(script, contains('OpenMutexW'));
       expect(script, contains('@kernel32.dll stdcall'));
-      expect(script, contains('FushiSingleInstanceMutex'));
+      expect(script, contains('MyComicSingleInstanceMutex'));
       // Closes, then terminates, fushi.exe / hibiki.exe (+ their WebView2
       // children) natively before the check (BUG-2203: never the whole
       // process tree — see the guard below; no taskkill child process).
@@ -393,7 +393,7 @@ void main() {
       final String rootCmake =
           File('windows/CMakeLists.txt').readAsStringSync();
 
-      expect(main, contains('FushiSingleInstanceMutex'));
+      expect(main, contains('MyComicSingleInstanceMutex'));
       expect(main, contains('CreateMutexW'));
       // The launcher never CREATES or holds the single-instance mutex (that is
       // the Flutter runner's job). It MAY probe it read-only via OpenMutexW to
@@ -401,7 +401,7 @@ void main() {
       // closing the "only waited on the parent PID" blind spot (TODO-549).
       expect(launcher, isNot(contains('CreateMutex')));
       expect(launcher, contains('OpenMutexW'));
-      expect(launcher, contains('FushiSingleInstanceMutex'));
+      expect(launcher, contains('MyComicSingleInstanceMutex'));
       expect(launcher, contains('WaitForMutexReleased'));
       expect(cmake, contains('add_executable(fushi_update_launcher WIN32'));
       expect(cmake, contains('"update_launcher.cpp"'));
@@ -492,11 +492,11 @@ void main() {
       // download must surface an error (caught upstream -> SnackBar) rather
       // than being fed to Process.start (and then exit(0) vanishing the app).
       final Directory tmp =
-          await Directory.systemTemp.createTemp('fushi-update-test');
+          await Directory.systemTemp.createTemp('mycomic-update-test');
       addTearDown(() async {
         if (tmp.existsSync()) await tmp.delete(recursive: true);
       });
-      final File bogus = File('${tmp.path}/fushi-0.4.2-windows-setup.exe');
+      final File bogus = File('${tmp.path}/mycomic-0.4.2-windows-setup.exe');
       await bogus.writeAsString('<html>rate limited</html>');
 
       await expectLater(
@@ -525,11 +525,11 @@ void main() {
       // the two tests above race the 30s default test timeout on a busy box.
       // Validation must come first, so diagnostics are never collected at all.
       final Directory tmp =
-          await Directory.systemTemp.createTemp('fushi-update-nodiag');
+          await Directory.systemTemp.createTemp('mycomic-update-nodiag');
       addTearDown(() async {
         if (tmp.existsSync()) await tmp.delete(recursive: true);
       });
-      final File bogus = File('${tmp.path}/fushi-0.4.2-windows-setup.exe');
+      final File bogus = File('${tmp.path}/mycomic-0.4.2-windows-setup.exe');
       await bogus.writeAsString('<html>rate limited</html>');
 
       var diagnosticsCalls = 0;
@@ -596,22 +596,22 @@ void main() {
     test('picks the -macos-arm64.zip asset (stable)', () async {
       final MacUpdater u = MacUpdater();
       final String? url = await _urlOf(u.selectAsset(_assets(<String>[
-        'fushi-0.4.2-arm64-v8a.apk',
-        'fushi-0.4.2-windows-setup.exe',
-        'fushi-0.4.2-macos-arm64.zip',
-        'fushi-0.4.2-ios.ipa',
+        'mycomic-0.4.2-arm64-v8a.apk',
+        'mycomic-0.4.2-windows-setup.exe',
+        'mycomic-0.4.2-macos-arm64.zip',
+        'mycomic-0.4.2-ios.ipa',
       ])));
-      expect(url, 'https://example.com/fushi-0.4.2-macos-arm64.zip');
+      expect(url, 'https://example.com/mycomic-0.4.2-macos-arm64.zip');
     });
 
     // 改名前（universal 时代）的 `-macos.zip` 在 arm64 上照常能跑，仍然认。
     test('still accepts the legacy -macos.zip asset', () async {
       final MacUpdater u = MacUpdater();
       final String? url = await _urlOf(u.selectAsset(_assets(<String>[
-        'fushi-0.4.2-windows-setup.exe',
-        'fushi-0.4.2-macos.zip',
+        'mycomic-0.4.2-windows-setup.exe',
+        'mycomic-0.4.2-macos.zip',
       ])));
-      expect(url, 'https://example.com/fushi-0.4.2-macos.zip');
+      expect(url, 'https://example.com/mycomic-0.4.2-macos.zip');
     });
 
     // 清单里与 zip 并列的 `-macos-arm64.dmg` 只给官网首装下载用：自替换流程按
@@ -619,20 +619,20 @@ void main() {
     test('never selects the -macos-arm64.dmg first-install download', () async {
       final MacUpdater u = MacUpdater();
       final String? url = await _urlOf(u.selectAsset(_assets(<String>[
-        'fushi-0.4.2-macos-arm64.dmg',
-        'fushi-0.4.2-macos-arm64.zip',
+        'mycomic-0.4.2-macos-arm64.dmg',
+        'mycomic-0.4.2-macos-arm64.zip',
       ])));
-      expect(url, 'https://example.com/fushi-0.4.2-macos-arm64.zip');
+      expect(url, 'https://example.com/mycomic-0.4.2-macos-arm64.zip');
       final UpdateAsset? dmgOnly = await u
-          .selectAsset(_assets(<String>['fushi-0.4.2-macos-arm64.dmg']));
+          .selectAsset(_assets(<String>['mycomic-0.4.2-macos-arm64.dmg']));
       expect(dmgOnly, isNull);
     });
 
     test('returns null when no macOS asset present', () async {
       final MacUpdater u = MacUpdater();
       final UpdateAsset? asset = await u.selectAsset(_assets(<String>[
-        'fushi-0.4.2-arm64-v8a.apk',
-        'fushi-0.4.2-windows-setup.exe',
+        'mycomic-0.4.2-arm64-v8a.apk',
+        'mycomic-0.4.2-windows-setup.exe',
       ]));
       expect(asset, isNull);
     });
@@ -641,23 +641,23 @@ void main() {
       final MacUpdater u = MacUpdater();
       final String? url = await _urlOf(u.selectAsset(
         _assets(<String>[
-          'fushi-0.5.1-macos-arm64.zip',
-          'fushi-0.5.1-debug.412-macos-arm64.zip',
+          'mycomic-0.5.1-macos-arm64.zip',
+          'mycomic-0.5.1-debug.412-macos-arm64.zip',
         ]),
         channel: UpdateChannel.debug,
       ));
-      expect(url, 'https://example.com/fushi-0.5.1-debug.412-macos-arm64.zip');
+      expect(url, 'https://example.com/mycomic-0.5.1-debug.412-macos-arm64.zip');
     });
 
     test('stable channel ignores the debug macOS zip', () async {
       final MacUpdater u = MacUpdater();
       final String? url = await _urlOf(u.selectAsset(
         _assets(<String>[
-          'fushi-0.5.1-debug.412-macos-arm64.zip',
-          'fushi-0.5.1-macos-arm64.zip',
+          'mycomic-0.5.1-debug.412-macos-arm64.zip',
+          'mycomic-0.5.1-macos-arm64.zip',
         ]),
       ));
-      expect(url, 'https://example.com/fushi-0.5.1-macos-arm64.zip');
+      expect(url, 'https://example.com/mycomic-0.5.1-macos-arm64.zip');
     });
 
     test('macOS updater advertises in-app install support', () {
@@ -671,8 +671,8 @@ void main() {
     test('never selects an asset (info-only, opens release page)', () async {
       final IosUpdater u = IosUpdater();
       final UpdateAsset? asset = await u.selectAsset(_assets(<String>[
-        'fushi-0.4.2-ios.ipa',
-        'fushi-0.4.2-macos.zip',
+        'mycomic-0.4.2-ios.ipa',
+        'mycomic-0.4.2-macos.zip',
       ]));
       expect(asset, isNull);
     });
@@ -693,10 +693,10 @@ void main() {
     test('synthesizeStableAssetNames lists the macOS zip', () {
       final List<String> names = synthesizeStableAssetNames('0.4.2');
       // macOS/Windows 均已切 fushi（Windows 更新桥已落，Phase 5）；Android APK 保持旧名。
-      expect(names, contains('fushi-0.4.2-macos-arm64.zip'));
+      expect(names, contains('mycomic-0.4.2-macos-arm64.zip'));
       // 旧名不再合成：从这一版起 release 里只有 arm64 名的包。
-      expect(names, isNot(contains('fushi-0.4.2-macos.zip')));
-      expect(names, contains('fushi-0.4.2-windows-setup.exe'));
+      expect(names, isNot(contains('mycomic-0.4.2-macos.zip')));
+      expect(names, contains('mycomic-0.4.2-windows-setup.exe'));
     });
   });
 

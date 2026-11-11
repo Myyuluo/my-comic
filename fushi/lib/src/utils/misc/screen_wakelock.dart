@@ -18,7 +18,7 @@ Future<void> setScreenWakelock({
     await WakelockPlus.toggle(enable: enable);
   } catch (e) {
     debugPrint(
-      '[Fushi] wakelock ${enable ? 'enable' : 'disable'} '
+      '[MyComic] wakelock ${enable ? 'enable' : 'disable'} '
       'failed ($source): $e',
     );
   }

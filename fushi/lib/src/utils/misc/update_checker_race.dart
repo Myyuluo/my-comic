@@ -78,7 +78,7 @@ class UpdateProbeOutcome {
 /// 胜出的候选 url。调用方只把 eligible 的结果传进来。
 ///
 /// 规则（与边界澄清 + PM tie-break ④ 一致）：
-///   0. **分档（用户 2026-10-18 拍板）**：只要有首选档（官网 Cloudflare / GitHub 直连，
+///   0. **分档（用户 2026-10-18 拍板）**：只要有首选档（GitHub 直连，
 ///      即非 [UpdateProbeOutcome.isRelay]）候选 eligible，就只在首选档里挑——中转镜像
 ///      再快也不抢；首选档一个都不可用时才在中转镜像里挑。
 ///   1. 在入选档里取「首字节最快」（[UpdateProbeOutcome.elapsed] 最小）者为基准 winner。
@@ -132,8 +132,8 @@ List<String> reorderCandidatesByRaceWinner(
 /// 调用。满足竞速门控（[_shouldRaceCandidates]）→ 并发探针选最快活源、把胜出 url 提首位
 /// 返回重排后的候选列表；不满足门控 / 竞速选不出源 → 原样返回 [candidateUrls]（现有串行
 /// 循环 + [selectRepresentativeDownloadFailure] 锚定直连完全不变）。竞速的 tie-break
-/// 偏好锚定候选首项：旧链首项仍是 GitHub 直连；加入官网 R2 后首项是 R2，避免它明明
-/// 最快/近似快却被 500ms 内到达的 GitHub 反抢。把整段接入逻辑下沉到本 race part，让
+/// 偏好锚定候选首项：自动顺序下首项就是 GitHub 直连，避免它被 500ms 内到达的代理
+/// 镜像反抢。把整段接入逻辑下沉到本 race part，让
 /// 下载 part 只剩一行调用、不越结构守卫的 1500 行天花板。
 ///
 /// [pinnedCandidateUrl] 非 null = 用户在设置里**显式**选了下载来源，且它在本资产上解析
@@ -218,13 +218,13 @@ Future<bool> _shouldRaceCandidates({
 
 /// **并发探针竞速选源（TODO-683 核心）**。对 [candidateUrls] 里的**所有**候选并发发
 /// 探针（`Range: bytes=0-0`，单字节，只探不真下载）。语义：
-///   * 第一个返回 206 且拿到合法总大小的**首选档**候选（官网 Cloudflare / GitHub 直连）
+///   * 第一个返回 206 且拿到合法总大小的**首选档**候选（GitHub 直连）
 ///     触发裁决——若它是锚点（[directUrl]），立即胜出；否则再多等
 ///     [_kDirectTieBreakWindow]（或直到锚点也到）做 tie-break（PM ④）。
 ///   * **中转镜像（[isGitHubMirrorUrl]）不触发裁决**：它们的探针照常并发发出（首选档全挂
 ///     后不必再从头建连），但只有首选档探针**全部结束且无一可用**时才放它们胜出——此时
-///     已到的中转立即裁决，还没到的等第一个到达者（用户 2026-10-18 拍板：中转只在连不上
-///     Cloudflare 与 GitHub 时才启用）。
+///     已到的中转立即裁决，还没到的等第一个到达者（用户 2026-10-18 拍板：中转只在连不上直连时
+///     GitHub 直连时才启用）。
 ///   * 裁决后（`_settled` 置位）所有候选 response 立即 `drain()` 回收（取消语义 R1）。
 ///   * 拿不到任何 eligible 候选（全部探针失败 / 非 206 / 拿不到总大小）→ 返回 null，由
 ///     调用方回退现有串行循环（它填 failures、让 [selectRepresentativeDownloadFailure]

@@ -77,8 +77,10 @@ void main() {
     expectScanScale(
       scanned,
       what: 'lib/ 下的 .dart',
-      atLeast: 1120,
-      measured: 1401,
+      // ticket 03 删除了非漫画内部包，扫描面从 1401 降到 707；下界仍用于
+      // 识破「扫描根写错 / 过滤条件写反」这类守卫自身故障。
+      atLeast: 650,
+      measured: 707,
     );
 
     expect(
@@ -92,8 +94,8 @@ void main() {
   test('fushiUserAgent 形状稳定（对外身份不能随手改）', () {
     expect(
       fushiUserAgent('shader-downloader'),
-      'fushi/shader-downloader (https://fushi.moe)',
+      'mycomic/shader-downloader (https://github.com/Myyuluo/my-comic)',
     );
-    expect(fushiUserAgent('  custom-fonts  '), contains('fushi/custom-fonts '));
+    expect(fushiUserAgent('  custom-fonts  '), contains('mycomic/custom-fonts '));
   });
 }

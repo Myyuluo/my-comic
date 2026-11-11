@@ -1173,7 +1173,7 @@ class _CustomFontsPageState extends BasePageState<CustomFontsPage> {
         await deleteCustomFontFileIfUnreferenced(_fonts, filePath);
       } catch (e, stack) {
         ErrorLogService.instance.log('CustomFontsPage.deleteFont', e, stack);
-        debugPrint('[Fushi] failed to delete font file $filePath: $e');
+        debugPrint('[MyComic] failed to delete font file $filePath: $e');
       }
     }
     FushiToast.show(

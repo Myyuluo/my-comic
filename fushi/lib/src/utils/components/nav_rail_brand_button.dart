@@ -56,7 +56,7 @@ class NavRailBrandButton extends StatelessWidget {
           splashFactory: apple ? NoSplash.splashFactory : null,
           child: Semantics(
             button: true,
-            label: 'Fushi',
+            label: 'MyComic',
             child: FushiFocusTarget(
               id: focusId,
               autoHome: false,

@@ -725,7 +725,7 @@ bool HookToolbarWindow::Show(hook_toolbar::Profile profile,
     // stay out of the taskbar / Alt+Tab.
     hwnd_ = CreateWindowExW(
         WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
-        kWindowClassName, L"Fushi Hook Toolbar", WS_POPUP, layout.rect.left,
+        kWindowClassName, L"MyComic Hook Toolbar", WS_POPUP, layout.rect.left,
         layout.rect.top, width, height, nullptr, nullptr,
         GetModuleHandle(nullptr), this);
     if (hwnd_ == nullptr) {

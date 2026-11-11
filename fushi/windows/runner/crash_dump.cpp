@@ -92,7 +92,7 @@ namespace fushi
     }
     size_t p = AppendW(dir, local_app_data);
     CoTaskMemFree(local_app_data);
-    if (!AppendSegmentW(dir, &p, L"\\Fushi")) return false;
+    if (!AppendSegmentW(dir, &p, L"\\MyComic")) return false;
     CreateDirectoryW(dir, nullptr);
     if (!AppendSegmentW(dir, &p, L"\\crashdumps")) return false;
     CreateDirectoryW(dir, nullptr);
@@ -103,7 +103,7 @@ namespace fushi
   {
     LONG WINAPI WriteDumpFilter(EXCEPTION_POINTERS* exception_pointers)
     {
-      WriteProcessMinidump(L"hibiki", GetCurrentThreadId(), exception_pointers,
+      WriteProcessMinidump(L"mycomic", GetCurrentThreadId(), exception_pointers,
         nullptr);
 
       // 链回前一个 filter（Flutter engine 上报等），保留其行为。
@@ -134,7 +134,7 @@ namespace fushi
       return false;
     }
     // 文件名：<prefix>-<pid>-<tickcount>.dmp（pid+tick 足以区分并发/连续崩溃）。
-    // 崩溃 filter 用 `hibiki`（诊断区按 *.dmp 列出，历史文件名不变）；主线程停泵
+    // 崩溃 filter 用 `mycomic`（诊断区按 *.dmp 列出）；主线程停泵
     // 看门狗用 `hang`，同一目录，一眼可分「崩了」还是「卡死后抓的」。
     wchar_t path[MAX_PATH];
     size_t fp = 0;

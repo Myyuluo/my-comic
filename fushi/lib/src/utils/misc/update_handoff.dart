@@ -366,9 +366,9 @@ class WindowsUpdateHandoffRecord {
   final DateTime? parentExitObservedAt;
 
   /// `fushi_update_launcher.exe` 在启动 Inno **之前**实测到的事实：
-  /// `FushiSingleInstanceMutex` 是否已经被释放（`WaitForMutexReleased()`）。
+  /// `MyComicSingleInstanceMutex` 是否已经被释放（`WaitForMutexReleased()`）。
   ///
-  /// 这是「Fushi 是不是还开着」唯一的**观测**来源。日志里出现 mutex 字样不是
+  /// 这是「MyComic 是不是还开着」唯一的**观测**来源。日志里出现 mutex 字样不是
   /// （BUG-2203：Inno 会把 `[Code]` 段的 `OpenMutexW@kernel32.dll` 导入记进每一份
   /// 日志，无论成败）。
   final bool? launcherMutexReleased;
@@ -946,7 +946,7 @@ WindowsInstallerFailureSummary summarizeWindowsInstallerFailure({
     return WindowsInstallerFailureSummary(
       type: 'deletefile_code_5',
       message: 'The installer could not replace ${code5.path} because Windows '
-          'reported access denied (DeleteFile code 5). Close Fushi and any '
+          'reported access denied (DeleteFile code 5). Close MyComic and any '
           'process using that file, then run the installer again.',
     );
   }
@@ -964,7 +964,7 @@ WindowsInstallerFailureSummary summarizeWindowsInstallerFailure({
   if (log == null || record.innoLogExists == false) {
     return const WindowsInstallerFailureSummary(
       type: 'missing_log',
-      message: 'The installer log was not created, so Fushi could not confirm '
+      message: 'The installer log was not created, so MyComic could not confirm '
           'that Inno Setup started. This usually means the handoff launcher '
           'failed before the installer began.',
     );
@@ -987,8 +987,8 @@ WindowsInstallerFailureSummary summarizeWindowsInstallerFailure({
     );
     if (record.launcherMutexReleased == false) {
       message.write(
-        ' The update launcher also observed FushiSingleInstanceMutex still '
-        'held when it started the installer, so a Fushi process was alive at '
+        ' The update launcher also observed MyComicSingleInstanceMutex still '
+        'held when it started the installer, so a MyComic process was alive at '
         'that moment.',
       );
     }
@@ -998,14 +998,14 @@ WindowsInstallerFailureSummary summarizeWindowsInstallerFailure({
     );
   }
 
-  // 「Fushi 还开着」只认**观测**：launcher 在启动 Inno 之前实测互斥量仍被持有，
+  // 「MyComic 还开着」只认**观测**：launcher 在启动 Inno 之前实测互斥量仍被持有，
   // 或者 Inno 自己在日志里写下了它检测到实例在跑。
   //
   // 这里**故意不再**匹配裸 `mutex` / `is running` 子串（BUG-2203 的误诊源头）：
   // Inno 会把 `[Code]` 段的外部函数导入逐个记进日志，其中就有
   // `Function and DLL name: OpenMutexW@kernel32.dll` —— 这一行**每一份**日志里都有，
   // 无论安装成功还是失败。于是旧判据对任何一次失败都恒真，把真正的失败原因
-  // （安装器被杀、复制失败、用户取消）全部盖成同一条「Fushi 仍在运行」。
+  // （安装器被杀、复制失败、用户取消）全部盖成同一条「MyComic 仍在运行」。
   final bool mentionsRunningApp = lower.contains('currently running') ||
       lower.contains('appmutex') ||
       lower.contains('another instance');
@@ -1016,8 +1016,8 @@ WindowsInstallerFailureSummary summarizeWindowsInstallerFailure({
   if (mentionsRunningApp || record.launcherMutexReleased == false) {
     return WindowsInstallerFailureSummary(
       type: 'app_mutex_running',
-      message: 'Fushi was still running when the installer started. The '
-          'installer is guarded by FushiSingleInstanceMutex, so every active '
+      message: 'MyComic was still running when the installer started. The '
+          'installer is guarded by MyComicSingleInstanceMutex, so every active '
           'fushi.exe process must be closed before the silent installer can '
           'continue.',
     );
@@ -1033,7 +1033,7 @@ WindowsInstallerFailureSummary summarizeWindowsInstallerFailure({
 
   return const WindowsInstallerFailureSummary(
     type: 'installer_incomplete',
-    message: 'The installer ran, but Fushi restarted with the previous '
+    message: 'The installer ran, but MyComic restarted with the previous '
         'version. Check the installer log for the full Inno Setup details.',
   );
 }

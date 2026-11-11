@@ -40,10 +40,10 @@ void main() {
     expect(src.contains('FOLDERID_Programs'), isTrue, reason: '必须同步开始菜单快捷方式');
     expect(
         RegExp(r'FushiShortcutInFolder\(\s*FOLDERID_UserPinned\s*,\s*'
-                r'L"TaskBar\\\\Fushi\.lnk"')
+                r'L"TaskBar\\\\MyComic\.lnk"')
             .hasMatch(src),
         isTrue,
-        reason: r'任务栏固定项必须使用 FOLDERID_UserPinned + TaskBar\Fushi.lnk');
+        reason: r'任务栏固定项必须使用 FOLDERID_UserPinned + TaskBar\MyComic.lnk');
     expect(
         src.contains('SetShortcutIconLocation(taskbar_lnk, icon_path, true)'),
         isTrue,
@@ -59,19 +59,19 @@ void main() {
     expect(src.contains('FinalPathForComparison(executable.data())'), isTrue,
         reason: '当前 exe 必须参与最终路径归一化');
     // TODO-901 C1 回归守卫（load-bearing）：开始菜单 .lnk 落在程序组子文件夹
-    // 内，相对路径必须是 Fushi 子目录 + Fushi.lnk，而不是 Programs 根下的
-    // 裸 Fushi.lnk（{group} = {autoprograms}+程序组名，含 Fushi 子目录）。
+    // 内，相对路径必须是 MyComic 子目录 + MyComic.lnk，而不是 Programs 根下的
+    // 裸 MyComic.lnk（{group} = {autoprograms}+程序组名，含 MyComic 子目录）。
     // 若把开始菜单那一支的相对路径改回根目录形式，GetFileAttributesW 恒 INVALID
     // → 软跳过 → 换图标时开始菜单图标永不更新。锁住整条 FOLDERID_Programs 调用
     // 连同其子目录实参，改回根目录即红（用 RegExp 匹配整段调用，避免被注释里的
     // 示例文本误满足）。
     expect(
         RegExp(r'FushiShortcutInFolder\(\s*FOLDERID_Programs\s*,\s*'
-                r'L"Fushi\\\\Fushi\.lnk"')
+                r'L"MyComic\\\\MyComic\.lnk"')
             .hasMatch(src),
         isTrue,
-        reason: r'开始菜单 .lnk 必须拼成程序组 Fushi 子文件夹下的 Fushi.lnk'
-            r'（FOLDERID_Programs + Fushi\Fushi.lnk），不能用 Programs 根下的裸 Fushi.lnk');
+        reason: r'开始菜单 .lnk 必须拼成程序组 MyComic 子文件夹下的 MyComic.lnk'
+            r'（FOLDERID_Programs + MyComic\MyComic.lnk），不能用 Programs 根下的裸 MyComic.lnk');
     expect(src.contains('SHGetKnownFolderPath('), isTrue,
         reason: '路径必须用 SHGetKnownFolderPath 解析（兼容 OneDrive 重定向桌面）');
 
@@ -141,10 +141,10 @@ void main() {
         isTrue,
         reason: 'main.dart 必须接入快捷方式同步实现');
     final RegExp restoreAndSync = RegExp(
-      r'final bool applied\s*=\s*await WindowCaptionChannel\.setWindowIcon\(iconPath\);'
+      r'final bool applied\s*=\s*await WindowCaptionChannel\.setWindowIcon\(\s*iconPath\s*,?\s*\);'
       r'[\s\S]*?if \(applied\) \{'
       r'\s*(?://[^\n]*\n\s*)*unawaited\(\(\) async \{'
-      r'[\s\S]*?final Uint8List iconBytes\s*=\s*await File\(iconPath\)\.readAsBytes\(\);'
+      r'[\s\S]*?final Uint8List iconBytes\s*=\s*await File\(\s*iconPath\s*,?\s*\)\.readAsBytes\(\);'
       r'[\s\S]*?await syncWindowsShortcutIcons\(iconBytes\);',
     );
     expect(restoreAndSync.hasMatch(src), isTrue,

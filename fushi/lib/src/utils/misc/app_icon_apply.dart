@@ -24,7 +24,7 @@ Future<AppIconSelection> persistAppliedAppIcon(
   try {
     return await saveAppIconSelection(selection);
   } catch (e) {
-    debugPrint('[Fushi] app icon preference persist failed: $e');
+    debugPrint('[MyComic] app icon preference persist failed: $e');
     return await publishAppIconSelection(selection);
   }
 }

@@ -6,8 +6,8 @@ body:
   - type: markdown
     attributes:
       value: |
-        Please search [existing issues](https://github.com/hajisensai/fushi/issues?q=is%3Aissue) first. English or Chinese are both fine.
-        提交前请先搜索[已有 issue](https://github.com/hajisensai/fushi/issues?q=is%3Aissue)。中英文均可。
+        Please search [existing issues](https://github.com/Myyuluo/my-comic/issues?q=is%3Aissue) first. English or Chinese are both fine.
+        提交前请先搜索[已有 issue](https://github.com/Myyuluo/my-comic/issues?q=is%3Aissue)。中英文均可。
   - type: textarea
     id: problem
     attributes:
@@ -31,13 +31,5 @@ body:
     id: platform
     attributes:
       label: Platform / 平台
-      multiple: true
       options:
-        - All / 全平台
-        - Android
-        - iOS
         - Windows
-        - macOS
-        - Linux
-        - Browser extension / 浏览器扩展
-        - Headless server / 无头服务端

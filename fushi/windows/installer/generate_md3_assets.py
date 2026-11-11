@@ -7,10 +7,9 @@
 产物落 fushi/windows/installer/assets/，由 fushi.iss 的 WizardImageFile /
 WizardSmallImageFile 引用。改配色或形状后重跑本脚本并提交产物即可——不要手改 PNG。
 
-为什么不复用 app_icon.ico：那份图标至今还是改名前的 **Hibiki 字标**
-（fushi/windows/runner/resources/app_icon.ico，实测 256x256 帧上写着 "Hibiki"），
-放进 Fushi 安装器等于在安装界面上打旧品牌。这里用与官网 fushi.moe 同一套占位标记
-（MD3 圆角方块 + 渐变 + 字母 F），等正式 logo 出来后连同官网一起替换。
+品牌标记直接取应用自己的 MyComic M 图标（`fushi/assets/meta/icon.png`，与
+`windows/runner/resources/app_icon.ico` 同源），因此安装器不再使用旧 Fushi 兔子
+或 Hibiki 字标。hero 图的文字固定为产品名 MyComic。
 
 配色是 MD3 baseline 主色（primary #6750A4 一族），与 app 内主题同源。
 """
@@ -18,17 +17,22 @@ WizardSmallImageFile 引用。改配色或形状后重跑本脚本并提交产�
 from __future__ import annotations
 
 import os
-import sys
 from typing import Sequence
 
 from PIL import Image, ImageDraw, ImageFont
+
+# 应用品牌图标（MyComic M 标记）。路径相对本脚本：
+# fushi/windows/installer/generate_md3_assets.py -> fushi/assets/meta/icon.png
+BRAND_ICON_PATH = os.path.normpath(
+    os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                 '..', '..', 'assets', 'meta', 'icon.png'))
+PRODUCT_NAME = 'MyComic'
 
 # ── MD3 baseline tokens ────────────────────────────────────────────────────
 PRIMARY = (103, 80, 164)  # #6750A4
 PRIMARY_DEEP = (79, 55, 139)  # #4F378B
 PRIMARY_CONTAINER = (234, 221, 255)  # #EADDFF
 PRIMARY_FIXED_DIM = (208, 188, 255)  # #D0BCFF
-ON_PRIMARY = (255, 255, 255)
 ON_PRIMARY_CONTAINER = (33, 0, 93)  # #21005D
 SURFACE_DARK = (20, 18, 24)  # #141218
 ON_SURFACE_DARK = (230, 224, 233)  # #E6E0E9
@@ -78,28 +82,13 @@ def vertical_gradient(size: tuple[int, int], top: tuple[int, int, int],
 
 
 def draw_mark(side: int, dark: bool) -> Image.Image:
-    """MD3 圆角方块标记（渐变底 + 白色 F），透明背景，边长 side 像素。"""
-    big = side * SS
-    canvas = Image.new('RGBA', (big, big), (0, 0, 0, 0))
+    """应用品牌标记：MyComic M 图标，透明背景，边长 side 像素。
 
-    top, bottom = (PRIMARY_FIXED_DIM, PRIMARY) if dark else (PRIMARY, PRIMARY_DEEP)
-    fill = vertical_gradient((big, big), top, bottom).convert('RGBA')
-
-    # MD3 large shape：圆角半径约边长的 28%。
-    mask = Image.new('L', (big, big), 0)
-    ImageDraw.Draw(mask).rounded_rectangle(
-        (0, 0, big - 1, big - 1), radius=round(big * 0.28), fill=255)
-    canvas.paste(fill, (0, 0), mask)
-
-    glyph_color = (56, 30, 114, 255) if dark else ON_PRIMARY + (255,)
-    font = load_font(round(big * 0.62))
-    draw = ImageDraw.Draw(canvas)
-    box = draw.textbbox((0, 0), 'F', font=font)
-    draw.text(
-        (big / 2 - (box[0] + box[2]) / 2, big / 2 - (box[1] + box[3]) / 2),
-        'F', font=font, fill=glyph_color)
-
-    return canvas.resize((side, side), Image.LANCZOS)
+    直接缩放应用图标（本身就是带透明圆角的 M 标记）；dark/light 共用同一份，
+    因为图标自带白色底片，在深浅两种向导背景上都保持可读。
+    """
+    icon = Image.open(BRAND_ICON_PATH).convert('RGBA')
+    return icon.resize((side, side), Image.LANCZOS)
 
 
 def draw_hero(size: tuple[int, int], dark: bool) -> Image.Image:
@@ -134,12 +123,13 @@ def draw_hero(size: tuple[int, int], dark: bool) -> Image.Image:
     canvas = canvas.resize((width, height), Image.LANCZOS)
     canvas.paste(mark, (mark_x, mark_y), mark)
 
-    font = load_font(max(round(width * 0.135), 8))
+    font = load_font(max(round(width * 0.115), 8))
     draw = ImageDraw.Draw(canvas)
-    box = draw.textbbox((0, 0), 'Fushi', font=font)
+    box = draw.textbbox((0, 0), PRODUCT_NAME, font=font)
     draw.text(
-        (width / 2 - (box[0] + box[2]) / 2, mark_y + mark_side + round(height * 0.035)),
-        'Fushi', font=font, fill=word_color)
+        (width / 2 - (box[0] + box[2]) / 2,
+         mark_y + mark_side + round(height * 0.035)),
+        PRODUCT_NAME, font=font, fill=word_color)
 
     return canvas
 
@@ -189,34 +179,26 @@ def draw_back(size: tuple[int, int], dark: bool) -> Image.Image:
 
 
 def main() -> None:
-    # ⚠ hero 与 mark 的入库产物**已经不是本脚本的输出**：95aee16b29 之后它们是手工
-    # 换上的兔子图标，而本脚本画的仍是早期的「圆角方块 + 字母 F」占位。无脑重跑会把
-    # 兔子覆盖回 F（实测踩过一次：右上角标记当场退回 F 方块）。所以这两类默认跳过，
-    # 要重生成占位图得显式传 --regenerate-placeholders —— 那多半意味着你在换一整套
-    # 新品牌图，而不是「顺手重跑一下资产脚本」。
-    regen_placeholders = '--regenerate-placeholders' in sys.argv
+    if not os.path.exists(BRAND_ICON_PATH):
+        raise SystemExit('missing brand icon: {}'.format(BRAND_ICON_PATH))
 
     out_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets')
     os.makedirs(out_dir, exist_ok=True)
 
     written: list[str] = []
 
-    if regen_placeholders:
-        for width, height in HERO_SIZES:
-            for dark in (False, True):
-                name = 'wizard_hero{}_{}x{}.png'.format(
-                    '_dark' if dark else '', width, height)
-                draw_hero((width, height), dark).save(os.path.join(out_dir, name))
-                written.append(name)
+    for width, height in HERO_SIZES:
+        for dark in (False, True):
+            name = 'wizard_hero{}_{}x{}.png'.format(
+                '_dark' if dark else '', width, height)
+            draw_hero((width, height), dark).save(os.path.join(out_dir, name))
+            written.append(name)
 
-        for side in MARK_SIZES:
-            for dark in (False, True):
-                name = 'wizard_mark{}_{}.png'.format('_dark' if dark else '', side)
-                draw_mark(side, dark).save(os.path.join(out_dir, name))
-                written.append(name)
-    else:
-        print('跳过 hero/mark：入库的是手工换的兔子图标，重跑会覆盖成 F 占位。'
-              '确需重生成占位图请加 --regenerate-placeholders。')
+    for side in MARK_SIZES:
+        for dark in (False, True):
+            name = 'wizard_mark{}_{}.png'.format('_dark' if dark else '', side)
+            draw_mark(side, dark).save(os.path.join(out_dir, name))
+            written.append(name)
 
     for dark in (False, True):
         name = 'wizard_back{}_{}x{}.png'.format(

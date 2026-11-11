@@ -211,6 +211,19 @@ SettingsDestination buildSystemDestination() {
             icon: FushiIcons.info,
             builder: _buildRuntimeAppVersionRow,
           ),
+          // Ticket 09 / ADR 0024：About 身份行。产品名固定为 MyComic；来源署名
+          // “基于 Fushi v3.0.0（GPL-3.0）”与上游 + MyComic 版权必须同时可见，
+          // 满足 GPL-3.0 的修改与署名要求。沿用现有只读设置行，不引入新视觉。
+          SettingsCustomItem(
+            id: 'system.about',
+            icon: FushiIcons.info,
+            builder: (_) => AdaptiveSettingsRow(
+              title: 'MyComic',
+              subtitle: t.about_based_on_fushi,
+              icon: FushiIcons.info,
+              showIcon: true,
+            ),
+          ),
           // Ticket 07：重新打开三步漫画版新手引导。复用现有导航行组件；
           // 页面与首次启动是同一个 OnboardingWizardPage。
           SettingsNavigationItem(

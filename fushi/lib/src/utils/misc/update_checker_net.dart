@@ -31,24 +31,9 @@ part of 'update_checker.dart';
 /// part 内 import，所以由 barrel 引入、这里只保留别名与既有的测试可见名。
 const List<String> updateCheckProxyPrefixes = kGitHubMirrorPrefixes;
 
-/// 官网 Cloudflare Worker 暴露的版本化 R2 下载入口。
-///
-/// 必须使用 `/releases/v/<tag>/<name>?src=r2`，而不是滚动的 `/releases/latest/*`：
-/// 更新检查拿到的 release 与真正开始下载之间可能跨过一次发版，版本化路径能保证候选
-/// 始终指向 [url] 里的同一个 tag / asset。`src=r2` 还把「该文件没有镜像」收敛为 404，
-/// 让下载引擎继续回退 GitHub；不带它会由官网 302 到 GitHub，和后续直连候选重复。
-const String _kOfficialUpdateMirrorHost = 'fushi.moe';
-
-/// 官网 R2 实际收录的 tag 形状：只有正式版 `vX.Y.Z`。
-///
-/// `mirror-releases.yml` 按 release 的 isPrerelease 跳过所有预发布（beta 的
-/// `vX.Y.Z-beta.N`、debug 的 `vX.Y.Z-debug.N+sha` 与滚动 tag `fushi-debug-rolling`），
-/// 发布规则又保证正式版 tag 恒为 `vX.Y.Z`，所以这里按 tag 形状就能与镜像范围对齐。
-/// 对预发布生成 R2 候选只会换来一次必然的 404 再回退 GitHub（BUG-2855）。
-final RegExp _kOfficialMirroredTagPattern = RegExp(r'^v\d+(?:\.\d+)*$');
-
+/// MyComic 是独立发行版：下载候选只来自本仓库的 GitHub Release 与其公共加速代理。
+/// 上游官网的 R2 镜像已随身份切换删除，旧 `r2` 偏好值会安全回退到自动顺序。
 const String updateDownloadSourceAutomatic = 'auto';
-const String updateDownloadSourceCloudflare = 'r2';
 const String updateDownloadSourceGitHub = 'github';
 const String updateDownloadSourceProxyPrefix = 'proxy:';
 
@@ -59,39 +44,6 @@ String Function() appUpdateDownloadSourceReader = () =>
 String updateDownloadSourceForProxy(String prefix) =>
     '$updateDownloadSourceProxyPrefix$prefix';
 
-/// **纯函数**：把本仓 GitHub Release 资产直链映射到官网 R2 的不可变版本路径。
-///
-/// 只接受 `https://github.com/hajisensai/fushi/releases/download/<tag>/<name>`：
-/// 旧 Hibiki 仓库、任意第三方 host、API URL 或畸形路径都返回 null，避免把不属于官网 R2
-/// 桶的文件送到受信域名；预发布 tag 同样返回 null——R2 只收正式版（见
-/// [_kOfficialMirroredTagPattern]）。用 [Uri.pathSegments] 解码输入，再交给 [Uri] 重新
-/// 编码输出，兼容资产名里的空格等字符。
-@visibleForTesting
-String? officialR2UrlForUpdateAsset(String url) {
-  final Uri? uri = Uri.tryParse(url);
-  if (uri == null ||
-      uri.scheme != 'https' ||
-      uri.host.toLowerCase() != 'github.com') {
-    return null;
-  }
-  final List<String> segments = uri.pathSegments;
-  if (segments.length != 6 ||
-      segments[0].toLowerCase() != 'hajisensai' ||
-      segments[1].toLowerCase() != 'fushi' ||
-      segments[2] != 'releases' ||
-      segments[3] != 'download' ||
-      !_kOfficialMirroredTagPattern.hasMatch(segments[4]) ||
-      segments[5].isEmpty) {
-    return null;
-  }
-  return Uri(
-    scheme: 'https',
-    host: _kOfficialUpdateMirrorHost,
-    pathSegments: <String>['releases', 'v', segments[4], segments[5]],
-    queryParameters: const <String, String>{'src': 'r2'},
-  ).toString();
-}
-
 /// 一次资产下载的**候选计划**：候选顺序 + 用户所选来源在**这个资产**上的落实结果。
 ///
 /// 为什么不是一个裸 `List<String>`：候选顺序和「所选来源用上了没有」本就是同一次决策的
@@ -99,9 +51,8 @@ String? officialR2UrlForUpdateAsset(String url) {
 ///   1. 下游（竞速门控 [orderedCandidatesAfterRace]）分不出「首项是用户钉的」还是
 ///      「首项只是默认排序」，于是探针测速把用户显式选的源顶掉（设置页承诺的
 ///      「优先尝试所选来源」不成立）；
-///   2. 「用户选了 Cloudflare，但这个资产不在官网 R2 桶里」（旧仓库直链 / 第三方 host /
-///      畸形路径 → [officialR2UrlForUpdateAsset] 返 null）与「用户没选」完全同形，
-///      于是静默降级：UI 零提示，用户以为锁定了 Cloudflare。
+///   2. 「用户选了代理站，但当前 URL 不是 http(s) / 畸形路径」与「用户没选」同形，
+///      于是静默降级：UI 零提示，用户以为锁定了代理。
 ///
 /// 把 [pinnedUrl] 与 [requestedSource] 一起带出来，这两件事就都成了可断言、可展示的
 /// 一等信息。**回退行为不变**：[candidates] 始终是完整回退链。
@@ -133,24 +84,17 @@ class UpdateDownloadPlan {
 
 /// **纯函数**：生成 release 资产的下载候选计划。
 ///
-/// 官网 R2 不可变版本路径排第一，优先获得 Cloudflare/R2 的低延迟与免费出网；R2 未镜像
-/// （单文件超过镜像上限、工作流失败等）会快速 404；预发布根本不生成 R2 候选，随后完整保留原来的
-/// GitHub 直连 + 公共 gh 代理回退链。检查 manifest/API 仍使用 [updateCheckUrls]，不会把
-/// 非下载请求误送进 R2。
+/// 候选链固定为「GitHub 直连 + 公共 gh 代理回退」；上游官网 R2 镜像已随独立身份删除。
+/// 检查 manifest/API 仍使用 [updateCheckUrls]。
 ///
 /// 用户显式选了来源且该来源在本资产上解析得出候选时，把它提到首位并记进
-/// [UpdateDownloadPlan.pinnedUrl]；解析不出（如对旧仓库资产选了 Cloudflare）时候选序
-/// 不变，由 [UpdateDownloadPlan.preferenceUnavailable] 把这个降级暴露给调用方。
+/// [UpdateDownloadPlan.pinnedUrl]；解析不出（如无效代理前缀）时候选序不变，由
+/// [UpdateDownloadPlan.preferenceUnavailable] 把这个降级暴露给调用方。
 @visibleForTesting
 UpdateDownloadPlan resolveUpdateDownloadPlan(String url, {String? preference}) {
-  final String? officialMirror = officialR2UrlForUpdateAsset(url);
-  final List<String> candidates = <String>[
-    if (officialMirror != null) officialMirror,
-    ...updateCheckUrls(url),
-  ];
+  final List<String> candidates = updateCheckUrls(url);
   final String selected = preference ?? appUpdateDownloadSourceReader();
   final String? requested = switch (selected) {
-    updateDownloadSourceCloudflare => officialMirror,
     updateDownloadSourceGitHub => url,
     String value when value.startsWith(updateDownloadSourceProxyPrefix) =>
       _selectedProxyCandidate(value, url),
@@ -180,7 +124,6 @@ List<String> updateDownloadUrls(String url, {String? preference}) =>
 /// **纯函数**：下载来源值 → 用户可读标签。设置页的选项标签与「本次没用上所选来源」
 /// 通告共用这一份，避免同一个来源在两处叫不同名字。未知值按「自动」处理。
 String updateDownloadSourceLabel(String source) => switch (source) {
-  updateDownloadSourceCloudflare => t.update_download_source_cloudflare,
   updateDownloadSourceGitHub => t.update_download_source_github,
   String value when value.startsWith(updateDownloadSourceProxyPrefix) =>
     t.update_download_source_proxy(

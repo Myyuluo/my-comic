@@ -561,7 +561,7 @@ class FloatingLyricWindow {
   std::vector<RubySpan> ruby_spans_;
   std::string context_id_;
   // Window title for the lyric strip (tool window: never shown in the taskbar).
-  std::wstring window_title_ = L"Fushi Lyric";
+  std::wstring window_title_ = L"MyComic Lyric";
   int highlight_start_ = -1;
   int highlight_length_ = 0;
   // TODO-708 P4: 块内当前行区间（UTF-16）。-1/0 = 无行标记（不 dim）。

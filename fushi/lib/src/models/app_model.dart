@@ -306,7 +306,7 @@ class AppModel with ChangeNotifier {
   UpdateNotifier get systemNotifier =>
       _systemNotifier ??= LocalUpdateNotifier.isSupportedPlatform
           ? LocalUpdateNotifier(
-              appName: 'Fushi',
+              appName: 'MyComic',
               groupTitle: t.updates_notification_header,
               onResponse: _onSystemNotificationResponse,
             )
@@ -1093,13 +1093,13 @@ class AppModel with ChangeNotifier {
   /// [initialise] so the in-flight guard holds.
   Future<void> _initialiseOnce() async {
     try {
-      debugPrint('[Fushi] init: PackageInfo + DeviceInfo');
+      debugPrint('[MyComic] init: PackageInfo + DeviceInfo');
 
       /// Prepare entities that may be repeatedly used at runtime.
       _packageInfo = await PackageInfo.fromPlatform();
       await platformServices.init();
 
-      debugPrint('[Fushi] init: directories (early, needed for DB)');
+      debugPrint('[MyComic] init: directories (early, needed for DB)');
       // TODO-1260：这一步内部解析数据根（含对自定义数据根盘的 stat）。盘掉线时最易 hang，
       // 故写启动面包屑 + 叠超时（超时→错误屏 Retry，不再无限加载）。
       ErrorLogService.instance
@@ -1117,8 +1117,8 @@ class AppModel with ChangeNotifier {
             .log('AppModel.migrateLegacyBooksDirectory', e, stack),
       );
 
-      debugPrint('[Fushi] init: Drift database');
-      ErrorLogService.instance.markInitStep('open-database（Drift 打开 fushi.db）');
+      debugPrint('[MyComic] init: Drift database');
+      ErrorLogService.instance.markInitStep('open-database（Drift 打开 my_comic.db）');
       _database = FushiDatabase(_databaseDirectory.path);
       _databaseOpened = true;
 
@@ -1139,7 +1139,7 @@ class AppModel with ChangeNotifier {
           portableOutcome.error!,
         );
       } else if (portableOutcome.rebased) {
-        debugPrint('[Fushi] portable state rebased: $portableOutcome');
+        debugPrint('[MyComic] portable state rebased: $portableOutcome');
       }
 
       // my-comic：Fushi 的备份恢复（`.fushi.zip` / 旧库导入）与互联/云同步已移除。
@@ -1156,7 +1156,7 @@ class AppModel with ChangeNotifier {
       _prefsRepo = PreferencesRepository(_database);
       mediaHistoryRepo = MediaHistoryRepository(_database);
 
-      debugPrint('[Fushi] init: repositories (parallel)');
+      debugPrint('[MyComic] init: repositories (parallel)');
       await Future.wait(<Future<void>>[
         prefsRepo.loadFromDb(),
         mediaHistoryRepo.loadFromDb(),
@@ -1187,7 +1187,7 @@ class AppModel with ChangeNotifier {
       themeNotifier.addListener(notifyListeners);
       _themeListenerAdded = true;
 
-      debugPrint('[Fushi] init: directories + system palette (parallel)');
+      debugPrint('[MyComic] init: directories + system palette (parallel)');
       _thumbnailsDirectory =
           Directory(path.join(_appPaths.cacheRoot.path, 'thumbnails'));
       await _guardInitIo(
@@ -1216,7 +1216,7 @@ class AppModel with ChangeNotifier {
       // my-comic：词典样式缓存与词典资源目录探测都属于已删除的查词域。
       // dictionary_metadata 不在漫画-only schema 里，启动期不得触碰。
 
-      debugPrint('[Fushi] init: populate maps + locales');
+      debugPrint('[MyComic] init: populate maps + locales');
       populateLocales();
       LocaleSettings.setLocaleRaw(appLocale.toLanguageTag());
       populateMediaTypes();
@@ -1233,7 +1233,7 @@ class AppModel with ChangeNotifier {
         );
         if (relocated > 0) {
           debugPrint(
-              '[Fushi] init: relocated $relocated stale custom-font path(s) to current custom_fonts dir');
+              '[MyComic] init: relocated $relocated stale custom-font path(s) to current custom_fonts dir');
         }
       } catch (e, stack) {
         ErrorLogService.instance.log('AppModel.healFontPaths', e, stack);
@@ -1267,8 +1267,8 @@ class AppModel with ChangeNotifier {
       );
 
       debugPrint(
-          '[Fushi] init: search preload skipped (my-comic: no dictionary domain)');
-      debugPrint('[Fushi] init: DONE');
+          '[MyComic] init: search preload skipped (my-comic: no dictionary domain)');
+      debugPrint('[MyComic] init: DONE');
       // TODO-1260：启动正常跑完，清掉启动步进面包屑（否则下次启动会误报上次 hang）。
       ErrorLogService.instance.clearInitStep();
       _isInitialised = true;
@@ -1331,7 +1331,7 @@ class AppModel with ChangeNotifier {
       // dedicated "data location unavailable" escape screen (Retry / explicit
       // opt-in-to-default); do NOT set _initError so the generic error screen
       // doesn't shadow it. The real data is untouched on e.configuredPath.
-      debugPrint('[Fushi] init PAUSED (data root unavailable): $e\n$stack');
+      debugPrint('[MyComic] init PAUSED (data root unavailable): $e\n$stack');
       ErrorLogService.instance
           .log('AppModel.initialise.dataRootUnavailable', e, stack);
       _dataRootUnavailable = e;
@@ -1341,7 +1341,7 @@ class AppModel with ChangeNotifier {
       // touching the file (no DROP / migration ran). Surface a dedicated,
       // non-retryable notice instead of the generic init-error screen, and
       // STOP — never continue init, never delete or rebuild the DB.
-      debugPrint('[Fushi] init REFUSED (DB downgrade): $e\n$stack');
+      debugPrint('[MyComic] init REFUSED (DB downgrade): $e\n$stack');
       ErrorLogService.instance.log('AppModel.initialise.downgrade', e, stack);
       _downgradeError = e;
       _initError = '$e';
@@ -1350,7 +1350,7 @@ class AppModel with ChangeNotifier {
       // 库比本版本能升级的下限还老（低于最低 schema 门槛，或只有改名前的
       // hibiki.db）。开库在任何迁移语句之前被拒，文件原样保留。与降级同理：专屏、
       // 不重试、不继续 init、绝不删库重建。
-      debugPrint('[Fushi] init REFUSED (legacy schema): $e\n$stack');
+      debugPrint('[MyComic] init REFUSED (legacy schema): $e\n$stack');
       ErrorLogService.instance.log('AppModel.initialise.legacySchema', e, stack);
       _legacySchemaError = e;
       _initError = '$e';
@@ -1360,14 +1360,14 @@ class AppModel with ChangeNotifier {
       // path and exhausted — the main fushi.db is corrupt. Surface a dedicated,
       // actionable notice (restore backup / clear data) instead of looping the
       // generic Retry button forever against the same un-openable file.
-      debugPrint('[Fushi] init FAILED (DB unrecoverable): $e\n$stack');
+      debugPrint('[MyComic] init FAILED (DB unrecoverable): $e\n$stack');
       ErrorLogService.instance
           .log('AppModel.initialise.unrecoverableDb', e, stack);
       _unrecoverableDbError = e;
       _initError = '$e';
       notifyListeners();
     } catch (e, stack) {
-      debugPrint('[Fushi] init FAILED: $e\n$stack');
+      debugPrint('[MyComic] init FAILED: $e\n$stack');
       ErrorLogService.instance.log('AppModel.initialise', e, stack);
       _initError = '$e';
       notifyListeners();

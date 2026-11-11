@@ -22,7 +22,7 @@ namespace {
 // 类名是契约（spec「冻结层窗口」）；标题**不能**是 "Fushi"：main.cpp 按标题 FindWindow
 // 找主窗（单实例转发）。
 constexpr wchar_t kClassName[] = L"FushiScreenOcrWindow";
-constexpr wchar_t kTitle[] = L"Fushi Screen OCR";
+constexpr wchar_t kTitle[] = L"MyComic Screen OCR";
 
 D2D1_COLOR_F ColorFromArgb(uint32_t argb, float opacity = 1.0f) {
   const float a = ((argb >> 24) & 0xFF) / 255.0f;

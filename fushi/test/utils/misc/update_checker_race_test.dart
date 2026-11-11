@@ -194,21 +194,20 @@ void main() {
       );
 
       expect(result, <String>[direct, relay],
-          reason: '中转只在连不上 Cloudflare 与 GitHub 时才启用');
+          reason: '中转只在连不上 GitHub 直连时才启用');
     });
 
     test('首选档全部失败 → 中转镜像胜出', () async {
-      const String r2 = 'https://fushi.moe/releases/v/v1/app.exe?src=r2';
       const String direct =
           'https://github.com/x/y/releases/download/v1/app.exe';
       final String relayFast = '${kGitHubMirrorPrefixes.first}$direct';
       final String relaySlow = '${kGitHubMirrorPrefixes[1]}$direct';
 
       final List<String>? result = await raceSelectFastestCandidate(
-        candidateUrls: <String>[r2, direct, relayFast, relaySlow],
-        directUrl: r2,
+        candidateUrls: <String>[direct, relayFast, relaySlow],
+        directUrl: direct,
         openUrl: (Uri uri, Map<String, String> headers) async {
-          if (uri.host == 'fushi.moe' || uri.host == 'github.com') {
+          if (uri.host == 'github.com') {
             await Future<void>.delayed(const Duration(milliseconds: 30));
             throw const SocketException('blocked');
           }
@@ -221,7 +220,7 @@ void main() {
 
       expect(result, isNotNull);
       expect(result!.first, relayFast);
-      expect(result.toSet(), <String>{r2, direct, relayFast, relaySlow});
+      expect(result.toSet(), <String>{direct, relayFast, relaySlow});
     });
 
     test('落败/坏候选被 drain：无 uncaught error、无未消费 Stream 告警（R1）', () async {
@@ -455,38 +454,6 @@ void main() {
       );
 
       expect(await file.readAsBytes(), payload);
-    });
-
-    test('官网 R2 是首候选时获得 tie-break 偏好，实际分段不被 GitHub 反抢', () async {
-      final List<int> payload = _largePayload();
-      final UpdateAsset asset = _asset(payload);
-      const String r2 = 'https://fushi.moe/releases/v/v1.2.0/app.exe?src=r2';
-      final List<String> segmentHosts = <String>[];
-
-      final File file = await downloadUpdateAsset(
-        asset: asset,
-        version: '1.2.0',
-        updatesDir: updatesDir,
-        candidateUrls: <String>[r2, asset.url],
-        connectionCount: 4,
-        minSegmentBytes: _minSeg,
-        openUrl: (Uri uri, Map<String, String> headers) async {
-          final String? range = headers[HttpHeaders.rangeHeader];
-          final bool isProbe = range == 'bytes=0-0';
-          if (uri.host == 'fushi.moe' && isProbe) {
-            // GitHub 探针先到，但 R2 仍在 500ms 官方首选窗口内；应保留 R2。
-            await Future<void>.delayed(const Duration(milliseconds: 100));
-          }
-          if (!isProbe) segmentHosts.add(uri.host);
-          return _rangeResponse(payload, range);
-        },
-      );
-
-      expect(await file.readAsBytes(), payload);
-      expect(segmentHosts, isNotEmpty);
-      expect(segmentHosts.toSet(), <String>{
-        'fushi.moe',
-      }, reason: '官网 R2 是候选首项，近似速度下应由它承担实际分段下载');
     });
 
     // 用户在设置里显式选了下载来源时，竞速**必须**让位：探针只比「谁首字节快」，

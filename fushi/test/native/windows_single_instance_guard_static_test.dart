@@ -56,8 +56,8 @@ void main() {
     }
     expect(depth, 0, reason: '早退分支花括号不配对');
     final String body = src.substring(open, close + 1);
-    expect(body.contains('::FindWindowW(nullptr, L"Fushi")'), isTrue,
-        reason: '二次实例分支必须前置首实例窗口');
+    expect(body.contains('::FindWindowW(nullptr, L"MyComic")'), isTrue,
+        reason: '二次实例分支必须前置首实例窗口（标题为 MyComic）');
     expect(body.contains('return EXIT_SUCCESS;'), isTrue,
         reason: '命中已有实例必须退出本进程，不再创建第二个共享 userDataFolder 的实例');
   });
@@ -106,15 +106,9 @@ void main() {
         isTrue,
         reason: '收到路径必须经 app.fushi/external_video channel 推给 Dart');
 
-    // Dart 端：复用现有 _openExternalVideo 打开链路，不另造第二套。
-    final String main = read('lib/main.dart');
-    expect(main.contains("MethodChannel('app.fushi/external_video')"), isTrue,
-        reason: 'Dart 必须注册 app.fushi/external_video channel');
-    expect(
-        main.contains('_handleExternalVideoChannel') &&
-            main.contains('_openExternalVideo('),
-        isTrue,
-        reason: '收到转交路径必须复用现有 _openExternalVideo 打开链路');
+    // 非漫画视频功能已在早期清理中从 Dart 侧移除；native 仍保留 WM_COPYDATA
+    // 转交协议（文件关联/CLI 参数由 Windows runner 负责），Dart 端不再注册
+    // external_video 处理器。这里只守 native 发送/接收两端。
   });
 
   test('开发并存开关只在 debug 构建生效，且换掉主窗标题', () {
@@ -129,8 +123,9 @@ void main() {
         isTrue,
         reason: 'FUSHI_DEV_SIDE_BY_SIDE 只能在 debug 构建生效');
     expect(body.contains('FUSHI_DEV_SIDE_BY_SIDE'), isTrue);
-    // 已安装实例的二次启动按标题 "Fushi" 转交文件，开发实例不能抢走。
-    expect(src.contains('dev_side_by_side ? L"Fushi Dev" : L"Fushi"'), isTrue,
+    // 已安装实例的二次启动按标题 "MyComic" 转交文件，开发实例不能抢走。
+    expect(
+        src.contains('dev_side_by_side ? L"MyComic Dev" : L"MyComic"'), isTrue,
         reason: '并存模式下主窗标题须与正式实例不同');
   });
 }

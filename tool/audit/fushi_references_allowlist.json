@@ -61,6 +61,11 @@
       "reason": "About / 设置页的来源署名"
     },
     {
+      "path": "fushi/windows/runner/Runner.rc",
+      "line_pattern": "Fushi contributors",
+      "reason": "Windows exe 版本资源里的 GPL 上游版权署名"
+    },
+    {
       "path": "packages/**",
       "line_pattern": "[Ff]ushi v3\\.0\\.0",
       "reason": "About / 设置页的来源署名"

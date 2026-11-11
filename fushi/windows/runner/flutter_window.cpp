@@ -416,13 +416,13 @@ std::wstring FushiShortcutInFolder(REFKNOWNFOLDERID folder_id,
   return path;
 }
 
-// TODO-901: points the desktop + Start menu Fushi shortcuts at |icon_path|
+// TODO-901: points the desktop + Start menu MyComic shortcuts at |icon_path|
 // (a freshly generated multi-size .ico). Installer (fushi.iss) drops the .lnk
-// at {userdesktop}\Fushi (Desktop\Fushi.lnk) and {group}\Fushi, where
-// {group} = {autoprograms}\{DefaultGroupName=Fushi} -> Programs\Fushi\Fushi.lnk
-// (DisableProgramGroupPage only hides the wizard page; the Fushi subfolder
+// at {userdesktop}\MyComic (Desktop\MyComic.lnk) and {group}\MyComic, where
+// {group} = {autoprograms}\{DefaultGroupName=MyComic} -> Programs\MyComic\MyComic.lnk
+// (DisableProgramGroupPage only hides the wizard page; the MyComic subfolder
 // still exists). The user's pinned taskbar shortcut is also updated, but only
-// when its target is this running executable so a stale/unrelated Fushi.lnk is
+// when its target is this running executable so a stale/unrelated MyComic.lnk is
 // never rewritten. Returns true if at least one shortcut now carries the icon
 // (rewritten, or already pointing at it).
 bool ApplyShortcutIcon(const std::wstring& icon_path) {
@@ -436,18 +436,18 @@ bool ApplyShortcutIcon(const std::wstring& icon_path) {
     rewritten |= result == ShortcutIconResult::kRewritten;
   };
   const std::wstring desktop_lnk =
-      FushiShortcutInFolder(FOLDERID_Desktop, L"Fushi.lnk");
+      FushiShortcutInFolder(FOLDERID_Desktop, L"MyComic.lnk");
   if (!desktop_lnk.empty()) {
     record(SetShortcutIconLocation(desktop_lnk, icon_path));
   }
-  // Start menu lives under the Fushi program group subfolder, not Programs root.
+  // Start menu lives under the MyComic program group subfolder, not Programs root.
   const std::wstring programs_lnk =
-      FushiShortcutInFolder(FOLDERID_Programs, L"Fushi\\Fushi.lnk");
+      FushiShortcutInFolder(FOLDERID_Programs, L"MyComic\\MyComic.lnk");
   if (!programs_lnk.empty()) {
     record(SetShortcutIconLocation(programs_lnk, icon_path));
   }
   const std::wstring taskbar_lnk = FushiShortcutInFolder(
-      FOLDERID_UserPinned, L"TaskBar\\Fushi.lnk");
+      FOLDERID_UserPinned, L"TaskBar\\MyComic.lnk");
   if (!taskbar_lnk.empty()) {
     record(SetShortcutIconLocation(taskbar_lnk, icon_path, true));
   }

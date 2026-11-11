@@ -2529,7 +2529,7 @@ class ReaderFushiSource extends ReaderMediaSource {
       }
     } catch (e, stack) {
       ErrorLogService.instance.log('ReaderFushiSource.deleteFont', e, stack);
-      debugPrint('[Fushi] failed to delete custom font file $filePath: $e');
+      debugPrint('[MyComic] failed to delete custom font file $filePath: $e');
     }
   }
 

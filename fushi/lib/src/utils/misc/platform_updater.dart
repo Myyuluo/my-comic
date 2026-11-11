@@ -168,9 +168,9 @@ List<String> synthesizeStableAssetNames(String version) {
     // 本行已切 fushi——从本提交发布的最后一个 hibiki-* 名安装包即桥版本，
     // 老用户升到桥后即可识别后续 fushi-* 资产。Android 无更新桥（跨包名不能
     // 就地更新，迁移链即通道），其 APK 行保持旧名直到老包停止发布。
-    'fushi-$version-windows-setup.exe',
-    'fushi-$version-macos-arm64.zip',
-    for (final String abi in kAndroidReleaseAbis) 'fushi-$version-$abi.apk',
+    'mycomic-$version-windows-setup.exe',
+    'mycomic-$version-macos-arm64.zip',
+    for (final String abi in kAndroidReleaseAbis) 'mycomic-$version-$abi.apk',
   ];
   return List<String>.unmodifiable(names);
 }
@@ -186,9 +186,12 @@ PlatformUpdater updaterForCurrentPlatform() {
   return UnsupportedUpdater();
 }
 
-/// 本产品族（`app.fushi.reader`）的发布资产名前缀。CI 对全平台产物统一按
-/// `fushi-<version>-<平台后缀>` 命名，[synthesizeStableAssetNames] 合成的候选名同源。
-const String kFushiAssetPrefix = 'fushi-';
+/// 本产品族的发布资产名前缀。CI 对全平台产物统一按
+/// `mycomic-<version>-<平台后缀>` 命名，[synthesizeStableAssetNames] 合成的候选名同源。
+///
+/// 干净切换：不保留旧 `fushi-` 前缀兼容；旧版客户端无法自动发现新资产，需要手动
+/// 更新/重装一次（ADR 0024）。
+const String kFushiAssetPrefix = 'mycomic-';
 
 /// **纯函数**：资产是否属于本产品族（BUG-1481）。
 ///
@@ -473,7 +476,7 @@ class AndroidInstaller {
 /// - `/SUPPRESSMSGBOXES`：配合 `/VERYSILENT` 抑制 Inno 的错误/选择弹窗，避免
 ///   `DeleteFile failed code 5` 把用户留在 Select action。
 /// - `/NOCLOSEAPPLICATIONS` + `/NOFORCECLOSEAPPLICATIONS`：禁止 Inno /
-///   RestartManager 自动关闭或强制结束任何残留 Fushi / libmpv 持有进程。
+///   RestartManager 自动关闭或强制结束任何残留 MyComic / libmpv 持有进程。
 /// - `/NORESTARTAPPLICATIONS`：不让 RestartManager 自动拉起被它管理的应用。
 /// - `/NORESTART`：禁止安装器重启**操作系统**（我们只想重启 app，不重启系统）。
 /// - `/DIR=`：应用内更新只写当前运行 `fushi.exe` 所在目录，不追随注册表或历史路径。
@@ -940,7 +943,7 @@ class WindowsInstaller {
     // 其他 fushi.exe / WebView2 实例交给安装器自己的 fushi.iss InitializeSetup 处理
     // （先 WM_CLOSE 优雅关闭给落盘机会，再按 image 名强制结束），而不是靠 Inno
     // 的 RestartManager（已用 /NOCLOSEAPPLICATIONS + /NOFORCECLOSEAPPLICATIONS 关掉）。
-    // 只有安装器杀不掉的真外部锁（非 Fushi/WebView2 占用目标目录 libmpv）才在 preflight
+    // 只有安装器杀不掉的真外部锁（非 MyComic/WebView2 占用目标目录 libmpv）才在 preflight
     // 硬中止并要求用户手动关闭（见 _throwIfWindowsInstallBlocked，TODO-1181）。
     await Future<void>.delayed(Duration.zero);
     await WindowsNativePreExit.prepareForExit(WindowsExitReason.update);
@@ -961,12 +964,12 @@ class WindowsInstaller {
   ///
   /// 根因（TODO-1181）：`fushi.iss` 的 `InitializeSetup()` 在 Inno 的 AppMutex 检查
   /// 之前，先对 `fushi.exe` 树发 `WM_CLOSE`（优雅关闭，给正在写 DB 的其他实例落盘机会）、
-  /// 轮询 `FushiSingleInstanceMutex` 释放，再按 image 名强制结束 `fushi.exe` +
-  /// `msedgewebview2.exe`。即安装器本就能自己关掉其他 Fushi 实例并解开 mutex 死锁。旧的
+  /// 轮询 `MyComicSingleInstanceMutex` 释放，再按 image 名强制结束 `fushi.exe` +
+  /// `msedgewebview2.exe`。即安装器本就能自己关掉其他 MyComic 实例并解开 mutex 死锁。旧的
   /// Dart 预检却在**启动安装器之前**就因「检测到其他 fushi.exe」硬 throw，用户永远走不到
   /// 这段自愈，只能被迫手动关进程——是过度防御。故这里改为：安装器杀得掉的占用进程只记警告、
   /// 继续启动安装器交给 `.iss` 处理；只有安装器**确实**处置不掉的外部锁（镜像不在安装目录
-  /// 树内、也不是 Fushi/WebView2 的进程，见 [_installerCanClose]）才保留硬中止。
+  /// 树内、也不是 MyComic/WebView2 的进程，见 [_installerCanClose]）才保留硬中止。
   static void _throwIfWindowsInstallBlocked(
     WindowsInstallerDiagnostics diagnostics,
     String innoLogPath,
@@ -987,7 +990,7 @@ class WindowsInstaller {
       // 由 .iss InitializeSetup 的 WM_CLOSE(优雅落盘)→强杀 序列关掉它们并解开 mutex。
       ErrorLogService.instance.log(
         'WindowsInstaller.installBlockersDeferred',
-        'Other Fushi/WebView2 processes are still running; continuing the '
+        'Other MyComic/WebView2 processes are still running; continuing the '
             'update and letting the installer close them (WM_CLOSE then '
             'force-terminate via fushi.iss). Target: $target. '
             'Deferred: ${_summarizeBlockingProcesses(blockers)}. '
@@ -997,14 +1000,14 @@ class WindowsInstaller {
     }
 
     // 外部锁分两类，**成因与处置都不同**，所以报错必须分开说（BUG-2055）：
-    // ① [WindowsInstallerDiagnostics.galHookModuleHolders] —— 被 Fushi 自己的语音捕获
+    // ① [WindowsInstallerDiagnostics.galHookModuleHolders] —— 被 MyComic 自己的语音捕获
     //   组件注入的程序（游戏，或任何被附着过的窗口）。它持有 `voice_hook/<arch>/` 下的
-    //   hook DLL 直到自身退出，这不是「别的软件在捣乱」，而是 Fushi 注进去的。旧文案把
-    //   所有占用者统称 `non-Fushi process`，等于把成因指向一个与 Fushi 无关的第三方程序 ——
-    //   用户照着这句话去找占用者，永远找不到自己正在玩的那个游戏为什么算「非 Fushi 程序」。
+    //   hook DLL 直到自身退出，这不是「别的软件在捣乱」，而是 MyComic 注进去的。旧文案把
+    //   所有占用者统称 `non-MyComic process`，等于把成因指向一个与 MyComic 无关的第三方程序 ——
+    //   用户照着这句话去找占用者，永远找不到自己正在玩的那个游戏为什么算「非 MyComic 程序」。
     //   手动运行安装器那条路径（`fushi.iss` 的 `LockedGalHookComponent` 提示）早就把成因
     //   讲清楚了；应用内更新是同一件事，不该比它更差。
-    // ② 其余外部锁 —— 真正与 Fushi 无关的进程占住了安装目录里的文件。
+    // ② 其余外部锁 —— 真正与 MyComic 无关的进程占住了安装目录里的文件。
     final Set<int> galHookHolderPids = diagnostics.galHookModuleHolders
         .map((WindowsProcessInfo process) => process.pid)
         .toSet();
@@ -1018,13 +1021,13 @@ class WindowsInstaller {
         .toList(growable: false);
 
     final StringBuffer message = StringBuffer(
-      'Fushi cannot install while another process is using files in the '
+      'MyComic cannot install while another process is using files in the '
       'target directory (the installer cannot close it automatically). '
       'Target: $target. ',
     );
     if (hookHolders.isNotEmpty) {
       message.write(
-        "Fushi's voice capture component is injected into these programs and "
+        "MyComic's voice capture component is injected into these programs and "
         'stays loaded until they exit, so the installer cannot replace it: '
         '${_summarizeBlockingProcesses(hookHolders)}. '
         'Save your progress and close them, then retry the installer. ',
@@ -1032,7 +1035,7 @@ class WindowsInstaller {
     }
     if (otherLocks.isNotEmpty) {
       message.write(
-        'These non-Fushi processes are holding files in the target directory: '
+        'These non-MyComic processes are holding files in the target directory: '
         '${_summarizeBlockingProcesses(otherLocks)}. '
         'Close them manually, then retry the installer. ',
       );
@@ -1048,8 +1051,8 @@ class WindowsInstaller {
   ///   强制结束主模块位于安装目录树内的**任何**进程；唯一被显式跳过的
   ///   `fushi_update_launcher.exe` 由 `MakeWayForRunningLauncher` 改名让路，同样不需要
   ///   用户插手。
-  /// - `InitializeSetup` 另外按 image 名关掉 `fushi.exe` / `hibiki.exe` 和 WebView2 的
-  ///   `msedgewebview2.exe`（WebView2 的镜像不在安装目录里，只能按名字认）。
+  /// - `InitializeSetup` 另外按 image 名关掉 `mycomic.exe` / `fushi.exe` / `hibiki.exe`
+  ///   和 WebView2 的 `msedgewebview2.exe`（WebView2 的镜像不在安装目录里，只能按名字认）。
   ///
   /// 旧实现只认那三个名字，于是安装目录里的其它自有子进程 —— 以 `--hold` 常驻的
   /// `voice_hook/<arch>/fushi_voice_injector.exe`、`unity_audio_runtime/` 下的提取器 ——
@@ -1062,8 +1065,9 @@ class WindowsInstaller {
   }) {
     if (_processImageIsUnderDirectory(process, targetInstallDir)) return true;
     final String name = _windowsImageName(process);
-    // 过渡期两个 exe 名都认（安装器 fushi.iss 会同时结束两者）。
-    return name == 'fushi.exe' ||
+    // 旧版本与过渡期的 exe 名都认（安装器 fushi.iss 会同时结束它们）。
+    return name == 'mycomic.exe' ||
+        name == 'fushi.exe' ||
         name == 'hibiki.exe' ||
         name == 'msedgewebview2.exe';
   }
@@ -1071,7 +1075,7 @@ class WindowsInstaller {
   /// 进程主模块是否位于 [directory] 目录**树内**。
   ///
   /// 必须比到路径分隔符：裸 `startsWith` 会让 `D:\APP\Fushi2\x.exe` 落进
-  /// `D:\APP\Fushi`，把一个真外部锁误判成安装器处理得掉 —— 更新照常交接，随后在复制
+  /// `D:\APP\MyComic`，把一个真外部锁误判成安装器处理得掉 —— 更新照常交接，随后在复制
   /// 阶段失败，而那次失败在 `/VERYSILENT` 下是静默的（BUG-1675 的失败形状）。
   static bool _processImageIsUnderDirectory(
     WindowsProcessInfo process,
@@ -1304,15 +1308,19 @@ String? windowsInstallPathMismatchWarning({
       .map((WindowsDetectedInstallLocation location) =>
           '${location.source}: ${location.path}')
       .join('; ');
-  return 'Install locations differ from the running Fushi directory '
+  return 'Install locations differ from the running MyComic directory '
       '$targetInstallDir. This update will install only to the running '
       'directory. Other locations are left untouched; remove old shortcuts or '
       'old install folders manually if they are no longer needed. Detected: '
       '$details';
 }
 
-/// 我们自己的 image 名（含改名前的旧包，老安装仍在跑 hibiki.exe）。
-const Set<String> kFushiImageNames = <String>{'fushi.exe', 'hibiki.exe'};
+/// 我们自己的 image 名（含改名前的旧包，老安装仍在跑 fushi.exe / hibiki.exe）。
+const Set<String> kFushiImageNames = <String>{
+  'mycomic.exe',
+  'fushi.exe',
+  'hibiki.exe',
+};
 
 /// 走 Win32 快照，**不生成 powershell 子进程**（AV 行为检测把
 /// 「进程 spawn powershell 查全机进程」算成高权重恶意信号，见
@@ -1374,7 +1382,7 @@ Future<List<WindowsProcessInfo>> queryWindowsLibmpvModuleHolders(
 ///   （injector_main.cpp 用法段）；
 /// - `LunaHook*.dll` / `LunaHost*.dll` 由上面两者加载。
 ///
-/// 🔴 这就是 protocol_mismatch 的根因（BUG-1675）：用户在游戏还开着时更新 Fushi，Inno
+/// 🔴 这就是 protocol_mismatch 的根因（BUG-1675）：用户在游戏还开着时更新 MyComic，Inno
 /// 的 `[Files]` 换不掉这些被锁的文件，而应用内更新用的是
 /// `/VERYSILENT /SUPPRESSMSGBOXES`（见 [windowsSilentInstallArgs]），**这次失败是静默的**。
 /// 落地结果是新 `fushi.exe`（读取端编译进当前 `kSharedVersion`）配旧 injector（写出旧版本号
@@ -1461,8 +1469,8 @@ Future<void> ensureWindowsInstallTargetWritable(Directory installDir) async {
   } catch (e) {
     throw UpdateInstallerException(
       'Cannot write to installation directory: ${installDir.path}. '
-      'Close Fushi and run the installer as administrator, or reinstall '
-      'Fushi to a user-writable folder. Details: $e',
+      'Close MyComic and run the installer as administrator, or reinstall '
+      'MyComic to a user-writable folder. Details: $e',
     );
   } finally {
     try {
@@ -1517,7 +1525,7 @@ String buildMacSwapScript({
   final StringBuffer b = StringBuffer();
   b.writeln('#!/bin/sh');
   b.writeln(
-      '# Fushi macOS in-app update swap (Phase 3). Waits for the running');
+      '# MyComic macOS in-app update swap (Phase 3). Waits for the running');
   b.writeln(
       '# app to exit, then swaps the .app bundle and relaunches. Restores');
   b.writeln(
@@ -1539,7 +1547,7 @@ String buildMacSwapScript({
       '# Wait (bounded ~60s) for the parent process to exit. Uses a `ps`');
   b.writeln(
       '# liveness probe (never terminates anything) so the swap only starts');
-  b.writeln('# once Fushi has quit on its own and released the bundle.');
+  b.writeln('# once MyComic has quit on its own and released the bundle.');
   b.writeln('i=0');
   b.writeln(r'while ps -p "$PARENT_PID" > /dev/null 2>&1; do');
   b.writeln(r'  i=$((i + 1))');
@@ -1630,7 +1638,7 @@ class MacInstaller {
     if (appBundle == null) {
       throw UpdateInstallerException(
         'Cannot locate the running .app bundle from "$execPath"; in-app '
-        'update requires Fushi launched as an .app.',
+        'update requires MyComic launched as an .app.',
       );
     }
 

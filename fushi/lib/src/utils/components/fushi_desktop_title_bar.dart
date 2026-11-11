@@ -281,7 +281,7 @@ class _FushiDesktopTitleBarState extends State<FushiDesktopTitleBar>
         _isFocused = state[2];
       });
     } catch (error) {
-      debugPrint('[Fushi] failed to read initial window state: $error');
+      debugPrint('[MyComic] failed to read initial window state: $error');
     }
   }
 
@@ -353,7 +353,7 @@ class _FushiDesktopTitleBarState extends State<FushiDesktopTitleBar>
       if (!mounted || _isMaximized == applied) return;
       setState(() => _isMaximized = applied);
     } catch (error) {
-      debugPrint('[Fushi] failed to toggle window maximize state: $error');
+      debugPrint('[MyComic] failed to toggle window maximize state: $error');
     }
   }
 

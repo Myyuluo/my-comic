@@ -475,7 +475,7 @@ void main() {
       );
 
       expect(running.type, 'app_mutex_running');
-      expect(running.message, contains('FushiSingleInstanceMutex'));
+      expect(running.message, contains('MyComicSingleInstanceMutex'));
       expect(missing.type, 'missing_log');
     });
   });
@@ -619,7 +619,7 @@ void main() {
       expect(startCalled, isFalse);
       expect(record?.installerLaunchSucceeded, isFalse);
       expect(record?.libmpvModuleHolders.single.pid, 9001);
-      expect(record?.launchError, contains('non-Fushi process'));
+      expect(record?.launchError, contains('non-MyComic processes'));
       expect(record?.launchError, contains('Close them manually'));
     });
 
@@ -673,17 +673,17 @@ void main() {
       expect(record?.galHookModuleHolders.single.pid, 7777);
       expect(record?.galHookModuleHolders.single.name, 'SiglusEngine.exe');
       // BUG-2055 —— 报错必须说清成因：占用者不是「某个非 Fushi 程序」，而是被 Fushi
-      // 自己的语音捕获组件注入的程序。旧文案把所有占用者统称 non-Fushi process，
+      // 自己的语音捕获组件注入的程序。旧文案把所有占用者统称 non-MyComic processes，
       // 等于把用户指向一个与 Fushi 无关的第三方，照着这句话永远找不到占用者。
       expect(
         record?.launchError,
-        contains("Fushi's voice capture component is injected"),
+        contains("MyComic's voice capture component is injected"),
       );
       expect(
         record?.launchError,
         contains('Save your progress and close them'),
       );
-      expect(record?.launchError, isNot(contains('non-Fushi process')));
+      expect(record?.launchError, isNot(contains('non-MyComic processes')));
       // 报错不得把占用者说成 libmpv：这次占用的是 helper 组件，指名错组件会把
       // 用户引到完全无关的排查方向。
       expect(record?.launchError, isNot(contains('libmpv')));
@@ -780,7 +780,7 @@ void main() {
       expect(startCalled, isFalse);
       final WindowsUpdateHandoffRecord? record =
           await WindowsUpdateHandoff.read(marker);
-      expect(record?.launchError, contains('non-Fushi process'));
+      expect(record?.launchError, contains('non-MyComic processes'));
     });
 
     test('BUG-1675 galHookModuleHolders 计入锁证据，且 wire 键可往返', () async {
@@ -1382,7 +1382,7 @@ void main() {
       );
 
       expect(summary.type, 'installer_stopped_at_startup');
-      expect(summary.message, contains('FushiSingleInstanceMutex'));
+      expect(summary.message, contains('MyComicSingleInstanceMutex'));
     });
 
     test('走出启动段的日志不算「停在启动段」，空日志不下结论', () {

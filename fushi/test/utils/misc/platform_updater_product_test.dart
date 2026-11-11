@@ -3,7 +3,7 @@ import 'package:fushi/src/utils/misc/platform_updater.dart';
 
 /// BUG-1481 守卫：**自更新绝不选中别的产品族的资产**。
 ///
-/// 改名过渡期同一个 GitHub 仓库里同时躺着三种资产名：本体 `fushi-*`、迁移桥包
+/// 改名过渡期同一个 GitHub 仓库里同时躺着三种资产名：本体 `mycomic-*`、迁移桥包
 /// `hibiki-*`（包名 `app.hibiki.reader`）、以及更早的无前缀历史产物。而挑包判据只看
 /// 平台后缀（`.apk` / `-windows-setup.exe` / `-macos.zip`），三者一律命中。
 ///
@@ -24,9 +24,9 @@ Map<String, dynamic> _asset(String name) => <String, dynamic>{
 void main() {
   group('assetBelongsToThisProduct（纯函数）', () {
     test('只认本族前缀', () {
-      expect(assetBelongsToThisProduct('fushi-1.4.0-arm64-v8a.apk'), isTrue);
+      expect(assetBelongsToThisProduct('mycomic-1.4.0-arm64-v8a.apk'), isTrue);
       expect(
-          assetBelongsToThisProduct('fushi-1.4.0-windows-setup.exe'), isTrue);
+          assetBelongsToThisProduct('mycomic-1.4.0-windows-setup.exe'), isTrue);
     });
 
     test('拒绝桥包族与无前缀历史产物', () {
@@ -39,7 +39,7 @@ void main() {
     });
 
     test('不能靠子串蒙混：前缀必须在开头', () {
-      expect(assetBelongsToThisProduct('hibiki-fushi-1.4.0-arm64-v8a.apk'),
+      expect(assetBelongsToThisProduct('hibiki-mycomic-1.4.0-arm64-v8a.apk'),
           isFalse);
     });
   });
@@ -89,20 +89,20 @@ void main() {
         <Map<String, dynamic>>[
           // 别族排在前面：顺序不能决定结果。
           _asset('hibiki-1.2.0-arm64-v8a.apk'),
-          _asset('fushi-1.4.0-arm64-v8a.apk'),
+          _asset('mycomic-1.4.0-arm64-v8a.apk'),
         ],
       );
-      expect(picked?.name, 'fushi-1.4.0-arm64-v8a.apk');
+      expect(picked?.name, 'mycomic-1.4.0-arm64-v8a.apk');
     });
 
     test('Windows 跳过 hibiki setup 选中 fushi setup', () async {
       final UpdateAsset? picked = await WindowsUpdater().selectAsset(
         <Map<String, dynamic>>[
           _asset('hibiki-1.2.0-windows-setup.exe'),
-          _asset('fushi-1.4.0-windows-setup.exe'),
+          _asset('mycomic-1.4.0-windows-setup.exe'),
         ],
       );
-      expect(picked?.name, 'fushi-1.4.0-windows-setup.exe');
+      expect(picked?.name, 'mycomic-1.4.0-windows-setup.exe');
     });
 
     test('debug 通道同样只在本族里挑', () async {
@@ -112,11 +112,11 @@ void main() {
       final UpdateAsset? picked = await updater.selectAsset(
         <Map<String, dynamic>>[
           _asset('hibiki-1.2.0-abc1234-debug.apk'),
-          _asset('fushi-1.4.0-debug.10332-2cddfff-debug.apk'),
+          _asset('mycomic-1.4.0-debug.10332-2cddfff-debug.apk'),
         ],
         channel: UpdateChannel.debug,
       );
-      expect(picked?.name, 'fushi-1.4.0-debug.10332-2cddfff-debug.apk');
+      expect(picked?.name, 'mycomic-1.4.0-debug.10332-2cddfff-debug.apk');
     });
   });
 
