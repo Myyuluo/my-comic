@@ -2,6 +2,13 @@ import 'dart:convert';
 
 import 'package:fushi/src/utils/misc/platform_updater.dart';
 
+/// 更新检查的发布源仓库标识。
+///
+/// 缓存条目随结果一起记录它来自哪个更新源；读取时按当前源校验。旧版上游
+/// `hajisensai/fushi` 的缓存没有这个字段（或值不同），一律视为无缓存——否则
+/// my-comic 1.0.0 会在联网检查前就显示上游 3.x「有新版本」。
+const String kUpdateCheckSourceRepository = 'Myyuluo/my-comic';
+
 /// TODO-1024 / BUG-479：app 自更新「检查更新」的**结果缓存**。
 ///
 /// 根因：旧 `UpdateChecker._check` 每次都冷查 GitHub（新建 `HttpClient`、对直连 + 镜像
@@ -20,6 +27,7 @@ class UpdateCheckCacheEntry {
     required this.latestTag,
     required this.htmlUrl,
     required this.channel,
+    this.repository = kUpdateCheckSourceRepository,
   });
 
   /// 上次成功完成网络检查的时刻（毫秒 epoch，UTC）。
@@ -34,6 +42,11 @@ class UpdateCheckCacheEntry {
   /// 该缓存条目所属的更新通道（stable/beta/debug）——通道不同结果不同，必须分流。
   final UpdateChannel channel;
 
+  /// 产生该结果的更新源仓库（如 `Myyuluo/my-comic`）。
+  ///
+  /// 旧版缓存缺这个字段；[decode] 直接按无缓存处理，避免上游发布线串入 fork。
+  final String repository;
+
   /// 上次检查时刻（本地时区 [DateTime]）。
   DateTime get lastCheckTime =>
       DateTime.fromMillisecondsSinceEpoch(lastCheckEpochMs, isUtc: true)
@@ -44,6 +57,7 @@ class UpdateCheckCacheEntry {
         'latestTag': latestTag,
         'htmlUrl': htmlUrl,
         'channel': channel.name,
+        'repository': repository,
       };
 
   /// 编码成可落 `preferences` 表的 JSON 字符串。
@@ -70,6 +84,11 @@ class UpdateCheckCacheEntry {
     final UpdateChannel? channel = _channelFromName(channelRaw);
     if (channel == null) return null;
 
+    // 旧版 / 上游缓存没有 repository（或值为空）：按无缓存处理，绝不把上游
+    // 3.x 的检查结果当成 fork 的当前版本。
+    final Object? repoRaw = decoded['repository'];
+    if (repoRaw is! String || repoRaw.isEmpty) return null;
+
     final Object? epochRaw = decoded['lastCheckEpochMs'];
     final int epoch = epochRaw is int
         ? epochRaw
@@ -85,6 +104,7 @@ class UpdateCheckCacheEntry {
       latestTag: tagRaw,
       htmlUrl: html,
       channel: channel,
+      repository: repoRaw,
     );
   }
 
@@ -101,15 +121,18 @@ class UpdateCheckCacheEntry {
 /// 字段——读时按当前通道比对，通道不匹配等价「无缓存」，绝不跨通道误用）。
 const String updateCheckCachePrefKey = 'update_check_cache';
 
-/// **纯函数**：读出的缓存条目是否可用于「当前通道」的乐观决定/显示。
+/// **纯函数**：读出的缓存条目是否可用于「当前通道 + 当前更新源」的乐观决定/显示。
 ///
-/// 条目通道 ≠ 当前查询通道时返回 `null`（视作无缓存），避免把 stable 的缓存误当 beta 用。
+/// 条目通道 ≠ 当前查询通道、或产生条目的仓库 ≠ 当前更新源时返回 `null`（视作
+/// 无缓存），避免把 stable 的缓存误当 beta 用，也避免旧上游发布线串入 fork。
 UpdateCheckCacheEntry? cachedEntryForChannel(
   UpdateCheckCacheEntry? entry,
-  UpdateChannel channel,
-) {
+  UpdateChannel channel, {
+  String repository = kUpdateCheckSourceRepository,
+}) {
   if (entry == null) return null;
   if (entry.channel != channel) return null;
+  if (entry.repository != repository) return null;
   return entry;
 }
 

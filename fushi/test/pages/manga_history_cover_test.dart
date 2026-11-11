@@ -286,6 +286,21 @@ void main() {
     expect(entries.single.coverUrl, 'https://source.test/remote.jpg');
   });
 
+  test('未注入 shelf cover service 时保留旧的远程回退（unknown）', () async {
+    await _seedHistory(
+      db,
+      root,
+      seriesCoverUrl: 'https://source.test/remote.jpg',
+    );
+
+    // 旧调用方 / 启动早期没有来源可用性信息：unknown 显式保留远程回退，
+    // 而不是把「无法判定」隐式当成 true/false。
+    final List<MangaHistoryEntry> entries = await loadMangaHistory(db);
+
+    expect(entries.single.coverFilePath, isNull);
+    expect(entries.single.coverUrl, 'https://source.test/remote.jpg');
+  });
+
   test('无 Library 行时也按快照来源可用性跳过远程 URL', () async {
     final OnlineMangaLibraryEntry entry = _onlineEntry(
       coverUrl: 'https://source.test/remote.jpg',

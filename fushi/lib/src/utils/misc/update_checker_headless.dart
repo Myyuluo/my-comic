@@ -188,6 +188,7 @@ abstract final class HeadlessUpdateFlow {
           latestTag: selection.version,
           htmlUrl: selection.htmlUrl ?? '',
           channel: channel,
+          repository: kGitHubRepo,
         ));
       }
       if (!isUpdateVersionNewer(selection.version, currentVersion, channel,

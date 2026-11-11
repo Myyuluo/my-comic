@@ -25,6 +25,8 @@ void main() {
       expect(back.latestTag, entry.latestTag);
       expect(back.htmlUrl, entry.htmlUrl);
       expect(back.channel, entry.channel);
+      expect(back.repository, entry.repository);
+      expect(back.repository, kUpdateCheckSourceRepository);
     });
 
     test('beta/debug 通道编码进 channel 字段', () {
@@ -68,11 +70,13 @@ void main() {
 
     test('缺 latestTag / 空 latestTag → null', () {
       expect(
-        UpdateCheckCacheEntry.decode('{"channel":"stable","latestTag":""}'),
+        UpdateCheckCacheEntry.decode(
+            '{"channel":"stable","repository":"Myyuluo/my-comic","latestTag":""}'),
         isNull,
       );
       expect(
-        UpdateCheckCacheEntry.decode('{"channel":"stable"}'),
+        UpdateCheckCacheEntry.decode(
+            '{"channel":"stable","repository":"Myyuluo/my-comic"}'),
         isNull,
       );
     });
@@ -80,12 +84,12 @@ void main() {
     test('通道名不识别 → null', () {
       expect(
         UpdateCheckCacheEntry.decode(
-            '{"channel":"nightly","latestTag":"v1.0.0"}'),
+            '{"channel":"nightly","repository":"Myyuluo/my-comic","latestTag":"v1.0.0"}'),
         isNull,
       );
       expect(
         UpdateCheckCacheEntry.decode(
-            '{"latestTag":"v1.0.0","lastCheckEpochMs":1}'),
+            '{"repository":"Myyuluo/my-comic","latestTag":"v1.0.0","lastCheckEpochMs":1}'),
         isNull,
         reason: '缺 channel 字段也视作无缓存',
       );
@@ -93,21 +97,66 @@ void main() {
 
     test('epoch 缺失 → 0；epoch 为 num → 截断为 int', () {
       final UpdateCheckCacheEntry? a = UpdateCheckCacheEntry.decode(
-          '{"channel":"stable","latestTag":"v1.0.0"}');
+          '{"channel":"stable","repository":"Myyuluo/my-comic","latestTag":"v1.0.0"}');
       expect(a, isNotNull);
       expect(a!.lastCheckEpochMs, 0);
 
       final UpdateCheckCacheEntry? b = UpdateCheckCacheEntry.decode(
-          '{"channel":"stable","latestTag":"v1.0.0","lastCheckEpochMs":12.0}');
+          '{"channel":"stable","repository":"Myyuluo/my-comic","latestTag":"v1.0.0","lastCheckEpochMs":12.0}');
       expect(b, isNotNull);
       expect(b!.lastCheckEpochMs, 12);
     });
 
     test('htmlUrl 缺失 → 空串', () {
       final UpdateCheckCacheEntry? e = UpdateCheckCacheEntry.decode(
-          '{"channel":"beta","latestTag":"1.0.0-beta.1"}');
+          '{"channel":"beta","repository":"Myyuluo/my-comic","latestTag":"1.0.0-beta.1"}');
       expect(e, isNotNull);
       expect(e!.htmlUrl, '');
+    });
+  });
+
+  group('更新源隔离（fork vs 旧上游缓存）', () {
+    const String legacyUpstreamCache =
+        '{"channel":"stable","latestTag":"v3.0.0","lastCheckEpochMs":1719705600000}';
+
+    test('旧上游缓存没有 repository → decode 为 null（不显示 Update 3.x）', () {
+      expect(UpdateCheckCacheEntry.decode(legacyUpstreamCache), isNull);
+    });
+
+    test('旧上游缓存即使显式带 repo 也不被 fork 使用', () {
+      const UpdateCheckCacheEntry upstream = UpdateCheckCacheEntry(
+        lastCheckEpochMs: 1719705600000,
+        latestTag: 'v3.0.0',
+        htmlUrl: 'https://github.com/hajisensai/fushi/releases/tag/v3.0.0',
+        channel: UpdateChannel.stable,
+        repository: 'hajisensai/fushi',
+      );
+      expect(
+        cachedEntryForChannel(
+          upstream,
+          UpdateChannel.stable,
+          repository: kUpdateCheckSourceRepository,
+        ),
+        isNull,
+        reason: '更新源不同 = 无可用缓存，必须联网重新检查 fork release',
+      );
+    });
+
+    test('fork 缓存命中当前更新源时可用', () {
+      const UpdateCheckCacheEntry fork = UpdateCheckCacheEntry(
+        lastCheckEpochMs: 1719705600000,
+        latestTag: 'v1.0.1',
+        htmlUrl: 'https://github.com/Myyuluo/my-comic/releases/tag/v1.0.1',
+        channel: UpdateChannel.stable,
+      );
+      expect(
+        cachedEntryForChannel(
+          fork,
+          UpdateChannel.stable,
+          repository: kUpdateCheckSourceRepository,
+        ),
+        same(fork),
+      );
     });
   });
 

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 
+import 'package:fushi/src/media/manga/cookie/manga_web_view_environment.dart';
 import 'package:fushi/src/storage/manga_cache_clear_service.dart';
 import 'package:fushi/src/storage/manga_webview_cache_clear.dart';
 
@@ -13,6 +14,9 @@ import 'package:fushi/src/storage/manga_webview_cache_clear.dart';
 /// 某个 profile 失败时继续清其余 profile 并报告部分成功；绝不删除 WebView2
 /// 数据目录（cookies / localStorage / IndexedDB / Preferences 保留）。
 void main() {
+  setUp(() => MangaWebViewEnvironment.debugSetCurrentUserDataFolder(null));
+  tearDown(() => MangaWebViewEnvironment.debugSetCurrentUserDataFolder(null));
+
   test('清理默认与漫画 WebView profile，并销毁临时 headless 会话', () async {
     final _FakeSession defaultSession = _FakeSession('default');
     final _FakeSession mangaSession = _FakeSession('manga');
@@ -46,32 +50,39 @@ void main() {
     addTearDown(() {
       if (stateRoot.existsSync()) stateRoot.deleteSync(recursive: true);
     });
-    void write(String relative, int bytes) {
-      final File file = File(
-        p.joinAll(<String>[stateRoot.path, ...relative.split('/')]),
-      )..createSync(recursive: true);
-      file.writeAsBytesSync(List<int>.filled(bytes, 0x41));
-    }
 
     // 默认 profile 的 HTTP cache：CDP `Network.clearBrowserCache` 会清掉。
-    write('webview2/EBWebView/Default/Cache/data_0', 100);
-    write('webview2/EBWebView/Default/Cache/Cache_Data/f_000001', 50);
+    _write(stateRoot, 'webview2/EBWebView/Default/Cache/data_0', 100);
+    _write(
+      stateRoot,
+      'webview2/EBWebView/Default/Cache/Cache_Data/f_000001',
+      50,
+    );
     // GPU / Shader / Dawn / Code Cache 是运行时组件，CDP 不清，不得计入。
-    write('webview2/EBWebView/Default/Code Cache/js/data_0', 20);
-    write('webview2/EBWebView/Default/GPUCache/data_0', 25);
-    write('webview2/EBWebView/Default/DawnCache/data_0', 10);
-    write('webview2/EBWebView/Default/GrShaderCache/data_0', 10);
-    write('webview2/EBWebView/Default/ShaderCache/data_0', 10);
-    write('webview2/EBWebView/GrShaderCache/data_0', 10);
-    write('webview2/EBWebView/ShaderCache/data_0', 10);
-    // 漫画 profile，包含按代理参数派生后缀的兄弟目录。
-    write('webview2-manga/EBWebView/Default/Cache/data_0', 200);
-    write('webview2-manga-ab12/EBWebView/Default/Cache/data_0', 300);
+    _write(stateRoot, 'webview2/EBWebView/Default/Code Cache/js/data_0', 20);
+    _write(stateRoot, 'webview2/EBWebView/Default/GPUCache/data_0', 25);
+    _write(stateRoot, 'webview2/EBWebView/Default/DawnCache/data_0', 10);
+    _write(stateRoot, 'webview2/EBWebView/Default/GrShaderCache/data_0', 10);
+    _write(stateRoot, 'webview2/EBWebView/Default/ShaderCache/data_0', 10);
+    _write(stateRoot, 'webview2/EBWebView/GrShaderCache/data_0', 10);
+    _write(stateRoot, 'webview2/EBWebView/ShaderCache/data_0', 10);
+    // 漫画 profile 的当前目录。
+    _write(stateRoot, 'webview2-manga/EBWebView/Default/Cache/data_0', 200);
+    // 旧代理参数留下的兄弟目录：当前环境不会清理它，不得计入占用。
+    _write(
+      stateRoot,
+      'webview2-manga-ab12/EBWebView/Default/Cache/data_0',
+      300,
+    );
     // 登录态与站点数据绝不计入占用。
-    write('webview2/EBWebView/Default/Network/Cookies', 999);
-    write('webview2/EBWebView/Default/Local Storage/leveldb/000003.log', 999);
-    write('webview2/EBWebView/Default/IndexedDB/source/LOG', 999);
-    write('webview2/EBWebView/Default/Preferences', 999);
+    _write(stateRoot, 'webview2/EBWebView/Default/Network/Cookies', 999);
+    _write(
+      stateRoot,
+      'webview2/EBWebView/Default/Local Storage/leveldb/000003.log',
+      999,
+    );
+    _write(stateRoot, 'webview2/EBWebView/Default/IndexedDB/source/LOG', 999);
+    _write(stateRoot, 'webview2/EBWebView/Default/Preferences', 999);
 
     final MangaWebViewCacheClearStep step = MangaWebViewCacheClearStep(
       id: 'webview_http',
@@ -79,7 +90,45 @@ void main() {
       profiles: buildMangaWebViewCacheProfiles(stateRoot: stateRoot),
     );
 
-    expect(await step.measureBytes(), 650);
+    expect(
+      await step.measureBytes(),
+      350,
+      reason: '只统计当前环境的 HTTP cache：150 默认 + 200 漫画；'
+          '旧 webview2-manga-ab12 的 300 不再被清理，不能计入',
+    );
+  });
+
+  test('测量跟随当前漫画环境目录，而不是汇总全部 webview2-manga* 兄弟', () async {
+    final Directory stateRoot = Directory.systemTemp.createTempSync(
+      'manga_webview_active_',
+    );
+    addTearDown(() {
+      if (stateRoot.existsSync()) stateRoot.deleteSync(recursive: true);
+    });
+    _write(stateRoot, 'webview2/EBWebView/Default/Cache/data_0', 100);
+    _write(stateRoot, 'webview2-manga/EBWebView/Default/Cache/data_0', 200);
+    _write(
+      stateRoot,
+      'webview2-manga-ab12/EBWebView/Default/Cache/data_0',
+      300,
+    );
+    // 换代理参数后 environment 落到派生兄弟目录：只有它会被清理。
+    final Directory active = Directory(
+      p.join(stateRoot.path, 'webview2-manga-ab12'),
+    );
+    MangaWebViewEnvironment.debugSetCurrentUserDataFolder(active.path);
+
+    final MangaWebViewCacheClearStep step = MangaWebViewCacheClearStep(
+      id: 'webview_http',
+      label: 'WebView cache',
+      profiles: buildMangaWebViewCacheProfiles(stateRoot: stateRoot),
+    );
+
+    expect(
+      await step.measureBytes(),
+      400,
+      reason: '100 默认 + 300 当前 manga 环境；基础 webview2-manga 的 200 是旧目录',
+    );
   });
 
   test('WebView 清理返回真实释放字节', () async {
@@ -89,17 +138,14 @@ void main() {
     addTearDown(() {
       if (stateRoot.existsSync()) stateRoot.deleteSync(recursive: true);
     });
-    File write(String relative, int bytes) {
-      final File file = File(
-        p.joinAll(<String>[stateRoot.path, ...relative.split('/')]),
-      )..createSync(recursive: true);
-      file.writeAsBytesSync(List<int>.filled(bytes, 0x41));
-      return file;
-    }
 
-    write('webview2/EBWebView/Default/Cache/data_0', 100);
-    write('webview2/EBWebView/Default/Cache/Cache_Data/f_000001', 50);
-    write('webview2-manga/EBWebView/Default/Cache/data_0', 200);
+    _write(stateRoot, 'webview2/EBWebView/Default/Cache/data_0', 100);
+    _write(
+      stateRoot,
+      'webview2/EBWebView/Default/Cache/Cache_Data/f_000001',
+      50,
+    );
+    _write(stateRoot, 'webview2-manga/EBWebView/Default/Cache/data_0', 200);
     final Directory defaultFolder = Directory(
       p.join(stateRoot.path, 'webview2'),
     );
@@ -128,7 +174,7 @@ void main() {
               onClear: () => deleteHttpCache(defaultHttpCache),
             ),
           ),
-          cacheDirectories: mangaWebViewSafeCacheDirectories(defaultFolder),
+          cacheDirectories: mangaWebViewClearableCacheDirectories(defaultFolder),
         ),
         MangaWebViewCacheProfile(
           id: 'manga',
@@ -138,7 +184,7 @@ void main() {
               onClear: () => deleteHttpCache(mangaHttpCache),
             ),
           ),
-          cacheDirectories: mangaWebViewSafeCacheDirectories(mangaFolder),
+          cacheDirectories: mangaWebViewClearableCacheDirectories(mangaFolder),
         ),
       ],
     );
@@ -160,16 +206,9 @@ void main() {
     });
     final Directory stateRoot = Directory(p.join(tmp.path, 'state'))
       ..createSync(recursive: true);
-    File write(String relative, int bytes) {
-      final File file = File(
-        p.joinAll(<String>[tmp.path, ...relative.split('/')]),
-      )..createSync(recursive: true);
-      file.writeAsBytesSync(List<int>.filled(bytes, 0x41));
-      return file;
-    }
 
-    write('state/webview2/EBWebView/Default/Cache/data_0', 100);
-    write('state/webview2-manga/EBWebView/Default/Cache/data_0', 200);
+    _write(tmp, 'state/webview2/EBWebView/Default/Cache/data_0', 100);
+    _write(tmp, 'state/webview2-manga/EBWebView/Default/Cache/data_0', 200);
     final Directory defaultHttpCache = Directory(
       p.join(stateRoot.path, 'webview2', 'EBWebView', 'Default', 'Cache'),
     );
@@ -190,7 +229,7 @@ void main() {
     };
     final Map<String, File> preservedFiles = <String, File>{
       for (final MapEntry<String, int> entry in preserved.entries)
-        entry.key: write(entry.key, entry.value),
+        entry.key: _write(tmp, entry.key, entry.value),
     };
 
     final MangaWebViewCacheClearStep step = MangaWebViewCacheClearStep(
@@ -203,7 +242,7 @@ void main() {
             openHeadless: () async =>
                 _FakeSession('default', clearError: StateError('CDP failed')),
           ),
-          cacheDirectories: mangaWebViewSafeCacheDirectories(
+          cacheDirectories: mangaWebViewClearableCacheDirectories(
             Directory(p.join(stateRoot.path, 'webview2')),
           ),
         ),
@@ -219,7 +258,7 @@ void main() {
               },
             ),
           ),
-          cacheDirectories: mangaWebViewSafeCacheDirectories(
+          cacheDirectories: mangaWebViewClearableCacheDirectories(
             Directory(p.join(stateRoot.path, 'webview2-manga')),
           ),
         ),
@@ -446,6 +485,50 @@ void main() {
       <String>['default', 'manga'],
     );
   });
+
+  test('文件系统测量失败按 0 计，不阻断清理', () async {
+    final _FakeSession session = _FakeSession('default');
+    final MangaWebViewCacheClearStep step = MangaWebViewCacheClearStep(
+      id: 'webview_http',
+      label: 'WebView cache',
+      profiles: <MangaWebViewCacheProfile>[
+        _profile('default', session, <String>[]),
+      ],
+      measureDirectories: (List<Directory> _) async =>
+          throw const FileSystemException('permission denied'),
+    );
+
+    expect(await step.measureBytes(), 0);
+    final MangaCacheClearStepResult result = await step.clear();
+
+    expect(result.freedBytes, 0, reason: '测量失败时无法证明释放量，按 0 计');
+    expect(result.failedEntries, 0, reason: '测量失败不等于清理失败');
+    expect(session.clearCalls, 1, reason: '测量失败不得跳过真正的清理');
+  });
+
+  test('意外测量异常不被「按 0 计」掩盖', () async {
+    final MangaWebViewCacheClearStep step = MangaWebViewCacheClearStep(
+      id: 'webview_http',
+      label: 'WebView cache',
+      profiles: const <MangaWebViewCacheProfile>[],
+      measureDirectories: (List<Directory> _) async =>
+          throw StateError('unexpected measurement bug'),
+    );
+
+    await expectLater(
+      step.measureBytes(),
+      throwsA(isA<StateError>()),
+      reason: '只有 FileSystemException 可以降级为 0，编程错误必须暴露',
+    );
+  });
+}
+
+File _write(Directory root, String relative, int bytes) {
+  final File file = File(
+    p.joinAll(<String>[root.path, ...relative.split('/')]),
+  )..createSync(recursive: true);
+  file.writeAsBytesSync(List<int>.filled(bytes, 0x41));
+  return file;
 }
 
 MangaWebViewCacheProfile _profile(

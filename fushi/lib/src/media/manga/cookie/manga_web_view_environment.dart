@@ -42,6 +42,21 @@ abstract final class MangaWebViewEnvironment {
   static WebViewEnvironment? _current;
   static String? _currentArguments;
 
+  /// 当前活动的漫画环境实际使用的 user data folder；从未成功创建过为 null。
+  ///
+  /// 「清除缓存」只统计这个目录下的 HTTP cache：换代理参数后 environment 会落到
+  /// 带哈希后缀的兄弟目录，旧目录不会再被清理，不能继续计入占用。
+  static String? _currentUserDataFolder;
+
+  /// 当前漫画环境的 user data folder（诊断 / 清缓存计量）。null = 尚未创建。
+  static String? get currentUserDataFolder => _currentUserDataFolder;
+
+  /// 测试注入「当前环境目录」，不真的创建 WebView2 环境。
+  @visibleForTesting
+  static void debugSetCurrentUserDataFolder(String? path) {
+    _currentUserDataFolder = path;
+  }
+
   /// 测试 / 非 Windows 的旁路：返回 null = 让 `InAppWebView` 与 `CookieManager`
   /// 都走各自的平台默认（Android / iOS / macOS 那边 cookie 由系统 WebView 持有，
   /// 本来就是同一份）。
@@ -110,6 +125,7 @@ abstract final class MangaWebViewEnvironment {
   static Future<WebViewEnvironment?> _create(String arguments) async {
     final WebViewEnvironment? previous = _current;
     _current = null;
+    _currentUserDataFolder = null;
     if (previous != null) {
       try {
         await previous.dispose();
@@ -133,6 +149,7 @@ abstract final class MangaWebViewEnvironment {
           ),
         );
         _current = created;
+        _currentUserDataFolder = _userDataFolder(suffix: suffix);
         return created;
       } on MissingPluginException {
         // 没有平台实现（widget 测试）：走默认。

@@ -6,10 +6,7 @@ part of 'update_checker.dart';
 /// 仓库没有可用 release（404 / 空列表 / 无匹配通道）时按「已是最新」处理：
 /// 更新检查返回空列表，`selectUpdateReleaseForCurrentPlatform` 选不出任何 release，
 /// 手动检查走 `onUpToDate` 而不是报错。
-const String kGitHubRepo = 'Myyuluo/my-comic';
-
-@visibleForTesting
-const List<String> kGitHubRepoFallbacks = <String>[kGitHubRepo];
+const String kGitHubRepo = kUpdateCheckSourceRepository;
 
 final RegExp _kBetaReleaseTagPattern = RegExp(r'^v\d+(?:\.\d+)*-beta\.\d+$');
 final RegExp _kDebugReleaseTagPattern =
@@ -352,6 +349,7 @@ class UpdateChecker {
           latestTag: version,
           htmlUrl: (json['html_url'] as String?) ?? '',
           channel: channel,
+          repository: kGitHubRepo,
         );
         try {
           await cacheWriter(entry);
@@ -508,21 +506,12 @@ class UpdateChecker {
     );
   }
 
-  static Future<String?> _httpGetStringFromGitHubRepos(
+  static Future<String?> _httpGetStringFromGitHubRepo(
     HttpClient client,
     String Function(String repo) urlForRepo, {
     Map<String, String> headers = const {},
-  }) async {
-    for (final String repo in kGitHubRepoFallbacks) {
-      final String? body = await _httpGetString(
-        client,
-        urlForRepo(repo),
-        headers: headers,
-      );
-      if (body != null) return body;
-    }
-    return null;
-  }
+  }) =>
+      _httpGetString(client, urlForRepo(kGitHubRepo), headers: headers);
 
   /// 单个候选 URL 的一次抓取：HTTP 200 返回响应体，否则返回 null（让回退继续）。
   /// 带 [_kPerAttemptTimeout] 整体超时——TCP 连上却挂起的镜像会被判死并回退。
@@ -598,7 +587,7 @@ class UpdateChecker {
       return <Map<String, dynamic>>[manifestRelease];
     }
 
-    final body = await _httpGetStringFromGitHubRepos(
+    final body = await _httpGetStringFromGitHubRepo(
       client,
       (String repo) =>
           'https://api.github.com/repos/$repo/releases?per_page=20',
@@ -622,17 +611,15 @@ class UpdateChecker {
     HttpClient client,
     UpdateChannel channel,
   ) async {
-    for (final MapEntry<String, String> candidate
-        in manifestUrlsForChannel(channel).entries) {
-      final String? body = await _httpGetString(client, candidate.value);
-      if (body == null) continue;
-      final Map<String, dynamic>? release =
-          buildReleaseFromManifest(body, repo: candidate.key);
-      if (release == null) continue;
-      if (!releaseMatchesUpdateChannel(release, channel)) continue;
-      return release;
-    }
-    return null;
+    final String? url = manifestUrlForChannel(channel);
+    if (url == null) return null;
+    final String? body = await _httpGetString(client, url);
+    if (body == null) return null;
+    final Map<String, dynamic>? release =
+        buildReleaseFromManifest(body, repo: kGitHubRepo);
+    if (release == null) return null;
+    if (!releaseMatchesUpdateChannel(release, channel)) return null;
+    return release;
   }
 
   /// stable 通道检查（TODO-404 根因修复）：**优先**走 `github.com/.../releases/latest`
@@ -661,7 +648,7 @@ class UpdateChecker {
   /// 原 `api.github.com/.../releases/latest` 直连路径（保留作 302 失败后的回退）。
   static Future<Map<String, dynamic>?> _fetchStableReleaseViaApi(
       HttpClient client) async {
-    final body = await _httpGetStringFromGitHubRepos(
+    final body = await _httpGetStringFromGitHubRepo(
       client,
       (String repo) => 'https://api.github.com/repos/$repo/releases/latest',
       headers: {'Accept': 'application/vnd.github+json'},
@@ -683,28 +670,25 @@ class UpdateChecker {
   /// 全失败才失败 / 失败记日志」不变式（与 [_httpGetString] 同一范式）。
   static Future<_StableRedirectTag?> _fetchStableTagViaRedirect(
       HttpClient client) async {
-    for (final String repo in kGitHubRepoFallbacks) {
-      final String? tag = await fetchFirstSuccessfulBody(
-        updateCheckUrls(stableReleasesLatestUrlForRepo(repo)),
-        fetch: (String u) => _fetchRedirectTagOne(client, u),
-        onFailure: (String host, Object? error) {
-          if (error == null || isExpectedUpdateNetworkFailure(error)) {
-            // TODO-1083：见上——预期的镜像不可达降级为诊断，不进用户可见报错日志。
-            ErrorLogService.instance.logDiagnostic(
-                'UpdateChecker.redirectTag',
-                t.update_network_failure(
-                  host: host,
-                  reason: describeUpdateNetworkFailureReason(error),
-                ));
-          } else {
-            ErrorLogService.instance.log('UpdateChecker.redirectTag', error);
-          }
-          debugPrint('[Fushi] update redirect-tag failed ($host): $error');
-        },
-      );
-      if (tag != null) return _StableRedirectTag(repo: repo, tag: tag);
-    }
-    return null;
+    final String? tag = await fetchFirstSuccessfulBody(
+      updateCheckUrls(stableReleasesLatestUrlForRepo(kGitHubRepo)),
+      fetch: (String u) => _fetchRedirectTagOne(client, u),
+      onFailure: (String host, Object? error) {
+        if (error == null || isExpectedUpdateNetworkFailure(error)) {
+          // TODO-1083：见上——预期的镜像不可达降级为诊断，不进用户可见报错日志。
+          ErrorLogService.instance.logDiagnostic(
+              'UpdateChecker.redirectTag',
+              t.update_network_failure(
+                host: host,
+                reason: describeUpdateNetworkFailureReason(error),
+              ));
+        } else {
+          ErrorLogService.instance.log('UpdateChecker.redirectTag', error);
+        }
+        debugPrint('[Fushi] update redirect-tag failed ($host): $error');
+      },
+    );
+    return tag == null ? null : _StableRedirectTag(repo: kGitHubRepo, tag: tag);
   }
 
   /// 单个候选 URL 的「读 302 → 解析 tag」一次尝试：关闭重定向跟随，3xx 且
@@ -1593,25 +1577,15 @@ const int kUpdateManifestSchemaVersion = 1;
 
 /// **纯函数**：按通道返回镜像清单 URL（TODO-705 / BUG-846）。三通道均有 manifest
 /// （stable 读它拿正式版 seq；读不到再回退 302）。
+///
+/// 更新源已收敛为单一 fork 仓库 [kGitHubRepo]，不再维护「仓库 → URL」的单 key
+/// map；需要换源时改 [kGitHubRepo] 与这里的三个常量即可。
 @visibleForTesting
 String? manifestUrlForChannel(UpdateChannel channel) {
-  final Map<String, String> urls = manifestUrlsForChannel(channel);
-  if (urls.isEmpty) return null;
-  return urls.values.first;
-}
-
-@visibleForTesting
-Map<String, String> manifestUrlsForChannel(UpdateChannel channel) {
   return switch (channel) {
-    UpdateChannel.beta => const <String, String>{
-        kGitHubRepo: kBetaManifestUrl,
-      },
-    UpdateChannel.debug => const <String, String>{
-        kGitHubRepo: kDebugManifestUrl,
-      },
-    UpdateChannel.stable => const <String, String>{
-        kGitHubRepo: kStableManifestUrl,
-      },
+    UpdateChannel.beta => kBetaManifestUrl,
+    UpdateChannel.debug => kDebugManifestUrl,
+    UpdateChannel.stable => kStableManifestUrl,
   };
 }
 

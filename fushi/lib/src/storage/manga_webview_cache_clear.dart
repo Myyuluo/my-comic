@@ -19,6 +19,7 @@ library;
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter_inappwebview/flutter_inappwebview.dart';
 import 'package:path/path.dart' as p;
 
@@ -79,6 +80,7 @@ class MangaWebViewCacheClearStep extends MangaCacheClearStep {
     this.supported = true,
     this.clearTimeout = const Duration(seconds: 30),
     this.disposeTimeout = const Duration(seconds: 10),
+    this.measureDirectories = mangaCacheDirectorySize,
   });
 
   @override
@@ -98,20 +100,30 @@ class MangaWebViewCacheClearStep extends MangaCacheClearStep {
   /// 临时 WebView 销毁的上限。
   final Duration disposeTimeout;
 
+  /// 目录大小测量缝；默认 [mangaCacheDirectorySize]。测试注入以区分
+  /// 「文件系统读失败」（按 0 计）与意外异常（必须继续抛出）。
+  @visibleForTesting
+  final Future<int> Function(List<Directory> directories) measureDirectories;
+
   @override
   Future<int> measureBytes() {
     if (!supported) return Future<int>.value(0);
     return _measureClearableBytes();
   }
 
-  /// CDP 实际会清掉的 HTTP cache 总量。测量失败按 0 计，不影响清理本身。
+  /// CDP 实际会清掉的 HTTP cache 总量。
+  ///
+  /// 只吞文件系统错误（权限 / 并发删除）：占用只是展示，读不到就按 0 计。
+  /// 其它异常继续抛出，不被「测量失败按 0 计」掩盖。
   Future<int> _measureClearableBytes() async {
+    final List<Directory> directories = <Directory>[
+      for (final MangaWebViewCacheProfile profile in profiles)
+        ...profile.cacheDirectories,
+    ];
     try {
-      return await mangaCacheDirectorySize(<Directory>[
-        for (final MangaWebViewCacheProfile profile in profiles)
-          ...profile.cacheDirectories,
-      ]);
-    } on Object {
+      return await measureDirectories(directories);
+    } on FileSystemException catch (error, stack) {
+      ErrorLogService.instance.log('MangaWebViewCache.measure', error, stack);
       return 0;
     }
   }
@@ -168,26 +180,28 @@ class MangaWebViewCacheClearStep extends MangaCacheClearStep {
 /// GPU / Shader / Dawn / Code Cache 属于运行时组件、CDP 不清；cookies /
 /// localStorage / IndexedDB / Preferences 等站点数据也不在清理范围，因此它们
 /// 既不计入占用，也不会被删除。
-const List<String> kMangaWebViewSafeCacheSubdirectories = <String>[
+const List<String> kMangaWebViewClearableCacheSubdirectories = <String>[
   'EBWebView/Default/Cache',
 ];
 
-/// 一个 WebView2 user data folder 下的安全 HTTP cache 子目录。
-List<Directory> mangaWebViewSafeCacheDirectories(
+/// 一个 WebView2 user data folder 下会被 CDP 清理的 HTTP cache 子目录。
+List<Directory> mangaWebViewClearableCacheDirectories(
   Directory userDataFolder,
 ) => <Directory>[
-  for (final String relative in kMangaWebViewSafeCacheSubdirectories)
+  for (final String relative in kMangaWebViewClearableCacheSubdirectories)
     Directory(p.joinAll(<String>[userDataFolder.path, ...relative.split('/')])),
 ];
 
 /// 生产环境的两个 WebView profile。默认 profile 使用插件的默认 environment
 /// （已由 `WebView2StateRoot.install()` 固定到 `state/webview2`）；漫画 profile
-/// 复用 [MangaWebViewEnvironment] 的 `state/webview2-manga*`。
+/// 复用 [MangaWebViewEnvironment] 当前的 `state/webview2-manga[后缀]`。
 ///
 /// [stateRoot] 为空时按 [AppPaths.stateRootDirectorySync] 解析；解析不到时
-/// profile 没有可统计的 cache 目录（占用按 0 计，清理仍可执行）。漫画 profile
-/// 把 `webview2-manga*` 兄弟目录全部纳入：换代理参数后 environment 会落到带
-/// 哈希后缀的目录。
+/// profile 没有可统计的 cache 目录（占用按 0 计，清理仍可执行）。
+///
+/// 漫画 profile **只统计当前环境实际使用的那一个目录**：换代理参数后 environment
+/// 会落到带哈希后缀的兄弟目录，旧目录不会再被清理，不能继续计入占用。环境尚未
+/// 创建时按第一次创建会用的基础目录计——与实际清理集合一致。
 ///
 /// 两个 profile 都走临时 headless WebView：设置页没有可见 WebView 的可靠引用，
 /// 而 WebView2 的 HTTP cache 归 environment 所有，同 profile 的 headless 实例
@@ -199,29 +213,16 @@ List<MangaWebViewCacheProfile> buildMangaWebViewCacheProfiles({
   List<Directory> defaultCacheDirectories = const <Directory>[];
   List<Directory> mangaCacheDirectories = const <Directory>[];
   if (root != null) {
-    defaultCacheDirectories = mangaWebViewSafeCacheDirectories(
+    defaultCacheDirectories = mangaWebViewClearableCacheDirectories(
       Directory(p.join(root.path, AppPaths.webView2DirName)),
     );
-    final List<Directory> mangaFolders = <Directory>[];
-    try {
-      if (root.existsSync()) {
-        for (final FileSystemEntity entity in root.listSync(
-          followLinks: false,
-        )) {
-          final String name = p.basename(entity.path);
-          if (entity is Directory &&
-              name.startsWith('${AppPaths.webView2DirName}-manga')) {
-            mangaFolders.add(entity);
-          }
-        }
-      }
-    } on FileSystemException {
-      // state 根不可读：只是少算占用，不影响清理。
-    }
-    mangaCacheDirectories = <Directory>[
-      for (final Directory folder in mangaFolders)
-        ...mangaWebViewSafeCacheDirectories(folder),
-    ];
+    final String? activeMangaFolder =
+        MangaWebViewEnvironment.currentUserDataFolder;
+    mangaCacheDirectories = mangaWebViewClearableCacheDirectories(
+      activeMangaFolder == null
+          ? Directory(p.join(root.path, '${AppPaths.webView2DirName}-manga'))
+          : Directory(activeMangaFolder),
+    );
   }
   return <MangaWebViewCacheProfile>[
     MangaWebViewCacheProfile(

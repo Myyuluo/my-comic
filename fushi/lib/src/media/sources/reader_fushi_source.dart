@@ -4,7 +4,6 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:path/path.dart' as p;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:fushi_dictionary/fushi_dictionary.dart';
@@ -24,12 +23,10 @@ import 'package:fushi/src/media/manga/library/manga_adjacent_chapter.dart'
     show mangaReadingOrder;
 import 'package:fushi/src/media/manga/library/manga_cover_resolution.dart';
 import 'package:fushi/src/media/manga/library/manga_first_page_cover_service.dart';
-import 'package:fushi/src/media/manga/library/manga_shelf_cover_cache.dart';
 import 'package:fushi/src/media/manga/library/manga_shelf_cover_revision.dart';
 import 'package:fushi/src/media/manga/library/manga_shelf_cover_service.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_metadata.dart';
-import 'package:fushi/src/storage/app_paths.dart';
 import 'package:fushi/src/reader/page_turn_animation.dart';
 import 'package:fushi/src/reader/reader_chrome_floating.dart';
 import 'package:fushi/src/reader/highlight_stroke_style.dart';
@@ -720,19 +717,11 @@ class ReaderFushiSource extends ReaderMediaSource {
   MangaShelfCoverService? _shelfCoverServiceFor(AppModel appModel) {
     final MangaShelfCoverService? override = debugShelfCoverService;
     if (override != null) return override;
-    final AppPaths? paths = appModel.appPathsOrNull;
-    if (paths == null) return null;
-    return MangaShelfCoverService(
-      cache: MangaShelfCoverCache(
-        Directory(p.join(paths.cacheRoot.path, kMangaShelfCoverCacheDirName)),
+    return MangaShelfCoverService.forAppCache(
+      cacheRoot: appModel.appPathsOrNull?.cacheRoot,
+      serviceFor: appOnlineMangaServiceResolver(
+        appModel.onlineMangaLibraryService,
       ),
-      serviceFor: (OnlineMangaRuntimeKind runtime) {
-        try {
-          return appModel.onlineMangaLibraryService(runtime);
-        } on Object {
-          return null;
-        }
-      },
     );
   }
 

@@ -51,23 +51,21 @@ void main() {
       expect(UpdateChannel.values.length, frozenHibikiManifests.length,
           reason: '新增通道时必须同步补一条冻结名，否则新通道会漏出守卫');
       for (final UpdateChannel channel in UpdateChannel.values) {
-        final Map<String, String> urls = manifestUrlsForChannel(channel);
-        expect(urls, isNotEmpty, reason: '$channel 必须有镜像清单 URL');
-        for (final MapEntry<String, String> entry in urls.entries) {
-          final String fileName = entry.value.split('/').last;
-          expect(
-            frozenHibikiManifests,
-            isNot(contains(fileName)),
-            reason: '$channel 的 ${entry.key} 镜像读的是 $fileName——'
-                '这是老 Hibiki 客户端编译进包里的 URL，本体读它就会两族互相覆盖，'
-                '老用户从此更新不到迁移桥包',
-          );
-          expect(
-            fileName.contains('fushi'),
-            isTrue,
-            reason: '$channel 的清单名 $fileName 认不出产品族',
-          );
-        }
+        final String? url = manifestUrlForChannel(channel);
+        expect(url, isNotNull, reason: '$channel 必须有镜像清单 URL');
+        final String fileName = url!.split('/').last;
+        expect(
+          frozenHibikiManifests,
+          isNot(contains(fileName)),
+          reason: '$channel 的镜像读的是 $fileName——'
+              '这是老 Hibiki 客户端编译进包里的 URL，本体读它就会两族互相覆盖，'
+              '老用户从此更新不到迁移桥包',
+        );
+        expect(
+          fileName.contains('fushi'),
+          isTrue,
+          reason: '$channel 的清单名 $fileName 认不出产品族',
+        );
       }
     });
 

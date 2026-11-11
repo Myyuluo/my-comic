@@ -3,15 +3,12 @@ import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:path/path.dart' as p;
 
 import 'package:fushi/src/focus/fushi_focus_controller.dart';
 import 'package:fushi/src/media/manga/history/manga_history.dart';
-import 'package:fushi/src/media/manga/library/manga_shelf_cover_cache.dart';
 import 'package:fushi/src/media/manga/library/manga_shelf_cover_revision.dart';
 import 'package:fushi/src/media/manga/library/manga_shelf_cover_service.dart';
 import 'package:fushi/src/media/manga/library/manga_series_page.dart';
-import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_service.dart';
 import 'package:fushi/src/media/media_search_text.dart';
 import 'package:fushi/src/media/sources/manga_fushi_source.dart';
@@ -39,19 +36,11 @@ import 'package:fushi/utils.dart';
 final mangaHistoryShelfCoverServiceProvider =
     Provider.autoDispose<MangaShelfCoverService?>((Ref ref) {
       final AppModel appModel = ref.watch(appProvider);
-      final Directory? cacheRoot = appModel.appPathsOrNull?.cacheRoot;
-      if (cacheRoot == null) return null;
-      return MangaShelfCoverService(
-        cache: MangaShelfCoverCache(
-          Directory(p.join(cacheRoot.path, kMangaShelfCoverCacheDirName)),
+      return MangaShelfCoverService.forAppCache(
+        cacheRoot: appModel.appPathsOrNull?.cacheRoot,
+        serviceFor: appOnlineMangaServiceResolver(
+          appModel.onlineMangaLibraryService,
         ),
-        serviceFor: (OnlineMangaRuntimeKind runtime) {
-          try {
-            return appModel.onlineMangaLibraryService(runtime);
-          } on Object {
-            return null;
-          }
-        },
       );
     });
 

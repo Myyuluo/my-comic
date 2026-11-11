@@ -51,6 +51,7 @@ Future<void> checkAppUpdateNow(BuildContext context, AppModel appModel) async {
   final UpdateCheckCacheEntry? cached = cachedEntryForChannel(
     appModel.updateCheckCache,
     channel,
+    repository: kUpdateCheckSourceRepository,
   );
   if (cached != null) {
     final bool newer = updateTagIsNewerThanCurrent(
