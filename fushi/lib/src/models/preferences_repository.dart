@@ -5,7 +5,6 @@ import 'package:material_ui/material_ui.dart';
 import 'package:fushi_audio/fushi_audio.dart'
     show kDefaultReadingIdleTimeout, kStudyIdleTimeoutPrefKey;
 import 'package:fushi_core/fushi_core.dart';
-import 'package:fushi_engine/ai/ai_settings.dart';
 import 'package:fushi_engine/srs/srs_backup_retention.dart';
 import 'package:fushi_engine/profile/profile_document.dart'
     show kProfileSettingCategoryPref;
@@ -21,14 +20,10 @@ import 'package:fushi_engine/ai/web_knowledge.dart'
         parseWebKnowledgeCustomSites,
         parseWebKnowledgeEnabledIds;
 import 'package:fushi/src/utils/adaptive/nav_bar_style.dart';
-import 'package:fushi/src/dictionary/dict_style_rules.dart';
 
 
-import 'package:fushi/src/media/discovery/audiobookshelf_server_config.dart';
 import 'package:fushi/src/media/discovery/opds_server_config.dart';
 import 'package:fushi/src/models/module_id.dart';
-import 'package:fushi/src/sync/hidden_remote_books.dart'
-    show HiddenRemoteBook, decodeHiddenRemoteBooks, encodeHiddenRemoteBooks;
 import 'package:fushi/src/media/manga/mihon/mihon_cover_cache.dart'
     show
         kMangaCoverCacheDefaultMaxAgeDays,
@@ -64,8 +59,6 @@ import 'package:fushi/src/stats/reader_study_clock_start_mode.dart';
 
 
 
-import 'package:fushi/src/media/audiobook/mining_audio_clip.dart'
-    show kMiningHeadPadMs, kMiningPadMaxMs, kMiningTailPadMs;
 
 // 迁移判据要用「这个存量代理地址归一得出来吗」，与 applyAppProxy 同一份实现，
 // 不在这里重写一遍（重写就会漂移，而漂移的后果是存量用户升级即断网）。
@@ -85,7 +78,6 @@ import 'package:fushi_engine/mining/immersion_mining_request.dart'
         MiningClipFormat,
         MiningStillFormat,
         VideoMiningImageMode;
-import 'package:fushi/src/models/audio_source_config.dart';
 import 'package:fushi_engine/utils/misc/desktop_audio_clipper.dart'
     show MiningMediaCompression;
 import 'package:fushi/src/utils/misc/error_log_service.dart';
@@ -204,8 +196,7 @@ enum FloatingLyricColorRole {
   final String prefKey;
 }
 
-class PreferencesRepository extends ChangeNotifier
-    implements PrefStore, AiSettingsSource {
+class PreferencesRepository extends ChangeNotifier implements PrefStore {
   PreferencesRepository(this._db);
 
   /// TODO-855: persisted monotonic counter, the cross-process change signal the
@@ -565,19 +556,6 @@ class PreferencesRepository extends ChangeNotifier
 
   Future<void> setShowRemoteEntries(bool value) async {
     await setPref('show_remote_entries', value);
-    notifyListeners();
-  }
-
-  /// 「仅从本机移除」的远端书（反馈 nvlhtczbro）：只在本机书架隐藏、对端那份不动。
-  /// 按「来源身份 + 远端身份键」记（[HiddenRemoteBook.key]）——同名书在另一台
-  /// host / 云盘上不受牵连。找回列表在 设置 › 同步 › 已从本机移除的远端书。
-  /// 设备本地（`SyncRepository.deviceLocalPrefKeys`），不随备份 / 同步带到别的设备。
-  List<HiddenRemoteBook> get hiddenRemoteBooks => decodeHiddenRemoteBooks(
-        getPref('hidden_remote_books', defaultValue: null) as String?,
-      );
-
-  Future<void> setHiddenRemoteBooks(List<HiddenRemoteBook> books) async {
-    await setPref('hidden_remote_books', encodeHiddenRemoteBooks(books));
     notifyListeners();
   }
 
@@ -1151,6 +1129,10 @@ class PreferencesRepository extends ChangeNotifier
   /// 复习例外：本安装的老 / 新用户判定（[settleSrsMiningTargetInstallDefault]）还没跑过
   /// 时按关读——与 [srsMiningTarget] 判定前按 'anki' 同一方向，老用户升级后在主进程
   /// 首启之前（:popup 进程、整层恢复老备份后）不会冒出复习入口。
+  /// 兼容保留：旧安装的 SRS 挖词目标出厂默认判定键。
+  static const String srsMiningTargetInstallDefaultKey =
+      'srs_mining_target_install_default';
+
   bool moduleEnabled(ModuleId module) {
     if (module == ModuleId.srs &&
         getPref(module.prefKey, defaultValue: null) == null &&
@@ -1166,6 +1148,144 @@ class PreferencesRepository extends ChangeNotifier
     await setPref(module.prefKey, value);
     notifyListeners();
   }
+
+  // ── usage stats（安装统计心跳；ticket 09 负责运营端点身份） ─────────
+
+  bool get usageStatsEnabled =>
+      getPref('usage_stats_enabled', defaultValue: true) as bool;
+
+  Future<void> setUsageStatsEnabled(bool value) async {
+    await setPref('usage_stats_enabled', value);
+    notifyListeners();
+  }
+
+  /// 安装统计的回退随机种子（随机 UUID v4）。设备本地。
+  Future<String> ensureUsageStatsInstallId() async {
+    final String existing = getPref(
+      'usage_stats_install_id',
+      defaultValue: '',
+    ) as String;
+    if (existing.trim().isNotEmpty) return existing.trim();
+    final String created = _randomUuidV4();
+    await setPref('usage_stats_install_id', created);
+    return created;
+  }
+
+  String? usageStatsInstallPowFor(String installId) {
+    final String raw =
+        getPref('usage_stats_install_pow', defaultValue: '') as String;
+    final String prefix = '$installId:';
+    if (!raw.startsWith(prefix)) return null;
+    final String nonce = raw.substring(prefix.length);
+    return nonce.isEmpty ? null : nonce;
+  }
+
+  Future<void> setUsageStatsInstallPow(String installId, String nonce) async {
+    await setPref('usage_stats_install_pow', '$installId:$nonce');
+  }
+
+  int get usageStatsLastPingAt =>
+      getPref('usage_stats_last_ping_at', defaultValue: 0) as int;
+
+  Future<void> setUsageStatsLastPingAt(int at) async {
+    await setPref('usage_stats_last_ping_at', at);
+  }
+
+  /// 「下载」改名「浏览」的一次性搬迁提示是否已处理。
+  bool get browseMovedNoticeHandled =>
+      getPref('browse_moved_notice_handled', defaultValue: false) as bool;
+
+  Future<void> setBrowseMovedNoticeHandled() async {
+    await setPref('browse_moved_notice_handled', true);
+  }
+
+  // ── reader chrome ────────────────────────────────────────────────────
+
+  ReaderControlLayout get readerControlLayout => ReaderControlLayout.decode(
+        getPref('reader_control_layout', defaultValue: '') as String,
+      );
+
+  Future<void> setReaderControlLayout(ReaderControlLayout layout) async {
+    await setPref('reader_control_layout', layout.encode());
+    notifyListeners();
+  }
+
+  ReaderControlLayout get readerCompactControlLayout {
+    final String compact =
+        getPref('reader_control_layout_compact', defaultValue: '') as String;
+    if (compact.trim().isNotEmpty) {
+      return ReaderControlLayout.decode(
+        compact,
+        fallback: ReaderControlLayout.compactDefaults,
+      );
+    }
+    final String wide =
+        getPref('reader_control_layout', defaultValue: '') as String;
+    if (wide.trim().isNotEmpty) return ReaderControlLayout.decode(wide);
+    return ReaderControlLayout.compactDefaults;
+  }
+
+  Future<void> setReaderCompactControlLayout(ReaderControlLayout layout) async {
+    await setPref('reader_control_layout_compact', layout.encode());
+    notifyListeners();
+  }
+
+  /// 无痕阅读（默认 false = 记录 History）。
+  bool get incognitoReading =>
+      getPref(kIncognitoReadingPrefKey, defaultValue: false) as bool;
+
+  Future<void> setIncognitoReading(bool value) async {
+    await setPref(kIncognitoReadingPrefKey, value);
+  }
+
+  String get readerToolbarStyle {
+    final String v =
+        getPref('reader_toolbar_style', defaultValue: 'floating') as String;
+    return v == 'docked' ? 'docked' : 'floating';
+  }
+
+  Future<void> setReaderToolbarStyle(String style) async {
+    await setPref(
+      'reader_toolbar_style',
+      style == 'docked' ? 'docked' : 'floating',
+    );
+    notifyListeners();
+  }
+
+  static const String readerToolbarStyleFloatingMigratedKey =
+      'reader_toolbar_style_floating_migrated';
+
+  Future<void> _settlePrefAcrossProfiles(
+    String key,
+    Object value,
+    String markerKey,
+  ) async {
+    if (getPref(markerKey, defaultValue: false) == true) {
+      return;
+    }
+    await _db.customStatement(
+      'UPDATE profile_settings SET value = ? WHERE category = ? AND key = ?',
+      <Object>[PrefCodec.encode(value), kProfileSettingCategoryPref, key],
+    );
+    await setPrefs(<String, dynamic>{key: value, markerKey: true});
+  }
+
+  Future<void> settleReaderToolbarStyleFloating() =>
+      _settlePrefAcrossProfiles(
+        'reader_toolbar_style',
+        'floating',
+        readerToolbarStyleFloatingMigratedKey,
+      );
+
+  static const String updatesNotifyMangaChapterDefaultOffMigratedKey =
+      'updates_notify_manga_chapter_default_off_migrated';
+
+  Future<void> settleUpdatesNotifyMangaChapterDefaultOff() =>
+      _settlePrefAcrossProfiles(
+        UpdateFeedKind.mangaChapter.enabledPrefKey,
+        false,
+        updatesNotifyMangaChapterDefaultOffMigratedKey,
+      );
 
   /// 「功能模块」的用户排序（底栏 / 侧栏 tab 顺序）。与开关同为设备本地键
   /// （[ModuleId.devicePrefKeys]）；缺省空 = 枚举顺序。
@@ -1311,949 +1431,6 @@ class PreferencesRepository extends ChangeNotifier
     Iterable<OpdsServerConfig> servers,
   ) async {
     await setPref('discovery_opds_servers', encodeOpdsServerConfigs(servers));
-    notifyListeners();
-  }
-
-  /// 用户自配的 Audiobookshelf 服务器清单（设备本地；含 base64 令牌）。
-  /// 逐条容错同 [discoveryOpdsServers]。
-  List<AudiobookshelfServerConfig> get discoveryAudiobookshelfServers {
-    final String raw =
-        getPref('discovery_audiobookshelf_servers', defaultValue: '')
-            as String;
-    if (raw.trim().isEmpty) return const <AudiobookshelfServerConfig>[];
-    try {
-      return decodeAudiobookshelfServerConfigs(raw);
-    } on Object catch (error, stack) {
-      ErrorLogService.instance.log(
-        'PreferencesRepository.discoveryAudiobookshelfServers.decode',
-        error,
-        stack,
-      );
-      return const <AudiobookshelfServerConfig>[];
-    }
-  }
-
-  Future<void> setDiscoveryAudiobookshelfServers(
-    Iterable<AudiobookshelfServerConfig> servers,
-  ) async {
-    await setPref(
-      'discovery_audiobookshelf_servers',
-      encodeAudiobookshelfServerConfigs(servers),
-    );
-    notifyListeners();
-  }
-
-  /// 用户自配的 AI 提供商清单（设备本地；含 base64 API key）。
-  ///
-  /// 与 [discoveryOpdsServers] 同范式：逐条容错在 [decodeAiProviderConfigs] 里，
-  /// 一条记录坏掉只丢那一条，不让整份清单消失。
-  @override
-  List<AiProviderConfig> get aiProviders {
-    final String raw = getPref('ai_providers', defaultValue: '') as String;
-    if (raw.trim().isEmpty) return const <AiProviderConfig>[];
-    try {
-      return decodeAiProviderConfigs(raw);
-    } on Object catch (error, stack) {
-      ErrorLogService.instance.log(
-        'PreferencesRepository.aiProviders.decode',
-        error,
-        stack,
-      );
-      return const <AiProviderConfig>[];
-    }
-  }
-
-  Future<void> setAiProviders(Iterable<AiProviderConfig> providers) async {
-    await setPref('ai_providers', encodeAiProviderConfigs(providers));
-    notifyListeners();
-  }
-
-  /// 运行时**生效**的「哪个功能用哪家 AI」：AI 模块（[ModuleId.ai]）关掉时投影成
-  /// 空指派，于是每个 `AiFeature` 都解析不到提供商——行为与「从没配过 AI」完全
-  /// 一致，后台刮削 / 补字幕 / AI 下载 / 漫画 OCR 重读一个请求都不发。
-  ///
-  /// 这是 AI 调用层（[AiSettingsSource] 的全部消费方）的唯一门：入口 UI 另由
-  /// `isAiModuleEnabled` 藏，但即使某个入口漏藏，这里也兜住不发请求。设置页编辑
-  /// 用户真实存的指派一律读 [storedAiFeatureAssignments]，不读本 getter——否则模块
-  /// 关着时编辑再保存会把真实指派清空。
-  @override
-  AiFeatureAssignments get aiFeatureAssignments => moduleEnabled(ModuleId.ai)
-      ? storedAiFeatureAssignments
-      : const AiFeatureAssignments();
-
-  /// 用户真实存的「哪个功能用哪家 AI」映射（设备本地），不看 AI 模块开关。
-  /// 只给设置 › AI 编辑用；运行时解析走 [aiFeatureAssignments]。
-  AiFeatureAssignments get storedAiFeatureAssignments {
-    final String raw = getPref(
-      'ai_feature_providers',
-      defaultValue: '',
-    ) as String;
-    return AiFeatureAssignments.fromJson(raw);
-  }
-
-  Future<void> setAiFeatureAssignments(AiFeatureAssignments value) async {
-    await setPref('ai_feature_providers', value.toJson());
-    notifyListeners();
-  }
-
-  /// [resolveAiFeatureProvider] 的解码缓存，键是两份**原始**偏好串。
-  ({
-    String? providersRaw,
-    String? assignmentsRaw,
-    List<AiProviderConfig> providers,
-    AiFeatureAssignments assignments,
-  })? _aiResolveCache;
-
-  /// 「[feature] 当前该用哪家 AI」，与
-  /// `aiFeatureAssignments.resolve(feature, aiProviders)` 同义。
-  ///
-  /// 调用方可能在热路径上反复问，而 [aiProviders] 每读一次都要
-  /// 解 JSON + base64。这里以 `ai_providers` / `ai_feature_providers` 的原始串为
-  /// 缓存键：任何写入（[setPref]、[loadFromDb] 换整份缓存、跨进程刷新）都会换串，
-  /// 串一变就重新解码——判据就是数据本身，不存在漏掉失效通知而读到陈旧值的路径。
-  AiProviderConfig? resolveAiFeatureProvider(AiFeature feature) {
-    // 模块门在缓存之外判：缓存键只有两份原始串，翻模块开关不会换串。
-    if (!moduleEnabled(ModuleId.ai)) return null;
-    final String? providersRaw = _prefCache['ai_providers'];
-    final String? assignmentsRaw = _prefCache['ai_feature_providers'];
-    var cache = _aiResolveCache;
-    if (cache == null ||
-        cache.providersRaw != providersRaw ||
-        cache.assignmentsRaw != assignmentsRaw) {
-      cache = _aiResolveCache = (
-        providersRaw: providersRaw,
-        assignmentsRaw: assignmentsRaw,
-        providers: aiProviders,
-        assignments: storedAiFeatureAssignments,
-      );
-    }
-    return cache.assignments.resolve(feature, cache.providers);
-  }
-
-  /// OpenSubtitles 的设备本地配置。登录 token 只存在 client 内存中，绝不写入本键。
-  ///
-  /// **永不返回 null**：没配置过 = [OpenSubtitlesConfig.unconfigured]（启用 + 内置
-  /// 应用密钥）。BUG-2429：此前返回 null，于是「没配置过」这个特殊情况要由每个消费方
-  /// 各自解释一遍，而三处解释互相矛盾——运行时装配当它「不装配」（内置密钥形同虚设），
-  /// 设置页列表当它「已内置」（谎报可用），详情页草稿当它「开关关闭」（用户一碰字段
-  /// 就把 enabled=false 落盘）。默认值收敛到一处，特殊情况随之消失。
-  bool get usageStatsEnabled =>
-      getPref('usage_stats_enabled', defaultValue: true) as bool;
-
-  Future<void> setUsageStatsEnabled(bool value) async {
-    await setPref('usage_stats_enabled', value);
-    notifyListeners();
-  }
-
-  /// 安装统计的**回退随机种子**（随机 UUID v4，与下载器安装身份同一个生成器，但各自独立）。
-  /// 2026-10-17 起上报的 installId 由系统机器标识派生（updates/install_attestation.dart），
-  /// 只有取不到机器标识时才用它做种子（重装即变，等同旧行为）；它本身不再直接上报。
-  /// 第一次读取时生成并持久化。设备本地：不进备份 / 同步 / Profile 快照，恢复备份到另一台
-  /// 设备不会克隆它（两台设备被算成一个安装）。持久化键名沿用 `usage_stats_install_id`（冻结）。
-  Future<String> ensureUsageStatsInstallId() async {
-    final String existing = getPref(
-      'usage_stats_install_id',
-      defaultValue: '',
-    ) as String;
-    if (existing.trim().isNotEmpty) return existing.trim();
-    final String created = _randomUuidV4();
-    await setPref('usage_stats_install_id', created);
-    return created;
-  }
-
-  /// 安装证明的工作量证明 nonce 缓存（`<installId>:<nonce>`）。只在属于 [installId] 时返回，
-  /// 否则 null（installId 变了就该重算）。设备本地。
-  String? usageStatsInstallPowFor(String installId) {
-    final String raw =
-        getPref('usage_stats_install_pow', defaultValue: '') as String;
-    final String prefix = '$installId:';
-    if (!raw.startsWith(prefix)) return null;
-    final String nonce = raw.substring(prefix.length);
-    return nonce.isEmpty ? null : nonce;
-  }
-
-  Future<void> setUsageStatsInstallPow(String installId, String nonce) async {
-    await setPref('usage_stats_install_pow', '$installId:$nonce');
-  }
-
-  /// 上次心跳成功的时刻（毫秒；0 = 从没成功过）。设备本地。
-  int get usageStatsLastPingAt =>
-      getPref('usage_stats_last_ping_at', defaultValue: 0) as int;
-
-  Future<void> setUsageStatsLastPingAt(int at) async {
-    await setPref('usage_stats_last_ping_at', at);
-  }
-
-  /// 是否已展示过「上传/做种」首用提示（默认 false = 未展示）。首次下载时弹
-  /// 一次性对话框提醒上传默认关并询问是否开启（见下载对话框），之后置真不再弹。
-  bool get browseMovedNoticeHandled =>
-      getPref('browse_moved_notice_handled', defaultValue: false) as bool;
-
-  Future<void> setBrowseMovedNoticeHandled() async {
-    await setPref('browse_moved_notice_handled', true);
-  }
-
-  ReaderControlLayout get readerControlLayout => ReaderControlLayout.decode(
-        getPref('reader_control_layout', defaultValue: '') as String,
-      );
-
-  Future<void> setReaderControlLayout(ReaderControlLayout layout) async {
-    await setPref('reader_control_layout', layout.encode());
-    notifyListeners();
-  }
-
-  /// 窄窗（手机竖屏）的按钮布局（2026-10：手机与桌面分别可配）。持久化键
-  /// `reader_control_layout_compact`。兼容存量：没存过窄窗布局、但存过（宽窗）
-  /// 布局的用户——此前一份布局两端共用——继续沿用那份自定义，不丢；两份都没有
-  /// 才落窄窗出厂布局 [ReaderControlLayout.compactDefaults]。
-  ReaderControlLayout get readerCompactControlLayout {
-    final String compact =
-        getPref('reader_control_layout_compact', defaultValue: '') as String;
-    if (compact.trim().isNotEmpty) {
-      return ReaderControlLayout.decode(
-        compact,
-        fallback: ReaderControlLayout.compactDefaults,
-      );
-    }
-    final String wide =
-        getPref('reader_control_layout', defaultValue: '') as String;
-    if (wide.trim().isNotEmpty) return ReaderControlLayout.decode(wide);
-    return ReaderControlLayout.compactDefaults;
-  }
-
-  Future<void> setReaderCompactControlLayout(ReaderControlLayout layout) async {
-    await setPref('reader_control_layout_compact', layout.encode());
-    notifyListeners();
-  }
-
-  /// 无痕阅读（默认 false = 记录 History）。读取方在**每次落库时**现读本值，
-  /// 因此在设置里切换后立即生效，不需要重启阅读器。
-  bool get incognitoReading =>
-      getPref(kIncognitoReadingPrefKey, defaultValue: false) as bool;
-
-  Future<void> setIncognitoReading(bool value) async {
-    await setPref(kIncognitoReadingPrefKey, value);
-  }
-
-  /// 阅读器工具栏样式（2026-10，M3 Expressive toolbars）：`floating`（默认：
-  /// 悬浮胶囊 + 底部悬浮工具栏，正文满屏）/ `docked`（贴边整宽实体条，旧形态）。
-  /// 未知值按默认。
-  String get readerToolbarStyle {
-    final String v =
-        getPref('reader_toolbar_style', defaultValue: 'floating') as String;
-    return v == 'docked' ? 'docked' : 'floating';
-  }
-
-  Future<void> setReaderToolbarStyle(String style) async {
-    await setPref('reader_toolbar_style', style == 'docked' ? 'docked' : 'floating');
-    notifyListeners();
-  }
-
-  /// 「工具栏样式强制悬浮」一次性迁移的已跑标记（bool）。本键不随 Profile 走
-  /// （`ProfileKeys` 排除）：描述的是本安装是否迁过，进快照的话切到老 Profile
-  /// 会把它删掉、迁移重跑，用户事后手动选的贴边又被改回悬浮。
-  static const String readerToolbarStyleFloatingMigratedKey =
-      'reader_toolbar_style_floating_migrated';
-
-  /// 一次性偏好迁移的公共形状：把 live 偏好**和每个 Profile 快照里**的 [key]
-  /// 一起覆盖成 [value]，随后写 [markerKey]（与值同一次 `setPrefs` 落盘）。
-  ///
-  /// 只改 live 的话，切一次 Profile 快照就把旧值带回来；标记进快照的话，切到老
-  /// Profile 会把标记删掉、迁移重跑。快照先改、标记后写：中途中断下次重跑也只是
-  /// 把同一个值再写一遍。标记已落下时直接返回，之后用户的选择正常持久化。
-  Future<void> _settlePrefAcrossProfiles(
-    String key,
-    Object value,
-    String markerKey,
-  ) async {
-    if (getPref(markerKey, defaultValue: false) == true) {
-      return;
-    }
-    await _db.customStatement(
-      'UPDATE profile_settings SET value = ? WHERE category = ? AND key = ?',
-      <Object>[PrefCodec.encode(value), kProfileSettingCategoryPref, key],
-    );
-    await setPrefs(<String, dynamic>{key: value, markerKey: true});
-  }
-
-  /// 启动时（`AppModel.initialise()`）跑一次：所有者 2026-10-06「工具栏样式默认
-  /// 悬浮，老用户更新也强制先悬浮」。把 live 偏好**和每个 Profile 快照里**的
-  /// `reader_toolbar_style` 一起改成 `floating`。标记与新值同一次 [setPrefs]
-  /// 落盘；此后用户再手动选贴边，标记已在，不会被改回。
-  Future<void> settleReaderToolbarStyleFloating() => _settlePrefAcrossProfiles(
-    'reader_toolbar_style',
-    'floating',
-    readerToolbarStyleFloatingMigratedKey,
-  );
-
-  /// 「漫画新章提醒默认关闭」一次性重置的已跑标记（bool）。本键不随 Profile 走
-  /// （`ProfileKeys` 排除）：描述的是本安装是否迁过；进快照的话切到老 Profile 会
-  /// 把它删掉、迁移重跑，用户此后手动开启的提醒又被改回关闭。
-  static const String updatesNotifyMangaChapterDefaultOffMigratedKey =
-      'updates_notify_manga_chapter_default_off_migrated';
-
-  /// 启动时（`AppModel.initialise()`）跑一次：2026-11 用户要求「漫画新章提醒」
-  /// 默认关闭，并且升级后把已有安装保存的开关值强制重置为关闭一次。
-  ///
-  /// 与 [settleReaderToolbarStyleFloating] 共用 [_settlePrefAcrossProfiles]：
-  /// 扩展更新提醒的已存值不动。此后用户再手动开启，标记已在，不会被改回。
-  Future<void> settleUpdatesNotifyMangaChapterDefaultOff() =>
-      _settlePrefAcrossProfiles(
-        UpdateFeedKind.mangaChapter.enabledPrefKey,
-        false,
-        updatesNotifyMangaChapterDefaultOffMigratedKey,
-      );
-
-  /// 视频「快捷键 1..4」自定义动作按钮的绑定（用户请求）：槽位序号 → 视频动作。
-  ///
-  /// 与 [videoControlLayout] **分开存**：布局管「按钮在哪个槽位、显不显示」，本表管
-  /// 「按钮按下去干什么」。两者正交——用户可以只改位置不改动作，反之亦然；混进同一个
-  /// JSON 只会让那个已经在扛 v1→v2→v3 迁移的 payload 再多一层版本。
-  /// 空串 = 一个都没绑（[VideoCustomActionBindings.empty]）。此时按钮仍显示在控制条上，
-  /// 点它就地弹动作选择器——空槽位是配置入口，不是死按钮。
-  List<WebKnowledgeSite> get aiWebKnowledgeCustomSites =>
-      parseWebKnowledgeCustomSites(
-        getPref('ai_web_knowledge_custom_sites', defaultValue: null) as String?,
-      );
-
-  Future<void> setAiWebKnowledgeCustomSites(
-    List<WebKnowledgeSite> sites,
-  ) async {
-    await setPref(
-      'ai_web_knowledge_custom_sites',
-      encodeWebKnowledgeCustomSites(sites),
-    );
-    notifyListeners();
-  }
-
-  /// 启用的站点 id（内置 + 自定义）。
-  ///
-  /// 落盘记的是**关掉了哪些**（`ai_web_knowledge_disabled_sites`），不是开了哪些：
-  /// 记「开了哪些」时，以后新增的内置站对任何动过开关的用户都默认关；旧版客户端
-  /// 经同步写回它认识的 id 子集，还会把新站一起关掉。记「关了哪些」，新站默认开、
-  /// 旧客户端不认识的 id 也不会被它抹掉。
-  ///
-  /// 迁移：还没有新键时读旧键 `ai_web_knowledge_sources`（只可能含三个维基 id）——
-  /// 旧键里没列的维基视为关掉，其余一律开。
-  Set<String> get aiWebKnowledgeEnabledSiteIds {
-    final Set<String> all = <String>{
-      for (final WebKnowledgeSite site in kBuiltinWebKnowledgeSites) site.id,
-      for (final WebKnowledgeSite site in aiWebKnowledgeCustomSites) site.id,
-    };
-    final Set<String>? disabled = parseWebKnowledgeEnabledIds(
-      getPref('ai_web_knowledge_disabled_sites', defaultValue: null)
-          as String?,
-    );
-    if (disabled != null) return all.difference(disabled);
-    final Set<String>? legacyEnabled = parseWebKnowledgeEnabledIds(
-      getPref('ai_web_knowledge_sources', defaultValue: null) as String?,
-    );
-    if (legacyEnabled == null) return all;
-    return all.difference(
-      kLegacyWebKnowledgeSiteIds.difference(legacyEnabled),
-    );
-  }
-
-  Future<void> setAiWebKnowledgeEnabledSiteIds(Set<String> ids) async {
-    // 按「内置顺序 + 自定义顺序」写出关掉的那些，同一组选择写出的值恒相同；已删掉
-    // 的站点 id 顺手清掉，不在偏好里越攒越多。
-    final List<String> disabled = <String>[
-      for (final WebKnowledgeSite site in <WebKnowledgeSite>[
-        ...kBuiltinWebKnowledgeSites,
-        ...aiWebKnowledgeCustomSites,
-      ])
-        if (!ids.contains(site.id)) site.id,
-    ];
-    await setPref('ai_web_knowledge_disabled_sites', disabled.join(','));
-    notifyListeners();
-  }
-
-  /// 实际要查的站点：启用的内置站（内置顺序）+ 启用的自定义站（添加顺序）。
-  @override
-  List<WebKnowledgeSite> get aiWebKnowledgeSites {
-    final Set<String> enabled = aiWebKnowledgeEnabledSiteIds;
-    return <WebKnowledgeSite>[
-      for (final WebKnowledgeSite site in <WebKnowledgeSite>[
-        ...kBuiltinWebKnowledgeSites,
-        ...aiWebKnowledgeCustomSites,
-      ])
-        if (enabled.contains(site.id)) site,
-    ];
-  }
-
-  /// 刮削完成后，自动为**仍缺字幕**的视频补一条在线字幕。默认开。
-  ///
-  /// 为什么默认开：下载流水线的字幕阶段本来就默认 `bestEffort`（自动配字幕一直
-  /// 是开着的），只是从来没有名字、没有开关、失败只落在任务行一句英文里，用户
-  /// 无从知道这个能力存在。给它一个名字放进设置页（可被设置搜索命中），是这个
-  /// 能力第一次变得可发现。
-  ///
-  /// 只在配好了在线字幕来源（Jimaku key / OpenSubtitles）时才有任何动作；
-  /// 且**绝不覆盖**任何已有字幕。
-  // ── tags & card export ───────────────────────────────────────────────
-
-  String get savedTags => getPref('saved_tags', defaultValue: '') as String;
-
-  void setSavedTags(String value) async {
-    await setPref('saved_tags', value);
-  }
-
-  bool get autoAddBookNameToTags =>
-      getPref('auto_add_book_name_to_tags', defaultValue: true) as bool;
-
-  void toggleAutoAddBookNameToTags() async {
-    await setPref('auto_add_book_name_to_tags', !autoAddBookNameToTags);
-    notifyListeners();
-  }
-
-  /// 小说阅读器制卡时是否给卡片追加「制卡所在字符数」标签（`chars_12345`，全书绝对
-  /// 学习字数位置，countStudyChars 口径）。默认关（2026-09-26 用户要求砍掉这个
-  /// 默认标签：每张卡多一个无意义的数字 tag）；需要的人在 Anki 设置里自己打开。
-  bool get autoAddCharPositionToTags =>
-      getPref('auto_add_char_position_to_tags', defaultValue: false) as bool;
-
-  void toggleAutoAddCharPositionToTags() async {
-    await setPref('auto_add_char_position_to_tags', !autoAddCharPositionToTags);
-    notifyListeners();
-  }
-
-  // TODO-1650 制卡图片/GIF 清晰度档（0..3，见 [MiningMediaCompression.imageTiers]）。
-  // 替代旧的单一「压缩」开关。未显式设过时从旧 `compress_mining_media` 布尔迁移：
-  // 开(默认)→标准档 1（= TODO-646 现状，零行为破坏）；关→高清档 2。读写都夹到 0..3，
-  // 防止损坏/越界值进到底层编码。
-  int get miningImageQuality {
-    final int? explicit =
-        getPref('mining_image_quality', defaultValue: null) as int?;
-    if (explicit != null) {
-      return explicit.clamp(0, MiningMediaCompression.imageTierCount - 1);
-    }
-    final bool oldCompress =
-        getPref('compress_mining_media', defaultValue: true) as bool;
-    return oldCompress
-        ? MiningMediaCompression.defaultImageTier
-        : 2; // 旧「关闭压缩」= 高保真档 = 图片高清档 2
-  }
-
-  void setMiningImageQuality(int tier) async {
-    await setPref('mining_image_quality',
-        tier.clamp(0, MiningMediaCompression.imageTierCount - 1));
-    notifyListeners();
-  }
-
-  // TODO-1650 制卡音频质量档（0..2，见 [MiningMediaCompression.audioTiers]）。未显式设过时
-  // 从旧「压缩」开关迁移：开(默认)→标准档 0（单声道 64k，现状）；关→高音质档 1（立体声
-  // 128k）。Android 句子音频本就无损 re-mux，不受此档影响。
-  int get miningAudioQuality {
-    final int? explicit =
-        getPref('mining_audio_quality', defaultValue: null) as int?;
-    if (explicit != null) {
-      return explicit.clamp(0, MiningMediaCompression.audioTierCount - 1);
-    }
-    final bool oldCompress =
-        getPref('compress_mining_media', defaultValue: true) as bool;
-    return oldCompress
-        ? MiningMediaCompression.defaultAudioTier
-        : 1; // 旧「关闭压缩」= 高保真档 = 音频高音质档 1
-  }
-
-  void setMiningAudioQuality(int tier) async {
-    await setPref('mining_audio_quality',
-        tier.clamp(0, MiningMediaCompression.audioTierCount - 1));
-    notifyListeners();
-  }
-
-  // 互联「制卡到服务端」开关：开启后所有 app 内制卡（查词/阅读器/视频）不落本地 Anki，
-  // 而是把制卡内容 + 全部媒体字节转发给已配对主机，用主机的 Anki 后端 + 配置落卡。
-  // 默认 false=本地制卡（现状零破坏）。目标主机复用互联客户端（远程查词的同一配对目标）。
-  bool get mineToServer =>
-      getPref('mine_to_server', defaultValue: false) as bool;
-
-  Future<void> setMineToServer(bool value) async {
-    await setPref('mine_to_server', value);
-    notifyListeners();
-  }
-
-  // 复习模块（SRS）的「挖词目标」：'anki' / 'srs'（见 SrsMiningTarget；存量 'both'
-  // 读成 'anki'）。只有复习模块开着时才被读取；模块关着时制卡链路不看它。
-  //
-  // 没设过时取本安装的出厂默认 [srsMiningTargetInstallDefaultKey]（所有者 2026-10-16：
-  // 新装默认 Fushi 复习、老用户继续发 Anki，由 [settleSrsMiningTargetInstallDefault]
-  // 一次性判定）。判定还没跑过（标记缺失：升级后主进程尚未启动过的 :popup 进程、
-  // 刚整层恢复了一份老备份）一律按 'anki'——宁可照旧发 Anki，也不把老用户的卡误送进
-  // 复习。
-  String get srsMiningTarget {
-    final Object? stored = getPref(srsMiningTargetKey, defaultValue: null);
-    if (stored is String) return stored;
-    final Object? installDefault = getPref(
-      srsMiningTargetInstallDefaultKey,
-      defaultValue: null,
-    );
-    return installDefault is String ? installDefault : 'anki';
-  }
-
-  Future<void> setSrsMiningTarget(String wire) async {
-    await setPref(srsMiningTargetKey, wire);
-    notifyListeners();
-  }
-
-  // 复习页评分栏只留「重来 / 良好」（对齐 AnkiDroid hideHardAndEasy）。默认 false。
-  bool get srsReviewHideHardEasy =>
-      getPref('srs_review_hide_hard_easy', defaultValue: false) as bool;
-
-  Future<void> setSrsReviewHideHardEasy(bool value) async {
-    await setPref('srs_review_hide_hard_easy', value);
-    notifyListeners();
-  }
-
-  // 复习页卡面缩放倍率。默认 1.0。
-  double get srsReviewZoom =>
-      (getPref('srs_review_zoom', defaultValue: 1.0) as num).toDouble();
-
-  Future<void> setSrsReviewZoom(double value) async {
-    await setPref('srs_review_zoom', value);
-    notifyListeners();
-  }
-
-  /// 复习自动备份开关（默认开）。设备本地。
-  static const String srsBackupAutoKey = 'srs_backup_auto';
-
-  /// 复习自动备份的间隔与保留份数（JSON，缺省 = Anki 默认）。设备本地。
-  static const String srsBackupLimitsKey = 'srs_backup_limits';
-
-  bool get srsBackupAuto =>
-      getPref(srsBackupAutoKey, defaultValue: true) as bool;
-
-  Future<void> setSrsBackupAuto(bool value) async {
-    await setPref(srsBackupAutoKey, value);
-    notifyListeners();
-  }
-
-  SrsBackupLimits get srsBackupLimits =>
-      srsBackupLimitsFromJson(getPref(srsBackupLimitsKey, defaultValue: ''));
-
-  Future<void> setSrsBackupLimits(SrsBackupLimits value) async {
-    await setPref(srsBackupLimitsKey, srsBackupLimitsToJson(value));
-    notifyListeners();
-  }
-
-  static const String srsMiningTargetKey = 'srs_mining_target';
-
-  /// 本安装「挖词目标」的出厂默认（'anki' / 'srs'），兼一次性判定的已跑标记。
-  ///
-  /// 设备本地（`SyncRepository.installScopedPrefKeys`）：它描述的是**本安装**属于老用户
-  /// 还是新用户，不进 Profile 快照 / 分享。
-  /// 用它而不是把判定结果写进 `srs_mining_target` 本身，是因为 Profile 快照里**没有**
-  /// 某键时，切 Profile 会把 live 键删掉（`ProfileRepository.applyProfile` 的 prune）——
-  /// 老用户切到一份 SRS 之前建的快照、或导入一份旧的 Profile 分享，键一删就回落默认；
-  /// 回落值取这里，老用户落回 'anki'，新用户落回 'srs'，不会被新默认误切。
-  ///
-  /// 也不随备份 / 推荐包走：导出时剔除（维护者用装了新版的机器打推荐包会带上 'anki'，
-  /// 新用户一导入就会被误判成老 Anki 用户）。导入设置的恢复会把它清掉（外来值、本机
-  /// 旧值都不留），下次启动按恢复后的数据重判——新装后恢复老 Anki 用户的完整备份会
-  /// 判回 'anki'，引导里导入推荐包仍只认制卡数据信号；显式设过的 [srsMiningTargetKey]
-  /// 随设置恢复、不受影响。判定前读取按 'anki'（见 [srsMiningTarget]）。
-  static const String srsMiningTargetInstallDefaultKey =
-      'srs_mining_target_install_default';
-
-  /// 启动时（`AppModel.initialise()`）跑一次：判定本安装是老用户还是新用户，定下
-  /// 「挖词目标」与复习模块的出厂默认（所有者 2026-10-16「默认就是 fushi srs」+
-  /// 「老用户继续发 Anki、不提醒」）。
-  ///
-  /// 老用户信号（任一即是）：
-  /// - `first_time_setup` / `onboarding_completed` 已落过盘——首页首帧会写前者，向导
-  ///   结束会写后者；全新安装第一次走到这里时两者都不存在（本方法先于首页跑）。
-  /// - `last_selected_deck` / `last_selected_model` 已落过盘（选过 Anki 牌组 / 笔记类型）。
-  /// - 有制卡历史（`mined_sentences`）或待发 Anki 的卡（`pending_mine_queue`）。
-  ///
-  /// [freshOnboardingPackImport]：本安装是在新手引导里导入了推荐包后重启上来的（推荐包
-  /// 是一份含设置类目的备份，导入会把 `preferences` 整层换成包里那份，前两类信号随包
-  /// 而来、并不代表这台设备的用户用过 Anki）。此时只认制卡数据这一类信号。
-  ///
-  /// 老用户：出厂默认记 'anki'；复习模块的开关若从没设过，显式写成关——升级上来**完全
-  /// 静默**，不出新 tab、不弹任何提示，只有自己去设置里打开才看得到 Fushi 复习。
-  /// 新用户：出厂默认记 'srs'，模块按 [ModuleId.defaultEnabled]（开）。
-  ///
-  /// 例外：`srs_mining_target` 显式为 'srs' 时按「在用 Fushi 复习」处理，模块从没设过就
-  /// 写成开（老用户也一样）。
-  ///
-  /// 已显式选过的 `srs_mining_target` 与模块开关一概不改。标记已在则直接返回（幂等）；
-  /// 标记与模块开关同一次 [setPrefs] 落盘。
-  Future<void> settleSrsMiningTargetInstallDefault({
-    bool freshOnboardingPackImport = false,
-  }) async {
-    if (getPref(srsMiningTargetInstallDefaultKey, defaultValue: null) != null) {
-      return;
-    }
-    bool stored(String key) => getPref(key, defaultValue: null) != null;
-    final bool prefSignal = stored('first_time_setup') ||
-        stored('onboarding_completed') ||
-        stored('last_selected_deck') ||
-        stored('last_selected_model');
-    final bool existingUser = (!freshOnboardingPackImport && prefSignal) ||
-        await _hasAnkiMiningData();
-    // 模块开关经与 [setModuleEnabled] 同一组按 [ModuleId] 的存储原语写入：这里是存储层
-    // 的一次性落盘，只问「落没落过盘」、不读用户意愿；门控一律问模块可见性。
-    final bool moduleUnset = !_moduleStored(ModuleId.srs);
-    // 显式选过「发往 Fushi 复习」= 在用复习（常见于恢复一份老用户备份：挖词目标随设置
-    // 恢复，而模块开关是设备本地键、新设备上没设过）。此时不论判成老用户与否都不能关
-    // 模块——关着就不读挖词目标，卡实际仍发 Anki；模块没设过就显式写成开。
-    final bool explicitSrs =
-        getPref(srsMiningTargetKey, defaultValue: null) == 'srs';
-    await setPrefs(<String, dynamic>{
-      srsMiningTargetInstallDefaultKey: existingUser ? 'anki' : 'srs',
-      if (moduleUnset && explicitSrs)
-        ..._moduleEntry(ModuleId.srs, true)
-      else if (moduleUnset && existingUser)
-        ..._moduleEntry(ModuleId.srs, false),
-    });
-  }
-
-  /// 模块开关是否显式落过盘（没落过 = 读出厂默认 / 判定规则）。
-  bool _moduleStored(ModuleId module) =>
-      getPref(module.prefKey, defaultValue: null) != null;
-
-  /// 模块开关的一条待写记录（与 [setModuleEnabled] 同一个键），供批量 [setPrefs]。
-  Map<String, dynamic> _moduleEntry(ModuleId module, bool value) =>
-      <String, dynamic>{module.prefKey: value};
-
-  Future<bool> _hasAnkiMiningData() async {
-    return (await _db
-            .customSelect(
-              'SELECT EXISTS(SELECT 1 FROM mined_sentences) '
-              'OR EXISTS(SELECT 1 FROM pending_mine_queue) AS used',
-            )
-            .getSingle())
-        .read<bool>('used');
-  }
-
-
-  // 首页 dashboard 面板显示档（JSON map，见 models/home_dashboard_panel.dart）。
-  // 空串 = 全部面板按各自的默认判据（auto）。
-  String get homeDashboardPanels =>
-      getPref('home_dashboard_panels', defaultValue: '') as String;
-
-  Future<void> setHomeDashboardPanels(String json) async {
-    await setPref('home_dashboard_panels', json);
-    notifyListeners();
-  }
-
-  // 复习卡面外观（JSON，见 SrsCardAppearance）。空串 = 模板默认外观。
-  String get srsCardAppearance =>
-      getPref('srs_card_appearance', defaultValue: '') as String;
-
-  Future<void> setSrsCardAppearance(String json) async {
-    await setPref('srs_card_appearance', json);
-    notifyListeners();
-  }
-
-  // 挖词目标 = Fushi 复习时，卡落进哪个 SRS 牌组 / 用哪个笔记类型（SRS 实体 id；
-  // 空串 = 默认牌组 / 内置 Fushi 卡片）。id 自带 profileUid，随 Profile 快照走。
-  String get srsMiningDeckId =>
-      getPref('srs_mining_deck_id', defaultValue: '') as String;
-
-  Future<void> setSrsMiningDeckId(String id) async {
-    await setPref('srs_mining_deck_id', id);
-    notifyListeners();
-  }
-
-  String get srsMiningNoteTypeId =>
-      getPref('srs_mining_note_type_id', defaultValue: '') as String;
-
-  Future<void> setSrsMiningNoteTypeId(String id) async {
-    await setPref('srs_mining_note_type_id', id);
-    notifyListeners();
-  }
-
-  // 非 Lapis 笔记类型的字段映射：JSON `{noteTypeId: {fieldId: 模板}}`（模板与 Anki
-  // 字段映射同一套 handlebar）。坏 JSON / 形状不对的项当没映射过。
-  Map<String, Map<String, String>> get srsMiningFieldMappings {
-    final String raw =
-        getPref('srs_mining_field_mappings', defaultValue: '') as String;
-    if (raw.isEmpty) return const <String, Map<String, String>>{};
-    try {
-      final Object? decoded = jsonDecode(raw);
-      if (decoded is! Map) return const <String, Map<String, String>>{};
-      return <String, Map<String, String>>{
-        for (final MapEntry<Object?, Object?> e in decoded.entries)
-          if (e.key is String && e.value is Map)
-            e.key! as String: <String, String>{
-              for (final MapEntry<Object?, Object?> f
-                  in (e.value! as Map).entries)
-                if (f.key is String && f.value is String)
-                  f.key! as String: f.value! as String,
-            },
-      };
-    } on FormatException {
-      return const <String, Map<String, String>>{};
-    }
-  }
-
-  Future<void> setSrsMiningFieldMappings(
-    Map<String, Map<String, String>> mappings,
-  ) async {
-    await setPref('srs_mining_field_mappings', jsonEncode(mappings));
-    notifyListeners();
-  }
-
-  // 制卡句子音频的头/尾 padding（毫秒）。对齐 asbplayer 的 audio padding：字幕 cue 的
-  // 时间窗通常比实际发声短，尾音/助词/呼吸直接被硬切。视频字幕与有声书两条制卡链共用
-  // 这一对值（同一个人听同一种语言，句首/句尾余量的需求不随媒体种类变），裁剪时都走
-  // [padSentenceRange] 夹相邻 cue 边界，所以填大了也不会把下一句混进来。
-  // 默认值 = 原有声书硬编码常量（头 120 / 尾 200，[kMiningHeadPadMs]/[kMiningTailPadMs]），
-  // 有声书用户行为零变化；视频链此前完全没 padding，默认即获得余量。
-  int get miningAudioHeadPadMs =>
-      (getPref('mining_audio_head_pad_ms', defaultValue: kMiningHeadPadMs)
-              as int)
-          .clamp(0, kMiningPadMaxMs);
-
-  void setMiningAudioHeadPadMs(int ms) async {
-    await setPref('mining_audio_head_pad_ms', ms.clamp(0, kMiningPadMaxMs));
-    notifyListeners();
-  }
-
-  int get miningAudioTailPadMs =>
-      (getPref('mining_audio_tail_pad_ms', defaultValue: kMiningTailPadMs)
-              as int)
-          .clamp(0, kMiningPadMaxMs);
-
-  void setMiningAudioTailPadMs(int ms) async {
-    await setPref('mining_audio_tail_pad_ms', ms.clamp(0, kMiningPadMaxMs));
-    notifyListeners();
-  }
-
-  /// 有声书倍速制卡：句子音频是否跟随当前播放倍速（变速不变调）。默认开——用户开着
-  /// 1.5× 听书，卡片里的句子音频就是 1.5× 的，与阅读时听到的一致；关掉则一律裁原速。
-  /// 只对小说有声书制卡链生效（视频链没有「播放倍速」这个制卡语境，不读它）。
-  bool get miningAudioFollowPlaybackSpeed =>
-      getPref('mining_audio_follow_playback_speed', defaultValue: true)
-          as bool;
-
-  void toggleMiningAudioFollowPlaybackSpeed() async {
-    await setPref(
-      'mining_audio_follow_playback_speed',
-      !miningAudioFollowPlaybackSpeed,
-    );
-    notifyListeners();
-  }
-
-  bool get deduplicatePitchAccents =>
-      getPref('deduplicate_pitch_accents', defaultValue: true) as bool;
-
-  void toggleDeduplicatePitchAccents() async {
-    await setPref('deduplicate_pitch_accents', !deduplicatePitchAccents);
-    notifyListeners();
-  }
-
-  bool get harmonicFrequency =>
-      getPref('harmonic_frequency', defaultValue: true) as bool;
-
-  void toggleHarmonicFrequency() async {
-    await setPref('harmonic_frequency', !harmonicFrequency);
-    notifyListeners();
-  }
-
-  bool get showExpressionTags =>
-      getPref('show_expression_tags', defaultValue: false) as bool;
-
-  void toggleShowExpressionTags() async {
-    await setPref('show_expression_tags', !showExpressionTags);
-    notifyListeners();
-  }
-
-  bool get collapseDictionaries =>
-      getPref('collapse_dictionaries', defaultValue: true) as bool;
-
-  void toggleCollapseDictionaries() async {
-    await setPref('collapse_dictionaries', !collapseDictionaries);
-    notifyListeners();
-  }
-
-  // 对齐 Hoshi Reader Android 的 "Compact Glossaries"：释义列表由每条一行改成
-  // inline + ` | ` 分隔的紧凑排版（popup.js createDictionaryBlock 的 compactCss）。
-  // 渲染器早就支持 window.compactGlossaries，只是从来没有偏好写入它。默认 false =
-  // 保持现状（Android 那边默认 true，但改默认会让所有存量用户的弹窗观感突变）。
-  bool get compactGlossaries =>
-      getPref('popup_compact_glossaries', defaultValue: false) as bool;
-
-  void toggleCompactGlossaries() async {
-    await setPref('popup_compact_glossaries', !compactGlossaries);
-    notifyListeners();
-  }
-
-  // 词典样式统一：查词弹窗把导入词典自带的颜色（styles.css / 结构化内容 inline
-  // style）按语义重映射到当前 ColorScheme（M3E）。默认 false（用户 10-09：统一着色会盖掉
-  // 词典自带配色，改为显式开启；存量用户写过的偏好值原样保留）；关掉 = 保留词典原样式。
-  // popup.js 读 window.__fushiDictUnifiedStyle。
-  bool get dictionaryUnifiedStyle =>
-      getPref('popup_dictionary_unified_style', defaultValue: false) as bool;
-
-  void toggleDictionaryUnifiedStyle() async {
-    await setPref('popup_dictionary_unified_style', !dictionaryUnifiedStyle);
-    notifyListeners();
-  }
-
-  // ── custom CSS ───────────────────────────────────────────────────────
-
-  Map<String, String> get customDictCSS {
-    final raw = getPref('custom_dict_css', defaultValue: '') as String;
-    if (raw.isEmpty) return {};
-    try {
-      final decoded = jsonDecode(raw);
-      if (decoded is Map) {
-        return decoded.map((k, v) => MapEntry(k.toString(), v.toString()));
-      }
-    } catch (e, stack) {
-      ErrorLogService.instance
-          .log('PreferencesRepository.customDictCSS.decode', e, stack);
-    }
-    return {};
-  }
-
-  String getCustomCSSForDict(String dictName) => customDictCSS[dictName] ?? '';
-
-  Future<void> setCustomCSSForDict(String dictName, String css) async {
-    final map = customDictCSS;
-    if (css.isEmpty) {
-      map.remove(dictName);
-    } else {
-      map[dictName] = css;
-    }
-    await setPref('custom_dict_css', jsonEncode(map));
-  }
-
-  String get globalDictCSS =>
-      getPref('global_dict_css', defaultValue: '') as String;
-
-  Future<void> setGlobalDictCSS(String css) async {
-    await setPref('global_dict_css', css);
-  }
-
-  // ── 可视化样式规则（结构化真相源 + CSS 编译产物缓存）────────────────
-  //
-  // 与上面的手写 CSS **分开存**：可视化面板改规则表，手写框改 CSS 文本，注入时
-  // 拼接。共用一份文本就得反向解析手写 CSS 才能回填面板，往返编辑必坏。
-
-  String get dictStyleRulesRaw =>
-      getPref(dictStyleRulesPrefKey, defaultValue: '') as String;
-
-  Future<void> setDictStyleRulesRaw(String raw) async {
-    await setPref(dictStyleRulesPrefKey, raw);
-  }
-
-  /// 规则表的 CSS 编译产物缓存。
-  ///
-  /// 供跑不了 Dart 编译器的消费方直接读（Android 独立弹窗 Activity 直连 prefs
-  /// 表）。Dart 侧一律走 `AppModel.effective*DictCSS` 现算，不读这个缓存——
-  /// 冗余数据只由同一个编译函数产出：`AppModel.saveDictStyleRules`（保存时）与
-  /// `AppModel.refreshCompiledDictStyleCssCache`（启动时按当前编译器对齐），一类读者。
-  String get dictStyleRulesCss =>
-      getPref(dictStyleRulesCssPrefKey, defaultValue: '') as String;
-
-  Future<void> setDictStyleRulesCss(String css) async {
-    await setPref(dictStyleRulesCssPrefKey, css);
-  }
-
-  // ── audio sources ────────────────────────────────────────────────────
-
-  /// 已退役的内置远端音频源 URL。曾经随新装默认写入用户的音频源列表；2026-09-13
-  /// 用户拍板不再依赖任何第三方网络音频库，内置默认远端源整个删掉。老用户列表里
-  /// 残留的这些 URL 在读取时剔除——只删默认值而不清持久化，就等于只对新装生效。
-  /// 消费方一律经 [audioSourceConfigs] 读，这里是唯一咽喉。
-  static const Set<String> retiredAudioSourceUrls = <String>{
-    'https://fushi-reader.manhhaoo-do.workers.dev/?term={term}&reading={reading}',
-  };
-
-  /// Anki 本地音频服务器（local-audio-yomichan，默认端口 5050）的内置预设 URL。
-  /// 用户装了该服务器后，在「管理音频来源」里打开开关即用；默认关闭——本地第三方
-  /// 服务不经用户同意不参与查词发音（与 fushiRemote 同策）。
-  /// 由 [_withDefaultAudioSources] 对所有用户「缺则补」为一条 disabled 源。
-  static const String ankiLocalAudioUrl =
-      'http://localhost:5050/?term={term}&reading={reading}';
-
-  /// legacy `audio_sources`（只存已启用的远端 URL）。无内置默认远端源，未写过即空。
-  List<String> get audioSources {
-    final result = getPref('audio_sources', defaultValue: const <String>[]);
-    if (result is List<String>) return result;
-    if (result is List) return result.cast<String>();
-    return <String>[];
-  }
-
-  List<AudioSourceConfig> get audioSourceConfigs {
-    final result = getPref('audio_source_configs', defaultValue: null);
-    if (result is List) {
-      final configs = result
-          .whereType<Map>()
-          .map((Map json) => AudioSourceConfig.fromJson(
-                Map<String, dynamic>.from(json),
-              ))
-          .where((AudioSourceConfig source) =>
-              source.kind != AudioSourceKind.remoteAudio ||
-              (source.url?.isNotEmpty ?? false))
-          .toList();
-      if (configs.isNotEmpty) return _withDefaultAudioSources(configs);
-    }
-    // 没写过 typed config 就按 legacy audio_sources 装配（fromLegacyUrls 默认
-    // enabled，保留老用户已启用的 URL）；纯新装两个 pref 都空，走同一条路。
-    return _withDefaultAudioSources(
-      AudioSourceConfig.fromLegacyUrls(audioSources),
-    );
-  }
-
-  List<AudioSourceConfig> _withDefaultAudioSources(
-    List<AudioSourceConfig> sources,
-  ) {
-    // 已退役的内置远端源（见 [retiredAudioSourceUrls]）从老用户列表里剔除。
-    final List<AudioSourceConfig> result = <AudioSourceConfig>[
-      for (final AudioSourceConfig source in sources)
-        if (source.kind != AudioSourceKind.remoteAudio ||
-            !retiredAudioSourceUrls.contains(source.url))
-          source,
-    ];
-
-    // fushiRemote 恒在列首（缺则补），历史行为不变。
-    final bool hasFushiRemote = result.any(
-      (AudioSourceConfig source) => source.kind == AudioSourceKind.fushiRemote,
-    );
-    if (!hasFushiRemote) {
-      result.insert(0, AudioSourceConfig.fushiRemote());
-    }
-
-    // Anki 本地音频服务器（5050）内置预设：对所有用户「缺则补」为一条 disabled 源，
-    // 追加在列尾。用户装了服务器打开开关即用；删掉后下次读取会 disabled 重生，与
-    // fushiRemote 恒补策略一致（TODO-083 范式）。
-    final bool hasAnki = result.any((AudioSourceConfig source) =>
-        source.kind == AudioSourceKind.remoteAudio &&
-        source.url == ankiLocalAudioUrl);
-    if (!hasAnki) {
-      result.add(AudioSourceConfig.remoteAudio(
-        url: ankiLocalAudioUrl,
-        label: 'Anki',
-        enabled: false,
-      ));
-    }
-
-    return result;
-  }
-
-  void setAudioSources(List<String> sources) async {
-    await setPref('audio_sources', sources);
-    notifyListeners();
-  }
-
-  Future<void> setAudioSourceConfigs(List<AudioSourceConfig> sources) async {
-    await setPref(
-      'audio_source_configs',
-      sources.map((AudioSourceConfig source) => source.toJson()).toList(),
-    );
-    await setPref(
-      'audio_sources',
-      sources
-          .where((AudioSourceConfig source) =>
-              source.kind == AudioSourceKind.remoteAudio && source.enabled)
-          .map((AudioSourceConfig source) => source.url ?? '')
-          .where((String url) => url.isNotEmpty)
-          .toList(),
-    );
     notifyListeners();
   }
 

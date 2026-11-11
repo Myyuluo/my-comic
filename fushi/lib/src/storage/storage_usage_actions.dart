@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:fushi_audio/fushi_audio.dart' show SrtBookRepository;
 import 'package:fushi_core/fushi_core.dart';
-import 'package:fushi_dictionary/fushi_dictionary.dart';
 import 'package:path/path.dart' as p;
 
 import 'package:fushi/src/media/sources/reader_fushi_source.dart';
@@ -46,12 +45,7 @@ class StorageUsageActions {
   /// 真实接线（原 `settings_schema_storage.dart` 里的闭包）。
   factory StorageUsageActions.of(SettingsContext c) => StorageUsageActions(
     booksProvider: () => loadStorageBookRefs(c.appModel.database),
-    dictionaryNamesProvider: () async => <String>[
-      for (final Dictionary d in c.appModel.dictionaries) d.name,
-    ],
-    // 只翻译明细行的 label；真名列表照旧驱动目录扫描与删除路由。
-    dictionaryDisplayNamesProvider: () async =>
-        c.appModel.dictionaryDisplayNameOverrides,
+    dictionaryNamesProvider: () async => const <String>[],
     deleteBook: (String bookKey) async {
       final DeleteBookResult result = await ReaderFushiSource.instance
           .deleteBook(
@@ -80,21 +74,7 @@ class StorageUsageActions {
     deleteDatabaseSnapshots: () async =>
         deleteDatabaseSnapshotFiles(await AppPaths.stateRootDirectory()),
     deleteFiles: deleteStorageDerivedFiles,
-    deleteDictionary: (String name) async {
-      // AppModel.deleteDictionary 内部 catch-all 不上抛，「无异常」不等于成功——
-      // 以「删除后该名是否仍在词典表」为准回报（审查 M1）。找不到该名 = 目标
-      // 状态已达成，按成功处理。
-      for (final Dictionary d in c.appModel.dictionaries) {
-        if (d.name == name) {
-          await c.appModel.deleteDictionary(d);
-          final bool stillPresent = c.appModel.dictionaries.any(
-            (Dictionary x) => x.name == name,
-          );
-          return stillPresent ? t.storage_dictionary_delete_incomplete : null;
-        }
-      }
-      return null;
-    },
+    deleteDictionary: (String name) async => null,
   );
 
   /// 书籍清单取数（真实现读 `epub_books` + `srt_books` + `audiobooks`）。

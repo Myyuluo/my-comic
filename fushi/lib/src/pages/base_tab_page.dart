@@ -63,23 +63,6 @@ abstract class BaseTabPageState<T extends BaseTabPage>
     }
   }
 
-  Widget buildChangeSourceButton() {
-    return FushiIconButton(
-      size: textTheme.titleLarge?.fontSize,
-      tooltip: t.change_source,
-      icon: mediaSource.icon,
-      onTap: () async {
-        await showAppDialog(
-          context: context,
-          builder: (context) => MediaSourcePickerDialogPage(
-            mediaType: mediaType,
-          ),
-        );
-        mediaType.refreshTab();
-      },
-    );
-  }
-
   Widget buildBackButton({
     required VoidCallback onTap,
   }) {

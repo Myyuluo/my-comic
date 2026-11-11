@@ -257,7 +257,7 @@ void main() {
       final Iterable<RegExpMatch> matches = call.allMatches(maskComments(body));
       expect(
         matches.length,
-        greaterThanOrEqualTo(5),
+        greaterThanOrEqualTo(4),
         reason: '扫描没抓到分类调用，守卫本身塌了',
       );
       for (final RegExpMatch match in matches) {
@@ -272,7 +272,7 @@ void main() {
       }
     });
 
-    test('这 5 个分类构建函数的定义签名也是零参', () {
+    test('分类构建函数的定义签名也是零参', () {
       // 只钉 `_buildDestinations()` 真正调用的那批，不搞「凡 build*Destination
       // 都得零参」的宽扫描——`buildReaderGroupDestination` /
       // `buildVideoGroupDestination` / `buildReaderQuickSettingsDestination` 是
@@ -287,11 +287,11 @@ void main() {
           .toSet();
       expect(
         called.length,
-        greaterThanOrEqualTo(5),
+        greaterThanOrEqualTo(4),
         reason: '扫描没抓到分类调用，守卫本身塌了',
       );
 
-      final List<String> sources = <String>['lib/src/settings', 'lib/src/sync']
+      final List<String> sources = <String>['lib/src/settings']
           .map((String dir) => Directory(dir))
           .expand((Directory dir) => dir.listSync())
           .whereType<File>()

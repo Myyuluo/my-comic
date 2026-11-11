@@ -3,8 +3,6 @@ import 'dart:async';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fushi/src/models/app_model.dart';
-import 'package:fushi/src/profile/profile_view_model.dart';
-import 'package:fushi/src/pages/implementations/activity_feed.dart';
 import 'package:fushi/src/pages/implementations/stat_charts.dart';
 import 'package:fushi/src/pages/implementations/stat_day_reset_hour_dialog.dart';
 import 'package:fushi/src/pages/implementations/stat_hourly_breakdown.dart';
@@ -447,7 +445,6 @@ class StatSettingsButton extends ConsumerWidget {
           context,
           ref.read(appProvider),
           settings: settings,
-          profileName: ref.read(profileViewModelProvider).activeProfile?.name,
         ),
       ),
     );
@@ -1106,25 +1103,6 @@ String? statBookCphOf(
   return formatStatCphOf(chars, ms);
 }
 
-/// 相对时间外显：把 [activityRelativeTime] 的结构化结果套上 i18n 文案
-/// （刚刚 / N 分钟前 / N 小时前 / N 天前）。
-///
-/// [activityRelativeTime] 刻意留在纯数据层不碰 i18n，这里是它唯一的 widget 层
-/// 映射：首页活动时间轴与 Bangumi 同步卡的「上次同步」共用同一口径，不各写一份
-/// switch（否则单位阈值一改就只改到一处）。
-String formatActivityRelativeTime(int timestampMs, DateTime now) {
-  final ActivityRelativeTime rel = activityRelativeTime(timestampMs, now);
-  switch (rel.unit) {
-    case ActivityRelativeUnit.justNow:
-      return t.activity_just_now;
-    case ActivityRelativeUnit.minutesAgo:
-      return t.activity_minutes_ago(n: rel.value);
-    case ActivityRelativeUnit.hoursAgo:
-      return t.activity_hours_ago(n: rel.value);
-    case ActivityRelativeUnit.daysAgo:
-      return t.activity_days_ago(n: rel.value);
-  }
-}
 
 /// 热力图气泡日期标签：`M-dd`；跨年补年份成 `Y-M-dd`。[dateKey] 形如 `2026-07-18`
 /// （[statDateKey] 格式）；无法解析时原样返回。

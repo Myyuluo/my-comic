@@ -44,7 +44,7 @@ class _AppSettingsExportSection {
     // The prefs-version counter is a per-install cache-invalidation signal
     // written on every preference change, not a user setting.
     if (key == FushiDatabase.prefsVersionKey) return false;
-    if (SyncRepository.deviceLocalPrefKeys.contains(key)) return false;
+    if (PrefRedactionPolicy.isDeviceLocalOrCredential(key)) return false;
     if (includeSensitive) return true;
     return !PrefRedactionPolicy.isDeviceLocalOrCredential(key);
   }

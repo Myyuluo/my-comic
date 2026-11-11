@@ -3,38 +3,18 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:fushi_cli/fushi_cli.dart';
 
-import 'package:fushi_engine/sync/pairing/fushi_pair_link.dart';
-
-import 'package:fushi/src/lookup/lookup_deep_link.dart';
-import 'package:fushi/src/platform/source_url_channel.dart';
 import 'package:fushi/src/startup/test_environment.dart';
 
 /// 关闭桌面控制通道的环境变量（值为 `off`）。
 const String kDesktopCtlDisableEnv = 'FUSHI_CTL';
 
-/// `fushi_cli open <target>` 的裁决：与 argv / 单实例转交（`main.dart` 的
-/// `_handleExternalVideoChannel`）认同一组候选，顺序也相同——卡片来源 URL →
-/// 配对深链 → 查词深链。这里只判定，不执行；接受后由调用方交给那条既有通道落地，
-/// CLI 不另开第二条打开路径。
-///
-/// 与 argv 路径的区别只在「拒绝要说出来」：argv 遇到不认识的参数静默忽略，CLI
-/// 要把原因回给终端。
+/// `fushi_cli open <target>` 的裁决：my-comic 已删除外部视频 / 查词 / 配对深链，
+/// 唯一支持的媒体打开通道是 app 内书架，故 CLI 的 open 目标一律拒绝。
 CtlOpenResult classifyCtlOpenTarget(
   String target, {
   bool Function(String path)? fileExists,
 }) {
-  if (SourceUrlChannel.isSourceUrl(target)) {
-    return const CtlOpenResult.accepted(CtlOpenKind.sourceUrl);
-  }
-  if (FushiPairLink.tryParse(target) != null) {
-    return const CtlOpenResult.accepted(CtlOpenKind.pairLink);
-  }
-  if (lookupWordFromDeepLink(target) != null) {
-    return const CtlOpenResult.accepted(CtlOpenKind.lookup);
-  }
-  return const CtlOpenResult.rejected(
-    '不支持的目标（目前只认 fushi:// 深链与卡片来源 URL）',
-  );
+  return const CtlOpenResult.rejected('my-comic 只支持在 app 内打开漫画库');
 }
 
 /// 桌面控制通道的 app 侧实现：把 [CtlDesktopHandler] 的四个动作接到 app 已有的

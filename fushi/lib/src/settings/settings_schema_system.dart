@@ -8,20 +8,12 @@ import 'package:fushi/src/models/app_model.dart';
 import 'package:fushi/src/models/module_id.dart';
 import 'package:fushi/src/models/store_compliance.dart';
 import 'package:fushi/src/media/manga/mihon/mihon_runtime_factory.dart';
-import 'package:fushi/src/pages/implementations/feedback/feedback_common.dart'
-    show openFeedbackCenter;
-import 'package:fushi/src/pages/implementations/leaderboard/leaderboard_tab.dart'
-    show LeaderboardPage;
 import 'package:fushi/src/pages/implementations/updates_center_open.dart'
     show openUpdatesCenter;
-import 'package:fushi/src/onboarding/recommended_pack_discard.dart';
-import 'package:fushi/src/onboarding/recommended_pack_download_row.dart';
-import 'package:fushi/src/onboarding/recommended_pack_import.dart';
 import 'package:fushi/src/settings/settings_actions.dart';
 import 'package:fushi/src/settings/settings_context.dart';
 import 'package:fushi/src/settings/settings_destination.dart';
 import 'package:fushi/src/stats/study_diag_export.dart';
-import 'package:fushi/src/sync/sync_http.dart';
 import 'package:fushi/src/updates/app_update_check.dart';
 import 'package:fushi/src/updates/update_feed_service.dart';
 import 'package:fushi_engine/updates/update_feed_kind.dart';
@@ -60,21 +52,6 @@ SettingsSection _homeShortcutsSection() {
         icon: FushiIcons.barChart,
         onTap: (SettingsContext c) =>
             pushSettingsPage(c, (_) => const StatisticsCenterPage()),
-      ),
-      SettingsNavigationItem(
-        id: 'system.home_shortcut_leaderboard',
-        title: t.leaderboard_title,
-        icon: FushiIcons.trophy,
-        onTap: (SettingsContext c) =>
-            pushSettingsPage(c, (_) => const LeaderboardPage()),
-      ),
-      SettingsNavigationItem(
-        id: 'system.home_shortcut_feedback',
-        title: t.feedback_title,
-        icon: FushiIcons.forum,
-        // 从设置里点开时截到的是设置页，没有意义；不预截图。
-        onTap: (SettingsContext c) =>
-            openFeedbackCenter(c.context, captureScreen: false),
       ),
     ],
   );
@@ -209,10 +186,6 @@ SettingsDestination buildSystemDestination() {
         // 内存 / 手柄导航 / 快捷键 / GitHub 这类通用应用项。框架层另有面包屑去重
         // （settingsSearchBreadcrumb），双保险消灭整类重复。
         title: t.settings_section_general,
-        // 「推荐包下载」行随 controller 的阶段实时显隐：本分组自己订阅 stage
-        // （SettingsSection.liveListenable），不再靠宿主页整页重建。
-        liveListenable: (SettingsContext settingsContext) =>
-            settingsContext.appModel.recommendedPackDownloadController.stage,
         items: <SettingsItem>[
           // 「界面语言」（id 'appearance.language'）已归位到「外观 · 界面」分区
           //（与主题/明暗/缩放并列）；id 前缀本就是 appearance，此前放系统分类
@@ -295,7 +268,6 @@ SettingsDestination buildSystemDestination() {
             selected: (SettingsContext c) => c.appModel.networkProxyMode,
             onChanged: (SettingsContext c, String value) async {
               await c.appModel.setNetworkProxyMode(value);
-              resetSyncHttpClient();
               c.refresh();
             },
           ),
@@ -316,7 +288,6 @@ SettingsDestination buildSystemDestination() {
               // 云同步的共享 client 在首次使用时就把代理解析结果固化进 findProxy 了，
               // 不丢弃它，用户改完代理仍走旧出口——那等于这条设置对同步不生效
               // （BUG-1348）。更新检查每次新建 client，不受影响。
-              resetSyncHttpClient();
               // 非空且无法归一成合法 host:port → 提示（仍保存原串，运行时忽略）。
               if (trimmed.isNotEmpty &&
                   normalizeUserProxyHostPort(trimmed) == null) {
@@ -343,7 +314,6 @@ SettingsDestination buildSystemDestination() {
             value: (SettingsContext c) => c.appModel.networkProxyUsername,
             onChanged: (SettingsContext c, String value) async {
               await c.appModel.setNetworkProxyUsername(value.trim());
-              resetSyncHttpClient();
             },
           ),
           SettingsTextItem(
@@ -356,7 +326,6 @@ SettingsDestination buildSystemDestination() {
             value: (SettingsContext c) => c.appModel.networkProxyPassword,
             onChanged: (SettingsContext c, String value) async {
               await c.appModel.setNetworkProxyPassword(value);
-              resetSyncHttpClient();
             },
           ),
         ],
@@ -542,23 +511,6 @@ Widget _buildTmdbAttributionRow(SettingsContext settingsContext) {
   );
 }
 
-Widget _buildRecommendedPackDownloadRow(SettingsContext settingsContext) {
-  final AppModel appModel = settingsContext.appModel;
-  return RecommendedPackDownloadRow(
-    controller: appModel.recommendedPackDownloadController,
-    // 导入编排是库级共享的（[importDownloadedRecommendedPack]）：设置这一行、
-    // 新手引导那一步、首页迷你条三个发起点同一个真相源。
-    onImport: () => unawaited(importDownloadedRecommendedPack(appModel)),
-    // 放弃编排同样库级共享（[confirmAndDiscardRecommendedPack]）：确认框漏在任何
-    // 一个发起点上，那一处就成了不带确认直接删几 GB 的按钮。
-    onDiscard: () => unawaited(
-      confirmAndDiscardRecommendedPack(
-        settingsContext.context,
-        appModel.recommendedPackDownloadController,
-      ),
-    ),
-  );
-}
 
 Widget _buildRuntimeAppVersionRow(SettingsContext settingsContext) {
   final packageInfo = settingsContext.appModel.packageInfo;

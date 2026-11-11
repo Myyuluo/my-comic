@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi/src/models/theme_notifier.dart';
-import 'package:fushi/src/pages/implementations/dictionary_popup_theme.dart';
 import 'package:fushi/src/utils/adaptive/adaptive_platform.dart';
 import 'package:fushi/src/utils/components/fushi_design_tokens.dart';
 
@@ -89,56 +88,5 @@ void main() {
     }
   });
 
-  group('书内查词弹窗主题', () {
-    DictionaryPopupTheme resolve({required bool eink}) =>
-        resolveDictionaryPopupTheme(
-          eink: eink,
-          einkDark: false,
-          readerDark: false,
-          buildColorScheme: eink
-              ? buildEinkColorScheme
-              : (Brightness b) => buildFushiColorScheme(
-                  seedColor: kFushiDefaultSeed,
-                  brightness: b,
-                ),
-          textTheme: appText,
-          designSystem: FushiDesignSystem.material,
-        );
 
-    test('组件主题与字号阶梯同源，配色即 app ColorScheme（不再叠纸色）', () {
-      final ThemeData theme = resolve(eink: false).theme;
-      final ThemeData reference = buildFushiThemeData(
-        scheme: theme.colorScheme,
-        textTheme: appText,
-        designSystem: FushiDesignSystem.material,
-      );
-      final ColorScheme app = buildFushiColorScheme(
-        seedColor: kFushiDefaultSeed,
-        brightness: Brightness.light,
-      );
-      expect(theme.colorScheme.surface, app.surface);
-      expect(theme.colorScheme.onSurface, app.onSurface);
-      expect(theme.cardTheme, reference.cardTheme);
-      expect(theme.chipTheme, reference.chipTheme);
-      expect(theme.dialogTheme, reference.dialogTheme);
-      expect(theme.snackBarTheme, reference.snackBarTheme);
-      expect(theme.cardTheme.color, theme.colorScheme.surfaceContainerLow);
-      expect(theme.textTheme.bodyMedium?.fontFamily, 'FushiTestFont');
-      expect(
-        theme.extension<FushiDesignSystemTheme>()?.designSystem,
-        FushiDesignSystem.material,
-      );
-    });
-
-    test('墨水屏扩展仍由纯函数自己挂上', () {
-      expect(
-        resolve(eink: true).theme.extension<FushiEinkTheme>()?.einkMode,
-        isTrue,
-      );
-      expect(
-        resolve(eink: false).theme.extension<FushiEinkTheme>()?.einkMode,
-        isFalse,
-      );
-    });
-  });
 }

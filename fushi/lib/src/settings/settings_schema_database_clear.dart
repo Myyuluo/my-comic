@@ -6,7 +6,7 @@ import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi/src/settings/settings_context.dart';
 import 'package:fushi/src/settings/settings_destination.dart';
 import 'package:fushi/src/storage/manga_database_clear_service.dart';
-import 'package:fushi/src/sync/deletion_disclosure.dart'
+import 'package:fushi/src/utils/components/deletion_disclosure.dart'
     show DeleteConfirmCheckboxRow;
 import 'package:fushi/src/utils/fushi_icons.dart';
 import 'package:fushi/utils.dart';

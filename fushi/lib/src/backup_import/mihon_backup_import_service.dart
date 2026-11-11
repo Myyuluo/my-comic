@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:drift/drift.dart';
 import 'package:fushi_core/fushi_core.dart';
+import 'package:fushi/src/utils/misc/pref_redaction_policy.dart';
 import 'package:fushi_engine/media/manga/manga_storage.dart';
 import 'package:fushi_engine/media/tracking/media_tracking_repository.dart'
     show
@@ -16,7 +17,6 @@ import 'package:fushi/src/backup_import/mihon_backup_parser.dart';
 import 'package:fushi/src/media/manga/history/manga_history.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi/src/models/preference_keys.dart';
-import 'package:fushi/src/sync/sync_repository.dart' show SyncRepository;
 import 'package:fushi/src/utils/misc/trimmed_text.dart';
 
 /// [kUnavailableMihonExtensionPackage] 住在书架条目模型里（它是写入用户库的
@@ -764,7 +764,7 @@ class MihonBackupImportService {
       // Validate first: an unknown standard type must abort even when this
       // device happens to already have the key.
       final String encoded = _encodeAppPreferenceValue(preference);
-      if (SyncRepository.deviceLocalPrefKeys.contains(key)) {
+      if (PrefRedactionPolicy.isDeviceLocalOrCredential(key)) {
         _increment(
           skippedByReason,
           MihonBackupAppPreferenceSkipReason.deviceLocal,

@@ -17,7 +17,6 @@ import 'package:fushi/src/pages/implementations/downloads_page.dart';
 import 'package:fushi/src/pages/implementations/home_page.dart';
 import 'package:fushi/src/platform/platform_providers.dart';
 import 'package:fushi/src/storage/app_paths.dart';
-import 'package:fushi/src/sync/desktop_lookup_service.dart';
 import 'package:fushi/src/utils/fushi_icons.dart';
 import 'package:fushi/src/utils/components/fushi_floating_chrome.dart'
     show FushiFloatingChromeBar;
@@ -52,7 +51,6 @@ void main() {
   setUp(() {
     LocaleSettings.setLocale(AppLocale.en);
     UpdateChecker.disableAutoCheckForTesting = true;
-    DesktopLookupService.instance.debugReset();
     // FushiToast 走全局 navigator overlay；页面测试挂上 key 才能断言 toast 真渲染。
     navKey = GlobalKey<NavigatorState>();
     FushiToast.navigatorKey = navKey;

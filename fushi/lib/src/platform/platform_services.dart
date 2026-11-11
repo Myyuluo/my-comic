@@ -1,11 +1,7 @@
 import 'dart:io' show Platform;
 
-import 'package:fushi_anki/fushi_anki.dart';
 import 'package:fushi_platform/fushi_platform.dart';
 
-import 'package:fushi/src/anki/sync_client/anki_sync_client_repository.dart';
-import 'package:fushi/src/anki/sync_client/anki_sync_host.dart';
-import 'package:fushi_engine/anki_sync/anki_sync_session.dart';
 import 'package:fushi/src/platform/desktop/desktop_directory_service.dart';
 import 'package:fushi/src/platform/desktop/desktop_lifecycle_service.dart';
 import 'package:fushi/src/platform/desktop/desktop_clipboard_service.dart';
@@ -15,52 +11,25 @@ import 'package:fushi/src/platform/desktop/desktop_device_info_service.dart';
 /// Holds all platform-specific service implementations.
 ///
 /// Created once in `main()` before `runApp()` and passed to [AppModel] as a
-/// constructor parameter. This avoids the need for `AppModel` to know which
-/// platform it runs on or to hold a `Ref`.
+/// constructor parameter. Ticket 04 removed the Anki backend factories; only
+/// the OS-level services and platform flags remain.
 class PlatformServices {
   final PlatformDirectoryService directory;
   final PlatformLifecycleService lifecycle;
   final PlatformClipboardService clipboard;
   final PlatformPermissionService permission;
   final PlatformDeviceInfoService deviceInfo;
-  final BaseAnkiRepository Function() _createDefaultAnkiRepository;
-  final BaseAnkiRepository Function()? _createMobileAnkiConnectRepository;
-
-  /// 本平台的原生 Anki 后端是否受限、因而提供「改用 AnkiConnect」这条路
-  /// （Android 的 AnkiDroid / iOS 的 AnkiMobile 都是）。桌面本来就走 AnkiConnect，
-  /// 没有这条支路。
-  final bool _isMobile;
-  bool _useAnkiConnectOnMobile = false;
-
-  /// 「Anki 同步客户端」会话（全 app 一份）；null = 本机没有 `fushi-anki-sync`。
-  final AnkiSyncSession? Function() _ankiSyncSession;
-  bool _useAnkiSyncClient = false;
 
   /// 本进程跑在 Windows 上吗。
-  ///
-  /// 收在这里而不是让调用方各自读 `Platform.isWindows`：本类的职责（见类注释）就是
-  /// 「让 [AppModel] 不必知道自己跑在哪个平台」，而模块可用性判据
-  /// （[ModuleId.availableOn]，galgame 只做 Windows 端）此前绕过本类直读
-  /// `dart:io`，于是 widget 测试没有任何缝去声明「这条用例讲的是 Windows」——
-  /// 表现为一批仪表盘游戏用例在 Windows 本机全绿、在 Linux CI 上必红。
-  /// 默认值仍取真实平台，生产行为不变。
   final bool isWindows;
 
-  /// 本进程跑在桌面端吗（Windows / macOS / Linux）。同上，默认取真实平台。
+  /// 本进程跑在桌面端吗。
   final bool isDesktop;
 
-  /// 本进程跑在 iOS 上吗。同上，默认取真实平台。
-  ///
-  /// 单列一个字段而不是让调用方写 `!isDesktop && !isAndroid`：iOS 在
-  /// [ModuleId.availableOn] 里承载的是 App Store 合规边界
-  /// （[StoreRestrictedCapability]），与「移动端」这个技术分类不是一回事——
-  /// Android 同为移动端却不受任何一条商店限制约束。
+  /// 本进程跑在 iOS 上吗。
   final bool isIOS;
 
-  /// 本进程跑在 Android 上吗。同上，默认取真实平台。
-  ///
-  /// 目前没有模块按它区分（串流接收端已覆盖全部平台）；保留它让模块判据始终
-  /// 拿到完整的平台元组。
+  /// 本进程跑在 Android 上吗。
   final bool isAndroid;
 
   PlatformServices({
@@ -69,100 +38,18 @@ class PlatformServices {
     required this.clipboard,
     required this.permission,
     required this.deviceInfo,
-    required BaseAnkiRepository Function() createAnkiRepository,
-    BaseAnkiRepository Function()? createMobileAnkiConnectRepository,
-    bool isMobile = false,
     bool? isWindows,
     bool? isDesktop,
     bool? isIOS,
     bool? isAndroid,
-    AnkiSyncSession? Function()? ankiSyncSession,
-  })  : _ankiSyncSession = ankiSyncSession ?? (() => sharedAnkiSyncSession),
-        isWindows = isWindows ?? Platform.isWindows,
+  })  : isWindows = isWindows ?? Platform.isWindows,
         isDesktop = isDesktop ??
             (Platform.isWindows || Platform.isMacOS || Platform.isLinux),
         isIOS = isIOS ?? Platform.isIOS,
-        isAndroid = isAndroid ?? Platform.isAndroid,
-        _createDefaultAnkiRepository = createAnkiRepository,
-        _createMobileAnkiConnectRepository = createMobileAnkiConnectRepository,
-        _isMobile = isMobile,
-        assert(
-          !isMobile || createMobileAnkiConnectRepository != null,
-          'Mobile requires an AnkiConnect repository factory.',
-        );
-
-  /// Creates the active Anki backend. 移动端保留各自的原生后端（AnkiDroid /
-  /// AnkiMobile）作为升级安全的默认值，但可显式改用一台可达的 AnkiConnect。
-  BaseAnkiRepository createAnkiRepository() {
-    if (_useAnkiSyncClient) {
-      return AnkiSyncClientRepository(session: _ankiSyncSession());
-    }
-    if (_isMobile && _useAnkiConnectOnMobile) {
-      return _createMobileAnkiConnectRepository!();
-    }
-    return _createDefaultAnkiRepository();
-  }
-
-  bool get useAnkiConnectOnMobile => _isMobile && _useAnkiConnectOnMobile;
-
-  /// 本平台是否提供「改用 AnkiConnect」这个选项（设置页据此显示开关）。
-  bool get offersMobileAnkiConnectChoice => _isMobile;
-
-  /// 本机带了 `fushi-anki-sync`，可以用「Anki 同步客户端」后端（设置页据此显示）。
-  bool get offersAnkiSyncClient => _ankiSyncSession() != null;
-
-  AnkiSyncSession? get ankiSyncSession => _ankiSyncSession();
-
-  bool get useAnkiSyncClient => _useAnkiSyncClient;
-
-  /// 运行时后端选择。本机没有 helper 时恒为 false：存储里记着 true 也不会把
-  /// 制卡路由到一个起不来的后端（换到没带 helper 的设备上恢复备份就是这种情况）。
-  void setUseAnkiSyncClient(bool value) {
-    _useAnkiSyncClient = value && offersAnkiSyncClient;
-  }
-
-  /// 运行时后端选择。判据只有 [AnkiSettings.ankiConnectUsableOnMobile] 一份——
-  /// 这里不再自己写一遍 `value && apiKey.isNotEmpty`，否则与 UI 门控、启动期修复
-  /// 三处迟早漂开（BUG-1608）。
-  void setUseAnkiConnectOnMobile(
-    bool value, {
-    String apiKey = '',
-  }) {
-    if (!_isMobile) return;
-    _useAnkiConnectOnMobile = AnkiSettings(
-      useAnkiConnectOnMobile: value,
-      ankiConnectApiKey: apiKey,
-    ).ankiConnectUsableOnMobile;
-  }
+        isAndroid = isAndroid ?? Platform.isAndroid;
 
   /// Cross-service wiring that requires async initialisation.
-  ///
-  /// Must be called once during app startup (e.g. in [AppModel.initialise])
-  /// after all services are constructed.
-  Future<void> init() async {
-    final AnkiSettings settings =
-        await _createDefaultAnkiRepository().loadSettings();
-    setUseAnkiSyncClient(settings.useAnkiSyncClient);
-    if (_isMobile) {
-      setUseAnkiConnectOnMobile(
-        settings.useAnkiConnectOnMobile,
-        apiKey: settings.ankiConnectApiKey,
-      );
-      // 存量坏状态修复：开关记着 true 但 key 空（BUG-1608 之前的版本允许出现这种
-      // 组合）。把存储对齐到运行时事实——运行时已经回落原生后端了，存储再声称
-      // 「开着」只会让设置页显示一个不生效的开关。
-      //
-      // 这条**只**为老数据兜底：BUG-1608 之后，清空 key 的那一刻设置页就会立即
-      // 关掉开关并明确告知用户，正常路径不再产生这种组合，所以这里静默改写不会
-      // 再在用户眼皮底下发生。
-      if (settings.useAnkiConnectOnMobile && !_useAnkiConnectOnMobile) {
-        await _createDefaultAnkiRepository().updateSettings(
-          (AnkiSettings current) =>
-              current.copyWith(useAnkiConnectOnMobile: false),
-        );
-      }
-    }
-  }
+  Future<void> init() async {}
 
   /// Constructs the correct service bundle for the current platform.
   ///
@@ -174,7 +61,6 @@ class PlatformServices {
       clipboard: DesktopClipboardService(),
       permission: DesktopPermissionService(),
       deviceInfo: DesktopDeviceInfoService(),
-      createAnkiRepository: AnkiConnectRepository.new,
     );
   }
 }

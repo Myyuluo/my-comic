@@ -6,7 +6,6 @@ import 'package:fushi/pages.dart';
 import 'package:fushi/src/media/sources/reader_fushi_source.dart';
 import 'package:fushi/src/models/theme_notifier.dart'
     show CustomThemeEntry, ThemePreset, kCustomThemeDefaultSeed;
-import 'package:fushi/src/profile/profile_view_model.dart';
 import 'package:fushi/src/settings/settings_context.dart';
 import 'package:fushi/src/settings/theme_preset_card.dart';
 import 'package:fushi/src/utils/fushi_icons.dart';
@@ -224,54 +223,6 @@ Widget buildDesignSystemSelector(SettingsContext settingsContext) {
   );
 }
 
-Widget buildProfilePickerRow(SettingsContext settingsContext) {
-  final ProfileUiState uiState =
-      settingsContext.ref.watch(profileViewModelProvider);
-  final ProfileViewModel viewModel =
-      settingsContext.ref.read(profileViewModelProvider.notifier);
-
-  if (uiState.isLoading || uiState.profiles.isEmpty) {
-    return AdaptiveSettingsRow(
-      title: t.profile_label,
-      icon: Icons.person_outline,
-      trailing: SizedBox(
-        width: 20,
-        height: 20,
-        child: adaptiveIndicator(
-          context: settingsContext.context,
-          strokeWidth: 2,
-        ),
-      ),
-    );
-  }
-
-  final int activeId = uiState.profiles.any(
-    (ProfileRow profile) => profile.id == uiState.activeProfileId,
-  )
-      ? uiState.activeProfileId
-      : uiState.profiles.first.id;
-
-  return AdaptiveSettingsPickerRow<int>(
-    title: t.profile_label,
-    icon: Icons.person_outline,
-    selected: activeId,
-    options: <AdaptiveSettingsPickerOption<int>>[
-      for (final ProfileRow profile in uiState.profiles)
-        AdaptiveSettingsPickerOption<int>(
-          value: profile.id,
-          label: profile.name,
-        ),
-    ],
-    onChanged: (int profileId) {
-      if (profileId == activeId) return;
-      unawaited(
-        viewModel.switchProfile(profileId).then<void>(
-              (_) => settingsContext.refresh(),
-            ),
-      );
-    },
-  );
-}
 
 /// App-UI language picker. With 17 locales it crosses
 /// [kSettingsPickerInlineLimit], so [AdaptiveSettingsPickerRow] renders a

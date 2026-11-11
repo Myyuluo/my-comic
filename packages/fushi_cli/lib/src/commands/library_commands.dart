@@ -1,7 +1,6 @@
 import 'package:args/args.dart';
 
 import '../ctl_commands.dart';
-import 'reader_commands.dart';
 import 'shelf_commands.dart';
 
 /// library 域命令（app 侧路由见 `fushi/lib/src/platform/desktop/ctl/ctl_library_routes.dart`）。
@@ -128,7 +127,6 @@ const List<CtlCommandGroup> libraryCommandGroups = <CtlCommandGroup>[
     ],
   ),
   ...shelfCommandGroups,
-  ...readerCommandGroups,
 ];
 
 const String _root = '/api/admin/library';

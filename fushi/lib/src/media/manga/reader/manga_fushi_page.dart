@@ -14,11 +14,9 @@ import 'package:fushi/src/utils/components/glass/fushi_icon.dart';
 import 'package:path/path.dart' as p;
 import 'package:window_manager/window_manager.dart';
 
-import 'package:fushi_anki/fushi_anki.dart';
-import 'package:fushi/src/anki/source_review_session.dart';
+import 'package:fushi/src/media/manga/reader/source_review_compat.dart';
 import 'package:fushi_audio/fushi_audio.dart';
 import 'package:fushi_core/fushi_core.dart';
-import 'package:fushi/src/profile/profile_view_model.dart';
 import 'package:fushi/src/media/sources/reader_fushi_source.dart';
 import 'package:fushi/src/models/fushi_reader_palette.dart';
 import 'package:fushi/src/models/module_id.dart';
@@ -1173,43 +1171,10 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
     // TODO-2936：应用「漫画」媒体类型 / 本书 book 级的 Profile 绑定（与 EPUB/
     // 视频阅读器同范式：非致命、与开书链并行；漫画的 bookKey 就是 Profile 的
     // book 级 entryKey，见 book_format_convert.dart 的身份说明）。
-    unawaited(_resolveAndApplyMangaProfile());
   }
 
-  /// 解析并应用 Profile 绑定（book 级 > 语言级 > 'manga' 媒体类型级 > 当前激活）。
-  ///
-  /// 漫画与 EPUB 共用 `epub_books` 表，语言取该行的 `language` 列。**注意当前它
-  /// 对漫画基本恒为 NULL**：`manga_importer` 的插入不带 language（CBZ / 图片包
-  /// 没有任何语言声明可读，PDF 也没有稳定的 `dc:language` 对应物），只有用户手动
-  /// 指定过的行才有值。通道在此接通，值有没有是数据侧的事——恒 NULL 时语言级整级
-  /// 跳过，行为与接通前逐字节一致。
-  Future<void> _resolveAndApplyMangaProfile() async {
-    String? languageTag;
-    try {
-      languageTag = (await appModel.database.getEpubBook(
-        widget.bookKey,
-      ))?.language;
-    } catch (e, st) {
-      debugPrint('[MangaFushi] 读内容语言失败（非致命，退回媒体类型绑定）: $e\n$st');
-    }
-    await ref
-        .read(profileViewModelProvider.notifier)
-        .autoApplyBinding(
-          bookUid: widget.bookKey,
-          languageTag: languageTag,
-          mediaType: ProfileMediaKind.manga,
-          restoreFallback: true,
-        );
-  }
-
-  SourceReviewSession? _sourceReviewSession;
-  bool _reviewContinued = false;
   bool _sourceLocatorApplied = false;
-  bool _disposedDuringSourceReview = false;
-  bool get _sourceReviewActive =>
-      _disposedDuringSourceReview ||
-      (_sourceReviewSession?.isReview ??
-          (widget.sourceReview != null && !_reviewContinued));
+  bool get _sourceReviewActive => false;
 
   @override
   void didChangeDependencies() {
@@ -1220,25 +1185,6 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
       _motionEnabled = motionEnabled;
       unawaited(_pushPageAnimationToJs());
     }
-    final SourceReviewSession? session = SourceReviewScope.maybeOf(context);
-    if (identical(session, _sourceReviewSession)) return;
-    _sourceReviewSession?.removeListener(_onSourceReviewChanged);
-    _sourceReviewSession = session;
-    session?.addListener(_onSourceReviewChanged);
-  }
-
-  void _onSourceReviewChanged() {
-    if (!mounted || _sourceReviewActive || _reviewContinued) return;
-    _reviewContinued = true;
-    _progressDebounce?.cancel();
-    _readLedger.reset();
-    if (_bookRow != null && _payload != null) {
-      _ensureStudyClock(appModel.database);
-      _noteVisiblePages();
-    }
-    _lastSavedPage = -1;
-    unawaited(_continueSourceReading());
-    setState(() {});
   }
 
   Future<void> _continueSourceReading() async {
@@ -1275,8 +1221,6 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
       );
     }
     readerSessionRemotes.unregister(_sessionRemote);
-    _disposedDuringSourceReview = _sourceReviewActive;
-    _sourceReviewSession?.removeListener(_onSourceReviewChanged);
     if (Platform.isWindows || Platform.isLinux) {
       windowManager.removeListener(this);
     }
@@ -2855,13 +2799,7 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
     final Color background = _backgroundColor;
     // 固定态顶栏可见时横幅贴在让出的区域下沿，最顶一排仍是底色；其余情况横幅
     // 贴页顶（悬浮胶囊浮在它上面、不占最顶一排）。
-    if (_sourceReviewSession != null && _chromeTopInset == 0) {
-      final ColorScheme scheme = Theme.of(context).colorScheme;
-      return (
-        background: scheme.secondaryContainer,
-        foreground: scheme.onSecondaryContainer,
-      );
-    }
+
     return fushiTitleBarColorsOn(background);
   }
 
@@ -5002,24 +4940,6 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
                     bottom: _chromeBottomInset,
                     child: _buildBody(),
                   ),
-                  if (_sourceReviewSession
-                      case final SourceReviewSession session)
-                    Positioned(
-                      // 固定态顶栏占布局高（含状态栏），横幅贴它下沿；悬浮态
-                      // 顶栏不占位，横幅自己让出状态栏。
-                      top: _chromeTopInset,
-                      left: 0,
-                      right: 0,
-                      child: SafeArea(
-                        top: _chromeTopInset == 0,
-                        child: SourceReviewBanner(
-                          runHidden: runWithLookupPopupHidden,
-                          session: session,
-                          onReturn: () =>
-                              unawaited(Navigator.of(context).maybePop()),
-                        ),
-                      ),
-                    ),
                   // 顶栏 = 返回键 + 标题/页码 + 动作组。
                   //
                   // 返回键是本页**唯一**的出口，它的可见性只能由用户意图

@@ -15,8 +15,7 @@ import 'package:fushi/src/backup_import/mihon_backup_parser.dart';
 import 'package:fushi/src/media/manga/history/manga_history.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi/src/media/sources/manga_fushi_source.dart';
-import 'package:fushi/src/sync/pref_redaction_policy.dart';
-import 'package:fushi/src/sync/sync_repository.dart';
+import 'package:fushi/src/utils/misc/pref_redaction_policy.dart';
 
 part 'mihon_backup_exporter_categories.part.dart';
 part 'mihon_backup_exporter_library.part.dart';

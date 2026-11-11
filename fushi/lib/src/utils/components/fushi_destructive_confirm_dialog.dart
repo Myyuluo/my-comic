@@ -1,6 +1,6 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:fushi/i18n/strings.g.dart';
-import 'package:fushi/src/sync/deletion_disclosure.dart';
+import 'package:fushi/src/utils/components/deletion_disclosure.dart';
 import 'package:fushi/src/utils/adaptive/adaptive_widgets.dart';
 import 'package:fushi/src/utils/components/fushi_design_tokens.dart';
 import 'package:fushi/src/utils/components/fushi_material_components.dart';

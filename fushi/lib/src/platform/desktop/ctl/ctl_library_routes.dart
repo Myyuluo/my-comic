@@ -22,14 +22,11 @@ import 'package:fushi/src/media/sources/reader_fushi_source.dart';
 import 'package:fushi/src/models/app_model.dart';
 
 
-import 'package:fushi/src/asr_host/asr_host.dart' show isAsrSupported;
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
-import 'package:fushi/src/platform/desktop/ctl/ctl_audiobook_routes.dart';
 import 'package:fushi/src/platform/desktop/ctl/ctl_library_entries.dart';
 import 'package:fushi/src/platform/desktop/ctl/ctl_library_import.dart';
 import 'package:fushi/src/platform/desktop/ctl/ctl_library_manage_routes.dart';
 
-import 'package:fushi/src/platform/desktop/ctl/ctl_reader_routes.dart';
 import 'package:fushi/src/platform/desktop/ctl/desktop_ctl_context.dart';
 import 'package:fushi/src/utils/misc/error_log_service.dart';
 
@@ -62,8 +59,6 @@ List<CtlRoute> buildLibraryCtlRoutes(DesktopCtlContext context) {
     // 书架管理（合集 / 标签 / 书签 / 收藏句 / 改名 / 封面 / 读完 / 重置 / 来源增删改）、
     // 阅读会话遥控、有声书、漫画 OCR：各自一个文件，路径同在 library 前缀下。
     ...buildLibraryManageCtlRoutes(context),
-    ...buildReaderCtlRoutes(context),
-    ...buildAudiobookCtlRoutes(context),
   ];
 }
 
@@ -95,13 +90,6 @@ class _LibraryCtlHandlers {
       throw CtlFailure.rejected(
         '「${kind.wireName}」所属模块已在设置里关闭（${kind.module.name}）',
       );
-    }
-  }
-
-  /// 已迁移只读态：与 [AppModel.openMedia] 同一闸门，写库的命令一律挡下。
-  void _requireWritable() {
-    if (_app.isMigrationReadonly) {
-      throw const CtlFailure.rejected('数据已迁移到新版，旧版处于只读状态');
     }
   }
 
@@ -332,7 +320,6 @@ class _LibraryCtlHandlers {
     if (call.optBool('confirm') != true) {
       throw const CtlFailure.badRequest('删除需要 confirm: true（CLI 用 --yes）');
     }
-    _requireWritable();
     final DeleteDecision decision = DeleteDecision(
       scope: call.optBool('everywhere') == true
           ? DeleteScope.syncEverywhere
@@ -367,10 +354,6 @@ class _LibraryCtlHandlers {
     _requireKindVisible(
       LibraryCtlKind.forBookFormat(BookFormat.parseOrEpub(row.format)),
     );
-    if (decision.deleteLocalFiles) {
-      // 先停止引用再销毁实体：正在播的就是这本时，句柄不放掉删除必然失败。
-      await _app.audiobookSession.stopIfPlayingAny(<String>[key.id]);
-    }
     final DeleteBookResult result = await ReaderFushiSource.instance.deleteBook(
       db: _db,
       bookKey: key.id,
@@ -399,12 +382,6 @@ class _LibraryCtlHandlers {
     if (decision.deleteStatistics &&
         !ReaderFushiSource.srtBookOffersStatisticsDeletion(book)) {
       throw const CtlFailure.rejected('纯字幕书不支持连同统计一起删（会连坐同名书的统计）');
-    }
-    if (decision.deleteLocalFiles) {
-      await _app.audiobookSession.stopIfPlayingAny(<String>[
-        book.uid,
-        if (book.bookKey.isNotEmpty) book.bookKey,
-      ]);
     }
     LocalFileDeleteReport localFiles = const LocalFileDeleteReport();
     if (book.bookKey.isNotEmpty) {
@@ -455,9 +432,6 @@ class _LibraryCtlHandlers {
     final NavigatorState? navigator = _context.navigator;
     if (navigator == null) {
       throw const CtlFailure.conflict('主界面还没就绪');
-    }
-    if (_app.isMigrationReadonly) {
-      throw const CtlFailure.rejected('数据已迁移到新版，旧版处于只读状态，不能打开媒体');
     }
     switch (key.store) {
       case LibraryCtlStore.book:
@@ -622,7 +596,6 @@ class _LibraryCtlHandlers {
   // ── import ───────────────────────────────────────────────────────────
 
   Future<Object?> importPaths(CtlCall call) async {
-    _requireWritable();
     final List<String> paths = call.stringList('paths');
     if (paths.isEmpty) throw const CtlFailure.badRequest('paths 缺失');
     for (final String path in paths) {
@@ -650,18 +623,7 @@ class _LibraryCtlHandlers {
       db: _db,
       isKindEnabled: _kindVisible,
       keepDuplicates: duplicate == 'suffix',
-      // 只有音频的有声书：本机能转录就排进「转录后入库」队列（发现页同一个）。
-      enqueueTranscription: isAsrSupported
-          ? ({
-              required List<String> audioPaths,
-              String? contentPath,
-              required String title,
-            }) async => (await _app.audiobookTranscribeImportQueue.enqueue(
-              audioPaths: audioPaths,
-              contentPath: contentPath,
-              title: title,
-            )).id
-          : null,
+      enqueueTranscription: null,
     );
     final List<LibraryCtlImportResult> results = await importer.importAll(
       paths,

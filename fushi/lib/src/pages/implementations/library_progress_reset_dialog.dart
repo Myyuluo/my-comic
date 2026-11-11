@@ -1,7 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 
 import 'package:fushi/src/media/library_progress_reset.dart';
-import 'package:fushi/src/sync/deletion_disclosure.dart'
+import 'package:fushi/src/utils/components/deletion_disclosure.dart'
     show DeleteConfirmCheckboxRow;
 import 'package:fushi/utils.dart';
 

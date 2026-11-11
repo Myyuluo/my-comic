@@ -17,12 +17,10 @@ import 'package:pdfrx/pdfrx.dart';
 import 'package:fushi_anki/fushi_anki.dart';
 import 'package:fushi_audio/fushi_audio.dart';
 import 'package:fushi_core/fushi_core.dart';
-import 'package:fushi/src/anki/anki_view_model.dart';
 import 'package:fushi/src/epub/book_file_location.dart';
 import 'package:fushi/src/lookup/sentence_extraction.dart';
 import 'package:fushi/src/models/module_id.dart';
 import 'package:fushi/src/pages/base_source_page.dart';
-import 'package:fushi/src/pages/implementations/dictionary_popup_webview.dart';
 import 'package:fushi/src/reader/reader_panel_chrome_kit.dart';
 import 'package:fushi/src/reader/reader_session_remote.dart';
 import 'package:fushi/src/pdf/pdf_engine.dart';
@@ -434,16 +432,7 @@ class _ReaderPdfPageState extends BaseSourcePageState<ReaderPdfPage>
     );
     if (selectionRect == null || !mounted) return;
 
-    prunePopupStack(0);
-    final int highlightCount = await searchDictionaryResult(
-      searchTerm: searchTerm,
-      selectionRect: selectionRect,
-    );
-    if (!mounted || highlightCount <= 0) return;
-
-    // 把引擎实际命中的词在 PDF 上做原生蓝选高亮（复用 pdfrx 选区，零手绘），
-    // 与 EPUB 查词后高亮原文同语义。两端 inclusive。
-    _highlightMatchedTerm(text, charIndex, highlightCount);
+    // Ticket 04：查词弹窗已删除；选区只更新当前句，不再触发查词。
   }
 
   /// 字符矩形（PDF 页坐标）→ 屏幕全局矩形（弹窗锚点坐标系）。
@@ -595,71 +584,6 @@ class _ReaderPdfPageState extends BaseSourcePageState<ReaderPdfPage>
     );
   }
 
-  // ── Phase 4：制卡 ─────────────────────────────────────────────────────
-
-  /// 查词弹窗里点「+」制卡。句子来自最近一次查词（[_lastSentence]），卡图是**当前页
-  /// 栅格化 PNG**（PDF 没有视频帧/封面图可用，页面本身就是最有信息量的图）。
-  @override
-  Future<MinePopupResult> onMineFromPopup(Map<String, String> fields) async {
-    final BaseAnkiRepository repo = ref.read(ankiRepositoryProvider);
-    Directory? tempDir;
-    try {
-      final String sentence =
-          _lastSentence.isNotEmpty ? _lastSentence : (fields['sentence'] ?? '');
-
-      // 当前页栅格化成临时 PNG 当卡图；失败则无图落卡（不阻断制卡）。
-      String? coverPath;
-      final Uint8List? pagePng = await _renderCurrentPagePng();
-      if (pagePng != null) {
-        tempDir = await Directory.systemTemp.createTemp('fushi_pdf_mine_');
-        final File file = File(p.join(tempDir.path, 'page.png'));
-        await file.writeAsBytes(pagePng, flush: true);
-        coverPath = file.path;
-      }
-
-      final AnkiMiningContext miningContext = AnkiMiningContext(
-        sentence: sentence,
-        documentTitle: _bookRow?.title,
-        coverPath: coverPath,
-        sentenceOffset: _lastSentenceOffset,
-        source: AnkiMiningSource.book,
-        bookTitleTag: appModel.autoAddBookNameToTags
-            ? BaseAnkiRepository.sanitizeTitleTag(_bookRow?.title)
-            : null,
-      );
-
-      FushiToast.showMine(
-        msg: t.card_mining_pending,
-        status: MineToastStatus.pending,
-      );
-      final MineOutcome outcome = await repo.mineEntry(
-        rawPayloadJson: jsonEncode(fields),
-        context: miningContext,
-      );
-      final described = describeMineOutcome(outcome);
-      if (described.record) {
-        unawaited(_recordMinedCount());
-      }
-      FushiToast.showMine(msg: described.message, status: described.status);
-      if (described.success) {
-        return MinePopupResult.mined(outcome);
-      }
-      return MinePopupResult.failed(outcome);
-    } catch (e, stack) {
-      ErrorLogService.instance.log('ReaderPdfPage.onMineFromPopup', e, stack);
-      return const MinePopupResult();
-    } finally {
-      // 卡图已由 repo 拷进 Anki 媒体库，临时目录用完即删。
-      if (tempDir != null) {
-        try {
-          if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
-        } catch (_) {
-          // 临时文件清理失败无害（系统临时目录会被回收）。
-        }
-      }
-    }
-  }
-
   Future<void> _recordMinedCount() async {
     // P4 写侧收敛：走 DB 复合入口（同事务全局汇总 + per-book 计数），并补上此前
     // 漏写的书身份（旧代码只写全局 addMiningCount，per-book 恒漏 → 恒等式单边偏差）。
@@ -767,8 +691,6 @@ class _ReaderPdfPageState extends BaseSourcePageState<ReaderPdfPage>
             Positioned.fill(child: _buildViewer()),
             _buildFloatingHeader(title),
             _buildFloatingPager(),
-            // 查词弹窗层：必须在树里，否则 searchDictionaryResult 查到也不显示。
-            buildDictionary(),
           ],
         ),
       ),

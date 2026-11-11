@@ -30,6 +30,10 @@ import 'package:fushi/src/utils/misc/build_version.dart';
 ///
 /// 顺序 = 设置页「功能模块」分区的展示顺序，也与底栏/侧栏的 tab 顺序同向
 /// （库页 → 工具页 → 横切能力 → 设备数据）。
+/// Ticket 04 兼容保留：全部旧枚举值与 `module_*_enabled` 偏好键**不得删除或改名**
+/// ——旧安装的偏好、备份与旧对端数据仍可能携带它们，解析时绝不能崩。my-comic 的
+/// 可见性合成（[ModuleId.isInMyComicScope] / [ModuleVisibility.resolve]）只启用
+/// 漫画域，其余值仅作为历史键存在。
 enum ModuleId {
   /// 首页 dashboard（继续 / 学习统计 / 活动 / 更新提醒）。可关：关掉后落地页改为
   /// 第一个启用的 tab；导航 tab 至少要留一个（见 `isLastNavigationModule`）。

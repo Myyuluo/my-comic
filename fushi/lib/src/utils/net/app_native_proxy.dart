@@ -11,7 +11,6 @@ import 'package:fushi_engine/utils/net/app_http.dart';
 
 
 import 'package:fushi_engine/utils/net/app_proxy.dart';
-import 'package:fushi/src/utils/net/hls_relay_normalizer.dart';
 
 Future<AppNativeProxy>? _sharedProxy;
 Future<AppNativeProxy>? _challengeProxy;
@@ -422,154 +421,14 @@ class AppNativeProxy {
     await request.response.close();
   }
 
-  /// 把上游正文转给 native，途中做两项 HLS 归一化（见 `hls_relay_normalizer.dart`）：
-  ///  - 播放列表：绝对 https 分片 / 变体 / `URI="…"` 改写成中继终结 TLS 的明文形式，
-  ///    分片请求才会以明文回到中继（否则 CONNECT 隧道里的字节中继看不见）；
-  ///  - 分片：图片魔数开头、后面却是 MPEG-TS / fMP4 的「伪装分片」剥掉图片前缀。
-  /// 只对整包 GET 做（200，或 `bytes=0-` 换来的完整 206）；真正的部分范围请求的
-  /// 字节偏移不能动，原样流过。
   Future<void> _relayBody(
     HttpRequest request,
     HttpClientResponse response,
   ) async {
-    final HttpResponse out = request.response;
-    // ffmpeg 的 http 首请求默认带 `Range: bytes=0-`，上游多半回 206 + 完整
-    // Content-Range——语义上仍是整包，与 200 同等处理；改写 / 剥前缀后以 200 回给
-    // native（Content-Range 随之作废）。真正的部分范围请求原样流过。
-    final bool wholeBody =
-        request.method == 'GET' &&
-        isWholeBodyRangeRequest(
-          request.headers.value(HttpHeaders.rangeHeader),
-        ) &&
-        (response.statusCode == HttpStatus.ok ||
-            (response.statusCode == HttpStatus.partialContent &&
-                isCompleteContentRange(
-                  response.headers.value(HttpHeaders.contentRangeHeader),
-                )));
-    if (!wholeBody) {
-      await out.addStream(response);
-      return;
-    }
-    final String? encoding = response.headers.value(
-      HttpHeaders.contentEncodingHeader,
-    );
-    final bool gzipped = encoding != null && encoding.toLowerCase() == 'gzip';
-    final bool plain = encoding == null || encoding.toLowerCase() == 'identity';
-    final bool playlistHint =
-        isHlsPlaylistContentType(
-          response.headers.value(HttpHeaders.contentTypeHeader),
-        ) ||
-        isHlsPlaylistPath(request.requestedUri.path);
-    final StreamIterator<List<int>> chunks = StreamIterator<List<int>>(
-      response,
-    );
-    // native 中途断开（libmpv 每次 seek / 换集都会掐掉正在下的分片或首个
-    // `bytes=0-` 整包请求）：Dart 的 HttpResponse 对已销毁的连接 `add` / `flush`
-    // **不抛**、`done` 也不完成（实测 Windows 上循环会一直跑到上游读完），不看
-    // 它这条循环会把上游整包拉完喂给死连接。唯一可靠信号是连接销毁后
-    // `connectionInfo` 取不到对端地址回 null。`addStream` 路径由 Dart 自己取消
-    // 源订阅，只有这条手动迭代要管；检测到就停读、finally 里 cancel 迭代器让
-    // 上游连接回池 / 关闭（读完后 cancel 是 no-op）。
-    try {
-      await _relayWholeBody(
-        request: request,
-        response: response,
-        out: out,
-        chunks: chunks,
-        gzipped: gzipped,
-        plain: plain,
-        playlistHint: playlistHint,
-        downstreamAlive: () => out.connectionInfo != null,
-      );
-    } finally {
-      await chunks.cancel();
-    }
+    // my-comic 已删除视频 / HLS 域：native 代理只做透明字节转发。
+    await request.response.addStream(response);
   }
 
-  static Future<void> _relayWholeBody({
-    required HttpRequest request,
-    required HttpClientResponse response,
-    required HttpResponse out,
-    required StreamIterator<List<int>> chunks,
-    required bool gzipped,
-    required bool plain,
-    required bool playlistHint,
-    required bool Function() downstreamAlive,
-  }) async {
-    final BytesBuilder head = BytesBuilder(copy: false);
-    // 第一段先攒够 16 字节判魔数（播放列表 / 图片 / 其它）。
-    while (head.length < 16 && await chunks.moveNext()) {
-      head.add(chunks.current);
-    }
-    Uint8List bytes = head.toBytes();
-    final bool playlist =
-        (playlistHint && (gzipped || plain)) ||
-        (plain && looksLikeHlsPlaylist(bytes));
-    if (playlist) {
-      // 播放列表整份读完再改写（一般几 KB；封顶 16 MiB，超了原样透传）。
-      const int cap = 16 * 1024 * 1024;
-      while (head.length <= cap &&
-          downstreamAlive() &&
-          await chunks.moveNext()) {
-        head.add(chunks.current);
-      }
-      bytes = head.takeBytes();
-      if (bytes.length <= cap) {
-        final List<int> decoded = gzipped ? gzip.decode(bytes) : bytes;
-        if (looksLikeHlsPlaylist(decoded)) {
-          final String rewritten = rewriteHlsPlaylistUris(
-            utf8.decode(decoded, allowMalformed: true),
-            nativePlaybackUri,
-          );
-          final List<int> body = utf8.encode(rewritten);
-          _asWholeEntity(out);
-          out.headers.removeAll(HttpHeaders.contentEncodingHeader);
-          // 正文已确认是 HLS 播放列表，就按 RFC 8216 的 mime 回给 native，不沿用上游
-          // 的 Content-Type（BUG-3079）。视频源扩展的 CDN 常把播放列表挂在非 .m3u8
-          // 路径上、回 `text/plain` / `application/octet-stream` / 图片类型；ffmpeg
-          // 的 hls_probe 遇到「扩展名与 mime 都不标准」直接拒认 HLS，libmpv 退到自己
-          // 的 demux_playlist，把每个分片当成独立的播放列表条目逐个播——每条只有一个
-          // 分片长（3～4 秒），进度条就被切成一段一段。
-          out.headers.contentType = ContentType(
-            'application',
-            'vnd.apple.mpegurl',
-          );
-          out.contentLength = body.length;
-          out.add(body);
-          return;
-        }
-      }
-      out.add(bytes);
-      await _drain(chunks, out, downstreamAlive);
-      return;
-    }
-    if (plain && looksLikeImagePrefix(bytes)) {
-      // 伪装分片：继续攒到探到媒体起点或封顶。
-      int? offset = disguisedMediaPayloadOffset(bytes);
-      while (offset == null &&
-          head.length < kDisguisedSegmentProbeLimit &&
-          await chunks.moveNext()) {
-        head.add(chunks.current);
-        offset = disguisedMediaPayloadOffset(head.toBytes());
-      }
-      bytes = head.takeBytes();
-      if (offset != null) {
-        _asWholeEntity(out);
-        final int declared = response.contentLength;
-        if (declared >= offset) out.contentLength = declared - offset;
-        out.headers.contentType = bytes[offset] == 0x47
-            ? ContentType('video', 'mp2t')
-            : ContentType('video', 'mp4');
-        out.add(Uint8List.sublistView(bytes, offset));
-        await _drain(chunks, out, downstreamAlive);
-        return;
-      }
-    }
-    out.add(bytes);
-    await _drain(chunks, out, downstreamAlive);
-  }
-
-  /// 改写过的响应不再是上游那个实体的字节切片：206 → 200、去掉 Content-Range。
   static void _asWholeEntity(HttpResponse out) {
     out.statusCode = HttpStatus.ok;
     out.headers.removeAll(HttpHeaders.contentRangeHeader);

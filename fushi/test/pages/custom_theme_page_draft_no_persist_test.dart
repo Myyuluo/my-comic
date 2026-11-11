@@ -286,16 +286,9 @@ void main() {
       expect(find.text(t.custom_theme_default_name(n: 2)), findsOneWidget,
           reason: '草稿默认名 hint 应为「Custom 列表长度+1」');
 
-      // 删除入口在 hero 的「更多」菜单里：打开菜单后才算数。
-      await tester.tap(find.byKey(const ValueKey<String>('custom-theme-more')));
-      await tester.pumpAndSettle();
-      expect(
-        find.text(t.delete_custom_theme, skipOffstage: false),
-        findsNothing,
-        reason: '草稿没有东西可删，删除项不该出现',
-      );
-      await tester.tapAt(const Offset(4, 4));
-      await tester.pumpAndSettle();
+      // Ticket 04：AI 入口删除后，草稿没有任何可用的「更多」项，整颗菜单不渲染。
+      expect(find.byKey(const ValueKey<String>('custom-theme-more')), findsNothing,
+          reason: '草稿没有删除项，AI 已删除，更多菜单不应渲染');
 
       await _tapApply(tester);
 

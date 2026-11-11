@@ -20,7 +20,6 @@ library;
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/physics.dart' show SpringSimulation;
-import 'package:fushi/src/media/audiobook/lyrics_player/lyrics_theme_host.dart';
 import 'package:fushi/src/reader/reader_panel_chrome_kit.dart';
 import 'package:fushi/src/utils/adaptive/adaptive_platform.dart';
 import 'package:fushi/src/utils/components/fushi_design_tokens.dart';
@@ -758,7 +757,6 @@ Future<T?> showReaderSideSheet<T>({
     from: context,
     to: Navigator.of(context).context,
   );
-  final LyricsThemeHostState? themeHost = LyricsThemeHost.maybeOf(context);
   final bool motion = fushiMotionEnabled(context);
   final Size window = MediaQuery.sizeOf(context);
   final ReaderPanelPresentation openedAs = readerPanelPresentationFor(
@@ -815,13 +813,7 @@ Future<T?> showReaderSideSheet<T>({
           }
 
           final Widget child = Builder(builder: buildSheet);
-          if (themeHost == null) return themes.wrap(child);
-          return _ReaderSideSheetThemes(
-            source: context,
-            initialThemes: themes,
-            changes: themeHost.themeChanges,
-            child: child,
-          );
+          return themes.wrap(child);
         },
     transitionBuilder:
         (

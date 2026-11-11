@@ -5,11 +5,7 @@ import 'package:fushi/src/settings/settings_destination.dart';
 import 'package:fushi/src/settings/settings_schema_appearance.dart';
 import 'package:fushi/src/settings/settings_schema_downloads.dart';
 import 'package:fushi/src/settings/settings_schema_manga.dart';
-import 'package:fushi_engine/media/tracking/media_tracking_service.dart'
-    show kMediaTrackingEnabled;
-import 'package:fushi/src/settings/settings_schema_tracking.dart';
 import 'package:fushi/src/settings/settings_schema_system.dart';
-import 'package:fushi/src/sync/sync_settings_schema.dart';
 import 'package:fushi/utils.dart';
 
 /// 记忆化的 schema 快照：整棵声明树 + 两张按 [ReaderPlacement] / [VideoPlacement]
@@ -87,7 +83,6 @@ List<SettingsDestination> _buildDestinations() {
     buildAppearanceDestination(),
     buildMangaDestination(),
     buildDownloadsDestination(),
-    if (kMediaTrackingEnabled) buildMediaTrackingDestination(),
     buildSystemDestination(),
   ]);
 }
@@ -270,8 +265,6 @@ SettingsDestination buildReaderQuickSettingsDestination(
     sections: <SettingsSection>[
       sectionFor(ReaderGroup.layout, t.section_layout),
       sectionFor(ReaderGroup.behavior, t.settings_destination_reading_controls),
-      sectionFor(ReaderGroup.lookup, t.settings_destination_lookup),
-      sectionFor(ReaderGroup.audiobook, t.section_audiobook),
     ].where((SettingsSection s) => s.items.isNotEmpty).toList(growable: false),
   );
 }

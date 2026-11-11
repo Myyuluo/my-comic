@@ -1,5 +1,5 @@
 import 'package:flutter/widgets.dart';
-import 'package:fushi/src/sync/desktop_foreground_guard.dart';
+import 'package:fushi/src/focus/desktop_foreground_guard.dart';
 
 /// 触发「把键盘焦点收回本页正文」的原因。
 ///

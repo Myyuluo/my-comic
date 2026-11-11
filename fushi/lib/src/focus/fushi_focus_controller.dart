@@ -6,7 +6,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:fushi/src/focus/focus_geometry.dart';
 import 'package:fushi/src/focus/main_window_focus_gate.dart';
 import 'package:fushi/src/focus/fushi_focus_scroll.dart';
-import 'package:fushi/src/sync/desktop_foreground_guard.dart';
+import 'package:fushi/src/focus/desktop_foreground_guard.dart';
 
 @immutable
 class FushiFocusId {

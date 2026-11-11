@@ -1,8 +1,6 @@
 import 'package:args/args.dart';
 import 'package:fushi_cli/fushi_cli.dart';
 import 'package:fushi_cli/src/commands/library_commands.dart';
-import 'package:fushi_cli/src/commands/reader_commands.dart'
-    show kOcrEngineKeys;
 import 'package:path/path.dart' as p;
 import 'package:test/test.dart';
 
@@ -1168,6 +1166,5 @@ void main() {
       ], group: 'ocr'),
       throwsA(isA<FormatException>()),
     );
-    expect(kOcrEngineKeys, hasLength(5));
   });
 }

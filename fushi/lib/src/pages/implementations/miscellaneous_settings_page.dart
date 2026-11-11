@@ -9,7 +9,6 @@ import 'package:fushi/src/settings/settings_context.dart';
 import 'package:fushi/src/settings/settings_destination.dart';
 import 'package:fushi/src/settings/settings_detail_page.dart';
 import 'package:fushi/src/settings/settings_schema_widgets.dart';
-import 'package:fushi/src/pages/implementations/crop_image_dialog_page.dart';
 import 'package:fushi/src/utils/components/glass/fushi_icon.dart';
 import 'package:fushi/src/utils/fushi_icons.dart';
 import 'package:fushi/src/utils/misc/app_icon_apply.dart';
@@ -191,17 +190,7 @@ class _MiscellaneousSettingsBodyState
     final String? pickedPath = result.files.first.path;
     if (pickedPath == null) return;
 
-    // 裁剪步骤：图标最终按**正方形**渲染，直接拿一张长条照片去当图标只会被拉伸
-    // 变形，用户没有任何机会挑出想要的那一块。锁 1:1，取消裁剪 = 取消整个流程
-    // （裁剪框默认铺满整图，不想裁的人直接确认即可拿到等价于原图的结果）。
-    if (!mounted) return;
-    final File? cropped = await showCropImageDialog(
-      context,
-      File(pickedPath),
-      aspectRatio: 1,
-    );
-    if (cropped == null) return;
-    final String iconPath = cropped.path;
+    final String iconPath = pickedPath;
 
     // Android 建快捷方式 / Windows 换窗口图标 + 落盘，与控制通道共用。
     final bool ok = await applyCustomAppIcon(iconPath);

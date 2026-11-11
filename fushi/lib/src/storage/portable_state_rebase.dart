@@ -1,15 +1,15 @@
 import 'dart:convert';
 
+import 'package:fushi_engine/profile/profile_document.dart' show kProfileSettingCategoryPref;
 import 'package:drift/drift.dart' show Variable;
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:fushi_core/fushi_core.dart';
 import 'package:path/path.dart' as p;
 
-import 'package:fushi/src/profile/profile_keys.dart' show ProfileKeys;
 import 'package:fushi/src/storage/app_paths.dart';
 import 'package:fushi/src/storage/path_rebase_coverage.dart'
     show PathRebasePref, PathValueShape, kPathRebasePrefs;
-import 'package:fushi/src/sync/backup_service.dart'
+import 'package:fushi/src/storage/font_path_rebase.dart'
     show rebaseFontCatalogJson, rebaseFontListJson;
 
 /// Ticket 02：Portable state 的启动期路径 rebase。
@@ -275,7 +275,7 @@ class PortableStateRebase {
         .customSelect(
           'SELECT id, key, value FROM profile_settings WHERE category = ?',
           variables: <Variable<Object>>[
-            Variable<String>(ProfileKeys.categoryPref),
+            Variable<String>(kProfileSettingCategoryPref),
           ],
         )
         .get();

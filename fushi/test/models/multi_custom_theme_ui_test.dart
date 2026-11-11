@@ -2,11 +2,8 @@ import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/native.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:fushi_anki/fushi_anki.dart';
-import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi/src/models/theme_notifier.dart';
-import 'package:fushi/src/profile/profile_keys.dart';
-import 'package:fushi/src/profile/profile_repository.dart';
+import 'package:fushi_core/fushi_core.dart';
 
 // TODO-930 M1-M3: behaviour guards for the multi-custom-theme UI integration
 // layer. M0 (data model + legacy migration) is covered by
@@ -17,37 +14,6 @@ import 'package:fushi/src/profile/profile_repository.dart';
 FushiDatabase _testDb() =>
     FushiDatabase.forTesting(DatabaseConnection(NativeDatabase.memory()));
 
-class _FakeAnkiRepository extends BaseAnkiRepository {
-  AnkiSettings _settings = const AnkiSettings();
-
-  @override
-  Future<AnkiSettings> loadSettings() async => _settings;
-
-  @override
-  Future<void> saveSettings(AnkiSettings settings) async {
-    _settings = settings;
-  }
-
-  @override
-  Future<AnkiFetchResult> fetchConfiguration() => throw UnimplementedError();
-
-  @override
-  Future<MineOutcome> mineEntry({
-    required String rawPayloadJson,
-    required AnkiMiningContext context,
-  }) =>
-      throw UnimplementedError();
-
-  @override
-  Future<bool> isDuplicate(String expression, String reading) async => false;
-
-  @override
-  Future<bool> createNoteType(AnkiNoteTypeTemplate template) =>
-      throw UnimplementedError();
-
-  @override
-  Future<bool> createDeck(String name) => throw UnimplementedError();
-}
 
 ThemeNotifier _notifier(FushiDatabase db) {
   int counter = 0;
@@ -155,54 +121,5 @@ void main() {
     });
   });
 
-  group('M3: per-Profile snapshot carries multi-theme keys', () {
-    test(
-        'custom_themes + selected_custom_theme_id are NOT excluded from '
-        'profile snapshots', () {
-      expect(
-        ProfileKeys.isExcludedPref(ThemeNotifier.customThemesPrefKey),
-        isFalse,
-      );
-      expect(
-        ProfileKeys.isExcludedPref(ThemeNotifier.selectedCustomThemeIdPrefKey),
-        isFalse,
-      );
-    });
 
-    test('two profiles keep independent custom theme lists across a switch',
-        () async {
-      final ProfileRepository repo =
-          ProfileRepository(db, _FakeAnkiRepository());
-
-      final int profileA = await repo.createProfile('A');
-      final int profileB = await repo.createProfile('B');
-
-      await n.upsertCustomTheme(
-          const CustomThemeEntry(id: 'a1', name: 'A1', seed: 0xFF111111));
-      await n.upsertCustomTheme(
-          const CustomThemeEntry(id: 'a2', name: 'A2', seed: 0xFF222222));
-      await n.selectCustomTheme('a1');
-      await repo.snapshotCurrentSettings(profileA);
-
-      await repo.applyProfile(profileB);
-      await n.refreshFromDb();
-      expect(n.customThemes, isEmpty,
-          reason: 'switching to a fresh profile should not leak A themes');
-
-      await n.upsertCustomTheme(
-          const CustomThemeEntry(id: 'b1', name: 'B1', seed: 0xFF333333));
-      await repo.snapshotCurrentSettings(profileB);
-
-      await repo.applyProfile(profileA);
-      await n.refreshFromDb();
-      expect(n.customThemes.map((CustomThemeEntry e) => e.id),
-          <String>['a1', 'a2']);
-      expect(n.selectedCustomThemeId, 'a1');
-      expect(n.customThemeById('a2')!.seed, 0xFF222222);
-
-      await repo.applyProfile(profileB);
-      await n.refreshFromDb();
-      expect(n.customThemes.map((CustomThemeEntry e) => e.id), <String>['b1']);
-    });
-  });
 }

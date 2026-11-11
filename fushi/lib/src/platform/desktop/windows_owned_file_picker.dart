@@ -2,7 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
-import 'package:fushi/src/sync/desktop_foreground_guard.dart';
+import 'package:fushi/src/focus/desktop_foreground_guard.dart';
 
 /// Windows 上让所有系统文件对话框都以 Fushi 主窗口为 owner（BUG-3286）。
 ///
