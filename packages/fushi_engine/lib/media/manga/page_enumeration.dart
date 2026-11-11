@@ -6,7 +6,7 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
-import 'package:fushi_engine/media/collections/shelf_sort.dart'
+import 'package:fushi_engine/media/manga/shelf_sort.dart'
     show naturalCompare;
 import 'package:fushi_engine/media/media_extensions.dart';
 import 'package:fushi_engine/media/manga/mokuro_payload.dart'

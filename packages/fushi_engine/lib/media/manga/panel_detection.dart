@@ -11,9 +11,63 @@ import 'dart:typed_data';
 
 
 
-import 'package:fushi_asr_core/asr_core.dart' show OnnxSession, OnnxTensor;
 import 'package:fushi_engine/media/manga/panel_geometry.dart';
 import 'package:image/image.dart' as img;
+
+/// 与业务无关的 ONNX 推理会话抽象（漫画分镜检测用）。
+///
+/// 原从 `fushi_asr_core` 引用；my-comic 独立化删除 ASR/ONNX 后端后，这里保留
+/// 最小抽象，让分镜检测算法层与后端解耦（测试用 fake 实现）。宿主未装配检测器
+/// 时阅读器保持原有翻页，不阻塞编译或运行。
+enum OnnxTensorType { float32, int64, int32 }
+
+class OnnxTensor {
+  OnnxTensor.float32(Float32List data, this.shape)
+      : type = OnnxTensorType.float32,
+        floatData = data,
+        intData = null,
+        int32Data = null {
+    _checkLength(data.length);
+  }
+
+  OnnxTensor.int64(Int64List data, this.shape)
+      : type = OnnxTensorType.int64,
+        floatData = null,
+        intData = data,
+        int32Data = null {
+    _checkLength(data.length);
+  }
+
+  OnnxTensor.int32(Int32List data, this.shape)
+      : type = OnnxTensorType.int32,
+        floatData = null,
+        intData = null,
+        int32Data = data {
+    _checkLength(data.length);
+  }
+
+  final OnnxTensorType type;
+  final List<int> shape;
+  final Float32List? floatData;
+  final Int64List? intData;
+  final Int32List? int32Data;
+
+  int get elementCount => shape.fold<int>(1, (int acc, int dim) => acc * dim);
+
+  void _checkLength(int length) {
+    if (length != elementCount) {
+      throw ArgumentError(
+          'OnnxTensor data length $length does not match shape $shape '
+          '($elementCount elements)');
+    }
+  }
+}
+
+abstract interface class OnnxSession {
+  Future<Map<String, OnnxTensor>> run(Map<String, OnnxTensor> inputs);
+
+  Future<void> close();
+}
 
 typedef OcrSession = OnnxSession;
 typedef OcrTensor = OnnxTensor;

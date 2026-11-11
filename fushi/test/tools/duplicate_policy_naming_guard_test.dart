@@ -23,7 +23,7 @@ import 'package:flutter_test/flutter_test.dart';
 import '../helpers/source_guard.dart';
 import '../helpers/scan_scale.dart';
 
-const String kPolicyFile = '../packages/fushi_engine/lib/epub/book_title_conflict.dart';
+const String kPolicyFile = '../packages/fushi_engine/lib/media/manga/book_title_conflict.dart';
 
 /// 已淘汰的名字 → 换成什么。
 const Map<String, String> kRetiredNames = <String, String>{
@@ -96,12 +96,11 @@ void main() {
     'lib',
     'test',
     '../packages/fushi_engine/lib',
-    '../packages/fushi_server/lib',
   ];
 
   test('扫描规模哨兵：淘汰词扫描确实扫到了 lib/ + test/', () {
     expectScanScale(_scannedDartFiles(roots).length,
-        what: 'lib/ + test/ 下的 .dart（已排除本守卫自身）', atLeast: 3570, measured: 4463);
+        what: 'lib/ + test/ 下的 .dart（已排除本守卫自身）', atLeast: 1300, measured: 1660);
   });
 
   group('淘汰词不得复活', () {

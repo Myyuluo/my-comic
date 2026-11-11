@@ -5,7 +5,7 @@ import 'package:drift/drift.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi/src/utils/misc/pref_redaction_policy.dart';
 import 'package:fushi_engine/media/manga/manga_storage.dart';
-import 'package:fushi_engine/media/tracking/media_tracking_repository.dart'
+import 'package:fushi_engine/media/manga/mihon_tracking_compat.dart'
     show
         kTrackingProviderBangumi,
         TrackingKind,

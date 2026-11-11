@@ -1,5 +1,4 @@
 import 'package:fushi/src/platform/platform_services.dart';
-import 'package:fushi_anki/fushi_anki.dart';
 import 'package:fushi_platform/fushi_platform.dart';
 
 // ── Recording fakes ────────────────────────────────────────────────────────
@@ -97,8 +96,6 @@ PlatformServices fakePlatformServices({
   FakeClipboardService? clipboard,
   FakePermissionService? permission,
   FakeDeviceInfoService? deviceInfo,
-  BaseAnkiRepository Function()? createAnkiRepository,
-  BaseAnkiRepository Function()? createMobileAnkiConnectRepository,
   bool isMobile = false,
   bool? isWindows,
   bool? isDesktop,

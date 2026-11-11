@@ -450,28 +450,4 @@ extension _ReaderHistoryCardWidgets on _ReaderFushiHistoryPageState {
     );
   }
 
-  Widget _audiobookBadge(HealthKind kind) {
-    final ColorScheme cs = theme.colorScheme;
-    final Color bg;
-    final Color fg;
-    switch (kind) {
-      case HealthKind.failed:
-        bg = cs.errorContainer;
-        fg = cs.onErrorContainer;
-      case HealthKind.partial:
-        bg = cs.tertiaryContainer;
-        fg = cs.onTertiaryContainer;
-      case HealthKind.ok:
-      case HealthKind.unrun:
-      case HealthKind.running:
-      case HealthKind.notApplicable:
-        bg = cs.secondaryContainer;
-        fg = cs.onSecondaryContainer;
-    }
-    return _cardBadge(
-      icon: Icons.headphones_outlined,
-      background: bg,
-      foreground: fg,
-    );
-  }
 }

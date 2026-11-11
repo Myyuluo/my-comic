@@ -6,14 +6,16 @@ import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:fushi_dictionary/fushi_dictionary.dart';
 import 'package:fushi/media.dart';
 import 'package:fushi/models.dart';
 import 'package:fushi/pages.dart';
 import 'package:fushi_core/fushi_core.dart';
-import 'package:fushi_engine/epub/epub_storage.dart';
+import 'package:fushi_engine/media/manga/book_storage.dart';
+import 'package:fushi_engine/media/manga/bookmark_repository.dart';
+import 'package:fushi_engine/media/manga/delete_scope.dart';
+import 'package:fushi_engine/media/manga/reader_language.dart';
+import 'package:fushi_engine/media/manga/reader_position.dart';
 import 'package:fushi/src/focus/fushi_focus_controller.dart';
-import 'package:fushi_audio/fushi_audio.dart';
 import 'package:fushi/src/media/manga/history/manga_history.dart';
 import 'package:fushi/src/media/manga/library/manga_adjacent_chapter.dart'
     show mangaReadingOrder;
@@ -27,7 +29,6 @@ import 'package:fushi/src/reader/page_turn_animation.dart';
 import 'package:fushi/src/reader/reader_chrome_floating.dart';
 import 'package:fushi/src/reader/highlight_stroke_style.dart';
 import 'package:fushi/src/reader/reader_settings.dart';
-import 'package:fushi_engine/sync/deletion_propagation.dart';
 import 'package:fushi/src/shortcuts/visual/gamepad_glyphs.dart';
 import 'package:fushi/utils.dart';
 import 'package:fushi_engine/media/media_pref_keys.dart' as pref_keys;
@@ -43,15 +44,6 @@ final _epubBookKeysProvider = StreamProvider<List<String>>((ref) {
       .watch(appProvider)
       .database
       .watchEpubBookKeys()
-      .distinct(listEquals);
-});
-
-/// BUG-793：有声书（SrtBooks）uid 集合的响应式来源，作用同 [_epubBookKeysProvider]。
-final _srtBookUidsProvider = StreamProvider<List<String>>((ref) {
-  return ref
-      .watch(appProvider)
-      .database
-      .watchSrtBookUids()
       .distinct(listEquals);
 });
 
@@ -84,13 +76,6 @@ final fushiBooksProvider =
   return ReaderFushiSource.instance.getBooksFromDb(
     appModel: ref.watch(appProvider),
   );
-});
-
-final srtBooksProvider = FutureProvider<List<SrtBook>>((ref) {
-  // BUG-793：订阅有声书集合变化，任意导入路径落库后自动重算。
-  ref.watch(_srtBookUidsProvider);
-  final db = ref.watch(appProvider).database;
-  return SrtBookRepository(db).listAll();
 });
 
 /// 每本书的「最后阅读时间」（`reader_positions.updatedAt` 毫秒，key=书稳定身份：
@@ -405,50 +390,21 @@ class ReaderFushiSource extends ReaderMediaSource {
     return bookKey;
   }
 
-  /// BUG-1018 (A3): standalone SRT books (empty bookKey sentinel) need their
-  /// OWN media identity. They previously all shared `mediaIdentifierFor('')`
-  /// == `hoshi://book/`, so every standalone SRT book's override title/cover
-  /// landed on the same preference key and stomped each other, and the author
-  /// save silently no-opped (parseBookKey returned null). Their identity is
-  /// the stable `SrtBook.uid` under a distinct prefix that can never collide
-  /// with a sanitized EPUB bookKey identifier.
-  static const String _srtBookIdentifierPrefix = 'fushi://srtbook/';
-
-  static String mediaIdentifierForSrtUid(String uid) =>
-      '$_srtBookIdentifierPrefix$uid';
-
-  /// Inverse of [mediaIdentifierForSrtUid]; null for non-SRT identifiers.
-  static String? parseSrtBookUid(String identifier) {
-    if (!identifier.startsWith(_srtBookIdentifierPrefix)) return null;
-    final String uid = identifier.substring(_srtBookIdentifierPrefix.length);
-    if (uid.isEmpty) return null;
-    return uid;
-  }
-
   /// BUG-1018 (A1): resolve the user's override display title for a book by
   /// its stable [bookKey], for surfaces that don't hold a full [MediaItem]
-  /// (home continue/activity rows, reading statistics, audiobook notification
-  /// metadata). Single source of truth: the same preference the edit dialog
-  /// writes via [setOverrideTitleFromMediaItem]. Returns null when the user
-  /// never renamed the book (callers fall back to the DB title).
+  /// (home continue/activity rows). Single source of truth: the same preference
+  /// the edit dialog writes via [setOverrideTitleFromMediaItem]. Returns null
+  /// when the user never renamed the book (callers fall back to the DB title).
   String? overrideTitleForBookKey(String bookKey) {
     if (bookKey.isEmpty) return null;
     return _overrideTitleForIdentifier(mediaIdentifierFor(bookKey));
   }
 
-  /// [overrideTitleForBookKey]'s standalone-SRT sibling (identity = uid).
-  String? overrideTitleForSrtUid(String uid) {
-    if (uid.isEmpty) return null;
-    return _overrideTitleForIdentifier(mediaIdentifierForSrtUid(uid));
-  }
-
   /// BUG-1317：这里合成的 `mediaSourceIdentifier` **不再参与 override 身份**。
   ///
-  /// 它以前是个谎——恒填 EPUB 源，于是一本漫画 / PDF 书的 override 键被按 EPUB 源
-  /// 拼出来，与编辑弹窗按真实 format 写进去的键对不上（首页 / 统计 / 通知栏读不到
-  /// 用户改的名字）。现在 override 键只由 `mediaIdentifier` 派生、统一存进
-  /// [overrideStore]，回退位置取自 `this` 的 [legacyOverrideStores]（书族三源全在
-  /// 内），所以本处填哪个源键都读到同一个值。保留 `uniqueKey` 只因它对本类自洽。
+  /// override 键只由 `mediaIdentifier` 派生、统一存进 [overrideStore]，回退位置
+  /// 取自 `this` 的 [legacyOverrideStores]（书族三源全在内），所以本处填哪个源键
+  /// 都读到同一个值。保留 `uniqueKey` 只因它对本类自洽。
   String? _overrideTitleForIdentifier(String mediaIdentifier) {
     return getOverrideTitleFromMediaItem(
         overrideTitleMediaItemForIdentifier(mediaIdentifier));
@@ -457,9 +413,7 @@ class ReaderFushiSource extends ReaderMediaSource {
   /// 只为 override 书名读写而合成的**最小 [MediaItem]**（BUG-1488 提取为公开）。
   ///
   /// `canEdit: true` 是硬要求：[getOverrideTitleFromMediaItem] 与
-  /// [setOverrideTitleFromMediaItem] 在 `!canEdit` 时**静默失效**（读返 null、
-  /// 写…也照写但读不回来）。手上只有 bookKey 的写入方（互联下载后收下 host 改名）
-  /// 必须复用本入口，别再各自 new 一个 MediaItem 踩这个无报错的坑。
+  /// [setOverrideTitleFromMediaItem] 在 `!canEdit` 时**静默失效**（读返 null）。
   MediaItem overrideTitleMediaItemForIdentifier(String mediaIdentifier) {
     return MediaItem(
       mediaIdentifier: mediaIdentifier,
@@ -476,11 +430,6 @@ class ReaderFushiSource extends ReaderMediaSource {
   /// [overrideTitleMediaItemForIdentifier] 的 bookKey 便捷形态。
   MediaItem overrideTitleMediaItemForBookKey(String bookKey) =>
       overrideTitleMediaItemForIdentifier(mediaIdentifierFor(bookKey));
-
-  /// BUG-220: EPUB books carry an editable author column, so expose author
-  /// editing in the media edit dialog.
-  @override
-  bool get supportsAuthorEdit => true;
 
   /// BUG-220: persist the edited author directly to the `epubBooks.author`
   /// column (NOT the primary key, so no re-key is needed — unlike the title,
@@ -501,15 +450,6 @@ class ReaderFushiSource extends ReaderMediaSource {
       await db.updateEpubBookAuthor(bookKey, author);
       return;
     }
-    final String? srtUid = parseSrtBookUid(item.mediaIdentifier);
-    if (srtUid == null) return;
-    final SrtBookRepository repo = SrtBookRepository(db);
-    final SrtBook? book = await repo.findByUid(srtUid);
-    if (book == null) return;
-    // Mirror updateEpubBookAuthor's blank-clears semantics.
-    final String trimmed = (author ?? '').trim();
-    book.author = trimmed.isEmpty ? null : trimmed;
-    await repo.save(book);
   }
 
   @override
@@ -1175,11 +1115,6 @@ class ReaderFushiSource extends ReaderMediaSource {
       // 原件位置在 audiobooks / srt_books 行上，deleteEpubBook 的事务会把它们
       // 级联删掉，必须先快照。my-comic 的漫画-only live schema 没有这两张表：
       // 表不存在 = 没有对应附件，跳过查询而不是让删除整体抛 `no such table`。
-      final bool hasAudiobooksTable = await db.hasAudiobooksTable;
-      final bool hasSrtBooksTable = await db.hasSrtBooksTable;
-      final Audiobook? audiobookBefore = deleteLocalFiles && hasAudiobooksTable
-          ? await AudiobookRepository(db).findByBookKey(bookKey)
-          : null;
       LocalFileDeleteReport localFileReport = const LocalFileDeleteReport();
       // HBK-AUDIT-041: db.deleteEpubBook removes every associated DB row
       // (readerPositions, bookmarks, srtBooks, audioCues, audiobooks for the
@@ -1192,9 +1127,6 @@ class ReaderFushiSource extends ReaderMediaSource {
       // The book's on-disk extract dir and the srt uid must be resolved BEFORE
       // the transaction, because deleteEpubBook deletes the rows they live on.
       final EpubBookRow? bookRow = await db.getEpubBook(bookKey);
-      final SrtBook? srt = hasSrtBooksTable
-          ? await SrtBookRepository(db).findByBookKey(bookKey)
-          : null;
 
       // Local source（ADR 0013）：移出书架只删 Library 记录 + 立墓碑，绝不删
       // `local` 里用户自己的文件。书架长删 / 批删 / 合集连删都经过这里。
@@ -1215,7 +1147,7 @@ class ReaderFushiSource extends ReaderMediaSource {
       // 据此把这本计入「已删除 N 本」。这里在删之前就判定：没有任何对应行（EPUB 行
       // 与按 bookKey 关联的 SRT 行都不存在）→ 真的没东西可删 → 如实回报失败并带上
       // 原因（TODO-1359 起写入 ErrorLogService），不跑磁盘清理/VACUUM，也不谎报成功。
-      if (bookRow == null && srt == null) {
+      if (bookRow == null) {
         final String reason = '找不到这本书的数据（bookKey="$bookKey" 无对应行，'
             '可能已删除或书架条目已失效）';
         ErrorLogService.instance
@@ -1279,12 +1211,7 @@ class ReaderFushiSource extends ReaderMediaSource {
       // 泄漏——这正是用户「为什么删不掉」的真实根因。改为与下方 VACUUM 同一纪律：尾活
       // 失败只记日志、不翻转删除结果（磁盘副本孤儿无害，DB 行已消失不会再被引用）。
       try {
-        // On-disk cleanups (not covered by the DB transaction). The audiobook
-        // persist dir is keyed by the book's own key now (no legacy uid).
-        await AudiobookStorage.deletePersistDir(bookKey);
-        if (srt != null) {
-          await AudiobookStorage.deletePersistDir(srt.uid);
-        }
+        // On-disk cleanups (not covered by the DB transaction).
         // Locate the extracted dir by the stored extract_dir column (the on-disk
         // folder name may still be the legacy int id; the column is the truth).
         //
@@ -1299,28 +1226,6 @@ class ReaderFushiSource extends ReaderMediaSource {
             await EpubStorage.deleteBookDir(bookRow.extractDir);
           }
         }
-        // 用户明确勾选后才删原始音频；两条记录可能指向同一批文件，第二次删到的
-        // 已不存在，[deleteLocalFiles] 既不计入 removed 也不计入 failures。
-        if (deleteLocalFiles) {
-          if (audiobookBefore != null) {
-            localFileReport = localFileReport.merge(
-              await deleteAudiobookLocalFiles(audiobookBefore.audioPaths),
-            );
-          }
-          if (srt != null) {
-            localFileReport = localFileReport.merge(
-              await deleteAudiobookLocalFiles(srt.audioPaths),
-            );
-          }
-          for (final LocalFileDeleteFailure failure
-              in localFileReport.failures) {
-            ErrorLogService.instance.log(
-              'ReaderFushiSource.deleteBook.localFiles',
-              failure,
-            );
-          }
-        }
-
         // HBK-AUDIT-040: these books are created with canDelete:false, so the
         // generic AppModel.deleteMediaItem cleanup (clearOverrideValues) never
         // runs for them. Clear the override title preference here, and the
@@ -1360,9 +1265,8 @@ class ReaderFushiSource extends ReaderMediaSource {
             .log('ReaderFushiSource.deleteBook.vacuum', e, stack);
         debugPrint('[ReaderFushiSource] VACUUM after delete failed: $e');
       }
-      // 真删了 EPUB 行，或清理了按 bookKey 关联的 SRT 行/磁盘副本，才算删除成功。
-      // 过了上面的早退守卫后两者至少有一个为真，这里如实回报删除结果。
-      if (deletedRows > 0 || srt != null) {
+      // 真删了 EPUB 行才算删除成功；过了上面的早退守卫后 deletedRows 必不为 0。
+      if (deletedRows > 0) {
         return DeleteBookResult.success(localFiles: localFileReport);
       }
       final String reason = 'DB 删除未移除任何行（bookKey="$bookKey"，deletedRows=0）';
@@ -1375,77 +1279,6 @@ class ReaderFushiSource extends ReaderMediaSource {
       debugPrint('[ReaderFushiSource] deleteBook failed: $e');
       return DeleteBookResult.failure(e.toString());
     }
-  }
-
-  /// 删除书架上的一张**字幕书卡**（srt_books 行；书架卡 key `srt_<uid>`）。
-  ///
-  /// BUG-3101：配对了 EPUB 的字幕书（`bookKey` 非空）由 [deleteBook] 整本删——
-  /// `deleteEpubBook` 的事务按 bookKey 级联删掉这本书的 srt_books 行。调用方以前在
-  /// [deleteBook] 之后又按 uid 调一次 `SrtBookRepository.delete`，行早已不在，回报
-  /// 删了 0 行，于是单本删除**每次**弹「删除书籍失败」（不论删除范围）、批量删除把它
-  /// 计成 0 本。这里按身份二选一，只走一条删除路径：
-  ///
-  /// * `bookKey` 非空 → [deleteBook]（EPUB 行、SRT 行、cue、有声书、墓碑 `book`、
-  ///   原件一并处理）；
-  /// * `bookKey` 为空（纯字幕书）→ `SrtBookRepository.delete`（standalone 行按
-  ///   [scope] 写 `srtbook` 墓碑）。
-  Future<DeleteBookResult> deleteSrtShelfBook({
-    required FushiDatabase db,
-    required SrtBook book,
-    DeleteScope scope = DeleteScope.keepLocalOnly,
-    bool deleteLocalFiles = false,
-  }) async {
-    if (book.bookKey.isNotEmpty) {
-      return deleteBook(
-        db: db,
-        bookKey: book.bookKey,
-        scope: scope,
-        deleteLocalFiles: deleteLocalFiles,
-      );
-    }
-    try {
-      final SrtBookDeleteResult removed = await SrtBookRepository(db).delete(
-        book.uid,
-        propagateDeletion: scope == DeleteScope.syncEverywhere,
-        deleteLocalFiles: deleteLocalFiles,
-      );
-      if (removed.deleted == 0) {
-        final String reason = '找不到这本字幕书的数据（uid="${book.uid}" 无对应行，'
-            '可能已删除或书架条目已失效）';
-        ErrorLogService.instance
-            .logDiagnostic('ReaderFushiSource.deleteSrtShelfBook', reason);
-        return DeleteBookResult.failure(reason);
-      }
-      return DeleteBookResult.success(localFiles: removed.localFiles);
-    } catch (e, stack) {
-      ErrorLogService.instance
-          .log('ReaderFushiSource.deleteSrtShelfBook', e, stack);
-      return DeleteBookResult.failure(e.toString());
-    }
-  }
-
-  /// 这本书（按 [bookKey]）有没有本机可删的原件——删除确认框据此决定摆不摆
-  /// 「同时删除本地文件」勾选框。只看附带有声书 / 配对字幕书**显式登记在 app 持久
-  /// 目录之外**的原始音频（见 [deleteBook] 与 `audiobook_local_files.dart`）。
-  Future<bool> hasLocalFiles({
-    required FushiDatabase db,
-    required String bookKey,
-  }) async {
-    if (bookKey.isEmpty) return false;
-    // my-comic 的 live schema 是漫画-only（37 表），不含 audiobooks / srt_books。
-    // 这两个查询以前无条件执行，在漫画-only 库上抛 `no such table`，删除按钮在弹
-    // 确认框之前就中断——用户看到的就是「点删除没反应」。表不存在等价于「没有
-    // 可删的原件」，跳过即可；完整 schema（测试库）行为不变。
-    if (await db.hasAudiobooksTable) {
-      final Audiobook? ab =
-          await AudiobookRepository(db).findByBookKey(bookKey);
-      if (ab != null && await resolveAudiobookHasLocalFiles(ab.audioPaths)) {
-        return true;
-      }
-    }
-    if (!await db.hasSrtBooksTable) return false;
-    final SrtBook? srt = await SrtBookRepository(db).findByBookKey(bookKey);
-    return srt != null && await resolveAudiobookHasLocalFiles(srt.audioPaths);
   }
 
   // ── Settings (same keys as ReaderTtuSource for seamless migration) ──
@@ -1620,23 +1453,6 @@ class ReaderFushiSource extends ReaderMediaSource {
         setPreference<bool>(
           key: 'reverse_arrow_page_turn',
           value: !reverseArrowPageTurn,
-        ));
-  }
-
-  // TODO-830: 反转有声书底栏 ⏮⏭ 前进/后退按钮的功能方向（per-reader，分层与
-  // invert_swipe_direction / reverse_arrow_page_turn 一致），默认 false。
-  bool get invertAudiobookSkipDirection =>
-      readerSettings?.invertAudiobookSkipDirection ??
-      getPreference<bool>(
-        key: 'invert_audiobook_skip_direction',
-        defaultValue: false,
-      );
-
-  void toggleInvertAudiobookSkipDirection() async {
-    await (readerSettings?.toggleInvertAudiobookSkipDirection() ??
-        setPreference<bool>(
-          key: 'invert_audiobook_skip_direction',
-          value: !invertAudiobookSkipDirection,
         ));
   }
 

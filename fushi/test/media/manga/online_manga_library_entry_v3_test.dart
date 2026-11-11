@@ -8,7 +8,7 @@ import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_service.dart';
 import 'package:fushi/src/media/manga/library/online_manga_runtime_adapter.dart';
-import 'package:fushi_engine/epub/epub_storage.dart';
+import 'package:fushi_engine/media/manga/book_storage.dart';
 
 /// v3 描述符（设计稿 2026-09-12 §2.3）：只在 v2 上加 `subscribed` / `autoDownload`
 /// 两个可选位，不加 DB 列。这里钉三件事：往返一致、旧版本解析成 false、服务层的

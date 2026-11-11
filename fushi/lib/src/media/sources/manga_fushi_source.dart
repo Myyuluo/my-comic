@@ -1,8 +1,8 @@
-import 'package:fushi_dictionary/fushi_dictionary.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:fushi_audio/fushi_audio.dart';
+import 'package:fushi_engine/media/manga/bookmark_repository.dart';
+import 'package:fushi_engine/media/manga/reader_language.dart';
 import 'package:fushi/media.dart';
 import 'package:fushi/src/focus/fushi_focus_controller.dart';
 import 'package:fushi/src/media/manga/manga_import_dialog.dart';
@@ -135,7 +135,6 @@ class MangaFushiSource extends ReaderMediaSource {
         );
         if (imported == true) {
           ref.invalidate(fushiBooksProvider(JapaneseLanguage.instance));
-          ref.invalidate(srtBooksProvider);
         }
       },
     );

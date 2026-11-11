@@ -9,7 +9,7 @@ import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_service.dart';
 import 'package:fushi/src/media/manga/library/online_manga_runtime_adapter.dart';
 import 'package:fushi/src/updates/update_probes.dart';
-import 'package:fushi_engine/epub/epub_storage.dart';
+import 'package:fushi_engine/media/manga/book_storage.dart';
 
 /// 在线漫画探针的订阅自动下载（设计稿 2026-09-12 §5）：真 in-memory DB +
 /// 真 `OnlineMangaLibraryService`，只把运行时换成可编排的假 adapter。

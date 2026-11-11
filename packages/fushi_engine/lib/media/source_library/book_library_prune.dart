@@ -27,10 +27,10 @@ import 'package:drift/drift.dart';
 import 'package:path/path.dart' as p;
 
 import 'package:fushi_core/fushi_core.dart';
-import 'package:fushi_engine/epub/epub_storage.dart';
+import 'package:fushi_engine/media/manga/book_storage.dart';
 import 'package:fushi_engine/media/manga/manga_folder_plan.dart';
 import 'package:fushi_engine/media/source_library/library_prune_guard.dart';
-import 'package:fushi_engine/sync/ttu_filename.dart';
+import 'package:fushi_engine/utils/misc/ttu_filename.dart';
 
 /// 来源扫描索引的偏好键前缀（后缀 = `MediaSources.id`）。
 const String kBookSourceScanIndexPrefKeyPrefix = 'media_source_scan_index_';

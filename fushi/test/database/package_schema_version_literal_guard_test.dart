@@ -74,7 +74,7 @@ void main() {
     }
 
     expectScanScale(scannedFiles,
-        what: 'packages/*/test 下的 .dart', atLeast: 50, measured: 72);
+        what: 'packages/*/test 下的 .dart', atLeast: 25, measured: 35);
     expect(offenders, isEmpty,
         reason: 'package 侧测试跑在 CI 的 `Run package tests` 里，拿不到 fushi/test '
             '那次批量替换，schema bump 必漏改。改成下界断言，例如\n'

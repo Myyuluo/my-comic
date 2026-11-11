@@ -12,7 +12,7 @@ import 'dart:typed_data';
 import 'package:archive/archive_io.dart';
 import 'package:path/path.dart' as p;
 
-import 'package:fushi_engine/media/collections/shelf_sort.dart'
+import 'package:fushi_engine/media/manga/shelf_sort.dart'
     show naturalCompare;
 import 'package:fushi_engine/media/manga/manga_importer.dart'
     show kMangaImageExtensions;

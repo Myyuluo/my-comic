@@ -10,7 +10,7 @@ import 'package:fushi/src/media/manga/download/download_library_index.dart';
 import 'package:fushi/src/media/manga/library/manga_chapter_download_state.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi_core/fushi_core.dart';
-import 'package:fushi_engine/epub/epub_storage.dart';
+import 'package:fushi_engine/media/manga/book_storage.dart';
 import 'package:fushi_engine/media/manga/download_library_storage.dart';
 import 'package:fushi_engine/media/manga/mokuro_payload.dart';
 import 'package:path/path.dart' as p;

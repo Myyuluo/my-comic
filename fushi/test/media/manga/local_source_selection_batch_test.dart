@@ -17,7 +17,7 @@ import 'package:fushi/src/storage/app_paths.dart';
 import 'package:fushi/src/utils/components/batch_action_bar.dart';
 import 'package:fushi/src/utils/fushi_icons.dart';
 import 'package:fushi/utils.dart';
-import 'package:fushi_audio/fushi_audio.dart';
+import 'package:fushi_engine/media/manga/reader_position.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_layout.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_library.dart';

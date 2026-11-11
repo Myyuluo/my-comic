@@ -8,30 +8,8 @@ environment:
   flutter: "^3.47.0"
 
 dependencies:
-  # 语音识别生成字幕：算法层已抽成独立仓库（hajisensai/fushi-subtitles，GPL-3.0）。
-  #
-  # 钉 sha 而不是分支：转录产物的字节级一致要能复现，跟着分支飘会让「同一版
-  # Fushi 转出来的字幕不一样」这种事无从追查。
-  fushi_asr_core:
-    git:
-      url: https://github.com/hajisensai/fushi-subtitles.git
-      path: packages/asr_core
-      ref: 0c5878a856be72c7439f166a3144c0c4c6a998a7
-  # 字幕重定时（拿 ASR 转录当参照修好已有字幕的时间轴）。与 fushi_asr_core 同仓同 sha。
-  #
-  # 只依赖 fushi_asr_core，**不含** ONNX 后端：算法那半边住在 fushi_asr 包里的话会
-  # 拖上 fushi_asr_onnx_ffi（archive ^4），而本仓钉 archive ^3.6.1，引进来等于强制一次
-  # archive 4 迁移。上游 PR #7 因此把它拆成了这个零重依赖的包。
-  fushi_asr_subtitles:
-    git:
-      url: https://github.com/hajisensai/fushi-subtitles.git
-      path: packages/asr_subtitles
-      ref: 0c5878a856be72c7439f166a3144c0c4c6a998a7
   archive: ^3.6.1
-  async_zip: ^0.1.0
   basic_utils: ^5.7.0
-  audio_service: ^0.18.9
-  audio_session: ^0.1.13
   cached_network_image: ^3.4.1
   carousel_slider: ^4.2.1
   change_notifier_builder: ^1.1.2
@@ -70,27 +48,17 @@ dependencies:
     sdk: flutter
   fushi_core:
     path: ../packages/fushi_core
-  fushi_dictionary:
-    path: ../packages/fushi_dictionary
   fushi_cli:
     path: ../packages/fushi_cli
   fushi_engine:
     path: ../packages/fushi_engine
-  fushi_anki:
-    path: ../packages/fushi_anki
-  fushi_srs:
-    path: ../packages/fushi_srs
-  fushi_audio:
-    path: ../packages/fushi_audio
   fushi_platform:
     path: ../packages/fushi_platform
   google_sign_in: ^6.2.2
   extension_google_sign_in_as_googleapis_auth: ^2.0.12
   googleapis: ^13.2.0
   googleapis_auth: ^1.6.0
-  flutter_archive: ^5.0.0
   flutter_cache_manager: ^3.3.0
-  flutter_charset_detector: ^1.0.2
   flutter_colorpicker: ^1.1.0
   flutter_markdown: ^0.6.18
   flutter_exit_app: ^1.0.5
@@ -124,11 +92,6 @@ dependencies:
   intl: ^0.20.2
   json_annotation: ^4.8.1
   json_serializable: ^6.6.1
-  just_audio: ^0.9.31
-  # my-comic (ticket 04)：just_audio 的桌面 media_kit 后端已移除——它本身不再
-  # 参与任何漫画路径，且 just_audio_media_kit / media_kit_libs_* 会把 libmpv 拉回
-  # 安装包。桌面音频播放（听书 / 查词发音）不在 my-comic 范围内。
-  kana_kit: ^2.0.0
   macos_ui: ^2.2.2
   material_color_utilities: ^0.13.0
   marquee: ^2.2.3
@@ -138,7 +101,6 @@ dependencies:
   path: ^1.8.2
   path_provider: ^2.0.13
   progress_indicators: ^1.0.0
-  recase: ^4.1.0
   remove_emoji: ^0.0.7
   share_plus: ^7.2.2
   shared_preferences: ^2.2.2
@@ -165,15 +127,8 @@ dependencies:
   # 入口注册，后台 isolate 只读本机工单回执、问一次进度、发本地通知（见
   # lib/src/feedback/feedback_reply_background.dart）。桌面不用它（运行中定时检查）。
   workmanager: ^0.10.10
-  record: 6.0.0
   brotli: ^0.6.0
   bonsoir: ^7.1.1
-  # my-comic (ticket 04)：media_kit_libs_video 已移除（libmpv / FFmpeg / x265 /
-  # ANGLE 的唯一来源）。media_kit / media_kit_video 的 Dart API 仍被树内残留的
-  # 视频域文件引用；没有 libs 包时 media_kit_video 走 CMake 的 stub 分支，
-  # Windows 端不再编入或随包任何 libmpv 运行时。
-  media_kit: ^1.2.6
-  media_kit_video: ^2.0.1
   # 移动端 ffmpeg：用「自编」的 ffmpeg-kit（arthenica 源码 + NDK r25 重编最小变体），
   # 替代崩溃的第三方预编译 ffmpeg-kit 变体（其 libffmpegkit_abidetect.so 在
   # Android 16/API 36 上 JNI_OnLoad 返回非法版本，启动即崩，BUG-122）。vendored 包见
@@ -189,12 +144,6 @@ dev_dependencies:
   # BUG-3003: native hot-restart regression waits for worker IsolateExit events.
   vm_service: ^15.1.0
   build_runner: ^2.3.3
-  just_audio_platform_interface: ^4.6.0
-  # TODO-817 M1c scanner test overrides CharsetDetectorPlatform with a Dart
-  # fake to verify SJIS subtitle decoding headlessly (native channel is
-  # unavailable in flutter test). These are transitive deps of
-  # flutter_charset_detector; declared here only for the test import.
-  flutter_charset_detector_platform_interface: ^1.1.0
   plugin_platform_interface: ^2.1.0
   # BUG-2499: local_update_notifier_test 直接驱动 Windows toast 的 image XML
   # 序列化，守卫 ci/patches/hosted/flutter_local_notifications_windows-2.0.1

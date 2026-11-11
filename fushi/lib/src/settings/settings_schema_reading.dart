@@ -877,22 +877,6 @@ SettingsDestination buildReadingDestination() {
               notifyReaderSettingsChanged(settingsContext);
             },
           ),
-          // TODO-830: 反转有声书底栏 ⏮⏭ 前进/后退按钮的功能方向（per-reader）。
-          SettingsSwitchItem(
-            id: 'reading_controls.invert_audiobook_skip_direction',
-            title: t.invert_audiobook_skip_direction,
-            icon: FushiIcons.swapCircle,
-            reader: const ReaderPlacement(
-              group: ReaderGroup.behavior,
-              order: 5,
-            ),
-            value: (SettingsContext settingsContext) =>
-                settingsContext.readerSource.invertAudiobookSkipDirection,
-            onChanged: (SettingsContext settingsContext, bool value) {
-              settingsContext.readerSource.toggleInvertAudiobookSkipDirection();
-              notifyReaderSettingsChanged(settingsContext);
-            },
-          ),
         ],
       ),
       // 原「导航」13 项混杂平铺，拆两组：阅读界面（进度条/悬浮 chrome/底栏提示/

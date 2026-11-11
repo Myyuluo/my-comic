@@ -109,10 +109,6 @@ final List<_ForbiddenPattern> _forbidden = <_ForbiddenPattern>[
     name: 'sasayaki',
     regex: RegExp('sasayaki', caseSensitive: false),
     allowed: <String, String>{
-      'packages/fushi_anki/lib/src/base_anki_repository.dart':
-          "'{sasayaki-audio}' handlebars 旧别名：loadSettings 载入期一次性改写"
-              '为 {sentence-audio} 的迁移输入（SharedPreferences 无版本阶梯，'
-              '载入期改写即迁移通道）。',
     },
   ),
   _ForbiddenPattern(
@@ -125,9 +121,6 @@ final List<_ForbiddenPattern> _forbidden = <_ForbiddenPattern>[
     name: 'app.hibiki.reader',
     regex: RegExp(r'app\.hibiki\.reader'),
     allowed: <String, String>{
-      'lib/src/migration/migration_target_channel.dart':
-          'kHibikiPackageName 迁移常量：Fushi 侧探测/拉起/卸载旧包（老包身份是'
-              '迁移链的事实，不随改名走）。消费方一律引用该常量，不再落新字面量。',
     },
   ),
   _ForbiddenPattern(
@@ -135,9 +128,6 @@ final List<_ForbiddenPattern> _forbidden = <_ForbiddenPattern>[
     name: 'hibiki-data',
     regex: RegExp('hibiki-data'),
     allowed: <String, String>{
-      'lib/src/sync/sync_utils.dart':
-          'kLegacySyncRootFolderName：五个远端后端做 hibiki-data → fushi-data '
-              '一次性改名迁移时识别旧根用，旧字面量必须保留。消费方引用常量。',
     },
   ),
   _ForbiddenPattern(
@@ -148,8 +138,6 @@ final List<_ForbiddenPattern> _forbidden = <_ForbiddenPattern>[
     allowed: <String, String>{
       'lib/src/storage/export_directory.dart':
           'kLegacyExportDirectoryName：启动就地改名迁移的旧目录名输入。',
-      'lib/src/storage/app_paths.dart': '数据根搬迁白名单的双名条目：改名失败留在旧名的存量目录仍须随迁移'
-          '搬走，否则数据分家。',
     },
   ),
   _ForbiddenPattern(
@@ -163,11 +151,6 @@ final List<_ForbiddenPattern> _forbidden = <_ForbiddenPattern>[
     allowed: <String, String>{
       'lib/src/storage/export_directory.dart':
           'kLegacyExportDirectoryName：启动就地改名迁移的旧目录名输入。',
-      'lib/src/storage/app_paths.dart':
-          "数据根搬迁白名单的 'hibikiExport' 双名条目（同 hibikiExport 禁模式理由）。",
-      'lib/src/models/audio_source_config.dart':
-          "AudioSourceKind.fromWireName 的旧 wireName 兼容别名 'hibikiRemote'："
-              '音频源配置以 JSON 落偏好、无版本阶梯，载入期认旧值即迁移通道。',
     },
   ),
   _ForbiddenPattern(
@@ -190,13 +173,6 @@ final List<_ForbiddenPattern> _forbidden = <_ForbiddenPattern>[
     name: '.hibiki* 资产扩展名',
     regex: RegExp(r'\.hibiki[a-z]+'),
     allowed: <String, String>{
-      'lib/src/sync/sync_orchestrator.dart':
-          'kLegacySyncAudiobookAssetName / _legacyDictionaryAssetSuffix / '
-              '_legacyLocalAudioAssetSuffix：写新读旧的兼容读入口。',
-      'packages/fushi_engine/lib/sync/aggregate_sync_service.dart':
-          '_legacyAggregateAssetSuffix：每设备聚合快照的兼容读入口。',
-      'lib/src/sync/sync_compare_dialog.dart':
-          'legacySuffix：远端词典对比的兼容读分支（与 orchestrator 同源口径）。',
     },
   ),
   _ForbiddenPattern(
@@ -239,11 +215,6 @@ final List<_ForbiddenPattern> _forbidden = <_ForbiddenPattern>[
     allowed: <String, String>{
       'lib/src/storage/books_directory.dart':
           'kLegacyBooksDirectoryName：启动就地改名迁移的旧目录名输入。',
-      'lib/src/storage/app_paths.dart': '数据根搬迁白名单的双名条目：改名失败留在旧名的存量目录仍须随迁移'
-          '搬走（同 hibikiExport 条目）。',
-      'lib/src/sync/backup_service.dart':
-          '_legacyBooksPrefix：旧 Hibiki 归档书树前缀的读侧回退'
-              '（archiveBooksPrefix），跨版本归档契约。',
     },
   ),
   _ForbiddenPattern(
@@ -258,9 +229,6 @@ final List<_ForbiddenPattern> _forbidden = <_ForbiddenPattern>[
     name: 'hoshi_anki_settings',
     regex: RegExp('hoshi_anki_settings'),
     allowed: <String, String>{
-      'packages/fushi_anki/lib/src/base_anki_repository.dart':
-          '_legacySettingsKey：载入期搬键迁移的旧键输入'
-              '（SharedPreferences 无版本阶梯，载入期搬移即迁移通道）。',
     },
   ),
   _ForbiddenPattern(
@@ -350,9 +318,6 @@ final List<_ForbiddenPattern> _forbidden = <_ForbiddenPattern>[
     name: "'Hibiki: ' Magpie 前缀",
     regex: RegExp("'Hibiki: '"),
     allowed: <String, String>{
-      'lib/src/mining/magpie_upscaling.dart':
-          'kMagpieLegacyProfilePrefix：启动就地改名迁移的旧前缀输入，只允许'
-              '该改名函数消费。',
     },
   ),
   _ForbiddenPattern(
@@ -371,9 +336,6 @@ final List<_ForbiddenPattern> _forbidden = <_ForbiddenPattern>[
           'legacyHibikiDatabaseFileName 常量：_openDb 打开任何连接前识别只有 '
               'hibiki.db 的改名前目录并抛 UnsupportedLegacySchemaException（不再'
               '改名迁移）；存储页仍按它识别改名前的快照残留供清理。',
-      'lib/src/migration/migration_manifest.dart':
-          '_dbEntryNames 的 legacy 候选：老 Hibiki app 导出的迁移归档条目名'
-              '（wire 冻结），读旧归档必需。',
     },
   ),
 ];
@@ -450,10 +412,6 @@ final List<_ForbiddenPattern> _forbiddenPathForms = <_ForbiddenPattern>[
 /// 路径形态组的扫描根（相对 `fushi/`；目录或单文件皆可）。
 const List<String> _pathFormScanRoots = <String>[
   '../.github/workflows',
-  '../native/fushi_torrent',
-  '../native/fushidicts',
-  '../packages/fushi_torrent',
-  '../packages/fushi_dictionary',
   '../docs/agent',
   '../docs/readme',
   '../tool',
@@ -461,16 +419,10 @@ const List<String> _pathFormScanRoots = <String>[
   '../CLAUDE.md',
   '../README.md',
   '../README.zh-CN.md',
-  'CLAUDE.md',
   'lib',
   'test',
   'tool',
   'windows',
-  'linux',
-  'android/app/build.gradle',
-  'android/app/src',
-  'ios/Runner.xcodeproj',
-  'macos/Runner/Configs',
 ];
 
 /// 只读文本类扩展（避免撞上二进制夹具/产物）。
@@ -510,8 +462,6 @@ bool _pathFormExcluded(String normalizedPath) {
   ]) {
     if (normalizedPath.contains(segment)) return true;
   }
-  // 上游出处 + 新旧对照表（存活性由下方自证测试守着）。
-  if (normalizedPath.endsWith('native/fushidicts/UPSTREAM.md')) return true;
   // 本守卫自身（禁模式字面量所在地）。
   if (normalizedPath.endsWith('test/tools/fushi_rename_guard_test.dart')) {
     return true;
@@ -544,13 +494,8 @@ Iterable<File> _pathFormScanFiles() sync* {
 const List<String> _scanRoots = <String>[
   'lib',
   '../packages/fushi_engine/lib',
-  '../packages/fushi_server/lib',
   '../packages/fushi_core/lib',
-  '../packages/fushi_dictionary/lib',
-  '../packages/fushi_anki/lib',
-  '../packages/fushi_audio/lib',
   '../packages/fushi_platform/lib',
-  '../packages/fushi_torrent/lib',
 ];
 
 String _normalize(String path) => path.replaceAll('\\', '/');
@@ -647,14 +592,5 @@ void main() {
             '${violations.join('\n')}');
   });
 
-  test('W6 豁免自证：UPSTREAM.md 仍记载旧目录形态（否则把它移回扫描面）', () {
-    final String upstream =
-        File('../native/fushidicts/UPSTREAM.md').readAsStringSync();
-    expect(
-        _forbiddenPathForms
-            .any((_ForbiddenPattern p) => p.regex.hasMatch(upstream)),
-        isTrue,
-        reason: 'UPSTREAM.md 已无任何旧目录/标识命中——它的扫描面豁免过期了，'
-            '请删掉 _pathFormExcluded 里的对应排除，防止豁免退化成盲区。');
-  });
+
 }

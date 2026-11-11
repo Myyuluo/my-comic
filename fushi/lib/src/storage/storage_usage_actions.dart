@@ -1,14 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:fushi_audio/fushi_audio.dart' show SrtBookRepository;
 import 'package:fushi_core/fushi_core.dart';
 import 'package:path/path.dart' as p;
 
 import 'package:fushi/src/media/sources/reader_fushi_source.dart';
-
-import 'package:fushi_engine/sync/deletion_propagation.dart'
-    show DeleteDecision, DeleteScope;
 
 import 'package:fushi/src/pages/implementations/tag_filter_sheet.dart'
     show bookTagMapProvider, srtBookTagMapProvider;
@@ -62,15 +58,9 @@ class StorageUsageActions {
       }
       return result.deleted ? null : result.failureReason;
     },
-    // BUG-1893：standalone 字幕书没有 EpubBooks 行，删除原语是
-    // SrtBookRepository.delete（连带持久目录 + cue）。行本来就不在 = 目标状态
-    // 已达成，按成功处理。
-    deleteSrtBook: (String uid) async {
-      await SrtBookRepository(c.appModel.database).delete(uid);
-      c.ref.invalidate(fushiBooksProvider);
-      c.ref.invalidate(srtBookTagMapProvider);
-      return null;
-    },
+    // 纯字幕书 / 有声书域已随 my-comic 独立化删除；历史任务行不应再出现。
+    // 保留端口形状：没有可删的记录 = 目标状态已达成。
+    deleteSrtBook: (String uid) async => null,
     deleteDatabaseSnapshots: () async =>
         deleteDatabaseSnapshotFiles(await AppPaths.stateRootDirectory()),
     deleteFiles: deleteStorageDerivedFiles,

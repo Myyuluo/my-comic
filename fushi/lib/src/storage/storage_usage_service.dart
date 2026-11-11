@@ -4,7 +4,7 @@ import 'dart:isolate';
 
 import 'package:fushi_core/fushi_core.dart'
     show databaseSnapshotMainFileName, fnv1a32Hex, isDeletableDatabaseSnapshot;
-import 'package:fushi_engine/media/collections/shelf_sort.dart'
+import 'package:fushi_engine/media/manga/shelf_sort.dart'
     show naturalCompare;
 import 'package:path/path.dart' as p;
 

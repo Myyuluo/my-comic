@@ -22,7 +22,7 @@ import 'package:fushi/src/models/preferences_repository.dart';
 import 'package:fushi/src/platform/platform_providers.dart';
 import 'package:fushi/src/utils/net/app_http_image.dart';
 import 'package:fushi_core/fushi_core.dart';
-import 'package:fushi_engine/epub/epub_storage.dart';
+import 'package:fushi_engine/media/manga/book_storage.dart';
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 

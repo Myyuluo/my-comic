@@ -44,7 +44,7 @@ import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_service.dart';
 import 'package:fushi/src/media/manga/library/online_manga_runtime_adapter.dart';
 import 'package:fushi/src/media/manga/reader/manga_fushi_page.dart';
-import 'package:fushi_audio/fushi_audio.dart'
+import 'package:fushi_engine/media/manga/reader_position.dart'
     show ReaderPosition, ReaderPositionRepository;
 import 'package:fushi/src/media/sources/manga_fushi_source.dart';
 import 'package:fushi/src/media/sources/reader_fushi_source.dart';

@@ -19,7 +19,7 @@ import 'package:fushi/src/models/preferences_repository.dart';
 import 'package:fushi/src/pages/implementations/downloads_page.dart';
 import 'package:fushi/src/platform/platform_providers.dart';
 import 'package:fushi/utils.dart';
-import 'package:fushi_audio/fushi_audio.dart';
+import 'package:fushi_engine/media/manga/bookmark_repository.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:material_ui/material_ui.dart';
 

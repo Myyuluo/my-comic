@@ -4,10 +4,10 @@ import 'package:path/path.dart' as p;
 
 import 'package:fushi/i18n/strings.g.dart';
 import 'package:fushi_core/fushi_core.dart';
-import 'package:fushi_engine/epub/epub_storage.dart';
+import 'package:fushi_engine/media/manga/book_storage.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_layout.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_library.dart';
-import 'package:fushi_engine/sync/deletion_propagation.dart';
+import 'package:fushi_engine/media/manga/delete_scope.dart';
 
 import 'package:fushi/src/media/manga/download/manga_download_service.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';

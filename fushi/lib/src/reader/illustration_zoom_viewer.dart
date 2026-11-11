@@ -11,7 +11,7 @@ import 'package:fushi/src/utils/components/glass/fushi_icon.dart';
 import 'package:path/path.dart' as p;
 import 'package:share_plus/share_plus.dart';
 
-import 'package:fushi_engine/epub/epub_book.dart' show fallbackMimeType;
+import 'package:fushi_engine/media/manga/epub_book.dart' show fallbackMimeType;
 import 'package:fushi/src/utils/misc/channel_constants.dart';
 import 'package:fushi/src/utils/misc/fushi_share.dart';
 import 'package:fushi/utils.dart';

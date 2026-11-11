@@ -21,7 +21,6 @@ import 'package:fushi/src/models/preferences_repository.dart';
 import 'package:fushi/src/pages/implementations/reader_fushi_history_page.dart';
 import 'package:fushi/src/utils/adaptive/adaptive_platform.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:fushi_audio/fushi_audio.dart';
 import 'package:fushi_core/fushi_core.dart';
 
 import '../helpers/test_platform_services.dart';
@@ -80,9 +79,6 @@ void main() {
       appProvider.overrideWith((ref) => appModel),
       fushiBooksProvider.overrideWith(
         (ref, language) => Future<List<MediaItem>>.value(const <MediaItem>[]),
-      ),
-      srtBooksProvider.overrideWith(
-        (ref) => Future<List<SrtBook>>.value(const <SrtBook>[]),
       ),
     ],
     child: TranslationProvider(

@@ -23,7 +23,7 @@ import 'package:fushi/src/media/manga/mihon/mihon_runtime.dart';
 import 'package:fushi/src/models/preferences_repository.dart';
 import 'package:fushi/src/platform/platform_providers.dart';
 import 'package:fushi/src/utils/components/fushi_material_components.dart';
-import 'package:fushi_audio/fushi_audio.dart';
+import 'package:fushi_engine/media/manga/bookmark_repository.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:path/path.dart' as p;
 

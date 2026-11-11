@@ -48,7 +48,7 @@ export 'src/utils/misc/fushi_byte_format.dart';
 export 'src/utils/misc/fushi_color.dart';
 export 'package:fushi_engine/utils/misc/fushi_time_format.dart';
 export 'package:fushi_engine/utils/misc/safe_file_name.dart';
-export 'package:fushi_dictionary/fushi_dictionary.dart' show FushiTextSelection;
+export 'src/models/fushi_text_selection.dart';
 export 'src/utils/misc/volume_key_channel.dart';
 export 'src/utils/misc/error_log_service.dart';
 export 'src/utils/misc/render_backend_service.dart';

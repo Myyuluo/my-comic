@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fushi/src/utils/components/glass/fushi_icon.dart';
 import 'package:fushi_core/fushi_core.dart';
 
-import 'package:fushi_engine/media/collections/shelf_sort.dart';
+import 'package:fushi_engine/media/manga/shelf_sort.dart';
 import 'package:fushi/src/media/tags/tag_chips.dart';
 import 'package:fushi/src/pages/implementations/tag_filter_sheet.dart';
 import 'package:fushi/src/pages/implementations/tag_management_page.dart';

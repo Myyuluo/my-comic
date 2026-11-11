@@ -10,8 +10,6 @@ list(APPEND FLUTTER_PLUGIN_LIST
   flutter_inappwebview_windows
   gamepads_windows
   hotkey_manager_windows
-  media_kit_video
-  record_windows
   screen_retriever_windows
   share_plus
   sqlite3_flutter_libs

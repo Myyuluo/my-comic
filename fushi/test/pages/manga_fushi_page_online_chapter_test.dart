@@ -21,7 +21,7 @@ import 'package:fushi/src/pages/implementations/manga_fushi_page.dart';
 import 'package:fushi/src/platform/platform_providers.dart';
 import 'package:fushi/src/utils/components/fushi_motion_tokens.dart';
 import 'package:fushi_core/fushi_core.dart';
-import 'package:fushi_engine/epub/epub_storage.dart';
+import 'package:fushi_engine/media/manga/book_storage.dart';
 import 'package:fushi_engine/media/manga/download_library_storage.dart';
 import 'package:fushi_engine/media/manga/mokuro_payload.dart';
 import 'package:image/image.dart' as img;

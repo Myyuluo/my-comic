@@ -1,7 +1,7 @@
 import 'package:drift/native.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:fushi_audio/fushi_audio.dart';
+import 'package:fushi_engine/media/manga/bookmark_repository.dart';
 import 'package:fushi/media.dart';
 import 'package:fushi/pages.dart';
 import 'package:fushi_core/fushi_core.dart';

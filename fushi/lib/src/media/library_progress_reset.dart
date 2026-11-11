@@ -18,7 +18,6 @@
 library;
 
 import 'package:drift/drift.dart' show Value;
-import 'package:fushi_audio/fushi_audio.dart';
 import 'package:fushi_core/fushi_core.dart';
 
 /// 把书（漫画，或配对了 EPUB 的有声书）重置为未读。
@@ -51,16 +50,4 @@ Future<void> resetBookReadingState({
     }
   }
   await db.setEpubBookCompleted(bookKey, null);
-  // 带有声书时首次按播放正文会跟到音频位置（BUG-3430），只回写阅读位置会被音频位置
-  // 原样拉回去、再被阅读器落库成「在读」；音频位置一并归零（带时间戳，互联 LWW 随之推送）。
-  //
-  // my-comic 的漫画-only live schema（37 表）没有 audiobooks 这张非漫画表：
-  // 表不存在 = 本书没有有声书记录，跳过位置归零；完整 schema 行为不变。
-  // 单卡菜单与批量栏共用本函数，守卫放在这里两处入口同时生效。
-  if (await db.hasAudiobooksTable) {
-    final AudiobookRepository audiobooks = AudiobookRepository(db);
-    if (await audiobooks.findByBookKey(bookKey) != null) {
-      await audiobooks.updatePositionMs(bookKey: bookKey, positionMs: 0);
-    }
-  }
 }

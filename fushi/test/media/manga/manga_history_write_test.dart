@@ -25,7 +25,7 @@ import 'package:fushi/src/models/preferences_repository.dart';
 import 'package:fushi/src/reader/reader_session_remote.dart';
 import 'package:fushi/src/platform/platform_providers.dart';
 import 'package:fushi/src/storage/app_paths.dart';
-import 'package:fushi_engine/epub/epub_storage.dart';
+import 'package:fushi_engine/media/manga/book_storage.dart';
 import 'package:fushi_engine/media/manga/download_library_storage.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_library.dart';
 import 'package:fushi_engine/media/manga/mokuro_payload.dart';

@@ -149,7 +149,7 @@ void main() {
   test('扫描规模哨兵：lib/ 与 fushi_engine/lib 确实被枚举到了', () {
     expectScanScale(dartFiles().length,
         what: 'lib/ + ../packages/fushi_engine/lib 下的 .dart',
-        atLeast: 850, measured: 1058);
+        atLeast: 600, measured: 705);
     expect(
       dartFiles().any((File f) =>
           norm(f.path).endsWith('fushi_engine/lib/media/cover_file_writer.dart')),

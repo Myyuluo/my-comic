@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
-import 'package:fushi_engine/epub/epub_storage.dart';
+import 'package:fushi_engine/media/manga/book_storage.dart';
 import 'package:fushi_engine/utils/misc/safe_file_name.dart';
 
 /// 漫画导入失败时抛出的领域异常：非法的 Mokuro 文件夹、路径穿越、缺图等。

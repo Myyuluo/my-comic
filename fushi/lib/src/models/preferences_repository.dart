@@ -3,20 +3,7 @@ import 'dart:io' show Platform;
 import 'dart:math';
 import 'package:material_ui/material_ui.dart';
 import 'package:fushi_core/fushi_core.dart';
-import 'package:fushi_engine/srs/srs_backup_retention.dart';
-import 'package:fushi_engine/profile/profile_document.dart'
-    show kProfileSettingCategoryPref;
 
-import 'package:fushi_engine/ai/ai_feature.dart';
-import 'package:fushi_engine/ai/ai_provider_config.dart';
-import 'package:fushi_engine/ai/web_knowledge.dart'
-    show
-        WebKnowledgeSite,
-        encodeWebKnowledgeCustomSites,
-        kBuiltinWebKnowledgeSites,
-        kLegacyWebKnowledgeSiteIds,
-        parseWebKnowledgeCustomSites,
-        parseWebKnowledgeEnabledIds;
 import 'package:fushi/src/utils/adaptive/nav_bar_style.dart';
 
 
@@ -38,8 +25,6 @@ import 'package:fushi/src/media/manga/mihon/mihon_cover_cache.dart'
 
 
 
-import 'package:fushi_engine/ai/ai_key_rotation.dart'
-    show AiKeyHealth, AiKeyHealthStore, AiKeyHealthUpdate, aiKeyHealthStore;
 
 
 
@@ -69,14 +54,6 @@ import 'package:fushi_engine/utils/net/app_proxy.dart'
         kProxyModeDirect,
         kProxyModeManual,
         normalizeUserProxyHostPort;
-import 'package:fushi_engine/mining/immersion_mining_request.dart'
-    show
-        MiningAnimatedFormat,
-        MiningClipFormat,
-        MiningStillFormat,
-        VideoMiningImageMode;
-import 'package:fushi_engine/utils/misc/desktop_audio_clipper.dart'
-    show MiningMediaCompression;
 import 'package:fushi/src/utils/misc/error_log_service.dart';
 import 'package:fushi/src/utils/misc/update_check_cache.dart';
 import 'package:fushi/src/media/manga/manga_view_prefs.dart';
@@ -221,9 +198,6 @@ class PreferencesRepository extends ChangeNotifier implements PrefStore {
     _prefCache[prefsVersionKey] =
         PrefCodec.encode(await readPrefsVersionFromDb());
     _installAppProxyReaders();
-    // AI 多 key 轮换的冷却记录（引擎全局装配点）：落偏好表，app 重启后被拒 /
-    // 限流的 key 仍在冷却里，不会一启动就把同一把坏 key 再打一遍。
-    aiKeyHealthStore = _PrefsAiKeyHealthStore(this);
   }
 
   /// 把进程级代理读取器接到本仓库上。**绑定点必须是「偏好变得可读的那一刻」**，不是
@@ -604,116 +578,6 @@ class PreferencesRepository extends ChangeNotifier implements PrefStore {
     await setPref('video_media_server_quality_preset', index);
     notifyListeners();
   }
-
-  /// AI 多 key 轮换的冷却记录上限（超出按写入先后丢最旧的）。正常情况下成功一次
-  /// 就清掉，留存的只有还在失败的 key，这个上限只防删掉的提供商留下的孤儿无界增长。
-  static const int kAiKeyHealthLimit = 200;
-
-  /// 冷却记录的偏好键（设备本地）。
-  static const String aiKeyHealthPrefKey = 'ai_key_health';
-
-  /// AI 多 key 轮换的冷却记录：`{指纹: AiKeyHealth.toJson()}`（指纹见
-  /// `aiKeyFingerprint`，不含 key 本身）。设备本地。解析失败回退空 map——冷却
-  /// 记录丢了只等于「这些 key 下次照常再试」，不能挡住请求。
-  Map<String, AiKeyHealth> get aiKeyHealth => _decodeAiKeyHealth(
-    getPref(aiKeyHealthPrefKey, defaultValue: '') as String,
-  );
-
-  /// 正在落库的 [updateAiKeyHealth] 笔数；归零时才把缓存对齐到持久值。
-  int _aiKeyHealthWritesInFlight = 0;
-
-  /// 改一条冷却记录（[AiKeyHealthStore.update] 的偏好表实现）。不 notifyListeners：
-  /// 设置页在自己的探测结束时重建，没有别的界面监听它。
-  ///
-  /// 对同一条记录分两处各算一次 [update]（所以它必须是纯函数）：
-  /// 1. 进程内缓存**同步**生效——请求热路径上的下一次 read 立刻看得到；
-  /// 2. 落库在一个事务里**重读最新持久值**、只改 [fingerprint] 这一条再写回。
-  ///    弹窗词典 `:popup` 进程与主进程各有一份偏好缓存，拿自己缓存里的整份 map
-  ///    覆盖写回会抹掉对方刚记的冷却；按条合并则互不影响，[update] 看到的也是
-  ///    别的进程写过之后的当前值。
-  /// 最后一笔在途写完成时把缓存换成持久值（顺带收进别的进程记的条目）。
-  Future<void> updateAiKeyHealth(
-    String fingerprint,
-    AiKeyHealthUpdate update,
-  ) async {
-    final Map<String, AiKeyHealth> cached = aiKeyHealth;
-    if (_applyAiKeyHealthUpdate(cached, fingerprint, update)) {
-      _prefCache[aiKeyHealthPrefKey] =
-          PrefCodec.encode(_encodeAiKeyHealth(cached));
-    }
-    // 缓存里没变也照样去持久值上算一遍：别的进程可能刚写过这一条（例如缓存里
-    // 没有、持久值里有），只看缓存就跳过会漏掉该做的清除 / 合并。没变时事务里
-    // 只有一次读、不写不抬版本号。
-    _aiKeyHealthWritesInFlight++;
-    final String? persistedRaw;
-    try {
-      persistedRaw = await _db.transaction(() async {
-        final String? raw = await _db.getPref(aiKeyHealthPrefKey);
-        final Map<String, AiKeyHealth> persisted = _decodeAiKeyHealth(
-          raw == null ? '' : PrefCodec.decode<String>(raw, ''),
-        );
-        if (!_applyAiKeyHealthUpdate(persisted, fingerprint, update)) {
-          return raw;
-        }
-        final String encoded =
-            PrefCodec.encode(_encodeAiKeyHealth(persisted));
-        await _db.setPref(aiKeyHealthPrefKey, encoded);
-        return encoded;
-      });
-    } finally {
-      _aiKeyHealthWritesInFlight--;
-    }
-    if (_aiKeyHealthWritesInFlight > 0) return;
-    if (persistedRaw == null) {
-      _prefCache.remove(aiKeyHealthPrefKey);
-    } else {
-      _prefCache[aiKeyHealthPrefKey] = persistedRaw;
-    }
-  }
-
-  /// 对 [map] 里 [fingerprint] 这一条套用 [update]；值没变返回 false（不必落库）。
-  /// 改过的条目挪到末尾，超出 [kAiKeyHealthLimit] 时丢最旧的。
-  static bool _applyAiKeyHealthUpdate(
-    Map<String, AiKeyHealth> map,
-    String fingerprint,
-    AiKeyHealthUpdate update,
-  ) {
-    final AiKeyHealth? current = map[fingerprint];
-    final AiKeyHealth? next = update(current);
-    if (next == current) return false;
-    map.remove(fingerprint);
-    if (next != null) map[fingerprint] = next;
-    while (map.length > kAiKeyHealthLimit) {
-      map.remove(map.keys.first);
-    }
-    return true;
-  }
-
-  static Map<String, AiKeyHealth> _decodeAiKeyHealth(String raw) {
-    if (raw.isEmpty) return <String, AiKeyHealth>{};
-    try {
-      final Object? decoded = jsonDecode(raw);
-      if (decoded is Map) {
-        return <String, AiKeyHealth>{
-          for (final MapEntry<dynamic, dynamic> e in decoded.entries)
-            if (AiKeyHealth.fromJson(e.value) case final AiKeyHealth health)
-              e.key.toString(): health,
-        };
-      }
-    } on FormatException catch (e, stack) {
-      ErrorLogService.instance
-          .log('PreferencesRepository.aiKeyHealth.decode', e, stack);
-    }
-    return <String, AiKeyHealth>{};
-  }
-
-  static String _encodeAiKeyHealth(Map<String, AiKeyHealth> map) =>
-      map.isEmpty
-          ? ''
-          : jsonEncode(<String, Object?>{
-              for (final MapEntry<String, AiKeyHealth> e in map.entries)
-                e.key: e.value.toJson(),
-            });
 
   // ── 实验性：键盘/手柄焦点导航 ──────────────────────────────────────────
   // 整套自定义焦点导航（FushiFocusRoot/Ring + 手柄/方向键焦点移动）默认关闭，
@@ -1120,56 +984,6 @@ class PreferencesRepository extends ChangeNotifier implements PrefStore {
     notifyListeners();
   }
 
-  // ── usage stats（安装统计心跳；ticket 09 负责运营端点身份） ─────────
-
-  bool get usageStatsEnabled =>
-      getPref('usage_stats_enabled', defaultValue: true) as bool;
-
-  Future<void> setUsageStatsEnabled(bool value) async {
-    await setPref('usage_stats_enabled', value);
-    notifyListeners();
-  }
-
-  /// 安装统计的回退随机种子（随机 UUID v4）。设备本地。
-  Future<String> ensureUsageStatsInstallId() async {
-    final String existing = getPref(
-      'usage_stats_install_id',
-      defaultValue: '',
-    ) as String;
-    if (existing.trim().isNotEmpty) return existing.trim();
-    final String created = _randomUuidV4();
-    await setPref('usage_stats_install_id', created);
-    return created;
-  }
-
-  String? usageStatsInstallPowFor(String installId) {
-    final String raw =
-        getPref('usage_stats_install_pow', defaultValue: '') as String;
-    final String prefix = '$installId:';
-    if (!raw.startsWith(prefix)) return null;
-    final String nonce = raw.substring(prefix.length);
-    return nonce.isEmpty ? null : nonce;
-  }
-
-  Future<void> setUsageStatsInstallPow(String installId, String nonce) async {
-    await setPref('usage_stats_install_pow', '$installId:$nonce');
-  }
-
-  int get usageStatsLastPingAt =>
-      getPref('usage_stats_last_ping_at', defaultValue: 0) as int;
-
-  Future<void> setUsageStatsLastPingAt(int at) async {
-    await setPref('usage_stats_last_ping_at', at);
-  }
-
-  /// 「下载」改名「浏览」的一次性搬迁提示是否已处理。
-  bool get browseMovedNoticeHandled =>
-      getPref('browse_moved_notice_handled', defaultValue: false) as bool;
-
-  Future<void> setBrowseMovedNoticeHandled() async {
-    await setPref('browse_moved_notice_handled', true);
-  }
-
   // ── reader chrome ────────────────────────────────────────────────────
 
   ReaderControlLayout get readerControlLayout => ReaderControlLayout.decode(
@@ -1236,7 +1050,7 @@ class PreferencesRepository extends ChangeNotifier implements PrefStore {
     }
     await _db.customStatement(
       'UPDATE profile_settings SET value = ? WHERE category = ? AND key = ?',
-      <Object>[PrefCodec.encode(value), kProfileSettingCategoryPref, key],
+      <Object>[PrefCodec.encode(value), 'pref', key],
     );
     await setPrefs(<String, dynamic>{key: value, markerKey: true});
   }
@@ -1288,6 +1102,14 @@ class PreferencesRepository extends ChangeNotifier implements PrefStore {
   void setMaximumTerms(int value) async {
     await setPref('maximum_terms', value);
     notifyListeners();
+  }
+
+  /// 「下载」改名「浏览」的一次性搬迁提示是否已处理。
+  bool get browseMovedNoticeHandled =>
+      getPref('browse_moved_notice_handled', defaultValue: false) as bool;
+
+  Future<void> setBrowseMovedNoticeHandled() async {
+    await setPref('browse_moved_notice_handled', true);
   }
 
   // ── home tab ─────────────────────────────────────────────────────────
@@ -2668,49 +2490,9 @@ class PreferencesRepository extends ChangeNotifier implements PrefStore {
     await setPref('last_selected_deck', deckName);
   }
 
-  String? get lastSelectedModel => getPref('last_selected_model');
-
-  Future<void> setLastSelectedModelName(String modelName) async {
-    await setPref('last_selected_model', modelName);
-    notifyListeners();
-  }
-
   // ── low memory mode (raw pref only; side effect in AppModel) ─────────
 
   bool get lowMemoryMode =>
       getPref('low_memory_mode', defaultValue: false) as bool;
 
-}
-
-/// [AiKeyHealthStore] 的偏好表实现（[PreferencesRepository.loadFromDb] 装配）。
-/// 读走偏好缓存（同步，请求热路径上不等 IO）；更新在缓存里同步生效、后台按条
-/// 合并落库（见 [PreferencesRepository.updateAiKeyHealth]），失败只记日志——
-/// 丢一次冷却记录只等于那把 key 下次照常再试，不该打断这次 AI 请求。
-class _PrefsAiKeyHealthStore implements AiKeyHealthStore {
-  _PrefsAiKeyHealthStore(this._prefs);
-
-  final PreferencesRepository _prefs;
-
-  @override
-  AiKeyHealth? read(String fingerprint) => _prefs.aiKeyHealth[fingerprint];
-
-  @override
-  void update(String fingerprint, AiKeyHealthUpdate update) {
-    _prefs.updateAiKeyHealth(fingerprint, update).catchError(
-          (Object e, StackTrace stack) => ErrorLogService.instance
-              .log('PreferencesRepository.updateAiKeyHealth', e, stack),
-        );
-  }
-}
-
-/// 随机 UUID v4（usage stats 安装身份的本地回退种子）。
-String _randomUuidV4() {
-  final Random rng = Random.secure();
-  final List<int> bytes = List<int>.generate(16, (_) => rng.nextInt(256));
-  bytes[6] = (bytes[6] & 0x0f) | 0x40;
-  bytes[8] = (bytes[8] & 0x3f) | 0x80;
-  String hex(int b) => b.toRadixString(16).padLeft(2, '0');
-  String group(int start, int end) =>
-      bytes.sublist(start, end).map(hex).join();
-  return '${group(0, 4)}-${group(4, 6)}-${group(6, 8)}-${group(8, 10)}-${group(10, 16)}';
 }

@@ -9,7 +9,7 @@ import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_service.dart';
 import 'package:fushi/src/media/manga/library/online_manga_runtime_adapter.dart';
 import 'package:fushi_core/fushi_core.dart';
-import 'package:fushi_engine/epub/epub_storage.dart';
+import 'package:fushi_engine/media/manga/book_storage.dart';
 import 'package:path/path.dart' as p;
 
 /// 只为把一条在线条目入库；本测试不跑 worker，页表 / 取页永远不会被调。

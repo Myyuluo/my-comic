@@ -50,7 +50,6 @@ import 'package:fushi/src/platform/platform_services.dart';
 import 'package:fushi/src/platform/source_url_channel.dart';
 import 'package:fushi/src/platform/desktop/desktop_ctl_host.dart';
 import 'package:fushi/src/platform/desktop/ctl/ctl_library_entries.dart';
-import 'package:fushi/src/platform/desktop/ctl/ctl_library_import.dart';
 import 'package:fushi_cli/fushi_cli.dart' show CtlOpenResult, CtlServer;
 import 'package:fushi/src/platform/app_shortcuts.dart';
 import 'package:fushi/src/platform/app_shortcut_router.dart';

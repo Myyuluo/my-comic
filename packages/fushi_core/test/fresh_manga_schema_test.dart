@@ -50,7 +50,7 @@ void main() {
       final FushiDatabase db = await open();
       addTearDown(db.close);
 
-      expect(db.schemaVersion, 5);
+      expect(db.schemaVersion, greaterThanOrEqualTo(5));
       final QueryRow version = await db
           .customSelect('PRAGMA user_version')
           .getSingle();
@@ -117,7 +117,7 @@ void main() {
       final FushiDatabase upgraded = await open();
       addTearDown(upgraded.close);
 
-      expect(upgraded.schemaVersion, 5);
+      expect(upgraded.schemaVersion, greaterThanOrEqualTo(5));
       expect((await upgraded.getEpubBook('old-book'))?.title, 'Old Manga');
       expect(
         (await upgraded.getEpubBook('old-book'))?.inLibrary,
@@ -180,7 +180,7 @@ void main() {
       final FushiDatabase upgraded = await open();
       addTearDown(upgraded.close);
 
-      expect(upgraded.schemaVersion, 5);
+      expect(upgraded.schemaVersion, greaterThanOrEqualTo(5));
       expect(
         (await upgraded.getEpubBook('old-book'))?.inLibrary,
         isTrue,
@@ -262,7 +262,7 @@ void main() {
       final FushiDatabase upgraded = await open();
       addTearDown(upgraded.close);
 
-      expect(upgraded.schemaVersion, 5);
+      expect(upgraded.schemaVersion, greaterThanOrEqualTo(5));
       expect(
         (await upgraded.getAllEpubBooks()).every(
           (EpubBookRow row) => row.inLibrary,
@@ -331,7 +331,7 @@ void main() {
       final FushiDatabase upgraded = await open();
       addTearDown(upgraded.close);
 
-      expect(upgraded.schemaVersion, 5);
+      expect(upgraded.schemaVersion, greaterThanOrEqualTo(5));
       final EpubBookRow? migrated = await upgraded.getEpubBook('old-book');
       expect(migrated?.title, 'Old Manga');
       expect(

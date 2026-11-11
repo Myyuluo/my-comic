@@ -15,7 +15,6 @@ import 'package:fushi/src/models/preferences_repository.dart';
 import 'package:fushi/src/pages/implementations/reader_fushi_history_page.dart';
 import 'package:fushi/src/settings/settings_context.dart';
 import 'package:fushi/src/storage/app_paths.dart';
-import 'package:fushi_audio/fushi_audio.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:path/path.dart' as p;
@@ -135,9 +134,6 @@ void main() {
   Widget buildApp() => ProviderScope(
     overrides: <Override>[
       appProvider.overrideWith((ref) => appModel),
-      srtBooksProvider.overrideWith(
-        (ref) => Future<List<SrtBook>>.value(const <SrtBook>[]),
-      ),
     ],
     child: TranslationProvider(
       child: MaterialApp(

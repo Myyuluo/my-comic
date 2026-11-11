@@ -12,7 +12,6 @@ import 'package:flutter/services.dart';
 import 'package:fushi/src/utils/adaptive/nav_bar_style.dart';
 import 'package:fushi/src/updates/local_update_notifier.dart';
 import 'package:fushi/src/updates/update_check_scheduler.dart';
-import 'package:fushi/src/updates/usage_heartbeat.dart';
 import 'package:fushi_engine/updates/update_feed_kind.dart';
 import 'package:fushi/src/updates/update_feed_service.dart';
 import 'package:fushi/src/updates/update_probes.dart';
@@ -21,6 +20,9 @@ import 'package:fushi/src/updates/update_notifier.dart';
 import 'package:fushi/src/utils/net/app_http_image.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fushi_core/fushi_core.dart';
+import 'package:fushi_engine/media/manga/bookmark_repository.dart';
+import 'package:fushi_engine/media/manga/reader_language.dart';
+import 'package:fushi_engine/media/manga/reader_position.dart';
 import 'package:path/path.dart' as path;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:http/http.dart' as http;
@@ -28,7 +30,6 @@ import 'package:http/io_client.dart';
 import 'package:remove_emoji/remove_emoji.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:fushi/src/utils/misc/screen_wakelock.dart';
-import 'package:fushi_dictionary/fushi_dictionary.dart';
 import 'package:fushi/media.dart';
 
 
@@ -46,19 +47,12 @@ import 'package:fushi/src/utils/misc/channel_constants.dart';
 import 'package:fushi/src/utils/misc/error_details_dialog.dart';
 import 'package:fushi/src/utils/net/app_network_bindings.dart';
 import 'package:fushi/src/media/drag_drop/desktop_drop_reinitializer.dart';
-import 'package:fushi_audio/fushi_audio.dart';
-import 'package:fushi_anki/fushi_anki.dart';
-import 'package:fushi/src/media/floating_dict_channel.dart';
 import 'package:fushi/src/models/app_font_loader.dart';
 import 'package:fushi/src/models/app_ui_font_chain.dart';
-import 'package:fushi_engine/epub/book_title_conflict.dart';
-import 'package:fushi_engine/srs/ankiconnect/srs_ankiconnect_endpoint.dart';
-import 'package:fushi_engine/srs/srs_backup_retention.dart';
-import 'package:fushi_engine/epub/epub_importer.dart';
+import 'package:fushi_engine/media/manga/book_title_conflict.dart';
 
 import 'package:fushi/src/reader/reader_control_layout.dart';
 import 'package:fushi/src/reader/reader_settings.dart';
-import 'package:fushi_engine/models/dictionary_directory.dart';
 import 'package:fushi/src/models/media_history_repository.dart';
 import 'package:fushi/src/models/preferences_repository.dart';
 import 'package:fushi/src/media/manga/cookie/manga_cookie_jar.dart';
@@ -145,11 +139,7 @@ import 'package:fushi/src/media/discovery/sources/opds_discovery_source.dart';
 
 
 
-import 'package:fushi_engine/media/tracking/media_tracking_repository.dart';
-import 'package:fushi_engine/media/tracking/media_tracking_service.dart';
 
-import 'package:fushi_engine/sync/local_library_host_service.dart';
-import 'package:fushi_engine/media/audiobook/audiobook_transcribe_import_queue.dart';
 import 'package:fushi_engine/media/discovery/import/discovery_engine_importers.dart'
     show
         importDiscoveryAudiobook,
@@ -159,13 +149,8 @@ import 'package:fushi_engine/media/discovery/import/discovery_engine_importers.d
 import 'package:fushi_engine/media/discovery/import/discovery_import_plan.dart';
 
 
-import 'package:fushi_engine/asr/asr_host_job_runner.dart';
-import 'package:fushi_engine/sync/host_jobs/host_job_manager.dart';
-import 'package:fushi_engine/sync/host_jobs/host_job_runner.dart';
-import 'package:fushi_engine/sync/deletion_propagation.dart';
 
 
-import 'package:fushi_engine/sync/sync_asset_package_service.dart';
 
 import 'package:fushi/src/models/theme_notifier.dart' as theme_notifier;
 import 'package:fushi/src/models/theme_notifier.dart'
@@ -175,29 +160,20 @@ import 'package:fushi/src/models/theme_notifier.dart'
 export 'package:fushi/src/models/theme_notifier.dart'
     show CustomThemeEntry, ThemePreset;
 import 'package:fushi/src/models/file_export_manager.dart';
-import 'package:fushi_engine/models/local_audio_source_pref.dart';
-import 'package:fushi_engine/sync/fushi_remote_lookup_service.dart';
-
-import 'package:fushi_engine/sync/forwarded_mine_payload.dart';
-import 'package:fushi_engine/sync/immersion_mine_payload.dart';
 
 
 
 
 
 
-import 'package:fushi_engine/mining/immersion_mining_request.dart';
 
 
-import 'package:fushi_engine/sync/manga_sync_package.dart';
+
 import 'package:fushi/src/models/module_id.dart';
 import 'package:fushi/src/models/store_compliance.dart';
 import 'package:fushi/src/settings/settings_schema.dart'
     show resetSettingsSchemaCache;
 
-
-import 'package:fushi_engine/sync/fushi_remote_api_handlers.dart'
-    show RemotePopupDictionaryCss;
 import 'package:fushi/src/shortcuts/gamepad_service.dart';
 import 'package:fushi/src/shortcuts/shortcut_preferences.dart';
 import 'package:fushi/src/shortcuts/shortcut_registry.dart';
@@ -421,7 +397,6 @@ class AppModel with ChangeNotifier {
       '${FushiTimeFormat.hourMinute(time)}';
 
   UpdateCheckScheduler? _updateCheckScheduler;
-  UsageHeartbeat? _usageHeartbeat;
 
   /// 启动后台更新检查（漫画新章 + 漫画扩展）。幂等，重复调用不再起第二个定时器。
   ///
@@ -1698,17 +1673,6 @@ class AppModel with ChangeNotifier {
     }
   }
 
-  /// Persist a new last selected dictionary format. This is called when the
-  /// user changes the import format in the dictionary menu.
-  Future<void> setLastSelectedDictionaryFormat(
-      DictionaryFormat dictionaryFormat) async {
-    String lastDictionaryFormatName = dictionaryFormat.uniqueKey;
-    await _setPref('last_selected_dictionary_format', lastDictionaryFormatName);
-  }
-
-  Future<void> setLastSelectedModelName(String modelName) =>
-      prefsRepo.setLastSelectedModelName(modelName);
-
   Future<void> setLastSelectedDeck(String deckName) =>
       prefsRepo.setLastSelectedDeck(deckName);
 
@@ -2524,10 +2488,6 @@ class AppModel with ChangeNotifier {
   Future<void> setUpdateAutoInstall(bool value) =>
       prefsRepo.setUpdateAutoInstall(value);
 
-  /// 安装统计心跳开关（[UsageHeartbeat]），设备本地。
-  bool get usageStatsEnabled => prefsRepo.usageStatsEnabled;
-  Future<void> setUsageStatsEnabled(bool value) =>
-      prefsRepo.setUsageStatsEnabled(value);
 
   bool get updateBetaChannel => prefsRepo.updateBetaChannel;
   Future<void> setUpdateBetaChannel(bool value) =>

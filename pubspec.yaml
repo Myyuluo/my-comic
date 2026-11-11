@@ -16,16 +16,10 @@ environment:
 workspace:
   - fushi
   - packages/flutter_inappwebview_windows
-  - packages/fushi_anki
-  - packages/fushi_audio
   - packages/fushi_cli
   - packages/fushi_core
-  - packages/fushi_dictionary
   - packages/fushi_engine
-  - packages/fushi_server
-  - packages/fushi_p2p
   - packages/fushi_platform
-  - packages/fushi_srs
   - packages/gamepads_windows
 
 dev_dependencies:
@@ -70,52 +64,7 @@ dependency_overrides:
     path: third_party/carousel_slider
   fading_edge_scrollview:
     path: third_party/fading_edge_scrollview
-  # my-comic (ticket 04): the media_kit_libs_* overrides were removed together
-  # with the media_kit_libs_video dependency. Those packages were the only
-  # source of libmpv / FFmpeg / x265 / ANGLE in the Windows bundle; my-comic
-  # only keeps the manga reader, so the video/audio native runtime is not
-  # shipped. media_kit_video is still overridden below because the Dart-side
-  # video files remain in the tree (their UI is unreachable) and compile
-  # against the stub branch that the plugin uses when libs are absent.
-  # BUG-235: media_kit_video 2.0.1's MaterialDesktopSeekBarState.onPointerUp /
-  # onPointerMove call controller(context) (dereferences State.context) with no
-  # mounted guard. Fushi tears down the controls subtree on fullscreen
-  # enter/exit and episode switch (VideoControlsFocusGate), so releasing the
-  # seek bar drag right then crashes with "Null check operator used on a null
-  # value". Vendored fork adds `if (!mounted) return;` to both handlers. See
-  # third_party/media_kit_video/PATCHES.md.
-  media_kit_video:
-    path: third_party/media_kit_video
-  # fushi_asr_subtitles 的 pubspec 把 fushi_asr_core 写成 `^0.1.0`（上游 workspace 里
-  # 靠 workspace 解析），我们从 git 单包引进来时 pub 会把它当 hosted 去 pub.dev 找 ——
-  # 那儿没有这个包（publish_to: none），于是 "fushi_asr_subtitles from git is forbidden"。
-  # 这条 override 把它钉回同仓同 sha 的 git 源；ref 必须与 fushi/pubspec.yaml、
-  # packages/fushi_engine/pubspec.yaml、packages/fushi_server/pubspec.yaml 里的各条
-  # 逐字一致，否则同一份算法会被解析成两个副本。
-  fushi_asr_core:
-    git:
-      url: https://github.com/hajisensai/fushi-subtitles.git
-      path: packages/asr_core
-      ref: 0c5878a856be72c7439f166a3144c0c4c6a998a7
-  # fushi_asr_onnx_ffi（仅无头 fushi_server 依赖）把 archive 钉成 ^4.0.0，本仓其余
-  # 全部钉 ^3.6.1；pub workspace 只解析一次，两者无法共存。
-  #
-  # 往上升不是选项：archive 4 移除了 `package:archive/archive_io.dart`（本仓 12+ 个
-  # 文件在用）并改掉了 `ArchiveFile.content`，实测迁移面 76 个文件——为一个包把全仓
-  # 拖去做这次迁移不成比例。
-  #
-  # 往下钉需要一行兼容补丁：上游整个包只有三处 archive API，其中
-  # `ort_provisioning.dart` 的 `entry.readBytes()` 是 4.x 专有（实测编译失败：
-  # "The method 'readBytes' isn't defined for the type 'ArchiveFile'"），3.x 的等价
-  # 物是 `entry.content`。补丁在
-  # `ci/patches/git/fushi-subtitles-<sha>/`，由 `ci/apply-patches.sh` 打进 pub-cache。
-  #
-  # 这是上游约束过紧的兼容层，不是本仓缺陷。清理条件：上游把那行换成 3/4 通吃的
-  # 写法、或把约束放宽成 `>=3.6.1 <5.0.0`——届时删掉这条 override 与补丁目录。
-  # sha 一变补丁自动跳过并告警，不会静默失效。
-  archive: ^3.6.1
-  # image 4.4+ 要求 archive 4；archive 因 fushi_asr_onnx_ffi 仍钉在 3.6.1，
-  # 保持与锁文件一致的 4.3.0（4.3.0 是最后一个兼容 archive 3.x 的版本）。
+  # 与锁文件一致的已测版本（image 4.4+ 要求 archive 4，本仓仍用 archive 3.x）。
   image: 4.3.0
   # 与 HEAD 锁文件一致：新版本在 Dart 3.13 / 当前 API 下编译失败
   # （dartssh2 2.14 的 int? 提升、dio 5.11 新增 transformTimeout）。
