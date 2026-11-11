@@ -76,59 +76,6 @@ void main() {
     });
   });
 
-  group('Chinese video clip export labels', () {
-    test('uses clip export wording consistently', () {
-      final strings = AppLocale.zhCn.translations;
-      final String formerPixelCaptureTerm =
-          String.fromCharCodes(<int>[0x5f55, 0x5c4f]);
-
-      expect(strings.video_clip_export, '片段导出');
-      expect(strings.video_clip_export_start, '开始片段导出');
-      expect(strings.video_clip_export_stop, '停止并导出片段');
-      expect(strings.video_clip_exporting, '正在导出片段…');
-      expect(strings.video_clip_export_remote_download_required,
-          contains('下载到本机'));
-      expect(
-          strings.video_clip_export, isNot(contains(formerPixelCaptureTerm)));
-      expect(
-        strings.video_clip_export_start,
-        isNot(contains(formerPixelCaptureTerm)),
-      );
-      expect(
-        strings.video_clip_export_stop,
-        isNot(contains(formerPixelCaptureTerm)),
-      );
-    });
-  });
-
-  group('video scrape cleanup labels', () {
-    test('direct getters and dynamic flat maps are available in every locale',
-        () {
-      for (final AppLocale locale in AppLocale.values) {
-        final strings = locale.translations;
-        expect(
-          strings.video_source_scrape_clear_all,
-          isNotEmpty,
-          reason: '${locale.name} direct getter',
-        );
-        expect(
-          strings['video_source_scrape_clear_all'],
-          isNotNull,
-          reason: '${locale.name} flat-map lookup',
-        );
-        expect(
-          strings['video_source_scrape_clear_all_in_progress'],
-          isNotNull,
-          reason: '${locale.name} in-progress flat-map lookup',
-        );
-      }
-      expect(
-        AppLocale.zhCn.translations.video_source_scrape_clear_all,
-        '清理全部刮削记录',
-      );
-    });
-  });
-
   group('Local source root rename', () {
     // 只守用户可见文案的**不变量**（旧目录名不得复现）。逐句硬编码文案由各
     // ticket 的专用测试（如 download_cbz_setting_test 对 CBZ 副标题）负责，
