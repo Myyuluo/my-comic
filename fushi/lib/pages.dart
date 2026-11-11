@@ -6,6 +6,7 @@ export 'src/pages/implementations/browse_page.dart';
 export 'src/pages/implementations/manga_history_page.dart';
 export 'src/pages/implementations/downloads_page.dart';
 export 'src/pages/implementations/home_page.dart';
+export 'src/pages/implementations/onboarding_wizard_page.dart';
 export 'src/pages/implementations/reader_fushi_history_page.dart';
 export 'src/media/manga/reader/manga_fushi_page.dart';
 export 'src/media/manga/manga_library_page.dart';

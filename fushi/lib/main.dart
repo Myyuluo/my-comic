@@ -826,7 +826,10 @@ class _FushiReaderAppState extends ConsumerState<FushiReaderApp>
     return runAppShortcut(
       shortcut,
       visibility: appModel.moduleVisibility,
-      onboardingCompleted: appModel.onboardingCompleted,
+      // 有效完成状态：新装用户（first_time_setup=true 且未完成）等同「引导中」，
+      // 快捷方式只切 tab；已有用户（first_time_setup=false）不因新偏好缺省 false
+      // 被误当成引导中。
+      onboardingCompleted: !appModel.needsOnboarding,
       navigator: appModel.navigatorKey.currentState,
       selectHomeTab: (HomeTab tab) => homeShellTabNotifier.value = tab,
     );

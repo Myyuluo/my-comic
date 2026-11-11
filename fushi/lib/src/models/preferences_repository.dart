@@ -1269,15 +1269,26 @@ class PreferencesRepository extends ChangeNotifier implements PrefStore {
     notifyListeners();
   }
 
-  /// 新手引导完成标志。缺省值刻意取 **true**：既有安装升级上来不重弹引导；
-  /// 全新安装在 HomePage 的 `first_time_setup` 首帧分支里显式写 false，向导
-  /// 关闭后写回 true——中途杀进程下次启动值仍是 false，会重新弹出。备份合并的
-  /// insert-if-absent 天然不会覆盖本键（描述本库自身状态，同 `first_time_setup`）。
+  /// 三步漫画版新手引导完成标志。缺省值 **false**：全新安装默认未完成。
+  ///
+  /// 已经有数据的用户不被打扰靠 `first_time_setup`：旧版本的 HomePage 首帧早已
+  /// 把它写成 false，而 `onboarding_completed` 的显示门控要求两者同时满足
+  /// （见 `src/onboarding/onboarding_steps.dart` 的 `shouldShowOnboarding`）。
+  /// 备份合并的 insert-if-absent 天然不会覆盖本键（描述本库自身状态，同
+  /// `first_time_setup`）。
   bool get onboardingCompleted =>
-      getPref('onboarding_completed', defaultValue: true) as bool;
+      getPref('onboarding_completed', defaultValue: false) as bool;
 
+  /// 完成 / 跳过引导：`onboarding_completed=true`，同时把 `first_time_setup`
+  /// 落为 false。
+  ///
+  /// 两个标记同一次 `setPrefs` 事务写入：完成即重启的场景下，不能出现「重启先
+  /// 发生、其中一半还没落盘」的窗口，否则新装用户下次启动会被再弹一次。
   Future<void> setOnboardingCompleted({required bool value}) async {
-    await setPref('onboarding_completed', value);
+    await setPrefs(<String, dynamic>{
+      'onboarding_completed': value,
+      if (value) 'first_time_setup': false,
+    });
   }
 
   final int defaultMaximumDictionaryTermsInResult = 10;
