@@ -123,8 +123,8 @@ void main() {
     expect(page.contains('saveIconPresetKey('), isFalse);
     expect(page.contains('saveCustomIconPath('), isFalse);
     // rail 的品牌位已从 home_page 的私有方法抽成 NavRailBrandButton（它同时是
-    // 官网入口，需要独立可测）：home_page 只剩「rail 确实挂了品牌位」，图标真值
-    // 判据跟着实现搬进该组件。
+    // GitHub 仓库入口，需要独立可测）：home_page 只剩「rail 确实挂了品牌位」，图标
+    // 真值判据跟着实现搬进该组件。
     final String brand =
         read('lib/src/utils/components/nav_rail_brand_button.dart');
     expect(home.contains('leading: const NavRailBrandButton()'), isTrue,

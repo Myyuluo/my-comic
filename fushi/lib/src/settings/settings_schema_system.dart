@@ -318,8 +318,8 @@ SettingsDestination buildSystemDestination() {
             icon: FushiIcons.info,
             builder: _buildRuntimeAppVersionRow,
           ),
-          // 官网。与宽屏侧栏左上角的 app 图标是同一个入口（openOfficialWebsite），
-          // URL 只存在 official_links.dart 一处。
+          // 官网。设置行沿用 openOfficialWebsite，URL 只存在 official_links.dart
+          // 一处。
           SettingsActionItem(
             id: 'system.website',
             title: t.options_website,
@@ -335,10 +335,7 @@ SettingsDestination buildSystemDestination() {
             icon: Icons.public_outlined,
             cli: const SettingsCliAction.tap(),
             onTap: (_) async {
-              await launchUrl(
-                Uri.parse('https://github.com/hajisensai/fushi'),
-                mode: LaunchMode.externalApplication,
-              );
+              await openMyComicRepository();
             },
           ),
           SettingsActionItem(

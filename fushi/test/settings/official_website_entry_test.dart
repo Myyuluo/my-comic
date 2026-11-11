@@ -60,13 +60,17 @@ void main() {
     expect(kOfficialWebsiteUrl, 'https://fushi.moe');
   });
 
-  test('system.github still opens the repository, not the website', () async {
-    final SettingsActionItem github = actionItem('system.github');
+  test(
+    'system.github opens the my-comic fork, not the upstream repository',
+    () async {
+      final SettingsActionItem github = actionItem('system.github');
 
-    await github.onTap(_StubSettingsContext());
+      await github.onTap(_StubSettingsContext());
 
-    expect(launchedUrls, <String>['https://github.com/hajisensai/fushi']);
-  });
+      expect(launchedUrls, <String>[kMyComicRepositoryUrl]);
+      expect(kMyComicRepositoryUrl, 'https://github.com/Myyuluo/my-comic');
+    },
+  );
 
   test('system.github_sponsors opens the public sponsorship page', () async {
     final SettingsActionItem sponsors = actionItem('system.github_sponsors');
