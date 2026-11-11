@@ -5,12 +5,16 @@
 ## Language
 
 **my-comic**:
-本项目的产品名与代码库名。它是独立发行版，不是 Fushi 的官方分支。
+本项目的产品名与代码库名。它是独立发行版，不是 Fushi 的官方分支；版本从 1.0.0 起，GitHub 仓库与更新源都是 `Myyuluo/my-comic`，不指向 Fushi 上游。
 _Avoid_: Fushi、Mihon（指本产品时）
 
 **Fushi**:
-本项目的上游代码基座，锁定在 v3.0.0 快照。只作为来源与历史背景使用，不跟随其后续更新。
+本项目的上游代码基座，锁定在 v3.0.0 快照。只作为来源与历史背景使用，不跟随其后续更新，也不作为本应用的更新源。
 _Avoid_: 当前应用、我们的应用
+
+**Update source（更新源）**:
+应用检查新版本时查询的发布仓库。my-comic 只使用自己的 GitHub 仓库 `Myyuluo/my-comic`，不回退上游 Fushi 的发布；仓库没有可用 release（404、空列表或无匹配通道）时按「已是最新」处理。
+_Avoid_: 上游更新、Fushi 发布线
 
 **Mihon**:
 Android 漫画阅读器，是本项目的扩展与备份兼容目标（v0.21.3）。
@@ -121,7 +125,7 @@ _Avoid_: 下载视图、下载页签、子标签
 _Avoid_: 书签、位置
 
 **History（历史）**:
-用户阅读 Manga 的会话记录，按 Manga 去重，每部一条，记录最近一次打开 Chapter 的时间；由「历史」页直接展示。书架与非书架 Manga 都会写入；历史卡片优先显示当前标题与本地封面，匹配不到时回退到导入快照，绝不显示内部作品标识。History 不设条数上限，写入新作品不会裁剪更早的记录。History 与 Reading progress 相互独立：删除 History 不会清除续读位置或 Chapter 已读标记。无痕阅读期间不新增、不更新 History。
+用户阅读 Manga 的会话记录，按 Manga 去重，每部一条，记录最近一次打开 Chapter 的时间；由「历史」页直接展示。书架与非书架 Manga 都会写入；历史卡片优先显示当前标题与当前封面，封面与书架使用同一优先级：本地封面 → 可用 Source 的当前封面（含持久缓存）→ 生成封面 → 占位；匹配不到记录时回退到导入快照，绝不显示内部作品标识。History 不设条数上限，写入新作品不会裁剪更早的记录。History 与 Reading progress 相互独立：删除 History 不会清除续读位置或 Chapter 已读标记。无痕阅读期间不新增、不更新 History。
 _Avoid_: 记录、阅读记录（可能指 Reading progress）
 
 **Reading statistics（阅读统计）**:
@@ -189,7 +193,7 @@ _Avoid_: 下载封面、离线封面、封面文件
 _Avoid_: 下载、离线文件、书库
 
 **Clear cache（清除缓存）**:
-「设置 → 存储与下载 → 数据存储位置」里的动作：清理应用管理的 Cache，并在行内显示当前磁盘占用（含图片管理器磁盘缓存与 WebView 的安全 HTTP cache 子目录）。它保留图源登录态、数据库、History、Reading progress、Download library 与 Local source 文件。WebView/HTTP 缓存清理只在 Windows（WebView2）上可用；其它平台跳过该部分并在结果中提示部分成功。
+「设置 → 存储与下载 → 数据存储位置」里的动作：清理应用管理的 Cache，并在行内显示当前占用。占用只统计该动作实际可清理的内容（图片管理器磁盘缓存与 WebView 的安全 HTTP cache 子目录），WebView2 的 GPU / Shader / Dawn 等运行时组件不计入；清理结果报告实际释放的字节，而不是固定值。它保留图源登录态、数据库、History、Reading progress、Download library 与 Local source 文件。WebView/HTTP 缓存清理只在 Windows（WebView2）上可用；其它平台跳过该部分并在结果中提示部分成功。
 _Avoid_: 清理下载、重置应用
 
 **Clear database（清理数据库）**:
