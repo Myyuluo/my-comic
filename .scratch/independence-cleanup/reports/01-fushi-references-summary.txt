@@ -1,0 +1,80 @@
+# Fushi reference scan (summary)
+tracked files scanned: 14832
+hits: 101310  allowed: 9141  violations: 92169
+
+## Categories
+category  all  violations
+user_visible_copy  17563  17485
+code  62715  62626
+docs  12888  11593
+third_party  562  465
+historical_docs  7582  0
+
+## Violations by top-level path
+path  violations
+fushi  64104
+native  10517
+tools  8388
+packages  6505
+.github  1286
+tool  434
+third_party  277
+services  171
+ci  168
+test  115
+.codex-test  46
+README.md  32
+README.zh-CN.md  32
+script  31
+pubspec.yaml  30
+.sonarcloud.properties  9
+.vscode  6
+pubspec.lock  6
+.gitignore  5
+.gitattributes  4
+.codex  1
+CLAUDE.md  1
+references  1
+
+## Top violation files (top 40 of 6028)
+path  violations
+native/galgame_hook/hook/adapters/kirikiri_adapter.inc  1255
+tools/browser-extension/content.js  1085
+native/galgame_hook/tests/kirikiri_lookup_source_guard_test.py  971
+packages/fushi_core/lib/src/database/database.g.dart  961
+tools/browser-extension/vendor/content.css  850
+fushi/lib/src/utils/components/fushi_material_components.dart  767
+tools/browser-extension/vendor/popup.js  711
+fushi/lib/src/utils/fushi_icons.g.dart  548
+native/galgame_hook/CMakeLists.txt  546
+native/galgame_hook/hook/adapters/hunex_gge_adapter.inc  494
+fushi/test/settings/m3e_design_system_static_test.dart  454
+fushi/lib/src/models/app_model.dart  436
+tools/browser-extension/scripts/content-css-overlay.css  351
+.github/workflows/build-multiplatform.yml  345
+fushi/lib/src/pages/implementations/reader_fushi_page.dart  345
+.github/workflows/release-desktop.yml  338
+fushi/lib/src/utils/components/fushi_floating_toolbar.dart  314
+fushi/lib/src/pages/implementations/reader_fushi/webview.part.dart  313
+native/galgame_hook/hook/adapters/leaf_aquaplus_adapter.inc  274
+native/galgame_hook/injector/injector_main.cpp  273
+fushi/lib/src/utils/components/fushi_floating_chrome.dart  271
+tools/browser-extension/vendor/popup.css  259
+tools/browser-extension/theme.css  254
+fushi/lib/src/utils/components/glass/fushi_glass_overlays.dart  249
+fushi/lib/src/sync/sync_settings_schema/interconnect.part.dart  248
+fushi/lib/i18n/strings.i18n.json  241
+fushi/lib/src/pages/implementations/onboarding_wizard_page.dart  239
+fushi/lib/src/reader/reader_pagination_scripts.dart  236
+fushi/lib/i18n/strings_zh-CN.i18n.json  228
+fushi/lib/i18n/strings_zh-HK.i18n.json  227
+fushi/lib/i18n/strings_ar.i18n.json  223
+fushi/lib/i18n/strings_fr.i18n.json  223
+fushi/lib/i18n/strings_ru.i18n.json  223
+fushi/lib/i18n/strings_de.i18n.json  222
+fushi/lib/i18n/strings_es.i18n.json  222
+fushi/lib/i18n/strings_id.i18n.json  222
+fushi/lib/i18n/strings_it.i18n.json  222
+fushi/lib/i18n/strings_nl.i18n.json  222
+fushi/lib/i18n/strings_pt-BR.i18n.json  222
+fushi/lib/i18n/strings_th.i18n.json  222
