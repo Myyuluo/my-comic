@@ -51,3 +51,11 @@ Resolved on `worktree-agent-ticket05`（基线 `fda0b361`；文档 commit `29ea3
 
 - `git diff --name-status --find-renames ad4fd020..fda0b361` 无 rename/copy；本批未新增数据库 schema、未改 Backup、未移动用户文件（仅 `pubspec.yaml` 版本与既有实现/测试文件变更）。
 - 未修改 spec 或其他 ticket；未 push。
+
+**Merge 收口（2026-11-11）**
+
+- 以 `git merge --no-ff worktree-agent-ticket05` 合入 `integration/manga-history-branding-settings`，无冲突（merge base 即原 integration HEAD `fda0b361`）。Merge commit：`e3aba65005aeec4dbbad2dd1994b8efe167228fe`（父提交 `fda0b361` + `79971f89`）。合并只涉及 4 个文档文件（本 ticket、`GLOSSARY.md`、ADR 0003/0004 amendment），无代码或 i18n 资源变更。
+- 合并后复验（`fushi/`，Flutter 3.47.6，`PUB_HOSTED_URL=https://pub.dev`，先 `dart run slang` 成功生成 17 个 locale）：`flutter test test/i18n` 59 passed；`manga_history_cover_test` + `nav_rail_brand_button_test` + `official_website_entry_test` + `app_version_display_format_test` + `settings_schema_coverage_test` 33 passed（rows=36、destFindings=0）；update checker 相关 11 个测试文件 107 passed、1 failed；`manga_webview_cache_clear_test` 10 passed。
+- 唯一失败为既有失败，与本次合并无关：`update_check_cache_wiring_guard_test.dart` 的 `home_page auto-check passes a cacheWriter (background refresh)`。证据：合并未改任何 Dart 文件，`fushi/lib/src/pages/implementations/home_page.dart` 在 `fda0b361` 与合并后完全相同，且都不含该 guard 期望的 `cacheWriter: appModel.setUpdateCheckCache,`（ticket 05 原文未包含此 guard 测试）。
+- 既有失败记录保持不变：`settings_renderer_test`（manga-only schema 无 `lookup` destination）与 `m3e_design_system_static_test`（已删除非漫画源文件导致 `PathNotFoundException`）；本轮未跑全量套件，未观察到新增失败。
+- 环境产物已还原：`PUB_HOSTED_URL` 导致根 `pubspec.lock` 镜像 URL 改写、测试生成的 plugin registrant 文件，均已 `git checkout --` 还原，未进入提交。
