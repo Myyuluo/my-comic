@@ -13,7 +13,7 @@ import 'dart:io';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi/src/focus/page_focus_ownership.dart';
-import 'package:fushi/src/sync/desktop_foreground_guard.dart';
+import 'package:fushi/src/focus/desktop_foreground_guard.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

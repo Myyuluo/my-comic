@@ -2,8 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/widgets.dart';
 
-import 'package:fushi/src/anki/source_review_navigation.dart';
 import 'package:fushi/src/models/home_tab.dart';
+import 'package:fushi/src/platform/external_media_navigation.dart';
 import 'package:fushi/src/models/module_id.dart';
 import 'package:fushi/src/platform/app_shortcuts.dart';
 
@@ -53,10 +53,7 @@ class AppShortcutQueue {
 ///   `setDynamicShortcuts` 消失（原生侧会把它置灰，但老版本固定的、或置灰前点下
 ///   的仍可能到这里），此时既不能切 tab，也不能把用户正在看的页面退掉。
 /// - 新手引导未完成：只在引导下面切 tab，不动路由栈（引导是压在首页上的路由，
-///   以任何方式关掉都记为完成）；用户走完引导落在目标 tab 上。查词与其它 tab
-///   同口径——不在引导上面再压一个独立查词页。
-/// - 查词：交给 [openLookup]（HomePage 的查词落地入口；阅读器 / 播放器压在上面时
-///   它推独立查词页到最上层，不打断正在看的东西）。
+///   以任何方式关掉都记为完成）；用户走完引导落在目标 tab 上。
 /// - 其余 tab：切 tab 后逐层退回首页根路由，否则 tab 切了也被上层页面挡住。
 ///   两步都排在 [ExternalMediaNavigation.navigate] 队列里。
 Future<void> runAppShortcut(
@@ -65,16 +62,11 @@ Future<void> runAppShortcut(
   required bool onboardingCompleted,
   required NavigatorState? navigator,
   required void Function(HomeTab tab) selectHomeTab,
-  required VoidCallback openLookup,
   ExternalMediaNavigation? media,
 }) async {
   if (!visibility.isEnabled(shortcut.module)) return;
   if (!onboardingCompleted) {
     selectHomeTab(shortcut.homeTab);
-    return;
-  }
-  if (shortcut == AppShortcut.lookup) {
-    openLookup();
     return;
   }
   final ExternalMediaNavigation mediaNavigation =

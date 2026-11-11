@@ -18,7 +18,6 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:fushi/src/leaderboard/leaderboard_service.dart';
 import 'package:fushi/src/models/preferences_repository.dart';
 import 'package:fushi/src/utils/misc/build_version.dart';
 import 'package:fushi_engine/leaderboard/leaderboard_client.dart';
@@ -94,7 +93,7 @@ Future<void> sendUsageHeartbeatToFushi({
   required String channel,
 }) =>
     LeaderboardClient(
-      baseUrl: Uri.parse(kLeaderboardDefaultBaseUrl),
+      baseUrl: Uri.parse('https://rank.fushi.moe'),
       httpClientFactory: () async => createAppHttpIoClient(),
     ).ping(
       install: install,

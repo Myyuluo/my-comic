@@ -213,7 +213,6 @@ void main() {
                   context,
                   appModel,
                   settings: StatTabSettings(onClearAll: () => cleared++),
-                  profileName: 'Default',
                 ),
                 child: const Text('open'),
               ),
@@ -224,11 +223,6 @@ void main() {
     );
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
-    expect(
-      find.text(t.stat_center_profile_scope(name: 'Default')),
-      findsOneWidget,
-      reason: '当前 Profile 从页头副标题挪进统计设置',
-    );
     final Finder clear =
         find.byKey(const ValueKey<String>('stat-settings-clear-all'));
     await tester.ensureVisible(clear);

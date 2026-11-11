@@ -279,13 +279,6 @@ extension _ReaderHistoryCardWidgets on _ReaderFushiHistoryPageState {
       enabled: !_selectionMode,
       builder: (BuildContext _, bool __) => card,
     );
-    if (dragBookId != null && onTagDropped != null && !_selectionMode) {
-      result = BookDragTarget(
-        bookId: dragBookId,
-        onTagDropped: onTagDropped,
-        child: result,
-      );
-    }
     // 长按扫选靠命中测试反查「手指下面是哪一格」，故身份标记包在最外层（
     // [MetaData] 默认 deferToChild，只有真命中卡片时才进命中路径）。不改布局。
     if (slot != null) {

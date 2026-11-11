@@ -9,7 +9,6 @@ import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi_core/fushi_core.dart';
-import 'package:fushi/src/media/audiobook/audiobook_bridge.dart';
 import 'package:fushi/src/models/theme_notifier.dart';
 import 'package:fushi/src/utils/app_ui_scale.dart';
 import 'package:fushi/src/utils/components/fushi_design_tokens.dart';
@@ -132,15 +131,6 @@ void main() {
           ThemeNotifier.buildPresetColorScheme(p, Brightness.light).primary,
       ];
       expect(primaries.toSet().length, primaries.length);
-    });
-
-    test('reader paper keys stay in sync with the legacy preset ids', () {
-      // 阅读器纸色（TtuReaderSettings.availableThemes）仍按存量旧预设 id 生效，
-      // 本次精简不动；它们必须全部能被映射到保留预设。
-      expect(
-        TtuReaderSettings.availableThemes.toSet(),
-        ThemeNotifier.legacyThemePresets.keys.toSet(),
-      );
     });
 
     test('legacy preset ids map to the nearest kept preset by seed hue', () {

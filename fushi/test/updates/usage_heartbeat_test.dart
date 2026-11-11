@@ -1,8 +1,7 @@
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi/src/models/preferences_repository.dart';
-import 'package:fushi/src/profile/profile_keys.dart';
-import 'package:fushi/src/sync/pref_redaction_policy.dart';
+import 'package:fushi/src/utils/misc/pref_redaction_policy.dart';
 import 'package:fushi/src/updates/usage_heartbeat.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi_engine/leaderboard/install_identity.dart';
@@ -192,7 +191,7 @@ void main() {
         isTrue,
         reason: '$key 随备份漂到另一台设备会把两台设备算成同一个安装',
       );
-      expect(ProfileKeys.isExcludedPref(key), isTrue, reason: key);
+      expect(PrefRedactionPolicy.isDeviceLocalOrCredential(key), isTrue, reason: key);
     }
   });
 }

@@ -22,13 +22,11 @@ abstract class BasePage extends ConsumerStatefulWidget {
 abstract class BasePageState<T extends BasePage> extends ConsumerState<T>
     with FushiPagePlaceholders<T> {
   late final AppModel _cachedAppModel;
-  late final CreatorModel _cachedCreatorModel;
 
   @override
   void initState() {
     super.initState();
     _cachedAppModel = ref.read(appProvider);
-    _cachedCreatorModel = ref.read(creatorProvider);
   }
 
   /// Access the global model responsible for app-wide state management.
@@ -39,20 +37,9 @@ abstract class BasePageState<T extends BasePage> extends ConsumerState<T>
     return ref.watch(appProvider);
   }
 
-  /// Access the global model responsible for creator state management.
-  /// Falls back to cached instance after dispose.
-  CreatorModel get creatorModel {
-    if (!mounted) return _cachedCreatorModel;
-    return ref.watch(creatorProvider);
-  }
-
   /// Access the global model responsible for app-wide state management without
   /// listening to state updates. Safe to use in dispose().
   AppModel get appModelNoUpdate => _cachedAppModel;
-
-  /// Access the global model responsible for creator state management without
-  /// listening to state updates. Safe to use in dispose().
-  CreatorModel get creatorModelNoUpdate => _cachedCreatorModel;
 
   /// Shortcut for accessing the app-wide theme-defined text theme.
   TextTheme get textTheme => Theme.of(context).textTheme;

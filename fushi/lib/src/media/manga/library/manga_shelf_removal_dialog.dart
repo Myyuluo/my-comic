@@ -1,7 +1,6 @@
 import 'package:material_ui/material_ui.dart';
 
-import 'package:fushi/src/sync/deletion_disclosure.dart'
-    show DeleteLocalFilesRow, DeleteStatisticsRow;
+import 'package:fushi/src/utils/components/deletion_disclosure.dart';
 import 'package:fushi/utils.dart';
 
 /// 用户在漫画「移出书架」弹窗里做出的两个可选动作。
@@ -145,3 +144,4 @@ class _MangaShelfRemovalDialogState extends State<_MangaShelfRemovalDialog> {
     );
   }
 }
+

@@ -214,7 +214,6 @@ class SettingsSchemaItem extends StatefulWidget
       // 行里的回调闭包捕获的是构建那一刻的上下文：宿主 / 能力槽换了就重建。
       ctx.context,
       ctx.appModel,
-      ctx.video,
       ...values,
     ];
   }

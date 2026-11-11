@@ -20,7 +20,7 @@
 import 'dart:io';
 
 import 'package:flutter/widgets.dart';
-import 'package:fushi/src/sync/desktop_foreground_guard.dart';
+import 'package:fushi/src/focus/desktop_foreground_guard.dart';
 import 'package:window_manager/window_manager.dart';
 
 /// 主窗此刻是否拥有 OS 焦点。**窗口级**真值，不是进程级。

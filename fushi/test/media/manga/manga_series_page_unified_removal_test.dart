@@ -21,7 +21,6 @@ import 'package:fushi/src/media/media_source.dart';
 import 'package:fushi/src/models/preferences_repository.dart';
 import 'package:fushi/src/platform/platform_providers.dart';
 import 'package:fushi/src/storage/app_paths.dart';
-import 'package:fushi/src/sync/deletion_prompt_preferences.dart';
 import 'package:fushi_audio/fushi_audio.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi_engine/epub/epub_storage.dart';
@@ -783,12 +782,6 @@ void main() {
         db,
         row.bookKey,
         row.extractDir,
-      );
-      await DeletePromptPreferenceStore(db).write(
-        const DeletePromptRememberedChoices(
-          syncEverywhere: true,
-          deleteLocalFiles: true,
-        ),
       );
       await _openRemovalDialog(tester, appModel, row.bookKey);
       // 上次记住的是「删除本地文件」，本次必须仍然默认不勾。

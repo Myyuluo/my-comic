@@ -84,15 +84,8 @@ class ReaderPdfSource extends ReaderMediaSource {
     required WidgetRef ref,
     required AppModel appModel,
   }) {
-    // 导入按钮统一由 EPUB 源提供（同一个对话框已通吃 epub/pdf）；本源作为打开-PDF 的
-    // 短暂当前源，页头动作复用同一按钮以防被设为当前源时缺动作。
-    return <Widget>[
-      ReaderFushiSource.instance.buildBookImportButton(
-        context: context,
-        ref: ref,
-        appModel: appModel,
-      ),
-    ];
+    // PDF 导入由 ticket 05 负责；当前没有页头动作。
+    return const <Widget>[];
   }
 
   @override

@@ -12,13 +12,9 @@ import 'package:fushi/models.dart';
 import 'package:fushi/pages.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi_engine/epub/epub_storage.dart';
-import 'package:fushi/src/media/audiobook/lyrics_player/lyrics_theme_host.dart';
 import 'package:fushi/src/focus/fushi_focus_controller.dart';
 import 'package:fushi_audio/fushi_audio.dart';
-import 'package:fushi/src/media/audiobook/book_import_dialog.dart';
 import 'package:fushi/src/media/manga/history/manga_history.dart';
-import 'package:fushi/src/media/manga/interconnect/interconnect_manga_source.dart'
-    show InterconnectMangaCatalog;
 import 'package:fushi/src/media/manga/library/manga_adjacent_chapter.dart'
     show mangaReadingOrder;
 import 'package:fushi/src/media/manga/library/manga_cover_resolution.dart';
@@ -550,17 +546,8 @@ class ReaderFushiSource extends ReaderMediaSource {
     MediaItem? item,
     Bookmark? initialBookmarkJump,
   }) {
-    final String bookKey = _extractBookKey(item?.mediaIdentifier ?? '');
-    return FushiAppUiScaleNeutralizer(
-      // 歌词模式配色的注入点：页面 context 弹出的侧栏 / 菜单 / 对话框都在它之下。
-      child: LyricsThemeHost(
-        child: ReaderFushiPage(
-          item: item,
-          bookKey: bookKey,
-          initialBookmarkJump: initialBookmarkJump,
-        ),
-      ),
-    );
+    // Ticket 04：EPUB 阅读器已删除；本源的 home/launch 回落到书架占位。
+    return const HistoryReaderPage();
   }
 
   // HBK-AUDIT-126: parseBookKey returns null for an empty/unknown identifier.
@@ -587,44 +574,8 @@ class ReaderFushiSource extends ReaderMediaSource {
     required WidgetRef ref,
     required AppModel appModel,
   }) {
-    return [
-      buildBookImportButton(context: context, ref: ref, appModel: appModel),
-    ];
-  }
-
-  Widget buildBookImportButton({
-    required BuildContext context,
-    required WidgetRef ref,
-    required AppModel appModel,
-    FushiFocusId? focusId,
-    String? label,
-  }) {
-    // 不覆盖 size：书架页头同排的其它按钮（管理来源 / 合集 / 统计，走
-    // _headerAction → FushiIconButton）与视频 tab 的导入按钮都用默认 24。
-    // 此前这里显式塞 titleLarge.fontSize(~22) 让「添加」按钮比兄弟小一圈、
-    // 外框也短一截，看起来大小和位置都对不齐（BUG-735）。回落默认即对齐。
-    return FushiIconButton(
-      tooltip: t.srt_import,
-      // 宽窗展开为「图标+文字」（书架页头传入）；null 时保持纯图标（其它调用点）。
-      label: label,
-      icon: Icons.library_add_outlined,
-      focusId: focusId,
-      onTap: () async {
-        final bool? imported = await showAppDialog<bool>(
-          context: context,
-          builder: (_) => BookImportDialog(
-            prefs: appModel.prefsRepo,
-            repo: SrtBookRepository(appModel.database),
-            audiobookRepo: AudiobookRepository(appModel.database),
-            db: appModel.database,
-          ),
-        );
-        if (imported == true) {
-          ref.invalidate(fushiBooksProvider(JapaneseLanguage.instance));
-          ref.invalidate(srtBooksProvider);
-        }
-      },
-    );
+    // 书 / 字幕导入已随非漫画域删除；漫画导入由 MangaFushiSource 提供。
+    return const <Widget>[];
   }
 
   @override
@@ -1329,10 +1280,8 @@ class ReaderFushiSource extends ReaderMediaSource {
       // 跨端删除墓碑键：两端键不同的书写**对端键**（BUG-3443 同类）——经互联收下的
       // 在线漫画取描述符里的对端键（本机键是单向哈希），从对端下载、落地键不同的书取
       // 别名表。必须删行前取：deleteEpubBook 会级联删掉别名。
-      final String syncTombstoneKey = scope == DeleteScope.syncEverywhere
-          ? InterconnectMangaCatalog.peerBookKeyOf(bookRow?.sourceMetadata) ??
-              await db.syncDeletionBookKeyOf(bookKey)
-          : bookKey;
+      // 互联已删除：删除墓碑键恒为本机 bookKey。
+      final String syncTombstoneKey = bookKey;
 
       // 票 10：删除整部作品时是否连落盘文件一起销毁。在线漫画只有勾选「同时
       // 删除本地文件」才删已下载章节；受管本地漫画（导入卷 / PDF 转漫画）的

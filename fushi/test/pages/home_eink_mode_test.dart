@@ -17,7 +17,6 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi/src/focus/fushi_focus_controller.dart';
 import 'package:fushi/src/models/theme_notifier.dart';
-import 'package:fushi/src/sync/remote_download_progress_badge.dart';
 import 'package:fushi/src/utils/adaptive/adaptive_navigation.dart';
 import 'package:fushi/src/utils/adaptive/adaptive_platform.dart';
 import 'package:fushi/src/utils/adaptive/adaptive_widgets.dart';
@@ -336,48 +335,9 @@ void main() {
       );
     });
 
-    testWidgets('远端下载角标：首个进度回报前不转圈、圆盘有边', (WidgetTester tester) async {
-      await tester.pumpWidget(
-        _wrap(
-          const Row(
-            children: <Widget>[
-              // 进度态铺满封面（自身撑满父级），给一个封面大小的框。
-              SizedBox(
-                width: 120,
-                height: 180,
-                child: RemoteDownloadProgressBadge(
-                  progress: null,
-                  tooltip: '下载中',
-                ),
-              ),
-              RemoteDownloadFailedBadge(tooltip: '失败'),
-            ],
-          ),
-        ),
-      );
-      final CircularProgressIndicator ring = tester
-          .widget<CircularProgressIndicator>(glassUnwrap<CircularProgressIndicator>(find.byType(CircularProgressIndicator)),);
-      expect(ring.value, 0, reason: 'null = 无限转圈，eink 下钉成 0');
-      final List<Container> discs = tester
-          .widgetList<Container>(find.byType(Container))
-          .toList();
-      final Iterable<Container> bordered = discs.where(
-        (Container c) =>
-            c.decoration is BoxDecoration &&
-            (c.decoration! as BoxDecoration).border != null,
-      );
-      expect(bordered.length, 2, reason: '进度盘与失败盘各描一圈边');
-    });
-  });
-
-  group('分区 tab 条', () {
     const List<LibrarySectionTab<int>> tabs = <LibrarySectionTab<int>>[
       LibrarySectionTab<int>(value: 0, label: '首页'),
-      LibrarySectionTab<int>(value: 1, label: '系列'),
-      LibrarySectionTab<int>(value: 2, label: '全部视频'),
-      LibrarySectionTab<int>(value: 3, label: '发现'),
-      LibrarySectionTab<int>(value: 4, label: '来源'),
-      LibrarySectionTab<int>(value: 5, label: '设置'),
+      LibrarySectionTab<int>(value: 1, label: '全部'),
     ];
 
     testWidgets('自持 controller 的指示条滑动时长归零，尾端渐隐不画渐变', (

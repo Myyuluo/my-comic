@@ -23,7 +23,7 @@ import 'package:fushi/src/models/preferences_repository.dart';
 import 'package:fushi/src/pages/implementations/reader_fushi_history_page.dart';
 import 'package:fushi/src/platform/platform_providers.dart';
 import 'package:fushi/src/storage/app_paths.dart';
-import 'package:fushi/src/sync/deletion_disclosure.dart';
+import 'package:fushi/src/utils/components/deletion_disclosure.dart';
 import 'package:fushi/src/utils/fushi_icons.dart';
 import 'package:fushi/src/utils/misc/fushi_toast.dart';
 import 'package:fushi_audio/fushi_audio.dart';
@@ -244,7 +244,6 @@ void main() {
             home: Scaffold(
               body: ReaderFushiHistoryPage(
                 mangaOnly: true,
-                remoteBookClientLoader: () async => null,
               ),
             ),
           ),

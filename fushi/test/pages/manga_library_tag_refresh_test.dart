@@ -165,7 +165,6 @@ void main() {
               Expanded(
                 child: ReaderFushiHistoryPage(
                   mangaOnly: true,
-                  remoteBookClientLoader: () async => null,
                 ),
               ),
             ],

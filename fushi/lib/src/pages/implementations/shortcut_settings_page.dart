@@ -527,20 +527,6 @@ class _ShortcutSettingsPageState extends BasePageState<ShortcutSettingsPage> {
       // 用户请求（Flow Launcher 式用法）：「置顶并打开查词页」热键的另一半——查完
       // 在查词页按「返回上一级」（默认 Esc）把主窗最小化，回到之前的程序。放在
       // 这张卡里而不是词典设置：它只在配合本 scope 的置顶热键时才有意义。执行体在
-      // HomeDictionaryPage（只在桌面生效）。
-      if (scope == ShortcutScope.globalExternal && !_isMobilePlatform)
-        AdaptiveSettingsSwitchRow(
-          key: const ValueKey<String>('shortcut-lookup-page-escape-minimize'),
-          title: t.shortcut_lookup_page_escape_minimize,
-          subtitle: t.shortcut_lookup_page_escape_minimize_hint,
-          icon: Icons.minimize_outlined,
-          showIcon: true,
-          value: appModel.lookupPageEscapeMinimizesWindow,
-          onChanged: (bool value) async {
-            await appModel.setLookupPageEscapeMinimizesWindow(value);
-            if (mounted) setState(() {});
-          },
-        ),
     ];
   }
 

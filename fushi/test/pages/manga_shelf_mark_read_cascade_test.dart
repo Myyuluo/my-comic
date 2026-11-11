@@ -234,7 +234,6 @@ void main() {
         home: Scaffold(
           body: ReaderFushiHistoryPage(
             mangaOnly: true,
-            remoteBookClientLoader: () async => null,
           ),
         ),
       ),

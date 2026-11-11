@@ -169,7 +169,6 @@ void main() {
         'custom-theme-name',
         'custom-theme-import',
         'custom-theme-share',
-        'custom-theme-more',
         'custom-theme-preview-brightness',
       ]) {
         expect(
@@ -181,23 +180,10 @@ void main() {
           reason: '$key 应在页头卡里',
         );
       }
-      final Finder ai = find.byKey(
-        const ValueKey<String>('custom-theme-ai-card'),
-      );
-      expect(ai, findsOneWidget);
+      // Ticket 04：AI 卡已删除。
       expect(
-        find.descendant(
-          of: ai,
-          matching: find.byKey(
-            const ValueKey<String>('custom-theme-ai-request'),
-          ),
-        ),
-        findsOneWidget,
-      );
-      // 页头在 AI 卡上面。
-      expect(
-        tester.getRect(header).bottom,
-        lessThanOrEqualTo(tester.getRect(ai).top),
+        find.byKey(const ValueKey<String>('custom-theme-ai-card')),
+        findsNothing,
       );
       expect(
         find.byKey(const ValueKey<String>('custom-theme-role-accent')),

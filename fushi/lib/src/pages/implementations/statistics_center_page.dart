@@ -19,8 +19,6 @@ import 'package:fushi/src/pages/implementations/stat_session_list.dart';
 import 'package:fushi/src/pages/implementations/stat_shared.dart';
 import 'package:fushi_engine/stats/stat_facts.dart';
 import 'package:fushi/src/pages/implementations/stat_range_bar.dart';
-import 'package:fushi/src/pages/implementations/srs_statistics_page.dart';
-import 'package:fushi/src/srs/srs_providers.dart';
 import 'package:fushi/src/stats/stat_range.dart';
 import 'package:fushi/src/stats/stat_window.dart';
 import 'package:fushi/src/utils/cover_image.dart';
@@ -34,14 +32,11 @@ import 'package:fushi_dictionary/fushi_dictionary.dart';
 ///
 /// [srs]（复习）只在复习模块（`ModuleId.srs`，默认关）开着时出现，见
 /// [statsCenterVisibleTabs]。
-enum StatsCenterTab { overview, reading, srs }
+enum StatsCenterTab { overview, reading }
 
 /// 此刻可见的 tab（复习模块关着时没有「复习」）。
-List<StatsCenterTab> statsCenterVisibleTabs({required bool srsEnabled}) =>
-    <StatsCenterTab>[
-      for (final StatsCenterTab tab in StatsCenterTab.values)
-        if (tab != StatsCenterTab.srs || srsEnabled) tab,
-    ];
+List<StatsCenterTab> statsCenterVisibleTabs({bool srsEnabled = false}) =>
+    StatsCenterTab.values.toList(growable: false);
 
 /// 统计中心（阶段 2，统计中心大改造）：总览 + 阅读/观看/游戏三域 tab。
 ///
@@ -78,7 +73,6 @@ class _StatisticsCenterPageState extends BasePageState<StatisticsCenterPage> {
   String _tabLabel(StatsCenterTab tab) => switch (tab) {
     StatsCenterTab.overview => t.stat_center_tab_overview,
     StatsCenterTab.reading => t.home_filter_read,
-    StatsCenterTab.srs => t.nav_srs,
   };
 
   Widget _tabBody(StatsCenterTab tab) => switch (tab) {
@@ -89,9 +83,6 @@ class _StatisticsCenterPageState extends BasePageState<StatisticsCenterPage> {
       embedded: true,
       rangeSelection: _rangeSelection,
     ),
-    // 复习统计有自己的时间范围（1 个月 / 3 个月 / 1 年 / 全部，Anki 口径）与 SRS
-    // 翻日，不吃学习统计域的 [StatRangeSelection]。
-    StatsCenterTab.srs => const SrsStatisticsTab(),
   };
 
   @override
@@ -100,9 +91,7 @@ class _StatisticsCenterPageState extends BasePageState<StatisticsCenterPage> {
     // 中间那枚放不下就被截成「统...」的标题胶囊删掉；四颗动作按钮收成一颗「统计
     // 设置」（重置时刻 + 清空统计，挂在各 tab 范围条行尾；目标改由首页每日目标卡
     // 进入，刷新砍掉）。
-    final List<StatsCenterTab> tabsShown = statsCenterVisibleTabs(
-      srsEnabled: ref.watch(srsModuleEnabledProvider),
-    );
+    final List<StatsCenterTab> tabsShown = statsCenterVisibleTabs();
     final int initial = tabsShown.indexOf(widget.initialTab);
     return DefaultTabController(
       // 模块开关变了 tab 数随之变：换 key 重建控制器（否则长度对不上）。

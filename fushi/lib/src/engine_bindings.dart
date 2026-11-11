@@ -15,8 +15,6 @@ import 'dart:io';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/painting.dart';
 import 'package:flutter/services.dart' show RootIsolateToken;
-import 'package:fushi/src/media/audiobook/audiobook_storage_platform.dart';
-import 'package:fushi/src/media/audiobook/platform_charset_detector.dart';
 import 'package:fushi/src/utils/cover_image.dart';
 
 import 'package:fushi/src/models/store_compliance.dart';
@@ -33,7 +31,6 @@ import 'package:fushi_engine/media/audio/flac_encoder.dart';
 
 import 'package:fushi_engine/utils/misc/desktop_audio_clipper.dart'
     show ffmpegRemoteInputRouteResolver;
-import 'package:fushi/src/utils/net/ffmpeg_relay_route.dart';
 
 /// `AppPaths` 静态便捷层 → 引擎 [EnginePaths]。三个引擎根逐一委派到新的
 /// Content root / Program state `state/` / `cache/`，子目录名契约留在引擎基类。
@@ -86,10 +83,4 @@ void installEngineHostBindings() {
   releaseImageCacheBeforeDelete = _releaseImageCacheBeforeDelete;
   // 词典导入/删除前释放 FFI 引擎的文件映射（BUG-1756）。
   releaseDictionaryMappings = FushiDicts.releaseAllMappings;
-  // fushi_audio 的两个插件级装配点（charset 探测 method channel、just_audio 时长探测 +
-  // path_provider 文档根）：纯 Dart 一半住 fushi_audio_core，插件实现由这里写入。
-  installPlatformCharsetDetector();
-  installAudiobookStoragePlatform();
-  // AIFF 有声书落盘转 FLAC（Android 的 ExoPlayer 不认 AIFF）。
-  installAudiobookFlacTranscoder();
 }

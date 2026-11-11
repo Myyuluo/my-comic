@@ -12,8 +12,12 @@ import 'package:fushi/src/storage/app_paths.dart';
 import 'package:fushi/src/storage/books_directory.dart'
     show kLegacyBooksDirectoryName;
 import 'package:fushi/src/storage/export_directory.dart'
+
     show kLegacyExportDirectoryName;
-import 'package:fushi/src/sync/backup_service.dart' show isBackupArchiveName;
+
+/// 旧 Fushi/Hibiki 备份包名（ticket 04 后不再生成，仅用于清理残留）。
+final RegExp _backupArchiveNamePattern =
+    RegExp(r'^(fushi|hibiki)-backup-.*\.(fushi|hibiki)\.zip$');
 
 /// 存储占用扫描服务（设置 → 存储）。
 ///
@@ -1062,7 +1066,7 @@ class StorageUsageService {
           excludePaths: <String>{
             for (final Map<String, Object> entry in raw)
               if (entry['isFile'] as bool &&
-                  isBackupArchiveName(p.basename(entry['path'] as String)))
+                  _backupArchiveNamePattern.hasMatch(p.basename(entry['path'] as String)))
                 entry['path'] as String,
           },
           kind: StorageEntryKind.derivedFile,
@@ -1082,7 +1086,7 @@ class StorageUsageService {
     final List<Map<String, Object>> backups = <Map<String, Object>>[
       for (final Map<String, Object> entry in raw)
         if (entry['isFile'] as bool &&
-            isBackupArchiveName(p.basename(entry['path'] as String)))
+            _backupArchiveNamePattern.hasMatch(p.basename(entry['path'] as String)))
           entry,
     ];
     final List<String> paths = <String>[

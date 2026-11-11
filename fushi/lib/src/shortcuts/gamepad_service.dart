@@ -11,7 +11,6 @@ import 'package:gamepads/gamepads.dart' as gp;
 
 import 'package:fushi/src/focus/fushi_focus_controller.dart';
 import 'package:fushi/src/focus/fushi_focus_scroll.dart';
-import 'package:fushi/src/lookup/lookup_overlay_navigator.dart';
 import 'package:fushi/src/shortcuts/dictionary_popup_gamepad.dart';
 import 'package:fushi/src/shortcuts/global_external_lookup_route.dart';
 import 'package:fushi/src/shortcuts/input_binding.dart';
@@ -524,8 +523,6 @@ class GamepadService {
         // 行为不变：命中才 pop，未绑定仍是无操作。
         if (registry?.resolveGamepad(button, scope: ShortcutScope.universal) ==
             ShortcutAction.globalBack) {
-          // BUG-2953：查词浮层自带导航层里开着菜单时只关菜单（菜单不在根栈上）。
-          if (LookupOverlayNavigator.popActiveMenu()) return;
           navigatorKey.currentState?.maybePop();
         }
         return;

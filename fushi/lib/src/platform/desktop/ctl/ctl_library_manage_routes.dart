@@ -106,9 +106,6 @@ class _LibraryManageHandlers {
       LibraryCtlShelf(db: _db);
 
   void _requireWritable() {
-    if (_app.isMigrationReadonly) {
-      throw const CtlFailure.rejected('数据已迁移到新版，旧版处于只读状态');
-    }
   }
 
   void _requireConfirm(CtlCall call) {

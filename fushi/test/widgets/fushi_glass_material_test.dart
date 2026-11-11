@@ -4,7 +4,6 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi/src/focus/fushi_focus_controller.dart';
 import 'package:fushi/src/models/theme_notifier.dart';
-import 'package:fushi/src/pages/implementations/dictionary_popup_theme.dart';
 import 'package:fushi/src/utils/adaptive/adaptive_navigation.dart';
 import 'package:fushi/src/utils/adaptive/adaptive_platform.dart';
 import 'package:fushi/src/utils/components/fushi_glass_surface.dart';
@@ -288,41 +287,6 @@ void main() {
     expect(tester.getRect(find.byKey(fushiMaterialNavKey)), solid);
   });
 
-  // 重设计后查词弹窗主题跟随 app 的玻璃材质 / 设计系统（组件表面同源），但
-  // 弹窗自己的底色（fillColor）必须恒不透明，墨水屏下玻璃一律关掉。
-  test('dictionary popup fill stays opaque; e-ink strips glass', () {
-    DictionaryPopupTheme resolvePopup({
-      required bool eink,
-      bool glassDesign = false,
-    }) => resolveDictionaryPopupTheme(
-      eink: eink,
-      einkDark: false,
-      readerDark: false,
-      buildColorScheme: (Brightness b) =>
-          ColorScheme.fromSeed(seedColor: Colors.teal, brightness: b),
-      textTheme: Typography.material2021().black,
-      glassDesign: glassDesign,
-      glass: FushiGlassMaterial.frosted,
-    );
-
-    for (final bool glassDesign in <bool>[false, true]) {
-      final DictionaryPopupTheme glassy = resolvePopup(
-        eink: false,
-        glassDesign: glassDesign,
-      );
-      expect(glassy.fillColor.a, 1);
-    }
-    final DictionaryPopupTheme eink = resolvePopup(eink: true);
-    // 填充色 = 主题自己的 surface（真实墨水屏下 buildColorScheme 给的就是纯白 / 纯黑）。
-    expect(eink.fillColor, eink.theme.colorScheme.surface);
-    expect(eink.fillColor.a, 1);
-    expect(
-      eink.theme.extension<FushiGlassTheme>()?.material ??
-          FushiGlassMaterial.off,
-      FushiGlassMaterial.off,
-    );
-    expect(eink.theme.dialogTheme.backgroundColor!.a, 1);
-  });
   group('component-wide glass theme', () {
     double alphaOf(Color? c) => c!.a;
 

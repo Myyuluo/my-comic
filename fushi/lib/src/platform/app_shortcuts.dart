@@ -19,14 +19,10 @@ import 'package:fushi/src/utils/misc/channel_constants.dart';
 /// 声明），因为它要跟着两样东西走：用户在「功能模块」里关掉的模块不该出现在
 /// 图标菜单里；标签要跟 app 内语言设置（不是系统语言）一致。
 ///
-/// 只有查词与三个媒体库页四条，两端一致（所有者 2026-09-27 拍板；iOS 图标菜单
-/// 本就只显示前 4 条）。游戏库 / 设置曾发布过：Android 上被固定到桌面的会被原生
-/// 侧置灰，旧 URL 在这里解析为 `null` 按「未处理」放行。
+/// my-comic 只发布漫画库一条；查词 / 书 / 视频快捷方式随对应域删除。
+/// 旧版本固定在桌面上的旧 id 解析为 `null`，调用方按「未处理」放行。
 enum AppShortcut {
-  lookup(HomeTab.dictionaries, ModuleId.lookup),
-  books(HomeTab.books, ModuleId.books),
-  manga(HomeTab.manga, ModuleId.manga),
-  video(HomeTab.video, ModuleId.video);
+  manga(HomeTab.manga, ModuleId.manga);
 
   const AppShortcut(this.homeTab, this.module);
 
@@ -62,7 +58,7 @@ enum AppShortcut {
     return null;
   }
 
-  /// 本平台此刻该发布的快捷方式（按展示顺序）：查词 > 书 > 漫画 > 视频。
+  /// 本平台此刻该发布的快捷方式（my-comic 只有漫画库）。
   static List<AppShortcut> available(ModuleVisibility visibility) => [
     for (final AppShortcut shortcut in values)
       if (visibility.isEnabled(shortcut.module)) shortcut,

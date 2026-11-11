@@ -214,7 +214,6 @@ void main() {
             home: Scaffold(
               body: ReaderFushiHistoryPage(
                 mangaOnly: mangaOnly,
-                remoteBookClientLoader: () async => null,
               ),
             ),
           ),
@@ -431,34 +430,4 @@ void main() {
     expect(badgeOf(tester, _onlineKey), isNull, reason: '全部读完返回书架后角标消失');
   });
 
-  testWidgets('非漫画卡的封面行为不变：保留书本图标角标与标签 chip', (WidgetTester tester) async {
-    await tester.runAsync(() async {
-      await insertPlainBook();
-      final int tagId = await db.createTag('收藏', 0xFF112233);
-      await db.addTagToBook(_bookKey, tagId);
-    });
-
-    await pumpShelf(tester, <MediaItem>[
-      _plainBookItem(_bookKey, _bookTitle),
-    ], mangaOnly: false);
-
-    final Finder card = find.byKey(
-      ValueKey<String>(
-        'book_entry_${_plainBookItem(_bookKey, _bookTitle).mediaIdentifier}',
-      ),
-    );
-    final Finder badges = find.descendant(
-      of: card,
-      matching: find.byType(CoverBadge),
-    );
-    expect(badges, findsOneWidget, reason: '非漫画卡仍有右上角类型角标');
-    final CoverBadge badge = tester.widget<CoverBadge>(badges);
-    expect(badge.icon, isNotNull, reason: '非漫画卡角标仍是图标');
-    expect(badge.label, isNull);
-    expect(
-      find.descendant(of: card, matching: find.byType(FushiTagChip)),
-      findsOneWidget,
-      reason: '非漫画卡左上角标签 chip 保持不变',
-    );
-  });
 }

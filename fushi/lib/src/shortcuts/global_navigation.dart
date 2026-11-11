@@ -6,7 +6,6 @@ import 'package:flutter/services.dart' hide ModifierKey;
 import 'package:macos_ui/macos_ui.dart' show WindowManipulator;
 import 'package:window_manager/window_manager.dart';
 import 'package:fushi/src/focus/fushi_focus_controller.dart';
-import 'package:fushi/src/lookup/lookup_overlay_navigator.dart';
 import 'package:fushi/src/utils/window_caption_channel.dart';
 
 import 'package:fushi/src/shortcuts/context_menu_trigger.dart';
@@ -278,9 +277,6 @@ KeyEventResult _handleGlobalBack(
     }
   }
   if (action != ShortcutAction.globalBack) return KeyEventResult.ignored;
-  // BUG-2953：查词浮层自带导航层里开着菜单时，「返回」只关这一层菜单——它在根
-  // Navigator 之外，根 maybePop 会落到页面 PopScope、把浮层连同菜单一起关掉。
-  if (LookupOverlayNavigator.popActiveMenu()) return KeyEventResult.handled;
   final NavigatorState? nav = navigatorKey.currentState;
   if (nav == null) return KeyEventResult.ignored;
   if (!nav.canPop()) return _backOnRootRoute(nav);
@@ -324,8 +320,6 @@ KeyEventResult _handleEscapeWithoutRegistry(
   if (event is! KeyDownEvent || event.logicalKey != LogicalKeyboardKey.escape) {
     return KeyEventResult.ignored;
   }
-  // BUG-2953：查词浮层菜单先关（同 [_handleGlobalBack]）。
-  if (LookupOverlayNavigator.popActiveMenu()) return KeyEventResult.handled;
   final NavigatorState? nav = navigatorKey.currentState;
   if (nav == null) return KeyEventResult.ignored;
   if (!nav.canPop()) return _backOnRootRoute(nav);
@@ -545,8 +539,6 @@ bool _executeGlobalMouseAction(
 ) {
   switch (action) {
     case ShortcutAction.globalBack:
-      // BUG-2953：查词浮层菜单先关（同 [_handleGlobalBack]）。
-      if (LookupOverlayNavigator.popActiveMenu()) return true;
       final NavigatorState? nav = navigatorKey.currentState;
       if (nav == null || !nav.canPop()) return false;
       // 键盘那条路对 Escape + 弹层有一条「让给框架」的例外（barrierDismissible

@@ -23,12 +23,10 @@ class StatSettingsDialog extends StatefulWidget {
     required this.appModel,
     super.key,
     this.settings,
-    this.profileName,
   });
 
   final AppModel appModel;
   final StatTabSettings? settings;
-  final String? profileName;
 
   /// `HH:00`——只取整点（v92 学习段不跨整点边界，天边界落在整点上永远不会撕裂
   /// 一个段）。
@@ -53,7 +51,6 @@ class _StatSettingsDialogState extends State<StatSettingsDialog> {
     final FushiDesignTokens tokens = FushiDesignTokens.of(context);
     final ColorScheme scheme = Theme.of(context).colorScheme;
     final StatTabSettings? settings = widget.settings;
-    final String? profile = widget.profileName;
     return FushiAlertDialog(
       icon: const FushiIcon(FushiIcons.settings),
       title: Text(t.stat_center_settings),
@@ -66,24 +63,6 @@ class _StatSettingsDialogState extends State<StatSettingsDialog> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
-                if (profile != null)
-                  FushiStaggeredEntrance(
-                    index: 0,
-                    child: Padding(
-                      padding: EdgeInsets.fromLTRB(
-                        tokens.spacing.card,
-                        0,
-                        tokens.spacing.card,
-                        tokens.spacing.gap,
-                      ),
-                      child: Text(
-                        t.stat_center_profile_scope(name: profile),
-                        style: tokens.type.metadata.copyWith(
-                          color: scheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ),
-                  ),
                 FushiStaggeredEntrance(
                   index: 1,
                   child: AdaptiveSettingsStepperRow(
@@ -141,14 +120,12 @@ Future<void> showStatSettingsDialog(
   BuildContext context,
   AppModel appModel, {
   StatTabSettings? settings,
-  String? profileName,
 }) {
   return showAppDialog<void>(
     context: context,
     builder: (BuildContext dialogContext) => StatSettingsDialog(
       appModel: appModel,
       settings: settings,
-      profileName: profileName,
     ),
   );
 }

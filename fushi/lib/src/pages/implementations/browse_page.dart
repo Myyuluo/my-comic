@@ -5,10 +5,6 @@ import 'package:fushi_audio/fushi_audio.dart'
     show AudiobookRepository, AudiobookStorage, SrtBookRepository;
 import 'package:path/path.dart' as p;
 
-import 'package:fushi/src/media/audiobook/audiobook_material_library.dart';
-import 'package:fushi/src/media/audiobook/audiobook_material_service.dart';
-import 'package:fushi/src/media/audiobook/audiobook_transcribe_tasks_section.dart';
-import 'package:fushi/src/media/audiobook/book_import_dialog.dart';
 import 'package:fushi/src/media/drag_drop/drop_classification.dart';
 import 'package:fushi_engine/media/discovery/discovery_models.dart';
 import 'package:fushi_core/fushi_core.dart'
@@ -19,16 +15,12 @@ import 'package:fushi/src/media/manga/discovery/manga_discovery_page.dart';
 import 'package:fushi/src/models/app_model.dart';
 import 'package:fushi/src/models/module_id.dart';
 import 'package:fushi/src/models/store_compliance.dart';
-import 'package:fushi/src/ai/ai_media_acquisition_assistant.dart'
-    show AiMediaAcquisitionDomain;
 
 import 'package:fushi/src/pages/implementations/browse_online_sources_view.dart';
 
 import 'package:fushi/src/pages/implementations/media_discovery_page.dart';
 
 import 'package:fushi/src/settings/settings_detail_page.dart';
-import 'package:fushi/src/sync/interconnect_peer_addresses.dart';
-import 'package:fushi/src/sync/sync_repository.dart';
 import 'package:fushi/src/utils/components/section_visibility.dart';
 import 'package:fushi/src/utils/components/fushi_floating_chrome.dart'
     show
@@ -98,7 +90,7 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
   BrowseTab? _selectedTab;
 
   /// 来源 / 扩展共用的内容域选择（在两者之间来回切不丢选择）。
-  OnlineSourcesDomain _onlineDomain = OnlineSourcesDomain.novel;
+  OnlineSourcesDomain _onlineDomain = OnlineSourcesDomain.manga;
 
   /// 「图源」页签里此刻显示来源还是扩展（2026-10-14 用户：库页顶栏把来源 /
   /// 扩展并在一个页签后，「浏览模块也可以做」）。两者共用一个顶层页签
@@ -110,7 +102,7 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
     _onlineSection,
   };
 
-  _DownloadsResourceDomain _resourceDomain = _DownloadsResourceDomain.books;
+  _DownloadsResourceDomain _resourceDomain = _DownloadsResourceDomain.manga;
 
   /// 头部（一级页签行 + 各页签的二级页签行）随滚动收放的状态：与四个库页
   /// 同一套规则（下滚收起、上滚弹回、只认主滚动区、平滑滚轮拉回不算）。头部
@@ -344,75 +336,8 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
     controller.animateTo(target);
   }
 
-  /// 「补对齐文件」：把已下完的孤立音频直接喂进统一导入对话框。
-  ///
-  /// 本仓有声书是字幕对齐驱动的，`download-only-audiobook` 任务落地的只有音频
-  /// （CoreAudio/TMW 单卷 m4b），自动导入链路进不去。这里把该任务真实落盘的音频
-  /// 预填进 [BookImportDialog]，用户只需再给一个字幕就能成书。
-  ///
-  /// 取不到音频路径（文件被手动删掉/移走）时照常开框、只是不预填——把死路留成
-  /// 用户仍可自选文件的活路，好过弹一句错误后什么也做不了。
-  ///
-  /// 素材库里配得到字幕/正文时一并预填：身份键取任务记的 [externalId]（发现页
-  /// 下载时写的作品主键），没有就退到音频文件名里的键。
-  ///
-  /// 注：my-comic 移除非漫画域后这条入口没有生产者（富任务浏览器未接线），但
-  /// 按 spec「不清理与下载视图迁移无关的其它未接线下载代码」原样保留。
-  // ignore: unused_element
-  Future<void> _pairDownloadedAudiobook(VideoDownloadJobRow job) async {
-    final AppModel appModel = ref.read(appProvider);
-    final List<VideoDownloadJobFileRow> rows = await appModel.database
-        .getVideoDownloadJobFiles(job.jobId);
-    final List<String> audioPaths = <String>[
-      for (final VideoDownloadJobFileRow row in rows)
-        if (row.selected &&
-            (row.finalAbsolutePath?.trim().isNotEmpty ?? false) &&
-            AudiobookStorage.audioExtensions.contains(
-              p.extension(row.finalAbsolutePath!).toLowerCase(),
-            ))
-          row.finalAbsolutePath!,
-    ]..sort();
-    final AudiobookMaterialMatch match = await _matchAudiobookMaterials(
-      appModel,
-      job: job,
-      audioPaths: audioPaths,
-    );
-    if (!mounted) return;
-    await showAppDialog<bool>(
-      context: context,
-      builder: (_) => BookImportDialog(
-        prefs: appModel.prefsRepo,
-        repo: SrtBookRepository(appModel.database),
-        audiobookRepo: AudiobookRepository(appModel.database),
-        db: appModel.database,
-        initialAudioPaths: audioPaths.isEmpty ? null : audioPaths,
-        initialSubtitlePath: match.subtitlePath,
-        initialEpubPath: match.contentPath,
-      ),
-    );
-  }
-
-  /// 从素材库给这条任务配字幕/正文；没配素材库或配不到时返回空匹配。
-  Future<AudiobookMaterialMatch> _matchAudiobookMaterials(
-    AppModel appModel, {
-    required VideoDownloadJobRow job,
-    required List<String> audioPaths,
-  }) async {
-    final AudiobookMaterialScan scan = await appModel.audiobookMaterialService
-        .scan();
-    if (scan.index.isEmpty) return const AudiobookMaterialMatch();
-    final String? externalId = job.externalId?.trim();
-    final String? key = (externalId != null && externalId.isNotEmpty)
-        ? externalId
-        : audioPaths
-              .map(audiobookKeyFromAudioPath)
-              .firstWhere((String? k) => k != null, orElse: () => null);
-    return matchAudiobookMaterial(scan.index, key: key, title: job.title);
-  }
-
   String _resourceDomainLabel(_DownloadsResourceDomain domain) =>
       switch (domain) {
-        _DownloadsResourceDomain.books => t.books,
         _DownloadsResourceDomain.manga => t.manga_library,
       };
 
@@ -448,12 +373,6 @@ class _BrowsePageState extends ConsumerState<BrowsePage>
 
   Widget _buildResourceDomain(_DownloadsResourceDomain domain) =>
       switch (domain) {
-        _DownloadsResourceDomain.books => MediaDiscoveryPage(
-          kinds: const <DiscoveryMediaKind>[
-            DiscoveryMediaKind.novel,
-            DiscoveryMediaKind.audiobook,
-          ],
-        ),
         _DownloadsResourceDomain.manga => MangaDiscoveryPage(
           embedded: true,
           onOpenSources: _mangaSourcesAction(),
@@ -873,7 +792,7 @@ class _BrowseTabKeepAliveState extends State<_BrowseTabKeepAlive>
   }
 }
 
-enum _DownloadsResourceDomain { books, manga }
+enum _DownloadsResourceDomain { manga }
 
 /// 资源域 → 所属功能模块（穷尽 switch：加域时编译器强制补齐这张表）。
 ///
@@ -881,7 +800,6 @@ enum _DownloadsResourceDomain { books, manga }
 /// 视频模块还留着「视频」资源域，等于给一个已经关掉的库继续找片源。
 ModuleId _moduleOfResourceDomain(_DownloadsResourceDomain domain) =>
     switch (domain) {
-      _DownloadsResourceDomain.books => ModuleId.books,
       _DownloadsResourceDomain.manga => ModuleId.manga,
     };
 

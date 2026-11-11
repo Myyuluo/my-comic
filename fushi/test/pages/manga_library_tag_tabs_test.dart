@@ -128,7 +128,6 @@ void main() {
           body: ReaderFushiHistoryPage(
             key: pageKey,
             mangaOnly: true,
-            remoteBookClientLoader: () async => null,
           ),
         ),
       ),

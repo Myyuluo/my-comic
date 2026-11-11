@@ -11,8 +11,6 @@ import 'package:fushi/src/lookup/browser_extension_installer.dart';
 import 'package:fushi/src/lookup/browser_extension_setup.dart';
 import 'package:fushi/src/models/app_model.dart';
 import 'package:fushi/src/settings/settings_kit.dart';
-import 'package:fushi/src/sync/fushi_api_server.dart'
-    show kFushiApiDefaultPort;
 import 'package:fushi/src/utils/components/fushi_press_scale.dart';
 import 'package:fushi/src/utils/components/fushi_staggered_entrance.dart';
 import 'package:fushi/src/utils/components/glass/fushi_icon.dart';
@@ -23,6 +21,9 @@ import 'package:url_launcher/url_launcher.dart';
 
 /// 探测默认浏览器的注入点（测试里换成同步返回，避免真起 `reg` / `defaults`）。
 typedef BrowserKindDetector = Future<BrowserKind?> Function();
+
+/// 浏览器扩展安装助手默认端口（原 yomitan-api server）。
+const int kFushiApiDefaultPort = 19633;
 
 /// 桌面专属「浏览器扩展」页（顶层导航目的地，仅桌面显示）。
 ///

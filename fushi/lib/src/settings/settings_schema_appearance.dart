@@ -5,14 +5,12 @@ import 'package:material_ui/material_ui.dart';
 import 'package:fushi/src/utils/adaptive/nav_bar_style.dart';
 import 'package:fushi/src/utils/fushi_icons.dart';
 import 'package:fushi/pages.dart';
-import 'package:fushi/src/models/home_dashboard_panel.dart';
 import 'package:fushi/src/models/module_id.dart';
 import 'package:fushi/src/models/module_registry.dart';
 import 'package:fushi/src/settings/settings_actions.dart';
 import 'package:fushi/src/settings/settings_context.dart';
 import 'package:fushi/src/settings/settings_destination.dart';
 import 'package:fushi/src/settings/nav_module_order_list.dart';
-import 'package:fushi/src/sync/desktop_lookup_service.dart';
 import 'package:fushi/src/utils/misc/app_icon_preferences.dart'
     show currentAppIconSelection;
 import 'package:fushi/utils.dart';
@@ -94,7 +92,7 @@ String _moduleItemId(ModuleId module) => switch (module) {
 /// 另写一份 Platform 判断。
 bool _moduleAvailableHere(ModuleId module) => module.availableOn(
   isWindows: Platform.isWindows,
-  isDesktop: DesktopLookupService.isDesktop,
+  isDesktop: Platform.isWindows,
   isIOS: Platform.isIOS,
   isAndroid: Platform.isAndroid,
 );
@@ -427,46 +425,3 @@ SettingsDestination buildAppearanceDestination() {
   );
 }
 
-/// 「首页面板」分区里一个面板的显示档（自动 / 显示 / 隐藏）。
-SettingsItem _homePanelModeItem(HomeDashboardPanel panel) {
-  final (
-    String title,
-    String hint,
-    IconData icon,
-    ModuleId module,
-  ) = switch (panel) {
-    HomeDashboardPanel.srsReview => (
-      t.nav_srs,
-      t.home_panel_srs_hint,
-      FushiIcons.repeat,
-      ModuleId.srs,
-    ),
-  };
-  return SettingsSegmentedItem<HomeDashboardPanelMode>(
-    id: 'appearance.home_panel.${panel.id}',
-    title: title,
-    subtitle: hint,
-    icon: icon,
-    visible: (SettingsContext c) =>
-        c.appModel.moduleVisibility.isEnabled(module),
-    options: <SettingsSegmentOption<HomeDashboardPanelMode>>[
-      SettingsSegmentOption<HomeDashboardPanelMode>(
-        value: HomeDashboardPanelMode.auto,
-        label: t.home_panel_mode_auto,
-      ),
-      SettingsSegmentOption<HomeDashboardPanelMode>(
-        value: HomeDashboardPanelMode.shown,
-        label: t.home_panel_mode_shown,
-      ),
-      SettingsSegmentOption<HomeDashboardPanelMode>(
-        value: HomeDashboardPanelMode.hidden,
-        label: t.home_panel_mode_hidden,
-      ),
-    ],
-    selected: (SettingsContext c) => c.appModel.homeDashboardPanelMode(panel),
-    onChanged: (SettingsContext c, HomeDashboardPanelMode value) => c.appModel
-        .setHomeDashboardPanelMode(panel, value)
-        .then((_) => c.refresh()),
-    defaultValue: HomeDashboardPanelMode.auto,
-  );
-}

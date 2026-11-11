@@ -19,5 +19,5 @@ class ReaderMediaType extends MediaType {
       ReaderMediaType._privateConstructor();
 
   @override
-  Widget get home => const HomeReaderPage();
+  Widget get home => const HistoryReaderPage();
 }

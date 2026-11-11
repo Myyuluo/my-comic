@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fushi/src/media/sources/reader_fushi_source.dart';
 import 'package:fushi/src/models/app_model.dart';
 import 'package:fushi/src/reader/reader_settings.dart';
-import 'package:fushi/src/settings/video_settings_host.dart';
 
 class SettingsContext {
   const SettingsContext({
@@ -12,7 +11,6 @@ class SettingsContext {
     required this.ref,
     required this.readerSource,
     required this.refresh,
-    this.video,
   });
 
   final BuildContext context;
@@ -20,9 +18,6 @@ class SettingsContext {
   final WidgetRef ref;
   final ReaderFushiSource readerSource;
   final VoidCallback refresh;
-
-  /// 视频播放上下文能力槽；null = 不在视频播放页（全局设置）。
-  final VideoSettingsHost? video;
 
   ReaderSettings? get readerSettings => ReaderFushiSource.readerSettings;
 }
@@ -36,7 +31,6 @@ mixin SettingsContextHost<T extends StatefulWidget> on State<T> {
     required AppModel appModel,
     required WidgetRef ref,
     VoidCallback? beforeRefresh,
-    VideoSettingsHost? video,
   }) {
     return SettingsContext(
       context: context,
@@ -48,7 +42,6 @@ mixin SettingsContextHost<T extends StatefulWidget> on State<T> {
         beforeRefresh?.call();
         setState(() {});
       },
-      video: video,
     );
   }
 }

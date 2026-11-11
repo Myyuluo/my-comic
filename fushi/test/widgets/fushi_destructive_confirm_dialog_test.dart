@@ -2,7 +2,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi/i18n/strings.g.dart';
-import 'package:fushi/src/sync/deletion_disclosure.dart';
+import 'package:fushi/src/utils/components/deletion_disclosure.dart';
 import 'package:fushi/src/utils/components/fushi_destructive_confirm_dialog.dart';
 import '../helpers/glass_unwrap.dart';
 

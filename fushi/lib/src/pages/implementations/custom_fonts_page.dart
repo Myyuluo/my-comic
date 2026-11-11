@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'dart:io';
-import 'package:fushi/src/media/video/video_subtitle_style.dart';
 
 import 'package:dio/dio.dart';
 import 'package:material_ui/material_ui.dart';
@@ -1155,7 +1154,6 @@ class _CustomFontsPageState extends BasePageState<CustomFontsPage> {
           FontTargetPreview(
             target: _previewTarget,
             families: families,
-            subtitleStyle: VideoSubtitleStyle.defaults,
           ),
         ],
       ),

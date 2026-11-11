@@ -15,7 +15,6 @@ import 'package:fushi/src/reader/reader_settings.dart';
 import 'package:fushi/src/settings/settings_actions.dart';
 import 'package:fushi/src/settings/settings_context.dart';
 import 'package:fushi/src/settings/settings_destination.dart';
-import 'package:fushi/src/settings/settings_schema_listening.dart';
 import 'package:fushi/src/stats/reader_study_clock_start_mode.dart';
 import 'package:fushi/utils.dart';
 import 'package:fushi/src/utils/adaptive/fushi_fold_posture.dart';
@@ -1254,10 +1253,6 @@ SettingsDestination buildReadingDestination() {
           ),
         ],
       ),
-      // 听书（有声书 + 悬浮歌词）2026-08-24 并入本分类，见 buildListeningSections
-      // 的合并说明。放在阅读各组之后：同一本 EPUB 的「读」与「听」从此在一个分类里。
-      // 这两个分区自带听书模块门，关掉模块时它们不渲染、也不进搜索索引。
-      ...buildListeningSections(),
     ],
   );
 }

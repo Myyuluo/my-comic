@@ -19,9 +19,6 @@ import 'package:macos_ui/macos_ui.dart'
         MacosIcon;
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/services.dart' hide ModifierKey;
-import 'package:fushi_anki/fushi_anki.dart' show AnkiMediaDedupReport;
-import 'package:fushi/src/anki/anki_media_dedup_dialogs.dart';
-import 'package:fushi/src/onboarding/recommended_pack_download_mini_bar.dart';
 import 'package:fushi/src/utils/components/fushi_desktop_title_bar.dart';
 import 'package:fushi/src/utils/components/fushi_floating_chrome.dart'
     show
@@ -33,36 +30,23 @@ import 'package:fushi/src/utils/components/nav_rail_brand_button.dart';
 import 'package:fushi/src/utils/misc/build_version.dart';
 import 'package:fushi/src/utils/window_caption_channel.dart';
 
-import 'package:fushi/src/pages/implementations/ai_settings_route.dart';
 
-import 'package:fushi/src/sync/desktop_foreground_guard.dart';
-import 'package:fushi/src/anki/anki_media_dedup_runner.dart';
-import 'package:fushi/src/anki/anki_view_model.dart'
-    show ankiRepositoryProvider;
-import 'package:fushi/src/leaderboard/leaderboard_paired_login.dart';
-import 'package:fushi/src/leaderboard/leaderboard_service.dart';
-import 'package:fushi/src/sync/sync_auto_trigger.dart';
 import 'package:fushi_engine/media/external_provider.dart';
 
 import 'package:fushi/src/media/import/real_path_directory_picker.dart';
 
-import 'package:fushi/src/sync/sync_repository.dart';
 
 import 'package:fushi/src/models/store_compliance.dart';
 
 import 'package:fushi/src/media/drag_drop/drop_surface_scope.dart';
 
-import 'package:fushi/src/sync/remote_library_cache.dart'
-    show remoteLibraryCacheProvider;
-import 'package:fushi/src/media/audiobook/now_listening_mini_bar.dart';
 import 'package:fushi/src/models/module_id.dart';
 import 'package:fushi/src/models/module_registry.dart';
 import 'package:fushi/src/storage/program_state_fallback_notice.dart';
-import 'package:fushi/src/sync/desktop_lookup_service.dart';
 import 'package:fushi/pages.dart';
 import 'package:fushi/src/utils/components/section_visibility.dart';
-import 'package:fushi/src/pages/implementations/home_module_swipe.dart';
 import 'package:fushi/utils.dart';
+import 'package:fushi/src/focus/desktop_foreground_guard.dart';
 import 'package:fushi/src/focus/fushi_focus_controller.dart'
     show FushiFocusController, FushiFocusRoot;
 import 'package:fushi/src/shortcuts/input_binding.dart'
@@ -355,10 +339,6 @@ class _HomePageState extends BasePageState<HomePage>
   HomeTab _previousTab = HomeTab.home;
   final FocusNode _keyboardFocusNode = FocusNode();
 
-  /// 待消费的查词页聚焦请求（见 [DictionaryFocusRequest]）。查词页不保活，请求得
-  /// 能挂着等页面挂载来取，故是可空值而不是 bump 计数。
-  final ValueNotifier<DictionaryFocusRequest?> _dictFocusSignal =
-      ValueNotifier<DictionaryFocusRequest?>(null);
   final Map<HomeTab, ScrollController> _tabScrollControllers =
       <HomeTab, ScrollController>{};
 
@@ -373,9 +353,6 @@ class _HomePageState extends BasePageState<HomePage>
   /// 倍成 10 分钟；小间隔 + 冷却闸则自校正，且 app-open / 关书 / 后台同步都会自然重置冷
   /// 却。被闸掉的 tick 只是两次本地 DB 读后早退，开销可忽略；退后台 / 熄屏时 OS 会挂起
   /// timer，不额外耗电。
-  static const Duration _periodicSyncInterval = Duration(minutes: 1);
-  Timer? _periodicSyncTimer;
-
   @override
   void initState() {
     super.initState();
@@ -405,15 +382,6 @@ class _HomePageState extends BasePageState<HomePage>
       return true;
     }());
     appModelNoUpdate.databaseCloseNotifier.addListener(refresh);
-    // TODO-376：只监听显式「打开查词 tab」请求（桌面悬浮字幕点词等手势触发），切到
-    // 查词 tab 让 HomeDictionaryPage 挂载并消费 pending。不在此监听 DesktopLookupService
-    // ——spec 2026-07-10 §7 后服务由 AppModel 持有 app 级监听，消费按
-    // resolveDesktopLookupConsumer 分区（mainTab 仍只归 HomeDictionaryPage），
-    // HomePage 根节点依旧不消费查词请求。
-    appModelNoUpdate.homeDictionaryTabRequest.addListener(
-      _onHomeDictionaryTabRequested,
-    );
-
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       // Ticket 03：安装目录不可写时 Program state root 回退到
@@ -436,162 +404,8 @@ class _HomePageState extends BasePageState<HomePage>
     });
   }
 
-  /// 排行榜书架后台同步：启动时一次，此后随 [_periodicSyncTimer] 每分钟探一次。未开启 /
-  /// 上传关闭 / 30 分钟内同步或尝试过都是 no-op（节流在服务里）；失败只记日志。
-  void _maybeSyncLeaderboard() {
-    if (!mounted) return;
-    unawaited(
-      Future<void>(
-        () => ref.read(leaderboardServiceProvider).maybeSyncInBackground(),
-      ).catchError((Object e, StackTrace s) {
-        ErrorLogService.instance.log('HomePage.leaderboardSync', e, s);
-      }),
-    );
-    _maybeFollowPairedLogin();
-  }
-
-  /// 本机没有 Fushi 账户时跟随已配对设备自动登录（条件、退避、失败静默都在
-  /// [LeaderboardPairedLogin] 里；未满足条件时只读本地配置，不发请求）。成功给一次轻提示。
-  void _maybeFollowPairedLogin() {
-    unawaited(() async {
-      final LeaderboardPairedLoginSuccess? done = await ref
-          .read(leaderboardPairedLoginProvider)
-          .maybeRun();
-      if (done == null || !mounted) return;
-      final String? peer = done.peerName;
-      ScaffoldMessenger.of(context).showSnackBar(
-        FushiSnackBar(
-          content: Text(
-            peer == null || peer.isEmpty
-                ? t.leaderboard_paired_login_done_generic(
-                    name: done.self.account.tag,
-                  )
-                : t.leaderboard_paired_login_done(
-                    device: peer,
-                    name: done.self.account.tag,
-                  ),
-          ),
-        ),
-      );
-    }());
-  }
-
-  /// 启动期自动处理一轮 Anki 媒体去重的 UI 侧收尾：报结果，或提示 + 等确认。
-  Future<void> _maybeAutoDedupAnkiMedia() async {
-    final AnkiMediaDedupAutoOutcome? outcome = await AnkiMediaDedupRunner(
-      ref.read(ankiRepositoryProvider),
-    ).maybeAutoRunOnStartup();
-    if (outcome == null || !mounted) return;
-    final AnkiMediaDedupReport? applied = outcome.applied;
-    if (applied != null) {
-      // 用户显式选了「自动直接删除」：只报结果。
-      ScaffoldMessenger.of(context).showSnackBar(
-        FushiSnackBar(
-          content: Text(
-            t.anki_dedup_auto_done(
-              count: '${applied.duplicatesRemoved}',
-              size: formatAnkiMediaDedupBytes(applied.bytesSaved),
-            ),
-          ),
-        ),
-      );
-      return;
-    }
-    if (!outcome.needsConfirmation) return;
-    // 保守路径（默认）：只提示。用户点「查看」才摊开逐条清单，再点删除才真删。
-    ScaffoldMessenger.of(context).showSnackBar(
-      FushiSnackBar(
-        content: Text(
-          t.anki_dedup_auto_found(
-            count: '${outcome.plan.duplicatesRemoved}',
-            size: formatAnkiMediaDedupBytes(outcome.plan.bytesSaved),
-          ),
-        ),
-        duration: const Duration(seconds: 10),
-        action: SnackBarAction(
-          label: t.anki_dedup_auto_review,
-          onPressed: () => unawaited(_reviewAutoDedupPlan(outcome.plan)),
-        ),
-      ),
-    );
-  }
-
-  /// 「查看」→ 逐条清单 + 删除确认 → 真删（带进度对话框，可取消）→ 结果
-  /// 报告。与设置页手动路径同一套弹窗（见 anki_media_dedup_dialogs.dart）。
-  Future<void> _reviewAutoDedupPlan(AnkiMediaDedupReport plan) async {
-    if (!mounted) return;
-    final bool confirmed = await showAnkiMediaDedupPlanDialog(
-      context,
-      plan,
-      offerDelete: true,
-    );
-    if (!confirmed || !mounted) return;
-    final AnkiMediaDedupReport? result = await runAnkiMediaDedupWithProgress(
-      context,
-      AnkiMediaDedupRunner(ref.read(ankiRepositoryProvider)),
-      dryRun: false,
-    );
-    if (result == null || !mounted) return;
-    await showAnkiMediaDedupReportDialog(context, result);
-  }
-
-  /// 触发一次 app-open 语义的全量双向同步（导入远端新书 + 同步进度 / 内容 / 词典 / 有声书
-  /// / 统计 / 合集）。首帧 postFrame 与 [_periodicSyncTimer] 定时轮询共用同一入口，保持
-  /// 单一逻辑。内部经 `_runAutoSyncAll` 的自动开关门控 + 5 分钟冷却 + `__all__` 去重锁，
-  /// 重复触发天然安全。
-  void _triggerFullAutoSync() {
-    if (!mounted) return;
-    triggerAutoSyncOnAppOpen(
-      db: appModel.database,
-      dictionaryResourceRoot: appModel.dictionaryResourceDirectory,
-      audioDatabaseRoot: Directory('${appModel.appDirectory.path}/audiobooks'),
-      tempDir: appModel.temporaryDirectory,
-      localAudioEntries: appModel.localAudioDbs,
-      onLocalAudioImported: appModel.importSyncedLocalAudioDb,
-      onPostRun: appModel.refreshAfterSyncRun,
-      onReport: appModel.presentSyncPrompts,
-    );
-  }
-
   void refresh() {
     setState(() {});
-  }
-
-  /// TODO-376：响应显式「打开查词 tab」请求（[AppModel.homeDictionaryTabRequest]）。
-  /// 桌面悬浮字幕条点词（reader 路由 `_lookupFromFloatingLyric`）这类**显式**手势会先
-  /// 把待查词排进 [DesktopLookupService.pendingText]、唤主窗前台，再发本请求；这里只把
-  /// 主窗切到查词 tab，让 [HomeDictionaryPage] 挂载——它在 initState 里无条件消费一次
-  /// 已存在的 pending 并展示。
-  ///
-  /// 这是与被动剪贴板监听正交的显式导航：本回调不读 pendingText、也不被剪贴板/热键的
-  /// 被动命中触发，故不违反「HomePage 根节点不消费查词请求（mainTab 分区只归
-  /// HomeDictionaryPage，spec 2026-07-10 §7）」的守卫。已在查词 tab 时无需切换
-  /// （页面已挂载并消费）。
-  void _onHomeDictionaryTabRequested() {
-    if (!mounted) return;
-    // 「已经在查词 tab 上」只有在 HomePage 真的是栈顶时才等于「已经显示出来了」。
-    // 阅读器 / 播放器压在上面时那个 tab 被完全遮住，早退会让本次请求变成彻底的
-    // no-op（窗口弹到前台、一点反馈都没有）。被遮住时继续走 [_revealDictionary]，
-    // 由它推独立查词路由到最上层。
-    // app 外热键「置顶主窗并打开查词页」= 用户要打字：把用户送进搜索框并全选已有
-    // 文本（直接打字就替换、什么都不打就保留上次结果）。携带待查词的调用方
-    // （focusSearch: false）不碰焦点——它们正要把 pending 的词填进去出词卡。
-    final DictionaryFocusIntent? focus =
-        appModelNoUpdate.homeDictionaryTabRequest.value.focusSearch
-        ? DictionaryFocusIntent.selectQuery
-        : null;
-    if (_currentTab == HomeTab.dictionaries &&
-        (ModalRoute.of(context)?.isCurrent ?? true)) {
-      // 已经显示着：不切 tab，但聚焦意图仍要落地（否则「已在查词页时按热键」
-      // 就成了唯一一条不聚焦的路径）。
-      if (focus != null) {
-        _dictFocusSignal.value = DictionaryFocusRequest(focus);
-      }
-      return;
-    }
-    // 这条是「用户刚用桌面取词 / 悬浮字幕点词 / 扩展回流发起了一次查词」，携带待
-    // 消费的 pendingText，即便查词模块关着也必须给它落地面，否则请求永远挂着。
-    _revealDictionary(carryingPendingLookup: true, focus: focus);
   }
 
   @override
@@ -603,17 +417,12 @@ class _HomePageState extends BasePageState<HomePage>
       HomePage.debugSelectTab = null;
       return true;
     }());
-    _periodicSyncTimer?.cancel();
-    _dictFocusSignal.dispose();
     for (final ScrollController controller in _tabScrollControllers.values) {
       controller.dispose();
     }
     _keyboardFocusNode.dispose();
     WidgetsBinding.instance.removeObserver(this);
     appModelNoUpdate.databaseCloseNotifier.removeListener(refresh);
-    appModelNoUpdate.homeDictionaryTabRequest.removeListener(
-      _onHomeDictionaryTabRequested,
-    );
     homeShellTabNotifier.removeListener(_onShellTabRequested);
     appModelNoUpdate.removeListener(_onModuleVisibilityMaybeChanged);
     super.dispose();
@@ -633,13 +442,6 @@ class _HomePageState extends BasePageState<HomePage>
     } else if (AppLifecycleState.paused == state) {
       if (appModel.lowMemoryMode) {
         PaintingBinding.instance.imageCache.clear();
-      }
-      final item = appModel.currentMediaItem;
-      if (item != null) {
-        triggerAutoSyncOnBackground(
-          db: appModel.database,
-          mediaIdentifier: item.mediaIdentifier,
-        );
       }
     }
   }
@@ -820,79 +622,6 @@ class _HomePageState extends BasePageState<HomePage>
     return tabs.contains(_previousTab) ? _previousTab : homeLandingTab(tabs);
   }
 
-  /// 查词 tab 被「功能模块」隐藏时用来承载查词页的独立路由（见 [_revealDictionary]）。
-  /// 存住它是为了「已经开着就把它翻到最上层」而不是叠第二份 —— 同一时刻全 app 只能有
-  /// 一个 [HomeDictionaryPage]，否则 mainTab 分区的 pending 查词会被双消费。
-  Route<void>? _standaloneDictionaryRoute;
-
-  /// 查词的**唯一**落地入口：热键（homeTabDict / homeFocusSearch）、桌面悬浮字幕点词
-  /// （[AppModel.homeDictionaryTabRequest]）、剪贴板 mainTab 分区都走这里。
-  ///
-  /// 「功能模块 → 查词」关掉的是**页面入口**，不是查词能力本身（用户拍板：纯阅读器
-  /// 仍要能查词）。于是这里按调用来源分流，[carryingPendingLookup] 就是那条界线：
-  /// - **主动导航**（热键 homeTabDict / homeFocusSearch，`false`）：模块关了就是
-  ///   「看不见也到不了」，直接不开——否则「关掉查词」却按 Ctrl+F 仍然弹出查词页。
-  /// - **携带待消费查词**（桌面取词、悬浮字幕点词、浏览器扩展回流，`true`）：用户
-  ///   刚用一个**仍然保留的能力**发起了查词，必须给它一个落地面。此时若吞掉请求，
-  ///   用户只会看到窗口被唤到前台却什么也不显示，且
-  ///   [DesktopLookupService.pendingText] 永远挂着（原注释记录的根因）。
-  ///
-  /// 两种情况下 tab 在就切 tab、tab 不在就推一个独立查词路由 —— 同一个
-  /// [HomeDictionaryPage]，同一条消费路径，只是换了个承载面。
-  void _revealDictionary({
-    DictionaryFocusIntent? focus,
-    bool carryingPendingLookup = false,
-  }) {
-    if (!mounted) return;
-    if (!carryingPendingLookup &&
-        !appModel.moduleVisibility.isEnabled(ModuleId.lookup)) {
-      return;
-    }
-    void requestFocus() {
-      if (focus == null) return;
-      _dictFocusSignal.value = DictionaryFocusRequest(focus);
-    }
-
-    // 切 tab 只有在 HomePage **真的是栈顶**时才等于「用户看得见查词页」：阅读器 /
-    // 播放器 / 漫画都是 `Navigator.push` 压在 HomePage 之上的全屏路由（BUG-286 已
-    // 记过这条），此时 [_selectTab] 只是在被完全遮住的 IndexedStack 里换了一页 ——
-    // 用户看到的是「窗口弹到前台却什么都没变」，正是本方法要消灭的那个形态。
-    //
-    // 所以判据是「查词页会不会被看见」，而不是「查词 tab 在不在导航里」。被遮住时
-    // 改推独立查词路由压在最上层：立刻可见，返回键退回原来的书 / 视频。**刻意不用
-    // popUntil 把上面的路由弹掉** —— BUG-286 定过这条边界：不能为了看个词强退阅读器
-    // 并停掉有声书。
-    final bool homeIsTopmost = ModalRoute.of(context)?.isCurrent ?? true;
-    if (homeIsTopmost && _activeTabs().contains(HomeTab.dictionaries)) {
-      _selectTab(HomeTab.dictionaries);
-      requestFocus();
-      return;
-    }
-    final Route<void>? existing = _standaloneDictionaryRoute;
-    if (existing != null && existing.isActive) {
-      // 已经开着：翻到最上层即可，绝不叠第二个查词页。
-      Navigator.of(
-        context,
-      ).popUntil((Route<Object?> route) => route == existing);
-      requestFocus();
-      return;
-    }
-    final Route<void> route = adaptivePageRoute<void>(
-      context: context,
-      builder: (_) => _StandaloneDictionaryRoute(focusSignal: _dictFocusSignal),
-    );
-    _standaloneDictionaryRoute = route;
-    unawaited(
-      Navigator.of(context).push<void>(route).whenComplete(() {
-        if (identical(_standaloneDictionaryRoute, route)) {
-          _standaloneDictionaryRoute = null;
-        }
-      }),
-    );
-    // 请求是可挂起的 pending，页面挂载后自己取；不必等帧。
-    requestFocus();
-  }
-
   /// 用户从导航（移动底栏 / 桌面 rail）点选 tab 的**唯一**入口。
   ///
   /// 与程序化切 tab（桌面取词落地、dashboard 卡片、快捷键）分开：点「查词」是
@@ -901,11 +630,6 @@ class _HomePageState extends BasePageState<HomePage>
   /// pending 的词填进去，清空会把它擦掉）。
   void _selectTabFromNav(HomeTab tab) {
     _selectTab(tab);
-    if (tab != HomeTab.dictionaries) return;
-    if (!_activeTabs().contains(HomeTab.dictionaries)) return;
-    _dictFocusSignal.value = const DictionaryFocusRequest(
-      DictionaryFocusIntent.clearQuery,
-    );
   }
 
   /// 统一切换顶层 tab：进入「设置」前记录来源 tab，供设置全屏返回箭头切回。
@@ -1043,11 +767,7 @@ class _HomePageState extends BasePageState<HomePage>
       case ShortcutAction.homeTabBooks:
         return _selectTabFromShortcut(HomeTab.books);
       case ShortcutAction.homeTabDict:
-        if (!appModel.moduleVisibility.isEnabled(ModuleId.lookup)) {
-          return KeyEventResult.ignored;
-        }
-        _revealDictionary();
-        return KeyEventResult.handled;
+        return KeyEventResult.ignored;
       case ShortcutAction.homeTabSettings:
         // 设置恒在，不可能不可达；仍走同一条路保持形态一致。
         return _selectTabFromShortcut(HomeTab.settings);
@@ -1058,11 +778,7 @@ class _HomePageState extends BasePageState<HomePage>
         _cycleTab(-1);
         return KeyEventResult.handled;
       case ShortcutAction.homeFocusSearch:
-        if (!appModel.moduleVisibility.isEnabled(ModuleId.lookup)) {
-          return KeyEventResult.ignored;
-        }
-        _revealDictionary(focus: DictionaryFocusIntent.keepQuery);
-        return KeyEventResult.handled;
+        return KeyEventResult.ignored;
       case ShortcutAction.globalBack:
         Navigator.of(context).maybePop();
         return KeyEventResult.handled;
@@ -1471,7 +1187,7 @@ class _HomePageState extends BasePageState<HomePage>
               // the native window background.
               return Material(
                 type: MaterialType.transparency,
-                child: _bodyWithMiniBar(),
+                child: buildBody(),
               );
             },
           ),
@@ -1581,7 +1297,7 @@ class _HomePageState extends BasePageState<HomePage>
               Expanded(
                 child: _GlassContentSurface(
                   child: _withAppleScrollChrome(
-                    FocusTraversalGroup(child: _bodyWithMiniBar()),
+                    FocusTraversalGroup(child: buildBody()),
                   ),
                 ),
               ),
@@ -1600,71 +1316,6 @@ class _HomePageState extends BasePageState<HomePage>
   /// BUG-2097 之后确实活过了向导，但可见入口只剩设置 → 系统里那一行 —— 新用户
   /// 走完引导正好落在首页，屏幕上一个像素都不说明它还在下。挂在这里它才真的
   /// 「有个地方看进度」。
-  Widget _bodyWithMiniBar() {
-    // 这两条是全 app 唯一「跨全部 home tab 常驻」的挂载位，也因此是最显眼的一处
-    // 模块泄漏：推荐包下载进度条属下载模块、正在听书条属听书模块，此前无条件挂着
-    // ——关掉下载/听书后它们仍钉在首页底部，与「看起来像纯粹的阅读器」直接相反。
-    final ModuleVisibility visibility = appModel.moduleVisibility;
-    return Column(
-      key: _homeBodyKey,
-      children: <Widget>[
-        // 横滑切模块（只在手机底栏布局启用）。结构三套布局恒定，只翻 enabled：
-        // 按布局增删这一层会让 GlobalKey 下的整棵正文重挂（BUG-2719 的那个坑）。
-        Expanded(
-          child: HomeModuleSwipeDetector(
-            enabled: _moduleSwipeEnabled(),
-            tracker: _moduleRoot,
-            controller: _moduleSwipe,
-            targetFor: _moduleSwipeTarget,
-            onSwipe: _selectTab,
-            child: buildBody(),
-          ),
-        ),
-        // 玻璃设计系统的移动布局里内容延伸到悬浮标签栏下面（extendBody），
-        // 迷你条得抬到胶囊之上；它们空闲时收成零高，此时不能留空白，否则内容
-        // 就滚不到胶囊底下了——见 [_FloatingBarInset]。其余布局这里的 bottom
-        // padding 已被 SafeArea 吃掉，是 0，几何不变。
-        _FloatingBarInset(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              if (visibility.isEnabled(ModuleId.browse))
-                const RecommendedPackDownloadMiniBar(),
-              if (visibility.isEnabled(ModuleId.listening))
-                const NowListeningMiniBar(),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  /// tab 内容的「模块根」登记表（多选模式 / 嵌套栈钻进去时不许横滑切模块）。
-  final ModuleRootTracker _moduleRoot = ModuleRootTracker();
-
-  /// 底栏长按拖选切完模块后借横滑的进场转场（同一段共享轴动画）。
-  final HomeModuleSwipeController _moduleSwipe = HomeModuleSwipeController();
-
-  /// 当前是否在手机底栏布局（[_buildMobileLayout] 每次构建时置位）。
-  bool _inMobileLayout = false;
-
-  /// 横滑切模块此刻是否启用：手机底栏布局、Material 设计系统（Apple 的玻璃底栏
-  /// 单独保持 iOS 的点按切换语义），且当前 tab 在横滑序列里（[homeModuleSwipeArmed]，
-  /// 含设置，BUG-3351）。
-  bool _moduleSwipeEnabled() {
-    if (!_inMobileLayout || isGlassDesign(context)) return false;
-    return homeModuleSwipeArmed(tabs: _activeTabs(), current: _visibleTab);
-  }
-
-  HomeTab? _moduleSwipeTarget({required bool fingerTowardStart}) =>
-      homeModuleSwipeTarget(
-        tabs: _activeTabs(),
-        current: _visibleTab,
-        reversed: appModel.reverseNavigationBar,
-        fingerTowardStart: fingerTowardStart,
-        textDirection: Directionality.of(context),
-      );
-
   Widget _buildMobileLayout() {
     _inMobileLayout = true;
     _shellFabHostedByBar = false;
@@ -1708,7 +1359,7 @@ class _HomePageState extends BasePageState<HomePage>
         child: SafeArea(
           bottom: false,
           child: _withAppleScrollChrome(
-            FocusTraversalGroup(child: _bodyWithMiniBar()),
+            FocusTraversalGroup(child: buildBody()),
           ),
         ),
       ),
@@ -1750,11 +1401,6 @@ class _HomePageState extends BasePageState<HomePage>
               if (tab == _visibleTab) return;
               final bool towardEnd = index > visualIndex;
               _selectTabFromNav(tab);
-              _moduleSwipe.playEnter(
-                fromScreenRight: Directionality.of(context) == TextDirection.ltr
-                    ? towardEnd
-                    : !towardEnd,
-              );
             },
           ),
         ),
@@ -1766,6 +1412,9 @@ class _HomePageState extends BasePageState<HomePage>
   /// 底栏；Apple 只在可见 tab 确有承载入口的页头时收走（见
   /// [homeScrapeEntryHostedByChrome]）。
   bool _shellFabHostedByBar = false;
+
+  /// 当前是否在手机底栏布局（三套布局切换时置位）。
+  bool _inMobileLayout = false;
 
   /// 需要跨 tab 切换**保活**（State 不随切走而销毁）的顶层 tab：书架、视频与游戏。
   ///
@@ -1796,11 +1445,7 @@ class _HomePageState extends BasePageState<HomePage>
   /// 消费桌面悬浮字幕的 pending 查词（TODO-376，见 [_onHomeDictionaryTabRequested]）；
   /// 若把它也保活会不再 re-mount 而漏消费。
   static const Set<HomeTab> _keepAliveTabs = <HomeTab>{
-    HomeTab.home,
-    HomeTab.books,
     HomeTab.manga,
-    HomeTab.video,
-    HomeTab.games,
     HomeTab.browse,
     HomeTab.downloads,
   };
@@ -1811,9 +1456,6 @@ class _HomePageState extends BasePageState<HomePage>
 
   /// 保活 tab 的离屏缓存（见 [_keepAliveTabContent]）。
   final Map<HomeTab, Widget> _hiddenTabContent = <HomeTab, Widget>{};
-
-  Future<void> _pushAiSettings(BuildContext context) =>
-      pushAiSettingsPage(context);
 
   Widget buildBody() {
     final HomeTab visible = _visibleTab;
@@ -1891,22 +1533,22 @@ class _HomePageState extends BasePageState<HomePage>
 
   Widget _buildTabContent(HomeTab tab) {
     final Widget content = switch (tab) {
-      HomeTab.home => const HomeDashboardPage(),
-      // my-comic：视频模块已删除；保留枚举值以兼容旧偏好/旧数据。
-      HomeTab.video => const SizedBox.shrink(),
+      // my-comic：首页 dashboard / 小说 / 视频 / 词典 / 复习 / 游戏已删除；
+      // 保留 HomeTab 枚举值以兼容旧偏好；这些 tab 不在可见导航里。
+      HomeTab.home ||
+      HomeTab.books ||
+      HomeTab.video ||
+      HomeTab.dictionaries ||
+      HomeTab.games ||
+      HomeTab.srs => const SizedBox.shrink(),
       HomeTab.browse => const BrowsePage(),
       HomeTab.history => const MangaHistoryPage(),
       HomeTab.downloads => const DownloadsPage(),
-      HomeTab.dictionaries => HomeDictionaryPage(focusSignal: _dictFocusSignal),
-      // my-comic：游戏模块已删除。
-      HomeTab.games => const SizedBox.shrink(),
       HomeTab.browserExtension => const BrowserExtensionPage(),
-      HomeTab.srs => const SrsDeckListPage(),
       HomeTab.settings =>
         // 设置 tab 走侧栏/底栏切回，不显示页头返回箭头；但仍需 PopScope 拦截系统
         // 返回键（否则冒泡到顶层 PopScope = 退出 app，见 BUG-236）。
         _buildSettingsTabContent(showBackButton: false),
-      HomeTab.books => const HomeReaderPage(),
       HomeTab.manga => const MangaLibraryPage(),
     };
     return FushiShellTitleScope(
@@ -2116,7 +1758,8 @@ class HomeSyncExitScope extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ValueListenable<bool> source = syncing ?? syncInProgress;
+    final ValueListenable<bool> source =
+        syncing ?? const _FalseListenable();
     return ValueListenableBuilder<bool>(
       valueListenable: source,
       child: child,
@@ -2215,29 +1858,6 @@ class _LocalDiscoveryTarget {
   final int? collectionId;
 }
 
-/// 查词 tab 被「功能模块」隐藏时的查词承载面（见 [_HomePageState._revealDictionary]）。
-///
-/// 只是给同一个 [HomeDictionaryPage] 套一层可 pop 的 [Scaffold]：查词能力（全局热键、
-/// 桌面取词、悬浮字幕点词、浏览器扩展回流）不随导航项一起消失，而 mainTab 分区的
-/// pending 查词仍由**唯一**的 HomeDictionaryPage 消费，分区互斥不变。
-class _StandaloneDictionaryRoute extends StatelessWidget {
-  const _StandaloneDictionaryRoute({required this.focusSignal});
-
-  final ValueNotifier<DictionaryFocusRequest?> focusSignal;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: SafeArea(
-        child: HomeDictionaryPage(
-          focusSignal: focusSignal,
-          showBackButton: true,
-        ),
-      ),
-    );
-  }
-}
-
 /// 视频源后台补刮任务入口是否由外壳的栏 / 页头承载（承载时首页 body 不再画
 /// 右下 FAB）。
 ///
@@ -2280,4 +1900,18 @@ class _HomeShellActionsSlot extends FushiShellActionsSlot {
       ],
     );
   }
+}
+
+/// 恒为 false 的 [ValueListenable]：my-comic 已无同步功能，退出提示恒不触发。
+class _FalseListenable implements ValueListenable<bool> {
+  const _FalseListenable();
+
+  @override
+  bool get value => false;
+
+  @override
+  void addListener(VoidCallback listener) {}
+
+  @override
+  void removeListener(VoidCallback listener) {}
 }
