@@ -6,7 +6,6 @@ import 'package:fushi/src/utils/fushi_icons.dart';
 import 'package:fushi/pages.dart';
 import 'package:fushi/src/models/app_model.dart';
 import 'package:fushi/src/models/module_id.dart';
-import 'package:fushi/src/models/module_registry.dart';
 import 'package:fushi/src/models/store_compliance.dart';
 import 'package:fushi/src/media/manga/mihon/mihon_runtime_factory.dart';
 import 'package:fushi/src/pages/implementations/feedback/feedback_common.dart'
@@ -79,49 +78,6 @@ SettingsSection _homeShortcutsSection() {
       ),
     ],
   );
-}
-
-/// 启动页下拉的「默认」项 token（底栏第一个可见页）。其余项的 token 是
-/// [ModuleId.name]——只是设置行 / ctl 的取值，持久化走 [ModuleId.prefKey]
-/// （见 `PreferencesRepository.setStartupModule`）。
-const String _kStartupModuleDefault = 'default';
-
-/// 启动页可选项：默认 + 有底栏 tab 的模块，按用户排的底栏顺序。[visibility] 为
-/// null 时给静态全集（仅供恢复默认的标签格式化），否则只列此刻可见的模块——
-/// 被关掉 / 本平台不存在的模块选不了（反馈 #PwEC1evz1E）。
-List<SettingsSegmentOption<String>> _startupModuleOptions(
-  ModuleVisibility? visibility,
-) => <SettingsSegmentOption<String>>[
-  SettingsSegmentOption<String>(
-    value: _kStartupModuleDefault,
-    label: t.startup_module_default,
-  ),
-  for (final ModuleId module in visibility?.ordered ?? ModuleId.values)
-    if (homeTabOfModule(module) case final HomeTab tab
-        when visibility == null || visibility.isEnabled(module))
-      SettingsSegmentOption<String>(
-        value: module.name,
-        label: homeNavItemFor(tab).label,
-      ),
-];
-
-/// 当前生效的启动页 token：所选模块此刻不可见时显示默认，与启动时的实际落点
-/// （`homeInitialTab` 回退到第一个可见页）一致。
-String _startupModuleToken(AppModel appModel) {
-  final ModuleId? module = appModel.startupModule;
-  if (module == null ||
-      homeTabOfModule(module) == null ||
-      !appModel.moduleVisibility.isEnabled(module)) {
-    return _kStartupModuleDefault;
-  }
-  return module.name;
-}
-
-ModuleId? _startupModuleOfToken(String token) {
-  for (final ModuleId module in ModuleId.values) {
-    if (module.name == token) return module;
-  }
-  return null;
 }
 
 SettingsDestination buildSystemDestination() {
@@ -274,33 +230,8 @@ SettingsDestination buildSystemDestination() {
               settingsContext.refresh();
             },
           ),
-          // 启动页（反馈 #PwEC1evz1E）：取代旧开关「启动时打开查词」，可选任一此刻
-          // 可见、有底栏 tab 的模块（选项随功能模块开关与排序实时变化）。所选模块
-          // 被关掉时这里显示「底栏第一个页面」，与启动时的实际落点（homeInitialTab）
-          // 一致；重新打开该模块后用户原先的选择照旧生效。
-          // item id 沿用旧开关的 'appearance.startup_default_dictionary_tab'（设置
-          // 搜索锚点，历史命名，非持久化 key）；持久化见 ModuleId.startupPrefKey。
-          SettingsSegmentedItem<String>(
-            id: 'appearance.startup_default_dictionary_tab',
-            title: t.startup_module,
-            subtitle: t.startup_module_hint,
-            icon: FushiIcons.home,
-            dropdown: true,
-            defaultValue: _kStartupModuleDefault,
-            options: _startupModuleOptions(null),
-            optionsBuilder: (SettingsContext settingsContext) =>
-                _startupModuleOptions(
-                  settingsContext.appModel.moduleVisibility,
-                ),
-            selected: (SettingsContext settingsContext) =>
-                _startupModuleToken(settingsContext.appModel),
-            onChanged: (SettingsContext settingsContext, String token) async {
-              await settingsContext.appModel.setStartupModule(
-                _startupModuleOfToken(token),
-              );
-              settingsContext.refresh();
-            },
-          ),
+          // 启动页偏好与启动落地（AppModel.startupModule / homeInitialTab）
+          // 仍保留，供旧安装与测试使用；ticket 03 只下线这个设置入口。
           SettingsSwitchItem(
             id: 'system.low_memory_mode',
             title: t.low_memory_mode,
@@ -318,17 +249,6 @@ SettingsDestination buildSystemDestination() {
             icon: FushiIcons.info,
             builder: _buildRuntimeAppVersionRow,
           ),
-          // 官网。设置行沿用 openOfficialWebsite，URL 只存在 official_links.dart
-          // 一处。
-          SettingsActionItem(
-            id: 'system.website',
-            title: t.options_website,
-            icon: Icons.language_outlined,
-            cli: const SettingsCliAction.tap(),
-            onTap: (_) async {
-              await openOfficialWebsite();
-            },
-          ),
           SettingsActionItem(
             id: 'system.github',
             title: t.options_github,
@@ -336,18 +256,6 @@ SettingsDestination buildSystemDestination() {
             cli: const SettingsCliAction.tap(),
             onTap: (_) async {
               await openMyComicRepository();
-            },
-          ),
-          SettingsActionItem(
-            id: 'system.github_sponsors',
-            title: t.options_github_sponsors,
-            icon: FushiIcons.favorite,
-            cli: const SettingsCliAction.tap(),
-            onTap: (_) async {
-              await launchUrl(
-                Uri.parse(kGitHubSponsorsUrl),
-                mode: LaunchMode.externalApplication,
-              );
             },
           ),
         ],
@@ -665,10 +573,9 @@ Widget _buildRuntimeAppVersionRow(SettingsContext settingsContext) {
   );
 }
 
-/// 版本展示文案。versionName 是 semver（含 `-debug.5613` 等预发布段），
-/// buildNumber 是 Android versionCode（如 `1000561300`），两者语义不同：
-/// 绝不能用 semver 的 `+` build-metadata 把 versionCode 拼进 versionName，
-/// 否则会渲染出畸形的 `0.11.1-debug.5613+1000561300`。用括号并列展示。
+/// 版本展示文案：只显示精确的 semver 版本名（如 `1.0.0`），不展示 build number。
+/// versionName 是 semver（含 `-debug.5613` 等预发布段），buildNumber 是 Android
+/// versionCode（如 `1000561300`）；后者是构建元数据，不属于用户需要看到的版本。
 ///
 /// [runningCodeVersion] 是编译进 `app.so` 的构建版本（见 `build_version.dart`），
 /// [PackageInfo.version] 则来自 exe / Info.plist / manifest 的版本资源。两者是
@@ -682,8 +589,7 @@ String formatAppVersionDisplay(
   String? runningCodeVersion,
 }) {
   final String executableVersion = packageInfo.version;
-  final String shown = runningCodeVersion ?? executableVersion;
-  final String display = '$shown (${packageInfo.buildNumber})';
+  final String display = runningCodeVersion ?? executableVersion;
   if (runningCodeVersion == null) return display;
   if (_isSameBuildVersion(runningCodeVersion, executableVersion)) {
     return display;
