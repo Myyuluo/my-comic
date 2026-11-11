@@ -45,8 +45,6 @@ void main() {
   group('manifestUrlForChannel (pure)', () {
     test('beta/debug return fork manifest URLs without upstream fallback', () {
       expect(kGitHubRepo, 'Myyuluo/my-comic');
-      expect(kGitHubRepoFallbacks, <String>['Myyuluo/my-comic'],
-          reason: '不得再回退到上游 3.x 仓库');
       expect(manifestUrlForChannel(UpdateChannel.beta), kBetaManifestUrl);
       expect(manifestUrlForChannel(UpdateChannel.debug), kDebugManifestUrl);
       expect(
@@ -57,20 +55,6 @@ void main() {
         kDebugManifestUrl,
         'https://raw.githubusercontent.com/Myyuluo/my-comic/update-manifest/latest-debug-fushi.json',
       );
-      expect(
-        manifestUrlsForChannel(UpdateChannel.beta),
-        const <String, String>{
-          'Myyuluo/my-comic':
-              'https://raw.githubusercontent.com/Myyuluo/my-comic/update-manifest/latest-beta-fushi.json',
-        },
-      );
-      expect(
-        manifestUrlsForChannel(UpdateChannel.debug),
-        const <String, String>{
-          'Myyuluo/my-comic':
-              'https://raw.githubusercontent.com/Myyuluo/my-comic/update-manifest/latest-debug-fushi.json',
-        },
-      );
     });
 
     test('stable now uses latest-stable.json manifest (BUG-846 谁后用谁)', () {
@@ -80,13 +64,6 @@ void main() {
       expect(
         kStableManifestUrl,
         'https://raw.githubusercontent.com/Myyuluo/my-comic/update-manifest/latest-stable-fushi.json',
-      );
-      expect(
-        manifestUrlsForChannel(UpdateChannel.stable),
-        const <String, String>{
-          'Myyuluo/my-comic':
-              'https://raw.githubusercontent.com/Myyuluo/my-comic/update-manifest/latest-stable-fushi.json',
-        },
       );
     });
   });

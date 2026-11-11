@@ -1,3 +1,7 @@
+import 'dart:io';
+
+import 'package:path/path.dart' as p;
+
 import 'package:fushi/src/media/manga/library/manga_shelf_cover_cache.dart';
 import 'package:fushi/src/media/manga/library/manga_shelf_cover_renewal.dart';
 import 'package:fushi/src/media/manga/library/manga_shelf_cover_revision.dart';
@@ -10,6 +14,19 @@ import 'package:fushi/src/utils/misc/trimmed_text.dart';
 /// 按 runtime 解析在线书架服务；null = 该运行时不可用。
 typedef OnlineMangaServiceResolver =
     OnlineMangaLibraryService? Function(OnlineMangaRuntimeKind runtime);
+
+/// 把运行时服务分派点包成宽松 resolver：解析异常按「该运行时不可用」处理。
+///
+/// 书架与 History 页共用这一处，避免两边各写一份 try/catch 语义。
+OnlineMangaServiceResolver appOnlineMangaServiceResolver(
+  OnlineMangaLibraryService? Function(OnlineMangaRuntimeKind runtime) resolve,
+) => (OnlineMangaRuntimeKind runtime) {
+  try {
+    return resolve(runtime);
+  } on Object {
+    return null;
+  }
+};
 
 /// 来源当前是否可解析（已安装且扩展与源都启用）。
 ///
@@ -63,6 +80,25 @@ Future<bool> isOnlineMangaSourceAvailable({
 /// 与站点鉴权都由扩展处理），不经过应用的裸 HTTP 客户端。
 class MangaShelfCoverService {
   MangaShelfCoverService({required this.cache, required this.serviceFor});
+
+  /// 按 Program state 缓存根装配书架封面服务。
+  ///
+  /// 书架（`ReaderFushiSource`）与 History 页共用这一个入口，保证两边读取同一
+  /// 个 `<programState>/cache/shelf_covers` 目录、使用同一套来源可用性判据。
+  /// [cacheRoot] 为 null（启动早期 / 测试壳）时返回 null，调用方退回占位或
+  /// 原有回退路径。
+  static MangaShelfCoverService? forAppCache({
+    required Directory? cacheRoot,
+    required OnlineMangaServiceResolver serviceFor,
+  }) {
+    if (cacheRoot == null) return null;
+    return MangaShelfCoverService(
+      cache: MangaShelfCoverCache(
+        Directory(p.join(cacheRoot.path, kMangaShelfCoverCacheDirName)),
+      ),
+      serviceFor: serviceFor,
+    );
+  }
 
   final MangaShelfCoverCache cache;
 

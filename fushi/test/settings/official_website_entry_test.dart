@@ -78,6 +78,14 @@ void main() {
     // 官网下载页仍被新手引导的推荐包入口使用；删掉的只是设置页入口。
     expect(launchedUrls, <String>[kOfficialDownloadPageUrl]);
     expect(kOfficialDownloadPageUrl, 'https://fushi.moe/download');
+    // 下载页必须仍属于官网站点：断言站点来源关系，而不是只钉一个可能被
+    // 一起改掉的字面量。
+    expect(
+      Uri.parse(kOfficialDownloadPageUrl).host,
+      Uri.parse(kOfficialWebsiteUrl).host,
+      reason: '下载页 URL 必须属于官网域名',
+    );
+    expect(kOfficialDownloadPageUrl, startsWith(kOfficialWebsiteUrl));
   });
 }
 
