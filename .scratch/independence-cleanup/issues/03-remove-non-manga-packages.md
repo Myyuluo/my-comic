@@ -129,6 +129,11 @@
 - `flutter build windows --debug`：**通过**（NuGet 从主 checkout `.dart_tool/nuget`
   注入；产物 `build/windows/x64/runner/Debug/fushi.exe`）；冷启动冒烟进程存活。
 
+合并 integration/independence-cleanup（含 ticket 07 三步 Onboarding）后复验：
+`dart run slang` 通过、`flutter analyze` 0 errors（155 warnings/infos）、
+Onboarding + 本 ticket 改动的守卫/manga 测试 115 条全绿、
+`flutter build windows --debug` 增量 35.9s 通过，冷启动冒烟 `alive=True`。
+
 ### 已知失败 / 延迟项（非本 ticket 引入或属于 ticket 12 复核）
 
 - ticket 04 已记录的既有失败仍在：`activity_events_test` 视频改名用例、
