@@ -1,19 +1,19 @@
-# my-comic
+# MyComic
 
-一个 Windows 桌面漫画阅读器：以 Fushi v3.0.0 的代码快照为基础，只保留漫画域，并在扩展与备份数据上与 Mihon v0.21.3 兼容。
+MyComic 是一个 Windows 桌面漫画阅读器：以 Fushi v3.0.0 的代码快照为基础，只保留漫画域，并在扩展与备份数据上与 Mihon v0.21.3 兼容。MyComic 只保留漫画域；标注“MyComic 不包含”的术语仅用于上游/历史对照。
 
 ## Language
 
-**my-comic**:
-本项目的产品名与代码库名。它是独立发行版，不是 Fushi 的官方分支；版本从 1.0.0 起，GitHub 仓库与更新源都是 `Myyuluo/my-comic`，不指向 Fushi 上游。
-_Avoid_: Fushi、Mihon（指本产品时）
+**MyComic**:
+本项目的产品名（窗口标题、安装器、About、快捷方式）。GitHub 仓库名是 `my-comic`，Dart 包名是 `my_comic`；它是独立发行版，不是 Fushi 的官方分支，版本从 1.0.0 起，更新源是 `Myyuluo/my-comic`。
+_Avoid_: Fushi、Mihon（指本产品时）、Mihon 的桌面版（暗示官方分支）
 
 **Fushi**:
-本项目的上游代码基座，锁定在 v3.0.0 快照。只作为来源与历史背景使用，不跟随其后续更新，也不作为本应用的更新源。
+本项目的上游代码基座，锁定在 v3.0.0 快照。只作为来源与历史背景使用，不跟随其后续更新，也不作为本应用的更新源；独立化清理后只出现在许可证、第三方声明、`UPSTREAM.md`、ADR、历史文档和 README/About 的来源署名中。
 _Avoid_: 当前应用、我们的应用
 
 **Update source（更新源）**:
-应用检查新版本时查询的发布仓库。my-comic 只使用自己的 GitHub 仓库 `Myyuluo/my-comic`，不回退上游 Fushi 的发布；仓库没有可用 release（404、空列表或无匹配通道）时按「已是最新」处理。
+应用检查新版本时查询的发布仓库。MyComic 只使用自己的 GitHub 仓库 `Myyuluo/my-comic`，不回退上游 Fushi 的发布；仓库没有可用 release（404、空列表或无匹配通道）时按「已是最新」处理。
 _Avoid_: 上游更新、Fushi 发布线
 
 **Mihon**:
@@ -43,6 +43,10 @@ _Avoid_: 签名者指纹、证书
 **Trust（信任）**:
 用户对某个 Signer 的明确接受记录；从未 trusted 的 Signer 安装 Extension 需要先确认。
 _Avoid_: 授权、白名单
+
+**Onboarding（新手引导）**:
+MyComic 首次启动的三步引导：欢迎（界面语言/明暗主题）→ 选择 Content root → 完成说明。只在全新安装且未完成引导时自动显示，也可从设置重新打开。
+_Avoid_: 向导、wizard、首次启动设置
 
 **Manga（漫画）**:
 一部漫画作品在应用中的持久记录，可以属于 Library，也可以是非书架 Manga；Chapter、Reading progress、History、下载与 Tracking 都归属于它。
@@ -93,7 +97,7 @@ _Avoid_: 导入（批量导入已退役）、自动入库
 _Avoid_: Non-library work、未入书架作品（旧称）、未收藏、临时作品
 
 **Category（分类）**:
-Mihon 备份中的 Library 内用户自定义分组，与 my-comic 的 Tag 双向映射：导出时每个 Tag 成为同名 Category，导入时每个 Category 按名称成为 Tag（同名合并）。Mihon 的 Default（不属于任何 Category）对应 my-comic 的「书架」页签。my-comic 不提供分类 UI，书架不按分类分组。
+Mihon 备份中的 Library 内用户自定义分组，与 MyComic 的 Tag 双向映射：导出时每个 Tag 成为同名 Category，导入时每个 Category 按名称成为 Tag（同名合并）。Mihon 的 Default（不属于任何 Category）对应 MyComic 的「书架」页签。MyComic 不提供分类 UI，书架不按分类分组。
 _Avoid_: 标签、文件夹、视图页签
 
 **Tag（标签）**:
@@ -129,7 +133,7 @@ _Avoid_: 书签、位置
 _Avoid_: 记录、阅读记录（可能指 Reading progress）
 
 **Reading statistics（阅读统计）**:
-统计中心「阅读」页所展示的阅读活动汇总：阅读时长、页数、阅读速度与会话等，以及查词/制卡计数。它按作品与时间范围聚合，与 History、Reading progress 是三套独立数据：History 记录每部 Manga 最近一次阅读会话，Reading progress 记录续读位置；删除阅读统计不会删除 History 或 Reading progress，移出书架时也只有显式勾选「同时删除统计数据」才会移除该作品的统计。非书架 Manga 的阅读同样计入。
+MyComic 不包含的 Fushi 功能：按作品与时间范围聚合阅读时长、页数、阅读速度与会话，以及查词/制卡计数。它只用于历史对照，不是 History 或 Reading progress 的同义词。
 _Avoid_: 历史、阅读进度（它们是独立的数据；阅读统计不是阅读会话记录）
 
 **Incognito reading（无痕阅读）**:
@@ -201,19 +205,19 @@ _Avoid_: 清理下载、重置应用
 _Avoid_: 清除数据库（旧称）、恢复出厂设置、重置应用、清除缓存
 
 **Tracking（追踪）**:
-把阅读状态发布到外部服务（Bangumi、MAL、AniList、Kitsu、Shikimori 等）。
+MyComic 不包含的 Fushi 功能：把阅读状态发布到外部服务（Bangumi、MAL、AniList、Kitsu、Shikimori 等）。它只用于历史对照与 Mihon Backup 的映射说明。
 _Avoid_: 同步
 
 **Backup（备份）**:
-Mihon 或 my-comic 生成的 `.tachibk` 快照。my-comic 可在「创建备份」页按所选范围生成 Backup，供 Mihon 或另一台 my-comic 导入。
+Mihon 或 MyComic 生成的 `.tachibk` 快照。MyComic 可在「创建备份」页按所选范围生成 Backup，供 Mihon 或另一台 MyComic 导入。
 _Avoid_: 存档、导出文件、应用快照（`.fushi.zip` 是另一种东西）
 
 **App snapshot（应用快照）**:
-my-comic 旧版生成的 `.fushi.zip` 全量应用导出；不是 Backup，计划弃用。
+旧版 Fushi 生成的 `.fushi.zip` 全量应用导出；不是 Backup。MyComic 不导入、不生成、不迁移这种格式，此术语只用于历史对照。
 _Avoid_: 备份、Backup、导出
 
 **Backup directory（备份目录）**:
-Content root 下存放 Backup 的目录；my-comic 的目录名是 `autobackup`，也是导入/导出 `.tachibk` 的默认位置。
+Content root 下存放 Backup 的目录；MyComic 的目录名是 `autobackup`，也是导入/导出 `.tachibk` 的默认位置。
 _Avoid_: 自动备份、应用快照
 
 **Automatic backup（自动备份）**:
@@ -221,15 +225,15 @@ _Avoid_: 自动备份、应用快照
 _Avoid_: 备份目录、autobackup（那是目录名）
 
 **Import（导入）**:
-把 Backup 读入 my-comic：恢复 Library 与阅读数据，并补齐本机缺失的 my-comic 设置。Merge 语义，按 Manga 与 Source 去重；未收藏的作品会恢复为非书架 Manga（含章节、阅读进度、已读与可恢复的 History），绝不进入 Library。导入后会尝试把已下载文件与可识别身份的本地文件关联到导入作品，不额外创建 Library 条目；「重建下载索引」仍是用户手动触发、只重链书架成员，`downloads` 中尚未加入书架的作品由「检索已下载」发现。
+把 Backup 读入 MyComic：恢复 Library 与阅读数据，并补齐本机缺失的 MyComic 设置。Merge 语义，按 Manga 与 Source 去重；未收藏的作品会恢复为非书架 Manga（含章节、阅读进度、已读与可恢复的 History），绝不进入 Library。导入后会尝试把已下载文件与可识别身份的本地文件关联到导入作品，不额外创建 Library 条目；「重建下载索引」仍是用户手动触发、只重链书架成员，`downloads` 中尚未加入书架的作品由「检索已下载」发现。
 _Avoid_: 恢复（除非特指 Mihon 的 restore 行为）、同步
 
 **Export（导出）**:
-从 my-comic 生成 Backup 的动作：在「创建备份」页选择导出范围后写出 `.tachibk`，产物可由 Mihon 读取，也可由 my-comic 重新导入。「书架中的作品」只包含书架成员；「所有已读作品」把未加入书架的已读作品写成 `favorite=false` 条目。
+从 MyComic 生成 Backup 的动作：在「创建备份」页选择导出范围后写出 `.tachibk`，产物可由 Mihon 读取，也可由 MyComic 重新导入。「书架中的作品」只包含书架成员；「所有已读作品」把未加入书架的已读作品写成 `favorite=false` 条目。
 _Avoid_: 同步、上传
 
 **Sync（同步）**:
-设备之间的实时数据交换。本项目明确不做。
+设备之间的实时数据交换。MyComic 明确不做，只用于历史对照。
 _Avoid_: 追踪、导入
 
 **Local source（本地图源）**:
@@ -237,15 +241,15 @@ _Avoid_: 追踪、导入
 _Avoid_: 本地文件、离线模式、本地源
 
 **Local source root（本地图源根）**:
-承载 Local source 的目录，即 Content root 下的 `local`；用户把 Manga/Chapter 文件夹或 CBZ 放在这里，my-comic 原地读取、不复制。扫描时机只有两种：进入「本地图源」时自动扫描，或运行 Rebuild download index。旧目录名 `localcomic` 已停用，不扫描、不迁移、不删除。作品根目录缺少封面时，扫描会从第一页生成可见的 `cover.jpg`；已有封面绝不覆盖，也不写隐藏元数据。
+承载 Local source 的目录，即 Content root 下的 `local`；用户把 Manga/Chapter 文件夹或 CBZ 放在这里，MyComic 原地读取、不复制。扫描时机只有两种：进入「本地图源」时自动扫描，或运行 Rebuild download index。旧目录名 `localcomic` 已停用，不扫描、不迁移、不删除。作品根目录缺少封面时，扫描会从第一页生成可见的 `cover.jpg`；已有封面绝不覆盖，也不写隐藏元数据。
 _Avoid_: 本地库、离线库、localcomic（旧目录名）
 
 **OCR**:
-在设备上从图片识别文字。本项目不包含端上 OCR/AI 生成。
+在设备上从图片识别文字。MyComic 不包含端上 OCR/AI 生成，只用于历史对照。
 _Avoid_: 本地图源
 
 **Sidecar（伴生进程）**:
-随应用启动的 JVM 进程，负责运行 Extension。Backup 的解析与生成由 my-comic 自身完成。
+随应用启动的 JVM 进程，负责运行 Extension。Backup 的解析与生成由 MyComic 自身完成。
 _Avoid_: 服务器、后端（避免暗示需要用户自建服务器）
 
 **Extension runtime（扩展运行时）**:
@@ -253,12 +257,12 @@ Sidecar 加上 Android 兼容层，用于执行 Mihon Extension。
 _Avoid_: 插件引擎
 
 **Bundled extension runtime（随包扩展运行时）**:
-随应用构建或安装包分发的 Extension runtime 副本；my-comic 只启动这一份，不从系统或其他安装目录查找运行时。
+随应用构建或安装包分发的 Extension runtime 副本；MyComic 只启动这一份，不从系统或其他安装目录查找运行时。
 _Avoid_: 外部运行时、系统 Java
 
 **Mihon-compatible**:
 本项目在四个轴上的兼容承诺：Extension、Backup、Manga 功能、数据映射。它不表示 UI 与 Mihon 相同，也不表示代码是 Mihon 的移植，也不表示 Storage layout 可由 Mihon 直接读取；见 Mihon-style layout。
-_Avoid_: Mihon 移植、Mihon 分支
+_Avoid_: Mihon 移植、Mihon 分支、Mihon 的桌面版（暗示官方产品）
 
 **Mihon-style layout（Mihon 风格布局）**:
 沿用 Mihon 的 Source → Manga → Chapter 目录习惯的布局；只表示目录形状，不承诺 Mihon 能读取。
@@ -269,7 +273,7 @@ _Avoid_: Mihon 兼容、数据结构统一
 _Avoid_: Mihon 本地源兼容
 
 **Extension compatibility（扩展兼容）**:
-my-comic 的扩展行为以 Fushi v3.0.0 为基准：Fushi 能安装/运行的 Extension，my-comic 也必须能；不承诺超出 Fushi 的兼容范围。
+MyComic 的扩展行为以 Fushi v3.0.0 为基准：Fushi 能安装/运行的 Extension，MyComic 也必须能；不承诺超出 Fushi 的兼容范围。
 _Avoid_: 全扩展兼容、100% 插件支持
 
 **Snapshot（快照）**:
