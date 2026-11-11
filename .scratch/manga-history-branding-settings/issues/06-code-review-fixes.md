@@ -75,3 +75,13 @@ Resolved on `worktree-agent-ticket06`（基线 `d20e1226`，实现 commit `868b8
 
 - `git merge integration/manga-history-branding-settings` → `Already up to date.`（integration 尖端仍为基线 `d20e1226`，本分支已领先两个提交），无冲突、无 merge commit。
 - merge 后 HEAD：`64bac02cc31f37b8247e69a83d0054a0ceb66f49`（实现 `868b8f35a2331ea72d2f5a66d74dd8997525afaa` + ticket 更新；本条 merge 记录提交后 HEAD 再前进一个 docs commit）。未 push。
+
+### Integration 收口（2026-11-11）
+
+- `worktree-agent-ticket06` 以 `--no-ff` 合入 `integration/manga-history-branding-settings`，无冲突；merge commit `4cdb916cfa8ca31cf785d78107a3ec1e9e97add8` 即 integration 新 HEAD。
+- 最终验证（`fushi/`，Flutter 3.47.6，先 `dart run slang`）：
+  - WebView cache clear、cache clear service、cache clear settings、update check cache、History cover、official website 合计 **53 passed**。
+  - update checker 全套（404 / all releases / manifest / redirect / structure / release selection / product split / publish race 等）**328 passed, 1 failed**。首轮 10 failed 均为本机 PATH 上 Windows Store `python3.exe` 占位符（exit 49、无输出）导致；换真实 Python 3.12 shim 后全部通过，与代码无关。
+  - 唯一失败仍是既有 `update_check_cache_wiring_guard_test.dart: home_page auto-check passes a cacheWriter`：合并前 `d20e1226` 的 `home_page.dart` 即不含该接线（manga-only 裁剪遗留），merge 未改 `home_page.dart` 或该 guard 测试，非本次合并引入。
+  - `test/i18n` **59 passed**。
+- 未 push；仅合并与验证，无功能改动。
