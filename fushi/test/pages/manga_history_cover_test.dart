@@ -349,6 +349,31 @@ void main() {
     expect(entries.single.coverUrl, isNull);
   });
 
+  test('远程可用且存在生成封面时优先使用远程 URL', () async {
+    final EpubBookRow book = await _seedHistory(
+      db,
+      root,
+      seriesCoverUrl: 'https://source.test/remote.jpg',
+    );
+    await cache.store(
+      bookKey: book.bookKey,
+      sourceUrl: 'local-first-page:${p.join(root.path, 'Ch 1.cbz')}|100|123',
+      bytes: _pngBytes(),
+    );
+
+    final List<MangaHistoryEntry> entries = await loadMangaHistory(
+      db,
+      shelfCovers: _ControllableShelfCovers(cache: cache),
+    );
+
+    expect(
+      entries.single.coverFilePath,
+      isNull,
+      reason: '可用来源的最新远程封面优先于第一页生成封面',
+    );
+    expect(entries.single.coverUrl, 'https://source.test/remote.jpg');
+  });
+
   test('来源未安装时显示第一页生成封面（darklust 场景）', () async {
     final EpubBookRow book = await _seedHistory(
       db,
