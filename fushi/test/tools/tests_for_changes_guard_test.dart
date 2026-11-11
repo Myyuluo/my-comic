@@ -188,13 +188,8 @@ void main() {
       // 表里每一项在替换前的手写清单里都是**零覆盖**（`fushi/windows` 只有 1 条）。
       // 下界取实测值的约 80%，只在量级塌掉时才响。
       const Map<String, int> blindSpots = <String, int>{
-        'fushi/android/app/src/main/AndroidManifest.xml': 10,
-        'fushi/android/app/build.gradle': 6,
         'packages/gamepads_windows/windows/gamepad.cpp': 3,
         'packages/flutter_inappwebview_windows/windows/CMakeLists.txt': 4,
-        'fushi/ios/Runner/Info.plist': 5,
-        'fushi/macos/Runner/MainFlutterWindow.swift': 6,
-        'fushi/linux/CMakeLists.txt': 2,
         'native/fushidicts/CMakeLists.txt': 9,
         'native/galgame_hook/include/voice_hook_ipc.h': 8,
         'third_party/desktop_drop/windows/desktop_drop_plugin.cpp': 4,
@@ -216,10 +211,6 @@ void main() {
       // 一旦反过来，就是结构化侧的某一遍扫描坏了。
       const List<String> trees = <String>[
         'fushi/windows',
-        'fushi/android',
-        'fushi/ios',
-        'fushi/macos',
-        'fushi/linux',
         'tools/browser-extension',
         '.github/workflows',
         'native/fushidicts',
@@ -242,15 +233,11 @@ void main() {
     test('逐树规模哨兵：绝对下界（实测值的约 80%）', () {
       const Map<String, int> floors = <String, int>{
         'fushi/windows': 58,
-        'fushi/android': 29,
         'tools/browser-extension': 38,
         '.github/workflows': 15,
         'packages/flutter_inappwebview_windows': 15,
         'native/fushidicts': 9,
-        'native/galgame_hook': 7,
-        'fushi/ios': 5,
-        'fushi/macos': 6,
-        'fushi/linux': 2,
+        'native/galgame_hook': 5,
       };
       final List<String> thin = <String>[];
       floors.forEach((String tree, int floor) {

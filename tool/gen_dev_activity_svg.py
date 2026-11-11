@@ -27,12 +27,12 @@ Channel data sources (they are deliberately different -- see below):
       the in-app update channels can never disagree.
 
   debug
-      GitHub Actions API: successful ``push``-triggered runs of release.yml,
+      GitHub Actions API: successful ``push``-triggered runs of release-desktop.yml,
       deduplicated by head SHA. The Releases API is *not* usable here: every
       push overwrites one rolling tag (``fushi-debug-rolling``), so the API
       reports a single release no matter how many debug builds shipped, and the
       legacy per-build ``v<x>-debug.<seq>+<sha>`` tags are garbage-collected by
-      release.yml. Actions history is retained ~90 days, which is why the
+      release-desktop.yml. Actions history is retained ~90 days, which is why the
       default window is 12 weeks -- a longer window would render a debug lane
       that is empty for reasons unrelated to project activity.
 
@@ -59,9 +59,9 @@ from typing import Dict, List, Optional, Sequence, Tuple
 API_ROOT = "https://api.github.com"
 
 # Workflow whose push-triggered runs correspond 1:1 with a debug channel
-# publish. Only the Android workflow is counted: release-desktop.yml runs on the
+# publish. Only the Windows desktop publish is counted: release-desktop.yml runs on the
 # same push, so counting both would double every debug build.
-DEBUG_WORKFLOW = "release.yml"
+DEBUG_WORKFLOW = "release-desktop.yml"
 
 # GitHub caps any Actions run listing at 1000 items regardless of total_count.
 RUNS_LIST_CAP = 1000
@@ -338,7 +338,7 @@ def fetch_debug_builds(
 ) -> List[dt.datetime]:
     """Return one timestamp per distinct commit that shipped a debug build.
 
-    Successful ``push``-triggered runs of release.yml, deduplicated by head SHA
+    Successful ``push``-triggered Windows release runs, deduplicated by head SHA
     so a manual re-run of the same commit is not counted twice.
     """
 

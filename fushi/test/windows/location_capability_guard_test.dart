@@ -26,11 +26,6 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-/// vendored 的 permission_handler_windows 插件源码（相对 `fushi/` 的测试 cwd）。
-const String _vendoredPluginPath =
-    '../third_party/permission_handler_windows/windows/'
-    'permission_handler_windows_plugin.cpp';
-
 /// workspace 根 pubspec —— pub workspace 只认根 pubspec 的 dependency_overrides。
 const String _rootPubspecPath = '../pubspec.yaml';
 
@@ -49,85 +44,33 @@ String _topLevelBody(String src, String signature, String path) {
 }
 
 void main() {
-  late String plugin;
   late String rootPubspec;
   late String overlay;
 
   setUpAll(() {
-    plugin = File(_vendoredPluginPath).readAsStringSync();
     rootPubspec = File(_rootPubspecPath).readAsStringSync();
     overlay = File(_runnerOverlayPath).readAsStringSync();
   });
 
-  group('① vendored permission_handler_windows 不在启动时开定位会话', () {
-    test('插件构造函数里没有 PositionChanged 订阅', () {
+  group('① permission_handler 不再进入 Windows 构建', () {
+    test('根 pubspec 不再 override permission_handler_windows', () {
       expect(
-        plugin.contains(
-          'PermissionHandlerWindowsPlugin::PermissionHandlerWindowsPlugin() '
-          '= default;',
-        ),
-        isTrue,
-        reason: '构造函数在 RegisterPlugins 期间跑；在这里做任何 Geolocator '
-            '订阅就是让 Windows 从启动到退出一直记「正在使用定位」——'
-            '这正是 BUG-1887 的根因。构造函数必须是空的',
-      );
-      // 全文件只允许有一处订阅，且必须在 EnsureGeolocator 里（懒创建的落点）。
-      final int subscribeAt = plugin.indexOf('PositionChanged(winrt::auto_revoke');
-      final int lazyAt =
-          plugin.indexOf('void PermissionHandlerWindowsPlugin::EnsureGeolocator()');
-      expect(
-        'PositionChanged(winrt::auto_revoke'.allMatches(plugin).length,
-        1,
-        reason: '订阅点必须唯一，多一处就意味着又有人在别的时机开定位会话',
-      );
-      expect(
-        subscribeAt > lazyAt && lazyAt >= 0,
-        isTrue,
-        reason: '唯一那处订阅必须落在 EnsureGeolocator 函数体里（懒创建），'
-            '不能回到构造函数或任何启动期路径',
+        rootPubspec.contains('permission_handler'),
+        isFalse,
+        reason: 'permission_handler 只服务移动端存储/相机权限；Windows-only 后它已从'
+            '依赖中移除，不应再出现 override——没有插件注册就绝不会开定位会话',
       );
     });
 
-    test('订阅推迟到 EnsureGeolocator，且 Geolocator 是懒句柄', () {
+    test('Windows 插件注册表不注册 PermissionHandlerWindowsPlugin', () {
+      final String registrant = File(
+        'windows/flutter/generated_plugin_registrant.cc',
+      ).readAsStringSync();
       expect(
-        plugin.contains('void PermissionHandlerWindowsPlugin::EnsureGeolocator()'),
-        isTrue,
-        reason: '订阅本身不是无用代码（LocationStatus 只有存在会话时才报真实状态），'
-            '所以是「推迟」不是「删掉」；推迟的落点就是这个函数',
-      );
-      expect(
-        plugin.contains('Geolocator geolocator{nullptr}'),
-        isTrue,
-        reason: '成员必须是空句柄才谈得上懒创建；写成值类型成员就又变成'
-            '「插件一构造就构造 Geolocator」',
-      );
-    });
-
-    test('唯一读 LocationStatus 的地方按需创建', () {
-      final String reader = _topLevelBody(
-        plugin,
-        'void PermissionHandlerWindowsPlugin::IsLocationServiceEnabled(',
-        _vendoredPluginPath,
-      );
-      expect(
-        reader.contains('EnsureGeolocator()'),
-        isTrue,
-        reason: '这是唯一读 geolocator 的地方；不在这里创建，'
-            '真有人问「定位服务开没开」时会对空句柄取值',
-      );
-      expect(
-        reader.contains('geolocator.LocationStatus()'),
-        isTrue,
-        reason: '按需创建之后语义要与上游一致，判据仍是 LocationStatus',
-      );
-    });
-
-    test('根 pubspec 用 path override 顶掉 pub.dev 版本', () {
-      expect(
-        rootPubspec.contains('path: third_party/permission_handler_windows'),
-        isTrue,
-        reason: 'vendored 源码改了但没接上 override = 构建用的还是上游那份，'
-            '定位显示照旧。pub workspace 只认根 pubspec 的 dependency_overrides',
+        registrant.contains('PermissionHandlerWindowsPlugin'),
+        isFalse,
+        reason: '插件一旦重新注册，构造函数里的 Geolocator 订阅会让 Windows 从启动'
+            '到退出一直记「正在使用定位」（BUG-1887）；Windows-only 构建不应再有它',
       );
     });
   });

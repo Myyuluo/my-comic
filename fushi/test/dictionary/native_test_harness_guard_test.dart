@@ -96,16 +96,4 @@ void main() {
         isNot(contains('Run fushidicts native tests (ctest)')));
   });
 
-  test('the existing macOS ctypes dylib smoke stays intact (not regressed)',
-      () {
-    // The deep native gate is additive: it must NOT remove or replace the
-    // pre-existing macOS create/destroy ctypes smoke in the macos job.
-    final String workflow =
-        read('../.github/workflows/build-multiplatform.yml');
-
-    expect(workflow, contains('Verify macOS fushidicts dylib bundle'));
-    expect(workflow, contains('ctypes.CDLL'));
-    expect(workflow, contains('fushidicts_create'));
-    expect(workflow, contains('fushidicts_destroy'));
-  });
 }

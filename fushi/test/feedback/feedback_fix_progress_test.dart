@@ -371,11 +371,16 @@ void main() {
   });
 
   group('平台键只认官方发布回填的平台', () {
-    test('四个回填平台原样返回；Linux / 未知平台为 null', () {
-      for (final String os in <String>['android', 'windows', 'macos', 'ios']) {
-        expect(feedbackPlatformKeyFor(os), os);
-      }
-      for (final String os in <String>['linux', 'fuchsia', '']) {
+    test('Windows 原样返回；其它平台为 null', () {
+      expect(feedbackPlatformKeyFor('windows'), 'windows');
+      for (final String os in <String>[
+        'android',
+        'macos',
+        'ios',
+        'linux',
+        'fuchsia',
+        '',
+      ]) {
         expect(feedbackPlatformKeyFor(os), isNull, reason: os);
       }
     });
@@ -394,7 +399,6 @@ void main() {
       );
       final Set<String> backfilled = <String>{};
       for (final String path in <String>[
-        '../.github/workflows/release.yml',
         '../.github/workflows/release-desktop.yml',
       ]) {
         final File f = File(path);

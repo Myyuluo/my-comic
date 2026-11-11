@@ -37,7 +37,7 @@ jobs:
           REPO: ${{ github.repository }}
           HEAD_SHA: ${{ github.sha }}
           BRANCH: ${{ github.ref_name }}
-          WORKFLOWS: release.yml release-desktop.yml
+          WORKFLOWS: release-desktop.yml
           SUPERSEDE_WINDOW_MINUTES: '8'
           SUPERSEDE_MAX_ELAPSED_MINUTES: '10'
         run: bash tool/cancel_superseded_runs.sh

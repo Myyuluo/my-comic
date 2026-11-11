@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <!-- 唯一的启动器图标背景色：兔子图标的薰衣草底（取自插画自身的淡紫阴影色）。
-         自适应图标（adaptive-icon）的背景层必须不透明——Android 会把它合成到不透明
-         底层上，纯透明会被多数启动器渲染成纯黑（TODO-1269 回归）。 -->
-    <color name="ic_launcher_background">#E6E2F6</color>
-    <color name="ic_launcher_squircle_background">#E6E2F6</color>
-</resources>

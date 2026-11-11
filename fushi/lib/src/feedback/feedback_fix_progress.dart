@@ -78,15 +78,12 @@ class FeedbackFixPending extends FeedbackFixProgress {
   final bool building;
 }
 
-/// 官方发布 workflow 会回填的平台（`release.yml`：android；`release-desktop.yml`：
-/// windows / macos / ios，各自的 `PLATFORM:`）。Linux App 只能从源码构建，CI 不出包，
-/// 没有任何回填——不在这里。键与 `Platform.operatingSystem` 同形；与 workflow 的一致性
-/// 由 `test/feedback/feedback_fix_progress_test.dart` 钉死。
+/// 官方发布 workflow 会回填的平台（`release-desktop.yml` 的 `PLATFORM:`）。
+/// my-comic 是 Windows-only，只有 Windows 构建会回填；键与
+/// `Platform.operatingSystem` 同形；与 workflow 的一致性由
+/// `test/feedback/feedback_fix_progress_test.dart` 钉死。
 const Set<String> kFeedbackReleasePlatforms = <String>{
-  'android',
   'windows',
-  'macos',
-  'ios',
 };
 
 /// **纯函数**：[operatingSystem]（`Platform.operatingSystem` 口径）在发布回填里的键；

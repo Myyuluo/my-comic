@@ -1,25 +1,14 @@
-/// 互联下载保活的唯一 Dart 门面。
+/// 下载保活的唯一 Dart 门面（my-comic Windows-only）。
 ///
-/// 互联下载（手机从已配对电脑拉视频）跑在主 isolate 里，没有原生组件托底；
-/// 用户切走后 Android 随时可能杀进程，下载随之中断。Android 上本门面驱动原生
-/// `DownloadKeepAliveService.java`（dataSync 前台服务 + 常驻进度通知）把进程
-/// 保活到下载结束；其余平台是 no-op。
+/// Android 上曾用前台服务在用户切走后保活下载；平台裁剪后 Windows 桌面进程
+/// 不需要这层保活，[createDownloadKeepAlive] 恒返回 [NoopDownloadKeepAlive]。
+/// 保留接口与租约汇总逻辑，调用方（漫画下载、更新检查）无需感知平台。
 ///
-/// 方法名与参数名（`update` / `stop`，`title` / `text` / `progress`）是跨语言
-/// 契约，改一边必须改另一边。
-///
-/// **调用纪律**：第一次 [DownloadKeepAlive.update] 必须发生在 app 前台（用户点
-/// 下载那一刻）——Android 12+ 不允许后台拉起前台服务，原生侧会拒绝并只记日志。
-/// 服务起来之后的进度更新在后台也安全（原生侧直接改通知，不再拉起服务）。
 /// 所有下载结束（完成 / 失败 / 取消）后必须 [DownloadKeepAlive.stop]。
 library;
 
 import 'dart:async';
-import 'dart:io' show Platform;
-
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
-import 'package:fushi/src/utils/misc/channel_constants.dart';
 
 /// 通知进度条的「不确定」取值（原生侧画转圈而不是进度条）。
 const int kDownloadKeepAliveIndeterminate = -1;
@@ -40,15 +29,10 @@ abstract interface class DownloadKeepAlive {
   Future<void> stop();
 }
 
-/// 按平台选实现：只有 Android 有原生侧，其余平台一律 no-op。
-DownloadKeepAlive createDownloadKeepAlive() {
-  if (Platform.isAndroid) {
-    return AndroidDownloadKeepAlive();
-  }
-  return const NoopDownloadKeepAlive();
-}
+/// my-comic 是 Windows-only：没有 Android 前台服务，恒用 no-op 实现。
+DownloadKeepAlive createDownloadKeepAlive() => const NoopDownloadKeepAlive();
 
-/// 非 Android 平台的实现：什么也不做，也不发任何通道调用。
+/// Windows 实现：什么也不做，也不发任何通道调用。
 class NoopDownloadKeepAlive implements DownloadKeepAlive {
   const NoopDownloadKeepAlive();
 
@@ -193,109 +177,5 @@ class DownloadKeepAliveThrottle {
     _lastSent = null;
     _lastSentAt = null;
     return wasActive;
-  }
-}
-
-/// Android 实现：经 [FushiChannels.downloadKeepAlive] 驱动原生前台服务。
-///
-/// 通道异常（没注册 / 原生抛错）一律吞掉只记日志：保活失败不能连带下载失败。
-class AndroidDownloadKeepAlive implements DownloadKeepAlive {
-  AndroidDownloadKeepAlive({
-    MethodChannel? channel,
-    DateTime Function()? now,
-    Duration minInterval = kDownloadKeepAliveMinInterval,
-  })  : _channel = channel ?? FushiChannels.downloadKeepAlive,
-        _throttle = DownloadKeepAliveThrottle(
-          now: now,
-          minInterval: minInterval,
-        );
-
-  static const String _methodUpdate = 'update';
-  static const String _methodStop = 'stop';
-  static const String _argTitle = 'title';
-  static const String _argText = 'text';
-  static const String _argProgress = 'progress';
-
-  final MethodChannel _channel;
-  final DownloadKeepAliveThrottle _throttle;
-
-  /// 被节流挡下、等待补发的最新状态。
-  DownloadKeepAliveState? _pending;
-  Timer? _pendingTimer;
-
-  @override
-  Future<void> update({
-    required String title,
-    required String text,
-    int? percent,
-  }) async {
-    final DownloadKeepAliveState state = DownloadKeepAliveState.normalized(
-      title: title,
-      text: text,
-      percent: percent,
-    );
-    final DownloadKeepAliveDecision decision = _throttle.onUpdate(state);
-    switch (decision.action) {
-      case DownloadKeepAliveAction.skip:
-        // 最新期望状态已经在通知上了：之前挡下的旧状态不必再补发。
-        _cancelPending();
-      case DownloadKeepAliveAction.defer:
-        _pending = state;
-        _pendingTimer ??= Timer(decision.delay, _flushPending);
-      case DownloadKeepAliveAction.send:
-        _cancelPending();
-        await _send(state);
-    }
-  }
-
-  @override
-  Future<void> stop() async {
-    _cancelPending();
-    if (!_throttle.onStop()) return;
-    await _invoke(_methodStop, null);
-  }
-
-  void _flushPending() {
-    _pendingTimer = null;
-    final DownloadKeepAliveState? state = _pending;
-    _pending = null;
-    if (state == null || !_throttle.isActive) return;
-    final DownloadKeepAliveDecision decision = _throttle.onUpdate(state);
-    switch (decision.action) {
-      case DownloadKeepAliveAction.skip:
-        return;
-      case DownloadKeepAliveAction.defer:
-        _pending = state;
-        _pendingTimer = Timer(decision.delay, _flushPending);
-      case DownloadKeepAliveAction.send:
-        unawaited(_send(state));
-    }
-  }
-
-  void _cancelPending() {
-    _pendingTimer?.cancel();
-    _pendingTimer = null;
-    _pending = null;
-  }
-
-  Future<void> _send(DownloadKeepAliveState state) {
-    // 先记账再发：await 期间并发进来的 update 要能看到这次已发出的状态。
-    _throttle.markSent(state);
-    return _invoke(_methodUpdate, <String, Object?>{
-      _argTitle: state.title,
-      _argText: state.text,
-      _argProgress: state.percent,
-    });
-  }
-
-  Future<void> _invoke(String method, Object? arguments) async {
-    try {
-      await _channel.invokeMethod<void>(method, arguments);
-    } on MissingPluginException catch (e) {
-      // 非 MainActivity 引擎入口（弹窗词典等）没注册这条通道。
-      debugPrint('[DownloadKeepAlive] $method: channel missing ($e)');
-    } on PlatformException catch (e) {
-      debugPrint('[DownloadKeepAlive] $method failed: $e');
-    }
   }
 }

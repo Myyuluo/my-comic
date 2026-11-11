@@ -6,11 +6,11 @@ list(APPEND FLUTTER_PLUGIN_LIST
   bonsoir_windows
   desktop_drop
   dynamic_color
+  file_selector_windows
   flutter_inappwebview_windows
   gamepads_windows
   hotkey_manager_windows
   media_kit_video
-  permission_handler_windows
   record_windows
   screen_retriever_windows
   share_plus
@@ -21,6 +21,7 @@ list(APPEND FLUTTER_PLUGIN_LIST
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST
   flutter_local_notifications_windows
+  jni
 )
 
 set(PLUGIN_BUNDLED_LIBRARIES)

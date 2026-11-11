@@ -46,7 +46,6 @@ Directory _repoRoot() {
 const Set<String> _vendoredPackages = <String>{
   'flutter_inappwebview_windows',
   'gamepads_windows',
-  'gamepads_android_stub',
 };
 
 /// 扫描范围：本仓自有的 Dart 源码根，**从磁盘枚举**而不是写死清单。

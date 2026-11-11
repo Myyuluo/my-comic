@@ -3,25 +3,14 @@ import 'dart:io' show Platform;
 import 'package:fushi_anki/fushi_anki.dart';
 import 'package:fushi_platform/fushi_platform.dart';
 
-import 'package:fushi/src/anki/ankimobile_repository.dart';
 import 'package:fushi/src/anki/sync_client/anki_sync_client_repository.dart';
 import 'package:fushi/src/anki/sync_client/anki_sync_host.dart';
 import 'package:fushi_engine/anki_sync/anki_sync_session.dart';
-import 'package:fushi/src/platform/android/android_directory_service.dart';
-import 'package:fushi/src/platform/android/android_lifecycle_service.dart';
-import 'package:fushi/src/platform/android/android_clipboard_service.dart';
-import 'package:fushi/src/platform/android/android_permission_service.dart';
-import 'package:fushi/src/platform/android/android_device_info_service.dart';
 import 'package:fushi/src/platform/desktop/desktop_directory_service.dart';
 import 'package:fushi/src/platform/desktop/desktop_lifecycle_service.dart';
 import 'package:fushi/src/platform/desktop/desktop_clipboard_service.dart';
 import 'package:fushi/src/platform/desktop/desktop_permission_service.dart';
 import 'package:fushi/src/platform/desktop/desktop_device_info_service.dart';
-import 'package:fushi/src/platform/ios/ios_directory_service.dart';
-import 'package:fushi/src/platform/ios/ios_lifecycle_service.dart';
-import 'package:fushi/src/platform/ios/ios_clipboard_service.dart';
-import 'package:fushi/src/platform/ios/ios_permission_service.dart';
-import 'package:fushi/src/platform/ios/ios_device_info_service.dart';
 
 /// Holds all platform-specific service implementations.
 ///
@@ -46,12 +35,6 @@ class PlatformServices {
   /// 「Anki 同步客户端」会话（全 app 一份）；null = 本机没有 `fushi-anki-sync`。
   final AnkiSyncSession? Function() _ankiSyncSession;
   bool _useAnkiSyncClient = false;
-
-  /// Typed reference to the Android clipboard impl, when running on Android.
-  /// Holding the concrete type here (rather than an `is`/`as` downcast in
-  /// [init]) makes the SDK-version dependency explicit and turns an impl
-  /// rename/swap into a compile error instead of a silent no-op (HBK-AUDIT-134).
-  final AndroidClipboardService? _androidClipboard;
 
   /// 本进程跑在 Windows 上吗。
   ///
@@ -89,7 +72,6 @@ class PlatformServices {
     required BaseAnkiRepository Function() createAnkiRepository,
     BaseAnkiRepository Function()? createMobileAnkiConnectRepository,
     bool isMobile = false,
-    AndroidClipboardService? androidClipboard,
     bool? isWindows,
     bool? isDesktop,
     bool? isIOS,
@@ -104,7 +86,6 @@ class PlatformServices {
         _createDefaultAnkiRepository = createAnkiRepository,
         _createMobileAnkiConnectRepository = createMobileAnkiConnectRepository,
         _isMobile = isMobile,
-        _androidClipboard = androidClipboard,
         assert(
           !isMobile || createMobileAnkiConnectRepository != null,
           'Mobile requires an AnkiConnect repository factory.',
@@ -159,7 +140,6 @@ class PlatformServices {
   /// Must be called once during app startup (e.g. in [AppModel.initialise])
   /// after all services are constructed.
   Future<void> init() async {
-    await _androidClipboard?.init();
     final AnkiSettings settings =
         await _createDefaultAnkiRepository().loadSettings();
     setUseAnkiSyncClient(settings.useAnkiSyncClient);
@@ -185,39 +165,9 @@ class PlatformServices {
   }
 
   /// Constructs the correct service bundle for the current platform.
+  ///
+  /// my-comic is Windows-only: the desktop service bundle is the only one.
   factory PlatformServices.forCurrentPlatform() {
-    if (Platform.isAndroid) {
-      final AndroidDeviceInfoService deviceInfo = AndroidDeviceInfoService();
-      final AndroidClipboardService clipboard =
-          AndroidClipboardService(deviceInfo);
-      return PlatformServices(
-        directory: AndroidDirectoryService(),
-        lifecycle: AndroidLifecycleService(),
-        clipboard: clipboard,
-        permission: AndroidPermissionService(deviceInfo),
-        deviceInfo: deviceInfo,
-        createAnkiRepository: AnkiRepository.new,
-        createMobileAnkiConnectRepository: AnkiConnectRepository.new,
-        isMobile: true,
-        androidClipboard: clipboard,
-      );
-    }
-    if (Platform.isIOS) {
-      return PlatformServices(
-        directory: IosDirectoryService(),
-        lifecycle: IosLifecycleService(),
-        clipboard: IosClipboardService(),
-        permission: IosPermissionService(),
-        deviceInfo: IosDeviceInfoService(),
-        // AnkiMobile 仍是默认（装了 Anki 的 iPhone 上开箱即用，升级安全）。
-        // AnkiConnect 走纯 HTTP，iOS 上与 Android 一样可用——指向局域网里那台跑着
-        // Anki 桌面版的机器即可。接上它，iOS 才第一次拥有 Lapis 样式客制化等
-        // 「要改已存在 note type」的能力（AnkiMobile 只有加卡的 URL scheme）。
-        createAnkiRepository: AnkiMobileRepository.new,
-        createMobileAnkiConnectRepository: AnkiConnectRepository.new,
-        isMobile: true,
-      );
-    }
     return PlatformServices(
       directory: DesktopDirectoryService(),
       lifecycle: DesktopLifecycleService(),
