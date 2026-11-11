@@ -158,22 +158,18 @@ void main() {
         reason: '脚本里不该出现让镜像写顶层的分支',
       );
 
-      // 镜像资产集必须是桌面白名单，且显式排除 APK/IPA。
-      // 钉**整个元组**（右括号收尾），不是子串：`contains('… "-macos.zip"')` 在
-      // `(… "-macos.zip", ".apk")` 下照样为真，那种写法拦不住往白名单里加东西——
-      // 实测过，加 `.apk` 后子串版一声不吭。
+      // 镜像资产集必须是 Windows-only 白名单，且显式排除 APK/IPA/macOS。
+      // 钉**整个元组**（右括号收尾），不是子串：子串版拦不住往白名单里加东西。
       expect(
-        RegExp(r'suffixes = \("-windows-setup\.exe", "-macos-arm64\.zip"\)')
+        RegExp(r'suffixes = \("-windows-setup\.exe",\)')
             .hasMatch(script),
         isTrue,
-        reason: '镜像的资产白名单必须恰好是 Windows/macOS 两种桌面安装包；'
-            '放进 APK 就把安卓装不上的包塞给了桥的客户端',
+        reason: '镜像的资产白名单必须恰好是 Windows 安装包；my-comic 只发 Windows 包',
       );
     });
 
     test('debug rolling tag 按产品族分，不再共用历史 tag', () {
       const List<List<String>> workflows = <List<String>>[
-        <String>['.github', 'workflows', 'release.yml'],
         <String>['.github', 'workflows', 'release-desktop.yml'],
       ];
 
@@ -197,8 +193,8 @@ void main() {
           );
         }
       }
-      expect(assignments, greaterThanOrEqualTo(5),
-          reason: 'android 1 处 + desktop 4 处，共 5 处赋值；实际 $assignments');
+      expect(assignments, greaterThanOrEqualTo(2),
+          reason: 'desktop workflow 的 windows + publish job 各有 1 处 ROLLING_DEBUG_TAG 赋值；实际 $assignments');
     });
   });
 }

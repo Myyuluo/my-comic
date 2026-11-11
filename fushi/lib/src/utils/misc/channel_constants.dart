@@ -12,6 +12,7 @@ abstract final class FushiChannels {
   static const MethodChannel tts = MethodChannel('$_prefix/tts');
   static const MethodChannel update = MethodChannel('$_prefix/update');
   static const MethodChannel volumeKeys = MethodChannel('$_prefix/volume_keys');
+  static const MethodChannel iconSwitch = MethodChannel('$_prefix/icon_switch');
   static const MethodChannel floatingLyric =
       MethodChannel('$_prefix/floating_lyric');
   static const MethodChannel floatingDict =
@@ -28,11 +29,6 @@ abstract final class FushiChannels {
   /// Hibiki→Fushi 跨包名迁移（探测/拉起新包、卸载引导、注销系统入口）。
   static const MethodChannel migration = MethodChannel('$_prefix/migration');
 
-  /// 互联下载保活（Android dataSync 前台服务 + 进度通知）。原生侧
-  /// `DownloadKeepAliveService.java`，Dart 门面 `android_download_keep_alive.dart`。
-  static const MethodChannel downloadKeepAlive =
-      MethodChannel('$_prefix/download_keep_alive');
-  static const MethodChannel iconSwitch = MethodChannel('$_prefix/icon_switch');
 
   /// 长按 app 图标的系统快捷方式（Android launcher shortcuts / iOS quick
   /// actions）。Dart 门面 `lib/src/platform/app_shortcuts.dart`。
@@ -53,11 +49,6 @@ abstract final class FushiChannels {
   static const MethodChannel galHookText =
       MethodChannel('$_prefix/gal_hook_text');
 
-  /// 系统画中画（PiP）：把视频页缩成系统小窗。只有 Android 有原生侧
-  /// （`PictureInPictureChannelHandler.java`），其余平台上 Dart 门面
-  /// `AndroidPictureInPicture` 恒答「不支持」且不发调用。
-  static const MethodChannel pictureInPicture =
-      MethodChannel('$_prefix/picture_in_picture');
   // TODO-1232 A3: render-backend experiment toggle (persist "disable Impeller"
   // so MainActivity can force Skia at the next launch; Android-only).
   static const MethodChannel render = MethodChannel('$_prefix/render');

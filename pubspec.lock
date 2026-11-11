@@ -33,14 +33,6 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "0.3.2+1"
-  ansicolor:
-    dependency: transitive
-    description:
-      name: ansicolor
-      sha256: "50e982d500bc863e1d703448afdbf9e5a72eb48840a4f766fa361ffd6877055f"
-      url: "https://pub.flutter-io.cn"
-    source: hosted
-    version: "2.0.3"
   appkit_ui_element_colors:
     dependency: transitive
     description:
@@ -767,11 +759,12 @@ packages:
     source: hosted
     version: "6.1.5"
   flutter_inappwebview_android:
-    dependency: "direct overridden"
+    dependency: transitive
     description:
-      path: "third_party/flutter_inappwebview_android"
-      relative: true
-    source: path
+      name: flutter_inappwebview_android
+      sha256: "62557c15a5c2db5d195cb3892aab74fcaec266d7b86d59a6f0027abd672cddba"
+      url: "https://pub.flutter-io.cn"
+    source: hosted
     version: "1.1.3"
   flutter_inappwebview_internal_annotations:
     dependency: transitive
@@ -858,14 +851,6 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
-  flutter_logs:
-    dependency: transitive
-    description:
-      name: flutter_logs
-      sha256: "4685b26819330813f773330c97749e97a5b0fc588ba230370528c2db18b9692e"
-      url: "https://pub.flutter-io.cn"
-    source: hosted
-    version: "2.2.8"
   flutter_markdown:
     dependency: transitive
     description:
@@ -874,14 +859,6 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "0.6.23"
-  flutter_native_splash:
-    dependency: transitive
-    description:
-      name: flutter_native_splash
-      sha256: "9db4b80b044e9af17cc4b1272137fc7ace0054d879ef8210a76adc34aaf4cdff"
-      url: "https://pub.flutter-io.cn"
-    source: hosted
-    version: "2.4.8"
   flutter_onnxruntime:
     dependency: "direct overridden"
     description:
@@ -1003,6 +980,14 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "0.1.10+2"
+  gamepads_android:
+    dependency: transitive
+    description:
+      name: gamepads_android
+      sha256: "8a1fdda0478232ebe05ce70d0ddd350056a45a92b209baec122577d0acc9461f"
+      url: "https://pub.flutter-io.cn"
+    source: hosted
+    version: "0.1.12"
   gamepads_darwin:
     dependency: transitive
     description:
@@ -1742,45 +1727,6 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "0.4.7"
-  permission_handler:
-    dependency: transitive
-    description:
-      name: permission_handler
-      sha256: bc56bfe9d3f44c3c612d8d393bd9b174eb796d706759f9b495ac254e4294baa5
-      url: "https://pub.flutter-io.cn"
-    source: hosted
-    version: "10.4.5"
-  permission_handler_android:
-    dependency: transitive
-    description:
-      name: permission_handler_android
-      sha256: "59c6322171c29df93a22d150ad95f3aa19ed86542eaec409ab2691b8f35f9a47"
-      url: "https://pub.flutter-io.cn"
-    source: hosted
-    version: "10.3.6"
-  permission_handler_apple:
-    dependency: transitive
-    description:
-      name: permission_handler_apple
-      sha256: "99e220bce3f8877c78e4ace901082fb29fa1b4ebde529ad0932d8d664b34f3f5"
-      url: "https://pub.flutter-io.cn"
-    source: hosted
-    version: "9.1.4"
-  permission_handler_platform_interface:
-    dependency: transitive
-    description:
-      name: permission_handler_platform_interface
-      sha256: "6760eb5ef34589224771010805bea6054ad28453906936f843a8cc4d3a55c4a4"
-      url: "https://pub.flutter-io.cn"
-    source: hosted
-    version: "3.12.0"
-  permission_handler_windows:
-    dependency: "direct overridden"
-    description:
-      path: "third_party/permission_handler_windows"
-      relative: true
-    source: path
-    version: "0.1.2"
   petitparser:
     dependency: transitive
     description:
@@ -1901,15 +1847,6 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "4.1.0"
-  receive_intent:
-    dependency: transitive
-    description:
-      path: "."
-      ref: "3854d07f8f4e9d5a78589639b18b5d454ddf54a0"
-      resolved-ref: "3854d07f8f4e9d5a78589639b18b5d454ddf54a0"
-      url: "https://github.com/arianneorpilla/receive_intent"
-    source: git
-    version: "0.2.3"
   record:
     dependency: transitive
     description:
@@ -1990,14 +1927,6 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "0.0.10"
-  restart_app:
-    dependency: transitive
-    description:
-      name: restart_app
-      sha256: "398550c5c0438b15c6062c7cb7e5c234498584aa9ba1b28910e77d4ff43bfef6"
-      url: "https://pub.flutter-io.cn"
-    source: hosted
-    version: "1.10.2"
   riverpod:
     dependency: transitive
     description:
@@ -2435,14 +2364,6 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "1.1.9"
-  universal_io:
-    dependency: transitive
-    description:
-      name: universal_io
-      sha256: f63cbc48103236abf48e345e07a03ce5757ea86285ed313a6a032596ed9301e2
-      url: "https://pub.flutter-io.cn"
-    source: hosted
-    version: "2.3.1"
   universal_platform:
     dependency: transitive
     description:

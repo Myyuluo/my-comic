@@ -98,11 +98,6 @@ dependencies:
   flutter_exit_app: ^1.0.5
   flutter_html: ^3.0.0
   flutter_inappwebview: ^6.1.5
-  # Linux WebView 后端（WPE WebKit）。6.1.5 的 flutter_inappwebview 不 endorse
-  # Linux，必须由 app 直接依赖实现包才会注册；vendored 原因见该包 pubspec 顶部。
-  flutter_inappwebview_linux:
-    path: ../packages/flutter_inappwebview_linux
-  flutter_logs: ^2.1.11
   # v101 统一更新提醒的系统通知后端。选 20.x 而不是 22.x：22 起要求
   # `sdk: ^3.10.0`，会把本包的 SDK 下界从 3.8 顶上去；20.1.0 的
   # environment 与本仓一致，且 android/ios/macos/linux/windows 五端都有实现
@@ -144,7 +139,6 @@ dependencies:
   package_info_plus: ^4.0.2
   path: ^1.8.2
   path_provider: ^2.0.13
-  permission_handler: ^10.2.0
   # PDF 阅读器（Phase 0 spike）：PDFium 底层、字符级文本矩形供点选查词。
   # 五平台 + native-assets/build-hook 下载 PDFium。见 docs/specs/pdf-reader-lookup。
   # 钉 2.4.5：>=2.4.6 经 pdfrx_engine 拉 image ^4.8.0 → 要 archive ^4.0.7 / xml ^7.0.1，
@@ -152,12 +146,7 @@ dependencies:
   pdfrx: 2.4.5
   progress_indicators: ^1.0.0
   recase: ^4.1.0
-  receive_intent:
-    git:
-      url: https://github.com/arianneorpilla/receive_intent
-      ref: 3854d07f8f4e9d5a78589639b18b5d454ddf54a0
   remove_emoji: ^0.0.7
-  restart_app: ^1.1.2
   share_plus: ^7.2.2
   shared_preferences: ^2.2.2
   # 测试根下的 SharedPreferences 隔离存储（startup/test_root_shared_preferences.dart）。
@@ -217,10 +206,6 @@ dev_dependencies:
   # flutter_charset_detector; declared here only for the test import.
   flutter_charset_detector_platform_interface: ^1.1.0
   plugin_platform_interface: ^2.1.0
-  # BUG-1213: android_permission_service_test 用它替换
-  # PermissionHandlerPlatform.instance，在 flutter test 里复刻
-  # permission_handler_android 的 SDK 分级语义（原生通道不可用）。
-  permission_handler_platform_interface: ^3.9.0
   # BUG-2499: local_update_notifier_test 直接驱动 Windows toast 的 image XML
   # 序列化，守卫 ci/patches/hosted/flutter_local_notifications_windows-2.0.1
   # 的补丁真的打上了（file 路径不得百分号编码）。flutter_local_notifications
@@ -229,7 +214,6 @@ dev_dependencies:
   drift_dev: ^2.23.0
   dependency_validator: ^3.0.0
   flutter_lints: ^2.0.1
-  flutter_native_splash: ^2.2.8
   fake_async: ^1.3.1
   flutter_test:
     sdk: flutter

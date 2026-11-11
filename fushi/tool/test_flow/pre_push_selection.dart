@@ -86,7 +86,6 @@ bool budgetTrigger(
 const Set<String> kCiSkippedPackages = <String>{
   'flutter_inappwebview_windows',
   'gamepads_windows',
-  'gamepads_android_stub',
   'fushi_torrent',
 };
 

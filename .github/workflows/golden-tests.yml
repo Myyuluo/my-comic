@@ -1,6 +1,6 @@
 # Golden 图像测试（BUG-3494，2026-10-17 所有者拍板）。
 #
-# 为什么单独一条 workflow：main.yml / release.yml 的单测跑在 ubuntu 上并带
+# 为什么单独一条 workflow：main.yml 的全量单测跑在 Windows 上并带
 # `--exclude-tags golden`（fushi/dart_test.yaml 把 golden 门控到参考平台 Windows），
 # 所以此前**没有任何 CI job 跑 golden**；Windows 开发机本地又不跑全量测试。10-04～10-16
 # 的 M3E 改版批次因此把 18 张基准悄悄弄过期，直到有人手动跑才发现（BUG-3494）。

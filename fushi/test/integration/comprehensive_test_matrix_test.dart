@@ -400,22 +400,24 @@ void main() {
     });
 
     test(
-        'github workflow runs comprehensive automation on android windows macos',
+        'github workflow runs comprehensive automation on windows only',
         () {
       final String workflow = File(
         '../.github/workflows/build-multiplatform.yml',
       ).readAsStringSync();
 
-      expect(
-        workflow,
-        contains('ci/comprehensive-test.sh --platform=android --only=appSmoke'),
-      );
       expect(workflow,
           contains('.\\ci\\comprehensive-test.ps1 -Platform windows'));
       expect(workflow, contains('-Only appSmoke'));
       expect(
         workflow,
-        contains('ci/comprehensive-test.sh --platform=macos --only=appSmoke'),
+        isNot(contains('--platform=android')),
+        reason: 'Android CI was removed with the Windows-only platform trim',
+      );
+      expect(
+        workflow,
+        isNot(contains('--platform=macos')),
+        reason: 'macOS CI was removed with the Windows-only platform trim',
       );
     });
 

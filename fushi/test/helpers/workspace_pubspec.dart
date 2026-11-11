@@ -10,8 +10,7 @@ import 'dart:io';
 ///   1. `dependency_overrides:` —— 顶替 pub.dev 上的包（third_party/* 那批）。
 ///      workspace 只认根的 overrides，写在成员包里 pub 会直接拒绝。
 ///   2. `workspace:` 成员 —— 包名就是被顶替的上游包名时（
-///      flutter_inappwebview_windows / gamepads_windows /
-///      packages/gamepads_android_stub 的包名是 gamepads_android），成员身份
+///      flutter_inappwebview_windows / gamepads_windows），成员身份
 ///      天然优先于 pub.dev 版本，再写 override 反而报
 ///      "Cannot override workspace packages."
 ///

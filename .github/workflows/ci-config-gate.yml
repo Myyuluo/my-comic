@@ -1,6 +1,6 @@
 # CI 配置与发布脚本的轻量守卫门（2026-09-30 精简 CI 时新增）。
 #
-# 为什么要有它：main.yml（~90 min）以前挂整个 `.github/workflows/**`，两条发布 workflow 的
+# 为什么要有它：main.yml（Windows analyze + 全量单测）以前挂整个 `.github/workflows/**`，
 # push 挂整个 `tool/**` + `.github/workflows/**`——改任何一条 workflow 或 tool/bug.dart 都要
 # 白跑一整轮 Android 构建 / 发布构建。这些触发收窄到「各自真正读到的文件」之后，改 workflow
 # 或发布脚本的 PR / 直推就不再经过 fushi/test 全量——而钉死 workflow 不变式的守卫
@@ -68,9 +68,9 @@ jobs:
           set -euo pipefail
           mapfile -t files < <(grep -rlE '\.github/|\.\./tool/|\.\./\.\./tool/' test --include='*_test.dart' | sort)
           # 规模哨兵：枚举写错会让本门一个测试都不跑，而「零个测试」与「全绿」退出码相同。
-          # 2026-09-30 实测 51 个文件。
-          if [ "${#files[@]}" -lt 40 ]; then
-            echo "::error title=Guard enumeration collapsed::只枚举到 ${#files[@]} 个守卫测试文件，实测应有 ~51 个。去修枚举，不要调低这个下界。"
+          # Windows-only 平台裁剪后实测 37 个文件（裁剪前 ~51；删掉了移动端 / 发布 workflow 守卫）。
+          if [ "${#files[@]}" -lt 30 ]; then
+            echo "::error title=Guard enumeration collapsed::只枚举到 ${#files[@]} 个守卫测试文件，实测应有 ~37 个。去修枚举，不要调低这个下界。"
             exit 1
           fi
           printf '%s\n' "${files[@]}"
