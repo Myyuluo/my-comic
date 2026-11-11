@@ -14,7 +14,8 @@
 /// History / Reading progress / 数据库、图源登录态都不在本服务的步骤里。
 ///
 /// 占用统计覆盖上述显式缓存目录、图片管理器自己的磁盘 store，以及 WebView
-/// profile 里安全的 HTTP cache 子目录（见 `manga_webview_cache_clear.dart`）。
+/// profile 里 CDP 会清理的 HTTP cache 子目录（见
+/// `manga_webview_cache_clear.dart`）。
 /// 进度、确认框、部分成功提示和 toast 由同一套外层流程自动覆盖。
 library;
 
