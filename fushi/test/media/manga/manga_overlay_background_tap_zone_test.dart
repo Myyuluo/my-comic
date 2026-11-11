@@ -2,7 +2,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi/src/media/manga/manga_overlay_html.dart';
 import 'package:fushi/src/media/manga/manga_reading_mode.dart';
 import 'package:fushi/src/media/manga/manga_view_prefs.dart';
-import 'package:fushi/src/reader/reader_selection_scripts.dart';
 import 'package:fushi_engine/media/manga/mokuro_payload.dart';
 
 const MokuroImage _page = MokuroImage(
@@ -23,7 +22,6 @@ String _doc({
     <String>['manga.local/0/p001.jpg'],
     mode: mode,
     spreadDirection: spreadDirection,
-    inlineSelectionJs: ReaderSelectionScripts.source(),
     tapZoneLayout: tapZoneLayout,
     tapZonePaging: tapZonePaging,
     backgroundCss: backgroundCss,
@@ -132,23 +130,21 @@ void main() {
   });
 
   group('双击缩放', () {
-    test('注入双击判定，且不给查词/热区单击加延迟', () {
+    test('注入双击判定，且不给热区单击加延迟', () {
       final String doc = _doc();
       expect(doc.contains('function _consumeDoubleTap(x, y)'), isTrue);
       expect(doc.contains('var DBL_MS = 300'), isTrue);
-      // 查词响应速度是用户明确抱怨过的一项：不得为了等第二击而 setTimeout 单击。
+      // 热区翻页响应速度是用户明确抱怨过的一项：不得为了等第二击而 setTimeout 单击。
       expect(
         doc.contains('setTimeout(function(){ _onTap'),
         isFalse,
         reason: '单击不得被延迟去等双击',
       );
-      // 查词与热区在双击判定之前就 return，不经过任何定时器。
-      final int selectAt = doc.indexOf(
-        'if (_selectOcrChar(x, y, false)) return;',
-      );
+      // 热区在双击判定之前就 return，不经过任何定时器。
+      final int zoneAt = doc.indexOf('var zone = _tapZoneTurn(x, y);');
       final int deferAt = doc.indexOf('_deferEmptyTap();');
-      expect(selectAt, greaterThanOrEqualTo(0));
-      expect(deferAt, greaterThan(selectAt));
+      expect(zoneAt, greaterThanOrEqualTo(0));
+      expect(deferAt, greaterThan(zoneAt));
     });
 
     test('空白单击的 onTapEmpty 延后发出，第二击到达即取消', () {
@@ -175,16 +171,12 @@ void main() {
       expect(zoomAt, greaterThan(cancelAt), reason: '第二击先取消挂起的 onTapEmpty 再缩放');
     });
 
-    test('双击只在没命中 OCR 字、也没命中翻页热区时才缩放', () {
+    test('双击只在没命中翻页热区时才缩放', () {
       final String doc = _doc();
-      final int selectAt = doc.indexOf(
-        'if (_selectOcrChar(x, y, false)) return;',
-      );
       final int zoneAt = doc.indexOf('var zone = _tapZoneTurn(x, y);');
       final int dblAt = doc.indexOf('if (_consumeDoubleTap(x, y)) {');
-      expect(selectAt, greaterThanOrEqualTo(0));
-      expect(zoneAt, greaterThan(selectAt));
-      expect(dblAt, greaterThan(zoneAt), reason: '双击判定必须排在选词与热区之后，否则会抢走查词/翻页');
+      expect(zoneAt, greaterThanOrEqualTo(0));
+      expect(dblAt, greaterThan(zoneAt), reason: '双击判定必须排在热区之后，否则会抢走翻页');
     });
 
     test('不在 100% 就回到正常比例，正好 100% 才放大到 2×（BUG-2908）', () {

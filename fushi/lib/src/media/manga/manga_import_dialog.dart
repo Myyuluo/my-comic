@@ -274,7 +274,6 @@ class _MangaImportDialogState extends State<MangaImportDialog>
   ///
   /// `.zip` / `.epub` 在此列是因为图片型压缩包与词典包/普通电子书同形，选中后由
   /// [classifyImportCarrier] 真读包定性；不是漫画的会被 [_adoptPath] 挡回。
-  /// `.pdf` 在此列是因为一卷扫描版漫画常常就是一份 PDF（逐页栅格化即页图）。
   static final Set<String> _mangaFileExtensions =
       kMangaCarrierFileExtensions.map((String ext) => ext.substring(1)).toSet();
 
@@ -504,16 +503,6 @@ class _MangaImportDialogState extends State<MangaImportDialog>
     );
   }
 
-  /// PDF 逐页栅格化的进度（`(done, total)` 是页）。与 [_reportCopyProgress] 分开
-  /// 是因为文案单位不同：那边报的是「正在复制 <文件名>」，这边报的是第几页。
-  void _reportPageProgress(int done, int total) {
-    if (total <= 0) return;
-    reportProgress(
-      (done / total).clamp(0.0, 1.0),
-      t.import_step_copying_file(name: '$done / $total'),
-    );
-  }
-
   void _reportCopyProgress(int done, int total) {
     if (total <= 0) return;
     reportProgress(
@@ -562,7 +551,7 @@ class _MangaImportDialogState extends State<MangaImportDialog>
       action: () async {
         reportProgress(0, '');
         debugPrint('[fushi-import] manga route: carrier=$carrier path=$path');
-        // 漫画（cbz/zip/mokuro/PDF 转页图）同样不产出 EPUB，用中性文案。
+        // 漫画（cbz/zip/mokuro）同样不产出 EPUB，用中性文案。
         reportProgress(0.5, t.import_step_importing_book);
 
         // 批量目录导完要报「成功/跳过/失败各几卷」，单卷路径仍报那句通用成功。
@@ -596,18 +585,9 @@ class _MangaImportDialogState extends State<MangaImportDialog>
             );
           case ImportCarrier.mangaBatchFolder:
             batchSummary = await _importBatchFolder(path);
-          case ImportCarrier.pdf:
-            // 一份 PDF 进漫画库 = 按 PDF 导入 + 立刻转成漫画（逐页栅格化）。
-            // 两步都是现成零件，且书目录里留着 document.pdf，「转回 PDF」仍成立。
-            await MangaModule.importPdfAsManga(
-              db: widget.db,
-              path: path,
-              title: title,
-              policy: DuplicatePolicy.ask(_askOnDuplicate),
-              onProgress: _reportPageProgress,
-            );
           case ImportCarrier.epub:
           case ImportCarrier.text:
+          case ImportCarrier.unsupported:
             // 不可达：[_adoptPath] / [initState] 只收下 isMangaCapable 的载体。
             throw StateError(
                 'non-manga carrier in MangaImportDialog: $carrier');

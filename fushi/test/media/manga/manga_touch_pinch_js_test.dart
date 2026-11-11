@@ -57,7 +57,6 @@ void main() {
       const <String>['p0.png', 'p1.png', 'p2.png'],
       mode: mode,
       spreadDirection: 'rtl',
-      inlineSelectionJs: '',
       currentSpread: 1,
     );
     const String bridge =

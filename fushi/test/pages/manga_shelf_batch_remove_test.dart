@@ -367,16 +367,14 @@ void main() {
         ),
       ),
     );
-    final DeleteStatisticsRow statisticsRow =
-        tester.widget<DeleteStatisticsRow>(
-      find.byKey(
-        const ValueKey<String>(
-          'manga_remove_dialog_delete_statistics',
-        ),
-      ),
-    );
     expect(localFilesRow.value, isFalse, reason: '「同时删除本地文件」默认不勾选');
-    expect(statisticsRow.value, isFalse, reason: '「同时删除统计数据」默认不勾选');
+    expect(
+      find.byKey(
+        const ValueKey<String>('manga_remove_dialog_delete_statistics'),
+      ),
+      findsNothing,
+      reason: 'ticket 05：统计删除选项已移除',
+    );
 
     expect(
       find.text(t.delete_disclosure_will_delete_label),
@@ -595,8 +593,6 @@ void main() {
     await openBatchDeleteDialog(tester);
     await tester.tap(find.text(t.delete_local_files));
     await tester.pump();
-    await tester.tap(find.text(t.delete_statistics));
-    await tester.pump();
     await tester.tap(find.text(t.dialog_delete));
     await pumpUntil(
       tester,
@@ -625,8 +621,8 @@ void main() {
           mediaKind: kActivityMediaBook,
           mediaKey: mediaKey,
         ),
-        isEmpty,
-        reason: '统计数据删除应用于所有选中作品',
+        hasLength(1),
+        reason: '统计删除入口已移除（ticket 05）：移出书架保留统计',
       );
     }
     expect(

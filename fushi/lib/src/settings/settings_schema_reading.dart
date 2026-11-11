@@ -3,7 +3,6 @@ import 'dart:io' show Platform;
 
 import 'package:material_ui/material_ui.dart';
 import 'package:fushi/src/media/sources/reader_fushi_source.dart';
-import 'package:fushi/src/models/preferences_repository.dart';
 import 'package:fushi/src/pages/implementations/custom_fonts_page.dart';
 import 'package:fushi/src/pages/implementations/highlight_style_page.dart';
 import 'package:fushi/src/pages/implementations/home_page.dart';
@@ -15,7 +14,6 @@ import 'package:fushi/src/reader/reader_settings.dart';
 import 'package:fushi/src/settings/settings_actions.dart';
 import 'package:fushi/src/settings/settings_context.dart';
 import 'package:fushi/src/settings/settings_destination.dart';
-import 'package:fushi/src/stats/reader_study_clock_start_mode.dart';
 import 'package:fushi/utils.dart';
 import 'package:fushi/src/utils/adaptive/fushi_fold_posture.dart';
 import 'package:fushi/src/utils/fushi_icons.dart';
@@ -1102,66 +1100,6 @@ SettingsDestination buildReadingDestination() {
             },
           ),
           // 悬浮球不在这里：唯一入口是 设置 → 悬浮球（阅读器场景的按钮在那里勾选）。
-        ],
-      ),
-      // v92 统计域：阅读空闲门。只对阅读面生效（视频以播放态为准，用户拍板）；
-      // 下次打开书生效（时钟在建书时读一次）。
-      SettingsSection(
-        id: 'reading.section.statistics',
-        presentation: SettingsSectionPresentation.alwaysExpanded,
-        title: t.settings_section_reading_stats,
-        items: <SettingsItem>[
-          SettingsStepperItem(
-            id: 'reading.stats_idle_timeout_minutes',
-            title: t.reading_stats_idle_timeout,
-            subtitle: t.reading_stats_idle_timeout_hint,
-            icon: FushiIcons.timerOff,
-            min: PreferencesRepository.readingIdleTimeoutMinutesMin.toDouble(),
-            max: PreferencesRepository.readingIdleTimeoutMinutesMax.toDouble(),
-            step: 1,
-            value: (SettingsContext c) =>
-                c.appModel.readingIdleTimeoutMinutes.toDouble(),
-            format: (double value) => '${value.round()} min',
-            onChanged: (SettingsContext c, double value) async {
-              await c.appModel.setReadingIdleTimeoutMinutes(value.round());
-              c.refresh();
-            },
-          ),
-          // 阅读计时开始方式（2026-10-05）：手动 / 打开即开始（默认）/ 翻页后开始。
-          // 下次打开书生效；判据见 reader_study_clock_start_mode.dart。
-          SettingsSegmentedItem<ReaderStudyClockStartMode>(
-            id: 'reading.stats_clock_start_mode',
-            title: t.reading_stats_clock_start_mode,
-            subtitle: t.reading_stats_clock_start_mode_hint,
-            icon: FushiIcons.playCircle,
-            controlBelow: true,
-            options: <SettingsSegmentOption<ReaderStudyClockStartMode>>[
-              SettingsSegmentOption<ReaderStudyClockStartMode>(
-                value: ReaderStudyClockStartMode.manual,
-                label: t.reading_stats_clock_start_manual,
-                tooltip: t.reading_stats_clock_start_manual,
-              ),
-              SettingsSegmentOption<ReaderStudyClockStartMode>(
-                value: ReaderStudyClockStartMode.onOpen,
-                label: t.reading_stats_clock_start_on_open,
-                tooltip: t.reading_stats_clock_start_on_open,
-              ),
-              SettingsSegmentOption<ReaderStudyClockStartMode>(
-                value: ReaderStudyClockStartMode.onPageTurn,
-                label: t.reading_stats_clock_start_on_page_turn,
-                tooltip: t.reading_stats_clock_start_on_page_turn,
-              ),
-            ],
-            selected: (SettingsContext c) =>
-                c.appModel.readerStudyClockStartMode,
-            onChanged:
-                (SettingsContext c, ReaderStudyClockStartMode mode) async {
-              await c.appModel.setReaderStudyClockStartMode(mode);
-              c.refresh();
-            },
-          ),
-          // 「今日」重置时刻（整点）是三域共用的统计日界，入口在统计中心页头
-          // （stat_day_reset_hour_dialog.dart），不再放在阅读设置里。
         ],
       ),
       // 「高级选项」现移到最后（低频排版微调）：文字两端对齐、竖排字距/VPAL、

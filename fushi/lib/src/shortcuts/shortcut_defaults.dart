@@ -90,15 +90,11 @@ class ShortcutDefaults {
     ShortcutAction.readerOpenNavigation: _kb([
       _key(LogicalKeyboardKey.keyF, {ModifierKey.ctrl}),
     ]),
-    // 工具栏三入口：G 画廊 / I 统计 / B 有声书。reader+audiobook co-active 组内未被
+    // 工具栏两入口：G 画廊 / B 有声书。reader+audiobook co-active 组内未被
     // 占用（M 底栏、T 菜单、Ctrl+F 导航、方向 / PageUp/Down / Enter 系已占）。手柄
     // 留空，用户可自绑。
     ShortcutAction.readerOpenGallery: _kb([_key(LogicalKeyboardKey.keyG)]),
-    ShortcutAction.readerOpenStatistics: _kb([_key(LogicalKeyboardKey.keyI)]),
     ShortcutAction.readerOpenAudiobook: _kb([_key(LogicalKeyboardKey.keyB)]),
-    // 停 / 续阅读统计计时：键盘默认 P（reader+audiobook co-active 组内未被占用；
-    // video 组的 P 是播放/暂停，属不同组、绝不同时激活）。手柄留空，用户可自绑。
-    ShortcutAction.readerToggleStudyClock: _kb([_key(LogicalKeyboardKey.keyP)]),
     // 「只关词典、绝不退出」的可选专用动作：**默认空绑定**。
     //
     // Esc 已交给 universal 的 globalBack（一键阶梯：有词典先关词典、没词典才退书），

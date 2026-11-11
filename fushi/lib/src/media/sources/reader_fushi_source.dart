@@ -328,11 +328,12 @@ class ReaderFushiSource extends ReaderMediaSource {
   /// 出错），书 ↔ 漫画转化只是把它从「导入即错」放大成「转化后突然错」。
   static String mediaSourceKeyFor(BookFormat format) {
     switch (format) {
-      case BookFormat.pdf:
-        return ReaderPdfSource.kUniqueKey;
       case BookFormat.manga:
         return MangaFushiSource.kUniqueKey;
+      case BookFormat.pdf:
       case BookFormat.epub:
+        // PDF 导入与阅读器已移除（ticket 05）；仅剩的旧 PDF 行按书源回退，
+        // 无法打开时由打开路径如实报错，不再有专属阅读器。
         return instance.uniqueKey;
     }
   }
@@ -844,13 +845,12 @@ class ReaderFushiSource extends ReaderMediaSource {
     final int totalChars = sectionChars.fold<int>(0, (a, b) => a + b);
 
     // 书架列书 format-agnostic（本方法列全部**书架成员**行），但打开路由按 `format`
-    // 三态分流 mediaSourceIdentifier：`'pdf'` → [ReaderPdfSource]（进 ReaderPdfPage）、
-    // `'manga'` → [MangaFushiSource]（进 MangaFushiPage）、其余 → 本源（EPUB 阅读器）。
-    // 缺这条分流，PDF/漫画行会用 EPUB 阅读器打开并在解压/解析路径崩溃。媒体标识前缀
-    // 共用 `hoshi://book/<bookKey>`（bookKey 是主键、与 format 无关），路由只认
+    // 分流 mediaSourceIdentifier：`'manga'` → [MangaFushiSource]（进 MangaFushiPage）、
+    // 其余（含已不再导入的旧 PDF 行）→ 本源回退。媒体标识前缀共用
+    // `hoshi://book/<bookKey>`（bookKey 是主键、与 format 无关），路由只认
     // mediaSourceIdentifier。
     final BookFormat format = BookFormat.parseOrEpub(book.format);
-    // 页码型书（PDF/漫画）：进度单位是页而非章内字数。
+    // 页码型书（旧 PDF / 漫画）：进度单位是页而非章内字数。
     final bool pageBased = format.isPagedImageBook;
 
     // TODO-1346：进度纳入当前章内 charOffset（与章字数同单位），并对老书无字数时
@@ -1144,40 +1144,6 @@ class ReaderFushiSource extends ReaderMediaSource {
     coverPath: coverPath,
   );
 
-  /// 删一本书（EPUB / PDF / 漫画 / 字幕书）攒下的统计：「同时删除统计数据」勾选的
-  /// 落地，书架单删 / 批删 / 合集连删 / 漫画作品页移出书架共用。
-  ///
-  /// 逐身份走 [FushiDatabase.deleteReadingStatisticsForTitle]：它在一个事务里删
-  /// `study_segments` 并按身份立碑、删 legacy 阅读时长/字数与查词/制卡计数，并立
-  /// title 墓碑防同步复活。[mediaKeys] 同时给 bookKey 与 srt uid——后台听书时钟对
-  /// 纯字幕书以 uid 为身份（`SessionBookInfo.studyMediaKey`），两个都得清。
-  ///
-  /// best-effort：统计删失败不该拦住书本身的删除（用户可在统计页再删），只记日志。
-  static Future<void> deleteBookStatistics({
-    required FushiDatabase db,
-    required String title,
-    required Iterable<String> mediaKeys,
-  }) async {
-    for (final String key
-        in mediaKeys.where((String k) => k.isNotEmpty).toSet()) {
-      try {
-        await db.deleteReadingStatisticsForTitle(title, bookKey: key);
-      } catch (e, stack) {
-        ErrorLogService.instance
-            .log('ReaderFushiSource.deleteStatistics', e, stack);
-      }
-    }
-  }
-
-  /// 删除这本字幕书时能否提供「同时删除统计数据」。
-  ///
-  /// 只有配对了 EPUB 的字幕书（bookKey 非空，走 [deleteBook]）能安全删统计。纯字幕书
-  /// （bookKey 空）不行：它的 legacy `reading_statistics` / book 类查词制卡计数与
-  /// `(title, 'book')` 墓碑只能按 title 定位，同名 EPUB 的统计会被连坐删掉（PR #1697
-  /// 审查阻断 2）。书架单删 / 批删 / 合集连删共用这一条判据：不摆勾选、执行时跳过。
-  static bool srtBookOffersStatisticsDeletion(SrtBook book) =>
-      book.bookKey.isNotEmpty;
-
   /// Delete a book and all of its associated data.
   ///
   /// Pass [appModel] to also clear the override thumbnail file (it is needed to
@@ -1193,9 +1159,6 @@ class ReaderFushiSource extends ReaderMediaSource {
   /// 还表示删除 Download library 里的已下载章节（默认保留，让文件成为未索引内容）。
   /// 书本体（EPUB / PDF / 本地漫画）导入即拷贝进 app 目录、原件路径根本没入库，
   /// 没有可删的原件。
-  /// [deleteStatistics]（默认 false，对应删除弹窗「同时删除统计数据」）：true 时在删
-  /// 行**之前**把这本书攒下的统计一并删掉（[deleteBookStatistics]）——标题与 srt uid
-  /// 都住在即将被删的行上，行一删就无从定位。
   /// [removeFromLibraryOnly]（默认 false）：统一「移出书架」流程专用。调用方已经
   /// 自行处理作品文件，且 History 必须保留；因此跳过工作文件清理与「整部作品
   /// 删除时级联删历史」路径。受管漫画卷（无在线 / Local source 描述符）也不会
@@ -1206,7 +1169,6 @@ class ReaderFushiSource extends ReaderMediaSource {
     AppModel? appModel,
     DeleteScope scope = DeleteScope.keepLocalOnly,
     bool deleteLocalFiles = false,
-    bool deleteStatistics = false,
     bool removeFromLibraryOnly = false,
   }) async {
     try {
@@ -1238,13 +1200,6 @@ class ReaderFushiSource extends ReaderMediaSource {
       // `local` 里用户自己的文件。书架长删 / 批删 / 合集连删都经过这里。
       if (bookRow != null &&
           LocalSourceMetadata.tryParse(bookRow.sourceMetadata) != null) {
-        if (deleteStatistics) {
-          await deleteBookStatistics(
-            db: db,
-            title: bookRow.title,
-            mediaKeys: <String>[bookKey],
-          );
-        }
         final int localDeletedRows =
             await db.deleteEpubBook(bookKey, tombstone: true);
         if (localDeletedRows > 0) return const DeleteBookResult.success();
@@ -1267,14 +1222,6 @@ class ReaderFushiSource extends ReaderMediaSource {
             .logDiagnostic('ReaderFushiSource.deleteBook', reason);
         debugPrint('[ReaderFushiSource] deleteBook: $reason');
         return DeleteBookResult.failure(reason);
-      }
-
-      if (deleteStatistics) {
-        await deleteBookStatistics(
-          db: db,
-          title: bookRow?.title ?? srt!.title,
-          mediaKeys: <String>[bookKey, if (srt != null) srt.uid],
-        );
       }
 
       // 跨端删除墓碑键：两端键不同的书写**对端键**（BUG-3443 同类）——经互联收下的
@@ -1439,16 +1386,14 @@ class ReaderFushiSource extends ReaderMediaSource {
   /// 计成 0 本。这里按身份二选一，只走一条删除路径：
   ///
   /// * `bookKey` 非空 → [deleteBook]（EPUB 行、SRT 行、cue、有声书、墓碑 `book`、
-  ///   原件、统计一并处理）；
+  ///   原件一并处理）；
   /// * `bookKey` 为空（纯字幕书）→ `SrtBookRepository.delete`（standalone 行按
-  ///   [scope] 写 `srtbook` 墓碑）。纯字幕书不删统计：它的统计只能按 title 定位，会
-  ///   连坐同名 EPUB（[deleteStatistics] 对它无效）。
+  ///   [scope] 写 `srtbook` 墓碑）。
   Future<DeleteBookResult> deleteSrtShelfBook({
     required FushiDatabase db,
     required SrtBook book,
     DeleteScope scope = DeleteScope.keepLocalOnly,
     bool deleteLocalFiles = false,
-    bool deleteStatistics = false,
   }) async {
     if (book.bookKey.isNotEmpty) {
       return deleteBook(
@@ -1456,7 +1401,6 @@ class ReaderFushiSource extends ReaderMediaSource {
         bookKey: book.bookKey,
         scope: scope,
         deleteLocalFiles: deleteLocalFiles,
-        deleteStatistics: deleteStatistics,
       );
     }
     try {
@@ -1982,19 +1926,6 @@ class ReaderFushiSource extends ReaderMediaSource {
         setPreference<bool>(
           key: 'show_top_progress_bar',
           value: !showTopProgressBar,
-        ));
-  }
-
-  /// 底部状态行左段「阅读计时器」是否显示（分层同 [showTopProgressBar]）。
-  bool get showReadingTimer =>
-      readerSettings?.showReadingTimer ??
-      getPreference<bool>(key: 'show_reading_timer', defaultValue: true);
-
-  void toggleShowReadingTimer() async {
-    await (readerSettings?.toggleShowReadingTimer() ??
-        setPreference<bool>(
-          key: 'show_reading_timer',
-          value: !showReadingTimer,
         ));
   }
 

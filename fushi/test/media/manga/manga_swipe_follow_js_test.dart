@@ -32,7 +32,6 @@ void main() {
     const <String>['page.png'],
     mode: MangaReadingMode.spread,
     spreadDirection: 'rtl',
-    inlineSelectionJs: '',
   );
 
   String section(String start, String end) {

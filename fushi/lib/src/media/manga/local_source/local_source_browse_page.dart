@@ -359,7 +359,6 @@ class _LocalSourceBrowsePageState extends ConsumerState<LocalSourceBrowsePage> {
           context,
           message: t.manga_batch_remove_confirm(count: targets.length),
           localFilesSubtitle: t.delete_local_files_download_desc,
-          statisticsSubtitle: t.delete_statistics_manga_batch_desc,
         );
     if (decision == null || !mounted) return;
     setState(() => _batchRunning = true);
@@ -372,7 +371,6 @@ class _LocalSourceBrowsePageState extends ConsumerState<LocalSourceBrowsePage> {
           bookKey: localSourceBookKeyFor(manga.directoryPath),
           localSourceRoot: _appModel.appPaths.localComicRoot,
           deleteLocalFiles: decision.deleteLocalFiles,
-          deleteStatistics: decision.deleteStatistics,
         );
         if (result.removed) {
           success++;

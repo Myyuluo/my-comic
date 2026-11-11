@@ -126,8 +126,10 @@ void main() {
         missing[key] = e.path;
       }
     }
+    // ticket 04/05 删除非漫画应用面 / 统计 / PDF / 扩展后 lib 规模缩小；
+    // 阈值仍要挡住「扫描根塌成空目录」这类假绿。
     expectScanScale(scanned,
-        what: 'lib/ 下的 .dart', atLeast: 750, measured: 939);
+        what: 'lib/ 下的 .dart', atLeast: 600, measured: 645);
 
     expect(
       missing,
@@ -147,8 +149,10 @@ void main() {
       scanned++;
       all.write(e.readAsStringSync());
     }
+    // ticket 04/05 删除非漫画应用面 / 统计 / PDF / 扩展后 lib 规模缩小；
+    // 阈值仍要挡住「扫描根塌成空目录」这类假绿。
     expectScanScale(scanned,
-        what: 'lib/ 下的 .dart', atLeast: 750, measured: 939);
+        what: 'lib/ 下的 .dart', atLeast: 600, measured: 645);
     final String src = all.toString();
     final List<String> stale = <String>[];
     for (final PathRebasePref spec in kPathRebasePrefs) {

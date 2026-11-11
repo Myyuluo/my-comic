@@ -117,10 +117,12 @@ void main() {
   ];
 
   test('扫描规模哨兵：三个扫描根确实都被枚举到了', () {
+    // ticket 04/05 删除非漫画应用面 / 统计 / PDF / 扩展后扫描面缩小；
+    // 阈值仍要挡住「扫描根塌成空目录」这类假绿。
     expectScanScale(_scannedDartFiles(roots).length,
-        what: 'lib/ + test/ + fushi_core/lib 下的 .dart（已排除生成物与冻结文件）',
-        atLeast: 3590,
-        measured: 4492);
+        what: 'lib/ + test/ + packages 下的 .dart（已排除生成物与冻结文件）',
+        atLeast: 1900,
+        measured: 1947);
   });
 
   test('落库入口收 BookFormat 而非裸 String（未知值编译期不可表达）', () {

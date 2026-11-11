@@ -760,8 +760,6 @@ final List<PathRebasePref> kPathRebasePrefs = <PathRebasePref>[
           '或下载目录，不在 Fushi 数据根下，跟着数据根改写只会把有效路径改坏。'
           '目录没了不影响已入库的书（素材在导入时已复制进书的存储），设置页按'
           'missingDirs 如实提示。'),
-  PathRebasePref('manga_external_mokuro_path', PathRebaseKind.externalUserPath,
-      PathValueShape.none, '系统安装的 mokuro 可执行文件路径，外部路径。'),
   PathRebasePref(
       'manga_reading_direction',
       PathRebaseKind.notAPath,

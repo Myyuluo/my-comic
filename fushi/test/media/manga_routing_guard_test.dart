@@ -4,8 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi/media.dart';
 import 'package:fushi_core/fushi_core.dart';
 
-/// 漫画 OCR P1 的接线守卫（源码扫描 + 键不变量），与 PDF 的
-/// `reader_pdf_routing_guard_test.dart` 同纪律。
+/// 漫画阅读的接线守卫（源码扫描 + 键不变量）。
 ///
 /// 漫画作为「第三种书」复用 EpubBooks/书架/进度/删除管线，正确性依赖数处接线不能被
 /// 后续重构悄悄改断——一旦断掉，漫画行会带 EPUB 源标识被打开、进 EPUB 阅读器的解压/
@@ -18,16 +17,12 @@ void main() {
     return file.readAsStringSync();
   }
 
-  test('MangaFushiSource.kUniqueKey 是独立键 reader_manga，与 EPUB/PDF 源互异', () {
+  test('MangaFushiSource.kUniqueKey 是独立键 reader_manga，与 EPUB 源互异', () {
     expect(MangaFushiSource.kUniqueKey, 'reader_manga');
     expect(MangaFushiSource.instance.uniqueKey, 'reader_manga');
     expect(
       MangaFushiSource.instance.uniqueKey,
       isNot(ReaderFushiSource.instance.uniqueKey),
-    );
-    expect(
-      MangaFushiSource.instance.uniqueKey,
-      isNot(ReaderPdfSource.instance.uniqueKey),
     );
   });
 
@@ -39,10 +34,10 @@ void main() {
       MangaFushiSource.kUniqueKey,
       reason: '漫画行 mediaSourceIdentifier 应取 MangaFushiSource.kUniqueKey',
     );
-    // PDF 分流不能被漫画分流破坏（向后兼容守卫）。
+    // PDF 阅读器已移除（ticket 05）：旧 PDF 行回退到书源，不能抢漫画的路由。
     expect(
       ReaderFushiSource.mediaSourceKeyFor(BookFormat.pdf),
-      ReaderPdfSource.kUniqueKey,
+      ReaderFushiSource.instance.uniqueKey,
     );
     expect(
       ReaderFushiSource.mediaSourceKeyFor(BookFormat.epub),
@@ -137,43 +132,12 @@ void main() {
 
   test('漫画阅读统计：字数走 OCR 记账、页数走独立列，两个量纲不交叉', () {
     final String src = read('lib/src/media/manga/reader/manga_fushi_page.dart');
-    // 旧守卫钉的是字面量 `charsRead: 0`，理由写「漫画无字数」+「页数塞进 charsRead
-    // 会污染字数口径」。前半句在 schema v60 起**不再成立**：统计口径已按产品决策纳入
-    // 漫画，漫画的字来自 mokuro / 内置 OCR 的实义字符（口径与 EPUB 同源的
-    // japaneseCharCount），恒 0 反而是错的——统计页会永远显示漫画 0 字。
-    //
-    // 后半句仍然是真不变量，且是这条守卫真正要防的东西，所以原样保留并加强：页数有
-    // 自己的 `pagesRead` 列（v60 新增），绝不能冒充字数，否则「字数」和「阅读速度」
-    // 两个口径同时被污染。下面从「钉一个字面量」改成「钉两个量纲的接线不交叉」。
-    expect(
-      src.contains('mangaStatsForPages('),
-      isTrue,
-      reason: '字数必须来自 OCR 文本换算，不能凭页数现编',
-    );
-    // v92：字数 / 页数直接记进 StudyClock 的当前段（`study_segments.chars` /
-    // `.pages` 两列），页面不再持有会话累计器。
-    expect(
-      src.contains('_studyClock?.addChars(added.chars)'),
-      isTrue,
-      reason: 'OCR 字符数经 addChars 落段的 chars 列',
-    );
-    expect(
-      src.contains('_studyClock?.addPages(added.pages)'),
-      isTrue,
-      reason: '页数经 addPages 落段的 pages 独立列，不与字数混流',
-    );
-    // 交叉接线守卫：任何把页数喂给字数、或把字数喂给页数的写法都算口径污染。
-    expect(
-      src.contains('addChars(added.pages)'),
-      isFalse,
-      reason: '页数绝不能塞进 chars（会污染字数口径与阅读速度）',
-    );
-    expect(
-      src.contains('addPages(added.chars)'),
-      isFalse,
-      reason: '字数绝不能塞进 pages',
-    );
-    expect(src.contains('StudyClock'), isTrue, reason: '复用时长统计');
+    // ticket 05：阅读统计的写入（StudyClock / 字数页数记账）已移除；阅读进度
+    // （reader_positions）仍是唯一落库的阅读状态，这里守它不再回潮。
+    expect(src.contains('StudyClock'), isFalse,
+        reason: '阅读统计写入已移除，不得再建计时时钟');
+    expect(src.contains('mangaStatsForPages('), isFalse,
+        reason: '漫画字数/页数统计聚合已移除');
   });
 
   // ── 阅读模式覆盖 ────────────────────────────────────────────────────

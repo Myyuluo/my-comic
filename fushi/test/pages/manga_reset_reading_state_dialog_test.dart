@@ -1,11 +1,10 @@
-// ticket 04（漫画 UI 修正）：单卡与批量共用的「重置阅读状态」对话框只保留
-// 「同时撤销最近一次打开的记录」，不再提供「同时清除它的全部学习记录」。
+// ticket 05：单卡与批量共用的「重置阅读状态」对话框只做确认，阅读统计选项
+// 已随统计域移除（ticket 05）。
 //
 // 这里走页面级 seam（真实 37 表 FushiDatabase + 真实书架页 + 真实对话框 / 落地
-// 函数），钉住两条入口的可见选项与数据结果：
-//  * 单卡：勾选保留项后，阅读位置回到开头、读完标记清空、最近一次学习会话写零。
-//  * 批量：不勾任何选项时，只重置位置与完成标记，学习记录原样保留。
-// 底层 study_segments 写入 / 统计中心不在本文件内被删除或绕过。
+// 函数），钉住两条入口的数据结果：
+//  * 单卡 / 批量：确认后阅读位置回到开头、读完标记清空。
+//  * study_segments 里的既有统计行不被这条路径删除。
 import 'dart:io';
 
 import 'package:drift/drift.dart' show Value;
@@ -181,25 +180,25 @@ void main() {
         ),
       );
 
-  void expectOnlyRetainedOption() {
+  void expectNoRecordOptions() {
     expect(
       find.text(t.library_progress_reset_records_all),
       findsNothing,
-      reason: 'ticket 04：不再显示「同时清除它的全部学习记录」',
+      reason: 'ticket 05：统计清除选项已移除',
     );
     expect(
       find.text(t.library_progress_reset_records_all_desc),
       findsNothing,
-      reason: 'ticket 04：破坏性统计选项从对话框移除',
+      reason: 'ticket 05：统计清除选项已移除',
     );
     expect(
       find.text(t.library_progress_reset_records_last_session),
-      findsOneWidget,
-      reason: '「同时撤销最近一次打开的记录」必须保留',
+      findsNothing,
+      reason: 'ticket 05：撤销学习会话选项已移除',
     );
   }
 
-  testWidgets('单卡：对话框只保留撤销最近一次；勾选后位置与读完清空、最近会话写零',
+  testWidgets('单卡：确认后位置与读完清空，既有统计行保留',
       (WidgetTester tester) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(1200, 900);
@@ -218,20 +217,18 @@ void main() {
     await tester.tap(resetAction);
     await tester.pumpAndSettle();
 
-    expectOnlyRetainedOption();
-    await tester.tap(find.text(t.library_progress_reset_records_last_session));
-    await tester.pump();
+    expectNoRecordOptions();
     await tester.tap(find.text(t.library_progress_reset_confirm));
     await tester.pumpAndSettle();
 
     await expectReadingPositionReset();
     final StudySegmentRow after = await segment();
-    expect(after.durationMs, 0, reason: '勾选后最近一次会话的时长写零');
-    expect(after.chars, 0, reason: '勾选后最近一次会话的字数写零');
-    expect(after.pages, 0, reason: '勾选后最近一次会话的页数写零');
+    expect(after.durationMs, 60000, reason: '重置阅读状态不删统计');
+    expect(after.chars, 321, reason: '重置阅读状态不删统计');
+    expect(after.pages, 7, reason: '重置阅读状态不删统计');
   });
 
-  testWidgets('批量：同一对话框；不勾选项时只重置位置与读完，学习记录原样保留',
+  testWidgets('批量：同一确认框；只重置位置与读完，学习记录原样保留',
       (WidgetTester tester) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(1200, 900);
@@ -251,7 +248,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expectOnlyRetainedOption();
+    expectNoRecordOptions();
     await tester.tap(find.text(t.library_progress_reset_confirm));
     await tester.pumpAndSettle();
 

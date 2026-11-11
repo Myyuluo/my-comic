@@ -71,13 +71,6 @@ enum ReaderControlItem implements ControlItemSpec<ReaderControlSlot> {
   /// 插图册。
   gallery('gallery', recoverySlot: ReaderControlSlot.topLeft),
 
-  /// 书内统计侧栏。
-  statistics('statistics', recoverySlot: ReaderControlSlot.topLeft),
-
-  /// 暂停 / 继续阅读统计计时（与状态行计时键、快捷键 P 同一入口）。出厂在托盘，
-  /// 悬浮球出厂带上它（见 设置 → 悬浮球 → 阅读器）；可拖去顶栏 / 底栏。
-  studyTimer('studyTimer', recoverySlot: ReaderControlSlot.topRight),
-
   /// 书名（只能在顶栏中间）。
   title('title', recoverySlot: ReaderControlSlot.topCenter),
 
@@ -256,7 +249,6 @@ class ReaderControlLayout {
         ],
         ReaderControlSlot.overflow: <ReaderControlItem>[
           ReaderControlItem.modeToggle,
-          ReaderControlItem.statistics,
           ReaderControlItem.gallery,
           ReaderControlItem.fullscreen,
         ],
@@ -265,8 +257,8 @@ class ReaderControlLayout {
   );
 
   /// 窄窗（手机竖屏，< [kReaderControlCompactWidth]）出厂布局：顶部只留「← 返回 /
-  /// 书名 / ⋯」，主操作下沉到拇指区的底部悬浮工具栏「导航 / 有声书 / 设置 /
-  /// 统计」（等宽图标 + 小字标签）；有声书在场时 FAB 是变形播放键。
+  /// 书名 / ⋯」，主操作下沉到拇指区的底部悬浮工具栏「导航 / 有声书 / 设置」
+  /// （等宽图标 + 小字标签）；有声书在场时 FAB 是变形播放键。
   static final ReaderControlLayout compactDefaults = ReaderControlLayout._(
     ControlLayout<ReaderControlSlot, ReaderControlItem>.fromSlots(
       kReaderControlScheme,
@@ -281,7 +273,6 @@ class ReaderControlLayout {
           ReaderControlItem.navigation,
           ReaderControlItem.audiobook,
           ReaderControlItem.settings,
-          ReaderControlItem.statistics,
         ],
         ReaderControlSlot.overflow: <ReaderControlItem>[
           ReaderControlItem.modeToggle,

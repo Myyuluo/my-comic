@@ -27,13 +27,12 @@ abstract class ReaderMediaSource extends MediaSource {
   @override
   MediaSource get overrideStore => ReaderFushiSource.instance;
 
-  /// BUG-1317 读取期回退：存量 override 按写入时的 format 散落在三个源各自的
-  /// `src:<sourceId>:` 命名空间里，三个都要试。
+  /// BUG-1317 读取期回退：存量 override 按写入时的 format 散落在各源自己的
+  /// `src:<sourceId>:` 命名空间里，现存的两个都要试。
   @override
   List<MediaSource> get legacyOverrideStores => <MediaSource>[
         ReaderFushiSource.instance,
         MangaFushiSource.instance,
-        ReaderPdfSource.instance,
       ];
 
   // TODO-786：阅读类媒体源默认卡槽比例归到书封比例 [kShelfBookCardAspectRatio]

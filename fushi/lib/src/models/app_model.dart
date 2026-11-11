@@ -58,7 +58,6 @@ import 'package:fushi_engine/epub/epub_importer.dart';
 
 import 'package:fushi/src/reader/reader_control_layout.dart';
 import 'package:fushi/src/reader/reader_settings.dart';
-import 'package:fushi/src/lookup/browser_extension_installer.dart';
 import 'package:fushi_engine/models/dictionary_directory.dart';
 import 'package:fushi/src/models/media_history_repository.dart';
 import 'package:fushi/src/models/preferences_repository.dart';
@@ -190,7 +189,6 @@ import 'package:fushi_engine/sync/immersion_mine_payload.dart';
 import 'package:fushi_engine/mining/immersion_mining_request.dart';
 
 
-import 'package:fushi_engine/sync/fushi_sync_server.dart';
 import 'package:fushi_engine/sync/manga_sync_package.dart';
 import 'package:fushi/src/models/module_id.dart';
 import 'package:fushi/src/models/store_compliance.dart';
@@ -205,7 +203,6 @@ import 'package:fushi/src/shortcuts/shortcut_preferences.dart';
 import 'package:fushi/src/shortcuts/shortcut_registry.dart';
 import 'package:fushi/src/platform/platform_services.dart';
 import 'package:fushi/src/platform/platform_providers.dart';
-import 'package:fushi/src/stats/reader_study_clock_start_mode.dart';
 
 
 /// A global [Provider] for app-wide configuration and state management.
@@ -988,11 +985,7 @@ class AppModel with ChangeNotifier {
     final Map<MediaType, List<MediaSource>> availableMediaSources = {
       ReaderMediaType.instance: [
         ReaderFushiSource.instance,
-        // PDF 阅读器 Phase 1：注册第二个 reader 源。书架/页头恒用第一个（默认源），PDF 行
-        // 仅在打开时经 mediaSourceIdentifier='reader_pdf' 路由到本源、进 ReaderPdfPage。
-        // 通用 init 循环与 refreshPrefCache 按 mediaSources 遍历，自动接管本源初始化。
-        ReaderPdfSource.instance,
-        // 漫画 OCR P1：第三个 reader 源。format=='manga' 的行在打开时经
+        // 漫画阅读源：format=='manga' 的行在打开时经
         // mediaSourceIdentifier='reader_manga' 路由到本源、进 MangaFushiPage。
         MangaFushiSource.instance,
       ],
@@ -1188,7 +1181,7 @@ class AppModel with ChangeNotifier {
 
       debugPrint('[Fushi] init: repositories (parallel)');
       await Future.wait(<Future<void>>[
-        prefsRepo.loadFromDb().then((_) => _applyStatDayResetHour()),
+        prefsRepo.loadFromDb(),
         mediaHistoryRepo.loadFromDb(),
       ]);
       prefsRepo.addListener(notifyListeners);
@@ -2359,14 +2352,6 @@ class AppModel with ChangeNotifier {
 
   Future<void> setModuleEnabled(ModuleId module, bool value) async {
     await prefsRepo.setModuleEnabled(module, value);
-    // SRS 的「今天」与统计页共用日界 stats_day_reset_hour（设计铁律 G）。SRS 默认凌晨 4 点（与 Anki 一致），
-    // 但它是默认关闭的模块：只在用户第一次打开 SRS、且从没自己设过日界时把它设为 4，
-    // 不改动没开 SRS 的用户的统计口径（历史段不重分桶，只影响之后写入）。
-    if (module == ModuleId.srs &&
-        value &&
-        prefsRepo.getPref(kStatDayResetHourPrefKey) == null) {
-      await setStatDayResetHour(4); // 统计日界凌晨 4 点（原 SRS 默认值）
-    }
     // 设置 schema 树按 locale 记忆化，两张投影表（阅读器/视频快捷面板）也惰性缓存。
     // 模块可见性会改变这些树的过滤结果，故翻转开关必须丢弃快照，否则快捷面板会
     // 继续发已被关掉模块的设置项（settings_schema.dart 的 `_SettingsSchemaCache`）。
@@ -2520,96 +2505,8 @@ class AppModel with ChangeNotifier {
     super.dispose();
   }
 
-  int get readingGoalDailyChars => prefsRepo.readingGoalDailyChars;
-  Future<void> setReadingGoalDailyChars(int value) =>
-      prefsRepo.setReadingGoalDailyChars(value);
-
-  /// v92 阅读空闲门（分钟 / Duration 两种形态；阅读器建 StudyClock 时取后者）。
-  /// 偏好层未就绪（精简初始化路径 / 测试 harness）时回落默认 10 分钟——阅读器
-  /// 建时钟绝不能因为一个可选偏好没加载而整页崩掉。
-  int get readingIdleTimeoutMinutes =>
-      _prefsRepo?.readingIdleTimeoutMinutes ??
-      kDefaultReadingIdleTimeout.inMinutes;
-  Duration get readingIdleTimeout =>
-      Duration(minutes: readingIdleTimeoutMinutes);
-  Future<void> setReadingIdleTimeoutMinutes(int value) =>
-      prefsRepo.setReadingIdleTimeoutMinutes(value);
-
-  /// 小说阅读器阅读计时的开始方式。偏好层未就绪（精简初始化 / 测试 harness）时
-  /// 回落默认「打开即开始」，与改造前行为一致。
-  ReaderStudyClockStartMode get readerStudyClockStartMode =>
-      _prefsRepo?.readerStudyClockStartMode ??
-      kDefaultReaderStudyClockStartMode;
-  Future<void> setReaderStudyClockStartMode(ReaderStudyClockStartMode mode) =>
-      prefsRepo.setReaderStudyClockStartMode(mode);
-
-  /// 统计「今日」重置时刻（整点）。偏好层未就绪时回落 0（本地午夜）。
-  int get statDayResetHour => _prefsRepo?.statDayResetHour ?? 0;
-  Future<void> setStatDayResetHour(int value) async {
-    await prefsRepo.setStatDayResetHour(value);
-    _applyStatDayResetHour();
-  }
-
-  /// 把偏好镜像到 [FushiDatabase.statDayResetHour]——dateKey 派生的唯一输入。
-  /// 偏好加载后（主进程 / 弹窗进程两条初始化路径）与用户改设置时各调一次。
-  void _applyStatDayResetHour() {
-    FushiDatabase.statDayResetHour = statDayResetHour;
-  }
-
-  // ── 浏览器扩展安装助手兼容面（ticket 05 删除扩展功能前保留） ──────
-  /// 内置扩展内容指纹；扩展服务已删除，恒为 null。
-  String? get browserExtensionBuild => null;
-
-  /// 扩展最近一次连上本机的时间；扩展服务已删除，恒为 null。
-  DateTime? get browserExtensionLastSeenAt => null;
-
-  /// 扩展自报的 build（旧 UI 订阅用）；扩展服务已删除，恒为 null。
-  final ValueNotifier<String?> browserExtensionReportedBuild =
-      ValueNotifier<String?>(null);
-
-  /// 「试一试」页地址；本地扩展服务已删除，返回空串（页面不再提供可点链接）。
-  String get browserExtensionTestPageUrl => '';
-
   /// 移动端「所有文件访问」权限请求；my-comic Windows-only，恒 no-op。
   Future<void> requestExternalStoragePermissions() async {}
-
-  /// 浏览器扩展安装助手请求启动本机 API 服务；扩展服务已删除，恒返回 false。
-  Future<bool> ensureFushiApiServerForBrowserExtension() async => false;
-
-  /// 兼容保留：扩展 API 服务已删除，停止操作为 no-op。
-  Future<void> stopFushiApiServer() async {}
-
-  bool get fushiApiServerEnabled => prefsRepo.fushiApiServerEnabled;
-  Future<void> setFushiApiServerEnabled(bool value) =>
-      prefsRepo.setFushiApiServerEnabled(value);
-
-  int get fushiApiPort => prefsRepo.fushiApiPort;
-  Future<void> setFushiApiPort(int value) =>
-      prefsRepo.setFushiApiPort(value);
-
-  String get fushiApiKey => prefsRepo.fushiApiKey;
-  Future<void> setFushiApiKey(String value) =>
-      prefsRepo.setFushiApiKey(value);
-
-  /// [fushiApiKey] 为空时播种一枚随机 key（与 sync server 同款密码学安全随机源），
-  /// 返回是否真的播种了。**绝不覆盖**非空值：主 Fushi API 一旦有 key，本机回环请求
-  /// 也必须带 key，覆盖会让已配好的客户端（Yomitan / 浏览器扩展 / 另一台设备）401。
-  Future<bool> seedFushiApiKeyIfEmpty() async {
-    if (fushiApiKey.isNotEmpty) return false;
-    await setFushiApiKey(FushiSyncServer.generateToken());
-    return true;
-  }
-
-  /// 用户在设置里拨动「Fushi API 服务器」开关。与 [setFushiApiServerEnabled] 的区别：
-  /// **从关到开**那一刻若 key 为空就先播种一枚（复习模块的 AnkiConnect 兼容端点没
-  /// key 时只收回环请求，别的设备连它必须带 key）。已开着 + 空 key 的存量用户不走
-  /// 这里（启动只读偏好），他们不带 key 的本机客户端不会突然 401。
-  Future<void> setFushiApiServerEnabledByUser(bool value) async {
-    if (value && !fushiApiServerEnabled) {
-      await seedFushiApiKeyIfEmpty();
-    }
-    await setFushiApiServerEnabled(value);
-  }
 
   /// 实验性：整套键盘/手柄焦点导航是否启用（默认 false）。关闭时 main.dart 不安装
   /// FushiFocusRoot/Ring，App 回退到 Flutter 原生焦点遍历。

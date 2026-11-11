@@ -18,7 +18,6 @@ void main() {
     const <String>['page.png'],
     mode: MangaReadingMode.spread,
     spreadDirection: 'rtl',
-    inlineSelectionJs: '',
     readerPreferences: const MangaReaderPreferences(
       cropBorders: true,
       rotateWidePages: true,
@@ -142,7 +141,6 @@ assert.equal(source.style.width,'1000px');
           const <String>['wide.png'],
           mode: MangaReadingMode.spread,
           spreadDirection: direction,
-          inlineSelectionJs: '',
           splitWidePages: true,
         );
         final int halfStart = splitDocument.indexOf(
@@ -335,7 +333,8 @@ check(page.getAttribute('data-load-failed') === '1', 'blank centre away from the
         'invert(1) grayscale(1) brightness(1.25) contrast(1.5) saturate(0.5)',
       );
       expect(document, contains('class="manga-source"'));
-      expect(document, contains('source.insertAdjacentHTML'));
+      expect(document, isNot(contains('insertAdjacentHTML')),
+          reason: 'OCR 文本层热替换已移除（ticket 05）');
     },
   );
 }

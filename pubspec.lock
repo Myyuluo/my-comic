@@ -859,13 +859,6 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "0.6.23"
-  flutter_onnxruntime:
-    dependency: "direct overridden"
-    description:
-      path: "third_party/flutter_onnxruntime"
-      relative: true
-    source: path
-    version: "1.8.3"
   flutter_plugin_android_lifecycle:
     dependency: transitive
     description:
@@ -1695,38 +1688,6 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "2.3.0"
-  pdfium_dart:
-    dependency: transitive
-    description:
-      name: pdfium_dart
-      sha256: "86e95c66b09f3245b95c4924f2edce8d4f7c9786876e5c5ee8e36b104a94bbb0"
-      url: "https://pub.flutter-io.cn"
-    source: hosted
-    version: "0.2.5"
-  pdfium_flutter:
-    dependency: transitive
-    description:
-      name: pdfium_flutter
-      sha256: "0b115c0917aef9cf6bb9c4d47d0efc61d97f44844cd76287c921f997c26cf15d"
-      url: "https://pub.flutter-io.cn"
-    source: hosted
-    version: "0.2.3"
-  pdfrx:
-    dependency: transitive
-    description:
-      name: pdfrx
-      sha256: "4e0efc23547d319ae6089e9593c2c9aca6d858a844eaa7848f95e2c2efea919c"
-      url: "https://pub.flutter-io.cn"
-    source: hosted
-    version: "2.4.5"
-  pdfrx_engine:
-    dependency: transitive
-    description:
-      name: pdfrx_engine
-      sha256: "4399846809a75aed03881d8b8a19e5e70addd4b46b22fd94a0effd8859258f07"
-      url: "https://pub.flutter-io.cn"
-    source: hosted
-    version: "0.4.7"
   petitparser:
     dependency: transitive
     description:

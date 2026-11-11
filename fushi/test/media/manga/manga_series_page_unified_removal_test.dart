@@ -307,7 +307,8 @@ void main() {
       reason: '单本说明使用统一文案',
     );
     expect(find.text(t.delete_local_files), findsOneWidget);
-    expect(find.text(t.delete_statistics), findsOneWidget);
+    expect(find.text(t.delete_statistics), findsNothing,
+        reason: 'ticket 05：统计删除选项已移除');
     expect(
       find.text(t.delete_disclosure_will_delete_label),
       findsNothing,
@@ -623,7 +624,7 @@ void main() {
     },
   );
 
-  testWidgets('在线作品页：勾选「同时删除统计数据」→ 统计与墓碑写入，已下载文件保留', (
+  testWidgets('在线作品页：统计删除入口已移除 → 移出保留统计，已下载文件保留', (
     WidgetTester tester,
   ) async {
     tester.view.physicalSize = const Size(900, 1800);
@@ -655,8 +656,6 @@ void main() {
         ),
       );
       await _openRemovalDialog(tester, appModel, row.bookKey);
-      await tester.tap(find.text(t.delete_statistics));
-      await tester.pump();
       await tester.tap(find.text(t.dialog_delete));
       await _pumpUntil(
         tester,
@@ -667,15 +666,15 @@ void main() {
     expect(
       (await db.getEpubBook(row.bookKey))?.isInLibrary,
       isFalse,
-      reason: '删统计只清 membership，不删 Manga 行',
+      reason: '移出只清 membership，不删 Manga 行',
     );
     expect(
       await db.getStudySegmentsForMedia(
         mediaKind: kActivityMediaBook,
         mediaKey: row.bookKey,
       ),
-      isEmpty,
-      reason: '统计事实随勾选删除',
+      hasLength(1),
+      reason: 'ticket 05：移出书架不再提供统计删除',
     );
     final List<StudySegmentTombstoneRow> tombstones = await db
         .getStudySegmentTombstones();
@@ -683,8 +682,8 @@ void main() {
       tombstones.where(
         (StudySegmentTombstoneRow t) => t.mediaKey == row.bookKey,
       ),
-      hasLength(1),
-      reason: '删除写墓碑，防止其他路径把统计加回',
+      isEmpty,
+      reason: '统计未删除，不写墓碑',
     );
     expect(chapterDir.existsSync(), isTrue, reason: '未勾选删文件时章节文件保留');
   });
@@ -867,7 +866,8 @@ void main() {
 
     expect(find.text(t.manga_series_remove_confirm), findsOneWidget);
     expect(find.text(t.delete_local_files), findsOneWidget);
-    expect(find.text(t.delete_statistics), findsOneWidget);
+    expect(find.text(t.delete_statistics), findsNothing,
+        reason: 'ticket 05：统计删除选项已移除');
     expect(find.text(t.delete_disclosure_will_delete_label), findsNothing);
     expect(find.text(t.delete_disclosure_will_keep_label), findsNothing);
     expect(find.text(t.delete_choices_remember), findsNothing);
@@ -933,7 +933,7 @@ void main() {
     expect(await loadMangaHistory(db), hasLength(1), reason: 'History 保留');
   });
 
-  testWidgets('本地作品页：勾选「同时删除统计数据」→ 统计移除', (WidgetTester tester) async {
+  testWidgets('本地作品页：统计删除入口已移除 → 统计保留', (WidgetTester tester) async {
     tester.view.physicalSize = const Size(900, 1800);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
@@ -965,8 +965,6 @@ void main() {
         ),
       );
       await _openRemovalDialog(tester, appModel, row.bookKey);
-      await tester.tap(find.text(t.delete_statistics));
-      await tester.pump();
       await tester.tap(find.text(t.dialog_delete));
       await _pumpFrames(tester);
     });
@@ -974,14 +972,15 @@ void main() {
     expect(
       (await db.getEpubBook(row.bookKey))?.isInLibrary,
       isFalse,
-      reason: '删统计只清 membership，不删行',
+      reason: '移出只清 membership，不删行',
     );
     expect(
       await db.getStudySegmentsForMedia(
         mediaKind: kActivityMediaBook,
         mediaKey: row.bookKey,
       ),
-      isEmpty,
+      hasLength(1),
+      reason: 'ticket 05：移出书架不再提供统计删除',
     );
     final List<StudySegmentTombstoneRow> tombstones = await db
         .getStudySegmentTombstones();
@@ -989,7 +988,7 @@ void main() {
       tombstones.where(
         (StudySegmentTombstoneRow t) => t.mediaKey == row.bookKey,
       ),
-      hasLength(1),
+      isEmpty,
     );
   });
 
@@ -1079,6 +1078,5 @@ void main() {
       '确定把选中的 3 部作品移出书架？阅读进度、已读标记、已下载章节与 History 会保留。',
     );
     expect(t.delete_local_files_download_desc, '已下载的章节文件会从本机删除，且无法恢复。');
-    expect(t.delete_statistics_manga_desc, '该作品的阅读时长、页数与查词/制卡计数将从统计中移除，且无法恢复。');
   });
 }

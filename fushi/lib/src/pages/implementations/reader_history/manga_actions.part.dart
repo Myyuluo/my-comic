@@ -92,22 +92,17 @@ extension _MangaShelfActions<T extends HistoryReaderPage>
       targets.add((bookKey: bookKey, title: row.title));
     }
     if (targets.isEmpty || !mounted) return;
-    final StudyRecordResetScope? records = await showLibraryProgressResetDialog(
+    final bool confirmed = await showLibraryProgressResetDialog(
       context,
       title: t.library_progress_reset_action,
       message: '${t.library_progress_reset_book_message}\n\n'
           '${t.library_progress_reset_batch_message(n: targets.length)}',
     );
-    if (records == null || !mounted) return;
+    if (!confirmed || !mounted) return;
     int done = 0;
     for (final ({String bookKey, String title}) target in targets) {
       try {
-        await resetBookReadingState(
-          db: db,
-          bookKey: target.bookKey,
-          title: target.title,
-          records: records,
-        );
+        await resetBookReadingState(db: db, bookKey: target.bookKey);
         done++;
       } catch (e, stack) {
         ErrorLogService.instance
@@ -146,7 +141,6 @@ extension _MangaShelfActions<T extends HistoryReaderPage>
       context,
       message: message,
       localFilesSubtitle: t.delete_local_files_download_desc,
-      statisticsSubtitle: t.delete_statistics_manga_batch_desc,
     );
     if (decision == null || !mounted) return;
 
@@ -186,7 +180,6 @@ extension _MangaShelfActions<T extends HistoryReaderPage>
     required ValueNotifier<int> progress,
   }) async {
     final bool deleteLocalFiles = decision.deleteLocalFiles;
-    final bool deleteStatistics = decision.deleteStatistics;
     int succeeded = 0;
     int failed = 0;
     for (final String key in targetKeys) {
@@ -202,7 +195,6 @@ extension _MangaShelfActions<T extends HistoryReaderPage>
           localSourceRoot: appModel.appPathsOrNull?.localComicRoot,
           downloadsRoot: appModel.appPathsOrNull?.downloadsRoot,
           deleteLocalFiles: deleteLocalFiles,
-          deleteStatistics: deleteStatistics,
           downloadService: appModel.mangaDownloadService,
         );
         if (result.removed) {
@@ -291,7 +283,6 @@ extension _MangaShelfActions<T extends HistoryReaderPage>
       context,
       message: t.manga_series_remove_confirm,
       localFilesSubtitle: t.delete_local_files_download_desc,
-      statisticsSubtitle: t.delete_statistics_manga_desc,
     );
     if (decision == null || !mounted) return;
     final MangaLibraryRemovalResult result = await removeMangaFromLibrary(
@@ -300,7 +291,6 @@ extension _MangaShelfActions<T extends HistoryReaderPage>
       localSourceRoot: appModel.appPathsOrNull?.localComicRoot,
       downloadsRoot: appModel.appPathsOrNull?.downloadsRoot,
       deleteLocalFiles: decision.deleteLocalFiles,
-      deleteStatistics: decision.deleteStatistics,
       downloadService: appModel.mangaDownloadService,
     );
     if (!mounted) return;
@@ -315,27 +305,15 @@ extension _MangaShelfActions<T extends HistoryReaderPage>
   }
 
   /// 单卡重置阅读状态（进度归零 + 取消读完 + 离开继续阅读）。
-  Future<void> _resetBookReadingState(
-    MediaItem item,
-    String bookKey, {
-    String? title,
-  }) async {
+  Future<void> _resetBookReadingState(String bookKey) async {
     Navigator.pop(context);
-    final StudyRecordResetScope? records = await showLibraryProgressResetDialog(
+    final bool confirmed = await showLibraryProgressResetDialog(
       context,
       title: t.library_progress_reset_action,
       message: t.library_progress_reset_book_message,
     );
-    if (records == null || !mounted) return;
-    await resetBookReadingState(
-      db: appModel.database,
-      bookKey: bookKey,
-      title: title ??
-          await appModel.database
-              .getEpubBook(bookKey)
-              .then((EpubBookRow? row) => row?.title ?? item.title),
-      records: records,
-    );
+    if (!confirmed || !mounted) return;
+    await resetBookReadingState(db: appModel.database, bookKey: bookKey);
     _afterReadingStateReset();
   }
 

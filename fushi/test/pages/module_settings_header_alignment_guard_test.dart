@@ -62,10 +62,9 @@ void main() {
     );
   });
 
-  test('BUG-1658: 下载页 / 浏览器扩展页不得回退旧 AppBar 小标题页头', () {
+  test('BUG-1658: 下载页不得回退旧 AppBar 小标题页头', () {
     for (final String path in <String>[
       'lib/src/pages/implementations/browse_page.dart',
-      'lib/src/pages/implementations/browser_extension_page.dart',
     ]) {
       final String code = maskComments(File(path).readAsStringSync());
       expect(

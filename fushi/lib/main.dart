@@ -38,7 +38,6 @@ import 'package:fushi/utils.dart';
 import 'package:fushi/src/shortcuts/global_navigation.dart';
 import 'package:fushi/src/startup/desktop_window_placement.dart';
 
-import 'package:fushi/src/stats/study_diag_log.dart';
 import 'package:fushi/src/settings/settings_schema.dart'
     show resetSettingsSchemaCache;
 import 'package:fushi/src/startup/loading_watchdog_view.dart';
@@ -330,8 +329,6 @@ void main([List<String> args = const <String>[]]) {
 
       /// Initialise error log service.
       await ErrorLogService.instance.init();
-      // 统计诊断流水（用户 2026-09-12：导出日志排查阅读速度异常）。
-      await StudyDiagLog.instance.init();
       // 下面四步都只依赖错误日志已就绪、彼此独立（各自读写自己的文件 / 通道），
       // 并发跑；串行 await 四段小 IO 是启动到 LoadingPage 之前的纯等待。
       await Future.wait<void>(<Future<void>>[
