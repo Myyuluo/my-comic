@@ -525,7 +525,7 @@ bool FloatingLyricWindow::Show(HWND owner) {
     hwnd_ = CreateWindowExW(
         WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
         kWindowClassName,
-        hook_text_mode_ ? L"Fushi Hook Text" : window_title_.c_str(),
+        hook_text_mode_ ? L"MyComic Hook Text" : window_title_.c_str(),
         WS_POPUP, x, y, width, height,
         nullptr, nullptr, GetModuleHandle(nullptr), this);
     if (hwnd_ == nullptr) {

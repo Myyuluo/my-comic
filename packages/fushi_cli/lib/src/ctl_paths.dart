@@ -15,8 +15,8 @@ const String kCtlEndpointFileName = 'endpoint.json';
 /// 1. `FUSHI_CTL_DIR`（显式覆盖，两侧都认）；
 /// 2. [testRoot] 非空时落 `<testRoot>/ctl`——集成测试里的 app 不得改写用户真实
 ///    app 的发现文件（与 `FUSHI_TEST_ROOT` 隔离 SharedPreferences 同理）；
-/// 3. 平台默认：Windows `%LOCALAPPDATA%\Fushi\ctl`、macOS
-///    `~/Library/Application Support/Fushi/ctl`、其它
+/// 3. 平台默认：Windows `%LOCALAPPDATA%\MyComic\ctl`、macOS
+///    `~/Library/Application Support/MyComic/ctl`、其它
 ///    `${XDG_STATE_HOME:-~/.local/state}/fushi/ctl`。
 ///
 /// 解析不出（缺 HOME / LOCALAPPDATA）时返回 null，调用方按「通道不可用」处理。
@@ -38,7 +38,7 @@ String? resolveCtlStateDir({
     case 'windows':
       final String? local = _nonEmpty(environment['LOCALAPPDATA']);
       if (local == null) return null;
-      return p.windows.join(local, 'Fushi', 'ctl');
+      return p.windows.join(local, 'MyComic', 'ctl');
     case 'macos':
       final String? home = _nonEmpty(environment['HOME']);
       if (home == null) return null;
@@ -46,7 +46,7 @@ String? resolveCtlStateDir({
         home,
         'Library',
         'Application Support',
-        'Fushi',
+        'MyComic',
         'ctl',
       );
     default:

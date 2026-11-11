@@ -9,11 +9,11 @@
 /// 逐字一致）。那几处是「装成别人」，不是「报自己」，必须保持原样。
 library;
 
-/// 项目主页；随 UA 一起报出去，方便被访问方联系到上游。
-const String kFushiUserAgentHomepage = 'https://fushi.moe';
+/// 项目主页；随 UA 一起报出去，方便被访问方联系到本项目。
+const String kFushiUserAgentHomepage = 'https://github.com/Myyuluo/my-comic';
 
 /// 组件名 [component] 的对外 UA，形如
-/// `fushi/<component> (https://fushi.moe)`。
+/// `mycomic/<component> (https://github.com/Myyuluo/my-comic)`。
 ///
 /// [component] 用小写短横线（`shader-downloader` / `custom-fonts`），描述**是哪
 /// 个子系统在发请求**——出问题时对方能直接指出是哪条链路，而不是只知道「某个
@@ -21,7 +21,7 @@ const String kFushiUserAgentHomepage = 'https://fushi.moe';
 String fushiUserAgent(String component) {
   final String trimmed = component.trim();
   assert(trimmed.isNotEmpty, 'UA 组件名不能为空');
-  return 'fushi/$trimmed ($kFushiUserAgentHomepage)';
+  return 'mycomic/$trimmed ($kFushiUserAgentHomepage)';
 }
 
 /// OpenSubtitles 配置里存量的旧默认 UA。

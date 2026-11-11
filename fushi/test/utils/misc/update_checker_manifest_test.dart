@@ -28,14 +28,14 @@ String _manifestJson({
     'assets': assets ??
         <Map<String, dynamic>>[
           <String, dynamic>{
-            'name': 'fushi-0.10.1-arm64-v8a.apk',
+            'name': 'mycomic-0.10.1-arm64-v8a.apk',
             'browser_download_url':
-                'https://github.com/hajisensai/fushi/releases/download/$tag/fushi-0.10.1-arm64-v8a.apk',
+                'https://github.com/hajisensai/fushi/releases/download/$tag/mycomic-0.10.1-arm64-v8a.apk',
           },
           <String, dynamic>{
-            'name': 'fushi-0.10.1-windows-setup.exe',
+            'name': 'mycomic-0.10.1-windows-setup.exe',
             'browser_download_url':
-                'https://github.com/hajisensai/fushi/releases/download/$tag/fushi-0.10.1-windows-setup.exe',
+                'https://github.com/hajisensai/fushi/releases/download/$tag/mycomic-0.10.1-windows-setup.exe',
           },
         ],
   });
@@ -90,7 +90,7 @@ void main() {
       // (and, TODO-1205, the per-asset `version` stamp when present).
       expect(
         apk['browser_download_url'],
-        'https://github.com/hajisensai/fushi/releases/download/v0.10.1-beta.162/fushi-0.10.1-arm64-v8a.apk',
+        'https://github.com/hajisensai/fushi/releases/download/v0.10.1-beta.162/mycomic-0.10.1-arm64-v8a.apk',
       );
     });
 
@@ -111,9 +111,9 @@ void main() {
           releaseSequence: 7850,
           assets: <Map<String, dynamic>>[
             <String, dynamic>{
-              'name': 'fushi-1.2.0-arm64-v8a.apk',
+              'name': 'mycomic-1.2.0-arm64-v8a.apk',
               'browser_download_url':
-                  'https://github.com/hajisensai/fushi/releases/download/v1.2.0/fushi-1.2.0-arm64-v8a.apk',
+                  'https://github.com/hajisensai/fushi/releases/download/v1.2.0/mycomic-1.2.0-arm64-v8a.apk',
             },
           ],
         ),
@@ -151,7 +151,7 @@ void main() {
       ).selectAsset(assets, channel: UpdateChannel.beta);
       expect(
         asset?.url,
-        'https://github.com/hajisensai/fushi/releases/download/v0.10.1-beta.162/fushi-0.10.1-arm64-v8a.apk',
+        'https://github.com/hajisensai/fushi/releases/download/v0.10.1-beta.162/mycomic-0.10.1-arm64-v8a.apk',
       );
     });
 
@@ -164,9 +164,9 @@ void main() {
           channel: 'debug',
           assets: <Map<String, dynamic>>[
             <String, dynamic>{
-              'name': 'fushi-0.10.1-abc1234-debug.apk',
+              'name': 'mycomic-0.10.1-abc1234-debug.apk',
               'browser_download_url':
-                  'https://github.com/hajisensai/fushi/releases/download/v0.10.1-debug.162+abc1234/fushi-0.10.1-abc1234-debug.apk',
+                  'https://github.com/hajisensai/fushi/releases/download/v0.10.1-debug.162+abc1234/mycomic-0.10.1-abc1234-debug.apk',
             },
           ],
         ),

@@ -24,7 +24,6 @@ on:
       - 'tool/release_sequence.sh'
       - 'tool/publish_update_manifest.sh'
       - 'tool/merge_update_manifest.py'
-      - 'tool/feedback_mark_released.sh'
       - 'tool/mihon/**'
       - 'tool/ffmpeg-min/**'
       - 'tool/sign_windows_release.ps1'
@@ -152,7 +151,7 @@ jobs:
             push)
               CHANNEL=debug
               TAG="${TAG:-v${VERSION}-debug.${RELEASE_SEQUENCE}+${SHORT_SHA}}"
-              NAME="${NAME:-Fushi desktop debug ${VERSION} (${SHORT_SHA})}"
+              NAME="${NAME:-MyComic desktop debug ${VERSION} (${SHORT_SHA})}"
               BODY="Automated desktop debug-channel build from ${GITHUB_REF_NAME} @ ${SHORT_SHA}. Push releases are always prerelease and never Latest."
               PUBLISH_MANAGED_RELEASE=true
               ;;
@@ -160,18 +159,18 @@ jobs:
               case "$CHANNEL" in
                 debug)
                   TAG="${TAG:-v${VERSION}-debug.${RELEASE_SEQUENCE}+${SHORT_SHA}}"
-                  NAME="${NAME:-Fushi desktop debug ${VERSION} (${SHORT_SHA})}"
+                  NAME="${NAME:-MyComic desktop debug ${VERSION} (${SHORT_SHA})}"
                   BODY="Manual desktop debug-channel build from ${GITHUB_REF_NAME} @ ${SHORT_SHA}. Debug releases are prerelease and never Latest."
                   ;;
                 beta)
                   TAG="${TAG:-v${VERSION}-beta.${RELEASE_SEQUENCE}}"
-                  NAME="${NAME:-Fushi ${VERSION} beta ${RELEASE_SEQUENCE}}"
+                  NAME="${NAME:-MyComic ${VERSION} beta ${RELEASE_SEQUENCE}}"
                   BODY="Manual desktop beta/test build from ${GITHUB_REF_NAME} @ ${SHORT_SHA}. Beta/test releases are prerelease and never Latest."
                   if [ -f "$NOTES_FILE" ]; then BODY="$(cat "$NOTES_FILE")"; fi
                   ;;
                 formal)
                   TAG="${TAG:-v${VERSION}}"
-                  NAME="${NAME:-Fushi ${VERSION}}"
+                  NAME="${NAME:-MyComic ${VERSION}}"
                   BODY="Manual desktop formal release from ${GITHUB_REF_NAME} @ ${SHORT_SHA}."
                   if [ -f "$NOTES_FILE" ]; then BODY="$(cat "$NOTES_FILE")"; fi
                   PRERELEASE=false
@@ -759,7 +758,7 @@ jobs:
           & "$PWD\tool\sign_windows_release.ps1" `
             -Path "$PWD\fushi\build\windows\x64\runner\Release" `
             -Recurse -SkipValidlySigned `
-            -Description 'Fushi'
+            -Description 'MyComic'
           if ($LASTEXITCODE -ne 0) { throw "bundle 签名失败，退出码 $LASTEXITCODE" }
       - name: Compile installer (Inno Setup)
         shell: pwsh
@@ -822,8 +821,8 @@ jobs:
           CERTUM_CERT_THUMBPRINT: ${{ secrets.CERTUM_CERT_THUMBPRINT }}
         run: |
           & "$PWD\tool\sign_windows_release.ps1" `
-            -Path "$PWD\fushi\build\installer\fushi-${{ steps.channel.outputs.build_version_name }}-windows-setup.exe" `
-            -Description 'Fushi'
+            -Path "$PWD\fushi\build\installer\mycomic-${{ steps.channel.outputs.build_version_name }}-windows-setup.exe" `
+            -Description 'MyComic'
           if ($LASTEXITCODE -ne 0) { throw "签名失败，退出码 $LASTEXITCODE" }
       # 打包后回验：把刚签好的安装器真的装进 runner 的临时目录，检查**装出来的**
       # 每个 exe/dll 都带签名。
@@ -838,7 +837,7 @@ jobs:
           CERTUM_CERT_THUMBPRINT: ${{ secrets.CERTUM_CERT_THUMBPRINT }}
         run: |
           $thumb = if ($env:CERTUM_CERT_THUMBPRINT) { $env:CERTUM_CERT_THUMBPRINT } else { 'D717A3F6A12F50B75E9D04072A69B1BCB590AE14' }
-          $setup = "$PWD\fushi\build\installer\fushi-${{ steps.channel.outputs.build_version_name }}-windows-setup.exe"
+          $setup = "$PWD\fushi\build\installer\mycomic-${{ steps.channel.outputs.build_version_name }}-windows-setup.exe"
           $dst   = "$env:RUNNER_TEMP\payload-verify"
           # 不能用 Start-Process -Wait：它等的是「该进程**及其所有子孙进程**」退出
           # （PowerShell 的文档行为）。fushi.iss 的 [Run] 段带 postinstall，静默安装下
@@ -904,7 +903,7 @@ jobs:
           BUILD_VERSION_NAME: ${{ steps.channel.outputs.build_version_name }}
         run: |
           set -euo pipefail
-          installer="fushi/build/installer/fushi-${BUILD_VERSION_NAME}-windows-setup.exe"
+          installer="fushi/build/installer/mycomic-${BUILD_VERSION_NAME}-windows-setup.exe"
           asset_name="$(basename "$installer")"
           if [ ! -f "$installer" ]; then
             echo "::error title=Windows installer missing::Expected $installer"
@@ -920,7 +919,7 @@ jobs:
             esac
           fi
           mkdir -p fushi/build/release-artifacts
-          rm -f fushi/build/release-artifacts/fushi-*-windows-setup.exe
+          rm -f fushi/build/release-artifacts/mycomic-*-windows-setup.exe
           cp "$installer" "fushi/build/release-artifacts/$asset_name"
       # TODO-866: same fragility as the Android release workflow -- the prepared
       # Windows installer is otherwise only uploaded as a GitHub Release asset
@@ -936,7 +935,7 @@ jobs:
         with:
           name: desktop-artifacts-windows
           path: |
-            fushi/build/release-artifacts/fushi-*-windows-setup.exe
+            fushi/build/release-artifacts/mycomic-*-windows-setup.exe
           if-no-files-found: ignore
           # 正式 / 测试版 dispatch 的 publish job 要等人工审批（环境 release-publish，待审批
           # job 最长挂 30 天）才下载这些 artifact：三个平台的保留期都要盖住审批窗口。
@@ -1011,7 +1010,7 @@ jobs:
             push)
               CHANNEL=debug
               TAG="${TAG:-v${VERSION}-debug.${RELEASE_SEQUENCE}+${SHORT_SHA}}"
-              NAME="${NAME:-Fushi desktop debug ${VERSION} (${SHORT_SHA})}"
+              NAME="${NAME:-MyComic desktop debug ${VERSION} (${SHORT_SHA})}"
               BODY="Automated desktop debug-channel build from ${GITHUB_REF_NAME} @ ${SHORT_SHA}. Push releases are always prerelease and never Latest."
               PUBLISH_MANAGED_RELEASE=true
               ;;
@@ -1019,18 +1018,18 @@ jobs:
               case "$CHANNEL" in
                 debug)
                   TAG="${TAG:-v${VERSION}-debug.${RELEASE_SEQUENCE}+${SHORT_SHA}}"
-                  NAME="${NAME:-Fushi desktop debug ${VERSION} (${SHORT_SHA})}"
+                  NAME="${NAME:-MyComic desktop debug ${VERSION} (${SHORT_SHA})}"
                   BODY="Manual desktop debug-channel build from ${GITHUB_REF_NAME} @ ${SHORT_SHA}. Debug releases are prerelease and never Latest."
                   ;;
                 beta)
                   TAG="${TAG:-v${VERSION}-beta.${RELEASE_SEQUENCE}}"
-                  NAME="${NAME:-Fushi ${VERSION} beta ${RELEASE_SEQUENCE}}"
+                  NAME="${NAME:-MyComic ${VERSION} beta ${RELEASE_SEQUENCE}}"
                   BODY="Manual desktop beta/test build from ${GITHUB_REF_NAME} @ ${SHORT_SHA}. Beta/test releases are prerelease and never Latest."
                   if [ -f "$NOTES_FILE" ]; then BODY="$(cat "$NOTES_FILE")"; fi
                   ;;
                 formal)
                   TAG="${TAG:-v${VERSION}}"
-                  NAME="${NAME:-Fushi ${VERSION}}"
+                  NAME="${NAME:-MyComic ${VERSION}}"
                   BODY="Manual desktop formal release from ${GITHUB_REF_NAME} @ ${SHORT_SHA}."
                   if [ -f "$NOTES_FILE" ]; then BODY="$(cat "$NOTES_FILE")"; fi
                   PRERELEASE=false
@@ -1156,7 +1155,7 @@ jobs:
         with:
           tag_name: ${{ steps.channel.outputs.tag }}
           files: |
-            fushi/build/release-artifacts/fushi-*-windows-setup.exe
+            fushi/build/release-artifacts/mycomic-*-windows-setup.exe
       # Rolling debug assets are pruned to the newest KEEP_SEQS sequences so a
       # reused `debug-rolling` release does not accumulate one installer per
       # commit. Scoped to this workflow's own Windows installer assets.
@@ -1267,7 +1266,7 @@ jobs:
           prerelease: ${{ steps.channel.outputs.prerelease }}
           make_latest: ${{ steps.channel.outputs.make_latest }}
           files: |
-            fushi/build/release-artifacts/fushi-*-windows-setup.exe
+            fushi/build/release-artifacts/mycomic-*-windows-setup.exe
       # TODO-705: publish a mirror update manifest so beta/debug in-China update
       # checks succeed (raw.githubusercontent.com is proxiable; api.github.com
       # /releases is mirror-403'd, BUG-292). This pushes a DATA FILE to the
@@ -1296,26 +1295,6 @@ jobs:
           VERSION: ${{ steps.channel.outputs.build_version_name }}
           RELEASE_SEQUENCE: ${{ steps.channel.outputs.release_sequence }}
           ARTIFACTS_DIR: fushi/build/release-artifacts
-          ASSET_GLOB: fushi-*-windows-setup.exe
+          ASSET_GLOB: mycomic-*-windows-setup.exe
           PLATFORM_LABEL: windows
         run: bash tool/publish_update_manifest.sh
-      # 反馈发布回填：按产物是否真的在本次发布里回填；构建产物不满足路径过滤
-      # 守卫的 hashFiles 模式，故用 shell 的 compgen 判据。绝不能让发布变红：
-      # 步骤 continue-on-error，脚本内部失败也只打 ::warning。
-      - name: Backfill feedback fix releases (Windows)
-        if: steps.channel.outputs.publish_manifest == 'true'
-        continue-on-error: true
-        shell: bash
-        env:
-          FEEDBACK_CI_TOKEN: ${{ secrets.FEEDBACK_CI_TOKEN }}
-          FEEDBACK_API_BASE: ${{ vars.FEEDBACK_API_BASE }}
-          CHANNEL: ${{ steps.channel.outputs.manifest_channel }}
-          PLATFORM: windows
-          VERSION: ${{ steps.channel.outputs.build_version_name }}
-          HEAD_SHA: ${{ github.sha }}
-        run: |
-          if compgen -G 'fushi/build/release-artifacts/fushi-*-windows-setup.exe' >/dev/null; then
-            bash tool/feedback_mark_released.sh
-          else
-            echo "No Windows installer in this publish; skipping feedback backfill."
-          fi

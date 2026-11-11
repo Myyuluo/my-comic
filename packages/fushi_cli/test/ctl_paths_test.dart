@@ -47,7 +47,7 @@ void main() {
           },
           operatingSystem: 'windows',
         ),
-        r'C:\Users\u\AppData\Local\Fushi\ctl',
+        r'C:\Users\u\AppData\Local\MyComic\ctl',
       );
     });
 
@@ -57,7 +57,7 @@ void main() {
           environment: <String, String>{'HOME': '/Users/u'},
           operatingSystem: 'macos',
         ),
-        '/Users/u/Library/Application Support/Fushi/ctl',
+        '/Users/u/Library/Application Support/MyComic/ctl',
       );
     });
 
@@ -108,6 +108,7 @@ void main() {
           r'D:\explicit\fushi.exe',
           r'D:\env\fushi.exe',
           r'C:\L\Fushi\fushi.exe',
+          r'C:\L\MyComic\fushi.exe',
         ],
       );
     });
@@ -119,7 +120,7 @@ void main() {
         cliExecutable: '/usr/local/bin/fushi_cli',
       );
       expect(candidates, contains('/Applications/fushi.app'));
-      expect(candidates, contains('/Users/u/Applications/Fushi.app'));
+      expect(candidates, contains('/Users/u/Applications/MyComic.app'));
     });
   });
 }

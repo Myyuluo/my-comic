@@ -94,7 +94,7 @@ abstract final class MangaWebViewEnvironment {
       );
     }
     final String base = Platform.environment['LOCALAPPDATA'] ?? '.';
-    return '$base\\Fushi\\MangaWebView2$suffix';
+    return '$base\\MyComic\\MangaWebView2$suffix';
   }
 
   /// 取当前代理设置下的环境；非 Windows 返回 null。

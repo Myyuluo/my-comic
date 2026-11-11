@@ -523,7 +523,7 @@ class GlobalLookupWindow {
   // 窗口永不因透明改造而黑屏/崩溃（graceful degrade，只是不透明）。窗口样式、
   // controller 分支、WM_SIZE 都以 composition_active_（而非 _mode_）为准。
   bool composition_active_ = false;
-  std::wstring window_title_ = L"Fushi Lookup";
+  std::wstring window_title_ = L"MyComic Lookup";
   // WebView2 profile folder leaf under %LOCALAPPDATA%（见 OverlayUserDataFolder）。
   const std::wstring user_data_leaf_ = L"GlobalLookupWebView2";
   std::wstring popup_assets_dir_;

@@ -25,8 +25,8 @@ Future<void> startDetachedProcess(
 ///
 /// 1. `--app` / `FUSHI_APP`；
 /// 2. CLI 可执行文件的同级目录——安装包把 `fushi_cli` 放在 `fushi(.exe)` 旁边；
-/// 3. 各平台默认安装位置：Windows 安装包 `DefaultDirName={localappdata}\Fushi`；
-///    macOS `/Applications` 与 `~/Applications` 下的 `fushi.app` / `Fushi.app`。
+/// 3. 各平台默认安装位置：Windows 安装包 `DefaultDirName={localappdata}\MyComic`；
+///    macOS `/Applications` 与 `~/Applications` 下的 `fushi.app` / `MyComic.app`。
 List<String> fushiAppCandidates({
   required Map<String, String> environment,
   required String operatingSystem,
@@ -48,7 +48,7 @@ List<String> fushiAppCandidates({
       add(p.windows.join(cliDir, 'fushi.exe'));
       final String? local = environment['LOCALAPPDATA'];
       if (local != null && local.isNotEmpty) {
-        add(p.windows.join(local, 'Fushi', 'fushi.exe'));
+        add(p.windows.join(local, 'MyComic', 'fushi.exe'));
       }
     case 'macos':
       // CLI 随包放在 `<bundle>.app/Contents/MacOS/` 时，同级就是 app 本体。
@@ -59,7 +59,7 @@ List<String> fushiAppCandidates({
         if (home != null && home.isNotEmpty) p.posix.join(home, 'Applications'),
       ]) {
         add(p.posix.join(root, 'fushi.app'));
-        add(p.posix.join(root, 'Fushi.app'));
+        add(p.posix.join(root, 'MyComic.app'));
       }
     default:
       add(p.posix.join(cliDir, 'fushi'));

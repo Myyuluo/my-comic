@@ -55,7 +55,7 @@ void main() {
 
     test('NextButtonClick 在选目录页用探针文件预检可写性', () {
       expect(iss, contains('function InstallDirWritable'));
-      expect(iss, contains('.fushi-setup-write-test'));
+      expect(iss, contains('.mycomic-setup-write-test'));
       expect(iss, contains('function NextButtonClick'));
       expect(iss, contains('CurPageID = wpSelectDir'));
       expect(iss, contains('InstallDirWritable(WizardDirValue)'));

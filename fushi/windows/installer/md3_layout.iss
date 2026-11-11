@@ -112,7 +112,7 @@ begin
   Md3StepLabel.SetBounds(ScaleX(32), ScaleY(20), BodyWidth - ScaleX(64), ScaleY(18));
   Md3Text(Md3StepLabel, 9, True);
   Md3StepLabel.Font.Color := Md3Primary;
-  Md3StepLabel.Caption := 'FUSHI  /  安装向导';
+  Md3StepLabel.Caption := 'MYCOMIC  /  安装向导';
 
   Md3Text(WizardForm.PageNameLabel, 20, False);
   WizardForm.PageNameLabel.SetBounds(ScaleX(32), ScaleY(43),
@@ -169,20 +169,20 @@ var
 begin
   if CurPageID = wpSelectDir then
   begin
-    Md3StepLabel.Caption := 'FUSHI  /  程序位置';
+    Md3StepLabel.Caption := 'MYCOMIC  /  程序位置';
     Md3FitPathField(WizardForm.DirEdit, WizardForm.DirBrowseButton);
     Md3StyleButton(WizardForm.DirBrowseButton, False);
   end
   else if CurPageID = wpSelectTasks then
   begin
-    Md3StepLabel.Caption := 'FUSHI  /  使用偏好';
+    Md3StepLabel.Caption := 'MYCOMIC  /  使用偏好';
     WizardForm.TasksList.SetBounds(0, ScaleY(44), WizardForm.SelectTasksPage.ClientWidth,
       WizardForm.SelectTasksPage.ClientHeight - ScaleY(44));
     Md3StyleTasks(WizardForm.TasksList);
   end
   else if CurPageID = wpReady then
   begin
-    Md3StepLabel.Caption := 'FUSHI  /  确认设置';
+    Md3StepLabel.Caption := 'MYCOMIC  /  确认设置';
     { UpdateReadyPage has finished before CurPageChanged (Inno 6.7). Preserve
       its complete text across VCL handle recreation; do not instantiate a
       styled scrolling control on a hidden notebook page. }
@@ -213,9 +213,9 @@ begin
     Md3StyleSurface(Md3SummaryCard, 12);
   end
   else if CurPageID = wpInstalling then
-    Md3StepLabel.Caption := 'FUSHI  /  正在安装'
+    Md3StepLabel.Caption := 'MYCOMIC  /  正在安装'
   else
-    Md3StepLabel.Caption := 'FUSHI  /  安装向导';
+    Md3StepLabel.Caption := 'MYCOMIC  /  安装向导';
 end;
 
 procedure DeinitializeSetup();

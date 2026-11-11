@@ -60,7 +60,7 @@ class FushiDatabaseDowngradeException implements Exception {
   @override
   String toString() =>
       'FushiDatabaseDowngradeException: database was created by a newer '
-      'version of Fushi (schema v$dbVersion); this app only understands '
+      'version of MyComic (schema v$dbVersion); this app only understands '
       'schema v$appSchemaVersion. Opening was refused to protect your data.';
 }
 
@@ -80,8 +80,7 @@ const String kLegacySchemaBridgeAppVersion = '2.9.1';
 /// [kLegacySchemaBridgeAppVersion] 的 GitHub Release 页（门槛提示里的下载链接）。
 /// 2026-10-14 经 `gh release view v2.9.1` 核实：正式版、非预发布。
 const String kLegacySchemaBridgeReleaseUrl =
-    'https://github.com/hajisensai/fushi/releases/tag/'
-    'v$kLegacySchemaBridgeAppVersion';
+    'https://github.com/Myyuluo/my-comic/releases';
 
 /// 库的 schema 低于 [kMinSupportedSchemaVersion]（或目录里只有改名前的
 /// `hibiki.db`），本版本已不含能把它升上来的迁移代码。
@@ -113,8 +112,9 @@ class UnsupportedLegacySchemaException implements Exception {
       '${dbPath == null ? '' : '"$dbPath" '}'
       '(schema ${dbVersion == null ? 'pre-rename hibiki.db' : 'v$dbVersion'}) '
       'is older than the minimum this version can upgrade '
-      '(schema v$minSupportedVersion). Install Fushi '
-      'v$kLegacySchemaBridgeAppVersion, open it once to upgrade the data, then '
+      '(schema v$minSupportedVersion). Install a MyComic version that still '
+      'carries the full upgrade path (for example v'
+      '$kLegacySchemaBridgeAppVersion), open it once to upgrade the data, then '
       'install this version ($kLegacySchemaBridgeReleaseUrl). The database '
       'was left untouched.';
 }

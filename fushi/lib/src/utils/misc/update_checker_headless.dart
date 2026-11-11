@@ -24,9 +24,9 @@ class _UpdateDownloadSession {
   final ValueNotifier<UpdateDownloadDiagnostics?> diagnostics =
       ValueNotifier<UpdateDownloadDiagnostics?>(null);
 
-  /// 「本次没用上你选的下载来源」通告：所选来源对某些资产解析不出候选（旧仓库直链 /
-  /// 第三方 host / 镜像前缀已下线）时行为上照常回退，但降级必须看得见，否则用户会以为
-  /// 自己锁定了 Cloudflare（见 [UpdateDownloadPlan.preferenceUnavailable]）。
+  /// 「本次没用上你选的下载来源」通告：所选来源对某些资产解析不出候选（第三方 host /
+  /// 镜像前缀已下线）时行为上照常回退，但降级必须看得见，否则用户会以为自己锁定了
+  /// 所选来源（见 [UpdateDownloadPlan.preferenceUnavailable]）。
   final ValueNotifier<String?> sourceNotice = ValueNotifier<String?>(null);
   final ValueNotifier<bool> overlayVisible = ValueNotifier<bool>(true);
 

@@ -20,7 +20,7 @@ class HangWatchdogLog {
 
   /// 日志文件相对 `%LOCALAPPDATA%` 的子路径（native 端 `hang_watchdog.cpp` 写进与
   /// crash dump 同一目录，文件名 `hang_watchdog.log`——两边硬钉同一确定路径）。
-  static const String _relativePath = r'Fushi\crashdumps\hang_watchdog.log';
+  static const String _relativePath = r'MyComic\crashdumps\hang_watchdog.log';
 
   /// 解析日志文件（仅 Windows）。环境变量 `LOCALAPPDATA` 缺失或非 Windows 返回 null。
   @visibleForTesting

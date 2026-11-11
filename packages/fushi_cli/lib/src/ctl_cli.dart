@@ -1,4 +1,4 @@
-/// `fushi_cli` 命令行：驱动本机正在运行的 Fushi 桌面 app。
+/// `fushi_cli` 命令行：驱动本机正在运行的 MyComic 桌面 app。
 ///
 /// ```
 /// fushi_cli status            # app 是否在运行、是否初始化完成（不拉起 app）
@@ -55,7 +55,7 @@ ArgParser _buildParser(List<CtlCommandGroup> groups) {
     ..addFlag('json', negatable: false, help: '输出 JSON（便于脚本解析）')
     ..addOption(
       'app',
-      help: 'Fushi app 可执行文件路径（缺省查 FUSHI_APP / CLI 同级目录 / 默认安装位置）',
+      help: 'MyComic app 可执行文件路径（缺省查 FUSHI_APP / CLI 同级目录 / 默认安装位置）',
     )
     ..addOption(
       'timeout',
@@ -244,7 +244,7 @@ class _Cli {
           final CtlAppStatus status = await _ensureReady();
           _emit(
             status.toJson(),
-            '就绪：Fushi ${status.version ?? ''}（pid ${status.pid}）',
+            '就绪：MyComic ${status.version ?? ''}（pid ${status.pid}）',
           );
           return kCliExitOk;
         case 'open':
@@ -313,13 +313,13 @@ class _Cli {
   Future<int> _status() async {
     final CtlAppStatus? status = await _probe();
     if (status == null) {
-      _emit(const <String, Object?>{'running': false}, 'Fushi 没有在运行');
+      _emit(const <String, Object?>{'running': false}, 'MyComic 没有在运行');
       return kCliExitUnavailable;
     }
     _emit(<String, Object?>{
       'running': true,
       ...status.toJson(),
-    }, 'Fushi 正在运行（pid ${status.pid}，${status.initialised ? '已就绪' : '初始化中'}）');
+    }, 'MyComic 正在运行（pid ${status.pid}，${status.initialised ? '已就绪' : '初始化中'}）');
     return kCliExitOk;
   }
 
@@ -333,7 +333,7 @@ class _Cli {
       'ok': true,
       'target': target,
       'kind': kind?.wireName,
-    }, '已交给 Fushi 打开：$target');
+    }, '已交给 MyComic 打开：$target');
     return kCliExitOk;
   }
 
@@ -353,11 +353,11 @@ class _Cli {
       _emit(const <String, Object?>{
         'ok': true,
         'running': false,
-      }, 'Fushi 没有在运行');
+      }, 'MyComic 没有在运行');
       return kCliExitOk;
     }
     await _client!.quit();
-    _emit(<String, Object?>{'ok': true, 'pid': status.pid}, '已请求 Fushi 退出');
+    _emit(<String, Object?>{'ok': true, 'pid': status.pid}, '已请求 MyComic 退出');
     return kCliExitOk;
   }
 
@@ -410,7 +410,7 @@ class _Cli {
       if (!allowLaunch) {
         throw const _CliFailure(
           kCliExitUnavailable,
-          'Fushi 没有在运行（已指定 --no-launch）',
+          'MyComic 没有在运行（已指定 --no-launch）',
         );
       }
       final String? app = await locateFushiApp(
@@ -422,10 +422,10 @@ class _Cli {
       if (app == null) {
         throw const _CliFailure(
           kCliExitUnavailable,
-          '找不到 Fushi app，请用 --app <路径> 或环境变量 $kFushiAppEnv 指定',
+          '找不到 MyComic app，请用 --app <路径> 或环境变量 $kFushiAppEnv 指定',
         );
       }
-      if (!json) err.writeln('正在启动 Fushi：$app');
+      if (!json) err.writeln('正在启动 MyComic：$app');
       try {
         await launchFushiApp(
           app,
@@ -433,7 +433,7 @@ class _Cli {
           starter: starter,
         );
       } on ProcessException catch (error) {
-        throw _CliFailure(kCliExitUnavailable, '启动 Fushi 失败：${error.message}');
+        throw _CliFailure(kCliExitUnavailable, '启动 MyComic 失败：${error.message}');
       }
     }
     while (status == null || !status.initialised) {
@@ -441,8 +441,8 @@ class _Cli {
         throw _CliFailure(
           kCliExitTempFail,
           status == null
-              ? '等待 Fushi 控制通道超时（${timeout.inSeconds}s）。若 app 已打开，可能是不带控制通道的旧版本'
-              : '等待 Fushi 初始化完成超时（${timeout.inSeconds}s）',
+              ? '等待 MyComic 控制通道超时（${timeout.inSeconds}s）。若 app 已打开，可能是不带控制通道的旧版本'
+              : '等待 MyComic 初始化完成超时（${timeout.inSeconds}s）',
         );
       }
       await Future<void>.delayed(pollInterval);
@@ -474,9 +474,9 @@ class _Cli {
     'bad_request' ||
     'conflict' ||
     'unsupported' => error.message ?? error.code,
-    kCtlErrorRejected => 'Fushi 拒绝：${error.message ?? '不支持的目标'}',
+    kCtlErrorRejected => 'MyComic 拒绝：${error.message ?? '不支持的目标'}',
     kCtlErrorUnauthorized => '控制通道鉴权失败（token 不匹配）',
-    kCtlErrorUnreachable => 'Fushi 已断开连接',
+    kCtlErrorUnreachable => 'MyComic 已断开连接',
     _ => '请求失败：$error',
   };
 }

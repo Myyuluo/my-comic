@@ -96,7 +96,7 @@ class DesktopWindowPlacement {
         await windowManager.maximize();
       }
     } catch (e) {
-      debugPrint('[Fushi] desktop window placement skipped: $e');
+      debugPrint('[MyComic] desktop window placement skipped: $e');
     }
   }
 
@@ -166,7 +166,7 @@ class DesktopWindowPlacement {
       _lastSavedBounds = bounds;
       _lastSavedMaximized = false;
     } catch (e) {
-      debugPrint('[Fushi] desktop window placement save skipped: $e');
+      debugPrint('[MyComic] desktop window placement save skipped: $e');
     }
   }
 
@@ -182,7 +182,7 @@ class DesktopWindowPlacement {
     try {
       await _writeMaximized(maximized);
     } catch (e) {
-      debugPrint('[Fushi] desktop window maximized save skipped: $e');
+      debugPrint('[MyComic] desktop window maximized save skipped: $e');
     }
   }
 
@@ -212,7 +212,7 @@ class DesktopWindowPlacement {
       final SharedPreferences prefs = await SharedPreferences.getInstance();
       return prefs.getBool(_maximizedKey) ?? false;
     } catch (e) {
-      debugPrint('[Fushi] desktop window maximized read skipped: $e');
+      debugPrint('[MyComic] desktop window maximized read skipped: $e');
       return false;
     }
   }
@@ -351,7 +351,7 @@ class DesktopWindowPlacement {
           .toList();
       if (workAreas.isNotEmpty) return workAreas;
     } catch (e) {
-      debugPrint('[Fushi] screen work areas unavailable: $e');
+      debugPrint('[MyComic] screen work areas unavailable: $e');
     }
 
     if (_isUsableRect(fallbackBounds)) {
@@ -386,7 +386,7 @@ class DesktopWindowPlacement {
       final Rect bounds = Rect.fromLTWH(x, y, width, height);
       return _isUsableRect(bounds) ? bounds : null;
     } catch (e) {
-      debugPrint('[Fushi] desktop window placement read skipped: $e');
+      debugPrint('[MyComic] desktop window placement read skipped: $e');
       return null;
     }
   }

@@ -55,9 +55,9 @@ void main() {
   group('synthesizeStableAssetNames (资产命名重建，纯函数)', () {
     test('合成 Windows setup + 全 Android ABI 的 apk 名', () {
       final List<String> names = synthesizeStableAssetNames('0.4.1');
-      expect(names, contains('fushi-0.4.1-windows-setup.exe'));
+      expect(names, contains('mycomic-0.4.1-windows-setup.exe'));
       for (final String abi in kAndroidReleaseAbis) {
-        expect(names, contains('fushi-0.4.1-$abi.apk'));
+        expect(names, contains('mycomic-0.4.1-$abi.apk'));
       }
     });
 
@@ -90,7 +90,7 @@ void main() {
               (a['name'] as String).endsWith('-windows-setup.exe'));
       expect(
         windows['browser_download_url'],
-        'https://github.com/Myyuluo/my-comic/releases/download/v0.4.1/fushi-0.4.1-windows-setup.exe',
+        'https://github.com/Myyuluo/my-comic/releases/download/v0.4.1/mycomic-0.4.1-windows-setup.exe',
       );
     });
 
@@ -110,7 +110,7 @@ void main() {
               (a['name'] as String).endsWith('-windows-setup.exe'));
       expect(
         windows['browser_download_url'],
-        'https://github.com/example/fork/releases/download/v0.4.1/fushi-0.4.1-windows-setup.exe',
+        'https://github.com/example/fork/releases/download/v0.4.1/mycomic-0.4.1-windows-setup.exe',
       );
     });
 
@@ -129,7 +129,7 @@ void main() {
       final UpdateAsset? asset = await WindowsUpdater().selectAsset(assets);
       expect(
         asset?.url,
-        'https://github.com/Myyuluo/my-comic/releases/download/v0.4.1/fushi-0.4.1-windows-setup.exe',
+        'https://github.com/Myyuluo/my-comic/releases/download/v0.4.1/mycomic-0.4.1-windows-setup.exe',
       );
     });
 
@@ -142,7 +142,7 @@ void main() {
       ).selectAsset(assets);
       expect(
         asset?.url,
-        'https://github.com/Myyuluo/my-comic/releases/download/v0.4.1/fushi-0.4.1-arm64-v8a.apk',
+        'https://github.com/Myyuluo/my-comic/releases/download/v0.4.1/mycomic-0.4.1-arm64-v8a.apk',
       );
     });
   });

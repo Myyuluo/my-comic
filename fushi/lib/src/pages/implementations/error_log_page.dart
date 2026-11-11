@@ -74,7 +74,7 @@ class _ErrorLogPageState extends State<ErrorLogPage> {
             final bytes = Uint8List.fromList(utf8.encode(_log));
             final xFile = XFile.fromData(
               bytes,
-              name: 'fushi_error_log.txt',
+              name: 'mycomic_error_log.txt',
               mimeType: 'text/plain',
             );
             FushiShare.shareFiles([xFile], subject: t.error_log_share_subject);
@@ -97,7 +97,7 @@ class _ErrorLogPageState extends State<ErrorLogPage> {
             onTap: () => saveLogToFile(
               context: context,
               log: _log,
-              fileName: 'fushi_error_log.txt',
+              fileName: 'mycomic_error_log.txt',
               subject: t.error_log_share_subject,
             ),
           ),

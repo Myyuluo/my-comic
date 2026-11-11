@@ -165,7 +165,7 @@ class MihonDownloadCountsClient {
     try {
       final http.Request request = http.Request('GET', endpoint);
       // GitHub API 要求带 UA，不带会 403；Accept 钉住 v3 免得将来默认版本换掉。
-      request.headers[HttpHeaders.userAgentHeader] = 'Fushi';
+      request.headers[HttpHeaders.userAgentHeader] = 'MyComic';
       request.headers[HttpHeaders.acceptHeader] = 'application/vnd.github+json';
       final http.StreamedResponse response =
           await _client.send(request).timeout(left);

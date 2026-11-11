@@ -17,7 +17,7 @@ constexpr DWORD kParentExitTimeoutMs = 120000;
 // then still trips the AppMutex "is currently running" abort. This closes
 // the "only waited on the parent PID" blind spot. The .iss [Code]
 // InitializeSetup layer is the primary guard; this is belt-and-suspenders.
-constexpr wchar_t kFushiSingleInstanceMutex[] = L"FushiSingleInstanceMutex";
+constexpr wchar_t kFushiSingleInstanceMutex[] = L"MyComicSingleInstanceMutex";
 constexpr DWORD kMutexReleaseTimeoutMs = 10000;
 // 安装器退出后，等 app 自己回来的观察窗口。安装成功时 .iss 的 [Run] 会拉起 fushi.exe，
 // Flutter 冷启到建互斥体通常 1~3s；给足余量再判定「没人回来」。

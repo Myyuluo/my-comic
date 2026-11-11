@@ -72,8 +72,8 @@ class PresentWatchdog {
 class PresentStallLog {
   PresentStallLog._();
 
-  static const String logRelative = r'Fushi\present_stall.log';
-  static const String markerRelative = r'Fushi\present_stall.marker';
+  static const String logRelative = r'MyComic\present_stall.log';
+  static const String markerRelative = r'MyComic\present_stall.marker';
 
   /// 解析 `%LOCALAPPDATA%\Fushi\<relative>`（仅 Windows；非 Windows / 无 LOCALAPPDATA
   /// 返回 null）。

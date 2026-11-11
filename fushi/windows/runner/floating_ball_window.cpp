@@ -26,8 +26,8 @@ namespace {
 constexpr wchar_t kBallClassName[] = L"FushiFloatingBallWindow";
 constexpr wchar_t kMenuClassName[] = L"FushiFloatingBallMenuWindow";
 // 标题**不能**是 "Fushi"：main.cpp 按标题 FindWindow 找主窗（单实例转发）。
-constexpr wchar_t kBallTitle[] = L"Fushi Floating Ball";
-constexpr wchar_t kMenuTitle[] = L"Fushi Floating Ball Menu";
+constexpr wchar_t kBallTitle[] = L"MyComic Floating Ball";
+constexpr wchar_t kMenuTitle[] = L"MyComic Floating Ball Menu";
 
 constexpr UINT_PTR kAnimationTimerId = 1;
 // USER_TIMER_MINIMUM。SetTimer 的周期会被向上取整到系统时钟节拍（默认 15.6ms）：
@@ -180,7 +180,7 @@ std::wstring FloatingBallWindow::LabelFor(const std::string& id) const {
   if (id == "popup_lookup") return L"App-external lookup";
   if (id == "clipboard") return L"Clipboard";
   if (id == "sync") return L"Sync now";
-  if (id == kActionOpenApp) return L"Open Fushi";
+  if (id == kActionOpenApp) return L"Open MyComic";
   if (id == kActionClose) return L"Close";
   if (id == "ball") return L"Floating ball";
   return std::wstring(id.begin(), id.end());

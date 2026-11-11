@@ -2,17 +2,13 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'package:fushi/src/utils/misc/error_log_service.dart';
 
-/// 官网地址。官网下载页与新手引导从这里取值，URL 只存在一处。
+/// 项目主页（GitHub fork）。下载页与新手引导从这里取值，URL 只存在一处。
 ///
-/// 更新链路另有自己的常量（`update_checker_net.dart` 的官方镜像 host）：那边要的是
-/// 版本化的 R2 下载路径，不是站点首页，两者刻意不共用一个字符串。
-const String kOfficialWebsiteUrl = 'https://fushi.moe';
+/// MyComic 是独立发行版，不再指向上游官网；更新资产也由本仓库的 Release 发布。
+const String kOfficialWebsiteUrl = 'https://github.com/Myyuluo/my-comic';
 
-/// 官网下载页。除了 app 安装包，这一页还带**推荐包**那一节：分片直链
-/// （IDM / aria2 直接喂）、整包镜像，以及「导入方式要选合并、不要选覆盖整库」
-/// 的说明。新手引导里的「在官网下载」指向这里，而不是甩一条 9.5 GB 的裸直链
-/// ——直链下完了，用户还是不知道下一步该干什么。
-const String kOfficialDownloadPageUrl = '$kOfficialWebsiteUrl/download';
+/// 项目 Release 页。安装包、更新资产与发行说明都在这里。
+const String kOfficialDownloadPageUrl = '$kOfficialWebsiteUrl/releases';
 
 /// my-comic 的 GitHub 仓库。宽屏侧栏左上角的品牌图标与「设置 · 通用 · GitHub」
 /// 都指向这里；这是本项目的仓库，不是上游 Fushi 仓库。URL 只存在一处。

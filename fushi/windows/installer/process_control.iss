@@ -210,7 +210,7 @@ begin
   SetArrayLength(Targets, 0);
   FushiSnapshotProcesses(Pids, ParentPids, Names);
   for I := 0 to GetArrayLength(Pids) - 1 do
-    if (Names[I] = 'fushi.exe') or (Names[I] = 'hibiki.exe') then
+    if (Names[I] = 'mycomic.exe') or (Names[I] = 'fushi.exe') or (Names[I] = 'hibiki.exe') then
       FushiAppendPid(Targets, Pids[I]);
 end;
 
@@ -233,7 +233,7 @@ begin
   if GetArrayLength(FushiWmCloseTargets) = 0 then
     Exit;
   { 实参数组不能换行起头：Inno 把以 `[` 开头的行当段标签（即使在 [Code] 里）。 }
-  Log(Format('process_control: WM_CLOSE -> %d Fushi process(es)', [GetArrayLength(FushiWmCloseTargets)]));
+  Log(Format('process_control: WM_CLOSE -> %d MyComic process(es)', [GetArrayLength(FushiWmCloseTargets)]));
   FushiEnumWindows(CreateCallback(@FushiPostCloseToTargetWindow), 0);
   SetArrayLength(FushiWmCloseTargets, 0);
 end;
@@ -258,7 +258,7 @@ begin
   FushiSnapshotProcesses(Pids, ParentPids, Names);
   SetArrayLength(Targets, 0);
   for I := 0 to GetArrayLength(Pids) - 1 do
-    if (Names[I] = 'fushi.exe') or (Names[I] = 'hibiki.exe') then
+    if (Names[I] = 'mycomic.exe') or (Names[I] = 'fushi.exe') or (Names[I] = 'hibiki.exe') then
       FushiAppendPid(Targets, Pids[I]);
   if GetArrayLength(Targets) = 0 then
     Exit;

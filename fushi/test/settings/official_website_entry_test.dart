@@ -75,15 +75,16 @@ void main() {
   test('openOfficialDownloadPage 落在下载页，而不是首页', () async {
     expect(await openOfficialDownloadPage(), isTrue);
 
-    // 官网下载页仍被新手引导的推荐包入口使用；删掉的只是设置页入口。
+    // 独立发行版不再指向上游官网；下载入口落在 fork 仓库的 Releases 页。
     expect(launchedUrls, <String>[kOfficialDownloadPageUrl]);
-    expect(kOfficialDownloadPageUrl, 'https://fushi.moe/download');
-    // 下载页必须仍属于官网站点：断言站点来源关系，而不是只钉一个可能被
-    // 一起改掉的字面量。
+    expect(
+      kOfficialDownloadPageUrl,
+      'https://github.com/Myyuluo/my-comic/releases',
+    );
     expect(
       Uri.parse(kOfficialDownloadPageUrl).host,
       Uri.parse(kOfficialWebsiteUrl).host,
-      reason: '下载页 URL 必须属于官网域名',
+      reason: '下载页 URL 必须属于 fork 仓库域名',
     );
     expect(kOfficialDownloadPageUrl, startsWith(kOfficialWebsiteUrl));
   });

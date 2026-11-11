@@ -51,13 +51,13 @@ class MacosFullscreenState {
       );
     } catch (e) {
       // 平台通道不可用（测试 / 未初始化的壳）时降级成「非全屏」，与旧行为一致。
-      debugPrint('[Fushi] macOS fullscreen delegate skipped: $e');
+      debugPrint('[MyComic] macOS fullscreen delegate skipped: $e');
       return;
     }
     try {
       _isFullscreen.value = await WindowManipulator.isWindowFullscreened();
     } catch (e) {
-      debugPrint('[Fushi] macOS fullscreen initial query skipped: $e');
+      debugPrint('[MyComic] macOS fullscreen initial query skipped: $e');
     }
   }
 

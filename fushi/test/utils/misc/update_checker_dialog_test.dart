@@ -185,13 +185,13 @@ void main() {
     );
 
     final String message = t.update_download_source_unavailable(
-      source: t.update_download_source_cloudflare,
+      source: t.update_download_source_github,
     );
     expect(find.text(message), findsNothing,
         reason: '无事可报时不该占一行');
 
     // 「所选来源对这个资产不适用」以前是纯静默降级：UI 零提示，用户以为自己锁定了
-    // Cloudflare。现在它是一等信息，必须能在遮罩上看见。
+    // 所选来源。现在它是一等信息，必须能在遮罩上看见。
     notice.value = message;
     await tester.pump();
     expect(find.text(message), findsOneWidget);
@@ -511,7 +511,7 @@ void main() {
     expect(find.textContaining('5678'), findsWidgets);
     expect(find.textContaining('libmpv-2.dll'), findsWidgets);
     expect(find.textContaining('code 5'), findsWidgets);
-    expect(find.textContaining('Close Fushi'), findsOneWidget);
+    expect(find.textContaining('Close MyComic'), findsOneWidget);
     expect(find.textContaining('retry'), findsOneWidget);
     expect(find.textContaining('restart Windows'), findsOneWidget);
   });

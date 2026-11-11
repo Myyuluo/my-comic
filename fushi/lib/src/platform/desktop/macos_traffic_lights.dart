@@ -43,6 +43,6 @@ Future<void> setMacOSTrafficLightsHidden(bool hidden) async {
       await WindowManipulator.showZoomButton();
     }
   } catch (e) {
-    debugPrint('[Fushi] macOS traffic light toggle skipped: $e');
+    debugPrint('[MyComic] macOS traffic light toggle skipped: $e');
   }
 }

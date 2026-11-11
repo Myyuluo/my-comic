@@ -907,7 +907,7 @@ class LegacyAidokuLibraryAdapter implements OnlineMangaRuntimeAdapter {
 
   static const OnlineMangaUnavailable _removed = OnlineMangaUnavailable(
     OnlineMangaUnavailableReason.platformUnsupported,
-    'The Aidoku runtime has been removed from Fushi',
+    'The Aidoku runtime has been removed from MyComic',
   );
 
   @override

@@ -63,7 +63,7 @@ class _DebugLogPageState extends State<DebugLogPage> {
             final Uint8List bytes = Uint8List.fromList(utf8.encode(_log));
             final XFile xFile = XFile.fromData(
               bytes,
-              name: 'fushi_debug_log.txt',
+              name: 'mycomic_debug_log.txt',
               mimeType: 'text/plain',
             );
             FushiShare.shareFiles([xFile], subject: t.debug_log_share_subject);
@@ -86,7 +86,7 @@ class _DebugLogPageState extends State<DebugLogPage> {
             onTap: () => saveLogToFile(
               context: context,
               log: _log,
-              fileName: 'fushi_debug_log.txt',
+              fileName: 'mycomic_debug_log.txt',
               subject: t.debug_log_share_subject,
             ),
           ),
