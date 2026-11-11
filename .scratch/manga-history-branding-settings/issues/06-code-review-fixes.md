@@ -70,3 +70,8 @@ Resolved on `worktree-agent-ticket06`（基线 `d20e1226`，实现 commit `868b8
 - 漫画 WebView 环境若在清缓存过程中才首次创建、且基础目录被锁而退到哈希兄弟目录，清理前后测量仍按基础目录，`freedBytes` 会少报（不会多报）；已创建环境与正常路径准确。
 - `update_checker_release.dart` 行数天花板 2150 继续满足（2061 行），未上调。
 - `officialR2UrlForUpdateAsset` 仍只识别上游 `hajisensai/fushi` 的 Release 资产并映射到官网 R2；本 ticket 未改（不在 findings 列表），下载回退仍走 GitHub 直连 / 镜像。
+
+### Merge 收口（2026-11-11）
+
+- `git merge integration/manga-history-branding-settings` → `Already up to date.`（integration 尖端仍为基线 `d20e1226`，本分支已领先两个提交），无冲突、无 merge commit。
+- merge 后 HEAD：`64bac02cc31f37b8247e69a83d0054a0ceb66f49`（实现 `868b8f35a2331ea72d2f5a66d74dd8997525afaa` + ticket 更新；本条 merge 记录提交后 HEAD 再前进一个 docs commit）。未 push。
