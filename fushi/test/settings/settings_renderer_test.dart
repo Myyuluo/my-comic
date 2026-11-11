@@ -1648,19 +1648,3 @@ class _VersionedRendererTestAppModel extends _RendererTestAppModel {
   @override
   PackageInfo get packageInfo => _packageInfo;
 }
-
-/// Keep this test on real preference writes while replacing the HTTP listener.
-class _YomitanRendererTestAppModel extends _RendererTestAppModel {
-  int serverStarts = 0;
-  int serverStops = 0;
-
-  @override
-  Future<void> startFushiApiServer() async {
-    serverStarts++;
-  }
-
-  @override
-  Future<void> stopFushiApiServer() async {
-    serverStops++;
-  }
-}

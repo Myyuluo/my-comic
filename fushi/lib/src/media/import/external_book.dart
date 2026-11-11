@@ -12,11 +12,11 @@ import 'package:path/path.dart' as p;
 ///   想用阅读器去「打开」一个 json。只留 `.txt` 这一个真正当书分发的纯文本格式；
 /// - `.mokuro` 收：它就是一卷 OCR 漫画的入口文件。
 ///
-/// 载体身份（书 / PDF / 文本 / 漫画、图片型 EPUB 归漫画）不在这里判，交给导入层的
+/// 载体身份（书 / 文本 / 漫画、图片型 EPUB 归漫画）不在这里判，交给导入层的
 /// `classifyImportCarrier`——与导入对话框、`fushi_cli library import` 同一判据。
+/// PDF 导入已移除（ticket 05），不再登记为可打开的书。
 const Set<String> kExternalBookOpenExtensions = <String>{
   '.epub',
-  '.pdf',
   '.txt',
   '.cbz',
   '.cbr',

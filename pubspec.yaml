@@ -86,16 +86,6 @@ dependency_overrides:
   # third_party/media_kit_video/PATCHES.md.
   media_kit_video:
     path: third_party/media_kit_video
-  # macOS build fix: upstream flutter_onnxruntime 1.8.3 declares ios/macos plugin
-  # platforms whose podspecs pin onnxruntime-objc 1.23 -> forces macOS 14 / iOS 16
-  # deployment target, breaking the "Build Desktop" macOS release job (project is
-  # macOS 10.15). Vendored fork drops the ios/macos plugin-platform declarations
-  # (+ deletes the Apple native trees) so Flutter never registers it into the
-  # macOS Swift package; android/linux/windows native OCR is untouched. Apple's
-  # manga OCR degrades to interconnect-host / Gemini cloud (isLocalOnnxRuntimeAvailable).
-  # See third_party/flutter_onnxruntime/PATCHES.md.
-  flutter_onnxruntime:
-    path: third_party/flutter_onnxruntime
   # fushi_asr_subtitles 的 pubspec 把 fushi_asr_core 写成 `^0.1.0`（上游 workspace 里
   # 靠 workspace 解析），我们从 git 单包引进来时 pub 会把它当 hosted 去 pub.dev 找 ——
   # 那儿没有这个包（publish_to: none），于是 "fushi_asr_subtitles from git is forbidden"。

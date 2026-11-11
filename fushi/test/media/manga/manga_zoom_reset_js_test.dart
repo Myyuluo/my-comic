@@ -24,7 +24,6 @@ void main() {
     const <String>['page.png'],
     mode: MangaReadingMode.spread,
     spreadDirection: 'rtl',
-    inlineSelectionJs: '',
     animateDoubleTap: animate,
   );
 

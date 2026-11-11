@@ -21,7 +21,6 @@ void main() {
       ]);
       expect(d.itemsIn(ReaderControlSlot.overflow), <ReaderControlItem>[
         ReaderControlItem.modeToggle,
-        ReaderControlItem.statistics,
         ReaderControlItem.gallery,
         ReaderControlItem.fullscreen,
       ]);
@@ -38,7 +37,6 @@ void main() {
       expect(d.showsTitle, isTrue);
       // 计时开关、顶栏 / 底栏开关与有声书传输键出厂全在托盘。
       expect(d.core.removedItems, <ReaderControlItem>{
-        ReaderControlItem.studyTimer,
         ReaderControlItem.toolbars,
         ReaderControlItem.audiobookPrev,
         ReaderControlItem.audiobookPlayPause,
@@ -49,7 +47,7 @@ void main() {
       });
     });
 
-    test('窄窗出厂布局：顶部只留返回 + 书名，主操作下沉底部工具栏（4 颗）', () {
+    test('窄窗出厂布局：顶部只留返回 + 书名，主操作下沉底部工具栏（3 颗）', () {
       final ReaderControlLayout c = ReaderControlLayout.compactDefaults;
       expect(c.itemsIn(ReaderControlSlot.topLeft),
           <ReaderControlItem>[ReaderControlItem.back]);
@@ -58,7 +56,6 @@ void main() {
         ReaderControlItem.navigation,
         ReaderControlItem.audiobook,
         ReaderControlItem.settings,
-        ReaderControlItem.statistics,
       ]);
       expect(c.itemsIn(ReaderControlSlot.overflow), <ReaderControlItem>[
         ReaderControlItem.modeToggle,
@@ -71,11 +68,11 @@ void main() {
     test('存量自定义布局（2026-09 旧出厂形态）解码原样保留，不被新出厂表改写', () {
       // 旧出厂布局被用户存下来的 JSON（每颗按钮都显式在槽或 removed 里）。
       const String legacy = '{"version":1,"slots":{'
-          '"topLeft":["back","modeToggle","navigation","gallery","statistics"],'
+          '"topLeft":["back","modeToggle","navigation","gallery"],'
           '"topCenter":["title"],'
           '"topRight":["audiobook","fullscreen","settings"],'
           '"bottomLeft":[],"bottomCenter":[],"bottomRight":[]},'
-          '"removed":["studyTimer","toolbars","audiobookPrev",'
+          '"removed":["toolbars","audiobookPrev",'
           '"audiobookPlayPause","audiobookNext","audiobookSeekBack",'
           '"audiobookSeekForward","audiobookFollow"]}';
       final ReaderControlLayout d = ReaderControlLayout.decode(legacy);
@@ -84,7 +81,6 @@ void main() {
         ReaderControlItem.modeToggle,
         ReaderControlItem.navigation,
         ReaderControlItem.gallery,
-        ReaderControlItem.statistics,
       ]);
       expect(d.itemsIn(ReaderControlSlot.topRight), <ReaderControlItem>[
         ReaderControlItem.audiobook,

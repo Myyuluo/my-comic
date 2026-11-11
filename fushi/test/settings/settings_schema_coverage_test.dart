@@ -106,13 +106,6 @@ const Map<String, String> kCoveredElsewhere = <String, String>{
   // 反馈提交。行为由服务层用例咬住：「关掉开关不发」「关掉后反馈不带安装 id」。
   'system/Share usage statistics':
       'test/updates/usage_heartbeat_test.dart（关掉开关不发心跳、反馈不带安装 id）',
-  // v92 阅读空闲门（分钟）：写 prefsRepo（changed=true），生效点是阅读器建
-  // StudyClock 时读一次 appModel.readingIdleTimeout——harness 里没有阅读器。
-  // 空闲门行为由 study_clock_test「阅读空闲门」用例咬住，接线由
-  // statistics_write_convergence_guard_test ⑤ 咬住。
-  'reading/Idle timeout':
-      'test/media/audiobook/study_clock_test.dart（空闲门）+ '
-      'test/tools/statistics_write_convergence_guard_test.dart',
   // 「功能模块」里**有底栏 tab 的那些**（首页 / 库页 / 浏览 / 查词 / 浏览器扩展）
   // 自 #2198 起不再是 schema 开关行，而是自绘的 NavModuleOrderList（开关 + 拖拽 /
   // 上下移排序），本 harness 的焦点遍历不把它当 switchRow 驱动，故不在本表登记。
@@ -1034,11 +1027,6 @@ const Map<String, String> kCoveredElsewhere = <String, String>{
   // 显隐，非 reader CSS / 主题树）；由专项 getter 真值表 + 源码守卫覆盖。默认 true=保持现状。
   'reading/Reading progress indicator':
       'test/settings/top_progress_toggle_guard_test.dart',
-  // 底部状态行左段「阅读计时器」（计时器图标 + 字/时 + 本次时长）的显隐开关。生效点
-  // 在状态行组件自身的 showTimer 门控与 readerStatusFooterEnabled（两段都关时整条行
-  // 连同 28px 底部预留一起消失），既不进 reader CSS 也不进主题树，harness 的渲染输入
-  // 观测不到；由专项纯函数真值表 + widget 行为用例覆盖。默认 true=保持现状。
-  'reading/Show reading timer': 'test/reader/reader_status_footer_test.dart',
   // 视觉小说模式的六个控件：只在 view_mode=vn 时显示——本 harness 驱动「翻页 /
   // 滚动」时会走到 VN，于是它们进入遍历。生效点在 VN 引擎（WebView 分屏 /
   // 逐字显现 / 点空白推进），reader CSS 探针看不到；仅 VN 可见性、每项写穿与
@@ -1062,11 +1050,6 @@ const Map<String, String> kCoveredElsewhere = <String, String>{
       'test/reader/vn_blank_tap_chrome_reveal_bug1195_test.dart',
   // 2026-10 M3E 波次新增的四个设置（harness 能改、能写穿 DB，但生效点不在
   // reader CSS / 主题渲染输入里）：
-  // · 阅读计时起点（f68f88c）：生效点是阅读器 StudyClock 的初始暂停 / 首次翻页
-  //   起表，由纯函数真值表 + 页面接线源码守卫覆盖。
-  'reading/Reading timer start':
-      'test/stats/reader_study_clock_start_mode_test.dart + '
-      'test/pages/reader_study_clock_start_mode_wiring_guard_static_test.dart',
   // · 阅读器工具栏样式（77a4712）：悬浮 / 贴边。阅读器页要活 WebView，专项测试
   //   走设置行写偏好 → readerToolbarsFloating 换算（页面只经它，源码守卫）→
   //   生产 ReaderStatusFooter 渲染形态（胶囊 vs 整宽实体条）。
@@ -1676,19 +1659,6 @@ void main() {
       );
       final List<String> restoreDiff = _mapDiff(initial, restored);
       final bool globallyRestored = restoreDiff.isEmpty;
-
-      // 「Fushi API server」开关被焦点遍历真切到 ON 时会 shelf_io.serve 绑定一个
-      // 真实 HttpServer，它带一个 2 分钟 idleTimeout 周期 Timer。全局还原只写回 DB
-      // pref，不会停服 → 该 Timer 残留，触发测试结束的「A Timer is still pending」
-      // 断言（原 develop 基线红）。必须在**测试 body 内**（FakeAsync 区、pending-
-      // timer 校验之前）停服；放 addTearDown 太晚（teardown 在 timer 校验之后跑）。
-      // stopFushiApiServer() 是 async，但调用它会**同步**求值到 HttpServer.close()
-      // ——close() 在第一个 await 挂起前就同步取消了 idleTimeout Timer。故只需触发调
-      // 用、不能 await 它（await 真 socket-close 的 I/O Future 在 FakeAsync 区会死锁；
-      // 用 tester.runAsync 又会冲掉无关的 image-cache 真异步引出 path_provider
-      // MissingPluginException）。socket 真关闭随后在真实事件循环兑现，与本断言无关。
-      // 仅 Yomitan 留 Timer（texthooker/clipboard 切 ON 不留 fake Timer），故只停它。
-      unawaited(appModel.stopFushiApiServer());
 
       for (final ItemVerdict v in verdicts) {
         debugPrint('[schema-coverage] ${_describe(v)}');

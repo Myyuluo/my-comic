@@ -46,9 +46,8 @@ void main() {
       readerSources!['reader_manga'],
       same(MangaFushiSource.instance),
     );
-    // 既有 EPUB / PDF 源必须仍在（无覆盖）。
+    // 既有 EPUB 源必须仍在（无覆盖）；PDF 源随 PDF 阅读器移除（ticket 05）。
     expect(readerSources['reader_fushi'], same(ReaderFushiSource.instance));
-    expect(readerSources['reader_pdf'], same(ReaderPdfSource.instance));
   });
 
   test('漫画 MediaItem 经 getMediaSource 解析到 MangaFushiSource', () {

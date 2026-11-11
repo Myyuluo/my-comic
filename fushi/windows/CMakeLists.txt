@@ -129,14 +129,12 @@ endif()
 # sqlite3.dll 掩盖过这个缺口：它同时由 sqlite3_flutter_libs 走 PLUGIN_BUNDLED_LIBRARIES
 # 装进 bundle，所以 native-assets 这条通道从来没通过也看不出来。
 set(NATIVE_ASSETS_DIR "${PROJECT_BUILD_DIR}native_assets/windows/")
-# my-comic (ticket 04): pdfium is the PDF reader's native engine, which v1 does
-# not ship (local manga only covers CBZ/ZIP/folder/.mokuro). Exclude it from
-# the native-assets copy so the DLL never reaches the bundle; sqlite3.dll (the
-# other native asset) is still installed by sqlite3_flutter_libs and must stay.
+# my-comic (ticket 05): pdfrx (and its pdfium native asset) is gone with the
+# PDF reader; this native-assets copy now carries only what remaining plugins
+# produce (sqlite3.dll is also installed by sqlite3_flutter_libs).
 install(DIRECTORY "${NATIVE_ASSETS_DIR}"
    DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
-   COMPONENT Runtime
-   PATTERN "pdfium.dll" EXCLUDE)
+   COMPONENT Runtime)
 
 # my-comic (ticket 04): the following native runtimes are not shipped because
 # they only serve non-manga features (ADR-0002):

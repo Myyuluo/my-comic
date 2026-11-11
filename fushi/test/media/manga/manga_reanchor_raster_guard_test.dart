@@ -30,7 +30,6 @@ String _doc({
       <String>['p1.jpg', 'p2.jpg', 'p3.jpg'],
       mode: mode,
       spreadDirection: 'rtl',
-      inlineSelectionJs: '',
     );
 
 void main() {

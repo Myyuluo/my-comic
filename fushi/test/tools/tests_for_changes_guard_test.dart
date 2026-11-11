@@ -154,10 +154,6 @@ void main() {
         'tool/setup_worktree.ps1': <String>[
           'fushi/test/tools/powershell_51_compat_guard_test.dart',
         ],
-        'tools/browser-extension/manifest.json': <String>[
-          'fushi/test/build/browser_extension_mirror_full_guard_test.dart',
-          'fushi/test/lookup/browser_extension_installer_test.dart',
-        ],
         'docs/bugs/BUG-9999-x.md': <String>[
           'fushi/test/tools/bugs_per_file_guard_test.dart',
         ],

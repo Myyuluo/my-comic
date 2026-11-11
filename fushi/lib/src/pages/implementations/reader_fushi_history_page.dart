@@ -157,9 +157,6 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
   ReaderFushiHistoryPage get _pageWidget => widget as ReaderFushiHistoryPage;
   bool get _mangaOnly => _pageWidget.mangaOnly;
 
-  /// 「同时删除统计数据」勾选行的副标题：漫画库与书架各说各的统计口径。
-  String get _statisticsSubtitle => t.delete_statistics_manga_desc;
-
   @override
   MediaType get mediaType => mediaSource.mediaType;
 
@@ -2003,7 +2000,7 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
       DialogListAction(
         label: t.library_progress_reset_action,
         icon: Icons.restart_alt_outlined,
-        onPressed: () => _resetBookReadingState(item, bookKey),
+        onPressed: () => _resetBookReadingState(bookKey),
       ),
       DialogListAction(
         label: t.tag_label,

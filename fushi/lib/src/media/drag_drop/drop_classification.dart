@@ -1,14 +1,10 @@
 
 import 'package:path/path.dart' as p;
 
-/// 书籍扩展名（不带点，小写）。= epub + pdf + TextToEpub.supportedExtensions。
-///
-/// `pdf` 在列：PDF 是 `EpubBooks.format` 的三种书身份之一（`ImportCarrier.pdf` →
-/// `PdfImporter`），导入对话框的文件选择器一直认它。此前只有这份拖放白名单漏了，
-/// 于是「按钮能导、拖进去说不支持」——同一件东西两个入口两种答案（用户实报）。
+/// 书籍扩展名（不带点，小写）。= epub + TextToEpub.supportedExtensions。
+/// PDF 导入已移除（ticket 05），拖入 PDF 走 unknown 分支如实拒绝。
 const Set<String> kDragBookExtensions = <String>{
   'epub',
-  'pdf',
   'txt',
   'html',
   'htm',
@@ -112,11 +108,9 @@ const Set<String> kDragMangaSurfaceProbeExtensions = <String>{
   ...kDragImageArchiveProbeExtensions,
 };
 
-/// 落点偏好漫画时**直接**归漫画的扩展名（不带点，小写）：`pdf`。
+/// 落点偏好漫画时**直接**归漫画的扩展名（不带点，小写）。
 ///
-/// 一卷扫描版漫画常就是一份 PDF，漫画导入框把它逐页栅格化成漫画
-/// （`ImportCarrier.pdf` → `importPdfAsManga`）。PDF 没有便宜的「是不是页图」判据，
-/// 在漫画库里就按落点意图走漫画；书架上它仍是一本 PDF 书。
+/// 目前为空：PDF 导入已移除（ticket 05），其它漫画载体都要经扩展名 / 开包判据。
 const Set<String> kDragMangaSurfaceDirectExtensions = <String>{};
 
 /// [classifyDroppedFiles] / `probeDroppedImageArchives` 按落点取开包扩展名。

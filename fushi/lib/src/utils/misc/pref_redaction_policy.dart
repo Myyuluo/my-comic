@@ -25,7 +25,6 @@ abstract final class PrefRedactionPolicy {
     'network_proxy_username',
     'video_anidb_username',
     'video_anidb_password',
-    'yomitan_api_key',
     'jimaku_api_key',
     'video_subtitle_subdl_api_key',
     'manga_cloud_ocr_api_key',

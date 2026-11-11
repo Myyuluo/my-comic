@@ -33,10 +33,6 @@ IconData readerControlItemIcon(ReaderControlItem item) {
       return FushiIcons.bulletList;
     case ReaderControlItem.gallery:
       return FushiIcons.collections;
-    case ReaderControlItem.statistics:
-      return FushiIcons.statistics;
-    case ReaderControlItem.studyTimer:
-      return FushiIcons.timer;
     case ReaderControlItem.title:
       return FushiIcons.title;
     case ReaderControlItem.audiobook:
@@ -72,10 +68,6 @@ String readerControlItemLabel(ReaderControlItem item) {
       return t.section_navigation;
     case ReaderControlItem.gallery:
       return t.reader_gallery_tooltip;
-    case ReaderControlItem.statistics:
-      return t.reading_statistics;
-    case ReaderControlItem.studyTimer:
-      return t.shortcut_action_reader_toggle_study_clock;
     case ReaderControlItem.title:
       return t.reader_control_title;
     case ReaderControlItem.audiobook:

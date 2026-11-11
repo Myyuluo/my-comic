@@ -37,15 +37,17 @@ enum ImportCarrier {
   /// 走 `MangaModule.importArchive`。
   mangaArchive,
 
-  /// PDF。走 `PdfImporter`（真渲染，不经 TextToEpub 文本转换）。
-  pdf,
-
   /// EPUB。走 `EpubImporter.importFromPath`。
   epub,
 
   /// 可转成 EPUB 的纯文本类（txt/md/html/…），以及不认识的扩展名。
   /// 走 `TextToEpub.convert` + `EpubImporter.import`。
-  text;
+  text,
+
+  /// 明确不再受理的载体（my-comic ticket 05 起为 PDF）。保留一个显式分支，
+  /// 让「按扩展名认得、但本产品不导入」的路径能被如实拒绝，而不是掉进文本
+  /// 分支把二进制当纯文本转成乱码 EPUB。
+  unsupported;
 
   /// 是否属漫画域（四种漫画载体的统称）。书籍侧入口只关心这一个问题。
   bool get isManga =>
@@ -54,19 +56,8 @@ enum ImportCarrier {
       this == ImportCarrier.mangaMokuro ||
       this == ImportCarrier.mangaArchive;
 
-  /// 能不能在漫画库里成为一本漫画。= [isManga] + [ImportCarrier.pdf]。
-  ///
-  /// 为什么不是把 pdf 塞进 [isManga]：两个入口问的**不是同一个问题**。
-  /// - 书籍框问 [isManga]：「这东西该不该被转交给漫画流程？」PDF 的答案是**否**
-  ///   ——它在书籍框里有自己的正经去向（[ImportCarrier.pdf] → `PdfImporter`，
-  ///   落成一本 PDF 书进 PDF 阅读器）。把 pdf 并进 isManga，从书架选一份 PDF
-  ///   就会弹「这是漫画」并被转走，那是把一个正确行为改坏。
-  /// - 漫画框问本判据：「这东西能不能变成一本漫画？」PDF 的答案是**能**——逐页
-  ///   栅格化即页图，转化引擎（`book_format_rebuild.dart`）本来就在做这件事。
-  ///
-  /// 此前漫画框直接问 isManga，于是「PDF 能不能变成漫画」这个问题从来没被问过，
-  /// 漫画框选不中 PDF、硬塞进去也被当成「不支持的格式」挡回（用户实报）。
-  bool get isMangaCapable => isManga || this == ImportCarrier.pdf;
+  /// 能不能在漫画库里成为一本漫画。PDF 导入移除后就是 [isManga]。
+  bool get isMangaCapable => isManga;
 }
 
 /// 单个文件可以承载「一整卷漫画」的扩展名（带点，小写）。
@@ -77,10 +68,6 @@ enum ImportCarrier {
 ///
 /// `.zip` / `.epub` 在列是因为它们与词典包 / 普通电子书同形——光看扩展名分不出，
 /// 真定性仍由 [classifyImportCarrier] 的 `isImageArchive` 开包完成。
-///
-/// `.pdf` 在列是因为一卷扫描版漫画常常就是一份 PDF：逐页栅格化即页图。它的载体
-/// 身份仍是 [ImportCarrier.pdf]（书籍框据此走 `PdfImporter`），漫画侧的「能不能
-/// 变成漫画」由 [ImportCarrier.isMangaCapable] 单独回答，两边不打架。
 const Set<String> kMangaCarrierFileExtensions = <String>{
   '.mokuro',
   '.cbz',
@@ -135,8 +122,8 @@ ImportCarrier classifyImportCarrier(
 
   final String ext = p.extension(path).toLowerCase();
 
-  // PDF 必须在下面的文本分支之前早退——否则 PDF 二进制会被当文本转成乱码 EPUB。
-  if (ext == '.pdf') return ImportCarrier.pdf;
+  // PDF 导入已移除（ticket 05）：显式拒绝，绝不让二进制掉进文本分支转成乱码 EPUB。
+  if (ext == '.pdf') return ImportCarrier.unsupported;
 
   // .mokuro 同理：它的 JSON 内容会被文本分支当纯文本吞掉。
   if (ext == '.mokuro') return ImportCarrier.mangaMokuro;

@@ -5,7 +5,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:fushi/src/stats/study_diag_log.dart';
 import 'package:fushi/src/storage/app_paths.dart';
 import 'package:fushi/src/storage/webview2_state_root.dart';
 import 'package:fushi/src/utils/misc/error_log_service.dart';
@@ -215,19 +214,14 @@ void main() {
     );
   });
 
-  test('错误日志与学习统计日志默认落 state/logs', () async {
+  test('错误日志默认落 state/logs', () async {
     final AppPaths paths = await AppPaths.resolve();
 
     await ErrorLogService.instance.init();
     ErrorLogService.instance.log('ticket02.test', 'log location');
     await ErrorLogService.instance.flush();
 
-    await StudyDiagLog.instance.init();
-    await StudyDiagLog.instance.pending;
-
     expect(File(p.join(paths.logsRoot.path, 'error_log.txt')).existsSync(),
-        isTrue);
-    expect(File(p.join(paths.logsRoot.path, StudyDiagLog.fileName)).existsSync(),
         isTrue);
   });
 }

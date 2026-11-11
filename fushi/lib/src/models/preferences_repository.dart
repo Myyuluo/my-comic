@@ -2,8 +2,6 @@ import 'dart:convert';
 import 'dart:io' show Platform;
 import 'dart:math';
 import 'package:material_ui/material_ui.dart';
-import 'package:fushi_audio/fushi_audio.dart'
-    show kDefaultReadingIdleTimeout, kStudyIdleTimeoutPrefKey;
 import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi_engine/srs/srs_backup_retention.dart';
 import 'package:fushi_engine/profile/profile_document.dart'
@@ -50,7 +48,6 @@ import 'package:fushi_engine/ai/ai_key_rotation.dart'
 
 import 'package:fushi/src/reader/reader_control_layout.dart';
 
-import 'package:fushi/src/stats/reader_study_clock_start_mode.dart';
 
 
 
@@ -717,32 +714,6 @@ class PreferencesRepository extends ChangeNotifier implements PrefStore {
               for (final MapEntry<String, AiKeyHealth> e in map.entries)
                 e.key: e.value.toJson(),
             });
-
-  // ── yomitan-api server ───────────────────────────────────────────────
-
-  bool get fushiApiServerEnabled =>
-      getPref('yomitan_api_server_enabled', defaultValue: false) as bool;
-
-  Future<void> setFushiApiServerEnabled(bool value) async {
-    await setPref('yomitan_api_server_enabled', value);
-    notifyListeners();
-  }
-
-  int get fushiApiPort =>
-      getPref('yomitan_api_port', defaultValue: 19633) as int;
-
-  Future<void> setFushiApiPort(int value) async {
-    await setPref('yomitan_api_port', value);
-    notifyListeners();
-  }
-
-  String get fushiApiKey =>
-      getPref('yomitan_api_key', defaultValue: '') as String;
-
-  Future<void> setFushiApiKey(String value) async {
-    await setPref('yomitan_api_key', value);
-    notifyListeners();
-  }
 
   // ── 实验性：键盘/手柄焦点导航 ──────────────────────────────────────────
   // 整套自定义焦点导航（FushiFocusRoot/Ring + 手柄/方向键焦点移动）默认关闭，
@@ -2238,9 +2209,6 @@ class PreferencesRepository extends ChangeNotifier implements PrefStore {
     notifyListeners();
   }
 
-  /// 外部 mokuro CLI 可执行路径（漫画 OCR 后备；空串=未设）。内置 ONNX 引擎在本平台不可用
-  /// 或用户偏好外部工具时，OCR 导入向导据此调用系统 mokuro（见 [ExternalMokuroRunner]）。
-  /// 空串=未指定，运行时退回 `FUSHI_MOKURO` 环境变量 / PATH 探测。
   String get asrTranscribeLanguage =>
       getPref('asr_transcribe_language', defaultValue: 'ja') as String;
 
@@ -2712,72 +2680,6 @@ class PreferencesRepository extends ChangeNotifier implements PrefStore {
   bool get lowMemoryMode =>
       getPref('low_memory_mode', defaultValue: false) as bool;
 
-  // ── reading goals (TODO-1046) ────────────────────────────────────────
-  // Daily/weekly reading targets measured in characters. 0 = unset/off,
-  // which the statistics page treats as "no goal" (goal card hidden). Read
-  // and write clamped so a corrupt/out-of-range stored value can never reach
-  // the progress UI as an absurd goal. Per-Profile (not excluded in
-  // ProfileKeys), so each profile keeps its own targets.
-
-  /// v90 阅读空闲门（分钟）：这么久没有翻页 / 滚动 / 查词等输入就视为没在读，
-  /// 之后的时长不入账。只对阅读面（小说 / PDF / 漫画）生效，视频以播放态为准
-  /// （用户拍板）。偏好键与 fushi_audio 的 [kStudyIdleTimeoutPrefKey] 同名。
-  static const int readingIdleTimeoutMinutesMin = 1;
-  static const int readingIdleTimeoutMinutesMax = 120;
-
-  int get readingIdleTimeoutMinutes => (getPref(kStudyIdleTimeoutPrefKey,
-          defaultValue: kDefaultReadingIdleTimeout.inMinutes) as int)
-      .clamp(readingIdleTimeoutMinutesMin, readingIdleTimeoutMinutesMax);
-
-  Future<void> setReadingIdleTimeoutMinutes(int value) async {
-    await setPref(
-      kStudyIdleTimeoutPrefKey,
-      value.clamp(readingIdleTimeoutMinutesMin, readingIdleTimeoutMinutesMax),
-    );
-    notifyListeners();
-  }
-
-  /// 小说阅读器阅读计时的开始方式（手动 / 打开即开始 / 翻页后开始），默认打开即
-  /// 开始。普通偏好（随 Profile 快照）；下次打开书生效。
-  ReaderStudyClockStartMode get readerStudyClockStartMode =>
-      ReaderStudyClockStartMode.parse(
-          getPref(kReaderStudyClockStartModePrefKey) as String?);
-
-  Future<void> setReaderStudyClockStartMode(
-      ReaderStudyClockStartMode mode) async {
-    await setPref(kReaderStudyClockStartModePrefKey, mode.storageValue);
-    notifyListeners();
-  }
-
-  /// 统计「今日」重置时刻（整点 0..23，默认 0 = 本地午夜）：写入时把 dateKey 前移
-  /// 该小时数（凌晨 2 点读的书在重置 = 4 时记到「昨日」）。全局唯一入口是
-  /// [FushiDatabase.statDayResetHour]，AppModel 在偏好加载后与变更时镜像过去；
-  /// 历史段不重分桶（用户改设置只影响之后写入）。
-  static const int statDayResetHourMin = 0;
-  static const int statDayResetHourMax = 23;
-
-  int get statDayResetHour =>
-      (getPref(kStatDayResetHourPrefKey, defaultValue: 0) as int).clamp(
-        statDayResetHourMin,
-        statDayResetHourMax,
-      );
-
-  Future<void> setStatDayResetHour(int value) async {
-    await setPref(
-      kStatDayResetHourPrefKey,
-      value.clamp(statDayResetHourMin, statDayResetHourMax),
-    );
-    notifyListeners();
-  }
-
-  int get readingGoalDailyChars =>
-      (getPref('reading_goal_daily_chars', defaultValue: 0) as int)
-          .clamp(0, 1000000);
-
-  Future<void> setReadingGoalDailyChars(int value) async {
-    await setPref('reading_goal_daily_chars', value.clamp(0, 1000000));
-    notifyListeners();
-  }
 }
 
 /// [AiKeyHealthStore] 的偏好表实现（[PreferencesRepository.loadFromDb] 装配）。

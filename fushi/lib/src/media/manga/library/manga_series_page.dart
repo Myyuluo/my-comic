@@ -1632,7 +1632,6 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
         bookKey: row.bookKey,
         downloadsRoot: appModel.appPathsOrNull?.downloadsRoot,
         deleteLocalFiles: decision.deleteLocalFiles,
-        deleteStatistics: decision.deleteStatistics,
         downloadService: appModel.mangaDownloadService,
       );
       if (!mounted) return;
@@ -1702,7 +1701,6 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
         bookKey: row.bookKey,
         localSourceRoot: appModel.appPaths.localComicRoot,
         deleteLocalFiles: decision.deleteLocalFiles,
-        deleteStatistics: decision.deleteStatistics,
         downloadService: appModel.mangaDownloadService,
       );
       if (!mounted) return;
@@ -1823,7 +1821,6 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
         context,
         message: t.manga_series_remove_confirm,
         localFilesSubtitle: t.delete_local_files_download_desc,
-        statisticsSubtitle: t.delete_statistics_manga_desc,
       );
 
   /// 「继续阅读」落到哪一章。

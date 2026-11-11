@@ -8,9 +8,7 @@ environment:
   flutter: "^3.47.0"
 
 dependencies:
-  # 语音识别生成字幕：算法层已抽成独立仓库（hajisensai/fushi-subtitles，GPL-3.0），本仓只留
-  # Flutter 插件后端（`src/onnx/onnx_inference_ort.dart`）与 UI。漫画 OCR 也经
-  # `src/ocr/ocr_inference.dart` 复用同一套 ONNX 抽象，所以 fushi_asr_core 不只服务 ASR。
+  # 语音识别生成字幕：算法层已抽成独立仓库（hajisensai/fushi-subtitles，GPL-3.0）。
   #
   # 钉 sha 而不是分支：转录产物的字节级一致要能复现，跟着分支飘会让「同一版
   # Fushi 转出来的字幕不一样」这种事无从追查。
@@ -139,11 +137,6 @@ dependencies:
   package_info_plus: ^4.0.2
   path: ^1.8.2
   path_provider: ^2.0.13
-  # PDF 阅读器（Phase 0 spike）：PDFium 底层、字符级文本矩形供点选查词。
-  # 五平台 + native-assets/build-hook 下载 PDFium。见 docs/specs/pdf-reader-lookup。
-  # 钉 2.4.5：>=2.4.6 经 pdfrx_engine 拉 image ^4.8.0 → 要 archive ^4.0.7 / xml ^7.0.1，
-  # 与本仓 archive ^3.6.1 / xml ^6.3.0 冲突（升 archive/xml 主版本代价大，Phase 0 先钉）。
-  pdfrx: 2.4.5
   progress_indicators: ^1.0.0
   recase: ^4.1.0
   remove_emoji: ^0.0.7
@@ -187,9 +180,6 @@ dependencies:
   # dependency_overrides 的 ffmpeg_kit_flutter（android 用 third_party 自编 AAR）。
   ffmpeg_kit_flutter: ^6.0.3
   web_socket_channel: ^3.0.0
-  # 漫画内置 OCR：ONNX Runtime 五平台绑定（检测 RT-DETR + 识别 manga-ocr）。
-  # 选型见 lib/src/ocr/；EP 策略（CUDA/DirectML/CoreML/CPU）在 ocr_inference.dart。
-  flutter_onnxruntime: ^1.8.3
   hotkey_manager: ^0.2.3
   screen_retriever: ^0.2.0
   window_manager: ^0.5.1

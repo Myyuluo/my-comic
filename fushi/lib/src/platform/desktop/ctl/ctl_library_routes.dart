@@ -28,7 +28,6 @@ import 'package:fushi/src/platform/desktop/ctl/ctl_library_import.dart';
 import 'package:fushi/src/platform/desktop/ctl/ctl_library_manage_routes.dart';
 
 import 'package:fushi/src/platform/desktop/ctl/desktop_ctl_context.dart';
-import 'package:fushi/src/utils/misc/error_log_service.dart';
 
 /// library 域控制通道路由（CLI 侧命令见 `packages/fushi_cli/lib/src/commands/library_commands.dart`）。
 ///
@@ -314,7 +313,8 @@ class _LibraryCtlHandlers {
   // ── rm ───────────────────────────────────────────────────────────────
 
   /// 与各库页的单条删除同一方法、同一顺序；删除确认框的三个选项对应 body 的
-  /// `everywhere` / `deleteFiles` / `deleteStatistics`（默认全不勾，与确认框一致）。
+  /// `everywhere` / `deleteFiles`（默认全不勾，与确认框一致）。统计删除入口已随
+  /// 统计域移除（ticket 05）。
   Future<Object?> removeItem(CtlCall call) async {
     final LibraryCtlKey key = _parseKey(call);
     if (call.optBool('confirm') != true) {
@@ -325,7 +325,6 @@ class _LibraryCtlHandlers {
           ? DeleteScope.syncEverywhere
           : DeleteScope.keepLocalOnly,
       deleteLocalFiles: call.optBool('deleteFiles') == true,
-      deleteStatistics: call.optBool('deleteStatistics') == true,
     );
     switch (key.store) {
       case LibraryCtlStore.book:
@@ -359,7 +358,6 @@ class _LibraryCtlHandlers {
       bookKey: key.id,
       scope: decision.scope,
       deleteLocalFiles: decision.deleteLocalFiles,
-      deleteStatistics: decision.deleteStatistics,
     );
     if (!result.deleted) {
       throw CtlFailure.conflict('删除失败：${result.failureReason ?? '原因未知'}');
@@ -377,12 +375,6 @@ class _LibraryCtlHandlers {
     final SrtBookRepository repo = SrtBookRepository(_db);
     final SrtBook? book = await repo.findByUid(key.id);
     if (book == null) throw CtlFailure.notFound('书架里没有 ${key.wire}');
-    // 纯字幕书（bookKey 空）不提供「同时删除统计数据」：它的统计只能按 title 定位，
-    // 会连坐同名 EPUB（确认框同样不摆这个勾选框）。
-    if (decision.deleteStatistics &&
-        !ReaderFushiSource.srtBookOffersStatisticsDeletion(book)) {
-      throw const CtlFailure.rejected('纯字幕书不支持连同统计一起删（会连坐同名书的统计）');
-    }
     LocalFileDeleteReport localFiles = const LocalFileDeleteReport();
     if (book.bookKey.isNotEmpty) {
       final DeleteBookResult result = await ReaderFushiSource.instance
@@ -391,7 +383,6 @@ class _LibraryCtlHandlers {
             bookKey: book.bookKey,
             scope: decision.scope,
             deleteLocalFiles: decision.deleteLocalFiles,
-            deleteStatistics: decision.deleteStatistics,
           );
       localFiles = localFiles.merge(result.localFiles);
     }
@@ -609,11 +600,6 @@ class _LibraryCtlHandlers {
         : LibraryCtlKind.tryParse(kindRaw);
     if (kindRaw != null && kind == null) {
       throw CtlFailure.badRequest('kind「$kindRaw」不认识');
-    }
-    if (kind == LibraryCtlKind.pdf) {
-      throw const CtlFailure.badRequest(
-        'PDF 不用指定 --kind（自动识别）；要导成漫画用 --kind manga',
-      );
     }
     final String duplicate = call.optString('duplicate') ?? 'skip';
     if (duplicate != 'skip' && duplicate != 'suffix') {

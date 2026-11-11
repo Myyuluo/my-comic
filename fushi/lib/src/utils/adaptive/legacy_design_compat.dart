@@ -6,7 +6,7 @@
 //   - flutter_markdown 0.6.x（更新日志 / 更新弹窗的 MarkdownBody、SelectableText）
 //   - liquid_glass_widgets（玻璃组件全是旧 Cupertino：CupertinoTextField 等）
 //   - macos_ui（隐藏的 macOS renderer，Tooltip 等仍用旧 Material）
-//   - hotkey_manager / window_manager / flutter_html / pdfrx 等只读旧 Theme 的包
+//   - hotkey_manager / window_manager / flutter_html 等只读旧 Theme 的包
 // 新旧两套是**不同的类型**：旧组件看不见 material_ui 的 Theme / Material /
 // MaterialLocalizations，会退回默认主题，或在 debug 下直接因「No Material
 // widget found」「No MaterialLocalizations found」断言失败。

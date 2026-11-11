@@ -89,8 +89,6 @@ class MangaLibraryRemovalResult {
 /// - 本地作品（Local source / 受管本地卷）勾选「同时删除本地文件」：删除原作
 ///   文件后连 Manga 行与阅读/已读/下载状态一起删除（不留下指向已删除文件的
 ///   孤儿）；History 仍保留。文件删除失败时作品留在 Library。
-/// - 「同时删除统计数据」沿用现有语义：先删该作品的统计并按身份立碑。
-///
 /// History 始终保留：行删除路径也以 `removeFromLibraryOnly: true` 调底层，
 /// 跳过「整部作品连文件删除」的 History 级联。
 ///
@@ -102,7 +100,6 @@ Future<MangaLibraryRemovalResult> removeMangaFromLibrary({
   Directory? localSourceRoot,
   Directory? downloadsRoot,
   bool deleteLocalFiles = false,
-  bool deleteStatistics = false,
   DeleteScope scope = DeleteScope.keepLocalOnly,
   MangaDownloadService? downloadService,
 }) async {
@@ -188,16 +185,6 @@ Future<MangaLibraryRemovalResult> removeMangaFromLibrary({
     }
   }
 
-  // 文件已处理完（或不需要处理）才删统计：文件删除失败时不碰任何书架外状态，
-  // 与旧的「失败保留作品」语义一致。
-  if (deleteStatistics) {
-    await ReaderFushiSource.deleteBookStatistics(
-      db: db,
-      title: row.title,
-      mediaKeys: <String>[bookKey],
-    );
-  }
-
   if (deletesRow) {
     // 本地作品连行删除：走既有删除路径（级联章节状态 / 进度 / 任务 / 映射 /
     // Tag，并写 tombstone）。文件已由本方法处理，History 始终保留。
@@ -206,7 +193,6 @@ Future<MangaLibraryRemovalResult> removeMangaFromLibrary({
       bookKey: bookKey,
       scope: scope,
       deleteLocalFiles: false,
-      deleteStatistics: false,
       removeFromLibraryOnly: true,
     );
     if (!result.deleted) {

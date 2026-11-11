@@ -1119,8 +1119,8 @@ class _HomePageState extends BasePageState<HomePage>
 
   /// 外壳为 [tab] 显示的页面大标题：有自己分区页签行、却没有页面名的库页
   /// （书架 / 漫画 / 视频 / 游戏）与浏览、下载、查词。桌面自绘控制条已不再显示
-  /// 页面标题，这里是这些页面唯一的页面名。首页（仪表盘）、浏览器扩展与设置
-  /// 自带标题或不需要，返回 null。
+  /// 页面标题，这里是这些页面唯一的页面名。首页（仪表盘）、浏览器扩展（已删除，
+  /// 仅保留枚举值）与设置自带标题或不需要，返回 null。
   String? _shellTitleFor(HomeTab tab) => switch (tab) {
     HomeTab.books ||
     HomeTab.manga ||
@@ -1533,18 +1533,18 @@ class _HomePageState extends BasePageState<HomePage>
 
   Widget _buildTabContent(HomeTab tab) {
     final Widget content = switch (tab) {
-      // my-comic：首页 dashboard / 小说 / 视频 / 词典 / 复习 / 游戏已删除；
-      // 保留 HomeTab 枚举值以兼容旧偏好；这些 tab 不在可见导航里。
+      // my-comic：首页 dashboard / 小说 / 视频 / 词典 / 复习 / 游戏 / 浏览器扩展
+      // 已删除；保留 HomeTab 枚举值以兼容旧偏好；这些 tab 不在可见导航里。
       HomeTab.home ||
       HomeTab.books ||
       HomeTab.video ||
       HomeTab.dictionaries ||
       HomeTab.games ||
-      HomeTab.srs => const SizedBox.shrink(),
+      HomeTab.srs ||
+      HomeTab.browserExtension => const SizedBox.shrink(),
       HomeTab.browse => const BrowsePage(),
       HomeTab.history => const MangaHistoryPage(),
       HomeTab.downloads => const DownloadsPage(),
-      HomeTab.browserExtension => const BrowserExtensionPage(),
       HomeTab.settings =>
         // 设置 tab 走侧栏/底栏切回，不显示页头返回箭头；但仍需 PopScope 拦截系统
         // 返回键（否则冒泡到顶层 PopScope = 退出 app，见 BUG-236）。

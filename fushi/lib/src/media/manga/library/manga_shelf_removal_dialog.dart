@@ -3,42 +3,36 @@ import 'package:material_ui/material_ui.dart';
 import 'package:fushi/src/utils/components/deletion_disclosure.dart';
 import 'package:fushi/utils.dart';
 
-/// 用户在漫画「移出书架」弹窗里做出的两个可选动作。
+/// 用户在漫画「移出书架」弹窗里做出的可选动作。
 ///
-/// 两项都默认不勾选；弹窗不记忆上次选择（旧 `delete_prompt_remembered_choices`
+/// 默认不勾选；弹窗不记忆上次选择（旧 `delete_prompt_remembered_choices`
 /// 偏好已不再读取）。取消返回 null。
 class MangaLibraryRemovalDecision {
-  const MangaLibraryRemovalDecision({
-    required this.deleteLocalFiles,
-    required this.deleteStatistics,
-  });
+  const MangaLibraryRemovalDecision({required this.deleteLocalFiles});
 
   /// 在线 Manga 删除 Download library 里的已下载章节；本地 Manga 删除 Local
   /// source root 里的原作文件夹/文件。
   final bool deleteLocalFiles;
-
-  /// 删除该作品在主统计页的阅读时长/页数/查词/制卡计数。
-  final bool deleteStatistics;
 }
 
-/// 漫画「移出书架」的统一确认弹窗：标题、说明、两个默认不勾选的选项与
+/// 漫画「移出书架」的统一确认弹窗：标题、说明、一个默认不勾选的选项与
 /// 取消/删除按钮。在线与本地 Manga 作品页共用；书架批量/单卡与 Local source
 /// 批量入口也应复用本函数，保持文案与结构一致。
 ///
 /// 刻意不使用 [DeletionDisclosure] 的粉/蓝披露块、不提供「记住这些选择」、也不
 /// 显示同步能力说明——这是本功能明确要移除的三块内容。删除范围由标题下的说明
-/// 与两个选项的副标题直接讲清。
+/// 与选项的副标题直接讲清。
+///
+/// 统计删除（ticket 05）已移除：移出书架不再提供「同时删除统计数据」。
 Future<MangaLibraryRemovalDecision?> showMangaShelfRemovalDialog(
   BuildContext context, {
   required String message,
   required String localFilesSubtitle,
-  required String statisticsSubtitle,
 }) => showAppDialog<MangaLibraryRemovalDecision>(
   context: context,
   builder: (_) => _MangaShelfRemovalDialog(
     message: message,
     localFilesSubtitle: localFilesSubtitle,
-    statisticsSubtitle: statisticsSubtitle,
   ),
 );
 
@@ -46,12 +40,10 @@ class _MangaShelfRemovalDialog extends StatefulWidget {
   const _MangaShelfRemovalDialog({
     required this.message,
     required this.localFilesSubtitle,
-    required this.statisticsSubtitle,
   });
 
   final String message;
   final String localFilesSubtitle;
-  final String statisticsSubtitle;
 
   @override
   State<_MangaShelfRemovalDialog> createState() =>
@@ -60,7 +52,6 @@ class _MangaShelfRemovalDialog extends StatefulWidget {
 
 class _MangaShelfRemovalDialogState extends State<_MangaShelfRemovalDialog> {
   bool _deleteLocalFiles = false;
-  bool _deleteStatistics = false;
   bool _saving = false;
 
   void _confirm() {
@@ -68,10 +59,7 @@ class _MangaShelfRemovalDialogState extends State<_MangaShelfRemovalDialog> {
     setState(() => _saving = true);
     Navigator.pop(
       context,
-      MangaLibraryRemovalDecision(
-        deleteLocalFiles: _deleteLocalFiles,
-        deleteStatistics: _deleteStatistics,
-      ),
+      MangaLibraryRemovalDecision(deleteLocalFiles: _deleteLocalFiles),
     );
   }
 
@@ -110,15 +98,6 @@ class _MangaShelfRemovalDialogState extends State<_MangaShelfRemovalDialog> {
               subtitle: widget.localFilesSubtitle,
               onChanged: (bool value) =>
                   setState(() => _deleteLocalFiles = value),
-            ),
-            DeleteStatisticsRow(
-              key: const ValueKey<String>(
-                'manga_remove_dialog_delete_statistics',
-              ),
-              value: _deleteStatistics,
-              subtitle: widget.statisticsSubtitle,
-              onChanged: (bool value) =>
-                  setState(() => _deleteStatistics = value),
             ),
           ],
         ),

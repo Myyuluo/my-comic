@@ -7,7 +7,6 @@ import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi_engine/epub/book_title_conflict.dart';
 import 'package:fushi_engine/media/manga/manga_archive_importer.dart';
 import 'package:fushi/src/media/manga/import/manga_folder_batch.dart';
-import 'package:fushi/src/media/manga/import/manga_pdf_importer.dart';
 import 'package:fushi_engine/media/manga/manga_importer.dart';
 
 
@@ -102,26 +101,6 @@ abstract final class MangaModule {
         title: title,
         policy: policy,
         onProgress: onProgress,
-      );
-
-  /// 一份 PDF 直接进漫画库（按 PDF 导入 + 转成漫画，见 [importMangaFromPdf]）。
-  /// [onProgress] 的 `(done, total)` 单位是**页**。
-  static Future<String> importPdfAsManga({
-    required FushiDatabase db,
-    required String path,
-    required String title,
-    DuplicatePolicy policy = const DuplicatePolicy.suffix(),
-    void Function(int done, int total)? onProgress,
-    int? sourceId,
-  }) =>
-      importMangaFromPdf(
-        db: db,
-        pdfPath: path,
-        fileName: p.basename(path),
-        title: title,
-        policy: policy,
-        onProgress: onProgress,
-        sourceId: sourceId,
       );
 
   static Future<String> importArchive({

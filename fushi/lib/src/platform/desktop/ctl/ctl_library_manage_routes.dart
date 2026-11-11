@@ -75,15 +75,6 @@ List<CtlRoute> buildLibraryManageCtlRoutes(DesktopCtlContext context) {
 /// library 路由在它之下）。
 const String kLibraryCtlManageRoot = '/api/admin/library';
 
-/// `library reset --stats` 的值域 → [StudyRecordResetScope]。
-StudyRecordResetScope? parseLibraryCtlResetScope(String? raw) =>
-    switch ((raw ?? 'keep').trim().toLowerCase()) {
-      'keep' => StudyRecordResetScope.keep,
-      'last' => StudyRecordResetScope.lastSession,
-      'all' => StudyRecordResetScope.all,
-      _ => null,
-    };
-
 /// 导出格式名 → [ExportFormat]（`md` 也认）。
 ExportFormat? parseLibraryCtlExportFormat(String? raw) {
   final String text = (raw ?? 'markdown').trim().toLowerCase();
@@ -476,43 +467,24 @@ class _LibraryManageHandlers {
     return result;
   }
 
-  /// 库页「重置阅读状态 / 清除观看进度」：位置归零 + 取消读完，`stats` 决定学习
-  /// 记录（keep 不动 / last 撤最近一次会话 / all 全部清除）。
+  /// 库页「重置阅读状态 / 清除观看进度」：位置归零 + 取消读完。
+  /// 阅读统计清除（`--stats`）已随统计域移除（ticket 05）。
   Future<Object?> resetProgress(CtlCall call) async {
     _requireConfirm(call);
     _requireWritable();
     final LibraryCtlKey key = _key(call);
-    final StudyRecordResetScope? records = parseLibraryCtlResetScope(
-      call.optString('stats'),
-    );
-    if (records == null) {
-      throw const CtlFailure.badRequest('stats 只能是 keep / last / all');
-    }
     switch (key.store) {
       case LibraryCtlStore.book:
         final EpubBookRow? row = await _db.getEpubBook(key.id);
         if (row == null) throw CtlFailure.notFound('书架里没有 ${key.wire}');
-        final SrtBook? srt = await SrtBookRepository(_db).findByBookKey(key.id);
-        await resetBookReadingState(
-          db: _db,
-          bookKey: key.id,
-          title: row.title,
-          extraStatKeys: <String>{if (srt != null) srt.uid},
-          records: records,
-        );
+        await resetBookReadingState(db: _db, bookKey: key.id);
       case LibraryCtlStore.srt:
         final SrtBook? srt = await SrtBookRepository(_db).findByUid(key.id);
         if (srt == null) throw CtlFailure.notFound('书架里没有 ${key.wire}');
         if (srt.bookKey.isEmpty) {
           throw const CtlFailure.rejected('纯字幕书没有阅读进度可重置');
         }
-        await resetBookReadingState(
-          db: _db,
-          bookKey: srt.bookKey,
-          title: srt.title,
-          extraStatKeys: <String>{srt.uid},
-          records: records,
-        );
+        await resetBookReadingState(db: _db, bookKey: srt.bookKey);
       case LibraryCtlStore.video:
         throw const CtlFailure.unsupported('视频域已移除');
       case LibraryCtlStore.game:

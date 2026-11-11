@@ -5,13 +5,14 @@
 /// 1. [classifyDroppedFiles]（拖放落点同一份）先把视频 / 字幕 / 音频 / 词典包 / 种子
 ///    这些「不是书也不是漫画」的东西筛出去——否则下一道的文本兜底会把 `.mp3`
 ///    当纯文本转成 EPUB；
-/// 2. [classifyImportCarrier]（导入对话框同一份）定书 / PDF / 文本 / 漫画载体。
+/// 2. [classifyImportCarrier]（导入对话框同一份）定书 / 文本 / 漫画载体。
 ///
 /// 落地方法与对话框逐一对应：EPUB → [EpubImporter.importFromPath]、文本 →
-/// [TextToEpub.convert] + [EpubImporter.import]、PDF → [PdfImporter.importFromPath]、
+/// [TextToEpub.convert] + [EpubImporter.import]、
 /// 漫画 → [MangaModule]、有声书 → [importDiscoveryAudiobook]（发现页自动入库同一份
 /// 对齐管线）、游戏 → [filterOutDuplicateGameExes] + [GalgameRepository.addAll]、
 /// 视频 / 书目录 → [addLocalFolderAsSource]（拖目录进视频页同一函数）。
+/// PDF 导入已移除（ticket 05），PDF 路径一律按不支持如实返回。
 library;
 
 import 'dart:io';
@@ -35,9 +36,6 @@ import 'package:fushi/src/media/import/import_carrier.dart';
 import 'package:fushi/src/media/manga/import/manga_folder_batch.dart';
 import 'package:fushi/src/media/manga/manga_module.dart';
 
-
-
-import 'package:fushi/src/pdf/pdf_importer.dart';
 import 'package:fushi/src/platform/desktop/ctl/ctl_library_entries.dart';
 
 /// 「只有音频」的有声书排进转录队列（`AudiobookTranscribeImportQueue.enqueue` 的
@@ -176,7 +174,7 @@ class LibraryCtlImporter {
         }
         return _importBookLike(path);
       case LibraryCtlKind.manga:
-        return _importMangaCarrier(path, _carrierOf(path), allowPdf: true);
+        return _importMangaCarrier(path, _carrierOf(path));
       case LibraryCtlKind.pdf:
       case LibraryCtlKind.audiobook:
       case null:
@@ -184,7 +182,7 @@ class LibraryCtlImporter {
     }
     if (isDirectory) {
       // 与书架 / 漫画库拖目录同义：目录 = 一卷（或一批卷）漫画。
-      return _importMangaCarrier(path, _carrierOf(path), allowPdf: false);
+      return _importMangaCarrier(path, _carrierOf(path));
     }
     if (p.extension(path).toLowerCase() == '.exe') {
       return _importGame(path, isDirectory: false);
@@ -208,13 +206,13 @@ class LibraryCtlImporter {
       path,
     ], isImageArchive: MangaModule.isImageArchive);
     if (dropped.mangas.isNotEmpty) {
-      return _importMangaCarrier(path, _carrierOf(path), allowPdf: false);
+      return _importMangaCarrier(path, _carrierOf(path));
     }
     if (dropped.books.isNotEmpty) {
       final ImportCarrier carrier = _carrierOf(path);
       if (carrier.isManga) {
         // 图片型 EPUB / zip：对话框同样把它转交漫画流程。
-        return _importMangaCarrier(path, carrier, allowPdf: false);
+        return _importMangaCarrier(path, carrier);
       }
       return _importBookCarrier(path, carrier);
     }
@@ -243,28 +241,20 @@ class LibraryCtlImporter {
     return _unsupported(path, '不认识的文件类型（${p.extension(path)}）');
   }
 
-  /// 书籍侧三种载体（导入对话框 `_importEpubOnly` 同一分派）。
+  /// 书籍侧载体（导入对话框 `_importEpubOnly` 同一分派）。
   Future<LibraryCtlImportResult> _importBookCarrier(
     String path,
     ImportCarrier carrier,
   ) async {
-    final LibraryCtlKind kind = carrier == ImportCarrier.pdf
-        ? LibraryCtlKind.pdf
-        : LibraryCtlKind.book;
+    const LibraryCtlKind kind = LibraryCtlKind.book;
     final LibraryCtlImportResult? gated = _moduleGate(path, kind);
     if (gated != null) return gated;
     final String fileName = p.basename(path);
     final String title = p.basenameWithoutExtension(path);
     final String bookKey;
     switch (carrier) {
-      case ImportCarrier.pdf:
-        bookKey = await PdfImporter.importFromPath(
-          db: _db,
-          filePath: path,
-          fileName: fileName,
-          title: title,
-          policy: _policy,
-        );
+      case ImportCarrier.unsupported:
+        return _unsupported(path, 'PDF 导入已移除', kind: LibraryCtlKind.book);
       case ImportCarrier.text:
         final Uint8List bytes = await TextToEpub.convert(
           file: File(path),
@@ -287,7 +277,7 @@ class LibraryCtlImporter {
       case ImportCarrier.mangaBatchFolder:
       case ImportCarrier.mangaMokuro:
       case ImportCarrier.mangaArchive:
-        return _importMangaCarrier(path, carrier, allowPdf: false);
+        return _importMangaCarrier(path, carrier);
     }
     return _imported(path, kind, bookKey);
   }
@@ -303,12 +293,11 @@ class LibraryCtlImporter {
     keys: <String>[LibraryCtlKey(LibraryCtlStore.book, bookKey).wire],
   );
 
-  /// 漫画四种载体（+ `--kind manga` 时 PDF 转漫画），走 [MangaModule] 门面。
+  /// 漫画四种载体，走 [MangaModule] 门面。PDF 导入已移除（ticket 05）。
   Future<LibraryCtlImportResult> _importMangaCarrier(
     String path,
-    ImportCarrier carrier, {
-    required bool allowPdf,
-  }) async {
+    ImportCarrier carrier,
+  ) async {
     final LibraryCtlImportResult? gated = _moduleGate(
       path,
       LibraryCtlKind.manga,
@@ -356,25 +345,17 @@ class LibraryCtlImporter {
           path,
           await MangaModule.importBatchFolder(db: _db, path: path),
         );
-      case ImportCarrier.pdf:
-        if (!allowPdf) {
-          return _importBookCarrier(path, carrier);
-        }
-        return _imported(
+      case ImportCarrier.unsupported:
+        return _unsupported(
           path,
-          LibraryCtlKind.manga,
-          await MangaModule.importPdfAsManga(
-            db: _db,
-            path: path,
-            title: p.basenameWithoutExtension(path),
-            policy: _policy,
-          ),
+          'PDF 导入已移除',
+          kind: LibraryCtlKind.manga,
         );
       case ImportCarrier.epub:
       case ImportCarrier.text:
         return _unsupported(
           path,
-          '不是漫画载体（页图目录 / .mokuro / 图片压缩包 / PDF）',
+          '不是漫画载体（页图目录 / .mokuro / 图片压缩包）',
           kind: LibraryCtlKind.manga,
         );
     }

@@ -4,22 +4,18 @@ import 'dart:io';
 import 'package:material_ui/material_ui.dart';
 import 'package:fushi/src/utils/fushi_icons.dart';
 import 'package:fushi/pages.dart';
-import 'package:fushi/src/models/app_model.dart';
 import 'package:fushi/src/models/module_id.dart';
 import 'package:fushi/src/models/store_compliance.dart';
 import 'package:fushi/src/media/manga/mihon/mihon_runtime_factory.dart';
 import 'package:fushi/src/pages/implementations/updates_center_open.dart'
     show openUpdatesCenter;
-import 'package:fushi/src/settings/settings_actions.dart';
 import 'package:fushi/src/settings/settings_context.dart';
 import 'package:fushi/src/settings/settings_destination.dart';
-import 'package:fushi/src/stats/study_diag_export.dart';
 import 'package:fushi/src/updates/app_update_check.dart';
 import 'package:fushi/src/updates/update_feed_service.dart';
 import 'package:fushi_engine/updates/update_feed_kind.dart';
 import 'package:fushi/src/utils/misc/build_version.dart';
 import 'package:fushi/src/utils/misc/crash_dump_locator.dart';
-import 'package:fushi/src/utils/misc/log_exporter.dart';
 import 'package:fushi/utils.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -45,13 +41,6 @@ SettingsSection _homeShortcutsSection() {
         icon: FushiIcons.notifications,
         onTap: (SettingsContext c) =>
             openUpdatesCenter(c.context, c.appModel.updateFeedService),
-      ),
-      SettingsNavigationItem(
-        id: 'system.home_shortcut_statistics',
-        title: t.stat_center_title,
-        icon: FushiIcons.barChart,
-        onTap: (SettingsContext c) =>
-            pushSettingsPage(c, (_) => const StatisticsCenterPage()),
       ),
     ],
   );
@@ -397,41 +386,6 @@ SettingsDestination buildSystemDestination() {
   );
 }
 
-/// 诊断导出在控制通道上的参数：CLI 给目标文件（代替保存对话框 / 系统分享）。
-const List<SettingsCliParam> _kDiagExportParams = <SettingsCliParam>[
-  SettingsCliParam('value', help: '导出到的文件（绝对路径）', path: true),
-  SettingsCliParam('overwrite', help: 'true = 目标已存在时覆盖', required: false),
-];
-
-/// 控制通道导出：写到给定路径；已存在且没要求覆盖时拒绝。
-Future<Object?> _writeDiagExport(Map<String, String> args, String log) async {
-  final File file = File(args['value']!);
-  if (file.existsSync() && args['overwrite'] != 'true') {
-    throw ArgumentError('${file.path} 已存在；覆盖请加 --arg overwrite=true');
-  }
-  await file.parent.create(recursive: true);
-  await file.writeAsString(log);
-  return <String, Object?>{'path': file.path, 'bytes': await file.length()};
-}
-
-Future<String> _buildStudyDiagLog(AppModel appModel) => buildStudyDiagExport(
-  appModel.database,
-  appVersion: resolveCurrentAppVersion(appModel.packageInfo.version),
-  readingIdleTimeoutMinutes: appModel.readingIdleTimeoutMinutes,
-  statDayResetHour: appModel.statDayResetHour,
-);
-
-/// 设置 › 诊断 › 导出统计诊断日志（正文见 [buildStudyDiagExport]）。
-Future<void> _exportStudyDiagLog(SettingsContext settingsContext) async {
-  final String log = await _buildStudyDiagLog(settingsContext.appModel);
-  if (!settingsContext.context.mounted) return;
-  await saveLogToFile(
-    context: settingsContext.context,
-    log: log,
-    fileName: 'fushi_study_diag_log.txt',
-    subject: t.study_diag_share_subject,
-  );
-}
 
 /// 手动「立即检查更新」：编排在 [checkAppUpdateNow]（与更新中心的 app 新版本
 /// 条目共用同一条应用内下载安装链路）。
