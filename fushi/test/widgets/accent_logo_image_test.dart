@@ -95,16 +95,15 @@ void main() {
   });
 
   group('rail 品牌位（CurrentAppIcon）吃 ColorScheme.primary', () {
-    testWidgets('基线紫：仍是原 AssetImage（像素级等同改造前）', (WidgetTester tester) async {
-      await tester.pumpWidget(
-        _host(_preset('m3-baseline', Brightness.light), const CurrentAppIcon()),
-      );
+    testWidgets('基线紫（默认主题）：也换成跟随 primary 的换色图', (
+      WidgetTester tester,
+    ) async {
+      final ColorScheme baseline = _preset('m3-baseline', Brightness.light);
+      await tester.pumpWidget(_host(baseline, const CurrentAppIcon()));
       final Image image = tester.widget<Image>(find.byType(Image));
-      expect(image.image, isA<AssetImage>());
-      expect(
-        (image.image as AssetImage).assetName,
-        presetIconAssets['default'],
-      );
+      final AccentLogoImage logo = image.image as AccentLogoImage;
+      expect(logo.assetName, presetIconAssets['default']);
+      expect(logo.tint, LogoAccentTint.fromAccent(baseline.primary.toARGB32()));
     });
 
     for (final Brightness brightness in Brightness.values) {
@@ -123,27 +122,35 @@ void main() {
     }
 
     testWidgets('换主题即时重建：基线紫 → 红色 → 基线紫', (WidgetTester tester) async {
-      await tester.pumpWidget(
-        _host(_preset('m3-baseline', Brightness.light), const CurrentAppIcon()),
+      final ColorScheme baseline = _preset('m3-baseline', Brightness.light);
+      await tester.pumpWidget(_host(baseline, const CurrentAppIcon()));
+      expect(
+        (tester.widget<Image>(find.byType(Image)).image as AccentLogoImage).tint,
+        LogoAccentTint.fromAccent(baseline.primary.toARGB32()),
       );
-      expect(tester.widget<Image>(find.byType(Image)).image, isA<AssetImage>());
       final ColorScheme red = _preset('m3-red', Brightness.light);
       await tester.pumpWidget(_host(red, const CurrentAppIcon()));
       // 主题交叉过渡期间不跟着每帧插值色换图（每张都要整图换色一次）。
       await tester.pump(const Duration(milliseconds: 40));
-      expect(tester.widget<Image>(find.byType(Image)).image, isA<AssetImage>());
+      expect(
+        (tester.widget<Image>(find.byType(Image)).image as AccentLogoImage).tint,
+        LogoAccentTint.fromAccent(baseline.primary.toARGB32()),
+        reason: '过渡中仍用上一张，不逐帧换色',
+      );
       // 过渡结束、强调色稳定后只提交最终那一张。
       await tester.pump(const Duration(milliseconds: 300));
       await tester.pump(const Duration(milliseconds: 100));
       final AccentLogoImage logo =
           tester.widget<Image>(find.byType(Image)).image as AccentLogoImage;
       expect(logo.tint, LogoAccentTint.fromAccent(red.primary.toARGB32()));
-      await tester.pumpWidget(
-        _host(_preset('m3-baseline', Brightness.dark), const CurrentAppIcon()),
-      );
+      final ColorScheme baselineDark = _preset('m3-baseline', Brightness.dark);
+      await tester.pumpWidget(_host(baselineDark, const CurrentAppIcon()));
       await tester.pump(const Duration(milliseconds: 300));
       await tester.pump(const Duration(milliseconds: 100));
-      expect(tester.widget<Image>(find.byType(Image)).image, isA<AssetImage>());
+      expect(
+        (tester.widget<Image>(find.byType(Image)).image as AccentLogoImage).tint,
+        LogoAccentTint.fromAccent(baselineDark.primary.toARGB32()),
+      );
     });
 
     testWidgets('用户自定义图标永远原样显示，不换色', (WidgetTester tester) async {
@@ -160,11 +167,20 @@ void main() {
   });
 
   group('阅读器悬浮球吉祥物', () {
-    test('基线紫：原图按 192 解码', () {
+    test('基线紫（默认主题）也换色：换色图按 192 解码', () {
+      final LogoAccentTint tint = LogoAccentTint.fromAccent(
+        _preset('m3-baseline', Brightness.light).primary.toARGB32(),
+      );
+      final AccentLogoImage logo =
+          readerFloatingBallMascotImage(tint) as AccentLogoImage;
+      expect(logo.assetName, kReaderFloatingBallIconAsset);
+      expect(logo.decodeWidth, kReaderFloatingBallMascotDecodeWidth);
+      expect(logo.tint, tint);
+    });
+
+    test('关闭换色：原图按 192 解码', () {
       final ImageProvider<Object> provider = readerFloatingBallMascotImage(
-        LogoAccentTint.fromAccent(
-          _preset('m3-baseline', Brightness.light).primary.toARGB32(),
-        ),
+        LogoAccentTint.identity,
       );
       final ResizeImage resized = provider as ResizeImage;
       expect(resized.width, kReaderFloatingBallMascotDecodeWidth);
@@ -187,7 +203,7 @@ void main() {
     });
   });
 
-  testWidgets('AccentLogoImage 真解码：底色像素转到 primary 色相、alpha 不变', (
+  testWidgets('AccentLogoImage 真解码：彩色像素转到 primary 色相、alpha 不变', (
     WidgetTester tester,
   ) async {
     final ColorScheme scheme = _preset('m3-orange', Brightness.light);
@@ -217,8 +233,10 @@ void main() {
       final ByteData b = (await tinted.toByteData(
         format: ui.ImageByteFormat.rawStraightRgba,
       ))!;
-      // 左上内侧（squircle 底色区）：(8, 8)。
-      const int i = (8 * 64 + 8) * 4;
+      // 左上环形蓝色区（新 M logo 的实心蓝环）：(16, 16)。
+      // 注意 Flutter 的 targetWidth 解码取样网格与 Pillow 不同，取样点要按
+      // Flutter 实际解码结果选，不能只看原图坐标。
+      const int i = (16 * 64 + 16) * 4;
       int argb(ByteData d) =>
           (d.getUint8(i + 3) << 24) |
           (d.getUint8(i) << 16) |
@@ -232,6 +250,29 @@ void main() {
       expect(d > 180 ? 360 - d : d, lessThan(5));
       // 透明角落仍透明。
       expect(b.getUint8(3), a.getUint8(3));
+      // 半透明圆角边缘：straight → 预乘 → 反预乘的往返误差必须很小。
+      // 漏掉预乘时，引擎会把 straight 值当预乘值反算，边缘被拉成纯白（白边回归）。
+      int edge = -1;
+      for (int k = 0; k < a.lengthInBytes; k += 4) {
+        final int alpha = a.getUint8(k + 3);
+        if (alpha > 96 && alpha < 255) {
+          edge = k;
+          break;
+        }
+      }
+      expect(edge, greaterThanOrEqualTo(0), reason: '资源应有抗锯齿的半透明边缘');
+      final int src =
+          (a.getUint8(edge + 3) << 24) |
+          (a.getUint8(edge) << 16) |
+          (a.getUint8(edge + 1) << 8) |
+          a.getUint8(edge + 2);
+      final int expected =
+          (src & 0xFF000000) |
+          (tintLogoArgb(0xFF000000 | (src & 0xFFFFFF), tint) & 0xFFFFFF);
+      expect(b.getUint8(edge), closeTo((expected >> 16) & 0xFF, 5));
+      expect(b.getUint8(edge + 1), closeTo((expected >> 8) & 0xFF, 5));
+      expect(b.getUint8(edge + 2), closeTo(expected & 0xFF, 5));
+      expect(b.getUint8(edge + 3), (expected >> 24) & 0xFF);
       original.dispose();
       tinted.dispose();
     });

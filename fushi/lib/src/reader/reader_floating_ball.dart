@@ -753,7 +753,7 @@ const String kReaderFloatingBallIconAsset = 'assets/meta/splash_foreground.png';
 const int kReaderFloatingBallMascotDecodeWidth = 192;
 
 /// 球面吉祥物图片源：按主题强调色推出的 [tint] 换色（墨水屏由 surface 推出，褪成
-/// 灰阶）；基线紫下就是原图。
+/// 灰阶）；关闭「图标跟随主题色」时 [tint] 为 identity，直接显示原图。
 ImageProvider<Object> readerFloatingBallMascotImage(LogoAccentTint tint) {
   final ImageProvider<Object> provider = tintedLogoImageProvider(
     kReaderFloatingBallIconAsset,

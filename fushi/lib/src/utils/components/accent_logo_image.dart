@@ -135,6 +135,7 @@ Future<ui.Image> tintLogoImage(ui.Image source, LogoAccentTint tint) async {
     raw.buffer.asUint8List(raw.offsetInBytes, raw.lengthInBytes),
     tint,
   ));
+  _premultiplyRgba(tinted);
   final ui.ImmutableBuffer buffer = await ui.ImmutableBuffer.fromUint8List(
     tinted,
   );
@@ -159,6 +160,25 @@ Future<ui.Image> tintLogoImage(ui.Image source, LogoAccentTint tint) async {
 
 Uint8List _tintLogoRgbaEntry((Uint8List, LogoAccentTint) args) =>
     tintLogoRgba(args.$1, args.$2);
+
+/// [ui.PixelFormat.rgba8888] 按预乘 alpha 解释，而 [tintLogoRgba] 在 straight
+/// RGBA 上工作。这里先把 RGB 乘上 alpha 再交给引擎；否则抗锯齿的圆角边缘会被
+/// 当成「已经预乘过」的亮色，叠在主题底色上渲染成一圈白边。
+void _premultiplyRgba(Uint8List rgba) {
+  for (int i = 0; i < rgba.length; i += 4) {
+    final int alpha = rgba[i + 3];
+    if (alpha == 255) continue;
+    if (alpha == 0) {
+      rgba[i] = 0;
+      rgba[i + 1] = 0;
+      rgba[i + 2] = 0;
+      continue;
+    }
+    rgba[i] = rgba[i] * alpha ~/ 255;
+    rgba[i + 1] = rgba[i + 1] * alpha ~/ 255;
+    rgba[i + 2] = rgba[i + 2] * alpha ~/ 255;
+  }
+}
 
 /// 「图标跟随主题色」开关的运行时真值（偏好 `theme_tint_app_logo`，默认关）。
 ///

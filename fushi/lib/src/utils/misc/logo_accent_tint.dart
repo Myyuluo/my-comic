@@ -1,29 +1,38 @@
 /// 吉祥物 logo 跟随主题强调色的纯函数层（无 Flutter 依赖，可进 isolate）。
 ///
-/// logo 原图（`assets/meta/`）的配色就是从 M3 基线紫取的：薰衣草底、长春花色耳尖 /
-/// 腮红 / 鳍、深紫墨线，全部落在 HCT 色相 ≈ 250°–320° 一带；另有白身体、桃色嘴巴。
-/// 换强调色时只把「logo 自己的那一族色相」整体旋转到当前 primary 的色相，**保留每个
-/// 像素的明度（tone）与原有彩度层次**，白 / 灰等中性色与嘴巴的桃色不动——于是明暗
-/// 结构、描边与阴影一概不变，只有色调跟着主题走。
+/// logo 原图（`assets/meta/`）的主色是蓝色圆环（HCT 色相 ≈ 258°），另有深蓝渐变
+/// 笔画与白底。换强调色时把**主色相旋转到当前 primary 的色相**，其余彩色像素保留
+/// 与主色的相对色相，并**保留每个像素的明度（tone）与原有彩度层次**；白 / 灰等
+/// 中性色不动——于是明暗结构、描边与阴影一概不变，只有色调跟着主题走。
 ///
-/// 基线紫下 [LogoAccentTint.isIdentity] 成立，调用方直接用原图（像素级一致）。
+/// 所有主题（含默认的基线紫）在开启「图标跟随主题色」时都会换色；只有关闭开关时
+/// 才用 [LogoAccentTint.identity] 直接显示原图。
 library;
 
 import 'dart:typed_data';
 
 import 'package:material_color_utilities/material_color_utilities.dart';
 
-/// logo 原配色对应的强调色：M3 基线紫种子（`ThemeNotifier.themePresets['m3-baseline']`）。
-const int kLogoReferenceAccentArgb = 0xFF6750A4;
+/// logo 主色（蓝色圆环）实测值：`assets/meta/launcher_icon_squircle.png`。
+///
+/// 换色时以它为锚点把主色相映射到强调色相。若仍沿用基线紫作为锚点，蓝环会固定
+/// 落在强调色相偏移约 -41° 的位置——红色主题下呈现品红而不是红。
+const int kLogoDominantArgb = 0xFF0058A0;
 
-/// logo 自身配色族的色相中心（HCT 度）：耳尖 278°、底色 288°、阴影 301°、墨线 321°、
-/// 鳍高光 249°。
-const double kLogoAccentHueCenter = 290;
+/// logo 自身配色族的色相中心（HCT 度）：主色蓝环 258°，深蓝渐变笔画在 249°–268°
+/// 一带，全部落在完整跟随区间内。
+final double kLogoAccentHueCenter = Hct.fromInt(kLogoDominantArgb).hue;
+
+/// 图标白底跟随主题时映射到的浅色底：沿用旧 logo 薰衣草底（#E6E2F6）的
+/// HCT tone / chroma，只把色相转到主色相，保持「浅色底 + 深色图形」的对比。
+const int kLogoBackgroundReferenceArgb = 0xFFE6E2F6;
+
+final Hct _logoBackgroundReference = Hct.fromInt(kLogoBackgroundReferenceArgb);
 
 /// 距 [kLogoAccentHueCenter] 这么近的像素整份跟随色相旋转。
 const double kLogoAccentHueFullWidth = 75;
 
-/// 超过这个距离的像素完全不动（嘴巴的桃色在 45° 左右，距中心 115°）；
+/// 超过这个距离的像素完全不动（非配色族的暖色约 45°，距中心 147°）；
 /// 两者之间线性过渡，避免抗锯齿边出现色相断层。
 const double kLogoAccentHueFadeWidth = 105;
 
@@ -48,11 +57,11 @@ const double kLogoAchromaticAccentChroma = 4;
 class LogoAccentTint {
   const LogoAccentTint._(this.hueShift, this.chromaScale);
 
-  /// 恒等变换（基线紫）。
+  /// 关闭「图标跟随主题色」时的真值：不做任何换色。
   static const LogoAccentTint identity = LogoAccentTint._(0, 1);
 
-  /// 由当前主题的 primary（ARGB）推出换色参数：色相差相对基线紫，彩度缩放按
-  /// primary 彩度相对 [kLogoFullAccentChroma]。
+  /// 由当前主题的 primary（ARGB）推出换色参数：色相差相对 logo 主色，
+  /// 彩度缩放按 primary 彩度相对 [kLogoFullAccentChroma]。
   factory LogoAccentTint.fromAccent(int accentArgb) {
     final Hct accent = Hct.fromInt(accentArgb);
     final double chromaScale = _quantizeScale(
@@ -63,7 +72,7 @@ class LogoAccentTint {
     // 无彩度强调色的色相没有意义（HCT 给灰色一个随机色相）：只褪色、不转色相。
     final double shift = chromaScale == 0
         ? 0
-        : _normalizeShift(accent.hue - _referenceHue).roundToDouble();
+        : _normalizeShift(accent.hue - _dominantHue).roundToDouble();
     if (shift == 0 && chromaScale == 1) return identity;
     return LogoAccentTint._(shift, chromaScale);
   }
@@ -76,7 +85,7 @@ class LogoAccentTint {
 
   bool get isIdentity => hueShift == 0 && chromaScale == 1;
 
-  static final double _referenceHue = Hct.fromInt(kLogoReferenceAccentArgb).hue;
+  static final double _dominantHue = Hct.fromInt(kLogoDominantArgb).hue;
 
   static double _normalizeShift(double shift) {
     double s = shift % 360;
@@ -120,7 +129,20 @@ int tintLogoArgb(int argb, LogoAccentTint tint) {
   final int spread =
       (r > g ? (r > b ? r : b) : (g > b ? g : b)) -
       (r < g ? (r < b ? r : b) : (g < b ? g : b));
-  if (spread <= kLogoNeutralRgbSpread) return argb;
+  if (spread <= kLogoNeutralRgbSpread) {
+    if (r < 240 || g < 240 || b < 240) return argb;
+    // 近白的中性像素是图标底色（不是吉祥物的白色身体）：跟随主题换成浅色底，
+    // 保留旧底色的明度 / 彩度，只把色相转到主色相；更暗的中性灰阶原样保留。
+    final double hue = (kLogoAccentHueCenter + tint.hueShift) % 360;
+    final int rgb =
+        Hct.from(
+              hue,
+              _logoBackgroundReference.chroma * tint.chromaScale,
+              _logoBackgroundReference.tone,
+            ).toInt() &
+        0x00FFFFFF;
+    return (argb & 0xFF000000) | rgb;
+  }
   final Hct hct = Hct.fromInt(argb | 0xFF000000);
   final double weight = logoAccentHueWeight(hct.hue);
   if (weight == 0) return argb;

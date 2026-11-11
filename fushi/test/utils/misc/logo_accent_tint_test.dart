@@ -8,12 +8,15 @@ import 'package:image/image.dart' as img;
 import 'package:material_color_utilities/material_color_utilities.dart';
 import 'package:material_ui/material_ui.dart';
 
-/// logo 原图里的代表色（`assets/meta/icon.png` 实测直方图）。
+/// 换色函数的色相族回归样本：取自换图前旧吉祥物 logo 的代表色
+/// （`assets/meta/icon.png` 换图前实测直方图）。这些颜色用于验证
+/// 「配色族整份跟随色相 + 中性色/非配色族不动」，与当前资源内容解耦；
+/// 真实资源由下面「整张 logo」用例覆盖。
 const int _background = 0xFFE6E2F6; // 薰衣草底
 const int _periwinkle = 0xFFC4C6E0; // 耳尖 / 腮红 / 鳍
 const int _ink = 0xFF3F3242; // 深紫墨线
-const int _white = 0xFFFFFFFF; // 身体
-const int _mouth = 0xFFE8A07C; // 桃色嘴巴
+const int _white = 0xFFFFFFFF; // 白底
+const int _mouth = 0xFFE8A07C; // 非配色族暖色（原嘴巴桃色）
 
 double _hueDistance(double a, double b) {
   final double d = (a - b).abs() % 360;
@@ -35,26 +38,29 @@ Uint8List _decodeAssetRgba(String path, {int width = 128}) {
 }
 
 void main() {
-  group('基线紫 = 原图', () {
+  group('基线紫（默认主题）也跟随主题色', () {
     for (final Brightness brightness in Brightness.values) {
-      test('基线紫预设（$brightness）的 primary 推出恒等变换', () {
+      test('基线紫预设（$brightness）不再恒等，主色映射到 primary', () {
         final ColorScheme cs = _presetScheme('m3-baseline', brightness);
+        final Hct primary = Hct.fromInt(cs.primary.toARGB32());
         final LogoAccentTint tint = LogoAccentTint.fromAccent(
           cs.primary.toARGB32(),
         );
-        expect(tint.isIdentity, isTrue, reason: '$tint');
+        expect(tint.isIdentity, isFalse, reason: '$tint');
+        final Hct ring = Hct.fromInt(tintLogoArgb(kLogoDominantArgb, tint));
+        expect(_hueDistance(ring.hue, primary.hue), lessThan(4));
       });
     }
 
-    test('Material 默认亮色 ThemeData（primary = 基线紫种子）同样是恒等变换', () {
-      expect(
-        LogoAccentTint.fromAccent(
-          ThemeData().colorScheme.primary.toARGB32(),
-        ).isIdentity,
-        isTrue,
+    test('Material 默认亮色 ThemeData（primary = 基线紫种子）同样换色', () {
+      final LogoAccentTint tint = LogoAccentTint.fromAccent(
+        ThemeData().colorScheme.primary.toARGB32(),
       );
+      expect(tint.isIdentity, isFalse);
     });
+  });
 
+  group('关闭换色（identity）', () {
     test('恒等变换下整张 logo 逐字节不变', () {
       final Uint8List rgba = _decodeAssetRgba('assets/meta/icon.png');
       expect(tintLogoRgba(rgba, LogoAccentTint.identity), rgba);
@@ -80,11 +86,10 @@ void main() {
           final LogoAccentTint tint = LogoAccentTint.fromAccent(
             cs.primary.toARGB32(),
           );
-          // 原图里耳尖色比基线紫偏 -21°：换色后保持同一相对关系。
-          final Hct basePeri = Hct.fromInt(_periwinkle);
+          // 主色环映射到 primary 色相；其它配色族像素保持与主色的相对色相。
           final double baseOffset =
-              basePeri.hue -
-              Hct.fromInt(kLogoReferenceAccentArgb).hue; // ≈ -21°
+              Hct.fromInt(_periwinkle).hue -
+              Hct.fromInt(kLogoDominantArgb).hue;
           for (final int source in <int>[_background, _periwinkle, _ink]) {
             final Hct before = Hct.fromInt(source);
             final Hct after = Hct.fromInt(tintLogoArgb(source, tint));
@@ -106,25 +111,40 @@ void main() {
             lessThan(4),
             reason: '耳尖色相 ${peri.hue} vs primary ${primary.hue}',
           );
+          // 主色本身必须精确落在 primary 色相上（红色主题下应是红，而不是品红）。
+          final Hct ring = Hct.fromInt(tintLogoArgb(kLogoDominantArgb, tint));
+          expect(
+            _hueDistance(ring.hue, primary.hue),
+            lessThan(4),
+            reason: '主色环色相 ${ring.hue} vs primary ${primary.hue}',
+          );
         });
       }
     }
   });
 
-  group('中性色与非配色族不动', () {
+  group('中性色 / 非配色族像素', () {
     final LogoAccentTint red = LogoAccentTint.fromAccent(
       _presetScheme('m3-red', Brightness.light).primary.toARGB32(),
     );
 
-    test('白身体、灰阶、桃色嘴巴原样保留', () {
-      for (final int c in <int>[
-        _white,
-        0xFFFEFEFE,
-        0xFF808080,
-        0xFF000000,
-        _mouth,
-      ]) {
+    test('灰阶与非配色族暖色原样保留，白底换成主题浅色', () {
+      for (final int c in <int>[0xFF808080, 0xFF000000, _mouth]) {
         expect(tintLogoArgb(c, red), c, reason: c.toRadixString(16));
+      }
+      final Hct primary = Hct.fromInt(
+        _presetScheme('m3-red', Brightness.light).primary.toARGB32(),
+      );
+      final Hct reference = Hct.fromInt(kLogoBackgroundReferenceArgb);
+      for (final int white in <int>[_white, 0xFFFEFEFE]) {
+        final Hct bg = Hct.fromInt(tintLogoArgb(white, red));
+        expect(
+          _hueDistance(bg.hue, primary.hue),
+          lessThan(4),
+          reason: '白底应跟随主色相: ${white.toRadixString(16)}',
+        );
+        expect((bg.tone - reference.tone).abs(), lessThan(1.5));
+        expect(bg.chroma, greaterThan(1), reason: '白底应被染色');
       }
     });
 
@@ -133,25 +153,30 @@ void main() {
       expect(tintLogoArgb(0x00C4C6E0, red) >>> 24, 0x00);
     });
 
-    test('整张 logo：alpha 通道与白色像素逐字节不变，配色族像素被换色', () {
+    test('整张 logo：alpha 不变，彩色图形与白底都跟随主题', () {
       final Uint8List rgba = _decodeAssetRgba('assets/meta/icon.png');
       final Uint8List out = tintLogoRgba(rgba, red);
       int changed = 0;
+      int chromatic = 0;
+      int background = 0;
       for (int i = 0; i < rgba.length; i += 4) {
         expect(out[i + 3], rgba[i + 3]);
-        final bool white =
-            rgba[i] == 255 && rgba[i + 1] == 255 && rgba[i + 2] == 255;
-        if (white) {
-          expect(out[i] + out[i + 1] + out[i + 2], 765);
+        final int r = rgba[i], g = rgba[i + 1], b = rgba[i + 2];
+        final int spread = (r > g ? (r > b ? r : b) : (g > b ? g : b)) -
+            (r < g ? (r < b ? r : b) : (g < b ? g : b));
+        final bool opaque = rgba[i + 3] > 0;
+        if (opaque && spread > 3) chromatic++;
+        if (opaque && spread <= 3 && r >= 240 && g >= 240 && b >= 240) {
+          background++;
         }
-        if (out[i] != rgba[i] ||
-            out[i + 1] != rgba[i + 1] ||
-            out[i + 2] != rgba[i + 2]) {
+        if (out[i] != r || out[i + 1] != g || out[i + 2] != b) {
           changed++;
         }
       }
-      // 薰衣草底占了大半张：换色必须真的发生。
-      expect(changed, greaterThan(rgba.length ~/ 4 ~/ 3));
+      // 新 logo：蓝色图形约 18%、白底约 78%；两类像素都必须真的被换色。
+      expect(chromatic, greaterThan(rgba.length ~/ 4 ~/ 10));
+      expect(background, greaterThan(rgba.length ~/ 4 ~/ 2));
+      expect(changed, greaterThan((chromatic + background) * 9 ~/ 10));
     });
   });
 
