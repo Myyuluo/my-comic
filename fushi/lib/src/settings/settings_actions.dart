@@ -224,10 +224,9 @@ Widget buildDesignSystemSelector(SettingsContext settingsContext) {
 }
 
 
-/// App-UI language picker. With 17 locales it crosses
-/// [kSettingsPickerInlineLimit], so [AdaptiveSettingsPickerRow] renders a
-/// chevron row that pushes the searchable full-page selector instead of an
-/// overlay dropdown that would overflow the screen.
+/// App-UI language picker. The four shipped locales stay under
+/// [kSettingsPickerInlineLimit], so [AdaptiveSettingsPickerRow] renders the
+/// existing inline selector instead of the full-page searchable picker.
 Widget buildLanguageSelector(SettingsContext settingsContext) {
   final AppModel appModel = settingsContext.appModel;
   final String current = appModel.appLocale.toLanguageTag();

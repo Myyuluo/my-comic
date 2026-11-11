@@ -467,21 +467,20 @@ if ($needsBuild) {
         }
     }
 
+    # strings.g.dart is gitignored, so every build must generate it from the
+    # current i18n sources. The old mtime check missed *deleted* translation
+    # files (deleting an input does not touch the remaining files' mtimes),
+    # which could leave a stale file with locales that no longer ship. ticket 06
+    # makes generation unconditional: ~1s, and the build output always matches
+    # the checked-in .i18n.json set.
     $generatedStrings = Join-Path $FushiDir 'lib\i18n\strings.g.dart'
-    $needsSlang = -not (Test-Path -LiteralPath $generatedStrings -PathType Leaf)
-    if (-not $needsSlang) {
-        $generatedAt = (Get-Item -LiteralPath $generatedStrings).LastWriteTimeUtc
-        $needsSlang = @(
-            Get-ChildItem -LiteralPath (Split-Path -Parent $generatedStrings) -Filter '*.i18n.json' -File |
-                Where-Object { $_.LastWriteTimeUtc -gt $generatedAt }
-        ).Count -gt 0
+    Write-Host "[my-comic] dart run slang"
+    Invoke-Dart -Flutter $flutter -Arguments @('run', 'slang')
+    if (-not (Test-Path -LiteralPath $generatedStrings -PathType Leaf)) {
+        throw "dart run slang did not produce $generatedStrings"
     }
-    if ($needsSlang) {
-        Write-Host "[my-comic] dart run slang"
-        Invoke-Dart -Flutter $flutter -Arguments @('run', 'slang')
-        Write-Host "[my-comic] dart format lib/i18n/strings.g.dart"
-        Invoke-Dart -Flutter $flutter -Arguments @('format', 'lib/i18n/strings.g.dart')
-    }
+    Write-Host "[my-comic] dart format lib/i18n/strings.g.dart"
+    Invoke-Dart -Flutter $flutter -Arguments @('format', 'lib/i18n/strings.g.dart')
 
     Write-Host "[my-comic] flutter build windows --release"
     Invoke-Flutter -Flutter $flutter -Arguments @('build', 'windows', '--release', '--no-pub')

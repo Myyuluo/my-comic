@@ -80,8 +80,9 @@ void main() {
       expectScanScale(
         translationFiles.length,
         what: 'lib/i18n 下的译文 .i18n.json',
-        atLeast: 12,
-        measured: 16,
+        // ticket 06：保留 ja、zh-CN、zh-HK 三份译文（其余 13 份已删除）。
+        atLeast: 2,
+        measured: 3,
       );
       expect(
         translationFiles,

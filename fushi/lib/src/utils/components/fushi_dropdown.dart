@@ -136,7 +136,7 @@ class _GamepadMenuDropdownState<T> extends State<GamepadMenuDropdown<T>> {
 
   Widget _buildStockDropdown(BuildContext context) {
     // Cap the menu height to a fraction of the screen so a long list (e.g. the
-    // 17 app languages, dozens of Anki decks) scrolls WITHIN the viewport
+    // app languages, dozens of Anki decks) scrolls WITHIN the viewport
     // instead of running its bottom entries off the screen edge — unreachable
     // because the overlay is anchored, not scrolled. Mirrors the polled-platform
     // MenuAnchor cap in [_menuAnchor]; the stock DropdownMenu has no implicit
