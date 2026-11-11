@@ -1,0 +1,4 @@
+{
+  "description": "未使用 l10n key 扫描器的动态访问 allowlist。静态扫描识别不了动态拼出来的 key（例如从字符串表、枚举或 server 数据里取 key）；每条规则必须是 key / prefix / pattern 三者之一，并写明 reason。清理阶段应尽量少用：优先改为静态引用，确属动态访问才进 allowlist。",
+  "rules": []
+}
