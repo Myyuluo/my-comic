@@ -916,16 +916,17 @@ void main() {
     );
 
     expect(find.text('App version'), findsOneWidget);
-    // TODO-772: versionName 与 versionCode 用括号并列展示，不再用 semver `+`
-    // 把 versionCode 拼进 versionName（旧 `9.8.7+654` 会渲染畸形版本号）。
-    expect(find.text('9.8.7 (654)'), findsOneWidget);
+    // ticket 03：关于页显示精确版本名，不展示 build number（旧 `9.8.7+654`
+    // 与括号形态 `9.8.7 (654)` 都不再出现）。
+    expect(find.text('9.8.7'), findsOneWidget);
+    expect(find.text('9.8.7 (654)'), findsNothing);
     expect(find.text('9.8.7+654'), findsNothing);
     expect(
       find.byWidgetPredicate(
         (Widget widget) =>
             widget is AdaptiveSettingsRow &&
             widget.title == 'App version' &&
-            widget.subtitle == '9.8.7 (654)' &&
+            widget.subtitle == '9.8.7' &&
             widget.onTap == null,
       ),
       findsOneWidget,

@@ -237,10 +237,18 @@ void main() {
     expect(source, contains('String? manifestUrlForChannel('));
     expect(source, contains('Map<String, String> manifestUrlsForChannel('));
     expect(source, contains('const String kGitHubRepo ='));
-    expect(source, contains('const String kLegacyGitHubRepo ='));
     expect(source, contains('const String kBetaManifestUrl ='));
     expect(source, contains('const String kDebugManifestUrl ='));
     expect(source, contains('kUpdateManifestSchemaVersion'));
+  });
+
+  test('release part targets the MyComic fork, not upstream Fushi', () {
+    final String source = read(release);
+    expect(source, contains("const String kGitHubRepo = 'Myyuluo/my-comic';"));
+    expect(source, isNot(contains('hajisensai/fushi')),
+        reason: '更新源不得回退上游 3.x 仓库');
+    expect(source, isNot(contains('hajisensai/hibiki')),
+        reason: '旧上游回退仓不得回到更新链路');
   });
 
   /// 反馈 Pp8XPyve0N（PR #2100 审查）：远程触发的下载在 host 上必须与本机 UI 流用
