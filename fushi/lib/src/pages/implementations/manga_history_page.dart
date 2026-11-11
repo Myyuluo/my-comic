@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5,6 +6,8 @@ import 'package:material_ui/material_ui.dart';
 
 import 'package:fushi/src/focus/fushi_focus_controller.dart';
 import 'package:fushi/src/media/manga/history/manga_history.dart';
+import 'package:fushi/src/media/manga/library/manga_shelf_cover_revision.dart';
+import 'package:fushi/src/media/manga/library/manga_shelf_cover_service.dart';
 import 'package:fushi/src/media/manga/library/manga_series_page.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_service.dart';
 import 'package:fushi/src/media/media_search_text.dart';
@@ -21,6 +24,25 @@ import 'package:fushi/src/utils/components/fushi_staggered_entrance.dart';
 import 'package:fushi/src/utils/fushi_icons.dart';
 import 'package:fushi/src/utils/net/app_http_image.dart';
 import 'package:fushi/utils.dart';
+
+/// History 封面解析用的 Program state shelf cover 服务。
+///
+/// 与书架共用同一份 `<programState>/cache/shelf_covers` 目录与来源可用性判据；
+/// `appPaths` 尚未就绪（启动早期 / 测试壳）时返回 null，History 保持旧的远程 /
+/// 快照封面回退。测试覆盖该 provider 注入临时缓存目录。
+///
+/// autoDispose：每次加载都重新探测来源可用性。History 页非 keep-alive，重新
+/// 进入时来源可能刚被安装 / 启用，长期缓存一次“不可用”会错误地跳过远程封面。
+final mangaHistoryShelfCoverServiceProvider =
+    Provider.autoDispose<MangaShelfCoverService?>((Ref ref) {
+      final AppModel appModel = ref.watch(appProvider);
+      return MangaShelfCoverService.forAppCache(
+        cacheRoot: appModel.appPathsOrNull?.cacheRoot,
+        serviceFor: appOnlineMangaServiceResolver(
+          appModel.onlineMangaLibraryService,
+        ),
+      );
+    });
 
 /// 一级「历史」页（ADR 0018）。
 ///
@@ -44,6 +66,10 @@ class MangaHistoryPage extends ConsumerStatefulWidget {
 class _MangaHistoryPageState extends ConsumerState<MangaHistoryPage> {
   late Future<List<MangaHistoryEntry>> _entries;
 
+  /// 后台封面字节写入订阅：History 卡片的封面 URL 是加载时的快照，字节落盘
+  /// 本身不改数据库；revision 变化后必须重读缓存，页面才能从占位切到封面。
+  StreamSubscription<int>? _coverRevisionSubscription;
+
   /// 会话内搜索词（不落库）：由页头可展开搜索实时给出，收起即清空。
   String _query = '';
   final TextEditingController _searchController = TextEditingController();
@@ -62,22 +88,42 @@ class _MangaHistoryPageState extends ConsumerState<MangaHistoryPage> {
   @override
   void initState() {
     super.initState();
+    _coverRevisionSubscription = MangaShelfCoverRevision.events.listen((int _) {
+      if (!mounted) return;
+      unawaited(
+        _reload().catchError((Object error, StackTrace stack) {
+          ErrorLogService.instance.log(
+            'MangaHistoryPage.coverRevision',
+            error,
+            stack,
+          );
+        }),
+      );
+    });
     _entries = _load();
   }
 
   @override
   void dispose() {
+    _coverRevisionSubscription?.cancel();
     _headerSearch.dispose();
     _searchController.dispose();
     super.dispose();
   }
 
-  Future<List<MangaHistoryEntry>> _load() =>
-      loadMangaHistory(ref.read(appProvider).database);
+  Future<List<MangaHistoryEntry>> _load() {
+    final AppModel appModel = ref.read(appProvider);
+    return loadMangaHistory(
+      appModel.database,
+      shelfCovers: ref.read(mangaHistoryShelfCoverServiceProvider),
+    );
+  }
 
   Future<void> _reload() async {
     final Future<List<MangaHistoryEntry>> next = _load();
-    setState(() => _entries = next);
+    setState(() {
+      _entries = next;
+    });
     await next;
   }
 

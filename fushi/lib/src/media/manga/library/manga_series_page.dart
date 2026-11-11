@@ -18,7 +18,9 @@ import 'package:fushi/src/media/manga/download/manga_download_service.dart';
 import 'package:fushi/src/media/manga/history/manga_history.dart';
 import 'package:fushi/src/media/manga/library/manga_chapter_download_state.dart';
 import 'package:fushi/src/media/manga/library/manga_chapter_list.dart';
+import 'package:fushi/src/media/manga/library/manga_cover_resolution.dart';
 import 'package:fushi/src/media/manga/library/manga_download_planner.dart';
+import 'package:fushi/src/media/manga/library/manga_first_page_cover_service.dart';
 import 'package:fushi/src/media/manga/library/manga_resume_point.dart';
 import 'package:fushi/src/media/manga/library/manga_shelf_removal_dialog.dart';
 import 'package:fushi/src/media/manga/library/manga_shelf_removal_service.dart';
@@ -169,6 +171,16 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
   EpubBookRow? _row;
   OnlineMangaLibraryEntry? _entry;
 
+  /// Program state 里已有真实来源封面字节时的 `file://` URL（ticket 02 封面
+  /// 优先级：本地 cover.* → 真实来源封面 → 第一页生成封面 → 占位）。
+  String? _shelfCachedCoverUrl;
+
+  /// 第一页生成封面的缓存 `file://` URL；null = 还没有可用生成封面。
+  String? _generatedCoverUrl;
+
+  /// 生成封面服务（Program state 缓存 + 数据库映射）；测试可注入覆盖。
+  MangaFirstPageCoverService? _firstPageCoverServiceCache;
+
   /// Local source（`local`）条目：`sourceMetadata` 标记 + 章节表。
   /// 有它时章节区按共享章节列表渲染，`_entry` 保持 null（不是在线条目）。
   LocalSourceMetadata? _localSource;
@@ -287,6 +299,29 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     try {
       return ref.read(appProvider);
     } on Object {
+      return null;
+    }
+  }
+
+  /// 第一页生成封面服务；Program state 缓存根不可用（启动早期 / 测试壳）时
+  /// 返回 null，作品页退回本地 / 持久缓存 / 占位。
+  MangaFirstPageCoverService? _firstPageCoverService() {
+    final MangaFirstPageCoverService? cached = _firstPageCoverServiceCache;
+    if (cached != null) return cached;
+    final AppModel? appModel = _appModelOrNull;
+    if (appModel == null) return null;
+    try {
+      return _firstPageCoverServiceCache =
+          MangaFirstPageCoverService.forAppCache(
+            database: appModel.database,
+            cacheRoot: appModel.appPathsOrNull?.cacheRoot,
+          );
+    } on Object catch (error, stack) {
+      ErrorLogService.instance.log(
+        'MangaSeriesPage.firstPageCoverService',
+        error,
+        stack,
+      );
       return null;
     }
   }
@@ -1099,6 +1134,8 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
       _sourceLabelResolved = false;
       _sourceMissing = false;
       _missingSourceName = null;
+      _shelfCachedCoverUrl = null;
+      _generatedCoverUrl = null;
     });
     if (entry != null && service != null) {
       unawaited(_resolveSourceLabel(service.adapter, entry));
@@ -1114,6 +1151,7 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
       _watchLocalVolume(row.bookKey);
     }
     unawaited(_refreshDownloadState());
+    unawaited(_ensureGeneratedCover());
   }
 
   /// 从「本地图源」网格打开的扫描结果。
@@ -1156,7 +1194,10 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
       _sourceLabelResolved = false;
       _sourceMissing = false;
       _missingSourceName = null;
+      _shelfCachedCoverUrl = null;
+      _generatedCoverUrl = null;
     });
+    unawaited(_ensureGeneratedCover());
   }
 
   /// 本地卷才读：在线作品的进度按章记在 `manga_chapter_states`。
@@ -1194,9 +1235,31 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
         ErrorLogService.instance.log('MangaSeriesPage.find', error, stack);
       }
     }
-    final OnlineMangaLibraryEntry entry = existing == null
-        ? seed
-        : OnlineMangaLibraryEntry.tryParse(existing.sourceMetadata) ?? seed;
+    final OnlineMangaLibraryEntry? stored = existing == null
+        ? null
+        : OnlineMangaLibraryEntry.tryParse(existing.sourceMetadata);
+    OnlineMangaLibraryEntry entry = stored ?? seed;
+    // 票 06：源搜索/详情页手里就是源**当前**的系列描述（封面 URL 每次带新签名）。
+    // 已有记录时直接合并回去——不联网、不碰章节，旧封面即可自愈。
+    if (hadRow && existing != null && stored != null && shelf != null) {
+      final String? before = trimmedOrNull(stored.series.coverUrl);
+      try {
+        entry = await shelf.mergeSeries(
+          bookKey: existing.bookKey,
+          existing: stored,
+          series: seed.series,
+        );
+      } on Object catch (error, stack) {
+        ErrorLogService.instance.log(
+          'MangaSeriesPage.mergeSeries',
+          error,
+          stack,
+        );
+      }
+      if (mounted && trimmedOrNull(entry.series.coverUrl) != before) {
+        ref.invalidate(fushiBooksProvider);
+      }
+    }
     final Map<String, MangaChapterStateRow> states = existing == null
         ? const <String, MangaChapterStateRow>{}
         : await _readChapterStates(existing);
@@ -1210,8 +1273,11 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
       _sourceLabelResolved = sourceLabel != null && sourceLabel.isNotEmpty;
       _sourceMissing = false;
       _missingSourceName = null;
+      _shelfCachedCoverUrl = null;
+      _generatedCoverUrl = null;
       _states = states;
     });
+    unawaited(_ensureGeneratedCover());
     // 来源页未提供名称时（如从 History 打开）自己解析一次：来源可用就显示真实
     // 名称，缺失 / 停用则与书架路径一样按缺失来源降级，而不是露出扩展包名。
     if (sourceLabel == null || sourceLabel.isEmpty) {
@@ -1253,6 +1319,7 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
       _missingSourceName = knownName;
       _sourceLabelResolved = true;
     });
+    unawaited(_ensureGeneratedCover());
   }
 
   /// 联网刷新作品详情 + 章节列表。
@@ -1282,33 +1349,65 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     try {
       final String? bookKey = _bookKey;
       final OnlineMangaLibraryService? service = _service;
+      OnlineMangaLibraryEntry updated = entry;
+      OnlineMangaUnavailable? chaptersError;
+      StackTrace? chaptersStack;
       if (bookKey == null || service == null) {
         // 未入库（或够不着书架）：只拉，不落库。
-        final OnlineMangaRefreshResult result = await adapter.refresh(entry);
-        if (!mounted) return;
-        setState(() {
-          _entry = entry.copyWith(
+        try {
+          final OnlineMangaRefreshResult result = await adapter.refresh(entry);
+          updated = entry.copyWith(
             series: result.series,
-            chapters: result.chapters,
+            chapters: result.chapters.isEmpty && entry.chapters.isNotEmpty
+                ? entry.chapters
+                : result.chapters,
           );
-          _refreshSucceeded = true;
-        });
-        // 章节列表变了：已下载状态的章集合也要按新章节身份重算（首次打开
-        // 源页时 seed 往往只有标题，下载判据要等这次刷新后的章节表）。
-        unawaited(_refreshDownloadState());
-        return;
+        } on OnlineMangaUnavailable catch (error, stack) {
+          // 详情成功、章节失败：错误里带着刚拿到的封面 URL，页面照样先换新封面。
+          final OnlineMangaSeries? details = error.series;
+          if (details == null) rethrow;
+          updated = entry.copyWith(series: details);
+          chaptersError = error;
+          chaptersStack = stack;
+        }
+      } else {
+        final OnlineMangaRefreshOutcome outcome = await service
+            .refreshFromSource(bookKey: bookKey, entry: entry);
+        updated = outcome.entry;
+        chaptersError = outcome.chaptersError;
       }
-      final OnlineMangaLibraryEntry updated = await service.refreshFromSource(
-        bookKey: bookKey,
-        entry: entry,
-      );
-      final EpubBookRow? row = await service.database.getEpubBook(bookKey);
+      final EpubBookRow? row = bookKey == null || service == null
+          ? null
+          : await service.database.getEpubBook(bookKey);
       if (!mounted) return;
+      final bool coverChanged =
+          trimmedOrNull(entry.series.coverUrl) !=
+          trimmedOrNull(updated.series.coverUrl);
       setState(() {
         _entry = updated;
         if (row != null) _row = row;
-        _refreshSucceeded = true;
+        // 章节没拉到 = 刷新只完成了一半，空章节的语言解释与「刷新成功」都不成立。
+        _refreshSucceeded = chaptersError == null;
+        _refreshError = chaptersError;
       });
+      // 书架封面来自 fushiBooksProvider 里的 MediaItem：描述符换了新签名 URL
+      // 要让它重算，否则返回书架时仍显示过期 URL 的失败封面。
+      if (coverChanged) ref.invalidate(fushiBooksProvider);
+      if (chaptersError != null) {
+        ErrorLogService.instance.log(
+          'MangaSeriesPage.refresh[${chaptersError.reason.name}]',
+          chaptersError,
+          chaptersStack ?? StackTrace.current,
+        );
+        if (!silent) {
+          FushiToast.show(
+            msg: _loadErrorText(chaptersError),
+            severity: ToastSeverity.error,
+          );
+        }
+      }
+      // 章节列表变了：已下载状态的章集合也要按新章节身份重算（首次打开
+      // 源页时 seed 往往只有标题，下载判据要等这次刷新后的章节表）。
       unawaited(_refreshDownloadState());
     } on OnlineMangaUnavailable catch (error, stack) {
       // 这条**才是**在线漫画的主流失败路径：adapter 已经把 Mihon/Aidoku 的运行时
@@ -2748,11 +2847,6 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
                     Text(text, style: theme.textTheme.bodyMedium),
-                    const SizedBox(height: 2),
-                    Text(
-                      t.manga_series_offline_hint,
-                      style: theme.textTheme.bodySmall,
-                    ),
                   ],
                 ),
               ),
@@ -2855,6 +2949,89 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
         : _buildRefreshBanner(context, refreshError);
   }
 
+  /// ticket 02：没有更优先封面时，懒生成 / 载入第一页生成封面。
+  ///
+  /// 优先级：本地 `cover.*` → 真实来源封面（持久字节缓存或当前 URL）→ 第一页
+  /// 生成封面 → 占位。来源未安装 / 停用时先检查本地与持久缓存，再生成；不会
+  /// 发起远程请求。生成只写 Program state 缓存。
+  Future<void> _ensureGeneratedCover() async {
+    final MangaFirstPageCoverService? service = _firstPageCoverService();
+    if (service == null) return;
+    if (_localCoverPath() != null) {
+      _clearGeneratedCoverState();
+      return;
+    }
+    final EpubBookRow? row = _row;
+    // 与书架 / 重建预热共用「已有更优先封面」判据：本地记录封面（含页路径）
+    // 与持久真实来源字节都不生成第一页封面。
+    final MangaCoverResolution? existing = row == null
+        ? null
+        : await service.resolveExistingCover(row);
+    if (existing?.hasExistingCover ?? false) {
+      if (mounted) {
+        setState(() {
+          _shelfCachedCoverUrl = existing!.realCachedUrl;
+          _generatedCoverUrl = null;
+        });
+      }
+      return;
+    }
+    final String? bookKey = _bookKey;
+    if (row == null && bookKey != null) {
+      final String? realCached = await service.cachedRealCoverUrl(bookKey);
+      if (realCached != null) {
+        if (mounted) {
+          setState(() {
+            _shelfCachedCoverUrl = realCached;
+            _generatedCoverUrl = null;
+          });
+        }
+        return;
+      }
+    }
+    final MangaSeriesTarget target = widget.target;
+    if (target is SourceMangaSeriesTarget &&
+        target.remoteCoverBuilder != null) {
+      _clearGeneratedCoverState();
+      return;
+    }
+    final OnlineMangaLibraryEntry? entry = _entry;
+    final bool sourceUsable =
+        entry == null || (_adapter != null && _service != null);
+    final bool remoteUsable =
+        sourceUsable && !_sourceMissing && _remoteCoverUrl() != null;
+    if (remoteUsable) {
+      _clearGeneratedCoverState();
+      return;
+    }
+    String? generated;
+    if (row != null) {
+      generated = await service.ensureGeneratedCover(row);
+    } else {
+      final LocalSourceManga? scanned = _scannedLocal;
+      if (scanned != null) {
+        generated = await service.ensureGeneratedCoverForScanned(
+          manga: scanned,
+          bookKey: localSourceBookKeyFor(scanned.directoryPath),
+        );
+      }
+    }
+    if (!mounted) return;
+    setState(() {
+      _shelfCachedCoverUrl = null;
+      _generatedCoverUrl = generated;
+    });
+  }
+
+  void _clearGeneratedCoverState() {
+    if (!mounted) return;
+    if (_generatedCoverUrl == null && _shelfCachedCoverUrl == null) return;
+    setState(() {
+      _generatedCoverUrl = null;
+      _shelfCachedCoverUrl = null;
+    });
+  }
+
   /// 本地已落盘封面的路径；未入库 / 无封面为 null。
   String? _localCoverPath() {
     final LocalSourceManga? scanned = _scannedLocal;
@@ -2877,11 +3054,42 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
     );
   }
 
-  /// hero 大背景：本地封面模糊铺底。未入库的源条目只有来源自己的取图控件、拿不到
-  /// ImageProvider，就只画色晕（不为背景另开一条取图路径）。
+  /// hero 大背景：本地封面 / 持久缓存 / 生成封面模糊铺底。未入库的源条目只有
+  /// 来源自己的取图控件、拿不到 ImageProvider，就只画色晕。
   ImageProvider? _coverImageProvider() {
     final String? path = _localCoverPath();
-    return path == null ? null : FileImage(File(path));
+    if (path != null) return FileImage(File(path));
+    final String? cachedPath =
+        _coverCacheFilePath(_shelfCachedCoverUrl) ??
+        _coverCacheFilePath(_generatedCoverUrl);
+    return cachedPath == null ? null : FileImage(File(cachedPath));
+  }
+
+  /// `file://` 缓存 URL → 本地路径；其它协议 / 坏 URL 返回 null。
+  String? _coverCacheFilePath(String? url) {
+    if (url == null) return null;
+    try {
+      return Uri.parse(url).toFilePath();
+    } on Object {
+      return null;
+    }
+  }
+
+  /// 渲染 Program state 缓存里的封面；解码失败退回占位块。
+  Widget _buildCachedCoverImage(String url) {
+    final String? path = _coverCacheFilePath(url);
+    if (path == null) return const MangaCoverPlaceholder();
+    return Image.file(
+      File(path),
+      fit: BoxFit.cover,
+      errorBuilder: (_, Object error, __) {
+        ErrorLogService.instance.logDiagnostic(
+          'MangaSeriesPage.coverDecode',
+          '$path: $error',
+        );
+        return const MangaCoverPlaceholder();
+      },
+    );
   }
 
   /// 备份里保存的远程封面 URL（导入条目）。来源未安装也能用——它不经过 Source，
@@ -2893,10 +3101,10 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
 
   /// 封面。
   ///
-  /// 顺序固定：**本地已落盘**封面（作品页首屏不该依赖网络，源挂了封面也得在）→
-  /// 在线条目先确认来源（解析完成前 / 来源未安装时显示灰占位，不发起任何封面
-  /// 请求，票 02）→ 源浏览时由来源自己提供的取图控件 → 备份描述符里的远程
-  /// `series.coverUrl`（经现有 HTTP 图片缓存懒加载）→ 占位块。
+  /// 顺序固定（ticket 02）：**本地已落盘** `cover.*` → 真实来源封面（按 bookKey
+  /// 的持久字节缓存 / 来源当前 URL）→ 第一页生成封面 → 占位块。在线条目在来源
+  /// 解析完成前 / 来源未安装时不会发起远程请求：先检查本地与持久缓存，再显示
+  /// 生成封面或灰占位。
   Widget _buildCover(BuildContext context) {
     final String? resolved = _localCoverPath();
     if (resolved != null) {
@@ -2913,11 +3121,14 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
         },
       );
     }
-    // 来源未安装（或尚未解析完来源）：不请求远程封面，先显示灰占位；
-    // 安装扩展后 [_resolveSourceLabel] 会把远程封面接回来。已有本地 cover.*
-    // 在上面已优先返回，不会被删除或忽略。
+    final String? realCached = _shelfCachedCoverUrl;
+    if (realCached != null) return _buildCachedCoverImage(realCached);
+    // 来源未安装（或尚未解析完来源）：不请求远程封面；已有生成封面时先显示它。
     if (_entry != null && (!_sourceLabelResolved || _sourceMissing)) {
-      return const MangaCoverPlaceholder();
+      final String? generated = _generatedCoverUrl;
+      return generated == null
+          ? const MangaCoverPlaceholder()
+          : _buildCachedCoverImage(generated);
     }
     final MangaSeriesTarget target = widget.target;
     if (target is SourceMangaSeriesTarget) {
@@ -2939,6 +3150,8 @@ class _MangaSeriesPageState extends ConsumerState<MangaSeriesPage> {
         },
       );
     }
+    final String? generated = _generatedCoverUrl;
+    if (generated != null) return _buildCachedCoverImage(generated);
     return const MangaCoverPlaceholder();
   }
 

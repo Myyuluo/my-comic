@@ -4040,11 +4040,23 @@ class _MangaFushiPageState extends BaseSourcePageState<MangaFushiPage>
     } catch (e, stack) {
       ErrorLogService.instance.log('MangaFushiPage._persistPosition', e, stack);
     }
-    // 翻到最后一页 → 幂等写「已读完」（判据用总页数）。无痕期间不写——
-    // 书级完成标记是 History 的可见信号。
+    // 翻到最后一页 → 幂等写「已读完」（判据用总页数），但**只有规范阅读顺序的
+    // 最后一章（最新一话）**才算整部作品读完；读完旧章只写章级 readAt。
+    // 没有章上下文的本地卷（`_shelfEntry == null`）仍保持旧行为：整卷即一本书。
+    // 无痕期间不写——书级完成标记是 History 的可见信号。
     final int pageCount = _payload?.images.length ?? 0;
     final bool atLastPage = pageCount > 0 && page >= pageCount - 1;
-    if (atLastPage && history.autoMarkBookCompleted) {
+    final OnlineMangaLibraryEntry? shelfEntry = _shelfEntry;
+    final bool isLastChapter =
+        shelfEntry == null ||
+        isLastMangaChapterInReadingOrder(
+          chapters: shelfEntry.chapters,
+          index: _shelfChapterIndex,
+          ordering: shelfEntry.runtime == OnlineMangaRuntimeKind.local
+              ? MangaChapterOrdering.natural
+              : MangaChapterOrdering.canonical,
+        );
+    if (atLastPage && isLastChapter && history.autoMarkBookCompleted) {
       try {
         await db.markEpubBookCompletedIfUnset(widget.bookKey, DateTime.now());
       } catch (e, stack) {

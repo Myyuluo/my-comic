@@ -1010,6 +1010,12 @@ const Map<String, String> kCoveredElsewhere = <String, String>{
   // 生效点同样在 native session 下发，由编解码测试覆盖。
   'downloads/Peer encryption':
       'test/media/torrent/anime_download_config_backend_test.dart',
+  // 「保存为CBZ压缩包」：写 prefsRepo（changed=true），生效点在下载任务**开始时**
+  // 的 MangaDownloadService（CBZ 容器 vs 文件夹容器），设置页 harness 里没有下载
+  // 任务，观测不到。默认值 / 落库 / 开关写穿与容器形态由专项用例逐条咬住。
+  'downloads/Save as CBZ archive':
+      'test/settings/download_cbz_setting_test.dart（默认开启 / 落库 / 开关写穿） + '
+      'test/media/manga/manga_download_service_test.dart（CBZ 与文件夹容器、运行中任务保持原形态）',
   // 设备/集成 backlog（消费点真机/WebView/Android-only，widget 测不到）
   'reading/Spread direction': 'DEVICE: spread page order in WebView',
   'reading/Highlight text on tap': 'DEVICE: WebView onTap lookup',
@@ -1195,12 +1201,9 @@ const Map<String, String> kCoveredElsewhere = <String, String>{
   "system/Don't remind me about updates": 'DEVICE: Android-only UpdateChecker',
   'system/Auto-install updates': 'DEVICE: Android-only UpdateChecker install',
   'appearance/Reverse navigation bar': 'WIDGET-TODO: HomePage nav order',
-  // 阶段 G 归位：「启动时打开查词」从 appearance 移到 system·通用（item id 不变，
-  // destId 随所属 destination 改为 system）。反馈 #PwEC1evz1E 起泛化为「启动页」
-  // 下拉（只列可见模块）；落点判据 homeInitialTab 由纯函数测试钉住，旧开关迁移由
-  // preferences_repository_test 钉住。
-  'system/Startup page':
-      'test/pages/home_page_tabs_test.dart + test/models/preferences_repository_test.dart',
+  // 「启动页」设置行已随 ticket 03 下线（只删 UI 入口）：startup_module 偏好、
+  // 旧开关迁移与 homeInitialTab 落地判据仍由 preferences_repository_test /
+  // home_page_tabs_test 咬住，不再作为设置项进入本覆盖表。
   'reading/Reverse reader bottom bar':
       'DEVICE: reader bottom-bar layout order (like reverse nav bar)',
   // TODO-830: 反转有声书底栏 ⏮⏭ 前进/后退按钮的功能方向（per-reader）。change/
@@ -1776,8 +1779,9 @@ void main() {
           .toList();
       expect(
         pickers.length,
-        greaterThanOrEqualTo(2),
-        reason: '保留下来的下拉型设置项应被遍历到（认出来这一步）',
+        greaterThanOrEqualTo(1),
+        reason: '保留下来的下拉型设置项应被遍历到（认出来这一步）；'
+            '「启动页」dropdown 已随 ticket 03 下线',
       );
       // 「驱动那一步」以前钉的是绝对数（写穿 >= 18）——那数的是**当前平台恰好有
       // 多少行**，不是不变式。下拉行里有 4 条挂着 `Platform.isWindows`

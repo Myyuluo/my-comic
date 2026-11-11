@@ -235,12 +235,23 @@ void main() {
     // TODO-705: beta/debug mirror-manifest reading lives in the release part.
     expect(source, contains('Map<String, dynamic>? buildReleaseFromManifest('));
     expect(source, contains('String? manifestUrlForChannel('));
-    expect(source, contains('Map<String, String> manifestUrlsForChannel('));
     expect(source, contains('const String kGitHubRepo ='));
-    expect(source, contains('const String kLegacyGitHubRepo ='));
     expect(source, contains('const String kBetaManifestUrl ='));
     expect(source, contains('const String kDebugManifestUrl ='));
     expect(source, contains('kUpdateManifestSchemaVersion'));
+  });
+
+  test('release part targets the MyComic fork, not upstream Fushi', () {
+    final String source = read(release);
+    expect(
+      source,
+      contains('const String kGitHubRepo = kUpdateCheckSourceRepository;'),
+      reason: '更新源与更新检查缓存共用同一个仓库标识，避免两处漂移',
+    );
+    expect(source, isNot(contains('hajisensai/fushi')),
+        reason: '更新源不得回退上游 3.x 仓库');
+    expect(source, isNot(contains('hajisensai/hibiki')),
+        reason: '旧上游回退仓不得回到更新链路');
   });
 
   /// 反馈 Pp8XPyve0N（PR #2100 审查）：远程触发的下载在 host 上必须与本机 UI 流用

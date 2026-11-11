@@ -1,9 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
-import 'package:path/path.dart' as p;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:fushi_dictionary/fushi_dictionary.dart';
@@ -19,6 +19,12 @@ import 'package:fushi/src/media/audiobook/book_import_dialog.dart';
 import 'package:fushi/src/media/manga/history/manga_history.dart';
 import 'package:fushi/src/media/manga/interconnect/interconnect_manga_source.dart'
     show InterconnectMangaCatalog;
+import 'package:fushi/src/media/manga/library/manga_adjacent_chapter.dart'
+    show mangaReadingOrder;
+import 'package:fushi/src/media/manga/library/manga_cover_resolution.dart';
+import 'package:fushi/src/media/manga/library/manga_first_page_cover_service.dart';
+import 'package:fushi/src/media/manga/library/manga_shelf_cover_revision.dart';
+import 'package:fushi/src/media/manga/library/manga_shelf_cover_service.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_metadata.dart';
 import 'package:fushi/src/reader/page_turn_animation.dart';
@@ -64,10 +70,21 @@ final _libraryEpubBookKeysProvider = StreamProvider<List<String>>((ref) {
       .distinct(listEquals);
 });
 
+/// 后台封面字节成功写入持久缓存后的 revision 视图（ticket 01）。
+///
+/// 书架卡片是 `MediaItem.imageUrl` 的快照；字节落盘本身不会改数据库，
+/// 只有重新解析 `MediaItem` 才能切到新的 `file://` 缓存封面。
+final _shelfCoverRevisionProvider = StreamProvider<int>((ref) {
+  return MangaShelfCoverRevision.events;
+});
+
 final fushiBooksProvider =
     FutureProvider.family<List<MediaItem>, Language>((ref, language) {
   // BUG-793：订阅书架成员集合变化，任意导入 / 删除 / membership 翻转后自动重算。
   ref.watch(_libraryEpubBookKeysProvider);
+  // ticket 01：后台封面字节成功写入后重算，卡片立即改用新的持久缓存封面。
+  // 服务只在成功写入新字节时 bump，失败 / 空字节不会造成无意义的重建。
+  ref.watch(_shelfCoverRevisionProvider);
   return ReaderFushiSource.instance.getBooksFromDb(
     appModel: ref.watch(appProvider),
   );
@@ -86,12 +103,23 @@ final srtBooksProvider = FutureProvider<List<SrtBook>>((ref) {
 /// [epubBookUidByKeyProvider] 换算再查。BUG-777：继续阅读 hero 与书架「最近阅读」
 /// 排序的唯一 recency 真相源；关书时与 [fushiBooksProvider] 同点失效
 /// （[ReaderFushiSource.onSourceExit]），不会陈旧。
+///
+/// 章状态时间戳只作**补充证据**：`reader_positions` 是主证据，章状态仅在
+/// 完全没有位置行时兜底（例如导入备份带回了 `manga_chapter_states` 却没有
+/// `reader_positions`）。已有位置行时不能取两者 max——无痕阅读会推进章状态
+/// `updatedAt`、同时冻结位置时间戳，取 max 会让无痕阅读顶出「最近阅读」。
 final bookLastReadAtProvider = FutureProvider<Map<String, int>>((ref) async {
   final FushiDatabase db = ref.watch(appProvider).database;
   final List<ReaderPositionRow> rows = await db.getAllReaderPositions();
-  return <String, int>{
+  final Map<String, int> lastReadAt = <String, int>{
     for (final ReaderPositionRow r in rows) r.bookUid: r.updatedAt,
   };
+  final Map<String, int> chapterActivity =
+      await db.getLatestMangaChapterStateUpdatedAtByBookUid();
+  for (final MapEntry<String, int> entry in chapterActivity.entries) {
+    lastReadAt.putIfAbsent(entry.key, () => entry.value);
+  }
+  return lastReadAt;
 });
 
 /// 「读完」的书的 bookKey 集合（`EpubBooks.completedAt` 非 null：手动标记或读到
@@ -622,6 +650,28 @@ class ReaderFushiSource extends ReaderMediaSource {
     // 重叠不了 SQL，书架延迟仍随库大小线性增长（N 次往返 + N 次语句准备）。
     final Map<String, ReaderPosition> positions =
         await ReaderPositionRepository(db).findAllByBookUid();
+    // 章状态也一次批量取完（在线漫画的进度 / 续读唯一真源）。
+    final Map<String, Map<String, MangaChapterStateRow>> chapterStates =
+        await db.getMangaChapterStatesForBookUids(books.map((b) => b.uid));
+
+    // 票 02：书架封面优先级为本地 cover.* → 来源当前封面（含按 bookKey 的
+    // Program state 持久字节缓存）→ 第一页生成封面 → 占位。缓存根不可用
+    // （启动早期）时传 null，行为回落。
+    final MangaShelfCoverService? shelfCoverService = _shelfCoverServiceFor(
+      appModel,
+    );
+    // ticket 02：第一页生成封面与书架持久缓存共用同一份 Program state 缓存
+    // 目录；缺封面时懒生成，成功后经 ticket 01 的 revision 刷新书架。
+    final MangaFirstPageCoverService? firstPageCoverService =
+        shelfCoverService != null
+        ? MangaFirstPageCoverService(
+            database: db,
+            cache: shelfCoverService.cache,
+          )
+        : MangaFirstPageCoverService.forAppCache(
+            database: db,
+            cacheRoot: appModel.appPathsOrNull?.cacheRoot,
+          );
 
     // HBK-AUDIT-128: previously this was a serial for-loop where every book
     // awaited up to four File.exists() cover probes one after another, so
@@ -633,9 +683,85 @@ class ReaderFushiSource extends ReaderMediaSource {
         (EpubBookRow book) => _bookToMediaItem(
           book,
           book.uid.isEmpty ? null : positions[book.uid],
+          chapterStates: book.uid.isEmpty
+              ? const <String, MangaChapterStateRow>{}
+              : chapterStates[book.uid] ??
+                    const <String, MangaChapterStateRow>{},
+          shelfCoverService: shelfCoverService,
+          firstPageCoverService: firstPageCoverService,
         ),
       ),
     );
+  }
+
+  /// 书架持久封面缓存的测试缝。
+  ///
+  /// 生产环境按 [AppModel.appPathsOrNull] 的 Program state 缓存根装配；测试
+  /// 注入临时目录 + 可控运行时适配器，避免依赖真实 `userdata`。
+  @visibleForTesting
+  static MangaShelfCoverService? debugShelfCoverService;
+
+  /// 后台封面刷新是 unawaited 的：测试需要等它们落盘后再断言。
+  static final Set<Future<void>> _pendingShelfCoverRefreshes =
+      <Future<void>>{};
+
+  @visibleForTesting
+  static Future<void> debugWaitForShelfCoverRefreshes() async {
+    while (_pendingShelfCoverRefreshes.isNotEmpty) {
+      await Future.wait<void>(
+        _pendingShelfCoverRefreshes.toList(growable: false),
+      );
+    }
+  }
+
+  MangaShelfCoverService? _shelfCoverServiceFor(AppModel appModel) {
+    final MangaShelfCoverService? override = debugShelfCoverService;
+    if (override != null) return override;
+    return MangaShelfCoverService.forAppCache(
+      cacheRoot: appModel.appPathsOrNull?.cacheRoot,
+      serviceFor: appOnlineMangaServiceResolver(
+        appModel.onlineMangaLibraryService,
+      ),
+    );
+  }
+
+  /// 后台刷新订阅：只保留 future 以便测试等待，不阻塞书架渲染。
+  static void _scheduleShelfCoverRefresh(
+    MangaShelfCoverService service,
+    String bookKey,
+    OnlineMangaLibraryEntry entry,
+  ) {
+    final Future<void> pending = service.refreshIfNeeded(entry, bookKey);
+    _pendingShelfCoverRefreshes.add(pending);
+    unawaited(
+      pending.whenComplete(() => _pendingShelfCoverRefreshes.remove(pending)),
+    );
+  }
+
+  /// 第一页生成封面的后台订阅（ticket 02）：与远程封面刷新共用同一份 pending
+  /// 集合，测试用 [debugWaitForShelfCoverRefreshes] 等它们落盘。
+  static void _scheduleFirstPageCoverGeneration(
+    MangaFirstPageCoverService service,
+    EpubBookRow book,
+  ) {
+    final Future<void> pending = service.generateIfNeeded(book);
+    _pendingShelfCoverRefreshes.add(pending);
+    unawaited(
+      pending.whenComplete(() => _pendingShelfCoverRefreshes.remove(pending)),
+    );
+  }
+
+  /// 在线条目能否回退到已保存的远程封面 URL。
+  ///
+  /// 有封面服务时必须确认来源已安装且启用；服务缺失（启动早期缓存根不可用）
+  /// 时无法判定，保持旧的远程回退行为。该判定只查数据库，不发起网络请求。
+  static Future<bool> _canUseShelfRemoteCover(
+    MangaShelfCoverService? service,
+    OnlineMangaLibraryEntry? entry,
+  ) async {
+    if (entry == null) return false;
+    if (service == null) return true;
+    return service.isSourceAvailable(entry);
   }
 
   /// 按 bookKey 解析出 [MediaItem]（TODO-291：首页「正在听书」迷你条「回到书」用，
@@ -649,23 +775,66 @@ class ReaderFushiSource extends ReaderMediaSource {
     final ReaderPosition? pos = book.uid.isEmpty
         ? null
         : await ReaderPositionRepository(db).findByBookUid(book.uid);
-    return _bookToMediaItem(book, pos);
+    final Map<String, MangaChapterStateRow> chapterStates = book.uid.isEmpty
+        ? const <String, MangaChapterStateRow>{}
+        : await db.getMangaChapterStates(book.uid);
+    return _bookToMediaItem(book, pos, chapterStates: chapterStates);
   }
 
-  /// 在线漫画的章级进度。
+  /// 进度条里每章占的横向单位数（position / duration = 百分比）。章状态只有
+  /// 页级信息，整数 position/duration 需要放大才能表达章内位置。
+  static const int _kMangaChapterProgressUnits = 1000;
+
+  /// 在线漫画的章级进度：**章状态 + 规范阅读顺序**，不再用
+  /// `currentChapterIndex`（那只记「最后一次选中哪章」，不是进度）。
   ///
-  /// 「读到第几话」= 从**末尾**往回数：源按新→旧返回，列表 0 是最新一话，所以
-  /// 下标越大越旧。没选过章 = 一话都没开始读，position 0。
+  /// 「当前章」= 最近动过的章（`updatedAt` 最大，与
+  /// `continueMangaChapterIndex` 同一口径）；position = 该章在阅读顺序里的
+  /// 位置 × 每章单位 + 章内进度。章内进度：已读完 = 整章；否则按页数 / webtoon
+  /// 千分比折算（至少 1 个单位，表示「翻开过」）。没有章状态 = 未开始。
   static ({int position, int duration}) _onlineMangaProgress(
     OnlineMangaLibraryEntry entry,
+    Map<String, MangaChapterStateRow> states,
   ) {
     final int total = entry.chapters.length;
     if (total == 0) return (position: 0, duration: 1);
-    final int? selected = entry.currentChapterIndex;
-    if (selected == null || selected < 0 || selected >= total) {
-      return (position: 0, duration: total);
+    final int duration = total * _kMangaChapterProgressUnits;
+    if (states.isEmpty) return (position: 0, duration: duration);
+    final List<OnlineMangaChapter> ordered = mangaReadingOrder(entry.chapters);
+    int bestIndex = -1;
+    int bestUpdatedAt = -1;
+    for (int i = 0; i < ordered.length; i++) {
+      final MangaChapterStateRow? state = states[ordered[i].key];
+      if (state == null) continue;
+      if (state.updatedAt > bestUpdatedAt ||
+          (state.updatedAt == bestUpdatedAt && i > bestIndex)) {
+        bestUpdatedAt = state.updatedAt;
+        bestIndex = i;
+      }
     }
-    return (position: (total - selected).clamp(0, total), duration: total);
+    if (bestIndex < 0) return (position: 0, duration: duration);
+    final int within = _mangaChapterProgressUnits(
+      states[ordered[bestIndex].key]!,
+    );
+    final int position = bestIndex * _kMangaChapterProgressUnits + within;
+    return (position: position.clamp(0, duration), duration: duration);
+  }
+
+  /// 章内进度折算成 position 单位（1..每章单位数）。已读完的章算整章。
+  static int _mangaChapterProgressUnits(MangaChapterStateRow state) {
+    const int units = _kMangaChapterProgressUnits;
+    if (state.readAt != null) return units;
+    if (state.pageCount != null && state.pageCount! > 0) {
+      final double fraction = state.lastFraction >= 0
+          ? state.lastFraction / 1000
+          : (state.lastPage + 1) / state.pageCount!;
+      return (fraction.clamp(0.0, 1.0) * units).round().clamp(1, units);
+    }
+    if (state.lastFraction >= 0) {
+      return ((state.lastFraction / 1000) * units).round().clamp(1, units);
+    }
+    // 页数未知（导入备份的章状态）：有页号 = 读到过半，至少算翻开了。
+    return state.lastPage > 0 ? units ~/ 2 : 1;
   }
 
   /// 本地图源的章级进度。
@@ -697,8 +866,12 @@ class ReaderFushiSource extends ReaderMediaSource {
   /// reader position (already keyed by uid by the caller; null = never read).
   Future<MediaItem> _bookToMediaItem(
     EpubBookRow book,
-    ReaderPosition? pos,
-  ) async {
+    ReaderPosition? pos, {
+    Map<String, MangaChapterStateRow> chapterStates =
+        const <String, MangaChapterStateRow>{},
+    MangaShelfCoverService? shelfCoverService,
+    MangaFirstPageCoverService? firstPageCoverService,
+  }) async {
     int position = 0;
     int duration = 1;
 
@@ -746,7 +919,7 @@ class ReaderFushiSource extends ReaderMediaSource {
         ? LocalSourceMetadata.tryParse(book.sourceMetadata)
         : null;
     final ({int position, int duration}) prog = onlineEntry != null
-        ? _onlineMangaProgress(onlineEntry)
+        ? _onlineMangaProgress(onlineEntry, chapterStates)
         : localSource != null
         ? _localSourceMangaProgress(book, localSource)
         : pageBased
@@ -787,17 +960,60 @@ class ReaderFushiSource extends ReaderMediaSource {
     position = prog.position;
     duration = prog.duration;
 
+    // 票 02：书架封面解析顺序——
+    // 本地 `cover.*` 文件 → 可用 Source 的当前封面（含按 bookKey 的持久字节
+    // 缓存）→ 第一页生成封面 → 占位。
     String? imageUrl = await _resolveCoverUrl(book);
-    // 导入的在线漫画（Mihon 备份）通常没有本地封面文件，备份只带远程
-    // `series.coverUrl`。本地探测全落空时回退到它，交给 `MediaItem.imageUrl`
-    // 的现有 HTTP 图片缓存（`AppCachedHttpImage`）懒加载；来源是否安装无关紧要。
-    // 它**不**写入 [_lastGoodCoverUrlByBookKey]：那份进程缓存只存磁盘上真实
-    // 存在过的 `file://` URL（BUG-513），混入远程地址会破坏离线语义。
-    if (imageUrl == null) {
-      final String? remoteCoverUrl = onlineEntry?.series.coverUrl?.trim();
-      if (remoteCoverUrl != null && remoteCoverUrl.isNotEmpty) {
+    if (imageUrl == null && onlineEntry != null && shelfCoverService != null) {
+      final String? cachedShelfCover = await shelfCoverService.cachedCoverUrl(
+        book.bookKey,
+      );
+      // 持久缓存与生成封面共用一份文件；生成封面优先级低于来源当前封面，
+      // 因此只有 sidecar 是真实 URL 时才在这里采用。
+      final bool cachedIsGenerated =
+          cachedShelfCover != null &&
+          firstPageCoverService != null &&
+          await firstPageCoverService.cachedGeneratedCoverUrl(book.bookKey) !=
+              null;
+      if (cachedShelfCover != null && !cachedIsGenerated) {
+        imageUrl = cachedShelfCover;
+      }
+    }
+    if (imageUrl == null && onlineEntry != null) {
+      // 导入的在线漫画（Mihon 备份）通常没有本地封面文件，备份只带远程
+      // `series.coverUrl`。本地探测全落空时回退到它，交给 `MediaItem.imageUrl`
+      // 的现有 HTTP 图片缓存（`AppCachedHttpImage`）懒加载。
+      //
+      // 来源未安装 / 停用时不得回退远程 URL：此时几乎必然请求失败，书架应直接
+      // 显示占位（票 09）。可用性判定只读数据库，不联网、不逐本抓封面。它**不**
+      // 写入 [_lastGoodCoverUrlByBookKey]：那份进程缓存只存磁盘上真实存在过的
+      // `file://` URL（BUG-513），混入远程地址会破坏离线语义。
+      final String? remoteCoverUrl = onlineEntry.series.coverUrl?.trim();
+      if (remoteCoverUrl != null &&
+          remoteCoverUrl.isNotEmpty &&
+          await _canUseShelfRemoteCover(shelfCoverService, onlineEntry)) {
         imageUrl = remoteCoverUrl;
       }
+    }
+    // 本地 / 来源封面都不可用：先显示已有生成缓存，并在后台按容器 sentinel
+    // 检查是否需要重新生成；成功后 bump ticket 01 的 revision。
+    if (imageUrl == null &&
+        format == BookFormat.manga &&
+        firstPageCoverService != null) {
+      imageUrl = await firstPageCoverService.cachedGeneratedCoverUrl(
+        book.bookKey,
+      );
+      _scheduleFirstPageCoverGeneration(firstPageCoverService, book);
+    }
+    // 只要没有持久字节缓存或来源 URL 变了，就在后台刷新一份；即使当前显示的是
+    // 本地封面也一样（本地封面不影响持久缓存对新签名 URL 的自愈）。失败保留
+    // 旧缓存 / 本地 / 远程回退。
+    if (onlineEntry != null && shelfCoverService != null) {
+      _scheduleShelfCoverRefresh(
+        shelfCoverService,
+        book.bookKey,
+        onlineEntry,
+      );
     }
 
     return MediaItem(
@@ -841,26 +1057,17 @@ class ReaderFushiSource extends ReaderMediaSource {
 
   /// Build the ordered candidate cover paths for a book: the declared cover
   /// path (if any) wins over the conventional `cover.jpg/jpeg/png` fallbacks.
+  ///
+  /// 实现住在 `manga_cover_resolution.dart`，与作品页 / 重建预热共用；这里保留
+  /// 静态入口只为既有调用方与测试（BUG-513 的候选顺序契约）。
   @visibleForTesting
   static List<String> coverCandidatePaths({
     required String extractDir,
     String? coverPath,
-  }) {
-    final List<String> candidates = <String>[];
-    if (coverPath != null && coverPath.isNotEmpty) {
-      String coverRel = coverPath;
-      if (coverRel.startsWith('/')) coverRel = coverRel.substring(1);
-      candidates.add(p.join(extractDir, coverRel));
-    }
-    for (final String name in const <String>[
-      'cover.jpg',
-      'cover.jpeg',
-      'cover.png',
-    ]) {
-      candidates.add(p.join(extractDir, name));
-    }
-    return candidates;
-  }
+  }) => mangaCoverCandidatePaths(
+    extractDir: extractDir,
+    coverPath: coverPath,
+  );
 
   /// Pure, injectable cover resolution (BUG-513). Probes [candidates]
   /// concurrently with [probe] and returns the `file://` URL of the first
@@ -940,21 +1147,6 @@ class ReaderFushiSource extends ReaderMediaSource {
     return null;
   }
 
-  /// Real-filesystem child lister for [resolveCaseInsensitive]. Returns the
-  /// child entity paths of [dir], or an empty list if it is missing/unreadable.
-  static List<String> _listDirEntries(String dir) {
-    final Directory d = Directory(dir);
-    if (!d.existsSync()) return const <String>[];
-    try {
-      return d
-          .listSync(followLinks: false)
-          .map((FileSystemEntity e) => e.path)
-          .toList();
-    } catch (_) {
-      return const <String>[];
-    }
-  }
-
   /// Case-insensitive on-disk resolution of a book cover (TODO-1319 / BUG-612).
   ///
   /// Walks each relative candidate in [relPaths] segment by segment under
@@ -964,51 +1156,18 @@ class ReaderFushiSource extends ReaderMediaSource {
   /// a coverPath whose case was mangled by a case-insensitive host still find
   /// the case-preserved extracted file on a case-sensitive device.
   ///
-  /// Pure + injectable ([listDir]) so it is unit-testable with a mock
-  /// filesystem; the instance path wires in [_listDirEntries].
+  /// 实现住在 `manga_cover_resolution.dart`（书架 / 作品页 / 重建预热共用）；
+  /// 这里保留静态入口与可注入 lister 的测试契约。
   @visibleForTesting
   static String? resolveCaseInsensitive({
     required String extractDir,
     required List<String> relPaths,
     required List<String> Function(String dir) listDir,
-  }) {
-    for (final String rel in relPaths) {
-      if (rel.isEmpty || p.isAbsolute(rel)) continue;
-      final List<String> segs = p
-          .split(rel)
-          .where((String s) => s.isNotEmpty && s != '.' && s != '/')
-          .toList();
-      if (segs.isEmpty) continue;
-      String current = extractDir;
-      bool resolvedAll = true;
-      for (final String seg in segs) {
-        final List<String> children = listDir(current);
-        String? match;
-        for (final String child in children) {
-          if (p.basename(child) == seg) {
-            match = child;
-            break;
-          }
-        }
-        if (match == null) {
-          final String segLower = seg.toLowerCase();
-          for (final String child in children) {
-            if (p.basename(child).toLowerCase() == segLower) {
-              match = child;
-              break;
-            }
-          }
-        }
-        if (match == null) {
-          resolvedAll = false;
-          break;
-        }
-        current = match;
-      }
-      if (resolvedAll) return current;
-    }
-    return null;
-  }
+  }) => resolveMangaCoverCandidate(
+    extractDir: extractDir,
+    relPaths: relPaths,
+    listDir: listDir,
+  );
 
   /// Resolve a book cover to its on-disk **file path** (not a `file://` URL),
   /// reusing the exact same case-insensitive resolution the library grid uses
@@ -1021,30 +1180,18 @@ class ReaderFushiSource extends ReaderMediaSource {
   /// still finds the case-preserved file on a case-sensitive device
   /// (Android/Linux). Returns null when no candidate resolves to a real file.
   ///
-  /// Static + wiring the real [_listDirEntries] lister so mining (which only
-  /// had a naive `File(join(extractDir, coverHref)).existsSync()` probe --
-  /// blind to case, hence the missing cover on Android) shares one resolution
-  /// with the grid instead of drifting.
+  /// 共享实现见 [resolveMangaCoverFilePath]：作品页 / 重建预热的
+  /// 「已有记录封面」判定与书架 / 制卡走同一份解析。
   ///
   /// Not `@visibleForTesting`: this is genuine production API consumed by both
   /// the shelf grid (`_resolveCoverUrl`) and card mining (`mining.part.dart`).
   static String? resolveCoverFilePath({
     required String extractDir,
     String? coverPath,
-  }) {
-    final String? resolved = resolveCaseInsensitive(
-      extractDir: extractDir,
-      relPaths: <String>[
-        if (coverPath != null && coverPath.isNotEmpty) coverPath,
-        'cover.jpg',
-        'cover.jpeg',
-        'cover.png',
-      ],
-      listDir: _listDirEntries,
-    );
-    if (resolved != null && File(resolved).existsSync()) return resolved;
-    return null;
-  }
+  }) => resolveMangaCoverFilePath(
+    extractDir: extractDir,
+    coverPath: coverPath,
+  );
 
   /// 删一本书（EPUB / PDF / 漫画 / 字幕书）攒下的统计：「同时删除统计数据」勾选的
   /// 落地，书架单删 / 批删 / 合集连删 / 漫画作品页移出书架共用。

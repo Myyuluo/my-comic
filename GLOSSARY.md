@@ -5,12 +5,16 @@
 ## Language
 
 **my-comic**:
-本项目的产品名与代码库名。它是独立发行版，不是 Fushi 的官方分支。
+本项目的产品名与代码库名。它是独立发行版，不是 Fushi 的官方分支；版本从 1.0.0 起，GitHub 仓库与更新源都是 `Myyuluo/my-comic`，不指向 Fushi 上游。
 _Avoid_: Fushi、Mihon（指本产品时）
 
 **Fushi**:
-本项目的上游代码基座，锁定在 v3.0.0 快照。只作为来源与历史背景使用，不跟随其后续更新。
+本项目的上游代码基座，锁定在 v3.0.0 快照。只作为来源与历史背景使用，不跟随其后续更新，也不作为本应用的更新源。
 _Avoid_: 当前应用、我们的应用
+
+**Update source（更新源）**:
+应用检查新版本时查询的发布仓库。my-comic 只使用自己的 GitHub 仓库 `Myyuluo/my-comic`，不回退上游 Fushi 的发布；仓库没有可用 release（404、空列表或无匹配通道）时按「已是最新」处理。
+_Avoid_: 上游更新、Fushi 发布线
 
 **Mihon**:
 Android 漫画阅读器，是本项目的扩展与备份兼容目标（v0.21.3）。
@@ -109,7 +113,7 @@ _Avoid_: 标签、用户标签、分类（未指明来源时）
 _Avoid_: 子标签、标签页、分类页签
 
 **继续阅读胶囊（Continue reading pill）**:
-漫画页顶部 chrome 行里的紧凑继续阅读入口：圆形封面、主色「继续阅读」文字与主色圆形播放钮，不显示书名与进度；悬停时以 tooltip 显示书名。整颗胶囊可点击并打开当前的继续阅读作品；没有继续阅读条目时不显示。它取代了旧布局里网格顶部的继续阅读大卡片。
+漫画页顶部 chrome 行里的紧凑继续阅读入口：圆形封面、主色「继续阅读」文字、下方小号灰黑色的书名第二行与主色圆形播放钮，不显示进度。书名使用显示标题（含改名覆盖），宽度受本地化「继续阅读」主标签的实际渲染宽度约束，单行、超出显示省略号；完整书名保留在悬停 tooltip 中。整颗胶囊（含第二行与播放钮区域）可点击并打开当前的继续阅读作品；没有继续阅读条目时不显示。它取代了旧布局里网格顶部的继续阅读大卡片。
 _Avoid_: 继续阅读大卡片、继续阅读 hero（旧布局的网格顶部大卡片）
 
 **下载页（Downloads page）**:
@@ -121,7 +125,7 @@ _Avoid_: 下载视图、下载页签、子标签
 _Avoid_: 书签、位置
 
 **History（历史）**:
-用户阅读 Manga 的会话记录，按 Manga 去重，每部一条，记录最近一次打开 Chapter 的时间；由「历史」页直接展示。书架与非书架 Manga 都会写入；历史卡片优先显示当前标题与本地封面，匹配不到时回退到导入快照，绝不显示内部作品标识。History 不设条数上限，写入新作品不会裁剪更早的记录。History 与 Reading progress 相互独立：删除 History 不会清除续读位置或 Chapter 已读标记。无痕阅读期间不新增、不更新 History。
+用户阅读 Manga 的会话记录，按 Manga 去重，每部一条，记录最近一次打开 Chapter 的时间；由「历史」页直接展示。书架与非书架 Manga 都会写入；历史卡片优先显示当前标题与当前封面，封面与书架使用同一优先级（ADR 0023）：本地 `cover.*` → 真实来源持久封面缓存 → 可用 Source 的当前远程封面 → 第一页生成封面 → 占位；来源未安装 / 停用时跳过远程一档，已有本地或生成封面仍显示。匹配不到记录时回退到导入快照，绝不显示内部作品标识。History 不设条数上限，写入新作品不会裁剪更早的记录。History 与 Reading progress 相互独立：删除 History 不会清除续读位置或 Chapter 已读标记。无痕阅读期间不新增、不更新 History。
 _Avoid_: 记录、阅读记录（可能指 Reading progress）
 
 **Reading statistics（阅读统计）**:
@@ -157,8 +161,12 @@ Manga/Chapter 与磁盘上已下载文件及其状态之间的映射，覆盖书
 _Avoid_: 漫画索引、书库、缓存
 
 **Rebuild download index（重建下载索引）**:
-用户触发的恢复扫描：扫描当前 Content root 的 Download library 与 Local source root，按 Download identity 把文件关联到已有 Manga（含非书架；身份不足时按文件名回退），并为未索引内容补建条目。多个目录都能证明同一身份时不猜，优先已记录目录或唯一最新完整副本，否则跳过并在报告中说明；只增改，不删除或重命名文件与映射。
+用户触发的恢复扫描：扫描当前 Content root 的 Download library 与 Local source root，按 Download identity 只把磁盘内容重新关联到 Library 中已有的 Manga（身份不足时按文件名回退）；不新增 Manga、不改变 Library membership、不分配 Tag，也不读取或改写非书架 Manga。发现尚未加入 Library 的作品由 Scan downloaded 负责。多个目录都能证明同一身份时不猜，优先已记录目录或唯一最新完整副本，否则跳过并在报告中说明；只增改，不删除或重命名文件与映射。
 _Avoid_: 导入、恢复备份、同步
+
+**Scan downloaded（检索已下载）**:
+用户手动触发的发现扫描：只读取当前 Content root 的 `downloads`，把已下载但尚未加入 Library 的作品加入 Library。只收至少有一个完整 Chapter container 的作品；歧义副本跳过并在报告中说明。已有非书架记录时复用同一条记录并提升为 Library 成员，保留阅读状态与 History；源未安装时原地登记为指向该 `downloads` 目录的 Local 条目；主动移出 Library 的作品在用户显式执行本动作时重新加入并清除移出标记（tombstone）。它不移动、复制或删除文件，也不重新关联已在 Library 的 Manga；后者属于 Rebuild download index。
+_Avoid_: 自动入库、导入、重建索引
 
 **Downloaded（已下载）**:
 下载状态：该 Chapter 在本地有可读内容。判据来自磁盘关联与可读性，与 Library membership、Source 是否安装以及数据库映射是否存在无关。由 Download identity 证明归属的 Chapter container 需要完整；用户提供、按容器名与 Chapter 关联且没有 Download identity 的容器只要可读也算；单章作品放在 Manga 目录根的章节内容同样算已下载。Local source root 下的用户原件可以被关联与阅读，但永不删除；删除只作用于 Download library 中由应用管理的容器。
@@ -173,15 +181,19 @@ _Avoid_: 文件缺失
 _Avoid_: 未下载
 
 **Unindexed（未索引）**:
-磁盘上存在 Chapter 内容，但还没有对应的 Manga/Download index 条目。
+磁盘上存在 Chapter 内容，但还没有对应的 Manga/Download index 条目。未索引内容不会由 Rebuild download index 自动登记；用户显式运行 Scan downloaded 时可从 `downloads` 中发现并加入 Library。
 _Avoid_: 未下载、孤儿
 
+**Generated cover（生成封面）**:
+书架缺少可用封面时，从本地 Chapter container 的第一页临时生成的封面：按 Chapter reading order 取第一个完整容器，CBZ 取归档内第一张图片，文件夹章节取自然排序第一张图片，跳过 `ComicInfo.xml` 等非图片文件，缩放到封面尺寸并编码为 JPEG。生成封面只存在于 Program state 的 Cache（`<programState>/cache/shelf_covers`，按 bookKey 归属），不是 Download library 的内容：不写入 Content root、不创建下载目录、不改 `cover_path`，也不进入 Backup。缓存 sidecar 记录容器的规范路径、大小与 mtime；容器替换或更新后自动重新生成。封面优先级为本地 `cover.*` 文件 → 可用 Source 的当前封面（含持久字节缓存）→ 生成封面 → 占位；Source 恢复可用并取得真实封面后，真实封面替换生成封面。第一页不可读、容器不完整或解码失败时保留占位，不崩溃，也不阻断重建、书架或阅读。
+_Avoid_: 下载封面、离线封面、封面文件
+
 **Cache（缓存）**:
-应用为了加速在线源与阅读会话而保留的可再生临时数据，例如封面与页面图片、网页响应、压缩包解包临时文件。封面属于 Cache：应用不把封面写入 Download library，已有的本地封面文件保持原位、不自动删除；离线或清除缓存后，依赖远程封面的书架与作品页显示占位封面，重新联网或重新打开后自动恢复。缓存不是 Download，也不包含 Local source 的用户文件；清除缓存不改变 History、Reading progress 或 Download library。
+应用为了加速在线源与阅读会话而保留的可再生临时数据，例如封面与页面图片、网页响应、压缩包解包临时文件。封面属于 Cache：应用不把封面写入 Download library，已有的本地封面文件保持原位、不自动删除；书架持久封面与 Generated cover 都存放在 Program state 的缓存目录，生成封面在本地容器变化时重新生成，清除缓存会一并删除并在需要时重建。离线或清除缓存后，书架与作品页使用本地或生成封面；都没有时显示占位，重新联网或重新打开后自动恢复。缓存不是 Download，也不包含 Local source 的用户文件；清除缓存不改变 History、Reading progress 或 Download library。
 _Avoid_: 下载、离线文件、书库
 
 **Clear cache（清除缓存）**:
-「设置 → 存储与下载 → 数据存储位置」里的动作：清理应用管理的 Cache，并在行内显示当前磁盘占用（含图片管理器磁盘缓存与 WebView 的安全 HTTP cache 子目录）。它保留图源登录态、数据库、History、Reading progress、Download library 与 Local source 文件。WebView/HTTP 缓存清理只在 Windows（WebView2）上可用；其它平台跳过该部分并在结果中提示部分成功。
+「设置 → 存储与下载 → 数据存储位置」里的动作：清理应用管理的 Cache，并在行内显示当前占用。占用只统计该动作实际可清理的内容（图片管理器磁盘缓存与 WebView 的安全 HTTP cache 子目录），WebView2 的 GPU / Shader / Dawn 等运行时组件不计入；清理结果报告实际释放的字节，而不是固定值。它保留图源登录态、数据库、History、Reading progress、Download library 与 Local source 文件。WebView/HTTP 缓存清理只在 Windows（WebView2）上可用；其它平台跳过该部分并在结果中提示部分成功。
 _Avoid_: 清理下载、重置应用
 
 **Clear database（清理数据库）**:
@@ -209,7 +221,7 @@ _Avoid_: 自动备份、应用快照
 _Avoid_: 备份目录、autobackup（那是目录名）
 
 **Import（导入）**:
-把 Backup 读入 my-comic：恢复 Library 与阅读数据，并补齐本机缺失的 my-comic 设置。Merge 语义，按 Manga 与 Source 去重；未收藏的作品会恢复为非书架 Manga（含章节、阅读进度、已读与可恢复的 History），绝不进入 Library。导入后会尝试把已下载文件与可识别身份的本地文件关联到导入作品，不额外创建 Library 条目；「重建下载索引」仍是手动全量扫描。
+把 Backup 读入 my-comic：恢复 Library 与阅读数据，并补齐本机缺失的 my-comic 设置。Merge 语义，按 Manga 与 Source 去重；未收藏的作品会恢复为非书架 Manga（含章节、阅读进度、已读与可恢复的 History），绝不进入 Library。导入后会尝试把已下载文件与可识别身份的本地文件关联到导入作品，不额外创建 Library 条目；「重建下载索引」仍是用户手动触发、只重链书架成员，`downloads` 中尚未加入书架的作品由「检索已下载」发现。
 _Avoid_: 恢复（除非特指 Mihon 的 restore 行为）、同步
 
 **Export（导出）**:

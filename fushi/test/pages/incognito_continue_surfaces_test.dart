@@ -75,5 +75,23 @@ void main() {
         isFalse,
       );
     });
+
+    test('完成状态已知且未完成：进度到 100% 仍算在读、留在「继续」', () {
+      final MediaItem percent100 = MediaItem(
+        mediaIdentifier: 'fushi://book/percent100',
+        mediaSourceIdentifier: 'reader',
+        title: 'percent100',
+        mediaTypeIdentifier: 'reader',
+        position: 100,
+        duration: 100,
+        canDelete: false,
+        canEdit: true,
+      );
+      expect(
+        isDashboardContinueBook(percent100, const <String>{}),
+        isTrue,
+        reason: '没有 completedAt 时不能由进度自动判读完（与书架同一口径）',
+      );
+    });
   });
 }

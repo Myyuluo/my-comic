@@ -243,6 +243,47 @@ void main() {
     expect((await stored(keyA)).chapters, hasLength(2), reason: '列表本身照常落库');
   });
 
+  test('源返回空章节列表而库里已有章节：按失败上报、不计刷新数、保留旧章节', () async {
+    const String newCover = 'https://example.test/fresh-signature.jpg';
+    final String keyA = await addBook(
+      entryFor('/series/a', chapters: const <OnlineMangaChapter>[c2, c1]),
+      autoDownload: true,
+    );
+    adapter.script = (OnlineMangaLibraryEntry entry) async =>
+        OnlineMangaRefreshResult(
+          series: OnlineMangaSeries(
+            key: entry.series.key,
+            title: entry.series.title,
+            coverUrl: newCover,
+            raw: entry.series.raw,
+          ),
+          chapters: const <OnlineMangaChapter>[],
+        );
+
+    final int refreshed = await runOnlineMangaUpdateProbe(
+      database: database,
+      serviceFor: (OnlineMangaRuntimeKind _) => service,
+      autoDownload: autoDownload,
+      onError: onError,
+    );
+
+    expect(refreshed, 0, reason: '空章节列表不得计为一次成功刷新（回退既有语义）');
+    expect(errors, hasLength(1), reason: '空章节列表仍按失败上报');
+    expect(errors.single.bookKey, keyA);
+    expect(enqueued, isEmpty, reason: '章节没刷新成功，不得自动追更');
+    final OnlineMangaLibraryEntry storedA = await stored(keyA);
+    expect(
+      storedA.chapters,
+      hasLength(2),
+      reason: '票 06 的目标仍然成立：旧章节保留，不清空',
+    );
+    expect(
+      storedA.series.coverUrl,
+      newCover,
+      reason: '详情/封面仍须在失败前落库（票 06 的最小改动）',
+    );
+  });
+
   test('章节没变时不入队', () async {
     await addBook(
       entryFor('/series/a', chapters: const <OnlineMangaChapter>[c2, c1]),

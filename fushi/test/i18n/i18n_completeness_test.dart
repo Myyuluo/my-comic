@@ -183,5 +183,47 @@ void main() {
         }
       }
     });
+
+    test('scan_downloaded_report_body 使用真正的换行而不是字面量 \\n', () {
+      for (final file in <File>[
+        File(p.join(i18nDir, 'strings.i18n.json')),
+        ...translationFiles,
+      ]) {
+        final name = p.basename(file.path);
+        final translation =
+            jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
+        final value = translation['scan_downloaded_report_body'];
+        expect(value, isA<String>(), reason: '$name 缺少 scan 报告正文');
+        expect(
+          value,
+          isNot(contains(r'\n')),
+          reason: '$name 的 scan 报告正文不得显示字面量反斜杠 n',
+        );
+        expect(value, contains('\n'), reason: '$name 的 scan 报告正文必须使用真正的换行');
+      }
+    });
+
+    test('下载索引 / 检索已下载文案在所有译文里不是英文占位', () {
+      final List<String> keys = <String>[
+        for (final String key in baseKeys)
+          if (key.startsWith('scan_downloaded_') ||
+              key.startsWith('rebuild_download_index_') ||
+              key == 'cache_clear_step_shelf_covers')
+            key,
+      ];
+      expect(keys, isNotEmpty);
+      for (final file in translationFiles) {
+        final name = p.basename(file.path);
+        final translation =
+            jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
+        for (final String key in keys) {
+          expect(
+            translation[key],
+            isNot(baseStrings[key]),
+            reason: '$name 的 "$key" 仍是英文占位，需要提供本地化翻译',
+          );
+        }
+      }
+    });
   });
 }

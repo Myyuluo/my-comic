@@ -78,15 +78,17 @@ void main() {
     final String source = File(
       'lib/src/pages/implementations/reader_fushi_history_page.dart',
     ).readAsStringSync();
-    final int start = source.indexOf('ShelfSortKey _shelfGroupSortKey(');
+    final int start = source.indexOf('ShelfSortKey _shelfSlotSortKey(');
     expect(start, isNonNegative);
-    final String titleOf = source.substring(
-      source.indexOf('String titleOf(', start),
-      source.indexOf('int recentOf(', start),
-    );
+    final int end = source.indexOf('void _toggleFilter(', start);
+    expect(end, isNonNegative);
+    final String titleOf = source.substring(start, end);
     expect(titleOf, contains('displayTitleForBook('));
-    expect(titleOf, isNot(contains('s.epub?.title')));
-    expect(titleOf, isNot(contains('s.srt?.title')));
+    // 原始列只可作 displayTitleForBook 的 rawTitle 参数，不可直接赋给 title。
+    expect(titleOf, isNot(contains('title = srt.title')));
+    expect(titleOf, isNot(contains('title = epub.title')));
+    expect(titleOf, isNot(contains('title = s.epub?.title')));
+    expect(titleOf, isNot(contains('title = s.srt?.title')));
   });
 
   group('compareShelfSortKeys', () {
@@ -244,7 +246,7 @@ void main() {
       expect(tally.inProgress, isEmpty);
     });
 
-    test('isCompleted：手动标记的书计读完，不受进度约束、不进在读候选', () {
+    test('completionOf：手动标记的书计读完，不受进度约束、不进在读候选', () {
       // 用户诉求：跳过后记/附录进度停在 99% 的书，手动标记后必须计入 Completed。
       final List<({int position, int duration, int lastReadAt})> books =
           <({int position, int duration, int lastReadAt})>[
@@ -257,7 +259,9 @@ void main() {
         (it) => it.position,
         (it) => it.duration,
         // 第 0、2 本被标记完成（按 lastReadAt 区分：这里用 position 当身份代理）。
-        isCompleted: (it) => it.position == 99 || it.position == 0,
+        completionOf: (it) => it.position == 99 || it.position == 0
+            ? ShelfCompletion.complete
+            : ShelfCompletion.incomplete,
       );
       expect(tally.finished, 2, reason: '两本标记完成的都计读完（含 position=0）');
       expect(tally.reading, 1, reason: '只有未标记的 30% 那本在读');
@@ -265,7 +269,7 @@ void main() {
           reason: '标记完成的不进在读候选，即使进度 99%');
     });
 
-    test('isCompleted 为 null → 退回纯进度派生（旧行为向后兼容）', () {
+    test('completionOf 为 null → 退回纯进度派生（旧行为向后兼容）', () {
       final tally = tallyShelfProgress(
         <({int position, int duration, int lastReadAt})>[
           item(100, 100),
@@ -277,26 +281,49 @@ void main() {
       expect(tally.finished, 1);
       expect(tally.reading, 1);
     });
+
+    test('completionOf 提供 = 完成状态已知：100% 未完成的书计在读', () {
+      final tally = tallyShelfProgress(
+        <({int position, int duration, int lastReadAt})>[
+          item(100, 100), // 进度到 100%，但没有 completedAt
+          item(30, 100),
+        ],
+        (it) => it.position,
+        (it) => it.duration,
+        completionOf: (_) => ShelfCompletion.incomplete,
+      );
+      expect(tally.finished, 0, reason: '没有完成标记的书不得由进度自动判读完');
+      expect(tally.reading, 2);
+      expect(tally.inProgress, hasLength(2));
+    });
   });
 
   group('classifyShelfReadStatus（书架 / 漫画库阅读状态筛选判据）', () {
     ShelfReadStatus classify({
-      bool completed = false,
+      ShelfCompletion completion = ShelfCompletion.unknown,
       required int position,
       required int duration,
     }) => classifyShelfReadStatus(
-      completed: completed,
+      completion: completion,
       position: position,
       duration: duration,
     );
 
     test('显式读完标记不受进度约束（停在 99% 的手动标记书）', () {
       expect(
-        classify(completed: true, position: 99, duration: 100),
+        classify(
+          completion: ShelfCompletion.complete,
+          position: 99,
+          duration: 100,
+        ),
         ShelfReadStatus.finished,
       );
       expect(
-        classify(completed: true, position: 0, duration: 0),
+        classify(
+          completion: ShelfCompletion.complete,
+          position: 0,
+          duration: 0,
+        ),
         ShelfReadStatus.finished,
       );
     });
@@ -305,6 +332,35 @@ void main() {
       expect(classify(position: 100, duration: 100), ShelfReadStatus.finished);
       expect(classify(position: 30, duration: 100), ShelfReadStatus.reading);
       expect(classify(position: 0, duration: 100), ShelfReadStatus.unread);
+    });
+
+    test('完成状态已知且未完成：进度到 100% 判在读，不自动判读完', () {
+      expect(
+        classify(
+          completion: ShelfCompletion.incomplete,
+          position: 100,
+          duration: 100,
+        ),
+        ShelfReadStatus.reading,
+        reason: '没有 completedAt 时，读到最后一页不等于显式完成',
+      );
+      expect(
+        classify(
+          completion: ShelfCompletion.incomplete,
+          position: 0,
+          duration: 100,
+        ),
+        ShelfReadStatus.unread,
+      );
+      expect(
+        classify(
+          completion: ShelfCompletion.complete,
+          position: 0,
+          duration: 100,
+        ),
+        ShelfReadStatus.finished,
+        reason: '显式完成标记优先于进度',
+      );
     });
 
     test('没有进度维度（纯字幕书 / 无配对 EPUB 的有声书）归未读', () {
@@ -326,19 +382,28 @@ void main() {
             books,
             (b) => b.pos,
             (b) => b.dur,
-            isCompleted: (b) => b.done,
+            completionOf: (b) => b.done
+                ? ShelfCompletion.complete
+                : ShelfCompletion.incomplete,
           );
+      // 传了 completionOf = 完成状态已知：100% 未完成的书按在读算。
       int countOf(ShelfReadStatus status) => books
           .where(
             (b) =>
-                classify(completed: b.done, position: b.pos, duration: b.dur) ==
+                classify(
+                  completion: b.done
+                      ? ShelfCompletion.complete
+                      : ShelfCompletion.incomplete,
+                  position: b.pos,
+                  duration: b.dur,
+                ) ==
                 status,
           )
           .length;
       expect(tally.reading, countOf(ShelfReadStatus.reading));
       expect(tally.finished, countOf(ShelfReadStatus.finished));
-      expect(tally.reading, 1);
-      expect(tally.finished, 2);
+      expect(tally.reading, 2);
+      expect(tally.finished, 1);
     });
 
     test('书架「继续阅读」hero 的统计传了读完判据（已读完筛选下不再顶出读完的书）', () {
@@ -348,7 +413,8 @@ void main() {
       final int call = source.indexOf('tallyShelfProgress<MediaItem>(');
       expect(call, isNonNegative);
       final String args = source.substring(call, source.indexOf(');', call));
-      expect(args, contains('isCompleted:'));
+      expect(args, contains('completionOf:'));
+      expect(args, contains('ShelfCompletion.complete'));
       expect(args, contains('_completedBookKeys.contains('));
     });
   });

@@ -43,6 +43,35 @@ List<OnlineMangaChapter> mangaReadingOrder(List<OnlineMangaChapter> chapters) {
   );
 }
 
+/// 判断「最后一章」时使用的章节顺序。
+enum MangaChapterOrdering {
+  /// 在线 / 导入条目的规范阅读顺序：sourceOrder → 话数 → 上传时间，与存储
+  /// 数组顺序无关（[mangaReadingOrder]）。
+  canonical,
+
+  /// 本地图源扫描的自然顺序（第 1 话 → 第 N 话）。
+  natural,
+}
+
+/// [chapters] 里下标 [index] 的章是否是**该顺序的最后一章**。
+///
+/// [MangaChapterOrdering.canonical] 用于在线 / 导入条目，按 [mangaReadingOrder]
+/// 推导；[MangaChapterOrdering.natural] 用于本地图源，与阅读器
+/// `_adjacentChapterIndex` 的本地分支一致。用于「读到哪一章的末页才算整部作品
+/// 读完」——旧实现任何一章读到末页都写书级 `completedAt`。
+bool isLastMangaChapterInReadingOrder({
+  required List<OnlineMangaChapter> chapters,
+  required int index,
+  MangaChapterOrdering ordering = MangaChapterOrdering.canonical,
+}) {
+  if (index < 0 || index >= chapters.length) return false;
+  if (ordering == MangaChapterOrdering.natural) {
+    return index == chapters.length - 1;
+  }
+  if (chapters.length <= 1) return true;
+  return mangaReadingOrder(chapters).last.key == chapters[index].key;
+}
+
 /// 阅读顺序上与第 [currentIndex] 章相邻的章（[forward] = 往后读），返回它在
 /// [chapters] 里的下标；没有可去的章返回 null。
 ///

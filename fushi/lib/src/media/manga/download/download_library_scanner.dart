@@ -435,7 +435,7 @@ class DownloadMangaFolderIdentityMatch {
 
   /// 所有核心身份匹配的目录（包括被扩展包 tie-breaker 淘汰的重复副本）。
   ///
-  /// Rebuild download index 用它把未采用的重复副本排除在 orphan recovery 之外。
+  /// Rebuild download index 用它把未采用的重复副本排除在重链候选之外。
   final List<DownloadMangaFolderOnDisk> matches;
 }
 

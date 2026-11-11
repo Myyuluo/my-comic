@@ -7,11 +7,8 @@ import 'package:fushi/src/settings/settings_destination.dart';
 import 'package:fushi/src/settings/settings_schema_system.dart';
 import 'package:fushi/src/utils/misc/official_links.dart';
 
-/// 「设置 · 通用 · 官网」这一行真的打开官网，而不是复制粘贴 GitHub 那行时把 URL
-/// 也一起抄了过来。两行并排、图标相近、只差一个 URL，是最容易静默串线的形状，所以
-/// 相邻外链都断言各自的落点，防止复制入口时把 URL 一起抄错。
-///
-/// 侧栏左上角品牌位的同一入口在 `test/widgets/nav_rail_brand_button_test.dart`。
+/// ticket 03：系统与关于 › 通用不再有「访问官网」与「GitHub Sponsors」两行；
+/// 保留的 GitHub 行仍打开仓库。侧栏品牌位由 ticket 02 单独覆盖。
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -42,55 +39,53 @@ void main() {
     );
   });
 
-  SettingsActionItem actionItem(String id) {
-    return buildSystemDestination()
-        .sections
-        .expand((SettingsSection s) => s.items)
-        .whereType<SettingsActionItem>()
-        .firstWhere((SettingsActionItem i) => i.id == id);
-  }
+  List<SettingsItem> generalItems() => buildSystemDestination()
+      .sections
+      .singleWhere((SettingsSection s) => s.id == 'system.section.general')
+      .items;
 
-  test('system.website opens the official website', () async {
-    final SettingsActionItem website = actionItem('system.website');
-    expect(website.title, t.options_website);
-
-    await website.onTap(_StubSettingsContext());
-
-    expect(launchedUrls, <String>[kOfficialWebsiteUrl]);
-    expect(kOfficialWebsiteUrl, 'https://fushi.moe');
+  test('system.website and system.github_sponsors rows are removed', () {
+    final List<String> ids =
+        generalItems().map((SettingsItem item) => item.id).toList();
+    expect(ids, isNot(contains('system.website')));
+    expect(ids, isNot(contains('system.github_sponsors')));
+    expect(
+      ids,
+      isNot(contains('appearance.startup_default_dictionary_tab')),
+      reason: '启动页行同时下线，但 startup_module 偏好与启动行为保留',
+    );
+    // 通用分组其余入口保持原位：GitHub 行仍保留（URL 由 ticket 02 改为 fork）。
+    expect(ids, contains('system.github'));
   });
 
-  test('system.github still opens the repository, not the website', () async {
-    final SettingsActionItem github = actionItem('system.github');
+  test(
+    'system.github opens the my-comic fork, not the upstream repository',
+    () async {
+      final SettingsActionItem github = generalItems()
+          .whereType<SettingsActionItem>()
+          .firstWhere((SettingsActionItem i) => i.id == 'system.github');
 
-    await github.onTap(_StubSettingsContext());
+      await github.onTap(_StubSettingsContext());
 
-    expect(launchedUrls, <String>['https://github.com/hajisensai/fushi']);
-  });
-
-  test('system.github_sponsors opens the public sponsorship page', () async {
-    final SettingsActionItem sponsors = actionItem('system.github_sponsors');
-    expect(sponsors.title, t.options_github_sponsors);
-
-    await sponsors.onTap(_StubSettingsContext());
-
-    expect(launchedUrls, <String>[kGitHubSponsorsUrl]);
-    expect(kGitHubSponsorsUrl, 'https://github.com/sponsors/hajisensai');
-  });
+      expect(launchedUrls, <String>[kMyComicRepositoryUrl]);
+      expect(kMyComicRepositoryUrl, 'https://github.com/Myyuluo/my-comic');
+    },
+  );
 
   test('openOfficialDownloadPage 落在下载页，而不是首页', () async {
     expect(await openOfficialDownloadPage(), isTrue);
 
-    // 第三个官网入口，同样是「只差一段路径」的形状：漏了 /download 就退回首页，
-    // 用户看不到推荐包那一节的分片直链和「导入选合并」的说明，而引导页把用户
-    // 送到这里的全部理由就是那一节。
+    // 官网下载页仍被新手引导的推荐包入口使用；删掉的只是设置页入口。
     expect(launchedUrls, <String>[kOfficialDownloadPageUrl]);
     expect(kOfficialDownloadPageUrl, 'https://fushi.moe/download');
+    // 下载页必须仍属于官网站点：断言站点来源关系，而不是只钉一个可能被
+    // 一起改掉的字面量。
     expect(
-      kOfficialDownloadPageUrl.startsWith('$kOfficialWebsiteUrl/'),
-      isTrue,
-      reason: '下载页必须挂在官网域名下，换站点时两者一起走',
+      Uri.parse(kOfficialDownloadPageUrl).host,
+      Uri.parse(kOfficialWebsiteUrl).host,
+      reason: '下载页 URL 必须属于官网域名',
     );
+    expect(kOfficialDownloadPageUrl, startsWith(kOfficialWebsiteUrl));
   });
 }
 

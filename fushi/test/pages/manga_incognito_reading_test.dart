@@ -460,7 +460,9 @@ void main() {
     expect(state.readAt, isNull, reason: '无痕：章尾自动标记已读必须被跳过');
   });
 
-  testWidgets('关闭无痕：在线漫画恢复章尾自动已读与书级完成标记', (WidgetTester tester) async {
+  testWidgets('关闭无痕：在线漫画旧章恢复章尾自动已读，但不写书级完成', (
+    WidgetTester tester,
+  ) async {
     tester.view.physicalSize = const Size(600, 1000);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
@@ -534,8 +536,8 @@ void main() {
     expect(state.readAt, isNotNull, reason: '关闭无痕后章尾恢复自动已读');
     expect(
       (await db.getEpubBook(bookKey))!.completedAt,
-      isNotNull,
-      reason: '关闭无痕后恢复书级完成标记',
+      isNull,
+      reason: '第 1 话是多话作品的旧章：关闭无痕也只写章级已读，不写书级完成',
     );
     expect(
       (await db.getReaderPosition(bookUid))!.updatedAt,

@@ -36,6 +36,36 @@ OnlineMangaLibraryService mihonOnlineLibraryService(MihonManager manager) =>
       adapter: MihonLibraryAdapter(manager),
     );
 
+/// 一次联网刷新的结果。
+///
+/// [entry] 是**已经落库**的描述符：详情阶段的系列元数据与封面 URL 一定写回了
+/// [entry]（票 06）。[chaptersError] 非空表示这次章节列表没拿到，此时
+/// [entry] 里的章节是上一次成功刷新留下的旧列表，不是空列表。
+class OnlineMangaRefreshOutcome {
+  const OnlineMangaRefreshOutcome({
+    required this.entry,
+    this.chaptersError,
+    this.chaptersRefreshed = true,
+  });
+
+  final OnlineMangaLibraryEntry entry;
+  final OnlineMangaUnavailable? chaptersError;
+
+  /// 章节列表是否真的刷新过。
+  ///
+  /// 与 [chaptersError] 不同：源返回空章节列表时详情/封面仍会落库（票 06），
+  /// 但章节列表没有刷新、沿用了旧缓存；自动更新探测必须把这种情况按失败处理，
+  /// 不能计入一次成功刷新，也不能拿旧章节去 diff 新章。
+  final bool chaptersRefreshed;
+
+  /// 空章节列表、沿用旧缓存时必须向调用方报告的原因。
+  static const OnlineMangaUnavailable emptyChaptersError =
+      OnlineMangaUnavailable(
+        OnlineMangaUnavailableReason.runtimeFailure,
+        'Source returned no chapters; keeping the existing list.',
+      );
+}
+
 /// 在线漫画书架条目的读写口，**与运行时无关**。
 ///
 /// v88 前这些逻辑住在 `MihonLibraryService` 里且签名上焊着 `MihonManager`，
@@ -241,6 +271,11 @@ class OnlineMangaLibraryService {
   ///
   /// 「当前章」按 [OnlineMangaChapter.key] 重新定位而不是沿用下标：源在两次
   /// 刷新之间插了新章，下标就会指到别的章上去。
+  ///
+  /// 票 06：**详情与章节解耦**。即使源这次返回空章节列表（Mihon 的
+  /// `chapterListParse` 撞上 Cloudflare 拦截页时通常返回空而不抛），详情那一步
+  /// 已经拿到的系列元数据与封面 URL 仍要落库；本地已有的非空章节列表原样保留，
+  /// 绝不清空。旧章节没变，也就没有重链与「新章提醒」可做。
   Future<OnlineMangaLibraryEntry?> refresh({
     required String bookKey,
     required OnlineMangaLibraryEntry? existing,
@@ -248,21 +283,15 @@ class OnlineMangaLibraryService {
     required List<OnlineMangaChapter> chapters,
   }) async {
     if (existing == null) return null;
-    // 「刷出来一章都没有、而库里本来有」不是一次成功的刷新，是一次没抛异常的
-    // 失败：Mihon 的 `chapterListParse` 撞上 Cloudflare 拦截页时通常**返回空
-    // 列表而不抛**。照单全收就会把书架里那部漫画的章节整个清空、进度条归零，
-    // 而且零提示。这里不落库、抛回给调用方走正常的失败展示（横幅 + 日志），
-    // 库里的旧描述符原样保留。
-    if (chapters.isEmpty && existing.chapters.isNotEmpty) {
-      throw const OnlineMangaUnavailable(
-        OnlineMangaUnavailableReason.runtimeFailure,
-        'Source returned no chapters; keeping the existing list.',
-      );
-    }
+    final bool keepExistingChapters =
+        chapters.isEmpty && existing.chapters.isNotEmpty;
+    final List<OnlineMangaChapter> effectiveChapters = keepExistingChapters
+        ? existing.chapters
+        : chapters;
     int? nextIndex;
     final OnlineMangaChapter? selected = existing.currentChapter;
     if (selected != null) {
-      final int found = chapters.indexWhere(
+      final int found = effectiveChapters.indexWhere(
         (OnlineMangaChapter item) => item.key == selected.key,
       );
       if (found >= 0) nextIndex = found;
@@ -270,26 +299,29 @@ class OnlineMangaLibraryService {
     // copyWith 而不是重新构造：订阅两位（v3）必须跟着刷新活下来。
     final OnlineMangaLibraryEntry updated = existing.copyWith(
       series: series,
-      chapters: List<OnlineMangaChapter>.unmodifiable(chapters),
+      chapters: List<OnlineMangaChapter>.unmodifiable(effectiveChapters),
       currentChapterIndex: nextIndex,
       clearCurrentChapter: nextIndex == null,
     );
     await database.updateEpubBookMihonState(
       bookKey,
       sourceMetadata: updated.encode(),
-      chapterCount: chapters.length,
-      chaptersJson: _chaptersJson(chapters),
+      chapterCount: effectiveChapters.length,
+      chaptersJson: _chaptersJson(effectiveChapters),
     );
-    // 清库只删记录：重开时行可能是用「只有标题」的源页 seed 建出来的，磁盘目录
-    // 已按 pages.json 身份复用，但 seed 没有章节，映射建不出来。章节表刷新后
-    // 再走一次 re-link，章节列表才能立即显示已下载、删除下载无需手动重建索引。
-    await _relinkDownloadFolderAfterRefresh(bookKey: bookKey, entry: updated);
-    await _publishNewChapters(
-      bookKey: bookKey,
-      title: series.title,
-      previous: existing.chapters,
-      current: chapters,
-    );
+    if (!keepExistingChapters) {
+      // 清库只删记录：重开时行可能是用「只有标题」的源页 seed 建出来的，磁盘
+      // 目录已按 pages.json 身份复用，但 seed 没有章节，映射建不出来。章节表
+      // 刷新后再走一次 re-link，章节列表才能立即显示已下载、删除下载无需手动
+      // 重建索引。
+      await _relinkDownloadFolderAfterRefresh(bookKey: bookKey, entry: updated);
+      await _publishNewChapters(
+        bookKey: bookKey,
+        title: series.title,
+        previous: existing.chapters,
+        current: chapters,
+      );
+    }
     return updated;
   }
 
@@ -368,19 +400,91 @@ class OnlineMangaLibraryService {
     }
   }
 
+  /// 打开源搜索 / 详情页时，把源当前拿到的系列描述合并回已有 Manga 行。
+  ///
+  /// 只写 `sourceMetadata`；章节、当前章、订阅位与阅读进度原样保留，也不联网、
+  /// 不抓封面字节、不创建 Download library 目录。封面 URL 常带时效签名且源
+  /// 每次搜索都会给出新地址，合并后签名过期即可自愈。
+  Future<OnlineMangaLibraryEntry> mergeSeries({
+    required String bookKey,
+    required OnlineMangaLibraryEntry existing,
+    required OnlineMangaSeries series,
+  }) async {
+    final OnlineMangaSeries merged = _mergedSeries(
+      existing: existing.series,
+      incoming: series,
+    );
+    if (jsonEncode(merged.toJson()) == jsonEncode(existing.series.toJson())) {
+      return existing;
+    }
+    final OnlineMangaLibraryEntry updated = existing.copyWith(series: merged);
+    await database.updateEpubBookMihonState(
+      bookKey,
+      sourceMetadata: updated.encode(),
+      chapterCount: updated.chapters.length,
+      chaptersJson: _chaptersJson(updated.chapters),
+    );
+    return updated;
+  }
+
+  /// 逐个字段「非空优先」：源页给的新值覆盖旧值，源页没给的（搜索网格常常只有
+  /// 标题与封面）保留记录里的。身份 key 永远用已有记录，避免同源回退行被改写
+  /// 身份。
+  static OnlineMangaSeries _mergedSeries({
+    required OnlineMangaSeries existing,
+    required OnlineMangaSeries incoming,
+  }) => OnlineMangaSeries(
+    key: existing.key,
+    title: trimmedOrNull(incoming.title) ?? existing.title,
+    coverUrl: trimmedOrNull(incoming.coverUrl) ?? existing.coverUrl,
+    author: trimmedOrNull(incoming.author) ?? existing.author,
+    artist: trimmedOrNull(incoming.artist) ?? existing.artist,
+    description: trimmedOrNull(incoming.description) ?? existing.description,
+    genre: trimmedOrNull(incoming.genre) ?? existing.genre,
+    raw: incoming.raw.isEmpty ? existing.raw : incoming.raw,
+  );
+
   /// 联网刷新一条书架条目，成功则落库。
-  Future<OnlineMangaLibraryEntry> refreshFromSource({
+  ///
+  /// 票 06：详情与章节解耦。章节阶段失败时，只要错误携带了详情阶段已经拿到的
+  /// 系列描述（[OnlineMangaUnavailable.series]），就先把这份描述落库（旧章节
+  /// 原样保留），再把失败作为 [OnlineMangaRefreshOutcome.chaptersError] 交回
+  /// 调用方，让界面既能自愈封面，又能照常提示这次刷新没拉全。
+  Future<OnlineMangaRefreshOutcome> refreshFromSource({
     required String bookKey,
     required OnlineMangaLibraryEntry entry,
   }) async {
-    final OnlineMangaRefreshResult result = await adapter.refresh(entry);
-    final OnlineMangaLibraryEntry? updated = await refresh(
-      bookKey: bookKey,
-      existing: entry,
-      series: result.series,
-      chapters: result.chapters,
-    );
-    return updated ?? entry;
+    try {
+      final OnlineMangaRefreshResult result = await adapter.refresh(entry);
+      // 源返回空列表而本地已有章节：详情/封面照常落库，但章节没刷新。
+      final bool chaptersRefreshed =
+          !(result.chapters.isEmpty && entry.chapters.isNotEmpty);
+      final OnlineMangaLibraryEntry? updated = await refresh(
+        bookKey: bookKey,
+        existing: entry,
+        series: result.series,
+        chapters: result.chapters,
+      );
+      return OnlineMangaRefreshOutcome(
+        entry: updated ?? entry,
+        chaptersRefreshed: chaptersRefreshed,
+      );
+    } on OnlineMangaUnavailable catch (error) {
+      final OnlineMangaSeries? details = error.series;
+      if (details == null) rethrow;
+      // 章节为空会命中 `refresh` 的「保留旧章节」分支：只写新的系列/封面。
+      final OnlineMangaLibraryEntry? updated = await refresh(
+        bookKey: bookKey,
+        existing: entry,
+        series: details,
+        chapters: const <OnlineMangaChapter>[],
+      );
+      return OnlineMangaRefreshOutcome(
+        entry: updated ?? entry,
+        chaptersError: error,
+        chaptersRefreshed: false,
+      );
+    }
   }
 
   /// 记下「用户选了这一章」。
@@ -610,8 +714,9 @@ class OnlineMangaLibraryService {
         p.relative(directory, from: rootPath),
       );
       if (segments.isEmpty) continue;
-      final OnlineMangaLibraryEntry? claimed =
-          OnlineMangaLibraryEntry.tryParse(row.sourceMetadata);
+      final OnlineMangaLibraryEntry? claimed = OnlineMangaLibraryEntry.tryParse(
+        row.sourceMetadata,
+      );
       claims.add(
         _DownloadLibraryClaim(
           sourceFolder: segments.first,
@@ -743,16 +848,15 @@ class OnlineMangaLibraryService {
           reusedFolder: shared,
         );
       }
-      final List<_DownloadLibraryClaim> sharedClaims =
-          <_DownloadLibraryClaim>[
-            for (final _DownloadLibraryClaim claim in claims)
-              if (claim.mangaFolder != null &&
-                  _sameFolderName(claim.sourceFolder, sourceFolder) &&
-                  (claim.sourceIdentity == null ||
-                      claim.sourceIdentity!.matches(sourceIdentity)) &&
-                  claim.mangaTitle.trim() == entryTitle)
-                claim,
-          ];
+      final List<_DownloadLibraryClaim> sharedClaims = <_DownloadLibraryClaim>[
+        for (final _DownloadLibraryClaim claim in claims)
+          if (claim.mangaFolder != null &&
+              _sameFolderName(claim.sourceFolder, sourceFolder) &&
+              (claim.sourceIdentity == null ||
+                  claim.sourceIdentity!.matches(sourceIdentity)) &&
+              claim.mangaTitle.trim() == entryTitle)
+            claim,
+      ];
       if (sharedClaims.isNotEmpty) {
         final _DownloadLibraryClaim preferred = sharedClaims.firstWhere(
           (_DownloadLibraryClaim claim) =>
@@ -831,8 +935,7 @@ class OnlineMangaLibraryService {
     )) {
       final String folderName = p.basename(sourceDir.path);
       if (skipFolderNames.contains(folderName.toLowerCase())) continue;
-      final Set<DownloadSourceIdentity> identities =
-          <DownloadSourceIdentity>{};
+      final Set<DownloadSourceIdentity> identities = <DownloadSourceIdentity>{};
       for (final Directory mangaDir in await listDownloadChildDirectories(
         sourceDir,
       )) {

@@ -6,7 +6,6 @@ import 'package:fushi/src/utils/fushi_icons.dart';
 import 'package:fushi/pages.dart';
 import 'package:fushi/src/models/app_model.dart';
 import 'package:fushi/src/models/module_id.dart';
-import 'package:fushi/src/models/module_registry.dart';
 import 'package:fushi/src/models/store_compliance.dart';
 import 'package:fushi/src/media/manga/mihon/mihon_runtime_factory.dart';
 import 'package:fushi/src/pages/implementations/feedback/feedback_common.dart'
@@ -81,49 +80,6 @@ SettingsSection _homeShortcutsSection() {
   );
 }
 
-/// 启动页下拉的「默认」项 token（底栏第一个可见页）。其余项的 token 是
-/// [ModuleId.name]——只是设置行 / ctl 的取值，持久化走 [ModuleId.prefKey]
-/// （见 `PreferencesRepository.setStartupModule`）。
-const String _kStartupModuleDefault = 'default';
-
-/// 启动页可选项：默认 + 有底栏 tab 的模块，按用户排的底栏顺序。[visibility] 为
-/// null 时给静态全集（仅供恢复默认的标签格式化），否则只列此刻可见的模块——
-/// 被关掉 / 本平台不存在的模块选不了（反馈 #PwEC1evz1E）。
-List<SettingsSegmentOption<String>> _startupModuleOptions(
-  ModuleVisibility? visibility,
-) => <SettingsSegmentOption<String>>[
-  SettingsSegmentOption<String>(
-    value: _kStartupModuleDefault,
-    label: t.startup_module_default,
-  ),
-  for (final ModuleId module in visibility?.ordered ?? ModuleId.values)
-    if (homeTabOfModule(module) case final HomeTab tab
-        when visibility == null || visibility.isEnabled(module))
-      SettingsSegmentOption<String>(
-        value: module.name,
-        label: homeNavItemFor(tab).label,
-      ),
-];
-
-/// 当前生效的启动页 token：所选模块此刻不可见时显示默认，与启动时的实际落点
-/// （`homeInitialTab` 回退到第一个可见页）一致。
-String _startupModuleToken(AppModel appModel) {
-  final ModuleId? module = appModel.startupModule;
-  if (module == null ||
-      homeTabOfModule(module) == null ||
-      !appModel.moduleVisibility.isEnabled(module)) {
-    return _kStartupModuleDefault;
-  }
-  return module.name;
-}
-
-ModuleId? _startupModuleOfToken(String token) {
-  for (final ModuleId module in ModuleId.values) {
-    if (module.name == token) return module;
-  }
-  return null;
-}
-
 SettingsDestination buildSystemDestination() {
   return SettingsDestination(
     id: SettingsDestinationId.system,
@@ -131,217 +87,6 @@ SettingsDestination buildSystemDestination() {
     summary: t.settings_destination_system_summary,
     icon: FushiIcons.system,
     sections: <SettingsSection>[
-      SettingsSection(
-        id: 'system.section.general',
-        presentation: SettingsSectionPresentation.alwaysExpanded,
-        // 文案统一（阶段 F/G）：本 section 原标题与 destination 标题同为「系统」，
-        // 搜索面包屑显示「系统 › 系统」语义重复。改为「通用」——本区聚的是版本 /
-        // 内存 / 手柄导航 / 快捷键 / GitHub 这类通用应用项。框架层另有面包屑去重
-        // （settingsSearchBreadcrumb），双保险消灭整类重复。
-        title: t.settings_section_general,
-        // 「推荐包下载」行随 controller 的阶段实时显隐：本分组自己订阅 stage
-        // （SettingsSection.liveListenable），不再靠宿主页整页重建。
-        liveListenable: (SettingsContext settingsContext) =>
-            settingsContext.appModel.recommendedPackDownloadController.stage,
-        items: <SettingsItem>[
-          // 「界面语言」（id 'appearance.language'）已归位到「外观 · 界面」分区
-          //（与主题/明暗/缩放并列）；id 前缀本就是 appearance，此前放系统分类
-          // 是历史错配。
-          SettingsSwitchItem(
-            id: 'system.focus_navigation',
-            title: t.focus_navigation_enabled,
-            subtitle: t.focus_navigation_enabled_hint,
-            icon: Icons.gamepad_outlined,
-            value: (SettingsContext settingsContext) =>
-                settingsContext.appModel.experimentalFocusNavigationEnabled,
-            onChanged: (SettingsContext settingsContext, bool value) async {
-              await settingsContext.appModel
-                  .setExperimentalFocusNavigationEnabled(value);
-              settingsContext.refresh();
-            },
-          ),
-          // 启动页（反馈 #PwEC1evz1E）：取代旧开关「启动时打开查词」，可选任一此刻
-          // 可见、有底栏 tab 的模块（选项随功能模块开关与排序实时变化）。所选模块
-          // 被关掉时这里显示「底栏第一个页面」，与启动时的实际落点（homeInitialTab）
-          // 一致；重新打开该模块后用户原先的选择照旧生效。
-          // item id 沿用旧开关的 'appearance.startup_default_dictionary_tab'（设置
-          // 搜索锚点，历史命名，非持久化 key）；持久化见 ModuleId.startupPrefKey。
-          SettingsSegmentedItem<String>(
-            id: 'appearance.startup_default_dictionary_tab',
-            title: t.startup_module,
-            subtitle: t.startup_module_hint,
-            icon: FushiIcons.home,
-            dropdown: true,
-            defaultValue: _kStartupModuleDefault,
-            options: _startupModuleOptions(null),
-            optionsBuilder: (SettingsContext settingsContext) =>
-                _startupModuleOptions(
-                  settingsContext.appModel.moduleVisibility,
-                ),
-            selected: (SettingsContext settingsContext) =>
-                _startupModuleToken(settingsContext.appModel),
-            onChanged: (SettingsContext settingsContext, String token) async {
-              await settingsContext.appModel.setStartupModule(
-                _startupModuleOfToken(token),
-              );
-              settingsContext.refresh();
-            },
-          ),
-          SettingsSwitchItem(
-            id: 'system.low_memory_mode',
-            title: t.low_memory_mode,
-            subtitle: t.low_memory_mode_hint,
-            icon: Icons.memory_outlined,
-            value: (SettingsContext settingsContext) =>
-                settingsContext.appModel.lowMemoryMode,
-            onChanged: (SettingsContext settingsContext, bool value) async {
-              await settingsContext.appModel.setLowMemoryMode(value);
-              settingsContext.refresh();
-            },
-          ),
-          SettingsCustomItem(
-            id: 'system.app_version',
-            icon: FushiIcons.info,
-            builder: _buildRuntimeAppVersionRow,
-          ),
-          // 官网。与宽屏侧栏左上角的 app 图标是同一个入口（openOfficialWebsite），
-          // URL 只存在 official_links.dart 一处。
-          SettingsActionItem(
-            id: 'system.website',
-            title: t.options_website,
-            icon: Icons.language_outlined,
-            cli: const SettingsCliAction.tap(),
-            onTap: (_) async {
-              await openOfficialWebsite();
-            },
-          ),
-          SettingsActionItem(
-            id: 'system.github',
-            title: t.options_github,
-            icon: Icons.public_outlined,
-            cli: const SettingsCliAction.tap(),
-            onTap: (_) async {
-              await launchUrl(
-                Uri.parse('https://github.com/hajisensai/fushi'),
-                mode: LaunchMode.externalApplication,
-              );
-            },
-          ),
-          SettingsActionItem(
-            id: 'system.github_sponsors',
-            title: t.options_github_sponsors,
-            icon: FushiIcons.favorite,
-            cli: const SettingsCliAction.tap(),
-            onTap: (_) async {
-              await launchUrl(
-                Uri.parse(kGitHubSponsorsUrl),
-                mode: LaunchMode.externalApplication,
-              );
-            },
-          ),
-        ],
-      ),
-      SettingsSection(
-        id: 'system.section.network',
-        presentation: SettingsSectionPresentation.collapsed,
-        title: t.section_network,
-        items: <SettingsItem>[
-          // 全应用唯一的代理项：自动 = env > 系统代理 > 直连；直连 = 明确禁用；
-          // 手动 = 下方地址与可选认证。持久化地址键 `update_custom_proxy` 是历史遗留，
-          // 冻结不改；旧安装若已有地址且还没有模式键，会自动投影成手动模式。
-          SettingsSegmentedItem<String>(
-            id: 'system.network_proxy_mode',
-            title: t.network_proxy_mode_label,
-            icon: FushiIcons.server,
-            options: <SettingsSegmentOption<String>>[
-              SettingsSegmentOption<String>(
-                value: kProxyModeAuto,
-                label: t.network_proxy_mode_auto,
-                icon: Icons.sync_outlined,
-                tooltip: t.network_proxy_mode_auto_hint,
-              ),
-              SettingsSegmentOption<String>(
-                value: kProxyModeDirect,
-                label: t.network_proxy_mode_direct,
-                icon: Icons.link_off_outlined,
-                tooltip: t.network_proxy_mode_direct_hint,
-              ),
-              SettingsSegmentOption<String>(
-                value: kProxyModeManual,
-                label: t.network_proxy_mode_manual,
-                icon: FushiIcons.settings,
-                tooltip: t.network_proxy_mode_manual_hint,
-              ),
-            ],
-            selected: (SettingsContext c) => c.appModel.networkProxyMode,
-            onChanged: (SettingsContext c, String value) async {
-              await c.appModel.setNetworkProxyMode(value);
-              resetSyncHttpClient();
-              c.refresh();
-            },
-          ),
-          SettingsTextItem(
-            id: 'system.network_proxy',
-            title: t.network_proxy_label,
-            subtitle: t.network_proxy_address_hint,
-            icon: FushiIcons.server,
-            placeholder: t.network_proxy_hint,
-            keyboardType: TextInputType.url,
-            visible: (SettingsContext c) =>
-                c.appModel.networkProxyMode == kProxyModeManual,
-            value: (SettingsContext settingsContext) =>
-                settingsContext.appModel.updateCustomProxy,
-            onChanged: (SettingsContext settingsContext, String value) async {
-              final String trimmed = value.trim();
-              await settingsContext.appModel.setUpdateCustomProxy(trimmed);
-              // 云同步的共享 client 在首次使用时就把代理解析结果固化进 findProxy 了，
-              // 不丢弃它，用户改完代理仍走旧出口——那等于这条设置对同步不生效
-              // （BUG-1348）。更新检查每次新建 client，不受影响。
-              resetSyncHttpClient();
-              // 非空且无法归一成合法 host:port → 提示（仍保存原串，运行时忽略）。
-              if (trimmed.isNotEmpty &&
-                  normalizeUserProxyHostPort(trimmed) == null) {
-                final BuildContext ctx = settingsContext.context;
-                if (!ctx.mounted) return;
-                ScaffoldMessenger.of(ctx).showSnackBar(
-                  FushiSnackBar(content: Text(t.network_proxy_invalid)),
-                );
-              }
-            },
-          ),
-          SettingsTextItem(
-            id: 'system.network_proxy_username',
-            title: t.network_proxy_username,
-            // 认证的作用面必须说清：凭据是 dart:io `HttpClient.authenticateProxy`
-            // 的 407 应答，只覆盖 app 自己发的 HTTP 出站。内置 torrent 引擎的 C ABI
-            // （`ht_apply_proxy`）只接 type/host/port，libtorrent 的
-            // `settings_pack::proxy_username/password` 根本没被导出，凭据到不了
-            // P2P 那一侧；不写出来用户会以为「开了 P2P 走代理」就连上了。
-            subtitle: t.network_proxy_credentials_scope_hint,
-            icon: FushiIcons.person,
-            visible: (SettingsContext c) =>
-                c.appModel.networkProxyMode == kProxyModeManual,
-            value: (SettingsContext c) => c.appModel.networkProxyUsername,
-            onChanged: (SettingsContext c, String value) async {
-              await c.appModel.setNetworkProxyUsername(value.trim());
-              resetSyncHttpClient();
-            },
-          ),
-          SettingsTextItem(
-            id: 'system.network_proxy_password',
-            title: t.network_proxy_password,
-            icon: Icons.password_outlined,
-            secret: true,
-            visible: (SettingsContext c) =>
-                c.appModel.networkProxyMode == kProxyModeManual,
-            value: (SettingsContext c) => c.appModel.networkProxyPassword,
-            onChanged: (SettingsContext c, String value) async {
-              await c.appModel.setNetworkProxyPassword(value);
-              resetSyncHttpClient();
-            },
-          ),
-        ],
-      ),
       // v101 统一更新提醒。四个域各一个开关 + 系统通知总开关。
       //
       // 四个域开关**不经 `AppModel.updateFeedService`**，直接读写 pref 键：
@@ -452,6 +197,166 @@ SettingsDestination buildSystemDestination() {
             onChanged: (SettingsContext settingsContext, bool value) async {
               await settingsContext.appModel.setIncognitoReading(value);
               settingsContext.refresh();
+            },
+          ),
+        ],
+      ),
+      SettingsSection(
+        id: 'system.section.general',
+        presentation: SettingsSectionPresentation.alwaysExpanded,
+        // 文案统一（阶段 F/G）：本 section 原标题与 destination 标题同为「系统」，
+        // 搜索面包屑显示「系统 › 系统」语义重复。改为「通用」——本区聚的是版本 /
+        // 内存 / 手柄导航 / 快捷键 / GitHub 这类通用应用项。框架层另有面包屑去重
+        // （settingsSearchBreadcrumb），双保险消灭整类重复。
+        title: t.settings_section_general,
+        // 「推荐包下载」行随 controller 的阶段实时显隐：本分组自己订阅 stage
+        // （SettingsSection.liveListenable），不再靠宿主页整页重建。
+        liveListenable: (SettingsContext settingsContext) =>
+            settingsContext.appModel.recommendedPackDownloadController.stage,
+        items: <SettingsItem>[
+          // 「界面语言」（id 'appearance.language'）已归位到「外观 · 界面」分区
+          //（与主题/明暗/缩放并列）；id 前缀本就是 appearance，此前放系统分类
+          // 是历史错配。
+          SettingsSwitchItem(
+            id: 'system.focus_navigation',
+            title: t.focus_navigation_enabled,
+            subtitle: t.focus_navigation_enabled_hint,
+            icon: Icons.gamepad_outlined,
+            value: (SettingsContext settingsContext) =>
+                settingsContext.appModel.experimentalFocusNavigationEnabled,
+            onChanged: (SettingsContext settingsContext, bool value) async {
+              await settingsContext.appModel
+                  .setExperimentalFocusNavigationEnabled(value);
+              settingsContext.refresh();
+            },
+          ),
+          // 启动页偏好与启动落地（AppModel.startupModule / homeInitialTab）
+          // 仍保留，供旧安装与测试使用；ticket 03 只下线这个设置入口。
+          SettingsSwitchItem(
+            id: 'system.low_memory_mode',
+            title: t.low_memory_mode,
+            subtitle: t.low_memory_mode_hint,
+            icon: Icons.memory_outlined,
+            value: (SettingsContext settingsContext) =>
+                settingsContext.appModel.lowMemoryMode,
+            onChanged: (SettingsContext settingsContext, bool value) async {
+              await settingsContext.appModel.setLowMemoryMode(value);
+              settingsContext.refresh();
+            },
+          ),
+          SettingsCustomItem(
+            id: 'system.app_version',
+            icon: FushiIcons.info,
+            builder: _buildRuntimeAppVersionRow,
+          ),
+          SettingsActionItem(
+            id: 'system.github',
+            title: t.options_github,
+            icon: Icons.public_outlined,
+            cli: const SettingsCliAction.tap(),
+            onTap: (_) async {
+              await openMyComicRepository();
+            },
+          ),
+        ],
+      ),
+      SettingsSection(
+        id: 'system.section.network',
+        presentation: SettingsSectionPresentation.collapsed,
+        title: t.section_network,
+        items: <SettingsItem>[
+          // 全应用唯一的代理项：自动 = env > 系统代理 > 直连；直连 = 明确禁用；
+          // 手动 = 下方地址与可选认证。持久化地址键 `update_custom_proxy` 是历史遗留，
+          // 冻结不改；旧安装若已有地址且还没有模式键，会自动投影成手动模式。
+          SettingsSegmentedItem<String>(
+            id: 'system.network_proxy_mode',
+            title: t.network_proxy_mode_label,
+            icon: FushiIcons.server,
+            options: <SettingsSegmentOption<String>>[
+              SettingsSegmentOption<String>(
+                value: kProxyModeAuto,
+                label: t.network_proxy_mode_auto,
+                icon: Icons.sync_outlined,
+                tooltip: t.network_proxy_mode_auto_hint,
+              ),
+              SettingsSegmentOption<String>(
+                value: kProxyModeDirect,
+                label: t.network_proxy_mode_direct,
+                icon: Icons.link_off_outlined,
+                tooltip: t.network_proxy_mode_direct_hint,
+              ),
+              SettingsSegmentOption<String>(
+                value: kProxyModeManual,
+                label: t.network_proxy_mode_manual,
+                icon: FushiIcons.settings,
+                tooltip: t.network_proxy_mode_manual_hint,
+              ),
+            ],
+            selected: (SettingsContext c) => c.appModel.networkProxyMode,
+            onChanged: (SettingsContext c, String value) async {
+              await c.appModel.setNetworkProxyMode(value);
+              resetSyncHttpClient();
+              c.refresh();
+            },
+          ),
+          SettingsTextItem(
+            id: 'system.network_proxy',
+            title: t.network_proxy_label,
+            subtitle: t.network_proxy_address_hint,
+            icon: FushiIcons.server,
+            placeholder: t.network_proxy_hint,
+            keyboardType: TextInputType.url,
+            visible: (SettingsContext c) =>
+                c.appModel.networkProxyMode == kProxyModeManual,
+            value: (SettingsContext settingsContext) =>
+                settingsContext.appModel.updateCustomProxy,
+            onChanged: (SettingsContext settingsContext, String value) async {
+              final String trimmed = value.trim();
+              await settingsContext.appModel.setUpdateCustomProxy(trimmed);
+              // 云同步的共享 client 在首次使用时就把代理解析结果固化进 findProxy 了，
+              // 不丢弃它，用户改完代理仍走旧出口——那等于这条设置对同步不生效
+              // （BUG-1348）。更新检查每次新建 client，不受影响。
+              resetSyncHttpClient();
+              // 非空且无法归一成合法 host:port → 提示（仍保存原串，运行时忽略）。
+              if (trimmed.isNotEmpty &&
+                  normalizeUserProxyHostPort(trimmed) == null) {
+                final BuildContext ctx = settingsContext.context;
+                if (!ctx.mounted) return;
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  FushiSnackBar(content: Text(t.network_proxy_invalid)),
+                );
+              }
+            },
+          ),
+          SettingsTextItem(
+            id: 'system.network_proxy_username',
+            title: t.network_proxy_username,
+            // 认证的作用面必须说清：凭据是 dart:io `HttpClient.authenticateProxy`
+            // 的 407 应答，只覆盖 app 自己发的 HTTP 出站。内置 torrent 引擎的 C ABI
+            // （`ht_apply_proxy`）只接 type/host/port，libtorrent 的
+            // `settings_pack::proxy_username/password` 根本没被导出，凭据到不了
+            // P2P 那一侧；不写出来用户会以为「开了 P2P 走代理」就连上了。
+            subtitle: t.network_proxy_credentials_scope_hint,
+            icon: FushiIcons.person,
+            visible: (SettingsContext c) =>
+                c.appModel.networkProxyMode == kProxyModeManual,
+            value: (SettingsContext c) => c.appModel.networkProxyUsername,
+            onChanged: (SettingsContext c, String value) async {
+              await c.appModel.setNetworkProxyUsername(value.trim());
+              resetSyncHttpClient();
+            },
+          ),
+          SettingsTextItem(
+            id: 'system.network_proxy_password',
+            title: t.network_proxy_password,
+            icon: Icons.password_outlined,
+            secret: true,
+            visible: (SettingsContext c) =>
+                c.appModel.networkProxyMode == kProxyModeManual,
+            value: (SettingsContext c) => c.appModel.networkProxyPassword,
+            onChanged: (SettingsContext c, String value) async {
+              await c.appModel.setNetworkProxyPassword(value);
+              resetSyncHttpClient();
             },
           ),
         ],
@@ -668,10 +573,9 @@ Widget _buildRuntimeAppVersionRow(SettingsContext settingsContext) {
   );
 }
 
-/// 版本展示文案。versionName 是 semver（含 `-debug.5613` 等预发布段），
-/// buildNumber 是 Android versionCode（如 `1000561300`），两者语义不同：
-/// 绝不能用 semver 的 `+` build-metadata 把 versionCode 拼进 versionName，
-/// 否则会渲染出畸形的 `0.11.1-debug.5613+1000561300`。用括号并列展示。
+/// 版本展示文案：只显示精确的 semver 版本名（如 `1.0.0`），不展示 build number。
+/// versionName 是 semver（含 `-debug.5613` 等预发布段），buildNumber 是 Android
+/// versionCode（如 `1000561300`）；后者是构建元数据，不属于用户需要看到的版本。
 ///
 /// [runningCodeVersion] 是编译进 `app.so` 的构建版本（见 `build_version.dart`），
 /// [PackageInfo.version] 则来自 exe / Info.plist / manifest 的版本资源。两者是
@@ -685,8 +589,7 @@ String formatAppVersionDisplay(
   String? runningCodeVersion,
 }) {
   final String executableVersion = packageInfo.version;
-  final String shown = runningCodeVersion ?? executableVersion;
-  final String display = '$shown (${packageInfo.buildNumber})';
+  final String display = runningCodeVersion ?? executableVersion;
   if (runningCodeVersion == null) return display;
   if (_isSameBuildVersion(runningCodeVersion, executableVersion)) {
     return display;

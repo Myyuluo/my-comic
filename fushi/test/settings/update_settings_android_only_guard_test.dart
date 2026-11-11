@@ -3,28 +3,21 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
-/// BUG-013 演进（全平台自动更新 Phase 1）：更新分区不再仅 Android。
-/// 不变量：分区按 platformSupportsUpdateCheck()（恒真）可见；自动安装开关按
-/// platformSupportsInAppInstall()（本期 Android+Windows）网关；数据侧 UpdateChecker
-/// 不再硬门控 Android，而是按 updater.supportsUpdateCheck。
+/// BUG-013 演进（全平台自动更新 Phase 1）在 manga-only shell 之后的边界。
+/// 不变量：上游 Fushi 的更新分区与自动安装开关已从系统设置 schema 移除；
+/// 能力 helper（platformSupportsUpdateCheck / platformSupportsInAppInstall）
+/// 仍被更新中心与反馈流程使用；数据侧 UpdateChecker 不再硬门控 Android，
+/// 而是按 updater.supportsUpdateCheck。
 void main() {
-  test('update section gated by capability helper, not Platform.isAndroid', () {
+  test('manga-only settings no longer expose the app update section', () {
+    // ff3f2df0（manga-only shell）移除了上游 Fushi 的更新分区与自动安装开关；
+    // 能力 helper 仍被更新中心 / 反馈流程使用，但设置页不得重新出现这些行。
     final String src =
         File('lib/src/settings/settings_schema_system.dart').readAsStringSync();
-    final String systemDest = _functionSource(
-      src,
-      'SettingsDestination buildSystemDestination() {',
-      'String _selectedUpdateChannel(',
-    );
-    expect(
-        systemDest, contains('visible: (_) => platformSupportsUpdateCheck()'));
-    expect(systemDest.contains('visible: (_) => Platform.isAndroid'), isFalse,
-        reason: '更新分区不应再硬绑 Android（已扩展到全平台）');
-    final int autoIdx = systemDest.indexOf("id: 'system.update_auto_install'");
-    expect(autoIdx, isNonNegative);
-    expect(
-        systemDest, contains('visible: (_) => platformSupportsInAppInstall()'),
-        reason: '自动安装开关必须按 platformSupportsInAppInstall 网关');
+    expect(src, isNot(contains("id: 'system.check_update_now'")));
+    expect(src, isNot(contains("id: 'system.update_auto_install'")));
+    expect(src.contains('visible: (_) => Platform.isAndroid'), isFalse,
+        reason: '设置页不得重新硬绑 Android 更新可见性');
   });
 
   test('UpdateChecker no longer hard-returns on non-Android', () {
@@ -231,12 +224,4 @@ void main() {
       isNot(contains(r'debug-<short-sha>')),
     );
   });
-}
-
-String _functionSource(String source, String start, String end) {
-  final int startIndex = source.indexOf(start);
-  expect(startIndex, isNonNegative, reason: 'Missing start marker: $start');
-  final int endIndex = source.indexOf(end, startIndex + start.length);
-  expect(endIndex, isNonNegative, reason: 'Missing end marker: $end');
-  return source.substring(startIndex, endIndex);
 }

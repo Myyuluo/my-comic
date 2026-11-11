@@ -94,41 +94,12 @@ void main() {
     }
   });
 
-  testWidgets('点名要求可经 CLI 读写的自绘行都声明了 cliValue / cliList', (
-    WidgetTester tester,
-  ) async {
-    await captureContext(tester);
-    final Map<String, SettingsCustomItem> custom = <String, SettingsCustomItem>{
-      for (final SettingsCustomItem item
-          in allItems().whereType<SettingsCustomItem>())
-        item.id: item,
-    };
-    const List<String> valueRows = <String>[
-      'video.player.subtitle_text_color',
-      'video.player.subtitle_shadow_color',
-      'video.player.subtitle_outline_color',
-      'video.player.subtitle_bg_color',
-      'video.player.mpv_raw',
-      'video.player.danmaku_block_rules',
-      'video.player.controls_editor',
-      'reading_controls.controls_editor',
-      'game.gal_hook_text_color',
-      'listening.floating_lyric_color_text',
-    ];
-    const List<String> listRows = <String>[
-      'video.player.mpv_lua_scripts_list',
-      'video.player.shaders',
-      'ai.web_knowledge.custom',
-      'services.media_server.jellyfin',
-      'services.media_server.plex',
-    ];
-    for (final String id in valueRows) {
-      expect(custom[id]?.cliValue, isNotNull, reason: '$id 缺 cliValue');
-    }
-    for (final String id in listRows) {
-      expect(custom[id]?.cliList, isNotNull, reason: '$id 缺 cliList');
-    }
-  });
+  // 上游 Fushi 在这里点名检查视频 / 阅读器 / AI 的若干自绘行必须声明
+  // cliValue / cliList。manga-only shell（ff3f2df0）把视频、游戏、阅读器与
+  // AI 分类整体移出主设置 schema（`buildSettingsSchema` 只剩外观 / 漫画 /
+  // 下载 / 系统与关于，可选 Tracking），这些 id 在 CLI 索引里已不存在；
+  // 当前可达的自绘行都没有 CLI 读写需求。将来若给可达自绘行加 CLI 读写，
+  // 在此恢复逐 id 的 cliValue / cliList 守卫。
 
   test('颜色写法：#RRGGBB 补不透明、#AARRGGBB 原样、坏写法抛 FormatException', () {
     expect(parseSettingsCliColor('#112233'), 0xFF112233);

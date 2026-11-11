@@ -529,8 +529,9 @@ UpdateDownloadAttemptFailure? selectRepresentativeDownloadFailure(
 /// 「更新日志」页数据源（TODO-1310，应用内查看历史发布说明）：拉取本仓库全部
 /// GitHub releases（含各版本 `tag_name` / `published_at` / Markdown `body` /
 /// `prerelease` 标记 / `html_url`），复用与「检查更新」完全相同的私有 HTTP 管线
-/// （[UpdateChecker._httpGetStringFromGitHubRepos]）——自动继承多镜像回退、系统/自定义
-/// 代理注入（[applyAppProxy]）、每候选整体超时、`kGitHubRepoFallbacks` 旧库回退。
+/// （[UpdateChecker._httpGetStringFromGitHubRepo]）——自动继承多镜像回退、系统/自定义
+/// 代理注入（[applyAppProxy]）、每候选整体超时，并固定只查本 fork 的单一发布仓
+/// [kGitHubRepo]（不再有上游仓库回退）。
 /// `draft` 草稿被过滤（未发布，用户不该看到）。
 ///
 /// ⚠️ `api.github.com/.../releases` 列表 API 经任何公共 gh 代理都会 403（BUG-292），
@@ -545,7 +546,7 @@ Future<List<Map<String, dynamic>>> fetchAllGitHubReleases({
     ..connectionTimeout = const Duration(seconds: 10);
   try {
     await applyAppProxy(client, userProxy: customProxy);
-    final String? body = await UpdateChecker._httpGetStringFromGitHubRepos(
+    final String? body = await UpdateChecker._httpGetStringFromGitHubRepo(
       client,
       (String repo) =>
           'https://api.github.com/repos/$repo/releases?per_page=$perPage',

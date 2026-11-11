@@ -10,11 +10,15 @@ import 'package:path/path.dart' as p;
 import 'package:fushi/src/media/manga/download/download_library_index.dart';
 import 'package:fushi/src/media/manga/download/rebuild_download_index_service.dart';
 import 'package:fushi/src/media/manga/library/manga_chapter_download_state.dart';
+import 'package:fushi/src/media/manga/library/manga_first_page_cover_service.dart';
+import 'package:fushi/src/media/manga/library/manga_shelf_cover_cache.dart';
+import 'package:fushi/src/media/manga/library/manga_shelf_cover_revision.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:image/image.dart' as img;
 import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi_engine/epub/epub_storage.dart';
 import 'package:fushi_engine/media/manga/download_library_storage.dart';
+import 'package:fushi_engine/media/manga/local_source/local_source_cover.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_layout.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_library.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_reader.dart';
@@ -37,6 +41,7 @@ void main() {
   late FushiDatabase db;
 
   setUp(() async {
+    MangaShelfCoverRevision.debugReset();
     root = await Directory.systemTemp.createTemp('rebuild_download_index_');
     content = Directory(p.join(root.path, 'Content'));
     downloadsRoot = Directory(p.join(content.path, 'downloads'));
@@ -52,6 +57,7 @@ void main() {
   });
 
   tearDown(() async {
+    MangaShelfCoverRevision.debugReset();
     EpubStorage.debugBaseDirectoryOverride = null;
     await db.close();
     if (await root.exists()) await root.delete(recursive: true);
@@ -60,6 +66,7 @@ void main() {
   OnlineMangaLibraryEntry entryFor({
     String seriesKey = '/series/fixture',
     String title = 'Fixture series',
+    String? coverUrl,
     List<OnlineMangaChapter>? chapters,
   }) => OnlineMangaLibraryEntry(
     runtime: OnlineMangaRuntimeKind.mihon,
@@ -68,6 +75,7 @@ void main() {
     series: OnlineMangaSeries(
       key: seriesKey,
       title: title,
+      coverUrl: coverUrl,
       raw: const <String, Object?>{},
     ),
     chapters:
@@ -164,10 +172,11 @@ void main() {
     required OnlineMangaLibraryEntry entry,
     required OnlineMangaChapter chapter,
     bool writePage = true,
+    List<int>? pageBytes,
   }) async {
     final Archive archive = Archive();
     if (writePage) {
-      final List<int> page = utf8.encode('page');
+      final List<int> page = pageBytes ?? utf8.encode('page');
       archive.addFile(ArchiveFile('001.jpg', page.length, page));
     }
     final List<int> manifest = utf8.encode(
@@ -182,11 +191,25 @@ void main() {
     return file;
   }
 
-  RebuildDownloadIndexService service() => RebuildDownloadIndexService(
+  RebuildDownloadIndexService service({
+    MangaFirstPageCoverService? coverService,
+    Future<bool> Function(OnlineMangaLibraryEntry entry)?
+    isRemoteCoverAvailable,
+  }) => RebuildDownloadIndexService(
     database: db,
     downloadsRoot: downloadsRoot,
     localComicRoot: localComicRoot,
+    firstPageCoverService: coverService,
+    isRemoteCoverAvailable: isRemoteCoverAvailable,
   );
+
+  /// 与生产相同位置：Program state 下的书架封面缓存目录。
+  MangaShelfCoverCache coverCache() => MangaShelfCoverCache(
+    Directory(p.join(root.path, 'userdata', 'cache', 'shelf_covers')),
+  );
+
+  MangaFirstPageCoverService firstPageCoverService() =>
+      MangaFirstPageCoverService(database: db, cache: coverCache());
 
   /// 模拟「Download index 曾认为这一章已下载」：写一条 `done` 任务行。
   Future<void> markDownloaded(String bookKey, String chapterKey) =>
@@ -976,7 +999,7 @@ void main() {
     expect(elsewhere.existsSync(), isTrue);
   });
 
-  test('不扫描 autobackup；local 里书架没有的作品由票 10 补建条目', () async {
+  test('不扫描 autobackup；downloads/local 里书架没有的作品不补建条目', () async {
     final OnlineMangaLibraryEntry entry = entryFor();
     final String oldMangaDir = p.join(
       oldContent.path,
@@ -1000,7 +1023,7 @@ void main() {
       entry: entry,
       chapter: entry.chapters[0],
     );
-    // local 里放一部书架没有的作品——票 10 负责创建条目。
+    // local 里放一部书架没有的作品——重建不负责发现新作品（那是「检索已下载」的职责）。
     final File orphanPage = File(
       p.join(localComicRoot.path, 'Orphan local', 'Ch 1', '001.jpg'),
     );
@@ -1011,26 +1034,91 @@ void main() {
 
     expect(report.booksMissing, 1);
     expect(report.chaptersMissing, 2);
-    expect(report.booksAdded, 1, reason: 'local 里的孤儿作品会被补建');
     expect(
       (await db.getEpubBook('mihon-fixture'))!.extractDir,
       oldMangaDir,
       reason: 'autobackup 里的文件不是 Download library，不得参与 re-link',
     );
-    final List<EpubBookRow> rows = await db.getAllEpubBooks();
-    expect(rows.length, 2);
-    final EpubBookRow added = rows.singleWhere(
-      (EpubBookRow row) => row.bookKey != 'mihon-fixture',
+    expect(
+      (await db.getAllEpubBooks()).map((EpubBookRow row) => row.bookKey),
+      <String>['mihon-fixture'],
+      reason: '磁盘上书架没有的作品不得被加入书架',
+    );
+    expect(orphanPage.existsSync(), isTrue, reason: '不移动、不删除文件');
+  });
+
+  test('非书架 Manga 不被读取或改写：即使磁盘上有同身份文件', () async {
+    final OnlineMangaLibraryEntry entry = entryFor();
+    final String oldMangaDir = p.join(
+      oldContent.path,
+      'downloads',
+      'Example Source',
+      'Fixture series',
+    );
+    await insertOnlineBook(
+      bookKey: 'mihon-nonlibrary',
+      entry: entry,
+      extractDir: oldMangaDir,
+      inLibrary: false,
+    );
+    await markDownloaded('mihon-nonlibrary', '/c/1');
+    final Directory mangaDir = Directory(
+      p.join(downloadsRoot.path, 'Example Source', 'Fixture series'),
+    );
+    await writeChapter(
+      mangaDir: mangaDir,
+      folderName: 'Chapter 1',
+      entry: entry,
+      chapter: entry.chapters[0],
+    );
+    final EpubBookRow before = (await db.getEpubBook('mihon-nonlibrary'))!;
+
+    final RebuildDownloadIndexReport report = await service().run();
+
+    expect(report.booksScanned, 0, reason: '重建只扫描书架成员');
+    expect(report.booksMatched, 0);
+    expect(report.booksRelinked, 0);
+    final EpubBookRow after = (await db.getEpubBook('mihon-nonlibrary'))!;
+    expect(after.isInLibrary, isFalse);
+    expect(after.extractDir, before.extractDir, reason: '非书架行不得重指向');
+    expect(after.chaptersJson, before.chaptersJson);
+    expect(
+      await db.getMangaChapterDir('mihon-nonlibrary', '/c/1'),
+      isNull,
+      reason: '非书架行不得写下载映射',
     );
     expect(
-      p.equals(added.extractDir, p.join(localComicRoot.path, 'Orphan local')),
+      File(p.join(mangaDir.path, 'Chapter 1', '001.jpg')).existsSync(),
       isTrue,
-      reason: '只登记 local 里的作品，不碰 autobackup',
+      reason: '文件原地保留',
     );
-    expect(p.isWithin(content.path, added.extractDir), isTrue);
+  });
+
+  test('绝不新增 Manga：downloads 里书架没有的完整作品不被加入书架', () async {
+    final OnlineMangaLibraryEntry entry = entryFor();
+    await installSource(
+      extensionPackage: entry.extensionPackage,
+      sourceId: entry.sourceId,
+    );
+    final Directory orphanDownload = Directory(
+      p.join(downloadsRoot.path, 'Example Source', 'Orphan download'),
+    );
+    await writeChapter(
+      mangaDir: orphanDownload,
+      folderName: 'Chapter 1',
+      entry: entry,
+      chapter: entry.chapters[0],
+    );
+
+    final RebuildDownloadIndexReport report = await service().run();
+
+    expect(report.booksScanned, 0);
+    expect(await db.getAllEpubBooks(), isEmpty, reason: '重建绝不补建 Manga');
+    expect(await db.getBookTombstoneKeys(), isEmpty);
     expect(
-      p.isWithin(p.join(content.path, 'autobackup'), added.extractDir),
-      isFalse,
+      File(p.join(orphanDownload.path, 'Chapter 1', '001.jpg')).existsSync(),
+      isTrue,
+      reason: '不移动、不复制、不删除文件',
     );
   });
 
@@ -1078,282 +1166,16 @@ void main() {
     );
   });
 
-  test('downloads 里书架没有的作品：源已安装时创建在线条目并标记已下载章节', () async {
-    final OnlineMangaLibraryEntry entry = entryFor();
-    await installSource(
-      extensionPackage: entry.extensionPackage,
-      sourceId: entry.sourceId,
-    );
-    final Directory mangaDir = Directory(
-      p.join(downloadsRoot.path, 'Example Source', 'Fixture series'),
-    );
-    await writeChapter(
-      mangaDir: mangaDir,
-      folderName: 'Chapter 1',
-      entry: entry,
-      chapter: entry.chapters[0],
-    );
-    await writeChapter(
-      mangaDir: mangaDir,
-      folderName: 'Chapter 2',
-      entry: entry,
-      chapter: entry.chapters[1],
-    );
-
-    final RebuildDownloadIndexReport report = await service().run();
-
-    expect(report.booksAdded, 1);
-    expect(report.booksAddedOnline, 1);
-    expect(report.booksAddedLocal, 0);
-    expect(report.chaptersAdded, 2);
-    final String bookKey = onlineMangaBookKeyFor(
-      runtime: entry.runtime,
-      extensionPackage: entry.extensionPackage,
-      sourceId: entry.sourceId,
-      seriesKey: entry.series.key,
-    );
-    final EpubBookRow row = (await db.getEpubBook(bookKey))!;
-    final OnlineMangaLibraryEntry recovered = OnlineMangaLibraryEntry.tryParse(
-      row.sourceMetadata,
-    )!;
-    expect(recovered.runtime, OnlineMangaRuntimeKind.mihon);
-    expect(recovered.extensionPackage, entry.extensionPackage);
-    expect(recovered.sourceId, entry.sourceId);
-    expect(recovered.series.key, entry.series.key);
-    expect(recovered.series.title, entry.series.title);
-    expect(
-      recovered.chapters.map((OnlineMangaChapter chapter) => chapter.key),
-      <String>['/c/1', '/c/2'],
-    );
-    expect(p.equals(row.extractDir, mangaDir.path), isTrue);
-    expect(
-      (await db.getMangaChapterDir(bookKey, '/c/1'))?.folderName,
-      'Chapter 1',
-    );
-    expect(
-      (await db.getMangaChapterDir(bookKey, '/c/2'))?.folderName,
-      'Chapter 2',
-    );
-    final DownloadLibraryIndex index = DownloadLibraryIndex(db);
-    expect(
-      await index.isChapterDownloaded(bookKey: bookKey, chapterKey: '/c/1'),
-      isTrue,
-    );
-    expect(
-      await index.isChapterDownloaded(bookKey: bookKey, chapterKey: '/c/2'),
-      isTrue,
-    );
-
-    // 幂等：第二次不再新增条目 / 重复映射，文件原样保留。
-    final RebuildDownloadIndexReport second = await service().run();
-    expect(second.booksAdded, 0);
-    expect(second.chaptersAdded, 0);
-    expect((await db.getAllEpubBooks()).length, 1);
-    expect(
-      File(p.join(mangaDir.path, 'Chapter 1', '001.jpg')).existsSync(),
-      isTrue,
-    );
-    expect(
-      File(p.join(mangaDir.path, 'Chapter 2', '001.jpg')).existsSync(),
-      isTrue,
-    );
-  });
-
-  test('downloads 里书架没有的作品：源未安装时降级为指向该文件夹的本地条目并报告', () async {
-    final OnlineMangaLibraryEntry entry = entryFor();
-    // 刻意不安装扩展 / 在线源。
-    final Directory mangaDir = Directory(
-      p.join(downloadsRoot.path, 'Example Source', 'Fixture series'),
-    );
-    await writeChapter(
-      mangaDir: mangaDir,
-      folderName: 'Chapter 1',
-      entry: entry,
-      chapter: entry.chapters[0],
-    );
-    await writeChapter(
-      mangaDir: mangaDir,
-      folderName: 'Chapter 2',
-      entry: entry,
-      chapter: entry.chapters[1],
-    );
-
-    final RebuildDownloadIndexReport report = await service().run();
-
-    expect(report.booksAdded, 1);
-    expect(report.booksAddedOnline, 0);
-    expect(report.booksAddedLocal, 1);
-    expect(report.booksAddedLocalSourceMissing, 1);
-    expect(report.chaptersAdded, 2);
-    final List<EpubBookRow> rows = await db.getAllEpubBooks();
-    expect(rows.length, 1);
-    final EpubBookRow row = rows.single;
-    expect(
-      row.bookKey,
-      localSourceBookKeyFor(mangaDir.path),
-      reason: '降级后的本地条目身份 = 文件夹路径',
-    );
-    expect(OnlineMangaLibraryEntry.tryParse(row.sourceMetadata), isNull);
-    final LocalSourceMetadata metadata = LocalSourceMetadata.tryParse(
-      row.sourceMetadata,
-    )!;
-    expect(metadata.relativePath, 'Example Source/Fixture series');
-    expect(p.equals(row.extractDir, mangaDir.path), isTrue);
-    expect(
-      decodeLocalSourceChapters(
-        row.chaptersJson,
-      ).map((LocalSourceChapterRecord chapter) => chapter.key),
-      <String>['Chapter 1', 'Chapter 2'],
-    );
-
-    // 降级条目仍可阅读：Local source reader 接受当前 Download library 根里的
-    // 恢复条目（不复制文件）。
-    final LocalSourceResolvedChapter? resolved =
-        await LocalSourceReader.resolveChapter(
-          db: db,
-          bookKey: row.bookKey,
-          chapterIndex: 0,
-          downloadsRoot: downloadsRoot,
-        );
-    expect(resolved, isNotNull);
-    expect(
-      p.equals(
-        resolved!.chapterDirectory.path,
-        p.join(mangaDir.path, 'Chapter 1'),
-      ),
-      isTrue,
-    );
-
-    // 幂等：第二次不会把同一目录再加一遍。
-    final RebuildDownloadIndexReport second = await service().run();
-    expect(second.booksAdded, 0);
-    expect(second.booksSkipped, 0);
-    expect((await db.getAllEpubBooks()).length, 1);
-    expect(
-      File(p.join(mangaDir.path, 'Chapter 1', '001.jpg')).existsSync(),
-      isTrue,
-    );
-  });
-
-  test('downloads 里没有 pages.json 的目录：扫描图片建本地条目', () async {
-    final Directory mangaDir = Directory(
-      p.join(downloadsRoot.path, 'Manual Source', 'Manual manga'),
-    );
-    for (final String chapter in <String>['Ch 1', 'Ch 2']) {
-      final Directory chapterDir = Directory(p.join(mangaDir.path, chapter))
-        ..createSync(recursive: true);
-      File(p.join(chapterDir.path, '001.jpg')).writeAsStringSync('page-1');
-      File(p.join(chapterDir.path, '002.jpg')).writeAsStringSync('page-2');
-    }
-
-    final RebuildDownloadIndexReport report = await service().run();
-
-    expect(report.booksAdded, 1);
-    expect(report.booksAddedOnline, 0);
-    expect(report.booksAddedLocal, 1);
-    expect(report.booksAddedLocalSourceMissing, 0);
-    expect(report.chaptersAdded, 2);
-    final EpubBookRow row = (await db.getAllEpubBooks()).single;
-    expect(row.bookKey, localSourceBookKeyFor(mangaDir.path));
-    expect(row.title, 'Manual manga');
-    expect(p.equals(row.extractDir, mangaDir.path), isTrue);
-    expect(row.chapterCount, 4);
-    expect(
-      decodeLocalSourceChapters(
-        row.chaptersJson,
-      ).map((LocalSourceChapterRecord chapter) => chapter.key),
-      <String>['Ch 1', 'Ch 2'],
-    );
-    // 没有写 pages.json，也没有复制/删除任何文件。
-    expect(
-      File(p.join(mangaDir.path, 'Ch 1', 'pages.json')).existsSync(),
-      isFalse,
-    );
-    expect(
-      File(p.join(mangaDir.path, 'Ch 1', '002.jpg')).readAsStringSync(),
-      'page-2',
-    );
-    // 来源未安装也能读：降级条目经 Local source 阅读路径原地读取无 manifest
-    // 文件夹（ticket 06「关联后的容器可以阅读」）。
-    final LocalSourceResolvedChapter? resolved =
-        await LocalSourceReader.resolveChapter(
-          db: db,
-          bookKey: row.bookKey,
-          chapterIndex: 0,
-          downloadsRoot: downloadsRoot,
-        );
-    expect(resolved, isNotNull);
-    expect(resolved!.payload.images, isNotEmpty);
-
-    final RebuildDownloadIndexReport second = await service().run();
-    expect(second.booksAdded, 0);
-    expect((await db.getAllEpubBooks()).length, 1);
-  });
-
-  test('local 里书架没有的作品也会被登记；重复运行不重复添加', () async {
-    final File page =
-        File(p.join(localComicRoot.path, 'Local orphan', 'Ch 1', '001.jpg'))
-          ..createSync(recursive: true)
-          ..writeAsStringSync('page');
-
-    final RebuildDownloadIndexReport report = await service().run();
-
-    expect(report.booksAdded, 1);
-    expect(report.booksAddedOnline, 0);
-    expect(report.booksAddedLocal, 1);
-    expect(report.booksAddedLocalSourceMissing, 0);
-    expect(report.chaptersAdded, 1);
-    final EpubBookRow row = (await db.getAllEpubBooks()).single;
-    expect(row.bookKey, localSourceBookKeyFor(page.parent.parent.path));
-    expect(row.title, 'Local orphan');
-    final LocalSourceMetadata metadata = LocalSourceMetadata.tryParse(
-      row.sourceMetadata,
-    )!;
-    expect(metadata.relativePath, 'Local orphan');
-    expect(
-      decodeLocalSourceChapters(
-        row.chaptersJson,
-      ).map((LocalSourceChapterRecord chapter) => chapter.key),
-      <String>['Ch 1'],
-    );
-
-    final RebuildDownloadIndexReport second = await service().run();
-    expect(second.booksAdded, 0);
-    expect(second.booksRelinked, 0);
-    expect((await db.getAllEpubBooks()).length, 1);
-    expect(page.readAsStringSync(), 'page');
-  });
-
   /// 一张真实可解码的页图（封面生成要能解码第一页）。
-  List<int> coverTestPageBytes() {
-    final img.Image image = img.Image(width: 400, height: 600)
-      ..clear(img.ColorRgb8(255, 0, 0));
+  List<int> coverTestPageBytes({
+    int width = 400,
+    int height = 600,
+    img.Color? color,
+  }) {
+    final img.Image image = img.Image(width: width, height: height)
+      ..clear(color ?? img.ColorRgb8(255, 0, 0));
     return img.encodePng(image);
   }
-
-  test('Rebuild 给只经它登记的本地作品生成 cover.jpg 并写入 coverPath', () async {
-    final Directory mangaDir = Directory(
-      p.join(localComicRoot.path, 'Cover orphan'),
-    );
-    final File page = File(p.join(mangaDir.path, 'Ch 1', '001.png'))
-      ..createSync(recursive: true)
-      ..writeAsBytesSync(coverTestPageBytes());
-
-    final RebuildDownloadIndexReport report = await service().run();
-
-    expect(report.booksAddedLocal, 1);
-    final File cover = File(p.join(mangaDir.path, 'cover.jpg'));
-    expect(cover.existsSync(), isTrue, reason: 'Rebuild 登记时补齐封面');
-    final EpubBookRow row = (await db.getAllEpubBooks()).single;
-    expect(row.coverPath, 'cover.jpg', reason: '书架 / 作品页据此显示封面');
-    expect(page.readAsBytesSync(), isNotEmpty);
-
-    // 幂等：再跑一次不重复生成、不覆盖已生成的封面。
-    final List<int> coverBytes = cover.readAsBytesSync();
-    final RebuildDownloadIndexReport second = await service().run();
-    expect(second.booksAdded, 0);
-    expect(cover.readAsBytesSync(), coverBytes);
-  });
 
   test('Rebuild 重链已登记的 CBZ 本地作品时补封面并更新 coverPath', () async {
     final Directory mangaDir = Directory(
@@ -1384,77 +1206,7 @@ void main() {
     expect((await db.getAllEpubBooks()).single.coverPath, 'cover.jpg');
   });
 
-  test('尊重 book_tombstones：主动移出书架的下载/本地作品不会被重新加入', () async {
-    final OnlineMangaLibraryEntry entry = entryFor();
-    await installSource(
-      extensionPackage: entry.extensionPackage,
-      sourceId: entry.sourceId,
-    );
-    final Directory downloaded = Directory(
-      p.join(downloadsRoot.path, 'Example Source', 'Fixture series'),
-    );
-    await writeChapter(
-      mangaDir: downloaded,
-      folderName: 'Chapter 1',
-      entry: entry,
-      chapter: entry.chapters[0],
-    );
-    await db.insertBookTombstone(
-      onlineMangaBookKeyFor(
-        runtime: entry.runtime,
-        extensionPackage: entry.extensionPackage,
-        sourceId: entry.sourceId,
-        seriesKey: entry.series.key,
-      ),
-    );
-
-    final File localPage =
-        File(p.join(localComicRoot.path, 'Tombstoned local', 'Ch 1', '001.jpg'))
-          ..createSync(recursive: true)
-          ..writeAsStringSync('page');
-    final Directory localMangaDir = localPage.parent.parent;
-    await db.insertBookTombstone(localSourceBookKeyFor(localMangaDir.path));
-
-    // downloads 里没有 pages.json 的手工目录：按本地身份立碑也要跳过。
-    final File manualPage =
-        File(
-            p.join(
-              downloadsRoot.path,
-              'Manual Source',
-              'Manual manga',
-              'Ch 1',
-              '001.jpg',
-            ),
-          )
-          ..createSync(recursive: true)
-          ..writeAsStringSync('page');
-    await db.insertBookTombstone(
-      localSourceBookKeyFor(manualPage.parent.parent.path),
-    );
-
-    final RebuildDownloadIndexReport report = await service().run();
-
-    expect(report.booksAdded, 0);
-    expect(report.booksSkipped, 3);
-    expect(report.booksSkippedTombstoned, 3);
-    expect(await db.getAllEpubBooks(), isEmpty);
-    // 只跳过登记，不删文件。
-    expect(
-      File(p.join(downloaded.path, 'Chapter 1', '001.jpg')).existsSync(),
-      isTrue,
-    );
-    expect(localPage.existsSync(), isTrue);
-    expect(manualPage.existsSync(), isTrue);
-    expect((await db.getBookTombstoneKeys()).length, 3);
-  });
-
-  test('报告新增/更新/缺失/跳过数量，且不删除已有记录和文件', () async {
-    final OnlineMangaLibraryEntry entry = entryFor();
-    await installSource(
-      extensionPackage: entry.extensionPackage,
-      sourceId: entry.sourceId,
-    );
-
+  test('报告扫描/匹配/重链/缺失/跳过数量，且不删除已有记录和文件', () async {
     // 1) 书架里的在线条目：文件已不在当前 Content root → Missing。
     final OnlineMangaLibraryEntry missingEntry = entryFor(
       seriesKey: '/series/missing',
@@ -1498,7 +1250,7 @@ void main() {
       ..createSync(recursive: true)
       ..writeAsStringSync('new local page');
 
-    // 3) downloads 里书架没有的作品：源已安装 → 新增在线条目。
+    // 3) downloads 里书架没有的作品：重建不发现、不加入书架。
     final OnlineMangaLibraryEntry newEntry = entryFor(
       seriesKey: '/series/new',
       title: 'New series',
@@ -1510,49 +1262,68 @@ void main() {
         ),
       ],
     );
+    final Directory orphanDownload = Directory(
+      p.join(downloadsRoot.path, 'Example Source', 'New series'),
+    );
     await writeChapter(
-      mangaDir: Directory(
-        p.join(downloadsRoot.path, 'Example Source', 'New series'),
-      ),
+      mangaDir: orphanDownload,
       folderName: 'Chapter 2',
       entry: newEntry,
       chapter: newEntry.chapters.single,
     );
 
-    // 4) 主动移出书架的 local 作品 → 跳过。
-    final File tombstonedPage =
-        File(p.join(localComicRoot.path, 'Tombstoned', 'Ch 1', '001.jpg'))
-          ..createSync(recursive: true)
-          ..writeAsStringSync('page');
-    await db.insertBookTombstone(
-      localSourceBookKeyFor(tombstonedPage.parent.parent.path),
+    // 4) 书架里的同名作品在当前根有两个无身份候选 → 跳过并报告歧义。
+    final OnlineMangaLibraryEntry ambiguousEntry = entryFor(
+      seriesKey: '/series/ambiguous',
+      title: 'Ambiguous series',
+      chapters: const <OnlineMangaChapter>[
+        OnlineMangaChapter(
+          key: '/c/1',
+          name: 'Chapter 1',
+          raw: <String, Object?>{},
+        ),
+      ],
     );
+    await insertOnlineBook(
+      bookKey: 'mihon-ambiguous',
+      entry: ambiguousEntry,
+      extractDir: p.join(
+        oldContent.path,
+        'downloads',
+        'Example Source',
+        'Ambiguous series',
+      ),
+    );
+    await markDownloaded('mihon-ambiguous', '/c/1');
+    for (final String source in <String>['Source A', 'Source B']) {
+      final Directory chapterDir = Directory(
+        p.join(downloadsRoot.path, source, 'Ambiguous series', 'Chapter 1'),
+      )..createSync(recursive: true);
+      File(p.join(chapterDir.path, '001.jpg')).writeAsStringSync('page');
+    }
 
     final RebuildDownloadIndexReport report = await service().run();
 
-    expect(report.booksAdded, 1);
-    expect(report.booksAddedOnline, 1);
-    expect(report.booksAddedLocal, 0);
+    expect(report.booksScanned, 3);
+    expect(report.booksMatched, 1);
     expect(report.booksRelinked, 1);
     expect(report.booksMissing, 1);
     expect(report.booksSkipped, 1);
-    expect(report.booksSkippedTombstoned, 1);
-    expect(report.chaptersAdded, 1);
+    expect(report.booksAmbiguous, 1);
+    expect(report.chaptersRelinked, 1);
     expect(report.chaptersMissing, 1);
+    expect(report.chaptersSkipped, 1);
+    expect(report.failed, 0);
+    expect(report.cancelled, isFalse);
     expect(
       (await db.getAllEpubBooks()).map((EpubBookRow row) => row.bookKey),
-      containsAll(<String>[
-        'mihon-missing',
-        movedLocalKey,
-        onlineMangaBookKeyFor(
-          runtime: newEntry.runtime,
-          extensionPackage: newEntry.extensionPackage,
-          sourceId: newEntry.sourceId,
-          seriesKey: newEntry.series.key,
-        ),
-      ]),
+      containsAll(<String>['mihon-missing', movedLocalKey, 'mihon-ambiguous']),
     );
-    expect((await db.getAllEpubBooks()).length, 3);
+    expect(
+      (await db.getAllEpubBooks()).length,
+      3,
+      reason: 'downloads 里的孤儿作品不得被加入书架',
+    );
     expect(
       p.equals(
         (await db.getEpubBook(movedLocalKey))!.extractDir,
@@ -1572,60 +1343,10 @@ void main() {
       ).existsSync(),
       isTrue,
     );
-    expect(tombstonedPage.existsSync(), isTrue);
-  });
-
-  test('半成品章节不会进入恢复后的下载索引', () async {
-    final OnlineMangaLibraryEntry entry = entryFor();
-    await installSource(
-      extensionPackage: entry.extensionPackage,
-      sourceId: entry.sourceId,
-    );
-    final Directory mangaDir = Directory(
-      p.join(downloadsRoot.path, 'Example Source', 'Fixture series'),
-    );
-    await writeChapter(
-      mangaDir: mangaDir,
-      folderName: 'Chapter 1',
-      entry: entry,
-      chapter: entry.chapters[0],
-    );
-    // 第二章 pages.json 完整但页文件已被删掉（半成品）——不能算已下载。
-    final Directory incomplete = await writeChapter(
-      mangaDir: mangaDir,
-      folderName: 'Chapter 2',
-      entry: entry,
-      chapter: entry.chapters[1],
-    );
-    File(p.join(incomplete.path, '001.jpg')).deleteSync();
-
-    final RebuildDownloadIndexReport report = await service().run();
-
-    final String bookKey = onlineMangaBookKeyFor(
-      runtime: entry.runtime,
-      extensionPackage: entry.extensionPackage,
-      sourceId: entry.sourceId,
-      seriesKey: entry.series.key,
-    );
-    expect(report.booksAdded, 1);
-    expect(report.chaptersAdded, 1);
-    final OnlineMangaLibraryEntry recovered = OnlineMangaLibraryEntry.tryParse(
-      (await db.getEpubBook(bookKey))!.sourceMetadata,
-    )!;
     expect(
-      recovered.chapters.map((OnlineMangaChapter chapter) => chapter.key),
-      <String>['/c/1'],
-    );
-    expect(
-      (await db.getMangaChapterDir(bookKey, '/c/1'))?.folderName,
-      'Chapter 1',
-    );
-    expect(await db.getMangaChapterDir(bookKey, '/c/2'), isNull);
-    expect(
-      await DownloadLibraryIndex(
-        db,
-      ).isChapterDownloaded(bookKey: bookKey, chapterKey: '/c/2'),
-      isFalse,
+      File(p.join(orphanDownload.path, 'Chapter 2', '001.jpg')).existsSync(),
+      isTrue,
+      reason: '不在重建职责内的下载作品文件原地保留',
     );
   });
 
@@ -1780,92 +1501,7 @@ void main() {
     expect(archive.existsSync(), isTrue);
   });
 
-  test('downloads 里书架没有的作品：仅 CBZ 章节也建在线条目并标记 archive', () async {
-    final OnlineMangaLibraryEntry entry = entryFor();
-    await installSource(
-      extensionPackage: entry.extensionPackage,
-      sourceId: entry.sourceId,
-    );
-    final Directory mangaDir = Directory(
-      p.join(downloadsRoot.path, 'Example Source', 'Fixture series'),
-    );
-    await writeArchiveChapter(
-      mangaDir: mangaDir,
-      fileName: 'Chapter 1.cbz',
-      entry: entry,
-      chapter: entry.chapters[0],
-    );
-    await writeArchiveChapter(
-      mangaDir: mangaDir,
-      fileName: 'Chapter 2.cbz',
-      entry: entry,
-      chapter: entry.chapters[1],
-    );
-
-    final RebuildDownloadIndexReport report = await service().run();
-
-    expect(report.booksAdded, 1);
-    expect(report.booksAddedOnline, 1);
-    expect(report.chaptersAdded, 2);
-    final String bookKey = onlineMangaBookKeyFor(
-      runtime: entry.runtime,
-      extensionPackage: entry.extensionPackage,
-      sourceId: entry.sourceId,
-      seriesKey: entry.series.key,
-    );
-    expect(
-      (await db.getMangaChapterDir(bookKey, '/c/1'))!.containerKindEnum,
-      MangaChapterContainerKind.archive,
-    );
-    expect(
-      (await db.getMangaChapterDir(bookKey, '/c/1'))!.folderName,
-      'Chapter 1.cbz',
-    );
-    expect(
-      (await db.getMangaChapterDir(bookKey, '/c/2'))!.containerKindEnum,
-      MangaChapterContainerKind.archive,
-    );
-    final DownloadLibraryIndex index = DownloadLibraryIndex(db);
-    expect(
-      await index.downloadedChapterKeys(bookKey, <String>['/c/1', '/c/2']),
-      <String>{'/c/1', '/c/2'},
-    );
-
-    final RebuildDownloadIndexReport second = await service().run();
-    expect(second.booksAdded, 0);
-    expect(second.chaptersAdded, 0);
-  });
-
-  test('downloads 里书架没有的作品：源未安装的纯 CBZ 目录降级为本地条目', () async {
-    final OnlineMangaLibraryEntry entry = entryFor();
-    final Directory mangaDir = Directory(
-      p.join(downloadsRoot.path, 'Example Source', 'Fixture series'),
-    );
-    // 刻意不安装扩展 / 在线源。
-    await writeArchiveChapter(
-      mangaDir: mangaDir,
-      fileName: 'Chapter 1.cbz',
-      entry: entry,
-      chapter: entry.chapters[0],
-    );
-
-    final RebuildDownloadIndexReport report = await service().run();
-
-    expect(report.booksAdded, 1);
-    expect(report.booksAddedLocal, 1);
-    expect(report.booksAddedLocalSourceMissing, 1);
-    expect(report.chaptersAdded, 1);
-    final EpubBookRow row = (await db.getAllEpubBooks()).single;
-    expect(row.bookKey, localSourceBookKeyFor(mangaDir.path));
-    expect(
-      decodeLocalSourceChapters(
-        row.chaptersJson,
-      ).map((LocalSourceChapterRecord chapter) => chapter.key),
-      <String>['Chapter 1.cbz'],
-    );
-  });
-
-  test('local 中带 manifest 的文件夹按身份关联到在线 Manga 行（含非书架）', () async {
+  test('local 中带 manifest 的文件夹按身份关联到书架中的在线 Manga 行', () async {
     const String bookKey = 'mihon-fixture';
     final OnlineMangaLibraryEntry entry = entryFor();
     await insertOnlineBook(
@@ -1877,7 +1513,6 @@ void main() {
         'Example Source',
         'Fixture series',
       ),
-      inLibrary: false,
     );
     // 目录名与作品标题毫无关系：只有 pages.json 能证明身份。
     final Directory localMangaDir = Directory(
@@ -1902,7 +1537,7 @@ void main() {
     expect(report.booksMatched, 1);
     expect(report.booksRelinked, 1);
     final EpubBookRow after = (await db.getEpubBook(bookKey))!;
-    expect(after.isInLibrary, isFalse, reason: '非书架归属不被重建改写');
+    expect(after.isInLibrary, isTrue, reason: '书架归属保持为 true');
     expect(
       p.equals(after.extractDir, localMangaDir.path),
       isTrue,
@@ -1935,7 +1570,6 @@ void main() {
     final RebuildDownloadIndexReport second = await service().run();
     expect(second.booksMatched, 1);
     expect(second.booksRelinked, 0);
-    expect(second.booksAdded, 0);
     expect(await db.getAllEpubBooks(), hasLength(1));
   });
 
@@ -1959,7 +1593,6 @@ void main() {
         'Example Source',
         'Fixture series',
       ),
-      inLibrary: false,
     );
     // 单章作品把 pages.json 直接放在 local/<manga> 根；没有章节子目录。
     final Directory localMangaDir = Directory(
@@ -2017,41 +1650,35 @@ void main() {
     expect(await db.getMangaChapterDir(bookKey, '/c/1'), isNull);
   });
 
-  test('membership=false 的 Manga 行也按 pages.json 身份 re-link', () async {
-    const String bookKey = 'mihon-fixture';
-    final OnlineMangaLibraryEntry entry = entryFor();
-    await insertOnlineBook(
-      bookKey: bookKey,
-      entry: entry,
-      extractDir: p.join(
-        oldContent.path,
-        'downloads',
-        'Example Source',
-        'Fixture series',
-      ),
-      inLibrary: false,
-    );
-    final Directory mangaDir = Directory(
-      p.join(downloadsRoot.path, 'Example Source', 'Fixture series'),
-    );
-    await writeChapter(
-      mangaDir: mangaDir,
-      folderName: 'Chapter 1',
-      entry: entry,
-      chapter: entry.chapters[0],
-    );
+  test('非书架 Local source 行不被重链或改写', () async {
+    final Directory oldLocalRoot = Directory(p.join(oldContent.path, 'local'));
+    final File oldPage =
+        File(p.join(oldLocalRoot.path, 'Local Manga', 'Ch 1', '001.jpg'))
+          ..createSync(recursive: true)
+          ..writeAsStringSync('old page');
+    await LocalSourceLibrary(
+      db: db,
+      root: oldLocalRoot,
+    ).registerScannedManga((await scanLocalSourceRoot(oldLocalRoot)).single);
+    final EpubBookRow before = (await db.getAllEpubBooks()).single;
+    await (db.update(db.epubBooks)
+          ..where((t) => t.bookKey.equals(before.bookKey)))
+        .write(const EpubBooksCompanion(inLibrary: Value<bool>(false)));
+    // 用户把作品目录搬到当前 local；非书架行不得被重链。
+    final File newPage =
+        File(p.join(localComicRoot.path, 'Local Manga', 'Ch 1', '001.jpg'))
+          ..createSync(recursive: true)
+          ..writeAsStringSync('new page');
 
     final RebuildDownloadIndexReport report = await service().run();
 
-    expect(report.booksScanned, 1);
-    expect(report.booksMatched, 1);
-    final EpubBookRow after = (await db.getEpubBook(bookKey))!;
+    expect(report.booksScanned, 0);
+    expect(report.booksRelinked, 0);
+    final EpubBookRow after = (await db.getEpubBook(before.bookKey))!;
     expect(after.isInLibrary, isFalse);
-    expect(p.equals(after.extractDir, mangaDir.path), isTrue);
-    expect(
-      (await db.getMangaChapterDir(bookKey, '/c/1'))?.folderName,
-      'Chapter 1',
-    );
+    expect(after.extractDir, before.extractDir, reason: '非书架行保持原记录');
+    expect(oldPage.existsSync(), isTrue);
+    expect(newPage.existsSync(), isTrue);
   });
 
   test('重复副本优先已记录的 extractDir（即使另一份更新）', () async {
@@ -2228,219 +1855,6 @@ void main() {
         reason: '不删除任何重复副本文件',
       );
     }
-  });
-
-  test('local 中带 manifest 的孤儿作品仍按现有语义登记为本地条目', () async {
-    final OnlineMangaLibraryEntry entry = entryFor();
-    await installSource(
-      extensionPackage: entry.extensionPackage,
-      sourceId: entry.sourceId,
-    );
-    final Directory localMangaDir = Directory(
-      p.join(localComicRoot.path, 'Unindexed local'),
-    );
-    await writeChapter(
-      mangaDir: localMangaDir,
-      folderName: 'Ch 1',
-      entry: entry,
-      chapter: entry.chapters[0],
-    );
-
-    final RebuildDownloadIndexReport report = await service().run();
-
-    expect(report.booksAdded, 1);
-    expect(report.booksAddedLocal, 1);
-    final EpubBookRow epubBook = (await db.getAllEpubBooks()).single;
-    expect(
-      LocalSourceMetadata.tryParse(epubBook.sourceMetadata),
-      isNotNull,
-      reason: 'orphan recovery 保留本地条目语义',
-    );
-    expect(p.equals(epubBook.extractDir, localMangaDir.path), isTrue);
-    expect(
-      File(p.join(localMangaDir.path, 'Ch 1', '001.jpg')).existsSync(),
-      isTrue,
-    );
-  });
-
-  test('local manifest 证明属于已移出书架的在线作品时不复活', () async {
-    final OnlineMangaLibraryEntry entry = entryFor();
-    final Directory localMangaDir = Directory(
-      p.join(localComicRoot.path, 'Removed online work'),
-    );
-    await writeChapter(
-      mangaDir: localMangaDir,
-      folderName: 'Ch 1',
-      entry: entry,
-      chapter: entry.chapters[0],
-    );
-    await db.insertBookTombstone(
-      onlineMangaBookKeyFor(
-        runtime: entry.runtime,
-        extensionPackage: entry.extensionPackage,
-        sourceId: entry.sourceId,
-        seriesKey: entry.series.key,
-      ),
-    );
-
-    final RebuildDownloadIndexReport report = await service().run();
-
-    expect(report.booksAdded, 0);
-    expect(report.booksSkipped, 1);
-    expect(report.booksSkippedTombstoned, 1);
-    expect(await db.getAllEpubBooks(), isEmpty);
-    expect(
-      File(p.join(localMangaDir.path, 'Ch 1', '001.jpg')).existsSync(),
-      isTrue,
-      reason: '只跳过登记，不删文件',
-    );
-  });
-
-  test('local 里与在线行身份相同的重复副本不补建本地条目', () async {
-    const String bookKey = 'mihon-fixture';
-    final OnlineMangaLibraryEntry entry = entryFor(
-      chapters: const <OnlineMangaChapter>[
-        OnlineMangaChapter(
-          key: '/c/1',
-          name: 'Chapter 1',
-          raw: <String, Object?>{},
-        ),
-      ],
-    );
-    final Directory downloadsCopy = Directory(
-      p.join(downloadsRoot.path, 'Example Source', 'Fixture series'),
-    );
-    final Directory localCopy = Directory(
-      p.join(localComicRoot.path, 'Local duplicate'),
-    );
-    await insertOnlineBook(
-      bookKey: bookKey,
-      entry: entry,
-      extractDir: downloadsCopy.path,
-    );
-    await writeChapter(
-      mangaDir: downloadsCopy,
-      folderName: 'Chapter 1',
-      entry: entry,
-      chapter: entry.chapters.single,
-      downloadedAt: DateTime.utc(2026, 11, 1),
-    );
-    await writeChapter(
-      mangaDir: localCopy,
-      folderName: 'Local Ch 1',
-      entry: entry,
-      chapter: entry.chapters.single,
-      downloadedAt: DateTime.utc(2026, 11, 2),
-    );
-
-    final RebuildDownloadIndexReport report = await service().run();
-
-    expect(report.booksMatched, 1);
-    expect(report.booksAdded, 0);
-    expect(
-      await db.getAllEpubBooks(),
-      hasLength(1),
-      reason: '同一在线身份已被行覆盖时，local 重复副本不得补建本地条目',
-    );
-    expect(
-      File(p.join(localCopy.path, 'Local Ch 1', '001.jpg')).existsSync(),
-      isTrue,
-    );
-  });
-
-  test('共享目录里多个作品身份：Rebuild 各建条目并只映射自己的章', () async {
-    final OnlineMangaLibraryEntry first = entryFor(
-      seriesKey: '/series/first',
-      title: 'Shared title',
-      chapters: const <OnlineMangaChapter>[
-        OnlineMangaChapter(
-          key: '/c/1',
-          name: 'Chapter 1',
-          raw: <String, Object?>{},
-        ),
-      ],
-    );
-    final OnlineMangaLibraryEntry second = entryFor(
-      seriesKey: '/series/second',
-      title: 'Shared title',
-      chapters: const <OnlineMangaChapter>[
-        OnlineMangaChapter(
-          key: '/c/1',
-          name: 'Chapter 1',
-          raw: <String, Object?>{},
-        ),
-      ],
-    );
-    await installSource(
-      extensionPackage: first.extensionPackage,
-      sourceId: first.sourceId,
-    );
-    final Directory mangaDir = Directory(
-      p.join(downloadsRoot.path, 'Example Source', 'Shared title'),
-    );
-    await writeChapter(
-      mangaDir: mangaDir,
-      folderName: 'A first',
-      entry: first,
-      chapter: first.chapters.single,
-    );
-    await writeChapter(
-      mangaDir: mangaDir,
-      folderName: 'B second',
-      entry: second,
-      chapter: second.chapters.single,
-    );
-
-    final RebuildDownloadIndexReport report = await service().run();
-
-    expect(report.booksAdded, 2, reason: '共享目录里的每个作品身份各建一条');
-    expect(report.booksAddedOnline, 2);
-    expect(report.booksSkipped, 0, reason: '共享目录不再整目录跳过');
-    expect(report.chaptersAdded, 2);
-    expect(await db.getAllEpubBooks(), hasLength(2));
-
-    final List<EpubBookRow> rows = await db.getAllEpubBooks();
-    for (final EpubBookRow row in rows) {
-      expect(
-        p.equals(row.extractDir, mangaDir.path),
-        isTrue,
-        reason: '两部作品都指向同一个共享目录',
-      );
-    }
-    final EpubBookRow firstRow = rows.firstWhere((EpubBookRow row) {
-      final OnlineMangaLibraryEntry entry = OnlineMangaLibraryEntry.tryParse(
-        row.sourceMetadata,
-      )!;
-      return entry.series.key == '/series/first';
-    });
-    final EpubBookRow secondRow = rows.firstWhere((EpubBookRow row) {
-      final OnlineMangaLibraryEntry entry = OnlineMangaLibraryEntry.tryParse(
-        row.sourceMetadata,
-      )!;
-      return entry.series.key == '/series/second';
-    });
-    expect(
-      (await db.getMangaChapterDirRowsForBook(
-        firstRow.bookKey,
-      )).values.single.folderName,
-      'A first',
-    );
-    expect(
-      (await db.getMangaChapterDirRowsForBook(
-        secondRow.bookKey,
-      )).values.single.folderName,
-      'B second',
-    );
-    expect(await db.getMangaChapterDir(firstRow.bookKey, '/c/1'), isNotNull);
-    expect(await db.getMangaChapterDir(secondRow.bookKey, '/c/1'), isNotNull);
-    expect(
-      File(p.join(mangaDir.path, 'A first', '001.jpg')).existsSync(),
-      isTrue,
-    );
-    expect(
-      File(p.join(mangaDir.path, 'B second', '001.jpg')).existsSync(),
-      isTrue,
-    );
   });
 
   test('共享目录里无 manifest 的容器不按名称认领；删除 A 不动它', () async {
@@ -2621,6 +2035,575 @@ void main() {
     expect(
       (await db.getMangaChapterDirRowsForBook(secondRow.bookKey)).keys,
       <String>{'/c/1'},
+    );
+  });
+
+  // ── Ticket 03：重建预热第一页封面 ────────────────────────────────────
+
+  test('源未安装 + 本地 CBZ：重建重链后生成第一页封面并只写入 Program state 缓存', () async {
+    const String bookKey = 'mihon-imported-cbz';
+    final OnlineMangaLibraryEntry entry = entryFor(
+      // 导入备份留下的签名 URL：源未安装时不可用，不能据此跳过生成。
+      coverUrl: 'https://example.test/expired.jpg',
+      chapters: const <OnlineMangaChapter>[
+        OnlineMangaChapter(
+          key: '/c/1',
+          name: 'Chapter 1',
+          raw: <String, Object?>{},
+        ),
+      ],
+    );
+    await insertOnlineBook(
+      bookKey: bookKey,
+      entry: entry,
+      extractDir: p.join(
+        oldContent.path,
+        'downloads',
+        'Example Source',
+        'Fixture series',
+      ),
+    );
+    final Directory mangaDir = Directory(
+      p.join(downloadsRoot.path, 'Example Source', 'Fixture series'),
+    );
+    await writeArchiveChapter(
+      mangaDir: mangaDir,
+      fileName: 'Chapter 1.cbz',
+      entry: entry,
+      chapter: entry.chapters.single,
+      pageBytes: coverTestPageBytes(width: 900, height: 1200),
+    );
+    final MangaShelfCoverCache cache = coverCache();
+    expect(await cache.hasCover(bookKey), isFalse);
+    final int revisionBefore = MangaShelfCoverRevision.value;
+
+    final RebuildDownloadIndexReport report = await service(
+      coverService: firstPageCoverService(),
+      // 源未安装：远程 URL 不可用。
+      isRemoteCoverAvailable: (OnlineMangaLibraryEntry _) async => false,
+    ).run();
+
+    expect(report.booksMatched, 1);
+    expect(report.coversGenerated, 1);
+    expect(report.coversUpdated, 0);
+    expect(report.coversFailed, 0);
+    expect(report.failed, 0, reason: '封面生成本身不算书目重建失败');
+    expect(await cache.hasCover(bookKey), isTrue);
+    expect(
+      isLocalSourceGeneratedCoverSentinel(await cache.storedSourceUrl(bookKey)),
+      isTrue,
+      reason: '生成封面 sidecar 必须是本地容器 sentinel',
+    );
+    final img.Image cover = img.decodeJpg(
+      await cache.coverPathFor(bookKey).readAsBytes(),
+    )!;
+    expect(cover.width, 600);
+    expect(
+      File(p.join(mangaDir.path, 'cover.jpg')).existsSync(),
+      isFalse,
+      reason: '重建预热不得往 Content root / Download library 写 cover.jpg',
+    );
+    expect(
+      MangaShelfCoverRevision.value,
+      greaterThan(revisionBefore),
+      reason: '生成成功后经 ticket 01 的 revision 让书架重算',
+    );
+  });
+
+  test('来源可用且有远程封面：重建不生成第一页封面、不覆盖远程层', () async {
+    const String bookKey = 'mihon-remote-cover';
+    final OnlineMangaLibraryEntry entry = entryFor(
+      coverUrl: 'https://example.test/current.jpg',
+      chapters: const <OnlineMangaChapter>[
+        OnlineMangaChapter(
+          key: '/c/1',
+          name: 'Chapter 1',
+          raw: <String, Object?>{},
+        ),
+      ],
+    );
+    await insertOnlineBook(
+      bookKey: bookKey,
+      entry: entry,
+      extractDir: p.join(
+        oldContent.path,
+        'downloads',
+        'Example Source',
+        'Fixture series',
+      ),
+    );
+    await writeArchiveChapter(
+      mangaDir: Directory(
+        p.join(downloadsRoot.path, 'Example Source', 'Fixture series'),
+      ),
+      fileName: 'Chapter 1.cbz',
+      entry: entry,
+      chapter: entry.chapters.single,
+      pageBytes: coverTestPageBytes(),
+    );
+    final MangaShelfCoverCache cache = coverCache();
+    final int revisionBefore = MangaShelfCoverRevision.value;
+
+    final RebuildDownloadIndexReport report = await service(
+      coverService: firstPageCoverService(),
+      // 来源已安装且启用：远程封面可用，优先级高于生成封面。
+      isRemoteCoverAvailable: (OnlineMangaLibraryEntry _) async => true,
+    ).run();
+
+    expect(report.coversGenerated, 0);
+    expect(report.coversUpdated, 0);
+    expect(report.coversSkipped, 1);
+    expect(report.coversFailed, 0);
+    expect(
+      await cache.hasCover(bookKey),
+      isFalse,
+      reason: '可用远程封面存在时不得生成 / 覆盖第一页封面',
+    );
+    expect(
+      MangaShelfCoverRevision.value,
+      revisionBefore,
+      reason: '没有写入新封面字节时不应触发书架重算',
+    );
+  });
+
+  test('已有持久真实封面或本地 cover.*：重建不生成、不覆盖', () async {
+    final MangaShelfCoverCache cache = coverCache();
+    final List<int> realBytes = coverTestPageBytes(width: 120, height: 180);
+
+    // 1) 远程真实封面已经写入持久字节缓存。
+    const String realBookKey = 'mihon-real-cached';
+    final OnlineMangaLibraryEntry realEntry = entryFor(
+      chapters: const <OnlineMangaChapter>[
+        OnlineMangaChapter(
+          key: '/c/1',
+          name: 'Chapter 1',
+          raw: <String, Object?>{},
+        ),
+      ],
+    );
+    await insertOnlineBook(
+      bookKey: realBookKey,
+      entry: realEntry,
+      extractDir: p.join(
+        oldContent.path,
+        'downloads',
+        'Example Source',
+        'Fixture series',
+      ),
+    );
+    await writeArchiveChapter(
+      mangaDir: Directory(
+        p.join(downloadsRoot.path, 'Example Source', 'Fixture series'),
+      ),
+      fileName: 'Chapter 1.cbz',
+      entry: realEntry,
+      chapter: realEntry.chapters.single,
+      pageBytes: coverTestPageBytes(color: img.ColorRgb8(0, 255, 0)),
+    );
+    await cache.store(
+      bookKey: realBookKey,
+      sourceUrl: 'https://example.test/real.jpg',
+      bytes: realBytes,
+    );
+    final List<int> realBefore = cache
+        .coverPathFor(realBookKey)
+        .readAsBytesSync();
+
+    // 2) 作品根目录已有本地 cover.jpg。
+    const String localCoverBookKey = 'mihon-local-cover';
+    final OnlineMangaLibraryEntry localCoverEntry = entryFor(
+      seriesKey: '/series/local-cover',
+      title: 'Local cover series',
+      chapters: const <OnlineMangaChapter>[
+        OnlineMangaChapter(
+          key: '/c/1',
+          name: 'Chapter 1',
+          raw: <String, Object?>{},
+        ),
+      ],
+    );
+    final Directory localCoverDir = Directory(
+      p.join(downloadsRoot.path, 'Example Source', 'Local cover series'),
+    );
+    await insertOnlineBook(
+      bookKey: localCoverBookKey,
+      entry: localCoverEntry,
+      extractDir: p.join(
+        oldContent.path,
+        'downloads',
+        'Example Source',
+        'Local cover series',
+      ),
+    );
+    await writeArchiveChapter(
+      mangaDir: localCoverDir,
+      fileName: 'Chapter 1.cbz',
+      entry: localCoverEntry,
+      chapter: localCoverEntry.chapters.single,
+      pageBytes: coverTestPageBytes(),
+    );
+    await File(
+      p.join(localCoverDir.path, 'cover.jpg'),
+    ).writeAsBytes(coverTestPageBytes(width: 64, height: 96));
+
+    final RebuildDownloadIndexReport report = await service(
+      coverService: firstPageCoverService(),
+      isRemoteCoverAvailable: (OnlineMangaLibraryEntry _) async => false,
+    ).run();
+
+    expect(report.coversGenerated, 0);
+    expect(report.coversSkipped, 2);
+    expect(report.coversFailed, 0);
+    expect(
+      cache.coverPathFor(realBookKey).readAsBytesSync(),
+      realBefore,
+      reason: '真实来源封面的持久字节不得被生成封面覆盖',
+    );
+    expect(
+      await cache.hasCover(localCoverBookKey),
+      isFalse,
+      reason: '已有本地 cover.* 时不需要生成封面缓存',
+    );
+  });
+
+  test('已记录 epub_books.cover_path（页路径）：重建不重复生成封面', () async {
+    const String bookKey = 'mihon-recorded-page-cover';
+    final OnlineMangaLibraryEntry entry = entryFor(
+      chapters: const <OnlineMangaChapter>[
+        OnlineMangaChapter(
+          key: '/c/1',
+          name: 'Chapter 1',
+          raw: <String, Object?>{},
+        ),
+      ],
+    );
+    await insertOnlineBook(
+      bookKey: bookKey,
+      entry: entry,
+      extractDir: p.join(
+        oldContent.path,
+        'downloads',
+        'Example Source',
+        'Fixture series',
+      ),
+    );
+    final Directory mangaDir = Directory(
+      p.join(downloadsRoot.path, 'Example Source', 'Fixture series'),
+    );
+    await writeArchiveChapter(
+      mangaDir: mangaDir,
+      fileName: 'Chapter 1.cbz',
+      entry: entry,
+      chapter: entry.chapters.single,
+      pageBytes: coverTestPageBytes(color: img.ColorRgb8(0, 255, 0)),
+    );
+    // 已记录封面 = 页图路径（本地登记 / 备份常见），不是根目录 cover.*。
+    final File page = File(p.join(mangaDir.path, 'pages', '001.jpg'))
+      ..createSync(recursive: true)
+      ..writeAsBytesSync(coverTestPageBytes(width: 64, height: 96));
+    await (db.update(
+      db.epubBooks,
+    )..where((t) => t.bookKey.equals(bookKey))).write(
+      EpubBooksCompanion(coverPath: const Value<String?>('pages/001.jpg')),
+    );
+    final MangaShelfCoverCache cache = coverCache();
+    final int revisionBefore = MangaShelfCoverRevision.value;
+
+    final RebuildDownloadIndexReport report = await service(
+      coverService: firstPageCoverService(),
+      isRemoteCoverAvailable: (OnlineMangaLibraryEntry _) async => false,
+    ).run();
+
+    expect(page.existsSync(), isTrue);
+    expect(
+      (await db.getEpubBook(bookKey))!.coverPath,
+      'pages/001.jpg',
+      reason: '重建不得把已记录封面改成别的路径',
+    );
+    expect(report.coversGenerated, 0, reason: '已有记录封面时不得重复生成');
+    expect(report.coversSkipped, 1);
+    expect(report.coversFailed, 0);
+    expect(
+      await cache.hasCover(bookKey),
+      isFalse,
+      reason: '已有记录封面时不得写第一页生成封面缓存',
+    );
+    expect(MangaShelfCoverRevision.value, revisionBefore);
+  });
+
+  test('非书架作品不参与封面预热：不生成、不计入封面统计', () async {
+    const String bookKey = 'mihon-nonlibrary-cover';
+    final OnlineMangaLibraryEntry entry = entryFor();
+    await insertOnlineBook(
+      bookKey: bookKey,
+      entry: entry,
+      extractDir: p.join(
+        oldContent.path,
+        'downloads',
+        'Example Source',
+        'Fixture series',
+      ),
+      inLibrary: false,
+    );
+    await writeArchiveChapter(
+      mangaDir: Directory(
+        p.join(downloadsRoot.path, 'Example Source', 'Fixture series'),
+      ),
+      fileName: 'Chapter 1.cbz',
+      entry: entry,
+      chapter: entry.chapters.first,
+      pageBytes: coverTestPageBytes(),
+    );
+    final MangaShelfCoverCache cache = coverCache();
+
+    final RebuildDownloadIndexReport report = await service(
+      coverService: firstPageCoverService(),
+      isRemoteCoverAvailable: (OnlineMangaLibraryEntry _) async => false,
+    ).run();
+
+    expect(report.booksScanned, 0, reason: '重建只处理书架成员');
+    expect(report.coversGenerated, 0);
+    expect(report.coversSkipped, 0);
+    expect(report.coversFailed, 0);
+    expect(
+      await cache.hasCover(bookKey),
+      isFalse,
+      reason: '非书架作品不预热封面（作品页按需懒生成）',
+    );
+  });
+
+  test('坏页 / 坏容器计入封面失败，不阻断重建、不算书目失败', () async {
+    final MangaShelfCoverCache cache = coverCache();
+
+    Future<OnlineMangaLibraryEntry> insertBook({
+      required String bookKey,
+      required String title,
+      required String seriesKey,
+      required List<int>? pageBytes,
+      required bool writePage,
+    }) async {
+      final OnlineMangaLibraryEntry entry = entryFor(
+        seriesKey: seriesKey,
+        title: title,
+        chapters: const <OnlineMangaChapter>[
+          OnlineMangaChapter(
+            key: '/c/1',
+            name: 'Chapter 1',
+            raw: <String, Object?>{},
+          ),
+        ],
+      );
+      await insertOnlineBook(
+        bookKey: bookKey,
+        entry: entry,
+        extractDir: p.join(
+          oldContent.path,
+          'downloads',
+          'Example Source',
+          title,
+        ),
+      );
+      await writeArchiveChapter(
+        mangaDir: Directory(
+          p.join(downloadsRoot.path, 'Example Source', title),
+        ),
+        fileName: 'Chapter 1.cbz',
+        entry: entry,
+        chapter: entry.chapters.single,
+        writePage: writePage,
+        pageBytes: pageBytes,
+      );
+      return entry;
+    }
+
+    // 1) 坏页：容器完整，第一页字节不是可解码图片。
+    await insertBook(
+      bookKey: 'mihon-bad-page',
+      title: 'Bad page series',
+      seriesKey: '/series/bad-page',
+      pageBytes: <int>[1, 2, 3],
+      writePage: true,
+    );
+    // 2) 坏容器：pages.json 声明了页，但包里没有该页。
+    await insertBook(
+      bookKey: 'mihon-bad-container',
+      title: 'Bad container series',
+      seriesKey: '/series/bad-container',
+      pageBytes: null,
+      writePage: false,
+    );
+    // 3) 正常作品：封面失败不得影响同一轮里的其他作品。
+    await insertBook(
+      bookKey: 'mihon-good-cover',
+      title: 'Good cover series',
+      seriesKey: '/series/good-cover',
+      pageBytes: coverTestPageBytes(),
+      writePage: true,
+    );
+
+    final RebuildDownloadIndexReport report = await service(
+      coverService: firstPageCoverService(),
+      isRemoteCoverAvailable: (OnlineMangaLibraryEntry _) async => false,
+    ).run();
+
+    expect(report.coversFailed, 2);
+    expect(report.coversGenerated, 1);
+    expect(report.failed, 0, reason: '封面失败绝不能计为书目重建失败');
+    expect(report.booksRelinked, 3, reason: '坏封面不阻断重链');
+    expect(report.chaptersRelinked, 3);
+    expect(await cache.hasCover('mihon-bad-page'), isFalse);
+    expect(await cache.hasCover('mihon-bad-container'), isFalse);
+    expect(await cache.hasCover('mihon-good-cover'), isTrue);
+    expect(
+      await db.getMangaChapterDir('mihon-bad-page', '/c/1'),
+      isNotNull,
+      reason: '封面失败的书仍然完成重链',
+    );
+    expect(
+      await db.getMangaChapterDir('mihon-bad-container', '/c/1'),
+      isNotNull,
+    );
+    for (final String title in <String>[
+      'Bad page series',
+      'Bad container series',
+      'Good cover series',
+    ]) {
+      expect(
+        File(
+          p.join(downloadsRoot.path, 'Example Source', title, 'cover.jpg'),
+        ).existsSync(),
+        isFalse,
+        reason: '任何情况下都不往 Download library 写 cover.jpg',
+      );
+    }
+  });
+
+  test('重复运行幂等：第二次不再生成、不改缓存字节', () async {
+    const String bookKey = 'mihon-idempotent-cover';
+    final OnlineMangaLibraryEntry entry = entryFor(
+      chapters: const <OnlineMangaChapter>[
+        OnlineMangaChapter(
+          key: '/c/1',
+          name: 'Chapter 1',
+          raw: <String, Object?>{},
+        ),
+      ],
+    );
+    await insertOnlineBook(
+      bookKey: bookKey,
+      entry: entry,
+      extractDir: p.join(
+        oldContent.path,
+        'downloads',
+        'Example Source',
+        'Fixture series',
+      ),
+    );
+    await writeArchiveChapter(
+      mangaDir: Directory(
+        p.join(downloadsRoot.path, 'Example Source', 'Fixture series'),
+      ),
+      fileName: 'Chapter 1.cbz',
+      entry: entry,
+      chapter: entry.chapters.single,
+      pageBytes: coverTestPageBytes(),
+    );
+    final MangaShelfCoverCache cache = coverCache();
+    final RebuildDownloadIndexService rebuild = service(
+      coverService: firstPageCoverService(),
+      isRemoteCoverAvailable: (OnlineMangaLibraryEntry _) async => false,
+    );
+
+    final RebuildDownloadIndexReport first = await rebuild.run();
+    final List<int> firstBytes = cache.coverPathFor(bookKey).readAsBytesSync();
+    final String firstSentinel = (await cache.storedSourceUrl(bookKey))!;
+    final int revisionAfterFirst = MangaShelfCoverRevision.value;
+
+    final RebuildDownloadIndexReport second = await rebuild.run();
+
+    expect(first.coversGenerated, 1);
+    expect(second.coversGenerated, 0, reason: '第二次已经有缓存，不再生成');
+    expect(second.coversUpdated, 0);
+    expect(second.coversSkipped, 1);
+    expect(second.coversFailed, 0);
+    expect(cache.coverPathFor(bookKey).readAsBytesSync(), firstBytes);
+    expect(await cache.storedSourceUrl(bookKey), firstSentinel);
+    expect(
+      MangaShelfCoverRevision.value,
+      revisionAfterFirst,
+      reason: '没有新字节时不 bump revision，避免无意义的书架重算',
+    );
+  });
+
+  test('本地容器变化后重建更新生成封面并计入 updated', () async {
+    const String bookKey = 'mihon-updated-cover';
+    final OnlineMangaLibraryEntry entry = entryFor(
+      chapters: const <OnlineMangaChapter>[
+        OnlineMangaChapter(
+          key: '/c/1',
+          name: 'Chapter 1',
+          raw: <String, Object?>{},
+        ),
+      ],
+    );
+    await insertOnlineBook(
+      bookKey: bookKey,
+      entry: entry,
+      extractDir: p.join(
+        oldContent.path,
+        'downloads',
+        'Example Source',
+        'Fixture series',
+      ),
+    );
+    final Directory mangaDir = Directory(
+      p.join(downloadsRoot.path, 'Example Source', 'Fixture series'),
+    );
+    await writeArchiveChapter(
+      mangaDir: mangaDir,
+      fileName: 'Chapter 1.cbz',
+      entry: entry,
+      chapter: entry.chapters.single,
+      pageBytes: coverTestPageBytes(color: img.ColorRgb8(255, 0, 0)),
+    );
+    final MangaShelfCoverCache cache = coverCache();
+    final RebuildDownloadIndexService rebuild = service(
+      coverService: firstPageCoverService(),
+      isRemoteCoverAvailable: (OnlineMangaLibraryEntry _) async => false,
+    );
+
+    final RebuildDownloadIndexReport first = await rebuild.run();
+    expect(first.coversGenerated, 1);
+    final String firstSentinel = (await cache.storedSourceUrl(bookKey))!;
+    final int revisionAfterFirst = MangaShelfCoverRevision.value;
+
+    // 用户替换了 CBZ：容器 sentinel（大小 / mtime）变化。
+    await writeArchiveChapter(
+      mangaDir: mangaDir,
+      fileName: 'Chapter 1.cbz',
+      entry: entry,
+      chapter: entry.chapters.single,
+      pageBytes: coverTestPageBytes(
+        width: 500,
+        height: 700,
+        color: img.ColorRgb8(0, 0, 255),
+      ),
+    );
+
+    final RebuildDownloadIndexReport second = await rebuild.run();
+
+    expect(second.coversGenerated, 0);
+    expect(second.coversUpdated, 1);
+    expect(second.coversFailed, 0);
+    expect(
+      await cache.storedSourceUrl(bookKey),
+      isNot(firstSentinel),
+      reason: '容器变化后 sentinel 必须更新',
+    );
+    expect(
+      MangaShelfCoverRevision.value,
+      greaterThan(revisionAfterFirst),
+      reason: '更新生成封面同样让书架重算',
     );
   });
 }

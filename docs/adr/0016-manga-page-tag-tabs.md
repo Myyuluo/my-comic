@@ -36,3 +36,13 @@ status: accepted
 标签页签栏不再占用漫画页顶部 chrome 行的页签位：它移到「漫画」标题下方的二级浮动胶囊行，仍是「书架」固定最左、其后用户标签的单选页签栏。本 ADR 原文决定的全部语义与状态模型不变——单选、排他归属、多标签归属、数量、顺序与「管理标签」入口均按原文理解，只是呈现位置改到二级行。
 
 顶部 chrome 行的页签位改由**继续阅读胶囊**占据：圆形封面 + 主色「继续阅读」文字 + 主色圆形播放钮，没有继续阅读条目时隐藏；网格顶部旧的继续阅读大卡片随之移除。这次布局调整是用户在 2026-11-09 明确批准的 UI 改动（ADR 0008），实现复用现有浮动 chrome 与分段胶囊组件，不引入新的视觉语言。
+
+## Amendment 2026-11-11（manga-cover-and-shelf-polish）
+
+用户在 manga-cover-and-shelf-polish spec（ticket 05）中明确批准继续阅读胶囊增加第二行书名。这是对 2026-11-09 版「胶囊不显示书名」的修订，按 ADR 0008 记录如下：
+
+- 第二行显示当前作品的**显示标题**（`MediaSource.getDisplayTitleFromMediaItem`，含编辑弹窗写入的改名 override，不直读数据库原始标题）。
+- 书名使用小号灰黑色文字：MD3 取 `tokens.surfaces.onVariant`，Apple 设计系统取 `appleColorsOf(context).secondaryLabel`，字号为 `labelSmall`（约 11px），视觉重心仍留给主色「继续阅读」。
+- 书名宽度按本地化「继续阅读」的实际渲染宽度用 `TextPainter` 测量（同字阶、同文字缩放、同 locale），单行、超出显示省略号；完整书名保留在悬停 tooltip 中。胶囊整体仍是单一点击目标。
+- 桌面 MD3 顶部 chrome 行高度不变（56）。Apple 渲染路径的胶囊表面增高到 48 以容纳两行（默认 macOS 36 / iOS 44 放不下内部 40 高的胶囊段），chrome 行按内容自适应。这是 UI fidelity 的明确例外，仅为容纳新增书名行，不改变 Fushi 的组件、主题或整体布局。
+- 没有继续阅读候选时胶囊仍隐藏，不出现空书名行。其余书架视觉不变。

@@ -4,13 +4,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi/src/settings/settings_schema_system.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
-/// TODO-772: 设置页「应用版本」行曾把 versionName 与 Android versionCode 用
-/// semver 的 `+` build-metadata 硬拼，渲染出畸形的
-/// `0.11.1-debug.5613+1000561300`（`1000561300` 是 versionCode，不是乱码）。
-/// 修复后改成括号并列展示，且展示层不得再出现 `version+buildNumber` 形态。
+/// ticket 03：应用版本显示精确的 semver（如 `1.0.0`），不展示 build number。
+/// 历史上 build number 曾用 semver `+` 硬拼（`0.11.1-debug.5613+1000561300`），
+/// 后来改成括号并列（`0.11.1-debug.5613 (1000561300)`），现在按用户要求收回到
+/// 纯版本名——关于页只需要告诉用户装的是哪个版本。
 void main() {
   group('formatAppVersionDisplay (display layer)', () {
-    test('debug build: versionCode shown in parens, not semver-plus', () {
+    test('debug build: only the version name, no build number', () {
       final PackageInfo info = PackageInfo(
         appName: 'Fushi',
         packageName: 'app.fushi.reader',
@@ -22,13 +22,13 @@ void main() {
 
       expect(
         subtitle,
-        isNot('0.11.1-debug.5613+1000561300'),
-        reason: '不得再用 semver 的 + 把 versionCode 拼进 versionName',
+        isNot(contains('1000561300')),
+        reason: 'build number 不再进入关于页',
       );
-      expect(subtitle, '0.11.1-debug.5613 (1000561300)');
+      expect(subtitle, '0.11.1-debug.5613');
     });
 
-    test('stable build: same parenthesized shape', () {
+    test('stable build: exact version, no build number', () {
       final PackageInfo info = PackageInfo(
         appName: 'Fushi',
         packageName: 'app.fushi.reader',
@@ -36,7 +36,19 @@ void main() {
         buildNumber: '187',
       );
 
-      expect(formatAppVersionDisplay(info), '0.11.1 (187)');
+      expect(formatAppVersionDisplay(info), '0.11.1');
+    });
+
+    test('ticket 03: 1.0.0+1355 renders as exactly 1.0.0', () {
+      final PackageInfo info = PackageInfo(
+        appName: 'MyComic',
+        packageName: 'app.mycomic.reader',
+        version: '1.0.0',
+        buildNumber: '1355',
+      );
+
+      expect(formatAppVersionDisplay(info), '1.0.0');
+      expect(formatAppVersionDisplay(info), isNot(contains('1355')));
     });
   });
 
@@ -60,7 +72,7 @@ void main() {
           windowsInfo('2.2.1-debug.12215'),
           runningCodeVersion: '2.2.1-debug.12215',
         ),
-        '2.2.1-debug.12215 (12215)',
+        '2.2.1-debug.12215',
       );
     });
 
@@ -72,7 +84,7 @@ void main() {
           windowsInfo('2.2.1-debug.12216'),
           runningCodeVersion: '2.2.1-debug.12215',
         ),
-        '2.2.1-debug.12215 (12215) ≠ exe 2.2.1-debug.12216',
+        '2.2.1-debug.12215 ≠ exe 2.2.1-debug.12216',
       );
     });
 
@@ -89,7 +101,7 @@ void main() {
     test('没注入时退回 exe 版本资源，形状不变', () {
       expect(
         formatAppVersionDisplay(windowsInfo('2.2.1-debug.12215')),
-        '2.2.1-debug.12215 (12215)',
+        '2.2.1-debug.12215',
       );
     });
   });
@@ -101,7 +113,7 @@ void main() {
   /// 版本名（`build_version_define_guard_test.dart` 把这两条一起钉死）。
   ///
   /// 逐字比较会因此在**每一个** iOS debug/beta 包的关于页上常驻一句
-  /// `2.2.1-beta.30 (30) ≠ exe 2.2.1` —— 一个恒为真的「你的安装坏了」告警，正是
+  /// `2.2.1-beta.30 ≠ exe 2.2.1` —— 一个恒为真的「你的安装坏了」告警，正是
   /// BUG-1786 想避开的「警告退化成噪音」。判据必须吃下这层有损渲染。
   group('版本资源的有损渲染（Apple 只收数字段）', () {
     PackageInfo appleInfo(String version, String buildNumber) => PackageInfo(
@@ -117,7 +129,7 @@ void main() {
           appleInfo('2.2.1', '30'),
           runningCodeVersion: '2.2.1-beta.30',
         ),
-        '2.2.1-beta.30 (30)',
+        '2.2.1-beta.30',
       );
     });
 

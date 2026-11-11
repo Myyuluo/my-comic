@@ -42,7 +42,10 @@ void main() {
     sortOrder: 0,
   );
 
-  Future<void> seedSource(MangaOnlineSourceRow row) async {
+  Future<void> seedSource(
+    MangaOnlineSourceRow row, {
+    bool extensionEnabled = true,
+  }) async {
     await database.upsertMangaExtension(
       MangaExtensionsCompanion.insert(
         packageName: row.extensionPackage,
@@ -54,7 +57,7 @@ void main() {
         apkPath: 'extensions/${row.extensionPackage}.ext',
         apkSha256: 'apk-sha',
         signerSha256: 'signer-sha',
-        enabled: const Value<bool>(true),
+        enabled: Value<bool>(extensionEnabled),
         installedAt: 1,
       ),
     );
@@ -70,6 +73,12 @@ void main() {
           enabled: Value<bool>(row.enabled),
         ),
       ],
+    );
+    // replace 会保留已有源的设置；显式改启用位才能覆盖同一 Source 的旧状态。
+    await database.updateMangaOnlineSourceSettings(
+      extensionPackage: row.extensionPackage,
+      sourceId: row.sourceId,
+      enabled: row.enabled,
     );
   }
 
@@ -105,6 +114,27 @@ void main() {
     manager.dispose();
     await database.close();
     if (await root.exists()) await root.delete(recursive: true);
+  });
+
+  test('来源可用性要求扩展与在线源两侧都启用', () async {
+    await seedSource(sourceRow());
+    await manager.initialise();
+    final MihonLibraryAdapter adapter = MihonLibraryAdapter(manager);
+    expect(await adapter.isSourceAvailable(placeholderEntry()), isTrue);
+
+    await seedSource(sourceRow(enabled: false));
+    expect(
+      await adapter.isSourceAvailable(placeholderEntry()),
+      isFalse,
+      reason: '在线源停用等同于来源不可用',
+    );
+
+    await seedSource(sourceRow(), extensionEnabled: false);
+    expect(
+      await adapter.isSourceAvailable(placeholderEntry()),
+      isFalse,
+      reason: '扩展停用时即使源行仍为 enabled，来源也不可用',
+    );
   });
 
   test('来源名解析按数字 sourceId 回退到已启用的真实 Source', () async {
@@ -157,6 +187,27 @@ void main() {
       entry.encode(),
       identityBefore,
       reason: '运行时回退不得改写 extensionPackage / sourceId / bookKey 身份',
+    );
+  });
+
+  test('章节抓取失败：错误仍携带详情阶段拿到的系列与封面 URL', () async {
+    await seedSource(sourceRow());
+    await manager.initialise();
+    runtime.coverUrl = 'https://example.invalid/fresh-cover.jpg';
+    runtime.chaptersError = StateError('Cloudflare challenge');
+
+    await expectLater(
+      MihonLibraryAdapter(manager).refresh(placeholderEntry()),
+      throwsA(
+        isA<OnlineMangaUnavailable>()
+            .having((OnlineMangaUnavailable e) => e.stage, 'stage', 'chapters')
+            .having(
+              (OnlineMangaUnavailable e) => e.series?.coverUrl,
+              'series.coverUrl',
+              'https://example.invalid/fresh-cover.jpg',
+            ),
+      ),
+      reason: '详情已经成功时，章节失败不得让新的封面 URL 一起丢失（票 06）',
     );
   });
 
@@ -300,6 +351,11 @@ class _SourceRuntime extends Fake implements MihonRuntime {
   MihonSource? lastPagesSource;
   MihonSource? lastCoverSource;
 
+  String coverUrl = 'https://example.invalid/cover.jpg';
+
+  /// 非空 = `getChapters` 抛这个错误（模拟 Cloudflare / 站点抽风）。
+  Object? chaptersError;
+
   List<MihonChapter> chapters = const <MihonChapter>[
     MihonChapter(
       url: '/chapter/1',
@@ -320,7 +376,7 @@ class _SourceRuntime extends Fake implements MihonRuntime {
     return MihonManga(
       url: manga.url,
       title: 'Fixture series',
-      coverUrl: 'https://example.invalid/cover.jpg',
+      coverUrl: coverUrl,
     );
   }
 
@@ -330,7 +386,14 @@ class _SourceRuntime extends Fake implements MihonRuntime {
     MihonSource source,
     MihonManga manga, {
     List<MihonPreference> preferences = const <MihonPreference>[],
-  }) async => chapters;
+  }) async {
+    final Object? error = chaptersError;
+    if (error != null) {
+      // ignore: only_throw_errors — 测试要原样抛回编排好的错误对象。
+      throw error;
+    }
+    return chapters;
+  }
 
   @override
   Future<List<MihonPage>> getPages(

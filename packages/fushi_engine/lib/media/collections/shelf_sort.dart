@@ -18,9 +18,9 @@ enum ShelfSortMode {
 
   /// 从持久化 `.name` 解析；未知值（含旧版本残留）退默认 [recent]。
   static ShelfSortMode fromName(String name) => values.firstWhere(
-        (ShelfSortMode m) => m.name == name,
-        orElse: () => ShelfSortMode.recent,
-      );
+    (ShelfSortMode m) => m.name == name,
+    orElse: () => ShelfSortMode.recent,
+  );
 }
 
 /// 一个展示单元（散卡或合集行）参与库页排序的键。合集行取成员聚合：
@@ -157,22 +157,43 @@ T? mostRecentlyReadCandidate<T>(
 /// 「阅读状态」下拉的档位也是它（null = 全部）。
 enum ShelfReadStatus { unread, reading, finished }
 
+/// 书架条目的完成状态三态：调用方是否知道完成信息，以及已知时的值。
+///
+/// 旧调用方只拿得到进度（不知道 `completedAt`），保留纯进度回退；书架主链路
+/// 知道真实 `completedAt`（null = 未完成），此时进度到 100% 不应自动判读完
+/// （见 manga-shelf-download-ux 票 01）。
+enum ShelfCompletion {
+  /// 完成状态未知（旧记录 / 调用方没有完成信息），按纯进度回退。
+  unknown,
+
+  /// 已知未完成（`completedAt` 为 null）。
+  incomplete,
+
+  /// 已知完成（`completedAt` 非 null）。
+  complete,
+}
+
 /// 条目阅读状态的**唯一判据**，书架概览统计（[tallyShelfProgress]）与阅读状态
 /// 筛选共用：
-/// * [completed]（`EpubBooks.completedAt` 非 null，手动标记或读到末尾自动写入）
-///   → 读完，不受进度约束；
+/// * [ShelfCompletion.complete]（`EpubBooks.completedAt` 非 null，手动标记或
+///   读到末尾自动写入）→ 读完，不受进度约束；
 /// * `duration<=0`（无进度维度，如纯字幕书）→ 未读；
-/// * `position>=duration` → 读完；`0<position<duration` → 在读；其余未读。
+/// * [ShelfCompletion.unknown] 时 `position>=duration` → 读完；已知未完成时
+///   进度到 100% 仍按 `position>0` 判在读；
+/// * `0<position<duration` → 在读；其余未读。
 ShelfReadStatus classifyShelfReadStatus({
-  required bool completed,
+  required ShelfCompletion completion,
   required int position,
   required int duration,
 }) {
-  if (completed) return ShelfReadStatus.finished;
+  if (completion == ShelfCompletion.complete) return ShelfReadStatus.finished;
   if (duration <= 0 || position <= 0) return ShelfReadStatus.unread;
-  return position >= duration
-      ? ShelfReadStatus.finished
-      : ShelfReadStatus.reading;
+  if (position >= duration) {
+    return completion == ShelfCompletion.unknown
+        ? ShelfReadStatus.finished
+        : ShelfReadStatus.reading;
+  }
+  return ShelfReadStatus.reading;
 }
 
 /// 书架概览统计（在读数 / 读完数 / 在读候选列表）。
@@ -198,23 +219,22 @@ class ShelfProgressTally<T> {
   final List<T> inProgress;
 }
 
-/// [isCompleted]（可选）= 该书是否被显式标记「读完」（EpubBooks.completedAt 非
-/// null，用户手动标记或读到末尾自动写入）。命中即计读完、不进在读候选，且**不受
-/// 进度约束**——跳过后记/附录、进度停在 99% 的手动标记书也能计入 Completed，正是
-/// 「读到最后一字才算完成」这一临时派生判据无法覆盖的场景。未传则退回纯进度派生
-/// （旧行为，向后兼容）。
+/// [completionOf]（可选）= 该书的 [ShelfCompletion]。传了 = 调用方知道每本书
+/// 的完成信息：完成计读完且**不受进度约束**（跳过后记/附录、进度停在 99% 的
+/// 手动标记书也计入 Completed）；未完成时进度到 100% 仍按在读算。未传则退回
+/// 纯进度派生（旧行为，向后兼容）。
 ShelfProgressTally<T> tallyShelfProgress<T>(
   Iterable<T> epubBackedBooks,
   int Function(T) position,
   int Function(T) duration, {
-  bool Function(T)? isCompleted,
+  ShelfCompletion Function(T)? completionOf,
 }) {
   int reading = 0;
   int finished = 0;
   final List<T> inProgress = <T>[];
   for (final T book in epubBackedBooks) {
     switch (classifyShelfReadStatus(
-      completed: isCompleted != null && isCompleted(book),
+      completion: completionOf?.call(book) ?? ShelfCompletion.unknown,
       position: position(book),
       duration: duration(book),
     )) {
