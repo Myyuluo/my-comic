@@ -5167,7 +5167,6 @@
   "options_hide": "查詞時隱藏",
   "options_language": "語言設定",
   "options_show": "查詞時顯示",
-  "options_website": "瀏覽官方網站",
   "overlay_lookup_independent_size": "彈出查詞窗獨立尺寸",
   "overlay_lookup_independent_size_hint": "讓 app 外彈出查詞窗使用獨立最大尺寸，而非跟隨 app 內查詞彈窗",
   "overlay_lookup_max_height": "彈出查詞窗最大高度",

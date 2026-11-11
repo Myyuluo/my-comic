@@ -58,15 +58,19 @@ void main() {
     expect(ids, contains('system.github'));
   });
 
-  test('system.github still opens the repository, not removed links', () async {
-    final SettingsActionItem github = generalItems()
-        .whereType<SettingsActionItem>()
-        .firstWhere((SettingsActionItem i) => i.id == 'system.github');
+  test(
+    'system.github opens the my-comic fork, not the upstream repository',
+    () async {
+      final SettingsActionItem github = generalItems()
+          .whereType<SettingsActionItem>()
+          .firstWhere((SettingsActionItem i) => i.id == 'system.github');
 
-    await github.onTap(_StubSettingsContext());
+      await github.onTap(_StubSettingsContext());
 
-    expect(launchedUrls, <String>['https://github.com/hajisensai/fushi']);
-  });
+      expect(launchedUrls, <String>[kMyComicRepositoryUrl]);
+      expect(kMyComicRepositoryUrl, 'https://github.com/Myyuluo/my-comic');
+    },
+  );
 
   test('openOfficialDownloadPage 落在下载页，而不是首页', () async {
     expect(await openOfficialDownloadPage(), isTrue);

@@ -5167,7 +5167,6 @@
   "options_hide": "検索時に非表示",
   "options_language": "言語設定",
   "options_show": "検索時に表示",
-  "options_website": "公式サイトを開く",
   "overlay_lookup_independent_size": "ポップアウト辞書の個別サイズ",
   "overlay_lookup_independent_size_hint": "アプリ外ポップアウト辞書ウィンドウにアプリ内ポップアップとは別の最大サイズを設定",
   "overlay_lookup_max_height": "ポップアウト辞書の最大高さ",

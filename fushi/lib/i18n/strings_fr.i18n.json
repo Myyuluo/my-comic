@@ -5167,7 +5167,6 @@
   "options_hide": "Masquer lors de la recherche",
   "options_language": "Paramètres de langue",
   "options_show": "Afficher lors de la recherche",
-  "options_website": "Visiter le site officiel",
   "overlay_lookup_independent_size": "Taille séparée pour la recherche pop-out",
   "overlay_lookup_independent_size_hint": "Donner à la fenêtre de recherche pop-out externe sa propre taille maximale au lieu de suivre le pop-up de l'application",
   "overlay_lookup_max_height": "Hauteur max de la recherche pop-out",

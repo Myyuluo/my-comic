@@ -5167,7 +5167,6 @@
   "options_hide": "Bei Suche ausblenden",
   "options_language": "Spracheinstellungen",
   "options_show": "Bei Suche anzeigen",
-  "options_website": "Offizielle Website besuchen",
   "overlay_lookup_independent_size": "Eigene Größe für externes Nachschlage-Fenster",
   "overlay_lookup_independent_size_hint": "Dem externen Nachschlage-Fenster eine eigene Maximalgröße geben, anstatt dem In-App-Popup zu folgen",
   "overlay_lookup_max_height": "Max. Höhe des externen Nachschlage-Fensters",

@@ -255,10 +255,7 @@ SettingsDestination buildSystemDestination() {
             icon: Icons.public_outlined,
             cli: const SettingsCliAction.tap(),
             onTap: (_) async {
-              await launchUrl(
-                Uri.parse('https://github.com/hajisensai/fushi'),
-                mode: LaunchMode.externalApplication,
-              );
+              await openMyComicRepository();
             },
           ),
         ],

@@ -5167,7 +5167,6 @@
   "options_hide": "검색 시 숨기기",
   "options_language": "언어 설정",
   "options_show": "검색 시 표시",
-  "options_website": "공식 웹사이트 방문",
   "overlay_lookup_independent_size": "팝아웃 검색 별도 크기",
   "overlay_lookup_independent_size_hint": "앱 외부 팝아웃 검색 창에 앱 내 팝업을 따르지 않는 별도의 최대 크기를 지정합니다",
   "overlay_lookup_max_height": "팝아웃 검색 최대 높이",

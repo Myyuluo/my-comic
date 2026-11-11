@@ -5167,7 +5167,6 @@
   "options_hide": "Ocultar en búsqueda",
   "options_language": "Configuración de idioma",
   "options_show": "Mostrar en búsqueda",
-  "options_website": "Visitar el sitio web oficial",
   "overlay_lookup_independent_size": "Tamaño separado para búsqueda emergente",
   "overlay_lookup_independent_size_hint": "Dale a la ventana de búsqueda emergente externa su propio tamaño máximo en lugar de seguir la ventana emergente de la app",
   "overlay_lookup_max_height": "Altura máxima de búsqueda emergente",

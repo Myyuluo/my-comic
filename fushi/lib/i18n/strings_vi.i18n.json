@@ -5167,7 +5167,6 @@
   "options_hide": "Ẩn khi tra cứu",
   "options_language": "Cài đặt ngôn ngữ",
   "options_show": "Hiện khi tra cứu",
-  "options_website": "Truy cập trang web chính thức",
   "overlay_lookup_independent_size": "Kích thước riêng cho cửa sổ tra cứu nổi",
   "overlay_lookup_independent_size_hint": "Cung cấp kích thước tối đa riêng cho cửa sổ tra cứu nổi bên ngoài ứng dụng thay vì theo cửa sổ popup trong ứng dụng",
   "overlay_lookup_max_height": "Chiều cao tối đa cửa sổ tra cứu nổi",

@@ -5167,7 +5167,6 @@
   "options_hide": "Nascondi nella ricerca",
   "options_language": "Impostazioni lingua",
   "options_show": "Mostra nella ricerca",
-  "options_website": "Visita il sito ufficiale",
   "overlay_lookup_independent_size": "Dimensione separata per ricerca pop-out",
   "overlay_lookup_independent_size_hint": "Dà alla finestra di ricerca pop-out esterna all'app una dimensione massima propria invece di seguire il popup nell'app",
   "overlay_lookup_max_height": "Altezza max ricerca pop-out",

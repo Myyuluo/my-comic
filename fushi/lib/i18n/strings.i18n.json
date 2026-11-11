@@ -5167,7 +5167,6 @@
   "options_hide": "Hide in lookup",
   "options_language": "Language settings",
   "options_show": "Show in lookup",
-  "options_website": "Visit the official website",
   "overlay_lookup_independent_size": "Separate size for pop-out lookup",
   "overlay_lookup_independent_size_hint": "Give the app-external pop-out lookup window its own max size instead of following the in-app popup",
   "overlay_lookup_max_height": "Pop-out lookup max height",
