@@ -13,8 +13,6 @@
 #include <flutter_inappwebview_windows/flutter_inappwebview_windows_plugin_c_api.h>
 #include <gamepads_windows/gamepads_windows_plugin_c_api.h>
 #include <hotkey_manager_windows/hotkey_manager_windows_plugin_c_api.h>
-#include <media_kit_video/media_kit_video_plugin_c_api.h>
-#include <record_windows/record_windows_plugin_c_api.h>
 #include <screen_retriever_windows/screen_retriever_windows_plugin_c_api.h>
 #include <share_plus/share_plus_windows_plugin_c_api.h>
 #include <sqlite3_flutter_libs/sqlite3_flutter_libs_plugin.h>
@@ -36,10 +34,6 @@ void RegisterPlugins(flutter::PluginRegistry* registry) {
       registry->GetRegistrarForPlugin("GamepadsWindowsPluginCApi"));
   HotkeyManagerWindowsPluginCApiRegisterWithRegistrar(
       registry->GetRegistrarForPlugin("HotkeyManagerWindowsPluginCApi"));
-  MediaKitVideoPluginCApiRegisterWithRegistrar(
-      registry->GetRegistrarForPlugin("MediaKitVideoPluginCApi"));
-  RecordWindowsPluginCApiRegisterWithRegistrar(
-      registry->GetRegistrarForPlugin("RecordWindowsPluginCApi"));
   ScreenRetrieverWindowsPluginCApiRegisterWithRegistrar(
       registry->GetRegistrarForPlugin("ScreenRetrieverWindowsPluginCApi"));
   SharePlusWindowsPluginCApiRegisterWithRegistrar(

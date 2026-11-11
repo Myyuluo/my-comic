@@ -1,14 +1,10 @@
 import 'dart:async';
-import 'dart:convert';
-import 'dart:math';
 
 import 'package:flutter/services.dart';
 
 import 'package:fushi/src/media/manga/mihon/mihon_bridge_runtime.dart';
 import 'package:fushi/src/media/manga/mihon/mihon_models.dart';
 import 'package:fushi/src/media/manga/mihon/mihon_runtime.dart';
-import 'package:fushi/src/media/manga/mihon/mihon_proxy_policy_server.dart';
-import 'package:fushi/src/utils/net/app_native_proxy.dart';
 
 class AndroidMihonRuntime extends MihonBridgeRuntime
     implements
@@ -20,33 +16,6 @@ class AndroidMihonRuntime extends MihonBridgeRuntime
 
   final MethodChannel _channel;
   int _imageRequestSequence = 0;
-  MihonProxyPolicyServer? _proxyPolicy;
-  Future<void>? _proxyConfiguration;
-
-  Future<void> _configureProxyPolicy() async {
-    final Random random = Random.secure();
-    final String token = base64UrlEncode(
-      List<int>.generate(32, (_) => random.nextInt(256)),
-    );
-    final MihonProxyPolicyServer server = await MihonProxyPolicyServer.start(
-      token,
-    );
-    try {
-      final Uri relay = await ensureAppChallengeProxyEndpoint();
-      await _channel
-          .invokeMethod<void>('configureProxyPolicy', <String, Object?>{
-            'port': server.port,
-            'token': token,
-            'challengeProxyEndpoint': relay.toString(),
-          });
-      _proxyPolicy = server;
-    } on Object {
-      await server.close();
-      _proxyConfiguration = null;
-      rethrow;
-    }
-  }
-
   @override
   Future<void> solveCloudflare(Uri uri, {String? userAgent}) =>
       _invokeVoid('solveCloudflare', <String, Object?>{
@@ -200,14 +169,7 @@ class AndroidMihonRuntime extends MihonBridgeRuntime
 
   @override
   Future<void> dispose() async {
-    try {
-      await _proxyConfiguration;
-      await _invokeVoid('dispose', const <String, Object?>{});
-    } finally {
-      await _proxyPolicy?.close();
-      _proxyPolicy = null;
-      _proxyConfiguration = null;
-    }
+    await _invokeVoid('dispose', const <String, Object?>{});
   }
 
   Future<Map<String, Object?>> _invokeMap(
@@ -233,14 +195,6 @@ class AndroidMihonRuntime extends MihonBridgeRuntime
 
   Future<T?> _invoke<T>(String method, Map<String, Object?> arguments) async {
     try {
-      if (const <String>{
-        'invoke',
-        'fetchImage',
-        'fetchSourceImage',
-        'solveCloudflare',
-      }.contains(method)) {
-        await (_proxyConfiguration ??= _configureProxyPolicy());
-      }
       // 宿主自己的 OkHttp 给每次请求 2 分钟（`NetworkHelper.kt` 的 `callTimeout`），
       // 但宿主线程真卡死（扩展在 `runBlocking` 里等一个永远不来的响应、Cloudflare
       // WebView 没人关）时 channel 的 Future 永远不 complete：页面就无限转圈，连失败

@@ -5,7 +5,7 @@ import 'dart:typed_data';
 import 'package:archive/archive.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:fushi_engine/epub/epub_storage.dart';
+import 'package:fushi_engine/media/manga/book_storage.dart';
 import 'package:fushi_engine/media/manga/manga_archive_importer.dart';
 import 'package:fushi_engine/media/manga/manga_storage.dart';
 import 'package:fushi_engine/media/manga/mokuro_payload.dart';

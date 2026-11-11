@@ -27,7 +27,6 @@ import 'package:fushi/src/utils/components/fushi_material_components.dart'
     show FushiTagChip;
 import 'package:fushi/src/utils/components/shelf_card_widgets.dart'
     show CoverProgressStrip;
-import 'package:fushi_audio/fushi_audio.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_metadata.dart';
 
@@ -204,9 +203,6 @@ void main() {
           appProvider.overrideWith((ref) => appModel),
           fushiBooksProvider.overrideWith(
             (ref, language) => Future<List<MediaItem>>.value(items),
-          ),
-          srtBooksProvider.overrideWith(
-            (ref) => Future<List<SrtBook>>.value(const <SrtBook>[]),
           ),
         ],
         child: TranslationProvider(

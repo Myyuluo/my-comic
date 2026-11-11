@@ -25,7 +25,7 @@ import 'package:fushi/src/utils/components/section_visibility.dart';
 import 'package:fushi/src/utils/fushi_icons.dart';
 import 'package:fushi/utils.dart';
 import 'package:fushi_core/fushi_core.dart';
-import 'package:fushi_engine/media/collections/shelf_sort.dart'
+import 'package:fushi_engine/media/manga/shelf_sort.dart'
     show naturalCompare;
 import 'package:fushi_engine/media/manga/local_source/local_source_cover.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_layout.dart';

@@ -14,9 +14,9 @@ import 'package:fushi/src/media/media_item.dart';
 import 'package:fushi/src/media/media_source.dart';
 import 'package:fushi/src/models/preferences_repository.dart';
 import 'package:fushi/src/platform/platform_providers.dart';
-import 'package:fushi_audio/fushi_audio.dart';
+import 'package:fushi_engine/media/manga/bookmark_repository.dart';
 import 'package:fushi_core/fushi_core.dart';
-import 'package:fushi_engine/epub/epub_storage.dart';
+import 'package:fushi_engine/media/manga/book_storage.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:path/path.dart' as p;
 

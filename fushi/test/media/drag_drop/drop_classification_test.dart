@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fushi/src/media/drag_drop/drop_classification.dart';
 import 'package:fushi_engine/media/media_extensions.dart';
-import 'package:fushi_audio/fushi_audio.dart';
 import 'package:path/path.dart' as p;
 
 void main() {
@@ -195,21 +194,6 @@ void main() {
     );
   });
 
-  test(
-      'kDragAudioExtensions stays in sync with AudiobookStorage.audioExtensions',
-      () {
-    // AudiobookStorage 用带点小写扩展名；本表不带点。规整后比较。
-    final Set<String> storage = AudiobookStorage.audioExtensions
-        .map((String e) => e.replaceFirst('.', ''))
-        .toSet();
-    expect(
-      kDragAudioExtensions,
-      equals(storage),
-      reason:
-          '音频扩展名漂移：更新 kDragAudioExtensions 与 AudiobookStorage.audioExtensions 保持一致',
-    );
-  });
-
   group('Blu-ray discs (drag a disc in, not a fragment)', () {
     // 按宿主平台拼路径：盘根判据走 package:path，Linux CI 与 Windows 本机都要成立。
     final String root = p.join('video', 'Kaguya');
@@ -283,15 +267,6 @@ void main() {
   });
 
   group('audio in the video library (media_extensions.dart)', () {
-    test('kAudioExtensions = AudiobookStorage.audioExtensions minus .mp4', () {
-      // media_extensions.dart 零依赖、不能引用 fushi_audio，只能靠守卫钉同步。
-      // `.mp4` 首先是视频容器，归 kVideoExtensions。
-      expect(
-        kAudioExtensions,
-        equals(AudiobookStorage.audioExtensions.difference(<String>{'.mp4'})),
-      );
-    });
-
     test('audio and video sets are disjoint; library set is their union', () {
       expect(kAudioExtensions.intersection(kVideoExtensions), isEmpty);
       expect(kAudioExtensions.intersection(kPlaylistManifestExtensions),

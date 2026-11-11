@@ -1,6 +1,6 @@
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:fushi_dictionary/fushi_dictionary.dart';
+import 'package:fushi/src/models/fushi_text_selection.dart';
 
 void main() {
   group('FushiTextSelection', () {

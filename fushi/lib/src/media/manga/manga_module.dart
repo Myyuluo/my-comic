@@ -4,7 +4,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:path/path.dart' as p;
 
 import 'package:fushi_core/fushi_core.dart';
-import 'package:fushi_engine/epub/book_title_conflict.dart';
+import 'package:fushi_engine/media/manga/book_title_conflict.dart';
 import 'package:fushi_engine/media/manga/manga_archive_importer.dart';
 import 'package:fushi/src/media/manga/import/manga_folder_batch.dart';
 import 'package:fushi_engine/media/manga/manga_importer.dart';

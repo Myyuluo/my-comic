@@ -19,9 +19,9 @@ import 'package:fushi/src/models/preferences_repository.dart';
 import 'package:fushi/src/pages/implementations/manga_tag_tabs.dart';
 import 'package:fushi/src/platform/platform_providers.dart';
 import 'package:fushi/src/media/tags/tag_picker_sheet.dart' show TagPickerPanel;
-import 'package:fushi_audio/fushi_audio.dart';
+import 'package:fushi_engine/media/manga/bookmark_repository.dart';
 import 'package:fushi_core/fushi_core.dart';
-import 'package:fushi_engine/epub/epub_storage.dart';
+import 'package:fushi_engine/media/manga/book_storage.dart';
 
 import '../../helpers/pump_until.dart';
 import '../../helpers/test_platform_services.dart';

@@ -4,7 +4,7 @@ import 'dart:io';
 import 'package:archive/archive_io.dart';
 import 'package:drift/native.dart';
 import 'package:fushi_core/fushi_core.dart';
-import 'package:fushi_engine/epub/epub_storage.dart';
+import 'package:fushi_engine/media/manga/book_storage.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_layout.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_library.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_reader.dart';

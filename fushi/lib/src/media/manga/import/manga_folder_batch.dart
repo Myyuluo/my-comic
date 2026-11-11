@@ -1,11 +1,11 @@
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
-import 'package:fushi_engine/media/collections/shelf_sort.dart' show naturalCompare;
+import 'package:fushi_engine/media/manga/shelf_sort.dart' show naturalCompare;
 import 'package:fushi_engine/media/manga/page_enumeration.dart';
 
 import 'package:fushi_core/fushi_core.dart';
-import 'package:fushi_engine/epub/book_title_conflict.dart';
+import 'package:fushi_engine/media/manga/book_title_conflict.dart';
 import 'package:fushi/src/media/import/import_carrier.dart';
 import 'package:fushi_engine/media/manga/manga_archive_importer.dart';
 import 'package:fushi_engine/media/manga/manga_importer.dart';

@@ -48,38 +48,18 @@ import '../helpers/source_guard.dart';
 const List<String> kScanRoots = <String>[
   'fushi/lib',
   'packages/fushi_engine/lib',
-  'packages/fushi_server/lib',
   'packages/fushi_core/lib',
-  'packages/fushi_dictionary/lib',
-  'packages/fushi_anki/lib',
-  'packages/fushi_audio/lib',
   'packages/fushi_platform/lib',
-  'packages/fushi_torrent/lib',
 ];
 
 /// **装配点自身**：它们的存在意义就是「建一个配好出口的 client」，当然要碰裸构造。
 const Map<String, String> kOutboundAssemblyPoints = <String, String>{
   'packages/fushi_engine/lib/utils/net/app_http.dart':
       '统一装配点本体：createAppHttpClient / createAppHttpIoClient / createAppDio',
-  'fushi/lib/src/utils/net/dictionary_dio.dart':
-      '词典链路的 app 侧接线（BUG-1493）：把包内 dictionaryDioFactory 接到 applyAppProxy',
-  'fushi/lib/src/sync/sync_http.dart':
-      '云同步共享 client 的装配点（BUG-1348）：60s 连接超时 + applyAppProxy',
-  'packages/fushi_engine/lib/sync/tls/fushi_pinning_http.dart':
-      '互联对端的证书指纹钉扎 client 装配点（自签证书，目标恒为局域网 peer）',
   'fushi/lib/src/utils/misc/update_checker_net.dart':
       '更新检查：自建 HttpClient 后立刻 applyAppProxy（每候选镜像单独建，需现场异步解析）',
   'fushi/lib/src/utils/misc/update_checker_release.dart':
       '更新包下载：同上，逐镜像建 client + applyAppProxy',
-  'packages/fushi_anki/lib/src/anki_remote_media_http.dart':
-      '制卡远程媒体的包内工厂钩子（BUG-1498）：未接线时回退裸 HttpClient，行为与接线前等价',
-  'packages/fushi_anki/lib/src/ankiconnect/ankiconnect_installer.dart':
-      '代装 AnkiConnect 时从 ankiweb.net 下插件包的包内工厂钩子（同 BUG-1498 范式）：'
-          'app 侧经 installAnkiAddonDownloadHttpClientFactory 接线，未接线时回退裸 '
-          'http.Client()。注意与同包 ankiconnect_service.dart 方向相反——那条打 '
-          'localhost 必须直连，这条打公网必须能走代理。',
-  'packages/fushi_dictionary/lib/src/formats/dictionary_downloader.dart':
-      '词典链路的包内工厂钩子（BUG-1493）：createDictionaryDio 里 `?? Dio()` 的未接线回退',
 };
 
 /// **合法裸出站**：目标是本机 / 局域网 / 用户自建服务，**故意不接代理**。
@@ -88,66 +68,13 @@ const Map<String, String> kOutboundAssemblyPoints = <String, String>{
 /// 真的打不到公网，否则应该改用 `createAppHttpIoClient()`。
 const Map<String, String> kBareOutboundRegistry = <String, String>{
   // --- 本机回环 ---
-  'packages/fushi_anki/lib/src/ankiconnect/ankiconnect_service.dart':
-      'AnkiConnect JSON-RPC，默认 localhost:8765（用户可改成局域网另一台机）。'
-          '它自带 connectionFactory 做连接期超时；走 HTTP 代理会让制卡整条链路当场失效。',
   'fushi/lib/src/media/manga/mihon/desktop_mihon_runtime.dart':
       'Mihon 桌面 sidecar：控制面与封面图都打本进程拉起的 127.0.0.1:<port> 认证代理端点。',
-  'fushi/lib/src/utils/net/ffmpeg_relay_route.dart':
-      '制卡预取 HLS master：findProxy 钉死为本进程的原生中继（127.0.0.1 带凭据），'
-          '与 ffmpeg 读同一条路径。真正出网的是中继自己的 appNativeProxyUpstreamClientFactory'
-          '（已走 app 代理）；这里再套用户代理会把本机中继请求也送进代理，取不到。',
-  'packages/fushi_engine/lib/media/torrent/qbittorrent_client.dart':
-      '外接 qBittorrent WebUI，默认 127.0.0.1:8080（用户可改成局域网 NAS）。',
-  'packages/fushi_engine/lib/media/torrent/torznab_client.dart':
-      '用户自配 indexer，实践中多为自建/局域网/loopback（源码里另有 loopback 明文放行判据）。',
-  'packages/fushi_engine/lib/sync/fushi_sync_server/video.part.dart':
-      '互联 host 把蓝光加密分段转给本进程的 AACS 解密回环（127.0.0.1:<port>，持有即可读'
-          '明文的 bearer URL，BUG-3236）；走用户代理会把这条本机请求和它的能力 URL 一起送出去。',
-  'packages/fushi_engine/lib/tts/local/gpt_sovits_local_server.dart':
-      '本机 GPT-SoVITS 探活：只打本进程拉起的 http://127.0.0.1:<port>/openapi.json；'
-          '走用户代理会把回环请求送进代理，服务永远判不就绪、朗读自动拉起整条失效。',
-  'packages/fushi_engine/lib/tts/local/irodori_local_server.dart':
-      '本机 Irodori-TTS-Server 探活：只打本进程拉起的 http://127.0.0.1:<port>/health 与 '
-          '/v1/models；走用户代理会把回环请求送进代理，服务永远判不就绪。',
-  'packages/fushi_server/lib/src/ctl/admin_client.dart':
-      '`fushi_server ctl` 打本机正在运行的 serve 管理 API：通配绑定改写成 127.0.0.1，'
-          'TLS 按本地证书指纹钉死；走用户代理会把带 admin_token 的本机请求送进代理。',
-  // --- 局域网互联（peer 发现 / 配对 / 直连） ---
-  'fushi/lib/src/sync/interconnect_post_transport.dart':
-      '互联 POST 传输：目标恒为已配对的局域网 peer。',
-  'fushi/lib/src/sync/interconnect_sync_backend.dart':
-      '互联同步 / 远程库 / 远程视频流：pinned client 之外的回退分支，目标仍是局域网 peer。',
-  'fushi/lib/src/sync/interconnect_manga_ocr_client.dart':
-      '远程 manga-OCR：把 OCR 卸载到局域网另一台机，经代理等于把内网请求发到公网出口。',
-  'fushi/lib/src/sync/interconnect_job_client.dart':
-      '互联通用任务（ASR 等）客户端：目标恒为已配对 host，与 manga-OCR 客户端同一理由。',
-  'fushi/lib/src/sync/interconnect_download_client.dart':
-      '互联代下载客户端：目标恒为已配对 host，与 manga-OCR 客户端同一理由。',
-  'fushi/lib/src/sync/interconnect_subscription_client.dart':
-      '互联内容订阅客户端：目标恒为已配对 host，与 manga-OCR 客户端同一理由。',
-  'fushi/lib/src/sync/interconnect_assistant_client.dart':
-      '互联 AI 助手会话客户端（手机把一句话交给电脑办）：目标恒为已配对 host，与 manga-OCR 客户端同一理由。',
-  'packages/fushi_server/lib/src/commands/sync_commands.dart':
-      '`fushi_server sync push|pull` 聚合同步：目标恒为用户给出的已配对互联 host'
-          '（https 走指纹钉扎，http 需显式允许），与 interconnect_sync_backend 同一理由。',
-  'packages/fushi_engine/lib/sync/pairing/fushi_ping_client.dart':
-      '配对 peer 存活 ping：目标是 mDNS 发现出来的局域网地址。',
-  'fushi/lib/src/sync/interconnect_peer_addresses.dart':
-      '互联地址学习（/api/host/addresses）：目标恒为已配对 host 的某条地址（LAN / IPv6 / '
-          '组网 / P2P 本地转发口 127.0.0.1），与 manga-OCR 客户端同一理由；隧道口走代理必然取不到。',
-  'fushi/lib/src/models/app_model.dart':
-      '远端查词 / 远端发音共用的 keep-alive client（TODO-744）：目标恒为已配对的局域网 peer。',
-  'fushi/lib/src/sync/video_remote_client.dart':
-      '手机遥控电脑视频（快照 / 事件流 / 控制命令）：目标恒为已配对 host，与 manga-OCR 客户端同一理由。',
-  'fushi/lib/src/pages/implementations/video_remote_page.dart':
-      '手机遥控页的词典资源 client（样式 / 媒体 / 发音由电脑端提供）：目标恒为已配对 host，'
-          '与 app_model 的远端查词 client 同一理由。',
 };
 
 /// 登记在案的文件总数（装配点 + 豁免）。**这是自校验用的哨兵**：改清单必须同步改这个数，
 /// 光靠「新增未登记即红」挡不住「悄悄多登记一条」。
-const int kRegisteredOutboundFileCount = 31;
+const int kRegisteredOutboundFileCount = 4;
 
 /// 裸出站构造的判据。
 ///
@@ -228,7 +155,7 @@ Set<String> _matchedPatternsIn(String source) {
 void main() {
   test('扫描规模哨兵：7 个源码根确实被枚举到了', () {
     expectScanScale(scannedDartFiles().length,
-        what: '本仓自有 lib/ 下的 .dart', atLeast: 900, measured: 1136);
+        what: '本仓自有 lib/ 下的 .dart', atLeast: 600, measured: 751);
   });
 
   test('裸出站构造必须已登记（装配点 or 豁免清单）', () {

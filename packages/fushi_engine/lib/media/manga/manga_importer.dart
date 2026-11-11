@@ -6,14 +6,14 @@ import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 
 import 'package:fushi_core/fushi_core.dart';
-import 'package:fushi_engine/epub/book_title_conflict.dart';
+import 'package:fushi_engine/media/manga/book_title_conflict.dart';
 import 'package:fushi_engine/media/manga/import/image_size_probe.dart';
 import 'package:fushi_engine/media/manga/manga_storage.dart';
 import 'package:fushi_engine/media/manga/mokuro_payload.dart';
 import 'package:fushi_engine/media/manga/page_enumeration.dart';
 
 import 'package:fushi_engine/media/media_extensions.dart';
-import 'package:fushi_engine/sync/ttu_filename.dart';
+import 'package:fushi_engine/utils/misc/ttu_filename.dart';
 import 'package:fushi_engine/utils/misc/fushi_time_format.dart';
 import 'package:fushi_engine/foundation/engine_log.dart';
 

@@ -65,7 +65,6 @@ import 'package:fushi_core/fushi_core.dart';
 String displayTitleForBook({
   MediaItem? item,
   String? bookKey,
-  String? srtUid,
   required String rawTitle,
 }) {
   final ReaderFushiSource source = ReaderFushiSource.instance;
@@ -76,9 +75,6 @@ String displayTitleForBook({
   }
   if (bookKey != null && bookKey.isNotEmpty) {
     return source.overrideTitleForBookKey(bookKey) ?? rawTitle;
-  }
-  if (srtUid != null && srtUid.isNotEmpty) {
-    return source.overrideTitleForSrtUid(srtUid) ?? rawTitle;
   }
   return rawTitle;
 }

@@ -1,5 +1,4 @@
 import 'package:fushi/src/utils/components/glass/fushi_icon.dart';
-import 'package:fushi_dictionary/fushi_dictionary.dart';
 import 'dart:async' show StreamSubscription, Timer, unawaited;
 import 'dart:io';
 
@@ -12,12 +11,8 @@ import 'package:transparent_image/transparent_image.dart';
 import 'package:fushi/src/shortcuts/context_menu_trigger.dart';
 import 'package:fushi/media.dart';
 import 'package:fushi/pages.dart';
-import 'package:fushi_audio/fushi_audio.dart';
 import 'package:fushi/src/epub/book_file_location.dart';
-import 'package:fushi_engine/epub/epub_importer.dart';
 
-import 'package:fushi_engine/sync/epub_repackage.dart';
-import 'package:fushi/src/media/import/srt_book_reimport.dart';
 import 'package:fushi/src/media/drag_drop/card_drop_registry.dart';
 import 'package:fushi/src/media/drag_drop/drop_classification.dart';
 import 'package:fushi/src/media/drag_drop/drop_decision.dart';
@@ -62,6 +57,8 @@ import 'package:fushi/src/utils/components/fushi_floating_chrome.dart'
         FushiFloatingToolbarSurface;
 import 'package:fushi/src/utils/components/fushi_floating_toolbar.dart';
 import 'package:fushi_core/fushi_core.dart';
+import 'package:fushi_engine/media/manga/reader_language.dart';
+import 'package:fushi_engine/media/manga/reader_position.dart';
 // BUG-813：构造 ReaderPositionsCompanion 回填下载书的阅读进度需要 drift 的 Value（
 // fushi_core 未再导出它）。
 import 'package:drift/drift.dart' show Value;
@@ -71,7 +68,7 @@ import 'package:fushi/src/models/preferences_repository.dart';
 import 'package:fushi/src/media/library_progress_reset.dart';
 import 'package:fushi/src/pages/implementations/library_progress_reset_dialog.dart';
 import 'package:fushi/src/media/media_cover_service.dart';
-import 'package:fushi_engine/media/collections/shelf_sort.dart';
+import 'package:fushi_engine/media/manga/shelf_sort.dart';
 import 'package:fushi/src/media/media_search_text.dart';
 import 'package:fushi/src/media/shelf_card_layout.dart';
 import 'package:fushi/src/media/selection/media_selection_controller.dart';
@@ -82,12 +79,8 @@ import 'package:fushi/src/focus/fushi_focus_controller.dart';
 import 'package:fushi/src/focus/fushi_focus_target.dart';
 import 'package:fushi/src/shortcuts/gamepad_service.dart'
     show GamepadLongPressActions;
-import 'package:fushi_engine/sync/deletion_propagation.dart';
 
-import 'package:fushi_engine/sync/fushi_library_host_service.dart';
-import 'package:fushi_engine/sync/sync_asset_package_service.dart';
-import 'package:fushi_engine/sync/manga_sync_package.dart';
-import 'package:fushi_engine/sync/ttu_filename.dart';
+import 'package:fushi_engine/utils/misc/ttu_filename.dart';
 import 'package:fushi/src/utils/components/section_visibility.dart';
 import 'package:fushi/utils.dart';
 import 'package:fushi/src/utils/components/batch_action_bar.dart';
@@ -486,28 +479,13 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
   /// 只在批量动作那层按 [_isRemoteSelectionKey] 分流：本地三动作只吃本地键；
   /// 「下载」只吃远端**漫画**键（纯 SRT 有声书与非漫画远端书在下载执行 / 可用态
   /// 里被排除，ticket 02 复审 B）。
-  String? _looseSelectionKey(_ShelfBookSlot slot) {
-    final MediaItem? epub = slot.epub;
-    if (epub != null) return epub.mediaIdentifier;
-    final SrtBook? srt = slot.srt;
-    if (srt != null) return 'srt_${srt.uid}';
-    final RemoteBookInfo? remote = slot.remote;
-    if (remote != null) return _remoteBookSelectionKey(remote);
-    final RemoteAudiobookInfo? remoteSrt = slot.remoteSrt;
-    if (remoteSrt != null) return _remoteSrtSelectionKey(remoteSrt);
-    return null;
-  }
+  String? _looseSelectionKey(_ShelfBookSlot slot) =>
+      slot.epub.mediaIdentifier;
 
   /// 选中集里的本地条目键（EPUB / SRT）：组合 / 打标签 / 删除三个本地动作的输入。
   Set<String> get _selectedLocalKeys => <String>{
         for (final String key in _selectedKeys)
           if (!_isRemoteSelectionKey(key)) key,
-      };
-
-  /// 选中集里的远端占位键：批量「下载」的输入。
-  Set<String> get _selectedRemoteKeys => <String>{
-        for (final String key in _selectedKeys)
-          if (_isRemoteSelectionKey(key)) key,
       };
 
   @override
@@ -1161,46 +1139,16 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
   ///
   /// 2026-11-05：合集已删除，排序单元从「合集组/散卡」收敛为单卡。
   ShelfSortKey _shelfSlotSortKey(_ShelfBookSlot slot) {
-    final String title;
-    final int importedAt;
-    final int recentScore;
-    final String tieKey;
-    final SrtBook? srt = slot.srt;
-    final MediaItem? epub = slot.epub;
-    final RemoteBookInfo? remote = slot.remote;
-    final RemoteAudiobookInfo? remoteSrt = slot.remoteSrt;
-    if (srt != null) {
-      title = displayTitleForBook(
-        bookKey: srt.bookKey.isNotEmpty ? srt.bookKey : null,
-        srtUid: srt.uid,
-        rawTitle: srt.title,
-      );
-      importedAt = srt.importedAt;
-      recentScore = lastReadAtForBookKey(
-              _lastReadAtByBookKey, _epubUidByKey, srt.bookKey) ??
-          importedAt;
-      tieKey = 'srt|${srt.uid}';
-    } else if (epub != null) {
-      final String? bookKey = _parseBookKey(epub.mediaIdentifier);
-      title = displayTitleForBook(item: epub, rawTitle: epub.title);
-      importedAt = bookKey == null ? 0 : (_epubImportedAtByKey[bookKey] ?? 0);
-      recentScore = lastReadAtForBookKey(
-              _lastReadAtByBookKey, _epubUidByKey, bookKey) ??
-          importedAt;
-      tieKey = 'epub|${bookKey ?? epub.mediaIdentifier}';
-    } else if (remote != null) {
-      title = remote.title;
-      importedAt = remote.importedAt ?? 0;
-      recentScore =
-          remote.progressUpdatedAtMs > 0 ? remote.progressUpdatedAtMs : 0;
-      tieKey = 'epub|${remote.downloadId}';
-    } else {
-      final RemoteAudiobookInfo r = remoteSrt!;
-      title = r.title ?? r.identity;
-      importedAt = r.importedAt ?? 0;
-      recentScore = r.positionUpdatedAtMs > 0 ? r.positionUpdatedAtMs : 0;
-      tieKey = 'srt|${r.identity}';
-    }
+    final MediaItem epub = slot.epub;
+    final String? bookKey = _parseBookKey(epub.mediaIdentifier);
+    final String title = displayTitleForBook(item: epub, rawTitle: epub.title);
+    final int importedAt =
+        bookKey == null ? 0 : (_epubImportedAtByKey[bookKey] ?? 0);
+    final int recentScore =
+        lastReadAtForBookKey(_lastReadAtByBookKey, _epubUidByKey, bookKey) ??
+            importedAt;
+    final String tieKey =
+        MediaKind.epub.compositeKey(bookKey ?? epub.mediaIdentifier);
     return ShelfSortKey(
       recentScore: recentScore,
       title: title,
@@ -1272,21 +1220,6 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
       invalidate: <ProviderOrFamily>[
         bookTagMapProvider,
         filteredBookIdsProvider
-      ],
-      successMsg: t.tag_added_to_book(name: tag.name),
-    );
-  }
-
-  Future<void> _addTagToSrtBook(String srtUid, BookTagRow tag) async {
-    final existing = ref.read(srtBookTagMapProvider).valueOrNull;
-    await _addTagToMedia(
-      alreadyHas: existing?[srtUid]?.any((t) => t.id == tag.id) ?? false,
-      tag: tag,
-      addToDb: () =>
-          ref.read(appProvider).database.addTagToSrtBook(srtUid, tag.id),
-      invalidate: <ProviderOrFamily>[
-        srtBookTagMapProvider,
-        filteredSrtBookUidsProvider,
       ],
       successMsg: t.tag_added_to_book(name: tag.name),
     );
@@ -2053,7 +1986,6 @@ class _ReaderFushiHistoryPageState<T extends HistoryReaderPage>
     // BUG-1018 同款刷新纪律：书架的响应式源按 key 集合去重，纯覆盖层写入不会
     // 自动重发，只 refreshTab 会拿旧的缓存 MediaItem 重绘、看着像"没保存"。
     ref.invalidate(fushiBooksProvider(JapaneseLanguage.instance));
-    ref.invalidate(srtBooksProvider);
     _rebuild(() {});
   }
 
@@ -2197,15 +2129,6 @@ class _MangaShelfMeta {
   final OnlineMangaLibraryEntry? onlineEntry;
 }
 
-/// 远端 EPUB 占位卡的多选键：身份是 host 的 `downloadId`（与 [_ShelfBookSlot]
-/// 的 entryKey、下载任务 id 同源），不是可被 host 改名的显示名。
-String _remoteBookSelectionKey(RemoteBookInfo book) =>
-    '$_kRemoteBookSelectionPrefix${book.downloadId}';
-
-/// 纯 SRT 远端有声书占位卡的多选键：身份是 `identity`（与 entryKey 同源）。
-String _remoteSrtSelectionKey(RemoteAudiobookInfo book) =>
-    '$_kRemoteSrtSelectionPrefix${book.identity}';
-
 bool _isRemoteSelectionKey(String key) =>
     key.startsWith(_kRemoteBookSelectionPrefix) ||
     key.startsWith(_kRemoteSrtSelectionPrefix);
@@ -2217,21 +2140,9 @@ bool _isRemoteSelectionKey(String key) =>
 /// 无本地 importedAt/lastReadAt，排序退化到目录序（注入时以 `-1-index` 编码进
 /// CollectionOrderingItem.importedAt，稳定排在本地条目之后、组内保持目录序）。
 class _ShelfBookSlot {
-  const _ShelfBookSlot({
-    this.srt,
-    this.epub,
-    this.remote,
-    this.remoteSrt,
-  });
+  const _ShelfBookSlot({required this.epub});
 
-  final SrtBook? srt;
-  final MediaItem? epub;
-  final RemoteBookInfo? remote;
-
-  /// 纯 SRT（standalone）远端有声书占位卡（互联后端 listRemoteAudiobooks 的
-  /// standalone 项，本地尚无同 uid 的 SrtBook）。与 [remote] 同为「远端占位」，无本地
-  /// 阅读进度，排在本地条目之后；下载后原地变本地 SRT 卡。
-  final RemoteAudiobookInfo? remoteSrt;
+  final MediaItem epub;
 }
 
 /// 页面向壳槽登记内容的通用状态机：槽变化时先在旧槽上撤回本页登记，槽为 null

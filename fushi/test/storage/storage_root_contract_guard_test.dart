@@ -251,32 +251,6 @@ void main() {
     );
   });
 
-  test('互联 host 的章节供给走 Download library 映射，不读旧哈希布局', () {
-    final String host = File(
-      '../packages/fushi_engine/lib/sync/local_library_host_service/manga.part.dart',
-    ).readAsStringSync();
-    expect(host, contains('getMangaChapterDir('));
-    expect(host, contains('downloadChapterDirectory('));
-    expect(host, contains('readDownloadLibraryChapterPayload('));
-    expect(
-      host,
-      isNot(contains('mangaChapterDirectoryByDigest(')),
-      reason: '旧哈希章目录定位必须删除',
-    );
-    expect(
-      host,
-      isNot(contains('readDownloadedChapterPayload(')),
-      reason: '旧布局页表读取必须删除',
-    );
-    final String books = File(
-      '../packages/fushi_engine/lib/sync/local_library_host_service/books.part.dart',
-    ).readAsStringSync();
-    // 票 06：清单按容器类型区分可读章节（host 页服务只支持 folder）。
-    expect(books, contains('getMangaChapterDirRowsForBook'));
-    expect(books, contains('MangaChapterContainerKind.folder'));
-    expect(books, isNot(contains('hasAnyChapterDirSync')));
-  });
-
   test('fresh start：main() 不搬、不读旧 app-support / prefs 域', () {
     final String mainSource = File('lib/main.dart').readAsStringSync();
     expect(

@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
-import 'package:fushi_engine/media/audiobook/text_to_epub.dart';
 
 /// 一个待导入路径的**载体身份**：它到底是哪种东西，因而该交给哪个 importer。
 ///
@@ -136,11 +135,32 @@ ImportCarrier classifyImportCarrier(
   }
 
   // 非 epub/zip 的一切（含无扩展名文件）都尝试按文本转 EPUB——保持既有兜底语义。
-  if (TextToEpub.isSupported(path) || (ext != '.epub' && ext != '.zip')) {
+  if (_isTextLikeExtension(ext) || (ext != '.epub' && ext != '.zip')) {
     return ImportCarrier.text;
   }
   return ImportCarrier.epub;
 }
+
+/// 纯文本类扩展名（不带点，小写）。原引用 `TextToEpub.supportedExtensions`；
+/// 文本转 EPUB 的导入域已删除，这里只保留分类判定用的扩展名集合。
+const Set<String> _kTextLikeExtensions = <String>{
+  'txt',
+  'html',
+  'htm',
+  'xhtml',
+  'md',
+  'markdown',
+  'rst',
+  'org',
+  'csv',
+  'tsv',
+  'log',
+  'json',
+  'xml',
+};
+
+bool _isTextLikeExtension(String ext) =>
+    _kTextLikeExtensions.contains(ext.startsWith('.') ? ext.substring(1) : ext);
 
 /// 需要真读包才能定性的容器扩展名（带点，小写）。
 const Set<String> _ambiguousArchiveExtensions = <String>{'.zip', '.epub'};

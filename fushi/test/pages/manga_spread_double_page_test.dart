@@ -11,7 +11,7 @@ import 'package:fushi/src/media/manga/manga_view_prefs.dart';
 import 'package:fushi/src/media/media_item.dart';
 import 'package:fushi/src/pages/implementations/manga_fushi_page.dart';
 import 'package:fushi/src/platform/platform_providers.dart';
-import 'package:fushi_audio/fushi_audio.dart';
+import 'package:fushi_engine/media/manga/reader_position.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';

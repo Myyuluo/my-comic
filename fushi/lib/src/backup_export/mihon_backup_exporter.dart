@@ -5,7 +5,7 @@ import 'package:drift/drift.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi_engine/media/media_pref_keys.dart'
     show readerBookMediaIdentifierFor;
-import 'package:fushi_engine/media/tracking/media_tracking_repository.dart'
+import 'package:fushi_engine/media/manga/mihon_tracking_compat.dart'
     show kTrackingProviderBangumi, TrackingMediaType;
 
 import 'package:fushi/src/backup_export/mihon_backup_writer.dart';

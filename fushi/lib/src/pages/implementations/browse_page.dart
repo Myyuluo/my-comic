@@ -1,8 +1,6 @@
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:fushi_audio/fushi_audio.dart'
-    show AudiobookRepository, AudiobookStorage, SrtBookRepository;
 import 'package:path/path.dart' as p;
 
 import 'package:fushi/src/media/drag_drop/drop_classification.dart';

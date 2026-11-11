@@ -1,7 +1,7 @@
 /// Flutter app 对 `fushi_engine`（以及 fushi_core / fushi_audio）平台装配点的
 /// 一次性接线。
 ///
-/// 引擎包不依赖 Flutter，它需要的日志、数据根、ffmpeg 平台后端、图片缓存失效、
+/// 引擎包不依赖 Flutter，它需要的日志、数据根、图片缓存失效、
 /// 调试打印全靠宿主在进程入口装配。与 `installAsrHostBindings()` 同一范式、同一
 /// 调用位置（`main()`，不放 `AppModel.initialise()`：弹窗词典与悬浮词典两个入口
 /// 绕开 initialise）。`flutter_test_config.dart` 也调它，保证测试里的引擎代码拿到
@@ -22,15 +22,10 @@ import 'package:fushi/src/models/store_compliance.dart';
 import 'package:fushi/src/storage/app_paths.dart';
 import 'package:fushi/src/utils/misc/error_log_service.dart';
 import 'package:fushi_core/fushi_core.dart';
-import 'package:fushi_dictionary/fushi_dictionary.dart' show FushiDicts;
 import 'package:fushi_engine/foundation/engine_log.dart';
 import 'package:fushi_engine/foundation/engine_paths.dart';
-import 'package:fushi_engine/dictionary/dictionary_engine_hooks.dart';
 import 'package:fushi_engine/foundation/engine_platform_hooks.dart';
-import 'package:fushi_engine/media/audio/flac_encoder.dart';
 
-import 'package:fushi_engine/utils/misc/desktop_audio_clipper.dart'
-    show ffmpegRemoteInputRouteResolver;
 
 /// `AppPaths` 静态便捷层 → 引擎 [EnginePaths]。三个引擎根逐一委派到新的
 /// Content root / Program state `state/` / `cache/`，子目录名契约留在引擎基类。
@@ -81,6 +76,4 @@ void installEngineHostBindings() {
   // 发现来源 chip 的资料源名走 i18n 出口（引擎默认是不翻译的品牌名）。
   evictImageCacheForFile = _evictImageCacheForFile;
   releaseImageCacheBeforeDelete = _releaseImageCacheBeforeDelete;
-  // 词典导入/删除前释放 FFI 引擎的文件映射（BUG-1756）。
-  releaseDictionaryMappings = FushiDicts.releaseAllMappings;
 }

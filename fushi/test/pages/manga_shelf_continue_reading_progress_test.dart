@@ -6,7 +6,7 @@ import 'package:fushi/models.dart';
 import 'package:fushi/src/media/manga/library/online_manga_library_entry.dart';
 import 'package:fushi/src/media/sources/reader_fushi_source.dart';
 import 'package:fushi_core/fushi_core.dart';
-import 'package:fushi_engine/media/collections/shelf_sort.dart';
+import 'package:fushi_engine/media/manga/shelf_sort.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'manga_library_page_harness.dart';

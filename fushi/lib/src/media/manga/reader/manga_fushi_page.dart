@@ -15,7 +15,7 @@ import 'package:path/path.dart' as p;
 import 'package:window_manager/window_manager.dart';
 
 import 'package:fushi/src/media/manga/reader/source_review_compat.dart';
-import 'package:fushi_audio/fushi_audio.dart';
+import 'package:fushi_engine/media/manga/reader_position.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:fushi/src/media/sources/reader_fushi_source.dart';
 import 'package:fushi/src/models/fushi_reader_palette.dart';

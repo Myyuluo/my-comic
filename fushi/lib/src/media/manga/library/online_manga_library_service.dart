@@ -17,7 +17,7 @@ import 'package:fushi/src/utils/misc/trimmed_text.dart';
 import 'package:fushi/src/media/manga/download/download_identity.dart';
 import 'package:fushi/src/media/manga/download/download_library_scanner.dart';
 import 'package:fushi/src/media/manga/download/download_manga_relinker.dart';
-import 'package:fushi_engine/epub/epub_storage.dart';
+import 'package:fushi_engine/media/manga/book_storage.dart';
 import 'package:fushi_engine/media/manga/download_library_storage.dart';
 import 'package:fushi_engine/media/manga/local_source/local_source_layout.dart';
 

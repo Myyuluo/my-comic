@@ -1,5 +1,5 @@
 import 'package:fushi_core/fushi_core.dart';
-import 'package:fushi_engine/sync/ttu_filename.dart';
+import 'package:fushi_engine/utils/misc/ttu_filename.dart';
 import 'package:path/path.dart' as p;
 
 /// 「从 app 外用 Fushi 打开」时认作书 / 漫画的扩展名（小写、带点）。

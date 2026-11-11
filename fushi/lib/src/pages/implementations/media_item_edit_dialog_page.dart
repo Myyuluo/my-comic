@@ -205,7 +205,6 @@ class _MediaItemEditDialogPageState
       // （MangaFushiSource，非 ReaderFushiSource）此前落在此条件外，改完书架不刷新。
       if (mediaSource is ReaderMediaSource) {
         ref.invalidate(fushiBooksProvider);
-        ref.invalidate(srtBooksProvider);
       }
 
       navigator.pop();

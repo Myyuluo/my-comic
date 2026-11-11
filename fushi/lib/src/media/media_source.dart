@@ -16,7 +16,7 @@ import 'package:fushi/src/media/media_cover_service.dart';
 import 'package:fushi/src/utils/cover_image.dart';
 import 'package:fushi/utils.dart';
 import 'package:fushi_core/fushi_core.dart';
-import 'package:fushi_audio/fushi_audio.dart';
+import 'package:fushi_engine/media/manga/bookmark_repository.dart';
 import 'package:path/path.dart' as path;
 import 'package:fushi_engine/media/media_pref_keys.dart' as pref_keys;
 export 'package:fushi_engine/media/media_pref_keys.dart' show dbSourcePrefKey;

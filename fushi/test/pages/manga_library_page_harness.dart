@@ -12,7 +12,7 @@ import 'package:fushi/src/models/preferences_repository.dart';
 import 'package:fushi/src/utils/components/fushi_floating_chrome.dart'
     show FushiShellInlineTitle;
 import 'package:fushi/utils.dart';
-import 'package:fushi_audio/fushi_audio.dart';
+import 'package:fushi_engine/media/manga/bookmark_repository.dart';
 import 'package:fushi_core/fushi_core.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -190,9 +190,6 @@ class MangaLibraryPageHarness<M extends AppModel> {
           fushiBooksProvider.overrideWith(
             (ref, language) => Future<List<MediaItem>>.value(mangaItems),
           ),
-        srtBooksProvider.overrideWith(
-          (ref) => Future<List<SrtBook>>.value(const <SrtBook>[]),
-        ),
       ],
       child: TranslationProvider(
         child: MaterialApp(

@@ -1,6 +1,5 @@
 import 'dart:convert';
 
-import 'package:fushi_engine/profile/profile_document.dart' show kProfileSettingCategoryPref;
 import 'package:drift/drift.dart' show Variable;
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:fushi_core/fushi_core.dart';
@@ -275,7 +274,7 @@ class PortableStateRebase {
         .customSelect(
           'SELECT id, key, value FROM profile_settings WHERE category = ?',
           variables: <Variable<Object>>[
-            Variable<String>(kProfileSettingCategoryPref),
+            Variable<String>('pref'),
           ],
         )
         .get();

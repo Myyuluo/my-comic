@@ -101,7 +101,7 @@ void main() {
     // 视频域，只剩漫画/书库真正使用的模块。
     const List<String> convergedModules = <String>[
       'lib/src/models/app_model.dart',
-      '../packages/fushi_engine/lib/epub/epub_storage.dart',
+      '../packages/fushi_engine/lib/media/manga/book_storage.dart',
     ];
 
     for (final String rel in convergedModules) {
@@ -177,51 +177,5 @@ void main() {
       );
     });
 
-    test('fushi_audio 包内 audiobook_storage 有单一 documents 解析点', () {
-      // 上游包不能 import app 层 AppPaths，故包内自有单一解析点 _documentsRoot；
-      // 三处持久目录方法都经它，不再各自直连 path_provider。
-      final String src = read(
-        '../packages/fushi_audio/lib/src/audiobook/audiobook_storage.dart',
-      );
-      expect(
-        src.contains('_documentsRoot()'),
-        isTrue,
-        reason: 'audiobook_storage 必须有包内单一 documents 解析点 _documentsRoot',
-      );
-      // _documentsRoot 是唯一真正调用 path_provider 的地方：三个持久目录方法都改读
-      // `await _documentsRoot()`，包内对 getApplicationDocumentsDirectory() 的实际
-      // 调用表达式只剩 _documentsRoot 自身一处（注释里提到名字不算调用）。
-      expect(
-        '_documentsRoot()'.allMatches(src).length,
-        equals(4),
-        reason: '_documentsRoot 定义 1 次 + 三个持久目录方法各调用 1 次 = 4',
-      );
-      // TODO-1236：_documentsRoot 改为 resolver 注入优先；无头服务端拆分后
-      // audiobook_storage.dart 是纯 Dart，**不再直连 path_provider**——平台兜底
-      // `getApplicationDocumentsDirectory` 挪到重文件 audiobook_storage_platform.dart，
-      // 由 installAudiobookStoragePlatform() 以 `??=` 装入（不覆盖 app 层注入的 AppPaths）。
-      expect(
-        src.contains('path_provider'),
-        isFalse,
-        reason: 'audiobook_storage.dart 必须零插件（无头服务端消费）',
-      );
-      expect(
-        RegExp(
-          r'documentsRootResolver \?\? _unassignedDocumentsRoot',
-        ).hasMatch(src),
-        isTrue,
-        reason: '_documentsRoot 应经 resolver 门控、未装配时抛 StateError',
-      );
-      final String platformSrc = read(
-        'lib/src/media/audiobook/audiobook_storage_platform.dart',
-      );
-      expect(
-        RegExp(
-          r'documentsRootResolver \?\?= getApplicationDocumentsDirectory',
-        ).hasMatch(platformSrc),
-        isTrue,
-        reason: '平台兜底只能以 ??= 补默认值，不得覆盖 AppPaths 注入',
-      );
-    });
   });
 }

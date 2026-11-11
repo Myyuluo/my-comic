@@ -13,7 +13,7 @@ import 'package:fushi/src/reader/reader_chrome_floating.dart';
 import 'package:fushi/src/utils/misc/error_log_service.dart';
 import 'package:path/path.dart' as p;
 import 'package:fushi/src/media/sources/reader_fushi_source.dart';
-import 'package:fushi_engine/epub/reader_resource_host.dart' as engine_host;
+import 'package:fushi_engine/foundation/reader_resource_host.dart' as engine_host;
 
 /// The independent font targets a user can configure (TODO-049 / TODO-864):
 /// 软件系统字体 ([appUi]) / 小说正文字体 ([body]) / 词典字体 ([dictionary]) /
@@ -811,15 +811,6 @@ class ReaderSettings {
   bool get reverseArrowPageTurn => _get<bool>('reverse_arrow_page_turn', false);
   Future<void> toggleReverseArrowPageTurn() =>
       _set<bool>('reverse_arrow_page_turn', !reverseArrowPageTurn);
-
-  // TODO-830: 反转有声书底栏 ⏮⏭ 前进/后退按钮的功能方向（per-reader，每本书
-  // 各自记忆，与 invert_swipe_direction / reverse_arrow_page_turn 一致）。
-  // 默认 false = 现有行为（左=上一句/快退、右=下一句/快进）；true = 左右功能互换。
-  // 这是「功能反转」维度，与 reverseReaderBottomBar 的「位置镜像」维度严格正交。
-  bool get invertAudiobookSkipDirection =>
-      _get<bool>('invert_audiobook_skip_direction', false);
-  Future<void> toggleInvertAudiobookSkipDirection() => _set<bool>(
-      'invert_audiobook_skip_direction', !invertAudiobookSkipDirection);
 
   // ── Custom fonts (catalog + per-target refs) ─────────────────────
   //

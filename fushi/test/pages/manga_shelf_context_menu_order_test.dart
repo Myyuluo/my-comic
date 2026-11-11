@@ -19,7 +19,6 @@ import 'package:fushi/models.dart';
 import 'package:fushi/src/models/preferences_repository.dart';
 import 'package:fushi/src/pages/implementations/reader_fushi_history_page.dart';
 import 'package:fushi/src/platform/platform_providers.dart';
-import 'package:fushi_audio/fushi_audio.dart';
 import 'package:fushi_core/fushi_core.dart';
 
 import '../helpers/test_platform_services.dart';
@@ -139,9 +138,6 @@ void main() {
         (ref, language) => Future<List<MediaItem>>.value(<MediaItem>[
           _mangaItem(),
         ]),
-      ),
-      srtBooksProvider.overrideWith(
-        (ref) => Future<List<SrtBook>>.value(const <SrtBook>[]),
       ),
     ],
     child: TranslationProvider(

@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:fushi_audio/fushi_audio.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -42,15 +41,12 @@ void main() {
         return null;
       },
     );
-    // 生产接线：app 启动期把有声书根解析接到 AppPaths（这里显式重放以端到端验证）。
-    AudiobookStorage.documentsRootResolver = AppPaths.contentRootDirectory;
   });
 
   tearDown(() {
     AppPaths.debugExecutablePathOverride = null;
     AppPaths.debugLocalAppDataOverride = null;
     SharedPreferences.setMockInitialValues(<String, Object>{});
-    AudiobookStorage.documentsRootResolver = null;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(
       const MethodChannel('plugins.flutter.io/path_provider'),
@@ -70,8 +66,6 @@ void main() {
         p.join(content, 'autobackup'));
     expect((await AppPaths.localComicRootDirectory()).path,
         p.join(content, 'local'));
-    expect(p.equals(await AudiobookStorage.audiobooksRootDir(),
-        p.join(content, 'audiobooks')), isTrue);
 
     // 不再散落在共享 Documents 根。
     expect((await AppPaths.downloadsRootDirectory()).path,
@@ -89,8 +83,6 @@ void main() {
         p.join(content.path, 'downloads'));
     expect((await AppPaths.localComicRootDirectory()).path,
         p.join(content.path, 'local'));
-    expect(p.equals(await AudiobookStorage.audiobooksRootDir(),
-        p.join(content.path, 'audiobooks')), isTrue);
   });
 
   test('旧 data_root 不再影响写路径', () async {
