@@ -15,8 +15,8 @@ import 'package:fushi/src/utils/components/glass/fushi_glass_controls.dart';
 /// rail 顶部固定区域，不叠加卡片底色、描边或额外内边距；下面的目的地仍在剩余空间
 /// 内独立居中。
 ///
-/// 品牌位同时是官网入口：点击在系统浏览器里打开 [kOfficialWebsiteUrl]，与
-/// 「设置 · 通用 · 官网」调同一个 [openOfficialWebsite]。
+/// 品牌位同时是仓库入口：点击在系统浏览器里打开 [kMyComicRepositoryUrl]，与
+/// 「设置 · 通用 · GitHub」调同一个 [openMyComicRepository]。
 ///
 /// rail 的每个目的地都是独立焦点目标，品牌位也必须是——否则键盘 Tab / 手柄永远走
 /// 不到它，只有鼠标能点。手柄 A / 回车走 [ActivateIntent]：在主焦点的 context 派发
@@ -48,9 +48,9 @@ class NavRailBrandButton extends StatelessWidget {
     return Padding(
       padding: EdgeInsets.all(tokens.spacing.gap),
       child: FushiTooltip(
-        message: t.options_website,
+        message: t.options_github,
         child: InkWell(
-          onTap: () => unawaited(openOfficialWebsite()),
+          onTap: () => unawaited(openMyComicRepository()),
           canRequestFocus: false,
           borderRadius: iconRadius,
           splashFactory: apple ? NoSplash.splashFactory : null,
