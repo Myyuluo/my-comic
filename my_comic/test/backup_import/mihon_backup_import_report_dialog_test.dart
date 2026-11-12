@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:drift/native.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -109,15 +108,15 @@ Future<void> _openReportDialog(
   File backup, {
   bool realIo = false,
 }) async {
-  FilePicker? previous;
-  try {
-    previous = FilePicker.platform;
-  } catch (_) {
-    previous = null;
-  }
-  FilePicker.platform = _RecordingFilePicker(resultPath: backup.path);
+  final Future<String?> Function(String)? previous =
+      debugMihonBackupFilePicker;
+  String? pickedDirectory;
+  debugMihonBackupFilePicker = (String initialDirectory) async {
+    pickedDirectory = initialDirectory;
+    return backup.path;
+  };
   addTearDown(() {
-    if (previous != null) FilePicker.platform = previous;
+    debugMihonBackupFilePicker = previous;
   });
 
   await tester.tap(find.text('import backup'));
@@ -133,36 +132,8 @@ Future<void> _openReportDialog(
     await _pumpUntil(tester, find.text('备份导入完成'));
   }
   await tester.pumpAndSettle();
-}
-
-class _RecordingFilePicker extends FilePicker {
-  _RecordingFilePicker({required this.resultPath});
-
-  final String resultPath;
-
-  @override
-  Future<FilePickerResult?> pickFiles({
-    String? dialogTitle,
-    String? initialDirectory,
-    FileType type = FileType.any,
-    List<String>? allowedExtensions,
-    Function(FilePickerStatus)? onFileLoading,
-    bool allowCompression = true,
-    int compressionQuality = 30,
-    bool allowMultiple = false,
-    bool withData = false,
-    bool withReadStream = false,
-    bool lockParentWindow = false,
-    bool readSequential = false,
-  }) async {
-    return FilePickerResult(<PlatformFile>[
-      PlatformFile(
-        name: p.basename(resultPath),
-        path: resultPath,
-        size: File(resultPath).lengthSync(),
-      ),
-    ]);
-  }
+  expect(pickedDirectory, isNotNull);
+  expect(p.basename(pickedDirectory!), 'autobackup');
 }
 
 /// Two library entries, one category, one chapter with history, one non-MyComic

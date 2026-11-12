@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:file_picker/file_picker.dart';
+import 'package:file_selector/file_selector.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'package:my_comic/i18n/strings.g.dart';
@@ -21,23 +21,33 @@ import 'package:my_comic/src/utils/misc/show_app_dialog.dart';
 String mihonBackupPickerInitialDirectory(AppPaths paths) =>
     paths.autobackupRoot.path;
 
+/// Test seam: replaces the native picker. `null` = production file_selector.
+@visibleForTesting
+Future<String?> Function(String initialDirectory)? debugMihonBackupFilePicker;
+
 /// Picks one `.tachibk` Backup file, starting in [initialDirectory].
 ///
-/// [picker] is injectable so tests can assert the picker request (default
-/// directory and allowed extension) without opening a native dialog.
+/// Uses `file_selector`'s Windows IFileOpenDialog backend, which applies
+/// [initialDirectory] with `SetFolder`. file_picker's legacy
+/// `GetOpenFileNameW` path ignores the initial directory after the dialog has
+/// been shown once (Windows 7+ remembers the last folder instead).
 Future<String?> pickMihonBackupFile({
   required String initialDirectory,
-  FilePicker? picker,
 }) async {
-  final FilePickerResult? picked = await (picker ?? FilePicker.platform)
-      .pickFiles(
-        type: FileType.custom,
-        allowedExtensions: const <String>['tachibk'],
-        allowMultiple: false,
-        initialDirectory: initialDirectory,
-        dialogTitle: t.backup_import_mihon_title,
-      );
-  return picked?.files.single.path;
+  final Future<String?> Function(String)? debugPick =
+      debugMihonBackupFilePicker;
+  if (debugPick != null) return debugPick(initialDirectory);
+  final XFile? picked = await openFile(
+    acceptedTypeGroups: <XTypeGroup>[
+      XTypeGroup(
+        label: t.backup_import_mihon_title,
+        extensions: const <String>['tachibk'],
+      ),
+    ],
+    initialDirectory: initialDirectory,
+    confirmButtonText: t.backup_import_mihon_title,
+  );
+  return picked?.path;
 }
 
 /// Settings → Storage & downloads → Backup: pick a `.tachibk` file and import it.

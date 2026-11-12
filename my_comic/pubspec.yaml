@@ -26,6 +26,9 @@ dependencies:
   # 分段条溢出滚动的渐隐边缘（vendored，见 dependency_overrides）。
   fading_edge_scrollview: ^3.0.0
   file_picker: ^8.0.0
+  # Windows IFileOpenDialog-backed file picker: honors initialDirectory via
+  # SetFolder, unlike file_picker's legacy GetOpenFileNameW path.
+  file_selector: ^1.1.0
   # Cross-platform game controllers (GameInput / GameController / evdev).
   # BUILD PREREQ: the Windows backend (gamepads_windows) #includes <GameInput.h>,
   # which ships only in Windows SDK >= 10.0.26100 — every Windows build
