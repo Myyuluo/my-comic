@@ -114,6 +114,13 @@
   discovery、entitlement/entrance、settings、reader 字体/设置守卫等；
   `test_source_path_exists_guard_test` 归零。
 
+### Scope-creep 说明：上游 bug 工具链
+
+`docs/bugs` 在 ticket 11 删除后，`tool/bug.dart` 与
+`.github/workflows/bug-number-settle.yml` 失去了唯一的数据源，成为死工具；
+ticket 12 因此连同 3 个 bug 工具测试一并删除。这是**有意清理**，不是误删
+功能；若将来需要本地 bug 索引，应从 git 历史恢复并按新目录结构重建。
+
 ### 残余项
 
 - `native/galgame_hook` 与 Windows 原生截屏 OCR/悬浮球 C++ 仍保留（ticket 04

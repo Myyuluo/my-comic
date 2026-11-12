@@ -54,10 +54,6 @@ class CtlClient {
     return CtlOpenKind.fromWire(body['kind'] as String?);
   }
 
-  Future<void> lookup(String word) async {
-    await _send('POST', kCtlLookupPath, body: <String, Object?>{'word': word});
-  }
-
   Future<void> quit() async {
     await _send('POST', kCtlQuitPath);
   }

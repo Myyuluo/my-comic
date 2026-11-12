@@ -1527,8 +1527,6 @@ class ThemeNotifier extends ChangeNotifier {
         return MyComicDesignSystem.material;
       case 'cupertino':
         return MyComicDesignSystem.cupertino;
-      case 'macos':
-        return MyComicDesignSystem.macos;
       default:
         return MyComicDesignSystem.auto;
     }

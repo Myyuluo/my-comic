@@ -46,29 +46,17 @@ dependency_overrides:
   # native delta is tracked source. See third_party/desktop_drop/PATCHES.md.
   desktop_drop:
     path: third_party/desktop_drop
-  # 自编 ffmpeg-kit（arthenica 源码重编，android 用 third_party 内自编 AAR；修 BUG-122
-  # Android16 启动崩溃）。Dart API 与上游 ffmpeg_kit_flutter 6.0.3 一致。
-  ffmpeg_kit_flutter:
-    path: third_party/ffmpeg_kit_flutter
   # Vendored third-party packages carrying Flutter 3.x API-compat patches that
-  # are not published on pub.dev. Previously these lived only as hand-edits in
-  # each dev's pub-cache, so a clean checkout failed to build (e.g. on iOS):
-  #   network_to_file_image: hashValues→Object.hash, DecoderCallback /
-  #     PaintingBinding.instantiateImageCodec / ImageProvider.load removals.
-  #   carousel_slider: CarouselController name clash with flutter/material.
-  #   fading_edge_scrollview: PageController vs ScrollController type.
-  # Source under third_party/ (SDK upper bound bumped to <4.0.0 for Dart 3).
+  # are not published on pub.dev. These previously lived only as hand-edits in
+  # each dev's pub-cache, so a clean checkout failed to build. Source under
+  # third_party/ (SDK upper bound bumped to <4.0.0 for Dart 3).
   network_to_file_image:
     path: third_party/network_to_file_image
-  carousel_slider:
-    path: third_party/carousel_slider
   fading_edge_scrollview:
     path: third_party/fading_edge_scrollview
   # 与锁文件一致的已测版本（image 4.4+ 要求 archive 4，本仓仍用 archive 3.x）。
   image: 4.3.0
-  # 与 HEAD 锁文件一致：新版本在 Dart 3.13 / 当前 API 下编译失败
-  # （dartssh2 2.14 的 int? 提升、dio 5.11 新增 transformTimeout）。
-  dartssh2: 2.11.0
+  # 与 HEAD 锁文件一致：dio 5.11 在当前 API 下编译失败。
   dio: 5.1.2
 
 # Melos 7 的配置位置就是这里（7.0 起 melos.yaml 被废弃）。包列表不再重复声明：

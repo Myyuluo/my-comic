@@ -7,7 +7,6 @@ library;
 
 const String kCtlStatusPath = '/api/admin/status';
 const String kCtlOpenPath = '/api/admin/app/open';
-const String kCtlLookupPath = '/api/admin/app/lookup';
 const String kCtlQuitPath = '/api/admin/app/quit';
 
 /// 409：app 进程已起、控制通道已开，但还没初始化完（LoadingPage）。CLI 应继续等。
@@ -30,7 +29,7 @@ class CtlAppStatus {
   final int pid;
   final String platform;
 
-  /// AppModel 初始化完成且主导航已就绪；为 false 时 open / lookup 回 409。
+  /// AppModel 初始化完成且主导航已就绪；为 false 时 open 回 409。
   final bool initialised;
   final String? version;
 
@@ -53,15 +52,9 @@ class CtlAppStatus {
 
 /// `open` 接受的目标种类——与 argv / 单实例转交认的候选一一对应。
 enum CtlOpenKind {
-  video,
-  lookup,
-  pairLink,
   sourceUrl;
 
   String get wireName => switch (this) {
-    CtlOpenKind.video => 'video',
-    CtlOpenKind.lookup => 'lookup',
-    CtlOpenKind.pairLink => 'pair_link',
     CtlOpenKind.sourceUrl => 'source_url',
   };
 

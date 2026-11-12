@@ -485,21 +485,6 @@ void main() {
     expect(source, isNot(contains('StorageUsageView(')));
   });
 
-  testWidgets('可选模块区已移除：OCR 模型只剩占用行，没有下载/删除按钮', (WidgetTester tester) async {
-    writeFile(
-      p.join(support.path, kOcrModelsStateChild, 'manga', 'a.onnx'),
-      300,
-    );
-
-    await tester.pumpWidget(wrap(view(service: service())));
-    await tester.pumpAndSettle();
-
-    // 类目行还在（如实显示占用），但下载/删除入口已回归漫画 OCR 设置区。
-    expect(_rowText(t.storage_category_ocr_models), findsOneWidget);
-    expect(find.byTooltip(t.manga_ocr_delete), findsNothing);
-    expect(find.byTooltip(t.manga_ocr_download), findsNothing);
-  });
-
   testWidgets('着色器类目行挂 Anime4K 删除：确认后走注入的删除原语并重扫', (WidgetTester tester) async {
     writeFile(p.join(docs.path, 'mpv_shaders', 'Anime4K_Clamp.glsl'), 512);
     int deleteCalls = 0;

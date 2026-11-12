@@ -1,4 +1,4 @@
-import 'dart:io' show File, Platform;
+import 'dart:io' show File;
 
 import 'package:cupertino_ui/cupertino_ui.dart';
 import 'package:material_ui/material_ui.dart';
@@ -58,12 +58,12 @@ Future<Route<dynamic>?> _pushAdaptiveRoute(
 }
 
 void main() {
-  Future<({bool cupertino, bool macos})> resolve(
+  Future<bool> resolve(
     WidgetTester tester, {
     required TargetPlatform platform,
     required MyComicDesignSystem designSystem,
   }) async {
-    late ({bool cupertino, bool macos}) result;
+    late bool cupertino;
     await tester.pumpWidget(
       MaterialApp(
         theme: ThemeData(
@@ -74,62 +74,50 @@ void main() {
         ),
         home: Builder(
           builder: (BuildContext context) {
-            result = (
-              cupertino: isCupertinoPlatform(context),
-              macos: isMacosPlatform(context),
-            );
+            cupertino = isCupertinoPlatform(context);
             return const SizedBox.shrink();
           },
         ),
       ),
     );
     await tester.pumpAndSettle();
-    return result;
+    return cupertino;
   }
 
   testWidgets('auto resolves to MD3 on all five platform families', (
     WidgetTester tester,
   ) async {
     for (final TargetPlatform platform in TargetPlatform.values) {
-      final result = await resolve(
+      final bool cupertino = await resolve(
         tester,
         platform: platform,
         designSystem: MyComicDesignSystem.auto,
       );
-      expect(result.cupertino, isFalse, reason: '$platform');
-      expect(result.macos, isFalse, reason: '$platform');
+      expect(cupertino, isFalse, reason: '$platform');
     }
   });
 
   testWidgets('explicit Apple modes remain internally available', (
     WidgetTester tester,
   ) async {
-    final cupertino = await resolve(
+    final bool cupertino = await resolve(
       tester,
       platform: TargetPlatform.iOS,
       designSystem: MyComicDesignSystem.cupertino,
     );
-    expect(cupertino.cupertino, isTrue);
-    final macos = await resolve(
-      tester,
-      platform: TargetPlatform.macOS,
-      designSystem: MyComicDesignSystem.macos,
-    );
-    expect(macos.macos, Platform.isMacOS);
+    expect(cupertino, isTrue);
   });
 
   testWidgets('missing design extension follows auto and stays MD3', (
     WidgetTester tester,
   ) async {
     late bool cupertino;
-    late bool macos;
     await tester.pumpWidget(
       MaterialApp(
         theme: ThemeData(platform: TargetPlatform.iOS),
         home: Builder(
           builder: (BuildContext context) {
             cupertino = isCupertinoPlatform(context);
-            macos = isMacosPlatform(context);
             return const SizedBox.shrink();
           },
         ),
@@ -137,7 +125,6 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(cupertino, isFalse);
-    expect(macos, isFalse);
   });
 
   test('adaptive route API requires the active BuildContext', () {

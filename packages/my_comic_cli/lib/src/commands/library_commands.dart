@@ -131,16 +131,11 @@ const String _root = '/api/admin/library';
 
 /// `--kind` 的值域（与 app 侧 `LibraryCtlKind` 同名）。
 const List<String> kLibraryKinds = <String>[
-  'book',
-  'pdf',
   'manga',
-  'audiobook',
-  'video',
-  'game',
 ];
 
 /// 来源库种类（`MediaSources.mediaKind`）。
-const List<String> kLibrarySourceKinds = <String>['book', 'video', 'manga'];
+const List<String> kLibrarySourceKinds = <String>['manga'];
 
 /// 条目路径：键整体编码成一段。
 String libraryItemPath(String key) =>

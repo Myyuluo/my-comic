@@ -6,40 +6,12 @@
 #include <string>
 
 #include "crash_dump.h"
-#include "external_video_handoff.h"
 #include "flutter_window.h"
 #include "hang_watchdog.h"
 #include "single_instance_mutex.h"
 #include "utils.h"
-#include "window_capture.h"
 
 namespace {
-
-// 从本进程 argv 里挑出第一个「文件」参数（跳过以 `-` 开头的 flag / 调试器注入参数）。
-// 这是「用 MyComic 打开视频」时资源管理器 / 命令行传进来的 `"%1"`。只做字符串级判定，
-// 真正的视频扩展名白名单 + 存在性校验仍由首实例 Dart 侧（firstExternalVideoArg +
-// File.existsSync）负责——这里转交的是「候选路径」，首实例自行决定是否打开。
-std::wstring FirstFileArgFromCommandLine() {
-  int argc = 0;
-  wchar_t **argv = ::CommandLineToArgvW(::GetCommandLineW(), &argc);
-  if (argv == nullptr) {
-    return std::wstring();
-  }
-  std::wstring file_arg;
-  // 跳过 argv[0]（binary 名）。
-  for (int i = 1; i < argc; ++i) {
-    if (argv[i] == nullptr || argv[i][0] == 0) {
-      continue;
-    }
-    if (argv[i][0] == L'-') {
-      continue;  // flag（如调试器注入），不是文件路径。
-    }
-    file_arg = argv[i];
-    break;
-  }
-  ::LocalFree(argv);
-  return file_arg;
-}
 
 // TODO-935 BUG: 数据迁移成功后的自动重启（DesktopLifecycleService.restartApp）
 // 带的重启标志。必须与 Dart 侧 DesktopLifecycleService.restartMarkerArg 逐字符一致。
@@ -163,16 +135,6 @@ void EnsureWritableWebView2UserDataFolder() {
 
 int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
                       _In_ wchar_t *command_line, _In_ int show_command) {
-  // PrintWindow can synchronously enter an unresponsive target window. Keep
-  // that call in a killable helper process before any Flutter, WebView2, or
-  // single-instance initialization so a timeout cannot strand the app's
-  // runner thread or its global capture gate.
-  const int print_window_helper_exit =
-      ::my_comic::RunPrintWindowCaptureHelperIfRequested();
-  if (print_window_helper_exit >= 0) {
-    return print_window_helper_exit;
-  }
-
   // Inno Setup 静默更新靠这个命名互斥量检测并关闭运行中的实例（见 mycomic.iss AppMutex）。
   // TODO-904 / BUG-437: 真单实例守卫。第二个 MyComic.exe 与首实例共享同一 WebView2
   // 默认 userDataFolder（基于 exe 名），而 WebView2 契约不允许多进程并发同一
@@ -237,19 +199,9 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
     }
   }
   if (another_instance) {
-    // 已有实例在跑：找到首实例主窗口。
+    // 已有实例在跑：找到首实例主窗口并前置，然后退出本进程。
     HWND existing = ::FindWindowW(nullptr, L"MyComic");
     if (existing != nullptr) {
-      // TODO-904 P0 回归修复：本次启动若带视频文件参数（文件关联 / 拖到 exe /
-      // CLI `MyComic.exe "%1"`），必须把路径**转交**首实例，否则第二实例只前置窗口
-      // 就退出 → 视频路径整个丢掉、首实例从不知情 →「点了没反应」。用 WM_COPYDATA
-      // 把 UTF-8 路径字节跨进程发给首实例的窗口过程（见 flutter_window.cpp 的
-      // WM_COPYDATA 处理 → app.mycomic/external_video MethodChannel →
-      // _openExternalVideo）。无文件参数（纯第二次启动）则只前置 + 退出。
-      const std::wstring file_arg = FirstFileArgFromCommandLine();
-      if (!file_arg.empty()) {
-        ::my_comic::SendExternalVideoPath(existing, file_arg);
-      }
       if (::IsIconic(existing)) {
         ::ShowWindow(existing, SW_RESTORE);
       }

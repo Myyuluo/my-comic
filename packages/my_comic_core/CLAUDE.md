@@ -4,7 +4,11 @@
 
 ## 模块职责
 
-共享核心模块：定义 Drift SQLite 数据库 schema（当前 schemaVersion=118；以 `database.dart` 的 `schemaVersion` getter 与 `@DriftDatabase(tables: [...])` 注册清单为准，本文数字仅作快照。v82：ReaderPositions/Bookmarks/BookCustomCss/RevealedImages 书键从 bookKey 切稳定 uid；v90：网页播放器自动制卡队列 `web_mine_queue`；v114：收藏词上下文；v115：排行榜 isbn / completedAt；v116：设备端待发制卡队列 `pending_mine_queue`；v117：MyComic SRS——`profiles.uid` 全局身份 + 八张 `srs_*` 表；v118：`epub_books` / `srt_books` / `video_books` 加 `localAddedAt`——本机开始拥有的时刻，与原始入库时刻 `importedAt` 拆开，删除墓碑仲裁与首页「最近添加」读它，设备本地不进 wire）、表迁移逻辑、偏好键值编解码器（PrefCodec）、语言配置模型和文本选区模型。是所有其他 packages 的基础依赖。
+共享核心模块：定义 Drift SQLite 数据库 schema、表迁移逻辑、偏好键值编解码器（PrefCodec）、语言配置模型和文本选区模型。是所有其他 packages 的基础依赖。
+
+- 当前 `schemaVersion = 5`（`lib/src/database/database.dart` 的 `kMyComicSchemaVersion`；本文数字仅作快照，以代码为准）。
+- `@DriftDatabase(tables: [...])` 注册 **99 张表**。MyComic 只使用漫画域子集；其余表是 上游快照的历史 schema，按 spec 要求保留以避免旧备份 / 旧偏好解析崩溃，**不要新增迁移或删除表**。
+- 迁移策略：`onUpgrade` 逐版本增量迁移，最低可升级 schema 为 `kMinSupportedSchemaVersion`；低于门槛抛 `UnsupportedLegacySchemaException`，库比代码新抛 `MyComicDatabaseDowngradeException`，都不重建库。
 
 ## 入口与启动
 
@@ -14,81 +18,33 @@
 
 ## 对外接口
 
-- `MyComicDatabase` -- 全部数据访问层，提供 media items / anki mappings / search history / audiobooks / audio cues / srt books / reader positions / bookmarks / reading statistics / preferences / dictionary metadata / epub books / book tags / profiles 等完整 CRUD API。
+- `MyComicDatabase` -- 全部数据访问层（漫画 / 来源 / 下载 / 历史 / 标签 / 备份 / 偏好等 CRUD）。
 - `PrefCodec` -- 偏好值的 `encode<T>` / `decode<T>` 泛型编解码。
 - `MyComicTextSelection` -- 跨模块共享的文本选区数据模型。
 
 ## 关键依赖与配置
 
-- `drift: ">=2.33.0 <2.34.0"` + `sqlite3` -- ORM 与 SQLite 绑定。**本包零 Flutter**（pubspec 不声明 `sdk: flutter`，包测试用 `package:test`）；SQLite 原生库由消费方装配：app 在 `my_comic/pubspec.yaml` 声明 `sqlite3_flutter_libs`，服务端走 `sqlite3` 的 native asset（`dart build cli`）。
+- `drift: ">=2.33.0 <2.34.0"` + `sqlite3` -- ORM 与 SQLite 绑定。**本包零 Flutter**（pubspec 不声明 `sdk: flutter`，包测试用 `package:test`）；SQLite 原生库由消费方装配：app 在 `my_comic/pubspec.yaml` 声明 `sqlite3_flutter_libs`。
 - `path: ^1.8.2` -- 路径处理。
 - 代码生成：`drift_dev: ^2.23.0` + `build_runner`，生成 `database.g.dart`。
 
 ## 数据模型
 
-98 张 Drift 表（按功能分组，以 `database.dart` 的 `@DriftDatabase(tables: [...])` 注册清单为准）：
+99 张 Drift 表，按功能分组（以 `database.dart` 的 `@DriftDatabase(tables: [...])` 注册清单为准）：
 
 | 分组 | 表名 |
 |------|------|
-| 媒体 | `MediaOpenHistory`（v78 最近打开流，取代 jidoujisho 血统的 `MediaItems`） |
-| 来源库 | `MediaSources` |
-| Anki | `AnkiMappings` |
-| 搜索 | `SearchHistoryItems` |
-| 有声书 | `Audiobooks`, `AudioCues`, `SrtBooks` |
-| 阅读位置 | `ReaderPositions`, `Bookmarks` |
-| 阅读器渲染 | `BookCustomCss`, `RevealedImages` |
-| 统计 | `ReadingStatistics`, `ReadingHourlyLogs` |
-| 偏好 | `Preferences` |
-| 剪贴板/活动 | `ClipboardHistory`, `ActivityEvents` |
-| 词典 | `DictionaryMetadata`, `DictionaryHistory` |
-| EPUB | `EpubBooks` |
-| 标签 | `BookTags`, `TagAssignments`（v77 五张映射表合一，宿主逻辑外键） |
-| Profile | `Profiles`, `ProfileSettings`, `MediaTypeProfiles`, `BookProfiles` |
-| 同步基线 | `SyncBaselines` |
-| 视频 | `VideoBooks`, `VideoWatchStatistics`, `VideoHourlyLogs` |
-| 收藏/制卡 | `FavoriteWords`, `MiningStatistics`, `MinedSentences`, `LookupMiningCounters`, `WebMineQueue`, `PendingMineQueue`（后两张设备本地） |
-| 合集/系列 | `MediaCollections`, `MediaCollectionItems`, `CollectionBookAliases`, `Series`, `ShelfEntries` |
-| 互联 | `MyComicPairedPeers` |
-| 游戏库 | `Galgames`, `GalgameSources`, `GalgameSessions` |
-| 删除墓碑 | `BookTombstones`, `StatisticsTombstones`, `CollectionMemberTombstones`, `BookTagMembershipTombstones`, `SyncDeletionTombstones` |
-| SRS（v117） | 同步事件本体 `SrsEntities`, `SrsFieldEdits`, `SrsReviewLogs`, `SrsUnknownEvents`（随备份走，合并导入走 SRS 专用步骤）；本机状态 / 可重建缓存 `SrsEventLocal`, `SrsLocalState`, `SrsNotesCache`, `SrsCardsCache`（设备本地，不进备份、恢复后清空）。身份是 `profiles.uid` |
-
-新增表（相对旧文档的 28 张补齐的 18 张）用途：
-
-- `MediaSources` -- TODO-817 网络/本地来源库：一个媒体根扫描产出多本书/视频，敏感凭据绝不入 `configJson`。
-- `ActivityEvents` -- 首页活动时间轴，每次 session 一行的精确时间戳事件流（read/watch/added）。
-- `ClipboardHistory` -- 桌面剪贴板复制历史，供查词面板/瞬态浮窗的历史按钮读取。
-- `MinedSentences` -- 制卡历史逐条记录（句子 + 跳回原文的定位锚点），供收藏夹跨媒体查看。
-- `LookupMiningCounters` -- per-book 查词/制卡终身累加计数（区别于 `MinedSentences` 的滚动历史）。
-- `Series` -- 旧「系列」容器，自 v38 冻结为遗留残留（勿再读写系列语义）。
-- `ShelfEntries` -- 以 `(mediaType, entryKey)` 统管本地+远端条目的自定义排序权重与（遗留）系列归属。
-- `MediaCollections` -- 统一合集容器（collection 无序 / playlist 有序，Jellyfin BoxSet/Playlist 式）。
-- `MediaCollectionItems` -- 合集成员引用（复合键按合集去重，同一条目可属多个合集）。
-- `CollectionMemberTombstones` -- 合集成员移出/合集删除墓碑，防跨端并集同步复活。
-- `CollectionTagMappings` -- 合集 ↔ 标签 多对多映射（复用共享 `BookTags` 标签池）。
-- `MyComicPairedPeers` -- 互联（局域网配对）的 per-peer 授权凭据表，token 明文列存（红线：不进日志/明文导出）。
-- `BookTombstones` -- 已删书墓碑，供备份「合并导入」跳过、避免复活已删的书。
-- `StatisticsTombstones` -- per-book/video 统计删除墓碑，防 MAX-union 同步/备份把删掉的统计加回。
-- `BookTagMembershipTombstones` -- 书/视频标签移除墓碑（LWW-element-set add/remove 裁决，防跨端复活/误删）。
-- `SyncDeletionTombstones` -- sync 通道跨资产统一的删除墓碑（带发布状态，删除需双向确认、不静默传播）。
-- `BookCustomCss` -- per-book 自定义 CSS 文本 + `updatedAt` 的跨端同步载体（LWW，`deleted`=重置墓碑）。
-- `RevealedImages` -- 图片防剧透遮罩「已揭开」状态的持久真相源（书内 ↔ 图片库双向同步）。
-- `Galgames` -- v55 galgame 游戏库真相源，取代旧偏好 key `galgame_library` 的 6 字段 JSON；TEXT 主键沿用旧微秒时间戳（封面文件名与之绑定）。
-- `GalgameSources` -- 游戏元数据源纵表（`(gameId, source)` 复合键 + JSON 快照 + 上提的 score/rank），加数据源零 schema 变更。
-- `GalgameSessions` -- 游玩会话事实表，由前台窗口计时器写入（脱离 hook 文本）。**刻意无统计投影表**，时长/次数/最后游玩一律现算 GROUP BY。
-- `GalgameTagMappings` -- v59（BUG-1113）游戏 ↔ 用户标签映射（复用共享 `BookTags` 池）。**无 `addedAt` 时钟、无移除墓碑**：游戏是本机局域身份，整套游戏数据不进 live-sync 也不进备份合并导入，标签跟随宿主不跨端传播。与游戏**元数据标签**（bgm/vndb 刮削字符串）是两条正交轴。
-
-迁移策略：`onUpgrade` 逐版本增量迁移，**最低可升级 schema 是 `kMinSupportedSchemaVersion`（v75）**——v2–v75 的阶梯（含旧时代的 `reader_ttu` / `sasayaki` / `hoshi://` / `s:hibikiServer` 等存量改写）已删除。低于门槛的库在任何迁移语句之前抛 `UnsupportedLegacySchemaException`，库文件原样保留，app 提示先装 `kLegacySchemaBridgeAppVersion`（v2.9.1，仍带完整阶梯）打开一次再更新；备份恢复 / 合并导入用 `checkSupportedSchemaVersion` + 文件头 `user_version` 在覆盖前做同样判定。降级（库比代码新）同样拒绝打开（`MyComicDatabaseDowngradeException`），绝不重建。
+| 媒体 / 来源 | `MediaOpenHistory`, `MediaSources`, `Series`, `ShelfEntries`, `MediaCollections`, `MediaCollectionItems`, `CollectionRelations` |
+| 漫画库 | `MangaChapterStates`, `MangaDownloadJobs`, `MangaChapterDirs`, `MangaReaderOverrides`, `MangaExtensionStores`, `MangaExtensions`, `MangaOnlineSources`, `MangaSourcePreferences`, `MangaTrustedSigners`, `MediaImages` |
+| 阅读位置 / 书签 | `ReaderPositions`, `Bookmarks`, `BookCustomCss`, `RevealedImages` |
+| 标签 | `BookTags`, `TagAssignments` |
+| 偏好 / 活动 | `Preferences`, `ClipboardHistory`, `ActivityEvents`, `UpdateFeedEntries` |
+| 备份 / 墓碑 | `BookTombstones`, `StatisticsTombstones`, `CollectionMemberTombstones`, `BookTagMembershipTombstones`, `SyncDeletionTombstones`, `StudySegmentTombstones` |
+| 历史非漫画域（兼容保留） | `AnkiMappings`, `SearchHistoryItems`, `Audiobooks`, `AudioCues`, `SrtBooks`, `ReadingStatistics`, `ReadingHourlyLogs`, `DictionaryMetadata`, `DictionaryHistory`, `EpubBooks`, `Profiles`, `ProfileSettings`, `MediaTypeProfiles`, `BookProfiles`, `LanguageProfiles`, `SyncBaselines`, `VideoBooks`, `VideoWatchStatistics`, `VideoHourlyLogs`, `FavoriteWords`, `MiningStatistics`, `MinedSentences`, `LookupMiningCounters`, `CollectionBookAliases`, `MyComicPairedPeers`, `VideoScrapeMeta`, `CollectionScrapeMeta`, `MediaTrackingMappings`, `MediaTrackingOutbox`, `Galgames`, `GalgameSources`, `GalgameSessions`, `VideoMetadata*`, `VideoSourceScrape*`, `VideoSidecarArtifacts`, `VideoDownload*`, `VideoFileSpecs`, `VideoEpisodeBindingOverrides`, `AnidbFileIdentities`, `StudySegments`, `WebMineQueue`, `PendingMineQueue`, `SrsEntities`, `SrsFieldEdits`, `SrsReviewLogs`, `SrsUnknownEvents`, `SrsEventLocal`, `SrsLocalState`, `SrsNotesCache`, `SrsCardsCache` |
 
 ## 测试与质量
 
-测试位于 `my_comic/test/database/` 下，覆盖：
-- `migration_test.dart` -- 迁移路径验证
-- `preferences_test.dart` / `pref_codec_test.dart` -- 偏好读写
-- `epub_books_test.dart` / `audiobooks_test.dart` / `media_items_test.dart` 等 -- 各表 CRUD
-- `concurrent_writes_test.dart` -- 并发写入
-- `foreign_keys_test.dart` -- 外键约束
-- `profiles_test.dart` / `reader_positions_test.dart` / `tags_test.dart` 等
+测试位于 `packages/my_comic_core/test/`（本包目录下，不在 `my_comic/test/`），用 `dart test` 运行，覆盖 fresh schema、迁移降级、偏好编解码、成员关系与快照文件等。
 
 ## 相关文件清单
 
@@ -102,3 +58,4 @@
 ## 变更记录 (Changelog)
 
 - 2026-05-23: 初始文档生成。
+- 2026-11-12: 更新到 MyComic 独立化后的实际 schemaVersion / 表清单 / 测试路径。

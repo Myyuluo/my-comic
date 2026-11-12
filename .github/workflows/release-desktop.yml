@@ -18,19 +18,16 @@ on:
       - 'packages/**'
       # C ABI bridge 源码：只改 native/ 的 PR 以前触发不了任何构建，
       # 编译挂了要等下一个不相关改动才暴露。
-      - 'native/**'
       - 'ci/**'
       - 'tool/check_release_policy.ps1'
       - 'tool/release_sequence.sh'
       - 'tool/publish_update_manifest.sh'
       - 'tool/merge_update_manifest.py'
       - 'tool/mihon/**'
-      - 'tool/ffmpeg-min/**'
       - 'tool/sign_windows_release.ps1'
       - 'tool/simplysign_connect.ps1'
       - 'tool/engine_overlay.ps1'
       - 'third_party/**'
-      - 'tools/build_magpie_slim.ps1'
       - 'tools/bundle_7za.ps1'
       - '.github/workflows/release-desktop.yml'
       - '.github/actions/provide-baked-secrets/**'
@@ -75,8 +72,7 @@ concurrency:
 jobs:
   windows:
     # BUG-2817：`release` 事件只给应用 release（tag = v<数字>…）构建；依赖资产
-    # release（vendor-libmpv、voice-hook-helper…）被手动发布时不许整套构建、
-    # 把安装包挂到它们身上。表达式没有正则，只能逐个列 v0..v9；
+    # release 被手动发布时不许整套构建、把安装包挂到它们身上。表达式没有正则，只能逐个列 v0..v9；
     # 守卫 my_comic/test/build/release_event_app_tag_guard_test.dart 钉住每个 job 都带它。
     if: ${{ (github.event_name != 'release' || startsWith(github.event.release.tag_name, 'v0') || startsWith(github.event.release.tag_name, 'v1') || startsWith(github.event.release.tag_name, 'v2') || startsWith(github.event.release.tag_name, 'v3') || startsWith(github.event.release.tag_name, 'v4') || startsWith(github.event.release.tag_name, 'v5') || startsWith(github.event.release.tag_name, 'v6') || startsWith(github.event.release.tag_name, 'v7') || startsWith(github.event.release.tag_name, 'v8') || startsWith(github.event.release.tag_name, 'v9')) }}
     runs-on: windows-2022
@@ -290,13 +286,8 @@ jobs:
       - name: Provide baked-in secret stubs
         uses: ./.github/actions/provide-baked-secrets
         with:
-          google-oauth-client-secret: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
           log-upload-endpoint: ${{ secrets.LOG_UPLOAD_ENDPOINT }}
           log-upload-token: ${{ secrets.LOG_UPLOAD_TOKEN }}
-          dandanplay-app-id: ${{ secrets.DANDANPLAY_APP_ID }}
-          dandanplay-app-secret: ${{ secrets.DANDANPLAY_APP_SECRET }}
-          tmdb-api-key: ${{ secrets.TMDB_API_KEY }}
-          opensubtitles-api-key: ${{ secrets.OPENSUBTITLES_API_KEY }}
       - name: Flutter pub get
         working-directory: my_comic
         run: flutter pub get
@@ -384,69 +375,6 @@ jobs:
           mode: save
           name: ${{ steps.native_store.outputs.mihon }}
           path: ${{ runner.temp }}\mihon-runtime
-      # 持久库理由与名字契约见 build-multiplatform.yml windows job 同名步骤（名字逐字一致）。
-      - name: Restore galgame helper archives
-        id: galgame_helper_store
-        uses: ./.github/actions/native-artifact-store
-        with:
-          mode: restore
-          name: ${{ steps.native_store.outputs.galgame }}
-          path: native\galgame_hook\dist
-      - name: Build and bundle galgame helper archives
-        shell: pwsh
-        run: |
-          # 这句断言是把「意外安全」变成「显式安全」，不是在修一个当前的漏红。
-          # 准确的 pwsh 规则是：$LASTEXITCODE 只被 **native 命令** 写，cmdlet
-          # （Join-Path / New-Item / Test-Path / Copy-Item）不会重置它。下面整段
-          # 只有这一条 native 命令，所以块尾 GitHub 追加的 `exit $LASTEXITCODE`
-          # 今天确实拿到的是 build_distribution.ps1 的退出码 —— 它是对的。
-          # 但这份正确性完全依赖「后面没有第二条 native 命令」：任何人在下方插入
-          # 一条 git / 7z / certutil，`-RunTests` 里双架构 22 个 ctest 的判决就会
-          # 被静默顶掉。显式断言后这个隐性前提消失。
-          if ('${{ steps.galgame_helper_store.outputs.hit }}' -ne 'true') {
-            powershell -NoProfile -ExecutionPolicy Bypass -File native/galgame_hook/tools/build_distribution.ps1 -RunTests
-            if ($LASTEXITCODE -ne 0) { throw "build_distribution.ps1 -RunTests failed ($LASTEXITCODE)" }
-          }
-          # BUG-1449：把 helper 作为**普通文件**直接装进 bundle 的 voice_hook\<arch>\，
-          # 不再随包发 zip 让运行时解压。zip + 侧车 + 运行时安装那套是 helper 还走网络
-          # 下载时的设计；随包之后它只剩一个后果——磁盘上多出一份需要与本体保持同步的
-          # 解压副本，而「保持同步」正是 BUG-1448 断掉的地方。构建期解压使两者同源，
-          # 漂移在结构上不再可能。完整性校验没有削弱，只是前移到这里（构建期 fail-closed）。
-          # 解压/校验逻辑与 build-multiplatform.yml 共用同一个脚本：这两段曾是孪生副本，
-          # 而「两份各自漂移」就是本次要根治的形态，不要再复制粘贴回来。
-          powershell -NoProfile -ExecutionPolicy Bypass -File native/galgame_hook/tools/install_into_bundle.ps1 -BundleDirectory "$PWD\my_comic\build\windows\x64\runner\Release"
-          if ($LASTEXITCODE -ne 0) { throw "install_into_bundle.ps1 failed ($LASTEXITCODE)" }
-      - name: Save galgame helper archives to native artifact store
-        if: steps.galgame_helper_store.outputs.hit != 'true'
-        continue-on-error: true
-        uses: ./.github/actions/native-artifact-store
-        with:
-          mode: save
-          name: ${{ steps.native_store.outputs.galgame }}
-          path: native\galgame_hook\dist
-      - name: Bundle slim Magpie for offline upscaling install
-        shell: pwsh
-        run: |
-          # BUG-1217：随主包发行精简版 Magpie，超分首次使用不再需要下载 10.79 MB。
-          # 脚本自己先校验上游完整包的 SHA-256 再裁剪重打包——裁剪等于重新签名，
-          # 源包若被掉包而不先验，我们的侧车就成了给污染产物背书的东西。
-          # 只出 x64：ARM64 用户极少且能跑 x64 模拟，为它多背 4.7 MB 不划算，
-          # 那条路继续走按需下载。
-          pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build_magpie_slim.ps1
-          if ($LASTEXITCODE -ne 0) { throw "build_magpie_slim.ps1 failed ($LASTEXITCODE)" }
-          $sourceDir = Join-Path $PWD 'dist'
-          $targetDir = Join-Path $PWD 'my_comic\build\windows\x64\runner\Release\magpie_bundle'
-          New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
-          foreach ($file in @(
-            'Magpie-hibiki-slim-x64.zip',
-            'Magpie-hibiki-slim-x64.zip.sha256'
-          )) {
-            $source = Join-Path $sourceDir $file
-            if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
-              throw "Missing bundled magpie asset: $source"
-            }
-            Copy-Item -LiteralPath $source -Destination (Join-Path $targetDir $file) -Force
-          }
       - name: Bundle full 7-Zip for discovery and manga extraction
         shell: pwsh
         run: |
@@ -475,48 +403,6 @@ jobs:
           # `exit $LASTEXITCODE`，且以 `pwsh -command ". '{0}'"` 点源执行——点源脚本里
           # `exit 69` 让 pwsh 进程以 1 退出、不打任何报错，整步无声变红。显式成功收尾。
           exit 0
-      # ffmpeg.exe and its MinGW runtime DLLs are vendored at
-      # third_party/ffmpeg-min/windows/
-      # (TODO-416). It used to be fetched from another workflow's build artifact,
-      # which silently broke whenever that artifact expired (90 days) or that
-      # workflow had not run on this branch, shipping a Windows bundle with NO
-      # ffmpeg -> missing video covers/subtitles. Copying the committed binary
-      # plus its runtime DLLs makes every release self-contained and removes the
-      # cross-workflow supply dependency.
-      - name: Install vendored ffmpeg-min runtime into Windows bundle
-        shell: pwsh
-        run: |
-          $sourceDir = Join-Path $PWD 'third_party\ffmpeg-min\windows'
-          $targetDir = Join-Path $PWD 'my_comic\build\windows\x64\runner\Release'
-          if (-not (Test-Path -LiteralPath $targetDir -PathType Container)) {
-            throw "Missing Windows release bundle directory: $targetDir"
-          }
-          # BUG-1420: ffprobe rides along with ffmpeg. resolveFfprobeExecutable()
-          # (ffmpeg_backend.dart) has always looked for it next to the app exe,
-          # but the recipe used to pass --disable-ffprobe so it never existed and
-          # the lookup silently fell through to PATH. Two features degrade
-          # silently without it on a machine with no system ffmpeg: embedded
-          # subtitle fonts (subtitle_embedded_fonts.dart) and audio container
-          # tags (desktop_audio_clipper.dart).
-          # TODO-2701 ②: no MinGW runtime DLLs here. The recipe builds Windows with
-          # `--extra-ldflags=-static --pkg-config-flags=--static`, so zlib/pthread
-          # are folded into the exe; ffmpeg.exe/ffprobe.exe import only system DLLs
-          # (kernel32/msvcrt/ws2_32/secur32/bcrypt). libwinpthread-1.dll and
-          # zlib1.dll were leftovers from the pre-static, dynamically-linked MSYS2
-          # generation and shipped ~194 KB of dead weight to every user.
-          $runtimeFiles = @(
-            'ffmpeg.exe',
-            'ffprobe.exe'
-          )
-          foreach ($file in $runtimeFiles) {
-            $source = Join-Path $sourceDir $file
-            if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
-              throw "Missing vendored ffmpeg-min runtime file: $source"
-            }
-            Copy-Item -LiteralPath $source -Destination (Join-Path $targetDir $file) -Force
-          }
-          Get-Item -LiteralPath ($runtimeFiles | ForEach-Object { Join-Path $targetDir $_ }) |
-            Select-Object FullName, Length
       # TODO-1242 (P0): my_comic's C++ modules link the MSVC CRT dynamically (/MD)
       # and reference newer STL/EH symbols (VCRUNTIME140_1!__CxxFrameHandler4).
       # The installer did NOT ship the CRT, so machines whose system VC++
@@ -580,79 +466,6 @@ jobs:
           }
           Get-ChildItem -LiteralPath $targetDir -Filter '*140*.dll' |
             Select-Object FullName, Length
-      # The bundled ffmpeg -version check below is the hard gate: it proves the
-      # exact binary we ship in the installer payload executes. The fuller
-      # smoke-test.sh comparison additionally needs a *fixture* full ffmpeg to
-      # author representative MP4/MKV inputs (the minimal bundled binary
-      # deliberately lacks lavfi/muxers - see windows_vendored_ffmpeg_guard).
-      # GitHub windows runners do not preinstall ffmpeg, so the fixture comes
-      # from `choco install ffmpeg`, whose source community.chocolatey.org
-      # intermittently returns 504 Gateway Timeout (runs +130/+132). That is an
-      # external-service flake on a *reference* generator, not a defect in the
-      # shipped artifact, yet it was failing the whole Desktop release workflow
-      # and blocking the installer. Fix (mirrors the TODO-624 emulator
-      # non-blocking precedent): retry the choco install a few times to absorb
-      # transient 504s, and if the fixture still cannot be obtained, emit a loud
-      # ::warning:: and skip only the comparison smoke (the bundled -version gate
-      # already ran). External-platform limitation: re-evaluate once a more
-      # reliable fixture ffmpeg source is vendored/cached (TODO-652).
-      - name: Smoke test bundled ffmpeg in Windows bundle
-        shell: pwsh
-        run: |
-          # NOTE: keep the FULL literal bundle paths below (no $releaseDir
-          # indirection). release_workflow_diagnostics_guard_test asserts on
-          # these literals to prove the release smokes the exact binaries copied
-          # beside MyComic.exe -- splitting them into a variable silently blinds
-          # that guard.
-          $target = Join-Path $PWD 'my_comic\build\windows\x64\runner\Release\ffmpeg.exe'
-          if (-not (Test-Path -LiteralPath $target -PathType Leaf)) {
-            throw "Missing bundled ffmpeg executable: $target"
-          }
-          & $target -version
-          if ($LASTEXITCODE -ne 0) {
-            throw "Bundled ffmpeg failed -version with exit code $LASTEXITCODE"
-          }
-          # BUG-1420: ffprobe is a SEPARATE executable with its own consumers
-          # (embedded subtitle fonts, audio container tags). A bundle that ships
-          # a healthy ffmpeg but a missing/broken ffprobe degrades silently -
-          # both consumers swallow the ProcessException by design - so gate it
-          # here with the same -version check rather than trusting the copy step.
-          $probeTarget = Join-Path $PWD 'my_comic\build\windows\x64\runner\Release\ffprobe.exe'
-          if (-not (Test-Path -LiteralPath $probeTarget -PathType Leaf)) {
-            throw "Missing bundled ffprobe executable: $probeTarget"
-          }
-          & $probeTarget -version
-          if ($LASTEXITCODE -ne 0) {
-            throw "Bundled ffprobe failed -version with exit code $LASTEXITCODE"
-          }
-          $fixtureCommand = Get-Command ffmpeg -ErrorAction SilentlyContinue
-          if ($null -eq $fixtureCommand) {
-            # External dependency: tolerate transient chocolatey 504s with a
-            # bounded retry instead of failing on the first flake.
-            for ($attempt = 1; $attempt -le 3; $attempt++) {
-              Write-Host "Installing fixture ffmpeg from chocolatey (attempt $attempt/3)"
-              choco install ffmpeg -y --no-progress
-              $fixtureCommand = Get-Command ffmpeg -ErrorAction SilentlyContinue
-              if ($null -ne $fixtureCommand) { break }
-              if ($attempt -lt 3) {
-                Write-Host "Fixture ffmpeg not available yet; retrying in 30s..."
-                Start-Sleep -Seconds 30
-              }
-            }
-          }
-          if ($null -eq $fixtureCommand) {
-            Write-Host "::warning title=Fixture ffmpeg unavailable::Could not obtain a full fixture ffmpeg (chocolatey likely flaking, e.g. 504). The bundled ffmpeg -version gate already passed; skipping the fixture comparison smoke test. This is an external-service flake on a reference generator, not a defect in the shipped binary (TODO-652)."
-            exit 0
-          }
-          $fixtureFfmpeg = $fixtureCommand.Source
-          & $fixtureFfmpeg -version
-          if ($LASTEXITCODE -ne 0) {
-            throw "Fixture ffmpeg failed -version with exit code $LASTEXITCODE"
-          }
-          $bash = (Get-Command bash -ErrorAction Stop).Source
-          $env:FFMPEG_MIN = ($target -replace '\\', '/')
-          $env:FIXTURE_FFMPEG = ($fixtureFfmpeg -replace '\\', '/')
-          & $bash -c 'bash tool/ffmpeg-min/smoke-test.sh'
       # 打包前校验「app 起不来就靠它」的核心文件真在 bundle 里。
       # 本仓已删除词典 / Blu-ray / 视频原生库；只剩 Flutter runner 与 app 本体。
       - name: Verify Windows installer payload has the core runtime
@@ -744,9 +557,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "SimplySign 登录失败，退出码 $LASTEXITCODE" }
       # 给 bundle 里的所有 exe/dll 签名，必须在 Inno 打包**之前** —— 打包之后再签
       # 只能签到外壳，里面的程序仍是未签名的。
-      # 只签外壳时的实际缺口：MyComic.exe、my_comic_update_launcher.exe、voice_hook/ 下的
-      # 注入器与 hook DLL、ffmpeg/ffprobe 全部无签名，杀软扫描已安装目录照样报毒；
-      # galgame 注入器尤其容易被盯上，而它恰恰是最需要签名背书的那个。
+      # 只签外壳时的实际缺口：MyComic.exe、my_comic_update_launcher.exe、随包 DLL
+      # 全部无签名，杀软扫描已安装目录照样报毒。
       # -SkipValidlySigned：bundle 里混着微软的 VC++ CRT 运行库，重签会把微软签名
       # 换成我们的，那是倒退不是补齐。
       - name: Sign Windows bundle binaries

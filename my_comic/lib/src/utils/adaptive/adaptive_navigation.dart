@@ -96,12 +96,6 @@ Widget _maybeBadge({
 /// this no longer uses on Material).
 const Key myComicMaterialNavKey = ValueKey<String>('mycomic-material-nav');
 
-/// Marks the macOS-native (macos_ui) shell's content subtree so integration
-/// tests can locate the top-level destinations without depending on the
-/// MacosWindow/Sidebar internals. Mirrors [myComicMaterialNavKey] for the macOS
-/// design system.
-const Key myComicMacosNavKey = ValueKey<String>('mycomic-macos-nav');
-
 /// Height of the mobile bottom bar's **content box**, in logical pixels —
 /// the system gesture inset is let through by [SafeArea] on top of this.
 ///

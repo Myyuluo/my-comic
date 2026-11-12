@@ -21,32 +21,6 @@ import 'package:my_comic/utils.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-/// 「首页入口」：首页模块关掉后，首页浮动工具栏上那四个入口的落脚处。
-///
-/// 首页工具栏（`home_dashboard_page.dart` 的 `_buildFloatingToolbar`）是更新中心、
-/// 统计中心、排行榜、反馈四个页面的常驻入口，其中统计中心与排行榜**只有**这一处
-/// 入口。2026-10-09 首页可关（[ModuleId.home]）之后，关掉首页不能把它们一起关成
-/// 不可达——所以首页关着时这里出现同样四行，打开的是同一个页面、同一个函数。
-/// 首页开着时整段隐藏（不在设置里多一份重复入口，也不进搜索）。
-SettingsSection _homeShortcutsSection() {
-  return SettingsSection(
-    id: 'system.section.home_shortcuts',
-    presentation: SettingsSectionPresentation.alwaysExpanded,
-    title: t.settings_section_home_shortcuts,
-    visible: (SettingsContext c) =>
-        !c.appModel.moduleVisibility.isEnabled(ModuleId.home),
-    items: <SettingsItem>[
-      SettingsNavigationItem(
-        id: 'system.home_shortcut_updates',
-        title: t.updates_center_title,
-        icon: MyComicIcons.notifications,
-        onTap: (SettingsContext c) =>
-            openUpdatesCenter(c.context, c.appModel.updateFeedService),
-      ),
-    ],
-  );
-}
-
 SettingsDestination buildSystemDestination() {
   return SettingsDestination(
     id: SettingsDestinationId.system,
@@ -418,85 +392,6 @@ SettingsDestination buildSystemDestination() {
         ],
       ),
     ],
-  );
-}
-
-
-/// 手动「立即检查更新」：编排在 [checkAppUpdateNow]（与更新中心的 app 新版本
-/// 条目共用同一条应用内下载安装链路）。
-Future<void> _checkUpdateNow(SettingsContext settingsContext) =>
-    checkAppUpdateNow(settingsContext.context, settingsContext.appModel);
-
-String _selectedUpdateChannel(SettingsContext settingsContext) {
-  if (settingsContext.appModel.updateDebugChannel) return 'debug';
-  if (settingsContext.appModel.updateBetaChannel) return 'beta';
-  return 'stable';
-}
-
-/// TMDB 官方标识（`Primary short (blue)`）在包内的路径。
-///
-/// 这张 PNG 由 themoviedb.org/about/logos-attribution 下发的**矢量原图**栅格化而来；
-/// 原图 `assets/attribution/tmdb/blue_square_1.svg` 逐字节入库存证（sha256 即 TMDB
-/// 直链文件名里那串摘要）。之所以不直接渲染 SVG：Flutter 唯一现实的 SVG 方案
-/// `flutter_svg` 不支持 CSS，而 TMDB 原图把唯一填充写在 `<style>` 类里，解析后渐变
-/// 全丢、整个标识渲染成纯黑——那本身就是「改色」。栅格化只做尺寸映射，未改色 /
-/// 改比例 / 翻转 / 旋转 / 裁剪。来源、哈希、配方与守卫见同目录 README.md 与
-/// `test/settings/tmdb_attribution_test.dart`。
-@visibleForTesting
-const String kTmdbLogoAsset = 'assets/attribution/tmdb/logo_tmdb.png';
-
-/// logo 展示高度（dp）；宽度见 [_kTmdbLogoWidth]（24 × 190.24/81.52 ≈ 56.0）。
-///
-/// 条款要求展示 TMDB 标识，但它**不得比本应用自己的标识更显眼**。这条义务的实测
-/// 依据（数字均可按下列位置复核）：
-///
-/// - 同一行左侧的图标徽标是 30dp：`_SettingsIcon` 在 Material 下走
-///   `MyComicBadge(size: 18, padding: EdgeInsets.all(6))`，18+6*2 = 30
-///   （`utils/components/settings_shared.dart`）。24dp 与之同量级。
-/// - 应用自身图标在 Flutter widget 树里有两个真渲染点。设置 › 外观 › 应用图标的
-///   预设瓦片（`miscellaneous_settings_page.dart` 的 `_AppIconTile`）中，
-///   `SizedBox.square(72)` 扣掉 `MyComicCard` 描边的 1dp 内缩与 `gap/2 = 4` 的
-///   双侧 padding，图片实得 62×62dp；宽屏主导航 rail 的品牌位直接显示经过圆角
-///   裁切的 64×64dp 图片。取较大的 64dp 作比较，TMDB 标识 24dp 高 = 其 37.5%；
-///   面积 24×56.0 ≈ 1344dp²，是其 4096dp² 的 32.8%——
-///   两个维度都更小，满足条款的 "less prominent"。
-/// - 除上述预设瓦片和宽屏 rail 外应用图标不再重复绘制：首页 dashboard、
-///   loading/splash 都不传图；窄屏底栏也没有品牌位。
-///
-/// 所以旧注释那句「远小于应用自身 logo 的**任何**展示尺寸」结论对、依据错：可比
-/// 的最大展示尺寸现在是 64×64dp。调整本值前请重跑上述核对——这段是「不得更显眼」
-/// 的唯一书面依据，守卫只能钉住上限（≤32dp），钉不住依据本身。
-const double _kTmdbLogoHeight = 24;
-
-/// 原图 viewBox 是 `0 0 190.24 81.52`；宽度按该比例算死，配合 [BoxFit.contain]
-/// 保证任何主题/文字缩放下都不会被拉伸变形（改比例同样是条款禁止项）。
-const double _kTmdbLogoWidth = _kTmdbLogoHeight * 190.24 / 81.52;
-
-/// TMDB 署名行：官方标识 + 条款原句免责声明，点击跳官网。
-///
-/// 用 [SettingsCustomItem] 而不是 [SettingsActionItem]，只因为 schema 的 `icon`
-/// 槽是 `IconData`、放不下一张图；行本体仍是共享的 [AdaptiveSettingsRow]，
-/// 焦点/密度/折叠行为与其它设置行完全一致。
-Widget _buildTmdbAttributionRow(SettingsContext settingsContext) {
-  return AdaptiveSettingsRow(
-    title: 'TMDB',
-    subtitle: t.about_tmdb_attribution,
-    icon: MyComicIcons.video,
-    showIcon: true,
-    trailing: SizedBox(
-      height: _kTmdbLogoHeight,
-      width: _kTmdbLogoWidth,
-      child: Image.asset(
-        kTmdbLogoAsset,
-        fit: BoxFit.contain,
-        filterQuality: FilterQuality.medium,
-        semanticLabel: 'TMDB',
-      ),
-    ),
-    onTap: () async => launchUrl(
-      Uri.parse('https://www.themoviedb.org/'),
-      mode: LaunchMode.externalApplication,
-    ),
   );
 }
 

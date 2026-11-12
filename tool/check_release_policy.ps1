@@ -128,26 +128,15 @@ Require-Text '.github/workflows/release-desktop.yml' $desktopWorkflow '--build-n
 Require-Text '.github/workflows/release-desktop.yml' $desktopWorkflow 'flutter build windows --release' 'desktop workflow must still publish Windows'
 Require-Text '.github/workflows/release-desktop.yml' $desktopWorkflow 'mycomic-*-windows-setup.exe' 'desktop workflow must upload Windows installer assets'
 Require-Text '.github/workflows/release-desktop.yml' $desktopWorkflow 'Publish mirror update manifest (Windows assets)' 'Windows release assets must merge into the update manifest'
-Require-Text '.github/workflows/release-desktop.yml' $desktopWorkflow 'native/galgame_hook/tools/build_distribution.ps1 -RunTests' 'Windows releases must build the bundled offline galgame helper from the in-tree source'
-Require-Text '.github/workflows/release-desktop.yml' $desktopWorkflow 'install_into_bundle.ps1 -BundleDirectory "$PWD\my_comic\build\windows\x64\runner\Release"' 'Windows release payload must unpack both helper architectures into the packaged Release bundle (BUG-1449)'
-
+# ADR 0024 / independence cleanup: non-manga native helpers (galgame hook,
+# Magpie upscaling, ffmpeg-min) must never come back into the Windows bundle.
 $multiplatformWorkflow = Read-RepoFile '.github/workflows/build-multiplatform.yml'
-Require-Text '.github/workflows/build-multiplatform.yml' $multiplatformWorkflow 'native/galgame_hook/tools/build_distribution.ps1 -RunTests' 'Windows CI must exercise the same bundled helper build as release'
-Require-Text '.github/workflows/build-multiplatform.yml' $multiplatformWorkflow 'install_into_bundle.ps1 -BundleDirectory "$PWD\my_comic\build\windows\x64\runner\Debug"' 'Windows debug bundle must exercise the same build-time helper unpack as release (BUG-1449)'
-
-# BUG-1292: Magpie has no download path left, so the bundled slim archive is the
-# ONLY way window upscaling can ever install.
-$magpieBundleWorkflows = @{
-  '.github/workflows/release-desktop.yml'     = @{ Content = $desktopWorkflow; Payload = 'Release\magpie_bundle' }
-  '.github/workflows/build-multiplatform.yml' = @{ Content = $multiplatformWorkflow; Payload = 'Debug\magpie_bundle' }
-}
-foreach ($relativePath in $magpieBundleWorkflows.Keys) {
-  $entry = $magpieBundleWorkflows[$relativePath]
-  $content = $entry.Content
-  Require-Text $relativePath $content 'tools/build_magpie_slim.ps1' 'Windows bundles must build the slim Magpie archive from the in-tree script (BUG-1217/BUG-1292)'
-  Require-Text $relativePath $content $entry.Payload 'Windows bundle payload must contain magpie_bundle/ or window upscaling can never install (BUG-1292)'
-  Require-Text $relativePath $content 'Magpie-hibiki-slim-x64.zip.sha256' 'the bundled Magpie archive must ship with its sha256 sidecar; the installer refuses an unverified package (BUG-1292)'
-}
+Forbid-Pattern '.github/workflows/release-desktop.yml' $desktopWorkflow 'native/galgame_hook/' 'galgame helper was removed with the non-manga native surface'
+Forbid-Pattern '.github/workflows/release-desktop.yml' $desktopWorkflow 'magpie_bundle' 'Magpie upscaling was removed with the non-manga native surface'
+Forbid-Pattern '.github/workflows/release-desktop.yml' $desktopWorkflow 'ffmpeg-min' 'ffmpeg-min was removed with the video feature'
+Forbid-Pattern '.github/workflows/build-multiplatform.yml' $multiplatformWorkflow 'native/galgame_hook/' 'galgame helper was removed with the non-manga native surface'
+Forbid-Pattern '.github/workflows/build-multiplatform.yml' $multiplatformWorkflow 'magpie_bundle' 'Magpie upscaling was removed with the non-manga native surface'
+Forbid-Pattern '.github/workflows/build-multiplatform.yml' $multiplatformWorkflow 'ffmpeg-min' 'ffmpeg-min was removed with the video feature'
 
 if ($failures.Count -gt 0) {
   Write-Error ("Release policy guard failed:`n- " + ($failures -join "`n- "))

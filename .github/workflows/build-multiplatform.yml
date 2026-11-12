@@ -30,10 +30,8 @@ on:
       - 'packages/**'
       # C ABI bridge 源码：只改 native/ 的 PR 以前触发不了任何构建，
       # 编译挂了要等下一个不相关改动才暴露。
-      - 'native/**'
       - 'ci/**'
       - 'third_party/**'
-      - 'tools/build_magpie_slim.ps1'
       - 'tools/bundle_7za.ps1'
       # Windows job 构建并校验 Mihon 桌面 sidecar（tool/mihon/*）。
       - 'tool/mihon/**'
@@ -118,7 +116,7 @@ jobs:
 
           app_common='^(pubspec\.(yaml|lock)$|ci/|third_party/[^/]+/pubspec\.yaml$|\.github/workflows/build-multiplatform\.yml$|\.github/actions/(provide-baked-secrets|native-artifact-store|native-store-names|pdfium-hook-cache)/)'
           smoke='^my_comic/(integration_test/(app_smoke_test\.dart$|test_helpers\.dart$|support/|helpers/)|tool/(comprehensive_test_runner\.dart$|generate_test_fixtures\.dart$|test_flow/))'
-          windows_only='^(my_comic/windows/|packages/(flutter_inappwebview_windows|gamepads_windows)/|packages/[^/]+/windows/|native/galgame_hook/|third_party/([^/]+/windows/|[^/]*windows[^/]*/|libplacebo-win/|m_extension_server/|jogamp/)|tool/mihon/|tool/engine_overlay\.ps1$|tools/(build_magpie_slim|bundle_7za)\.ps1$|.github/actions/(flutter-engine-overlay)/)'
+          windows_only='^(my_comic/windows/|packages/(flutter_inappwebview_windows|gamepads_windows)/|packages/[^/]+/windows/|third_party/([^/]+/windows/|[^/]*windows[^/]*/|libplacebo-win/|m_extension_server/|jogamp/)|tool/mihon/|tool/engine_overlay\.ps1$|tools/bundle_7za\.ps1$|.github/actions/(flutter-engine-overlay)/)'
 
           route() {
             local key="$1" re="" v
@@ -135,7 +133,7 @@ jobs:
   # appSmoke），把 PR 上被路径门跳过的「只改 Dart 的 PR」在 develop 上补一遍。
   #
   # 为什么需要它、为什么是这种形状：
-  #   * release-desktop.yml 在每次 develop push（my_comic/** packages/** native/** …）上都会做
+  #   * release-desktop.yml 在每次 develop push（my_comic/** packages/** ci/** …）上都会做
   #     Windows release 构建——编译 / 链接这层兜底本来就在，而且是每次合并。
   #     它**没有**的是 appSmoke（Windows 真 app 冒烟）、debug 配置构建和 FFI 真调用
   #     测试；这些只在本 workflow 里。
@@ -193,13 +191,8 @@ jobs:
       - name: Provide baked-in secret stubs
         uses: ./.github/actions/provide-baked-secrets
         with:
-          google-oauth-client-secret: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
           log-upload-endpoint: ${{ secrets.LOG_UPLOAD_ENDPOINT }}
           log-upload-token: ${{ secrets.LOG_UPLOAD_TOKEN }}
-          dandanplay-app-id: ${{ secrets.DANDANPLAY_APP_ID }}
-          dandanplay-app-secret: ${{ secrets.DANDANPLAY_APP_SECRET }}
-          tmdb-api-key: ${{ secrets.TMDB_API_KEY }}
-          opensubtitles-api-key: ${{ secrets.OPENSUBTITLES_API_KEY }}
       - name: Flutter pub get
         working-directory: my_comic
         run: flutter pub get
@@ -273,68 +266,6 @@ jobs:
           mode: save
           name: ${{ steps.native_store.outputs.mihon }}
           path: ${{ runner.temp }}\mihon-runtime
-      # helper 双架构 cmake + ctest 每次 270~400 s。key = runner 镜像 + native/galgame_hook
-      # 全树哈希。镜像决定 MSVC / CMake / 自带 .NET 运行时，工具链一变就重编并重跑 ctest；
-      # 树哈希**含测试**：只改 ctest 用例也必须 miss 重跑，所以不能拿只覆盖出包输入的
-      # helper_source_fingerprint 当 key。持久库只在 build_distribution.ps1 -RunTests 与
-      # install_into_bundle.ps1 都成功之后才存（下面的 Save 步骤），所以命中
-      # = 这棵树已经完整编译并通过过 -RunTests，跳过是重复劳动而不是跳过门。
-      # install_into_bundle.ps1 仍会按当前源码指纹复核 dist，串号在那里 fail-closed。
-      # 哈希由 native-store-names 按已提交树（git ls-tree）算，与磁盘上的 build/ dist/
-      # 等生成物无关。
-      # 名字与 release-desktop.yml windows job 逐字一致，两条 workflow 共用同一份。
-      - name: Restore galgame helper archives
-        id: galgame_helper_store
-        uses: ./.github/actions/native-artifact-store
-        with:
-          mode: restore
-          name: ${{ steps.native_store.outputs.galgame }}
-          path: native\galgame_hook\dist
-      - name: Build and bundle galgame helper archives
-        shell: pwsh
-        run: |
-          # 同 release-desktop.yml 的孪生副本：这段今天是「意外安全」的（块内只有
-          # 这一条 native 命令，后面全是不重置 $LASTEXITCODE 的 cmdlet），但只要
-          # 有人插入第二条 native 命令，双架构 ctest 的判决就被静默顶掉。显式断言。
-          if ('${{ steps.galgame_helper_store.outputs.hit }}' -ne 'true') {
-            powershell -NoProfile -ExecutionPolicy Bypass -File native/galgame_hook/tools/build_distribution.ps1 -RunTests
-            if ($LASTEXITCODE -ne 0) { throw "build_distribution.ps1 -RunTests failed ($LASTEXITCODE)" }
-          }
-          # BUG-1449：见 release-desktop.yml 同处注释。helper 作为普通文件直接装进
-          # voice_hook\<arch>\，与本体同源；解压/校验走共用脚本，不要复制粘贴回来。
-          powershell -NoProfile -ExecutionPolicy Bypass -File native/galgame_hook/tools/install_into_bundle.ps1 -BundleDirectory "$PWD\my_comic\build\windows\x64\runner\Debug"
-          if ($LASTEXITCODE -ne 0) { throw "install_into_bundle.ps1 failed ($LASTEXITCODE)" }
-      - name: Save galgame helper archives to native artifact store
-        if: steps.galgame_helper_store.outputs.hit != 'true'
-        continue-on-error: true
-        uses: ./.github/actions/native-artifact-store
-        with:
-          mode: save
-          name: ${{ steps.native_store.outputs.galgame }}
-          path: native\galgame_hook\dist
-      - name: Bundle slim Magpie for offline upscaling install
-        shell: pwsh
-        run: |
-          # BUG-1217：随主包发行精简版 Magpie，超分首次使用不再需要下载 10.79 MB。
-          # 脚本自己先校验上游完整包的 SHA-256 再裁剪重打包——裁剪等于重新签名，
-          # 源包若被掉包而不先验，我们的侧车就成了给污染产物背书的东西。
-          # 只出 x64：ARM64 用户极少且能跑 x64 模拟，为它多背 4.7 MB 不划算，
-          # 那条路继续走按需下载。
-          pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build_magpie_slim.ps1
-          if ($LASTEXITCODE -ne 0) { throw "build_magpie_slim.ps1 failed ($LASTEXITCODE)" }
-          $sourceDir = Join-Path $PWD 'dist'
-          $targetDir = Join-Path $PWD 'my_comic\build\windows\x64\runner\Debug\magpie_bundle'
-          New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
-          foreach ($file in @(
-            'Magpie-hibiki-slim-x64.zip',
-            'Magpie-hibiki-slim-x64.zip.sha256'
-          )) {
-            $source = Join-Path $sourceDir $file
-            if (-not (Test-Path -LiteralPath $source -PathType Leaf)) {
-              throw "Missing bundled magpie asset: $source"
-            }
-            Copy-Item -LiteralPath $source -Destination (Join-Path $targetDir $file) -Force
-          }
       - name: Bundle full 7-Zip for discovery and manga extraction
         shell: pwsh
         run: |

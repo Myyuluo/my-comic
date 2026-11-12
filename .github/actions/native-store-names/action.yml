@@ -12,9 +12,6 @@ outputs:
   mihon:
     description: Mihon desktop runtime (windows)
     value: ${{ steps.names.outputs.mihon }}
-  galgame:
-    description: galgame helper archives (windows)
-    value: ${{ steps.names.outputs.galgame }}
 runs:
   using: composite
   steps:

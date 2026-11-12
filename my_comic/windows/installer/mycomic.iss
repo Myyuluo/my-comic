@@ -114,31 +114,14 @@ ButtonBrowse=浏览(&R)
 ; 桌面图标位置得以保留（BUG-1014）。
 Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: "附加快捷方式："
 
-; 可选：把 MyComic 注册为视频文件的「打开方式」候选（不抢占系统默认播放器，
-; 只在资源管理器右键「打开方式」里出现 MyComic）。
-Name: "videoassoc"; Description: "将 MyComic 加入视频文件的「打开方式」（mkv / mp4 等）"; GroupDescription: "文件关联："
-; 同上，书 / 漫画文件的「打开方式」候选（epub / pdf / txt / cbz 等）。
-Name: "bookassoc"; Description: "将 MyComic 加入书和漫画文件的「打开方式」（epub / pdf / txt / cbz 等）"; GroupDescription: "文件关联："
+; 可选：把 MyComic 注册为漫画归档文件的「打开方式」候选（不抢占系统默认
+; 阅读器，只在资源管理器右键「打开方式」里出现 MyComic）。
+Name: "bookassoc"; Description: "将 MyComic 加入漫画文件的「打开方式」（cbz / cbr / cb7 / mokuro）"; GroupDescription: "文件关联："
 
 [InstallDelete]
-; BUG-1449：galgame helper 现在以**普通文件**随包发在 {app}\voice_hook\<arch>\，
-; 由 install_into_bundle.ps1 在构建期解压，与本体同一次构建产出。随包 zip 归档
-; （旧模型的产物）必须在升级时清掉——否则它会以「随包真相源」的身份留在磁盘上：
-; 一旦用户手工删过 voice_hook\<arch>\installed.sha256（排障时的常见动作），
-; GalgameHelperInstaller 就会拿这份**旧** zip 回填，把安装器刚放好的新组件覆盖成旧的，
-; 直接复发 BUG-1448 的「组件比本体旧」。删的是上一版留下的归档，不碰用户数据。
-Type: filesandordirs; Name: "{app}\galgame_helper"
-; 归属判据：本段只放「必须在复制前删、且删了不影响可运行性」的条目。
-; 上面 {app}\galgame_helper 两点都满足——新包同样往 {app} 下写 helper 组件，
-; 不先删就会被旧归档回填；而它本身不是可执行入口，删早了不会让 app 打不开。
-;
-; 旧名二进制（hibiki.exe / hibiki_update_launcher.exe / hibiki_torrent_ffi.dll /
-; hoshidicts_ffi.dll）和旧名快捷方式**不在这里**：[InstallDelete] 在复制任何新文件
-; 之前执行，且 Inno 明确不会在安装失败/取消时回滚这些删除。它们又都不与新文件同名，
-; 所以「复制前删」没有任何必要性，却把一次中途失败的升级从「还剩个能跑的旧版」
-; 变成「一个可执行文件都没有」（实测现场：{app} 下 hibiki.exe 与 MyComic.exe 双双消失，
-; 只剩 unins000.exe，快捷方式全成死链接）。这些条目已下沉到 [Code] 的
-; CurStepChanged / ssPostInstall，即新文件全部落地之后才执行。
+; 目前没有必须在复制前删除的条目。旧名二进制、已移除功能目录的清理都在
+; [Code] 的 ssPostInstall 阶段执行（新文件全部落地之后），避免中途失败把
+; 安装目录清成不可运行状态。userdata 永不在此删除。
 
 [Files]
 ; 包含 my_comic_update_launcher.exe：应用内更新用它等待当前 MyComic.exe 退出后再启动 Inno。
@@ -154,70 +137,28 @@ Name: "{userdesktop}\MyComic"; Filename: "{app}\MyComic.exe"; Tasks: desktopicon
 
 [Registry]
 ; MyComic 应用 ProgId：双击/「打开方式」时以 MyComic.exe "<文件>" 启动。
-; "%1" 即视频绝对路径，被 runner 经 set_dart_entrypoint_arguments 传给 Dart
+; "%1" 即漫画归档路径，被 runner 经 set_dart_entrypoint_arguments 传给 Dart
 ; main(args)（见 lib/main.dart + windows/runner/utils.cpp::GetCommandLineArguments）。
 ;
 ; 旧版深链协议已随查词功能删除；ADR 0024 的干净切换不兼容旧深链。
 ; 旧协议键不再由本安装器处理（干净切换要求先手动卸载旧版本）。
 
-Root: HKCU; Subkey: "Software\Classes\MyComic.Video"; ValueType: string; ValueData: "MyComic 视频"; Flags: uninsdeletekey; Tasks: videoassoc
-Root: HKCU; Subkey: "Software\Classes\MyComic.Video\DefaultIcon"; ValueType: string; ValueData: "{app}\MyComic.exe,0"; Tasks: videoassoc
-Root: HKCU; Subkey: "Software\Classes\MyComic.Video\shell\open\command"; ValueType: string; ValueData: """{app}\MyComic.exe"" ""%1"""; Tasks: videoassoc
-
-; 让 MyComic.exe 出现在「打开方式」应用列表，并声明它支持的视频 / 书扩展名。
-; 这个键两个关联任务共用：只勾其中一个也必须注册它。
-; 根键单独挂 uninsdeletekey：下面那条只删 shell\open\command 子键，SupportedTypes
-; 里的扩展名值卸载后会留下（视频关联原本就有这个残留）。
-Root: HKCU; Subkey: "Software\Classes\Applications\MyComic.exe"; ValueType: none; Flags: uninsdeletekey; Tasks: videoassoc or bookassoc
-Root: HKCU; Subkey: "Software\Classes\Applications\MyComic.exe\shell\open\command"; ValueType: string; ValueData: """{app}\MyComic.exe"" ""%1"""; Flags: uninsdeletekey; Tasks: videoassoc or bookassoc
-Root: HKCU; Subkey: "Software\Classes\Applications\MyComic.exe\SupportedTypes"; ValueType: string; ValueName: ".mkv"; ValueData: ""; Tasks: videoassoc
-Root: HKCU; Subkey: "Software\Classes\Applications\MyComic.exe\SupportedTypes"; ValueType: string; ValueName: ".mp4"; ValueData: ""; Tasks: videoassoc
-Root: HKCU; Subkey: "Software\Classes\Applications\MyComic.exe\SupportedTypes"; ValueType: string; ValueName: ".m4v"; ValueData: ""; Tasks: videoassoc
-Root: HKCU; Subkey: "Software\Classes\Applications\MyComic.exe\SupportedTypes"; ValueType: string; ValueName: ".avi"; ValueData: ""; Tasks: videoassoc
-Root: HKCU; Subkey: "Software\Classes\Applications\MyComic.exe\SupportedTypes"; ValueType: string; ValueName: ".webm"; ValueData: ""; Tasks: videoassoc
-Root: HKCU; Subkey: "Software\Classes\Applications\MyComic.exe\SupportedTypes"; ValueType: string; ValueName: ".mov"; ValueData: ""; Tasks: videoassoc
-Root: HKCU; Subkey: "Software\Classes\Applications\MyComic.exe\SupportedTypes"; ValueType: string; ValueName: ".ts"; ValueData: ""; Tasks: videoassoc
-
-; 把 MyComic.Video 挂到各扩展名的 OpenWithProgids（追加候选，不改默认关联）。
-Root: HKCU; Subkey: "Software\Classes\.mkv\OpenWithProgids"; ValueType: string; ValueName: "MyComic.Video"; ValueData: ""; Flags: uninsdeletevalue; Tasks: videoassoc
-Root: HKCU; Subkey: "Software\Classes\.mp4\OpenWithProgids"; ValueType: string; ValueName: "MyComic.Video"; ValueData: ""; Flags: uninsdeletevalue; Tasks: videoassoc
-Root: HKCU; Subkey: "Software\Classes\.m4v\OpenWithProgids"; ValueType: string; ValueName: "MyComic.Video"; ValueData: ""; Flags: uninsdeletevalue; Tasks: videoassoc
-Root: HKCU; Subkey: "Software\Classes\.avi\OpenWithProgids"; ValueType: string; ValueName: "MyComic.Video"; ValueData: ""; Flags: uninsdeletevalue; Tasks: videoassoc
-Root: HKCU; Subkey: "Software\Classes\.webm\OpenWithProgids"; ValueType: string; ValueName: "MyComic.Video"; ValueData: ""; Flags: uninsdeletevalue; Tasks: videoassoc
-Root: HKCU; Subkey: "Software\Classes\.mov\OpenWithProgids"; ValueType: string; ValueName: "MyComic.Video"; ValueData: ""; Flags: uninsdeletevalue; Tasks: videoassoc
-Root: HKCU; Subkey: "Software\Classes\.ts\OpenWithProgids"; ValueType: string; ValueName: "MyComic.Video"; ValueData: ""; Flags: uninsdeletevalue; Tasks: videoassoc
-
 ; 书 / 漫画：ProgId MyComic.Book + SupportedTypes + 各扩展名 OpenWithProgids 追加候选（不改默认关联）。
-Root: HKCU; Subkey: "Software\Classes\MyComic.Book"; ValueType: string; ValueData: "MyComic 书籍"; Flags: uninsdeletekey; Tasks: bookassoc
+Root: HKCU; Subkey: "Software\Classes\MyComic.Book"; ValueType: string; ValueData: "MyComic 漫画"; Flags: uninsdeletekey; Tasks: bookassoc
 Root: HKCU; Subkey: "Software\Classes\MyComic.Book\DefaultIcon"; ValueType: string; ValueData: "{app}\MyComic.exe,0"; Tasks: bookassoc
 Root: HKCU; Subkey: "Software\Classes\MyComic.Book\shell\open\command"; ValueType: string; ValueData: """{app}\MyComic.exe"" ""%1"""; Tasks: bookassoc
-Root: HKCU; Subkey: "Software\Classes\Applications\MyComic.exe\SupportedTypes"; ValueType: string; ValueName: ".epub"; ValueData: ""; Tasks: bookassoc
-Root: HKCU; Subkey: "Software\Classes\Applications\MyComic.exe\SupportedTypes"; ValueType: string; ValueName: ".pdf"; ValueData: ""; Tasks: bookassoc
-Root: HKCU; Subkey: "Software\Classes\Applications\MyComic.exe\SupportedTypes"; ValueType: string; ValueName: ".txt"; ValueData: ""; Tasks: bookassoc
 Root: HKCU; Subkey: "Software\Classes\Applications\MyComic.exe\SupportedTypes"; ValueType: string; ValueName: ".cbz"; ValueData: ""; Tasks: bookassoc
 Root: HKCU; Subkey: "Software\Classes\Applications\MyComic.exe\SupportedTypes"; ValueType: string; ValueName: ".cbr"; ValueData: ""; Tasks: bookassoc
 Root: HKCU; Subkey: "Software\Classes\Applications\MyComic.exe\SupportedTypes"; ValueType: string; ValueName: ".cb7"; ValueData: ""; Tasks: bookassoc
 Root: HKCU; Subkey: "Software\Classes\Applications\MyComic.exe\SupportedTypes"; ValueType: string; ValueName: ".mokuro"; ValueData: ""; Tasks: bookassoc
-Root: HKCU; Subkey: "Software\Classes\.epub\OpenWithProgids"; ValueType: string; ValueName: "MyComic.Book"; ValueData: ""; Flags: uninsdeletevalue; Tasks: bookassoc
-Root: HKCU; Subkey: "Software\Classes\.pdf\OpenWithProgids"; ValueType: string; ValueName: "MyComic.Book"; ValueData: ""; Flags: uninsdeletevalue; Tasks: bookassoc
-Root: HKCU; Subkey: "Software\Classes\.txt\OpenWithProgids"; ValueType: string; ValueName: "MyComic.Book"; ValueData: ""; Flags: uninsdeletevalue; Tasks: bookassoc
 Root: HKCU; Subkey: "Software\Classes\.cbz\OpenWithProgids"; ValueType: string; ValueName: "MyComic.Book"; ValueData: ""; Flags: uninsdeletevalue; Tasks: bookassoc
 Root: HKCU; Subkey: "Software\Classes\.cbr\OpenWithProgids"; ValueType: string; ValueName: "MyComic.Book"; ValueData: ""; Flags: uninsdeletevalue; Tasks: bookassoc
 Root: HKCU; Subkey: "Software\Classes\.cb7\OpenWithProgids"; ValueType: string; ValueName: "MyComic.Book"; ValueData: ""; Flags: uninsdeletevalue; Tasks: bookassoc
 Root: HKCU; Subkey: "Software\Classes\.mokuro\OpenWithProgids"; ValueType: string; ValueName: "MyComic.Book"; ValueData: ""; Flags: uninsdeletevalue; Tasks: bookassoc
 
 
-; ── 旧 Hibiki 注册表迁移清理（无条件执行，不挂 videoassoc：用户这次没勾关联
-;    也要把指向已删除 hibiki.exe 的死键清掉，否则「打开方式」里留一个坏条目）──
-Root: HKCU; Subkey: "Software\Classes\Hibiki.Video"; ValueType: none; Flags: deletekey
+; ── 旧 Hibiki 注册表迁移清理（无条件执行：把指向已删除 hibiki.exe 的死键清掉）──
 Root: HKCU; Subkey: "Software\Classes\Applications\hibiki.exe"; ValueType: none; Flags: deletekey
-Root: HKCU; Subkey: "Software\Classes\.mkv\OpenWithProgids"; ValueType: none; ValueName: "Hibiki.Video"; Flags: deletevalue
-Root: HKCU; Subkey: "Software\Classes\.mp4\OpenWithProgids"; ValueType: none; ValueName: "Hibiki.Video"; Flags: deletevalue
-Root: HKCU; Subkey: "Software\Classes\.m4v\OpenWithProgids"; ValueType: none; ValueName: "Hibiki.Video"; Flags: deletevalue
-Root: HKCU; Subkey: "Software\Classes\.avi\OpenWithProgids"; ValueType: none; ValueName: "Hibiki.Video"; Flags: deletevalue
-Root: HKCU; Subkey: "Software\Classes\.webm\OpenWithProgids"; ValueType: none; ValueName: "Hibiki.Video"; Flags: deletevalue
-Root: HKCU; Subkey: "Software\Classes\.mov\OpenWithProgids"; ValueType: none; ValueName: "Hibiki.Video"; Flags: deletevalue
-Root: HKCU; Subkey: "Software\Classes\.ts\OpenWithProgids"; ValueType: none; ValueName: "Hibiki.Video"; Flags: deletevalue
 
 [UninstallDelete]
 ; 卸载删除 Program state root（便携状态）：数据库、设置、扩展、字体、WebView 数据、
@@ -341,53 +282,6 @@ begin
     CloseHandle(Handle);
 end;
 
-{ 扫一个 arch 目录下所有 exe/dll，返回第一个被占用的完整路径（没有则空串）。 }
-function FirstLockedFileInDir(const Dir: String): String;
-var
-  FindRec: TFindRec;
-  Lower: String;
-  Full: String;
-begin
-  Result := '';
-  if not DirExists(Dir) then
-    Exit;
-  if not FindFirst(AddBackslash(Dir) + '*', FindRec) then
-    Exit;
-  try
-    repeat
-      if FindRec.Attributes and FILE_ATTRIBUTE_DIRECTORY = 0 then
-      begin
-        Lower := Lowercase(FindRec.Name);
-        { 按**后缀**判，不用 Pos 子串：`classdata.tpk` 之类不该进来，而
-          `foo.dll.stale`（换入残骸）也不是安装器要覆盖的目标。 }
-        Lower := Copy(Lower, Length(Lower) - 3, 4);
-        if (Lower = '.dll') or (Lower = '.exe') then
-        begin
-          Full := AddBackslash(Dir) + FindRec.Name;
-          if FileLockedForWrite(Full) then
-          begin
-            Result := Full;
-            Exit;
-          end;
-        end;
-      end;
-    until not FindNext(FindRec);
-  finally
-    FindClose(FindRec);
-  end;
-end;
-
-{ 被占用的 galgame helper 组件（两个架构都查），没有则空串。 }
-function LockedGalHookComponent(const AppDir: String): String;
-var
-  Base: String;
-begin
-  Base := AddBackslash(AppDir) + 'voice_hook\';
-  Result := FirstLockedFileInDir(Base + 'x86');
-  if Result = '' then
-    Result := FirstLockedFileInDir(Base + 'x64');
-end;
-
 // BUG-1786：给正在运行的 update launcher 让路。
 //
 // 应用内更新时 {app}\my_comic_update_launcher.exe **必然**处于运行中——它就是拉起本安装器
@@ -465,34 +359,10 @@ begin
   { KillProcessesUnderDir 杀不到 launcher，也**不该**杀它（见上）。改名让路。 }
   MakeWayForRunningLauncher(ExpandConstant('{app}'));
 
-  { BUG-1675：KillProcessesUnderDir 按**主模块路径**杀进程，杀得掉安装目录里的
-    my_comic_voice_injector.exe，却杀不掉真正的占用大头——**用户正在玩的游戏**：它的
-    exe 在 D:\Games\ 之类的地方，只是把安装目录下 voice_hook\<arch>\my_comic_voice_hook.dll
-    映射了进去。放着不管，复制阶段就换不掉这些文件，而应用内更新用的
-    /VERYSILENT /SUPPRESSMSGBOXES 会把这次失败静默吞掉，落地成「新本体 + 旧 helper」，
-    用户下次开游戏才看到 `voice_hook open protocol_mismatch shm=13/want 15`，
-    且那条提示给的处置（关掉游戏重开）对已经写坏的磁盘状态毫无作用。
+  { BUG-1675 的语音 hook 占用检查随 galgame helper 删除；现在只剩
+    KillProcessesUnderDir 与 launcher 让路。 }
+end;
 
-    这里**故意不强杀游戏**：ffmpeg/injector 是我们自己的无状态子进程，杀了没有代价；
-    而玩家的游戏里可能有没存档的进度，为了装个更新把它杀掉是不可接受的破坏。
-    所以查出占用就在**复制任何文件之前**中止，让用户自己存档退出——这一步返回非空
-    字符串，Inno 会显示它并干净地放弃本次安装，磁盘保持完整旧版本。 }
-  Locked := LockedGalHookComponent(ExpandConstant('{app}'));
-  if Locked <> '' then
-  begin
-    { NL 走变量而不是把 #13#10 直接写进串联式：ISPP 会把**行首**的 `#` 当成
-      预处理指令，跨行拼接时以 #13#10 开头的续行会直接编译失败。 }
-    NL := Chr(13) + Chr(10);
-    { 文案不再断言占用者是「游戏」：MyComic 的捕获组件可以附着到任何被用户选中的窗口，
-      实测现场里锁住 my_comic_voice_hook.dll 的是**微信**（连开三天，于是每次自动更新都在
-      这里中止，版本卡了五天，BUG-1708）。把占用者写死成游戏会让用户对着一个根本没开的
-      东西找问题。只陈述事实：哪个文件被占用、它为什么会被别的进程持有、怎么放开。 }
-    Result := '检测到 MyComic 的捕获组件正被其它程序占用，无法更新：' + NL + Locked + NL + NL +
-      'MyComic 的语音捕获组件会注入到你选定的程序里（游戏，或任何你附着过的窗口），' + NL +
-      '并由该程序持有到它退出为止。请关闭最近附着过的程序（游戏请先存档），' + NL +
-      '然后重新运行本安装程序。' + NL + NL +
-      '（本次未改动任何文件，现有版本可继续使用。）';
-  end;
 end;
 
 // BUG-1014: preserve the user's desktop icon position across updates.
@@ -662,9 +532,8 @@ begin
   DeleteFile(ExpandConstant('{app}\libbluray-j2se-1.5.0.jar'));
   // libmpv 的 FFmpeg/ANGLE 运行时是一大组 fbd*.dll（约 100 个文件）。
   DeleteFilesByPattern(ExpandConstant('{app}'), 'fbd*.dll');
-  // 蓝光菜单与 galgame helper 目录都只服务已移除的功能。
+  // 蓝光菜单只服务已移除的功能。
   DelTree(ExpandConstant('{app}\bluray'), True, True, True);
-  DelTree(ExpandConstant('{app}\voice_hook'), True, True, True);
 
   // 旧品牌（Hibiki）快捷方式清理：旧名指向已不存在的入口。
   // 1) 桌面

@@ -105,6 +105,16 @@
       "path": "my_comic/test/media/manga/mihon_bundled_runtime_guard_test.dart",
       "line_pattern": "Fushi v3\\.0\\.0",
       "reason": "打包 runtime 的上游 v3.0.0 出处断言"
+    },
+    {
+      "path": ".github/workflows/main.yml",
+      "line_pattern": "[Ff]ushi references|fushi_references\\.dart",
+      "reason": "CI 的残留扫描门禁步骤名与命令路径"
+    },
+    {
+      "path": "my_comic/tool/pre_push_check.dart",
+      "line_pattern": "[Ff]ushi reference|fushi_references\\.dart",
+      "reason": "pre-push 调用同一个残留扫描器"
     }
   ]
 }

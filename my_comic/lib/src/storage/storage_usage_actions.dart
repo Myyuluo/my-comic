@@ -360,7 +360,6 @@ String storageCategoryTitle(StorageCategoryId id) => switch (id) {
   StorageCategoryId.exports => t.storage_category_exports,
   StorageCategoryId.backups => t.storage_category_backups,
   StorageCategoryId.database => t.storage_category_database,
-  StorageCategoryId.ocrModels => t.storage_category_ocr_models,
   StorageCategoryId.cache => t.storage_category_cache,
   StorageCategoryId.other => t.storage_category_other,
 };

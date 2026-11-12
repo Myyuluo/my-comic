@@ -139,32 +139,6 @@ void main() {
     });
   });
 
-  // 隐藏的 macOS 原生设计系统（MyComicDesignSystem.macos）同样不是隐藏的
-  // MyComicDesignSystem.cupertino：修复前它在 macOS 上让 `.adaptive` 出 Cupertino
-  // 开关 / 菊花，现在与 MD3 一样渲染 Material 控件。
-  group('hidden MyComicDesignSystem.macos renders Material', () {
-    testWidgets('MyComicSwitch.adaptive / progress on macOS are Material', (
-      WidgetTester tester,
-    ) async {
-      await _pump(
-        tester,
-        _theme(
-          platform: TargetPlatform.macOS,
-          designSystem: MyComicDesignSystem.macos,
-        ),
-        Column(
-          children: <Widget>[
-            MyComicSwitch.adaptive(value: true, onChanged: (_) {}),
-            const MyComicCircularProgressIndicator.adaptive(),
-          ],
-        ),
-      );
-      expect(find.byType(Switch), isNot(paints..rrect(color: _iosGreen)));
-      expect(find.byType(CupertinoActivityIndicator), findsNothing);
-      await tester.pump(const Duration(milliseconds: 300));
-    });
-  });
-
   // 源码守卫：SDK `X.adaptive(` 只许出现在包装层（及显式 Apple 分支的
   // settings_kit），且包装层每一处都经 useCupertinoAdaptiveControls 判据；不许再
   // 出现直通 `if (_adaptive) {`。

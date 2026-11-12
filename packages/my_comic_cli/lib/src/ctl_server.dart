@@ -16,8 +16,6 @@ abstract interface class CtlDesktopHandler {
   /// 打开一个「候选 argv」：视频路径或 `mycomic://` 深链 / 卡片来源 URL。
   Future<CtlOpenResult> open(String target);
 
-  Future<void> lookup(String word);
-
   /// 走与关窗口同一条落库再退出的路径。服务端先回 202 再调用它。
   Future<void> quit();
 
@@ -105,8 +103,6 @@ class CtlServer {
         switch (path) {
           case kCtlOpenPath:
             return await _open(request);
-          case kCtlLookupPath:
-            return await _lookup(request);
           case kCtlQuitPath:
             // 先把 202 送出去再退出：quit 会 exit(0)，晚了 CLI 只能看到连接断开。
             Timer.run(() => unawaited(handler.quit()));
@@ -178,15 +174,6 @@ class CtlServer {
       return _error(422, kCtlErrorRejected, message: result.reason);
     }
     return _json(200, <String, Object?>{'ok': true, 'kind': kind.wireName});
-  }
-
-  Future<shelf.Response> _lookup(shelf.Request request) async {
-    final String? word = await _stringField(request, 'word');
-    if (word == null)
-      return _error(400, kCtlErrorBadRequest, message: 'word 缺失');
-    if (!handler.status().initialised) return _error(409, kCtlErrorNotReady);
-    await handler.lookup(word);
-    return _json(200, const <String, Object?>{'ok': true});
   }
 
   bool _authorized(String? header) {

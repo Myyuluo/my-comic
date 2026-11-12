@@ -79,14 +79,14 @@ void main() {
     test('--kind / --search / --limit 进 query；kind 规整成小写', () {
       final CtlRequestSpec r = _build('ls', const <String>[
         '--kind',
-        'Book, manga',
+        'Manga',
         '--search',
         '猫',
         '--limit',
         '5',
       ]);
       expect(r.query, <String, String>{
-        'kind': 'book,manga',
+        'kind': 'manga',
         'search': '猫',
         'limit': '5',
       });
@@ -215,11 +215,11 @@ void main() {
         '/x/book.srt',
         '/x/01.mp3',
         '--kind',
-        'audiobook',
+        'manga',
         '--duplicate',
         'suffix',
       ]);
-      expect(r.body!['kind'], 'audiobook');
+      expect(r.body!['kind'], 'manga');
       expect(r.body!['duplicate'], 'suffix');
       expect(r.body!['paths'], hasLength(3));
     });
@@ -299,23 +299,23 @@ void main() {
     test('sources --kind 进 query', () {
       final CtlRequestSpec r = _build('sources', const <String>[
         '--kind',
-        'video',
+        'manga',
       ]);
       expect(r.method, 'GET');
       expect(r.path, '/api/admin/library/sources');
-      expect(r.query, <String, String>{'kind': 'video'});
+      expect(r.query, <String, String>{'kind': 'manga'});
     });
 
     test('scan --kind / --source 进 body', () {
       final CtlRequestSpec r = _build('scan', const <String>[
         '--kind',
-        'book',
+        'manga',
         '--source',
         '3',
       ]);
       expect(r.method, 'POST');
       expect(r.path, '/api/admin/library/scan');
-      expect(r.body, <String, Object?>{'kind': 'book', 'source': 3});
+      expect(r.body, <String, Object?>{'kind': 'manga', 'source': 3});
     });
 
     test('scan --source 非整数 → 用法错误', () {
@@ -343,7 +343,7 @@ void main() {
   });
   test('新增命令组的请求同样落在 /api/admin/library/ 下', () {
     final List<CtlRequestSpec> requests = <CtlRequestSpec>[
-      _build('source-add', const <String>['/d', '--kind', 'video']),
+      _build('source-add', const <String>['/d', '--kind', 'manga']),
       _build('source-rename', const <String>['3', '新名']),
       _build('source-rm', const <String>['3', '--yes']),
       _build('rename', const <String>['book:x', '新书名']),
@@ -396,13 +396,13 @@ void main() {
       final CtlRequestSpec r = _build('source-add', const <String>[
         'anime',
         '--kind',
-        'video',
+        'manga',
       ]);
       expect(r.method, 'POST');
       expect(r.path, '/api/admin/library/sources');
       expect(r.body, <String, Object?>{
         'path': p.normalize(p.absolute('anime')),
-        'kind': 'video',
+        'kind': 'manga',
       });
       expect(
         () => _build('source-add', const <String>['/d']),
