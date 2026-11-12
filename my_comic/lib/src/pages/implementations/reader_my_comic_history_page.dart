@@ -2065,6 +2065,34 @@ class _ReaderMyComicHistoryPageState<T extends HistoryReaderPage>
   Future<void> _openBookFileLocation(String bookKey) async {
     Navigator.pop(context);
     final EpubBookRow? row = await appModel.database.getEpubBook(bookKey);
+    if (row != null) {
+      final OnlineMangaLibraryEntry? entry = _onlineMangaEntryFromRow(row);
+      if (entry != null) {
+        final DownloadLibraryIndex index = DownloadLibraryIndex(
+          appModel.database,
+        );
+        bool hasDownload = false;
+        for (final chapter in entry.chapters) {
+          if (await index.resolveChapter(
+                bookKey: row.bookKey,
+                chapterKey: chapter.key,
+              ) !=
+              null) {
+            hasDownload = true;
+            break;
+          }
+        }
+        if (!hasDownload) {
+          if (mounted) {
+            MyComicToast.show(
+              msg: t.media_file_location_not_downloaded,
+              severity: ToastSeverity.info,
+            );
+          }
+          return;
+        }
+      }
+    }
     final bool revealed = row != null && await revealBookLocation(row);
     if (revealed || !mounted) return;
     MyComicToast.show(

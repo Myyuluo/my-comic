@@ -340,4 +340,245 @@ void main() {
     expect(parsed.mangas, hasLength(1));
     expect(parsed.mangas.single.url, isEmpty);
   });
+
+  test('writes Kotlin-required fields even at proto3 defaults', () {
+    const MihonBackupData data = MihonBackupData(
+      mangas: <MihonBackupManga>[
+        MihonBackupManga(
+          source: 0,
+          url: '',
+          title: '',
+          artist: null,
+          author: null,
+          description: null,
+          genres: <String>[],
+          status: 0,
+          thumbnailUrl: null,
+          dateAdded: 0,
+          favorite: true,
+          chapters: <MihonBackupChapter>[
+            MihonBackupChapter(
+              url: '',
+              name: '',
+              scanlator: null,
+              read: false,
+              bookmark: false,
+              lastPageRead: 0,
+              dateFetch: 0,
+              dateUpload: 0,
+              chapterNumber: 0,
+            ),
+          ],
+          categoryOrders: <int>[],
+          history: <MihonBackupHistory>[
+            MihonBackupHistory(url: '', lastRead: 0, readDuration: 0),
+          ],
+          tracking: <MihonBackupTracking>[
+            MihonBackupTracking(
+              syncId: 0,
+              libraryId: 0,
+              mediaIdInt: 0,
+              trackingUrl: '',
+              title: '',
+              lastChapterRead: 0,
+              totalChapters: 0,
+              score: 0,
+              status: 0,
+              startedReadingDate: 0,
+              finishedReadingDate: 0,
+              private: false,
+              mediaId: 0,
+            ),
+          ],
+        ),
+      ],
+      categories: <MihonBackupCategory>[
+        MihonBackupCategory(name: '', order: 0, id: 0),
+      ],
+      sourceNames: <int, String>{0: ''},
+      sourcePreferences: <MihonBackupSourcePreferences>[
+        MihonBackupSourcePreferences(
+          sourceKey: '',
+          preferences: <MihonBackupPreference>[
+            MihonBackupPreference(
+              key: 's',
+              value: MihonBackupPreferenceValue(
+                type: MihonBackupPreferenceType.string,
+                value: '',
+              ),
+            ),
+            MihonBackupPreference(
+              key: 'b',
+              value: MihonBackupPreferenceValue(
+                type: MihonBackupPreferenceType.boolean,
+                value: false,
+              ),
+            ),
+            MihonBackupPreference(
+              key: 'i',
+              value: MihonBackupPreferenceValue(
+                type: MihonBackupPreferenceType.integer,
+                value: 0,
+              ),
+            ),
+            MihonBackupPreference(
+              key: 'l',
+              value: MihonBackupPreferenceValue(
+                type: MihonBackupPreferenceType.long,
+                value: 0,
+              ),
+            ),
+            MihonBackupPreference(
+              key: 'f',
+              value: MihonBackupPreferenceValue(
+                type: MihonBackupPreferenceType.float,
+                value: 0.0,
+              ),
+            ),
+          ],
+        ),
+      ],
+      extensionStores: <MihonBackupExtensionStore>[
+        MihonBackupExtensionStore(
+          indexUrl: '',
+          name: '',
+          badgeLabel: null,
+          signingKey: '',
+          contactWebsite: '',
+          contactDiscord: null,
+          isLegacy: null,
+          extensionListUrl: null,
+        ),
+      ],
+    );
+
+    final Map<int, List<Object>> top = _parseProto(
+      const MihonBackupWriter().encode(data),
+    );
+
+    final Map<int, List<Object>> manga = _parseProto(
+      _bytesField(top, 1).first,
+    );
+    expect(manga.containsKey(1), isTrue, reason: 'BackupManga.source');
+    expect(manga.containsKey(2), isTrue, reason: 'BackupManga.url');
+
+    final Map<int, List<Object>> chapter = _parseProto(
+      _bytesField(manga, 16).first,
+    );
+    expect(chapter.containsKey(1), isTrue, reason: 'BackupChapter.url');
+    expect(chapter.containsKey(2), isTrue, reason: 'BackupChapter.name');
+
+    final Map<int, List<Object>> history = _parseProto(
+      _bytesField(manga, 104).first,
+    );
+    expect(history.containsKey(1), isTrue, reason: 'BackupHistory.url');
+    expect(history.containsKey(2), isTrue, reason: 'BackupHistory.lastRead');
+
+    final Map<int, List<Object>> tracking = _parseProto(
+      _bytesField(manga, 18).first,
+    );
+    expect(tracking.containsKey(1), isTrue, reason: 'BackupTracking.syncId');
+    expect(
+      tracking.containsKey(2),
+      isTrue,
+      reason: 'BackupTracking.libraryId',
+    );
+
+    final Map<int, List<Object>> category = _parseProto(
+      _bytesField(top, 2).first,
+    );
+    expect(category.containsKey(1), isTrue, reason: 'BackupCategory.name');
+
+    final Map<int, List<Object>> source = _parseProto(
+      _bytesField(top, 101).first,
+    );
+    expect(source.containsKey(2), isTrue, reason: 'BackupSource.sourceId');
+
+    final Map<int, List<Object>> sourcePreferences = _parseProto(
+      _bytesField(top, 105).first,
+    );
+    expect(
+      sourcePreferences.containsKey(1),
+      isTrue,
+      reason: 'BackupSourcePreferences.sourceKey',
+    );
+    for (final List<int> preferenceBytes
+        in _bytesField(sourcePreferences, 2)) {
+      final Map<int, List<Object>> preference = _parseProto(
+        preferenceBytes,
+      );
+      expect(preference.containsKey(1), isTrue, reason: 'BackupPreference.key');
+      final Map<int, List<Object>> envelope = _parseProto(
+        _bytesField(preference, 2).first,
+      );
+      expect(
+        envelope.containsKey(1),
+        isTrue,
+        reason: 'PreferenceValue serial name',
+      );
+      final Map<int, List<Object>> payload = _parseProto(
+        _bytesField(envelope, 2).first,
+      );
+      expect(
+        payload.containsKey(1),
+        isTrue,
+        reason: 'PreferenceValue payload must be present even at default',
+      );
+    }
+
+    final Map<int, List<Object>> store = _parseProto(
+      _bytesField(top, 106).first,
+    );
+    for (final int field in <int>[1, 2, 4, 5]) {
+      expect(
+        store.containsKey(field),
+        isTrue,
+        reason: 'BackupExtensionStore.$field is required',
+      );
+    }
+  });
 }
+
+/// Minimal generic protobuf reader for the writer's structural assertions.
+Map<int, List<Object>> _parseProto(List<int> bytes) {
+  final Map<int, List<Object>> fields = <int, List<Object>>{};
+  int index = 0;
+
+  int readVarint() {
+    int value = 0;
+    int shift = 0;
+    while (true) {
+      final int byte = bytes[index++];
+      value |= (byte & 0x7f) << shift;
+      if ((byte & 0x80) == 0) return value;
+      shift += 7;
+    }
+  }
+
+  while (index < bytes.length) {
+    final int tag = readVarint();
+    final int field = tag >> 3;
+    final int wire = tag & 7;
+    final Object value;
+    if (wire == 0) {
+      value = readVarint();
+    } else if (wire == 1) {
+      value = bytes.sublist(index, index + 8);
+      index += 8;
+    } else if (wire == 2) {
+      final int length = readVarint();
+      value = bytes.sublist(index, index + length);
+      index += length;
+    } else if (wire == 5) {
+      value = bytes.sublist(index, index + 4);
+      index += 4;
+    } else {
+      throw StateError('Unexpected protobuf wire type $wire');
+    }
+    fields.putIfAbsent(field, () => <Object>[]).add(value);
+  }
+  return fields;
+}
+
+List<List<int>> _bytesField(Map<int, List<Object>> fields, int field) =>
+    fields[field]!.cast<List<int>>();
