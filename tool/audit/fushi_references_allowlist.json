@@ -1,5 +1,5 @@
 {
-  "description": "Fushi 引用扫描器 allowlist。只放行 GPL 来源与历史记录：许可证、第三方 NOTICE/PATCHES/UPSTREAM、UPSTREAM.md、ADR、历史文档、GLOSSARY 的上游术语定义，以及 README/About 的『基于 Fushi v3.0.0』署名。git 历史不在扫描范围内（扫描器只看 git ls-files 的工作区内容）。任何其他命中都应视为需要清理的残留。",
+  "description": "Fushi 引用扫描器 allowlist。只放行 GPL 来源与历史记录：许可证、第三方 NOTICE/PATCHES/UPSTREAM、UPSTREAM.md、ADR 与未列入删除名单的历史文档、GLOSSARY 的上游术语定义、第三方 provenance，以及 README/About 的『基于 Fushi v3.0.0』署名与来源/兼容说明。docs/bugs、docs/readme、docs/agent 已由 ticket 11 删除。git 历史不在扫描范围内（扫描器只看 git ls-files 的工作区内容）。任何其他命中都应视为需要清理的残留。",
   "rules": [
     {
       "path": "LICENSE",
@@ -19,11 +19,11 @@
     },
     {
       "path": "**/UPSTREAM*",
-      "reason": "上游来源说明"
+      "reason": "上游来源说明（快照、commit、许可证）"
     },
     {
       "path": "**/CLAUDE.upstream.md",
-      "reason": "上游 CLAUDE 文档快照"
+      "reason": "上游 CLAUDE 文档历史快照"
     },
     {
       "path": "third_party/**",
@@ -39,11 +39,11 @@
     },
     {
       "path": "docs/**",
-      "reason": "ADR 与未列入删除名单的历史文档，保留 Fushi 作为来源记录"
+      "reason": "ADR 与未列入删除名单的历史文档（specs/plans/reviews 等），保留 Fushi 作为来源记录"
     },
     {
       "path": "my_comic/docs/**",
-      "reason": "上游历史文档（例如 docs/reviews）"
+      "reason": "上游历史文档（例如 docs/reviews、第三方许可说明）"
     },
     {
       "path": ".scratch/**",
@@ -63,15 +63,13 @@
     },
     {
       "path": "README.md",
-      "reason": "ticket 11 将重写 README；当前内容仍是上游文档"
+      "line_pattern": "[Ff]ushi v3\\.0\\.0|Fushi contributors|Fushi-based|fushi://|fushi-",
+      "reason": "README 的来源署名、兼容基线与旧 fushi://、fushi- 兼容性说明"
     },
     {
       "path": "README.zh-CN.md",
-      "reason": "ticket 11 将重写 README；当前内容仍是上游文档"
-    },
-    {
-      "path": "my_comic/README.md",
-      "reason": "ticket 11 将删除或重写应用子目录 README；当前内容仍是上游文档"
+      "line_pattern": "[Ff]ushi v3\\.0\\.0|Fushi 贡献者|fushi://|fushi-",
+      "reason": "README 的来源署名、兼容基线与旧 fushi://、fushi- 兼容性说明"
     },
     {
       "path": "my_comic/lib/**",
