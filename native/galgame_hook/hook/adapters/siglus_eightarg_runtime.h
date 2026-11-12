@@ -6,7 +6,7 @@
 #include <limits>
 #include <tuple>
 
-namespace fushi_voice_hook::siglus_eightarg_runtime {
+namespace my_comic_voice_hook::siglus_eightarg_runtime {
 
 using Read = bool (*)(void*, uint32_t, void*, size_t);
 
@@ -133,4 +133,4 @@ inline bool ReadSnapshot(uintptr_t base, const Sites& sites, Read read,
   return true;
 }
 
-}  // namespace fushi_voice_hook::siglus_eightarg_runtime
+}  // namespace my_comic_voice_hook::siglus_eightarg_runtime

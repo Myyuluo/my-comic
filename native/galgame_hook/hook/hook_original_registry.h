@@ -4,7 +4,7 @@
 #include <atomic>
 #include <cstddef>
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 // MinHook detours that can be reached through more than one COM vtable target
 // must call the trampoline that belongs to the current target.  Publication is
@@ -61,4 +61,4 @@ class HookOriginalRegistry {
   std::array<Entry, Capacity> entries_{};
 };
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

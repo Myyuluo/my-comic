@@ -17,7 +17,7 @@
 #include <cwchar>
 #include <string>
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 constexpr const wchar_t* kCmvsConfigFileName = L"cmvs.cfg";
 constexpr const char* kCmvsConfigSection = "[CMVS_SYSTEM_MAIN]";
@@ -90,4 +90,4 @@ inline bool MatchesCmvsProfile(const wchar_t*) {
   return MatchesCmvsLayout(executable);
 }
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

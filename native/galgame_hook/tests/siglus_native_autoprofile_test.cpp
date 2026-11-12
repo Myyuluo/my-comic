@@ -6,8 +6,8 @@
 #include "siglus_native_autoprofile.h"
 
 namespace {
-using namespace fushi_voice_hook;
-using namespace fushi_voice_hook::siglus_native_family;
+using namespace my_comic_voice_hook;
+using namespace my_comic_voice_hook::siglus_native_family;
 struct Layout {
   uintptr_t glyph = 0x1000u, dialogue = 0x2200u, text = 0x2800u;
   uintptr_t text_caller = 0x3000u, input = 0x3800u, main_call = 0x4000u;

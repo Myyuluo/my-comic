@@ -1,7 +1,7 @@
 // BUG-2136 引擎层原点：**纯像素求解**。不碰 Win32，可被 native ctest 直接喂合成位图。
 //
 // 为什么单独一个头：抓帧（BitBlt/GDI）与像素分析原本焊死在
-// `fushi/windows/runner/layer_origin_solver.cpp` 的同一个函数里，签名是
+// `my_comic/windows/runner/layer_origin_solver.cpp` 的同一个函数里，签名是
 // `SolveLookupLayerOrigin(HWND game, ...)` —— 结构上不可测，而它承载的正是「免手动
 // 校准」的全部算法。本仓其余六个 native gate 都遵循「纯函数 + 合成夹具」，这里补齐。
 //
@@ -14,7 +14,7 @@
 #include <cstdint>
 #include <vector>
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 struct LayerOriginPixelSolve {
   bool ok = false;
@@ -240,4 +240,4 @@ inline LayerOriginPixelSolve SolveLayerOriginFromBgra(
   return out;
 }
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

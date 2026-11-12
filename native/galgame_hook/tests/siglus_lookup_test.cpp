@@ -12,8 +12,8 @@
 
 namespace {
 
-using fushi_voice_hook::AppendSiglusLookupGlyphCapture;
-using fushi_voice_hook::SiglusLookupGlyphCaptureBuffer;
+using my_comic_voice_hook::AppendSiglusLookupGlyphCapture;
+using my_comic_voice_hook::SiglusLookupGlyphCaptureBuffer;
 
 void Push(char16_t code_unit, int32_t x, int32_t y,
           SiglusLookupGlyphCaptureBuffer *captures, int32_t extent = 40) {
@@ -21,7 +21,7 @@ void Push(char16_t code_unit, int32_t x, int32_t y,
 }
 
 void TestSplitRedrawLifetime() {
-  using namespace fushi_voice_hook;
+  using namespace my_comic_voice_hook;
   const auto& profile = kAnemoiSiglusLookupProfile;
   SiglusLookupGlyphCaptureBuffer captures;
   SiglusLookupLayoutState state;
@@ -114,7 +114,7 @@ void TestSplitRedrawLifetime() {
 }
 
 void TestCommittedTextIdentityAcrossWriters() {
-  using namespace fushi_voice_hook;
+  using namespace my_comic_voice_hook;
   const uint64_t region_bytes = TextRegionBytes(kTextLaneCount, kTextLaneSlotCount);
   std::vector<uint8_t> mapping(
       static_cast<size_t>(sizeof(SharedHeader) + region_bytes), 0);
@@ -194,7 +194,7 @@ void TestCommittedTextIdentityAcrossWriters() {
 } // namespace
 
 int main() {
-  using namespace fushi_voice_hook;
+  using namespace my_comic_voice_hook;
   TestSplitRedrawLifetime();
   TestCommittedTextIdentityAcrossWriters();
 

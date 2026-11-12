@@ -1,5 +1,5 @@
-#ifndef FUSHI_LUNA_HOOK_CONFIG_H_
-#define FUSHI_LUNA_HOOK_CONFIG_H_
+#ifndef MYCOMIC_LUNA_HOOK_CONFIG_H_
+#define MYCOMIC_LUNA_HOOK_CONFIG_H_
 
 #include <algorithm>
 #include <cctype>
@@ -12,7 +12,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 inline constexpr size_t kMaxLunaHostLogCharacters = 4096;
 
@@ -180,6 +180,6 @@ inline const char* BuiltInLunaHookProfiles() {
       ;
 }
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook
 
-#endif  // FUSHI_LUNA_HOOK_CONFIG_H_
+#endif  // MYCOMIC_LUNA_HOOK_CONFIG_H_

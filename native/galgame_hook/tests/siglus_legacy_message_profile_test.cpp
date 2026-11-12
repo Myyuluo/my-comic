@@ -5,7 +5,7 @@
 #include "siglus_legacy_message_profile.h"
 
 namespace {
-using namespace fushi_voice_hook;
+using namespace my_comic_voice_hook;
 using namespace siglus_legacy_message;
 struct Image {
   uint8_t* bytes = static_cast<uint8_t*>(VirtualAlloc(nullptr, 0xa000,

@@ -1,5 +1,5 @@
-#ifndef FUSHI_VOICE_HOOK_XAUDIO_SOURCE_FORMAT_H_
-#define FUSHI_VOICE_HOOK_XAUDIO_SOURCE_FORMAT_H_
+#ifndef MYCOMIC_VOICE_HOOK_XAUDIO_SOURCE_FORMAT_H_
+#define MYCOMIC_VOICE_HOOK_XAUDIO_SOURCE_FORMAT_H_
 
 #include <mmreg.h>
 
@@ -11,7 +11,7 @@
 #include <limits>
 #include <vector>
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 enum class XAudioSourceEncoding : uint32_t {
   kUnsupported = 0,
@@ -734,6 +734,6 @@ inline bool DecodeMicrosoftAdpcm(const XAudioSourceFormat& format,
   return !decoded->empty();
 }
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook
 
-#endif  // FUSHI_VOICE_HOOK_XAUDIO_SOURCE_FORMAT_H_
+#endif  // MYCOMIC_VOICE_HOOK_XAUDIO_SOURCE_FORMAT_H_

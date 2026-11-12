@@ -22,7 +22,7 @@
 #include <cstdint>
 #include <cstring>
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 namespace tcwf {
 
 constexpr size_t kHeaderBytes = 24;
@@ -236,4 +236,4 @@ inline bool DecodeToWav(const uint8_t* data, size_t len, const Header& h,
 }
 
 }  // namespace tcwf
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

@@ -4,7 +4,7 @@ on:
   # TODO-1208: docs-only / repo-chore pushes should not fire the full Windows
   # release build. Scope the PUSH trigger to build-relevant paths. The `release`
   # and `workflow_dispatch` triggers stay UNfiltered so manual beta/formal
-  # publishes always run. A version bump lives under fushi/** so it still
+  # publishes always run. A version bump lives under my_comic/** so it still
   # triggers; rolling debug seq = commit count, so skipping a seq on a docs-only
   # push is harmless.
   push:
@@ -14,7 +14,7 @@ on:
     branches: ['main', 'develop']
     # push 路径 = 本 workflow 真正读到的文件。
     paths:
-      - 'fushi/**'
+      - 'my_comic/**'
       - 'packages/**'
       # C ABI bridge 源码：只改 native/ 的 PR 以前触发不了任何构建，
       # 编译挂了要等下一个不相关改动才暴露。
@@ -69,7 +69,7 @@ on:
 concurrency:
   # One Windows publisher per tag/sha. cancel-in-progress must stay false so a
   # running publish is never interrupted.
-  group: fushi-release-${{ github.workflow }}-${{ github.event_name == 'push' && github.ref || github.event.release.tag_name || github.event.inputs.tag_name || github.sha }}
+  group: mycomic-release-${{ github.workflow }}-${{ github.event_name == 'push' && github.ref || github.event.release.tag_name || github.event.inputs.tag_name || github.sha }}
   cancel-in-progress: false
 
 jobs:
@@ -77,7 +77,7 @@ jobs:
     # BUG-2817：`release` 事件只给应用 release（tag = v<数字>…）构建；模型 / 依赖资产
     # release（manga-panel-detector-onnx-v1、vendor-libmpv、voice-hook-helper…）被手动
     # 发布时不许整套构建、把安装包挂到它们身上。表达式没有正则，只能逐个列 v0..v9；
-    # 守卫 fushi/test/build/release_event_app_tag_guard_test.dart 钉住每个 job 都带它。
+    # 守卫 my_comic/test/build/release_event_app_tag_guard_test.dart 钉住每个 job 都带它。
     if: ${{ (github.event_name != 'release' || startsWith(github.event.release.tag_name, 'v0') || startsWith(github.event.release.tag_name, 'v1') || startsWith(github.event.release.tag_name, 'v2') || startsWith(github.event.release.tag_name, 'v3') || startsWith(github.event.release.tag_name, 'v4') || startsWith(github.event.release.tag_name, 'v5') || startsWith(github.event.release.tag_name, 'v6') || startsWith(github.event.release.tag_name, 'v7') || startsWith(github.event.release.tag_name, 'v8') || startsWith(github.event.release.tag_name, 'v9')) }}
     runs-on: windows-2022
     timeout-minutes: 150
@@ -118,7 +118,7 @@ jobs:
           RELEASE_BODY: ${{ github.event.release.body }}
         run: |
           set -euo pipefail
-          VERSION=$(grep '^version:' fushi/pubspec.yaml | sed 's/version: *//;s/+.*//')
+          VERSION=$(grep '^version:' my_comic/pubspec.yaml | sed 's/version: *//;s/+.*//')
           RELEASE_SEQUENCE=$(bash tool/release_sequence.sh)
           if ! [[ "$RELEASE_SEQUENCE" =~ ^[0-9]+$ ]] || [ "$RELEASE_SEQUENCE" -le 0 ]; then
             echo "::error title=Invalid release sequence::Expected positive git rev-list count, got $RELEASE_SEQUENCE"
@@ -257,7 +257,7 @@ jobs:
           fi
           # BUG-1481: per product family; the bridge (`app.hibiki.reader`) keeps
           # the historical `debug-rolling`. Must match release.yml.
-          ROLLING_DEBUG_TAG=fushi-debug-rolling
+          ROLLING_DEBUG_TAG=mycomic-debug-rolling
           if [ "$CHANNEL" = debug ]; then
             PUBLISH_TAG="$ROLLING_DEBUG_TAG"
             ROLLING_DEBUG=true
@@ -298,7 +298,7 @@ jobs:
           tmdb-api-key: ${{ secrets.TMDB_API_KEY }}
           opensubtitles-api-key: ${{ secrets.OPENSUBTITLES_API_KEY }}
       - name: Flutter pub get
-        working-directory: fushi
+        working-directory: my_comic
         run: flutter pub get
       - name: Apply pub cache patches
         shell: bash
@@ -308,7 +308,7 @@ jobs:
       # strings.g.dart is gitignored; generate it deterministically before the
       # release build so the shipped binary never uses a stale locale set.
       - name: Generate l10n
-        working-directory: fushi
+        working-directory: my_comic
         run: dart run slang
       - name: Resolve native artifact store names
         id: native_store
@@ -337,12 +337,12 @@ jobs:
       #
       # -v 的日志量（本机实测约 2500 行）远小于「红了但不知道为什么」的代价。
       - name: Build Windows release
-        working-directory: fushi
+        working-directory: my_comic
         run: >-
           flutter build windows --release -v
           --build-name "${{ steps.channel.outputs.build_version_name }}"
           --build-number "${{ steps.channel.outputs.release_sequence }}"
-          --dart-define="FUSHI_BUILD_VERSION=${{ steps.channel.outputs.build_version_name }}"
+          --dart-define="MYCOMIC_BUILD_VERSION=${{ steps.channel.outputs.build_version_name }}"
       # 失败时把 CMake 自己的日志捞出来：-v 打的是 flutter 侧，CMake 配置期的
       # 报错只在这两个文件里。artifact 而不是 echo，避免再被日志截断吃掉。
       - name: Upload Windows build logs on failure
@@ -351,8 +351,8 @@ jobs:
         with:
           name: windows-release-build-logs
           path: |
-            fushi/build/windows/x64/CMakeFiles/CMakeOutput.log
-            fushi/build/windows/x64/CMakeFiles/CMakeError.log
+            my_comic/build/windows/x64/CMakeFiles/CMakeOutput.log
+            my_comic/build/windows/x64/CMakeFiles/CMakeError.log
           if-no-files-found: ignore
           retention-days: 14
       - name: Restore pinned Mihon desktop runtime
@@ -369,10 +369,10 @@ jobs:
           if ('${{ steps.mihon_runtime_store.outputs.hit }}' -ne 'true') {
             .\tool\mihon\build_desktop_runtime.ps1 `
               -OutputDirectory $built `
-              -DownloadCache "$env:RUNNER_TEMP\fushi-mihon-downloads"
+              -DownloadCache "$env:RUNNER_TEMP\mycomic-mihon-downloads"
             if ($LASTEXITCODE -ne 0) { throw "Mihon desktop runtime build failed ($LASTEXITCODE)" }
           }
-          $runtime = "fushi\build\windows\x64\runner\Release\mihon_bridge"
+          $runtime = "my_comic\build\windows\x64\runner\Release\mihon_bridge"
           if (Test-Path -LiteralPath $runtime) { Remove-Item -LiteralPath $runtime -Recurse -Force }
           Copy-Item -LiteralPath $built -Destination $runtime -Recurse
           .\tool\mihon\verify_desktop_runtime.ps1 -RuntimeDirectory $runtime
@@ -414,7 +414,7 @@ jobs:
           # 漂移在结构上不再可能。完整性校验没有削弱，只是前移到这里（构建期 fail-closed）。
           # 解压/校验逻辑与 build-multiplatform.yml 共用同一个脚本：这两段曾是孪生副本，
           # 而「两份各自漂移」就是本次要根治的形态，不要再复制粘贴回来。
-          powershell -NoProfile -ExecutionPolicy Bypass -File native/galgame_hook/tools/install_into_bundle.ps1 -BundleDirectory "$PWD\fushi\build\windows\x64\runner\Release"
+          powershell -NoProfile -ExecutionPolicy Bypass -File native/galgame_hook/tools/install_into_bundle.ps1 -BundleDirectory "$PWD\my_comic\build\windows\x64\runner\Release"
           if ($LASTEXITCODE -ne 0) { throw "install_into_bundle.ps1 failed ($LASTEXITCODE)" }
       - name: Save galgame helper archives to native artifact store
         if: steps.galgame_helper_store.outputs.hit != 'true'
@@ -435,7 +435,7 @@ jobs:
           pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build_magpie_slim.ps1
           if ($LASTEXITCODE -ne 0) { throw "build_magpie_slim.ps1 failed ($LASTEXITCODE)" }
           $sourceDir = Join-Path $PWD 'dist'
-          $targetDir = Join-Path $PWD 'fushi\build\windows\x64\runner\Release\magpie_bundle'
+          $targetDir = Join-Path $PWD 'my_comic\build\windows\x64\runner\Release\magpie_bundle'
           New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
           foreach ($file in @(
             'Magpie-hibiki-slim-x64.zip',
@@ -453,24 +453,24 @@ jobs:
           # 发现页与漫画导入的 7z/rar 离线解压依赖随包 7z.exe + 7z.dll
           # （LGPL，官方 GitHub 镜像 + SHA-256 钉死，fail-closed）。
           pwsh -NoProfile -ExecutionPolicy Bypass -File tools/bundle_7za.ps1 `
-            -BundleDirectory "$PWD\fushi\build\windows\x64\runner\Release" `
-            -DownloadCache "$env:RUNNER_TEMP\fushi-7za-cache"
+            -BundleDirectory "$PWD\my_comic\build\windows\x64\runner\Release" `
+            -DownloadCache "$env:RUNNER_TEMP\mycomic-7za-cache"
           if ($LASTEXITCODE -ne 0) { throw "bundle_7za.ps1 failed ($LASTEXITCODE)" }
-      - name: Build and bundle fushi_cli
+      - name: Build and bundle my_comic_cli
         shell: pwsh
         run: |
-          $targetDir = Join-Path $PWD 'fushi\build\windows\x64\runner\Release'
+          $targetDir = Join-Path $PWD 'my_comic\build\windows\x64\runner\Release'
           if (-not (Test-Path -LiteralPath $targetDir -PathType Container)) {
             throw "Missing Windows release bundle directory: $targetDir"
           }
-          $exe = Join-Path $targetDir 'fushi_cli.exe'
-          dart compile exe packages/fushi_cli/bin/fushi_cli.dart -o $exe
-          if ($LASTEXITCODE -ne 0) { throw "dart compile exe fushi_cli failed ($LASTEXITCODE)" }
+          $exe = Join-Path $targetDir 'my_comic_cli.exe'
+          dart compile exe packages/my_comic_cli/bin/my_comic_cli.dart -o $exe
+          if ($LASTEXITCODE -ne 0) { throw "dart compile exe my_comic_cli failed ($LASTEXITCODE)" }
           # 冒烟：能起、能出帮助。app 不在跑时 status 应返回 69（EX_UNAVAILABLE），不是崩溃。
           & $exe --help | Out-Null
-          if ($LASTEXITCODE -ne 0) { throw "fushi_cli --help failed ($LASTEXITCODE)" }
+          if ($LASTEXITCODE -ne 0) { throw "my_comic_cli --help failed ($LASTEXITCODE)" }
           & $exe status | Out-Null
-          if ($LASTEXITCODE -ne 69) { throw "fushi_cli status expected exit 69 (not running), got $LASTEXITCODE" }
+          if ($LASTEXITCODE -ne 69) { throw "my_comic_cli status expected exit 69 (not running), got $LASTEXITCODE" }
           # 预期内的 69 已核对完。Actions 的 pwsh 包装会在脚本末尾追加
           # `exit $LASTEXITCODE`，且以 `pwsh -command ". '{0}'"` 点源执行——点源脚本里
           # `exit 69` 让 pwsh 进程以 1 退出、不打任何报错，整步无声变红。显式成功收尾。
@@ -487,7 +487,7 @@ jobs:
         shell: pwsh
         run: |
           $sourceDir = Join-Path $PWD 'third_party\ffmpeg-min\windows'
-          $targetDir = Join-Path $PWD 'fushi\build\windows\x64\runner\Release'
+          $targetDir = Join-Path $PWD 'my_comic\build\windows\x64\runner\Release'
           if (-not (Test-Path -LiteralPath $targetDir -PathType Container)) {
             throw "Missing Windows release bundle directory: $targetDir"
           }
@@ -517,21 +517,21 @@ jobs:
           }
           Get-Item -LiteralPath ($runtimeFiles | ForEach-Object { Join-Path $targetDir $_ }) |
             Select-Object FullName, Length
-      # TODO-1242 (P0): fushi's C++ modules link the MSVC CRT dynamically (/MD)
+      # TODO-1242 (P0): my_comic's C++ modules link the MSVC CRT dynamically (/MD)
       # and reference newer STL/EH symbols (VCRUNTIME140_1!__CxxFrameHandler4).
       # The installer did NOT ship the CRT, so machines whose system VC++
       # Redistributable is stale (stuck at 2019 14.24) lack those exports and
-      # fushi.exe dies at launch with a faulting MSVCP140.dll / c0000005 access
+      # MyComic.exe dies at launch with a faulting MSVCP140.dll / c0000005 access
       # violation. Standard Flutter Windows distribution practice: copy the CRT
       # DLLs next to the exe (app-directory DLL search precedes System32, needs
       # no elevation) so the payload is self-contained regardless of the target
       # machine's system redist. The DLLs land in the same Release dir that
-      # fushi.iss packages via `Source: {#SourceDir}\*`, so they ride into the
+      # mycomic.iss packages via `Source: {#SourceDir}\*`, so they ride into the
       # installer automatically. Sourced from the VS2022 redist on windows-2022.
       - name: Bundle VC++ CRT runtime into Windows bundle
         shell: pwsh
         run: |
-          $targetDir = Join-Path $PWD 'fushi\build\windows\x64\runner\Release'
+          $targetDir = Join-Path $PWD 'my_comic\build\windows\x64\runner\Release'
           if (-not (Test-Path -LiteralPath $targetDir -PathType Container)) {
             throw "Missing Windows release bundle directory: $targetDir"
           }
@@ -602,9 +602,9 @@ jobs:
           # NOTE: keep the FULL literal bundle paths below (no $releaseDir
           # indirection). release_workflow_diagnostics_guard_test asserts on
           # these literals to prove the release smokes the exact binaries copied
-          # beside fushi.exe -- splitting them into a variable silently blinds
+          # beside MyComic.exe -- splitting them into a variable silently blinds
           # that guard.
-          $target = Join-Path $PWD 'fushi\build\windows\x64\runner\Release\ffmpeg.exe'
+          $target = Join-Path $PWD 'my_comic\build\windows\x64\runner\Release\ffmpeg.exe'
           if (-not (Test-Path -LiteralPath $target -PathType Leaf)) {
             throw "Missing bundled ffmpeg executable: $target"
           }
@@ -617,7 +617,7 @@ jobs:
           # a healthy ffmpeg but a missing/broken ffprobe degrades silently -
           # both consumers swallow the ProcessException by design - so gate it
           # here with the same -version check rather than trusting the copy step.
-          $probeTarget = Join-Path $PWD 'fushi\build\windows\x64\runner\Release\ffprobe.exe'
+          $probeTarget = Join-Path $PWD 'my_comic\build\windows\x64\runner\Release\ffprobe.exe'
           if (-not (Test-Path -LiteralPath $probeTarget -PathType Leaf)) {
             throw "Missing bundled ffprobe executable: $probeTarget"
           }
@@ -658,12 +658,12 @@ jobs:
       - name: Verify Windows installer payload has the core runtime
         shell: pwsh
         run: |
-          $targetDir = Join-Path $PWD 'fushi\build\windows\x64\runner\Release'
+          $targetDir = Join-Path $PWD 'my_comic\build\windows\x64\runner\Release'
           if (-not (Test-Path -LiteralPath $targetDir -PathType Container)) {
             throw "Missing Windows release bundle directory: $targetDir"
           }
           $required = @(
-            'fushi.exe',
+            'MyComic.exe',
             'flutter_windows.dll'
           )
           $missing = @()
@@ -682,7 +682,7 @@ jobs:
 
       # 编译器够不够新是硬要求，不是「有就行」：安装器的 MD3 外观整套走 6.7 才有的
       # 指令（WizardStyle 自定义样式 / WizardBackColor / Wizard*ImageFileDynamicDark，
-      # 见 fushi/windows/installer/fushi.iss）。fushi.iss 留了 ISPP 版本闸门，老编译器
+      # 见 my_comic/windows/installer/mycomic.iss）。mycomic.iss 留了 ISPP 版本闸门，老编译器
       # 上会**静默**退回旧外观——CI 一旦悄悄降级出包，谁也不会从产物上看出来。
       #
       # 判据是**能力探测**，不是版本号：ISCC.exe 的版本资源是 0.0.0.0，命令行 banner
@@ -744,7 +744,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "SimplySign 登录失败，退出码 $LASTEXITCODE" }
       # 给 bundle 里的所有 exe/dll 签名，必须在 Inno 打包**之前** —— 打包之后再签
       # 只能签到外壳，里面的程序仍是未签名的。
-      # 只签外壳时的实际缺口：fushi.exe、fushi_update_launcher.exe、voice_hook/ 下的
+      # 只签外壳时的实际缺口：MyComic.exe、my_comic_update_launcher.exe、voice_hook/ 下的
       # 注入器与 hook DLL、ffmpeg/ffprobe 全部无签名，杀软扫描已安装目录照样报毒；
       # galgame 注入器尤其容易被盯上，而它恰恰是最需要签名背书的那个。
       # -SkipValidlySigned：bundle 里混着微软的 VC++ CRT 运行库，重签会把微软签名
@@ -756,7 +756,7 @@ jobs:
           CERTUM_CERT_THUMBPRINT: ${{ secrets.CERTUM_CERT_THUMBPRINT }}
         run: |
           & "$PWD\tool\sign_windows_release.ps1" `
-            -Path "$PWD\fushi\build\windows\x64\runner\Release" `
+            -Path "$PWD\my_comic\build\windows\x64\runner\Release" `
             -Recurse -SkipValidlySigned `
             -Description 'MyComic'
           if ($LASTEXITCODE -ne 0) { throw "bundle 签名失败，退出码 $LASTEXITCODE" }
@@ -805,14 +805,14 @@ jobs:
               throw ("Inno Setup 6.7+ is required for the Material Design 3 installer chrome " +
                 "and the freshly installed compiler at $iscc still rejects those directives. " +
                 "Shipping with an older compiler would silently fall back to the pre-MD3 look " +
-                "(fushi.iss keeps an ISPP version gate so it still compiles).")
+                "(mycomic.iss keeps an ISPP version gate so it still compiles).")
             }
           }
           Write-Host "ISCC accepts the MD3 wizard directives"
           & "$iscc" "/DAppVersion=${{ steps.channel.outputs.build_version_name }}" `
-            "/DSourceDir=$PWD\fushi\build\windows\x64\runner\Release" `
-            "/DOutputDir=$PWD\fushi\build\installer" `
-            "fushi\windows\installer\fushi.iss"
+            "/DSourceDir=$PWD\my_comic\build\windows\x64\runner\Release" `
+            "/DOutputDir=$PWD\my_comic\build\installer" `
+            "my_comic\windows\installer\mycomic.iss"
           if ($LASTEXITCODE -ne 0) { throw "ISCC failed with exit code $LASTEXITCODE" }
       - name: Sign Windows installer
         if: steps.signcheck.outputs.have == 'true'
@@ -821,7 +821,7 @@ jobs:
           CERTUM_CERT_THUMBPRINT: ${{ secrets.CERTUM_CERT_THUMBPRINT }}
         run: |
           & "$PWD\tool\sign_windows_release.ps1" `
-            -Path "$PWD\fushi\build\installer\mycomic-${{ steps.channel.outputs.build_version_name }}-windows-setup.exe" `
+            -Path "$PWD\my_comic\build\installer\mycomic-${{ steps.channel.outputs.build_version_name }}-windows-setup.exe" `
             -Description 'MyComic'
           if ($LASTEXITCODE -ne 0) { throw "签名失败，退出码 $LASTEXITCODE" }
       # 打包后回验：把刚签好的安装器真的装进 runner 的临时目录，检查**装出来的**
@@ -837,11 +837,11 @@ jobs:
           CERTUM_CERT_THUMBPRINT: ${{ secrets.CERTUM_CERT_THUMBPRINT }}
         run: |
           $thumb = if ($env:CERTUM_CERT_THUMBPRINT) { $env:CERTUM_CERT_THUMBPRINT } else { 'D717A3F6A12F50B75E9D04072A69B1BCB590AE14' }
-          $setup = "$PWD\fushi\build\installer\mycomic-${{ steps.channel.outputs.build_version_name }}-windows-setup.exe"
+          $setup = "$PWD\my_comic\build\installer\mycomic-${{ steps.channel.outputs.build_version_name }}-windows-setup.exe"
           $dst   = "$env:RUNNER_TEMP\payload-verify"
           # 不能用 Start-Process -Wait：它等的是「该进程**及其所有子孙进程**」退出
-          # （PowerShell 的文档行为）。fushi.iss 的 [Run] 段带 postinstall，静默安装下
-          # Inno 照样执行它、拉起 fushi.exe；那是 GUI 进程，永远不会自己退出，
+          # （PowerShell 的文档行为）。mycomic.iss 的 [Run] 段带 postinstall，静默安装下
+          # Inno 照样执行它、拉起 MyComic.exe；那是 GUI 进程，永远不会自己退出，
           # 于是 -Wait 永远返回不了。iss 里的 nowait 只约束 Inno 自己不等，
           # 管不住 PowerShell 等子孙。实测：这一步曾就地挂死 45 分钟没有任何输出。
           # 改为只等安装器本体，并给上限；超时视为失败而不是无声拖到 job 超时。
@@ -856,11 +856,11 @@ jobs:
             throw "静默安装 10 分钟未结束，已终止。"
           }
           if ($p.ExitCode -ne 0) { throw "静默安装失败，退出码 $($p.ExitCode)" }
-          # 收掉被 postinstall 拉起来的 fushi.exe：留着它会占住刚装出来的文件，
+          # 收掉被 postinstall 拉起来的 MyComic.exe：留着它会占住刚装出来的文件，
           # 后续读签名和 runner 清理都可能被卡。
-          Get-Process -Name 'fushi' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+          Get-Process -Name 'my_comic' -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
           Write-Host "[verify] 安装完成，耗时 $([math]::Round($sw.Elapsed.TotalSeconds,1))s"
-          if (-not (Test-Path -LiteralPath "$dst\fushi.exe")) { throw "装出来的目录里没有 fushi.exe: $dst" }
+          if (-not (Test-Path -LiteralPath "$dst\MyComic.exe")) { throw "装出来的目录里没有 MyComic.exe: $dst" }
 
           $files = Get-ChildItem -LiteralPath $dst -Recurse -File |
             Where-Object { $_.Extension -in '.exe', '.dll' } |
@@ -877,10 +877,10 @@ jobs:
           }
           Write-Host "装出的 exe/dll 共 $($files.Count) 个：本证书签名 $ours，他方签名 $others，未签名 $($unsigned.Count)"
 
-          $main = Get-AuthenticodeSignature -LiteralPath "$dst\fushi.exe"
-          Write-Host "fushi.exe -> $($main.Status) / $($main.SignatureType) / $($main.SignerCertificate.Subject)"
+          $main = Get-AuthenticodeSignature -LiteralPath "$dst\MyComic.exe"
+          Write-Host "MyComic.exe -> $($main.Status) / $($main.SignatureType) / $($main.SignerCertificate.Subject)"
           if ($main.Status -ne 'Valid' -or $main.SignerCertificate.Thumbprint -ne $thumb) {
-            throw "fushi.exe 未被本证书签名 —— 安装包外壳签了但里面没签，等于没补齐。"
+            throw "MyComic.exe 未被本证书签名 —— 安装包外壳签了但里面没签，等于没补齐。"
           }
           if ($unsigned.Count -gt 0) {
             $unsigned | ForEach-Object { Write-Host "  未签名: $_" }
@@ -903,7 +903,7 @@ jobs:
           BUILD_VERSION_NAME: ${{ steps.channel.outputs.build_version_name }}
         run: |
           set -euo pipefail
-          installer="fushi/build/installer/mycomic-${BUILD_VERSION_NAME}-windows-setup.exe"
+          installer="my_comic/build/installer/mycomic-${BUILD_VERSION_NAME}-windows-setup.exe"
           asset_name="$(basename "$installer")"
           if [ ! -f "$installer" ]; then
             echo "::error title=Windows installer missing::Expected $installer"
@@ -918,9 +918,9 @@ jobs:
                 ;;
             esac
           fi
-          mkdir -p fushi/build/release-artifacts
-          rm -f fushi/build/release-artifacts/mycomic-*-windows-setup.exe
-          cp "$installer" "fushi/build/release-artifacts/$asset_name"
+          mkdir -p my_comic/build/release-artifacts
+          rm -f my_comic/build/release-artifacts/mycomic-*-windows-setup.exe
+          cp "$installer" "my_comic/build/release-artifacts/$asset_name"
       # TODO-866: same fragility as the Android release workflow -- the prepared
       # Windows installer is otherwise only uploaded as a GitHub Release asset
       # (softprops steps below). When that publish intermittently 403s, the
@@ -935,7 +935,7 @@ jobs:
         with:
           name: desktop-artifacts-windows
           path: |
-            fushi/build/release-artifacts/mycomic-*-windows-setup.exe
+            my_comic/build/release-artifacts/mycomic-*-windows-setup.exe
           if-no-files-found: ignore
           # 正式 / 测试版 dispatch 的 publish job 要等人工审批（环境 release-publish，待审批
           # job 最长挂 30 天）才下载这些 artifact：三个平台的保留期都要盖住审批窗口。
@@ -977,7 +977,7 @@ jobs:
           RELEASE_BODY: ${{ github.event.release.body }}
         run: |
           set -euo pipefail
-          VERSION=$(grep '^version:' fushi/pubspec.yaml | sed 's/version: *//;s/+.*//')
+          VERSION=$(grep '^version:' my_comic/pubspec.yaml | sed 's/version: *//;s/+.*//')
           RELEASE_SEQUENCE=$(bash tool/release_sequence.sh)
           if ! [[ "$RELEASE_SEQUENCE" =~ ^[0-9]+$ ]] || [ "$RELEASE_SEQUENCE" -le 0 ]; then
             echo "::error title=Invalid release sequence::Expected positive git rev-list count, got $RELEASE_SEQUENCE"
@@ -1116,7 +1116,7 @@ jobs:
           fi
           # BUG-1481: per product family; the bridge (`app.hibiki.reader`) keeps
           # the historical `debug-rolling`. Must match release.yml.
-          ROLLING_DEBUG_TAG=fushi-debug-rolling
+          ROLLING_DEBUG_TAG=mycomic-debug-rolling
           if [ "$CHANNEL" = debug ]; then
             PUBLISH_TAG="$ROLLING_DEBUG_TAG"
             ROLLING_DEBUG=true
@@ -1148,14 +1148,14 @@ jobs:
         with:
           pattern: desktop-artifacts-windows
           merge-multiple: true
-          path: fushi/build/release-artifacts
+          path: my_comic/build/release-artifacts
       - name: Upload assets to GitHub Release event
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.channel.outputs.tag }}
           files: |
-            fushi/build/release-artifacts/mycomic-*-windows-setup.exe
+            my_comic/build/release-artifacts/mycomic-*-windows-setup.exe
       # Rolling debug assets are pruned to the newest KEEP_SEQS sequences so a
       # reused `debug-rolling` release does not accumulate one installer per
       # commit. Scoped to this workflow's own Windows installer assets.
@@ -1202,7 +1202,7 @@ jobs:
           fi
           ASSET_NAMES=("${PLATFORM_ASSETS[@]}")
           # Asset names embed the versionName token `-<base>-debug.<seq>-` (e.g.
-          # fushi-0.11.1-debug.5633-3cf5905-windows-setup.exe). Parse the current
+          # mycomic-0.11.1-debug.5633-3cf5905-windows-setup.exe). Parse the current
           # build's seq from BUILD_VERSION_NAME (0.11.1-debug.5633), extract every
           # asset's seq the same way, keep the top KEEP_SEQS distinct seqs (numeric
           # desc), and delete only assets whose seq is NOT in that set. Assets with
@@ -1266,7 +1266,7 @@ jobs:
           prerelease: ${{ steps.channel.outputs.prerelease }}
           make_latest: ${{ steps.channel.outputs.make_latest }}
           files: |
-            fushi/build/release-artifacts/mycomic-*-windows-setup.exe
+            my_comic/build/release-artifacts/mycomic-*-windows-setup.exe
       # TODO-705: publish a mirror update manifest so beta/debug in-China update
       # checks succeed (raw.githubusercontent.com is proxiable; api.github.com
       # /releases is mirror-403'd, BUG-292). This pushes a DATA FILE to the
@@ -1294,7 +1294,7 @@ jobs:
           NOTES: ${{ steps.channel.outputs.body }}
           VERSION: ${{ steps.channel.outputs.build_version_name }}
           RELEASE_SEQUENCE: ${{ steps.channel.outputs.release_sequence }}
-          ARTIFACTS_DIR: fushi/build/release-artifacts
+          ARTIFACTS_DIR: my_comic/build/release-artifacts
           ASSET_GLOB: mycomic-*-windows-setup.exe
           PLATFORM_LABEL: windows
         run: bash tool/publish_update_manifest.sh

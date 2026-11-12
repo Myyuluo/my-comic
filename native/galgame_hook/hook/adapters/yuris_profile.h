@@ -25,7 +25,7 @@
 #include "../yuris_ypf.h"
 #include "engine_dir_signature.h"
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 // The probe reads a whole index; an archive whose index is larger than this
 // is not used as identity evidence (the scan moves on to the next archive).
@@ -37,7 +37,7 @@ constexpr uint32_t kYurisProbeIndexBytes = 16u << 20;
 // entry (yuris::ResolveYpfLayout).
 inline bool IsYurisArchiveHead(const uint8_t* head, size_t head_bytes,
                                uint64_t file_size) {
-  namespace yuris = ::fushi_voice_hook::yuris;
+  namespace yuris = ::my_comic_voice_hook::yuris;
   yuris::YpfHeader header;
   return yuris::ParseYpfHeader(head, head_bytes, file_size, &header) &&
          yuris::ResolveYpfLayout(head, head_bytes, header, file_size,
@@ -45,7 +45,7 @@ inline bool IsYurisArchiveHead(const uint8_t* head, size_t head_bytes,
 }
 
 inline bool IsYurisArchiveFile(const std::wstring& path) {
-  namespace yuris = ::fushi_voice_hook::yuris;
+  namespace yuris = ::my_comic_voice_hook::yuris;
   uint64_t size = 0;
   uint8_t header_bytes[yuris::kYpfHeaderBytes] = {0};
   DWORD read = 0;
@@ -96,4 +96,4 @@ inline bool MatchesYurisProfile(const wchar_t*) {
   return MatchesYurisLayout(directory);
 }
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

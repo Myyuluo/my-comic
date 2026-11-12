@@ -5,7 +5,7 @@
 // 「画在弹窗内被尺寸/半透明约束」的教训）。这里断言：
 //   · 打开即渲染前文/当前句（所查词 <mark> 高亮）/后文 + 计数；
 //   · ± 按钮整体替换宿主草稿并重绘（轨首/轨尾封顶后对应「+」禁用）；
-//   · 「确认制卡」关窗并回点该词条的制卡按钮（fushiPopupMineEntryByIndex(entryIndex)），
+//   · 「确认制卡」关窗并回点该词条的制卡按钮（myComicPopupMineEntryByIndex(entryIndex)），
 //     草稿保留给制卡消费；
 //   · 「取消」/ 背景点击 / Esc 关窗并把草稿还原到开窗时的快照。
 import { test } from "node:test";
@@ -44,11 +44,11 @@ function createWorld() {
     set(v) { this.__t = v; },
   });
   win.document.querySelector("video").currentTime = 4.2;
-  win.fushiActiveFullTrack = () => ({ lang: "ja", cues: TRACK });
-  // 模态文案走 fushiTr → window.fushiT（i18n.js）；没装时退回键名。这里按真实
+  win.myComicActiveFullTrack = () => ({ lang: "ja", cues: TRACK });
+  // 模态文案走 myComicTr → window.myComicT（i18n.js）；没装时退回键名。这里按真实
   // zh-CN 语言包解析，断言的中文标签与扩展实际显示一致（缺 key 时同样退回键名，照样暴露）。
   const zh = JSON.parse(src("locales/zh-CN.json"));
-  win.fushiT = (key) => (typeof zh[key] === "string" ? zh[key] : key);
+  win.myComicT = (key) => (typeof zh[key] === "string" ? zh[key] : key);
   for (const f of ["subtitle-adapters.js", "vendor/dict-media.js", "popup-size.js",
     "subtitle-providers.js", "content.js"]) {
     win.eval(src(f));
@@ -57,7 +57,7 @@ function createWorld() {
 }
 
 function modal(win) {
-  const host = win.document.getElementById("fushi-ctx-modal-host");
+  const host = win.document.getElementById("mycomic-ctx-modal-host");
   if (!host) return null;
   const root = host.shadowRoot;
   const buttons = [...root.querySelectorAll("button")];
@@ -79,8 +79,8 @@ function modal(win) {
 test("打开：前文/当前句(高亮所查词)/后文 + 计数；确认制卡回点该词条并保留草稿", () => {
   const win = createWorld();
   const mined = [];
-  win.fushiPopupMineEntryByIndex = (idx) => { mined.push(idx); return true; };
-  win.fushiOpenSentenceContextModal({ entryIndex: 2, matched: "当前" });
+  win.myComicPopupMineEntryByIndex = (idx) => { mined.push(idx); return true; };
+  win.myComicOpenSentenceContextModal({ entryIndex: 2, matched: "当前" });
   let m = modal(win);
   assert.ok(m, "模态必须挂在宿主页顶层（独立 shadow host）");
   assert.deepStrictEqual(m.boxes(), ["（无）", "第三句 当前", "（无）"]);
@@ -99,43 +99,43 @@ test("打开：前文/当前句(高亮所查词)/后文 + 计数；确认制卡�
   assert.strictEqual(m.button("前加一句").disabled, false);
 
   m.button("确认制卡").click();
-  assert.strictEqual(win.document.getElementById("fushi-ctx-modal-host"), null, "确认后关窗");
+  assert.strictEqual(win.document.getElementById("mycomic-ctx-modal-host"), null, "确认后关窗");
   assert.deepStrictEqual(mined, [2], "回点第 entryIndex 个词条的制卡按钮");
-  const p = win.fushiSentenceContextPreview({});
+  const p = win.myComicSentenceContextPreview({});
   assert.strictEqual(p.total, 2, "草稿保留给随后的制卡消费（制卡成功才归零）");
-  assert.strictEqual(win.fushiMineContext().contextSentence, "第二句\n第三句 当前\n第四句");
+  assert.strictEqual(win.myComicMineContext().contextSentence, "第二句\n第三句 当前\n第四句");
 });
 
 test("取消 / 背景点击 / Esc：关窗并还原到开窗时的草稿快照", () => {
   const win = createWorld();
-  win.fushiSetSentenceContext(1, 0);
-  win.fushiOpenSentenceContextModal({ entryIndex: 0, matched: "" });
+  win.myComicSetSentenceContext(1, 0);
+  win.myComicOpenSentenceContextModal({ entryIndex: 0, matched: "" });
   let m = modal(win);
   m.button("前退一句").click();
   m.button("后加一句").click();
-  assert.strictEqual(win.fushiSentenceContextPreview({}).total, 1);
+  assert.strictEqual(win.myComicSentenceContextPreview({}).total, 1);
   m = modal(win);
   m.button("取消").click();
-  assert.strictEqual(win.document.getElementById("fushi-ctx-modal-host"), null);
-  let p = win.fushiSentenceContextPreview({});
+  assert.strictEqual(win.document.getElementById("mycomic-ctx-modal-host"), null);
+  let p = win.myComicSentenceContextPreview({});
   assert.deepStrictEqual([p.prev.length, p.next.length], [1, 0], "取消还原快照 1/0");
 
-  win.fushiOpenSentenceContextModal({ entryIndex: 0, matched: "" });
+  win.myComicOpenSentenceContextModal({ entryIndex: 0, matched: "" });
   m = modal(win);
   m.button("后加一句").click();
   m = modal(win);
   m.root.querySelector(".bg").dispatchEvent(new win.MouseEvent("click", { bubbles: true }));
-  assert.strictEqual(win.document.getElementById("fushi-ctx-modal-host"), null, "背景点击关窗");
-  p = win.fushiSentenceContextPreview({});
+  assert.strictEqual(win.document.getElementById("mycomic-ctx-modal-host"), null, "背景点击关窗");
+  p = win.myComicSentenceContextPreview({});
   assert.deepStrictEqual([p.prev.length, p.next.length], [1, 0]);
 
-  win.fushiOpenSentenceContextModal({ entryIndex: 0, matched: "" });
+  win.myComicOpenSentenceContextModal({ entryIndex: 0, matched: "" });
   m = modal(win);
   m.button("前退一句").click();
   m = modal(win);
   m.host.dispatchEvent(new win.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-  assert.strictEqual(win.document.getElementById("fushi-ctx-modal-host"), null, "Esc 关窗");
-  p = win.fushiSentenceContextPreview({});
+  assert.strictEqual(win.document.getElementById("mycomic-ctx-modal-host"), null, "Esc 关窗");
+  p = win.myComicSentenceContextPreview({});
   assert.deepStrictEqual([p.prev.length, p.next.length], [1, 0]);
 });
 
@@ -143,17 +143,17 @@ test("模态开着时按键不漏给宿主页（网飞空格=播放/暂停）", 
   const win = createWorld();
   let leaked = 0;
   win.document.addEventListener("keydown", () => { leaked++; });
-  win.fushiOpenSentenceContextModal({ entryIndex: 0, matched: "" });
+  win.myComicOpenSentenceContextModal({ entryIndex: 0, matched: "" });
   const m = modal(win);
   m.root.querySelector("button").dispatchEvent(
     new win.KeyboardEvent("keydown", { key: " ", bubbles: true, composed: true }));
   assert.strictEqual(leaked, 0, "空格在模态里按下不得冒泡到 document");
-  assert.ok(win.document.getElementById("fushi-ctx-modal-host"), "非 Esc 键不关窗");
+  assert.ok(win.document.getElementById("mycomic-ctx-modal-host"), "非 Esc 键不关窗");
 });
 
 test("重复打开：只保留一个模态实例", () => {
   const win = createWorld();
-  win.fushiOpenSentenceContextModal({ entryIndex: 0, matched: "" });
-  win.fushiOpenSentenceContextModal({ entryIndex: 0, matched: "" });
-  assert.strictEqual(win.document.querySelectorAll("#fushi-ctx-modal-host").length, 1);
+  win.myComicOpenSentenceContextModal({ entryIndex: 0, matched: "" });
+  win.myComicOpenSentenceContextModal({ entryIndex: 0, matched: "" });
+  assert.strictEqual(win.document.querySelectorAll("#mycomic-ctx-modal-host").length, 1);
 });

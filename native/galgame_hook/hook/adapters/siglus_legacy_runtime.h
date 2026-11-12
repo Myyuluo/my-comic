@@ -6,7 +6,7 @@
 
 #include "siglus_legacy_input_viewport.h"
 
-namespace fushi_voice_hook::siglus_legacy_runtime {
+namespace my_comic_voice_hook::siglus_legacy_runtime {
 namespace sites = siglus_legacy_input_viewport;
 
 // The callback must copy exactly bytes readable bytes or return false, without
@@ -181,4 +181,4 @@ inline bool ReadSnapshot(uintptr_t module_base, const sites::Sites& resolved,
   return true;
 }
 
-}  // namespace fushi_voice_hook::siglus_legacy_runtime
+}  // namespace my_comic_voice_hook::siglus_legacy_runtime

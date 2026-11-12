@@ -3,7 +3,7 @@
 #include "siglus_resource_mapping.h"
 #include "siglus_voice_source.h"
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 // This is a static source ABI capability. Actual path, file identity, archive
 // member/range and bytes still need the worker's independent verification.
 enum class SiglusNativeResourceFrame { kStack120, kStack118 };
@@ -614,4 +614,4 @@ bool CaptureSiglusNativeVoiceSource(const SiglusNativeVoiceSourceLayout &layout,
   *out = task;
   return true;
 }
-} // namespace fushi_voice_hook
+} // namespace my_comic_voice_hook

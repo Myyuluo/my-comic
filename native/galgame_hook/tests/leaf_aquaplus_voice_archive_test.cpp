@@ -11,9 +11,9 @@
 
 namespace {
 
-using fushi_voice_hook::leaf_aquaplus::kLacEntryBytes;
-using fushi_voice_hook::leaf_aquaplus::kLacHeaderBytes;
-using fushi_voice_hook::leaf_aquaplus::kLacStoredNameBytes;
+using my_comic_voice_hook::leaf_aquaplus::kLacEntryBytes;
+using my_comic_voice_hook::leaf_aquaplus::kLacHeaderBytes;
+using my_comic_voice_hook::leaf_aquaplus::kLacStoredNameBytes;
 
 void PutLe32(std::vector<uint8_t> *bytes, size_t at, uint32_t value) {
   assert(bytes != nullptr && at + sizeof(value) <= bytes->size());
@@ -107,7 +107,7 @@ SyntheticArchive MakeSyntheticArchive() {
 } // namespace
 
 int main() {
-  namespace leaf = fushi_voice_hook::leaf_aquaplus;
+  namespace leaf = my_comic_voice_hook::leaf_aquaplus;
   static_assert(leaf::kLacEntryBytes == 0x28u);
   const SyntheticArchive archive = MakeSyntheticArchive();
   assert(archive.bytes[kLacHeaderBytes] ==

@@ -16,8 +16,8 @@
 
 namespace {
 using Bytes = std::vector<unsigned char>;
-using fushi_locale_emulator::CopyVersionResourceWithLocale;
-using fushi_locale_emulator::FindVersionTranslationOffset;
+using my_comic_locale_emulator::CopyVersionResourceWithLocale;
+using my_comic_locale_emulator::FindVersionTranslationOffset;
 void PutWord(Bytes& data, std::size_t at, unsigned int word) {
   data.at(at) = static_cast<unsigned char>(word);
   data.at(at + 1) = static_cast<unsigned char>(word >> 8);

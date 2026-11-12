@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Claude Code PreToolUse hook (Bash / PowerShell): refuses a bare local
 // `flutter test|analyze|build` or `gradlew` that does not go through the
-// machine-wide heavy-run lease (fushi/tool/heavy.dart), and tells the agent
+// machine-wide heavy-run lease (my_comic/tool/heavy.dart), and tells the agent
 // the wrapped form. Root CLAUDE.md "本机重活一律走租约" is the rule; this only
 // gives it teeth. Enable in .claude/settings.json:
 //
@@ -9,7 +9,7 @@
 //     { "type": "command", "command": "node tool/claude_hooks/require_heavy_lease.mjs" } ] } ] }
 //
 // pre_push_check.dart / flutter_test_failures.dart take the lease themselves
-// and are not matched; `FUSHI_HEAVY=off` in the command opts out explicitly.
+// and are not matched; `MYCOMIC_HEAVY=off` in the command opts out explicitly.
 
 const HEAVY_FLUTTER_VERBS = new Set(['test', 'analyze', 'build']);
 
@@ -23,7 +23,7 @@ function exeName(token) {
 /** The first command segment that is a bare heavy run, or null. */
 export function findBareHeavyCommand(command) {
   if (typeof command !== 'string' || command.length === 0) return null;
-  if (/heavy\.dart/.test(command) || /FUSHI_HEAVY\s*=\s*['"]?off/i.test(command)) {
+  if (/heavy\.dart/.test(command) || /MYCOMIC_HEAVY\s*=\s*['"]?off/i.test(command)) {
     return null;
   }
   for (const raw of command.split(/&&|\|\||[;|\n]/)) {
@@ -54,7 +54,7 @@ export function denial(segment) {
       permissionDecision: 'deny',
       permissionDecisionReason:
         `本机重活必须走租约（根 CLAUDE.md「本机重活一律走租约」）：\`${segment}\` ` +
-        '请在 fushi/ 下改写成 `dart tool/heavy.dart -- <原命令>`（用 dart 直接跑，不加 run）。' +
+        '请在 my_comic/ 下改写成 `dart tool/heavy.dart -- <原命令>`（用 dart 直接跑，不加 run）。' +
         '它会排队等槽位与内存、低优先级运行、内存封顶，不会拖垮用户的电脑或与别的 agent 互抢 build/。' +
         '`dart tool/heavy.dart --status` 可看当前占用。',
     },

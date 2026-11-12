@@ -4,7 +4,7 @@
 
 #include "voice_hook_ipc.h"
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 enum class AdapterCapability : uint32_t {
   kNone = 0,
@@ -62,4 +62,4 @@ class EngineAdapter {
   }
 };
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

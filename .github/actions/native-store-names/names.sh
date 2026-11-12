@@ -10,7 +10,7 @@
 # local dry run is just `bash .github/actions/native-store-names/names.sh windows`.
 #
 # my-comic is Windows-only. The per-package native artifacts for the deleted
-# fushi_p2p / fushi_srs / fushi_anki_sync / fushidicts / fushi_aacs / fushi_torrent
+# my_comic_p2p / my_comic_srs / my_comic_anki_sync / my_comicdicts / my_comic_aacs / my_comic_torrent
 # domains were removed together with those packages/engine subdomains; the only
 # remaining native artifacts are the Mihon desktop runtime and the galgame helper.
 #

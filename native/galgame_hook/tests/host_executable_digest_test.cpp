@@ -11,8 +11,8 @@
 
 namespace {
 
-using fushi_voice_hook::HostExecutableSha256Hex;
-using fushi_voice_hook::PublishHostExecutableSha256;
+using my_comic_voice_hook::HostExecutableSha256Hex;
+using my_comic_voice_hook::PublishHostExecutableSha256;
 
 // 这个槽存在的理由：准入收敛到「不支持或未识别」那一刻的定义就是**没有任何 adapter
 // 认领**，各家私有摘要缓冲在那里全部够不着。下面几条钉住它与私有缓冲的差别。

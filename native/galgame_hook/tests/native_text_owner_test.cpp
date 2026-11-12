@@ -5,7 +5,7 @@
 #include <thread>
 #include "native_text_owner.h"
 
-using namespace fushi_voice_hook;
+using namespace my_comic_voice_hook;
 
 int main() {
   // DLL Ready and loopback ACK can precede engine admission by any amount.

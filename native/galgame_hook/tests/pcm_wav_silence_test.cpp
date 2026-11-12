@@ -10,9 +10,9 @@
 
 #include "pcm_wav_silence.h"
 
-using fushi_voice_hook::IsSilentPcmWav;
-using fushi_voice_hook::ParsePcmWav;
-using fushi_voice_hook::PcmWavView;
+using my_comic_voice_hook::IsSilentPcmWav;
+using my_comic_voice_hook::ParsePcmWav;
+using my_comic_voice_hook::PcmWavView;
 
 namespace {
 

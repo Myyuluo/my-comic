@@ -172,50 +172,50 @@
 // 解析本符号 RVA，再用 ReadProcessMemory 读取；因此无需升级 IPC 版本，也不要求 probe 与目标
 // 同位数。初始化只含常量/零值，不在 loader lock 下做任何动作。
 extern "C" __declspec(dllexport) alignas(8)
-    fushi_voice_hook::XAudioTraceBuffer FushiXAudioTraceV1 = {};
+    my_comic_voice_hook::XAudioTraceBuffer MyComicXAudioTraceV1 = {};
 
 // Numeric-only exact-profile renderer telemetry, outside SharedHeader ABI.
 extern "C" __declspec(dllexport) alignas(8)
-    fushi_voice_hook::LeafD3DTraceBuffer FushiLeafD3DTraceV1 = {};
+    my_comic_voice_hook::LeafD3DTraceBuffer MyComicLeafD3DTraceV1 = {};
 
 // Numeric-only HUNEX/GGE renderer and sampled-input telemetry.  Like the Leaf
 // trace this is resolved by the diagnostic probe from the live DLL export and
 // is intentionally outside SharedHeader ABI.
 extern "C" __declspec(dllexport) alignas(8)
-    fushi_voice_hook::HunexGgeTraceBuffer FushiHunexGgeTraceV3 = {};
+    my_comic_voice_hook::HunexGgeTraceBuffer MyComicHunexGgeTraceV3 = {};
 
 namespace {
 
-using fushi_voice_hook::kClipCount;
-using fushi_voice_hook::kDiagStartupAudioHooksReady;
-using fushi_voice_hook::kDiagSiglusExactTextHookReady;
-using fushi_voice_hook::kDiagSiglusExactTextObserved;
-using fushi_voice_hook::kDiagSiglusOvkHooksReady;
-using fushi_voice_hook::kDiagKirikiriVoiceStreamDumped;
-using fushi_voice_hook::kDiagKirikiriVoiceStreamHookReady;
-using fushi_voice_hook::kDiagUnityIl2CppClipCaptured;
-using fushi_voice_hook::kDiagUnityIl2CppGetDataRejected;
-using fushi_voice_hook::kDiagUnityIl2CppHooksReady;
-using fushi_voice_hook::kDiagUnityIl2CppPlaybackObserved;
-using fushi_voice_hook::kDiagUnityNaninovelTextHookReady;
-using fushi_voice_hook::kDiagUnityTmpTextHooksReady;
-using fushi_voice_hook::kUnityBundlePathChars;
-using fushi_voice_hook::kUnityClipNameChars;
-using fushi_voice_hook::kUnityVoiceEventCount;
-using fushi_voice_hook::kLoopbackMarkerCount;
-using fushi_voice_hook::kSharedMagic;
-using fushi_voice_hook::kSharedVersion;
-using fushi_voice_hook::kTextSlotBytes;
-using fushi_voice_hook::kTextSlotCount;
-using fushi_voice_hook::kTextHookCodeChars;
-using fushi_voice_hook::kTextHookNameChars;
-using fushi_voice_hook::LoopbackMarker;
-using fushi_voice_hook::ReadyEventName;
-using fushi_voice_hook::SharedHeader;
-using fushi_voice_hook::SharedMemoryName;
-using fushi_voice_hook::TextSlot;
-using fushi_voice_hook::VoiceClip;
-using fushi_voice_hook::UnityVoiceEvent;
+using my_comic_voice_hook::kClipCount;
+using my_comic_voice_hook::kDiagStartupAudioHooksReady;
+using my_comic_voice_hook::kDiagSiglusExactTextHookReady;
+using my_comic_voice_hook::kDiagSiglusExactTextObserved;
+using my_comic_voice_hook::kDiagSiglusOvkHooksReady;
+using my_comic_voice_hook::kDiagKirikiriVoiceStreamDumped;
+using my_comic_voice_hook::kDiagKirikiriVoiceStreamHookReady;
+using my_comic_voice_hook::kDiagUnityIl2CppClipCaptured;
+using my_comic_voice_hook::kDiagUnityIl2CppGetDataRejected;
+using my_comic_voice_hook::kDiagUnityIl2CppHooksReady;
+using my_comic_voice_hook::kDiagUnityIl2CppPlaybackObserved;
+using my_comic_voice_hook::kDiagUnityNaninovelTextHookReady;
+using my_comic_voice_hook::kDiagUnityTmpTextHooksReady;
+using my_comic_voice_hook::kUnityBundlePathChars;
+using my_comic_voice_hook::kUnityClipNameChars;
+using my_comic_voice_hook::kUnityVoiceEventCount;
+using my_comic_voice_hook::kLoopbackMarkerCount;
+using my_comic_voice_hook::kSharedMagic;
+using my_comic_voice_hook::kSharedVersion;
+using my_comic_voice_hook::kTextSlotBytes;
+using my_comic_voice_hook::kTextSlotCount;
+using my_comic_voice_hook::kTextHookCodeChars;
+using my_comic_voice_hook::kTextHookNameChars;
+using my_comic_voice_hook::LoopbackMarker;
+using my_comic_voice_hook::ReadyEventName;
+using my_comic_voice_hook::SharedHeader;
+using my_comic_voice_hook::SharedMemoryName;
+using my_comic_voice_hook::TextSlot;
+using my_comic_voice_hook::VoiceClip;
+using my_comic_voice_hook::UnityVoiceEvent;
 
 HANDLE g_mapping = nullptr;
 SharedHeader* g_header = nullptr;
@@ -257,8 +257,8 @@ CRITICAL_SECTION g_text_cs;
 bool g_text_cs_ready = false;
 void* g_hooked_fns[64] = {nullptr};
 int g_hooked_count = 0;
-fushi_voice_hook::HookOriginalRegistry<16> g_submit_source_buffer_originals;
-fushi_voice_hook::HookOriginalRegistry<16> g_flush_source_buffers_originals;
+my_comic_voice_hook::HookOriginalRegistry<16> g_submit_source_buffer_originals;
+my_comic_voice_hook::HookOriginalRegistry<16> g_flush_source_buffers_originals;
 
 // 原始语音流落盘的共用出口（KiriKiri 与 Siglus 都写同一目录，供 Dart 按 tick 配对）。
 //
@@ -272,10 +272,10 @@ std::wstring VoiceBaseName(const wchar_t* storagename, const uint8_t* data,
   std::wstring s(storagename);
   // 分隔符判据的唯一真相源是 `kirikiri_voice_storage_name.h`——这里从尾往前扫并
   // **调用**它，而不是把字符集再抄一遍。抄一遍的代价已经付过：BUG-2115 的根因就是
-  // 这个集合里少了 `>`；而 `fushi_kirikiri_voice_storage_name_test` 里那 4 条分隔符
+  // 这个集合里少了 `>`；而 `my_comic_kirikiri_voice_storage_name_test` 里那 4 条分隔符
   // 断言压的是那个函数，只要生产代码自己硬写字符集，把它改窄测试照样全绿。
   size_t cut = s.size();
-  while (cut > 0 && !fushi_voice_hook::IsKirikiriPathSeparator(s[cut - 1])) {
+  while (cut > 0 && !my_comic_voice_hook::IsKirikiriPathSeparator(s[cut - 1])) {
     --cut;
   }
   std::wstring base = s.substr(cut);
@@ -288,7 +288,7 @@ std::wstring VoiceBaseName(const wchar_t* storagename, const uint8_t* data,
   if (base.empty()) base = L"voice";
   if (base.find(L'.') == std::wstring::npos) {
     const wchar_t* sniffed =
-        fushi_voice_hook::KirikiriVoicePayloadExtension(data, len);
+        my_comic_voice_hook::KirikiriVoicePayloadExtension(data, len);
     base += sniffed != nullptr ? sniffed : L".ogg";
   }
   return base;
@@ -373,7 +373,7 @@ DirectSoundCreate_t g_orig_DirectSoundCreate = nullptr;
 CreateSoundBuffer_t g_orig_CreateSoundBuffer = nullptr;
 DsbSetFrequency_t g_orig_DsbSetFrequency = nullptr;
 DsbUnlock_t g_orig_DsbUnlock = nullptr;
-fushi_voice_hook::DirectSoundFormatRegistry<256> g_dsound_formats;
+my_comic_voice_hook::DirectSoundFormatRegistry<256> g_dsound_formats;
 
 typedef HRESULT(WINAPI* CoCreateInstance_t)(REFCLSID rclsid,
                                              LPUNKNOWN pUnkOuter,
@@ -381,7 +381,7 @@ typedef HRESULT(WINAPI* CoCreateInstance_t)(REFCLSID rclsid,
                                              REFIID riid, LPVOID* ppv);
 CoCreateInstance_t g_orig_CoCreateInstance = nullptr;
 
-// 独立测试用 proof-of-life 标记文件：%TEMP%\fushi_voice_hook_<pid>.marker。injector 之外也
+// 独立测试用 proof-of-life 标记文件：%TEMP%\my_comic_voice_hook_<pid>.marker。injector 之外也
 // 能据此确认 DLL 真的被加载执行（不依赖事件）。
 void WriteMarkerFile(DWORD pid) {
   wchar_t temp[MAX_PATH] = {0};
@@ -390,14 +390,14 @@ void WriteMarkerFile(DWORD pid) {
     return;
   }
   std::wstring path =
-      std::wstring(temp) + L"fushi_voice_hook_" + std::to_wstring(pid) +
+      std::wstring(temp) + L"my_comic_voice_hook_" + std::to_wstring(pid) +
       L".marker";
   HANDLE f = CreateFileW(path.c_str(), GENERIC_WRITE, 0, nullptr,
                          CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
   if (f == INVALID_HANDLE_VALUE) {
     return;
   }
-  const char msg[] = "fushi voice hook attached\n";
+  const char msg[] = "my_comic voice hook attached\n";
   DWORD written = 0;
   WriteFile(f, msg, sizeof(msg) - 1, &written, nullptr);
   CloseHandle(f);
@@ -447,7 +447,7 @@ bool HookFn(void* target, void* detour, void** original) {
 template <size_t Capacity>
 bool HookFnWithOriginalRegistry(
     void* target, void* detour,
-    fushi_voice_hook::HookOriginalRegistry<Capacity>* originals) {
+    my_comic_voice_hook::HookOriginalRegistry<Capacity>* originals) {
   if (target == nullptr || originals == nullptr || !g_cs_ready) return false;
   bool ok = false;
   EnterCriticalSection(&g_cs);
@@ -475,7 +475,7 @@ bool HookFnWithOriginalRegistry(
 template <typename Function, size_t Capacity>
 Function OriginalHookForVtableSlot(
     void* com_obj, size_t idx,
-    const fushi_voice_hook::HookOriginalRegistry<Capacity>& originals) {
+    const my_comic_voice_hook::HookOriginalRegistry<Capacity>& originals) {
   return reinterpret_cast<Function>(originals.Lookup(VtableSlot(com_obj, idx)));
 }
 
@@ -498,15 +498,15 @@ void MaybeRecordPcmFormat(uint32_t sample_rate, uint32_t channels,
 }
 
 void MaybeRecordFormat(const WAVEFORMATEX* format) {
-  fushi_voice_hook::XAudioSourceFormat parsed;
-  if (!fushi_voice_hook::ParseXAudioSourceFormat(format, &parsed) ||
+  my_comic_voice_hook::XAudioSourceFormat parsed;
+  if (!my_comic_voice_hook::ParseXAudioSourceFormat(format, &parsed) ||
       parsed.encoding ==
-          fushi_voice_hook::XAudioSourceEncoding::kMicrosoftAdpcm) {
+          my_comic_voice_hook::XAudioSourceEncoding::kMicrosoftAdpcm) {
     return;
   }
   MaybeRecordPcmFormat(
       parsed.sample_rate, parsed.channels, parsed.bits_per_sample,
-      parsed.encoding == fushi_voice_hook::XAudioSourceEncoding::kPcmFloat ? 1u
+      parsed.encoding == my_comic_voice_hook::XAudioSourceEncoding::kPcmFloat ? 1u
                                                                            : 0u);
 }
 
@@ -681,18 +681,18 @@ DWORD WINAPI HookWorker(LPVOID /*module_context*/) {
   }
 
   g_header->hooked = 1;
-  fushi_voice_hook::g_geometry_provider_registry.Reset(g_header);
+  my_comic_voice_hook::g_geometry_provider_registry.Reset(g_header);
   // BUG-2339: proof-of-life must not let Luna claim a pending native text
   // entry (SiglusEngine, LucaSystem). This cheap engine classification
   // precedes Ready; ABI work stays async.
-  fushi_voice_hook::InitializeNativeTextOwner(g_header,
+  my_comic_voice_hook::InitializeNativeTextOwner(g_header,
                                               registry.native_text_candidate());
   // 此时 DLL、共享内存与契约均已就绪，先让 injector 进入 hold 保住映射。
   // 后面的 MinHook/Siglus/KiriKiri 探测允许异步继续，不能阻塞 proof-of-life。
   if (!SignalReady(pid)) {
     // This worker will never install hooks or advance Pending. A later helper
     // must not reuse its mapping as a live, ready injection session.
-    fushi_voice_hook::AtomicStoreShared32(&g_header->hooked, 0u);
+    my_comic_voice_hook::AtomicStoreShared32(&g_header->hooked, 0u);
     registry.FailNativeTextStartup();
     return 1;
   }
@@ -724,7 +724,7 @@ DWORD WINAPI HookWorker(LPVOID /*module_context*/) {
     const ULONGLONG ack_deadline = GetTickCount64() + 1500ull;
     while (!g_stop && GetTickCount64() < ack_deadline) {
       registry.PollLoopbackPolicyOnly();
-      if (fushi_voice_hook::NativeLoopbackRequestAcknowledged(g_header)) break;
+      if (my_comic_voice_hook::NativeLoopbackRequestAcknowledged(g_header)) break;
       Sleep(20);
     }
   }
@@ -752,11 +752,11 @@ DWORD WINAPI HookWorker(LPVOID /*module_context*/) {
     TryInstallGenericLookupInputShield();
     TryInstallOverlayCursorGuard();
     ProcessGenericLookupInputShield();
-    fushi_voice_hook::g_geometry_provider_registry.Reconcile(g_header);
+    my_comic_voice_hook::g_geometry_provider_registry.Reconcile(g_header);
     // 通用位图呈现器：host 打开查词后才起，且只在没有引擎适配器认领呈现时起。
     // 放在 Poll 之后是因为认领发生在适配器安装里——先 Poll 再问，才不会在 KiriKiri
     // 认领之前抢跑起一个多余的分层窗口。它自带 UI 线程，这里只是点火，不阻塞本循环。
-    if (g_header != nullptr && fushi_voice_hook::HasLookupRegion(g_header) &&
+    if (g_header != nullptr && my_comic_voice_hook::HasLookupRegion(g_header) &&
         g_header->lookup_enabled != 0) {
       StartLookupOverlayIfUnclaimed();
     }

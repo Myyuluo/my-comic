@@ -15,15 +15,15 @@ int wmain(int argc, wchar_t** argv) {
                                   DONT_RESOLVE_DLL_REFERENCES);
   assert(module != nullptr);
   FARPROC exported =
-      GetProcAddress(module, fushi_voice_hook::kXAudioTraceExportName);
+      GetProcAddress(module, my_comic_voice_hook::kXAudioTraceExportName);
   assert(exported != nullptr);
   const auto* trace = reinterpret_cast<
-      const fushi_voice_hook::XAudioTraceBuffer*>(exported);
-  assert(trace->magic == fushi_voice_hook::kXAudioTraceMagic);
-  assert(trace->version == fushi_voice_hook::kXAudioTraceVersion);
-  assert(trace->event_size == sizeof(fushi_voice_hook::XAudioTraceEvent));
-  assert(trace->slot_size == sizeof(fushi_voice_hook::XAudioTraceSlot));
-  assert(trace->capacity == fushi_voice_hook::kXAudioTraceCapacity);
+      const my_comic_voice_hook::XAudioTraceBuffer*>(exported);
+  assert(trace->magic == my_comic_voice_hook::kXAudioTraceMagic);
+  assert(trace->version == my_comic_voice_hook::kXAudioTraceVersion);
+  assert(trace->event_size == sizeof(my_comic_voice_hook::XAudioTraceEvent));
+  assert(trace->slot_size == sizeof(my_comic_voice_hook::XAudioTraceSlot));
+  assert(trace->capacity == my_comic_voice_hook::kXAudioTraceCapacity);
 
   // The C data export must have one architecture-neutral name.  A redundant
   // x86 linker alias still lets GetProcAddress pass but creates two identical
@@ -44,7 +44,7 @@ int wmain(int argc, wchar_t** argv) {
   uint32_t matching_names = 0;
   for (uint32_t i = 0; i < exports->NumberOfNames; ++i) {
     const char* name = reinterpret_cast<const char*>(base + names[i]);
-    if (std::strcmp(name, fushi_voice_hook::kXAudioTraceExportName) == 0) {
+    if (std::strcmp(name, my_comic_voice_hook::kXAudioTraceExportName) == 0) {
       ++matching_names;
     }
   }

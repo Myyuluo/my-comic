@@ -31,7 +31,7 @@
 
 #if defined(_M_IX86)
 
-namespace cs2_lookup = fushi_voice_hook::catsystem2_lookup;
+namespace cs2_lookup = my_comic_voice_hook::catsystem2_lookup;
 
 constexpr uint32_t kCs2ModelSlots = 2u;
 constexpr uint32_t kCs2SubmitSlots = 8u;
@@ -497,7 +497,7 @@ void QueueCs2Submit(const Cs2Submit& submit) {
 bool Cs2ShieldActive(HWND game) {
   if (IsLookupOverlayInputShieldVisible()) return true;
   if (g_header == nullptr) return false;
-  const auto request = fushi_voice_hook::ReadLookupShieldRequest(g_header);
+  const auto request = my_comic_voice_hook::ReadLookupShieldRequest(g_header);
   return request.valid && request.active_buttons != 0u &&
          request.target_hwnd ==
              static_cast<uint64_t>(reinterpret_cast<uintptr_t>(game));
@@ -529,8 +529,8 @@ Cs2PressGate Cs2PressGateFor(HWND hwnd, WPARAM wparam, LPARAM lparam,
                              Cs2Submit* submit) {
   auto& rt = g_cs2_lookup;
   if (!rt.live.load(std::memory_order_acquire) || g_header == nullptr ||
-      g_stop || !fushi_voice_hook::HasLookupRegion(g_header) ||
-      fushi_voice_hook::AtomicLoadShared32(&g_header->lookup_enabled) == 0u) {
+      g_stop || !my_comic_voice_hook::HasLookupRegion(g_header) ||
+      my_comic_voice_hook::AtomicLoadShared32(&g_header->lookup_enabled) == 0u) {
     return Cs2PressGate::kLookupOff;
   }
   Cs2Model& model = rt.input_model;
@@ -549,9 +549,9 @@ Cs2PressGate Cs2PressGateFor(HWND hwnd, WPARAM wparam, LPARAM lparam,
       model.snapshot_version) {
     return Cs2PressGate::kVersionStale;
   }
-  if (!fushi_voice_hook::g_geometry_provider_registry.NativeInputAllowed(
-          g_header, fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-          fushi_voice_hook::kLookupGeometryProviderIdCatSystem2)) {
+  if (!my_comic_voice_hook::g_geometry_provider_registry.NativeInputAllowed(
+          g_header, my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+          my_comic_voice_hook::kLookupGeometryProviderIdCatSystem2)) {
     return Cs2PressGate::kInputNotAllowed;
   }
   if (Cs2ShieldActive(hwnd)) return Cs2PressGate::kShield;
@@ -650,7 +650,7 @@ LRESULT __stdcall Cs2InputExtraDetour(uintptr_t input, HWND hwnd,
 
 // ── HookWorker ─────────────────────────────────────────────────────────────
 
-// Worker-only, bounded diagnostics in %TEMP%\fushi_galhook.log.  Never logs
+// Worker-only, bounded diagnostics in %TEMP%\my_comic_galhook.log.  Never logs
 // dialogue text.
 void Cs2LookupLog(const wchar_t* format, ...) {
   wchar_t line[512] = {};
@@ -661,7 +661,7 @@ void Cs2LookupLog(const wchar_t* format, ...) {
   wchar_t path[MAX_PATH] = {};
   const DWORD length = GetTempPathW(MAX_PATH, path);
   if (length == 0 || length >= MAX_PATH - 20) return;
-  wcscat_s(path, L"fushi_galhook.log");
+  wcscat_s(path, L"my_comic_galhook.log");
   HANDLE file = g_orig_CreateFileW(path, FILE_APPEND_DATA, FILE_SHARE_READ,
                                    nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL,
                                    nullptr);
@@ -765,9 +765,9 @@ bool InstallCatSystem2Lookup() {
   LARGE_INTEGER frequency = {}, started = {}, finished = {};
   QueryPerformanceFrequency(&frequency);
   QueryPerformanceCounter(&started);
-  fushi_voice_hook::exact_lookup::LoadedPeImage image;
+  my_comic_voice_hook::exact_lookup::LoadedPeImage image;
   cs2_lookup::ImportSlots imports;
-  if (!fushi_voice_hook::exact_lookup::OpenLoadedPeImage(
+  if (!my_comic_voice_hook::exact_lookup::OpenLoadedPeImage(
           GetModuleHandleW(nullptr), &image)) {
     rt.site_result = cs2_lookup::SiteResult::kPageMissing;
   } else {
@@ -818,8 +818,8 @@ bool InstallCatSystem2Lookup() {
       static_cast<unsigned long>(rt.sites.rasteriser - base), hooked ? 1 : 0,
       scan_ms);
   if (rt.installed && g_header != nullptr) {
-    fushi_voice_hook::AtomicOrShared32(
-        &g_header->lookup_diag, fushi_voice_hook::kLookupDiagSensorInstalled);
+    my_comic_voice_hook::AtomicOrShared32(
+        &g_header->lookup_diag, my_comic_voice_hook::kLookupDiagSensorInstalled);
   }
   return rt.installed;
 }
@@ -834,9 +834,9 @@ void RetireCs2Lookup() {
   if (!rt.provider_offered) return;
   rt.provider_offered = false;
   if (g_header != nullptr) {
-    fushi_voice_hook::g_geometry_provider_registry.Retire(
-        g_header, fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-        fushi_voice_hook::kLookupGeometryProviderIdCatSystem2);
+    my_comic_voice_hook::g_geometry_provider_registry.Retire(
+        g_header, my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+        my_comic_voice_hook::kLookupGeometryProviderIdCatSystem2);
   }
 }
 
@@ -1012,7 +1012,7 @@ bool PublishCs2LookupHit(const Cs2Submit& submit) {
   if (glyph.line.source_index == cs2_lookup::kNoSource ||
       glyph.line.source_length == 0u || glyph.line.source_index >= units ||
       glyph.line.source_length > units - glyph.line.source_index ||
-      fushi_voice_hook::LookupUtf16SourceLength(
+      my_comic_voice_hook::LookupUtf16SourceLength(
           rt.model_line.data(), static_cast<uint32_t>(units),
           glyph.line.source_index) != glyph.line.source_length) {
     return false;
@@ -1021,26 +1021,26 @@ bool PublishCs2LookupHit(const Cs2Submit& submit) {
       CP_UTF8, WC_ERR_INVALID_CHARS, rt.model_line.data(),
       static_cast<int>(units), nullptr, 0, nullptr, nullptr);
   if (required <= 0 ||
-      static_cast<uint32_t>(required) > fushi_voice_hook::kLookupLineBytes) {
+      static_cast<uint32_t>(required) > my_comic_voice_hook::kLookupLineBytes) {
     return false;
   }
-  char utf8[fushi_voice_hook::kLookupLineBytes] = {};
+  char utf8[my_comic_voice_hook::kLookupLineBytes] = {};
   if (WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, rt.model_line.data(),
                           static_cast<int>(units), utf8, required, nullptr,
                           nullptr) != required) {
     return false;
   }
-  fushi_voice_hook::LookupGeometryHitPublication publication;
+  my_comic_voice_hook::LookupGeometryHitPublication publication;
   publication.provider_kind =
-      fushi_voice_hook::kLookupGeometryProviderEngineExactLayout;
+      my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout;
   publication.provider_id =
-      fushi_voice_hook::kLookupGeometryProviderIdCatSystem2;
+      my_comic_voice_hook::kLookupGeometryProviderIdCatSystem2;
   publication.char_index = glyph.line.source_index;
   publication.source_length = glyph.line.source_length;
   publication.char_count = static_cast<uint32_t>(units);
   publication.coordinate_space =
-      fushi_voice_hook::kLookupCoordinateSpaceClientPhysicalPixels;
-  publication.writing_mode = fushi_voice_hook::kLookupWritingModeHorizontal;
+      my_comic_voice_hook::kLookupCoordinateSpaceClientPhysicalPixels;
+  publication.writing_mode = my_comic_voice_hook::kLookupWritingModeHorizontal;
   publication.text_generation = rt.model_text_event;
   publication.geometry_generation = model.generation;
   publication.glyph_x = glyph.rect.x;
@@ -1049,11 +1049,11 @@ bool PublishCs2LookupHit(const Cs2Submit& submit) {
   publication.glyph_h = glyph.rect.h;
   publication.view_w = model.physical_w;
   publication.view_h = model.physical_h;
-  publication.flags = fushi_voice_hook::kLookupHitFlagSubmit;
+  publication.flags = my_comic_voice_hook::kLookupHitFlagSubmit;
   publication.line_utf8 = reinterpret_cast<const uint8_t*>(utf8);
   publication.line_bytes = static_cast<uint32_t>(required);
   const bool published =
-      fushi_voice_hook::g_geometry_provider_registry.PublishHit(g_header,
+      my_comic_voice_hook::g_geometry_provider_registry.PublishHit(g_header,
                                                                 publication);
   Cs2LookupLog(
       L"catsystem2-lookup: hit gen=%llu glyph=%u char=%u+%u rect=%d,%d %dx%d "
@@ -1140,14 +1140,14 @@ void ProcessCatSystem2LookupTick() {
   if (!rt.installed) return;
   NoteCs2Presses();
   if (g_stop || g_header == nullptr ||
-      !fushi_voice_hook::HasLookupRegion(g_header) ||
-      fushi_voice_hook::AtomicLoadShared32(&g_header->lookup_enabled) == 0u) {
+      !my_comic_voice_hook::HasLookupRegion(g_header) ||
+      my_comic_voice_hook::AtomicLoadShared32(&g_header->lookup_enabled) == 0u) {
     NoteCs2Retire(1u);
     RetireCs2Lookup();
     return;
   }
-  fushi_voice_hook::AtomicOrShared32(
-      &g_header->lookup_diag, fushi_voice_hook::kLookupDiagSensorInstalled);
+  my_comic_voice_hook::AtomicOrShared32(
+      &g_header->lookup_diag, my_comic_voice_hook::kLookupDiagSensorInstalled);
 
   // The message window updates every frame while the game runs; a silent
   // window is a suspended, minimised or dying game, or no window at all.
@@ -1164,7 +1164,7 @@ void ProcessCatSystem2LookupTick() {
   std::wstring line;
   uint64_t event = 0u;
   uint64_t thread = 0u;
-  if (!fushi_voice_hook::ReadSelectedLookupText(
+  if (!my_comic_voice_hook::ReadSelectedLookupText(
           g_header, &line, &event, &thread, cs2_lookup::kMaxSurfaceGlyphs)) {
     NoteCs2Retire(3u);
     RetireCs2Lookup();
@@ -1212,17 +1212,17 @@ void ProcessCatSystem2LookupTick() {
           rt.model.logical_h, rt.model.design_w, rt.model.design_h);
     }
   }
-  if (fushi_voice_hook::g_geometry_provider_registry.OfferReady(
-          g_header, fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-          fushi_voice_hook::kLookupGeometryProviderIdCatSystem2)) {
+  if (my_comic_voice_hook::g_geometry_provider_registry.OfferReady(
+          g_header, my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+          my_comic_voice_hook::kLookupGeometryProviderIdCatSystem2)) {
     if (!rt.provider_offered) {
       Cs2LookupLog(L"catsystem2-lookup: OfferReady gen=%llu glyphs=%u",
                    static_cast<unsigned long long>(rt.model.generation),
                    rt.model.count);
     }
     rt.provider_offered = true;
-    fushi_voice_hook::AtomicOrShared32(
-        &g_header->lookup_diag, fushi_voice_hook::kLookupDiagGeometryObserved);
+    my_comic_voice_hook::AtomicOrShared32(
+        &g_header->lookup_diag, my_comic_voice_hook::kLookupDiagGeometryObserved);
     NoteCs2Retire(0u);
   } else {
     NoteCs2Retire(5u);

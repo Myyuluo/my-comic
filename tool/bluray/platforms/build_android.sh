@@ -98,4 +98,4 @@ if not files:
 (directory / 'sha256.json').write_text(json.dumps(files, indent=2) + '\n')
 PY
 echo "Artifacts: $work/artifacts"
-echo "After all four ABIs pass device checks, build Fushi with FUSHI_LIBMPV_ANDROID_DIR=$work/artifacts"
+echo "After all four ABIs pass device checks, build MyComic with MYCOMIC_LIBMPV_ANDROID_DIR=$work/artifacts"

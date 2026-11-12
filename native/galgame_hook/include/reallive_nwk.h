@@ -28,7 +28,7 @@
 #include <cstdint>
 #include <cstring>
 
-namespace fushi_voice_hook::reallive {
+namespace my_comic_voice_hook::reallive {
 
 constexpr uint32_t kNwkEntryBytes = 12u;
 // 实测 z0001.nwk 754 项；上界兜住损坏索引诱导的大分配（1.2 MB 索引）。
@@ -348,4 +348,4 @@ inline bool DecodeNwaToWav(const uint8_t* nwa, size_t bytes, const NwaHeader& h,
   return produced == h.sample_count;
 }
 
-}  // namespace fushi_voice_hook::reallive
+}  // namespace my_comic_voice_hook::reallive

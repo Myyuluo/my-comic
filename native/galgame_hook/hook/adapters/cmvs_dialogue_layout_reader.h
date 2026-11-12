@@ -6,7 +6,7 @@
 #include <cstring>
 #include <limits>
 
-namespace fushi_voice_hook::cmvs_layout {
+namespace my_comic_voice_hook::cmvs_layout {
 
 // ChronoClock trial v2 x64 only. This reader does not discover a process, choose
 // a text thread, project to client pixels, or admit an IPC geometry provider.
@@ -143,4 +143,4 @@ inline Result Capture(ReadMemory read, void* context, uint64_t module_base,
   return Result::kCaptured;
 }
 
-}  // namespace fushi_voice_hook::cmvs_layout
+}  // namespace my_comic_voice_hook::cmvs_layout

@@ -51,7 +51,7 @@ fresh publish supersedes it. The extra per-asset keys are ignored by the
 client (buildReleaseFromManifest reads only name + browser_download_url).
 
 Reading/writing a file (not a git tree) keeps this offline-testable:
-fushi/test/tools/update_manifest_publish_race_test.dart drives this script
+my_comic/test/tools/update_manifest_publish_race_test.dart drives this script
 twice over one file, and tool/merge_update_manifest_test.py unit-tests
 merge_manifest() directly.
 
@@ -212,7 +212,7 @@ def merge_manifest(
     (BUG-1516 ①b): contribute assets, leave tag/version/prerelease/notes/
     releaseSequence exactly as they are. Needed because the hibiki-family
     manifest's top level belongs to the Android bridge, while its desktop
-    slots must carry Fushi installers -- Windows/macOS migrate by installer
+    slots must carry MyComic installers -- Windows/macOS migrate by installer
     overwrite (`platform_updater.dart`, Phase 5), Android cannot cross package
     names at all. Letting the mirror move the top level would hand Android
     clients a version whose only selectable APK is the older bridge build --

@@ -2,7 +2,7 @@
 
 #include "exact_lookup_signature.h"
 
-namespace fushi_voice_hook::siglus_viewport {
+namespace my_comic_voice_hook::siglus_viewport {
 
 // The render-state initializer copies Gameexe's design size into the renderer;
 // an independent window-normalization path divides by those same fields.
@@ -154,4 +154,4 @@ inline uintptr_t FindVerifiedUser32Import(
   return observed == expected_export ? slot : 0;
 }
 
-}  // namespace fushi_voice_hook::siglus_viewport
+}  // namespace my_comic_voice_hook::siglus_viewport

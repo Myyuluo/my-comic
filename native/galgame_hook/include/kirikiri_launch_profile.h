@@ -3,7 +3,7 @@
 #include <array>
 #include <string>
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 // Binary-scoped lifecycle exceptions for KiriKiri titles that crash when the
 // raw TVP stream adapter is installed from a CREATE_SUSPENDED startup hook.
@@ -34,4 +34,4 @@ inline const KirikiriDelayedAttachProfile* FindKirikiriDelayedAttachProfile(
   return nullptr;
 }
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

@@ -6,7 +6,7 @@
 
 #include "siglus_message_capture.h"
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 // Adapter queue policy, not a claimed engine path-length limit. Longer paths
 // are rejected in full so a truncated path can never acquire resource identity.
@@ -147,4 +147,4 @@ bool CaptureSiglusVoiceSource(const SiglusVoiceSourceLayout& layout,
   return true;
 }
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

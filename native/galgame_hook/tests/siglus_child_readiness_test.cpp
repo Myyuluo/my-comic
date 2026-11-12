@@ -18,7 +18,7 @@ struct Observation {
   unsigned classify=0,wait=0,apply=0,inject=0,terminate=0,resume=0,report=0;
   HANDLE waited_handle=nullptr;
   DWORD waited_pid=0,timeout=0;
-  fushi_voice_hook::LaunchFailureReason failure=fushi_voice_hook::LaunchFailureReason::kNone;
+  my_comic_voice_hook::LaunchFailureReason failure=my_comic_voice_hook::LaunchFailureReason::kNone;
   int failure_code=0;
   std::wstring classified_path;
   std::vector<HANDLE> closed;
@@ -34,7 +34,7 @@ bool WaitForReadyGameWindow(HANDLE handle,DWORD pid,DWORD timeout){
   ++observed.wait;observed.waited_handle=handle;observed.waited_pid=pid;
   observed.timeout=timeout;observed.order.push_back("wait");return observed.ready;
 }
-void ReportFailureReason(fushi_voice_hook::LaunchFailureReason reason,int code){
+void ReportFailureReason(my_comic_voice_hook::LaunchFailureReason reason,int code){
   ++observed.report;observed.failure=reason;observed.failure_code=code;
   observed.order.push_back("report");
 }
@@ -82,7 +82,7 @@ void TestProductionBlock(){
         "readiness uses final target handle and PID");
   Check(observed.timeout==20000,"existing bounded readiness budget");
   Check(observed.classify==1&&observed.classified_path==final_exe,"classify final child identity");
-  Check(observed.report==1&&observed.failure==fushi_voice_hook::LaunchFailureReason::kInjectionFailed&&observed.failure_code==1,
+  Check(observed.report==1&&observed.failure==my_comic_voice_hook::LaunchFailureReason::kInjectionFailed&&observed.failure_code==1,
         "readiness failure reported once");
   Check(observed.closed==std::vector<HANDLE>{child,pi.hThread,pi.hProcess},"close only three owned handles in order");
   Check(observed.apply==0&&observed.inject==0&&observed.terminate==0&&observed.resume==0,
@@ -121,7 +121,7 @@ void TestAutomaticAttachAfterFailedLaunch(){
         "retry failure closes exactly its one additional owned handle");
   Check(observed.apply==0&&observed.inject==0&&observed.terminate==0&&observed.resume==0,
         "launch plus retry failure never injects or controls game lifetime");
-  Check(observed.report==2&&observed.failure==fushi_voice_hook::LaunchFailureReason::kInjectionFailed&&observed.failure_code==1,
+  Check(observed.report==2&&observed.failure==my_comic_voice_hook::LaunchFailureReason::kInjectionFailed&&observed.failure_code==1,
         "each unavailable entry reports failure once");
   Check(observed.order==std::vector<std::string>{"classify","wait","report","close","close","close",
       "classify","wait","report","close"},"retry keeps readiness before all downstream operations");

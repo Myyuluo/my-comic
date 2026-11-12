@@ -24,26 +24,26 @@
 #include "../bgi_arc.h"
 #include "engine_dir_signature.h"
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 // 单个文件是否是自洽的 BGI 归档（有界读：头 + 前 8 条目，ARC20 最多 1040 字节）。
 inline bool IsBgiArchiveFile(const std::wstring& path) {
   constexpr DWORD kPrefixBytes =
-      static_cast<DWORD>(::fushi_voice_hook::bgi::kArcHeaderBytes +
-                         8 * ::fushi_voice_hook::bgi::kArc20EntryBytes);
+      static_cast<DWORD>(::my_comic_voice_hook::bgi::kArcHeaderBytes +
+                         8 * ::my_comic_voice_hook::bgi::kArc20EntryBytes);
   uint8_t prefix[kPrefixBytes] = {0};
   DWORD read = 0;
   uint64_t size = 0;
   return engine_dir::FileSize(path, &size) &&
          engine_dir::ReadFilePrefix(path, prefix, kPrefixBytes, &read) &&
-         ::fushi_voice_hook::bgi::IsArcIdentityPrefix(prefix, read, size);
+         ::my_comic_voice_hook::bgi::IsArcIdentityPrefix(prefix, read, size);
 }
 
 // 给定游戏根目录的结构判据；测试用临时目录直接喂它。
-// 从根限定 `::fushi_voice_hook::bgi`：本头在 dll_main.cpp 里是从匿名命名空间内部被包的
+// 从根限定 `::my_comic_voice_hook::bgi`：本头在 dll_main.cpp 里是从匿名命名空间内部被包的
 // （adapters/*.inc → generated/adapter_includes.inc → dll_main.cpp），而 bgi_arc.h 早在
 // dll_main.cpp 顶层就包过了。include guard 会让里面这次变成空操作，于是非全限定的
-// `bgi::` 会去 `(匿名)::fushi_voice_hook` 里找、找不到。测试 TU 从全局作用域包本头时，
+// `bgi::` 会去 `(匿名)::my_comic_voice_hook` 里找、找不到。测试 TU 从全局作用域包本头时，
 // `::` 限定同样成立。
 //
 // scan_limit 与 engine_dir::DirectoryHasFileStartingWith 同理：probe 可能每次 Poll 都问，
@@ -74,4 +74,4 @@ inline bool MatchesBgiEthornellProfile(const wchar_t*) {
   return MatchesBgiEthornellLayout(directory);
 }
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

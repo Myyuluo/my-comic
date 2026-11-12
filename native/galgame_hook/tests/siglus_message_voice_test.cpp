@@ -80,8 +80,8 @@ int main() {
   const uint64_t revision = Observe(file, index);
   assert(revision != 0 && Observe(file, index) == revision);
   QueueSiglusMessageVoice(10, 10100125, 2);
-  fushi_voice_hook::siglus::VoiceBinding binding;
-  using Status = fushi_voice_hook::siglus::VoiceBindingStatus;
+  my_comic_voice_hook::siglus::VoiceBinding binding;
+  using Status = my_comic_voice_hook::siglus::VoiceBindingStatus;
   assert(g_siglus_voice_bindings.GetBinding(10, &binding) == Status::kReady);
   SiglusVoiceTask task;
   task.text_event_id = 10;

@@ -1,12 +1,12 @@
-#ifndef FUSHI_TEXT_THREAD_IDENTITY_H_
-#define FUSHI_TEXT_THREAD_IDENTITY_H_
+#ifndef MYCOMIC_TEXT_THREAD_IDENTITY_H_
+#define MYCOMIC_TEXT_THREAD_IDENTITY_H_
 
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <cwchar>
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 // Native engine adapters and Luna share one selected_text_thread_id field.
 // Reserve bit 62 for native sources while keeping bit 63 clear so ids survive
@@ -47,6 +47,6 @@ inline uint64_t NativeTextThreadIdFrom(uint64_t component_identity,
          kNativeTextThreadNamespaceBit;
 }
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook
 
-#endif  // FUSHI_TEXT_THREAD_IDENTITY_H_
+#endif  // MYCOMIC_TEXT_THREAD_IDENTITY_H_

@@ -179,7 +179,7 @@ bool RejectLucaPress(uint32_t reason) {
 bool LucaShieldActive(HWND game) {
   if (IsLookupOverlayInputShieldVisible()) return true;
   if (g_header == nullptr) return false;
-  const auto request = fushi_voice_hook::ReadLookupShieldRequest(g_header);
+  const auto request = my_comic_voice_hook::ReadLookupShieldRequest(g_header);
   return request.valid && request.active_buttons != 0u &&
          request.target_hwnd ==
              static_cast<uint64_t>(reinterpret_cast<uintptr_t>(game));
@@ -224,8 +224,8 @@ uint32_t HitLucaGlyphAtCursor(const LucaModel& model, HWND game,
 bool LucaPressEligible(LucaSubmit* submit) {
   auto& rt = g_luca_lookup;
   if (g_header == nullptr || g_stop ||
-      !fushi_voice_hook::HasLookupRegion(g_header) ||
-      fushi_voice_hook::AtomicLoadShared32(&g_header->lookup_enabled) == 0u) {
+      !my_comic_voice_hook::HasLookupRegion(g_header) ||
+      my_comic_voice_hook::AtomicLoadShared32(&g_header->lookup_enabled) == 0u) {
     return RejectLucaPress(1u);
   }
   LucaModel& model = rt.input_model;
@@ -234,9 +234,9 @@ bool LucaPressEligible(LucaSubmit* submit) {
   }
   const HWND game = reinterpret_cast<HWND>(model.window);
   if (game == nullptr ||
-      !fushi_voice_hook::g_geometry_provider_registry.NativeInputAllowed(
-          g_header, fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-          fushi_voice_hook::kLookupGeometryProviderIdLuca) ||
+      !my_comic_voice_hook::g_geometry_provider_registry.NativeInputAllowed(
+          g_header, my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+          my_comic_voice_hook::kLookupGeometryProviderIdLuca) ||
       LucaShieldActive(game) || GetForegroundWindow() != game ||
       (GetKeyState(VK_SHIFT) & 0x8000) != 0 ||
       (GetKeyState(VK_CONTROL) & 0x8000) != 0 ||
@@ -375,9 +375,9 @@ void RetireLucaLookup() {
   if (!rt.provider_offered) return;
   rt.provider_offered = false;
   if (g_header != nullptr) {
-    fushi_voice_hook::g_geometry_provider_registry.Retire(
-        g_header, fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-        fushi_voice_hook::kLookupGeometryProviderIdLuca);
+    my_comic_voice_hook::g_geometry_provider_registry.Retire(
+        g_header, my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+        my_comic_voice_hook::kLookupGeometryProviderIdLuca);
   }
 }
 
@@ -497,31 +497,31 @@ void PublishLucaLookupHit(const LucaSubmit& submit) {
   const std::wstring& line = rt.model_line;
   const LucaModelGlyph& glyph = model.glyphs[submit.glyph];
   const uint32_t units = static_cast<uint32_t>(line.size());
-  const uint32_t source_length = fushi_voice_hook::LookupUtf16SourceLength(
+  const uint32_t source_length = my_comic_voice_hook::LookupUtf16SourceLength(
       line.data(), units, glyph.line.source_index);
   const int required =
       WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, line.data(),
                           static_cast<int>(units), nullptr, 0, nullptr,
                           nullptr);
-  char utf8[fushi_voice_hook::kLookupLineBytes] = {};
+  char utf8[my_comic_voice_hook::kLookupLineBytes] = {};
   if (source_length == 0u || required <= 0 ||
-      static_cast<uint32_t>(required) > fushi_voice_hook::kLookupLineBytes ||
+      static_cast<uint32_t>(required) > my_comic_voice_hook::kLookupLineBytes ||
       WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, line.data(),
                           static_cast<int>(units), utf8, required, nullptr,
                           nullptr) != required) {
     LucaLog(L"luca-lookup: hit dropped (line encoding)");
     return;
   }
-  fushi_voice_hook::LookupGeometryHitPublication publication;
+  my_comic_voice_hook::LookupGeometryHitPublication publication;
   publication.provider_kind =
-      fushi_voice_hook::kLookupGeometryProviderEngineExactLayout;
-  publication.provider_id = fushi_voice_hook::kLookupGeometryProviderIdLuca;
+      my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout;
+  publication.provider_id = my_comic_voice_hook::kLookupGeometryProviderIdLuca;
   publication.char_index = glyph.line.source_index;
   publication.source_length = source_length;
   publication.char_count = units;
   publication.coordinate_space =
-      fushi_voice_hook::kLookupCoordinateSpaceClientPhysicalPixels;
-  publication.writing_mode = fushi_voice_hook::kLookupWritingModeHorizontal;
+      my_comic_voice_hook::kLookupCoordinateSpaceClientPhysicalPixels;
+  publication.writing_mode = my_comic_voice_hook::kLookupWritingModeHorizontal;
   publication.text_generation = model.text_event;
   publication.geometry_generation = model.generation;
   publication.glyph_x = glyph.physical.x;
@@ -530,11 +530,11 @@ void PublishLucaLookupHit(const LucaSubmit& submit) {
   publication.glyph_h = glyph.physical.h;
   publication.view_w = model.physical_w;
   publication.view_h = model.physical_h;
-  publication.flags = fushi_voice_hook::kLookupHitFlagSubmit;
+  publication.flags = my_comic_voice_hook::kLookupHitFlagSubmit;
   publication.line_utf8 = reinterpret_cast<const uint8_t*>(utf8);
   publication.line_bytes = static_cast<uint32_t>(required);
   const bool published =
-      fushi_voice_hook::g_geometry_provider_registry.PublishHit(g_header,
+      my_comic_voice_hook::g_geometry_provider_registry.PublishHit(g_header,
                                                                 publication);
   LucaLog(L"luca-lookup: hit gen=%llu glyph=%u char=%u+%u rect=%d,%d %dx%d "
           L"view=%dx%d published=%d",
@@ -588,15 +588,15 @@ void ProcessLucaLookupTick() {
   auto& rt = g_luca_lookup;
   if (!rt.installed) return;
   if (g_stop || g_header == nullptr ||
-      !fushi_voice_hook::HasLookupRegion(g_header) ||
-      fushi_voice_hook::AtomicLoadShared32(&g_header->lookup_enabled) == 0u) {
+      !my_comic_voice_hook::HasLookupRegion(g_header) ||
+      my_comic_voice_hook::AtomicLoadShared32(&g_header->lookup_enabled) == 0u) {
     NoteLucaGate(kLucaGateDisabled);
     luca::ResetShiftState(&rt.shift);
     RetireLucaLookup();
     return;
   }
-  fushi_voice_hook::AtomicOrShared32(
-      &g_header->lookup_diag, fushi_voice_hook::kLookupDiagSensorInstalled);
+  my_comic_voice_hook::AtomicOrShared32(
+      &g_header->lookup_diag, my_comic_voice_hook::kLookupDiagSensorInstalled);
   const bool shift_press = luca::ConsumeShiftSample(
       static_cast<uint16_t>(GetAsyncKeyState(VK_SHIFT)), &rt.shift);
   {
@@ -609,7 +609,7 @@ void ProcessLucaLookupTick() {
     }
   }
   DrainLucaSubmits();
-  const HWND game = fushi_voice_hook::FindGameMainWindow();
+  const HWND game = my_comic_voice_hook::FindGameMainWindow();
   if (game == nullptr) {
     NoteLucaGate(kLucaGateNoWindow);
     RetireLucaLookup();
@@ -618,7 +618,7 @@ void ProcessLucaLookupTick() {
   std::wstring line;
   uint64_t event = 0u;
   uint64_t thread = 0u;
-  if (!fushi_voice_hook::ReadSelectedLookupText(g_header, &line, &event,
+  if (!my_comic_voice_hook::ReadSelectedLookupText(g_header, &line, &event,
                                                 &thread, luca::kMaxGlyphs)) {
     NoteLucaGate(kLucaGateNoLine);
     RetireLucaLookup();
@@ -647,12 +647,12 @@ void ProcessLucaLookupTick() {
             rt.model.physical_w, rt.model.physical_h, rt.model.logical_w,
             rt.model.logical_h, rt.model.design_w, rt.model.design_h);
   }
-  if (fushi_voice_hook::g_geometry_provider_registry.OfferReady(
-          g_header, fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-          fushi_voice_hook::kLookupGeometryProviderIdLuca)) {
+  if (my_comic_voice_hook::g_geometry_provider_registry.OfferReady(
+          g_header, my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+          my_comic_voice_hook::kLookupGeometryProviderIdLuca)) {
     rt.provider_offered = true;
-    fushi_voice_hook::AtomicOrShared32(
-        &g_header->lookup_diag, fushi_voice_hook::kLookupDiagGeometryObserved);
+    my_comic_voice_hook::AtomicOrShared32(
+        &g_header->lookup_diag, my_comic_voice_hook::kLookupDiagGeometryObserved);
     NoteLucaGate(kLucaGateOffered);
   } else {
     NoteLucaGate(kLucaGateOfferRejected);
@@ -692,8 +692,8 @@ bool InstallLucaLookup(const luca::CodeSpan* spans, size_t span_count) {
           static_cast<unsigned long>(rt.layout_rva), g_luca.design_w,
           g_luca.design_h, hooked ? 1 : 0);
   if (rt.installed && g_header != nullptr) {
-    fushi_voice_hook::AtomicOrShared32(
-        &g_header->lookup_diag, fushi_voice_hook::kLookupDiagSensorInstalled);
+    my_comic_voice_hook::AtomicOrShared32(
+        &g_header->lookup_diag, my_comic_voice_hook::kLookupDiagSensorInstalled);
   }
   return rt.installed;
 }

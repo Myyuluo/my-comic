@@ -385,7 +385,7 @@ void QueueMalieSubmit(const MalieSubmit& submit) {
 bool MalieShieldActive(HWND game) {
   if (IsLookupOverlayInputShieldVisible()) return true;
   if (g_header == nullptr) return false;
-  const auto request = fushi_voice_hook::ReadLookupShieldRequest(g_header);
+  const auto request = my_comic_voice_hook::ReadLookupShieldRequest(g_header);
   return request.valid && request.active_buttons != 0u &&
          request.target_hwnd ==
              static_cast<uint64_t>(reinterpret_cast<uintptr_t>(game));
@@ -402,8 +402,8 @@ bool MaliePressEligible(HWND hwnd, WPARAM wparam, LPARAM lparam,
                         MalieSubmit* submit) {
   auto& rt = g_malie_lookup;
   if (!rt.live.load(std::memory_order_acquire) || g_header == nullptr ||
-      g_stop || !fushi_voice_hook::HasLookupRegion(g_header) ||
-      fushi_voice_hook::AtomicLoadShared32(&g_header->lookup_enabled) == 0u) {
+      g_stop || !my_comic_voice_hook::HasLookupRegion(g_header) ||
+      my_comic_voice_hook::AtomicLoadShared32(&g_header->lookup_enabled) == 0u) {
     return RefuseMaliePress(1u);
   }
   MalieModel& model = rt.input_model;
@@ -419,9 +419,9 @@ bool MaliePressEligible(HWND hwnd, WPARAM wparam, LPARAM lparam,
     return RefuseMaliePress(4u);
   }
   if (MalieWatchedNodeStale()) return RefuseMaliePress(5u);
-  if (!fushi_voice_hook::g_geometry_provider_registry.NativeInputAllowed(
-          g_header, fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-          fushi_voice_hook::kLookupGeometryProviderIdMalie)) {
+  if (!my_comic_voice_hook::g_geometry_provider_registry.NativeInputAllowed(
+          g_header, my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+          my_comic_voice_hook::kLookupGeometryProviderIdMalie)) {
     return RefuseMaliePress(6u);
   }
   if (MalieShieldActive(hwnd)) return RefuseMaliePress(7u);
@@ -484,9 +484,9 @@ constexpr std::array<WNDPROC, malie_lookup::kMaxWindowProcedures>
 // "ScreenWidth"/"ScreenHeight": the profile read whose result the engine
 // stores into its design-size global (`push lit ... call ... mov [G],eax`).
 uintptr_t ResolveMalieDesignGlobal(
-    const ::fushi_voice_hook::exact_lookup::LoadedPeImage& image,
+    const ::my_comic_voice_hook::exact_lookup::LoadedPeImage& image,
     const wchar_t* key) {
-  namespace mio = ::fushi_voice_hook::malie_io;
+  namespace mio = ::my_comic_voice_hook::malie_io;
   const auto literals = mio::FindWideLiteral(image, key);
   uintptr_t found = 0u;
   for (size_t literal : literals) {
@@ -545,11 +545,11 @@ bool InstallMalieLookup() {
   if (rt.resolved) return false;
   // Not resolved until the identity matched: an image that was not ready
   // (still unpacking) is measured again later and may match then.
-  if (!fushi_voice_hook::MatchesMalieProfile(nullptr)) return false;
+  if (!my_comic_voice_hook::MatchesMalieProfile(nullptr)) return false;
   rt.resolved = true;
-  ::fushi_voice_hook::exact_lookup::LoadedPeImage image;
+  ::my_comic_voice_hook::exact_lookup::LoadedPeImage image;
   const HMODULE module = GetModuleHandleW(nullptr);
-  if (!::fushi_voice_hook::exact_lookup::OpenLoadedPeImage(module, &image)) {
+  if (!::my_comic_voice_hook::exact_lookup::OpenLoadedPeImage(module, &image)) {
     return false;
   }
   const auto draw = malie_lookup::ResolveDraw(image, &rt.draw);
@@ -594,8 +594,8 @@ bool InstallMalieLookup() {
       static_cast<unsigned long>(rt.design_h_global ? rt.design_h_global - rt.image_base : 0u),
       hooked ? 1 : 0);
   if (rt.installed && g_header != nullptr) {
-    fushi_voice_hook::AtomicOrShared32(
-        &g_header->lookup_diag, fushi_voice_hook::kLookupDiagSensorInstalled);
+    my_comic_voice_hook::AtomicOrShared32(
+        &g_header->lookup_diag, my_comic_voice_hook::kLookupDiagSensorInstalled);
   }
   return rt.installed;
 }
@@ -605,31 +605,31 @@ uint64_t PublishMalieTextLine(const std::wstring& text, uintptr_t node,
   auto& rt = g_malie_lookup;
   if (!g_capture_enabled || g_header == nullptr || g_text_base == nullptr ||
       !g_text_cs_ready || text.empty() ||
-      text.size() * sizeof(wchar_t) > fushi_voice_hook::kTextSlotBytes) {
+      text.size() * sizeof(wchar_t) > my_comic_voice_hook::kTextSlotBytes) {
     return 0u;
   }
   constexpr wchar_t kHookCode[] = L"ENGINE:MALIE:message_segment";
   constexpr char kHookName[] = "Malie exact";
-  const uint64_t thread_id = fushi_voice_hook::NativeTextThreadIdFrom(
+  const uint64_t thread_id = my_comic_voice_hook::NativeTextThreadIdFrom(
       rt.draw.draw - rt.image_base, kHookCode, kHookName);
   if (text == rt.last_text && tick - rt.last_text_tick <= 500u) {
     return rt.last_text_event;
   }
-  fushi_voice_hook::TextLaneWrite write;
+  my_comic_voice_hook::TextLaneWrite write;
   write.thread_id = thread_id;
   write.thread_address = node;
   write.thread_context = node;
   write.process_id = GetCurrentProcessId();
-  write.source_kind = fushi_voice_hook::kTextSourceMalie;
+  write.source_kind = my_comic_voice_hook::kTextSourceMalie;
   write.is_utf8 = 0;
   write.text = text.data();
   write.byte_len = static_cast<uint32_t>(text.size() * sizeof(wchar_t));
   write.hook_name = kHookName;
   write.hook_code = kHookCode;
   EnterCriticalSection(&g_text_cs);
-  const uint64_t event = fushi_voice_hook::WriteTextLaneEvent(
-      g_header, fushi_voice_hook::kNativeThreadPreviewStart,
-      fushi_voice_hook::kTextLaneCount, write);
+  const uint64_t event = my_comic_voice_hook::WriteTextLaneEvent(
+      g_header, my_comic_voice_hook::kNativeThreadPreviewStart,
+      my_comic_voice_hook::kTextLaneCount, write);
   LeaveCriticalSection(&g_text_cs);
   if (event == 0u) return 0u;
   rt.last_text = text;
@@ -717,7 +717,7 @@ bool CollectMalieWindowCandidate(malie_lookup::WindowCandidate* candidate,
                                  HWND* main_window) {
   auto& rt = g_malie_lookup;
   *candidate = malie_lookup::WindowCandidate();
-  const HWND main = fushi_voice_hook::FindGameMainWindow();
+  const HWND main = my_comic_voice_hook::FindGameMainWindow();
   *main_window = main;
   if (main == nullptr) return true;  // not created yet
   RECT client = {};
@@ -726,8 +726,8 @@ bool CollectMalieWindowCandidate(malie_lookup::WindowCandidate* candidate,
                   (client.bottom - client.top) / 2};
   HWND target = ChildWindowFromPointEx(main, center, CWP_SKIPINVISIBLE);
   if (target == nullptr) target = main;
-  ::fushi_voice_hook::exact_lookup::LoadedPeImage image;
-  if (!::fushi_voice_hook::exact_lookup::OpenLoadedPeImage(
+  ::my_comic_voice_hook::exact_lookup::LoadedPeImage image;
+  if (!::my_comic_voice_hook::exact_lookup::OpenLoadedPeImage(
           reinterpret_cast<HMODULE>(rt.image_base), &image)) {
     return false;
   }
@@ -737,7 +737,7 @@ bool CollectMalieWindowCandidate(malie_lookup::WindowCandidate* candidate,
   candidate->procedure = procedure;
   candidate->in_image =
       procedure >= rt.image_base &&
-      ::fushi_voice_hook::malie_io::ExecutableAt(image, procedure - rt.image_base,
+      ::my_comic_voice_hook::malie_io::ExecutableAt(image, procedure - rt.image_base,
                                                  16u);
   return true;
 }
@@ -818,9 +818,9 @@ void RetireMalieLookup() {
   if (!rt.provider_offered) return;
   rt.provider_offered = false;
   if (g_header != nullptr) {
-    fushi_voice_hook::g_geometry_provider_registry.Retire(
-        g_header, fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-        fushi_voice_hook::kLookupGeometryProviderIdMalie);
+    my_comic_voice_hook::g_geometry_provider_registry.Retire(
+        g_header, my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+        my_comic_voice_hook::kLookupGeometryProviderIdMalie);
   }
 }
 
@@ -1020,31 +1020,31 @@ bool PublishMalieLookupHit(const MalieSubmit& submit) {
   const std::wstring& line = record->line;
   const uint32_t units = static_cast<uint32_t>(line.size());
   if (submit.unit >= units) return false;
-  const uint32_t length = fushi_voice_hook::LookupUtf16SourceLength(
+  const uint32_t length = my_comic_voice_hook::LookupUtf16SourceLength(
       line.data(), units, submit.unit);
   const int required = WideCharToMultiByte(
       CP_UTF8, WC_ERR_INVALID_CHARS, line.data(), static_cast<int>(units),
       nullptr, 0, nullptr, nullptr);
   if (length == 0u || required <= 0 ||
-      static_cast<uint32_t>(required) > fushi_voice_hook::kLookupLineBytes) {
+      static_cast<uint32_t>(required) > my_comic_voice_hook::kLookupLineBytes) {
     return false;
   }
-  char utf8[fushi_voice_hook::kLookupLineBytes] = {};
+  char utf8[my_comic_voice_hook::kLookupLineBytes] = {};
   if (WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, line.data(),
                           static_cast<int>(units), utf8, required, nullptr,
                           nullptr) != required) {
     return false;
   }
-  fushi_voice_hook::LookupGeometryHitPublication publication;
+  my_comic_voice_hook::LookupGeometryHitPublication publication;
   publication.provider_kind =
-      fushi_voice_hook::kLookupGeometryProviderEngineExactLayout;
-  publication.provider_id = fushi_voice_hook::kLookupGeometryProviderIdMalie;
+      my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout;
+  publication.provider_id = my_comic_voice_hook::kLookupGeometryProviderIdMalie;
   publication.char_index = submit.unit;
   publication.source_length = length;
   publication.char_count = units;
   publication.coordinate_space =
-      fushi_voice_hook::kLookupCoordinateSpaceClientPhysicalPixels;
-  publication.writing_mode = fushi_voice_hook::kLookupWritingModeHorizontal;
+      my_comic_voice_hook::kLookupCoordinateSpaceClientPhysicalPixels;
+  publication.writing_mode = my_comic_voice_hook::kLookupWritingModeHorizontal;
   publication.text_generation = record->text_event;
   publication.geometry_generation = submit.generation;
   publication.glyph_x = submit.rect.x;
@@ -1053,11 +1053,11 @@ bool PublishMalieLookupHit(const MalieSubmit& submit) {
   publication.glyph_h = submit.rect.h;
   publication.view_w = submit.physical_w;
   publication.view_h = submit.physical_h;
-  publication.flags = fushi_voice_hook::kLookupHitFlagSubmit;
+  publication.flags = my_comic_voice_hook::kLookupHitFlagSubmit;
   publication.line_utf8 = reinterpret_cast<const uint8_t*>(utf8);
   publication.line_bytes = static_cast<uint32_t>(required);
   const bool published =
-      fushi_voice_hook::g_geometry_provider_registry.PublishHit(g_header,
+      my_comic_voice_hook::g_geometry_provider_registry.PublishHit(g_header,
                                                                 publication);
   MalieLookupLog(L"lookup: hit gen=%llu unit=%u+%u rect=%d,%d %dx%d view=%dx%d "
                  L"published=%d",
@@ -1093,14 +1093,14 @@ void ProcessMalieLookupTick() {
   if (!rt.installed) return;
   DrainMalieSegments();  // the text lane does not depend on the lookup switch
   if (g_stop || g_header == nullptr ||
-      !fushi_voice_hook::HasLookupRegion(g_header) ||
-      fushi_voice_hook::AtomicLoadShared32(&g_header->lookup_enabled) == 0u) {
+      !my_comic_voice_hook::HasLookupRegion(g_header) ||
+      my_comic_voice_hook::AtomicLoadShared32(&g_header->lookup_enabled) == 0u) {
     NoteMalieRetire(1u);
     RetireMalieLookup();
     return;
   }
-  fushi_voice_hook::AtomicOrShared32(
-      &g_header->lookup_diag, fushi_voice_hook::kLookupDiagSensorInstalled);
+  my_comic_voice_hook::AtomicOrShared32(
+      &g_header->lookup_diag, my_comic_voice_hook::kLookupDiagSensorInstalled);
   const uint64_t claims = rt.claimed_presses.load(std::memory_order_acquire);
   if (claims != rt.logged_claims) {
     rt.logged_claims = claims;
@@ -1130,7 +1130,7 @@ void ProcessMalieLookupTick() {
   std::wstring line;
   uint64_t event = 0u;
   uint64_t thread = 0u;
-  if (!fushi_voice_hook::ReadSelectedLookupText(
+  if (!my_comic_voice_hook::ReadSelectedLookupText(
           g_header, &line, &event, &thread, malie_lookup::kMaxSegmentUnits)) {
     NoteMalieRetire(3u);
     RetireMalieLookup();
@@ -1170,12 +1170,12 @@ void ProcessMalieLookupTick() {
                    rt.model.client_h, rt.model.physical_w,
                    rt.model.physical_h);
   }
-  if (fushi_voice_hook::g_geometry_provider_registry.OfferReady(
-          g_header, fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-          fushi_voice_hook::kLookupGeometryProviderIdMalie)) {
+  if (my_comic_voice_hook::g_geometry_provider_registry.OfferReady(
+          g_header, my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+          my_comic_voice_hook::kLookupGeometryProviderIdMalie)) {
     rt.provider_offered = true;
-    fushi_voice_hook::AtomicOrShared32(
-        &g_header->lookup_diag, fushi_voice_hook::kLookupDiagGeometryObserved);
+    my_comic_voice_hook::AtomicOrShared32(
+        &g_header->lookup_diag, my_comic_voice_hook::kLookupDiagGeometryObserved);
     NoteMalieRetire(0u);
   } else {
     NoteMalieRetire(5u);

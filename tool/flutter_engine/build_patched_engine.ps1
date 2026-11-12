@@ -1,4 +1,4 @@
-# Builds Fushi's patched Flutter Windows engine (HDR output inside the Flutter
+# Builds MyComic's patched Flutter Windows engine (HDR output inside the Flutter
 # compositor) and packages it for tool/engine_overlay.ps1.
 #
 # Steps (run any subset, in this order):
@@ -43,7 +43,7 @@ $Modes = Split-List $Modes @('debug', 'profile', 'release') 'Modes'
 
 $repo =(Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 if (-not $FlutterVersion) {
-  $FlutterVersion = (Get-Content (Join-Path $repo 'fushi\.fvmrc') -Raw | ConvertFrom-Json).flutter
+  $FlutterVersion = (Get-Content (Join-Path $repo 'my_comic\.fvmrc') -Raw | ConvertFrom-Json).flutter
 }
 $patchDir = Join-Path $repo "ci\patches\flutter-engine\$FlutterVersion"
 $flutter = Join-Path $Root 'flutter'

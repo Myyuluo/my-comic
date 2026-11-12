@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Fushi modification to Locale Emulator Core, 2026-09-07.
+// MyComic modification to Locale Emulator Core, 2026-09-07.
 // Shared by the LGPL source patch and its regression test.
 #pragma once
 
-namespace fushi_locale_emulator {
+namespace my_comic_locale_emulator {
 
 // InInitializationOrderModuleList is a circular LIST_ENTRY with a separate
 // sentinel. Only real entries may be converted to LDR_MODULE: the head is part
@@ -34,4 +34,4 @@ Module* FindKernel32Module(Entry* head, ModuleFromEntry module_from_entry) {
   return nullptr;
 }
 
-}  // namespace fushi_locale_emulator
+}  // namespace my_comic_locale_emulator

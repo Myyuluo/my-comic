@@ -19,7 +19,7 @@ if (-not (Test-Path -LiteralPath $fingerprintScript -PathType Leaf)) {
   throw "Helper source fingerprint script is missing: $fingerprintScript"
 }
 . $fingerprintScript
-$sourceFingerprintBefore = Get-FushiHelperSourceFingerprint -SourceRoot $sourceRoot
+$sourceFingerprintBefore = Get-MyComicHelperSourceFingerprint -SourceRoot $sourceRoot
 if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
   $outputRoot = [IO.Path]::GetFullPath((Join-Path $sourceRoot 'dist'))
 }
@@ -97,7 +97,7 @@ foreach ($config in @(
     # --no-tests=error: ctest defaults to returning 0 when NO test is registered,
     # so a CMakeLists refactor that stops registering the suite would read as a
     # pass. Same "zero tests executed masquerades as green" family as BUG-1157.
-    # Matches .github/workflows/native-fushidicts-gate.yml.
+    # Matches .github/workflows/native-my_comicdicts-gate.yml.
     Invoke-Checked -FilePath ctest -Arguments @(
       '--test-dir', $buildDir, '-C', 'Release', '--output-on-failure',
       '--no-tests=error'
@@ -113,15 +113,15 @@ Reset-StageDirectory $stageX86
 $releaseX64 = Join-Path $buildRoot 'x64\Release'
 $releaseX86 = Join-Path $buildRoot 'x86\Release'
 foreach ($file in @(
-  'fushi_voice_injector.exe',
-  'fushi_voice_hook.dll',
+  'my_comic_voice_injector.exe',
+  'my_comic_voice_hook.dll',
   'LunaHook64.dll',
   'LunaHost64.dll'
 )) {
   Copy-Item -LiteralPath (Join-Path $releaseX64 $file) -Destination $stageX64 -Force
 }
 $unityAudioRuntimeFiles = @(
-  'unity_audio_runtime/fushi_unity_audio_extract.exe',
+  'unity_audio_runtime/my_comic_unity_audio_extract.exe',
   'unity_audio_runtime/classdata.tpk',
   'unity_audio_runtime/vgmstream-cli.exe',
   'unity_audio_runtime/avcodec-vgmstream-59.dll',
@@ -144,8 +144,8 @@ foreach ($file in $unityAudioRuntimeFiles) {
   Copy-Item -LiteralPath (Join-Path $releaseX64 $file) -Destination $destination -Force
 }
 foreach ($file in @(
-  'fushi_voice_injector.exe',
-  'fushi_voice_hook.dll',
+  'my_comic_voice_injector.exe',
+  'my_comic_voice_hook.dll',
   'LunaHook32.dll',
   'LunaHost32.dll'
 )) {
@@ -155,7 +155,7 @@ foreach ($file in @(
 # Locale Emulator 2.5.0.1 (LGPL-3.0), pinned by version and SHA-256 for x86.
 $tempBase = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { [IO.Path]::GetTempPath() }
 $leZip = Join-Path $tempBase 'Locale.Emulator.2.5.0.1.zip'
-$leDir = Join-Path $tempBase 'fushi-locale-emulator-2.5.0.1'
+$leDir = Join-Path $tempBase 'mycomic-locale-emulator-2.5.0.1'
 $leUrl = 'https://github.com/xupefei/Locale-Emulator/releases/download/v2.5.0.1/Locale.Emulator.2.5.0.1.zip'
 $expectedLeSha = '808ff584426d52cc775ad6406da00622f454be95bd4c8fbca42eef4b7235ad5c'
 if (-not (Test-Path -LiteralPath $leZip -PathType Leaf) -or
@@ -183,11 +183,11 @@ Invoke-WebRequest `
 
 $expected = @{
   x64 = @(
-    'fushi_voice_injector.exe',
-    'fushi_voice_hook.dll',
+    'my_comic_voice_injector.exe',
+    'my_comic_voice_hook.dll',
     'LunaHook64.dll',
     'LunaHost64.dll',
-    'unity_audio_runtime/fushi_unity_audio_extract.exe',
+    'unity_audio_runtime/my_comic_unity_audio_extract.exe',
     'unity_audio_runtime/classdata.tpk',
     'unity_audio_runtime/vgmstream-cli.exe',
     'unity_audio_runtime/avcodec-vgmstream-59.dll',
@@ -203,7 +203,7 @@ $expected = @{
     'unity_audio_runtime/libvorbis.dll',
     'unity_audio_runtime/COPYING'
   )
-  x86 = @('fushi_voice_injector.exe', 'fushi_voice_hook.dll', 'LunaHook32.dll', 'LunaHost32.dll', 'LoaderDll.dll', 'LocaleEmulator.dll', 'LocaleEmulator-LGPL-3.0.txt')
+  x86 = @('my_comic_voice_injector.exe', 'my_comic_voice_hook.dll', 'LunaHook32.dll', 'LunaHost32.dll', 'LoaderDll.dll', 'LocaleEmulator.dll', 'LocaleEmulator-LGPL-3.0.txt')
 }
 foreach ($arch in @('x64', 'x86')) {
   $stage = Join-Path $outputRoot $arch
@@ -232,7 +232,7 @@ foreach ($stage in @($stageX64, $stageX86)) {
 # A zip hash proves archive integrity, not that the archive belongs to the
 # current checkout. Record the deterministic build-input identity only after
 # the build completes, and reject a source tree that changed underneath it.
-$sourceFingerprintAfter = Get-FushiHelperSourceFingerprint -SourceRoot $sourceRoot
+$sourceFingerprintAfter = Get-MyComicHelperSourceFingerprint -SourceRoot $sourceRoot
 if ($sourceFingerprintAfter -ne $sourceFingerprintBefore) {
   throw "Galgame helper sources changed during build: before=$sourceFingerprintBefore after=$sourceFingerprintAfter"
 }

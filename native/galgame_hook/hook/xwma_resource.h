@@ -1,5 +1,5 @@
-#ifndef FUSHI_VOICE_HOOK_XWMA_RESOURCE_H_
-#define FUSHI_VOICE_HOOK_XWMA_RESOURCE_H_
+#ifndef MYCOMIC_VOICE_HOOK_XWMA_RESOURCE_H_
+#define MYCOMIC_VOICE_HOOK_XWMA_RESOURCE_H_
 
 #include <cstddef>
 #include <cstdint>
@@ -9,7 +9,7 @@
 
 #include "xaudio_source_format.h"
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 inline void AppendXwmaU16(std::vector<uint8_t>* output, uint16_t value) {
   output->push_back(static_cast<uint8_t>(value));
@@ -137,6 +137,6 @@ inline bool IsLikelyVoiceWmaSubmission(const XAudioSourceFormat& format,
          static_cast<uint64_t>(decoded_bytes) * 1000u >=
              bytes_per_second * 700u;
 }
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook
 
-#endif  // FUSHI_VOICE_HOOK_XWMA_RESOURCE_H_
+#endif  // MYCOMIC_VOICE_HOOK_XWMA_RESOURCE_H_

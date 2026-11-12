@@ -26,7 +26,7 @@
 
 #if defined(_M_IX86)
 
-namespace kogado_hy = fushi_voice_hook::kogado_hy;
+namespace kogado_hy = my_comic_voice_hook::kogado_hy;
 
 constexpr uint32_t kKogadoHyPageSlots = 8u;
 constexpr uint32_t kKogadoHyLogBudget = 2048u;
@@ -111,7 +111,7 @@ void KogadoHyLog(const wchar_t* format, ...) {
   wchar_t path[MAX_PATH] = {};
   const DWORD length = GetTempPathW(MAX_PATH, path);
   if (length == 0 || length >= MAX_PATH - 20) return;
-  wcscat_s(path, L"fushi_galhook.log");
+  wcscat_s(path, L"my_comic_galhook.log");
   HANDLE file = g_orig_CreateFileW(path, FILE_APPEND_DATA, FILE_SHARE_READ,
                                    nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL,
                                    nullptr);
@@ -406,29 +406,29 @@ uint64_t PublishKogadoHyText(const std::wstring& text, uintptr_t window) {
   auto& rt = g_kogado_hy;
   if (!g_capture_enabled || g_header == nullptr || g_text_base == nullptr ||
       !g_text_cs_ready || text.empty() ||
-      text.size() * sizeof(wchar_t) > fushi_voice_hook::kTextSlotBytes) {
+      text.size() * sizeof(wchar_t) > my_comic_voice_hook::kTextSlotBytes) {
     return 0u;
   }
   // Lane identity: the engine's renderer and row stride, stable across runs
   // (one message system per process), unlike the heap address of the window.
   const uint64_t identity =
       (static_cast<uint64_t>(rt.sites.render) << 8) ^ rt.sites.stride;
-  fushi_voice_hook::TextLaneWrite write;
-  write.thread_id = fushi_voice_hook::NativeTextThreadIdFrom(
+  my_comic_voice_hook::TextLaneWrite write;
+  write.thread_id = my_comic_voice_hook::NativeTextThreadIdFrom(
       identity, kKogadoHyHookCode, kKogadoHyHookName);
   write.thread_address = window;
   write.thread_context = window;
   write.process_id = GetCurrentProcessId();
-  write.source_kind = fushi_voice_hook::kTextSourceKogadoHy;
+  write.source_kind = my_comic_voice_hook::kTextSourceKogadoHy;
   write.is_utf8 = 0;
   write.text = text.data();
   write.byte_len = static_cast<uint32_t>(text.size() * sizeof(wchar_t));
   write.hook_name = kKogadoHyHookName;
   write.hook_code = kKogadoHyHookCode;
   EnterCriticalSection(&g_text_cs);
-  const uint64_t event = fushi_voice_hook::WriteTextLaneEvent(
-      g_header, fushi_voice_hook::kNativeThreadPreviewStart,
-      fushi_voice_hook::kTextLaneCount, write);
+  const uint64_t event = my_comic_voice_hook::WriteTextLaneEvent(
+      g_header, my_comic_voice_hook::kNativeThreadPreviewStart,
+      my_comic_voice_hook::kTextLaneCount, write);
   LeaveCriticalSection(&g_text_cs);
   if (event == 0u) return 0u;
   // An exact engine producer is live: the GDI glyph fallback yields (the

@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <cstring>
 
-namespace fushi_voice_hook::catsystem2 {
+namespace my_comic_voice_hook::catsystem2 {
 
 // KIF 归档魔数，含结尾 NUL。身份判据（adapters/catsystem2_profile.h）和索引解析共用
 // 这一份，别再各写各的字面量。
@@ -109,4 +109,4 @@ inline bool IsVoiceOgg(const EntryView& entry) {
          EndsWithInsensitive(entry.name, entry.name_length, ".ogg");
 }
 
-}  // namespace fushi_voice_hook::catsystem2
+}  // namespace my_comic_voice_hook::catsystem2

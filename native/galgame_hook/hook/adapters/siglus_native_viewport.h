@@ -2,7 +2,7 @@
 
 #include "siglus_viewport.h"
 
-namespace fushi_voice_hook::siglus_native_viewport {
+namespace my_comic_voice_hook::siglus_native_viewport {
 
 // This native Siglus ABI initializes renderer fields from Gameexe config,
 // including design width/height at +0x7c/+0x80. A separate normalization path
@@ -101,4 +101,4 @@ inline uintptr_t ResolveNativeConfigSlot(
       IMAGE_SCN_MEM_READ | IMAGE_SCN_MEM_WRITE,IMAGE_SCN_MEM_EXECUTE) ? rva : 0;
 }
 
-}  // namespace fushi_voice_hook::siglus_native_viewport
+}  // namespace my_comic_voice_hook::siglus_native_viewport

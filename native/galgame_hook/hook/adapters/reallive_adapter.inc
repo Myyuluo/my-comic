@@ -77,7 +77,7 @@ bool HasNwkSuffix(const wchar_t* path) {
 
 void RememberRealliveNwk(HANDLE handle, const wchar_t* path) {
   if (handle == INVALID_HANDLE_VALUE || !HasNwkSuffix(path)) return;
-  const bool remembered = fushi_voice_hook::RememberTrackedHandle(
+  const bool remembered = my_comic_voice_hook::RememberTrackedHandle(
       g_reallive_nwk_handles, handle, [path](RealliveNwkHandle& slot) {
         wcsncpy_s(slot.path, path, _TRUNCATE);
       });
@@ -89,13 +89,13 @@ void RememberRealliveNwk(HANDLE handle, const wchar_t* path) {
   if (InterlockedCompareExchange(&g_reallive_capture_armed, 0, 0) != 0 &&
       g_header != nullptr) {
     InterlockedOr(reinterpret_cast<volatile LONG*>(&g_header->hook_diagnostics),
-                  static_cast<LONG>(fushi_voice_hook::kDiagVisualArtsOvkHooksReady));
+                  static_cast<LONG>(my_comic_voice_hook::kDiagVisualArtsOvkHooksReady));
   }
 }
 
 bool CopyRealliveNwkPath(HANDLE handle, wchar_t* out, size_t out_chars) {
   if (out == nullptr || out_chars == 0) return false;
-  return fushi_voice_hook::ReadTrackedHandle(
+  return my_comic_voice_hook::ReadTrackedHandle(
       g_reallive_nwk_handles, handle,
       [out, out_chars](const RealliveNwkHandle& slot) {
         wcsncpy_s(out, out_chars, slot.path, _TRUNCATE);
@@ -103,7 +103,7 @@ bool CopyRealliveNwkPath(HANDLE handle, wchar_t* out, size_t out_chars) {
 }
 
 void ForgetRealliveNwk(HANDLE handle) {
-  fushi_voice_hook::ForgetTrackedHandle(g_reallive_nwk_handles, handle);
+  my_comic_voice_hook::ForgetTrackedHandle(g_reallive_nwk_handles, handle);
 }
 
 void QueueRealliveNwkVoice(const wchar_t* path, uint64_t offset) {
@@ -132,7 +132,7 @@ void ObserveRealliveNwkRead(HANDLE file, const void* buffer, DWORD done,
   }
   bool header = false;
   __try {
-    header = fushi_voice_hook::reallive::LooksLikeNwaHeaderPrefix(
+    header = my_comic_voice_hook::reallive::LooksLikeNwaHeaderPrefix(
         static_cast<const uint8_t*>(buffer), done);
   } __except (EXCEPTION_EXECUTE_HANDLER) {
     return;
@@ -158,7 +158,7 @@ void ObserveRealliveNwkRead(HANDLE file, const void* buffer, DWORD done,
 
 // Worker：按索引精确对上成员起点 → 读整条 NWA → 校验并解码 → WAV 落盘。
 void ProcessRealliveNwkTask(const RealliveNwkTask& task) {
-  namespace rl = fushi_voice_hook::reallive;
+  namespace rl = my_comic_voice_hook::reallive;
   const uint64_t since_last = task.tick_ms >= g_reallive_last_export_tick
       ? task.tick_ms - g_reallive_last_export_tick
       : g_reallive_last_export_tick - task.tick_ms;
@@ -273,10 +273,10 @@ bool MeasureRealliveImage(const wchar_t* executable, uint32_t* markers) {
     CloseHandle(file);
     return false;
   }
-  fushi_voice_hook::reallive::ImageSignatureScanner scanner;
+  my_comic_voice_hook::reallive::ImageSignatureScanner scanner;
   uint64_t scanned = 0;
   bool ok = true;
-  while (scanned < fushi_voice_hook::reallive::kMaxImageScanBytes) {
+  while (scanned < my_comic_voice_hook::reallive::kMaxImageScanBytes) {
     DWORD read = 0;
     if (!ReadFile(file, chunk, 64 * 1024, &read, nullptr)) {
       ok = false;
@@ -313,11 +313,11 @@ bool IsRealliveEngine() {
   const std::wstring directory(executable,
                                static_cast<size_t>(slash - executable));
 
-  fushi_voice_hook::reallive::IdentityInputs inputs;
+  my_comic_voice_hook::reallive::IdentityInputs inputs;
   inputs.siglus_executable = IsSiglusEngine();
   inputs.siglus_directory =
-      fushi_voice_hook::DirectoryLooksLikeSiglusOnDisk(directory);
-  inputs.reallive_directory = fushi_voice_hook::reallive::DirectoryLooksLikeReallive(
+      my_comic_voice_hook::DirectoryLooksLikeSiglusOnDisk(directory);
+  inputs.reallive_directory = my_comic_voice_hook::reallive::DirectoryLooksLikeReallive(
       directory, RealliveRegularFileExists);
   inputs.image_measured = MeasureRealliveImage(executable, &inputs.image_markers);
   if (!inputs.image_measured && !inputs.reallive_directory) {
@@ -330,16 +330,16 @@ bool IsRealliveEngine() {
   }
   if (inputs.reallive_directory) MarkRealliveFlag(kRealliveFlagDirectorySignature);
   if (inputs.image_measured &&
-      fushi_voice_hook::reallive::IsRealliveImageSignature(inputs.image_markers)) {
+      my_comic_voice_hook::reallive::IsRealliveImageSignature(inputs.image_markers)) {
     MarkRealliveFlag(kRealliveFlagImageSignature);
   }
-  const bool matched = fushi_voice_hook::MatchesRealliveProfile(inputs);
+  const bool matched = my_comic_voice_hook::MatchesRealliveProfile(inputs);
   if (matched) MarkRealliveFlag(kRealliveFlagIdentityMatched);
   InterlockedExchange(&g_reallive_identity_state, matched ? 1 : -1);
   return matched;
 }
 
-class RealliveAdapter final : public fushi_voice_hook::EngineAdapter {
+class RealliveAdapter final : public my_comic_voice_hook::EngineAdapter {
  public:
   const char* id() const override { return "reallive"; }
   bool probe() const override { return IsRealliveEngine(); }
@@ -362,27 +362,27 @@ class RealliveAdapter final : public fushi_voice_hook::EngineAdapter {
     ProcessRealliveNwkTasks();
     ProcessRealliveLookupTick();
   }
-  fushi_voice_hook::LookupAdmissionReport lookupAdmission() const override {
-    fushi_voice_hook::LookupAdmissionReport report;
+  my_comic_voice_hook::LookupAdmissionReport lookupAdmission() const override {
+    my_comic_voice_hook::LookupAdmissionReport report;
     if (RealliveLookupSensorInstalled()) {
-      report.state = fushi_voice_hook::kLookupAdmissionSensorInstalled;
+      report.state = my_comic_voice_hook::kLookupAdmissionSensorInstalled;
       return report;
     }
     // Sites were resolved and rejected: terminal for this executable, so the
     // host gets the digest to report instead of waiting for a gate.
     if (RealliveLookupSitesRejected()) {
-      report.state = fushi_voice_hook::kLookupAdmissionIdentityRejected;
+      report.state = my_comic_voice_hook::kLookupAdmissionIdentityRejected;
       strncpy_s(report.executable_sha256,
-                fushi_voice_hook::HostExecutableSha256Hex(), _TRUNCATE);
+                my_comic_voice_hook::HostExecutableSha256Hex(), _TRUNCATE);
       return report;
     }
-    report.state = fushi_voice_hook::kLookupAdmissionIdentityAccepted;
+    report.state = my_comic_voice_hook::kLookupAdmissionIdentityAccepted;
     return report;
   }
-  fushi_voice_hook::AdapterCapability capabilities() const override {
-    return fushi_voice_hook::AdapterCapability::kText |
-           fushi_voice_hook::AdapterCapability::kResourceAudio |
-           fushi_voice_hook::AdapterCapability::kPcmAudio;
+  my_comic_voice_hook::AdapterCapability capabilities() const override {
+    return my_comic_voice_hook::AdapterCapability::kText |
+           my_comic_voice_hook::AdapterCapability::kResourceAudio |
+           my_comic_voice_hook::AdapterCapability::kPcmAudio;
   }
   void onModuleLoaded(const wchar_t*) override {
     // File APIs are installed at startup; module notifications remain a profile extension seam.
@@ -392,7 +392,7 @@ class RealliveAdapter final : public fushi_voice_hook::EngineAdapter {
     InterlockedExchange(&g_reallive_capture_armed, 0);
     installed_ = false;
   }
-  fushi_voice_hook::AdapterDiagnostics diagnostics() const override {
+  my_comic_voice_hook::AdapterDiagnostics diagnostics() const override {
     return {id(), probe(), installed_,
             static_cast<uint32_t>(
                 InterlockedCompareExchange(&g_reallive_flags, 0, 0))};

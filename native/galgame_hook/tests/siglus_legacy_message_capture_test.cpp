@@ -7,7 +7,7 @@
 #include "siglus_legacy_message_capture.h"
 
 namespace {
-using namespace fushi_voice_hook;
+using namespace my_comic_voice_hook;
 struct Memory {
   std::map<uint32_t,uint8_t> bytes;
   uint32_t fail=0, change_at=0;

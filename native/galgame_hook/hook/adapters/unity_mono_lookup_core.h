@@ -54,12 +54,12 @@
 
 // Unity internal calls are C functions: cdecl on x86, the Win64 ABI on x64.
 #if defined(_M_IX86)
-#define FUSHI_UNITY_ICALL __cdecl
+#define MYCOMIC_UNITY_ICALL __cdecl
 #else
-#define FUSHI_UNITY_ICALL
+#define MYCOMIC_UNITY_ICALL
 #endif
 
-namespace fushi_voice_hook::unity_mono_lookup {
+namespace my_comic_voice_hook::unity_mono_lookup {
 
 // ── metadata constants ──────────────────────────────────────────────────────
 
@@ -187,19 +187,19 @@ struct Bounds {
 static_assert(sizeof(Vec3) == 12 && sizeof(Bounds) == 24,
               "UnityEngine.Vector3 / Bounds layout");
 
-using IcallObjectFn = void*(FUSHI_UNITY_ICALL*)();
-using IcallWorldToScreenFn = void(FUSHI_UNITY_ICALL*)(void* camera,
+using IcallObjectFn = void*(MYCOMIC_UNITY_ICALL*)();
+using IcallWorldToScreenFn = void(MYCOMIC_UNITY_ICALL*)(void* camera,
                                                      const Vec3* position,
                                                      int32_t eye, Vec3* out);
-using IcallInstanceIntFn = int32_t(FUSHI_UNITY_ICALL*)(void* self);
-using IcallInstanceObjectFn = void*(FUSHI_UNITY_ICALL*)(void* self);
-using IcallStaticIntFn = int32_t(FUSHI_UNITY_ICALL*)();
-using IcallInstanceBoolFn = bool(FUSHI_UNITY_ICALL*)(void* self);
-using IcallGetComponentFn = void*(FUSHI_UNITY_ICALL*)(void* self, void* type);
-using IcallInstanceOutFn = void(FUSHI_UNITY_ICALL*)(void* self, void* out);
-using IcallStaticOutFn = void(FUSHI_UNITY_ICALL*)(void* out);
-using IcallInstanceFloatFn = float(FUSHI_UNITY_ICALL*)(void* self);
-using IcallInstanceArgFn = void(FUSHI_UNITY_ICALL*)(void* self, void* arg);
+using IcallInstanceIntFn = int32_t(MYCOMIC_UNITY_ICALL*)(void* self);
+using IcallInstanceObjectFn = void*(MYCOMIC_UNITY_ICALL*)(void* self);
+using IcallStaticIntFn = int32_t(MYCOMIC_UNITY_ICALL*)();
+using IcallInstanceBoolFn = bool(MYCOMIC_UNITY_ICALL*)(void* self);
+using IcallGetComponentFn = void*(MYCOMIC_UNITY_ICALL*)(void* self, void* type);
+using IcallInstanceOutFn = void(MYCOMIC_UNITY_ICALL*)(void* self, void* out);
+using IcallStaticOutFn = void(MYCOMIC_UNITY_ICALL*)(void* out);
+using IcallInstanceFloatFn = float(MYCOMIC_UNITY_ICALL*)(void* self);
+using IcallInstanceArgFn = void(MYCOMIC_UNITY_ICALL*)(void* self, void* arg);
 
 // ── resolved sites ──────────────────────────────────────────────────────────
 
@@ -449,7 +449,7 @@ inline SiteResolution ResolveSites(const MonoEmbeddingApi& api,
 inline constexpr IcallSpec kObjectGetNameSpec = {
     Icall::kCount, "UnityEngine", "Object", "GetName", false, kMonoTypeString,
     1, {kMonoTypeClass, 0, 0}, 0u};
-using IcallGetNameFn = void*(FUSHI_UNITY_ICALL*)(void* object);
+using IcallGetNameFn = void*(MYCOMIC_UNITY_ICALL*)(void* object);
 
 inline void* ResolveObjectGetName(const MonoEmbeddingApi& api,
                                   const MonoLookupApi& lookup) {
@@ -1212,4 +1212,4 @@ inline bool FungusTextReadable(bool active_and_enabled, bool culled,
          color_alpha >= kMinReadableAlpha;
 }
 
-}  // namespace fushi_voice_hook::unity_mono_lookup
+}  // namespace my_comic_voice_hook::unity_mono_lookup

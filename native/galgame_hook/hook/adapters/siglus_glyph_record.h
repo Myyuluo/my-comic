@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <cstring>
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 // Calling convention and object layout travel together. Neither the title
 // nor a text-hook family establishes which glyph ABI is safe to call.
@@ -78,4 +78,4 @@ inline bool DecodeSiglusGlyphRecord(SiglusGlyphLayoutAbi abi,
   return true;
 }
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

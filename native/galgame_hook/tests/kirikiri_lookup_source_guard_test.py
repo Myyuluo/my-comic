@@ -11,7 +11,7 @@
    「更难利用」。
 
 2. 游戏进程里不得有 HTTP 客户端和认证凭据（`WinHttp*` /
-   `FUSHI_KIRIKIRI_LOOKUP_PORT` / `FUSHI_KIRIKIRI_LOOKUP_TOKEN`）。token 放进游戏
+   `MYCOMIC_KIRIKIRI_LOOKUP_PORT` / `MYCOMIC_KIRIKIRI_LOOKUP_TOKEN`）。token 放进游戏
    进程环境块，任何拿得到 PROCESS_QUERY_INFORMATION 的进程都能读；而且环境变量在
    进程启动后改不了，做不到运行期开关。v14 用共享内存的 `lookup_enabled` 取代它。
 
@@ -22,18 +22,18 @@
    也不进入以后的实例化——Fate/stay night[Realta Nua] 真机（2026-08-14）挂上后连推 7 句
    一次都没被调用正是这个语义。所以它不只是"让所有 UI 绘制多绕一层"的性能问题，而是
    **根本不工作**的死代码。
-   唯一豁免：留在 `if(global.fushiLookupProbeMode)` 这个**默认关闭**的探测分支里，
+   唯一豁免：留在 `if(global.myComicLookupProbeMode)` 这个**默认关闭**的探测分支里，
    供换游戏时判断"文本到底走哪条路"。所以这条规则有配套的第二问——那个开关必须默认
    false，否则豁免立刻退化成"全局补丁常驻"。
    配套的正向规则（`find_classic_sweep_missing`）：经典 KAG3（没有 global.TextRender）
    的采集面必须以**逐实例**补丁的形式存在——KAGEX 缺席门的 else 里调用
-   `fushiLookupSweepClassicLayers()`，而它逐个给 `kag.fore/back.messages` 的实例赋
+   `myComicLookupSweepClassicLayers()`，而它逐个给 `kag.fore/back.messages` 的实例赋
    `layer.drawText`。把 sweep 从 else 里挪走、把门删掉、或把逐实例补丁改回类补丁，都红。
 
 4. 字形层与 `kag.primaryLayer` 的坐标不能假定共享父子链。KAG 的 fore/back 页可以是
    同一窗口根下的兄弟子树；必须分别沿父链累加到**同一个根**，再以两个绝对图层坐标相减。
    任一父链成环、断根或根不同都必须失败，Probe 也必须在失败时跳过该记录，不能复用上一次
-   的 `fushiLookupOffX/Y`。否则同一套代码在 fore 页看似可用，换到 back 页就恒定点不中。
+   的 `myComicLookupOffX/Y`。否则同一套代码在 fore 页看似可用，换到 back 页就恒定点不中。
 
 5. KAG 消息层锚点不能靠尺寸认领。必须先取 drawCh 宿主的 `hostPage`，再把
    `kag.currentNum` 投影到该宿主页的 `messages[currentNum]`。旧/定制 KAG 没有
@@ -58,7 +58,7 @@
    「有 owner 就排除」是 BUG-2121 的形状：Borland VCL（KiriKiri2 2.x/BCB）把每个 TForm
    都建成隐藏 TApplication 窗的 owned window，一刀切排除就一个主窗都选不出，查词安装、
    exe 直取门、overlay owner 三处静默死掉。不得自带一份「EnumWindows 第一个匹配」。第一个匹配那套是错的：TVP 控制台窗、
-   splash、同进程启动器窗，或本模块自己那个 1x1 的 `WS_EX_TOPMOST` `FushiLookupOverlay`
+   splash、同进程启动器窗，或本模块自己那个 1x1 的 `WS_EX_TOPMOST` `MyComicLookupOverlay`
    （EnumWindows 会先枚举到它）都会抢走判定，把别的线程 id 当引擎主线程
    `InterlockedCompareExchange(..., 0)` **一次性**缓存下来，写错永不自愈；此后
    `GetCurrentThreadId() != main_tid` 恒真，传感器静默永不安装，症状与「这个引擎不支持」
@@ -80,7 +80,7 @@ from typing import Iterator
 # KAGEX 缺席门：`if(typeof global.TextRender == "Object") { ... } else { ... }`。
 # 经典 KAG3 游戏（Fate/stay night[Realta Nua]、PRETTY×CATION2、フタマタ恋愛）整个
 # global.TextRender 都不存在，逐字几何只从消息层实例的 drawText 经过——else 里必须
-# 调用逐实例 sweep（`fushiLookupSweepClassicLayers()`），而且只能是逐实例：TJS2 的
+# 调用逐实例 sweep（`myComicLookupSweepClassicLayers()`），而且只能是逐实例：TJS2 的
 # 实例化把成员拷进实例，类对象上的补丁对实例永远不可见（见规则 3）。装了 textrender.dll
 # 的游戏走 if 分支，sweep 以 classic 位为门，一行都不多绕。
 KAGEX_GATE_RE = re.compile(
@@ -92,7 +92,7 @@ ROOT = Path(__file__).resolve().parents[1]
 ADAPTER = ROOT / "hook" / "adapters" / "kirikiri_adapter.inc"
 
 # TJS 侧的全局命名空间前缀。C++ 里出现含这个前缀的宽字符串字面量 = 这条语句在拼 TJS 源码。
-TJS_MARKER = "fushiLookup"
+TJS_MARKER = "myComicLookup"
 
 _SLOT = "\x01"
 _SLOT_RE = re.compile(_SLOT + r"\d+" + _SLOT)
@@ -101,8 +101,8 @@ _SLOT_RE = re.compile(_SLOT + r"\d+" + _SLOT)
 # 链路（plan §6 的整段删除清单），一起守住免得换个写法又长回来。
 NETWORK_DEBRIS = (
     "WinHttp",
-    "FUSHI_KIRIKIRI_LOOKUP_PORT",
-    "FUSHI_KIRIKIRI_LOOKUP_TOKEN",
+    "MYCOMIC_KIRIKIRI_LOOKUP_PORT",
+    "MYCOMIC_KIRIKIRI_LOOKUP_TOKEN",
     "/api/lookup/dictionary",
     "Authorization: Bearer",
 )
@@ -112,7 +112,7 @@ GLOBAL_PATCH_RE = re.compile(r"global\.(?:Layer|MessageLayer)\.\w+\s*=(?!=)")
 
 # 默认关闭的探测分支。全局补丁只允许活在它里面：换游戏、TextRender 一条都不命中时才开，
 # 用来判断文本到底走哪条路。
-PROBE_GATE_RE = re.compile(r"if\s*\(\s*global\.fushiLookupProbeMode\s*\)")
+PROBE_GATE_RE = re.compile(r"if\s*\(\s*global\.myComicLookupProbeMode\s*\)")
 
 # 生产 bootstrap 为了规避 MSVC raw-literal 长度/编辑风险，被拆成多个相邻的
 # `LR"TJS(...)TJS"`。C++ 的 MaskedSource 会把每一整段 raw literal 隐掉；bootstrap 内守卫
@@ -309,7 +309,7 @@ def _tjs_script_variables(
 ) -> set[str]:
     """哪些变量装着 TJS 源码。
 
-    脚本文本通常先用一条语句起头（`std::wstring script = L"...fushiLookupApply(";`），
+    脚本文本通常先用一条语句起头（`std::wstring script = L"...myComicLookupApply(";`），
     再由后续 `script += ...` 追加——追加那几条语句里一个 TJS 字面量都没有。所以判定
     必须跟着**变量**走，只按单条语句看会漏掉真正危险的那几行。
     """
@@ -390,7 +390,7 @@ def find_network_debris(source: MaskedSource) -> list[str]:
 
 
 def _probe_block_spans(text: str) -> list[tuple[int, int]]:
-    """`if(global.fushiLookupProbeMode) { ... }` 的字节区间（TJS 侧大括号配对）。"""
+    """`if(global.myComicLookupProbeMode) { ... }` 的字节区间（TJS 侧大括号配对）。"""
     spans: list[tuple[int, int]] = []
     for gate in PROBE_GATE_RE.finditer(text):
         open_index = text.find("{", gate.end())
@@ -469,7 +469,7 @@ def find_global_monkey_patches(source: MaskedSource) -> list[str]:
 
 
 KAG_SEAM_CONTEXT_REBIND_RE = re.compile(
-    r"fushiLookupOrig_\w+\s+incontextof\b"
+    r"myComicLookupOrig_\w+\s+incontextof\b"
 )
 
 
@@ -480,7 +480,7 @@ def find_kag_seam_context_rebinds(source: MaskedSource) -> list[str]:
     《王様恋愛》：logo/标题阶段的鼠标处理引用该对象的 `CS_Timer`）。
     `(orig incontextof this)` 把它强行改绑到 kag，第一次鼠标移动就抛
     `Member "CS_Timer" does not exist`——游戏弹未处理异常框后退出（BUG-2745）。
-    按成员调用 `this.fushiLookupOrig_x(...)`，TJS 保留闭包原有上下文。
+    按成员调用 `this.myComicLookupOrig_x(...)`，TJS 保留闭包原有上下文。
     """
     return [
         f"{ADAPTER.name}:{source.line_of(m.start())} {m.group(0)}"
@@ -492,7 +492,7 @@ def find_kag_seam_context_rebinds(source: MaskedSource) -> list[str]:
 INSTANCE_DRAWTEXT_PATCH_RE = re.compile(
     r"(?<![\w.])(?!global\.)(\w+)\.drawText\s*=(?!=)\s*function"
 )
-CLASSIC_SWEEP_CALL_RE = re.compile(r"global\.fushiLookupSweepClassicLayers\s*\(\s*\)\s*;")
+CLASSIC_SWEEP_CALL_RE = re.compile(r"global\.myComicLookupSweepClassicLayers\s*\(\s*\)\s*;")
 
 
 def find_classic_sweep_missing(source: MaskedSource) -> list[str]:
@@ -502,7 +502,7 @@ def find_classic_sweep_missing(source: MaskedSource) -> list[str]:
 
     1. KAGEX 缺席门 `if(typeof global.TextRender == "Object") {...} else {...}` 存在
        ——门没了就是"所有游戏都跑 classic sweep"或"经典 KAG3 整个没有采集面"。
-    2. else 里调用 `global.fushiLookupSweepClassicLayers();`——sweep 挪出 else 或被删，
+    2. else 里调用 `global.myComicLookupSweepClassicLayers();`——sweep 挪出 else 或被删，
        经典 KAG3 的游戏内查词整个不存在，而症状与"这个引擎不支持"同形，没人会发现。
     3. 源码里存在逐实例补丁 `<layer>.drawText = function` 且不是 `global.Layer.drawText`
        ——改回类补丁就是规则 3 里那条永远不工作的死代码。
@@ -515,7 +515,7 @@ def find_classic_sweep_missing(source: MaskedSource) -> list[str]:
     elif not any(CLASSIC_SWEEP_CALL_RE.search(text[start:end]) for start, end in spans):
         hits.append(
             f"{ADAPTER.name}: KAGEX 缺席门的 else 里没有 "
-            "global.fushiLookupSweepClassicLayers();"
+            "global.myComicLookupSweepClassicLayers();"
         )
     if not INSTANCE_DRAWTEXT_PATCH_RE.search(text):
         hits.append(f"{ADAPTER.name}: 没有逐实例的 <layer>.drawText = function 补丁")
@@ -523,13 +523,13 @@ def find_classic_sweep_missing(source: MaskedSource) -> list[str]:
 
 
 def find_default_on_probe_switches(source: MaskedSource) -> list[str]:
-    """喂给 `__FUSHI_PROBE_MODE__` 的开关必须默认关。
+    """喂给 `__MYCOMIC_PROBE_MODE__` 的开关必须默认关。
 
     探测分支被允许存在的**唯一**前提就是它默认不跑；开关默认 true 时上面那条豁免立刻
     变成"全局补丁常驻"。这里跟着实际替换表达式里的标识符走，改名不会让这条守卫失效。
     """
     for match in re.finditer(
-        r'__FUSHI_PROBE_MODE__"\s*,([^;]*);', source.text, re.S
+        r'__MYCOMIC_PROBE_MODE__"\s*,([^;]*);', source.text, re.S
     ):
         expression = match.group(1)
         names = [
@@ -550,10 +550,10 @@ def find_default_on_probe_switches(source: MaskedSource) -> list[str]:
 
 
 def _placeholder_substitutions(text: str) -> list[tuple[int, str, str]]:
-    """`ReplaceLookupPlaceholder(script, L"__FUSHI_X__", <值表达式>);` 的 (位置, 占位符, 值)。"""
+    """`ReplaceLookupPlaceholder(script, L"__MYCOMIC_X__", <值表达式>);` 的 (位置, 占位符, 值)。"""
     return [
         (m.start(), m.group(1), m.group(2))
-        for m in re.finditer(r'(__FUSHI_[A-Z0-9_]*__)"\s*,([^;]*)\)\s*;', text, re.S)
+        for m in re.finditer(r'(__MYCOMIC_[A-Z0-9_]*__)"\s*,([^;]*)\)\s*;', text, re.S)
     ]
 
 
@@ -753,7 +753,7 @@ def find_invalid_kag_anchor_identity_selection(
 ) -> list[str]:
     """守住 KAG 消息层锚点的**冻结点**与宿主页投影契约。
 
-    锚点必须在 drawCh 真正执行的那一刻冻结（`fushiLookupStampBindGroup`），不能留到
+    锚点必须在 drawCh 真正执行的那一刻冻结（`myComicLookupStampBindGroup`），不能留到
     鼠标事件或 Capture 再按"那时的" `kag.currentNum` 去投影：共存的姓名层（ai=1）与
     正文层（ai=0）会轮流成为 current，晚一步投影就把这条绑定挂到别人的台词上，症状是
     卡片稳定地弹在另一行。
@@ -768,25 +768,25 @@ def find_invalid_kag_anchor_identity_selection(
         return [f'{ADAPTER.name}: 没有找到 LR"TJS(...)TJS" bootstrap']
 
     tjs = _joined_tjs_payload(source)
-    stamps = _assigned_tjs_functions(tjs, "fushiLookupStampBindGroup")
+    stamps = _assigned_tjs_functions(tjs, "myComicLookupStampBindGroup")
     if len(stamps) != 1:
         return [
-            f"{ADAPTER.name}: fushiLookupStampBindGroup 定义数应为 1，"
+            f"{ADAPTER.name}: myComicLookupStampBindGroup 定义数应为 1，"
             f"实际 {len(stamps)}"
         ]
     _, stamp_body = stamps[0]
     stamp = _compact_tjs(stamp_body)
 
-    captures = _assigned_tjs_functions(tjs, "fushiLookupCapture")
+    captures = _assigned_tjs_functions(tjs, "myComicLookupCapture")
     if len(captures) != 1:
         return [
-            f"{ADAPTER.name}: fushiLookupCapture 定义数应为 1，实际 {len(captures)}"
+            f"{ADAPTER.name}: myComicLookupCapture 定义数应为 1，实际 {len(captures)}"
         ]
     capture = _compact_tjs(captures[0][1])
 
     slot = _SLOT_RE.pattern
     field_read_re = re.compile(
-        rf"global\.fushiLookupField\(global\.kag,(?P<field>{slot})\)"
+        rf"global\.myComicLookupField\(global\.kag,(?P<field>{slot})\)"
     )
 
     def field_literal_is(match: re.Match[str], expected: str) -> bool:
@@ -820,8 +820,8 @@ def find_invalid_kag_anchor_identity_selection(
             f"{ADAPTER.name}: 禁止旧 pages=[fore,back] 跨页按尺寸首个命中后 break"
         )
 
-    host_page = "group.hostPage=global.fushiLookupPageOf(host);"
-    messages_decl = "varmessages=global.fushiLookupMessagesForPage(group.hostPage);"
+    host_page = "group.hostPage=global.myComicLookupPageOf(host);"
+    messages_decl = "varmessages=global.myComicLookupMessagesForPage(group.hostPage);"
     for needle, message in (
         (host_page, "hostPage 必须由 drawCh 宿主 host 求得"),
         (messages_decl, "宿主页消息数组必须由 hostPage 唯一选择"),
@@ -846,7 +846,7 @@ def find_invalid_kag_anchor_identity_selection(
         )
 
     current_num_decl_re = re.compile(
-        rf"varcurrentNum=global\.fushiLookupField\(global\.kag,(?P<field>{slot})\);"
+        rf"varcurrentNum=global\.myComicLookupField\(global\.kag,(?P<field>{slot})\);"
     )
     current_num_decls = list(current_num_decl_re.finditer(stamp))
     if len(current_num_decls) != 1 or not field_literal_is(
@@ -895,7 +895,7 @@ def find_invalid_kag_anchor_identity_selection(
             indexed_body = primary[indexed_spans[0][0] : indexed_spans[0][1]]
             primary_publish = (
                 re.escape("group.anchorIdentity=indexed;"),
-                re.escape("group.anchorPage=global.fushiLookupPageOf(indexed);"),
+                re.escape("group.anchorPage=global.myComicLookupPageOf(indexed);"),
                 re.escape("group.anchorIndex=currentNum;"),
                 re.escape("group.anchorStrength=1;"),
             )
@@ -905,7 +905,7 @@ def find_invalid_kag_anchor_identity_selection(
                     "并记 strength=1"
                 )
 
-    resolved_decl = "varresolved=global.fushiLookupResolveCurrentSlot();"
+    resolved_decl = "varresolved=global.myComicLookupResolveCurrentSlot();"
     if stamp.count(resolved_decl) != 1:
         violations.append(
             f"{ADAPTER.name}: identity 兜底必须唯一经 ResolveCurrentSlot 读 kag.current"
@@ -938,7 +938,7 @@ def find_invalid_kag_anchor_identity_selection(
             )
         fallback_publish = (
             re.escape("group.anchorIdentity=projected;"),
-            re.escape("group.anchorPage=global.fushiLookupPageOf(projected);"),
+            re.escape("group.anchorPage=global.myComicLookupPageOf(projected);"),
             re.escape("group.anchorIndex=resolved.index;"),
         )
         if not _matches_once_in_order(fallback_body, fallback_publish):
@@ -1022,15 +1022,15 @@ def find_invalid_common_root_coordinate_conversion(
         return [f"{ADAPTER.name}: 没有找到 LR\"TJS(...)TJS\" bootstrap"]
 
     tjs = _joined_tjs_payload(source)
-    computes = _assigned_tjs_functions(tjs, "fushiLookupComputeOffset")
-    probes = _assigned_tjs_functions(tjs, "fushiLookupProbe")
+    computes = _assigned_tjs_functions(tjs, "myComicLookupComputeOffset")
+    probes = _assigned_tjs_functions(tjs, "myComicLookupProbe")
     if len(computes) != 1:
         violations.append(
-            f"{ADAPTER.name}: fushiLookupComputeOffset 定义数应为 1，实际 {len(computes)}"
+            f"{ADAPTER.name}: myComicLookupComputeOffset 定义数应为 1，实际 {len(computes)}"
         )
     if len(probes) != 1:
         violations.append(
-            f"{ADAPTER.name}: fushiLookupProbe 定义数应为 1，实际 {len(probes)}"
+            f"{ADAPTER.name}: myComicLookupProbe 定义数应为 1，实际 {len(probes)}"
         )
     if len(computes) != 1 or len(probes) != 1:
         return violations
@@ -1048,8 +1048,8 @@ def find_invalid_common_root_coordinate_conversion(
         "varprimaryX=0,primaryY=0;": "缺少 primary 绝对坐标累加器",
         "varprimaryRoot=void;": "缺少 primary 根身份",
         "current=primary;": "第二条父链必须从 primary 开始",
-        "global.fushiLookupOffX=layerX-primaryX;": "X 偏移必须是共同根绝对坐标之差",
-        "global.fushiLookupOffY=layerY-primaryY;": "Y 偏移必须是共同根绝对坐标之差",
+        "global.myComicLookupOffX=layerX-primaryX;": "X 偏移必须是共同根绝对坐标之差",
+        "global.myComicLookupOffY=layerY-primaryY;": "Y 偏移必须是共同根绝对坐标之差",
         "returntrue;": "成功路径必须显式返回 true",
     }
     for needle, message in required_once.items():
@@ -1065,7 +1065,7 @@ def find_invalid_common_root_coordinate_conversion(
             f"{ADAPTER.name}: layer/primary 必须各有一条受界父链，实际 {len(chains)} 条"
         )
     else:
-        loop_guard = "if(++guard>32){global.fushiLookupMark(16);returnfalse;}"
+        loop_guard = "if(++guard>32){global.myComicLookupMark(16);returnfalse;}"
         first_required = (
             loop_guard,
             "layerRoot=current;",
@@ -1092,7 +1092,7 @@ def find_invalid_common_root_coordinate_conversion(
 
     root_gate = (
         "if(layerRoot===void||primaryRoot===void||layerRoot!==primaryRoot)"
-        "{global.fushiLookupMark(16);returnfalse;}"
+        "{global.myComicLookupMark(16);returnfalse;}"
     )
     if compute.count(root_gate) != 1:
         violations.append(
@@ -1105,8 +1105,8 @@ def find_invalid_common_root_coordinate_conversion(
     layer_start = compute.find("varcurrent=layer;")
     primary_start = compute.find("current=primary;")
     root_gate_start = compute.find(root_gate)
-    off_x_start = compute.find("global.fushiLookupOffX=layerX-primaryX;")
-    off_y_start = compute.find("global.fushiLookupOffY=layerY-primaryY;")
+    off_x_start = compute.find("global.myComicLookupOffX=layerX-primaryX;")
+    off_y_start = compute.find("global.myComicLookupOffY=layerY-primaryY;")
     success_start = compute.rfind("returntrue;")
     if not (
         0
@@ -1135,7 +1135,7 @@ def find_invalid_common_root_coordinate_conversion(
 
     _, probe_body = probes[0]
     probe = _compact_tjs(probe_body)
-    checked_condition = "if(!global.fushiLookupComputeOffset(layer))"
+    checked_condition = "if(!global.myComicLookupComputeOffset(layer))"
     checked_index = probe.find(checked_condition)
     checked_end = checked_index + len(checked_condition)
     checked = False
@@ -1154,27 +1154,27 @@ def find_invalid_common_root_coordinate_conversion(
             f"{ADAPTER.name}: Probe 必须检查 ComputeOffset 失败并跳过当前记录"
         )
     all_tjs = _compact_tjs(tjs.masked)
-    rehomes = _assigned_tjs_functions(tjs, "fushiLookupRehomeLayerToPrimary")
+    rehomes = _assigned_tjs_functions(tjs, "myComicLookupRehomeLayerToPrimary")
     expected_compute_calls = 2 if len(rehomes) == 1 else 1
-    if all_tjs.count("global.fushiLookupComputeOffset(layer)") != expected_compute_calls:
+    if all_tjs.count("global.myComicLookupComputeOffset(layer)") != expected_compute_calls:
         violations.append(
             f"{ADAPTER.name}: ComputeOffset 只能由受检的 Probe 调用一次，"
             "并可由 carrier rehome 再调用一次"
         )
     if len(rehomes) == 1:
         rehome = _compact_tjs(rehomes[0][1])
-        rehome_gate = "if(!global.fushiLookupComputeOffset(layer))returnfalse;"
+        rehome_gate = "if(!global.myComicLookupComputeOffset(layer))returnfalse;"
         if rehome.count(rehome_gate) != 1:
             violations.append(
                 f"{ADAPTER.name}: carrier rehome 必须检查共同根坐标换算失败并停止迁移"
             )
     for needle, message in (
         (
-            "rx=lx-global.fushiLookupOffX-entry.imgLeft-entry.originX;",
+            "rx=lx-global.myComicLookupOffX-entry.imgLeft-entry.originX;",
             "rx 必须消费共同根 X 偏移",
         ),
         (
-            "ry=ly-global.fushiLookupOffY-entry.imgTop-entry.originY;",
+            "ry=ly-global.myComicLookupOffY-entry.imgTop-entry.originY;",
             "ry 必须消费共同根 Y 偏移",
         ),
     ):
@@ -1204,41 +1204,41 @@ def find_invalid_lookup_entry_visibility_lifecycle(
     violations: list[str] = []
     tjs = _joined_tjs_payload(source)
     required_functions = (
-        "fushiLookupBootstrap",
-        "fushiLookupAuditWrappers",
-        "fushiLookupFindEntry",
-        "fushiLookupEntryFor",
-        "fushiLookupQueueHighlightErase",
-        "fushiLookupFlushPendingHighlightErase",
-        "fushiLookupClearEntryBinding",
-        "fushiLookupRetireAnchorPeers",
-        "fushiLookupFindSlot",
-        "fushiLookupResolveCurrentSlot",
-        "fushiLookupSlotFor",
-        "fushiLookupAdoptSlot",
-        "fushiLookupCurrentIdentityState",
-        "fushiLookupActiveSentenceState",
-        "fushiLookupCaptureTokenCurrent",
-        "fushiLookupCapture",
-        "fushiLookupLayerOwnedByPrimary",
-        "fushiLookupRetireDetachedLayer",
-        "fushiLookupAdvanceDismissFence",
-        "fushiLookupRehomeLayerToPrimary",
-        "fushiLookupPrimaryRacedSince",
-        "fushiLookupTryRehomeVisualParents",
-        "fushiLookupReconcileVisualParents",
-        "fushiLookupRefreshCaptureBridges",
-        "fushiLookupRefreshSentenceSurface",
-        "fushiLookupEnsureHighlight",
-        "fushiLookupFlushVisualWork",
-        "fushiLookupPrepare",
-        "fushiLookupApply",
-        "fushiLookupCardVisible",
-        "fushiLookupQueueInput",
-        "fushiLookupBindOrigin",
-        "fushiLookupProbe",
-        "fushiLookupLeftClickHook",
-        "fushiLookupMouseMoveHook",
+        "myComicLookupBootstrap",
+        "myComicLookupAuditWrappers",
+        "myComicLookupFindEntry",
+        "myComicLookupEntryFor",
+        "myComicLookupQueueHighlightErase",
+        "myComicLookupFlushPendingHighlightErase",
+        "myComicLookupClearEntryBinding",
+        "myComicLookupRetireAnchorPeers",
+        "myComicLookupFindSlot",
+        "myComicLookupResolveCurrentSlot",
+        "myComicLookupSlotFor",
+        "myComicLookupAdoptSlot",
+        "myComicLookupCurrentIdentityState",
+        "myComicLookupActiveSentenceState",
+        "myComicLookupCaptureTokenCurrent",
+        "myComicLookupCapture",
+        "myComicLookupLayerOwnedByPrimary",
+        "myComicLookupRetireDetachedLayer",
+        "myComicLookupAdvanceDismissFence",
+        "myComicLookupRehomeLayerToPrimary",
+        "myComicLookupPrimaryRacedSince",
+        "myComicLookupTryRehomeVisualParents",
+        "myComicLookupReconcileVisualParents",
+        "myComicLookupRefreshCaptureBridges",
+        "myComicLookupRefreshSentenceSurface",
+        "myComicLookupEnsureHighlight",
+        "myComicLookupFlushVisualWork",
+        "myComicLookupPrepare",
+        "myComicLookupApply",
+        "myComicLookupCardVisible",
+        "myComicLookupQueueInput",
+        "myComicLookupBindOrigin",
+        "myComicLookupProbe",
+        "myComicLookupLeftClickHook",
+        "myComicLookupMouseMoveHook",
     )
     functions: dict[str, str] = {}
     parameters: dict[str, str] = {}
@@ -1264,7 +1264,7 @@ def find_invalid_lookup_entry_visibility_lifecycle(
             )
 
     bootstrap = _compact_tjs(
-        _restore_tjs_literals(tjs, functions["fushiLookupBootstrap"])
+        _restore_tjs_literals(tjs, functions["myComicLookupBootstrap"])
     )
     # 两道门必须分开，且顺序固定：kag 无条件等；TextRender 只有**半就绪**（类在、方法
     # 没挂全）才等。把第二道并回第一道会让「完全没有 TextRender」的经典 KAG3 游戏在
@@ -1272,7 +1272,7 @@ def find_invalid_lookup_entry_visibility_lifecycle(
     # kag.addHook **不在**这道门里：它是 KAGEX 系框架的扩展点，经典 KAG3（Fate RN 真机
     # 实测）没有；写进前置条件同样会让下面的经典分支变成死代码（BUG-2121 第四段，与
     # TextRender 那条是同一个错误）。两条安装路在 installStage 40 由
-    # fushiLookupInstallKagSeams 分叉。
+    # myComicLookupInstallKagSeams 分叉。
     readiness_gate = (
         'if(typeofglobal.kag!="Object"||global.kag===null)return;'
         'if(typeofglobal.TextRender=="Object"&&global.TextRender!==null&&'
@@ -1312,7 +1312,7 @@ def find_invalid_lookup_entry_visibility_lifecycle(
         "38",
         "39",
         # 40→43：输入接缝安装。两条路（addHook / kag 实例逐个包装）都收在
-        # fushiLookupInstallKagSeams 里，所以中间没有 41/42 这两段——它们过去对应
+        # myComicLookupInstallKagSeams 里，所以中间没有 41/42 这两段——它们过去对应
         # 四次 addHook 调用中的两次（BUG-2121 第四段）。
         "40",
         "43",
@@ -1327,64 +1327,64 @@ def find_invalid_lookup_entry_visibility_lifecycle(
 
     for marker, message in (
         (
-            "global.fushiLookupWrapperAuditPending=true;"
-            "global.fushiLookupWrapperAuditLastState=-1;",
+            "global.myComicLookupWrapperAuditPending=true;"
+            "global.myComicLookupWrapperAuditLastState=-1;",
             "wrapper audit 必须初始化一次 mouseMove 启动基线并把 lastState 置 -1",
         ),
         # 给某个 renderer 实例打完补丁后必须重新置位：实例集合变了，上一次审计的
         # state 就不再代表现状。少了这一处，新实例的包装被游戏脚本覆写掉将永远不发诊断。
         (
-            "patch.state=1;global.fushiLookupWrapperAuditPending=true;",
+            "patch.state=1;global.myComicLookupWrapperAuditPending=true;",
             "实例补丁装成后必须重新置位 audit，令下一次审计覆盖新实例",
         ),
     ):
         require_once(bootstrap, marker, message)
 
     audit = _compact_tjs(
-        _restore_tjs_literals(tjs, functions["fushiLookupAuditWrappers"])
+        _restore_tjs_literals(tjs, functions["myComicLookupAuditWrappers"])
     )
-    if parameters["fushiLookupAuditWrappers"] != "force":
+    if parameters["myComicLookupAuditWrappers"] != "force":
         violations.append(
             f"{ADAPTER.name}: AuditWrappers 必须接收 force，区分一次性 hover 基线与点击复核"
         )
     audit_contract = (
-        "if(!force&&!global.fushiLookupWrapperAuditPending)return;"
-        "global.fushiLookupWrapperAuditPending=false;varstate=0;try{"
+        "if(!force&&!global.myComicLookupWrapperAuditPending)return;"
+        "global.myComicLookupWrapperAuditPending=false;varstate=0;try{"
         'if(typeofglobal.TextRender!="Object"||global.TextRender===null)'
         "state=state|1;else{"
         'if(typeofglobal.TextRender.render!="Object")state=state|2;'
-        "elseif(global.fushiLookupRenderInstallFailed||"
-        "global.TextRender.render!==global.fushiLookupInstalledRenderWrapper)"
+        "elseif(global.myComicLookupRenderInstallFailed||"
+        "global.TextRender.render!==global.myComicLookupInstalledRenderWrapper)"
         "state=state|4;"
         'if(typeofglobal.TextRender.done!="Object")state=state|8;'
-        "elseif(global.fushiLookupDoneInstallFailed||"
-        "global.TextRender.done!==global.fushiLookupInstalledDoneWrapper)"
+        "elseif(global.myComicLookupDoneInstallFailed||"
+        "global.TextRender.done!==global.myComicLookupInstalledDoneWrapper)"
         "state=state|16;"
         'if(typeofglobal.TextRender.drawCh!="Object")state=state|32;'
-        "elseif(global.fushiLookupDrawChInstallFailed||"
-        "global.TextRender.drawCh!==global.fushiLookupInstalledDrawChWrapper)"
+        "elseif(global.myComicLookupDrawChInstallFailed||"
+        "global.TextRender.drawCh!==global.myComicLookupInstalledDrawChWrapper)"
         "state=state|64;}"
         # 512/1024：私有 msgwin 插件的 getRender 入口没了，或被别人换掉。与 1..64 分开
         # 编码，因为它们是**两条独立的安装路径**——全局类补丁好着、实例入口坏了，症状同样
         # 是"没有卡片"，合成一位就分不出该去修哪条。
-        "varplugin=global.fushiLookupResolveMsgwinPlugin();"
+        "varplugin=global.myComicLookupResolveMsgwinPlugin();"
         "if(plugin!==void){"
         'if(typeofplugin.getRender!="Object")state=state|512;'
-        "elseif(global.fushiLookupInstanceGetRenderInstallFailed||"
-        "plugin!==global.fushiLookupInstanceGetRenderOwner||"
-        "plugin.getRender!==global.fushiLookupInstanceGetRenderWrapper)"
+        "elseif(global.myComicLookupInstanceGetRenderInstallFailed||"
+        "plugin!==global.myComicLookupInstanceGetRenderOwner||"
+        "plugin.getRender!==global.myComicLookupInstanceGetRenderWrapper)"
         "state=state|1024;}"
         # 2048：已经打过补丁的 renderer 实例被游戏脚本覆写回去了。
-        "varpatches=global.fushiLookupInstancePatches;"
+        "varpatches=global.myComicLookupInstancePatches;"
         "for(varpi=0;pi<patches.count&&pi<16;pi++){"
         "varpatch=patches[pi];"
         "if(patch.state==1&&(patch.renderer.render!==patch.renderWrapper||"
         "patch.renderer.done!==patch.doneWrapper||"
         "patch.renderer.drawCh!==patch.drawChWrapper)){state=state|2048;break;}}"
         "}catch(e){state=state|128;}"
-        "if(state!=global.fushiLookupWrapperAuditLastState){"
-        "global.fushiLookupWrapperAuditLastState=state;"
-        'global.fushiLookupNoteError("wrapper.identity",'
+        "if(state!=global.myComicLookupWrapperAuditLastState){"
+        "global.myComicLookupWrapperAuditLastState=state;"
+        'global.myComicLookupNoteError("wrapper.identity",'
         '%[message:"state="+state]);}'
     )
     if audit != audit_contract:
@@ -1395,23 +1395,23 @@ def find_invalid_lookup_entry_visibility_lifecycle(
         )
 
     left_click = _compact_tjs(
-        _restore_tjs_literals(tjs, functions["fushiLookupLeftClickHook"])
+        _restore_tjs_literals(tjs, functions["myComicLookupLeftClickHook"])
     )
     mouse_move = _compact_tjs(
-        _restore_tjs_literals(tjs, functions["fushiLookupMouseMoveHook"])
+        _restore_tjs_literals(tjs, functions["myComicLookupMouseMoveHook"])
     )
     # 人工点击只能做 attempt-only rehome 与补采集桥；先冻结本次
     # 点击是否属于既有 popup。只有 primary 竞态这一种「下一次输入必然看到不同
     # 状态」的失败才吞掉这一击，且不得发 kind=5/Cancel，也不得推进 route。
     if not left_click.startswith(
         "varpopupTransaction=false;try{"
-        "popupTransaction=global.fushiLookupCardVisible();"
-        "varcarrierSettled=global.fushiLookupTryRehomeVisualParents();"
-        "global.fushiLookupRefreshCaptureBridges();"
+        "popupTransaction=global.myComicLookupCardVisible();"
+        "varcarrierSettled=global.myComicLookupTryRehomeVisualParents();"
+        "global.myComicLookupRefreshCaptureBridges();"
     ) or (
-        left_click.count("global.fushiLookupTryRehomeVisualParents();") != 1
-        or left_click.count("global.fushiLookupRefreshCaptureBridges();") != 1
-        or "global.fushiLookupReconcileVisualParents();" in left_click
+        left_click.count("global.myComicLookupTryRehomeVisualParents();") != 1
+        or left_click.count("global.myComicLookupRefreshCaptureBridges();") != 1
+        or "global.myComicLookupReconcileVisualParents();" in left_click
     ):
         violations.append(
             f"{ADAPTER.name}: leftClick 必须先冻结 popup 事务，再做 attempt-only "
@@ -1419,16 +1419,16 @@ def find_invalid_lookup_entry_visibility_lifecycle(
         )
     rehome_wait_swallow = "if(popupTransaction&&!carrierSettled)returntrue;"
     card_click = (
-        "if(global.fushiLookupCardVisible()&&global.fushiLookupOverCard()){"
+        "if(global.myComicLookupCardVisible()&&global.myComicLookupOverCard()){"
     )
     outside_dismiss = (
-        "if(popupTransaction||global.fushiLookupCardVisible()){"
-        "try{global.fushiLookupQueueInput(5,0,0,0);}"
-        "catch(e){global.fushiLookupFault();}"
-        "try{global.fushiLookupCancelCurrent();}"
-        "catch(e){global.fushiLookupFault();}returntrue;}"
+        "if(popupTransaction||global.myComicLookupCardVisible()){"
+        "try{global.myComicLookupQueueInput(5,0,0,0);}"
+        "catch(e){global.myComicLookupFault();}"
+        "try{global.myComicLookupCancelCurrent();}"
+        "catch(e){global.myComicLookupFault();}returntrue;}"
     )
-    probe_submit = "returnglobal.fushiLookupProbe(true);"
+    probe_submit = "returnglobal.myComicLookupProbe(true);"
     if (
         left_click.count(rehome_wait_swallow) != 1
         or left_click.count(card_click) != 1
@@ -1444,12 +1444,12 @@ def find_invalid_lookup_entry_visibility_lifecycle(
         )
     card_bodies = _braced_bodies_after(
         left_click,
-        "if(global.fushiLookupCardVisible()&&global.fushiLookupOverCard())",
+        "if(global.myComicLookupCardVisible()&&global.myComicLookupOverCard())",
     )
     if (
         len(card_bodies) != 1
         or card_bodies[0].count("try{") != 1
-        or card_bodies[0].count("catch(e){global.fushiLookupFault();}") != 1
+        or card_bodies[0].count("catch(e){global.myComicLookupFault();}") != 1
         or not card_bodies[0].endswith("returntrue;")
     ):
         violations.append(
@@ -1460,14 +1460,14 @@ def find_invalid_lookup_entry_visibility_lifecycle(
     # 只要还有一个残留的非零 CardSeq，玩家就再也推不动剧情，而 TJS 侧唯一无条件清
     # CardSeq 的入口恰好要靠玩家点得动才够得着。查词坏掉是小事，吞输入是大事。
     if not left_click.endswith(
-        "catch(e){global.fushiLookupFault();returnfalse;}"
+        "catch(e){global.myComicLookupFault();returnfalse;}"
     ):
         violations.append(
             f"{ADAPTER.name}: leftClick 异常出口必须 fail-open 返回 false，"
             "不得在未知状态下消费玩家的点击"
         )
 
-    queue_input = functions["fushiLookupQueueInput"]
+    queue_input = functions["myComicLookupQueueInput"]
     for needle, message in (
         (
             "if(System.getKeyState(0x10))keys=keys|4;",
@@ -1483,28 +1483,28 @@ def find_invalid_lookup_entry_visibility_lifecycle(
         ),
     ):
         require_once(queue_input, needle, message)
-    if "if(global.fushiLookupShiftDown)keys=keys|1;" in queue_input:
+    if "if(global.myComicLookupShiftDown)keys=keys|1;" in queue_input:
         violations.append(
             f"{ADAPTER.name}: 不得把粘滞 Shift 状态编码成 WebView2 左键 bit0"
         )
     if not mouse_move.startswith(
-        "try{global.fushiLookupAuditWrappers(false);"
-    ) or mouse_move.count("global.fushiLookupAuditWrappers(false);") != 1:
+        "try{global.myComicLookupAuditWrappers(false);"
+    ) or mouse_move.count("global.myComicLookupAuditWrappers(false);") != 1:
         violations.append(
             f"{ADAPTER.name}: mouseMove 只能先 AuditWrappers(false)，建立一次启动基线"
         )
-    if bootstrap.count("global.fushiLookupAuditWrappers(true);") != 1 or bootstrap.count(
-        "global.fushiLookupAuditWrappers(false);"
+    if bootstrap.count("global.myComicLookupAuditWrappers(true);") != 1 or bootstrap.count(
+        "global.myComicLookupAuditWrappers(false);"
     ) != 1:
         violations.append(
             f"{ADAPTER.name}: wrapper audit 调用面只能是 bridge refresh(true) 与 mouseMove(false)"
         )
 
-    bridge_refresh = functions["fushiLookupRefreshCaptureBridges"]
+    bridge_refresh = functions["myComicLookupRefreshCaptureBridges"]
     bridge_patterns = (
-        re.escape("global.fushiLookupInstallGetRenderBridge();"),
-        re.escape("global.fushiLookupSweepMsgwinRenders();"),
-        re.escape("global.fushiLookupAuditWrappers(true);"),
+        re.escape("global.myComicLookupInstallGetRenderBridge();"),
+        re.escape("global.myComicLookupSweepMsgwinRenders();"),
+        re.escape("global.myComicLookupAuditWrappers(true);"),
     )
     if not _matches_once_in_order(bridge_refresh, bridge_patterns):
         violations.append(
@@ -1512,38 +1512,38 @@ def find_invalid_lookup_entry_visibility_lifecycle(
             "的固定顺序执行"
         )
     for forbidden in (
-        "fushiLookupLayerOwnedByPrimary",
-        "fushiLookupRefreshSentenceLayers",
-        "fushiLookupAdvanceDismissFence",
-        "fushiLookupDismiss",
-        "fushiLookupFlushVisualWork",
-        "fushiLookupPendingVisualDismiss",
-        "fushiLookupPendingSentenceRefresh",
-        "fushiLookupPendingSubmitFence",
+        "myComicLookupLayerOwnedByPrimary",
+        "myComicLookupRefreshSentenceLayers",
+        "myComicLookupAdvanceDismissFence",
+        "myComicLookupDismiss",
+        "myComicLookupFlushVisualWork",
+        "myComicLookupPendingVisualDismiss",
+        "myComicLookupPendingSentenceRefresh",
+        "myComicLookupPendingSubmitFence",
     ):
         if forbidden in bridge_refresh:
             violations.append(
                 f"{ADAPTER.name}: 动画/资源 bridge refresh 禁止改变 Layer/route: {forbidden}"
             )
 
-    refresh = functions["fushiLookupRefreshSentenceSurface"]
+    refresh = functions["myComicLookupRefreshSentenceSurface"]
     refresh_patterns = (
         # 🔴 重入早退必须把 pending 放回去。pending 位在 FlushVisualWork 里已经被清，
         # 这里裸 return 会把换句刷新永久丢掉，且 FlushVisualWork 仍报「已排空」——
         # 与兄弟路径 VisualFlushActive「保留 pending + 返回未排空」的不变式相反。
         re.escape(
-            "if(global.fushiLookupSentenceRefreshActive)"
-            "{global.fushiLookupPendingSentenceRefresh=true;return;}"
+            "if(global.myComicLookupSentenceRefreshActive)"
+            "{global.myComicLookupPendingSentenceRefresh=true;return;}"
         ),
-        re.escape("global.fushiLookupReconcileVisualParents();"),
-        re.escape("global.fushiLookupRefreshCaptureBridges();"),
+        re.escape("global.myComicLookupReconcileVisualParents();"),
+        re.escape("global.myComicLookupRefreshCaptureBridges();"),
     )
     if not _matches_once_in_order(refresh, refresh_patterns):
         violations.append(
             f"{ADAPTER.name}: 逐句 refresh 重入时必须保留 pending 请求，"
             "随后先处理 Layer 归属，再调用 bridge-only refresh"
         )
-    if bootstrap.count("global.fushiLookupReconcileVisualParents();") != 1:
+    if bootstrap.count("global.myComicLookupReconcileVisualParents();") != 1:
         violations.append(
             f"{ADAPTER.name}: 可销毁 carrier 的 reconcile 只能由确认换句的 "
             "RefreshSentenceSurface 调用一次"
@@ -1551,12 +1551,12 @@ def find_invalid_lookup_entry_visibility_lifecycle(
 
     bridge_plugin = (
         "installStage=38;if(typeofglobal.kag.addPlugin==\"Object\"){"
-        "global.fushiLookupBridgePlugin=%[onStableStateChanged:function(stable){"
-        "try{global.fushiLookupTryRehomeVisualParents();"
-        "if(!stable)global.fushiLookupRefreshCaptureBridges();}"
-        "catch(e){global.fushiLookupFault();}}];"
-        "try{global.kag.addPlugin(global.fushiLookupBridgePlugin);}"
-        "catch(e){global.fushiLookupFault();}}installStage=39;"
+        "global.myComicLookupBridgePlugin=%[onStableStateChanged:function(stable){"
+        "try{global.myComicLookupTryRehomeVisualParents();"
+        "if(!stable)global.myComicLookupRefreshCaptureBridges();}"
+        "catch(e){global.myComicLookupFault();}}];"
+        "try{global.kag.addPlugin(global.myComicLookupBridgePlugin);}"
+        "catch(e){global.myComicLookupFault();}}installStage=39;"
     )
     require_once(
         bootstrap,
@@ -1575,10 +1575,10 @@ def find_invalid_lookup_entry_visibility_lifecycle(
     else:
         stable_callback = stable_callback_bodies[0]
         if (
-            stable_callback.count("global.fushiLookupTryRehomeVisualParents();")
+            stable_callback.count("global.myComicLookupTryRehomeVisualParents();")
             != 1
             or stable_callback.count(
-                "if(!stable)global.fushiLookupRefreshCaptureBridges();"
+                "if(!stable)global.myComicLookupRefreshCaptureBridges();"
             )
             != 1
         ):
@@ -1587,20 +1587,20 @@ def find_invalid_lookup_entry_visibility_lifecycle(
                 "attempt-only rehome，仅 stable=false 刷新采集桥"
             )
         for forbidden in (
-            "fushiLookupReconcileVisualParents",
-            "fushiLookupRetireDetachedLayer",
-            "fushiLookupAdvanceDismissFence",
-            "fushiLookupDismiss",
-            "fushiLookupCancelCurrent",
-            "fushiLookupQueueInput",
-            "fushiLookupPendingSubmitFence",
-            "fushiLookupPendingVisualDismiss",
-            "fushiLookupPendingSentenceRefresh",
-            "fushiLookupFlushVisualWork",
-            "fushiLookupRefreshSentenceSurface",
-            "fushiLookupCard=",
-            "fushiLookupCardSeq=",
-            "fushiLookupCardEntry=",
+            "myComicLookupReconcileVisualParents",
+            "myComicLookupRetireDetachedLayer",
+            "myComicLookupAdvanceDismissFence",
+            "myComicLookupDismiss",
+            "myComicLookupCancelCurrent",
+            "myComicLookupQueueInput",
+            "myComicLookupPendingSubmitFence",
+            "myComicLookupPendingVisualDismiss",
+            "myComicLookupPendingSentenceRefresh",
+            "myComicLookupFlushVisualWork",
+            "myComicLookupRefreshSentenceSurface",
+            "myComicLookupCard=",
+            "myComicLookupCardSeq=",
+            "myComicLookupCardEntry=",
             "invalidate",
         ):
             if forbidden in stable_callback:
@@ -1611,32 +1611,32 @@ def find_invalid_lookup_entry_visibility_lifecycle(
     wrapper_markers = (
         (
             "10",
-            "global.fushiLookupOriginalRender=global.TextRender.render;",
+            "global.myComicLookupOriginalRender=global.TextRender.render;",
             "global.TextRender.render=function(a,b,c,d,e,f)",
-            "global.fushiLookupInstalledRenderWrapper=global.TextRender.render;",
-            "global.fushiLookupRenderInstallFailed="
-            "global.fushiLookupInstalledRenderWrapper==="
-            "global.fushiLookupOriginalRender;",
+            "global.myComicLookupInstalledRenderWrapper=global.TextRender.render;",
+            "global.myComicLookupRenderInstallFailed="
+            "global.myComicLookupInstalledRenderWrapper==="
+            "global.myComicLookupOriginalRender;",
             "11",
         ),
         (
             "20",
-            "global.fushiLookupOriginalDone=global.TextRender.done;",
+            "global.myComicLookupOriginalDone=global.TextRender.done;",
             "global.TextRender.done=function()",
-            "global.fushiLookupInstalledDoneWrapper=global.TextRender.done;",
-            "global.fushiLookupDoneInstallFailed="
-            "global.fushiLookupInstalledDoneWrapper==="
-            "global.fushiLookupOriginalDone;",
+            "global.myComicLookupInstalledDoneWrapper=global.TextRender.done;",
+            "global.myComicLookupDoneInstallFailed="
+            "global.myComicLookupInstalledDoneWrapper==="
+            "global.myComicLookupOriginalDone;",
             "21",
         ),
         (
             "30",
-            "global.fushiLookupOriginalDrawCh=global.TextRender.drawCh;",
+            "global.myComicLookupOriginalDrawCh=global.TextRender.drawCh;",
             "global.TextRender.drawCh=function(layer,ox,oy,ch)",
-            "global.fushiLookupInstalledDrawChWrapper=global.TextRender.drawCh;",
-            "global.fushiLookupDrawChInstallFailed="
-            "global.fushiLookupInstalledDrawChWrapper==="
-            "global.fushiLookupOriginalDrawCh;",
+            "global.myComicLookupInstalledDrawChWrapper=global.TextRender.drawCh;",
+            "global.myComicLookupDrawChInstallFailed="
+            "global.myComicLookupInstalledDrawChWrapper==="
+            "global.myComicLookupOriginalDrawCh;",
             "31",
         ),
     )
@@ -1688,38 +1688,38 @@ def find_invalid_lookup_entry_visibility_lifecycle(
     # 必须走 install failed 的 catch 分支留下证据，而不是留个假成功（BUG-2121 第四段）。
     staged_hooks = (
         re.escape("installStage=40;"),
-        re.escape("global.fushiLookupInstallKagSeams();"),
+        re.escape("global.myComicLookupInstallKagSeams();"),
         re.escape("installStage=43;"),
-        re.escape("if(global.fushiLookupKagSeams==0)"),
+        re.escape("if(global.myComicLookupKagSeams==0)"),
         re.escape("installStage=50;"),
     )
     if not _matches_once_in_order(bootstrap, staged_hooks):
         violations.append(
-            f"{ADAPTER.name}: installStage 40→50 必须调用 fushiLookupInstallKagSeams "
-            "并核实 fushiLookupKagSeams 非空"
+            f"{ADAPTER.name}: installStage 40→50 必须调用 myComicLookupInstallKagSeams "
+            "并核实 myComicLookupKagSeams 非空"
         )
     # 四个 hook 必须都被接缝安装器接进去（哪条路都算），否则等于少挂一路输入。
-    seam_installer = _assigned_tjs_functions(tjs, "fushiLookupInstallKagSeams")
+    seam_installer = _assigned_tjs_functions(tjs, "myComicLookupInstallKagSeams")
     if len(seam_installer) != 1:
         violations.append(
-            f"{ADAPTER.name}: fushiLookupInstallKagSeams 定义数应为 1，"
+            f"{ADAPTER.name}: myComicLookupInstallKagSeams 定义数应为 1，"
             f"实际 {len(seam_installer)}"
         )
     else:
         installer_body = _compact_tjs(seam_installer[0][1])
         for hook_name in (
-            "fushiLookupLeftClickHook",
-            "fushiLookupMouseMoveHook",
-            "fushiLookupMouseWheelHook",
-            "fushiLookupKeyDownHook",
+            "myComicLookupLeftClickHook",
+            "myComicLookupMouseMoveHook",
+            "myComicLookupMouseWheelHook",
+            "myComicLookupKeyDownHook",
         ):
             if hook_name not in installer_body:
                 violations.append(
-                    f"{ADAPTER.name}: fushiLookupInstallKagSeams 没有接进 {hook_name}"
+                    f"{ADAPTER.name}: myComicLookupInstallKagSeams 没有接进 {hook_name}"
                 )
 
     bootstrap_stage_note = (
-        'global.fushiLookupNoteError("bootstrap.stage",'
+        'global.myComicLookupNoteError("bootstrap.stage",'
         '%[message:"stage="+installStage]);'
     )
     require_once(
@@ -1729,10 +1729,10 @@ def find_invalid_lookup_entry_visibility_lifecycle(
     )
 
     remove_handler = (
-        "System.removeContinuousHandler(global.fushiLookupBootstrap);"
+        "System.removeContinuousHandler(global.myComicLookupBootstrap);"
     )
     remove_positions = list(_iter_find(bootstrap, remove_handler))
-    clear_bootstrap = "global.fushiLookupBootstrap=void;"
+    clear_bootstrap = "global.myComicLookupBootstrap=void;"
     clear_positions = list(_iter_find(bootstrap, clear_bootstrap))
     # 生产函数有两条退休路径：完整安装后的 success path，以及安装中途抛错后的
     # fail-closed catch。后者不能删，否则下一帧在半包装状态重试，OriginalRender 可能
@@ -1758,28 +1758,28 @@ def find_invalid_lookup_entry_visibility_lifecycle(
             "fail-closed 移除 continuous handler"
         )
 
-    if joined.count("global.fushiLookupSlots=[];") != 1:
+    if joined.count("global.myComicLookupSlots=[];") != 1:
         violations.append(
             f"{ADAPTER.name}: page/index slot ledger 必须唯一初始化"
         )
-    if joined.count("global.fushiLookupRendererLease=0;") != 1:
+    if joined.count("global.myComicLookupRendererLease=0;") != 1:
         violations.append(
             f"{ADAPTER.name}: renderer lease 序列必须唯一初始化"
         )
 
-    find_entry = functions["fushiLookupFindEntry"]
+    find_entry = functions["myComicLookupFindEntry"]
     require_once(
         find_entry,
         "if(registry[i].renderer===renderer&&registry[i].rendererLease>0)"
         "returnregistry[i];",
         "done/Capture 必须可 find-only 查询精确 renderer",
     )
-    if "fushiLookupEntryFor" in find_entry or "registry.add" in find_entry:
+    if "myComicLookupEntryFor" in find_entry or "registry.add" in find_entry:
         violations.append(
             f"{ADAPTER.name}: FindEntry 不得分配或复用 registry entry"
         )
 
-    entry_for = functions["fushiLookupEntryFor"]
+    entry_for = functions["myComicLookupEntryFor"]
     for needle, message in (
         (
             "if(slots[si].activeEntry===candidate)",
@@ -1800,7 +1800,7 @@ def find_invalid_lookup_entry_visibility_lifecycle(
             "entry 必须初始化 render/retired epoch",
         ),
         (
-            "rendererLease:++global.fushiLookupRendererLease",
+            "rendererLease:++global.myComicLookupRendererLease",
             "fresh entry 必须取得单调 renderer lease",
         ),
     ):
@@ -1809,11 +1809,11 @@ def find_invalid_lookup_entry_visibility_lifecycle(
     revoke_reused = entry_for.find("reused.rendererLease=0;")
     clear_glyphs = entry_for.find("reused.glyphs=[];")
     clear_reused = entry_for.find(
-        "global.fushiLookupClearEntryBinding(reused);"
+        "global.myComicLookupClearEntryBinding(reused);"
     )
     publish_reused = entry_for.find("reused.renderer=renderer;")
     publish_lease = entry_for.find(
-        "reused.rendererLease=++global.fushiLookupRendererLease;"
+        "reused.rendererLease=++global.myComicLookupRendererLease;"
     )
     if not (
         0 <= reused < revoke_reused < clear_glyphs < clear_reused
@@ -1828,14 +1828,14 @@ def find_invalid_lookup_entry_visibility_lifecycle(
     ):
         require_once(entry_for, reset, "Entry LRU 复用必须重置 render epoch")
 
-    clear = functions["fushiLookupClearEntryBinding"]
+    clear = functions["myComicLookupClearEntryBinding"]
     clear_patterns = (
-        re.escape("if(global.fushiLookupHitEntry===entry)"),
+        re.escape("if(global.myComicLookupHitEntry===entry)"),
         re.escape(
-            "global.fushiLookupQueueHighlightErase("
-            "global.fushiLookupHighlightRect);"
+            "global.myComicLookupQueueHighlightErase("
+            "global.myComicLookupHighlightRect);"
         ),
-        re.escape("global.fushiLookupHitEntry=void;"),
+        re.escape("global.myComicLookupHitEntry=void;"),
         re.escape("entry.layer=void;"),
         re.escape("entry.visibleHost=void;"),
         re.escape("if(slots[si].activeEntry===entry)"),
@@ -1853,14 +1853,14 @@ def find_invalid_lookup_entry_visibility_lifecycle(
             f"{ADAPTER.name}: 清 binding 不得抹掉 entry 的 logical slot 身份"
         )
 
-    retire = functions["fushiLookupRetireAnchorPeers"]
+    retire = functions["myComicLookupRetireAnchorPeers"]
     retire_patterns = (
         re.escape("if(peer===entry)continue;"),
         re.escape(
             "if(peer.slotPage!=anchorPage||peer.slotIndex!=anchorIndex)continue;"
         ),
         re.escape("peer.glyphs=[];"),
-        re.escape("global.fushiLookupClearEntryBinding(peer);"),
+        re.escape("global.myComicLookupClearEntryBinding(peer);"),
     )
     if not _matches_once_in_order(retire, retire_patterns):
         violations.append(
@@ -1871,19 +1871,19 @@ def find_invalid_lookup_entry_visibility_lifecycle(
         "peer.retiredRenderEpoch=peer.renderEpoch;",
         "peer retirement 必须封存已见 render epoch，阻止迟到 done 复活",
     )
-    if "global.fushiLookupDismiss();" in retire:
+    if "global.myComicLookupDismiss();" in retire:
         violations.append(
             f"{ADAPTER.name}: peer retirement 自身不得 dismiss"
         )
 
-    find_slot = functions["fushiLookupFindSlot"]
+    find_slot = functions["myComicLookupFindSlot"]
     require_once(
         find_slot,
         "if(slots[i].page==page&&slots[i].index==index)returnslots[i];",
         "slot 必须使用严格 (page,index) 复合键",
     )
 
-    resolve = functions["fushiLookupResolveCurrentSlot"]
+    resolve = functions["myComicLookupResolveCurrentSlot"]
     for needle, message in (
         (
             "varpages=[global.kag.fore.messages,global.kag.back.messages];",
@@ -1900,7 +1900,7 @@ def find_invalid_lookup_entry_visibility_lifecycle(
             f"{ADAPTER.name}: ResolveCurrentSlot 不得把双缓冲复用的 currentNum 当身份"
         )
 
-    slot_for = functions["fushiLookupSlotFor"]
+    slot_for = functions["myComicLookupSlotFor"]
     slot_lru_patterns = (
         re.escape("if(slots.count>=8)"),
         re.escape(
@@ -1910,7 +1910,7 @@ def find_invalid_lookup_entry_visibility_lifecycle(
             "varoldest=(oldestInactive>=0)?oldestInactive:oldestActive;"
         ),
         re.escape("retired.retiredRenderEpoch=retired.renderEpoch;"),
-        re.escape("global.fushiLookupClearEntryBinding(retired);"),
+        re.escape("global.myComicLookupClearEntryBinding(retired);"),
         re.escape("slots.erase(oldest);"),
     )
     if not _matches_once_in_order(slot_for, slot_lru_patterns):
@@ -1918,21 +1918,21 @@ def find_invalid_lookup_entry_visibility_lifecycle(
             f"{ADAPTER.name}: Slot LRU 必须 inactive-first，且退役 active 时先清 binding"
         )
 
-    adopt = functions["fushiLookupAdoptSlot"]
-    if parameters["fushiLookupAdoptSlot"] != (
+    adopt = functions["myComicLookupAdoptSlot"]
+    if parameters["myComicLookupAdoptSlot"] != (
         "entry,line,page,index,identity,capturePhase"
     ):
         violations.append(
             f"{ADAPTER.name}: AdoptSlot 必须接收 capturePhase 并保持完整 candidate 参数"
         )
     detach_patterns = (
-        re.escape("varallSlots=global.fushiLookupSlots;"),
+        re.escape("varallSlots=global.myComicLookupSlots;"),
         re.escape("if(other===slot)continue;"),
         re.escape("if(other.activeEntry===entry)"),
         re.escape("other.activeEntry=void;"),
     )
     advance_patterns = (
-        re.escape("global.fushiLookupRetireAnchorPeers(entry,page,index);"),
+        re.escape("global.myComicLookupRetireAnchorPeers(entry,page,index);"),
         re.escape("slot.line=line;"),
         re.escape("slot.generation++;"),
         re.escape("slot.activeEntry=void;"),
@@ -1984,10 +1984,10 @@ def find_invalid_lookup_entry_visibility_lifecycle(
             f"{ADAPTER.name}: fresh slot 首次观测不得发布句界；只有同一逻辑槽完整异句 "
             "candidate 才能 advanced 并触发 surface/route 换代"
         )
-    identity = functions["fushiLookupCurrentIdentityState"]
+    identity = functions["myComicLookupCurrentIdentityState"]
     identity_patterns = (
         re.escape(
-            "varslot=global.fushiLookupFindSlot(entry.slotPage,entry.slotIndex);"
+            "varslot=global.myComicLookupFindSlot(entry.slotPage,entry.slotIndex);"
         ),
         re.escape(
             "if(slot===void||slot.generation!=entry.slotGeneration||"
@@ -2008,11 +2008,11 @@ def find_invalid_lookup_entry_visibility_lifecycle(
             "其他共存 slot 回退 visibleHost"
         )
 
-    sentence_state = functions["fushiLookupActiveSentenceState"]
+    sentence_state = functions["myComicLookupActiveSentenceState"]
     sentence_state_patterns = (
         re.escape("if(entry.slotPage==0||entry.slotIndex<0)return0;"),
         re.escape(
-            "varslot=global.fushiLookupFindSlot(entry.slotPage,entry.slotIndex);"
+            "varslot=global.myComicLookupFindSlot(entry.slotPage,entry.slotIndex);"
         ),
         re.escape(
             "if(slot===void||slot.generation!=entry.slotGeneration||"
@@ -2027,9 +2027,9 @@ def find_invalid_lookup_entry_visibility_lifecycle(
             "slot line/generation/activeEntry 判存活"
         )
     for forbidden in (
-        "fushiLookupResolveCurrentSlot",
+        "myComicLookupResolveCurrentSlot",
         "entry.currentIdentity",
-        "fushiLookupEntryVisible",
+        "myComicLookupEntryVisible",
     ):
         if forbidden in sentence_state:
             violations.append(
@@ -2037,21 +2037,21 @@ def find_invalid_lookup_entry_visibility_lifecycle(
                 f"{forbidden}"
             )
 
-    capture = functions["fushiLookupCapture"]
+    capture = functions["myComicLookupCapture"]
     # expectedBindRevision 与 lease/epoch 同属"进入这次 Capture 时就冻结"的快照：
     # drawCh 在本次 render 之后还会继续绑新的原点组，用调用时刻的 global 版本号配对
     # 就会把下一句的绑定当成本句的。这个参数必须由调用方传进来，不能在函数里现取。
-    if parameters["fushiLookupCapture"] != (
+    if parameters["myComicLookupCapture"] != (
         "renderer,capturePhase,expectedLease,expectedRenderEpoch,expectedBindRevision"
     ):
         violations.append(
             f"{ADAPTER.name}: Capture 必须携 render/done 阶段与不可变 "
             "lease/epoch/bindRevision"
         )
-    token = functions["fushiLookupCaptureTokenCurrent"]
+    token = functions["myComicLookupCaptureTokenCurrent"]
     for needle, message in (
         (
-            "global.fushiLookupFindEntry(renderer)===entry",
+            "global.myComicLookupFindEntry(renderer)===entry",
             "Capture token 必须复核 exact resident entry",
         ),
         (
@@ -2068,12 +2068,12 @@ def find_invalid_lookup_entry_visibility_lifecycle(
         ),
     ):
         require_once(token, needle, message)
-    if "fushiLookupEntryFor" in capture:
+    if "myComicLookupEntryFor" in capture:
         violations.append(
             f"{ADAPTER.name}: Capture 不得分配 entry；evicted renderer 必须失败关闭"
         )
     token_gate = (
-        "if(!global.fushiLookupCaptureTokenCurrent(entry,renderer,"
+        "if(!global.myComicLookupCaptureTokenCurrent(entry,renderer,"
         "expectedLease,expectedRenderEpoch))return;"
     )
     token_positions = [m.start() for m in re.finditer(re.escape(token_gate), capture)]
@@ -2081,19 +2081,19 @@ def find_invalid_lookup_entry_visibility_lifecycle(
     # 所以取出来直接调用。锚点跟着实现走，别倒回去要求 incontextof。
     getter = capture.find("varcharacters=getCharacters(0,0);")
     adopt_call_position = capture.find(
-        "slotAdoption=global.fushiLookupAdoptSlot(entry,line,"
+        "slotAdoption=global.myComicLookupAdoptSlot(entry,line,"
     )
     clear_positions = [
         m.start()
         for m in re.finditer(
-            re.escape("global.fushiLookupClearEntryBinding(entry);"), capture
+            re.escape("global.myComicLookupClearEntryBinding(entry);"), capture
         )
     ]
     fallback_start = capture.find("if(slotAdoption===void)")
     fallback_identity = capture.find("entry.logicalLine=line;", fallback_start)
-    precommit = capture.find("entry.used=++global.fushiLookupClock;")
+    precommit = capture.find("entry.used=++global.myComicLookupClock;")
     retire_call_position = capture.find(
-        "global.fushiLookupRetireAnchorPeers(entry,logicalSlot.page,logicalSlot.index);"
+        "global.myComicLookupRetireAnchorPeers(entry,logicalSlot.page,logicalSlot.index);"
     )
     candidate_publish = capture.find("entry.glyphs=glyphs;", retire_call_position)
     # 九道门，一道也不能少。每道都紧跟在一次**可能重入渲染**的调用之后：Capture 里
@@ -2118,80 +2118,80 @@ def find_invalid_lookup_entry_visibility_lifecycle(
             "fallback 清理前后、Retire 前后和最终清理后保留 9 个有序 token 门"
         )
 
-    clear_binding = functions["fushiLookupClearEntryBinding"]
+    clear_binding = functions["myComicLookupClearEntryBinding"]
     # `.visible=` 而不是 `.visible`：账本里合法地存着 `entry.visibleHost`，裸子串会把它
     # 当成"改了 Layer 可见性"报出来。禁的是**写**引擎的可见性，不是名字里带 visible。
-    for forbidden in ("fillRect", ".visible=", ".update(", "fushiLookupDismiss"):
+    for forbidden in ("fillRect", ".visible=", ".update(", "myComicLookupDismiss"):
         if forbidden in clear_binding:
             violations.append(
                 f"{ADAPTER.name}: ClearEntryBinding 必须是纯账本操作，禁止 Layer/Dismiss: {forbidden}"
             )
     require_once(
         clear_binding,
-        "global.fushiLookupQueueHighlightErase(global.fushiLookupHighlightRect)",
+        "global.myComicLookupQueueHighlightErase(global.myComicLookupHighlightRect)",
         "ClearEntryBinding 必须把旧高亮排入有界 erase queue",
     )
     for helper_name in (
-        "fushiLookupEntryFor",
-        "fushiLookupRetireAnchorPeers",
-        "fushiLookupSlotFor",
-        "fushiLookupAdoptSlot",
+        "myComicLookupEntryFor",
+        "myComicLookupRetireAnchorPeers",
+        "myComicLookupSlotFor",
+        "myComicLookupAdoptSlot",
     ):
         helper = functions[helper_name]
-        for forbidden in ("fillRect", ".update(", "fushiLookupDismiss("):
+        for forbidden in ("fillRect", ".update(", "myComicLookupDismiss("):
             if forbidden in helper:
                 violations.append(
                     f"{ADAPTER.name}: {helper_name} 事务内禁止视觉 Layer/Dismiss: {forbidden}"
                 )
 
-    queue_erase = functions["fushiLookupQueueHighlightErase"]
+    queue_erase = functions["myComicLookupQueueHighlightErase"]
     for needle, message in (
-        ("varpending=global.fushiLookupPendingHighlightEraseRect", "erase queue 必须读取既有矩形"),
+        ("varpending=global.myComicLookupPendingHighlightEraseRect", "erase queue 必须读取既有矩形"),
         ("varleft=pending.x<rect.x?pending.x:rect.x", "erase queue 必须合并左边界"),
         ("varright=pendingRight>rectRight?pendingRight:rectRight", "erase queue 必须合并右边界"),
         ("varbottom=pendingBottom>rectBottom?pendingBottom:rectBottom", "erase queue 必须合并下边界"),
-        ("global.fushiLookupPendingHighlightEraseSeq++", "pending highlight erase 必须用单调 seq 保护重入"),
+        ("global.myComicLookupPendingHighlightEraseSeq++", "pending highlight erase 必须用单调 seq 保护重入"),
     ):
         require_once(queue_erase, needle, message)
-    flush_erase = functions["fushiLookupFlushPendingHighlightErase"]
+    flush_erase = functions["myComicLookupFlushPendingHighlightErase"]
     for needle, message in (
-        ("if(global.fushiLookupHighlightFlushActive)returnfalse", "erase flush 必须防递归"),
+        ("if(global.myComicLookupHighlightFlushActive)returnfalse", "erase flush 必须防递归"),
         ("varcompleted=false", "erase flush 必须默认失败保留 pending"),
         ("highlight.fillRect(pending.x,pending.y,pending.w,pending.h,0)", "leaf flush 必须擦 pending union"),
         ("completed=true", "视觉操作完整成功后才可消费 pending"),
-        ("if(completed&&global.fushiLookupPendingHighlightEraseSeq==seq)", "只可消费成功且未被重入更新的 pending erase"),
+        ("if(completed&&global.myComicLookupPendingHighlightEraseSeq==seq)", "只可消费成功且未被重入更新的 pending erase"),
     ):
         require_once(flush_erase, needle, message)
-    visual_flush = functions["fushiLookupFlushVisualWork"]
+    visual_flush = functions["myComicLookupFlushVisualWork"]
     for needle, message in (
-        ("if(global.fushiLookupVisualFlushActive)returnfalse", "visual flush 必须防递归"),
-        ("global.fushiLookupPendingVisualDismiss=false", "visual flush 必须先摘 pending dismiss"),
-        ("varsentenceRefresh=global.fushiLookupPendingSentenceRefresh", "visual flush 必须冻结逐句刷新请求"),
-        ("global.fushiLookupPendingSentenceRefresh=false", "visual flush 必须先摘 pending 逐句刷新"),
-        ("varsubmitFence=global.fushiLookupPendingSubmitFence", "visual flush 必须冻结 submit fence 请求"),
-        ("global.fushiLookupPendingSubmitFence=false", "visual flush 必须先摘 pending submit fence"),
-        ("if(submitFence)global.fushiLookupAdvanceDismissFence()", "submit fence 必须在视觉操作前推进"),
-        ("if(sentenceRefresh)global.fushiLookupRefreshSentenceSurface()", "逐句刷新只能由事务外 visual leaf 执行"),
-        ("!global.fushiLookupPendingSubmitFence", "visual flush 完成条件必须包含重入产生的新 fence"),
-        ("global.fushiLookupFlushPendingHighlightErase()", "visual leaf 必须 drain erase"),
+        ("if(global.myComicLookupVisualFlushActive)returnfalse", "visual flush 必须防递归"),
+        ("global.myComicLookupPendingVisualDismiss=false", "visual flush 必须先摘 pending dismiss"),
+        ("varsentenceRefresh=global.myComicLookupPendingSentenceRefresh", "visual flush 必须冻结逐句刷新请求"),
+        ("global.myComicLookupPendingSentenceRefresh=false", "visual flush 必须先摘 pending 逐句刷新"),
+        ("varsubmitFence=global.myComicLookupPendingSubmitFence", "visual flush 必须冻结 submit fence 请求"),
+        ("global.myComicLookupPendingSubmitFence=false", "visual flush 必须先摘 pending submit fence"),
+        ("if(submitFence)global.myComicLookupAdvanceDismissFence()", "submit fence 必须在视觉操作前推进"),
+        ("if(sentenceRefresh)global.myComicLookupRefreshSentenceSurface()", "逐句刷新只能由事务外 visual leaf 执行"),
+        ("!global.myComicLookupPendingSubmitFence", "visual flush 完成条件必须包含重入产生的新 fence"),
+        ("global.myComicLookupFlushPendingHighlightErase()", "visual leaf 必须 drain erase"),
     ):
         require_once(visual_flush, needle, message)
     require_once(
         capture,
         "if(slotAdoption!==void&&slotAdoption.advanced)"
-        "global.fushiLookupPendingSubmitFence=true;",
+        "global.myComicLookupPendingSubmitFence=true;",
         "完整 candidate 证明同一逻辑槽内容变化后必须先排队旧 submit fence",
     )
     require_once(
         capture,
         "if(slotAdoption!==void&&slotAdoption.advanced)"
-        "global.fushiLookupPendingSentenceRefresh=true;",
+        "global.myComicLookupPendingSentenceRefresh=true;",
         "完整 candidate 证明同一逻辑槽内容变化后必须只排队逐句刷新",
     )
-    if bootstrap.count("global.fushiLookupPendingSubmitFence=true;") != 1:
+    if bootstrap.count("global.myComicLookupPendingSubmitFence=true;") != 1:
         violations.append(
             f"{ADAPTER.name}: submit fence 请求只能由完整 candidate 的句子边界发布"
-            f"（出现 {bootstrap.count('global.fushiLookupPendingSubmitFence=true;')} 次）"
+            f"（出现 {bootstrap.count('global.myComicLookupPendingSubmitFence=true;')} 次）"
         )
     # surface refresh 恰好两处，且两处的语义必须不同：
     #   ① 完整 candidate 的句子边界**发布**请求；
@@ -2201,27 +2201,27 @@ def find_invalid_lookup_entry_visibility_lifecycle(
     # 计数从 1 放宽到 2 时必须同时钉住第二处的确切形状，否则等于把「只有句子边界
     # 能发布」这条规则整个作废。
     sentence_requeue = (
-        "if(global.fushiLookupSentenceRefreshActive)"
-        "{global.fushiLookupPendingSentenceRefresh=true;return;}"
+        "if(global.myComicLookupSentenceRefreshActive)"
+        "{global.myComicLookupPendingSentenceRefresh=true;return;}"
     )
     if (
-        bootstrap.count("global.fushiLookupPendingSentenceRefresh=true;") != 2
+        bootstrap.count("global.myComicLookupPendingSentenceRefresh=true;") != 2
         or bootstrap.count(sentence_requeue) != 1
     ):
         violations.append(
             f"{ADAPTER.name}: surface refresh 请求只能由完整 candidate 的句子边界发布，"
             "外加 RefreshSentenceSurface 重入早退时原样放回（出现 "
-            f"{bootstrap.count('global.fushiLookupPendingSentenceRefresh=true;')} 次，"
+            f"{bootstrap.count('global.myComicLookupPendingSentenceRefresh=true;')} 次，"
             f"重入回填 {bootstrap.count(sentence_requeue)} 次）"
         )
 
-    layer_owned = functions["fushiLookupLayerOwnedByPrimary"]
+    layer_owned = functions["myComicLookupLayerOwnedByPrimary"]
     require_once(
         layer_owned,
         "layer.parent===primary",
         "视觉 Layer 必须以严格 parent 身份归属 current primaryLayer",
     )
-    retire_layer = functions["fushiLookupRetireDetachedLayer"]
+    retire_layer = functions["myComicLookupRetireDetachedLayer"]
     hide_position = retire_layer.find("layer.visible=false;")
     update_position = retire_layer.find("layer.update();")
     invalidate_position = retire_layer.find("invalidatelayer;")
@@ -2234,12 +2234,12 @@ def find_invalid_lookup_entry_visibility_lifecycle(
             "update 抛错不得阻止退休"
         )
 
-    advance_fence = functions["fushiLookupAdvanceDismissFence"]
+    advance_fence = functions["myComicLookupAdvanceDismissFence"]
     advance_patterns = (
-        re.escape("varsubmitSeq=global.fushiLookupSubmitSeq;"),
-        re.escape("if(submitSeq>global.fushiLookupDismissedSubmitSeq)"),
-        re.escape("global.fushiLookupDismissedSubmitSeq=submitSeq;"),
-        re.escape("global.fushiLookupNotify++;"),
+        re.escape("varsubmitSeq=global.myComicLookupSubmitSeq;"),
+        re.escape("if(submitSeq>global.myComicLookupDismissedSubmitSeq)"),
+        re.escape("global.myComicLookupDismissedSubmitSeq=submitSeq;"),
+        re.escape("global.myComicLookupNotify++;"),
         re.escape("returntrue;"),
     )
     if not _matches_once_in_order(advance_fence, advance_patterns):
@@ -2253,12 +2253,12 @@ def find_invalid_lookup_entry_visibility_lifecycle(
                 f"{ADAPTER.name}: submit fence helper 必须无 Layer 副作用: {forbidden}"
             )
 
-    rehome_layer = functions["fushiLookupRehomeLayerToPrimary"]
+    rehome_layer = functions["myComicLookupRehomeLayerToPrimary"]
     rehome_needles = (
-        "if(global.fushiLookupLayerOwnedByPrimary(layer,primary))returntrue;",
-        "if(!global.fushiLookupComputeOffset(layer))returnfalse;",
-        "varnewLeft=global.fushiLookupOffX;",
-        "varnewTop=global.fushiLookupOffY;",
+        "if(global.myComicLookupLayerOwnedByPrimary(layer,primary))returntrue;",
+        "if(!global.myComicLookupComputeOffset(layer))returnfalse;",
+        "varnewLeft=global.myComicLookupOffX;",
+        "varnewTop=global.myComicLookupOffY;",
         "if(primary!==global.kag.primaryLayer)returnfalse;",
         "layer.parent=primary;",
         "layer.setPos(newLeft,newTop);",
@@ -2277,11 +2277,11 @@ def find_invalid_lookup_entry_visibility_lifecycle(
             "并在提交 parent 后复核归属"
         )
     for forbidden in (
-        "fushiLookupAdvanceDismissFence",
-        "fushiLookupDismiss",
-        "fushiLookupPending",
-        "fushiLookupCardSeq=",
-        "fushiLookupCardEntry=",
+        "myComicLookupAdvanceDismissFence",
+        "myComicLookupDismiss",
+        "myComicLookupPending",
+        "myComicLookupCardSeq=",
+        "myComicLookupCardEntry=",
     ):
         if forbidden in rehome_layer:
             violations.append(
@@ -2290,7 +2290,7 @@ def find_invalid_lookup_entry_visibility_lifecycle(
 
     # 🔴 rehome 唯一值得等的失败：primary 在「读取」与「parent 赋值」之间被换掉。
     # 判据必须自成一个 helper 且只有这一条，否则「等一次」会被悄悄扩到永久失败上。
-    primary_raced = functions["fushiLookupPrimaryRacedSince"]
+    primary_raced = functions["myComicLookupPrimaryRacedSince"]
     if primary_raced != (
         "try{returnprimary!==global.kag.primaryLayer;}catch(e){returnfalse;}"
     ):
@@ -2299,26 +2299,26 @@ def find_invalid_lookup_entry_visibility_lifecycle(
             "primaryLayer，读不到时按「没换」处理"
         )
 
-    # 🔴 不变式：CardSeq != 0 ⇒ fushiLookupCard 是有效 Layer。Prepare / Apply /
+    # 🔴 不变式：CardSeq != 0 ⇒ myComicLookupCard 是有效 Layer。Prepare / Apply /
     # Reconcile 判定 carrier 不可用时都会清 Card/CardSeq/CardEntry 三件套；
     # attempt-only rehome 是第四个能观察到该不变式被引擎侧打破的地方（kag.clear()、
     # 场景重载、全屏切换会直接 invalidate 掉 Layer），因此**必须就地修回不变式**。
-    # 若它把矛盾状态原样报成 "not ready"，fushiLookupCardVisible() 只看 CardSeq 会
+    # 若它把矛盾状态原样报成 "not ready"，myComicLookupCardVisible() 只看 CardSeq 会
     # 返回 true，本函数返回 false，leftClick 的 popupTransaction && !carrierSettled
     # 恒成立，玩家的左键被永久吞掉、剧情再也推不动。
-    try_rehome = functions["fushiLookupTryRehomeVisualParents"]
+    try_rehome = functions["myComicLookupTryRehomeVisualParents"]
     invalid_card_restore = (
         "if(card===void||card===null||!isvalidcard){"
-        "global.fushiLookupCard=void;global.fushiLookupCardSeq=0;"
-        "global.fushiLookupCardEntry=void;returntrue;}"
+        "global.myComicLookupCard=void;global.myComicLookupCardSeq=0;"
+        "global.myComicLookupCardEntry=void;returntrue;}"
     )
     permanent_rehome_retire = (
-        "if(!global.fushiLookupLayerOwnedByPrimary(card,primary)&&"
-        "!global.fushiLookupRehomeLayerToPrimary(card,primary)){"
-        "if(global.fushiLookupPrimaryRacedSince(primary))returnfalse;"
-        "global.fushiLookupCard=void;global.fushiLookupCardSeq=0;"
-        "global.fushiLookupCardEntry=void;"
-        "global.fushiLookupRetireDetachedLayer(card);returntrue;}"
+        "if(!global.myComicLookupLayerOwnedByPrimary(card,primary)&&"
+        "!global.myComicLookupRehomeLayerToPrimary(card,primary)){"
+        "if(global.myComicLookupPrimaryRacedSince(primary))returnfalse;"
+        "global.myComicLookupCard=void;global.myComicLookupCardSeq=0;"
+        "global.myComicLookupCardEntry=void;"
+        "global.myComicLookupRetireDetachedLayer(card);returntrue;}"
     )
     try_rehome_patterns = (
         re.escape("varprimary=void;"),
@@ -2327,16 +2327,16 @@ def find_invalid_lookup_entry_visibility_lifecycle(
         re.escape("if(primary===void||primary===null||!isvalidprimary)returntrue;"),
         re.escape(
             "if(highlight!==void&&highlight!==null&&"
-            "!global.fushiLookupLayerOwnedByPrimary(highlight,primary))"
-            "global.fushiLookupRehomeLayerToPrimary(highlight,primary);"
+            "!global.myComicLookupLayerOwnedByPrimary(highlight,primary))"
+            "global.myComicLookupRehomeLayerToPrimary(highlight,primary);"
         ),
         re.escape(invalid_card_restore),
         re.escape(permanent_rehome_retire),
         re.escape(
-            "if(global.fushiLookupCardSeq!=0&&"
-            "!global.fushiLookupCaptureSuppressed&&!card.visible)"
+            "if(global.myComicLookupCardSeq!=0&&"
+            "!global.myComicLookupCaptureSuppressed&&!card.visible)"
         ),
-        re.escape("catch(e){global.fushiLookupFault();}returntrue;"),
+        re.escape("catch(e){global.myComicLookupFault();}returntrue;"),
     )
     if not _matches_once_in_order(try_rehome, try_rehome_patterns):
         violations.append(
@@ -2347,9 +2347,9 @@ def find_invalid_lookup_entry_visibility_lifecycle(
     # 就是多一条能把玩家左键永久吞掉的路径。
     if (
         try_rehome.count("returnfalse;") != 1
-        or try_rehome.count("if(global.fushiLookupPrimaryRacedSince(primary))returnfalse;")
+        or try_rehome.count("if(global.myComicLookupPrimaryRacedSince(primary))returnfalse;")
         != 1
-        or try_rehome.count("global.fushiLookupCardSeq=0;") != 2
+        or try_rehome.count("global.myComicLookupCardSeq=0;") != 2
     ):
         violations.append(
             f"{ADAPTER.name}: attempt-only rehome 只能有一个受 primary 竞态判据保护的 "
@@ -2357,8 +2357,8 @@ def find_invalid_lookup_entry_visibility_lifecycle(
         )
     active_restore_bodies = _braced_bodies_after(
         try_rehome,
-        "if(global.fushiLookupCardSeq!=0&&"
-        "!global.fushiLookupCaptureSuppressed&&!card.visible)",
+        "if(global.myComicLookupCardSeq!=0&&"
+        "!global.myComicLookupCaptureSuppressed&&!card.visible)",
     )
     if active_restore_bodies != ["card.visible=true;card.update();"]:
         violations.append(
@@ -2366,12 +2366,12 @@ def find_invalid_lookup_entry_visibility_lifecycle(
             "恢复 carrier visible/update"
         )
     for forbidden in (
-        "fushiLookupAdvanceDismissFence",
-        "fushiLookupDismiss",
-        "fushiLookupQueueInput",
-        "fushiLookupCancelCurrent",
-        "fushiLookupPending",
-        "fushiLookupRefreshSentenceSurface",
+        "myComicLookupAdvanceDismissFence",
+        "myComicLookupDismiss",
+        "myComicLookupQueueInput",
+        "myComicLookupCancelCurrent",
+        "myComicLookupPending",
+        "myComicLookupRefreshSentenceSurface",
         "invalidate",
     ):
         if forbidden in try_rehome:
@@ -2379,53 +2379,53 @@ def find_invalid_lookup_entry_visibility_lifecycle(
                 f"{ADAPTER.name}: attempt-only rehome 禁止销毁 surface/route: {forbidden}"
             )
 
-    reconcile_layers = functions["fushiLookupReconcileVisualParents"]
+    reconcile_layers = functions["myComicLookupReconcileVisualParents"]
     for needle, message in (
         (
-            "!global.fushiLookupLayerOwnedByPrimary(highlight,primary)&&"
-            "!global.fushiLookupRehomeLayerToPrimary(highlight,primary)",
+            "!global.myComicLookupLayerOwnedByPrimary(highlight,primary)&&"
+            "!global.myComicLookupRehomeLayerToPrimary(highlight,primary)",
             "高亮 parent 变化必须先尝试无损迁移",
         ),
         (
-            "global.fushiLookupHighlightLayer=void;"
-            "global.fushiLookupHighlightRect=void;"
-            "global.fushiLookupPendingHighlightEraseRect=void;"
-            "global.fushiLookupRetireDetachedLayer(highlight);",
+            "global.myComicLookupHighlightLayer=void;"
+            "global.myComicLookupHighlightRect=void;"
+            "global.myComicLookupPendingHighlightEraseRect=void;"
+            "global.myComicLookupRetireDetachedLayer(highlight);",
             "迁移失败才可撤销高亮引用并退休坏 Layer",
         ),
         (
-            "!global.fushiLookupLayerOwnedByPrimary(card,primary)&&"
-            "!global.fushiLookupRehomeLayerToPrimary(card,primary)",
+            "!global.myComicLookupLayerOwnedByPrimary(card,primary)&&"
+            "!global.myComicLookupRehomeLayerToPrimary(card,primary)",
             "卡片 parent 变化必须先尝试无损迁移",
         ),
         (
-            "global.fushiLookupCard=void;global.fushiLookupCardSeq=0;"
-            "global.fushiLookupCardEntry=void;"
-            "global.fushiLookupRetireDetachedLayer(card);",
+            "global.myComicLookupCard=void;global.myComicLookupCardSeq=0;"
+            "global.myComicLookupCardEntry=void;"
+            "global.myComicLookupRetireDetachedLayer(card);",
             "迁移失败才可撤销坏 carrier 引用，且不得推进 route fence",
         ),
     ):
         require_once(reconcile_layers, needle, message)
     for forbidden in (
-        "fushiLookupAdvanceDismissFence",
-        "fushiLookupQueueInput",
-        "fushiLookupDismiss",
-        "fushiLookupPendingSubmitFence",
-        "fushiLookupPendingSentenceRefresh",
-        "fushiLookupPendingVisualDismiss",
+        "myComicLookupAdvanceDismissFence",
+        "myComicLookupQueueInput",
+        "myComicLookupDismiss",
+        "myComicLookupPendingSubmitFence",
+        "myComicLookupPendingSentenceRefresh",
+        "myComicLookupPendingVisualDismiss",
     ):
         if forbidden in reconcile_layers:
             violations.append(
                 f"{ADAPTER.name}: 确认换句 reconcile 禁止改变 lookup route: {forbidden}"
             )
 
-    ensure_highlight = functions["fushiLookupEnsureHighlight"]
-    prepare = functions["fushiLookupPrepare"]
-    apply_frame = functions["fushiLookupApply"]
+    ensure_highlight = functions["myComicLookupEnsureHighlight"]
+    prepare = functions["myComicLookupPrepare"]
+    apply_frame = functions["myComicLookupApply"]
     if (
-        ensure_highlight.count("global.fushiLookupRehomeLayerToPrimary(layer,primary)") != 1
-        or prepare.count("global.fushiLookupRehomeLayerToPrimary(card,primary)") != 1
-        or apply_frame.count("global.fushiLookupRehomeLayerToPrimary(card,primary)") != 1
+        ensure_highlight.count("global.myComicLookupRehomeLayerToPrimary(layer,primary)") != 1
+        or prepare.count("global.myComicLookupRehomeLayerToPrimary(card,primary)") != 1
+        or apply_frame.count("global.myComicLookupRehomeLayerToPrimary(card,primary)") != 1
     ):
         violations.append(
             f"{ADAPTER.name}: 高亮 ensure、卡片 prepare/apply 都必须先无损迁移到 current primary"
@@ -2434,37 +2434,37 @@ def find_invalid_lookup_entry_visibility_lifecycle(
         (
             reconcile_layers,
             "if(highlight!==void&&highlight!==null&&"
-            "!global.fushiLookupLayerOwnedByPrimary(highlight,primary)&&"
-            "!global.fushiLookupRehomeLayerToPrimary(highlight,primary))",
+            "!global.myComicLookupLayerOwnedByPrimary(highlight,primary)&&"
+            "!global.myComicLookupRehomeLayerToPrimary(highlight,primary))",
             "视觉 reconcile 必须把 invalid Layer 当成迁移失败",
         ),
         (
             reconcile_layers,
             "if(card!==void&&card!==null&&"
-            "!global.fushiLookupLayerOwnedByPrimary(card,primary)&&"
-            "!global.fushiLookupRehomeLayerToPrimary(card,primary))",
+            "!global.myComicLookupLayerOwnedByPrimary(card,primary)&&"
+            "!global.myComicLookupRehomeLayerToPrimary(card,primary))",
             "视觉 reconcile 必须把 invalid card 当成迁移失败",
         ),
         (
             ensure_highlight,
             "if(layer!==void&&layer!==null&&"
-            "!global.fushiLookupLayerOwnedByPrimary(layer,primary)&&"
-            "!global.fushiLookupRehomeLayerToPrimary(layer,primary))",
+            "!global.myComicLookupLayerOwnedByPrimary(layer,primary)&&"
+            "!global.myComicLookupRehomeLayerToPrimary(layer,primary))",
             "高亮 ensure 必须先迁移，失败才换 carrier",
         ),
         (
             prepare,
             "if(card!==void&&card!==null&&"
-            "!global.fushiLookupLayerOwnedByPrimary(card,primary)&&"
-            "!global.fushiLookupRehomeLayerToPrimary(card,primary))",
+            "!global.myComicLookupLayerOwnedByPrimary(card,primary)&&"
+            "!global.myComicLookupRehomeLayerToPrimary(card,primary))",
             "Prepare 必须先迁移，失败才让当前 full frame 重建 carrier",
         ),
     ):
         require_once(body, needle, message)
     prepare_detached = (
-        "global.fushiLookupCard=void;global.fushiLookupCardSeq=0;"
-        "global.fushiLookupCardEntry=void;"
-        "global.fushiLookupRetireDetachedLayer(card);card=void;"
+        "global.myComicLookupCard=void;global.myComicLookupCardSeq=0;"
+        "global.myComicLookupCardEntry=void;"
+        "global.myComicLookupRetireDetachedLayer(card);card=void;"
     )
     require_once(
         prepare,
@@ -2472,9 +2472,9 @@ def find_invalid_lookup_entry_visibility_lifecycle(
         "Prepare 迁移失败时只换 carrier，不得取消当前 route/full frame",
     )
     apply_detached = (
-        "global.fushiLookupCard=void;global.fushiLookupCardSeq=0;"
-        "global.fushiLookupCardEntry=void;"
-        "global.fushiLookupRetireDetachedLayer(card);return;"
+        "global.myComicLookupCard=void;global.myComicLookupCardSeq=0;"
+        "global.myComicLookupCardEntry=void;"
+        "global.myComicLookupRetireDetachedLayer(card);return;"
     )
     require_once(
         apply_frame,
@@ -2484,8 +2484,8 @@ def find_invalid_lookup_entry_visibility_lifecycle(
     )
     for forbidden in (
         "detachedSubmit",
-        "fushiLookupAdvanceDismissFence",
-        "fushiLookupDismissedSubmitSeq",
+        "myComicLookupAdvanceDismissFence",
+        "myComicLookupDismissedSubmitSeq",
     ):
         if forbidden in prepare:
             violations.append(
@@ -2508,10 +2508,10 @@ def find_invalid_lookup_entry_visibility_lifecycle(
         re.escape(
             "if(spanErrX>toleranceX||spanErrY>toleranceY)continue;"
         ),
-        # 可见性判据必须走 BindGroupVisible(g)，不能退回裸 `fushiLookupVisible(g.host)`：
+        # 可见性判据必须走 BindGroupVisible(g)，不能退回裸 `myComicLookupVisible(g.host)`：
         # drawCh 的逐字淡入宿主在角色口型/表情切换时会变 hidden，而 KAG message 仍在屏上。
         # 按短命 host 判，整句会在配音角色一说话就变成不可选。
-        re.escape("if(!global.fushiLookupBindGroupVisible(g))continue;"),
+        re.escape("if(!global.myComicLookupBindGroupVisible(g))continue;"),
     )
     if not _matches_once_in_order(capture, span_patterns):
         violations.append(
@@ -2541,7 +2541,7 @@ def find_invalid_lookup_entry_visibility_lifecycle(
         )
 
     adopt_call = (
-        "slotAdoption=global.fushiLookupAdoptSlot(entry,line,"
+        "slotAdoption=global.myComicLookupAdoptSlot(entry,line,"
         "candidateAnchorPage,candidateAnchorIndex,candidateCurrentIdentity,"
         "capturePhase);"
     )
@@ -2551,7 +2551,7 @@ def find_invalid_lookup_entry_visibility_lifecycle(
         violations.append(
             f"{ADAPTER.name}: slot adoption 必须晚于完整 candidate"
         )
-    if "fushiLookupAdoptSlot(entry,line,resolvedCurrent." in capture:
+    if "myComicLookupAdoptSlot(entry,line,resolvedCurrent." in capture:
         violations.append(
             f"{ADAPTER.name}: resolvedCurrent 只能作身份证据，不能在 candidate 前推进 slot"
         )
@@ -2568,22 +2568,22 @@ def find_invalid_lookup_entry_visibility_lifecycle(
         owned_patterns = (
             re.escape("if(entry.slotPage!=0&&entry.slotIndex>=0)"),
             re.escape(
-                "varowned=global.fushiLookupFindSlot("
+                "varowned=global.myComicLookupFindSlot("
                 "entry.slotPage,entry.slotIndex);"
             ),
             re.escape("if(owned!==void&&owned.activeEntry===entry)"),
             re.escape("owned.activeEntry=void;"),
             re.escape("owned.activeStrength=0;"),
-            re.escape("global.fushiLookupClearEntryBinding(entry);"),
+            re.escape("global.myComicLookupClearEntryBinding(entry);"),
         )
         fallback_ok = (
             len(changed_bodies) == 1
             and _matches_once_in_order(changed_bodies[0], owned_patterns)
             and "entry.slotGeneration++;" in changed_bodies[0]
-            and "global.fushiLookupDismiss();" not in fallback
+            and "global.myComicLookupDismiss();" not in fallback
             and "entry.retiredRenderEpoch=entry.renderEpoch;" not in fallback
         )
-    if not fallback_ok or "global.fushiLookupDismiss();" in capture:
+    if not fallback_ok or "global.myComicLookupDismiss();" in capture:
         violations.append(
             f"{ADAPTER.name}: 无 candidate 的新句只能清当前 entry，不得推进 slot 或 dismiss"
         )
@@ -2623,7 +2623,7 @@ def find_invalid_lookup_entry_visibility_lifecycle(
         same_ok = (
             same.count("entry.glyphs=glyphs;") == 1
             and same.count("entry.line=line;") == 1
-            and "fushiLookupClearEntryBinding" not in same
+            and "myComicLookupClearEntryBinding" not in same
             and "entry.layer=" not in same
             and "entry.visibleHost=" not in same
             and "entry.currentIdentity=" not in same
@@ -2641,7 +2641,7 @@ def find_invalid_lookup_entry_visibility_lifecycle(
             publish,
             (
                 re.escape(
-                    "global.fushiLookupRetireAnchorPeers(entry,"
+                    "global.myComicLookupRetireAnchorPeers(entry,"
                     "logicalSlot.page,logicalSlot.index);"
                 ),
                 re.escape("entry.layer=candidateLayer;"),
@@ -2655,7 +2655,7 @@ def find_invalid_lookup_entry_visibility_lifecycle(
             f"{ADAPTER.name}: 完整 candidate 必须原子写入 layer/visibleHost 并发布 activeEntry"
         )
 
-    bind = functions["fushiLookupBindOrigin"]
+    bind = functions["myComicLookupBindOrigin"]
     bind_patterns = (
         re.escape(
             "if(victimHost===void||victimHost===null||!isvalidvictimHost)"
@@ -2682,24 +2682,24 @@ def find_invalid_lookup_entry_visibility_lifecycle(
             f"{ADAPTER.name}: 向下换行不得被当成新的绘制序列"
         )
 
-    probe = functions["fushiLookupProbe"]
-    if not probe.startswith("global.fushiLookupFlushVisualWork();"):
+    probe = functions["myComicLookupProbe"]
+    if not probe.startswith("global.myComicLookupFlushVisualWork();"):
         violations.append(
             f"{ADAPTER.name}: Probe 必须在命中/绘制前作为事务外叶子 flush visual work"
         )
     probe_patterns = (
         re.escape("varlayer=entry.layer;"),
-        re.escape("if(!global.fushiLookupComputeOffset(layer))"),
+        re.escape("if(!global.myComicLookupComputeOffset(layer))"),
         re.escape(
             "varactiveSentenceState="
-            "global.fushiLookupActiveSentenceState(entry);"
+            "global.myComicLookupActiveSentenceState(entry);"
         ),
         # 已提交 slot 的 line/generation/activeEntry 是同句存活真值；只有无 slot 的经典
         # KAG3 才经 EntryVisible 回退。把 kag.current identity 搬回 Probe 会让人物动画
         # 换 MessageLayer 对象时出现同一句一帧可点、下一帧不可点。
         re.escape(
             "if(activeSentenceState<0||(activeSentenceState==0&&"
-            "!global.fushiLookupEntryVisible(entry)))"
+            "!global.myComicLookupEntryVisible(entry)))"
         ),
     )
     if not _matches_once_in_order(probe, probe_patterns):
@@ -2709,12 +2709,12 @@ def find_invalid_lookup_entry_visibility_lifecycle(
         )
     for call, owner, message in (
         (
-            "global.fushiLookupCurrentIdentityState(",
+            "global.myComicLookupCurrentIdentityState(",
             capture,
             "strict current identity 只能用于 Capture candidate takeover",
         ),
         (
-            "global.fushiLookupActiveSentenceState(",
+            "global.myComicLookupActiveSentenceState(",
             probe,
             "active sentence state 只能用于 Probe liveness",
         ),
@@ -2722,8 +2722,8 @@ def find_invalid_lookup_entry_visibility_lifecycle(
         if joined.count(call) != 1 or owner.count(call) != 1:
             violations.append(f"{ADAPTER.name}: {message}")
     for forbidden in (
-        "global.fushiLookupVisible(layer)",
-        "global.fushiLookupVisible(visibleHost)",
+        "global.myComicLookupVisible(layer)",
+        "global.myComicLookupVisible(visibleHost)",
     ):
         if forbidden in probe:
             violations.append(
@@ -2733,27 +2733,27 @@ def find_invalid_lookup_entry_visibility_lifecycle(
 
     render_wrapper = (
         "varcaptureLease=0,captureEpoch=0;"
-        "try{varepochEntry=global.fushiLookupEntryFor(this);"
+        "try{varepochEntry=global.myComicLookupEntryFor(this);"
         "epochEntry.renderEpoch++;captureLease=epochEntry.rendererLease;"
         "captureEpoch=epochEntry.renderEpoch;}"
-        "catch(e){global.fushiLookupFault();}"
-        "varresult=(global.fushiLookupOriginalRenderincontextofthis)(...);"
-        "try{global.fushiLookupCapture(this,1,captureLease,captureEpoch);}"
-        "catch(e){global.fushiLookupFault();}"
-        "try{global.fushiLookupFlushVisualWork();}"
-        "catch(e){global.fushiLookupFault();}returnresult;"
+        "catch(e){global.myComicLookupFault();}"
+        "varresult=(global.myComicLookupOriginalRenderincontextofthis)(...);"
+        "try{global.myComicLookupCapture(this,1,captureLease,captureEpoch);}"
+        "catch(e){global.myComicLookupFault();}"
+        "try{global.myComicLookupFlushVisualWork();}"
+        "catch(e){global.myComicLookupFault();}returnresult;"
     )
     done_wrapper = (
         "vardoneLease=0,doneEpoch=0;"
-        "try{vardoneEntry=global.fushiLookupFindEntry(this);"
+        "try{vardoneEntry=global.myComicLookupFindEntry(this);"
         "if(doneEntry!==void){doneLease=doneEntry.rendererLease;"
         "doneEpoch=doneEntry.renderEpoch;}}"
-        "catch(e){global.fushiLookupFault();}"
-        "varresult=(global.fushiLookupOriginalDoneincontextofthis)(...);"
-        "try{if(doneLease>0)global.fushiLookupCapture(this,2,doneLease,doneEpoch);}"
-        "catch(e){global.fushiLookupFault();}"
-        "try{global.fushiLookupFlushVisualWork();}"
-        "catch(e){global.fushiLookupFault();}returnresult;"
+        "catch(e){global.myComicLookupFault();}"
+        "varresult=(global.myComicLookupOriginalDoneincontextofthis)(...);"
+        "try{if(doneLease>0)global.myComicLookupCapture(this,2,doneLease,doneEpoch);}"
+        "catch(e){global.myComicLookupFault();}"
+        "try{global.myComicLookupFlushVisualWork();}"
+        "catch(e){global.myComicLookupFault();}returnresult;"
     )
     require_once(
         joined,
@@ -2771,7 +2771,7 @@ def find_invalid_lookup_entry_visibility_lifecycle(
 def _strip_line_comments(text: str) -> str:
     """去掉 `//` 行注释，长度不变（换成空格）。
 
-    判据必须落在**可执行代码**上：注释里写一句"归属见 fushiLookupCardEntry"不该让守卫
+    判据必须落在**可执行代码**上：注释里写一句"归属见 myComicLookupCardEntry"不该让守卫
     转绿，否则改坏判据只要留着注释就能蒙混过去。
     """
     return re.sub(r"//[^\n]*", lambda m: " " * len(m.group(0)), text)
@@ -2796,15 +2796,15 @@ def _tjs_function_body(text: str, name: str) -> tuple[int, int] | None:
     return None
 
 
-# 收卡归属：卡片是在 fushiLookupApply 那一刻绑到某条 entry 上的，只有**那条**台词重绘
+# 收卡归属：卡片是在 myComicLookupApply 那一刻绑到某条 entry 上的，只有**那条**台词重绘
 # 才轮得到收卡。窗口取得比一条 if 语句宽一些（判据可能写成多行），但必须在去注释后的
 # 文本上找。
-CARD_OWNER_MARKER = "fushiLookupCardEntry"
+CARD_OWNER_MARKER = "myComicLookupCardEntry"
 _CARD_OWNER_WINDOW = 300
 
 
 def find_ownerless_card_dismissals(source: MaskedSource) -> list[str]:
-    """`fushiLookupCapture` 里的收卡必须带归属判据（BUG-1606）。
+    """`myComicLookupCapture` 里的收卡必须带归属判据（BUG-1606）。
 
     捕获回调对**每一个** TextRender renderer 触发：名字层、第二消息层、选项层、历史层
     都会走进来。旧判据是「这个 renderer 上的行文本变了就收卡」，于是同一句里说话人切换
@@ -2812,12 +2812,12 @@ def find_ownerless_card_dismissals(source: MaskedSource) -> list[str]:
     又把它拉回来）——表现就是卡片反复闪没。归属判据是这条路径上唯一的关卡：真正的换行
     由 host 侧「会话最新行变了」兜底，与这里是哪个 renderer 无关。
     """
-    span = _tjs_function_body(source.text, "fushiLookupCapture")
+    span = _tjs_function_body(source.text, "myComicLookupCapture")
     if span is None:
-        return [f"{ADAPTER.name} 找不到 TJS 的 fushiLookupCapture 函数体"]
+        return [f"{ADAPTER.name} 找不到 TJS 的 myComicLookupCapture 函数体"]
     body = _strip_line_comments(source.text[span[0] : span[1]])
     offenders: list[str] = []
-    for index in _iter_find(body, "fushiLookupDismiss("):
+    for index in _iter_find(body, "myComicLookupDismiss("):
         window = body[max(0, index - _CARD_OWNER_WINDOW) : index]
         if CARD_OWNER_MARKER in window:
             continue
@@ -2927,9 +2927,9 @@ EXPORTER_SCAN_RAN_BIT = "kXAudioDiag2KirikiriExporterScanRan"
 EXPORTER_SCAN_PLUGIN_GATE = "kMinPlugins"
 
 # BUG-2121 第四段：`kag.addHook` 是 KAGEX 系框架的扩展点，经典 KAG3 没有。它只能作为
-# **安装手段**出现在 fushiLookupInstallKagSeams 的分叉里，绝不能回到 bootstrap 的前置条件
+# **安装手段**出现在 myComicLookupInstallKagSeams 的分叉里，绝不能回到 bootstrap 的前置条件
 # ——那会让整条经典逐实例分支（BUG-2116）变成死代码，且症状与「引擎不支持」同形。
-KAG_SEAM_INSTALLER = "global.fushiLookupInstallKagSeams = function()"
+KAG_SEAM_INSTALLER = "global.myComicLookupInstallKagSeams = function()"
 BOOTSTRAP_PRECONDITION = 'if(typeof global.kag != "Object" || global.kag === null'
 
 
@@ -2950,15 +2950,15 @@ def find_addhook_in_bootstrap_precondition(source: MaskedSource) -> list[str]:
         )
     if KAG_SEAM_INSTALLER not in text:
         offenders.append(
-            "缺少 fushiLookupInstallKagSeams：addHook 与逐实例包装的两条安装路必须在这里分叉"
+            "缺少 myComicLookupInstallKagSeams：addHook 与逐实例包装的两条安装路必须在这里分叉"
         )
     else:
         installer = text[text.find(KAG_SEAM_INSTALLER):]
         if 'typeof global.kag.addHook == "Object"' not in installer[:2000]:
-            offenders.append("fushiLookupInstallKagSeams 里没有 addHook 分支")
-        if "fushiLookupWrapKagSeam" not in installer[:4000]:
+            offenders.append("myComicLookupInstallKagSeams 里没有 addHook 分支")
+        if "myComicLookupWrapKagSeam" not in installer[:4000]:
             offenders.append(
-                "fushiLookupInstallKagSeams 缺少经典 KAG3 的逐实例包装路（fushiLookupWrapKagSeam）"
+                "myComicLookupInstallKagSeams 缺少经典 KAG3 的逐实例包装路（myComicLookupWrapKagSeam）"
             )
     return offenders
 
@@ -3094,7 +3094,7 @@ def find_missing_main_thread_identity_check(source: MaskedSource) -> list[str]:
 # 一问题取的是**客户区面积最大**的那个（注释写着「启动器/工具窗口都比它小」）。两套判据
 # 里第一个匹配那套是错的：进程里只要还有另一个可见无 owner 顶层窗口且属于别的线程（TVP
 # 控制台窗、splash、同进程启动器窗，或本模块自己那个 1x1 的 WS_EX_TOPMOST
-# FushiLookupOverlay —— EnumWindows 会**先**枚举到它），就会把那个线程 id 当引擎主线程
+# MyComicLookupOverlay —— EnumWindows 会**先**枚举到它），就会把那个线程 id 当引擎主线程
 # 缓存下来。缓存是 InterlockedCompareExchange(..., 0) 的一次性写入，写错**永不自愈**，
 # 此后 GetCurrentThreadId() != main_tid 恒真，传感器静默永不安装 —— 症状与「这个引擎不
 # 支持」完全同形。
@@ -3163,8 +3163,8 @@ def find_unshared_main_window_area_criterion(header_source: str) -> list[str]:
 def find_main_window_criteria_copied_into_overlay(overlay_source: str) -> list[str]:
     """lookup_overlay_window.inc 只许转发到共享头，不许再抄一份判据。"""
     text = _strip_line_comments(overlay_source)
-    if "fushi_voice_hook::FindGameMainWindow()" not in text:
-        return ["lookup_overlay_window.inc 没有转发到 fushi_voice_hook::FindGameMainWindow()"]
+    if "my_comic_voice_hook::FindGameMainWindow()" not in text:
+        return ["lookup_overlay_window.inc 没有转发到 my_comic_voice_hook::FindGameMainWindow()"]
     offenders: list[str] = []
     if re.search(r"EnumWindows\s*\(", text) or "GW_OWNER" in text:
         offenders.append(
@@ -3208,7 +3208,7 @@ class RealAdapterTest(unittest.TestCase):
             find_divergent_main_window_criteria(self.source),
             "ResolveKirikiriEngineMainThreadId 必须复用 FindGameMainWindow()："
             "自带一份「EnumWindows 第一个可见无 owner 顶层窗口」会把 TVP 控制台窗/"
-            "splash/1x1 的 FushiLookupOverlay 的线程 id 永久缓存成引擎主线程，"
+            "splash/1x1 的 MyComicLookupOverlay 的线程 id 永久缓存成引擎主线程，"
             "此后传感器静默永不安装",
         )
 
@@ -3229,7 +3229,7 @@ class RealAdapterTest(unittest.TestCase):
             find_main_window_criteria_copied_into_overlay(
                 OVERLAY_WINDOW_INC.read_text(encoding="utf-8")
             ),
-            "lookup_overlay_window.inc 只许转发到 fushi_voice_hook::FindGameMainWindow()，"
+            "lookup_overlay_window.inc 只许转发到 my_comic_voice_hook::FindGameMainWindow()，"
             "再抄一份判据就又是同概念两套答案",
         )
 
@@ -3312,7 +3312,7 @@ class RealAdapterTest(unittest.TestCase):
             [],
             find_classic_sweep_missing(self.source),
             "经典 KAG3（无 textrender.dll）的采集面必须是 KAGEX 缺席门 else 里的"
-            "fushiLookupSweepClassicLayers() + 逐实例 layer.drawText 补丁；缺任何一环，"
+            "myComicLookupSweepClassicLayers() + 逐实例 layer.drawText 补丁；缺任何一环，"
             "Fate RN / フタマタ恋愛 的游戏内查词整个不存在且症状与「引擎不支持」同形。",
         )
 
@@ -3367,7 +3367,7 @@ class RealAdapterTest(unittest.TestCase):
         self.assertEqual(
             [],
             find_ownerless_card_dismissals(self.source),
-            "fushiLookupCapture 对每个 TextRender renderer 都触发（名字层 / 第二消息层 / "
+            "myComicLookupCapture 对每个 TextRender renderer 都触发（名字层 / 第二消息层 / "
             "选项层 / 历史层都在内）；收卡必须只认卡片自己依附的那条台词，否则说话人切换"
             "时另一个文本层逐字重绘会把用户正在读的卡片反复打掉（BUG-1606）。",
         )
@@ -3378,8 +3378,8 @@ class RealAdapterTest(unittest.TestCase):
 CLEAN_SAMPLE = """
 // 整数回执：唯一允许的形态。
 void QueueLookupApply(uint64_t seq, uint32_t start, uint32_t length) {
-  std::wstring script = L"if(typeof global.fushiLookupApply!=\\"undefined\\") "
-                        L"global.fushiLookupApply(";
+  std::wstring script = L"if(typeof global.myComicLookupApply!=\\"undefined\\") "
+                        L"global.myComicLookupApply(";
   script += std::to_wstring(seq) + L"," + std::to_wstring(start) + L"," +
             std::to_wstring(length) + L");";
   g_lookup_pending_script = std::move(script);
@@ -3413,17 +3413,17 @@ bool SetLookupCardPath(const std::wstring& path) {
 
 std::wstring BuildBootstrap() {
   std::wstring script = kBootstrap;
-  ReplaceLookupPlaceholder(script, L"__FUSHI_PROBE_MODE__",
+  ReplaceLookupPlaceholder(script, L"__MYCOMIC_PROBE_MODE__",
                            kProbePaths ? L"1" : L"0");
-  ReplaceLookupPlaceholder(script, L"__FUSHI_CARD_PATH__", g_lookup_card_path);
+  ReplaceLookupPlaceholder(script, L"__MYCOMIC_CARD_PATH__", g_lookup_card_path);
   return script;
 }
 
 // 默认关闭的探测分支：全局补丁只允许活在这里。
 static const wchar_t kBootstrap[] = LR"TJS(
-if(global.fushiLookupProbeMode)
+if(global.myComicLookupProbeMode)
 {
-	global.fushiLookupProbeOriginalDrawText = global.Layer.drawText;
+	global.myComicLookupProbeOriginalDrawText = global.Layer.drawText;
 	global.Layer.drawText = function(x, y, text) { return 0; };
 }
 if(typeof global.TextRender == "Object")
@@ -3432,28 +3432,28 @@ if(typeof global.TextRender == "Object")
 }
 else
 {
-	global.fushiLookupClassicSource = global.fushiLookupClassicSource | 1;
-	global.fushiLookupSweepClassicLayers();
+	global.myComicLookupClassicSource = global.myComicLookupClassicSource | 1;
+	global.myComicLookupSweepClassicLayers();
 }
-global.fushiLookupPatchClassicLayer = function(layer)
+global.myComicLookupPatchClassicLayer = function(layer)
 {
-	layer.fushiLookupOriginalDrawText = layer.drawText;
+	layer.myComicLookupOriginalDrawText = layer.drawText;
 	layer.drawText = function(x, y, text) { return 0; } incontextof layer;
 };
-global.fushiLookupSweepClassicLayers = function()
+global.myComicLookupSweepClassicLayers = function()
 {
-	if((global.fushiLookupClassicSource & 1) == 0) return 0;
+	if((global.myComicLookupClassicSource & 1) == 0) return 0;
 	return 0;
 };
-global.fushiLookupCapture = function(renderer)
+global.myComicLookupCapture = function(renderer)
 {
-    var entry = global.fushiLookupEntryFor(renderer);
+    var entry = global.myComicLookupEntryFor(renderer);
     var changed = entry.line != renderer.line;
     entry.line = renderer.line;
     if(changed)
     {
-        if(global.fushiLookupCardEntry === entry) global.fushiLookupDismiss();
-        else if(global.fushiLookupHitEntry === entry) global.fushiLookupClearHover();
+        if(global.myComicLookupCardEntry === entry) global.myComicLookupDismiss();
+        else if(global.myComicLookupHitEntry === entry) global.myComicLookupClearHover();
     }
 };
 )TJS";
@@ -3469,27 +3469,27 @@ bool TryHookKirikiriVoiceStream() {
 }
 
 ITVPFunctionExporter* ScanLinkedPluginsForExporter() {
-  if (per_module.size() < fushi_voice_hook::kirikiri_exporter::kMinPlugins) {
+  if (per_module.size() < my_comic_voice_hook::kirikiri_exporter::kMinPlugins) {
     return nullptr;
   }
-  SetXAudioDiagnostic2(fushi_voice_hook::kXAudioDiag2KirikiriExporterScanRan);
+  SetXAudioDiagnostic2(my_comic_voice_hook::kXAudioDiag2KirikiriExporterScanRan);
   for (size_t i = 0; i < candidates.size(); ++i) {
     if (!LooksLikeExporter(candidates[i], base, size, &DefaultReadableSpan)) continue;
     auto* exporter = reinterpret_cast<ITVPFunctionExporter*>(candidates[i]);
     if (!ExporterAnswersQuery(exporter)) continue;
-    SetXAudioDiagnostic2(fushi_voice_hook::kXAudioDiag2KirikiriExporterScanAdopted);
+    SetXAudioDiagnostic2(my_comic_voice_hook::kXAudioDiag2KirikiriExporterScanAdopted);
     return exporter;
   }
-  SetXAudioDiagnostic2(fushi_voice_hook::kXAudioDiag2KirikiriExporterScanNoCandidate);
+  SetXAudioDiagnostic2(my_comic_voice_hook::kXAudioDiag2KirikiriExporterScanNoCandidate);
   return nullptr;
 }
 """
 
 # 干净样本里那条带归属的收卡判据（变异自测的锚点）。
 OWNED_DISMISS_SAMPLE = (
-    "        if(global.fushiLookupCardEntry === entry) global.fushiLookupDismiss();\n"
-    "        else if(global.fushiLookupHitEntry === entry) "
-    "global.fushiLookupClearHover();"
+    "        if(global.myComicLookupCardEntry === entry) global.myComicLookupDismiss();\n"
+    "        else if(global.myComicLookupHitEntry === entry) "
+    "global.myComicLookupClearHover();"
 )
 
 
@@ -3497,7 +3497,7 @@ OWNED_DISMISS_SAMPLE = (
 # C++ 的 masked 文本，或只看某一段 raw literal，这个 clean 样本就无法通过。
 COORDINATE_CLEAN_SAMPLE = r'''
 static const wchar_t kCoordinateBootstrap[] = LR"TJS(
-global.fushiLookupComputeOffset = function(layer)
+global.myComicLookupComputeOffset = function(layer)
 {
   var primary = global.kag.primaryLayer;
   var layerX = 0, layerY = 0;
@@ -3508,7 +3508,7 @@ global.fushiLookupComputeOffset = function(layer)
   {
     if(++guard > 32)
     {
-      global.fushiLookupMark(16);
+      global.myComicLookupMark(16);
       return false;
     }
     layerRoot = current;
@@ -3526,7 +3526,7 @@ global.fushiLookupComputeOffset = function(layer)
   {
     if(++guard > 32)
     {
-      global.fushiLookupMark(16);
+      global.myComicLookupMark(16);
       return false;
     }
     primaryRoot = current;
@@ -3538,51 +3538,51 @@ global.fushiLookupComputeOffset = function(layer)
   if(layerRoot === void || primaryRoot === void ||
     layerRoot !== primaryRoot)
   {
-    global.fushiLookupMark(16);
+    global.myComicLookupMark(16);
     return false;
   }
-  global.fushiLookupOffX = layerX - primaryX;
-  global.fushiLookupOffY = layerY - primaryY;
+  global.myComicLookupOffX = layerX - primaryX;
+  global.myComicLookupOffY = layerY - primaryY;
   return true;
 };
 
-global.fushiLookupProbe = function(submit)
+global.myComicLookupProbe = function(submit)
 {
   var lx = global.kag.primaryLayer.cursorX;
   var ly = global.kag.primaryLayer.cursorY;
-  var layer = global.fushiLookupHitEntry.layer;
-  var entry = global.fushiLookupHitEntry;
+  var layer = global.myComicLookupHitEntry.layer;
+  var entry = global.myComicLookupHitEntry;
   for(var i = 0; i < 1; i++)
   {
     var rx = 0;
     var ry = 0;
-    if(!global.fushiLookupComputeOffset(layer))
+    if(!global.myComicLookupComputeOffset(layer))
     {
-      global.fushiLookupMark(32);
+      global.myComicLookupMark(32);
       continue;
     }
-    rx = lx - global.fushiLookupOffX - entry.imgLeft - entry.originX;
-    ry = ly - global.fushiLookupOffY - entry.imgTop - entry.originY;
+    rx = lx - global.myComicLookupOffX - entry.imgLeft - entry.originX;
+    ry = ly - global.myComicLookupOffY - entry.imgTop - entry.originY;
   }
 };
 )TJS";
 '''
 
 
-# 生产锚点选择位于 fushiLookupCapture 内，且与其它 bootstrap 一样可能被分成
+# 生产锚点选择位于 myComicLookupCapture 内，且与其它 bootstrap 一样可能被分成
 # 相邻 raw literal。clean 样本保留这个形状，防止守卫退回去扫 C++ masked 文本。
 ANCHOR_IDENTITY_CLEAN_SAMPLE = r'''
 static const wchar_t kAnchorBootstrap[] = LR"TJS(
-global.fushiLookupStampBindGroup = function(group, host)
+global.myComicLookupStampBindGroup = function(group, host)
 {
-  group.hostPage = global.fushiLookupPageOf(host);
+  group.hostPage = global.myComicLookupPageOf(host);
   group.anchorPage = 0;
   group.anchorIndex = -1;
   group.anchorIdentity = void;
   group.currentIdentity = void;
   group.anchorStrength = 0;
-  var messages = global.fushiLookupMessagesForPage(group.hostPage);
-  var currentNum = global.fushiLookupField(global.kag, "currentNum");
+  var messages = global.myComicLookupMessagesForPage(group.hostPage);
+  var currentNum = global.myComicLookupField(global.kag, "currentNum");
   if(messages !== void && typeof currentNum == "Integer" &&
     currentNum >= 0 && currentNum < messages.count)
   {
@@ -3592,7 +3592,7 @@ global.fushiLookupStampBindGroup = function(group, host)
       if(indexed !== void && indexed !== null && isvalid indexed)
       {
         group.anchorIdentity = indexed;
-        group.anchorPage = global.fushiLookupPageOf(indexed);
+        group.anchorPage = global.myComicLookupPageOf(indexed);
         group.anchorIndex = currentNum;
         group.anchorStrength = 1;
       }
@@ -3600,7 +3600,7 @@ global.fushiLookupStampBindGroup = function(group, host)
     catch(e) {}
   }
 )TJS" LR"TJS(
-  var resolved = global.fushiLookupResolveCurrentSlot();
+  var resolved = global.myComicLookupResolveCurrentSlot();
   if(resolved !== void && messages !== void && resolved.index >= 0 &&
     resolved.index < messages.count)
   {
@@ -3613,7 +3613,7 @@ global.fushiLookupStampBindGroup = function(group, host)
           resolved.index == group.anchorIndex)))
       {
         group.anchorIdentity = projected;
-        group.anchorPage = global.fushiLookupPageOf(projected);
+        group.anchorPage = global.myComicLookupPageOf(projected);
         group.anchorIndex = resolved.index;
         if(resolved.page == group.anchorPage &&
           resolved.identity === projected)
@@ -3627,10 +3627,10 @@ global.fushiLookupStampBindGroup = function(group, host)
   }
 };
 
-global.fushiLookupCapture = function(renderer, capturePhase,
+global.myComicLookupCapture = function(renderer, capturePhase,
   expectedLease, expectedRenderEpoch, expectedBindRevision)
 {
-  var entry = global.fushiLookupFindEntry(renderer);
+  var entry = global.myComicLookupFindEntry(renderer);
   entry.layer = best.anchorIdentity;
   entry.hostPage = best.hostPage;
 };
@@ -3642,7 +3642,7 @@ global.fushiLookupCapture = function(renderer, capturePhase,
 # bootstrap 里的函数跨越多个 raw literal，clean 样本也保留拼接形状。
 ENTRY_VISIBILITY_LIFECYCLE_CLEAN_SAMPLE = r'''
 static const wchar_t kEntryBootstrap[] = LR"TJS(
-global.fushiLookupBootstrap = function(tick)
+global.myComicLookupBootstrap = function(tick)
 {
   if(typeof global.kag != "Object" || global.kag === null) return;
   if(typeof global.TextRender == "Object" && global.TextRender !== null &&
@@ -3652,24 +3652,24 @@ global.fushiLookupBootstrap = function(tick)
 var installStage = 0;
 try
 {
-global.fushiLookupSlots = [];
-global.fushiLookupRendererLease = 0;
-global.fushiLookupPendingHighlightEraseRect = void;
-global.fushiLookupPendingHighlightEraseSeq = 0;
-global.fushiLookupHighlightFlushActive = false;
-global.fushiLookupPendingVisualDismiss = false;
-global.fushiLookupVisualFlushActive = false;
-global.fushiLookupPendingSentenceRefresh = false;
-global.fushiLookupPendingSubmitFence = false;
-global.fushiLookupSentenceRefreshActive = false;
-global.fushiLookupBridgePlugin = void;
-global.fushiLookupWrapperAuditPending = true;
-global.fushiLookupWrapperAuditLastState = -1;
+global.myComicLookupSlots = [];
+global.myComicLookupRendererLease = 0;
+global.myComicLookupPendingHighlightEraseRect = void;
+global.myComicLookupPendingHighlightEraseSeq = 0;
+global.myComicLookupHighlightFlushActive = false;
+global.myComicLookupPendingVisualDismiss = false;
+global.myComicLookupVisualFlushActive = false;
+global.myComicLookupPendingSentenceRefresh = false;
+global.myComicLookupPendingSubmitFence = false;
+global.myComicLookupSentenceRefreshActive = false;
+global.myComicLookupBridgePlugin = void;
+global.myComicLookupWrapperAuditPending = true;
+global.myComicLookupWrapperAuditLastState = -1;
 
-global.fushiLookupAuditWrappers = function(force)
+global.myComicLookupAuditWrappers = function(force)
 {
-  if(!force && !global.fushiLookupWrapperAuditPending) return;
-  global.fushiLookupWrapperAuditPending = false;
+  if(!force && !global.myComicLookupWrapperAuditPending) return;
+  global.myComicLookupWrapperAuditPending = false;
   var state = 0;
   try
   {
@@ -3678,28 +3678,28 @@ global.fushiLookupAuditWrappers = function(force)
     else
     {
       if(typeof global.TextRender.render != "Object") state = state | 2;
-      else if(global.fushiLookupRenderInstallFailed ||
-        global.TextRender.render !== global.fushiLookupInstalledRenderWrapper)
+      else if(global.myComicLookupRenderInstallFailed ||
+        global.TextRender.render !== global.myComicLookupInstalledRenderWrapper)
         state = state | 4;
       if(typeof global.TextRender.done != "Object") state = state | 8;
-      else if(global.fushiLookupDoneInstallFailed ||
-        global.TextRender.done !== global.fushiLookupInstalledDoneWrapper)
+      else if(global.myComicLookupDoneInstallFailed ||
+        global.TextRender.done !== global.myComicLookupInstalledDoneWrapper)
         state = state | 16;
       if(typeof global.TextRender.drawCh != "Object") state = state | 32;
-      else if(global.fushiLookupDrawChInstallFailed ||
-        global.TextRender.drawCh !== global.fushiLookupInstalledDrawChWrapper)
+      else if(global.myComicLookupDrawChInstallFailed ||
+        global.TextRender.drawCh !== global.myComicLookupInstalledDrawChWrapper)
         state = state | 64;
     }
-    var plugin = global.fushiLookupResolveMsgwinPlugin();
+    var plugin = global.myComicLookupResolveMsgwinPlugin();
     if(plugin !== void)
     {
       if(typeof plugin.getRender != "Object") state = state | 512;
-      else if(global.fushiLookupInstanceGetRenderInstallFailed ||
-        plugin !== global.fushiLookupInstanceGetRenderOwner ||
-        plugin.getRender !== global.fushiLookupInstanceGetRenderWrapper)
+      else if(global.myComicLookupInstanceGetRenderInstallFailed ||
+        plugin !== global.myComicLookupInstanceGetRenderOwner ||
+        plugin.getRender !== global.myComicLookupInstanceGetRenderWrapper)
         state = state | 1024;
     }
-    var patches = global.fushiLookupInstancePatches;
+    var patches = global.myComicLookupInstancePatches;
     for(var pi = 0; pi < patches.count && pi < 16; pi++)
     {
       var patch = patches[pi];
@@ -3713,14 +3713,14 @@ global.fushiLookupAuditWrappers = function(force)
     }
   }
   catch(e) { state = state | 128; }
-  if(state != global.fushiLookupWrapperAuditLastState)
+  if(state != global.myComicLookupWrapperAuditLastState)
   {
-    global.fushiLookupWrapperAuditLastState = state;
-    global.fushiLookupNoteError("wrapper.identity", %[message: "state=" + state]);
+    global.myComicLookupWrapperAuditLastState = state;
+    global.myComicLookupNoteError("wrapper.identity", %[message: "state=" + state]);
   }
 };
 
-global.fushiLookupLayerOwnedByPrimary = function(layer, primary)
+global.myComicLookupLayerOwnedByPrimary = function(layer, primary)
 {
   try
   {
@@ -3731,7 +3731,7 @@ global.fushiLookupLayerOwnedByPrimary = function(layer, primary)
   catch(e) { return false; }
 };
 
-global.fushiLookupRetireDetachedLayer = function(layer)
+global.myComicLookupRetireDetachedLayer = function(layer)
 {
   try
   {
@@ -3741,37 +3741,37 @@ global.fushiLookupRetireDetachedLayer = function(layer)
       layer.update();
     }
   }
-  catch(e) { global.fushiLookupFault(); }
+  catch(e) { global.myComicLookupFault(); }
   try
   {
     if(layer !== void && layer !== null && isvalid layer)
       invalidate layer;
   }
-  catch(e) { global.fushiLookupFault(); }
+  catch(e) { global.myComicLookupFault(); }
 };
 
-global.fushiLookupAdvanceDismissFence = function()
+global.myComicLookupAdvanceDismissFence = function()
 {
-  var submitSeq = global.fushiLookupSubmitSeq;
-  if(submitSeq > global.fushiLookupDismissedSubmitSeq)
+  var submitSeq = global.myComicLookupSubmitSeq;
+  if(submitSeq > global.myComicLookupDismissedSubmitSeq)
   {
-    global.fushiLookupDismissedSubmitSeq = submitSeq;
-    global.fushiLookupNotify++;
+    global.myComicLookupDismissedSubmitSeq = submitSeq;
+    global.myComicLookupNotify++;
     return true;
   }
   return false;
 };
 
-global.fushiLookupRehomeLayerToPrimary = function(layer, primary)
+global.myComicLookupRehomeLayerToPrimary = function(layer, primary)
 {
   try
   {
-    if(global.fushiLookupLayerOwnedByPrimary(layer, primary)) return true;
+    if(global.myComicLookupLayerOwnedByPrimary(layer, primary)) return true;
     if(layer === void || layer === null || !isvalid layer ||
       primary === void || primary === null || !isvalid primary) return false;
-    if(!global.fushiLookupComputeOffset(layer)) return false;
-    var newLeft = global.fushiLookupOffX;
-    var newTop = global.fushiLookupOffY;
+    if(!global.myComicLookupComputeOffset(layer)) return false;
+    var newLeft = global.myComicLookupOffX;
+    var newTop = global.myComicLookupOffY;
     if(primary !== global.kag.primaryLayer) return false;
     layer.parent = primary;
     layer.setPos(newLeft, newTop);
@@ -3781,164 +3781,164 @@ global.fushiLookupRehomeLayerToPrimary = function(layer, primary)
   }
   catch(e)
   {
-    global.fushiLookupNoteError("layer.rehome", e);
-    global.fushiLookupFault();
+    global.myComicLookupNoteError("layer.rehome", e);
+    global.myComicLookupFault();
     return false;
   }
 };
 
-global.fushiLookupPrimaryRacedSince = function(primary)
+global.myComicLookupPrimaryRacedSince = function(primary)
 {
   try { return primary !== global.kag.primaryLayer; }
   catch(e) { return false; }
 };
 
-global.fushiLookupTryRehomeVisualParents = function()
+global.myComicLookupTryRehomeVisualParents = function()
 {
   var primary = void;
   try { primary = global.kag.primaryLayer; }
   catch(e) { return true; }
   if(primary === void || primary === null || !isvalid primary) return true;
 
-  var highlight = global.fushiLookupHighlightLayer;
+  var highlight = global.myComicLookupHighlightLayer;
   if(highlight !== void && highlight !== null &&
-    !global.fushiLookupLayerOwnedByPrimary(highlight, primary))
-    global.fushiLookupRehomeLayerToPrimary(highlight, primary);
+    !global.myComicLookupLayerOwnedByPrimary(highlight, primary))
+    global.myComicLookupRehomeLayerToPrimary(highlight, primary);
 
-  var card = global.fushiLookupCard;
+  var card = global.myComicLookupCard;
   if(card === void || card === null || !isvalid card)
   {
-    global.fushiLookupCard = void;
-    global.fushiLookupCardSeq = 0;
-    global.fushiLookupCardEntry = void;
+    global.myComicLookupCard = void;
+    global.myComicLookupCardSeq = 0;
+    global.myComicLookupCardEntry = void;
     return true;
   }
-  if(!global.fushiLookupLayerOwnedByPrimary(card, primary) &&
-    !global.fushiLookupRehomeLayerToPrimary(card, primary))
+  if(!global.myComicLookupLayerOwnedByPrimary(card, primary) &&
+    !global.myComicLookupRehomeLayerToPrimary(card, primary))
   {
-    if(global.fushiLookupPrimaryRacedSince(primary)) return false;
-    global.fushiLookupCard = void;
-    global.fushiLookupCardSeq = 0;
-    global.fushiLookupCardEntry = void;
-    global.fushiLookupRetireDetachedLayer(card);
+    if(global.myComicLookupPrimaryRacedSince(primary)) return false;
+    global.myComicLookupCard = void;
+    global.myComicLookupCardSeq = 0;
+    global.myComicLookupCardEntry = void;
+    global.myComicLookupRetireDetachedLayer(card);
     return true;
   }
   try
   {
-    if(global.fushiLookupCardSeq != 0 &&
-      !global.fushiLookupCaptureSuppressed && !card.visible)
+    if(global.myComicLookupCardSeq != 0 &&
+      !global.myComicLookupCaptureSuppressed && !card.visible)
     {
       card.visible = true;
       card.update();
     }
   }
-  catch(e) { global.fushiLookupFault(); }
+  catch(e) { global.myComicLookupFault(); }
   return true;
 };
 
-global.fushiLookupReconcileVisualParents = function()
+global.myComicLookupReconcileVisualParents = function()
 {
   var primary = global.kag.primaryLayer;
-  var highlight = global.fushiLookupHighlightLayer;
+  var highlight = global.myComicLookupHighlightLayer;
   if(highlight !== void && highlight !== null &&
-    !global.fushiLookupLayerOwnedByPrimary(highlight, primary) &&
-    !global.fushiLookupRehomeLayerToPrimary(highlight, primary))
+    !global.myComicLookupLayerOwnedByPrimary(highlight, primary) &&
+    !global.myComicLookupRehomeLayerToPrimary(highlight, primary))
   {
-    global.fushiLookupHighlightLayer = void;
-    global.fushiLookupHighlightRect = void;
-    global.fushiLookupPendingHighlightEraseRect = void;
-    global.fushiLookupRetireDetachedLayer(highlight);
+    global.myComicLookupHighlightLayer = void;
+    global.myComicLookupHighlightRect = void;
+    global.myComicLookupPendingHighlightEraseRect = void;
+    global.myComicLookupRetireDetachedLayer(highlight);
   }
-  var card = global.fushiLookupCard;
+  var card = global.myComicLookupCard;
   if(card !== void && card !== null &&
-    !global.fushiLookupLayerOwnedByPrimary(card, primary) &&
-    !global.fushiLookupRehomeLayerToPrimary(card, primary))
+    !global.myComicLookupLayerOwnedByPrimary(card, primary) &&
+    !global.myComicLookupRehomeLayerToPrimary(card, primary))
   {
-    global.fushiLookupCard = void;
-    global.fushiLookupCardSeq = 0;
-    global.fushiLookupCardEntry = void;
-    global.fushiLookupRetireDetachedLayer(card);
+    global.myComicLookupCard = void;
+    global.myComicLookupCardSeq = 0;
+    global.myComicLookupCardEntry = void;
+    global.myComicLookupRetireDetachedLayer(card);
   }
 };
 
-global.fushiLookupEnsureHighlight = function()
+global.myComicLookupEnsureHighlight = function()
 {
   var primary = global.kag.primaryLayer;
-  var layer = global.fushiLookupHighlightLayer;
+  var layer = global.myComicLookupHighlightLayer;
   if(layer !== void && layer !== null &&
-    !global.fushiLookupLayerOwnedByPrimary(layer, primary) &&
-    !global.fushiLookupRehomeLayerToPrimary(layer, primary))
+    !global.myComicLookupLayerOwnedByPrimary(layer, primary) &&
+    !global.myComicLookupRehomeLayerToPrimary(layer, primary))
   {
-    global.fushiLookupHighlightLayer = void;
-    global.fushiLookupRetireDetachedLayer(layer);
+    global.myComicLookupHighlightLayer = void;
+    global.myComicLookupRetireDetachedLayer(layer);
     layer = void;
   }
 };
 
-global.fushiLookupRefreshCaptureBridges = function()
+global.myComicLookupRefreshCaptureBridges = function()
 {
-  global.fushiLookupInstallGetRenderBridge();
-  global.fushiLookupSweepMsgwinRenders();
-  global.fushiLookupAuditWrappers(true);
+  global.myComicLookupInstallGetRenderBridge();
+  global.myComicLookupSweepMsgwinRenders();
+  global.myComicLookupAuditWrappers(true);
 };
 
-global.fushiLookupRefreshSentenceSurface = function()
+global.myComicLookupRefreshSentenceSurface = function()
 {
-  if(global.fushiLookupSentenceRefreshActive)
+  if(global.myComicLookupSentenceRefreshActive)
   {
-    global.fushiLookupPendingSentenceRefresh = true;
+    global.myComicLookupPendingSentenceRefresh = true;
     return;
   }
-  global.fushiLookupSentenceRefreshActive = true;
+  global.myComicLookupSentenceRefreshActive = true;
   try
   {
-    global.fushiLookupReconcileVisualParents();
-    global.fushiLookupRefreshCaptureBridges();
+    global.myComicLookupReconcileVisualParents();
+    global.myComicLookupRefreshCaptureBridges();
   }
-  catch(e) { global.fushiLookupFault(); }
-  global.fushiLookupSentenceRefreshActive = false;
+  catch(e) { global.myComicLookupFault(); }
+  global.myComicLookupSentenceRefreshActive = false;
 };
 
-global.fushiLookupPrepare = function(anchorX, anchorY, cardW, cardH)
+global.myComicLookupPrepare = function(anchorX, anchorY, cardW, cardH)
 {
   var primary = global.kag.primaryLayer;
-  var card = global.fushiLookupCard;
+  var card = global.myComicLookupCard;
   if(card !== void && card !== null &&
-    !global.fushiLookupLayerOwnedByPrimary(card, primary) &&
-    !global.fushiLookupRehomeLayerToPrimary(card, primary))
+    !global.myComicLookupLayerOwnedByPrimary(card, primary) &&
+    !global.myComicLookupRehomeLayerToPrimary(card, primary))
   {
-    global.fushiLookupCard = void;
-    global.fushiLookupCardSeq = 0;
-    global.fushiLookupCardEntry = void;
-    global.fushiLookupRetireDetachedLayer(card);
+    global.myComicLookupCard = void;
+    global.myComicLookupCardSeq = 0;
+    global.myComicLookupCardEntry = void;
+    global.myComicLookupRetireDetachedLayer(card);
     card = void;
   }
 };
 
-global.fushiLookupApply = function(seq, highlightStart, highlightLen,
+global.myComicLookupApply = function(seq, highlightStart, highlightLen,
   anchorX, anchorY, cardW, cardH)
 {
-  var card = global.fushiLookupCard;
+  var card = global.myComicLookupCard;
   var primary = global.kag.primaryLayer;
-  if(!global.fushiLookupLayerOwnedByPrimary(card, primary) &&
-    !global.fushiLookupRehomeLayerToPrimary(card, primary))
+  if(!global.myComicLookupLayerOwnedByPrimary(card, primary) &&
+    !global.myComicLookupRehomeLayerToPrimary(card, primary))
   {
-    global.fushiLookupCard = void;
-    global.fushiLookupCardSeq = 0;
-    global.fushiLookupCardEntry = void;
-    global.fushiLookupRetireDetachedLayer(card);
+    global.myComicLookupCard = void;
+    global.myComicLookupCardSeq = 0;
+    global.myComicLookupCardEntry = void;
+    global.myComicLookupRetireDetachedLayer(card);
     return;
   }
 };
 
-global.fushiLookupCardVisible = function()
+global.myComicLookupCardVisible = function()
 {
-  var card = global.fushiLookupCard;
-  return global.fushiLookupCardSeq != 0 ||
+  var card = global.myComicLookupCard;
+  return global.myComicLookupCardSeq != 0 ||
     (card !== void && isvalid card && card.visible);
 };
 
-global.fushiLookupQueueInput = function(kind, x, y, wheel)
+global.myComicLookupQueueInput = function(kind, x, y, wheel)
 {
   var keys = 0;
   try
@@ -3948,35 +3948,35 @@ global.fushiLookupQueueInput = function(kind, x, y, wheel)
   catch(e) {}
   if(kind == 1) keys = keys | 1;
   if(kind == 4 || kind == 5) keys = 0;
-  global.fushiLookupInputQueue.add(keys);
+  global.myComicLookupInputQueue.add(keys);
 };
 
-global.fushiLookupFindEntry = function(renderer)
+global.myComicLookupFindEntry = function(renderer)
 {
-  var registry = global.fushiLookupRegistry;
+  var registry = global.myComicLookupRegistry;
   for(var i = 0; i < registry.count; i++)
     if(registry[i].renderer === renderer && registry[i].rendererLease > 0)
       return registry[i];
   return void;
 };
 
-global.fushiLookupEntryFor = function(renderer)
+global.myComicLookupEntryFor = function(renderer)
 {
-  var registry = global.fushiLookupRegistry;
+  var registry = global.myComicLookupRegistry;
   var nonActiveInvalid = -1, nonActive = -1;
   var activeInvalid = -1, activeOldest = -1;
   for(var i = 0; i < registry.count; i++)
   {
     var candidate = registry[i];
     var active = false;
-    var slots = global.fushiLookupSlots;
+    var slots = global.myComicLookupSlots;
     for(var si = 0; si < slots.count; si++)
       if(slots[si].activeEntry === candidate) active = true;
   }
   if(registry.count < 8)
   {
     var fresh = %[renderer:renderer,
-      rendererLease:++global.fushiLookupRendererLease,
+      rendererLease:++global.myComicLookupRendererLease,
       glyphs:[], line:"", used:0,
       layer:void, visibleHost:void, currentIdentity:void,
       logicalLine:"", slotPage:0, slotIndex:-1, slotGeneration:0,
@@ -3992,20 +3992,20 @@ global.fushiLookupEntryFor = function(renderer)
   reused.glyphs = [];
   reused.line = "";
   reused.used = 0;
-  global.fushiLookupClearEntryBinding(reused);
+  global.myComicLookupClearEntryBinding(reused);
   reused.renderer = renderer;
   reused.renderEpoch = 0;
   reused.retiredRenderEpoch = 0;
-  reused.rendererLease = ++global.fushiLookupRendererLease;
+  reused.rendererLease = ++global.myComicLookupRendererLease;
   return reused;
 };
 
-global.fushiLookupQueueHighlightErase = function(rect)
+global.myComicLookupQueueHighlightErase = function(rect)
 {
   if(rect === void || rect === null) return;
-  var pending = global.fushiLookupPendingHighlightEraseRect;
+  var pending = global.myComicLookupPendingHighlightEraseRect;
   if(pending === void || pending === null)
-    global.fushiLookupPendingHighlightEraseRect = rect;
+    global.myComicLookupPendingHighlightEraseRect = rect;
   else
   {
     var left = pending.x < rect.x ? pending.x : rect.x;
@@ -4016,46 +4016,46 @@ global.fushiLookupQueueHighlightErase = function(rect)
     var pendingBottom = pending.y + pending.h;
     var rectBottom = rect.y + rect.h;
     var bottom = pendingBottom > rectBottom ? pendingBottom : rectBottom;
-    global.fushiLookupPendingHighlightEraseRect =
+    global.myComicLookupPendingHighlightEraseRect =
       %[x:left, y:top, w:right - left, h:bottom - top];
   }
-  global.fushiLookupPendingHighlightEraseSeq++;
+  global.myComicLookupPendingHighlightEraseSeq++;
 };
 
-global.fushiLookupFlushPendingHighlightErase = function()
+global.myComicLookupFlushPendingHighlightErase = function()
 {
-  if(global.fushiLookupHighlightFlushActive) return false;
-  var pending = global.fushiLookupPendingHighlightEraseRect;
+  if(global.myComicLookupHighlightFlushActive) return false;
+  var pending = global.myComicLookupPendingHighlightEraseRect;
   if(pending === void || pending === null) return true;
-  var seq = global.fushiLookupPendingHighlightEraseSeq;
-  global.fushiLookupHighlightFlushActive = true;
+  var seq = global.myComicLookupPendingHighlightEraseSeq;
+  global.myComicLookupHighlightFlushActive = true;
   var completed = false;
   try
   {
-    var highlight = global.fushiLookupHighlightLayer;
+    var highlight = global.myComicLookupHighlightLayer;
     highlight.fillRect(pending.x, pending.y, pending.w, pending.h, 0);
     highlight.visible = false;
     highlight.update();
     completed = true;
   }
-  catch(e) { global.fushiLookupFault(); }
-  global.fushiLookupHighlightFlushActive = false;
-  if(completed && global.fushiLookupPendingHighlightEraseSeq == seq)
-    global.fushiLookupPendingHighlightEraseRect = void;
-  return global.fushiLookupPendingHighlightEraseRect === void;
+  catch(e) { global.myComicLookupFault(); }
+  global.myComicLookupHighlightFlushActive = false;
+  if(completed && global.myComicLookupPendingHighlightEraseSeq == seq)
+    global.myComicLookupPendingHighlightEraseRect = void;
+  return global.myComicLookupPendingHighlightEraseRect === void;
 };
 
-global.fushiLookupClearEntryBinding = function(entry)
+global.myComicLookupClearEntryBinding = function(entry)
 {
-  if(global.fushiLookupHitEntry === entry)
+  if(global.myComicLookupHitEntry === entry)
   {
-    global.fushiLookupQueueHighlightErase(global.fushiLookupHighlightRect);
-    global.fushiLookupHitEntry = void;
+    global.myComicLookupQueueHighlightErase(global.myComicLookupHighlightRect);
+    global.myComicLookupHitEntry = void;
   }
   entry.layer = void;
   entry.visibleHost = void;
   entry.currentIdentity = void;
-  var slots = global.fushiLookupSlots;
+  var slots = global.myComicLookupSlots;
   for(var si = 0; si < slots.count; si++)
   {
     if(slots[si].activeEntry === entry)
@@ -4066,9 +4066,9 @@ global.fushiLookupClearEntryBinding = function(entry)
   }
 };
 
-global.fushiLookupRetireAnchorPeers = function(entry, anchorPage, anchorIndex)
+global.myComicLookupRetireAnchorPeers = function(entry, anchorPage, anchorIndex)
 {
-  var registry = global.fushiLookupRegistry;
+  var registry = global.myComicLookupRegistry;
   for(var i = 0; i < registry.count; i++)
   {
     var peer = registry[i];
@@ -4076,21 +4076,21 @@ global.fushiLookupRetireAnchorPeers = function(entry, anchorPage, anchorIndex)
     if(peer.slotPage != anchorPage || peer.slotIndex != anchorIndex) continue;
     peer.glyphs = [];
     peer.retiredRenderEpoch = peer.renderEpoch;
-    global.fushiLookupClearEntryBinding(peer);
+    global.myComicLookupClearEntryBinding(peer);
   }
 };
 
-global.fushiLookupFindSlot = function(page, index)
+global.myComicLookupFindSlot = function(page, index)
 {
-  var slots = global.fushiLookupSlots;
+  var slots = global.myComicLookupSlots;
   for(var i = 0; i < slots.count; i++)
     if(slots[i].page == page && slots[i].index == index) return slots[i];
   return void;
 };
 
-global.fushiLookupResolveCurrentSlot = function()
+global.myComicLookupResolveCurrentSlot = function()
 {
-  var current = global.fushiLookupField(global.kag, "current");
+  var current = global.myComicLookupField(global.kag, "current");
   var pages = [global.kag.fore.messages, global.kag.back.messages];
   for(var p = 0; p < pages.count; p++)
   {
@@ -4102,9 +4102,9 @@ global.fushiLookupResolveCurrentSlot = function()
   return void;
 };
 
-global.fushiLookupSlotFor = function(page, index, identity)
+global.myComicLookupSlotFor = function(page, index, identity)
 {
-  var slots = global.fushiLookupSlots;
+  var slots = global.myComicLookupSlots;
   if(slots.count >= 8)
   {
     var oldestInactive = -1, oldestActive = -1;
@@ -4118,7 +4118,7 @@ global.fushiLookupSlotFor = function(page, index, identity)
     var oldest = (oldestInactive >= 0) ? oldestInactive : oldestActive;
     var retired = slots[oldest].activeEntry;
     retired.retiredRenderEpoch = retired.renderEpoch;
-    global.fushiLookupClearEntryBinding(retired);
+    global.myComicLookupClearEntryBinding(retired);
     slots.erase(oldest);
   }
   var fresh = %[page:page, index:index, line:"", generation:0,
@@ -4127,11 +4127,11 @@ global.fushiLookupSlotFor = function(page, index, identity)
   return fresh;
 };
 
-global.fushiLookupAdoptSlot = function(entry, line, page, index, identity,
+global.myComicLookupAdoptSlot = function(entry, line, page, index, identity,
   capturePhase)
 {
-  var slot = global.fushiLookupSlotFor(page, index, identity);
-  var allSlots = global.fushiLookupSlots;
+  var slot = global.myComicLookupSlotFor(page, index, identity);
+  var allSlots = global.myComicLookupSlots;
   for(var si = 0; si < allSlots.count; si++)
   {
     var other = allSlots[si];
@@ -4154,7 +4154,7 @@ global.fushiLookupAdoptSlot = function(entry, line, page, index, identity,
       entry.slotGeneration < slot.generation && entry.logicalLine == line &&
       entry.renderEpoch <= entry.retiredRenderEpoch)
       return %[slot:slot, stale:true, same:false, advanced:false];
-    global.fushiLookupRetireAnchorPeers(entry, page, index);
+    global.myComicLookupRetireAnchorPeers(entry, page, index);
     slot.line = line;
     slot.generation++;
     slot.activeEntry = void;
@@ -4168,76 +4168,76 @@ global.fushiLookupAdoptSlot = function(entry, line, page, index, identity,
   return %[slot:slot, same:same, advanced:advanced];
 };
 
-global.fushiLookupFlushVisualWork = function()
+global.myComicLookupFlushVisualWork = function()
 {
-  if(global.fushiLookupVisualFlushActive) return false;
-  global.fushiLookupVisualFlushActive = true;
-  var dismiss = global.fushiLookupPendingVisualDismiss;
-  var sentenceRefresh = global.fushiLookupPendingSentenceRefresh;
-  var submitFence = global.fushiLookupPendingSubmitFence;
-  global.fushiLookupPendingVisualDismiss = false;
-  global.fushiLookupPendingSentenceRefresh = false;
-  global.fushiLookupPendingSubmitFence = false;
-  if(submitFence) global.fushiLookupAdvanceDismissFence();
-  if(dismiss) global.fushiLookupDismissNow();
-  if(sentenceRefresh) global.fushiLookupRefreshSentenceSurface();
-  global.fushiLookupFlushPendingHighlightErase();
-  global.fushiLookupVisualFlushActive = false;
-  return !global.fushiLookupPendingVisualDismiss &&
-    !global.fushiLookupPendingSentenceRefresh &&
-    !global.fushiLookupPendingSubmitFence &&
-    global.fushiLookupPendingHighlightEraseRect === void;
+  if(global.myComicLookupVisualFlushActive) return false;
+  global.myComicLookupVisualFlushActive = true;
+  var dismiss = global.myComicLookupPendingVisualDismiss;
+  var sentenceRefresh = global.myComicLookupPendingSentenceRefresh;
+  var submitFence = global.myComicLookupPendingSubmitFence;
+  global.myComicLookupPendingVisualDismiss = false;
+  global.myComicLookupPendingSentenceRefresh = false;
+  global.myComicLookupPendingSubmitFence = false;
+  if(submitFence) global.myComicLookupAdvanceDismissFence();
+  if(dismiss) global.myComicLookupDismissNow();
+  if(sentenceRefresh) global.myComicLookupRefreshSentenceSurface();
+  global.myComicLookupFlushPendingHighlightErase();
+  global.myComicLookupVisualFlushActive = false;
+  return !global.myComicLookupPendingVisualDismiss &&
+    !global.myComicLookupPendingSentenceRefresh &&
+    !global.myComicLookupPendingSubmitFence &&
+    global.myComicLookupPendingHighlightEraseRect === void;
 };
 
-global.fushiLookupCurrentIdentityState = function(entry)
+global.myComicLookupCurrentIdentityState = function(entry)
 {
-  var slot = global.fushiLookupFindSlot(entry.slotPage, entry.slotIndex);
+  var slot = global.myComicLookupFindSlot(entry.slotPage, entry.slotIndex);
   if(slot === void || slot.generation != entry.slotGeneration ||
     slot.line != entry.logicalLine || slot.activeEntry !== entry) return -1;
   if(entry.anchorKind == 0) return 0;
   var captured = entry.currentIdentity;
   if(captured === void || captured === null) return 0;
-  var resolved = global.fushiLookupResolveCurrentSlot();
+  var resolved = global.myComicLookupResolveCurrentSlot();
   if(resolved === void) return -1;
   if(resolved.page == entry.slotPage && resolved.index == entry.slotIndex)
     return resolved.identity === captured ? 1 : -1;
   return 0;
 };
 
-global.fushiLookupActiveSentenceState = function(entry)
+global.myComicLookupActiveSentenceState = function(entry)
 {
   if(entry.slotPage == 0 || entry.slotIndex < 0) return 0;
-  var slot = global.fushiLookupFindSlot(entry.slotPage, entry.slotIndex);
+  var slot = global.myComicLookupFindSlot(entry.slotPage, entry.slotIndex);
   if(slot === void || slot.generation != entry.slotGeneration ||
     slot.line == "" || entry.line == "" || slot.line != entry.line ||
     slot.line != entry.logicalLine || slot.activeEntry !== entry) return -1;
   return 1;
 };
 )TJS" LR"TJS(
-global.fushiLookupCaptureTokenCurrent = function(entry, renderer,
+global.myComicLookupCaptureTokenCurrent = function(entry, renderer,
   expectedLease, expectedRenderEpoch)
 {
   return entry !== void && expectedLease > 0 &&
-    global.fushiLookupFindEntry(renderer) === entry &&
+    global.myComicLookupFindEntry(renderer) === entry &&
     entry.renderer === renderer && entry.rendererLease == expectedLease &&
     entry.renderEpoch == expectedRenderEpoch &&
     expectedRenderEpoch > entry.retiredRenderEpoch;
 };
 
-global.fushiLookupCapture = function(renderer, capturePhase,
+global.myComicLookupCapture = function(renderer, capturePhase,
   expectedLease, expectedRenderEpoch, expectedBindRevision)
 {
-  var entry = global.fushiLookupFindEntry(renderer);
-  if(!global.fushiLookupCaptureTokenCurrent(entry, renderer,
+  var entry = global.myComicLookupFindEntry(renderer);
+  if(!global.myComicLookupCaptureTokenCurrent(entry, renderer,
     expectedLease, expectedRenderEpoch)) return;
   var getCharacters = renderer.getCharacters;
   var characters = getCharacters(0, 0);
-  if(!global.fushiLookupCaptureTokenCurrent(entry, renderer,
+  if(!global.myComicLookupCaptureTokenCurrent(entry, renderer,
     expectedLease, expectedRenderEpoch)) return;
-  var resolvedCurrent = global.fushiLookupResolveCurrentSlot();
+  var resolvedCurrent = global.myComicLookupResolveCurrentSlot();
   if(capturePhase != 3 && resolvedCurrent !== void)
   {
-    if(!global.fushiLookupCaptureTokenCurrent(entry, renderer,
+    if(!global.myComicLookupCaptureTokenCurrent(entry, renderer,
       expectedLease, expectedRenderEpoch)) return;
     entry.observedPage = resolvedCurrent.page;
     entry.observedIndex = resolvedCurrent.index;
@@ -4257,7 +4257,7 @@ global.fushiLookupCapture = function(renderer, capturePhase,
   var originMinY = 0, originMaxY = 0;
   var glyphOriginSpanX = originMaxX - originMinX;
   var glyphOriginSpanY = originMaxY - originMinY;
-  var groups = global.fushiLookupBindGroups;
+  var groups = global.myComicLookupBindGroups;
   var best = void;
   for(var gi = 0; gi < groups.count; gi++)
   {
@@ -4266,7 +4266,7 @@ global.fushiLookupCapture = function(renderer, capturePhase,
     var spanErrY = Math.abs((g.maxOy - g.minOy) - glyphOriginSpanY);
     var toleranceX = 12, toleranceY = 2;
     if(spanErrX > toleranceX || spanErrY > toleranceY) continue;
-    if(!global.fushiLookupBindGroupVisible(g)) continue;
+    if(!global.myComicLookupBindGroupVisible(g)) continue;
     best = g;
   }
   if(best !== void)
@@ -4284,9 +4284,9 @@ global.fushiLookupCapture = function(renderer, capturePhase,
   if(slotAdoption === void && candidateAnchorPage != 0 &&
     candidateAnchorIndex >= 0)
   {
-    if(!global.fushiLookupCaptureTokenCurrent(entry, renderer,
+    if(!global.myComicLookupCaptureTokenCurrent(entry, renderer,
       expectedLease, expectedRenderEpoch)) return;
-    slotAdoption = global.fushiLookupAdoptSlot(entry, line,
+    slotAdoption = global.myComicLookupAdoptSlot(entry, line,
       candidateAnchorPage, candidateAnchorIndex, candidateCurrentIdentity,
       capturePhase);
     if(slotAdoption.stale) return;
@@ -4295,14 +4295,14 @@ global.fushiLookupCapture = function(renderer, capturePhase,
   }
   if(slotAdoption === void)
   {
-    if(!global.fushiLookupCaptureTokenCurrent(entry, renderer,
+    if(!global.myComicLookupCaptureTokenCurrent(entry, renderer,
       expectedLease, expectedRenderEpoch)) return;
     entrySameLogical = entry.logicalLine == line;
     if(!entrySameLogical)
     {
       if(entry.slotPage != 0 && entry.slotIndex >= 0)
       {
-        var owned = global.fushiLookupFindSlot(
+        var owned = global.myComicLookupFindSlot(
           entry.slotPage, entry.slotIndex);
         if(owned !== void && owned.activeEntry === entry)
         {
@@ -4311,8 +4311,8 @@ global.fushiLookupCapture = function(renderer, capturePhase,
         }
       }
       entry.glyphs = [];
-      global.fushiLookupClearEntryBinding(entry);
-      if(!global.fushiLookupCaptureTokenCurrent(entry, renderer,
+      global.myComicLookupClearEntryBinding(entry);
+      if(!global.myComicLookupCaptureTokenCurrent(entry, renderer,
         expectedLease, expectedRenderEpoch)) return;
       entry.logicalLine = line;
       entry.slotGeneration++;
@@ -4323,19 +4323,19 @@ global.fushiLookupCapture = function(renderer, capturePhase,
   if(candidateReady && entrySameLogical && entry.hasBase &&
     candidateStrength < entry.bindingStrength) candidateReady = false;
   var activeIdentityState =
-    global.fushiLookupCurrentIdentityState(entry);
+    global.myComicLookupCurrentIdentityState(entry);
   if(activeIdentityState < 0) activeUsable = false;
   if(activeUsable && candidateStrength <= logicalSlot.activeStrength)
     candidateReady = false;
-  if(!global.fushiLookupCaptureTokenCurrent(entry, renderer,
+  if(!global.myComicLookupCaptureTokenCurrent(entry, renderer,
     expectedLease, expectedRenderEpoch)) return;
-  entry.used = ++global.fushiLookupClock;
+  entry.used = ++global.myComicLookupClock;
   if(candidateReady)
   {
     if(logicalSlot !== void)
-      global.fushiLookupRetireAnchorPeers(entry,
+      global.myComicLookupRetireAnchorPeers(entry,
         logicalSlot.page, logicalSlot.index);
-    if(!global.fushiLookupCaptureTokenCurrent(entry, renderer,
+    if(!global.myComicLookupCaptureTokenCurrent(entry, renderer,
       expectedLease, expectedRenderEpoch)) return;
     entry.glyphs = glyphs;
     entry.layer = candidateLayer;
@@ -4344,11 +4344,11 @@ global.fushiLookupCapture = function(renderer, capturePhase,
     if(logicalSlot !== void)
       logicalSlot.activeEntry = entry;
     if(slotAdoption !== void && slotAdoption.advanced)
-      global.fushiLookupPendingSubmitFence = true;
+      global.myComicLookupPendingSubmitFence = true;
     if(slotAdoption !== void && slotAdoption.advanced)
-      global.fushiLookupPendingSentenceRefresh = true;
+      global.myComicLookupPendingSentenceRefresh = true;
     if(slotAdoption !== void && slotAdoption.advanced)
-      global.fushiLookupPendingVisualDismiss = true;
+      global.myComicLookupPendingVisualDismiss = true;
   }
   else if(entrySameLogical && entry.hasBase)
   {
@@ -4358,17 +4358,17 @@ global.fushiLookupCapture = function(renderer, capturePhase,
   else
   {
     entry.glyphs = [];
-    global.fushiLookupClearEntryBinding(entry);
-    if(!global.fushiLookupCaptureTokenCurrent(entry, renderer,
+    global.myComicLookupClearEntryBinding(entry);
+    if(!global.myComicLookupCaptureTokenCurrent(entry, renderer,
       expectedLease, expectedRenderEpoch)) return;
   }
 };
 
-global.fushiLookupBindOrigin = function(renderer, layer, originX, originY, ch)
+global.myComicLookupBindOrigin = function(renderer, layer, originX, originY, ch)
 {
   var drawX = originX + ch.x;
   var drawY = originY + ch.y;
-  var groups = global.fushiLookupBindGroups;
+  var groups = global.myComicLookupBindGroups;
   if(groups.count >= 8)
   {
     var victim = 0;
@@ -4397,253 +4397,253 @@ global.fushiLookupBindOrigin = function(renderer, layer, originX, originY, ch)
   if(newRun) slot.count = 0;
 };
 
-global.fushiLookupProbe = function(submit)
+global.myComicLookupProbe = function(submit)
 {
-  global.fushiLookupFlushVisualWork();
-  var entry = global.fushiLookupRegistry[0];
+  global.myComicLookupFlushVisualWork();
+  var entry = global.myComicLookupRegistry[0];
   var layer = entry.layer;
-  if(!global.fushiLookupComputeOffset(layer)) return false;
+  if(!global.myComicLookupComputeOffset(layer)) return false;
   var activeSentenceState =
-    global.fushiLookupActiveSentenceState(entry);
+    global.myComicLookupActiveSentenceState(entry);
   if(activeSentenceState < 0 ||
     (activeSentenceState == 0 &&
-    !global.fushiLookupEntryVisible(entry)))
+    !global.myComicLookupEntryVisible(entry)))
     return false;
   return true;
 };
 
-global.fushiLookupPatchRendererInstance = function(patch)
+global.myComicLookupPatchRendererInstance = function(patch)
 {
   patch.state = 1;
-  global.fushiLookupWrapperAuditPending = true;
+  global.myComicLookupWrapperAuditPending = true;
   return true;
 };
 
-global.fushiLookupLeftClickHook = function()
+global.myComicLookupLeftClickHook = function()
 {
   var popupTransaction = false;
   try
   {
-    popupTransaction = global.fushiLookupCardVisible();
-    var carrierSettled = global.fushiLookupTryRehomeVisualParents();
-    global.fushiLookupRefreshCaptureBridges();
+    popupTransaction = global.myComicLookupCardVisible();
+    var carrierSettled = global.myComicLookupTryRehomeVisualParents();
+    global.myComicLookupRefreshCaptureBridges();
     if(popupTransaction && !carrierSettled) return true;
-    if(global.fushiLookupCardVisible() && global.fushiLookupOverCard())
+    if(global.myComicLookupCardVisible() && global.myComicLookupOverCard())
     {
       try
       {
-        global.fushiLookupQueueInput(0, 0, 0, 0);
-        global.fushiLookupQueueInput(1, 0, 0, 0);
-        global.fushiLookupQueueInput(2, 0, 0, 0);
+        global.myComicLookupQueueInput(0, 0, 0, 0);
+        global.myComicLookupQueueInput(1, 0, 0, 0);
+        global.myComicLookupQueueInput(2, 0, 0, 0);
       }
-      catch(e) { global.fushiLookupFault(); }
+      catch(e) { global.myComicLookupFault(); }
       return true;
     }
-    if(popupTransaction || global.fushiLookupCardVisible())
+    if(popupTransaction || global.myComicLookupCardVisible())
     {
-      try { global.fushiLookupQueueInput(5, 0, 0, 0); }
-      catch(e) { global.fushiLookupFault(); }
-      try { global.fushiLookupCancelCurrent(); }
-      catch(e) { global.fushiLookupFault(); }
+      try { global.myComicLookupQueueInput(5, 0, 0, 0); }
+      catch(e) { global.myComicLookupFault(); }
+      try { global.myComicLookupCancelCurrent(); }
+      catch(e) { global.myComicLookupFault(); }
       return true;
     }
-    return global.fushiLookupProbe(true);
+    return global.myComicLookupProbe(true);
   }
-  catch(e) { global.fushiLookupFault(); return false; }
+  catch(e) { global.myComicLookupFault(); return false; }
 };
-global.fushiLookupMouseMoveHook = function(x, y)
+global.myComicLookupMouseMoveHook = function(x, y)
 {
   try
   {
-    global.fushiLookupAuditWrappers(false);
-    global.fushiLookupProbe(false);
+    global.myComicLookupAuditWrappers(false);
+    global.myComicLookupProbe(false);
   }
-  catch(e) { global.fushiLookupFault(); }
+  catch(e) { global.myComicLookupFault(); }
   return false;
 };
-global.fushiLookupKagSeams = 0;
-global.fushiLookupWrapKagSeam = function(name, wrapper)
+global.myComicLookupKagSeams = 0;
+global.myComicLookupWrapKagSeam = function(name, wrapper)
 {
   try
   {
     if(typeof global.kag[name] != "Object") return false;
-    global.kag["fushiLookupOrig_" + name] = global.kag[name];
+    global.kag["myComicLookupOrig_" + name] = global.kag[name];
     global.kag[name] = wrapper;
     return true;
   }
   catch(e) { return false; }
 };
-global.fushiLookupInstallKagSeams = function()
+global.myComicLookupInstallKagSeams = function()
 {
   if(typeof global.kag.addHook == "Object")
   {
-    global.kag.addHook("leftClick", global.fushiLookupLeftClickHook);
-    global.kag.addHook("mouseMove", global.fushiLookupMouseMoveHook);
-    global.kag.addHook("onMouseWheelHook", global.fushiLookupMouseWheelHook);
-    global.kag.addHook("keyDown", global.fushiLookupKeyDownHook);
-    global.fushiLookupKagSeams = 0x1F;
+    global.kag.addHook("leftClick", global.myComicLookupLeftClickHook);
+    global.kag.addHook("mouseMove", global.myComicLookupMouseMoveHook);
+    global.kag.addHook("onMouseWheelHook", global.myComicLookupMouseWheelHook);
+    global.kag.addHook("keyDown", global.myComicLookupKeyDownHook);
+    global.myComicLookupKagSeams = 0x1F;
     return;
   }
   var seams = 0;
-  if(global.fushiLookupWrapKagSeam("onPrimaryClick",
+  if(global.myComicLookupWrapKagSeam("onPrimaryClick",
     function()
     {
       var consumed = false;
-      try { consumed = global.fushiLookupLeftClickHook(); }
-      catch(e) { global.fushiLookupFault(); }
+      try { consumed = global.myComicLookupLeftClickHook(); }
+      catch(e) { global.myComicLookupFault(); }
       if(consumed) return true;
-      return this.fushiLookupOrig_onPrimaryClick(...);
+      return this.myComicLookupOrig_onPrimaryClick(...);
     } incontextof global.kag)) seams = seams | 0x2;
-  if(global.fushiLookupWrapKagSeam("onMouseMove",
+  if(global.myComicLookupWrapKagSeam("onMouseMove",
     function(x, y)
     {
-      try { global.fushiLookupMouseMoveHook(x, y); }
-      catch(e) { global.fushiLookupFault(); }
-      return this.fushiLookupOrig_onMouseMove(...);
+      try { global.myComicLookupMouseMoveHook(x, y); }
+      catch(e) { global.myComicLookupFault(); }
+      return this.myComicLookupOrig_onMouseMove(...);
     } incontextof global.kag)) seams = seams | 0x4;
-  if(global.fushiLookupWrapKagSeam("onMouseWheel",
+  if(global.myComicLookupWrapKagSeam("onMouseWheel",
     function(shift, delta, x, y)
     {
       var consumed = false;
-      try { consumed = global.fushiLookupMouseWheelHook(shift, delta, x, y); }
-      catch(e) { global.fushiLookupFault(); }
+      try { consumed = global.myComicLookupMouseWheelHook(shift, delta, x, y); }
+      catch(e) { global.myComicLookupFault(); }
       if(consumed) return true;
-      return this.fushiLookupOrig_onMouseWheel(...);
+      return this.myComicLookupOrig_onMouseWheel(...);
     } incontextof global.kag)) seams = seams | 0x8;
-  if(global.fushiLookupWrapKagSeam("onKeyDown",
+  if(global.myComicLookupWrapKagSeam("onKeyDown",
     function(key, shift)
     {
       var consumed = false;
-      try { consumed = global.fushiLookupKeyDownHook(key, shift); }
-      catch(e) { global.fushiLookupFault(); }
+      try { consumed = global.myComicLookupKeyDownHook(key, shift); }
+      catch(e) { global.myComicLookupFault(); }
       if(consumed) return true;
-      return this.fushiLookupOrig_onKeyDown(...);
+      return this.myComicLookupOrig_onKeyDown(...);
     } incontextof global.kag)) seams = seams | 0x10;
-  global.fushiLookupKagSeams = seams;
+  global.myComicLookupKagSeams = seams;
 };
 
 installStage = 10;
-global.fushiLookupOriginalRender = global.TextRender.render;
+global.myComicLookupOriginalRender = global.TextRender.render;
 global.TextRender.render = function(a, b, c, d, e, f)
 {
   var captureLease = 0, captureEpoch = 0;
   try
   {
-    var epochEntry = global.fushiLookupEntryFor(this);
+    var epochEntry = global.myComicLookupEntryFor(this);
     epochEntry.renderEpoch++;
     captureLease = epochEntry.rendererLease;
     captureEpoch = epochEntry.renderEpoch;
   }
-  catch(e) { global.fushiLookupFault(); }
-  var result = (global.fushiLookupOriginalRender incontextof this)(...);
-  try { global.fushiLookupCapture(this, 1, captureLease, captureEpoch); }
-  catch(e) { global.fushiLookupFault(); }
-  try { global.fushiLookupFlushVisualWork(); }
-  catch(e) { global.fushiLookupFault(); }
+  catch(e) { global.myComicLookupFault(); }
+  var result = (global.myComicLookupOriginalRender incontextof this)(...);
+  try { global.myComicLookupCapture(this, 1, captureLease, captureEpoch); }
+  catch(e) { global.myComicLookupFault(); }
+  try { global.myComicLookupFlushVisualWork(); }
+  catch(e) { global.myComicLookupFault(); }
   return result;
 };
-global.fushiLookupInstalledRenderWrapper = global.TextRender.render;
-global.fushiLookupRenderInstallFailed =
-  global.fushiLookupInstalledRenderWrapper === global.fushiLookupOriginalRender;
+global.myComicLookupInstalledRenderWrapper = global.TextRender.render;
+global.myComicLookupRenderInstallFailed =
+  global.myComicLookupInstalledRenderWrapper === global.myComicLookupOriginalRender;
 installStage = 11;
 installStage = 20;
-global.fushiLookupOriginalDone = global.TextRender.done;
+global.myComicLookupOriginalDone = global.TextRender.done;
 global.TextRender.done = function()
 {
   var doneLease = 0, doneEpoch = 0;
   try
   {
-    var doneEntry = global.fushiLookupFindEntry(this);
+    var doneEntry = global.myComicLookupFindEntry(this);
     if(doneEntry !== void)
     {
       doneLease = doneEntry.rendererLease;
       doneEpoch = doneEntry.renderEpoch;
     }
   }
-  catch(e) { global.fushiLookupFault(); }
-  var result = (global.fushiLookupOriginalDone incontextof this)(...);
+  catch(e) { global.myComicLookupFault(); }
+  var result = (global.myComicLookupOriginalDone incontextof this)(...);
   try
   {
     if(doneLease > 0)
-      global.fushiLookupCapture(this, 2, doneLease, doneEpoch);
+      global.myComicLookupCapture(this, 2, doneLease, doneEpoch);
   }
-  catch(e) { global.fushiLookupFault(); }
-  try { global.fushiLookupFlushVisualWork(); }
-  catch(e) { global.fushiLookupFault(); }
+  catch(e) { global.myComicLookupFault(); }
+  try { global.myComicLookupFlushVisualWork(); }
+  catch(e) { global.myComicLookupFault(); }
   return result;
 };
-global.fushiLookupInstalledDoneWrapper = global.TextRender.done;
-global.fushiLookupDoneInstallFailed =
-  global.fushiLookupInstalledDoneWrapper === global.fushiLookupOriginalDone;
+global.myComicLookupInstalledDoneWrapper = global.TextRender.done;
+global.myComicLookupDoneInstallFailed =
+  global.myComicLookupInstalledDoneWrapper === global.myComicLookupOriginalDone;
 installStage = 21;
 installStage = 30;
-global.fushiLookupOriginalDrawCh = global.TextRender.drawCh;
+global.myComicLookupOriginalDrawCh = global.TextRender.drawCh;
 global.TextRender.drawCh = function(layer, ox, oy, ch)
 {
-  try { global.fushiLookupBindOrigin(this, layer, ox, oy); }
-  catch(e) { global.fushiLookupFault(); }
-  return (global.fushiLookupOriginalDrawCh incontextof this)(...);
+  try { global.myComicLookupBindOrigin(this, layer, ox, oy); }
+  catch(e) { global.myComicLookupFault(); }
+  return (global.myComicLookupOriginalDrawCh incontextof this)(...);
 };
-global.fushiLookupInstalledDrawChWrapper = global.TextRender.drawCh;
-global.fushiLookupDrawChInstallFailed =
-  global.fushiLookupInstalledDrawChWrapper === global.fushiLookupOriginalDrawCh;
+global.myComicLookupInstalledDrawChWrapper = global.TextRender.drawCh;
+global.myComicLookupDrawChInstallFailed =
+  global.myComicLookupInstalledDrawChWrapper === global.myComicLookupOriginalDrawCh;
 installStage = 31;
-if(global.fushiLookupResolveMsgwinPlugin() !== void)
+if(global.myComicLookupResolveMsgwinPlugin() !== void)
 {
   installStage = 35;
-  global.fushiLookupInstallGetRenderBridge();
+  global.myComicLookupInstallGetRenderBridge();
   installStage = 36;
-  global.fushiLookupSweepMsgwinRenders();
+  global.myComicLookupSweepMsgwinRenders();
   installStage = 37;
 }
 else
 {
   installStage = 32;
-  if(global.fushiLookupSweepLayerRenderers() == 0)
+  if(global.myComicLookupSweepLayerRenderers() == 0)
   {
     installStage = 33;
-    global.fushiLookupClassicSource = global.fushiLookupClassicSource | 1;
-    global.fushiLookupSweepClassicLayers();
+    global.myComicLookupClassicSource = global.myComicLookupClassicSource | 1;
+    global.myComicLookupSweepClassicLayers();
   }
 }
 installStage = 38;
 if(typeof global.kag.addPlugin == "Object")
 {
-  global.fushiLookupBridgePlugin = %[
+  global.myComicLookupBridgePlugin = %[
     onStableStateChanged:function(stable)
     {
       try
       {
-        global.fushiLookupTryRehomeVisualParents();
-        if(!stable) global.fushiLookupRefreshCaptureBridges();
+        global.myComicLookupTryRehomeVisualParents();
+        if(!stable) global.myComicLookupRefreshCaptureBridges();
       }
-      catch(e) { global.fushiLookupFault(); }
+      catch(e) { global.myComicLookupFault(); }
     }
   ];
-  try { global.kag.addPlugin(global.fushiLookupBridgePlugin); }
-  catch(e) { global.fushiLookupFault(); }
+  try { global.kag.addPlugin(global.myComicLookupBridgePlugin); }
+  catch(e) { global.myComicLookupFault(); }
 }
 installStage = 39;
 installStage = 40;
-global.fushiLookupInstallKagSeams();
+global.myComicLookupInstallKagSeams();
 installStage = 43;
-if(global.fushiLookupKagSeams == 0)
-  throw new Exception("fushiLookup: no kag input seam available");
+if(global.myComicLookupKagSeams == 0)
+  throw new Exception("myComicLookup: no kag input seam available");
 installStage = 50;
-System.removeContinuousHandler(global.fushiLookupBootstrap);
-global.fushiLookupBootstrap = void;
+System.removeContinuousHandler(global.myComicLookupBootstrap);
+global.myComicLookupBootstrap = void;
 }
 catch(e)
 {
   try
   {
-    if(typeof global.fushiLookupNoteError == "Object")
-      global.fushiLookupNoteError("bootstrap.stage",
+    if(typeof global.myComicLookupNoteError == "Object")
+      global.myComicLookupNoteError("bootstrap.stage",
         %[message: "stage=" + installStage]);
   }
   catch(e2) {}
-  System.removeContinuousHandler(global.fushiLookupBootstrap);
-  global.fushiLookupBootstrap = void;
+  System.removeContinuousHandler(global.myComicLookupBootstrap);
+  global.myComicLookupBootstrap = void;
 }
 };
 )TJS";
@@ -4654,7 +4654,7 @@ catch(e)
 # 这是单独的点名变异，不能只靠“新结构不完整”的附带报错证明守卫有效。
 LEGACY_CROSS_PAGE_ANCHOR_SAMPLE = r'''
 static const wchar_t kAnchorBootstrap[] = LR"TJS(
-global.fushiLookupStampBindGroup = function(group, host)
+global.myComicLookupStampBindGroup = function(group, host)
 {
   var anchorMsg = void;
   var pages = [global.kag.fore, global.kag.back];
@@ -4675,10 +4675,10 @@ global.fushiLookupStampBindGroup = function(group, host)
   group.anchorIdentity = anchorMsg;
 };
 
-global.fushiLookupCapture = function(renderer, capturePhase,
+global.myComicLookupCapture = function(renderer, capturePhase,
   expectedLease, expectedRenderEpoch, expectedBindRevision)
 {
-  var entry = global.fushiLookupFindEntry(renderer);
+  var entry = global.myComicLookupFindEntry(renderer);
   entry.layer = best.anchorIdentity;
 };
 )TJS";
@@ -4783,7 +4783,7 @@ DIRTY_OWNER_VISIBLE_ONLY = CLEAN_AREA_OWNER.replace(
 )
 
 CLEAN_OVERLAY_FORWARDER = """
-HWND FindGameMainWindow() { return fushi_voice_hook::FindGameMainWindow(); }
+HWND FindGameMainWindow() { return my_comic_voice_hook::FindGameMainWindow(); }
 """
 
 DIRTY_OVERLAY_COPY = """
@@ -4908,13 +4908,13 @@ class MutationSelfTest(unittest.TestCase):
     def test_kag_seam_rebinding_original_context_is_red(self) -> None:
         clean = MaskedSource(
             "function(x, y)\n{\n"
-            "  return this.fushiLookupOrig_onMouseMove(...);\n"
+            "  return this.myComicLookupOrig_onMouseMove(...);\n"
             "} incontextof global.kag\n"
         )
         self.assertEqual([], find_kag_seam_context_rebinds(clean))
         dirty = MaskedSource(
             "function(x, y)\n{\n"
-            "  return (this.fushiLookupOrig_onMouseMove incontextof this)(...);\n"
+            "  return (this.myComicLookupOrig_onMouseMove incontextof this)(...);\n"
             "} incontextof global.kag\n"
         )
         self.assertNotEqual([], find_kag_seam_context_rebinds(dirty))
@@ -4936,12 +4936,12 @@ class MutationSelfTest(unittest.TestCase):
         # 根本没被走到（规则会变成永远走不到的死代码而无人察觉）。
         self.assertNotEqual([], _classic_fallback_spans(CLEAN_SAMPLE))
         # 干净样本里确实有一次收卡，否则归属这条规则根本没被走到。
-        self.assertIsNotNone(_tjs_function_body(CLEAN_SAMPLE, "fushiLookupCapture"))
-        self.assertIn("fushiLookupDismiss(", CLEAN_SAMPLE)
+        self.assertIsNotNone(_tjs_function_body(CLEAN_SAMPLE, "myComicLookupCapture"))
+        self.assertIn("myComicLookupDismiss(", CLEAN_SAMPLE)
         # 干净样本里确实有一处运行期占位符替换，否则这条规则根本没被走到。
         self.assertTrue(
             any(
-                name == "__FUSHI_CARD_PATH__"
+                name == "__MYCOMIC_CARD_PATH__"
                 for _, name, _ in _placeholder_substitutions(CLEAN_SAMPLE)
             )
         )
@@ -5021,7 +5021,7 @@ class MutationSelfTest(unittest.TestCase):
             '    typeof global.TextRender.drawCh != "Object")) return;\n'
         )
         install_start = "var installStage = 0;\ntry\n{\n"
-        state = "global.fushiLookupSlots = [];\n"
+        state = "global.myComicLookupSlots = [];\n"
         dirty = self._mutate_entry_lifecycle(
             readiness + install_start + state,
             state + readiness + install_start,
@@ -5033,10 +5033,10 @@ class MutationSelfTest(unittest.TestCase):
     def test_bootstrap_retires_only_after_all_three_wrappers(self) -> None:
         staged_success_retire = (
             "installStage = 50;\n"
-            "System.removeContinuousHandler(global.fushiLookupBootstrap);\n"
+            "System.removeContinuousHandler(global.myComicLookupBootstrap);\n"
         )
         retire_before_final_stage = (
-            "System.removeContinuousHandler(global.fushiLookupBootstrap);\n"
+            "System.removeContinuousHandler(global.myComicLookupBootstrap);\n"
             "installStage = 50;\n"
         )
         dirty = self._mutate_entry_lifecycle(
@@ -5048,18 +5048,18 @@ class MutationSelfTest(unittest.TestCase):
 
     def test_wrapper_install_readback_and_failure_markers_are_pinned(self) -> None:
         for marker in (
-            "global.fushiLookupInstalledRenderWrapper = global.TextRender.render;\n",
-            "global.fushiLookupRenderInstallFailed =\n"
-            "  global.fushiLookupInstalledRenderWrapper === "
-            "global.fushiLookupOriginalRender;\n",
-            "global.fushiLookupInstalledDoneWrapper = global.TextRender.done;\n",
-            "global.fushiLookupDoneInstallFailed =\n"
-            "  global.fushiLookupInstalledDoneWrapper === "
-            "global.fushiLookupOriginalDone;\n",
-            "global.fushiLookupInstalledDrawChWrapper = global.TextRender.drawCh;\n",
-            "global.fushiLookupDrawChInstallFailed =\n"
-            "  global.fushiLookupInstalledDrawChWrapper === "
-            "global.fushiLookupOriginalDrawCh;\n",
+            "global.myComicLookupInstalledRenderWrapper = global.TextRender.render;\n",
+            "global.myComicLookupRenderInstallFailed =\n"
+            "  global.myComicLookupInstalledRenderWrapper === "
+            "global.myComicLookupOriginalRender;\n",
+            "global.myComicLookupInstalledDoneWrapper = global.TextRender.done;\n",
+            "global.myComicLookupDoneInstallFailed =\n"
+            "  global.myComicLookupInstalledDoneWrapper === "
+            "global.myComicLookupOriginalDone;\n",
+            "global.myComicLookupInstalledDrawChWrapper = global.TextRender.drawCh;\n",
+            "global.myComicLookupDrawChInstallFailed =\n"
+            "  global.myComicLookupInstalledDrawChWrapper === "
+            "global.myComicLookupOriginalDrawCh;\n",
         ):
             with self.subTest(marker=marker.strip()):
                 dirty = self._mutate_entry_lifecycle(marker, "")
@@ -5072,7 +5072,7 @@ class MutationSelfTest(unittest.TestCase):
             ("function(force)\n", "function()\n"),
             ("state = state | 64;\n", "state = state | 4;\n"),
             (
-                "if(state != global.fushiLookupWrapperAuditLastState)\n",
+                "if(state != global.myComicLookupWrapperAuditLastState)\n",
                 "if(true)\n",
             ),
         )
@@ -5086,12 +5086,12 @@ class MutationSelfTest(unittest.TestCase):
     def test_wrapper_audit_call_sites_are_pinned(self) -> None:
         for old, new in (
             (
-                "global.fushiLookupAuditWrappers(true);\n",
-                "global.fushiLookupAuditWrappers(false);\n",
+                "global.myComicLookupAuditWrappers(true);\n",
+                "global.myComicLookupAuditWrappers(false);\n",
             ),
             (
-                "global.fushiLookupAuditWrappers(false);\n",
-                "global.fushiLookupAuditWrappers(true);\n",
+                "global.myComicLookupAuditWrappers(false);\n",
+                "global.myComicLookupAuditWrappers(true);\n",
             ),
         ):
             with self.subTest(old=old.strip()):
@@ -5110,20 +5110,20 @@ class MutationSelfTest(unittest.TestCase):
 
     def test_sentence_refresh_reconciles_layers_before_renderer_audit(self) -> None:
         dirty = self._mutate_entry_lifecycle(
-            "    global.fushiLookupReconcileVisualParents();\n"
-            "    global.fushiLookupRefreshCaptureBridges();\n",
-            "    global.fushiLookupRefreshCaptureBridges();\n"
-            "    global.fushiLookupReconcileVisualParents();\n",
+            "    global.myComicLookupReconcileVisualParents();\n"
+            "    global.myComicLookupRefreshCaptureBridges();\n",
+            "    global.myComicLookupRefreshCaptureBridges();\n"
+            "    global.myComicLookupReconcileVisualParents();\n",
         )
         self.assertNotEqual(
             [], find_invalid_lookup_entry_visibility_lifecycle(dirty)
         )
 
     def test_primary_reconcile_never_advances_route_fence(self) -> None:
-        old = "    global.fushiLookupRetireDetachedLayer(card);\n"
+        old = "    global.myComicLookupRetireDetachedLayer(card);\n"
         dirty = self._mutate_entry_lifecycle(
             old,
-            "    global.fushiLookupAdvanceDismissFence();\n" + old,
+            "    global.myComicLookupAdvanceDismissFence();\n" + old,
         )
         self.assertNotEqual(
             [], find_invalid_lookup_entry_visibility_lifecycle(dirty)
@@ -5132,20 +5132,20 @@ class MutationSelfTest(unittest.TestCase):
     def test_popup_outside_click_is_dismissed_and_consumed(self) -> None:
         for old, new in (
             (
-                "      try { global.fushiLookupQueueInput(5, 0, 0, 0); }\n",
+                "      try { global.myComicLookupQueueInput(5, 0, 0, 0); }\n",
                 "",
             ),
             (
-                "      try { global.fushiLookupCancelCurrent(); }\n"
-                "      catch(e) { global.fushiLookupFault(); }\n"
+                "      try { global.myComicLookupCancelCurrent(); }\n"
+                "      catch(e) { global.myComicLookupFault(); }\n"
                 "      return true;\n",
-                "      try { global.fushiLookupCancelCurrent(); }\n"
-                "      catch(e) { global.fushiLookupFault(); }\n"
+                "      try { global.myComicLookupCancelCurrent(); }\n"
+                "      catch(e) { global.myComicLookupFault(); }\n"
                 "      return false;\n",
             ),
             (
-                "  catch(e) { global.fushiLookupFault(); return false; }\n",
-                "  catch(e) { global.fushiLookupFault(); "
+                "  catch(e) { global.myComicLookupFault(); return false; }\n",
+                "  catch(e) { global.myComicLookupFault(); "
                 "return popupTransaction; }\n",
             ),
         ):
@@ -5163,8 +5163,8 @@ class MutationSelfTest(unittest.TestCase):
             ),
             (
                 "    var carrierSettled = "
-                "global.fushiLookupTryRehomeVisualParents();\n",
-                "    global.fushiLookupReconcileVisualParents();\n"
+                "global.myComicLookupTryRehomeVisualParents();\n",
+                "    global.myComicLookupReconcileVisualParents();\n"
                 "    var carrierSettled = true;\n",
             ),
         ):
@@ -5219,22 +5219,22 @@ class MutationSelfTest(unittest.TestCase):
     def test_stable_edges_preserve_surface_and_post_transition_rehome(self) -> None:
         for old, new in (
             (
-                "        global.fushiLookupTryRehomeVisualParents();\n",
+                "        global.myComicLookupTryRehomeVisualParents();\n",
                 "",
             ),
             (
                 "        if(!stable) "
-                "global.fushiLookupRefreshCaptureBridges();\n",
-                "        global.fushiLookupRefreshCaptureBridges();\n",
+                "global.myComicLookupRefreshCaptureBridges();\n",
+                "        global.myComicLookupRefreshCaptureBridges();\n",
             ),
             (
-                "        global.fushiLookupTryRehomeVisualParents();\n"
+                "        global.myComicLookupTryRehomeVisualParents();\n"
                 "        if(!stable) "
-                "global.fushiLookupRefreshCaptureBridges();\n",
-                "        global.fushiLookupTryRehomeVisualParents();\n"
-                "        global.fushiLookupReconcileVisualParents();\n"
+                "global.myComicLookupRefreshCaptureBridges();\n",
+                "        global.myComicLookupTryRehomeVisualParents();\n"
+                "        global.myComicLookupReconcileVisualParents();\n"
                 "        if(!stable) "
-                "global.fushiLookupRefreshCaptureBridges();\n",
+                "global.myComicLookupRefreshCaptureBridges();\n",
             ),
         ):
             with self.subTest(replacement=new.strip()):
@@ -5255,45 +5255,45 @@ class MutationSelfTest(unittest.TestCase):
             (
                 "  if(card === void || card === null || !isvalid card)\n"
                 "  {\n"
-                "    global.fushiLookupCard = void;\n"
-                "    global.fushiLookupCardSeq = 0;\n"
-                "    global.fushiLookupCardEntry = void;\n"
+                "    global.myComicLookupCard = void;\n"
+                "    global.myComicLookupCardSeq = 0;\n"
+                "    global.myComicLookupCardEntry = void;\n"
                 "    return true;\n"
                 "  }\n",
                 "  if(card === void || card === null || !isvalid card)\n"
-                "    return global.fushiLookupCardSeq == 0;\n",
+                "    return global.myComicLookupCardSeq == 0;\n",
             ),
             # ② 迁移永久失败也只报「not ready」，carrier 永远换不掉。
             (
-                "  if(!global.fushiLookupLayerOwnedByPrimary(card, primary) &&\n"
-                "    !global.fushiLookupRehomeLayerToPrimary(card, primary))\n"
+                "  if(!global.myComicLookupLayerOwnedByPrimary(card, primary) &&\n"
+                "    !global.myComicLookupRehomeLayerToPrimary(card, primary))\n"
                 "  {\n"
-                "    if(global.fushiLookupPrimaryRacedSince(primary)) return false;\n"
-                "    global.fushiLookupCard = void;\n"
-                "    global.fushiLookupCardSeq = 0;\n"
-                "    global.fushiLookupCardEntry = void;\n"
-                "    global.fushiLookupRetireDetachedLayer(card);\n"
+                "    if(global.myComicLookupPrimaryRacedSince(primary)) return false;\n"
+                "    global.myComicLookupCard = void;\n"
+                "    global.myComicLookupCardSeq = 0;\n"
+                "    global.myComicLookupCardEntry = void;\n"
+                "    global.myComicLookupRetireDetachedLayer(card);\n"
                 "    return true;\n"
                 "  }\n",
-                "  if(!global.fushiLookupLayerOwnedByPrimary(card, primary) &&\n"
-                "    !global.fushiLookupRehomeLayerToPrimary(card, primary))"
+                "  if(!global.myComicLookupLayerOwnedByPrimary(card, primary) &&\n"
+                "    !global.myComicLookupRehomeLayerToPrimary(card, primary))"
                 " return false;\n",
             ),
             # ③ 「再等一次」失去 primary 竞态守卫，退化成无条件等待。
             (
-                "    if(global.fushiLookupPrimaryRacedSince(primary)) return false;\n",
+                "    if(global.myComicLookupPrimaryRacedSince(primary)) return false;\n",
                 "    return false;\n",
             ),
             # ④ 恢复 visible 抛错被当成「等一次就会好」。
             (
-                "  catch(e) { global.fushiLookupFault(); }\n"
+                "  catch(e) { global.myComicLookupFault(); }\n"
                 "  return true;\n"
                 "};\n\n"
-                "global.fushiLookupReconcileVisualParents = function()\n",
-                "  catch(e) { global.fushiLookupFault(); return false; }\n"
+                "global.myComicLookupReconcileVisualParents = function()\n",
+                "  catch(e) { global.myComicLookupFault(); return false; }\n"
                 "  return true;\n"
                 "};\n\n"
-                "global.fushiLookupReconcileVisualParents = function()\n",
+                "global.myComicLookupReconcileVisualParents = function()\n",
             ),
             # ⑤ 这一刻拿不到 primary 也被当成「等一次就会好」。
             (
@@ -5317,7 +5317,7 @@ class MutationSelfTest(unittest.TestCase):
             (
                 "      card.visible = true;\n"
                 "      card.update();\n",
-                "      global.fushiLookupDismiss();\n"
+                "      global.myComicLookupDismiss();\n"
                 "      card.visible = true;\n"
                 "      card.update();\n",
             ),
@@ -5332,15 +5332,15 @@ class MutationSelfTest(unittest.TestCase):
         """重入早退丢掉 pending = 换句刷新永久丢失，且 flush 还谎报已排空。"""
         for old_body, new_body in (
             (
-                "  if(global.fushiLookupSentenceRefreshActive)\n"
+                "  if(global.myComicLookupSentenceRefreshActive)\n"
                 "  {\n"
-                "    global.fushiLookupPendingSentenceRefresh = true;\n"
+                "    global.myComicLookupPendingSentenceRefresh = true;\n"
                 "    return;\n"
                 "  }\n",
-                "  if(global.fushiLookupSentenceRefreshActive) return;\n",
+                "  if(global.myComicLookupSentenceRefreshActive) return;\n",
             ),
             (
-                "    global.fushiLookupPendingSentenceRefresh = true;\n"
+                "    global.myComicLookupPendingSentenceRefresh = true;\n"
                 "    return;\n",
                 "    return;\n",
             ),
@@ -5353,18 +5353,18 @@ class MutationSelfTest(unittest.TestCase):
 
     def test_apply_rehome_failure_retires_half_written_carrier(self) -> None:
         old = (
-            "global.fushiLookupApply = function(seq, highlightStart, highlightLen,\n"
+            "global.myComicLookupApply = function(seq, highlightStart, highlightLen,\n"
             "  anchorX, anchorY, cardW, cardH)\n"
             "{\n"
-            "  var card = global.fushiLookupCard;\n"
+            "  var card = global.myComicLookupCard;\n"
             "  var primary = global.kag.primaryLayer;\n"
-            "  if(!global.fushiLookupLayerOwnedByPrimary(card, primary) &&\n"
-            "    !global.fushiLookupRehomeLayerToPrimary(card, primary))\n"
+            "  if(!global.myComicLookupLayerOwnedByPrimary(card, primary) &&\n"
+            "    !global.myComicLookupRehomeLayerToPrimary(card, primary))\n"
             "  {\n"
-            "    global.fushiLookupCard = void;\n"
-            "    global.fushiLookupCardSeq = 0;\n"
-            "    global.fushiLookupCardEntry = void;\n"
-            "    global.fushiLookupRetireDetachedLayer(card);\n"
+            "    global.myComicLookupCard = void;\n"
+            "    global.myComicLookupCardSeq = 0;\n"
+            "    global.myComicLookupCardEntry = void;\n"
+            "    global.myComicLookupRetireDetachedLayer(card);\n"
             "    return;\n"
             "  }\n"
             "};\n"
@@ -5372,10 +5372,10 @@ class MutationSelfTest(unittest.TestCase):
         dirty = self._mutate_entry_lifecycle(
             old,
             old.replace(
-                "    global.fushiLookupCard = void;\n"
-                "    global.fushiLookupCardSeq = 0;\n"
-                "    global.fushiLookupCardEntry = void;\n"
-                "    global.fushiLookupRetireDetachedLayer(card);\n",
+                "    global.myComicLookupCard = void;\n"
+                "    global.myComicLookupCardSeq = 0;\n"
+                "    global.myComicLookupCardEntry = void;\n"
+                "    global.myComicLookupRetireDetachedLayer(card);\n",
                 "",
             ),
         )
@@ -5394,13 +5394,13 @@ class MutationSelfTest(unittest.TestCase):
 
     def test_prepare_rehomes_an_invalid_or_detached_prior_card(self) -> None:
         old = (
-            "global.fushiLookupPrepare = function(anchorX, anchorY, cardW, cardH)\n"
+            "global.myComicLookupPrepare = function(anchorX, anchorY, cardW, cardH)\n"
             "{\n"
             "  var primary = global.kag.primaryLayer;\n"
-            "  var card = global.fushiLookupCard;\n"
+            "  var card = global.myComicLookupCard;\n"
             "  if(card !== void && card !== null &&\n"
-            "    !global.fushiLookupLayerOwnedByPrimary(card, primary) &&\n"
-            "    !global.fushiLookupRehomeLayerToPrimary(card, primary))\n"
+            "    !global.myComicLookupLayerOwnedByPrimary(card, primary) &&\n"
+            "    !global.myComicLookupRehomeLayerToPrimary(card, primary))\n"
         )
         dirty = self._mutate_entry_lifecycle(
             old,
@@ -5434,8 +5434,8 @@ class MutationSelfTest(unittest.TestCase):
 
     def test_clear_binding_queues_hover_erase_and_unlinks_active(self) -> None:
         for removed in (
-            "    global.fushiLookupQueueHighlightErase("
-            "global.fushiLookupHighlightRect);\n",
+            "    global.myComicLookupQueueHighlightErase("
+            "global.myComicLookupHighlightRect);\n",
             "      slots[si].activeEntry = void;\n",
         ):
             with self.subTest(removed=removed.strip()):
@@ -5465,7 +5465,7 @@ class MutationSelfTest(unittest.TestCase):
 
     def test_complete_different_line_retires_peers_before_advancing(self) -> None:
         dirty = self._mutate_entry_lifecycle(
-            "    global.fushiLookupRetireAnchorPeers(entry, page, index);\n"
+            "    global.myComicLookupRetireAnchorPeers(entry, page, index);\n"
             "    slot.line = line;\n",
             "    slot.line = line;\n",
         )
@@ -5492,13 +5492,13 @@ class MutationSelfTest(unittest.TestCase):
                 "    var spanErrX = Math.abs(g.maxOx - glyphOriginSpanX);\n",
             ),
             (
-                "    if(!global.fushiLookupBindGroupVisible(g)) continue;\n",
+                "    if(!global.myComicLookupBindGroupVisible(g)) continue;\n",
                 "",
             ),
             # 退回裸的短命宿主可见性 = BUG-1631 的原始形状，必须单独变红。
             (
-                "    if(!global.fushiLookupBindGroupVisible(g)) continue;\n",
-                "    if(!global.fushiLookupVisible(g.host)) continue;\n",
+                "    if(!global.myComicLookupBindGroupVisible(g)) continue;\n",
+                "    if(!global.myComicLookupVisible(g.host)) continue;\n",
             ),
         )
         for old, new in mutations:
@@ -5529,13 +5529,13 @@ class MutationSelfTest(unittest.TestCase):
 
     def test_no_candidate_new_line_never_dismisses(self) -> None:
         dirty = self._mutate_entry_lifecycle(
-            "      global.fushiLookupClearEntryBinding(entry);\n"
-            "      if(!global.fushiLookupCaptureTokenCurrent(entry, renderer,\n"
+            "      global.myComicLookupClearEntryBinding(entry);\n"
+            "      if(!global.myComicLookupCaptureTokenCurrent(entry, renderer,\n"
             "        expectedLease, expectedRenderEpoch)) return;\n"
             "      entry.logicalLine = line;\n",
-            "      global.fushiLookupClearEntryBinding(entry);\n"
-            "      global.fushiLookupDismiss();\n"
-            "      if(!global.fushiLookupCaptureTokenCurrent(entry, renderer,\n"
+            "      global.myComicLookupClearEntryBinding(entry);\n"
+            "      global.myComicLookupDismiss();\n"
+            "      if(!global.myComicLookupCaptureTokenCurrent(entry, renderer,\n"
             "        expectedLease, expectedRenderEpoch)) return;\n"
             "      entry.logicalLine = line;\n",
         )
@@ -5554,8 +5554,8 @@ class MutationSelfTest(unittest.TestCase):
 
     def test_capture_never_allocates_an_evicted_renderer_entry(self) -> None:
         dirty = self._mutate_entry_lifecycle(
-            "  var entry = global.fushiLookupFindEntry(renderer);\n",
-            "  var entry = global.fushiLookupEntryFor(renderer);\n",
+            "  var entry = global.myComicLookupFindEntry(renderer);\n",
+            "  var entry = global.myComicLookupEntryFor(renderer);\n",
         )
         self.assertNotEqual(
             [], find_invalid_lookup_entry_visibility_lifecycle(dirty)
@@ -5563,7 +5563,7 @@ class MutationSelfTest(unittest.TestCase):
 
     def test_renderer_lease_is_rechecked_after_game_getters(self) -> None:
         gate = (
-            "  if(!global.fushiLookupCaptureTokenCurrent(entry, renderer,\n"
+            "  if(!global.myComicLookupCaptureTokenCurrent(entry, renderer,\n"
             "    expectedLease, expectedRenderEpoch)) return;\n"
         )
         dirty = self._mutate_entry_lifecycle(gate, "")
@@ -5573,7 +5573,7 @@ class MutationSelfTest(unittest.TestCase):
 
     def test_all_nine_capture_token_boundaries_are_required(self) -> None:
         gate = (
-            "  if(!global.fushiLookupCaptureTokenCurrent(entry, renderer,\n"
+            "  if(!global.myComicLookupCaptureTokenCurrent(entry, renderer,\n"
             "    expectedLease, expectedRenderEpoch)) return;\n"
         )
         # 样本里这九道门分布在不同缩进层级（fallback 分支比外层多两级），所以按
@@ -5581,7 +5581,7 @@ class MutationSelfTest(unittest.TestCase):
         self.assertEqual(
             9,
             ENTRY_VISIBILITY_LIFECYCLE_CLEAN_SAMPLE.count(
-                "if(!global.fushiLookupCaptureTokenCurrent(entry, renderer,"
+                "if(!global.myComicLookupCaptureTokenCurrent(entry, renderer,"
             ),
         )
         dirty = self._mutate_entry_lifecycle(gate, "")
@@ -5600,8 +5600,8 @@ class MutationSelfTest(unittest.TestCase):
 
     def test_done_is_find_only_and_uses_a_pre_original_token(self) -> None:
         dirty = self._mutate_entry_lifecycle(
-            "    var doneEntry = global.fushiLookupFindEntry(this);\n",
-            "    var doneEntry = global.fushiLookupEntryFor(this);\n",
+            "    var doneEntry = global.myComicLookupFindEntry(this);\n",
+            "    var doneEntry = global.myComicLookupEntryFor(this);\n",
         )
         self.assertNotEqual(
             [], find_invalid_lookup_entry_visibility_lifecycle(dirty)
@@ -5614,7 +5614,7 @@ class MutationSelfTest(unittest.TestCase):
             "    entry.glyphs = glyphs;\n",
             "  else if(entrySameLogical && entry.hasBase)\n"
             "  {\n"
-            "    global.fushiLookupClearEntryBinding(entry);\n"
+            "    global.myComicLookupClearEntryBinding(entry);\n"
             "    entry.glyphs = glyphs;\n",
         )
         self.assertNotEqual(
@@ -5674,9 +5674,9 @@ class MutationSelfTest(unittest.TestCase):
     def test_probe_liveness_uses_sentence_ledger_not_current_identity(self) -> None:
         dirty = self._mutate_entry_lifecycle(
             "  var activeSentenceState =\n"
-            "    global.fushiLookupActiveSentenceState(entry);\n",
+            "    global.myComicLookupActiveSentenceState(entry);\n",
             "  var activeSentenceState =\n"
-            "    global.fushiLookupCurrentIdentityState(entry);\n",
+            "    global.myComicLookupCurrentIdentityState(entry);\n",
         )
         self.assertNotEqual(
             [], find_invalid_lookup_entry_visibility_lifecycle(dirty)
@@ -5687,11 +5687,11 @@ class MutationSelfTest(unittest.TestCase):
             "  return 1;\n"
             "};\n"
             ")TJS\" LR\"TJS(\n"
-            "global.fushiLookupCaptureTokenCurrent",
-            "  return global.fushiLookupCurrentIdentityState(entry);\n"
+            "global.myComicLookupCaptureTokenCurrent",
+            "  return global.myComicLookupCurrentIdentityState(entry);\n"
             "};\n"
             ")TJS\" LR\"TJS(\n"
-            "global.fushiLookupCaptureTokenCurrent",
+            "global.myComicLookupCaptureTokenCurrent",
         )
         self.assertNotEqual(
             [], find_invalid_lookup_entry_visibility_lifecycle(dirty)
@@ -5724,8 +5724,8 @@ class MutationSelfTest(unittest.TestCase):
     def test_probe_separates_coordinate_layer_from_visible_host(self) -> None:
         """可见性判据被拆回 Probe 里手写，就不再是 EntryVisible 的固定顺序。"""
         dirty = self._mutate_entry_lifecycle(
-            "    !global.fushiLookupEntryVisible(entry)))\n",
-            "    !global.fushiLookupVisible(layer)))\n",
+            "    !global.myComicLookupEntryVisible(entry)))\n",
+            "    !global.myComicLookupVisible(layer)))\n",
         )
         self.assertNotEqual(
             [], find_invalid_lookup_entry_visibility_lifecycle(dirty)
@@ -5734,25 +5734,25 @@ class MutationSelfTest(unittest.TestCase):
     def test_render_and_done_wrappers_keep_original_before_capture(self) -> None:
         for old, new in (
             (
-                "  var result = (global.fushiLookupOriginalRender "
+                "  var result = (global.myComicLookupOriginalRender "
                 "incontextof this)(...);\n"
-                "  try { global.fushiLookupCapture(this, 1, captureLease, "
+                "  try { global.myComicLookupCapture(this, 1, captureLease, "
                 "captureEpoch); }\n",
-                "  try { global.fushiLookupCapture(this, 1, captureLease, "
+                "  try { global.myComicLookupCapture(this, 1, captureLease, "
                 "captureEpoch); }\n"
-                "  var result = (global.fushiLookupOriginalRender "
+                "  var result = (global.myComicLookupOriginalRender "
                 "incontextof this)(...);\n",
             ),
             (
-                "  var result = (global.fushiLookupOriginalDone "
+                "  var result = (global.myComicLookupOriginalDone "
                 "incontextof this)(...);\n"
                 "  try\n  {\n    if(doneLease > 0)\n"
-                "      global.fushiLookupCapture(this, 2, doneLease, doneEpoch);\n"
+                "      global.myComicLookupCapture(this, 2, doneLease, doneEpoch);\n"
                 "  }\n",
                 "  try\n  {\n    if(doneLease > 0)\n"
-                "      global.fushiLookupCapture(this, 2, doneLease, doneEpoch);\n"
+                "      global.myComicLookupCapture(this, 2, doneLease, doneEpoch);\n"
                 "  }\n"
-                "  var result = (global.fushiLookupOriginalDone "
+                "  var result = (global.myComicLookupOriginalDone "
                 "incontextof this)(...);\n",
             ),
         ):
@@ -5784,7 +5784,7 @@ class MutationSelfTest(unittest.TestCase):
         # 补丁挪到无门位置（既不在探测分支、也不在 KAGEX 缺席门里）：所有游戏都要
         # 多绕一层，代价没有对价，必须红。
         dirty = self._mutate(
-            "global.fushiLookupCapture = function(renderer)",
+            "global.myComicLookupCapture = function(renderer)",
             "global.Layer.drawText = function(renderer)",
         )
         self.assertNotEqual([], find_global_monkey_patches(dirty))
@@ -5794,7 +5794,7 @@ class MutationSelfTest(unittest.TestCase):
         # sweep 失去了"只在经典 KAG3 才跑"的门——正向规则必须红。
         dirty = self._mutate(
             'if(typeof global.TextRender == "Object")',
-            "if(global.fushiLookupAlways)",
+            "if(global.myComicLookupAlways)",
         )
         self.assertEqual([], _classic_fallback_spans(dirty.text))
         self.assertNotEqual([], find_classic_sweep_missing(dirty))
@@ -5810,7 +5810,7 @@ class MutationSelfTest(unittest.TestCase):
         # 2026-09-04 前 else 里是全局类补丁且被豁免；TJS2 语义证明它对实例永远不可见，
         # 豁免取消：把 sweep 换回类补丁，规则 3 与正向规则都必须红。
         dirty = self._mutate(
-            "global.fushiLookupSweepClassicLayers();\n}",
+            "global.myComicLookupSweepClassicLayers();\n}",
             "global.Layer.drawText = function(x, y, text) { return 0; };\n}",
         )
         self.assertNotEqual([], find_global_monkey_patches(dirty))
@@ -5820,8 +5820,8 @@ class MutationSelfTest(unittest.TestCase):
         # sweep 从 else 里消失（分支只剩置位）：经典 KAG3 的采集面整个不存在，而
         # 症状与"引擎不支持"同形——必须由守卫而不是真机来发现。
         dirty = self._mutate(
-            "global.fushiLookupSweepClassicLayers();\n}",
-            "global.fushiLookupClassicSource = global.fushiLookupClassicSource | 16;\n}",
+            "global.myComicLookupSweepClassicLayers();\n}",
+            "global.myComicLookupClassicSource = global.myComicLookupClassicSource | 16;\n}",
         )
         self.assertNotEqual([], find_classic_sweep_missing(dirty))
 
@@ -5912,12 +5912,12 @@ class MutationSelfTest(unittest.TestCase):
     def test_scan_ran_bit_before_the_plugin_gate_is_red(self) -> None:
         # 把插件数门挪到 ScanRan 之后：非 KiriKiri 进程也会点亮该位（Siglus 真机实测过）。
         dirty = self._mutate(
-            "  if (per_module.size() < fushi_voice_hook::kirikiri_exporter::kMinPlugins) {\n"
+            "  if (per_module.size() < my_comic_voice_hook::kirikiri_exporter::kMinPlugins) {\n"
             "    return nullptr;\n"
             "  }\n"
-            "  SetXAudioDiagnostic2(fushi_voice_hook::kXAudioDiag2KirikiriExporterScanRan);\n",
-            "  SetXAudioDiagnostic2(fushi_voice_hook::kXAudioDiag2KirikiriExporterScanRan);\n"
-            "  if (per_module.size() < fushi_voice_hook::kirikiri_exporter::kMinPlugins) {\n"
+            "  SetXAudioDiagnostic2(my_comic_voice_hook::kXAudioDiag2KirikiriExporterScanRan);\n",
+            "  SetXAudioDiagnostic2(my_comic_voice_hook::kXAudioDiag2KirikiriExporterScanRan);\n"
+            "  if (per_module.size() < my_comic_voice_hook::kirikiri_exporter::kMinPlugins) {\n"
             "    return nullptr;\n"
             "  }\n",
         )
@@ -5925,7 +5925,7 @@ class MutationSelfTest(unittest.TestCase):
 
     def test_dropping_the_plugin_gate_is_red(self) -> None:
         dirty = self._mutate(
-            "  if (per_module.size() < fushi_voice_hook::kirikiri_exporter::kMinPlugins) {\n"
+            "  if (per_module.size() < my_comic_voice_hook::kirikiri_exporter::kMinPlugins) {\n"
             "    return nullptr;\n"
             "  }\n",
             "",
@@ -5942,7 +5942,7 @@ class MutationSelfTest(unittest.TestCase):
     def test_instance_patch_definition_alone_is_not_enough(self) -> None:
         # 只留逐实例补丁函数、删掉 sweep 调用：正向规则仍然红——定义了没人调用等于没有。
         dirty = self._mutate(
-            "\tglobal.fushiLookupSweepClassicLayers();\n",
+            "\tglobal.myComicLookupSweepClassicLayers();\n",
             "",
         )
         self.assertNotEqual([], find_classic_sweep_missing(dirty))
@@ -5988,8 +5988,8 @@ class MutationSelfTest(unittest.TestCase):
     def test_patch_escaping_the_probe_branch_is_red(self) -> None:
         # 把补丁从探测分支里挪出来（分支留空）——豁免立刻失效。
         dirty = self._mutate(
-            "if(global.fushiLookupProbeMode)\n{\n\t"
-            "global.fushiLookupProbeOriginalDrawText = global.Layer.drawText;\n\t"
+            "if(global.myComicLookupProbeMode)\n{\n\t"
+            "global.myComicLookupProbeOriginalDrawText = global.Layer.drawText;\n\t"
             "global.Layer.drawText = function(x, y, text) { return 0; };\n}",
             "global.Layer.drawText = function(x, y, text) { return 0; };",
         )
@@ -6020,8 +6020,8 @@ class MutationSelfTest(unittest.TestCase):
 
     def test_anchor_host_page_not_derived_from_draw_host_is_red(self) -> None:
         dirty = self._mutate_anchor(
-            "  group.hostPage = global.fushiLookupPageOf(host);",
-            "  group.hostPage = global.fushiLookupPageOf(global.kag.current);",
+            "  group.hostPage = global.myComicLookupPageOf(host);",
+            "  group.hostPage = global.myComicLookupPageOf(global.kag.current);",
         )
         self.assertNotEqual(
             [], find_invalid_kag_anchor_identity_selection(dirty)
@@ -6029,7 +6029,7 @@ class MutationSelfTest(unittest.TestCase):
 
     def test_host_messages_hardcoded_to_fore_is_red(self) -> None:
         dirty = self._mutate_anchor(
-            "  var messages = global.fushiLookupMessagesForPage(group.hostPage);",
+            "  var messages = global.myComicLookupMessagesForPage(group.hostPage);",
             "  var messages = global.kag.fore.messages;",
         )
         self.assertNotEqual(
@@ -6044,7 +6044,7 @@ class MutationSelfTest(unittest.TestCase):
 
     def test_current_num_read_is_red_when_removed(self) -> None:
         dirty = self._mutate_anchor(
-            '  var currentNum = global.fushiLookupField(global.kag, "currentNum");\n',
+            '  var currentNum = global.myComicLookupField(global.kag, "currentNum");\n',
             "",
         )
         self.assertNotEqual(
@@ -6088,7 +6088,7 @@ class MutationSelfTest(unittest.TestCase):
 
     def test_identity_fallback_not_via_resolve_current_slot_is_red(self) -> None:
         dirty = self._mutate_anchor(
-            "  var resolved = global.fushiLookupResolveCurrentSlot();\n", ""
+            "  var resolved = global.myComicLookupResolveCurrentSlot();\n", ""
         )
         self.assertNotEqual(
             [], find_invalid_kag_anchor_identity_selection(dirty)
@@ -6141,9 +6141,9 @@ class MutationSelfTest(unittest.TestCase):
         消息层；按它重新投影会把这条绑定挂到别人的台词上。冻结点只能是 drawCh 执行期。
         """
         dirty = self._mutate_anchor(
-            "  var entry = global.fushiLookupFindEntry(renderer);\n",
-            "  var entry = global.fushiLookupFindEntry(renderer);\n"
-            '  var late = global.fushiLookupField(global.kag, "currentNum");\n',
+            "  var entry = global.myComicLookupFindEntry(renderer);\n",
+            "  var entry = global.myComicLookupFindEntry(renderer);\n"
+            '  var late = global.myComicLookupField(global.kag, "currentNum");\n',
         )
         self.assertNotEqual(
             [], find_invalid_kag_anchor_identity_selection(dirty)
@@ -6193,7 +6193,7 @@ class MutationSelfTest(unittest.TestCase):
             "  {\n"
             "    if(++guard > 32)\n"
             "    {\n"
-            "      global.fushiLookupMark(16);\n"
+            "      global.myComicLookupMark(16);\n"
             "      return false;\n"
             "    }\n"
             "    primaryRoot = current;\n"
@@ -6274,8 +6274,8 @@ class MutationSelfTest(unittest.TestCase):
 
     def test_adding_root_x_coordinates_is_red(self) -> None:
         dirty = self._mutate_coordinate(
-            "  global.fushiLookupOffX = layerX - primaryX;",
-            "  global.fushiLookupOffX = layerX + primaryX;",
+            "  global.myComicLookupOffX = layerX - primaryX;",
+            "  global.myComicLookupOffX = layerX + primaryX;",
         )
         self.assertNotEqual(
             [], find_invalid_common_root_coordinate_conversion(dirty)
@@ -6283,8 +6283,8 @@ class MutationSelfTest(unittest.TestCase):
 
     def test_adding_root_y_coordinates_is_red(self) -> None:
         dirty = self._mutate_coordinate(
-            "  global.fushiLookupOffY = layerY - primaryY;",
-            "  global.fushiLookupOffY = layerY + primaryY;",
+            "  global.myComicLookupOffY = layerY - primaryY;",
+            "  global.myComicLookupOffY = layerY + primaryY;",
         )
         self.assertNotEqual(
             [], find_invalid_common_root_coordinate_conversion(dirty)
@@ -6292,8 +6292,8 @@ class MutationSelfTest(unittest.TestCase):
 
     def test_publishing_offsets_before_the_common_root_gate_is_red(self) -> None:
         assignments = (
-            "  global.fushiLookupOffX = layerX - primaryX;\n"
-            "  global.fushiLookupOffY = layerY - primaryY;\n"
+            "  global.myComicLookupOffX = layerX - primaryX;\n"
+            "  global.myComicLookupOffY = layerY - primaryY;\n"
         )
         self.assertIn(assignments, COORDINATE_CLEAN_SAMPLE)
         moved = COORDINATE_CLEAN_SAMPLE.replace(assignments, "", 1)
@@ -6312,7 +6312,7 @@ class MutationSelfTest(unittest.TestCase):
         dirty = self._mutate_coordinate(
             "    if(++guard > 32)\n"
             "    {\n"
-            "      global.fushiLookupMark(16);\n"
+            "      global.myComicLookupMark(16);\n"
             "      return false;\n"
             "    }\n",
             "",
@@ -6326,13 +6326,13 @@ class MutationSelfTest(unittest.TestCase):
             "  if(layerRoot === void || primaryRoot === void ||\n"
             "    layerRoot !== primaryRoot)\n"
             "  {\n"
-            "    global.fushiLookupMark(16);\n"
+            "    global.myComicLookupMark(16);\n"
             "    return false;\n"
             "  }",
             "  if(layerRoot === void || primaryRoot === void ||\n"
             "    layerRoot !== primaryRoot)\n"
             "  {\n"
-            "    global.fushiLookupMark(16);\n"
+            "    global.myComicLookupMark(16);\n"
             "    return true;\n"
             "  }",
         )
@@ -6342,12 +6342,12 @@ class MutationSelfTest(unittest.TestCase):
 
     def test_unchecked_common_root_call_is_red(self) -> None:
         dirty = self._mutate_coordinate(
-            "    if(!global.fushiLookupComputeOffset(layer))\n"
+            "    if(!global.myComicLookupComputeOffset(layer))\n"
             "    {\n"
-            "      global.fushiLookupMark(32);\n"
+            "      global.myComicLookupMark(32);\n"
             "      continue;\n"
             "    }",
-            "    global.fushiLookupComputeOffset(layer);",
+            "    global.myComicLookupComputeOffset(layer);",
         )
         self.assertNotEqual(
             [], find_invalid_common_root_coordinate_conversion(dirty)
@@ -6355,9 +6355,9 @@ class MutationSelfTest(unittest.TestCase):
 
     def test_conditionally_skipping_after_common_root_failure_is_red(self) -> None:
         dirty = self._mutate_coordinate(
-            "      global.fushiLookupMark(32);\n"
+            "      global.myComicLookupMark(32);\n"
             "      continue;",
-            "      global.fushiLookupMark(32);\n"
+            "      global.myComicLookupMark(32);\n"
             "      if(submit) continue;",
         )
         self.assertNotEqual(
@@ -6366,7 +6366,7 @@ class MutationSelfTest(unittest.TestCase):
 
     def test_probe_ignoring_common_root_x_offset_is_red(self) -> None:
         dirty = self._mutate_coordinate(
-            "    rx = lx - global.fushiLookupOffX - entry.imgLeft - entry.originX;",
+            "    rx = lx - global.myComicLookupOffX - entry.imgLeft - entry.originX;",
             "    rx = lx - entry.imgLeft - entry.originX;",
         )
         self.assertNotEqual(
@@ -6375,7 +6375,7 @@ class MutationSelfTest(unittest.TestCase):
 
     def test_probe_ignoring_common_root_y_offset_is_red(self) -> None:
         dirty = self._mutate_coordinate(
-            "    ry = ly - global.fushiLookupOffY - entry.imgTop - entry.originY;",
+            "    ry = ly - global.myComicLookupOffY - entry.imgTop - entry.originY;",
             "    ry = ly - entry.imgTop - entry.originY;",
         )
         self.assertNotEqual(
@@ -6384,15 +6384,15 @@ class MutationSelfTest(unittest.TestCase):
 
     def test_ownerless_card_dismissal_is_red(self) -> None:
         # 退回旧判据：任意 renderer 的行文本变了就收卡。
-        dirty = self._mutate(OWNED_DISMISS_SAMPLE, "        global.fushiLookupDismiss();")
+        dirty = self._mutate(OWNED_DISMISS_SAMPLE, "        global.myComicLookupDismiss();")
         self.assertNotEqual([], find_ownerless_card_dismissals(dirty))
 
     def test_owner_marker_only_in_a_comment_is_still_red(self) -> None:
         # 判据被改坏、只在注释里留个名字——守卫必须照红（否则它形同虚设）。
         dirty = self._mutate(
             OWNED_DISMISS_SAMPLE,
-            "        // 归属见 global.fushiLookupCardEntry\n"
-            "        global.fushiLookupDismiss();",
+            "        // 归属见 global.myComicLookupCardEntry\n"
+            "        global.myComicLookupDismiss();",
         )
         self.assertNotEqual([], find_ownerless_card_dismissals(dirty))
 
@@ -6400,14 +6400,14 @@ class MutationSelfTest(unittest.TestCase):
         # 反向变异：判据换个等价写法，守卫不该跟着红（否则它是在守写法不是守行为）。
         dirty = self._mutate(
             OWNED_DISMISS_SAMPLE,
-            "        if(entry === global.fushiLookupCardEntry) "
-            "global.fushiLookupDismiss();",
+            "        if(entry === global.myComicLookupCardEntry) "
+            "global.myComicLookupDismiss();",
         )
         self.assertEqual([], find_ownerless_card_dismissals(dirty))
 
     def test_missing_capture_function_is_red(self) -> None:
         dirty = MaskedSource(
-            CLEAN_SAMPLE.replace("global.fushiLookupCapture = function", "// gone", 1)
+            CLEAN_SAMPLE.replace("global.myComicLookupCapture = function", "// gone", 1)
         )
         self.assertNotEqual([], find_ownerless_card_dismissals(dirty))
 
@@ -6490,7 +6490,7 @@ class MutationSelfTest(unittest.TestCase):
     def test_masking_keeps_line_numbers_and_hides_literal_content(self) -> None:
         self.assertEqual(len(self.clean.masked), len(CLEAN_SAMPLE))
         self.assertEqual(self.clean.masked.count("\n"), CLEAN_SAMPLE.count("\n"))
-        self.assertNotIn("fushiLookupApply", self.clean.masked)
+        self.assertNotIn("myComicLookupApply", self.clean.masked)
         # 行号映射没漂：干净样本里 memcpy 的行号按原文数得出来。
         index = CLEAN_SAMPLE.index("memcpy(")
         self.assertEqual(
@@ -6499,23 +6499,23 @@ class MutationSelfTest(unittest.TestCase):
 
 
 def find_install_failure_keeping_sensor_contract(source: MaskedSource) -> list[str]:
-    """bootstrap 的 catch 必须撤销 `global.fushiLookupNotify`。
+    """bootstrap 的 catch 必须撤销 `global.myComicLookupNotify`。
 
-    DLL 判「传感器活了没」的唯一判据是 `typeof global.fushiLookupNotify == "Integer"`，
+    DLL 判「传感器活了没」的唯一判据是 `typeof global.myComicLookupNotify == "Integer"`，
     而它在 installStage 0 就建立。catch 不撤销的话，任何一段安装失败（包括
     「一个接缝都没挂上」那次 throw）在 host 看来与成功完全同形：lookup_diag 亮
     sensor_installed、几何 provider 被认领、UI 显示查词就绪，点字却永远没有卡片，
     而且没有任何一位说明卡在哪。
     """
-    marker = '[FushiLookup] install failed: '
+    marker = '[MyComicLookup] install failed: '
     index = source.text.find(marker)
     if index < 0:
         return [f"{ADAPTER.name}: 找不到 install failed 的 catch 分支（锚点漂了）"]
     window = source.text[max(0, index - 1200):index]
-    if 'global.fushiLookupNotify = void;' not in window:
+    if 'global.myComicLookupNotify = void;' not in window:
         return [
             f"{ADAPTER.name}: install failed 的 catch 没有撤销 "
-            "global.fushiLookupNotify —— 安装失败会被 host 读成 sensor_installed"
+            "global.myComicLookupNotify —— 安装失败会被 host 读成 sensor_installed"
         ]
     return []
 
@@ -6558,7 +6558,7 @@ def find_unread_classic_patched_bit(source: MaskedSource) -> list[str]:
     为了在真机上区分「分支根本没跑到」和「跑到了但 kag.fore.messages 不是标准 KAG3
     结构、一个层都没挂上」。写了没人读 = 那个区分能力不存在，而注释还声称有。
     """
-    if 'fushiLookupClassicSource | 8' not in source.text:
+    if 'myComicLookupClassicSource | 8' not in source.text:
         return [f"{ADAPTER.name}: TJS 侧不再置 classic 位 3（锚点漂了）"]
     if 'classic & 8' not in source.masked:
         return [
@@ -6578,16 +6578,16 @@ def find_late_classic_patch_marker(source: MaskedSource) -> list[str]:
     已被包装、标记却没落下；此后每个 KAG stable 边沿重扫都把「上一层包装」当成 original
     再包一层，N 次推进后一次 drawText 调用递归 N 层，主线程画字时栈溢出。
     """
-    body = _tjs_function_body(source.text, 'fushiLookupPatchClassicLayer')
+    body = _tjs_function_body(source.text, 'myComicLookupPatchClassicLayer')
     if body is None:
-        return [f"{ADAPTER.name}: 找不到 fushiLookupPatchClassicLayer（锚点漂了）"]
+        return [f"{ADAPTER.name}: 找不到 myComicLookupPatchClassicLayer（锚点漂了）"]
     text = source.text[body[0]:body[1]]
-    marker = text.find('fushiLookupClassicPatched = 1;')
-    first_wrap = text.find('fushiLookupOriginalDrawText = layer.drawText')
+    marker = text.find('myComicLookupClassicPatched = 1;')
+    first_wrap = text.find('myComicLookupOriginalDrawText = layer.drawText')
     if marker < 0:
-        return [f"{ADAPTER.name}: fushiLookupPatchClassicLayer 没有幂等标记"]
+        return [f"{ADAPTER.name}: myComicLookupPatchClassicLayer 没有幂等标记"]
     if first_wrap < 0:
-        return [f"{ADAPTER.name}: fushiLookupPatchClassicLayer 没有 drawText 包装"]
+        return [f"{ADAPTER.name}: myComicLookupPatchClassicLayer 没有 drawText 包装"]
     if marker > first_wrap:
         return [
             f"{ADAPTER.name}: 幂等标记写在第一次包装之后 —— "
@@ -6687,7 +6687,7 @@ class ReviewFixGuardTest(unittest.TestCase):
 
     # -- 变异 ---------------------------------------------------------------
     def test_catch_not_clearing_notify_is_red(self) -> None:
-        dirty = self._mutate_real('global.fushiLookupNotify = void;', '')
+        dirty = self._mutate_real('global.myComicLookupNotify = void;', '')
         self.assertNotEqual([], find_install_failure_keeping_sensor_contract(dirty))
 
     def test_install_request_never_cleared_is_red(self) -> None:
@@ -6710,16 +6710,16 @@ class ReviewFixGuardTest(unittest.TestCase):
 
     def test_late_idempotence_marker_is_red(self) -> None:
         dirty = self._mutate_real(
-            'layer.fushiLookupClassicPatched = 1;\n'
-            '\t\t\t\tlayer.fushiLookupOriginalDrawText = layer.drawText;',
-            'layer.fushiLookupOriginalDrawText = layer.drawText;\n'
-            '\t\t\t\tlayer.fushiLookupClassicPatched = 1;',
+            'layer.myComicLookupClassicPatched = 1;\n'
+            '\t\t\t\tlayer.myComicLookupOriginalDrawText = layer.drawText;',
+            'layer.myComicLookupOriginalDrawText = layer.drawText;\n'
+            '\t\t\t\tlayer.myComicLookupClassicPatched = 1;',
         )
         self.assertNotEqual([], find_late_classic_patch_marker(dirty))
 
     def test_unvalidated_exporter_stub_is_red(self) -> None:
         dirty = self._mutate_real(
-            'fushi_voice_hook::exact_lookup::IsExecutableAddress(stub)',
+            'my_comic_voice_hook::exact_lookup::IsExecutableAddress(stub)',
             'true',
         )
         self.assertNotEqual([], find_unvalidated_exporter_stub(dirty))
@@ -6747,10 +6747,10 @@ def find_bind_group_swap_not_followed(source: MaskedSource) -> list[str]:
     没有交换证据门：任何对象替换（含被移走/重排）都会被当成同一句继续命中。
     """
     tjs = _joined_tjs_payload(source)
-    follows = _assigned_tjs_functions(tjs, "fushiLookupBindGroupFollowSwap")
+    follows = _assigned_tjs_functions(tjs, "myComicLookupBindGroupFollowSwap")
     if len(follows) != 1:
         return [
-            f"{ADAPTER.name}: fushiLookupBindGroupFollowSwap 定义数应为 1，"
+            f"{ADAPTER.name}: myComicLookupBindGroupFollowSwap 定义数应为 1，"
             f"实际 {len(follows)}"
         ]
     follow = _compact_tjs(follows[0][1])
@@ -6764,14 +6764,14 @@ def find_bind_group_swap_not_followed(source: MaskedSource) -> list[str]:
         if needle not in follow:
             violations.append(f"{ADAPTER.name}: FollowSwap {why}")
 
-    captures = _assigned_tjs_functions(tjs, "fushiLookupCapture")
+    captures = _assigned_tjs_functions(tjs, "myComicLookupCapture")
     if len(captures) != 1:
         return violations + [
-            f"{ADAPTER.name}: fushiLookupCapture 定义数应为 1，实际 {len(captures)}"
+            f"{ADAPTER.name}: myComicLookupCapture 定义数应为 1，实际 {len(captures)}"
         ]
     capture = _compact_tjs(captures[0][1])
-    call = capture.find("global.fushiLookupBindGroupFollowSwap(g)")
-    valid = capture.find("global.fushiLookupBindGroupAnchorValid(g)")
+    call = capture.find("global.myComicLookupBindGroupFollowSwap(g)")
+    valid = capture.find("global.myComicLookupBindGroupAnchorValid(g)")
     if call < 0:
         violations.append(f"{ADAPTER.name}: Capture 的候选循环没有调用 FollowSwap")
     elif valid < 0 or call > valid:
@@ -6805,7 +6805,7 @@ class BindGroupSwapFollowTest(unittest.TestCase):
 
     def test_capture_not_following_is_red(self) -> None:
         dirty = self._mutate_real(
-            "if(global.fushiLookupBindGroupFollowSwap(g)) followedSwap++;", ""
+            "if(global.myComicLookupBindGroupFollowSwap(g)) followedSwap++;", ""
         )
         self.assertNotEqual([], find_bind_group_swap_not_followed(dirty))
 

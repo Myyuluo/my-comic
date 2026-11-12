@@ -237,9 +237,9 @@ void RetireKogadoHyLookup(uint32_t reason) {
   if (!rt.provider_offered) return;
   rt.provider_offered = false;
   if (g_header != nullptr) {
-    fushi_voice_hook::g_geometry_provider_registry.Retire(
-        g_header, fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-        fushi_voice_hook::kLookupGeometryProviderIdKogadoHy);
+    my_comic_voice_hook::g_geometry_provider_registry.Retire(
+        g_header, my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+        my_comic_voice_hook::kLookupGeometryProviderIdKogadoHy);
   }
 }
 
@@ -415,7 +415,7 @@ void PublishKogadoHyHit(const KogadoHySubmit& submit) {
   const std::wstring& line = rt.model_line;
   const size_t units = line.size();
   if (glyph.source_index >= units ||
-      fushi_voice_hook::LookupUtf16SourceLength(
+      my_comic_voice_hook::LookupUtf16SourceLength(
           line.data(), static_cast<uint32_t>(units), glyph.source_index) !=
           1u) {
     KogadoHyLog(L"kogado-hy-lookup: hit dropped source=%u",
@@ -433,25 +433,25 @@ void PublishKogadoHyHit(const KogadoHySubmit& submit) {
       CP_UTF8, WC_ERR_INVALID_CHARS, line.data(), static_cast<int>(units),
       nullptr, 0, nullptr, nullptr);
   if (required <= 0 ||
-      static_cast<uint32_t>(required) > fushi_voice_hook::kLookupLineBytes) {
+      static_cast<uint32_t>(required) > my_comic_voice_hook::kLookupLineBytes) {
     return;
   }
-  char utf8[fushi_voice_hook::kLookupLineBytes] = {};
+  char utf8[my_comic_voice_hook::kLookupLineBytes] = {};
   if (WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, line.data(),
                           static_cast<int>(units), utf8, required, nullptr,
                           nullptr) != required) {
     return;
   }
-  fushi_voice_hook::LookupGeometryHitPublication publication;
+  my_comic_voice_hook::LookupGeometryHitPublication publication;
   publication.provider_kind =
-      fushi_voice_hook::kLookupGeometryProviderEngineExactLayout;
-  publication.provider_id = fushi_voice_hook::kLookupGeometryProviderIdKogadoHy;
+      my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout;
+  publication.provider_id = my_comic_voice_hook::kLookupGeometryProviderIdKogadoHy;
   publication.char_index = glyph.source_index;
   publication.source_length = 1u;
   publication.char_count = static_cast<uint32_t>(units);
   publication.coordinate_space =
-      fushi_voice_hook::kLookupCoordinateSpaceClientPhysicalPixels;
-  publication.writing_mode = fushi_voice_hook::kLookupWritingModeHorizontal;
+      my_comic_voice_hook::kLookupCoordinateSpaceClientPhysicalPixels;
+  publication.writing_mode = my_comic_voice_hook::kLookupWritingModeHorizontal;
   publication.text_generation = rt.model_text_event;
   publication.geometry_generation = model.generation;
   publication.glyph_x = rect.x;
@@ -460,11 +460,11 @@ void PublishKogadoHyHit(const KogadoHySubmit& submit) {
   publication.glyph_h = rect.h;
   publication.view_w = model.physical_w;
   publication.view_h = model.physical_h;
-  publication.flags = fushi_voice_hook::kLookupHitFlagSubmit;
+  publication.flags = my_comic_voice_hook::kLookupHitFlagSubmit;
   publication.line_utf8 = reinterpret_cast<const uint8_t*>(utf8);
   publication.line_bytes = static_cast<uint32_t>(required);
   const bool published =
-      fushi_voice_hook::g_geometry_provider_registry.PublishHit(g_header,
+      my_comic_voice_hook::g_geometry_provider_registry.PublishHit(g_header,
                                                                 publication);
   KogadoHyLog(L"kogado-hy-lookup: hit gen=%llu char=%u rect=%d,%d %dx%d "
               L"view=%dx%d published=%d",
@@ -478,13 +478,13 @@ void ProcessKogadoHyLookupTick() {
   auto& rt = g_kogado_hy_lookup;
   if (!rt.installed) return;
   if (g_stop || g_header == nullptr ||
-      !fushi_voice_hook::HasLookupRegion(g_header) ||
-      fushi_voice_hook::AtomicLoadShared32(&g_header->lookup_enabled) == 0u) {
+      !my_comic_voice_hook::HasLookupRegion(g_header) ||
+      my_comic_voice_hook::AtomicLoadShared32(&g_header->lookup_enabled) == 0u) {
     RetireKogadoHyLookup(1u);
     return;
   }
-  fushi_voice_hook::AtomicOrShared32(
-      &g_header->lookup_diag, fushi_voice_hook::kLookupDiagSensorInstalled);
+  my_comic_voice_hook::AtomicOrShared32(
+      &g_header->lookup_diag, my_comic_voice_hook::kLookupDiagSensorInstalled);
   // Claimed presses first: they refer to the model offered so far.
   const uint64_t latest = rt.submit_count.load(std::memory_order_acquire);
   if (latest != rt.processed_submit) {
@@ -507,7 +507,7 @@ void ProcessKogadoHyLookupTick() {
   std::wstring line;
   uint64_t event = 0u;
   uint64_t thread = 0u;
-  if (!fushi_voice_hook::ReadSelectedLookupText(g_header, &line, &event,
+  if (!my_comic_voice_hook::ReadSelectedLookupText(g_header, &line, &event,
                                                 &thread,
                                                 kKogadoHyModelGlyphs)) {
     RetireKogadoHyLookup(3u);
@@ -547,13 +547,13 @@ void ProcessKogadoHyLookupTick() {
                 rt.model.origin_x, rt.model.origin_y, rt.model.design_w,
                 rt.model.design_h, rt.model.physical_w, rt.model.physical_h);
   }
-  if (fushi_voice_hook::g_geometry_provider_registry.OfferReady(
-          g_header, fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-          fushi_voice_hook::kLookupGeometryProviderIdKogadoHy)) {
+  if (my_comic_voice_hook::g_geometry_provider_registry.OfferReady(
+          g_header, my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+          my_comic_voice_hook::kLookupGeometryProviderIdKogadoHy)) {
     if (!rt.provider_offered) rt.last_retire = UINT32_MAX;
     rt.provider_offered = true;
-    fushi_voice_hook::AtomicOrShared32(
-        &g_header->lookup_diag, fushi_voice_hook::kLookupDiagGeometryObserved);
+    my_comic_voice_hook::AtomicOrShared32(
+        &g_header->lookup_diag, my_comic_voice_hook::kLookupDiagGeometryObserved);
   } else {
     RetireKogadoHyLookup(5u);
   }
@@ -564,7 +564,7 @@ void ProcessKogadoHyLookupTick() {
 bool KogadoHyShieldActive(HWND game) {
   if (IsLookupOverlayInputShieldVisible()) return true;
   if (g_header == nullptr) return false;
-  const auto request = fushi_voice_hook::ReadLookupShieldRequest(g_header);
+  const auto request = my_comic_voice_hook::ReadLookupShieldRequest(g_header);
   return request.valid && request.active_buttons != 0u &&
          request.target_hwnd ==
              static_cast<uint64_t>(reinterpret_cast<uintptr_t>(game));
@@ -580,8 +580,8 @@ bool KogadoHyPressEligible(HWND hwnd, int32_t x, int32_t y,
                            KogadoHySubmit* submit) {
   auto& rt = g_kogado_hy_lookup;
   if (g_header == nullptr || g_stop ||
-      !fushi_voice_hook::HasLookupRegion(g_header) ||
-      fushi_voice_hook::AtomicLoadShared32(&g_header->lookup_enabled) == 0u) {
+      !my_comic_voice_hook::HasLookupRegion(g_header) ||
+      my_comic_voice_hook::AtomicLoadShared32(&g_header->lookup_enabled) == 0u) {
     return RejectKogadoHyPress(1u);
   }
   KogadoHyModel& model = rt.input_model;
@@ -596,9 +596,9 @@ bool KogadoHyPressEligible(HWND hwnd, int32_t x, int32_t y,
           model.last_row) {
     return RejectKogadoHyPress(3u);
   }
-  if (!fushi_voice_hook::g_geometry_provider_registry.NativeInputAllowed(
-          g_header, fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-          fushi_voice_hook::kLookupGeometryProviderIdKogadoHy) ||
+  if (!my_comic_voice_hook::g_geometry_provider_registry.NativeInputAllowed(
+          g_header, my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+          my_comic_voice_hook::kLookupGeometryProviderIdKogadoHy) ||
       KogadoHyShieldActive(hwnd) || GetForegroundWindow() != hwnd ||
       (GetKeyState(VK_SHIFT) & 0x8000) != 0 ||
       (GetKeyState(VK_CONTROL) & 0x8000) != 0 ||

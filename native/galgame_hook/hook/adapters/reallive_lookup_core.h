@@ -49,9 +49,9 @@
 #include "exact_lookup_signature.h"
 #include "../lookup_line_text_match.h"
 
-namespace fushi_voice_hook::reallive_lookup {
+namespace my_comic_voice_hook::reallive_lookup {
 
-namespace exact = fushi_voice_hook::exact_lookup;
+namespace exact = my_comic_voice_hook::exact_lookup;
 
 // ── signature helpers ──────────────────────────────────────────────────────
 
@@ -962,4 +962,4 @@ inline ClaimDecision DecideLeftButton(uint8_t raw, bool eligible,
   return decision;
 }
 
-}  // namespace fushi_voice_hook::reallive_lookup
+}  // namespace my_comic_voice_hook::reallive_lookup

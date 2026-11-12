@@ -11,7 +11,7 @@
 
 #include "../hook/hunex_hfa.h"
 
-namespace hunex = fushi_voice_hook::hunex;
+namespace hunex = my_comic_voice_hook::hunex;
 
 namespace {
 

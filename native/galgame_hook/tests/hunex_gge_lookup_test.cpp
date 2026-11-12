@@ -11,40 +11,40 @@
 #include "../hook/adapters/hunex_gge_lookup.h"
 #include "../include/hunex_gge_trace.h"
 
-namespace lookup = fushi_voice_hook::hunex_lookup;
+namespace lookup = my_comic_voice_hook::hunex_lookup;
 
-static_assert(sizeof(fushi_voice_hook::HunexGgeTraceEvent) == 456u);
-static_assert(offsetof(fushi_voice_hook::HunexGgeTraceEvent,
+static_assert(sizeof(my_comic_voice_hook::HunexGgeTraceEvent) == 456u);
+static_assert(offsetof(my_comic_voice_hook::HunexGgeTraceEvent,
                        draw_arg12_bits) == 32u);
-static_assert(offsetof(fushi_voice_hook::HunexGgeTraceEvent, caller_rva) ==
+static_assert(offsetof(my_comic_voice_hook::HunexGgeTraceEvent, caller_rva) ==
               48u);
-static_assert(offsetof(fushi_voice_hook::HunexGgeTraceEvent, glyph_ordinal) ==
+static_assert(offsetof(my_comic_voice_hook::HunexGgeTraceEvent, glyph_ordinal) ==
               60u);
-static_assert(offsetof(fushi_voice_hook::HunexGgeTraceEvent,
+static_assert(offsetof(my_comic_voice_hook::HunexGgeTraceEvent,
                        utf16_char_index) == 64u);
-static_assert(offsetof(fushi_voice_hook::HunexGgeTraceEvent, draw_arg13) ==
+static_assert(offsetof(my_comic_voice_hook::HunexGgeTraceEvent, draw_arg13) ==
               76u);
-static_assert(offsetof(fushi_voice_hook::HunexGgeTraceEvent, evidence_flags) ==
+static_assert(offsetof(my_comic_voice_hook::HunexGgeTraceEvent, evidence_flags) ==
               96u);
-static_assert(offsetof(fushi_voice_hook::HunexGgeTraceEvent, render_x) ==
+static_assert(offsetof(my_comic_voice_hook::HunexGgeTraceEvent, render_x) ==
               108u);
-static_assert(offsetof(fushi_voice_hook::HunexGgeTraceEvent,
+static_assert(offsetof(my_comic_voice_hook::HunexGgeTraceEvent,
                        outer_caller_rva) == 144u);
-static_assert(offsetof(fushi_voice_hook::HunexGgeTraceEvent,
+static_assert(offsetof(my_comic_voice_hook::HunexGgeTraceEvent,
                        story_line_base) == 152u);
-static_assert(offsetof(fushi_voice_hook::HunexGgeTraceEvent,
+static_assert(offsetof(my_comic_voice_hook::HunexGgeTraceEvent,
                        story_scalar_present) == 168u);
-static_assert(offsetof(fushi_voice_hook::HunexGgeTraceEvent,
+static_assert(offsetof(my_comic_voice_hook::HunexGgeTraceEvent,
                        descriptor_words) == 184u);
-static_assert(offsetof(fushi_voice_hook::HunexGgeTraceEvent, output_words) ==
+static_assert(offsetof(my_comic_voice_hook::HunexGgeTraceEvent, output_words) ==
               216u);
-static_assert(offsetof(fushi_voice_hook::HunexGgeTraceEvent,
+static_assert(offsetof(my_comic_voice_hook::HunexGgeTraceEvent,
                        render_item_words) == 328u);
-static_assert(offsetof(fushi_voice_hook::HunexGgeTraceEvent,
+static_assert(offsetof(my_comic_voice_hook::HunexGgeTraceEvent,
                        lookup_gate_mask) == 440u);
-static_assert(sizeof(fushi_voice_hook::HunexGgeTraceSlot) == 464u);
+static_assert(sizeof(my_comic_voice_hook::HunexGgeTraceSlot) == 464u);
 // BUG-2134：头部增加四个投影 detour 调用计数后 slots 前移 32 字节。
-static_assert(offsetof(fushi_voice_hook::HunexGgeTraceBuffer, slots) == 976u);
+static_assert(offsetof(my_comic_voice_hook::HunexGgeTraceBuffer, slots) == 976u);
 
 namespace {
 

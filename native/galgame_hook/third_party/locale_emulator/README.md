@@ -1,6 +1,6 @@
 # Locale Emulator 维护补丁与本地构建
 
-本目录复用 Fushi 的 Windows x86 日语转区链路，保存模块链表修复、版本资源兼容和可重建运行库的脚本。2026-09-08 已使用正式工具链构建并通过自有运行时探针；尚未接入正式分发，也未据此升级游戏支持状态。
+本目录复用 MyComic 的 Windows x86 日语转区链路，保存模块链表修复、版本资源兼容和可重建运行库的脚本。2026-09-08 已使用正式工具链构建并通过自有运行时探针；尚未接入正式分发，也未据此升级游戏支持状态。
 
 上游为 [Locale-Emulator-Core](https://github.com/xupefei/Locale-Emulator-Core)，固定提交
 `ae7160dc5deb97947396abcd784f9b98b6ee38b3`。修改日期：2026-09-08，Hibiki。
@@ -11,7 +11,7 @@
 - BUG-2338：初始化模块链表以独立 sentinel 为边界，无 kernel32 时返回空，等待原有 DLL 通知。真实 x86 loader ABI 回归覆盖空表、首节点、后继节点、短名和 sentinel 无效名称指针。
 - BUG-2352：VERSION.dll 的 GetFileVersionInfoW/ExW 成功后，在调用者缓冲内原子更新首个 Translation 及匹配 StringTable；保留 codepage、字符串和其他语言项。畸形资源、缺表与键冲突不修改任何字节。不启用上游旧的 TLS 资源改写函数。
 - 新 VERSION 跳转的生命周期：明确 SelfShadow 手工映射入口由进程持有；正常 DllMain 加载必须成功固定自身。两种入口均固定 VERSION 后才安装跳转。部分安装失败回滚，恢复失败保留 trampoline、global 和 ml 上下文；进程终止交操作系统释放。该修改不宣称上游所有旧 Hook 的任意卸载安全。
-- Fushi 的日语时区名称在 injector/locale_emulator_launch.h 修复（BUG-2353）；不改变系统全局区域或时区。
+- MyComic 的日语时区名称在 injector/locale_emulator_launch.h 修复（BUG-2353）；不改变系统全局区域或时区。
 
 ## 源码准备
 
@@ -33,7 +33,7 @@ powershell -ExecutionPolicy Bypass -File native/galgame_hook/third_party/locale_
 
 原始 MyLib 含旧 /GL 对象，现代 MSVC 无法直接链接。正式 v140 先将精确十个编译单元及原依赖生成 native.iobj，LLVM 再链接最终 DLL，显式保留入口、导出、节权限及延迟导入。首阶段 codegen-only.dll 的 Kernel32 延迟导入被微软 linker 忽略，禁止使用或分发；最终产物必须通过 verify_runtime_pe.py 的 x86 PE32、入口、导出、普通导入仅 ntdll 和四组延迟导入契约。编译器隐式环境 CL/_CL_/LINK 在构建期间清空并恢复。
 
-输出只写入新目录，不替换 Fushi 已安装组件。当前候选 SHA-256：
+输出只写入新目录，不替换 MyComic 已安装组件。当前候选 SHA-256：
 `8DF7A41BE6AE8C6920CB06C05C60DAEFDA9D330A0212A1CC036DE9B877CA9079`。
 原有上游源码警告仍会报告，不能把本地构建描述为整个第三方项目零警告。
 

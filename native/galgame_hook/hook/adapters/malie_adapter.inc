@@ -16,8 +16,8 @@
 //     malie_io::VoiceAssembler in feed order and writes what it publishes.
 #include "malie_profile.h"
 
-namespace malie_io = ::fushi_voice_hook::malie_io;
-namespace malie_lookup = ::fushi_voice_hook::malie_lookup;
+namespace malie_io = ::my_comic_voice_hook::malie_io;
+namespace malie_lookup = ::my_comic_voice_hook::malie_lookup;
 
 typedef int32_t(__cdecl* MalieSyncWroteFn)(void* oy, int32_t bytes);
 
@@ -66,7 +66,7 @@ void MalieLog(const wchar_t* format, ...) {
   wchar_t path[MAX_PATH] = {};
   const DWORD length = GetTempPathW(MAX_PATH, path);
   if (length == 0 || length >= MAX_PATH - 20) return;
-  wcscat_s(path, L"fushi_galhook.log");
+  wcscat_s(path, L"my_comic_galhook.log");
   HANDLE file = g_orig_CreateFileW(path, FILE_APPEND_DATA, FILE_SHARE_READ,
                                    nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL,
                                    nullptr);
@@ -180,7 +180,7 @@ int32_t __cdecl MalieSyncWroteDetour(void* oy, int32_t bytes) {
         slot->decoder = decoder;
         slot->length = static_cast<uint32_t>(bytes);
         InterlockedExchange(&slot->state, 2);
-        MarkMalieIo(fushi_voice_hook::kDiagMalieReadRangeObserved);
+        MarkMalieIo(my_comic_voice_hook::kDiagMalieReadRangeObserved);
       } else {
         if (slot != nullptr) InterlockedExchange(&slot->state, 0);
         NoteMalieDrop(decoder, feed);
@@ -209,7 +209,7 @@ class MalieVoiceSink final : public malie_io::VoiceSink {
         WriteVoiceOggAt(data, bytes, storage.c_str(), first_tick, text_event);
     if (written && g_header != nullptr) {
       g_header->hook_diagnostics |=
-          fushi_voice_hook::kDiagMalieLibpVoiceCaptured;
+          my_comic_voice_hook::kDiagMalieLibpVoiceCaptured;
     }
     MalieLog(L"voice: %ls bytes=%lu tick=%llu text_event=%llu written=%d "
              L"lost=%lu damaged=%lu",
@@ -296,7 +296,7 @@ void ProcessMalieVoiceTasks() {
     }
     MalieChunk& chunk = g_malie_chunks[item.index];
     if (malie_io::StartsOggStream(chunk.data, chunk.length)) {
-      MarkMalieIo(fushi_voice_hook::kDiagMalieVoiceRangeQueued);
+      MarkMalieIo(my_comic_voice_hook::kDiagMalieVoiceRangeQueued);
     }
     malie_io::FeedChunk feed;
     feed.feed = chunk.feed;
@@ -343,12 +343,12 @@ bool TryHookMalieDecoderVoice() {
     InterlockedExchange(&g_malie_enabled, 1);
     return true;
   }
-  if (!fushi_voice_hook::MatchesMalieProfile(nullptr)) return false;
-  ::fushi_voice_hook::exact_lookup::LoadedPeImage image;
+  if (!my_comic_voice_hook::MatchesMalieProfile(nullptr)) return false;
+  ::my_comic_voice_hook::exact_lookup::LoadedPeImage image;
   const HMODULE module = GetModuleHandleW(nullptr);
   malie_io::OggFeedSites sites;
   const malie_io::FeedResult result =
-      ::fushi_voice_hook::exact_lookup::OpenLoadedPeImage(module, &image)
+      ::my_comic_voice_hook::exact_lookup::OpenLoadedPeImage(module, &image)
           ? malie_io::ResolveOggFeed(image, &sites)
           : malie_io::FeedResult::kNotX86;
   if (result != malie_io::FeedResult::kResolved) {
@@ -371,9 +371,9 @@ bool TryHookMalieDecoderVoice() {
   if (!ok) return false;
   g_malie_hooks_installed = true;
   InterlockedExchange(&g_malie_enabled, 1);
-  MarkMalieIo(fushi_voice_hook::kDiagMalieArchiveHandleTracked);
+  MarkMalieIo(my_comic_voice_hook::kDiagMalieArchiveHandleTracked);
   if (g_header != nullptr) {
-    g_header->hook_diagnostics |= fushi_voice_hook::kDiagMalieLibpHooksReady;
+    g_header->hook_diagnostics |= my_comic_voice_hook::kDiagMalieLibpHooksReady;
   }
   return true;
 }
@@ -391,11 +391,11 @@ void StopMalieDecoderVoice() {
   g_malie_assembler.Reset();
 }
 
-class MalieLibpAdapter final : public fushi_voice_hook::EngineAdapter {
+class MalieLibpAdapter final : public my_comic_voice_hook::EngineAdapter {
  public:
   const char* id() const override { return "malie_libp"; }
   bool probe() const override {
-    return fushi_voice_hook::MatchesMalieProfile(nullptr);
+    return my_comic_voice_hook::MatchesMalieProfile(nullptr);
   }
   bool install() override {
     NoteProfileState();
@@ -410,10 +410,10 @@ class MalieLibpAdapter final : public fushi_voice_hook::EngineAdapter {
     ProcessMalieVoiceTasks();
     ProcessMalieLookupTick();
   }
-  fushi_voice_hook::AdapterCapability capabilities() const override {
-    return fushi_voice_hook::AdapterCapability::kText |
-           fushi_voice_hook::AdapterCapability::kResourceAudio |
-           fushi_voice_hook::AdapterCapability::kPcmAudio;
+  my_comic_voice_hook::AdapterCapability capabilities() const override {
+    return my_comic_voice_hook::AdapterCapability::kText |
+           my_comic_voice_hook::AdapterCapability::kResourceAudio |
+           my_comic_voice_hook::AdapterCapability::kPcmAudio;
   }
   void onModuleLoaded(const wchar_t*) override {}
   void shutdown() override {
@@ -423,7 +423,7 @@ class MalieLibpAdapter final : public fushi_voice_hook::EngineAdapter {
     ready_ = false;
     shut_down_ = true;
   }
-  fushi_voice_hook::AdapterDiagnostics diagnostics() const override {
+  my_comic_voice_hook::AdapterDiagnostics diagnostics() const override {
     return {id(), probe(), installed_,
             g_header == nullptr ? 0u : g_header->hook_diagnostics};
   }
@@ -434,7 +434,7 @@ class MalieLibpAdapter final : public fushi_voice_hook::EngineAdapter {
   // and installed when it matches.
   void RecheckProfile() {
     if (shut_down_ || installed_ ||
-        fushi_voice_hook::MalieProfileState() !=
+        my_comic_voice_hook::MalieProfileState() !=
             malie_io::ProfileState::kImageNotReady) {
       return;
     }
@@ -443,9 +443,9 @@ class MalieLibpAdapter final : public fushi_voice_hook::EngineAdapter {
       return;
     }
     recheck_tick_ = now;
-    fushi_voice_hook::MeasureMalieProfile();
+    my_comic_voice_hook::MeasureMalieProfile();
     NoteProfileState();
-    if (fushi_voice_hook::MalieProfileState() ==
+    if (my_comic_voice_hook::MalieProfileState() ==
         malie_io::ProfileState::kMatched) {
       install();
     }
@@ -453,7 +453,7 @@ class MalieLibpAdapter final : public fushi_voice_hook::EngineAdapter {
   // Logs a match and every verdict reached after "image not ready"; the
   // first refusal of a game that is simply not Malie stays silent.
   void NoteProfileState() {
-    const auto state = fushi_voice_hook::MalieProfileState();
+    const auto state = my_comic_voice_hook::MalieProfileState();
     if (state == logged_state_) return;
     const bool was_not_ready =
         logged_state_ == malie_io::ProfileState::kImageNotReady;
@@ -465,7 +465,7 @@ class MalieLibpAdapter final : public fushi_voice_hook::EngineAdapter {
     MalieLog(L"identity: %ls (scheme result=%lu)",
              index < 4u ? kNames[index] : L"?",
              static_cast<unsigned long>(
-                 fushi_voice_hook::MalieProfile().last_result.load()));
+                 my_comic_voice_hook::MalieProfile().last_result.load()));
   }
 
   bool installed_ = false;

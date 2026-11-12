@@ -7,8 +7,8 @@
 #include <map>
 
 namespace {
-namespace owner = fushi_voice_hook::siglus_eightarg_owner;
-namespace message = fushi_voice_hook::siglus_eightarg_message;
+namespace owner = my_comic_voice_hook::siglus_eightarg_owner;
+namespace message = my_comic_voice_hook::siglus_eightarg_message;
 unsigned checks = 0;
 void Check(bool value) {
   ++checks;

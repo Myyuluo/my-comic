@@ -3,13 +3,13 @@
 #include <cstddef>
 #include <cstdint>
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 // Fixed, numeric-only telemetry for the exact WHITE ALBUM2 D3D9 profile.
 // It deliberately contains no text, texture bytes, or other game payloads.
 // The x64 ring probe resolves this export from the live x86 hook DLL and reads
 // it with ReadProcessMemory, so every field has an explicit cross-arch width.
-inline constexpr char kLeafD3DTraceExportName[] = "FushiLeafD3DTraceV1";
+inline constexpr char kLeafD3DTraceExportName[] = "MyComicLeafD3DTraceV1";
 inline constexpr uint32_t kLeafD3DTraceMagic = 0x3344464cu; // "LFD3"
 inline constexpr uint32_t kLeafD3DTraceVersion = 1u;
 inline constexpr uint32_t kLeafD3DTraceCapacity = 2048u;
@@ -87,4 +87,4 @@ static_assert(sizeof(LeafD3DTraceSlot) == 104,
 static_assert(offsetof(LeafD3DTraceBuffer, slots) == 168,
               "Leaf D3D trace header ABI drifted");
 
-} // namespace fushi_voice_hook
+} // namespace my_comic_voice_hook

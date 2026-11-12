@@ -7,7 +7,7 @@
 #include <cstring>
 #include <limits>
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 inline bool FindSgrePayloadOffsetInBytes(
     const uint8_t* archive, size_t archive_bytes, const uint8_t* payload,
@@ -125,4 +125,4 @@ inline bool FindSgreVoiceArchiveResourceParts(
   return true;
 }
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

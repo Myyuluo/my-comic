@@ -18,7 +18,7 @@ import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
 import { readFileSync } from "node:fs";
 
-const POPUP_URL = new URL("../../fushi/assets/popup/popup.js", import.meta.url);
+const POPUP_URL = new URL("../../my_comic/assets/popup/popup.js", import.meta.url);
 
 function sliceHeadwordTapCode() {
   const src = readFileSync(POPUP_URL, "utf8");

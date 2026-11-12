@@ -10,7 +10,7 @@
 
 namespace {
 
-using fushi_voice_hook::ModuleTableSettle;
+using my_comic_voice_hook::ModuleTableSettle;
 
 // 这条判据存在的理由：查词准入原本用「已经扫过一次模块表」当收敛闸，而那在注入
 // 完成的第 1 拍就成立。下面五条分别钉住它与「扫过一次」的差别。

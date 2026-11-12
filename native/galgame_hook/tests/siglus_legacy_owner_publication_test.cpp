@@ -6,7 +6,7 @@
 #include <map>
 #include <vector>
 
-namespace own = fushi_voice_hook::siglus_legacy_owner;
+namespace own = my_comic_voice_hook::siglus_legacy_owner;
 namespace {
 void Check(bool value) {
   if (!value) { std::fputs("Owner publication regression failed\n", stderr); std::exit(1); }

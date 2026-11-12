@@ -13,7 +13,7 @@
 
 // Resolved once by SgreAdapter::install(). Every hook site checks its own
 // anchor: an unresolved anchor leaves that site inert, never guessed.
-fushi_voice_hook::SgreAnchorSet g_sgre_anchors;
+my_comic_voice_hook::SgreAnchorSet g_sgre_anchors;
 bool g_sgre_anchors_resolved = false;
 std::array<uint8_t, 32> g_sgre_executable_sha256 = {};
 
@@ -66,7 +66,7 @@ struct SgreUiTextRun {
   float line_height = 0.0f;
   ULONGLONG captured_tick = 0;
   char utf8[kSgreUiTextBytes] = {};
-  fushi_voice_hook::SgreLookupGlyphGeometry
+  my_comic_voice_hook::SgreLookupGlyphGeometry
       local_glyphs[kSgreUiMaxGlyphsPerRun] = {};
 };
 
@@ -78,7 +78,7 @@ struct SgreUiRawRunRecord {
 
 struct SgreUiLayerRun {
   SgreUiTextRun run;
-  fushi_voice_hook::SgreLookupGlyphGeometry
+  my_comic_voice_hook::SgreLookupGlyphGeometry
       screen_glyphs[kSgreUiMaxGlyphsPerRun] = {};
 };
 
@@ -112,7 +112,7 @@ struct SgreLookupCapture {
   // occurrence it mines by this seq, so the hit publication must carry it.
   uint64_t text_seq = 0;
   wchar_t text[kSgreLookupMaxTextUnits] = {};
-  fushi_voice_hook::SgreLookupGlyphGeometry glyphs[kSgreLookupMaxGlyphs] = {};
+  my_comic_voice_hook::SgreLookupGlyphGeometry glyphs[kSgreLookupMaxGlyphs] = {};
   uint8_t glyph_spaces[kSgreLookupMaxGlyphs] = {};
 };
 
@@ -214,15 +214,15 @@ bool IsSgreResolvedStructureMatched(volatile LONG* cached_state,
   // the known-hash row and a hash-miss candidate build pass the same ABI
   // proof, while a stale row, patched image, or changed object layout remains
   // fail-closed.
-  fushi_voice_hook::SgreImageView image;
+  my_comic_voice_hook::SgreImageView image;
   HMODULE module = GetModuleHandleW(nullptr);
   if (!g_sgre_anchors_resolved || module == nullptr) {
     transient_failure = true;
-  } else if (!fushi_voice_hook::ReadSgreImageSections(module, &image)) {
+  } else if (!my_comic_voice_hook::ReadSgreImageSections(module, &image)) {
     transient_failure = true;
   } else {
-    fushi_voice_hook::SgreAnchorSet live_anchors;
-    const bool reparsed = fushi_voice_hook::ResolveSgreAnchorsGuarded(
+    my_comic_voice_hook::SgreAnchorSet live_anchors;
+    const bool reparsed = my_comic_voice_hook::ResolveSgreAnchorsGuarded(
         g_sgre_executable_sha256.data(), g_sgre_executable_sha256.size(),
         &image, &live_anchors);
     if (!reparsed) {
@@ -234,12 +234,12 @@ bool IsSgreResolvedStructureMatched(volatile LONG* cached_state,
                               g_sgre_anchors.text_draw.rva &&
                           live_anchors.scenario_text_vtable.rva ==
                               g_sgre_anchors.scenario_text_vtable.rva &&
-                          fushi_voice_hook::ValidateSgreLookupAnchorStructure(
+                          my_comic_voice_hook::ValidateSgreLookupAnchorStructure(
                               live_anchors, image)
                     : live_anchors.direct_input_shield_available() &&
                           live_anchors.direct_input_mouse_device.rva ==
                               g_sgre_anchors.direct_input_mouse_device.rva &&
-                          fushi_voice_hook::
+                          my_comic_voice_hook::
                               ValidateSgreDirectInputAnchorStructure(
                                   live_anchors, image);
     }
@@ -296,7 +296,7 @@ struct SgreLookupClickPayload {
   uint64_t logical_generation = 0;
   uint32_t text_units = 0;
   uint32_t char_index = 0;
-  fushi_voice_hook::SgreLookupRect rect;
+  my_comic_voice_hook::SgreLookupRect rect;
   uintptr_t game_window = 0;
   int32_t client_screen_x = 0;
   int32_t client_screen_y = 0;
@@ -336,7 +336,7 @@ ULONGLONG g_sgre_lookup_last_hit_tick = 0;
 // The admitted SGRE GetDeviceState callsite is single-threaded. Keep the
 // gesture itself on that exact poller; cross-thread handoff is only the fixed
 // target/event publications below, both protected by a sequence barrier.
-fushi_voice_hook::SgreLookupClickGestureState g_sgre_lookup_click_gesture;
+my_comic_voice_hook::SgreLookupClickGestureState g_sgre_lookup_click_gesture;
 void* g_sgre_lookup_click_observed_device = nullptr;
 SgreLookupClickTarget g_sgre_lookup_click_read_target = {};
 SgreLookupClickPayload g_sgre_lookup_pending_click = {};
@@ -345,7 +345,7 @@ bool g_sgre_lookup_pending_click_valid = false;
 void FillSgreLookupClickPayload(
     SgreLookupClickPayload* payload, const SgreLookupCapture& capture,
     uint64_t logical_generation, uint32_t char_index,
-    const fushi_voice_hook::SgreLookupRect& rect, HWND game,
+    const my_comic_voice_hook::SgreLookupRect& rect, HWND game,
     const POINT& client_origin, int32_t client_width, int32_t client_height) {
   if (payload == nullptr) return;
   *payload = SgreLookupClickPayload();
@@ -434,7 +434,7 @@ bool SgreLookupRectForCapturedGlyph(const SgreLookupCapture& capture,
                                     size_t glyph_index,
                                     int32_t client_width,
                                     int32_t client_height,
-                                    fushi_voice_hook::SgreLookupRect* rect) {
+                                    my_comic_voice_hook::SgreLookupRect* rect) {
   if (rect == nullptr || glyph_index >= capture.glyph_count) return false;
   auto glyph = capture.glyphs[glyph_index];
   if (capture.glyph_spaces[glyph_index] ==
@@ -469,9 +469,9 @@ bool SgreLookupRectForCapturedGlyph(const SgreLookupCapture& capture,
            rect->x <= client_width - rect->width &&
            rect->y <= client_height - rect->height;
   }
-  glyph.width = fushi_voice_hook::SgreLookupHitWidth(
+  glyph.width = my_comic_voice_hook::SgreLookupHitWidth(
       capture.glyphs, capture.glyph_count, glyph_index);
-  return fushi_voice_hook::SgreLookupRectForGlyph(
+  return my_comic_voice_hook::SgreLookupRectForGlyph(
       glyph, client_width, client_height, rect);
 }
 
@@ -479,9 +479,9 @@ int FindSgreCapturedLookupGlyph(const SgreLookupCapture& capture,
                                 int32_t client_width,
                                 int32_t client_height, int32_t cursor_x,
                                 int32_t cursor_y,
-                                fushi_voice_hook::SgreLookupRect* hit_rect) {
+                                my_comic_voice_hook::SgreLookupRect* hit_rect) {
   for (size_t i = 0; i < capture.glyph_count; ++i) {
-    fushi_voice_hook::SgreLookupRect rect;
+    my_comic_voice_hook::SgreLookupRect rect;
     if (!SgreLookupRectForCapturedGlyph(capture, i, client_width,
                                         client_height, &rect)) {
       continue;
@@ -524,7 +524,7 @@ bool BuildSgreLookupClickPayloadAtPress(const SgreLookupClickTarget& target,
   }
   const int32_t client_x = screen_point.x - client_origin.x;
   const int32_t client_y = screen_point.y - client_origin.y;
-  fushi_voice_hook::SgreLookupRect rect;
+  my_comic_voice_hook::SgreLookupRect rect;
   const int glyph_index = FindSgreCapturedLookupGlyph(
       target.capture, client_width, client_height, client_x, client_y, &rect);
   if (glyph_index < 0 ||
@@ -538,14 +538,14 @@ bool BuildSgreLookupClickPayloadAtPress(const SgreLookupClickTarget& target,
   return true;
 }
 
-fushi_voice_hook::SgreLookupClientSnapshot SgreLookupPayloadClientSnapshot(
+my_comic_voice_hook::SgreLookupClientSnapshot SgreLookupPayloadClientSnapshot(
     const SgreLookupClickPayload& payload) {
   return {payload.game_window, payload.client_screen_x,
           payload.client_screen_y, payload.client_width,
           payload.client_height};
 }
 
-fushi_voice_hook::SgreLookupClientSnapshot SgreLookupTargetClientSnapshot(
+my_comic_voice_hook::SgreLookupClientSnapshot SgreLookupTargetClientSnapshot(
     const SgreLookupClickTarget& target) {
   return {target.game_window, target.client_screen_x,
           target.client_screen_y, target.client_width,
@@ -556,7 +556,7 @@ bool SgreLookupPayloadMatchesPublishedTarget(
     const SgreLookupClickPayload& payload) {
   SgreLookupClickTarget target;
   return ReadSgreLookupClickTarget(&target) &&
-         fushi_voice_hook::MatchesSgreLookupGenerationAndClient(
+         my_comic_voice_hook::MatchesSgreLookupGenerationAndClient(
              payload.logical_generation,
              SgreLookupPayloadClientSnapshot(payload),
              target.logical_generation, SgreLookupTargetClientSnapshot(target));
@@ -620,7 +620,7 @@ constexpr ULONGLONG kSgreDirectInputHealthIntervalMs = 1000;
 HWND GetValidPublishedSgreDirectInputShieldPopup(HWND game) {
   if (game == nullptr) return nullptr;
   const HWND popup = reinterpret_cast<HWND>(GetPropW(
-      game, fushi_voice_hook::kSgreDirectInputShieldWindowProperty));
+      game, my_comic_voice_hook::kSgreDirectInputShieldWindowProperty));
   // Idle GetDeviceState hot path stops at the single null property read.  Pay
   // HWND/owner/class validation only while a host actually published a card.
   if (popup == nullptr || !IsWindow(game) || !IsWindow(popup) ||
@@ -631,7 +631,7 @@ HWND GetValidPublishedSgreDirectInputShieldPopup(HWND game) {
   if (GetClassNameW(popup, class_name,
                     static_cast<int>(sizeof(class_name) /
                                      sizeof(class_name[0]))) <= 0 ||
-      lstrcmpW(class_name, L"FushiGlobalLookupWindow") != 0) {
+      lstrcmpW(class_name, L"MyComicGlobalLookupWindow") != 0) {
     return nullptr;
   }
   return popup;
@@ -646,8 +646,8 @@ HWND GetValidPublishedSgreDirectInputShieldPopup(HWND game) {
 // 而且它一旦没人调用就会变成守卫护着的死代码——那正是本次要修掉的形态。
 bool IsSgreDirectInputShieldReadyPublished(HWND game) {
   return reinterpret_cast<uintptr_t>(GetPropW(
-             game, fushi_voice_hook::kSgreDirectInputShieldReadyProperty)) ==
-         fushi_voice_hook::kSgreDirectInputShieldReadyValue;
+             game, my_comic_voice_hook::kSgreDirectInputShieldReadyProperty)) ==
+         my_comic_voice_hook::kSgreDirectInputShieldReadyValue;
 }
 
 bool IsSgreDirectInputShieldOperational() {
@@ -664,7 +664,7 @@ bool IsSgreDirectInputShieldOperational() {
 // admitted main window of this process, that window owns the foreground (the
 // runtime acquires its devices DISCL_FOREGROUND) and the host lease is live.
 bool SgreGameStreamTargetAccepts(
-    const fushi_voice_hook::GameStreamInputRequestSnapshot& request, HWND game,
+    const my_comic_voice_hook::GameStreamInputRequestSnapshot& request, HWND game,
     uint64_t now_tick) {
   DWORD game_pid = 0;
   if (game != nullptr && IsWindow(game)) {
@@ -703,14 +703,14 @@ bool ReadSgreKeyboardBindings(const uint8_t** bindings, size_t* count) {
   const uintptr_t begin = slot[0];
   const uintptr_t end = slot[1];
   if (begin == 0 || end < begin ||
-      (end - begin) % fushi_voice_hook::kSgreKeyboardBindingStride != 0) {
+      (end - begin) % my_comic_voice_hook::kSgreKeyboardBindingStride != 0) {
     return false;
   }
   const size_t entries =
-      (end - begin) / fushi_voice_hook::kSgreKeyboardBindingStride;
+      (end - begin) / my_comic_voice_hook::kSgreKeyboardBindingStride;
   if (entries == 0 ||
-      entries > fushi_voice_hook::kSgreKeyboardBindingMaxEntries ||
-      !fushi_voice_hook::exact_lookup::IsReadableSpan(
+      entries > my_comic_voice_hook::kSgreKeyboardBindingMaxEntries ||
+      !my_comic_voice_hook::exact_lookup::IsReadableSpan(
           reinterpret_cast<const void*>(begin), end - begin)) {
     return false;
   }
@@ -720,10 +720,10 @@ bool ReadSgreKeyboardBindings(const uint8_t** bindings, size_t* count) {
 }
 
 void ApplySgreGameStreamKeyboardSample(uint8_t* bytes, size_t state_bytes) {
-  const auto request = fushi_voice_hook::ReadGameStreamInputRequest(g_header);
+  const auto request = my_comic_voice_hook::ReadGameStreamInputRequest(g_header);
   if (!request.valid ||
       (request.active_buttons &
-       fushi_voice_hook::kGameStreamInputGamepadButtonMask) == 0) {
+       my_comic_voice_hook::kGameStreamInputGamepadButtonMask) == 0) {
     g_sgre_game_stream_keyboard_observation.store(0,
                                                   std::memory_order_release);
     return;
@@ -743,7 +743,7 @@ void ApplySgreGameStreamKeyboardSample(uint8_t* bytes, size_t state_bytes) {
       !shield_active &&
       SgreGameStreamTargetAccepts(request, game, GetTickCount64()) &&
       ReadSgreKeyboardBindings(&bindings, &binding_count);
-  const uint32_t observed = fushi_voice_hook::ApplySgreGameStreamRemoteKeys(
+  const uint32_t observed = my_comic_voice_hook::ApplySgreGameStreamRemoteKeys(
       allowed, request.active_buttons, bindings, binding_count, bytes,
       state_bytes);
   g_sgre_game_stream_keyboard_observation.store(
@@ -765,7 +765,7 @@ uint32_t SgreGameStreamKeyboardObservedFor(uint32_t request_seq) {
 std::atomic<uint32_t> g_sgre_game_stream_ack_deferred_seq{0};
 
 bool SgreGameStreamAckWaitsForKeyboard(
-    const fushi_voice_hook::GameStreamInputRequestSnapshot& request) {
+    const my_comic_voice_hook::GameStreamInputRequestSnapshot& request) {
   if (!request.valid) return false;
   void* const* const slot =
       g_sgre_keyboard_device_slot.load(std::memory_order_acquire);
@@ -773,7 +773,7 @@ bool SgreGameStreamAckWaitsForKeyboard(
       g_sgre_game_stream_keyboard_observation.load(std::memory_order_acquire);
   uint32_t deferred =
       g_sgre_game_stream_ack_deferred_seq.load(std::memory_order_acquire);
-  const bool defer = fushi_voice_hook::DeferSgreGameStreamAckForKeyboard(
+  const bool defer = my_comic_voice_hook::DeferSgreGameStreamAckForKeyboard(
       request.seq, request.active_buttons,
       slot != nullptr && *slot != nullptr, static_cast<uint32_t>(packed >> 32),
       &deferred);
@@ -805,7 +805,7 @@ HRESULT STDMETHODCALLTYPE SgreGetDeviceStateDetour(void* device,
   // its per-frame poll arrives here too. Only the admitted engine keyboard
   // slot with the c_dfDIKeyboard layout is touched.
   if (state != nullptr &&
-      state_bytes == fushi_voice_hook::kSgreDirectInputKeyboardStateBytes &&
+      state_bytes == my_comic_voice_hook::kSgreDirectInputKeyboardStateBytes &&
       IsSgreRemoteKeyboardDevice(device)) {
     ApplySgreGameStreamKeyboardSample(static_cast<uint8_t*>(state),
                                       state_bytes);
@@ -813,7 +813,7 @@ HRESULT STDMETHODCALLTYPE SgreGetDeviceStateDetour(void* device,
   }
   if (state == nullptr ||
       device != g_sgre_mouse_device.load(std::memory_order_acquire) ||
-      state_bytes != fushi_voice_hook::kSgreDirectInputMouseStateBytes) {
+      state_bytes != my_comic_voice_hook::kSgreDirectInputMouseStateBytes) {
     return result;
   }
 
@@ -823,15 +823,15 @@ HRESULT STDMETHODCALLTYPE SgreGetDeviceStateDetour(void* device,
     // only the latter half of a click that SGRE already observed.
     g_sgre_lookup_click_observed_device = device;
     g_sgre_lookup_click_gesture =
-        fushi_voice_hook::SgreLookupClickGestureState();
+        my_comic_voice_hook::SgreLookupClickGestureState();
     g_sgre_lookup_pending_click = SgreLookupClickPayload();
     g_sgre_lookup_pending_click_valid = false;
   }
 
   auto* bytes = static_cast<uint8_t*>(state);
   const size_t primary_offset =
-      fushi_voice_hook::kSgreDirectInputMouseButtonsOffset +
-      fushi_voice_hook::kSgreLookupPrimaryButtonIndex;
+      my_comic_voice_hook::kSgreDirectInputMouseButtonsOffset +
+      my_comic_voice_hook::kSgreLookupPrimaryButtonIndex;
   const bool primary_down = (bytes[primary_offset] & 0x80u) != 0;
   const HWND game =
       g_sgre_direct_input_game_window.load(std::memory_order_acquire);
@@ -844,16 +844,16 @@ HRESULT STDMETHODCALLTYPE SgreGetDeviceStateDetour(void* device,
       direct_popup != nullptr && IsSgreDirectInputShieldReadyPublished(game);
   const bool shield_active = direct_shield || bitmap_popup_visible;
   const auto game_stream_request =
-      fushi_voice_hook::ReadGameStreamInputRequest(g_header);
+      my_comic_voice_hook::ReadGameStreamInputRequest(g_header);
   const uint64_t now_tick = GetTickCount64();
   const bool game_stream_target_ok =
       SgreGameStreamTargetAccepts(game_stream_request, game, now_tick);
   const bool lookup_allowed =
       g_sgre_lookup_click_runtime_enabled.load(std::memory_order_acquire) &&
-      fushi_voice_hook::g_geometry_provider_registry.OwnsReadyProvider(
+      my_comic_voice_hook::g_geometry_provider_registry.OwnsReadyProvider(
           g_header,
-          fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-          fushi_voice_hook::kLookupGeometryProviderIdSgre) &&
+          my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+          my_comic_voice_hook::kLookupGeometryProviderIdSgre) &&
       !shield_active && game != nullptr;
   const bool fresh_down = primary_down &&
                           g_sgre_lookup_click_gesture.synchronized &&
@@ -879,18 +879,18 @@ HRESULT STDMETHODCALLTYPE SgreGetDeviceStateDetour(void* device,
     hit_on_press = BuildSgreLookupClickPayloadAtPress(
         g_sgre_lookup_click_read_target, game, pointer, &pressed_payload);
   }
-  const fushi_voice_hook::SgreLookupClickAction click_action =
-      fushi_voice_hook::AdvanceSgreLookupClickGesture(
+  const my_comic_voice_hook::SgreLookupClickAction click_action =
+      my_comic_voice_hook::AdvanceSgreLookupClickGesture(
           primary_down, lookup_allowed, hit_on_press, pointer_valid,
           &g_sgre_lookup_click_gesture);
-  if (click_action == fushi_voice_hook::SgreLookupClickAction::kBegin) {
+  if (click_action == my_comic_voice_hook::SgreLookupClickAction::kBegin) {
     g_sgre_lookup_pending_click = pressed_payload;
     g_sgre_lookup_pending_click_valid = true;
     g_sgre_direct_input_latched_buttons.fetch_or(
-        fushi_voice_hook::kSgreLookupPrimaryButtonMask,
+        my_comic_voice_hook::kSgreLookupPrimaryButtonMask,
         std::memory_order_acq_rel);
   } else if (click_action ==
-             fushi_voice_hook::SgreLookupClickAction::kSubmit) {
+             my_comic_voice_hook::SgreLookupClickAction::kSubmit) {
     // The down payload is immutable, but the renderer may replace the
     // sentence or client transform while the button is held.  Re-read the
     // worker-published logical target before queueing the up transaction.
@@ -901,7 +901,7 @@ HRESULT STDMETHODCALLTYPE SgreGetDeviceStateDetour(void* device,
     }
     g_sgre_lookup_pending_click_valid = false;
   } else if (click_action ==
-             fushi_voice_hook::SgreLookupClickAction::kCancel) {
+             my_comic_voice_hook::SgreLookupClickAction::kCancel) {
     g_sgre_lookup_pending_click_valid = false;
   }
 
@@ -914,11 +914,11 @@ HRESULT STDMETHODCALLTYPE SgreGetDeviceStateDetour(void* device,
   const uint8_t initial_latch =
       g_sgre_direct_input_latched_buttons.load(std::memory_order_acquire);
   if (shield_active || initial_latch != 0) {
-    uint8_t raw_buttons[fushi_voice_hook::kSgreDirectInputMouseButtonCount] = {};
+    uint8_t raw_buttons[my_comic_voice_hook::kSgreDirectInputMouseButtonCount] = {};
     for (size_t index = 0;
-         index < fushi_voice_hook::kSgreDirectInputMouseButtonCount; ++index) {
+         index < my_comic_voice_hook::kSgreDirectInputMouseButtonCount; ++index) {
       raw_buttons[index] =
-          bytes[fushi_voice_hook::kSgreDirectInputMouseButtonsOffset + index];
+          bytes[my_comic_voice_hook::kSgreDirectInputMouseButtonsOffset + index];
     }
     // The admitted callsite is single-threaded, but make the latch linearizable
     // anyway: a future second poller must not lose another button's bit through
@@ -926,11 +926,11 @@ HRESULT STDMETHODCALLTYPE SgreGetDeviceStateDetour(void* device,
     uint8_t observed = initial_latch;
     for (;;) {
       for (size_t index = 0;
-           index < fushi_voice_hook::kSgreDirectInputMouseButtonCount; ++index) {
-        bytes[fushi_voice_hook::kSgreDirectInputMouseButtonsOffset + index] =
+           index < my_comic_voice_hook::kSgreDirectInputMouseButtonCount; ++index) {
+        bytes[my_comic_voice_hook::kSgreDirectInputMouseButtonsOffset + index] =
             raw_buttons[index];
       }
-      const uint8_t next = fushi_voice_hook::FilterSgreDirectInputMouseButtons(
+      const uint8_t next = my_comic_voice_hook::FilterSgreDirectInputMouseButtons(
           shield_active, bytes, state_bytes, observed);
       if (g_sgre_direct_input_latched_buttons.compare_exchange_weak(
               observed, next, std::memory_order_acq_rel,
@@ -941,7 +941,7 @@ HRESULT STDMETHODCALLTYPE SgreGetDeviceStateDetour(void* device,
   }
 
   const uint32_t game_stream_observed =
-      fushi_voice_hook::ApplySgreGameStreamRemoteButtons(
+      my_comic_voice_hook::ApplySgreGameStreamRemoteButtons(
           game_stream_target_ok && !shield_active,
           game_stream_request.active_buttons, bytes, state_bytes) |
       (game_stream_request.valid
@@ -951,11 +951,11 @@ HRESULT STDMETHODCALLTYPE SgreGetDeviceStateDetour(void* device,
       !SgreGameStreamAckWaitsForKeyboard(game_stream_request)) {
     const uint32_t status =
         now_tick > game_stream_request.deadline_tick_ms
-            ? fushi_voice_hook::kGameStreamInputStatusExpired
+            ? my_comic_voice_hook::kGameStreamInputStatusExpired
             : (game_stream_target_ok
-                   ? fushi_voice_hook::kGameStreamInputStatusApplied
-                   : fushi_voice_hook::kGameStreamInputStatusRejectedTarget);
-    fushi_voice_hook::PublishGameStreamInputStatus(
+                   ? my_comic_voice_hook::kGameStreamInputStatusApplied
+                   : my_comic_voice_hook::kGameStreamInputStatusRejectedTarget);
+    my_comic_voice_hook::PublishGameStreamInputStatus(
         g_header, game_stream_request, status, game_stream_observed);
   }
   return result;
@@ -964,14 +964,14 @@ HRESULT STDMETHODCALLTYPE SgreGetDeviceStateDetour(void* device,
 void RevokeSgreDirectInputShieldReady(HWND game) {
   if (game != nullptr && IsWindow(game)) {
     RemovePropW(game,
-                fushi_voice_hook::kSgreDirectInputShieldWindowProperty);
-    RemovePropW(game, fushi_voice_hook::kSgreDirectInputShieldReadyProperty);
+                my_comic_voice_hook::kSgreDirectInputShieldWindowProperty);
+    RemovePropW(game, my_comic_voice_hook::kSgreDirectInputShieldReadyProperty);
   }
   if (g_header != nullptr) {
     InterlockedAnd(
         reinterpret_cast<volatile LONG*>(&g_header->lookup_diag),
         static_cast<LONG>(
-            ~fushi_voice_hook::kLookupDiagSgreDirectInputShieldReady));
+            ~my_comic_voice_hook::kLookupDiagSgreDirectInputShieldReady));
   }
 }
 
@@ -1013,12 +1013,12 @@ bool RefreshSgreDirectInputPropertyWindow() {
 
   // SGRE may replace its visible top-level window while retaining the old HWND
   // (fullscreen / mode transitions).  Move the whole Required -> Ready contract
-  // instead of leaving Fushi to misclassify the new main window as a generic
+  // instead of leaving MyComic to misclassify the new main window as a generic
   // HHOOK-only game.
   RevokeSgreDirectInputShieldReady(previous);
   if (previous != nullptr && IsWindow(previous)) {
     RemovePropW(previous,
-                fushi_voice_hook::kSgreDirectInputShieldRequiredProperty);
+                my_comic_voice_hook::kSgreDirectInputShieldRequiredProperty);
   }
   g_sgre_direct_input_property_window = current;
   g_sgre_direct_input_game_window.store(nullptr, std::memory_order_release);
@@ -1030,15 +1030,15 @@ bool PublishSgreDirectInputShieldRequired() {
   const HWND game = ResolveSgreDirectInputPropertyWindow();
   if (game == nullptr) return false;
   if (reinterpret_cast<uintptr_t>(GetPropW(
-          game, fushi_voice_hook::kSgreDirectInputShieldRequiredProperty)) ==
-      fushi_voice_hook::kSgreDirectInputShieldRequiredValue) {
+          game, my_comic_voice_hook::kSgreDirectInputShieldRequiredProperty)) ==
+      my_comic_voice_hook::kSgreDirectInputShieldRequiredValue) {
     return true;
   }
   return SetPropW(
              game,
-             fushi_voice_hook::kSgreDirectInputShieldRequiredProperty,
+             my_comic_voice_hook::kSgreDirectInputShieldRequiredProperty,
              reinterpret_cast<HANDLE>(
-                 fushi_voice_hook::kSgreDirectInputShieldRequiredValue)) !=
+                 my_comic_voice_hook::kSgreDirectInputShieldRequiredValue)) !=
          FALSE;
 }
 
@@ -1058,15 +1058,15 @@ bool PublishSgreDirectInputShieldReady() {
   const HWND game = ResolveSgreDirectInputPropertyWindow();
   if (game == nullptr) return false;
   // Injected-side cache first, Ready property last. Ready is the cross-process
-  // commit observed by Fushi; publishing it earlier leaves a first-frame window
+  // commit observed by MyComic; publishing it earlier leaves a first-frame window
   // where host shows the popup while the detour still reads game == nullptr.
   g_sgre_direct_input_game_window.store(game, std::memory_order_release);
   if (reinterpret_cast<uintptr_t>(GetPropW(
-          game, fushi_voice_hook::kSgreDirectInputShieldReadyProperty)) !=
-          fushi_voice_hook::kSgreDirectInputShieldReadyValue &&
-      !SetPropW(game, fushi_voice_hook::kSgreDirectInputShieldReadyProperty,
+          game, my_comic_voice_hook::kSgreDirectInputShieldReadyProperty)) !=
+          my_comic_voice_hook::kSgreDirectInputShieldReadyValue &&
+      !SetPropW(game, my_comic_voice_hook::kSgreDirectInputShieldReadyProperty,
                 reinterpret_cast<HANDLE>(
-                    fushi_voice_hook::kSgreDirectInputShieldReadyValue))) {
+                    my_comic_voice_hook::kSgreDirectInputShieldReadyValue))) {
     g_sgre_direct_input_game_window.store(nullptr, std::memory_order_release);
     return false;
   }
@@ -1074,7 +1074,7 @@ bool PublishSgreDirectInputShieldReady() {
     InterlockedOr(
         reinterpret_cast<volatile LONG*>(&g_header->lookup_diag),
         static_cast<LONG>(
-            fushi_voice_hook::kLookupDiagSgreDirectInputShieldReady));
+            my_comic_voice_hook::kLookupDiagSgreDirectInputShieldReady));
   }
   g_sgre_direct_input_last_health_tick = GetTickCount64();
   return true;
@@ -1106,7 +1106,7 @@ bool InstallSgreDirectInputShield() {
     if (mouse_device != nullptr) {
       target = VtableSlot(
           mouse_device,
-          fushi_voice_hook::kSgreDirectInputGetDeviceStateVtableIndex);
+          my_comic_voice_hook::kSgreDirectInputGetDeviceStateVtableIndex);
     }
   } __except (EXCEPTION_EXECUTE_HANDLER) {
     mouse_device = nullptr;
@@ -1118,21 +1118,21 @@ bool InstallSgreDirectInputShield() {
   void** device_vtable = nullptr;
   if (mouse_device != nullptr &&
       reinterpret_cast<uintptr_t>(mouse_device) % alignof(void*) == 0 &&
-      fushi_voice_hook::exact_lookup::IsReadableSpan(mouse_device,
+      my_comic_voice_hook::exact_lookup::IsReadableSpan(mouse_device,
                                                      sizeof(void*))) {
     memcpy(&device_vtable, mouse_device, sizeof(device_vtable));
   }
   const bool device_abi_valid =
       device_vtable != nullptr &&
       reinterpret_cast<uintptr_t>(device_vtable) % alignof(void*) == 0 &&
-      fushi_voice_hook::exact_lookup::IsReadableSpan(
+      my_comic_voice_hook::exact_lookup::IsReadableSpan(
           device_vtable,
-          (fushi_voice_hook::kSgreDirectInputGetDeviceStateVtableIndex + 1u) *
+          (my_comic_voice_hook::kSgreDirectInputGetDeviceStateVtableIndex + 1u) *
               sizeof(void*)) &&
       target == device_vtable
-                     [fushi_voice_hook::
+                     [my_comic_voice_hook::
                           kSgreDirectInputGetDeviceStateVtableIndex] &&
-      fushi_voice_hook::exact_lookup::IsExecutableAddress(target);
+      my_comic_voice_hook::exact_lookup::IsExecutableAddress(target);
   if (mouse_device != nullptr && target != nullptr && device_abi_valid &&
       target == g_sgre_get_device_state_target &&
       mouse_device == g_sgre_mouse_device.load(std::memory_order_acquire) &&
@@ -1254,7 +1254,7 @@ SgreLookupCaptureResult CopySgreLookupDrawState(void* text_surface,
         g_sgre_direct_input_game_window.load(std::memory_order_acquire);
     RECT client = {};
     if (game != nullptr && IsWindow(game) && GetClientRect(game, &client)) {
-      expected_line_height = fushi_voice_hook::SgreScenarioLineHeightForClient(
+      expected_line_height = my_comic_voice_hook::SgreScenarioLineHeightForClient(
           client.right - client.left, client.bottom - client.top);
     }
   }
@@ -1305,7 +1305,7 @@ SgreLookupCaptureResult CopySgreLookupDrawState(void* text_surface,
       if (character == L'\0') {
         return SgreLookupCaptureResult::kGlyphCharacter;
       }
-      fushi_voice_hook::SgreLookupGlyphGeometry geometry;
+      my_comic_voice_hook::SgreLookupGlyphGeometry geometry;
       geometry.x =
           *reinterpret_cast<const float*>(glyph + kSgreGlyphDrawXOffset);
       geometry.y =
@@ -1319,7 +1319,7 @@ SgreLookupCaptureResult CopySgreLookupDrawState(void* text_surface,
           std::isfinite(geometry.x) && geometry.x > previous_x) {
         has_horizontal_advance = true;
       }
-      if (i != 0 && fushi_voice_hook::StartsNextSgreLookupLine(
+      if (i != 0 && my_comic_voice_hook::StartsNextSgreLookupLine(
                         previous_x, geometry.x)) {
         ++line;
       }
@@ -1347,7 +1347,7 @@ SgreLookupCaptureResult CopySgreLookupDrawState(void* text_surface,
       capture->glyphs[i] = geometry;
       previous_x = geometry.x;
     }
-    if (!fushi_voice_hook::MatchesSgreScenarioDrawMetrics(
+    if (!my_comic_voice_hook::MatchesSgreScenarioDrawMetrics(
             line_height, first_glyph_height, has_horizontal_advance,
             expected_line_height)) {
       return SgreLookupCaptureResult::kSurfaceMetrics;
@@ -1433,7 +1433,7 @@ uint64_t PublishSgreExactText(const SgreLookupCapture& snapshot,
   constexpr uint64_t kSgreTextComponentIdentity = 0x5347524554455854ull;
   constexpr wchar_t kSgreTextHookCode[] = L"ENGINE:SGRE:wind3d11";
   constexpr char kSgreTextHookName[] = "SGRE exact";
-  const uint64_t thread_id = fushi_voice_hook::NativeTextThreadIdFrom(
+  const uint64_t thread_id = my_comic_voice_hook::NativeTextThreadIdFrom(
       kSgreTextComponentIdentity, kSgreTextHookCode, kSgreTextHookName);
 
   EnterCriticalSection(&g_text_cs);
@@ -1443,19 +1443,19 @@ uint64_t PublishSgreExactText(const SgreLookupCapture& snapshot,
       g_sgre_last_text_units == snapshot.text_units &&
       memcmp(g_sgre_last_text, snapshot.text, bytes) == 0;
   if (!duplicate) {
-    fushi_voice_hook::TextLaneWrite write;
+    my_comic_voice_hook::TextLaneWrite write;
     write.thread_id = thread_id;
     write.thread_address = g_sgre_anchors.text_draw.rva;
     write.process_id = GetCurrentProcessId();
-    write.source_kind = fushi_voice_hook::kTextSourceSgre;
+    write.source_kind = my_comic_voice_hook::kTextSourceSgre;
     write.is_utf8 = 0;
     write.text = snapshot.text;
     write.byte_len = static_cast<uint32_t>(bytes);
     write.hook_name = kSgreTextHookName;
     write.hook_code = kSgreTextHookCode;
-    const uint64_t published = fushi_voice_hook::WriteTextLaneEvent(
-        g_header, fushi_voice_hook::kNativeThreadPreviewStart,
-        fushi_voice_hook::kTextLaneCount, write);
+    const uint64_t published = my_comic_voice_hook::WriteTextLaneEvent(
+        g_header, my_comic_voice_hook::kNativeThreadPreviewStart,
+        my_comic_voice_hook::kTextLaneCount, write);
     if (published != 0) {
       memcpy(g_sgre_last_text, snapshot.text, bytes);
       g_sgre_last_text_units = snapshot.text_units;
@@ -1480,7 +1480,7 @@ void CaptureSgreLookupDrawState(void* text_surface) {
       g_text_base != nullptr && g_text_cs_ready;
   const bool lookup_requested =
       !g_stop && g_header != nullptr &&
-      fushi_voice_hook::HasLookupRegion(g_header) &&
+      my_comic_voice_hook::HasLookupRegion(g_header) &&
       g_header->lookup_enabled != 0;
   if (!text_requested && !lookup_requested) return;
   SgreLookupCapture snapshot;
@@ -1490,7 +1490,7 @@ void CaptureSgreLookupDrawState(void* text_surface) {
     // A typing prefix stays lookup-able (its glyphs are on screen) but is not
     // a line: it gets no text-lane seq, so a hit on it fails closed on mining
     // instead of mining a half sentence.
-    if (text_requested && fushi_voice_hook::IsSgreScenarioLineFullyRevealed(
+    if (text_requested && my_comic_voice_hook::IsSgreScenarioLineFullyRevealed(
                               snapshot.glyph_count,
                               snapshot.layout_glyph_count)) {
       snapshot.text_seq = PublishSgreExactText(snapshot, text_surface);
@@ -1500,7 +1500,7 @@ void CaptureSgreLookupDrawState(void* text_surface) {
     snapshot.captured_tick = GetTickCount64();
     g_sgre_lookup_scenario_surface.store(text_surface,
                                          std::memory_order_release);
-    g_header->lookup_diag |= fushi_voice_hook::kLookupDiagGeometryObserved;
+    g_header->lookup_diag |= my_comic_voice_hook::kLookupDiagGeometryObserved;
   } else if (capture_result == SgreLookupCaptureResult::kNoGlyphs) {
     void* expected_text_surface = text_surface;
     if (text_requested &&
@@ -1522,7 +1522,7 @@ void CaptureSgreLookupDrawState(void* text_surface) {
     snapshot.captured_tick = GetTickCount64();
   } else {
     if (lookup_requested && IsSgreLookupCaptureFault(capture_result)) {
-      g_header->lookup_diag |= fushi_voice_hook::kLookupDiagSensorFault;
+      g_header->lookup_diag |= my_comic_voice_hook::kLookupDiagSensorFault;
     }
     return;
   }
@@ -1881,7 +1881,7 @@ bool InstallSgreLookupSensor() {
   if (g_sgre_text_draw_original != nullptr) {
     InstallSgreUiDrawTextTrace();
     if (g_header != nullptr) {
-      g_header->lookup_diag |= fushi_voice_hook::kLookupDiagSensorInstalled;
+      g_header->lookup_diag |= my_comic_voice_hook::kLookupDiagSensorInstalled;
     }
     return true;
   }
@@ -1900,7 +1900,7 @@ bool InstallSgreLookupSensor() {
              reinterpret_cast<void**>(&g_sgre_text_draw_original));
   if (installed) InstallSgreUiDrawTextTrace();
   if (installed && g_header != nullptr) {
-    g_header->lookup_diag |= fushi_voice_hook::kLookupDiagSensorInstalled;
+    g_header->lookup_diag |= my_comic_voice_hook::kLookupDiagSensorInstalled;
   }
   return installed;
 }
@@ -2049,32 +2049,32 @@ bool AppendSgreLookupCapture(const SgreLookupCapture& source,
 
 bool PublishSgreLookupHit(uint64_t capture_generation, uint64_t text_seq,
                           const std::wstring& line, uint32_t char_index,
-                          const fushi_voice_hook::SgreLookupRect& rect,
+                          const my_comic_voice_hook::SgreLookupRect& rect,
                           int32_t client_width, int32_t client_height) {
   if (g_header == nullptr || capture_generation == 0 ||
       char_index >= line.size()) return false;
-  char utf8[fushi_voice_hook::kLookupLineBytes] = {};
+  char utf8[my_comic_voice_hook::kLookupLineBytes] = {};
   const int bytes = WideCharToMultiByte(
       CP_UTF8, 0, line.data(), static_cast<int>(line.size()), utf8,
       static_cast<int>(sizeof(utf8)), nullptr, nullptr);
   if (bytes <= 0) return false;
-  fushi_voice_hook::LookupGeometryHitPublication publication;
+  my_comic_voice_hook::LookupGeometryHitPublication publication;
   publication.provider_kind =
-      fushi_voice_hook::kLookupGeometryProviderEngineExactLayout;
-  publication.provider_id = fushi_voice_hook::kLookupGeometryProviderIdSgre;
+      my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout;
+  publication.provider_id = my_comic_voice_hook::kLookupGeometryProviderIdSgre;
   publication.char_index = char_index;
-  publication.source_length = fushi_voice_hook::LookupUtf16SourceLength(
+  publication.source_length = my_comic_voice_hook::LookupUtf16SourceLength(
       line.data(), static_cast<uint32_t>(line.size()), char_index);
   publication.char_count = static_cast<uint32_t>(line.size());
   publication.coordinate_space =
-      fushi_voice_hook::kLookupCoordinateSpaceClientPhysicalPixels;
-  publication.writing_mode = fushi_voice_hook::kLookupWritingModeHorizontal;
+      my_comic_voice_hook::kLookupCoordinateSpaceClientPhysicalPixels;
+  publication.writing_mode = my_comic_voice_hook::kLookupWritingModeHorizontal;
   // BUG-2085: the host resolves the mined occurrence by
   // TexthookerLineEntry.sourceSequence == hit.textGeneration, i.e. the
   // text-lane seq the exact line was published with. The lookup capture
   // generation is a different counter and never matched, so every in-game
   // card mining on SGRE failed closed ("ankiConnect: false").
-  publication.text_generation = fushi_voice_hook::SgreLookupHitTextGeneration(
+  publication.text_generation = my_comic_voice_hook::SgreLookupHitTextGeneration(
       text_seq, capture_generation);
   publication.geometry_generation = capture_generation;
   publication.glyph_x = rect.x;
@@ -2083,18 +2083,18 @@ bool PublishSgreLookupHit(uint64_t capture_generation, uint64_t text_seq,
   publication.glyph_h = rect.height;
   publication.view_w = client_width;
   publication.view_h = client_height;
-  publication.flags = fushi_voice_hook::kLookupHitFlagSubmit;
+  publication.flags = my_comic_voice_hook::kLookupHitFlagSubmit;
   publication.line_utf8 = reinterpret_cast<const uint8_t*>(utf8);
   publication.line_bytes = static_cast<uint32_t>(bytes);
-  return fushi_voice_hook::g_geometry_provider_registry.PublishHit(g_header, publication);
+  return my_comic_voice_hook::g_geometry_provider_registry.PublishHit(g_header, publication);
 }
 
 void ClearSgreLookupActiveCapture() {
   if (g_header != nullptr) {
-    fushi_voice_hook::g_geometry_provider_registry.Retire(
+    my_comic_voice_hook::g_geometry_provider_registry.Retire(
         g_header,
-        fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-        fushi_voice_hook::kLookupGeometryProviderIdSgre);
+        my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+        my_comic_voice_hook::kLookupGeometryProviderIdSgre);
   }
   g_sgre_lookup_active_valid = false;
   g_sgre_lookup_active_line.clear();
@@ -2129,16 +2129,16 @@ bool IsSgreLookupPayloadCurrent(const SgreLookupClickPayload& payload) {
       !GetClientRect(game, &client) || !ClientToScreen(game, &origin)) {
     return false;
   }
-  const fushi_voice_hook::SgreLookupClientSnapshot active_client = {
+  const my_comic_voice_hook::SgreLookupClientSnapshot active_client = {
       reinterpret_cast<uintptr_t>(game), origin.x, origin.y,
       client.right - client.left, client.bottom - client.top};
-  if (!fushi_voice_hook::MatchesSgreLookupGenerationAndClient(
+  if (!my_comic_voice_hook::MatchesSgreLookupGenerationAndClient(
           payload.logical_generation, SgreLookupPayloadClientSnapshot(payload),
           g_sgre_lookup_active_generation, active_client)) {
     return false;
   }
 
-  fushi_voice_hook::SgreLookupRect expected;
+  my_comic_voice_hook::SgreLookupRect expected;
   if (!SgreLookupRectForCapturedGlyph(
           g_sgre_lookup_active_capture, payload.char_index,
           active_client.width, active_client.height, &expected)) {
@@ -2208,12 +2208,12 @@ struct SgreHoverHighlightScope {
 void ProcessSgreLookupTick() {
   SgreHoverHighlightScope hover_highlight;
   if (g_stop || g_header == nullptr ||
-      !fushi_voice_hook::HasLookupRegion(g_header)) {
+      !my_comic_voice_hook::HasLookupRegion(g_header)) {
     if (g_header != nullptr) {
-      fushi_voice_hook::g_geometry_provider_registry.Retire(
+      my_comic_voice_hook::g_geometry_provider_registry.Retire(
           g_header,
-          fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-          fushi_voice_hook::kLookupGeometryProviderIdSgre);
+          my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+          my_comic_voice_hook::kLookupGeometryProviderIdSgre);
     }
     g_sgre_lookup_click_runtime_enabled.store(false,
                                               std::memory_order_release);
@@ -2286,7 +2286,7 @@ void ProcessSgreLookupTick() {
       candidate.text_units == candidate.glyph_count) {
     const bool same_logical_snapshot =
         g_sgre_lookup_active_valid &&
-        fushi_voice_hook::SameSgreLookupLogicalSnapshot(
+        my_comic_voice_hook::SameSgreLookupLogicalSnapshot(
             reinterpret_cast<const char16_t*>(
                 g_sgre_lookup_active_capture.text),
             g_sgre_lookup_active_capture.text_units,
@@ -2300,7 +2300,7 @@ void ProcessSgreLookupTick() {
                candidate.glyph_spaces, candidate.glyph_count) == 0;
     if (!same_logical_snapshot) {
       g_sgre_lookup_generation_counter =
-          fushi_voice_hook::NextSgreLookupLogicalGeneration(
+          my_comic_voice_hook::NextSgreLookupLogicalGeneration(
               g_sgre_lookup_generation_counter);
     }
     g_sgre_lookup_active_capture = candidate;
@@ -2323,20 +2323,20 @@ void ProcessSgreLookupTick() {
   // an admission/owner handoff rejects its immutable payload.
   bool owns_geometry = false;
   if (g_sgre_lookup_active_valid && g_sgre_lookup_active_mapped != 0) {
-    fushi_voice_hook::g_geometry_provider_registry.OfferReady(
+    my_comic_voice_hook::g_geometry_provider_registry.OfferReady(
         g_header,
-        fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-        fushi_voice_hook::kLookupGeometryProviderIdSgre);
+        my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+        my_comic_voice_hook::kLookupGeometryProviderIdSgre);
     owns_geometry =
-        fushi_voice_hook::g_geometry_provider_registry.OwnsReadyProvider(
+        my_comic_voice_hook::g_geometry_provider_registry.OwnsReadyProvider(
             g_header,
-            fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-            fushi_voice_hook::kLookupGeometryProviderIdSgre);
+            my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+            my_comic_voice_hook::kLookupGeometryProviderIdSgre);
   } else {
-    fushi_voice_hook::g_geometry_provider_registry.Retire(
+    my_comic_voice_hook::g_geometry_provider_registry.Retire(
         g_header,
-        fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-        fushi_voice_hook::kLookupGeometryProviderIdSgre);
+        my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+        my_comic_voice_hook::kLookupGeometryProviderIdSgre);
   }
   g_sgre_lookup_click_runtime_enabled.store(owns_geometry,
                                              std::memory_order_release);
@@ -2365,7 +2365,7 @@ void ProcessSgreLookupTick() {
 
   const uint16_t shift_state =
       static_cast<uint16_t>(GetAsyncKeyState(VK_SHIFT));
-  const bool submit = fushi_voice_hook::ConsumeSgreLookupShiftSample(
+  const bool submit = my_comic_voice_hook::ConsumeSgreLookupShiftSample(
       shift_state, &g_sgre_lookup_last_shift_down);
   if (!g_sgre_lookup_active_valid || g_sgre_lookup_active_mapped == 0) {
     InvalidateSgreLookupClickTarget();
@@ -2379,10 +2379,10 @@ void ProcessSgreLookupTick() {
   POINT client_origin = {0, 0};
   if (game == nullptr || !GetClientRect(game, &client) ||
       !ClientToScreen(game, &client_origin) || !GetCursorPos(&cursor)) {
-    fushi_voice_hook::g_geometry_provider_registry.Retire(
+    my_comic_voice_hook::g_geometry_provider_registry.Retire(
         g_header,
-        fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-        fushi_voice_hook::kLookupGeometryProviderIdSgre);
+        my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+        my_comic_voice_hook::kLookupGeometryProviderIdSgre);
     InvalidateSgreLookupClickTarget();
     return;
   }
@@ -2410,7 +2410,7 @@ void ProcessSgreLookupTick() {
                           (point_window == game || IsChild(game, point_window));
   cursor.x -= client_origin.x;
   cursor.y -= client_origin.y;
-  fushi_voice_hook::SgreLookupRect hit_rect;
+  my_comic_voice_hook::SgreLookupRect hit_rect;
   const int glyph_index = FindSgreCapturedLookupGlyph(
       active, client_width, client_height, cursor.x, cursor.y, &hit_rect);
 
@@ -2424,12 +2424,12 @@ void ProcessSgreLookupTick() {
       term_start < active.glyph_count) {
     const uint32_t term_end = std::min<uint32_t>(
         active.glyph_count, term_start + term_len);
-    fushi_voice_hook::SgreLookupRect term_rect;
+    my_comic_voice_hook::SgreLookupRect term_rect;
     bool have_rect = false;
     const uint16_t term_row = active.glyphs[term_start].line;
     for (uint32_t index = term_start; index < term_end; ++index) {
       if (active.glyphs[index].line != term_row) break;
-      fushi_voice_hook::SgreLookupRect cell;
+      my_comic_voice_hook::SgreLookupRect cell;
       if (!SgreLookupRectForCapturedGlyph(active, index, client_width,
                                           client_height, &cell)) {
         continue;

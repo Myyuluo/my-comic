@@ -3,7 +3,7 @@
 #include "siglus_eightarg_runtime.h"
 #include "siglus_eightarg_message_capture.h"
 
-namespace fushi_voice_hook::siglus_eightarg_owner {
+namespace my_comic_voice_hook::siglus_eightarg_owner {
 namespace runtime = siglus_eightarg_runtime;
 namespace message = siglus_eightarg_message;
 
@@ -119,4 +119,4 @@ inline bool ContainsCurrentGlyph(const Path& path, uint32_t glyph,
       Same(path, current);
 }
 
-}  // namespace fushi_voice_hook::siglus_eightarg_owner
+}  // namespace my_comic_voice_hook::siglus_eightarg_owner

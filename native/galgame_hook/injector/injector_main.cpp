@@ -44,8 +44,8 @@
 #include "unity_voice_bundles.h"
 
 // galgame 一键制卡 C 阶段注入器（C.1）。把 hook DLL 注入目标游戏进程，建立共享内存 + 就绪
-// 事件，确认注入成功后读回语音格式。Fushi 主进程把它当子进程拉起（部署红线：注入代码只在
-// 这个隔离组件里，不进 fushi.exe）。
+// 事件，确认注入成功后读回语音格式。MyComic 主进程把它当子进程拉起（部署红线：注入代码只在
+// 这个隔离组件里，不进 MyComic.exe）。
 //
 // 两种进入方式（二选一）：
 //   attach（--pid）：注入已运行进程。适合引擎在游戏运行中才建声音设备的情形。
@@ -55,8 +55,8 @@
 //     正常启动，等保护壳退出且游戏主窗口出现后再附着。
 //
 // 用法：
-//   fushi_voice_injector.exe --pid <PID> [--dll <hook.dll>] [--wait-ms N] [--hold]
-//   fushi_voice_injector.exe --launch <exe> [--workdir <dir>] [--arg <a>]...
+//   my_comic_voice_injector.exe --pid <PID> [--dll <hook.dll>] [--wait-ms N] [--hold]
+//   my_comic_voice_injector.exe --launch <exe> [--workdir <dir>] [--arg <a>]...
 //                             [--japanese-locale]
 //                             [--dll <hook.dll>] [--wait-ms N] [--hold]
 //     --pid     目标进程 ID（attach 模式；与 --launch 二选一）
@@ -64,10 +64,10 @@
 //     --workdir 子进程工作目录（launch 缺省=exe 所在目录）
 //     --arg     追加一个传给子进程的命令行参数（可重复；launch 专用）
 //     --japanese-locale  用 injector 同目录的 Locale Emulator 运行库建立日语 CP932
-//               环境，再在同一个挂起进程里完成 Fushi 早注入。运行库不可用时告警并安全
+//               环境，再在同一个挂起进程里完成 MyComic 早注入。运行库不可用时告警并安全
 //               回退普通启动（launch 专用；Steam 协议启动会明确告警且不伪装已转区）。
-//     --dll     hook DLL 路径（默认取同目录 arch 匹配的 fushi_voice_hook.dll）
-//     --unity-runtime  Unity 资源提取运行时目录（含 fushi_unity_audio_extract.exe /
+//     --dll     hook DLL 路径（默认取同目录 arch 匹配的 my_comic_voice_hook.dll）
+//     --unity-runtime  Unity 资源提取运行时目录（含 my_comic_unity_audio_extract.exe /
 //               classdata.tpk / vgmstream-cli.exe）。缺省=injector 同目录的
 //               unity_audio_runtime\。注入运行时现在从安装目录外的副本启动（BUG-1708），
 //               而这套提取运行时有 140 MB、仍留在安装目录，故位置必须显式下发。
@@ -79,44 +79,44 @@
 //     --follow-child-processes  等启动器产生真实游戏子进程后再注入；Ren'Py 目录签名会自动启用。
 namespace {
 
-using fushi_voice_hook::kClipCount;
-using fushi_voice_hook::kDiagLunaConnected;
-using fushi_voice_hook::kDiagLunaHostReady;
-using fushi_voice_hook::kDiagLunaInjectFailed;
-using fushi_voice_hook::kDiagLunaOutputObserved;
-using fushi_voice_hook::kDiagStartupAudioHooksReady;
-using fushi_voice_hook::kDiagUnityResourceExtracted;
-using fushi_voice_hook::kDiagUnityResourceExtractFailed;
-using fushi_voice_hook::kDiagUnityResourceExtractorReady;
-using fushi_voice_hook::kLoopbackMarkerCount;
-using fushi_voice_hook::kLoopbackSeconds;
-using fushi_voice_hook::kMaxLoopbackBytes;
-using fushi_voice_hook::kMaxRingBytes;
-using fushi_voice_hook::kNativeLoopbackAllow;
-using fushi_voice_hook::kNativeLoopbackDeny;
-using fushi_voice_hook::kRingSeconds;
-using fushi_voice_hook::kSharedMagic;
-using fushi_voice_hook::kSharedVersion;
-using fushi_voice_hook::kStableIpcVersion;
-using fushi_voice_hook::kTextSlotBytes;
-using fushi_voice_hook::kTextSlotCount;
-using fushi_voice_hook::kUnityVoiceEventCount;
-using fushi_voice_hook::LoopbackMarker;
-using fushi_voice_hook::ReadyEventName;
-using fushi_voice_hook::SharedHeader;
-using fushi_voice_hook::SharedMemoryName;
-using fushi_voice_hook::TextSlot;
-using fushi_voice_hook::VoiceClip;
-using fushi_voice_hook::UnityVoiceEvent;
-using fushi_voice_hook::InspectMappingSession;
-using fushi_voice_hook::AdvanceUnityEventCursorIfCommitted;
-using fushi_voice_hook::MappingSessionAction;
-using fushi_voice_hook::LunaBridgeExports;
-using fushi_voice_hook::LunaThreadParam;
-using fushi_voice_hook::PFN_Luna_DetachProcess;
-using fushi_voice_hook::PFN_Luna_InsertHookCode;
-using fushi_voice_hook::PFN_Luna_InsertPCHooks;
-using fushi_voice_hook::PFN_Luna_RemoveHook;
+using my_comic_voice_hook::kClipCount;
+using my_comic_voice_hook::kDiagLunaConnected;
+using my_comic_voice_hook::kDiagLunaHostReady;
+using my_comic_voice_hook::kDiagLunaInjectFailed;
+using my_comic_voice_hook::kDiagLunaOutputObserved;
+using my_comic_voice_hook::kDiagStartupAudioHooksReady;
+using my_comic_voice_hook::kDiagUnityResourceExtracted;
+using my_comic_voice_hook::kDiagUnityResourceExtractFailed;
+using my_comic_voice_hook::kDiagUnityResourceExtractorReady;
+using my_comic_voice_hook::kLoopbackMarkerCount;
+using my_comic_voice_hook::kLoopbackSeconds;
+using my_comic_voice_hook::kMaxLoopbackBytes;
+using my_comic_voice_hook::kMaxRingBytes;
+using my_comic_voice_hook::kNativeLoopbackAllow;
+using my_comic_voice_hook::kNativeLoopbackDeny;
+using my_comic_voice_hook::kRingSeconds;
+using my_comic_voice_hook::kSharedMagic;
+using my_comic_voice_hook::kSharedVersion;
+using my_comic_voice_hook::kStableIpcVersion;
+using my_comic_voice_hook::kTextSlotBytes;
+using my_comic_voice_hook::kTextSlotCount;
+using my_comic_voice_hook::kUnityVoiceEventCount;
+using my_comic_voice_hook::LoopbackMarker;
+using my_comic_voice_hook::ReadyEventName;
+using my_comic_voice_hook::SharedHeader;
+using my_comic_voice_hook::SharedMemoryName;
+using my_comic_voice_hook::TextSlot;
+using my_comic_voice_hook::VoiceClip;
+using my_comic_voice_hook::UnityVoiceEvent;
+using my_comic_voice_hook::InspectMappingSession;
+using my_comic_voice_hook::AdvanceUnityEventCursorIfCommitted;
+using my_comic_voice_hook::MappingSessionAction;
+using my_comic_voice_hook::LunaBridgeExports;
+using my_comic_voice_hook::LunaThreadParam;
+using my_comic_voice_hook::PFN_Luna_DetachProcess;
+using my_comic_voice_hook::PFN_Luna_InsertHookCode;
+using my_comic_voice_hook::PFN_Luna_InsertPCHooks;
+using my_comic_voice_hook::PFN_Luna_RemoveHook;
 
 // 目标与自身位数（WOW64）必须一致才能注入：x86 DLL 只能进 32 位进程，x64 只能进 64 位。
 // 返回 true 表示匹配。CREATE_SUSPENDED 的新进程也能查（此刻映像已就绪，IsWow64Process 有效）。
@@ -129,12 +129,12 @@ bool BitnessMatches(HANDLE target, bool* target_is_wow64) {
   return (self_wow != FALSE) == (tgt_wow != FALSE);
 }
 
-// 默认 DLL 路径：注入器同目录的 fushi_voice_hook.dll（两者同一次构建产出、同目录落地）。
+// 默认 DLL 路径：注入器同目录的 my_comic_voice_hook.dll（两者同一次构建产出、同目录落地）。
 std::wstring DefaultDllPath() {
   wchar_t exe[MAX_PATH] = {0};
   const DWORD n = GetModuleFileNameW(nullptr, exe, MAX_PATH);
   if (n == 0 || n >= MAX_PATH) {
-    return L"fushi_voice_hook.dll";
+    return L"my_comic_voice_hook.dll";
   }
   std::wstring path(exe, n);
   const size_t slash = path.find_last_of(L"\\/");
@@ -143,7 +143,7 @@ std::wstring DefaultDllPath() {
   } else {
     path.clear();
   }
-  return path + L"fushi_voice_hook.dll";
+  return path + L"my_comic_voice_hook.dll";
 }
 
 // 目标进程里某个模块的加载基址；找不到（含模块尚未映射）返回 nullptr。
@@ -253,26 +253,26 @@ int Fail(const char* msg) {
 }
 
 // 把结构化失败原因打成 host 可解析的一行。人类可读诊断保持原样（诊断包/日志仍要它），
-// 这一行只是让 Fushi 不必去猜中文串，从而能对「需要管理员 / 位数不符 / 被杀软拦下 /
+// 这一行只是让 MyComic 不必去猜中文串，从而能对「需要管理员 / 位数不符 / 被杀软拦下 /
 // DLL 加载慢」给出各自不同的处置与重试策略。
-void ReportFailureReason(fushi_voice_hook::LaunchFailureReason reason,
+void ReportFailureReason(my_comic_voice_hook::LaunchFailureReason reason,
                          int exit_code) {
-  if (reason == fushi_voice_hook::LaunchFailureReason::kNone) return;
+  if (reason == my_comic_voice_hook::LaunchFailureReason::kNone) return;
   fprintf(stderr, "ERR reason=%s exit=%d\n",
-          fushi_voice_hook::LaunchFailureToken(reason), exit_code);
+          my_comic_voice_hook::LaunchFailureToken(reason), exit_code);
 }
 
 // 记录失败原因并返回退出码：每个失败出口都必须同时给出这两样，否则 host 只会看到
 // 一个没有原因的非零退出。
-int FailWith(fushi_voice_hook::LaunchFailureReason* reason_out,
-             fushi_voice_hook::LaunchFailureReason reason, int exit_code) {
+int FailWith(my_comic_voice_hook::LaunchFailureReason* reason_out,
+             my_comic_voice_hook::LaunchFailureReason reason, int exit_code) {
   if (reason_out != nullptr) *reason_out = reason;
   return exit_code;
 }
 
 // LunaHook 集成（host 侧全引擎文本 hook）。
 //
-// 游戏内的 fushi_voice_hook.dll 只覆盖 GDI 文本（TextOut/GetGlyphOutline 等），抓不到
+// 游戏内的 my_comic_voice_hook.dll 只覆盖 GDI 文本（TextOut/GetGlyphOutline 等），抓不到
 // KiriKiriZ/RenPy/Unity 这类把文本走自绘/脚本 VM 的引擎。LunaHook（Textractor 的后继、
 // GPLv3）是成熟的引擎级文本 hook 引擎，内置各引擎的精确台词 hook。这里在 **host 侧（injector
 // 进程内）** 用 vendored 的 LunaHost<arch>.dll 驱动 LunaHook：LunaHost.dll 加载进本进程，
@@ -366,7 +366,7 @@ UnityExtractorRuntime FindUnityExtractorRuntime() {
                                 ? InjectorDir() + L"unity_audio_runtime\\"
                                 : g_unity_runtime_override;
   UnityExtractorRuntime runtime;
-  runtime.executable = base + L"fushi_unity_audio_extract.exe";
+  runtime.executable = base + L"my_comic_unity_audio_extract.exe";
   runtime.classdata = base + L"classdata.tpk";
   runtime.decoder = base + L"vgmstream-cli.exe";
   runtime.ready = RegularFileExists(runtime.executable) &&
@@ -667,7 +667,7 @@ std::vector<std::wstring> ListUnityBundleSiblings(const std::wstring& directory)
 // Per injector session: the voice bundle the last clip was found in (tried
 // first), and clip names found in none of them (BGM / SE / typing sounds).
 std::wstring g_unity_voice_last_bundle;
-fushi_voice_injector::UnityVoiceNegativeCache g_unity_voice_negative;
+my_comic_voice_injector::UnityVoiceNegativeCache g_unity_voice_negative;
 
 bool ExtractUnityVoice(const UnityExtractorRuntime& runtime,
                        const std::wstring& data_directory,
@@ -679,7 +679,7 @@ bool ExtractUnityVoice(const UnityExtractorRuntime& runtime,
   wchar_t temp[MAX_PATH] = {0};
   const DWORD temp_len = GetTempPathW(MAX_PATH, temp);
   if (temp_len == 0 || temp_len >= MAX_PATH) return false;
-  const std::wstring dir = std::wstring(temp) + L"fushi_gal_voice";
+  const std::wstring dir = std::wstring(temp) + L"my_comic_gal_voice";
   CreateDirectoryW(dir.c_str(), nullptr);
   const std::wstring output =
       dir + L"\\" + std::to_wstring(event.timestamp_ms) + L"_" +
@@ -698,12 +698,12 @@ bool ExtractUnityVoice(const UnityExtractorRuntime& runtime,
 
   const std::wstring opened(event.bundle_path);
   const std::wstring bundle_directory =
-      fushi_voice_injector::UnityBundleDirectory(opened);
+      my_comic_voice_injector::UnityBundleDirectory(opened);
   if (g_unity_voice_negative.Contains(bundle_directory, event.clip_name)) {
     return false;  // already proven not to be in any voice bundle
   }
   std::vector<std::wstring> candidates =
-      fushi_voice_injector::OrderUnityVoiceBundleCandidates(
+      my_comic_voice_injector::OrderUnityVoiceBundleCandidates(
           opened, ListUnityBundleSiblings(bundle_directory),
           g_unity_voice_last_bundle);
   if (candidates.empty()) candidates.push_back(opened);
@@ -794,8 +794,8 @@ bool LunaPassesFilter(const wchar_t* text, int len) {
 // 其内部工作线程并发触发，原子占号同样保证 injector 侧多次调用互不撞槽。
 uint64_t LunaTextThreadId(const wchar_t* hookcode, const char* hookname,
                           const LunaThreadParam& tp) {
-  return fushi_voice_hook::NormalizeLunaTextThreadId(
-      fushi_voice_hook::LunaTextThreadIdFrom(
+  return my_comic_voice_hook::NormalizeLunaTextThreadId(
+      my_comic_voice_hook::LunaTextThreadIdFrom(
           tp.processId, tp.addr, tp.ctx, tp.ctx2, hookcode, hookname));
 }
 
@@ -804,18 +804,18 @@ uint64_t LunaTextThreadId(const wchar_t* hookcode, const char* hookname,
 // 语义分类（角色名/正文），必须保留。判据实现在 luna_text_selector.h，与单测共用。
 uint64_t LunaTextFaceId(const wchar_t* hookcode, const char* hookname,
                         const LunaThreadParam& tp) {
-  return fushi_voice_hook::LunaTextFaceIdFrom(tp.processId, tp.addr, tp.ctx2,
+  return my_comic_voice_hook::LunaTextFaceIdFrom(tp.processId, tp.addr, tp.ctx2,
                                                hookcode, hookname);
 }
 
 // Luna 侧写者状态。**必须定义在所有写路径之前**：v13 起写文本道也要在这把锁下认领，
 // 与预览槽认领共用同一把锁、同一套下标分区。
-fushi_voice_hook::LunaTextSelector g_lunaTextSelector;
+my_comic_voice_hook::LunaTextSelector g_lunaTextSelector;
 // 成对折叠 hook 面的粘性尾巴（BUG-2705），与选择器共用 g_lunaSelectCs。
-fushi_voice_hook::LunaPairedTailTracker g_lunaPairedTails;
+my_comic_voice_hook::LunaPairedTailTracker g_lunaPairedTails;
 // EmbedCS2 re-emits every message once more when the window starts showing it
 // (luna_text_selector.h LunaImmediateRepeatFilter); guarded by g_lunaSelectCs.
-fushi_voice_hook::LunaImmediateRepeatFilter g_lunaRepeats;
+my_comic_voice_hook::LunaImmediateRepeatFilter g_lunaRepeats;
 CRITICAL_SECTION g_lunaSelectCs;
 bool g_lunaSelectCsInit = false;
 alignas(8) volatile uint64_t g_lunaPreviewGeneration = 0;
@@ -826,20 +826,20 @@ void WriteLunaTextEvent(SharedHeader* header, const wchar_t* hookcode,
                         uint32_t event_kind, uint32_t event_flags,
                         const wchar_t* text, int wlen) {
   if (header == nullptr ||
-      (event_kind == fushi_voice_hook::kTextEventLine &&
+      (event_kind == my_comic_voice_hook::kTextEventLine &&
        (text == nullptr || wlen <= 0))) {
     return;
   }
   // v13：写进本线程自己那条道（Luna 在 injector 进程，用低段下标）。认领要与 ShouldWrite
   // 共用同一把进程内锁；跨进程隔离由区段划分保证，见 voice_hook_ipc.h 的分道注释。
-  fushi_voice_hook::TextLaneWrite write;
+  my_comic_voice_hook::TextLaneWrite write;
   write.thread_id = thread_id;
   write.face_id = face_id;
   write.thread_address = tp.addr;
   write.thread_context = tp.ctx;
   write.thread_context2 = tp.ctx2;
   write.process_id = tp.processId;
-  write.source_kind = fushi_voice_hook::kTextSourceLuna;
+  write.source_kind = my_comic_voice_hook::kTextSourceLuna;
   write.event_kind = event_kind;
   write.event_flags = event_flags;
   write.is_utf8 = 0;  // UTF-16LE
@@ -852,8 +852,8 @@ void WriteLunaTextEvent(SharedHeader* header, const wchar_t* hookcode,
   write.hook_code = hookcode;
   const bool locked = g_lunaSelectCsInit;
   if (locked) EnterCriticalSection(&g_lunaSelectCs);
-  fushi_voice_hook::WriteTextLaneEvent(
-      header, 0, fushi_voice_hook::kLunaThreadPreviewCount, write);
+  my_comic_voice_hook::WriteTextLaneEvent(
+      header, 0, my_comic_voice_hook::kLunaThreadPreviewCount, write);
   if (locked) LeaveCriticalSection(&g_lunaSelectCs);
 }
 
@@ -862,11 +862,11 @@ void WriteLunaTextLine(SharedHeader* header, const wchar_t* hookcode,
                        uint64_t thread_id, uint64_t face_id,
                        const wchar_t* text, int wlen) {
   const uint32_t event_flags =
-      fushi_voice_hook::LunaTextRequiresExactThreadContext(hookname)
-          ? fushi_voice_hook::kTextEventFlagExactThreadContext
+      my_comic_voice_hook::LunaTextRequiresExactThreadContext(hookname)
+          ? my_comic_voice_hook::kTextEventFlagExactThreadContext
           : 0u;
   WriteLunaTextEvent(header, hookcode, hookname, tp, thread_id, face_id,
-                     fushi_voice_hook::kTextEventLine, event_flags, text, wlen);
+                     my_comic_voice_hook::kTextEventLine, event_flags, text, wlen);
 }
 
 // ── 文本线程准入（LunaHook 伪影过滤 + 显式线程选择）────
@@ -899,19 +899,19 @@ void WriteThreadPreview(SharedHeader* header, uint64_t thread_id,
     return;
   }
   EnterCriticalSection(&g_lunaSelectCs);
-  auto* slots = reinterpret_cast<fushi_voice_hook::ThreadPreviewSlot*>(
+  auto* slots = reinterpret_cast<my_comic_voice_hook::ThreadPreviewSlot*>(
       reinterpret_cast<uint8_t*>(header) + header->thread_preview_offset);
   const uint32_t count = (std::min)(header->thread_preview_slot_count,
-                                    fushi_voice_hook::kLunaThreadPreviewCount);
-  fushi_voice_hook::ThreadPreviewSlot* slot =
-      fushi_voice_hook::FindThreadPreviewSlot(slots, count, thread_id);
+                                    my_comic_voice_hook::kLunaThreadPreviewCount);
+  my_comic_voice_hook::ThreadPreviewSlot* slot =
+      my_comic_voice_hook::FindThreadPreviewSlot(slots, count, thread_id);
   if (slot == nullptr) {
     LeaveCriticalSection(&g_lunaSelectCs);
     return;  // 只有 64 条同时存活线程时才会满；ThreadRemove 后的槽会立即可复用。
   }
-  const uint64_t generation = fushi_voice_hook::NextThreadPreviewGeneration(
+  const uint64_t generation = my_comic_voice_hook::NextThreadPreviewGeneration(
       &g_lunaPreviewGeneration);
-  fushi_voice_hook::BeginThreadPreviewWrite(slot, generation);
+  my_comic_voice_hook::BeginThreadPreviewWrite(slot, generation);
   if (slot->thread_id == 0) {
     slot->line_count = 0;
     slot->artifact_count = 0;
@@ -924,16 +924,16 @@ void WriteThreadPreview(SharedHeader* header, uint64_t thread_id,
                           ? 0
                           : static_cast<uint32_t>(wlen) * sizeof(wchar_t);
   const uint32_t max_bytes =
-      fushi_voice_hook::kThreadPreviewTextChars * sizeof(wchar_t);
+      my_comic_voice_hook::kThreadPreviewTextChars * sizeof(wchar_t);
   if (byte_len > max_bytes) byte_len = max_bytes;  // 截断到槽容量（wchar 边界）
   if (byte_len != 0) memcpy(slot->text, text, byte_len);
   slot->byte_len = byte_len;
   slot->event_flags =
-      is_artifact ? fushi_voice_hook::kThreadPreviewFlagArtifact : 0u;
+      is_artifact ? my_comic_voice_hook::kThreadPreviewFlagArtifact : 0u;
   slot->timestamp_ms = GetTickCount64();
-  fushi_voice_hook::PublishThreadPreviewWrite(slot, generation);
+  my_comic_voice_hook::PublishThreadPreviewWrite(slot, generation);
   // 全局计数最后发布：把它当变化信号的 reader 看到新 generation 时，槽必已是稳定偶数态。
-  fushi_voice_hook::PublishThreadPreviewChange(
+  my_comic_voice_hook::PublishThreadPreviewChange(
       &header->thread_preview_write_count);
   LeaveCriticalSection(&g_lunaSelectCs);
 }
@@ -961,14 +961,14 @@ bool LunaShouldWriteLine(uint64_t thread_id, bool is_artifact,
 
 // ── Luna_Start 的回调实现（__cdecl 默认约定）─────────────────────────────────
 // Output：全引擎精确台词入口。过滤 + 写文本环。v10.16.1.2 ABI 返回 void。
-// LunaHook 逐行诊断（env `FUSHI_LUNA_DIAG=1` 打开）：把**每一行**（含随后被 filter/伪影/线程
+// LunaHook 逐行诊断（env `MYCOMIC_LUNA_DIAG=1` 打开）：把**每一行**（含随后被 filter/伪影/线程
 // 选择丢弃的）连同其 hook 上下文（hookname / hookcode 签名 / addr / ctx / ctx2）打到 stderr。用于
 // 实证「系统菜单标题（读/存档确认）是否与对话走不同 hook」——若不同则可在 hook 层白名单精确排除，
 // 若同 hook 则只能回落文本层启发式。默认关（零开销）；不改任何写入路径，纯观测。
 bool LunaDiagEnabled() {
   static const bool enabled = []() {
     char buf[8] = {0};
-    const DWORD n = GetEnvironmentVariableA("FUSHI_LUNA_DIAG", buf, sizeof(buf));
+    const DWORD n = GetEnvironmentVariableA("MYCOMIC_LUNA_DIAG", buf, sizeof(buf));
     return n > 0 && buf[0] != '0';
   }();
   return enabled;
@@ -997,13 +997,13 @@ bool LunaMagesNormalizationActive() {
   if (InterlockedCompareExchange(&g_luna.mages_engine_claimed, 0, 0) != 0) {
     return true;
   }
-  if (!fushi_voice_hook::AdapterReportsClaimEngine(
-          g_luna.header, fushi_voice_hook::kLunaMagesControlEngineAdapterId)) {
+  if (!my_comic_voice_hook::AdapterReportsClaimEngine(
+          g_luna.header, my_comic_voice_hook::kLunaMagesControlEngineAdapterId)) {
     return false;
   }
   if (InterlockedExchange(&g_luna.mages_engine_claimed, 1) == 0) {
     fprintf(stderr, "[luna] engine %s claimed: MAGES control normalization on\n",
-            fushi_voice_hook::kLunaMagesControlEngineAdapterId);
+            my_comic_voice_hook::kLunaMagesControlEngineAdapterId);
   }
   return true;
 }
@@ -1016,7 +1016,7 @@ void LunaOutput(const wchar_t* hookcode, const char* hookname,
     g_luna.header->hook_diagnostics |= kDiagLunaOutputObserved;
     const int raw_len = static_cast<int>(wcslen(text));
     const std::wstring normalized_storage =
-        fushi_voice_hook::LunaNormalizeMagesControls(
+        my_comic_voice_hook::LunaNormalizeMagesControls(
             text, raw_len, LunaMagesNormalizationActive());
     const wchar_t* normalized_text = normalized_storage.c_str();
     const int escaped_len = static_cast<int>(normalized_storage.size());
@@ -1029,7 +1029,7 @@ void LunaOutput(const wchar_t* hookcode, const char* hookname,
           thread_id, hookname, normalized_text, escaped_len);
       LeaveCriticalSection(&g_lunaSelectCs);
     } else {
-      normalized_len = fushi_voice_hook::LunaNormalizedTextLengthForHook(
+      normalized_len = my_comic_voice_hook::LunaNormalizedTextLengthForHook(
           hookname, normalized_text, escaped_len);
     }
     if (LunaDiagEnabled()) {
@@ -1052,7 +1052,7 @@ void LunaOutput(const wchar_t* hookcode, const char* hookname,
     if (LunaPassesFilter(normalized_text, normalized_len)) {
       // 先判伪影，再决定本行是否写入文本环。
       const bool artifact =
-          fushi_voice_hook::LunaTextIsArtifact(normalized_text, normalized_len);
+          my_comic_voice_hook::LunaTextIsArtifact(normalized_text, normalized_len);
       const uint64_t face_id = LunaTextFaceId(hookcode, hookname, tp);
       // v12：预览必须写在门控**之前**且无条件（含伪影行）。预览区的全部意义就是让用户
       // 看见未被发布的线程；放到门控之后就只剩已选中的那条，等于没做。
@@ -1104,9 +1104,9 @@ void LunaConnect(DWORD pid) {
               code.c_str(), pid, inserted ? 1 : 0);
     }
     if (inserted_any && g_luna.header != nullptr &&
-        fushi_voice_hook::HasLookupRegion(g_luna.header)) {
+        my_comic_voice_hook::HasLookupRegion(g_luna.header)) {
       g_luna.header->lookup_diag |=
-          fushi_voice_hook::kLookupDiagLunaKnownHookReady;
+          my_comic_voice_hook::kLookupDiagLunaKnownHookReady;
     }
   }
   if (g_luna.use_pc_hooks && g_luna.insert_pc != nullptr) {
@@ -1128,13 +1128,13 @@ void LunaThreadCreate(const wchar_t* hookcode, const char* hookname,
   const uint64_t thread_id = LunaTextThreadId(hookcode, hookname, tp);
   const uint32_t event_flags =
       (embedable ? 1u : 0u) |
-      (fushi_voice_hook::LunaTextRequiresExactThreadContext(hookname)
-           ? fushi_voice_hook::kTextEventFlagExactThreadContext
+      (my_comic_voice_hook::LunaTextRequiresExactThreadContext(hookname)
+           ? my_comic_voice_hook::kTextEventFlagExactThreadContext
            : 0u);
   WriteLunaTextEvent(
       g_luna.header, hookcode, hookname, tp, thread_id,
       LunaTextFaceId(hookcode, hookname, tp),
-      fushi_voice_hook::kTextEventThreadDiscovered, event_flags, nullptr, 0);
+      my_comic_voice_hook::kTextEventThreadDiscovered, event_flags, nullptr, 0);
 }
 // 移除事件不透传到线程目录，且不清 selected_text_thread_id / face map：同 ThreadParam 短暂
 // 重建仍沿用用户选择。这里只回收预览槽，避免累计超过 64 个历史线程后新线程永久没有预览。
@@ -1146,22 +1146,22 @@ void LunaThreadRemove(const wchar_t* hookcode, const char* hookname,
   }
   const uint64_t thread_id = LunaTextThreadId(hookcode, hookname, tp);
   EnterCriticalSection(&g_lunaSelectCs);
-  auto* slots = reinterpret_cast<fushi_voice_hook::ThreadPreviewSlot*>(
+  auto* slots = reinterpret_cast<my_comic_voice_hook::ThreadPreviewSlot*>(
       reinterpret_cast<uint8_t*>(g_luna.header) +
       g_luna.header->thread_preview_offset);
   const uint32_t count =
       (std::min)(g_luna.header->thread_preview_slot_count,
-                 fushi_voice_hook::kLunaThreadPreviewCount);
+                 my_comic_voice_hook::kLunaThreadPreviewCount);
   for (uint32_t i = 0; i < count; ++i) {
     auto* slot = &slots[i];
     if (slot->thread_id != thread_id) continue;
     const uint64_t generation =
-        fushi_voice_hook::NextThreadPreviewGeneration(
+        my_comic_voice_hook::NextThreadPreviewGeneration(
             &g_lunaPreviewGeneration);
-    fushi_voice_hook::BeginThreadPreviewWrite(slot, generation);
-    fushi_voice_hook::ClearThreadPreviewPayload(slot);
-    fushi_voice_hook::PublishThreadPreviewWrite(slot, generation);
-    fushi_voice_hook::PublishThreadPreviewChange(
+    my_comic_voice_hook::BeginThreadPreviewWrite(slot, generation);
+    my_comic_voice_hook::ClearThreadPreviewPayload(slot);
+    my_comic_voice_hook::PublishThreadPreviewWrite(slot, generation);
+    my_comic_voice_hook::PublishThreadPreviewChange(
         &g_luna.header->thread_preview_write_count);
     break;
   }
@@ -1179,7 +1179,7 @@ void LunaHostInfo(int type, const wchar_t* log) {
       &g_luna.blocked_hook_remove_confirmations, 0, 0);
   if (confirmations >= requests) return;
   for (const std::wstring& name : g_luna.blocked_hook_names) {
-    if (fushi_voice_hook::LunaHostLogConfirmsHookRemoval(log, name) &&
+    if (my_comic_voice_hook::LunaHostLogConfirmsHookRemoval(log, name) &&
         std::find(g_luna.confirmed_blocked_hook_names.begin(),
                   g_luna.confirmed_blocked_hook_names.end(),
                   name) == g_luna.confirmed_blocked_hook_names.end()) {
@@ -1202,7 +1202,7 @@ void LunaHookInsert(DWORD pid, uint64_t addr, const wchar_t* hookcode) {
     fflush(stderr);
   }
   for (const std::wstring& blocked : g_luna.blocked_hook_codes) {
-    if (!fushi_voice_hook::LunaHookCodeMatchesBlock(blocked, hookcode)) {
+    if (!my_comic_voice_hook::LunaHookCodeMatchesBlock(blocked, hookcode)) {
       continue;
     }
     if (g_luna.remove_hook == nullptr) {
@@ -1363,7 +1363,7 @@ struct LunaOptions {
 
 std::string ReadUtf8File(const std::wstring& path);
 std::string Sha256File(const std::wstring& path);
-fushi_voice_hook::LunaTargetIdentity BuildTargetIdentity(
+my_comic_voice_hook::LunaTargetIdentity BuildTargetIdentity(
     const std::wstring& executable, DWORD pid);
 
 void ApplyLunaProfiles(const std::wstring& executable, DWORD pid,
@@ -1374,16 +1374,16 @@ void ApplyLunaProfiles(const std::wstring& executable, DWORD pid,
   // 磁盘上判定，这里用同一个函数（sgre_family.h）先判，MAGES 控制符归一化从 Luna 的
   // 第一行起就生效，不必等 hook DLL 的 adapter 报告（每秒最多一次、DLL 未注入时永不到）。
   if (!options->normalize_mages_controls &&
-      fushi_voice_hook::SgreVoiceArchiveExistsBesideExecutable(executable)) {
+      my_comic_voice_hook::SgreVoiceArchiveExistsBesideExecutable(executable)) {
     options->normalize_mages_controls = true;
     fprintf(stderr,
             "[luna] engine %s identified before injection (wind3d11 voice "
             "archive): MAGES control normalization on\n",
-            fushi_voice_hook::kLunaMagesControlEngineAdapterId);
+            my_comic_voice_hook::kLunaMagesControlEngineAdapterId);
   }
   const auto identity = BuildTargetIdentity(executable, pid);
   auto apply = [&](const std::string& tsv, const char* source) {
-    const auto match = fushi_voice_hook::MatchLunaHookProfiles(tsv, identity);
+    const auto match = my_comic_voice_hook::MatchLunaHookProfiles(tsv, identity);
     if (match.codepage > 0) options->codepage = match.codepage;
     if (match.enable_pc_hooks) options->pc_hooks = true;
     if (match.normalize_mages_controls) {
@@ -1430,7 +1430,7 @@ void ApplyLunaProfiles(const std::wstring& executable, DWORD pid,
       }
     }
   };
-  apply(fushi_voice_hook::BuiltInLunaHookProfiles(), "built-in");
+  apply(my_comic_voice_hook::BuiltInLunaHookProfiles(), "built-in");
   if (!user_profile.empty()) {
     const std::string imported = ReadUtf8File(user_profile);
     if (imported.empty()) {
@@ -1522,14 +1522,14 @@ bool ResumeLaunchedGame(HANDLE process, HANDLE thread, const char* stage) {
 
 // 读 exe 文件的 PE 头与 TLS 目录（判据见 loader_init_gate.h）。只读前 16 MiB：TLS 目录与
 // 回调数组都在头部附近的节里，超大资源尾部不必读。
-fushi_voice_hook::PeLaunchLayout ReadPeLaunchLayout(const std::wstring& exe) {
+my_comic_voice_hook::PeLaunchLayout ReadPeLaunchLayout(const std::wstring& exe) {
   std::ifstream in(exe, std::ios::binary);
   if (!in) return {};
   std::vector<uint8_t> bytes(16u << 20);
   in.read(reinterpret_cast<char*>(bytes.data()),
           static_cast<std::streamsize>(bytes.size()));
   bytes.resize(static_cast<size_t>(in.gcount()));
-  return fushi_voice_hook::ParsePeLaunchLayout(bytes.data(), bytes.size());
+  return my_comic_voice_hook::ParsePeLaunchLayout(bytes.data(), bytes.size());
 }
 
 // 目标进程（同位数）的映像基址：PEB->ImageBaseAddress。挂起创建后 PEB 已就绪。
@@ -1595,10 +1595,10 @@ bool ProcessHasVisibleTopLevelWindow(DWORD pid) {
 //   kLeftRunning：主线程已在跑进程初始化却没停到入口（入口被映像自己改写 / 无 UI 超时），
 //     保持运行、不挂回去，调用方按已运行进程附着——挂回去再远程 LoadLibraryW 会在 loader
 //     lock 上互等死锁。门是生命周期修正，不是新的失败面。
-fushi_voice_hook::LoaderInitGateOutcome RunLoaderInitGate(HANDLE process,
+my_comic_voice_hook::LoaderInitGateOutcome RunLoaderInitGate(HANDLE process,
                                                           HANDLE thread,
                                                           uint32_t entry_rva) {
-  using Outcome = fushi_voice_hook::LoaderInitGateOutcome;
+  using Outcome = my_comic_voice_hook::LoaderInitGateOutcome;
   if (thread == nullptr) {
     fprintf(stderr,
             "[loader-gate] no primary thread handle; skipping gate (legacy "
@@ -1770,27 +1770,27 @@ fushi_voice_hook::LoaderInitGateOutcome RunLoaderInitGate(HANDLE process,
 bool NativeLoopbackPolicyApplied(SharedHeader* header, uint32_t requested,
                                  uint32_t request_seq) {
   if (header == nullptr || request_seq == 0) return false;
-  const uint32_t applied = fushi_voice_hook::AtomicLoadShared32(
+  const uint32_t applied = my_comic_voice_hook::AtomicLoadShared32(
       &header->native_loopback_applied_seq);
-  const uint32_t state = fushi_voice_hook::AtomicLoadShared32(
+  const uint32_t state = my_comic_voice_hook::AtomicLoadShared32(
       &header->native_loopback_state);
   const bool state_matches =
       requested == kNativeLoopbackAllow
-          ? (state == fushi_voice_hook::kNativeLoopbackStateRunning ||
-             state == fushi_voice_hook::kNativeLoopbackStateFailed)
-          : state == fushi_voice_hook::kNativeLoopbackStateStopped;
+          ? (state == my_comic_voice_hook::kNativeLoopbackStateRunning ||
+             state == my_comic_voice_hook::kNativeLoopbackStateFailed)
+          : state == my_comic_voice_hook::kNativeLoopbackStateStopped;
   return applied == request_seq && state_matches;
 }
 
 bool NativeLoopbackCaptureMayBeActive(SharedHeader* header) {
   if (header == nullptr) return false;
-  const uint32_t state = fushi_voice_hook::AtomicLoadShared32(
+  const uint32_t state = my_comic_voice_hook::AtomicLoadShared32(
       &header->native_loopback_state);
-  return state == fushi_voice_hook::kNativeLoopbackStateStarting ||
-         state == fushi_voice_hook::kNativeLoopbackStateRunning ||
-         state == fushi_voice_hook::kNativeLoopbackStateStopping ||
-         (fushi_voice_hook::AtomicLoadShared32(&header->loopback_diag) &
-          fushi_voice_hook::kLoopbackDiagWorkerEntered) != 0;
+  return state == my_comic_voice_hook::kNativeLoopbackStateStarting ||
+         state == my_comic_voice_hook::kNativeLoopbackStateRunning ||
+         state == my_comic_voice_hook::kNativeLoopbackStateStopping ||
+         (my_comic_voice_hook::AtomicLoadShared32(&header->loopback_diag) &
+          my_comic_voice_hook::kLoopbackDiagWorkerEntered) != 0;
 }
 
 bool WaitForNativeLoopbackPolicy(SharedHeader* header, uint32_t requested,
@@ -1813,7 +1813,7 @@ bool WaitForNativeLoopbackPolicy(SharedHeader* header, uint32_t requested,
 bool RevokeNativeLoopbackForFailure(SharedHeader* header,
                                     bool hook_may_apply_policy,
                                     DWORD wait_ms) {
-  const uint32_t deny_seq = fushi_voice_hook::PublishNativeLoopbackRequest(
+  const uint32_t deny_seq = my_comic_voice_hook::PublishNativeLoopbackRequest(
       header, kNativeLoopbackDeny);
   if (deny_seq == 0) {
     fprintf(stderr, "failed to publish native loopback deny during cleanup\n");
@@ -1828,9 +1828,9 @@ bool RevokeNativeLoopbackForFailure(SharedHeader* header,
           "native loopback cleanup did not reach stopped ack "
           "(seq=%u state=%u applied=%u)\n",
           deny_seq,
-          fushi_voice_hook::AtomicLoadShared32(
+          my_comic_voice_hook::AtomicLoadShared32(
               &header->native_loopback_state),
-          fushi_voice_hook::AtomicLoadShared32(
+          my_comic_voice_hook::AtomicLoadShared32(
               &header->native_loopback_applied_seq));
   return false;
 }
@@ -1913,7 +1913,7 @@ bool FindResidentModulePath(DWORD pid, const std::wstring& module_basename,
 //     loaded 路径已经相等（不等在上一条判据就返回 kPathMismatch 了），所以若两侧都用
 //     Sha256File 读磁盘，读的就是同一个文件，loaded_sha 恒等于 requested_sha，
 //     kDigestMismatch 在真实运行中永不可达 —— 那是一道恒真的假校验。
-//     而它要挡的恰恰是「Fushi 自更新把磁盘上那份 DLL 换成新构建，游戏进程里仍驻留旧
+//     而它要挡的恰恰是「MyComic 自更新把磁盘上那份 DLL 换成新构建，游戏进程里仍驻留旧
 //     映像」：路径没变、磁盘上是新文件，磁盘里根本不含「驻留的是哪个构建」这条信息。
 //     这条信息只在**当初真正完成注入的那一方**手里，所以由 injector 在创建映射时把本次
 //     注入 DLL 的摘要写进 header（v17），下一次 injector 读它 —— 比较的两侧这才真的是
@@ -1921,7 +1921,7 @@ bool FindResidentModulePath(DWORD pid, const std::wstring& module_basename,
 //
 // header 来自已成功 MapViewOfFile 的既有映射；magic/version 不符时不读该字段（旧布局里
 // 那段字节是音频环形的开头，当摘要读会得到垃圾），返回空串走 kDigestUnavailable。
-fushi_voice_hook::HookModuleIdentityStatus InspectResidentHookIdentity(
+my_comic_voice_hook::HookModuleIdentityStatus InspectResidentHookIdentity(
     DWORD pid, const std::wstring& requested_dll_path,
     const SharedHeader* resident_header) {
   const std::wstring requested =
@@ -1938,9 +1938,9 @@ fushi_voice_hook::HookModuleIdentityStatus InspectResidentHookIdentity(
     // 定长安全读：共享内存里的字节不可信，不假定有 NUL。
     loaded_sha.assign(
         digest,
-        strnlen(digest, fushi_voice_hook::kHookModuleDigestChars));
+        strnlen(digest, my_comic_voice_hook::kHookModuleDigestChars));
   }
-  return fushi_voice_hook::EvaluateHookModuleIdentity(
+  return my_comic_voice_hook::EvaluateHookModuleIdentity(
       found, requested, loaded, requested_sha, loaded_sha);
 }
 
@@ -1948,11 +1948,11 @@ int RunInjection(HANDLE target, DWORD pid, const std::wstring& dll_path,
                  DWORD wait_ms, bool hold, HANDLE resume_thread,
                  HANDLE hold_process, const LunaOptions& luna,
                  uint32_t native_loopback_requested,
-                 fushi_voice_hook::LaunchFailureReason* reason_out = nullptr,
+                 my_comic_voice_hook::LaunchFailureReason* reason_out = nullptr,
                  bool* resumed_out = nullptr,
                  bool created_suspended = false,
                  bool* loopback_stopped_on_failure_out = nullptr) {
-  using fushi_voice_hook::LaunchFailureReason;
+  using my_comic_voice_hook::LaunchFailureReason;
   if (reason_out != nullptr) *reason_out = LaunchFailureReason::kNone;
   if (resumed_out != nullptr) *resumed_out = false;
   if (loopback_stopped_on_failure_out != nullptr) {
@@ -1976,21 +1976,21 @@ int RunInjection(HANDLE target, DWORD pid, const std::wstring& dll_path,
   //          [loopback 标记表 kLoopbackMarkerCount*sizeof(LoopbackMarker)]
   //          [线程预览区 kThreadPreviewCount*sizeof(ThreadPreviewSlot)]。各区偏移下面填进 header。
   // v13：文本区 = 道表 + 按道分块的槽区（尺寸算法与寻址同在契约头，写读两侧共用一份）。
-  const uint64_t text_region_bytes = fushi_voice_hook::TextRegionBytes(
-      fushi_voice_hook::kTextLaneCount,
-      fushi_voice_hook::kTextLaneSlotCount);
+  const uint64_t text_region_bytes = my_comic_voice_hook::TextRegionBytes(
+      my_comic_voice_hook::kTextLaneCount,
+      my_comic_voice_hook::kTextLaneSlotCount);
   const uint64_t clip_region_bytes =
       static_cast<uint64_t>(kClipCount) * sizeof(VoiceClip);
   const uint64_t loopback_marker_bytes =
       static_cast<uint64_t>(kLoopbackMarkerCount) * sizeof(LoopbackMarker);
   const uint64_t thread_preview_bytes =
-      static_cast<uint64_t>(fushi_voice_hook::kThreadPreviewCount) *
-      sizeof(fushi_voice_hook::ThreadPreviewSlot);
+      static_cast<uint64_t>(my_comic_voice_hook::kThreadPreviewCount) *
+      sizeof(my_comic_voice_hook::ThreadPreviewSlot);
   // v14：游戏内查词区（hit 槽 + 输入环 + 位图双缓冲）。同样追加在最尾。
-  const uint64_t lookup_region_bytes = fushi_voice_hook::LookupRegionBytes(
-      fushi_voice_hook::kLookupInputSlotCount,
-      fushi_voice_hook::kLookupFrameCount,
-      fushi_voice_hook::kLookupBitmapBytes);
+  const uint64_t lookup_region_bytes = my_comic_voice_hook::LookupRegionBytes(
+      my_comic_voice_hook::kLookupInputSlotCount,
+      my_comic_voice_hook::kLookupFrameCount,
+      my_comic_voice_hook::kLookupBitmapBytes);
   const uint64_t total_size = sizeof(SharedHeader) + ring_capacity +
                               text_region_bytes + clip_region_bytes +
                               loopback_capacity + loopback_marker_bytes +
@@ -2022,22 +2022,22 @@ int RunInjection(HANDLE target, DWORD pid, const std::wstring& dll_path,
   const auto resident_hook_identity =
       mapping_already_exists
           ? InspectResidentHookIdentity(pid, dll_path, header)
-          : fushi_voice_hook::HookModuleIdentityStatus::kMatch;
+          : my_comic_voice_hook::HookModuleIdentityStatus::kMatch;
   const MappingSessionAction mapping_action = InspectMappingSession(
       mapping_already_exists, header, ring_capacity, expected_text_offset,
       expected_clip_offset,
       resident_hook_identity ==
-          fushi_voice_hook::HookModuleIdentityStatus::kMatch);
+          my_comic_voice_hook::HookModuleIdentityStatus::kMatch);
   if (mapping_action == MappingSessionAction::kRejectStale) {
     const bool resident_hook_requires_restart =
-        fushi_voice_hook::HookModuleIdentityRequiresRestart(
+        my_comic_voice_hook::HookModuleIdentityRequiresRestart(
             resident_hook_identity);
     if (resident_hook_identity !=
-        fushi_voice_hook::HookModuleIdentityStatus::kMatch) {
+        my_comic_voice_hook::HookModuleIdentityStatus::kMatch) {
       fprintf(stderr,
               "[session] resident hook identity mismatch (%s); refusing "
               "ready mapping reuse\n",
-              fushi_voice_hook::HookModuleIdentityStatusToken(
+              my_comic_voice_hook::HookModuleIdentityStatusToken(
                   resident_hook_identity));
     }
     if (resident_hook_requires_restart) {
@@ -2066,15 +2066,15 @@ int RunInjection(HANDLE target, DWORD pid, const std::wstring& dll_path,
     header->version = kSharedVersion;
     header->ipc_protocol_version = kStableIpcVersion;
     header->luna_bridge_abi_version =
-        fushi_voice_hook::kLunaBridgeAbiVersion;
-    header->luna_vendored_version = fushi_voice_hook::kLunaVendoredVersion;
+        my_comic_voice_hook::kLunaBridgeAbiVersion;
+    header->luna_vendored_version = my_comic_voice_hook::kLunaVendoredVersion;
     header->ring_capacity = ring_capacity;
     // 文本环紧随音频环形；clip 索引紧随文本环。hook DLL 据此偏移定位两区。
     header->text_region_offset = expected_text_offset;
     header->clip_region_offset = expected_clip_offset;
     // v13 分道参数：写侧认领道、读侧定位槽都只认 header 里这两个值（冗余但让 reader 自洽）。
-    header->text_lane_count = fushi_voice_hook::kTextLaneCount;
-    header->text_lane_slot_count = fushi_voice_hook::kTextLaneSlotCount;
+    header->text_lane_count = my_comic_voice_hook::kTextLaneCount;
+    header->text_lane_slot_count = my_comic_voice_hook::kTextLaneSlotCount;
     // v9：loopback 环紧随 clip 索引；标记表紧随 loopback 环。
     header->loopback_ring_offset =
         static_cast<uint32_t>(header->clip_region_offset + clip_region_bytes);
@@ -2086,34 +2086,34 @@ int RunInjection(HANDLE target, DWORD pid, const std::wstring& dll_path,
     // 旧 host 即使只认到 v11 的字段也不会读错位（版本号仍会先把它挡掉，这只是纵深防御）。
     header->thread_preview_offset = static_cast<uint32_t>(
         header->loopback_marker_offset + loopback_marker_bytes);
-    header->thread_preview_slot_count = fushi_voice_hook::kThreadPreviewCount;
+    header->thread_preview_slot_count = my_comic_voice_hook::kThreadPreviewCount;
     // v14：查词区紧随预览区，同样在布局最尾。lookup_enabled 保持 0——由 host 在用户
     // 真正开启游戏内查词时置 1，注入侧在此之前一个字节都不写、一个 hook 都不装。
     header->lookup_region_offset = static_cast<uint32_t>(
         header->thread_preview_offset + thread_preview_bytes);
-    header->lookup_bitmap_bytes = fushi_voice_hook::kLookupBitmapBytes;
-    header->lookup_frame_count = fushi_voice_hook::kLookupFrameCount;
-    header->lookup_input_slot_count = fushi_voice_hook::kLookupInputSlotCount;
+    header->lookup_bitmap_bytes = my_comic_voice_hook::kLookupBitmapBytes;
+    header->lookup_frame_count = my_comic_voice_hook::kLookupFrameCount;
+    header->lookup_input_slot_count = my_comic_voice_hook::kLookupInputSlotCount;
     // v19: a fresh mapping starts with no authoritative geometry provider and
     // one coherent, inactive shield request. request_seq is published last by
     // the shared helper; hook/host readers therefore never consume a half-
     // initialised target or transaction.
     header->lookup_geometry_active_kind =
-        fushi_voice_hook::kLookupGeometryProviderUnknown;
+        my_comic_voice_hook::kLookupGeometryProviderUnknown;
     header->lookup_geometry_active_id =
-        fushi_voice_hook::kLookupGeometryProviderIdUnknown;
+        my_comic_voice_hook::kLookupGeometryProviderIdUnknown;
     header->lookup_geometry_status =
-        fushi_voice_hook::kLookupGeometryStatusUnavailable;
-    if (fushi_voice_hook::PublishLookupGeometryAdmission(
-            header, fushi_voice_hook::kLookupGeometryAdmissionDisabled,
+        my_comic_voice_hook::kLookupGeometryStatusUnavailable;
+    if (my_comic_voice_hook::PublishLookupGeometryAdmission(
+            header, my_comic_voice_hook::kLookupGeometryAdmissionDisabled,
             false, false) == 0) {
       UnmapViewOfFile(header);
       CloseHandle(mapping);
       return FailWith(reason_out,
                       LaunchFailureReason::kSharedMemoryUnavailable, 1);
     }
-    if (fushi_voice_hook::PublishLookupShieldRequest(
-            header, fushi_voice_hook::kLookupShieldOwnerNone, 0, 0, 0,
+    if (my_comic_voice_hook::PublishLookupShieldRequest(
+            header, my_comic_voice_hook::kLookupShieldOwnerNone, 0, 0, 0,
             false) == 0) {
       UnmapViewOfFile(header);
       CloseHandle(mapping);
@@ -2131,7 +2131,7 @@ int RunInjection(HANDLE target, DWORD pid, const std::wstring& dll_path,
         Sha256File(NormalizeAbsoluteModulePath(dll_path));
     if (!injected_hook_sha.empty() &&
         injected_hook_sha.size() <
-            fushi_voice_hook::kHookModuleDigestChars) {
+            my_comic_voice_hook::kHookModuleDigestChars) {
       memcpy(header->hook_module_sha256, injected_hook_sha.c_str(),
              injected_hook_sha.size() + 1);
     }
@@ -2146,12 +2146,12 @@ int RunInjection(HANDLE target, DWORD pid, const std::wstring& dll_path,
   // CLI policy has already normalized to deny, so an old/default caller cannot
   // accidentally authorise AUDCLNT_STREAMFLAGS_LOOPBACK.
   const uint32_t native_loopback_request_seq =
-      fushi_voice_hook::PublishNativeLoopbackRequest(
+      my_comic_voice_hook::PublishNativeLoopbackRequest(
           header, native_loopback_requested);
   if (native_loopback_request_seq == 0) {
     const DWORD cleanup_wait_ms =
         created_suspended
-            ? fushi_voice_hook::SuspendedStartupWaitBudgetMs(wait_ms)
+            ? my_comic_voice_hook::SuspendedStartupWaitBudgetMs(wait_ms)
             : wait_ms;
     const bool stopped =
         !reuse_ready ||
@@ -2167,7 +2167,7 @@ int RunInjection(HANDLE target, DWORD pid, const std::wstring& dll_path,
   bool hook_may_apply_loopback_policy = reuse_ready;
   const DWORD loopback_wait_ms =
       created_suspended
-          ? fushi_voice_hook::SuspendedStartupWaitBudgetMs(wait_ms)
+          ? my_comic_voice_hook::SuspendedStartupWaitBudgetMs(wait_ms)
           : wait_ms;
   if (loopback_stopped_on_failure_out != nullptr &&
       native_loopback_requested == kNativeLoopbackAllow) {
@@ -2245,14 +2245,14 @@ int RunInjection(HANDLE target, DWORD pid, const std::wstring& dll_path,
             "native loopback policy ack timed out (requested=%u seq=%u "
             "state=%u applied=%u)\n",
             native_loopback_requested, native_loopback_request_seq,
-            fushi_voice_hook::AtomicLoadShared32(
+            my_comic_voice_hook::AtomicLoadShared32(
                 &header->native_loopback_state),
-            fushi_voice_hook::AtomicLoadShared32(
+            my_comic_voice_hook::AtomicLoadShared32(
                 &header->native_loopback_applied_seq));
     // deny 是隐私边界，拿不到 stopped 的确认必须判失败；allow 只是一项能力，
     // 超时不得连带把「注入器负责安装的 LunaHook 文本 hook」一起毙掉——那个安装点
     // 就在下面几十行，旧实现在这里 return 等于让这一局永远没有台词（BUG-2131）。
-    if (fushi_voice_hook::NativeLoopbackAckTimeoutAbortsInjection(
+    if (my_comic_voice_hook::NativeLoopbackAckTimeoutAbortsInjection(
             native_loopback_requested == kNativeLoopbackAllow)) {
       revoke_loopback_before_failure();
       CloseHandle(ready);
@@ -2261,9 +2261,9 @@ int RunInjection(HANDLE target, DWORD pid, const std::wstring& dll_path,
       return FailWith(reason_out,
                       LaunchFailureReason::kNativeLoopbackAckTimeout, 2);
     }
-    fushi_voice_hook::AtomicOrShared32(
+    my_comic_voice_hook::AtomicOrShared32(
         &header->loopback_diag,
-        fushi_voice_hook::kLoopbackDiagPolicyAckTimeout);
+        my_comic_voice_hook::kLoopbackDiagPolicyAckTimeout);
     fprintf(stderr,
             "[loopback] allow 的策略确认未在 %lums 内到达；按「能力未就绪」降级"
             "继续，文本 hook 照常安装（worker 可稍后自行 ack 成 running）\n",
@@ -2273,11 +2273,11 @@ int RunInjection(HANDLE target, DWORD pid, const std::wstring& dll_path,
   // CREATE_SUSPENDED launch 必须等游戏内 DLL 完成首次 XAudio2/DirectSound 导出 hook，
   // 再恢复主线程。否则 Unity 可能先创建全部 source voice，之后晚 attach 只能拿到混音。
   bool luna_initialized = false;
-  fushi_voice_hook::NativeTextLunaStartupGate luna_startup_gate;
+  my_comic_voice_hook::NativeTextLunaStartupGate luna_startup_gate;
   uint32_t last_native_text_owner = UINT32_MAX;
   auto maybe_start_luna = [&]() {
     if (!hold || !luna.enabled || luna_initialized) return;
-    const auto text_owner = fushi_voice_hook::ReadNativeTextOwner(header);
+    const auto text_owner = my_comic_voice_hook::ReadNativeTextOwner(header);
     if (last_native_text_owner != static_cast<uint32_t>(text_owner)) {
       last_native_text_owner = static_cast<uint32_t>(text_owner);
       fprintf(stderr, "[native-text] owner=%u\n", last_native_text_owner);
@@ -2292,8 +2292,8 @@ int RunInjection(HANDLE target, DWORD pid, const std::wstring& dll_path,
   auto init_guarded_luna = [&]() -> bool {
     // Native ownership inserts no Luna hooks, so there is nothing to remove.
     // An undecided Siglus cannot bypass its ownership gate via a guarded call.
-    if (fushi_voice_hook::ReadNativeTextOwner(header) ==
-        fushi_voice_hook::NativeTextOwner::kNativeOwned) return true;
+    if (my_comic_voice_hook::ReadNativeTextOwner(header) ==
+        my_comic_voice_hook::NativeTextOwner::kNativeOwned) return true;
     if (luna.blocked_hook_names.size() != luna.blocked_hook_codes.size()) {
       fprintf(stderr,
               "[luna] blocked-hook profile is missing removal confirmation "
@@ -2330,7 +2330,7 @@ int RunInjection(HANDLE target, DWORD pid, const std::wstring& dll_path,
     // 挂起窗口只用总预算的一部分：与宿主超时同时到期会让 injector 在被 kill 时恰好还没
     // resume，游戏永久挂起（见 SuspendedStartupWaitBudgetMs 的说明）。
     const unsigned long startup_budget_ms =
-        fushi_voice_hook::SuspendedStartupWaitBudgetMs(wait_ms);
+        my_comic_voice_hook::SuspendedStartupWaitBudgetMs(wait_ms);
     const ULONGLONG deadline = GetTickCount64() + startup_budget_ms;
     while ((header->hook_diagnostics & kDiagStartupAudioHooksReady) == 0 &&
            GetTickCount64() < deadline) {
@@ -2433,8 +2433,8 @@ int RunInjection(HANDLE target, DWORD pid, const std::wstring& dll_path,
          pid, header->hooked, header->ring_capacity, header->sample_rate,
          header->channels, header->bits_per_sample, header->is_float,
          native_loopback_requested, native_loopback_request_seq,
-         fushi_voice_hook::AtomicLoadShared32(&header->native_loopback_state),
-         fushi_voice_hook::AtomicLoadShared32(
+         my_comic_voice_hook::AtomicLoadShared32(&header->native_loopback_state),
+         my_comic_voice_hook::AtomicLoadShared32(
              &header->native_loopback_applied_seq));
   fflush(stdout);
 
@@ -2446,7 +2446,7 @@ int RunInjection(HANDLE target, DWORD pid, const std::wstring& dll_path,
   maybe_start_luna();
 
   if (hold) {
-    // host 模式：常驻维持共享内存存活，供 Fushi 消费（C.2 起真正读 PCM）。
+    // host 模式：常驻维持共享内存存活，供 MyComic 消费（C.2 起真正读 PCM）。
     // 同时消费 Unity Streaming AudioClip 资源事件；重解析/解码在 injector 子进程完成，
     // 游戏内 hook 回调始终只写固定大小共享内存事件。
     uint64_t next_unity_event = 0;
@@ -2513,12 +2513,12 @@ struct LeProcessInformation : PROCESS_INFORMATION {
 };
 
 using LeCreateProcessFunction = LONG(WINAPI*)(
-    fushi_voice_hook::LeEnvironmentBlock*, PCWSTR, PWSTR, PCWSTR, ULONG,
+    my_comic_voice_hook::LeEnvironmentBlock*, PCWSTR, PWSTR, PCWSTR, ULONG,
     LPSTARTUPINFOW, LeProcessInformation*, LPSECURITY_ATTRIBUTES,
     LPSECURITY_ATTRIBUTES, PVOID, HANDLE);
 
 // Locale Emulator 的 LoaderDll 负责在 kernel32 初始化前装入 LocaleEmulator.dll。这里始终
-// 把调用结果保持在 CREATE_SUSPENDED；普通引擎交回 RunInjection 完成 Fushi 早注入后恢复，
+// 把调用结果保持在 CREATE_SUSPENDED；普通引擎交回 RunInjection 完成 MyComic 早注入后恢复，
 // 需要发现窗口/子进程的策略则由 RunLaunch 先恢复再等待，避免挂起启动器与发现逻辑死锁。
 bool CreateJapaneseLocaleProcess(
     const std::wstring& executable,
@@ -2558,7 +2558,7 @@ bool CreateJapaneseLocaleProcess(
     return false;
   }
 
-  auto environment = fushi_voice_hook::BuildJapaneseLocaleEnvironment();
+  auto environment = my_comic_voice_hook::BuildJapaneseLocaleEnvironment();
   LeProcessInformation le_process = {};
   const LONG status = create_process(
       &environment, executable.c_str(), command_line->data(),
@@ -2640,15 +2640,15 @@ std::vector<std::wstring> ListSubdirectories(const std::wstring& dir) {
 // 被启动的 exe 是不是启动器：自己那层没有引擎签名，受限深度内的某个子目录有。
 // 真实样本 AngelBeats 体験版：Start.exe 在根，Siglus 签名在 StartData/gamedata。
 bool LooksLikeLauncherForEngine(const std::wstring& exe) {
-  return fushi_voice_hook::LooksLikeLauncherLayout(
-      ExecutableDirectory(exe), fushi_voice_hook::kLauncherLayoutMaxDepth,
-      fushi_voice_hook::DirectoryHasEngineSignature, ListSubdirectories);
+  return my_comic_voice_hook::LooksLikeLauncherLayout(
+      ExecutableDirectory(exe), my_comic_voice_hook::kLauncherLayoutMaxDepth,
+      my_comic_voice_hook::DirectoryHasEngineSignature, ListSubdirectories);
 }
 
 // 子进程镜像所在目录带引擎签名 -> 它就是真游戏。启动器链里的游戏进程一个 ffmpeg 模块
 // 都不加载，只有这条证据认得出它。
 void InspectEngineSignature(DWORD pid,
-                            fushi_voice_hook::ChildProcessCandidate* candidate) {
+                            my_comic_voice_hook::ChildProcessCandidate* candidate) {
   HANDLE process =
       OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
   if (process == nullptr) return;
@@ -2656,11 +2656,11 @@ void InspectEngineSignature(DWORD pid,
   CloseHandle(process);
   if (image.empty()) return;
   candidate->has_engine_signature =
-      fushi_voice_hook::DirectoryHasEngineSignature(ExecutableDirectory(image));
+      my_comic_voice_hook::DirectoryHasEngineSignature(ExecutableDirectory(image));
 }
 
 void InspectFfmpegModules(DWORD pid,
-                          fushi_voice_hook::ChildProcessCandidate* candidate) {
+                          my_comic_voice_hook::ChildProcessCandidate* candidate) {
   HANDLE snapshot = CreateToolhelp32Snapshot(
       TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid);
   if (snapshot == INVALID_HANDLE_VALUE) return;
@@ -2669,14 +2669,14 @@ void InspectFfmpegModules(DWORD pid,
   if (Module32FirstW(snapshot, &module)) {
     do {
       const auto parsed =
-          fushi_voice_hook::ParseFfmpegModuleName(module.szModule);
+          my_comic_voice_hook::ParseFfmpegModuleName(module.szModule);
       candidate->has_avcodec =
           candidate->has_avcodec ||
-          parsed.kind == fushi_voice_hook::FfmpegModuleKind::kAvcodec;
+          parsed.kind == my_comic_voice_hook::FfmpegModuleKind::kAvcodec;
       candidate->has_avformat =
           candidate->has_avformat ||
-          parsed.kind == fushi_voice_hook::FfmpegModuleKind::kAvformat;
-      if (fushi_voice_hook::IsMonolithicFfmpegModuleName(module.szModule)) {
+          parsed.kind == my_comic_voice_hook::FfmpegModuleKind::kAvformat;
+      if (my_comic_voice_hook::IsMonolithicFfmpegModuleName(module.szModule)) {
         candidate->has_avcodec = true;
         candidate->has_avformat = true;
       }
@@ -2691,7 +2691,7 @@ uint64_t ProcessTimeValue(const FILETIME& time) {
 }
 
 bool ReadProcessLifetime(HANDLE process, DWORD pid,
-                         fushi_voice_hook::ChildProcessLineage::Node* node) {
+                         my_comic_voice_hook::ChildProcessLineage::Node* node) {
   FILETIME observed, created, exited, kernel, user;
   GetSystemTimeAsFileTime(&observed);
   if (!GetProcessTimes(process, &created, &exited, &kernel, &user)) return false;
@@ -2721,7 +2721,7 @@ class LaunchProcessLineage {
 
   void Refresh() {
     for (const auto& item : handles_) {
-      fushi_voice_hook::ChildProcessLineage::Node node;
+      my_comic_voice_hook::ChildProcessLineage::Node node;
       if (ReadProcessLifetime(item.second, item.first, &node)) {
         lineage_.UpdateLifetime(node.identity, node.alive_through,
                                 node.exited_at);
@@ -2730,13 +2730,13 @@ class LaunchProcessLineage {
   }
   bool Observe(DWORD pid, DWORD parent_pid) {
     if (lineage_.Find(pid) != nullptr || lineage_.Find(parent_pid) == nullptr ||
-        lineage_.size() >= fushi_voice_hook::ChildProcessLineage::kMaxProcesses) {
+        lineage_.size() >= my_comic_voice_hook::ChildProcessLineage::kMaxProcesses) {
       return false;
     }
     HANDLE process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION | SYNCHRONIZE,
                                  FALSE, pid);
     if (process == nullptr) return false;
-    fushi_voice_hook::ChildProcessLineage::Node node;
+    my_comic_voice_hook::ChildProcessLineage::Node node;
     if (!ReadProcessLifetime(process, pid, &node) ||
         !lineage_.Observe(node.identity, parent_pid)) {
       CloseHandle(process);
@@ -2746,7 +2746,7 @@ class LaunchProcessLineage {
     handles_[pid] = process;
     return true;
   }
-  const fushi_voice_hook::ChildProcessLineage::Node* LiveNode(DWORD pid) const {
+  const my_comic_voice_hook::ChildProcessLineage::Node* LiveNode(DWORD pid) const {
     const auto handle = handles_.find(pid);
     if (handle == handles_.end() ||
         WaitForSingleObject(handle->second, 0) != WAIT_TIMEOUT) return nullptr;
@@ -2760,23 +2760,23 @@ class LaunchProcessLineage {
   }
 
  private:
-  static fushi_voice_hook::ProcessIdentity RootIdentity(HANDLE root, DWORD pid) {
-    fushi_voice_hook::ChildProcessLineage::Node node;
+  static my_comic_voice_hook::ProcessIdentity RootIdentity(HANDLE root, DWORD pid) {
+    my_comic_voice_hook::ChildProcessLineage::Node node;
     return ReadProcessLifetime(root, pid, &node)
-               ? node.identity : fushi_voice_hook::ProcessIdentity{};
+               ? node.identity : my_comic_voice_hook::ProcessIdentity{};
   }
-  fushi_voice_hook::ChildProcessLineage lineage_;
+  my_comic_voice_hook::ChildProcessLineage lineage_;
   std::map<DWORD, HANDLE> handles_;
 };
 
-fushi_voice_hook::ProcessIdentity FindGameChildProcess(
+my_comic_voice_hook::ProcessIdentity FindGameChildProcess(
     DWORD root_pid, LaunchProcessLineage* lineage, bool* observation_valid) {
   *observation_valid = false;
   lineage->Refresh();
   HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
   if (snapshot == INVALID_HANDLE_VALUE) return {};
   struct OwnedCandidate {
-    fushi_voice_hook::ChildProcessCandidate value;
+    my_comic_voice_hook::ChildProcessCandidate value;
     std::wstring name;
   };
   std::vector<OwnedCandidate> owned;
@@ -2796,7 +2796,7 @@ fushi_voice_hook::ProcessIdentity FindGameChildProcess(
   }
   CloseHandle(snapshot);
   // Toolhelp order is unspecified. Each bounded pass admits another generation.
-  for (int depth = 0; depth < fushi_voice_hook::ChildProcessLineage::kMaxDepth;
+  for (int depth = 0; depth < my_comic_voice_hook::ChildProcessLineage::kMaxDepth;
        ++depth) {
     bool added = false;
     for (const auto& item : owned) {
@@ -2804,7 +2804,7 @@ fushi_voice_hook::ProcessIdentity FindGameChildProcess(
     }
     if (!added) break;
   }
-  fushi_voice_hook::ProcessIdentity best;
+  my_comic_voice_hook::ProcessIdentity best;
   int best_score = 0;
   for (auto& item : owned) {
     const auto* node = lineage->LiveNode(item.value.pid);
@@ -2812,7 +2812,7 @@ fushi_voice_hook::ProcessIdentity FindGameChildProcess(
     item.value.executable_name = item.name.c_str();
     InspectFfmpegModules(item.value.pid, &item.value);
     InspectEngineSignature(item.value.pid, &item.value);
-    const int score = fushi_voice_hook::ChildProcessScore(item.value, node->depth);
+    const int score = my_comic_voice_hook::ChildProcessScore(item.value, node->depth);
     if (score > best_score ||
         (score == best_score && score > 0 && item.value.pid < best.pid)) {
       best_score = score;
@@ -2823,29 +2823,29 @@ fushi_voice_hook::ProcessIdentity FindGameChildProcess(
 }
 
 struct GameChildWaitResult {
-  fushi_voice_hook::ProcessIdentity identity{};
-  fushi_voice_hook::ChildWaitAction action = fushi_voice_hook::ChildWaitAction::kFailed;
+  my_comic_voice_hook::ProcessIdentity identity{};
+  my_comic_voice_hook::ChildWaitAction action = my_comic_voice_hook::ChildWaitAction::kFailed;
 };
 
 GameChildWaitResult WaitForGameChildProcess(
     HANDLE root_process, DWORD root_pid, DWORD wait_ms, bool interactive) {
   LaunchProcessLineage lineage(root_process, root_pid);
   const uint64_t started = GetTickCount64();
-  fushi_voice_hook::LauncherWaitState waiting(interactive, started, wait_ms);
+  my_comic_voice_hook::LauncherWaitState waiting(interactive, started, wait_ms);
   for (;;) {
     bool observation_valid = false;
     const auto candidate = FindGameChildProcess(root_pid, &lineage, &observation_valid);
     bool root_runtime = false;
     if (candidate.pid == 0 && GetTickCount64() - started >= 1000 &&
         lineage.LiveNode(root_pid) != nullptr) {
-      fushi_voice_hook::ChildProcessCandidate launcher;
+      my_comic_voice_hook::ChildProcessCandidate launcher;
       launcher.pid = root_pid;
       InspectFfmpegModules(root_pid, &launcher);
       root_runtime = launcher.has_avcodec && launcher.has_avformat;
     }
     const auto action = waiting.Observe(GetTickCount64(), observation_valid,
         candidate, lineage.HasLiveNode(), root_runtime);
-    if (action != fushi_voice_hook::ChildWaitAction::kWait) return {candidate, action};
+    if (action != my_comic_voice_hook::ChildWaitAction::kWait) return {candidate, action};
     Sleep(100);
   }
 }
@@ -2917,9 +2917,9 @@ std::string ReadUtf8File(const std::wstring& path) {
                : std::string();
 }
 
-fushi_voice_hook::LunaTargetIdentity BuildTargetIdentity(
+my_comic_voice_hook::LunaTargetIdentity BuildTargetIdentity(
     const std::wstring& executable, DWORD pid) {
-  fushi_voice_hook::LunaTargetIdentity identity;
+  my_comic_voice_hook::LunaTargetIdentity identity;
   identity.executable_sha256 = Sha256File(executable);
   HANDLE snapshot = CreateToolhelp32Snapshot(
       TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid);
@@ -2928,7 +2928,7 @@ fushi_voice_hook::LunaTargetIdentity BuildTargetIdentity(
   module.dwSize = sizeof(module);
   if (Module32FirstW(snapshot, &module)) {
     do {
-      std::string name = fushi_voice_hook::LowerAscii(WideToUtf8(module.szModule));
+      std::string name = my_comic_voice_hook::LowerAscii(WideToUtf8(module.szModule));
       if (!name.empty() && identity.module_sha256.find(name) ==
                                identity.module_sha256.end()) {
         identity.module_sha256.emplace(name, Sha256File(module.szExePath));
@@ -2968,20 +2968,20 @@ bool LooksLikeUnityRuntime(const std::wstring& exe) {
 bool LooksLikeUnrealRuntime(const std::wstring& exe) {
   const std::wstring dir = ExecutableDirectory(exe);
   if (dir.empty()) return false;
-  return fushi_voice_hook::MatchesUnrealIostoreLayout(dir);
+  return my_comic_voice_hook::MatchesUnrealIostoreLayout(dir);
 }
 
 // Siglus 游戏（含改名 exe）：exe 名严格匹配，或 exe 同目录具备 Siglus 文件夹签名。用于把 launch
 // 的早注入改为延迟附着，绕过 Enigma 保护壳拒绝挂起态注入导致的 launch_or_inject_failed。
 bool LooksLikeSiglusRuntime(const std::wstring& exe) {
-  return fushi_voice_hook::DirectoryLooksLikeSiglusOnDisk(ExecutableDirectory(exe));
+  return my_comic_voice_hook::DirectoryLooksLikeSiglusOnDisk(ExecutableDirectory(exe));
 }
 
 // KiriKiri（2 / Z）：exe 同目录至少一个 `*.xp3` 以 XP3 归档魔数开头（判据本体与来由见
 // include/kirikiri_launch_signature.h）。exe 本身可能被 Enigma 整体加壳、不导出任何 TVP 符号，
 // 所以不看 exe，只看引擎数据归档的结构。这里只提供 Win32 的目录枚举与读文件头。
 bool LooksLikeKirikiriRuntime(const std::wstring& exe) {
-  return fushi_voice_hook::DirectoryLooksLikeKirikiri(
+  return my_comic_voice_hook::DirectoryLooksLikeKirikiri(
       ExecutableDirectory(exe),
       [](const std::wstring& dir, auto visit) {
         WIN32_FIND_DATAW data = {};
@@ -3122,8 +3122,8 @@ bool ReadSmallUtf8File(const std::wstring& path, std::wstring* out) {
 }
 
 std::wstring DiscoverSteamAppId(const std::wstring& executable) {
-  fushi_voice_hook::SteamLibraryPath library;
-  if (!fushi_voice_hook::ParseSteamLibraryPath(executable, &library)) {
+  my_comic_voice_hook::SteamLibraryPath library;
+  if (!my_comic_voice_hook::ParseSteamLibraryPath(executable, &library)) {
     return L"";
   }
   const std::wstring pattern = library.steamapps_dir + L"\\appmanifest_*.acf";
@@ -3138,11 +3138,11 @@ std::wstring DiscoverSteamAppId(const std::wstring& executable) {
                            &manifest)) {
       continue;
     }
-    const std::wstring install = fushi_voice_hook::ParseAcfQuotedValue(
+    const std::wstring install = my_comic_voice_hook::ParseAcfQuotedValue(
         manifest, L"installdir");
     if (_wcsicmp(install.c_str(), library.install_dir.c_str()) != 0) continue;
     const std::wstring app_id =
-        fushi_voice_hook::ParseAcfQuotedValue(manifest, L"appid");
+        my_comic_voice_hook::ParseAcfQuotedValue(manifest, L"appid");
     if (!app_id.empty() &&
         std::all_of(app_id.begin(), app_id.end(),
                     [](wchar_t c) { return c >= L'0' && c <= L'9'; })) {
@@ -3215,7 +3215,7 @@ int RunSteamLaunch(const std::wstring& exe, const std::wstring& app_id,
             "pid=%lu image=%ls\n",
             pid, expected_exe.c_str());
   } else {
-    const std::wstring uri = fushi_voice_hook::BuildSteamRunUri(app_id);
+    const std::wstring uri = my_comic_voice_hook::BuildSteamRunUri(app_id);
     const HINSTANCE launched = ShellExecuteW(
         nullptr, L"open", uri.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
     if (reinterpret_cast<INT_PTR>(launched) <= 32) {
@@ -3230,7 +3230,7 @@ int RunSteamLaunch(const std::wstring& exe, const std::wstring& app_id,
       fprintf(stderr,
               "Steam 已接受启动请求，但 45 秒内未发现目标进程：%ls\n",
               expected_exe.c_str());
-      ReportFailureReason(fushi_voice_hook::LaunchFailureReason::kSteamTimeout,
+      ReportFailureReason(my_comic_voice_hook::LaunchFailureReason::kSteamTimeout,
                           1);
       return 1;
     }
@@ -3247,8 +3247,8 @@ int RunSteamLaunch(const std::wstring& exe, const std::wstring& app_id,
   ApplyLunaProfiles(expected_exe, pid, luna.profile_path, &luna);
   // Steam 路径的游戏由客户端启动、始终处于运行态，没有可恢复的挂起主线程；但失败原因
   // 同样必须回报，否则 host 只能看到一个没有原因的非零退出。
-  fushi_voice_hook::LaunchFailureReason reason =
-      fushi_voice_hook::LaunchFailureReason::kNone;
+  my_comic_voice_hook::LaunchFailureReason reason =
+      my_comic_voice_hook::LaunchFailureReason::kNone;
   const int rc = RunInjection(target, pid, dll_path, wait_ms, hold, nullptr,
                               target, luna, native_loopback_requested, &reason);
   CloseHandle(target);
@@ -3266,7 +3266,7 @@ int RunLaunch(const std::wstring& exe, const std::wstring& workdir_in,
               uint32_t native_loopback_requested) {
   if (GetFileAttributesW(exe.c_str()) == INVALID_FILE_ATTRIBUTES) {
     Fail("目标 exe 不存在（--launch <exe路径>）");
-    ReportFailureReason(fushi_voice_hook::LaunchFailureReason::kGameExeMissing,
+    ReportFailureReason(my_comic_voice_hook::LaunchFailureReason::kGameExeMissing,
                         1);
     return 1;
   }
@@ -3292,7 +3292,7 @@ int RunLaunch(const std::wstring& exe, const std::wstring& workdir_in,
   // 反解规则逐个转义 —— 直接空格拼接会让含空格/引号的参数在游戏侧被拆成多个 argv。
   // CreateProcessW 要求缓冲可写。
   const std::wstring cmdline =
-      fushi_voice_hook::BuildLaunchCommandLine(exe, extra_args);
+      my_comic_voice_hook::BuildLaunchCommandLine(exe, extra_args);
   const auto make_command_buffer = [&cmdline]() {
     std::vector<wchar_t> buffer(cmdline.begin(), cmdline.end());
     buffer.push_back(L'\0');
@@ -3305,7 +3305,7 @@ int RunLaunch(const std::wstring& exe, const std::wstring& workdir_in,
   PROCESS_INFORMATION pi = {0};
   const bool delayed_siglus = IsSiglusGame(exe);
   const auto* delayed_kirikiri =
-      fushi_voice_hook::FindKirikiriDelayedAttachProfile(Sha256File(exe));
+      my_comic_voice_hook::FindKirikiriDelayedAttachProfile(Sha256File(exe));
   const bool delayed_attach = delayed_siglus || delayed_kirikiri != nullptr;
   if (delayed_kirikiri != nullptr) {
     fprintf(stderr, "[launch] delayed-attach profile=%s\n",
@@ -3324,8 +3324,8 @@ int RunLaunch(const std::wstring& exe, const std::wstring& workdir_in,
   // 已退出的首进程。Steam 游戏改走客户端协议，并自动按完整 exe 路径发现/注入真实进程。
   const std::wstring steam_app_id = DiscoverSteamAppId(exe);
   if (!force_direct_launch &&
-      fushi_voice_hook::ChooseSteamLaunchStrategy(steam_app_id) ==
-      fushi_voice_hook::SteamLaunchStrategy::kSteamClient) {
+      my_comic_voice_hook::ChooseSteamLaunchStrategy(steam_app_id) ==
+      my_comic_voice_hook::SteamLaunchStrategy::kSteamClient) {
     if (!extra_args.empty()) {
       fprintf(stderr,
               "[steam] warning: custom --arg values are not forwarded by the "
@@ -3340,10 +3340,10 @@ int RunLaunch(const std::wstring& exe, const std::wstring& workdir_in,
     return RunSteamLaunch(exe, steam_app_id, dll_path, wait_ms, hold,
                           effective_luna, native_loopback_requested);
   }
-  const fushi_voice_hook::PeLaunchLayout pe_layout = ReadPeLaunchLayout(exe);
+  const my_comic_voice_hook::PeLaunchLayout pe_layout = ReadPeLaunchLayout(exe);
   // 引擎 launch profile（结构判据，不按标题 / exe 名 / 哈希）：决定是否需要加载器初始化门。
-  const fushi_voice_hook::KirikiriLaunchProfile kirikiri_profile =
-      fushi_voice_hook::SelectKirikiriLaunchProfile(LooksLikeKirikiriRuntime(exe));
+  const my_comic_voice_hook::KirikiriLaunchProfile kirikiri_profile =
+      my_comic_voice_hook::SelectKirikiriLaunchProfile(LooksLikeKirikiriRuntime(exe));
   if (pe_layout.steam_stub) {
     // BUG-1192：SteamStub 包壳 exe 却没从 appmanifest 发现 AppID，只能直接启动。以前这里完全
     // 静默，用户只看到游戏自己弹的 `Application load error`，无从判断是启动方式不对。
@@ -3401,12 +3401,12 @@ int RunLaunch(const std::wstring& exe, const std::wstring& workdir_in,
     const DWORD create_error = GetLastError();
     fprintf(stderr, "CreateProcessW failed: %lu\n", create_error);
     // 740 = ERROR_ELEVATION_REQUIRED：游戏 manifest 要求管理员，非提权 injector 拉不起来。
-    // host 据此提示「以管理员身份启动 Fushi」，而不是笼统的启动失败。
+    // host 据此提示「以管理员身份启动 MyComic」，而不是笼统的启动失败。
     if (create_error == ERROR_ELEVATION_REQUIRED) {
       fprintf(stderr, "ERR reason=elevationRequired exit=1\n");
     } else {
       ReportFailureReason(
-          fushi_voice_hook::LaunchFailureReason::kCreateProcessFailed, 1);
+          my_comic_voice_hook::LaunchFailureReason::kCreateProcessFailed, 1);
     }
     return 1;
   }
@@ -3423,19 +3423,19 @@ int RunLaunch(const std::wstring& exe, const std::wstring& workdir_in,
   // 而 locale 路径下 LoaderDll 无论调用方传什么都会叠加 CREATE_SUSPENDED
   // （CreateJapaneseLocaleProcess 里的 `creation_flags | CREATE_SUSPENDED`），所以只要
   // 走了 locale 就一定是挂起态——旧代码算 created_suspended 时漏了这一半。
-  const bool launched_suspended = fushi_voice_hook::LaunchedProcessIsSuspended(
+  const bool launched_suspended = my_comic_voice_hook::LaunchedProcessIsSuspended(
       (creation_flags & CREATE_SUSPENDED) != 0, locale_launched);
   bool resumed_before_discovery = false;
 
   const auto locale_resume_policy =
-      fushi_voice_hook::SelectLocaleThreadResumePolicy(
+      my_comic_voice_hook::SelectLocaleThreadResumePolicy(
           locale_launched, delayed_attach, follow_children);
   if (locale_resume_policy ==
-      fushi_voice_hook::LocaleThreadResumePolicy::kBeforeProcessDiscovery) {
+      my_comic_voice_hook::LocaleThreadResumePolicy::kBeforeProcessDiscovery) {
     if (!ResumeLaunchedGame(pi.hProcess, pi.hThread, "pre-discovery")) {
       fprintf(stderr,
               "[locale] failed to resume the game before process discovery\n");
-      ReportFailureReason(fushi_voice_hook::LaunchFailureReason::kResumeFailed,
+      ReportFailureReason(my_comic_voice_hook::LaunchFailureReason::kResumeFailed,
                           1);
       TerminateProcess(pi.hProcess, 1);
       CloseHandle(pi.hThread);
@@ -3450,7 +3450,7 @@ int RunLaunch(const std::wstring& exe, const std::wstring& workdir_in,
   bool loader_gate_left_running = false;
   if (launched_suspended && !resumed_before_discovery && !delayed_attach &&
       !follow_children) {
-    if (fushi_voice_hook::ShouldUseLoaderInitGate(
+    if (my_comic_voice_hook::ShouldUseLoaderInitGate(
             pe_layout, true, kirikiri_profile.loader_init_gate)) {
       fprintf(stderr,
               "[loader-gate] KiriKiri launch profile (XP3 archive signature) and "
@@ -3458,7 +3458,7 @@ int RunLaunch(const std::wstring& exe, const std::wstring& workdir_in,
               "initialise the process before injection\n",
               pe_layout.tls_callback_count);
       loader_gate_left_running =
-          fushi_voice_hook::LoaderInitGateLeftProcessRunning(RunLoaderInitGate(
+          my_comic_voice_hook::LoaderInitGateLeftProcessRunning(RunLoaderInitGate(
               pi.hProcess, pi.hThread, pe_layout.entry_point_rva));
     }
   }
@@ -3495,27 +3495,27 @@ int RunLaunch(const std::wstring& exe, const std::wstring& workdir_in,
         wait_ms > static_cast<DWORD>(15000) ? wait_ms : static_cast<DWORD>(15000);
     const auto child_result = WaitForGameChildProcess(
         pi.hProcess, pi.dwProcessId, child_wait_ms, launcher_layout);
-    if (child_result.action == fushi_voice_hook::ChildWaitAction::kEnded ||
-        child_result.action == fushi_voice_hook::ChildWaitAction::kFailed) {
+    if (child_result.action == my_comic_voice_hook::ChildWaitAction::kEnded ||
+        child_result.action == my_comic_voice_hook::ChildWaitAction::kFailed) {
       fprintf(stderr, "[launch] launcher wait ended without a game (reason=%s)\n",
-          child_result.action == fushi_voice_hook::ChildWaitAction::kEnded
+          child_result.action == my_comic_voice_hook::ChildWaitAction::kEnded
               ? "lineageEnded" : "observationFailed");
-      ReportFailureReason(child_result.action == fushi_voice_hook::ChildWaitAction::kEnded
-          ? fushi_voice_hook::LaunchFailureReason::kLauncherEnded
-          : fushi_voice_hook::LaunchFailureReason::kLauncherDiscoveryFailed, 1);
+      ReportFailureReason(child_result.action == my_comic_voice_hook::ChildWaitAction::kEnded
+          ? my_comic_voice_hook::LaunchFailureReason::kLauncherEnded
+          : my_comic_voice_hook::LaunchFailureReason::kLauncherDiscoveryFailed, 1);
       CloseHandle(pi.hThread);
       CloseHandle(pi.hProcess);
       return 1;
     }
-    const auto child_identity = child_result.action == fushi_voice_hook::ChildWaitAction::kGame
-        ? child_result.identity : fushi_voice_hook::ProcessIdentity{};
+    const auto child_identity = child_result.action == my_comic_voice_hook::ChildWaitAction::kGame
+        ? child_result.identity : my_comic_voice_hook::ProcessIdentity{};
     const DWORD child_pid = child_identity.pid;
     if (child_pid != 0) {
       child_process = OpenProcess(
           PROCESS_CREATE_THREAD | PROCESS_VM_OPERATION | PROCESS_VM_WRITE |
               PROCESS_VM_READ | PROCESS_QUERY_INFORMATION | SYNCHRONIZE,
           FALSE, child_pid);
-      fushi_voice_hook::ChildProcessLineage::Node child_lifetime;
+      my_comic_voice_hook::ChildProcessLineage::Node child_lifetime;
       if (child_process != nullptr &&
           (!ReadProcessLifetime(child_process, child_pid, &child_lifetime) ||
            child_lifetime.identity.created_at != child_identity.created_at ||
@@ -3536,15 +3536,15 @@ int RunLaunch(const std::wstring& exe, const std::wstring& workdir_in,
       }
     }
     if (target_process == pi.hProcess) {
-      if (launcher_layout && child_result.action != fushi_voice_hook::ChildWaitAction::kRootRuntime) {
+      if (launcher_layout && child_result.action != my_comic_voice_hook::ChildWaitAction::kRootRuntime) {
         // A discovered child that disappeared or could not be opened is not
         // permission to inject the already identified launcher instead.
-        ReportFailureReason(fushi_voice_hook::LaunchFailureReason::kInjectionFailed, 1);
+        ReportFailureReason(my_comic_voice_hook::LaunchFailureReason::kInjectionFailed, 1);
         CloseHandle(pi.hThread);
         CloseHandle(pi.hProcess);
         return 1;
       }
-      if (child_result.action == fushi_voice_hook::ChildWaitAction::kRootRuntime) {
+      if (child_result.action == my_comic_voice_hook::ChildWaitAction::kRootRuntime) {
         printf("LAUNCH pid=%lu arch=%s role=game locale=%d\n", target_pid,
                sizeof(void*) == 8 ? "x64" : "x86", locale_launched ? 1 : 0);
         fflush(stdout);
@@ -3576,10 +3576,10 @@ int RunLaunch(const std::wstring& exe, const std::wstring& workdir_in,
   // ResumeLaunchedGame 会退到进程级 NtResumeProcess，绝不再静默跳过。
   // hold_process 让 --hold 挂到游戏退出。
   const bool must_resume_after_injection =
-      fushi_voice_hook::MustResumeAfterInjection(launched_suspended,
+      my_comic_voice_hook::MustResumeAfterInjection(launched_suspended,
                                                  resumed_before_discovery);
-  fushi_voice_hook::LaunchFailureReason reason =
-      fushi_voice_hook::LaunchFailureReason::kNone;
+  my_comic_voice_hook::LaunchFailureReason reason =
+      my_comic_voice_hook::LaunchFailureReason::kNone;
   bool resumed = false;
   bool loopback_stopped_on_failure = true;
   const int rc = RunInjection(target_process, target_pid, dll_path, wait_ms,
@@ -3600,8 +3600,8 @@ int RunLaunch(const std::wstring& exe, const std::wstring& workdir_in,
   const bool created_suspended = launched_suspended;
   const bool already_resumed = resumed || resumed_before_discovery;
   if (rc != 0) {
-    fushi_voice_hook::LaunchedProcessDisposition disposition =
-        fushi_voice_hook::DecideLaunchedProcessDisposition(created_suspended,
+    my_comic_voice_hook::LaunchedProcessDisposition disposition =
+        my_comic_voice_hook::DecideLaunchedProcessDisposition(created_suspended,
                                                             already_resumed,
                                                             reason);
     if (!loopback_stopped_on_failure) {
@@ -3610,16 +3610,16 @@ int RunLaunch(const std::wstring& exe, const std::wstring& workdir_in,
               "refusing degraded resume of a suspended game\n");
       if (created_suspended && !already_resumed) {
         disposition =
-            fushi_voice_hook::LaunchedProcessDisposition::kTerminate;
+            my_comic_voice_hook::LaunchedProcessDisposition::kTerminate;
       }
     }
     if (disposition ==
-        fushi_voice_hook::LaunchedProcessDisposition::kResumeDegraded) {
+        my_comic_voice_hook::LaunchedProcessDisposition::kResumeDegraded) {
       if (!ResumeLaunchedGame(pi.hProcess, pi.hThread, "degraded")) {
         fprintf(stderr, "[launch] hook failed and resuming the game failed\n");
-        reason = fushi_voice_hook::LaunchFailureReason::kResumeFailed;
+        reason = my_comic_voice_hook::LaunchFailureReason::kResumeFailed;
         disposition =
-            fushi_voice_hook::LaunchedProcessDisposition::kTerminate;
+            my_comic_voice_hook::LaunchedProcessDisposition::kTerminate;
       } else {
         // 别再说「without hooks」：注入编排失败时 hook DLL 往往**已经在进程里**且
         // 游戏内自装的音频 hook 已经就绪（真机 WoH 上 26 条音轨、game_resource 全好），
@@ -3629,11 +3629,11 @@ int RunLaunch(const std::wstring& exe, const std::wstring& workdir_in,
                 "[launch] injection orchestration aborted (reason=%s); game "
                 "resumed. Hooks already installed in-process stay active; "
                 "anything the injector had not installed yet is missing\n",
-                fushi_voice_hook::LaunchFailureToken(reason));
+                my_comic_voice_hook::LaunchFailureToken(reason));
       }
     }
     if (disposition ==
-        fushi_voice_hook::LaunchedProcessDisposition::kTerminate) {
+        my_comic_voice_hook::LaunchedProcessDisposition::kTerminate) {
       TerminateProcess(pi.hProcess, 1);
     }
     ReportFailureReason(reason, rc);
@@ -3745,14 +3745,14 @@ int main() {
   if ((pid == 0) == launch_exe.empty()) {
     // 两个都没给 或 两个都给了。
     return Fail(
-        "usage: fushi_voice_injector --pid <PID> [--dll <hook.dll>] "
+        "usage: my_comic_voice_injector --pid <PID> [--dll <hook.dll>] "
         "[--wait-ms N] [--hold] [--native-loopback-policy allow|deny]\n"
-        "   or: fushi_voice_injector --launch <exe> [--workdir <dir>] "
+        "   or: my_comic_voice_injector --launch <exe> [--workdir <dir>] "
         "[--japanese-locale] "
         "[--arg <a>]... [--dll <hook.dll>] [--wait-ms N] [--hold] "
         "[--follow-child-processes] [--force-direct-launch] "
         "[--native-loopback-policy allow|deny]\n"
-        "   or: fushi_voice_injector --capabilities\n"
+        "   or: my_comic_voice_injector --capabilities\n"
         "LunaHook(host 侧全引擎文本 hook，仅 --hold 生效): [--no-luna] "
         "[--luna-pchooks] [--luna-codepage <cp=932>] "
         "[--luna-hook-code <H-code>]... [--luna-hook-profile <profiles.tsv>]");
@@ -3763,7 +3763,7 @@ int main() {
   }
   if (GetFileAttributesW(dll_path.c_str()) == INVALID_FILE_ATTRIBUTES) {
     Fail("hook DLL not found (pass --dll <path>)");
-    ReportFailureReason(fushi_voice_hook::LaunchFailureReason::kHookDllMissing,
+    ReportFailureReason(my_comic_voice_hook::LaunchFailureReason::kHookDllMissing,
                         1);
     return 1;
   }
@@ -3782,7 +3782,7 @@ int main() {
     fprintf(stderr, "OpenProcess(%lu) failed: %lu (需管理员/相同完整性级别?)\n",
             pid, GetLastError());
     // 附着失败最常见的真实原因：游戏以更高完整性级别（管理员）运行。host 据此提示
-    // 「以管理员身份启动 Fushi」，并且不做无意义的重试。
+    // 「以管理员身份启动 MyComic」，并且不做无意义的重试。
     fprintf(stderr, "ERR reason=accessDenied exit=1\n");
     return 1;
   }
@@ -3801,8 +3801,8 @@ int main() {
             ExecutableBaseName(target_exe).c_str());
   }
 
-  fushi_voice_hook::LaunchFailureReason reason =
-      fushi_voice_hook::LaunchFailureReason::kNone;
+  my_comic_voice_hook::LaunchFailureReason reason =
+      my_comic_voice_hook::LaunchFailureReason::kNone;
   const int rc = RunInjection(target, pid, dll_path, wait_ms, hold, nullptr,
                               nullptr, effective_luna,
                               native_loopback_requested, &reason);

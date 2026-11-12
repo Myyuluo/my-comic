@@ -10,8 +10,8 @@
 #include "kirikiri_voice_storage_name.h"
 
 int main() {
-  using fushi_voice_hook::IsKirikiriPathSeparator;
-  using fushi_voice_hook::KirikiriVoicePayloadExtension;
+  using my_comic_voice_hook::IsKirikiriPathSeparator;
+  using my_comic_voice_hook::KirikiriVoicePayloadExtension;
 
   // `>` 是 KiriKiri 归档放置路径分隔符（`voice.xp3>坒`）——BUG-2115 的落盘名基名切分点。
   assert(IsKirikiriPathSeparator(L'>'));

@@ -1,4 +1,4 @@
-# 内置 libtorrent 引擎（native/fushi_torrent）的 **PR 阶段 Android/Linux 编译门**。
+# 内置 libtorrent 引擎（native/my_comic_torrent）的 **PR 阶段 Android/Linux 编译门**。
 #
 # ── 补的是哪个缺口 ────────────────────────────────────────────────────────────
 # C ABI bridge + libtorrent 在本仓一共有三个构建入口，本 workflow 之前它们的 CI
@@ -8,16 +8,16 @@
 #                              `pull_request` 触发、paths 含 `native/**`）
 #                              + release-desktop.yml（发布路径）
 #                              ⇒ Windows 侧 **PR 上本来就有真编译门**，还顺带跑
-#                                packages/fushi_torrent 的 dlopen FFI 测试。
+#                                packages/my_comic_torrent 的 dlopen FFI 测试。
 #   build_android_so.sh     -> **只**被 release.yml 消费，而 release.yml 没有
 #                              `pull_request` 触发，push 触发的 paths 里也**没有**
 #                              `native/**`。
 #   build_android_so.ps1    -> 无 CI 消费（开发者本机 Windows 用）。
 #
-# 也就是说：一个只改 `native/fushi_torrent/**` 的 PR，Android 侧的 vcpkg 交叉编译
+# 也就是说：一个只改 `native/my_comic_torrent/**` 的 PR，Android 侧的 vcpkg 交叉编译
 # （NDK clang + arm64-android overlay triplet + 静态链 boost/openssl/libtorrent）
 # **在合进主干之前从未跑过一次**；更糟的是合进 develop 之后那次 push 同样不触发
-# release.yml（paths 不含 native/**），断供要等到下一个碰 fushi/** 的提交才暴露。
+# release.yml（paths 不含 native/**），断供要等到下一个碰 my_comic/** 的提交才暴露。
 # 本 workflow 就是把这条从未被跑过的边补成 PR 阶段的硬门。
 #
 # ── 它**不**负责什么（别误以为它覆盖了这些）────────────────────────────────────
@@ -45,8 +45,8 @@ on:
   pull_request:
     branches: ['main', 'develop']
     paths:
-      - 'native/fushi_torrent/**'
-      - 'packages/fushi_torrent/**'
+      - 'native/my_comic_torrent/**'
+      - 'packages/my_comic_torrent/**'
       - '.github/scripts/verify_torrent_abi.sh'
       - '.github/scripts/verify_android_cxx_self_contained.sh'
       - '.github/workflows/native-torrent-gate.yml'
@@ -77,8 +77,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             libtorrent-rasterbar-dev libboost-dev libssl-dev ninja-build
-          # 版本必须仍是 2.0.x：fushi_torrent_ffi.cpp 用的是 2.0 API，2.1 移除或改名
-          # 了其中五处（native/fushi_torrent/vcpkg.json 的 why-pinned 有完整清单）。
+          # 版本必须仍是 2.0.x：my_comic_torrent_ffi.cpp 用的是 2.0 API，2.1 移除或改名
+          # 了其中五处（native/my_comic_torrent/vcpkg.json 的 why-pinned 有完整清单）。
           # 发行版某天升到 2.1 时这一行会当场红，而不是让下面的编译吐一串看不懂的
           # 模板错，把人往「bridge 写错了」的方向带。
           ver="$(dpkg-query -W -f='${Version}' libtorrent-rasterbar-dev)"
@@ -92,7 +92,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cmake -G Ninja -B "$RUNNER_TEMP/build-linux" -S native/fushi_torrent \
+          cmake -G Ninja -B "$RUNNER_TEMP/build-linux" -S native/my_comic_torrent \
             -DCMAKE_BUILD_TYPE=Release
           cmake --build "$RUNNER_TEMP/build-linux"
 
@@ -100,7 +100,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          so="$RUNNER_TEMP/build-linux/libfushi_torrent_ffi.so"
+          so="$RUNNER_TEMP/build-linux/libmy_comic_torrent_ffi.so"
           test -f "$so" || { echo "::error::missing artifact $so"; exit 1; }
           file "$so"
           bash .github/scripts/verify_torrent_abi.sh "$so" nm
@@ -146,7 +146,7 @@ jobs:
           # 末段 = vcpkg.json / overlay ports / triplets 的哈希：改钉版自动换 key，不再靠手动
           # bump vN（命中即不回存，忘了 bump 就每次重编改过的包）。restore-keys 只在同一
           # 镜像内前缀回退，没变的包照样从归档恢复；跨镜像不回退的约束不变。
-          key: ${{ runner.os }}-vcpkg-libtorrent-arm64-android-v2-${{ steps.vcpkg_cache_id.outputs.image }}-${{ hashFiles('native/fushi_torrent/vcpkg.json', 'native/fushi_torrent/vcpkg-ports/**', 'native/fushi_torrent/vcpkg-triplets/**') }}
+          key: ${{ runner.os }}-vcpkg-libtorrent-arm64-android-v2-${{ steps.vcpkg_cache_id.outputs.image }}-${{ hashFiles('native/my_comic_torrent/vcpkg.json', 'native/my_comic_torrent/vcpkg-ports/**', 'native/my_comic_torrent/vcpkg-triplets/**') }}
           restore-keys: |
             ${{ runner.os }}-vcpkg-libtorrent-arm64-android-v2-${{ steps.vcpkg_cache_id.outputs.image }}
 
@@ -160,8 +160,8 @@ jobs:
           VCPKG_DOWNLOADS: ${{ runner.temp }}/vcpkg-downloads
         run: |
           set -euo pipefail
-          chmod +x native/fushi_torrent/build_android_so.sh
-          bash native/fushi_torrent/build_android_so.sh \
+          chmod +x native/my_comic_torrent/build_android_so.sh
+          bash native/my_comic_torrent/build_android_so.sh \
             "$VCPKG_INSTALLATION_ROOT" "$ANDROID_NDK_LATEST_HOME" arm64-v8a
 
       # 「编出来了」不等于「编对了」：脚本自己只断言文件存在。这里再验产物形状。
@@ -169,7 +169,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          so="native/fushi_torrent/prebuilt/android/arm64-v8a/libfushi_torrent_ffi.so"
+          so="native/my_comic_torrent/prebuilt/android/arm64-v8a/libmy_comic_torrent_ffi.so"
           test -f "$so" || { echo "::error::missing artifact $so"; exit 1; }
           file "$so"
 

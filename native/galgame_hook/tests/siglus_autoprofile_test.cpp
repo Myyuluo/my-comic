@@ -10,8 +10,8 @@
 #include "siglus_autoprofile.h"
 
 namespace {
-using namespace fushi_voice_hook;
-using namespace fushi_voice_hook::siglus_family;
+using namespace my_comic_voice_hook;
+using namespace my_comic_voice_hook::siglus_family;
 
 struct Layout {
   uintptr_t glyph = 0x1000u;

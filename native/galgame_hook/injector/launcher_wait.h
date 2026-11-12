@@ -2,7 +2,7 @@
 
 #include "child_process_policy.h"
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 enum class ChildWaitAction { kWait, kGame, kRootRuntime, kEnded, kTimedOut, kFailed };
 
@@ -40,4 +40,4 @@ class LauncherWaitState {
   uint32_t wait_ms_;
   ProcessIdentity previous_{};
 };
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

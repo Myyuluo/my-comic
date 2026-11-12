@@ -20,7 +20,7 @@ enum class Identity { kPending, kResolving, kModernLuna, kModernNative, kLegacy,
 enum Export : size_t { kKey, kAsync, kTable, kRawData, kRawBuffer, kExportCount };
 enum class Owner { kNone, kGeneric, kExact };
 Identity identity = Identity::kOtherEngine;
-fushi_voice_hook::SiglusLookupProfile test_profile;
+my_comic_voice_hook::SiglusLookupProfile test_profile;
 bool leaf_matched = false, leaf_pending = false, hunex_matched = false;
 bool user32_loaded = true;
 std::array<int, kExportCount> export_tokens{}, trampoline_tokens{};
@@ -49,7 +49,7 @@ bool IsSiglusLookupProfileMatched() {
 bool IsSiglusLookupIdentityUndecided() {
   return identity == Identity::kPending || identity == Identity::kResolving;
 }
-const fushi_voice_hook::SiglusLookupProfile* ActiveSiglusLookupProfile() {
+const my_comic_voice_hook::SiglusLookupProfile* ActiveSiglusLookupProfile() {
   return IsSiglusLookupProfileMatched() ? &test_profile : nullptr;
 }
 bool IsLeafAquaplusProfileMatched() { return leaf_matched; }
@@ -101,11 +101,11 @@ bool HookFn(void* target, void* detour, void** original) {
 void SetIdentity(Identity value) {
   identity = value; test_profile = {};
   test_profile.glyph_abi = value == Identity::kLegacy
-      ? fushi_voice_hook::SiglusGlyphLayoutAbi::kStackSixteenArguments
-      : fushi_voice_hook::SiglusGlyphLayoutAbi::kEcxTenArguments;
+      ? my_comic_voice_hook::SiglusGlyphLayoutAbi::kStackSixteenArguments
+      : my_comic_voice_hook::SiglusGlyphLayoutAbi::kEcxTenArguments;
   test_profile.text_feed = value == Identity::kModernNative
-      ? fushi_voice_hook::SiglusLookupTextFeed::kNativeEcxTextUnion
-      : fushi_voice_hook::SiglusLookupTextFeed::kLunaScenarioLane;
+      ? my_comic_voice_hook::SiglusLookupTextFeed::kNativeEcxTextUnion
+      : my_comic_voice_hook::SiglusLookupTextFeed::kLunaScenarioLane;
 }
 void Reset(Identity value) {
   SetIdentity(value);

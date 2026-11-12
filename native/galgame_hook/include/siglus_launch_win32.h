@@ -10,7 +10,7 @@
 
 #include "siglus_launch.h"
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 // 普通文件存在（目录不算）。
 inline bool SiglusRegularFileExists(const std::wstring& dir, const wchar_t* name) {
@@ -48,4 +48,4 @@ inline bool DirectoryLooksLikeSiglusOnDisk(const std::wstring& dir) {
       });
 }
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

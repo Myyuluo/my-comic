@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 构建 Fushi 桌面用的「精简 ffmpeg」（~10MB 量级），只含 Fushi 实际调用的组件：
+# 构建 MyComic 桌面用的「精简 ffmpeg」（~10MB 量级），只含 MyComic 实际调用的组件：
 #   - 内封字幕枚举/抽取（-i 探测 + -map 0:s:N 转 srt/ass/vtt）
 #   - cue 动图（fps,scale,palettegen,paletteuse → gif）
 #   - 句子音频片段（解码 → aac/adts）
@@ -42,7 +42,7 @@
 # ⚠️ 改下面任何一组组件清单后，**必须**重跑 .github/workflows/ffmpeg-min.yml 并把
 # Windows artifact 重新 vendor 到 third_party/ffmpeg-min/windows/ffmpeg.exe。改脚本
 # 不换二进制等于没改——用户跑的是入库的那个 exe（BUG-1058：movtext 漏了整整一版，
-# 片段导出静默丢字幕）。守卫 fushi/test/tools/ffmpeg_min_vendored_recipe_guard_test.dart
+# 片段导出静默丢字幕）。守卫 my_comic/test/tools/ffmpeg_min_vendored_recipe_guard_test.dart
 # 会静态比对本脚本与入库 exe 内嵌的 configure 串，漏 vendor 直接单测红。
 set -euo pipefail
 
@@ -306,7 +306,7 @@ else
   echo "[ffmpeg-min] applied $(basename "$TLS_PIN_PATCH")"
 fi
 
-# 组件白名单（覆盖 Fushi 四类命令；按需在调优清单里增删）。
+# 组件白名单（覆盖 MyComic 四类命令；按需在调优清单里增删）。
 # image2/image2pipe：有声书片段导出（TODO-945 M4 / TODO-1096）用 `-loop 1 -i clip.png`
 # 把单张 PNG 当循环视频流喂进合成命令。`-loop` 是 image2 demuxer 的输入选项，读命名 PNG
 # 文件走 image2；若改走管道则用 image2pipe——两者都加，零体积成本、LGPL。漏 image2 会让
@@ -412,11 +412,11 @@ ENCODERS="gif,aac,mjpeg,png,libx264,libsvtav1,libwebp,libwebp_anim,libvpx_vp9,li
 # iOS 播放器认的是这条章节轨，mp4 模式只写 Nero `chpl`。
 # ⚠️ 入库二进制重编之前桌面上仍没有 ipod：BUG-460 / TODO-1217 那几条「桌面句子音频
 # 写 .aac 不写 .m4a」的约束继续成立，别因为配方里有了 ipod 就把它们改回 .m4a。
-# pcm_s16le：上游 fushi_asr_core 抽 ASR 用的裸 PCM（`-f s16le`；格式名是 s16le，configure
+# pcm_s16le：上游 my_comic_asr_core 抽 ASR 用的裸 PCM（`-f s16le`；格式名是 s16le，configure
 # 的组件名却是 pcm_s16le，写成 s16le 会被静默忽略——实测踩过），缺它时每次转录都先白跑
 # 一遍失败再回退 mov（BUG-3504）。
 # 刻意**不**开 matroska muxer：片段导出恒写 .mp4 / .webm（BUG-917，守卫
-# fushi/test/build/ffmpeg_min_clip_muxer_guard_test.dart 钉着「没有 matroska」这一事实）。
+# my_comic/test/build/ffmpeg_min_clip_muxer_guard_test.dart 钉着「没有 matroska」这一事实）。
 MUXERS="gif,adts,image2,mjpeg,mov,mp4,avif,webp,webm,srt,ass,webvtt,null,mpegts,sup,flac,ipod,pcm_s16le"
 # pad：有声书片段导出（buildFfmpegImageAudioToVideoArgs）用
 #   `scale=W:H:force_original_aspect_ratio=decrease,pad=W:H:(ow-iw)/2:(oh-ih)/2:color=black`

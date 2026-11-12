@@ -16,7 +16,7 @@
 
 namespace {
 
-const wchar_t* const kClassName = L"FushiGameMainWindowTestWindow";
+const wchar_t* const kClassName = L"MyComicGameMainWindowTestWindow";
 int g_failures = 0;
 
 void Expect(bool condition, const char* what) {
@@ -55,7 +55,7 @@ struct Windows {
 void TestNoVisibleWindowReturnsNull() {
   Windows w;
   w.Create(nullptr, 640, 480, false);
-  Expect(fushi_voice_hook::FindGameMainWindow() == nullptr,
+  Expect(my_comic_voice_hook::FindGameMainWindow() == nullptr,
          "hidden-only process has no main window");
 }
 
@@ -66,7 +66,7 @@ void TestUnownedMainBeatsOwnedDialogAndSmallerTools() {
   const HWND main = w.Create(nullptr, 640, 480, true);
   const HWND dialog = w.Create(main, 900, 700, true);  // 比主窗还大，但被可见主窗 own
   Expect(tool != nullptr && main != nullptr && dialog != nullptr, "windows created");
-  Expect(fushi_voice_hook::FindGameMainWindow() == main,
+  Expect(my_comic_voice_hook::FindGameMainWindow() == main,
          "unowned largest visible window wins; visible-owned dialog excluded");
 }
 
@@ -79,9 +79,9 @@ void TestFormOwnedByVisibleZeroSizeOwnerIsMainWindow() {
   const HWND dialog = w.Create(form, 300, 200, true);  // form 的对话框
   Expect(app != nullptr && form != nullptr && dialog != nullptr, "vcl windows created");
   Expect(GetWindow(form, GW_OWNER) == app, "form is owned by the app window");
-  Expect(IsWindowVisible(app) && fushi_voice_hook::WindowClientArea(app) == 0,
+  Expect(IsWindowVisible(app) && my_comic_voice_hook::WindowClientArea(app) == 0,
          "app window is visible with an empty client area");
-  Expect(fushi_voice_hook::FindGameMainWindow() == form,
+  Expect(my_comic_voice_hook::FindGameMainWindow() == form,
          "form owned by a visible 0x0 owner is the main window (BUG-2121)");
 }
 
@@ -91,7 +91,7 @@ void TestFormOwnedByHiddenOwnerIsMainWindow() {
   const HWND app = w.Create(nullptr, 0, 0, false);  // TApplication：隐藏、0x0
   const HWND form = w.Create(app, 800, 600, true);   // TTVPWindowForm
   Expect(app != nullptr && form != nullptr, "vcl windows created");
-  Expect(fushi_voice_hook::FindGameMainWindow() == form,
+  Expect(my_comic_voice_hook::FindGameMainWindow() == form,
          "form owned by a hidden owner is the main window (BUG-2121)");
 }
 
@@ -101,7 +101,7 @@ void TestHiddenFormUnderHiddenOwnerStaysExcluded() {
   const HWND app = w.Create(nullptr, 0, 0, false);
   w.Create(app, 800, 600, false);
   const HWND visible = w.Create(nullptr, 100, 100, true);
-  Expect(fushi_voice_hook::FindGameMainWindow() == visible,
+  Expect(my_comic_voice_hook::FindGameMainWindow() == visible,
          "hidden form is excluded even though its owner is hidden");
 }
 
@@ -109,7 +109,7 @@ void TestHiddenFormUnderHiddenOwnerStaysExcluded() {
 void TestForeignPidSeesNothing() {
   Windows w;
   w.Create(nullptr, 640, 480, true);
-  Expect(fushi_voice_hook::FindGameMainWindowOfProcess(0xFFFFFFFEu) == nullptr,
+  Expect(my_comic_voice_hook::FindGameMainWindowOfProcess(0xFFFFFFFEu) == nullptr,
          "foreign pid finds nothing");
 }
 

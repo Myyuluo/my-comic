@@ -3,7 +3,7 @@
 #include "siglus_message_profile.h"
 #include "siglus_native_autoprofile.h"
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 struct SiglusNativeMessageProfile {
   uintptr_t message_entry_rva = 0;
@@ -179,4 +179,4 @@ inline bool ResolveSiglusNativeMessageProfile(
   // This profile says nothing about source-file observation or audio readiness.
   return true;
 }
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

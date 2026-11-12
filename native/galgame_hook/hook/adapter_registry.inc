@@ -14,7 +14,7 @@ bool ModuleNameStartsWith(const wchar_t* module_name, const wchar_t* prefix) {
 }
 
 class GenericWindowsAudioAdapter final
-    : public fushi_voice_hook::EngineAdapter {
+    : public my_comic_voice_hook::EngineAdapter {
  public:
   const char* id() const override { return "xaudio2_directsound"; }
   bool probe() const override { return true; }
@@ -25,8 +25,8 @@ class GenericWindowsAudioAdapter final
     installed_ = installed_ || queue_ready;
     return queue_ready;
   }
-  fushi_voice_hook::AdapterCapability capabilities() const override {
-    return fushi_voice_hook::AdapterCapability::kPcmAudio;
+  my_comic_voice_hook::AdapterCapability capabilities() const override {
+    return my_comic_voice_hook::AdapterCapability::kPcmAudio;
   }
   void onModuleLoaded(const wchar_t* module_name) override {
     if (module_name == nullptr || ModuleNameEquals(module_name, L"xaudio2_9.dll") ||
@@ -41,7 +41,7 @@ class GenericWindowsAudioAdapter final
     ShutdownXAudioCaptureQueue();
     installed_ = false;
   }
-  fushi_voice_hook::AdapterDiagnostics diagnostics() const override {
+  my_comic_voice_hook::AdapterDiagnostics diagnostics() const override {
     return {id(), probe(), installed_,
             g_header == nullptr ? 0u : g_header->xaudio_diagnostics};
   }
@@ -50,7 +50,7 @@ class GenericWindowsAudioAdapter final
   bool installed_ = false;
 };
 
-class SiglusAdapter final : public fushi_voice_hook::EngineAdapter {
+class SiglusAdapter final : public my_comic_voice_hook::EngineAdapter {
  public:
   const char* id() const override { return "siglus"; }
   bool probe() const override { return IsSiglusEngine(); }
@@ -67,30 +67,30 @@ class SiglusAdapter final : public fushi_voice_hook::EngineAdapter {
   void InstallText() {
     // The owner handshake is shared with other native-text engines: a
     // non-Siglus process must never settle a decision that is not its own.
-    if (!probe() || fushi_voice_hook::ReadNativeTextOwner(g_header) !=
-        fushi_voice_hook::NativeTextOwner::kPending) {
+    if (!probe() || my_comic_voice_hook::ReadNativeTextOwner(g_header) !=
+        my_comic_voice_hook::NativeTextOwner::kPending) {
       text_pending_ = false;
       return;
     }
     const bool complete = TryHookSiglusExactText();
     if (IsSiglusMessageTextInstalled()) TryHookSiglusVoiceSource();
     if (IsSiglusMessageTextOwnershipBlocked())
-      fushi_voice_hook::PublishNativeTextOwner(
-          g_header, fushi_voice_hook::NativeTextOwner::kUnavailable);
-    fushi_voice_hook::CompleteNativeTextOwner(
+      my_comic_voice_hook::PublishNativeTextOwner(
+          g_header, my_comic_voice_hook::NativeTextOwner::kUnavailable);
+    my_comic_voice_hook::CompleteNativeTextOwner(
         g_header, IsSiglusExactTextInstalled(),
         !complete && IsSiglusLookupIdentityUndecided());
-    text_pending_ = fushi_voice_hook::ReadNativeTextOwner(g_header) ==
-        fushi_voice_hook::NativeTextOwner::kPending;
+    text_pending_ = my_comic_voice_hook::ReadNativeTextOwner(g_header) ==
+        my_comic_voice_hook::NativeTextOwner::kPending;
     installed_ = installed_ || probe();
   }
   void FailTextStartup() {
     text_pending_ = false;
     if (!probe()) return;
     if (IsSiglusMessageTextOwnershipBlocked())
-      fushi_voice_hook::PublishNativeTextOwner(
-          g_header, fushi_voice_hook::NativeTextOwner::kUnavailable);
-    fushi_voice_hook::CompleteNativeTextOwner(
+      my_comic_voice_hook::PublishNativeTextOwner(
+          g_header, my_comic_voice_hook::NativeTextOwner::kUnavailable);
+    my_comic_voice_hook::CompleteNativeTextOwner(
         g_header, IsSiglusExactTextInstalled(), false);
   }
   void ProcessPendingEvents() {
@@ -105,12 +105,12 @@ class SiglusAdapter final : public fushi_voice_hook::EngineAdapter {
     ProcessSiglusLookupTick();
   }
   bool audio_ready() const { return audio_ready_; }
-  fushi_voice_hook::AdapterCapability capabilities() const override {
-    return fushi_voice_hook::AdapterCapability::kText |
-           fushi_voice_hook::AdapterCapability::kResourceAudio |
-           fushi_voice_hook::AdapterCapability::kPcmAudio;
+  my_comic_voice_hook::AdapterCapability capabilities() const override {
+    return my_comic_voice_hook::AdapterCapability::kText |
+           my_comic_voice_hook::AdapterCapability::kResourceAudio |
+           my_comic_voice_hook::AdapterCapability::kPcmAudio;
   }
-  fushi_voice_hook::LookupAdmissionReport lookupAdmission() const override {
+  my_comic_voice_hook::LookupAdmissionReport lookupAdmission() const override {
     return SiglusLookupAdmission();
   }
   void onModuleLoaded(const wchar_t*) override {
@@ -127,7 +127,7 @@ class SiglusAdapter final : public fushi_voice_hook::EngineAdapter {
     audio_ready_ = false;
     text_pending_ = false;
   }
-  fushi_voice_hook::AdapterDiagnostics diagnostics() const override {
+  my_comic_voice_hook::AdapterDiagnostics diagnostics() const override {
     return {id(), probe(), installed_,
             g_header == nullptr ? 0u : g_header->hook_diagnostics};
   }
@@ -138,7 +138,7 @@ class SiglusAdapter final : public fushi_voice_hook::EngineAdapter {
   bool text_pending_ = false;
 };
 
-class UnityIl2CppAdapter final : public fushi_voice_hook::EngineAdapter {
+class UnityIl2CppAdapter final : public my_comic_voice_hook::EngineAdapter {
  public:
   const char* id() const override { return "unity_il2cpp"; }
   bool probe() const override {
@@ -152,10 +152,10 @@ class UnityIl2CppAdapter final : public fushi_voice_hook::EngineAdapter {
   }
   bool ready() const { return ready_; }
   void ProcessPendingEvents() { ProcessPendingUnityAudioEvents(); }
-  fushi_voice_hook::AdapterCapability capabilities() const override {
-    return fushi_voice_hook::AdapterCapability::kText |
-           fushi_voice_hook::AdapterCapability::kResourceAudio |
-           fushi_voice_hook::AdapterCapability::kPcmAudio;
+  my_comic_voice_hook::AdapterCapability capabilities() const override {
+    return my_comic_voice_hook::AdapterCapability::kText |
+           my_comic_voice_hook::AdapterCapability::kResourceAudio |
+           my_comic_voice_hook::AdapterCapability::kPcmAudio;
   }
   void onModuleLoaded(const wchar_t* module_name) override {
     if (module_name == nullptr ||
@@ -168,7 +168,7 @@ class UnityIl2CppAdapter final : public fushi_voice_hook::EngineAdapter {
     installed_ = false;
     ready_ = false;
   }
-  fushi_voice_hook::AdapterDiagnostics diagnostics() const override {
+  my_comic_voice_hook::AdapterDiagnostics diagnostics() const override {
     return {id(), probe(), installed_,
             g_header == nullptr ? 0u : g_header->hook_diagnostics};
   }
@@ -178,7 +178,7 @@ class UnityIl2CppAdapter final : public fushi_voice_hook::EngineAdapter {
   bool ready_ = false;
 };
 
-class TextRenderAdapter final : public fushi_voice_hook::EngineAdapter {
+class TextRenderAdapter final : public my_comic_voice_hook::EngineAdapter {
  public:
   const char* id() const override { return "text_render"; }
   bool probe() const override { return true; }
@@ -187,8 +187,8 @@ class TextRenderAdapter final : public fushi_voice_hook::EngineAdapter {
     installed_ = true;
     return true;
   }
-  fushi_voice_hook::AdapterCapability capabilities() const override {
-    return fushi_voice_hook::AdapterCapability::kText;
+  my_comic_voice_hook::AdapterCapability capabilities() const override {
+    return my_comic_voice_hook::AdapterCapability::kText;
   }
   void onModuleLoaded(const wchar_t* module_name) override {
     if (module_name == nullptr || ModuleNameEquals(module_name, L"gdi32.dll") ||
@@ -197,7 +197,7 @@ class TextRenderAdapter final : public fushi_voice_hook::EngineAdapter {
     }
   }
   void shutdown() override { installed_ = false; }
-  fushi_voice_hook::AdapterDiagnostics diagnostics() const override {
+  my_comic_voice_hook::AdapterDiagnostics diagnostics() const override {
     return {id(), probe(), installed_,
             g_header == nullptr ? 0u : g_header->hook_diagnostics};
   }
@@ -206,11 +206,11 @@ class TextRenderAdapter final : public fushi_voice_hook::EngineAdapter {
   bool installed_ = false;
 };
 
-class KiriKiriAdapter final : public fushi_voice_hook::EngineAdapter {
+class KiriKiriAdapter final : public my_comic_voice_hook::EngineAdapter {
  public:
   const char* id() const override { return "kirikiri_z"; }
   bool probe() const override {
-    return !fushi_voice_hook::MatchesQlieProfile(nullptr) &&
+    return !my_comic_voice_hook::MatchesQlieProfile(nullptr) &&
            (GetModuleHandleW(L"wuvorbis.dll") != nullptr ||
             GetModuleHandleW(L"wuopus.dll") != nullptr);
   }
@@ -220,13 +220,13 @@ class KiriKiriAdapter final : public fushi_voice_hook::EngineAdapter {
     return decoder_ready && voice_ready;
   }
   bool InstallDecoders() {
-    if (fushi_voice_hook::MatchesQlieProfile(nullptr)) return false;
+    if (my_comic_voice_hook::MatchesQlieProfile(nullptr)) return false;
     decoder_ready_ = TryHookKirikiriDecoders();
     installed_ = installed_ || decoder_ready_;
     return decoder_ready_;
   }
   bool InstallVoiceStream() {
-    if (fushi_voice_hook::MatchesQlieProfile(nullptr)) return false;
+    if (my_comic_voice_hook::MatchesQlieProfile(nullptr)) return false;
     voice_ready_ = TryHookKirikiriVoiceStream();
     installed_ = installed_ || voice_ready_;
     return voice_ready_;
@@ -240,17 +240,17 @@ class KiriKiriAdapter final : public fushi_voice_hook::EngineAdapter {
   // 拒绝这一档——未装一律报 IdentityAccepted，表示"引擎对得上，传感器还没到位"。把它
   // 谎报成 IdentityRejected 会让用户去换游戏版本，而真正该做的是看 xaudio_diagnostics2
   // 的 kXAudioDiag2KirikiriLookup* 位卡在安装路径哪一步（BUG-2121）。
-  fushi_voice_hook::LookupAdmissionReport lookupAdmission() const override {
-    fushi_voice_hook::LookupAdmissionReport report;
+  my_comic_voice_hook::LookupAdmissionReport lookupAdmission() const override {
+    my_comic_voice_hook::LookupAdmissionReport report;
     report.state = KirikiriLookupSensorLive()
-                       ? fushi_voice_hook::kLookupAdmissionSensorInstalled
-                       : fushi_voice_hook::kLookupAdmissionIdentityAccepted;
+                       ? my_comic_voice_hook::kLookupAdmissionSensorInstalled
+                       : my_comic_voice_hook::kLookupAdmissionIdentityAccepted;
     return report;
   }
-  fushi_voice_hook::AdapterCapability capabilities() const override {
-    return fushi_voice_hook::AdapterCapability::kText |
-           fushi_voice_hook::AdapterCapability::kResourceAudio |
-           fushi_voice_hook::AdapterCapability::kPcmAudio;
+  my_comic_voice_hook::AdapterCapability capabilities() const override {
+    return my_comic_voice_hook::AdapterCapability::kText |
+           my_comic_voice_hook::AdapterCapability::kResourceAudio |
+           my_comic_voice_hook::AdapterCapability::kPcmAudio;
   }
   void onModuleLoaded(const wchar_t* module_name) override {
     if (module_name == nullptr || ModuleNameEquals(module_name, L"wuvorbis.dll") ||
@@ -259,15 +259,15 @@ class KiriKiriAdapter final : public fushi_voice_hook::EngineAdapter {
     }
   }
   void shutdown() override {
-    fushi_voice_hook::g_geometry_provider_registry.Retire(
-        g_header, fushi_voice_hook::kLookupGeometryProviderRuntimeLayout,
-        fushi_voice_hook::kLookupGeometryProviderIdKirikiri);
+    my_comic_voice_hook::g_geometry_provider_registry.Retire(
+        g_header, my_comic_voice_hook::kLookupGeometryProviderRuntimeLayout,
+        my_comic_voice_hook::kLookupGeometryProviderIdKirikiri);
     StopKirikiriVoiceTasks();
     installed_ = false;
     decoder_ready_ = false;
     voice_ready_ = false;
   }
-  fushi_voice_hook::AdapterDiagnostics diagnostics() const override {
+  my_comic_voice_hook::AdapterDiagnostics diagnostics() const override {
     return {id(), probe(), installed_,
             g_header == nullptr ? 0u : g_header->hook_diagnostics};
   }
@@ -278,13 +278,13 @@ class KiriKiriAdapter final : public fushi_voice_hook::EngineAdapter {
   bool voice_ready_ = false;
 };
 
-class RenPyAdapter final : public fushi_voice_hook::EngineAdapter {
+class RenPyAdapter final : public my_comic_voice_hook::EngineAdapter {
  public:
   const char* id() const override { return "renpy_ffmpeg"; }
   bool probe() const override {
     uint32_t major = 0;
     return FindLoadedFfmpegModule(
-               fushi_voice_hook::FfmpegModuleKind::kAvformat, &major) !=
+               my_comic_voice_hook::FfmpegModuleKind::kAvformat, &major) !=
            nullptr;
   }
   bool install() override {
@@ -301,23 +301,23 @@ class RenPyAdapter final : public fushi_voice_hook::EngineAdapter {
   }
   // Ren'Py 也没有 exe hash 门：装不上的原因是找不到 CPython 或解释器没初始化，
   // 那属于"引擎对得上、传感器还没到位"，不是身份被拒。
-  fushi_voice_hook::LookupAdmissionReport lookupAdmission() const override {
-    fushi_voice_hook::LookupAdmissionReport report;
+  my_comic_voice_hook::LookupAdmissionReport lookupAdmission() const override {
+    my_comic_voice_hook::LookupAdmissionReport report;
     report.state = RenpyLookupSensorLive()
-                       ? fushi_voice_hook::kLookupAdmissionSensorInstalled
-                       : fushi_voice_hook::kLookupAdmissionIdentityAccepted;
+                       ? my_comic_voice_hook::kLookupAdmissionSensorInstalled
+                       : my_comic_voice_hook::kLookupAdmissionIdentityAccepted;
     return report;
   }
-  fushi_voice_hook::AdapterCapability capabilities() const override {
-    return fushi_voice_hook::AdapterCapability::kText |
-           fushi_voice_hook::AdapterCapability::kResourceAudio |
-           fushi_voice_hook::AdapterCapability::kPcmAudio;
+  my_comic_voice_hook::AdapterCapability capabilities() const override {
+    return my_comic_voice_hook::AdapterCapability::kText |
+           my_comic_voice_hook::AdapterCapability::kResourceAudio |
+           my_comic_voice_hook::AdapterCapability::kPcmAudio;
   }
   void onModuleLoaded(const wchar_t* module_name) override {
-    const auto ffmpeg = fushi_voice_hook::ParseFfmpegModuleName(module_name);
+    const auto ffmpeg = my_comic_voice_hook::ParseFfmpegModuleName(module_name);
     if (module_name == nullptr ||
-        ffmpeg.kind != fushi_voice_hook::FfmpegModuleKind::kNone ||
-        fushi_voice_hook::IsMonolithicFfmpegModuleName(module_name)) {
+        ffmpeg.kind != my_comic_voice_hook::FfmpegModuleKind::kNone ||
+        my_comic_voice_hook::IsMonolithicFfmpegModuleName(module_name)) {
       install();
     }
   }
@@ -327,7 +327,7 @@ class RenPyAdapter final : public fushi_voice_hook::EngineAdapter {
     installed_ = false;
     ready_ = false;
   }
-  fushi_voice_hook::AdapterDiagnostics diagnostics() const override {
+  my_comic_voice_hook::AdapterDiagnostics diagnostics() const override {
     return {id(), probe(), installed_,
             g_header == nullptr ? 0u : g_header->hook_diagnostics};
   }
@@ -337,7 +337,7 @@ class RenPyAdapter final : public fushi_voice_hook::EngineAdapter {
   bool ready_ = false;
 };
 
-class TyranoAdapter final : public fushi_voice_hook::EngineAdapter {
+class TyranoAdapter final : public my_comic_voice_hook::EngineAdapter {
  public:
   const char* id() const override { return "tyrano_nwjs"; }
   bool probe() const override {
@@ -350,8 +350,8 @@ class TyranoAdapter final : public fushi_voice_hook::EngineAdapter {
   }
   bool ready() const { return ready_; }
   void ProcessPendingEvents() { ProcessTyranoAsarTasks(); }
-  fushi_voice_hook::AdapterCapability capabilities() const override {
-    return fushi_voice_hook::AdapterCapability::kResourceAudio;
+  my_comic_voice_hook::AdapterCapability capabilities() const override {
+    return my_comic_voice_hook::AdapterCapability::kResourceAudio;
   }
   void onModuleLoaded(const wchar_t*) override {}
   void shutdown() override {
@@ -359,7 +359,7 @@ class TyranoAdapter final : public fushi_voice_hook::EngineAdapter {
     installed_ = false;
     ready_ = false;
   }
-  fushi_voice_hook::AdapterDiagnostics diagnostics() const override {
+  my_comic_voice_hook::AdapterDiagnostics diagnostics() const override {
     return {id(), probe(), installed_,
             g_header == nullptr ? 0u : g_header->hook_diagnostics};
   }
@@ -369,7 +369,7 @@ class TyranoAdapter final : public fushi_voice_hook::EngineAdapter {
   bool ready_ = false;
 };
 
-class LoopbackAdapter final : public fushi_voice_hook::EngineAdapter {
+class LoopbackAdapter final : public my_comic_voice_hook::EngineAdapter {
  public:
   const char* id() const override { return "process_loopback"; }
   bool probe() const override { return true; }
@@ -377,8 +377,8 @@ class LoopbackAdapter final : public fushi_voice_hook::EngineAdapter {
     PollPolicy();
     return installed_;
   }
-  fushi_voice_hook::AdapterCapability capabilities() const override {
-    return fushi_voice_hook::AdapterCapability::kPcmAudio;
+  my_comic_voice_hook::AdapterCapability capabilities() const override {
+    return my_comic_voice_hook::AdapterCapability::kPcmAudio;
   }
   void onModuleLoaded(const wchar_t*) override {}
 
@@ -386,11 +386,11 @@ class LoopbackAdapter final : public fushi_voice_hook::EngineAdapter {
   // reports process-local phase; it never acknowledges shared policy, so an
   // older generation cannot overwrite a newer request's state/applied_seq.
   void PollPolicy() {
-    using fushi_voice_hook::NativeLoopbackPolicyAction;
-    using fushi_voice_hook::NativeLoopbackWorkerPhase;
+    using my_comic_voice_hook::NativeLoopbackPolicyAction;
+    using my_comic_voice_hook::NativeLoopbackWorkerPhase;
 
-    const fushi_voice_hook::NativeLoopbackRequestSnapshot request =
-        fushi_voice_hook::ReadNativeLoopbackRequest(g_header);
+    const my_comic_voice_hook::NativeLoopbackRequestSnapshot request =
+        my_comic_voice_hook::ReadNativeLoopbackRequest(g_header);
     if (!request.valid) return;  // uninitialised/tearing request is deny.
 
     if (thread_ != nullptr && WaitForSingleObject(thread_, 0) == WAIT_OBJECT_0) {
@@ -407,7 +407,7 @@ class LoopbackAdapter final : public fushi_voice_hook::EngineAdapter {
       InterlockedExchange(&control_.phase, kLbWorkerIdle);
       InterlockedExchange(&control_.stop_requested, 0);
       InterlockedExchange(&control_.request_seq, 0);
-      if (fushi_voice_hook::NativeLoopbackWorkerFailureApplies(
+      if (my_comic_voice_hook::NativeLoopbackWorkerFailureApplies(
               request, completed_request_seq, stop_was_requested,
               exit_code)) {
         failed_request_seq_ = request.seq;
@@ -442,15 +442,15 @@ class LoopbackAdapter final : public fushi_voice_hook::EngineAdapter {
 
     const bool failed_for_request =
         thread_ == nullptr && failed_request_seq_ == request.seq &&
-        request.requested == fushi_voice_hook::kNativeLoopbackAllow;
+        request.requested == my_comic_voice_hook::kNativeLoopbackAllow;
     const NativeLoopbackPolicyAction action =
-        fushi_voice_hook::DecideNativeLoopbackPolicyAction(
+        my_comic_voice_hook::DecideNativeLoopbackPolicyAction(
             request, phase, failed_for_request);
     switch (action) {
       case NativeLoopbackPolicyAction::kStartWorker:
         // Revalidate immediately before the only loopback CreateThread call.
         // The worker independently rechecks policy before COM/Initialize/Start.
-        if (!fushi_voice_hook::NativeLoopbackRequestMatches(g_header,
+        if (!my_comic_voice_hook::NativeLoopbackRequestMatches(g_header,
                                                              request)) {
           return;
         }
@@ -459,9 +459,9 @@ class LoopbackAdapter final : public fushi_voice_hook::EngineAdapter {
         InterlockedExchange(&control_.request_seq,
                             static_cast<LONG>(request.seq));
         InterlockedExchange(&control_.phase, kLbWorkerStarting);
-        fushi_voice_hook::PublishNativeLoopbackTransientState(
+        my_comic_voice_hook::PublishNativeLoopbackTransientState(
             g_header, request,
-            fushi_voice_hook::kNativeLoopbackStateStarting);
+            my_comic_voice_hook::kNativeLoopbackStateStarting);
         thread_ =
             CreateThread(nullptr, 0, LoopbackWorker, &control_, 0, nullptr);
         installed_ = thread_ != nullptr;
@@ -469,44 +469,44 @@ class LoopbackAdapter final : public fushi_voice_hook::EngineAdapter {
           InterlockedExchange(&control_.phase, kLbWorkerIdle);
           InterlockedExchange(&control_.request_seq, 0);
           failed_request_seq_ = request.seq;
-          fushi_voice_hook::PublishNativeLoopbackApplied(
+          my_comic_voice_hook::PublishNativeLoopbackApplied(
               g_header, request,
-              fushi_voice_hook::kNativeLoopbackStateFailed);
+              my_comic_voice_hook::kNativeLoopbackStateFailed);
         }
         return;
       case NativeLoopbackPolicyAction::kRequestStop:
         InterlockedExchange(&control_.stop_requested, 1);
-        fushi_voice_hook::PublishNativeLoopbackTransientState(
+        my_comic_voice_hook::PublishNativeLoopbackTransientState(
             g_header, request,
-            fushi_voice_hook::kNativeLoopbackStateStopping);
+            my_comic_voice_hook::kNativeLoopbackStateStopping);
         return;
       case NativeLoopbackPolicyAction::kPublishStarting:
-        fushi_voice_hook::PublishNativeLoopbackTransientState(
+        my_comic_voice_hook::PublishNativeLoopbackTransientState(
             g_header, request,
-            fushi_voice_hook::kNativeLoopbackStateStarting);
+            my_comic_voice_hook::kNativeLoopbackStateStarting);
         return;
       case NativeLoopbackPolicyAction::kPublishStopping:
-        fushi_voice_hook::PublishNativeLoopbackTransientState(
+        my_comic_voice_hook::PublishNativeLoopbackTransientState(
             g_header, request,
-            fushi_voice_hook::kNativeLoopbackStateStopping);
+            my_comic_voice_hook::kNativeLoopbackStateStopping);
         return;
       case NativeLoopbackPolicyAction::kAcknowledgeStopped:
         // There is no worker HANDLE here: any previous thread has completed
         // Stop/Release/CoUninitialize and was reaped above.
         failed_request_seq_ = 0;
-        fushi_voice_hook::PublishNativeLoopbackApplied(
+        my_comic_voice_hook::PublishNativeLoopbackApplied(
             g_header, request,
-            fushi_voice_hook::kNativeLoopbackStateStopped);
+            my_comic_voice_hook::kNativeLoopbackStateStopped);
         return;
       case NativeLoopbackPolicyAction::kAcknowledgeRunning:
-        fushi_voice_hook::PublishNativeLoopbackApplied(
+        my_comic_voice_hook::PublishNativeLoopbackApplied(
             g_header, request,
-            fushi_voice_hook::kNativeLoopbackStateRunning);
+            my_comic_voice_hook::kNativeLoopbackStateRunning);
         return;
       case NativeLoopbackPolicyAction::kAcknowledgeFailed:
-        fushi_voice_hook::PublishNativeLoopbackApplied(
+        my_comic_voice_hook::PublishNativeLoopbackApplied(
             g_header, request,
-            fushi_voice_hook::kNativeLoopbackStateFailed);
+            my_comic_voice_hook::kNativeLoopbackStateFailed);
         return;
       case NativeLoopbackPolicyAction::kNone:
         return;
@@ -515,9 +515,9 @@ class LoopbackAdapter final : public fushi_voice_hook::EngineAdapter {
 
   bool transition_pending() {
     if (g_header == nullptr) return false;
-    const bool request_pending = fushi_voice_hook::AtomicLoadShared32(
+    const bool request_pending = my_comic_voice_hook::AtomicLoadShared32(
                &g_header->native_loopback_request_seq) !=
-               fushi_voice_hook::AtomicLoadShared32(
+               my_comic_voice_hook::AtomicLoadShared32(
                    &g_header->native_loopback_applied_seq);
     const LONG phase = InterlockedCompareExchange(&control_.phase, 0, 0);
     return request_pending ||
@@ -537,7 +537,7 @@ class LoopbackAdapter final : public fushi_voice_hook::EngineAdapter {
     InterlockedExchange(&control_.phase, kLbWorkerIdle);
     installed_ = false;
   }
-  fushi_voice_hook::AdapterDiagnostics diagnostics() const override {
+  my_comic_voice_hook::AdapterDiagnostics diagnostics() const override {
     return {id(), probe(), installed_,
             g_header == nullptr ? 0u : g_header->hook_diagnostics};
   }
@@ -701,16 +701,16 @@ class AdapterRegistry {
     if (adapter_report_tick_ != 0 && now - adapter_report_tick_ < 1000) return;
     adapter_report_tick_ = now;
 
-    fushi_voice_hook::AdapterReportSlot slots[fushi_voice_hook::kAdapterReportSlots] = {};
+    my_comic_voice_hook::AdapterReportSlot slots[my_comic_voice_hook::kAdapterReportSlots] = {};
     size_t used = 0;
-    auto consider = [&slots, &used](const fushi_voice_hook::EngineAdapter& adapter) {
-      if (used >= fushi_voice_hook::kAdapterReportSlots) return;
-      const fushi_voice_hook::AdapterDiagnostics diagnostics = adapter.diagnostics();
-      fushi_voice_hook::AdapterReportSlot& slot = slots[used++];
+    auto consider = [&slots, &used](const my_comic_voice_hook::EngineAdapter& adapter) {
+      if (used >= my_comic_voice_hook::kAdapterReportSlots) return;
+      const my_comic_voice_hook::AdapterDiagnostics diagnostics = adapter.diagnostics();
+      my_comic_voice_hook::AdapterReportSlot& slot = slots[used++];
       const char* id = diagnostics.id == nullptr ? "" : diagnostics.id;
       // 有界拷贝：id 由 adapter 自己给，长度不受本文件控制。
       size_t n = 0;
-      while (id[n] != '\0' && n + 1 < fushi_voice_hook::kAdapterReportIdChars) {
+      while (id[n] != '\0' && n + 1 < my_comic_voice_hook::kAdapterReportIdChars) {
         slot.id[n] = id[n];
         ++n;
       }
@@ -730,7 +730,7 @@ class AdapterRegistry {
     consider(tyrano_);
     consider(loopback_);
 #include "generated/adapter_admission.inc"
-    fushi_voice_hook::PublishAdapterReports(g_header, slots, used);
+    my_comic_voice_hook::PublishAdapterReports(g_header, slots, used);
   }
 
   // v19：把「本会话游戏内查词能不能用」汇总成一个值发布给 host。
@@ -742,15 +742,15 @@ class AdapterRegistry {
   // Poll 里的调用顺序，那是把 UI 结论押在一个没人当契约维护的顺序上。
   void PublishLookupAdmissionSummary() {
     if (g_header == nullptr) return;
-    if (!fushi_voice_hook::HasLookupRegion(g_header)) return;
-    fushi_voice_hook::LookupAdmissionReport best;
+    if (!my_comic_voice_hook::HasLookupRegion(g_header)) return;
+    my_comic_voice_hook::LookupAdmissionReport best;
     bool any_engine_claimed = false;
     auto consider = [&best,
                      &any_engine_claimed](
-                        const fushi_voice_hook::EngineAdapter& adapter) {
+                        const my_comic_voice_hook::EngineAdapter& adapter) {
       if (!adapter.probe()) return;
       any_engine_claimed = true;
-      const fushi_voice_hook::LookupAdmissionReport report =
+      const my_comic_voice_hook::LookupAdmissionReport report =
           adapter.lookupAdmission();
       if (report.state > best.state) best = report;
     };
@@ -780,8 +780,8 @@ class AdapterRegistry {
     // 台词把 wuvorbis.dll 拉进来）。用 modules_seeded_ 等于对着一个唯一已发布查词
     // 的引擎自信地说「本引擎没做查词」，要等第一句语音才自愈。
     if (!any_engine_claimed && module_settle_.settled(GetTickCount64()) &&
-        best.state == fushi_voice_hook::kLookupAdmissionUnknown) {
-      best.state = fushi_voice_hook::kLookupAdmissionEngineUnsupported;
+        best.state == my_comic_voice_hook::kLookupAdmissionUnknown) {
+      best.state = my_comic_voice_hook::kLookupAdmissionEngineUnsupported;
       // 上面那句"请把 exe 摘要报上来"得真给得出摘要。这一档的定义就是没有任何
       // adapter 认领，各家私有缓冲在这里全部够不着，所以读共享槽（Leaf 的 profile
       // 解析对任何 x86 游戏都会跑，顺手把它填满了）。算不出就留空串——host 要能说
@@ -789,39 +789,39 @@ class AdapterRegistry {
       // 两边都是 kHookModuleDigestChars，共享槽恒带 NUL（要么空串、要么 64 位十六进制
       // + NUL），所以整段拷贝是精确的——与 Siglus 那处同一种写法。
       std::memcpy(best.executable_sha256,
-                  fushi_voice_hook::HostExecutableSha256Hex(),
+                  my_comic_voice_hook::HostExecutableSha256Hex(),
                   sizeof(best.executable_sha256));
     }
-    fushi_voice_hook::PublishLookupAdmission(g_header, best);
+    my_comic_voice_hook::PublishLookupAdmission(g_header, best);
   }
 
   DWORD PollDelayMs() {
     if (cmvs_.lookup_sensor_available() && g_header != nullptr &&
-        fushi_voice_hook::HasLookupRegion(g_header) && g_header->lookup_enabled != 0)
+        my_comic_voice_hook::HasLookupRegion(g_header) && g_header->lookup_enabled != 0)
       return 16;
     if (loopback_.transition_pending()) return 10;
     if (sgre_.lookup_sensor_available() && g_header != nullptr &&
-        fushi_voice_hook::HasLookupRegion(g_header) &&
+        my_comic_voice_hook::HasLookupRegion(g_header) &&
         g_header->lookup_enabled != 0) {
       return 16;
     }
     if (siglus_.probe() && IsSiglusLookupProfileMatched() &&
-        g_header != nullptr && fushi_voice_hook::HasLookupRegion(g_header) &&
+        g_header != nullptr && my_comic_voice_hook::HasLookupRegion(g_header) &&
         g_header->lookup_enabled != 0) {
       return 16;
     }
     if (leaf_aquaplus_.probe() && g_header != nullptr &&
-        fushi_voice_hook::HasLookupRegion(g_header) &&
+        my_comic_voice_hook::HasLookupRegion(g_header) &&
         g_header->lookup_enabled != 0) {
       return 16;
     }
     if (hunex_gge_.lookup_sensor_available() && g_header != nullptr &&
-        fushi_voice_hook::HasLookupRegion(g_header) &&
+        my_comic_voice_hook::HasLookupRegion(g_header) &&
         g_header->lookup_enabled != 0) {
       return 16;
     }
     if (smash_fzmedia_.lookup_sensor_available() && g_header != nullptr &&
-        fushi_voice_hook::HasLookupRegion(g_header) &&
+        my_comic_voice_hook::HasLookupRegion(g_header) &&
         g_header->lookup_enabled != 0) {
       return 16;
     }
@@ -911,6 +911,6 @@ class AdapterRegistry {
   // 只表示「首拍已过」（用于抑制首张全表的 onModuleLoaded 风暴），**不表示稳定**。
   bool modules_seeded_ = false;
   // 表示「模块表稳定了」。两者曾是同一个 bool，那正是准入在第 1 拍就误报的根因。
-  fushi_voice_hook::ModuleTableSettle module_settle_;
+  my_comic_voice_hook::ModuleTableSettle module_settle_;
   std::vector<std::wstring> known_modules_;
 };

@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 // 「模块表稳定了吗」——把「扫过一次」和「不会再变了」分开的那个判据。
 //
@@ -66,4 +66,4 @@ class ModuleTableSettle {
   uint32_t quiet_scans_ = 0;
 };
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

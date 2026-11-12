@@ -21,7 +21,7 @@ bool ReadSiglusLookupClickTarget(SiglusLookupClickTarget *copy,
   if (copy->text_units == 0 || copy->text_units > kSiglusLookupMaxTextUnits)
     return RejectSiglusLookupPress(diagnostic, Reason::kTargetTextUnits);
   if (copy->geometry.glyph_count == 0 ||
-      copy->geometry.glyph_count > fushi_voice_hook::kSiglusLookupMaxGlyphs)
+      copy->geometry.glyph_count > my_comic_voice_hook::kSiglusLookupMaxGlyphs)
     return RejectSiglusLookupPress(diagnostic, Reason::kTargetGlyphCount);
   if (copy->geometry_generation == 0)
     return RejectSiglusLookupPress(diagnostic, Reason::kTargetGeneration);
@@ -78,17 +78,17 @@ bool BuildSiglusLookupPayloadAtPress(const SiglusLookupClickTarget &target,
       origin.y != target.client_screen_y) {
     return RejectSiglusLookupPress(diagnostic, Reason::kClientChanged);
   }
-  fushi_voice_hook::SiglusLookupEngineView engine_view;
+  my_comic_voice_hook::SiglusLookupEngineView engine_view;
   if (!ReadSiglusLookupEngineView(game, &engine_view))
     return RejectSiglusLookupPress(diagnostic, Reason::kLiveViewRejected);
-  if (!fushi_voice_hook::SameSiglusLookupEngineView(engine_view, target.engine_view))
+  if (!my_comic_voice_hook::SameSiglusLookupEngineView(engine_view, target.engine_view))
     return RejectSiglusLookupPress(diagnostic, Reason::kEngineViewChanged);
   const int32_t cursor_x = screen_point.x - origin.x;
   const int32_t cursor_y = screen_point.y - origin.y;
   bool any_projected = false;
   for (size_t index = 0; index < target.geometry.glyph_count; ++index) {
-    fushi_voice_hook::SiglusLookupRect client_rect;
-    if (!fushi_voice_hook::ProjectSiglusLookupRect(
+    my_comic_voice_hook::SiglusLookupRect client_rect;
+    if (!my_comic_voice_hook::ProjectSiglusLookupRect(
             *profile, engine_view, target.geometry.glyphs[index].rect, client_width,
             client_height, &client_rect)) {
       continue;
@@ -122,14 +122,14 @@ bool BuildSiglusLookupPayloadAtPress(const SiglusLookupClickTarget &target,
       any_projected ? Reason::kPointMiss : Reason::kNoProjectedGlyph);
 }
 
-fushi_voice_hook::SiglusLookupClientSnapshot SiglusLookupPayloadClientSnapshot(
+my_comic_voice_hook::SiglusLookupClientSnapshot SiglusLookupPayloadClientSnapshot(
     const SiglusLookupPayload &payload) {
   return {payload.game_window, payload.client_screen_x,
           payload.client_screen_y, payload.client_width,
           payload.client_height};
 }
 
-fushi_voice_hook::SiglusLookupClientSnapshot SiglusLookupTargetClientSnapshot(
+my_comic_voice_hook::SiglusLookupClientSnapshot SiglusLookupTargetClientSnapshot(
     const SiglusLookupClickTarget &target) {
   return {target.game_window, target.client_screen_x,
           target.client_screen_y, target.client_width,
@@ -141,18 +141,18 @@ bool SiglusLookupPayloadMatchesPublishedTarget(
     SiglusLookupPressDiagnostic* diagnostic = nullptr) {
   using Reason = SiglusLookupPressReason;
   SiglusLookupClickTarget target;
-  fushi_voice_hook::SiglusLookupEngineView engine_view;
+  my_comic_voice_hook::SiglusLookupEngineView engine_view;
   if (!ReadSiglusLookupClickTarget(&target, diagnostic)) return false;
   if (!ReadSiglusLookupEngineView(reinterpret_cast<HWND>(payload.game_window), &engine_view))
     return RejectSiglusLookupPress(diagnostic, Reason::kLiveViewRejected);
-  if (!fushi_voice_hook::SameSiglusLookupEngineView(engine_view, payload.engine_view) ||
-      !fushi_voice_hook::SameSiglusLookupEngineView(target.engine_view, payload.engine_view))
+  if (!my_comic_voice_hook::SameSiglusLookupEngineView(engine_view, payload.engine_view) ||
+      !my_comic_voice_hook::SameSiglusLookupEngineView(target.engine_view, payload.engine_view))
     return RejectSiglusLookupPress(diagnostic, Reason::kEngineViewChanged);
-  if (!fushi_voice_hook::IsSiglusLookupTextIdentityCurrent(payload.text_identity, target.text_identity))
+  if (!my_comic_voice_hook::IsSiglusLookupTextIdentityCurrent(payload.text_identity, target.text_identity))
     return RejectSiglusLookupPress(diagnostic, Reason::kPendingTextIdentity);
   if (payload.snapshot_epoch == 0 || payload.snapshot_epoch != target.snapshot_epoch)
     return RejectSiglusLookupPress(diagnostic, Reason::kPendingEpoch);
-  if (!fushi_voice_hook::MatchesSiglusLookupGenerationAndClient(
+  if (!my_comic_voice_hook::MatchesSiglusLookupGenerationAndClient(
           payload.geometry_generation, SiglusLookupPayloadClientSnapshot(payload),
           target.geometry_generation, SiglusLookupTargetClientSnapshot(target)))
     return RejectSiglusLookupPress(diagnostic,

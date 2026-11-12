@@ -12,7 +12,7 @@
 #include "unity_text_profile.h"
 
 int main() {
-  using fushi_voice_hook::UnityTextMeshReassembler;
+  using my_comic_voice_hook::UnityTextMeshReassembler;
 
   UnityTextMeshReassembler<32> line;
   assert(line.Append(L'前'));
@@ -35,7 +35,7 @@ int main() {
 
   // 逐字形批次 + 单独 U+3000 的引擎行为判据（不看 exe 名）。
   {
-    using fushi_voice_hook::UnityLegacyGlyphBatchDetector;
+    using my_comic_voice_hook::UnityLegacyGlyphBatchDetector;
     using Route = UnityLegacyGlyphBatchDetector::Route;
     const wchar_t g1[] = L"今";
     const wchar_t g2[] = L"日";
@@ -135,12 +135,12 @@ int main() {
     assert(!UnityLegacyGlyphBatchDetector::HasInteriorFullwidthSpace(nullptr, 5));
   }
 
-  const uint64_t native_id = fushi_voice_hook::NativeTextThreadIdFrom(
+  const uint64_t native_id = my_comic_voice_hook::NativeTextThreadIdFrom(
       0, L"UnityEngine.TextMesh.set_text(glyphs)",
       "Unity TextMesh line");
-  assert((native_id & fushi_voice_hook::kNativeTextThreadNamespaceBit) != 0);
-  assert((fushi_voice_hook::NormalizeLunaTextThreadId(native_id) &
-          fushi_voice_hook::kNativeTextThreadNamespaceBit) == 0);
-  assert(native_id != fushi_voice_hook::NormalizeLunaTextThreadId(native_id));
+  assert((native_id & my_comic_voice_hook::kNativeTextThreadNamespaceBit) != 0);
+  assert((my_comic_voice_hook::NormalizeLunaTextThreadId(native_id) &
+          my_comic_voice_hook::kNativeTextThreadNamespaceBit) == 0);
+  assert(native_id != my_comic_voice_hook::NormalizeLunaTextThreadId(native_id));
   return 0;
 }

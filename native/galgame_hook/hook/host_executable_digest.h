@@ -5,7 +5,7 @@
 
 #include "../include/voice_hook_ipc.h"
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 // 宿主 exe 的 SHA-256（小写十六进制；空串 = 本会话还没人算过）。
 //
@@ -40,4 +40,4 @@ inline const char* HostExecutableSha256Hex() {
   return HostExecutableSha256Storage();
 }
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

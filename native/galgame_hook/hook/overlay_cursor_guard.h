@@ -1,4 +1,4 @@
-// 游戏光标不得盖过 Fushi 浮层的光标（BUG-2864）。hook DLL（overlay_cursor_guard.inc 的
+// 游戏光标不得盖过 MyComic 浮层的光标（BUG-2864）。hook DLL（overlay_cursor_guard.inc 的
 // SetCursor detour）与 CTest（tests/overlay_cursor_guard_test.cpp，真 Win32 窗口）共用这一份
 // 判据，两边不得各抄一套。
 //
@@ -16,27 +16,27 @@
 //
 // Win32 契约本来就是「窗口只在光标位于其客户区、或它持有鼠标捕获时才设光标」
 // （SetCursor 文档）。所以这里只把游戏违反契约的那一种调用扣下：鼠标此刻归属的根窗口
-// （有捕获时是捕获窗，否则是光标下的窗口）是**别的线程**的 Fushi 浮层。其余一律原样放行
+// （有捕获时是捕获窗，否则是光标下的窗口）是**别的线程**的 MyComic 浮层。其余一律原样放行
 // ——光标回到游戏画面上，游戏下一次 SetCursor 立刻恢复它自己的指针。
 //
-// 只认 Fushi 自己的窗口类（类名前缀 "Fushi"：runner 的 FushiGlobalLookupWindow /
-// FushiAttachedTextSurfaceWindow / FushiHookToolbarWindow …，注入侧的 FushiLookupOverlay
-// / FushiLookupHoverHighlight）；第三方覆盖窗口的光标归属不归本 DLL 管。
+// 只认 MyComic 自己的窗口类（类名前缀 "MyComic"：runner 的 MyComicGlobalLookupWindow /
+// MyComicAttachedTextSurfaceWindow / MyComicHookToolbarWindow …，注入侧的 MyComicLookupOverlay
+// / MyComicLookupHoverHighlight）；第三方覆盖窗口的光标归属不归本 DLL 管。
 #pragma once
 
 #include <windows.h>
 
 #include <cwchar>
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
-inline constexpr wchar_t kFushiOverlayWindowClassPrefix[] = L"Fushi";
+inline constexpr wchar_t kMyComicOverlayWindowClassPrefix[] = L"MyComic";
 
-inline bool IsFushiOverlayWindowClass(const wchar_t* class_name) {
+inline bool IsMyComicOverlayWindowClass(const wchar_t* class_name) {
   if (class_name == nullptr) return false;
   const size_t prefix_length =
-      sizeof(kFushiOverlayWindowClassPrefix) / sizeof(wchar_t) - 1;
-  return std::wcsncmp(class_name, kFushiOverlayWindowClassPrefix,
+      sizeof(kMyComicOverlayWindowClassPrefix) / sizeof(wchar_t) - 1;
+  return std::wcsncmp(class_name, kMyComicOverlayWindowClassPrefix,
                       prefix_length) == 0;
 }
 
@@ -53,7 +53,7 @@ inline bool ShouldWithholdGameCursor(HWND mouse_root, DWORD caller_thread_id) {
       0) {
     return false;
   }
-  return IsFushiOverlayWindowClass(class_name);
+  return IsMyComicOverlayWindowClass(class_name);
 }
 
 // 鼠标此刻归属的根窗口。GetCapture 返回的是**调用线程输入队列**上的捕获：队列被 owner
@@ -78,4 +78,4 @@ inline bool ShouldWithholdGameCursorNow() {
   return ShouldWithholdGameCursor(MouseOwningRootWindow(), GetCurrentThreadId());
 }
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

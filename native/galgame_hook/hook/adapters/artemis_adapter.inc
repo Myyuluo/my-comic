@@ -100,12 +100,12 @@ bool LoadArtemisPfsIndex(const wchar_t* path,
       nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
   if (file == INVALID_HANDLE_VALUE) return false;
   LARGE_INTEGER file_size = {};
-  uint8_t header[fushi_voice_hook::artemis::kMinimumHeaderBytes] = {0};
-  fushi_voice_hook::artemis::IndexInfo info;
+  uint8_t header[my_comic_voice_hook::artemis::kMinimumHeaderBytes] = {0};
+  my_comic_voice_hook::artemis::IndexInfo info;
   uint8_t* index = nullptr;
   bool valid = GetFileSizeEx(file, &file_size) && file_size.QuadPart > 0 &&
                ReadExact(file, header, sizeof(header)) &&
-               fushi_voice_hook::artemis::ParseIndexInfo(
+               my_comic_voice_hook::artemis::ParseIndexInfo(
                    header, sizeof(header), &info) &&
                info.total_bytes <= static_cast<uint64_t>(file_size.QuadPart) &&
                info.total_bytes <= UINT32_MAX;
@@ -119,19 +119,19 @@ bool LoadArtemisPfsIndex(const wchar_t* path,
     }
   }
   if (valid) {
-    fushi_voice_hook::artemis::EntryCursor cursor;
-    valid = fushi_voice_hook::artemis::BeginEntries(
+    my_comic_voice_hook::artemis::EntryCursor cursor;
+    valid = my_comic_voice_hook::artemis::BeginEntries(
         index, info.total_bytes, &cursor, &info);
     for (uint32_t i = 0; valid && i < info.entry_count; ++i) {
-      fushi_voice_hook::artemis::EntryView entry;
-      valid = fushi_voice_hook::artemis::NextEntry(
+      my_comic_voice_hook::artemis::EntryView entry;
+      valid = my_comic_voice_hook::artemis::NextEntry(
           &cursor, static_cast<uint64_t>(file_size.QuadPart), &entry);
-      if (!valid || !fushi_voice_hook::artemis::IsVoiceOgg(entry)) continue;
+      if (!valid || !my_comic_voice_hook::artemis::IsVoiceOgg(entry)) continue;
       ArtemisVoiceRange range;
       range.offset = entry.offset;
       range.size = entry.size;
       const size_t name_bytes = (std::min)(
-          fushi_voice_hook::artemis::TrimmedNameLength(entry),
+          my_comic_voice_hook::artemis::TrimmedNameLength(entry),
           kArtemisNameBytes - 1);
       memcpy(range.name, entry.name, name_bytes);
       range.name[name_bytes] = 0;
@@ -145,10 +145,10 @@ bool LoadArtemisPfsIndex(const wchar_t* path,
                  const ArtemisVoiceRange& right) {
                 return left.offset < right.offset;
               });
-    *encrypted = info.format == fushi_voice_hook::artemis::Format::kPf8;
+    *encrypted = info.format == my_comic_voice_hook::artemis::Format::kPf8;
     if (*encrypted) {
       valid = ComputeArtemisSha1(
-          index + fushi_voice_hook::artemis::kIndexDataStart,
+          index + my_comic_voice_hook::artemis::kIndexDataStart,
           info.index_size, key);
     } else {
       memset(key, 0, kArtemisSha1Bytes);
@@ -177,7 +177,7 @@ bool FindAndLoadArtemisPfs() {
   LONG loaded = 0;
   do {
     if ((found.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0 ||
-        !fushi_voice_hook::artemis::IsArchiveSetLeaf(found.cFileName)) {
+        !my_comic_voice_hook::artemis::IsArchiveSetLeaf(found.cFileName)) {
       continue;
     }
     const std::wstring path = std::wstring(executable) + L"\\" + found.cFileName;
@@ -286,11 +286,11 @@ void QueueArtemisVoice(uint32_t archive, uint32_t entry_index) {
     g_artemis_tasks[i].tick_ms = GetTickCount64();
     g_artemis_tasks[i].archive = archive;
     g_artemis_tasks[i].entry_index = entry_index;
-    const uint64_t selected = fushi_voice_hook::SelectedTextThreadId(g_header);
+    const uint64_t selected = my_comic_voice_hook::SelectedTextThreadId(g_header);
     g_artemis_tasks[i].selected_thread_id = selected;
     g_artemis_tasks[i].baseline_text_seq =
         selected != 0 && g_header != nullptr
-            ? fushi_voice_hook::AtomicLoadPreview64(&g_header->text_write_count)
+            ? my_comic_voice_hook::AtomicLoadPreview64(&g_header->text_write_count)
             : 0;
     InterlockedExchange(&g_artemis_tasks[i].state, 2);
     return;
@@ -319,7 +319,7 @@ void ObserveArtemisPfsRead(HANDLE file, DWORD done, LPOVERLAPPED overlapped) {
     }
     start = static_cast<uint64_t>(current.QuadPart) - done;
   }
-  const long entry = fushi_voice_hook::artemis::FindRangeStartingAt(
+  const long entry = my_comic_voice_hook::artemis::FindRangeStartingAt(
       g_artemis_archives[archive].ranges,
       g_artemis_archives[archive].range_count, start);
   if (entry >= 0) {
@@ -349,16 +349,16 @@ bool ProcessArtemisVoiceTask(ArtemisVoiceTask* task) {
       task->tick_ms - g_artemis_last_tick <= 2000) {
     return true;
   }
-  fushi_voice_hook::VoiceTextCandidate
-      candidates[fushi_voice_hook::kTextLaneSlotCount] = {};
+  my_comic_voice_hook::VoiceTextCandidate
+      candidates[my_comic_voice_hook::kTextLaneSlotCount] = {};
   const size_t candidate_count =
       CollectSelectedLaneCandidates(task->selected_thread_id, candidates);
-  const auto decision = fushi_voice_hook::ResolveFollowingSelectedText(
+  const auto decision = my_comic_voice_hook::ResolveFollowingSelectedText(
       task->tick_ms,
-      task->tick_ms + fushi_voice_hook::kArtemisFollowingTextWindowMs,
+      task->tick_ms + my_comic_voice_hook::kArtemisFollowingTextWindowMs,
       GetTickCount64(), task->selected_thread_id, task->baseline_text_seq,
       candidates, candidate_count);
-  if (decision.state == fushi_voice_hook::VoiceResourcePairState::kWait) {
+  if (decision.state == my_comic_voice_hook::VoiceResourcePairState::kWait) {
     return false;
   }
   HANDLE file = g_orig_CreateFileW(
@@ -378,7 +378,7 @@ bool ProcessArtemisVoiceTask(ArtemisVoiceTask* task) {
     }
   }
   valid = valid &&
-      fushi_voice_hook::siglus::CompleteOggBytes(ogg, range.size) == range.size;
+      my_comic_voice_hook::siglus::CompleteOggBytes(ogg, range.size) == range.size;
   if (valid) {
     wchar_t name[kArtemisNameBytes] = {0};
     int converted = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS,
@@ -395,7 +395,7 @@ bool ProcessArtemisVoiceTask(ArtemisVoiceTask* task) {
     g_artemis_last_tick = task->tick_ms;
     if (g_header != nullptr) {
       g_header->hook_diagnostics |=
-          fushi_voice_hook::kDiagArtemisPfsVoiceCaptured;
+          my_comic_voice_hook::kDiagArtemisPfsVoiceCaptured;
     }
   }
   free(ogg);
@@ -413,12 +413,12 @@ void ProcessArtemisVoiceTasks() {
 }
 
 bool TryHookArtemisPfsVoice() {
-  if (!fushi_voice_hook::MatchesArtemisProfile(nullptr)) return false;
+  if (!my_comic_voice_hook::MatchesArtemisProfile(nullptr)) return false;
   const bool hooks_ready = TryHookSiglusOvk();
   if (!hooks_ready || !FindAndLoadArtemisPfs()) return false;
   InterlockedExchange(&g_artemis_enabled, 1);
   if (g_header != nullptr) {
-    g_header->hook_diagnostics |= fushi_voice_hook::kDiagArtemisPfsHooksReady;
+    g_header->hook_diagnostics |= my_comic_voice_hook::kDiagArtemisPfsHooksReady;
   }
   return true;
 }
@@ -437,11 +437,11 @@ void StopArtemisPfsVoice() {
   }
 }
 
-class ArtemisPfsAdapter final : public fushi_voice_hook::EngineAdapter {
+class ArtemisPfsAdapter final : public my_comic_voice_hook::EngineAdapter {
  public:
   const char* id() const override { return "artemis_pfs"; }
   bool probe() const override {
-    return fushi_voice_hook::MatchesArtemisProfile(nullptr);
+    return my_comic_voice_hook::MatchesArtemisProfile(nullptr);
   }
   bool install() override {
     // Lookup first: its sites come from the executable's structure alone and
@@ -461,27 +461,27 @@ class ArtemisPfsAdapter final : public fushi_voice_hook::EngineAdapter {
     ProcessArtemisVoiceTasks();
     ProcessArtemisLookupTick();
   }
-  fushi_voice_hook::LookupAdmissionReport lookupAdmission() const override {
-    fushi_voice_hook::LookupAdmissionReport report;
+  my_comic_voice_hook::LookupAdmissionReport lookupAdmission() const override {
+    my_comic_voice_hook::LookupAdmissionReport report;
     if (ArtemisLookupSensorInstalled()) {
-      report.state = fushi_voice_hook::kLookupAdmissionSensorInstalled;
+      report.state = my_comic_voice_hook::kLookupAdmissionSensorInstalled;
       return report;
     }
     // Sites were resolved and rejected: terminal for this executable, so the
     // host gets the digest to report instead of waiting for a gate.
     if (ArtemisLookupSitesRejected()) {
-      report.state = fushi_voice_hook::kLookupAdmissionIdentityRejected;
+      report.state = my_comic_voice_hook::kLookupAdmissionIdentityRejected;
       strncpy_s(report.executable_sha256,
-                fushi_voice_hook::HostExecutableSha256Hex(), _TRUNCATE);
+                my_comic_voice_hook::HostExecutableSha256Hex(), _TRUNCATE);
       return report;
     }
-    report.state = fushi_voice_hook::kLookupAdmissionIdentityAccepted;
+    report.state = my_comic_voice_hook::kLookupAdmissionIdentityAccepted;
     return report;
   }
-  fushi_voice_hook::AdapterCapability capabilities() const override {
-    return fushi_voice_hook::AdapterCapability::kText |
-           fushi_voice_hook::AdapterCapability::kResourceAudio |
-           fushi_voice_hook::AdapterCapability::kPcmAudio;
+  my_comic_voice_hook::AdapterCapability capabilities() const override {
+    return my_comic_voice_hook::AdapterCapability::kText |
+           my_comic_voice_hook::AdapterCapability::kResourceAudio |
+           my_comic_voice_hook::AdapterCapability::kPcmAudio;
   }
   void onModuleLoaded(const wchar_t*) override {}
   void shutdown() override {
@@ -490,7 +490,7 @@ class ArtemisPfsAdapter final : public fushi_voice_hook::EngineAdapter {
     installed_ = false;
     ready_ = false;
   }
-  fushi_voice_hook::AdapterDiagnostics diagnostics() const override {
+  my_comic_voice_hook::AdapterDiagnostics diagnostics() const override {
     return {id(), probe(), installed_,
             g_header == nullptr ? 0u : g_header->hook_diagnostics};
   }

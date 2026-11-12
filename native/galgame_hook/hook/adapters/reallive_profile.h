@@ -21,7 +21,7 @@
 #include <cstdint>
 #include <string>
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 namespace reallive {
 
 constexpr uint32_t kImageMarkerGameexeIni = 1u << 0;
@@ -159,4 +159,4 @@ inline bool MatchesRealliveProfile(const reallive::IdentityInputs& inputs) {
           reallive::IsRealliveImageSignature(inputs.image_markers));
 }
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

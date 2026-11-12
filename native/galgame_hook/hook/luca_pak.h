@@ -35,7 +35,7 @@
 #include <cstring>
 #include <vector>
 
-namespace fushi_voice_hook::luca {
+namespace my_comic_voice_hook::luca {
 
 constexpr size_t kPakHeaderBytes = 0x28;
 constexpr uint32_t kPakMaxCount = 1u << 20;
@@ -318,4 +318,4 @@ inline const OggPakStream* PickOggPakStream(
   return best;
 }
 
-}  // namespace fushi_voice_hook::luca
+}  // namespace my_comic_voice_hook::luca

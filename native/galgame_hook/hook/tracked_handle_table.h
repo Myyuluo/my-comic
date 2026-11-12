@@ -5,7 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 // 「文件句柄 → 适配器附带数据」的小型定长表，**全程无锁**。
 //
@@ -15,7 +15,7 @@ namespace fushi_voice_hook {
 // MinHook——LunaHook32 装 hook 时同样 Freeze。只要被它挂起的线程正卡在
 // EnterCriticalSection(&g_cs) 的「已被唤醒、尚未拿到锁」窗口（LockCount 低两位 = 01，
 // OwningThread = 0），Freeze 线程再进同一把锁就永远等不到那个被自己挂起的线程去消费
-// 唤醒：真机栈里主线程与 LunaHook 线程都停在 fushi_voice_hook 的同一个
+// 唤醒：真机栈里主线程与 LunaHook 线程都停在 my_comic_voice_hook 的同一个
 // EnterCriticalSection 调用点，锁却无人持有。规则因此只有一条：**CloseHandle detour
 // 可达的任何代码都不得阻塞**。Artemis / CatSystem2 / Malie 三张表早已是这套写法，本文件
 // 把它抽成一份，其余表统一接入。
@@ -130,4 +130,4 @@ inline bool ForgetTrackedHandle(Slot (&slots)[N], HANDLE handle) {
   return forgotten;
 }
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

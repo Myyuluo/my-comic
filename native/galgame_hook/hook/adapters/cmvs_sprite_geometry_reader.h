@@ -2,7 +2,7 @@
 #include <cmath>
 #include "cmvs_presentation_reader.h"
 
-namespace fushi_voice_hook::cmvs_layout {
+namespace my_comic_voice_hook::cmvs_layout {
 
 struct PixelRect { int32_t x = 0, y = 0, width = 0, height = 0; };
 
@@ -90,4 +90,4 @@ inline Result CaptureQuads(ReadMemory read, void* context, const Snapshot& line,
   *output = candidate;
   return Result::kCaptured;
 }
-}  // namespace fushi_voice_hook::cmvs_layout
+}  // namespace my_comic_voice_hook::cmvs_layout

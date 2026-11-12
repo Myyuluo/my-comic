@@ -10,8 +10,8 @@
 
 namespace {
 
-namespace viewport = fushi_voice_hook::siglus_native_viewport;
-using fushi_voice_hook::exact_lookup::LoadedPeImage;
+namespace viewport = my_comic_voice_hook::siglus_native_viewport;
+using my_comic_voice_hook::exact_lookup::LoadedPeImage;
 
 class TestImage {
  public:
@@ -144,8 +144,8 @@ void EmptyAndArchitecture() {
   test.image.size = test.bytes.size();
   test.image.section_count = test.image.sections.size() + 1u;
   assert(viewport::ResolveNativeConfigSlot(test.image) == 0u);
-  assert(fushi_voice_hook::siglus_viewport::ValidDesignSize(1920, 1080));
-  assert(fushi_voice_hook::siglus_viewport::ValidDesignSize(1280, 720));
+  assert(my_comic_voice_hook::siglus_viewport::ValidDesignSize(1920, 1080));
+  assert(my_comic_voice_hook::siglus_viewport::ValidDesignSize(1280, 720));
 }
 
 void AlternateLayoutLocationsAndSlots() {

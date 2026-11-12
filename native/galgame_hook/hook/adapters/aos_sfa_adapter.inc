@@ -13,24 +13,24 @@
 // 怎么读才能定，静态阶段不猜 hook 面。
 #include "aos_sfa_profile.h"
 
-class AosSfaAdapter final : public fushi_voice_hook::EngineAdapter {
+class AosSfaAdapter final : public my_comic_voice_hook::EngineAdapter {
  public:
   const char* id() const override { return "aos_sfa"; }
-  bool probe() const override { return fushi_voice_hook::MatchesAosSfaProfile(nullptr); }
+  bool probe() const override { return my_comic_voice_hook::MatchesAosSfaProfile(nullptr); }
   // 没有引擎专属 hook 可装：installed_ 只表示「身份成立、共享 PCM 路径对此进程生效」。
   bool install() override {
     installed_ = probe();
     return installed_;
   }
-  fushi_voice_hook::AdapterCapability capabilities() const override {
-    return fushi_voice_hook::AdapterCapability::kPcmAudio;
+  my_comic_voice_hook::AdapterCapability capabilities() const override {
+    return my_comic_voice_hook::AdapterCapability::kPcmAudio;
   }
   void onModuleLoaded(const wchar_t* module_name) override {
     // 身份来自磁盘布局，启动时一次判定即可；模块通知只作重试接缝。
     if (!installed_ && module_name == nullptr) install();
   }
   void shutdown() override { installed_ = false; }
-  fushi_voice_hook::AdapterDiagnostics diagnostics() const override {
+  my_comic_voice_hook::AdapterDiagnostics diagnostics() const override {
     return {id(), probe(), installed_,
             g_header == nullptr ? 0u : g_header->hook_diagnostics};
   }

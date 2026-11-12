@@ -7,13 +7,13 @@
 #
 # 提交计数只在「历史只增不减」的前提下单调。重写历史会让它**倒退**：
 # 2026-08-12 develop 被强推成重写后的历史，计数从 10546 掉到 9466，而当时
-# 已发布、已装到用户机器上的最大序号是 10405（fushi-debug-rolling）。
+# 已发布、已装到用户机器上的最大序号是 10405（mycomic-debug-rolling）。
 #
 # 序号同时喂三处单调比较，倒退会把它们一起锁死：
 #   1. Android versionCode = versionCodeBase + 100 * seq + abiOffset
-#      （fushi/android/app/build.gradle）→ 比已装的小，系统安装器拒装；
+#      （my_comic/android/app/build.gradle）→ 比已装的小，系统安装器拒装；
 #   2. app 内更新器按 releaseSequence 做全序比较
-#      （fushi/lib/src/utils/misc/update_checker_release.dart）→ 判远端
+#      （my_comic/lib/src/utils/misc/update_checker_release.dart）→ 判远端
 #      「不比本机新」，永远提示已是最新，用户再也收不到任何更新；
 #   3. tool/merge_update_manifest.py 的单调守卫「Never downgrades the
 #      advertised top-level release」→ 新包压根写不进清单。
@@ -27,7 +27,7 @@
 # 序号」时才需要抬。抬之前先去查真实的最大已发布序号（GitHub Release 资产
 # 名里的 `-debug.<seq>` / `-beta.<seq>`），别凭感觉加。
 #
-# 守卫：fushi/test/build/release_sequence_floor_guard_test.dart
+# 守卫：my_comic/test/build/release_sequence_floor_guard_test.dart
 set -euo pipefail
 
 # 10546 = 重写前 develop 曾推上去的最大计数（已发布最大 10405）。加余量取

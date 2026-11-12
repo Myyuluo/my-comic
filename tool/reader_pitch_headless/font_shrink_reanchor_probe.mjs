@@ -17,27 +17,27 @@ const cssPaginated = `html,body{margin:0;padding:0;}html{overflow:hidden;}
  p{margin:0 0 1em 0;}`;
 const paras = Array.from({length: 90}, (_, i) => `<p>P${i} これはテスト本文です。ページ分割の幾何を検証するための十分な長さのダミーテキストを並べています。文章文章文章文章文章文章文章文章。</p>`).join('\n');
 
-// 按真实装配顺序安装：完整引擎产物（工厂 + 学习单位 JS + __fushiInstallShell）→
-// `__fushiInstallShell(C)` 建 window.fushiReader → load 时自动 boot initialize。
+// 按真实装配顺序安装：完整引擎产物（工厂 + 学习单位 JS + __myComicInstallShell）→
+// `__myComicInstallShell(C)` 建 window.myComicReader → load 时自动 boot initialize。
 const CONFIG = {
   vnMode: false, continuousMode: false, perfTraceEnabled: false,
   chromeTopInset: 0, chromeBottomInset: 0, dartPageWidth: W, dartPageHeight: H,
   initialFragment: null, initialCharOffset: -1, initialProgress: 0, sentenceAudioCues: null,
 };
 async function openChapter(){
-  const engine = fs.readFileSync(path.join(os.tmpdir(), 'fushi_engine_paginated.html'), 'utf8');
-  const install = `<script>window.__fushiInstallShell(${JSON.stringify(CONFIG)});</script>`;
+  const engine = fs.readFileSync(path.join(os.tmpdir(), 'my_comic_engine_paginated.html'), 'utf8');
+  const install = `<script>window.__myComicInstallShell(${JSON.stringify(CONFIG)});</script>`;
   const full = `<!doctype html><html><head><meta charset="utf-8"><style>${cssPaginated}</style><style id="probe-style"></style></head><body>${paras}\n${engine}\n${install}</body></html>`;
   const b = await puppeteer.launch({executablePath: CHROME, headless: 'new', args: ['--no-sandbox']});
   const pg = await b.newPage(); await pg.setViewport({width: W, height: H});
   await pg.setRequestInterception(true);
   pg.on('request', async q => {
     const u = q.url();
-    if (u === 'https://fushi.local/chapter') return q.respond({status:200,contentType:'text/html',body:full});
-    if (u.startsWith('https://fushi.local')) return q.respond({status:404,body:''});
+    if (u === 'https://mycomic.local/chapter') return q.respond({status:200,contentType:'text/html',body:full});
+    if (u.startsWith('https://mycomic.local')) return q.respond({status:404,body:''});
     return q.continue();
   });
-  await pg.goto('https://fushi.local/chapter', {waitUntil:'load', timeout:8000}).catch(()=>{});
+  await pg.goto('https://mycomic.local/chapter', {waitUntil:'load', timeout:8000}).catch(()=>{});
   await new Promise(r => setTimeout(r, 500));
   return { b, pg };
 }
@@ -46,15 +46,15 @@ async function openChapter(){
 // commit 后的页首字 / 页号。
 async function restyle(pg, css){
   const before = await pg.evaluate((css) => {
-    const r = window.fushiReader;
+    const r = window.myComicReader;
     const el = document.getElementById('probe-style');
     const anchor = r.beginStyleReanchor(el, css);
     return { anchor };
   }, css);
-  await pg.evaluate(() => new Promise(res => requestAnimationFrame(() => { window.fushiReader.commitStyleReanchor(); res(); })));
+  await pg.evaluate(() => new Promise(res => requestAnimationFrame(() => { window.myComicReader.commitStyleReanchor(); res(); })));
   await new Promise(r => setTimeout(r, 120));
   const after = await pg.evaluate(() => {
-    const r = window.fushiReader; const c = r.getScrollContext();
+    const r = window.myComicReader; const c = r.getScrollContext();
     const pos = r.getPagePosition(c); const page = Math.round(pos / c.pageSize);
     const first = r.getFirstVisibleCharOffset();
     // 下一页页首字（用来断言锚字仍在当前页内），读完滚回。
@@ -70,7 +70,7 @@ let fail = 0;
 const { b, pg } = await openChapter();
 // 落到章中段某页（精确锚），记初始首可见字。
 const seed = await pg.evaluate(() => {
-  const r = window.fushiReader; r.scrollToCharOffset(2600);
+  const r = window.myComicReader; r.scrollToCharOffset(2600);
   const c = r.getScrollContext();
   return { page: Math.round(r.getPagePosition(c) / c.pageSize), first: r.getFirstVisibleCharOffset() };
 });

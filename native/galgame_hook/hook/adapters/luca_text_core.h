@@ -34,7 +34,7 @@
 #include <cstring>
 #include <string>
 
-namespace fushi_voice_hook::luca {
+namespace my_comic_voice_hook::luca {
 
 // One byte value per position; -1 is a wildcard.
 inline constexpr int16_t kMessageOperandShape[] = {
@@ -282,7 +282,7 @@ inline MessageText DecodeMessageRecord(const std::wstring& record,
 }
 
 // The record published as the line: the first one written in Japanese (the
-// engine stores one record per script language; Fushi mines Japanese).
+// engine stores one record per script language; MyComic mines Japanese).
 // This is the legacy two-language selector. Win64 uses VM-owned calibration
 // instead, so adding its Chinese record does not change this behavior.
 inline uint32_t PickJapaneseRecord(const std::wstring* records,
@@ -293,4 +293,4 @@ inline uint32_t PickJapaneseRecord(const std::wstring* records,
   return count;
 }
 
-}  // namespace fushi_voice_hook::luca
+}  // namespace my_comic_voice_hook::luca

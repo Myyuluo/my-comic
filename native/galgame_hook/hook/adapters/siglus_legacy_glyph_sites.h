@@ -1,7 +1,7 @@
 #pragma once
 #include "siglus_autoprofile.h"
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 // Resolved code sites only. This does not prove viewport, visibility, input
 // ownership, text occurrence, or support readiness. Menus can retain layout.
 struct LegacyGlyphSites {
@@ -190,4 +190,4 @@ inline bool ResolveSiglusLegacyGlyphSites(
   out->owner_render_rva=render;
   return true;
 }
-} // namespace fushi_voice_hook
+} // namespace my_comic_voice_hook

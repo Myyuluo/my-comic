@@ -14,9 +14,9 @@
 
 namespace {
 
-using fushi_voice_hook::ParsePeLaunchLayout;
-using fushi_voice_hook::PeLaunchLayout;
-using fushi_voice_hook::ShouldUseLoaderInitGate;
+using my_comic_voice_hook::ParsePeLaunchLayout;
+using my_comic_voice_hook::PeLaunchLayout;
+using my_comic_voice_hook::ShouldUseLoaderInitGate;
 
 // 下面 PE 结构断言都在「引擎 profile 已声明需要门」（KiriKiri）的前提下验 PE 判据本身；
 // 引擎 profile 这一维的正负向单独在 TestEngineProfileAdmission 里验。
@@ -112,7 +112,7 @@ PeLaunchLayout Parse(const std::vector<uint8_t>& b) {
 using FakeDir = std::map<std::wstring, std::vector<uint8_t>>;
 
 bool FakeDirLooksLikeKirikiri(const FakeDir& files, const std::wstring& dir) {
-  return fushi_voice_hook::DirectoryLooksLikeKirikiri(
+  return my_comic_voice_hook::DirectoryLooksLikeKirikiri(
       dir,
       [&](const std::wstring& d, auto visit) {
         for (const auto& entry : files) {
@@ -137,9 +137,9 @@ bool FakeDirLooksLikeKirikiri(const FakeDir& files, const std::wstring& dir) {
 }
 
 std::vector<uint8_t> Xp3Header() {
-  std::vector<uint8_t> header(fushi_voice_hook::kKirikiriXp3Magic,
-                              fushi_voice_hook::kKirikiriXp3Magic +
-                                  fushi_voice_hook::kKirikiriXp3MagicBytes);
+  std::vector<uint8_t> header(my_comic_voice_hook::kKirikiriXp3Magic,
+                              my_comic_voice_hook::kKirikiriXp3Magic +
+                                  my_comic_voice_hook::kKirikiriXp3MagicBytes);
   header.push_back(0x00);  // 后面跟索引偏移，内容无关
   return header;
 }
@@ -147,8 +147,8 @@ std::vector<uint8_t> Xp3Header() {
 // 从目录（假文件表）+ exe 的 PE 布局一路算到「是否启用门」，与 RunLaunch 的判定链同形。
 bool GateAdmitted(const FakeDir& files, const std::wstring& dir,
                   const PeLaunchLayout& layout) {
-  const fushi_voice_hook::KirikiriLaunchProfile profile =
-      fushi_voice_hook::SelectKirikiriLaunchProfile(FakeDirLooksLikeKirikiri(files, dir));
+  const my_comic_voice_hook::KirikiriLaunchProfile profile =
+      my_comic_voice_hook::SelectKirikiriLaunchProfile(FakeDirLooksLikeKirikiri(files, dir));
   return ShouldUseLoaderInitGate(layout, true, profile.loader_init_gate);
 }
 
@@ -159,7 +159,7 @@ void TestKirikiriSignature() {
     const FakeDir files = {{game + L"\\data.xp3", Xp3Header()},
                            {game + L"\\voice.xp3", Xp3Header()}};
     assert(FakeDirLooksLikeKirikiri(files, game));
-    const auto profile = fushi_voice_hook::SelectKirikiriLaunchProfile(true);
+    const auto profile = my_comic_voice_hook::SelectKirikiriLaunchProfile(true);
     assert(profile.recognised && profile.loader_init_gate);
   }
   // 只有扩展名、没有魔数（别家用同后缀的文件 / 空文件 / 截断文件）→ 不认（fail closed）。
@@ -168,7 +168,7 @@ void TestKirikiriSignature() {
                            {game + L"\\empty.xp3", {}}};
     assert(!FakeDirLooksLikeKirikiri(files, game));
     std::vector<uint8_t> truncated = Xp3Header();
-    truncated.resize(fushi_voice_hook::kKirikiriXp3MagicBytes - 1);
+    truncated.resize(my_comic_voice_hook::kKirikiriXp3MagicBytes - 1);
     const FakeDir short_file = {{game + L"\\data.xp3", truncated}};
     assert(!FakeDirLooksLikeKirikiri(short_file, game));
   }
@@ -183,16 +183,16 @@ void TestKirikiriSignature() {
   // 扫描有上限：前 kKirikiriXp3ScanLimit 个都不是 XP3 时不再往后读。
   {
     FakeDir files;
-    for (size_t i = 0; i < fushi_voice_hook::kKirikiriXp3ScanLimit; ++i) {
+    for (size_t i = 0; i < my_comic_voice_hook::kKirikiriXp3ScanLimit; ++i) {
       files[game + L"\\a" + std::to_wstring(100 + i) + L".xp3"] = {'n', 'o'};
     }
     files[game + L"\\z.xp3"] = Xp3Header();
     assert(!FakeDirLooksLikeKirikiri(files, game));
   }
   const std::vector<uint8_t> header = Xp3Header();
-  assert(fushi_voice_hook::IsKirikiriXp3ArchiveHeader(header.data(), header.size()));
-  assert(!fushi_voice_hook::IsKirikiriXp3ArchiveHeader(nullptr, 0));
-  const auto none = fushi_voice_hook::SelectKirikiriLaunchProfile(false);
+  assert(my_comic_voice_hook::IsKirikiriXp3ArchiveHeader(header.data(), header.size()));
+  assert(!my_comic_voice_hook::IsKirikiriXp3ArchiveHeader(nullptr, 0));
+  const auto none = my_comic_voice_hook::SelectKirikiriLaunchProfile(false);
   assert(!none.recognised && !none.loader_init_gate);
 }
 
@@ -236,8 +236,8 @@ void TestEngineProfileAdmission() {
 }
 
 void TestGateOutcomeDisposition() {
-  using fushi_voice_hook::LoaderInitGateLeftProcessRunning;
-  using fushi_voice_hook::LoaderInitGateOutcome;
+  using my_comic_voice_hook::LoaderInitGateLeftProcessRunning;
+  using my_comic_voice_hook::LoaderInitGateOutcome;
   // 只有「主线程已在跑初始化却没停到入口」（入口被壳改写 / 超时）才改按已运行进程附着；
   // 停到入口或门根本没开始时照旧早注入、注入后恢复。
   assert(LoaderInitGateLeftProcessRunning(LoaderInitGateOutcome::kLeftRunning));

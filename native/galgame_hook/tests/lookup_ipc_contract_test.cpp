@@ -1,6 +1,6 @@
 // v19 游戏内查词区的**契约级**测试。
 //
-// 这块区的三条通道（hit / input / frame）是跨进程的，写侧在游戏进程里、读侧在 Fushi
+// 这块区的三条通道（hit / input / frame）是跨进程的，写侧在游戏进程里、读侧在 MyComic
 // 里，两边只靠 voice_hook_ipc.h 的寻址函数对齐。所以下面钉死的不是"某个 adapter 怎么
 // 写"，而是**任何写侧/读侧都必须成立的结构性质**：
 //
@@ -33,34 +33,34 @@
 
 namespace {
 
-using fushi_voice_hook::HasLookupRegion;
-using fushi_voice_hook::IsLookupFrameSane;
-using fushi_voice_hook::kClipCount;
-using fushi_voice_hook::kLookupBitmapBytes;
-using fushi_voice_hook::kLookupFrameCount;
-using fushi_voice_hook::kLookupFrameCaptureSuppress;
-using fushi_voice_hook::kLookupFrameDismiss;
-using fushi_voice_hook::kLookupFrameHighlightOnly;
-using fushi_voice_hook::kLookupInputSlotCount;
-using fushi_voice_hook::kLookupLineBytes;
-using fushi_voice_hook::kLoopbackMarkerCount;
-using fushi_voice_hook::kSharedVersion;
-using fushi_voice_hook::kTextLaneCount;
-using fushi_voice_hook::kTextLaneSlotCount;
-using fushi_voice_hook::kThreadPreviewCount;
-using fushi_voice_hook::LookupBitmapAt;
-using fushi_voice_hook::LookupFrame;
-using fushi_voice_hook::LookupFrameAt;
-using fushi_voice_hook::LookupHitOf;
-using fushi_voice_hook::LookupHitSlot;
-using fushi_voice_hook::LookupInputSlot;
-using fushi_voice_hook::LookupInputsOf;
-using fushi_voice_hook::LookupRegionBytes;
-using fushi_voice_hook::LoopbackMarker;
-using fushi_voice_hook::SharedHeader;
-using fushi_voice_hook::ShouldApplyLookupFrame;
-using fushi_voice_hook::ThreadPreviewSlot;
-using fushi_voice_hook::VoiceClip;
+using my_comic_voice_hook::HasLookupRegion;
+using my_comic_voice_hook::IsLookupFrameSane;
+using my_comic_voice_hook::kClipCount;
+using my_comic_voice_hook::kLookupBitmapBytes;
+using my_comic_voice_hook::kLookupFrameCount;
+using my_comic_voice_hook::kLookupFrameCaptureSuppress;
+using my_comic_voice_hook::kLookupFrameDismiss;
+using my_comic_voice_hook::kLookupFrameHighlightOnly;
+using my_comic_voice_hook::kLookupInputSlotCount;
+using my_comic_voice_hook::kLookupLineBytes;
+using my_comic_voice_hook::kLoopbackMarkerCount;
+using my_comic_voice_hook::kSharedVersion;
+using my_comic_voice_hook::kTextLaneCount;
+using my_comic_voice_hook::kTextLaneSlotCount;
+using my_comic_voice_hook::kThreadPreviewCount;
+using my_comic_voice_hook::LookupBitmapAt;
+using my_comic_voice_hook::LookupFrame;
+using my_comic_voice_hook::LookupFrameAt;
+using my_comic_voice_hook::LookupHitOf;
+using my_comic_voice_hook::LookupHitSlot;
+using my_comic_voice_hook::LookupInputSlot;
+using my_comic_voice_hook::LookupInputsOf;
+using my_comic_voice_hook::LookupRegionBytes;
+using my_comic_voice_hook::LoopbackMarker;
+using my_comic_voice_hook::SharedHeader;
+using my_comic_voice_hook::ShouldApplyLookupFrame;
+using my_comic_voice_hook::ThreadPreviewSlot;
+using my_comic_voice_hook::VoiceClip;
 
 int g_failures = 0;
 
@@ -85,7 +85,7 @@ struct FakeMapping {
 
   explicit FakeMapping(bool with_lookup_region = true) {
     const uint64_t text_bytes =
-        fushi_voice_hook::TextRegionBytes(kTextLaneCount, kTextLaneSlotCount);
+        my_comic_voice_hook::TextRegionBytes(kTextLaneCount, kTextLaneSlotCount);
     const uint64_t clip_bytes =
         static_cast<uint64_t>(kClipCount) * sizeof(VoiceClip);
     const uint64_t marker_bytes =
@@ -103,7 +103,7 @@ struct FakeMapping {
     bytes.assign(static_cast<size_t>(total_bytes), 0);
 
     SharedHeader* h = header();
-    h->magic = fushi_voice_hook::kSharedMagic;
+    h->magic = my_comic_voice_hook::kSharedMagic;
     h->version = kSharedVersion;
     h->ring_capacity = kRingCapacity;
     h->text_region_offset =
@@ -669,7 +669,7 @@ void TestV16V17AndV19OnlyAppendOverV15() {
   const size_t first_v19_field =
       offsetof(SharedHeader, lookup_geometry_active_kind);
   const size_t v17_payload_end =
-      only_v17_field + fushi_voice_hook::kHookModuleDigestChars;
+      only_v17_field + my_comic_voice_hook::kHookModuleDigestChars;
   Check(first_v19_field == (v17_payload_end + 3u) / 4u * 4u,
         "v19 几何状态必须紧跟 v17 摘要的自然对齐尾部");
   const size_t geometry_text_generation =
@@ -722,199 +722,199 @@ void TestV16V17AndV19OnlyAppendOverV15() {
 
 void TestV21GeometryAdmissionPublication() {
   SharedHeader h = {};
-  Check(!fushi_voice_hook::ReadLookupGeometryAdmission(&h).valid,
+  Check(!my_comic_voice_hook::ReadLookupGeometryAdmission(&h).valid,
         "seq=0 的 geometry admission 不得当成已发布请求");
   const uint32_t first =
-      fushi_voice_hook::PublishLookupGeometryAdmission(
-          &h, fushi_voice_hook::kLookupGeometryAdmissionAuto, true, false);
+      my_comic_voice_hook::PublishLookupGeometryAdmission(
+          &h, my_comic_voice_hook::kLookupGeometryAdmissionAuto, true, false);
   const auto auto_attached =
-      fushi_voice_hook::ReadLookupGeometryAdmission(&h);
+      my_comic_voice_hook::ReadLookupGeometryAdmission(&h);
   Check(first == 1u && auto_attached.valid && auto_attached.seq == first &&
             auto_attached.mode ==
-                fushi_voice_hook::kLookupGeometryAdmissionAuto &&
+                my_comic_voice_hook::kLookupGeometryAdmissionAuto &&
             auto_attached.attached_ready(),
         "auto+attached-ready payload 必须 coherent round-trip");
-  Check(fushi_voice_hook::PublishLookupGeometryAdmission(
-            &h, fushi_voice_hook::kLookupGeometryAdmissionAuto, true, false) ==
+  Check(my_comic_voice_hook::PublishLookupGeometryAdmission(
+            &h, my_comic_voice_hook::kLookupGeometryAdmissionAuto, true, false) ==
             first,
         "重复 geometry admission 必须幂等，不制造假代际");
   const uint32_t second =
-      fushi_voice_hook::PublishLookupGeometryAdmission(
-          &h, fushi_voice_hook::kLookupGeometryAdmissionNativeOnly, false,
+      my_comic_voice_hook::PublishLookupGeometryAdmission(
+          &h, my_comic_voice_hook::kLookupGeometryAdmissionNativeOnly, false,
           false);
   const auto native_only =
-      fushi_voice_hook::ReadLookupGeometryAdmission(&h);
+      my_comic_voice_hook::ReadLookupGeometryAdmission(&h);
   Check(second == 2u && native_only.valid &&
             native_only.mode ==
-                fushi_voice_hook::kLookupGeometryAdmissionNativeOnly &&
+                my_comic_voice_hook::kLookupGeometryAdmissionNativeOnly &&
             !native_only.attached_ready() &&
             !native_only.native_input_allowed(),
         "owner policy edge 必须产生新 request generation");
   const uint32_t native_input =
-      fushi_voice_hook::PublishLookupGeometryAdmission(
-          &h, fushi_voice_hook::kLookupGeometryAdmissionNativeOnly, false,
+      my_comic_voice_hook::PublishLookupGeometryAdmission(
+          &h, my_comic_voice_hook::kLookupGeometryAdmissionNativeOnly, false,
           true);
   const auto native_input_allowed =
-      fushi_voice_hook::ReadLookupGeometryAdmission(&h);
+      my_comic_voice_hook::ReadLookupGeometryAdmission(&h);
   Check(native_input == 3u && native_input_allowed.valid &&
             native_input_allowed.seq == native_input &&
             native_input_allowed.mode ==
-                fushi_voice_hook::kLookupGeometryAdmissionNativeOnly &&
+                my_comic_voice_hook::kLookupGeometryAdmissionNativeOnly &&
             !native_input_allowed.attached_ready() &&
             native_input_allowed.native_input_allowed(),
         "NativeInputAllowed 必须复用 geometry flags 且保留 owner policy");
-  Check(fushi_voice_hook::PublishLookupGeometryAdmission(
-            &h, fushi_voice_hook::kLookupGeometryAdmissionNativeOnly, false,
+  Check(my_comic_voice_hook::PublishLookupGeometryAdmission(
+            &h, my_comic_voice_hook::kLookupGeometryAdmissionNativeOnly, false,
             true) == native_input,
         "重复 NativeInputAllowed=true 必须幂等");
-  fushi_voice_hook::AtomicStoreShared32(
+  my_comic_voice_hook::AtomicStoreShared32(
       &h.lookup_geometry_admission_request_seq,
-      fushi_voice_hook::kLookupGeometryAdmissionWriteInProgress |
+      my_comic_voice_hook::kLookupGeometryAdmissionWriteInProgress |
           native_input);
-  Check(!fushi_voice_hook::ReadLookupGeometryAdmission(&h).valid,
+  Check(!my_comic_voice_hook::ReadLookupGeometryAdmission(&h).valid,
         "writer-held geometry admission 不得被读成 disable/半份 payload");
-  fushi_voice_hook::AtomicStoreShared32(
+  my_comic_voice_hook::AtomicStoreShared32(
       &h.lookup_geometry_admission_request_seq, native_input);
-  Check(fushi_voice_hook::PublishLookupGeometryAdmission(
+  Check(my_comic_voice_hook::PublishLookupGeometryAdmission(
             &h, 99u, true, false) == 0 &&
-            fushi_voice_hook::ReadLookupGeometryAdmission(&h).mode ==
-                fushi_voice_hook::kLookupGeometryAdmissionNativeOnly,
+            my_comic_voice_hook::ReadLookupGeometryAdmission(&h).mode ==
+                my_comic_voice_hook::kLookupGeometryAdmissionNativeOnly,
         "非法 admission mode 必须拒绝且不改稳定请求");
 }
 
 void TestV19ShieldPublicationAndVerifiedGate() {
   SharedHeader h = {};
-  const uint32_t request_seq = fushi_voice_hook::PublishLookupShieldRequest(
-      &h, fushi_voice_hook::kLookupShieldOwnerAttachedGlyph, 0x1234u, 9u,
-      fushi_voice_hook::kLookupShieldButtonLeft, false);
+  const uint32_t request_seq = my_comic_voice_hook::PublishLookupShieldRequest(
+      &h, my_comic_voice_hook::kLookupShieldOwnerAttachedGlyph, 0x1234u, 9u,
+      my_comic_voice_hook::kLookupShieldButtonLeft, false);
   Check(request_seq == 1u, "fresh shield request 必须从 seq=1 发布");
-  const auto request = fushi_voice_hook::ReadLookupShieldRequest(&h);
+  const auto request = my_comic_voice_hook::ReadLookupShieldRequest(&h);
   Check(request.valid && request.seq == request_seq &&
             request.owner_kind ==
-                fushi_voice_hook::kLookupShieldOwnerAttachedGlyph &&
+                my_comic_voice_hook::kLookupShieldOwnerAttachedGlyph &&
             request.target_hwnd == 0x1234u && request.transaction_id == 9u &&
             request.active_buttons ==
-                fushi_voice_hook::kLookupShieldButtonLeft &&
+                my_comic_voice_hook::kLookupShieldButtonLeft &&
             !request.allow_risk,
         "shield request payload/seq 必须 coherent round-trip");
 
-  fushi_voice_hook::AtomicStoreShared32(
+  my_comic_voice_hook::AtomicStoreShared32(
       &h.lookup_shield_request_seq,
-      request_seq | fushi_voice_hook::kLookupShieldRequestWriteInProgress);
-  Check(!fushi_voice_hook::ReadLookupShieldRequest(&h).valid,
+      request_seq | my_comic_voice_hook::kLookupShieldRequestWriteInProgress);
+  Check(!my_comic_voice_hook::ReadLookupShieldRequest(&h).valid,
         "writer-held shield payload 必须不可读；generic risk 路径不能把半份请求当 verified");
-  fushi_voice_hook::AtomicStoreShared32(&h.lookup_shield_request_seq,
+  my_comic_voice_hook::AtomicStoreShared32(&h.lookup_shield_request_seq,
                                         request_seq);
 
-  fushi_voice_hook::LookupShieldStatusPublication status;
+  my_comic_voice_hook::LookupShieldStatusPublication status;
   status.required_mask =
-      fushi_voice_hook::kLookupShieldSurfaceLowLevelMouse |
-      fushi_voice_hook::kLookupShieldSurfaceDirectInputImmediate;
+      my_comic_voice_hook::kLookupShieldSurfaceLowLevelMouse |
+      my_comic_voice_hook::kLookupShieldSurfaceDirectInputImmediate;
   status.ready_mask = status.required_mask;
   status.observed_mask = status.required_mask;
-  status.status_flags = fushi_voice_hook::kLookupShieldStatusVerified;
-  Check(fushi_voice_hook::PublishLookupShieldStatus(&h, request, status),
+  status.status_flags = my_comic_voice_hook::kLookupShieldStatusVerified;
+  Check(my_comic_voice_hook::PublishLookupShieldStatus(&h, request, status),
         "完整 ready 且无风险/故障时必须能确认状态");
   Check(h.lookup_shield_applied_seq == request_seq &&
             (h.lookup_shield_status_flags &
-             fushi_voice_hook::kLookupShieldStatusVerified) != 0,
+             my_comic_voice_hook::kLookupShieldStatusVerified) != 0,
         "verified 只能随 applied_seq 最后确认");
 
-  status.status_flags = fushi_voice_hook::kLookupShieldStatusVerified |
-                        fushi_voice_hook::kLookupShieldStatusRiskAllowed;
+  status.status_flags = my_comic_voice_hook::kLookupShieldStatusVerified |
+                        my_comic_voice_hook::kLookupShieldStatusRiskAllowed;
   const uint32_t explicit_risk =
-      fushi_voice_hook::NormalizeLookupShieldStatusFlags(request, status);
-  Check((explicit_risk & fushi_voice_hook::kLookupShieldStatusVerified) == 0 &&
-            (explicit_risk & fushi_voice_hook::kLookupShieldStatusPartial) != 0 &&
+      my_comic_voice_hook::NormalizeLookupShieldStatusFlags(request, status);
+  Check((explicit_risk & my_comic_voice_hook::kLookupShieldStatusVerified) == 0 &&
+            (explicit_risk & my_comic_voice_hook::kLookupShieldStatusPartial) != 0 &&
             (explicit_risk &
-             fushi_voice_hook::kLookupShieldStatusRiskAllowed) != 0,
+             my_comic_voice_hook::kLookupShieldStatusRiskAllowed) != 0,
         "显式 risk 状态同样不得与 verified 并存");
 
   const uint32_t mismatched_seq =
-      fushi_voice_hook::PublishLookupShieldRequest(
-          &h, fushi_voice_hook::kLookupShieldOwnerAttachedGlyph, 0x1234u,
-          91u, fushi_voice_hook::kLookupShieldButtonLeft, false);
-  const auto mismatched = fushi_voice_hook::ReadLookupShieldRequest(&h);
+      my_comic_voice_hook::PublishLookupShieldRequest(
+          &h, my_comic_voice_hook::kLookupShieldOwnerAttachedGlyph, 0x1234u,
+          91u, my_comic_voice_hook::kLookupShieldButtonLeft, false);
+  const auto mismatched = my_comic_voice_hook::ReadLookupShieldRequest(&h);
   status.ready_mask =
-      status.required_mask | fushi_voice_hook::kLookupShieldSurfaceRawInputData;
-  status.status_flags = fushi_voice_hook::kLookupShieldStatusVerified;
+      status.required_mask | my_comic_voice_hook::kLookupShieldSurfaceRawInputData;
+  status.status_flags = my_comic_voice_hook::kLookupShieldStatusVerified;
   Check(mismatched_seq == 2u &&
-            fushi_voice_hook::PublishLookupShieldStatus(&h, mismatched,
+            my_comic_voice_hook::PublishLookupShieldStatus(&h, mismatched,
                                                         status),
         "mismatched shield masks 仍需 ack");
   Check((h.lookup_shield_status_flags &
-         fushi_voice_hook::kLookupShieldStatusVerified) == 0 &&
+         my_comic_voice_hook::kLookupShieldStatusVerified) == 0 &&
             (h.lookup_shield_status_flags &
-             fushi_voice_hook::kLookupShieldStatusPartial) != 0,
+             my_comic_voice_hook::kLookupShieldStatusPartial) != 0,
         "required/ready 不完全相等时不得发布 verified");
 
-  const uint32_t risky_seq = fushi_voice_hook::PublishLookupShieldRequest(
-      &h, fushi_voice_hook::kLookupShieldOwnerAttachedGlyph, 0x1234u, 10u,
-      fushi_voice_hook::kLookupShieldButtonLeft, true);
-  const auto risky = fushi_voice_hook::ReadLookupShieldRequest(&h);
+  const uint32_t risky_seq = my_comic_voice_hook::PublishLookupShieldRequest(
+      &h, my_comic_voice_hook::kLookupShieldOwnerAttachedGlyph, 0x1234u, 10u,
+      my_comic_voice_hook::kLookupShieldButtonLeft, true);
+  const auto risky = my_comic_voice_hook::ReadLookupShieldRequest(&h);
   Check(risky_seq == 3u && risky.valid && risky.allow_risk,
         "风险授权必须形成新 request generation");
   status.ready_mask = status.required_mask;
   status.fault_mask = 0;
-  status.status_flags = fushi_voice_hook::kLookupShieldStatusVerified;
-  Check(fushi_voice_hook::PublishLookupShieldStatus(&h, risky, status),
+  status.status_flags = my_comic_voice_hook::kLookupShieldStatusVerified;
+  Check(my_comic_voice_hook::PublishLookupShieldStatus(&h, risky, status),
         "风险状态仍需 ack");
   Check((h.lookup_shield_status_flags &
-         fushi_voice_hook::kLookupShieldStatusVerified) == 0 &&
+         my_comic_voice_hook::kLookupShieldStatusVerified) == 0 &&
             (h.lookup_shield_status_flags &
-             fushi_voice_hook::kLookupShieldStatusPartial) != 0 &&
+             my_comic_voice_hook::kLookupShieldStatusPartial) != 0 &&
             (h.lookup_shield_status_flags &
-             fushi_voice_hook::kLookupShieldStatusRiskAllowed) != 0,
+             my_comic_voice_hook::kLookupShieldStatusRiskAllowed) != 0,
         "allowRisk 路径绝不能冒充 verified");
 
-  const uint32_t fault_seq = fushi_voice_hook::PublishLookupShieldRequest(
-      &h, fushi_voice_hook::kLookupShieldOwnerNativeGlyph, 0x1234u, 11u,
-      fushi_voice_hook::kLookupShieldButtonLeft, false);
-  const auto fault_request = fushi_voice_hook::ReadLookupShieldRequest(&h);
+  const uint32_t fault_seq = my_comic_voice_hook::PublishLookupShieldRequest(
+      &h, my_comic_voice_hook::kLookupShieldOwnerNativeGlyph, 0x1234u, 11u,
+      my_comic_voice_hook::kLookupShieldButtonLeft, false);
+  const auto fault_request = my_comic_voice_hook::ReadLookupShieldRequest(&h);
   status.fault_mask =
-      fushi_voice_hook::kLookupShieldSurfaceDirectInputImmediate;
-  status.status_flags = fushi_voice_hook::kLookupShieldStatusVerified;
-  Check(fault_seq == 4u && fushi_voice_hook::PublishLookupShieldStatus(
+      my_comic_voice_hook::kLookupShieldSurfaceDirectInputImmediate;
+  status.status_flags = my_comic_voice_hook::kLookupShieldStatusVerified;
+  Check(fault_seq == 4u && my_comic_voice_hook::PublishLookupShieldStatus(
                                 &h, fault_request, status),
         "fault 状态必须可确认");
   Check((h.lookup_shield_status_flags &
-         fushi_voice_hook::kLookupShieldStatusFaulted) != 0 &&
+         my_comic_voice_hook::kLookupShieldStatusFaulted) != 0 &&
             (h.lookup_shield_status_flags &
-             fushi_voice_hook::kLookupShieldStatusVerified) == 0,
+             my_comic_voice_hook::kLookupShieldStatusVerified) == 0,
         "任一 fault 面必须压过 verified");
 }
 
 void TestV25GameStreamInputPublication() {
   SharedHeader h = {};
-  const uint32_t seq = fushi_voice_hook::PublishGameStreamInputRequest(
-      &h, 0x5555u, 42u, fushi_voice_hook::kGameStreamInputButtonLeft, 123456u);
+  const uint32_t seq = my_comic_voice_hook::PublishGameStreamInputRequest(
+      &h, 0x5555u, 42u, my_comic_voice_hook::kGameStreamInputButtonLeft, 123456u);
   Check(seq == 1u, "game-stream input fresh request 必须从 seq=1 发布");
-  const auto request = fushi_voice_hook::ReadGameStreamInputRequest(&h);
+  const auto request = my_comic_voice_hook::ReadGameStreamInputRequest(&h);
   Check(request.valid && request.seq == seq && request.target_hwnd == 0x5555u &&
             request.transaction_id == 42u && request.deadline_tick_ms == 123456u &&
-            request.active_buttons == fushi_voice_hook::kGameStreamInputButtonLeft,
+            request.active_buttons == my_comic_voice_hook::kGameStreamInputButtonLeft,
         "game-stream input request payload/seq 必须 coherent round-trip");
-  fushi_voice_hook::AtomicStoreShared32(
+  my_comic_voice_hook::AtomicStoreShared32(
       &h.game_stream_input_request_seq,
-      seq | fushi_voice_hook::kGameStreamInputRequestWriteInProgress);
-  Check(!fushi_voice_hook::ReadGameStreamInputRequest(&h).valid,
+      seq | my_comic_voice_hook::kGameStreamInputRequestWriteInProgress);
+  Check(!my_comic_voice_hook::ReadGameStreamInputRequest(&h).valid,
         "writer-held game-stream input payload 必须不可读");
-  fushi_voice_hook::AtomicStoreShared32(&h.game_stream_input_request_seq, seq);
-  Check(fushi_voice_hook::PublishGameStreamInputStatus(
-            &h, request, fushi_voice_hook::kGameStreamInputStatusApplied,
-            fushi_voice_hook::kGameStreamInputButtonLeft),
+  my_comic_voice_hook::AtomicStoreShared32(&h.game_stream_input_request_seq, seq);
+  Check(my_comic_voice_hook::PublishGameStreamInputStatus(
+            &h, request, my_comic_voice_hook::kGameStreamInputStatusApplied,
+            my_comic_voice_hook::kGameStreamInputButtonLeft),
         "game-stream input 当前 request 必须能确认状态");
   const uint32_t first_status_seq = h.game_stream_input_status_seq;
   Check(h.game_stream_input_applied_seq == seq && first_status_seq != 0 &&
-            h.game_stream_input_status == fushi_voice_hook::kGameStreamInputStatusApplied &&
-            h.game_stream_input_observed_buttons == fushi_voice_hook::kGameStreamInputButtonLeft,
+            h.game_stream_input_status == my_comic_voice_hook::kGameStreamInputStatusApplied &&
+            h.game_stream_input_observed_buttons == my_comic_voice_hook::kGameStreamInputButtonLeft,
         "game-stream input applied_seq 必须最后确认");
-  Check(fushi_voice_hook::PublishGameStreamInputStatus(
-            &h, request, fushi_voice_hook::kGameStreamInputStatusExpired, 0u),
+  Check(my_comic_voice_hook::PublishGameStreamInputStatus(
+            &h, request, my_comic_voice_hook::kGameStreamInputStatusExpired, 0u),
         "同一 game-stream request 可发布后续状态");
   Check(h.game_stream_input_status_seq != first_status_seq &&
             h.game_stream_input_applied_seq == seq &&
-            h.game_stream_input_status == fushi_voice_hook::kGameStreamInputStatusExpired &&
+            h.game_stream_input_status == my_comic_voice_hook::kGameStreamInputStatusExpired &&
             h.game_stream_input_observed_buttons == 0,
         "game-stream status publication generation must advance");
 }
@@ -922,29 +922,29 @@ void TestV25GameStreamInputPublication() {
 void TestV19AttachedGeometryOwnershipSnapshot() {
   SharedHeader h = {};
   h.lookup_geometry_active_kind =
-      fushi_voice_hook::kLookupGeometryProviderAttachedCalibrated;
+      my_comic_voice_hook::kLookupGeometryProviderAttachedCalibrated;
   h.lookup_geometry_active_id =
-      fushi_voice_hook::kLookupGeometryProviderIdAttachedCalibrated;
-  h.lookup_geometry_status = fushi_voice_hook::kLookupGeometryStatusReady;
-  Check(fushi_voice_hook::LookupGeometryAttachedProviderOwns(&h),
+      my_comic_voice_hook::kLookupGeometryProviderIdAttachedCalibrated;
+  h.lookup_geometry_status = my_comic_voice_hook::kLookupGeometryStatusReady;
+  Check(my_comic_voice_hook::LookupGeometryAttachedProviderOwns(&h),
         "attached Ready 必须在首个 hit 前拥有 geometry");
 
-  h.lookup_geometry_status = fushi_voice_hook::kLookupGeometryStatusActive;
-  Check(!fushi_voice_hook::LookupGeometryAttachedProviderOwns(&h),
+  h.lookup_geometry_status = my_comic_voice_hook::kLookupGeometryStatusActive;
+  Check(!my_comic_voice_hook::LookupGeometryAttachedProviderOwns(&h),
         "attached Active 缺失 text/geometry generation 必须拒绝");
   h.lookup_geometry_text_generation = 7;
   h.lookup_geometry_generation = 9;
-  Check(fushi_voice_hook::LookupGeometryAttachedProviderOwns(&h),
+  Check(my_comic_voice_hook::LookupGeometryAttachedProviderOwns(&h),
         "完整 attached Active generation 必须可拥有 geometry");
 
   h.lookup_geometry_active_kind =
-      fushi_voice_hook::kLookupGeometryProviderRuntimeLayout;
+      my_comic_voice_hook::kLookupGeometryProviderRuntimeLayout;
   h.lookup_geometry_active_id =
-      fushi_voice_hook::kLookupGeometryProviderIdRenpy;
-  h.lookup_geometry_status = fushi_voice_hook::kLookupGeometryStatusReady;
+      my_comic_voice_hook::kLookupGeometryProviderIdRenpy;
+  h.lookup_geometry_status = my_comic_voice_hook::kLookupGeometryStatusReady;
   h.lookup_geometry_text_generation = 0;
   h.lookup_geometry_generation = 0;
-  Check(!fushi_voice_hook::LookupGeometryAttachedProviderOwns(&h),
+  Check(!my_comic_voice_hook::LookupGeometryAttachedProviderOwns(&h),
         "native provider 抢占后旧 attached snapshot 不得继续拥有点击");
 }
 
@@ -952,7 +952,7 @@ void TestV19AttachedGeometryOwnershipSnapshot() {
 void TestV19AdmissionIsPureAppendOverV17() {
   const size_t v17_end =
       offsetof(SharedHeader, hook_module_sha256) +
-      fushi_voice_hook::kHookModuleDigestChars;
+      my_comic_voice_hook::kHookModuleDigestChars;
   const size_t admission = offsetof(SharedHeader, lookup_admission);
   Check(admission >= v17_end,
         "v19 准入字段必须追加在 v17 摘要之后，不能插进既有布局");
@@ -973,7 +973,7 @@ void TestV19AdmissionIsPureAppendOverV17() {
   // 相对次序——插字段 / 改序都必须判红，只有继续在**最后**尾追加才允许。
   Check(offsetof(SharedHeader, lookup_layer_line_seq) ==
             (offsetof(SharedHeader, lookup_executable_sha256) +
-             fushi_voice_hook::kHookModuleDigestChars + 3u) /
+             my_comic_voice_hook::kHookModuleDigestChars + 3u) /
                 4u * 4u,
         "v22 层原点块必须紧接 v19 摘要，不得插进既有布局");
   const size_t layer0 = offsetof(SharedHeader, lookup_layer_line_seq);
@@ -1003,19 +1003,19 @@ void TestV19AdmissionIsPureAppendOverV17() {
   // 就成了没人守的自由区，而它恰恰是跨进程按 sizeof 现算基址的那个结构。
   Check(offsetof(SharedHeader, adapter_reports) ==
             ((offsetof(SharedHeader, lookup_layer_reserved) + sizeof(uint32_t) +
-              alignof(fushi_voice_hook::AdapterReportSlot) - 1u) /
-             alignof(fushi_voice_hook::AdapterReportSlot)) *
-                alignof(fushi_voice_hook::AdapterReportSlot),
+              alignof(my_comic_voice_hook::AdapterReportSlot) - 1u) /
+             alignof(my_comic_voice_hook::AdapterReportSlot)) *
+                alignof(my_comic_voice_hook::AdapterReportSlot),
         "v23 adapter 读数块必须紧接层原点块，不得插进既有布局");
-  Check(sizeof(fushi_voice_hook::AdapterReportSlot) ==
-            fushi_voice_hook::kAdapterReportIdChars + 8u,
+  Check(sizeof(my_comic_voice_hook::AdapterReportSlot) ==
+            my_comic_voice_hook::kAdapterReportIdChars + 8u,
         "AdapterReportSlot 布局变了：id + applicable/installed/reserved + flags");
-  Check(offsetof(fushi_voice_hook::AdapterReportSlot, id) == 0,
+  Check(offsetof(my_comic_voice_hook::AdapterReportSlot, id) == 0,
         "槽必须以自带的 id 开头——按注册顺序编号会在清单中间插行时整体错位且不报错");
   Check(offsetof(SharedHeader, adapter_report_count) ==
             offsetof(SharedHeader, adapter_reports) +
-                sizeof(fushi_voice_hook::AdapterReportSlot) *
-                    fushi_voice_hook::kAdapterReportSlots,
+                sizeof(my_comic_voice_hook::AdapterReportSlot) *
+                    my_comic_voice_hook::kAdapterReportSlots,
         "adapter_report_count 必须紧跟槽数组");
   Check(offsetof(SharedHeader, adapter_report_seq) ==
             offsetof(SharedHeader, adapter_report_count) + sizeof(uint32_t),
@@ -1059,9 +1059,9 @@ void TestAdapterReportRoundTrip() {
 
   auto make = [](const char* id, bool applicable, bool installed,
                  uint32_t flags) {
-    fushi_voice_hook::AdapterReportSlot slot = {};
+    my_comic_voice_hook::AdapterReportSlot slot = {};
     size_t n = 0;
-    while (id[n] != '\0' && n + 1 < fushi_voice_hook::kAdapterReportIdChars) {
+    while (id[n] != '\0' && n + 1 < my_comic_voice_hook::kAdapterReportIdChars) {
       slot.id[n] = id[n];
       ++n;
     }
@@ -1074,25 +1074,25 @@ void TestAdapterReportRoundTrip() {
 
   // (a) 从未上报过：读到 0 槽，且 seq==0。这必须与"上报了但一个都没认领"区分开——
   //     混在一起会让诊断在 helper 起来前的那几百毫秒稳定误报"没有 adapter"。
-  fushi_voice_hook::AdapterReportSlot out[fushi_voice_hook::kAdapterReportSlots] = {};
+  my_comic_voice_hook::AdapterReportSlot out[my_comic_voice_hook::kAdapterReportSlots] = {};
   uint32_t seq = 0xffffffffu;
-  Check(fushi_voice_hook::ReadAdapterReports(
-            h, out, fushi_voice_hook::kAdapterReportSlots, &seq) == 0,
+  Check(my_comic_voice_hook::ReadAdapterReports(
+            h, out, my_comic_voice_hook::kAdapterReportSlots, &seq) == 0,
         "未上报时必须读到 0 槽");
   Check(seq == 0, "未上报时 seq 必须是 0");
-  Check(!fushi_voice_hook::AdapterReportsClaimEngine(h, "sgre"),
+  Check(!my_comic_voice_hook::AdapterReportsClaimEngine(h, "sgre"),
         "未上报时引擎身份必须是「还不知道」=false，不能猜成已认领");
 
   // (b) 正常往返：id / applicable / installed / flags 都要原样回来，且**按槽对号**。
-  fushi_voice_hook::AdapterReportSlot in[3] = {
+  my_comic_voice_hook::AdapterReportSlot in[3] = {
       make("cmvs", true, true, 0x11u),
       make("process_loopback", true, false, 0x22u),
       make("sgre", false, false, 0x33u),
   };
-  Check(fushi_voice_hook::PublishAdapterReports(h, in, 3) == 3,
+  Check(my_comic_voice_hook::PublishAdapterReports(h, in, 3) == 3,
         "发布 3 槽必须返回 3");
-  Check(fushi_voice_hook::ReadAdapterReports(
-            h, out, fushi_voice_hook::kAdapterReportSlots, &seq) == 3,
+  Check(my_comic_voice_hook::ReadAdapterReports(
+            h, out, my_comic_voice_hook::kAdapterReportSlots, &seq) == 3,
         "必须读回 3 槽");
   Check(seq == 1, "首次发布后 seq 必须是 1");
   Check(strcmp(out[0].id, "cmvs") == 0 && out[0].applicable == 1 &&
@@ -1105,38 +1105,38 @@ void TestAdapterReportRoundTrip() {
         "probe 为假的行同样要如实回来");
   // 引擎身份查询只认 applicable 的同名槽：sgre 那行 probe 为假 → 不算认领；
   // 别的引擎 applicable 也不能被当成 sgre；前缀相同的 id 不得误配。
-  Check(!fushi_voice_hook::AdapterReportsClaimEngine(h, "sgre"),
+  Check(!my_comic_voice_hook::AdapterReportsClaimEngine(h, "sgre"),
         "probe 为假的 sgre 槽不得被当成引擎已认领");
-  Check(fushi_voice_hook::AdapterReportsClaimEngine(h, "cmvs"),
+  Check(my_comic_voice_hook::AdapterReportsClaimEngine(h, "cmvs"),
         "probe 为真的 cmvs 槽必须被认出");
-  Check(!fushi_voice_hook::AdapterReportsClaimEngine(h, "cmv"),
+  Check(!my_comic_voice_hook::AdapterReportsClaimEngine(h, "cmv"),
         "id 必须整串相等，前缀不算");
-  Check(!fushi_voice_hook::AdapterReportsClaimEngine(h, "") &&
-            !fushi_voice_hook::AdapterReportsClaimEngine(h, nullptr) &&
-            !fushi_voice_hook::AdapterReportsClaimEngine(nullptr, "sgre"),
+  Check(!my_comic_voice_hook::AdapterReportsClaimEngine(h, "") &&
+            !my_comic_voice_hook::AdapterReportsClaimEngine(h, nullptr) &&
+            !my_comic_voice_hook::AdapterReportsClaimEngine(nullptr, "sgre"),
         "空 id / 空 header 必须是 false");
   {
-    fushi_voice_hook::AdapterReportSlot claimed[2] = {
+    my_comic_voice_hook::AdapterReportSlot claimed[2] = {
         make("siglus", false, false, 0u),
         make("sgre", true, true, 0u),
     };
-    Check(fushi_voice_hook::PublishAdapterReports(h, claimed, 2) == 2,
+    Check(my_comic_voice_hook::PublishAdapterReports(h, claimed, 2) == 2,
           "发布 sgre 认领必须成功");
-    Check(fushi_voice_hook::AdapterReportsClaimEngine(h, "sgre"),
+    Check(my_comic_voice_hook::AdapterReportsClaimEngine(h, "sgre"),
           "probe 为真的 sgre 槽必须被认出（不看 exe 哈希/文件名）");
-    Check(!fushi_voice_hook::AdapterReportsClaimEngine(h, "siglus"),
+    Check(!my_comic_voice_hook::AdapterReportsClaimEngine(h, "siglus"),
           "同一份报告里 probe 为假的引擎仍是 false");
-    Check(fushi_voice_hook::PublishAdapterReports(h, in, 3) == 3,
+    Check(my_comic_voice_hook::PublishAdapterReports(h, in, 3) == 3,
           "还原为原 3 槽");
   }
 
   // (c) adapter 数变少（换了个构建）时，尾部旧槽必须被清掉。不清就会读到上一次的
   //     probe/installed，而那一行看着完全正常——这正是最难发现的错。
-  fushi_voice_hook::AdapterReportSlot fewer[1] = {make("aos_sfa", true, false, 0u)};
-  Check(fushi_voice_hook::PublishAdapterReports(h, fewer, 1) == 1,
+  my_comic_voice_hook::AdapterReportSlot fewer[1] = {make("aos_sfa", true, false, 0u)};
+  Check(my_comic_voice_hook::PublishAdapterReports(h, fewer, 1) == 1,
         "发布 1 槽必须返回 1");
-  Check(fushi_voice_hook::ReadAdapterReports(
-            h, out, fushi_voice_hook::kAdapterReportSlots, &seq) == 1,
+  Check(my_comic_voice_hook::ReadAdapterReports(
+            h, out, my_comic_voice_hook::kAdapterReportSlots, &seq) == 1,
         "槽数必须跟着变少");
   Check(h->adapter_reports[1].id[0] == '\0' &&
             h->adapter_reports[1].applicable == 0 &&
@@ -1145,28 +1145,28 @@ void TestAdapterReportRoundTrip() {
 
   // (d) id 超长必须截断且仍带 NUL：id 由各 adapter 自己给，长度不受写侧文件控制，
   //     读侧绝不能因此读出界。
-  char long_id[fushi_voice_hook::kAdapterReportIdChars + 16];
+  char long_id[my_comic_voice_hook::kAdapterReportIdChars + 16];
   for (size_t i = 0; i + 1 < sizeof(long_id); ++i) long_id[i] = 'x';
   long_id[sizeof(long_id) - 1] = '\0';
-  fushi_voice_hook::AdapterReportSlot huge[1] = {make(long_id, true, true, 0u)};
-  Check(fushi_voice_hook::PublishAdapterReports(h, huge, 1) == 1, "超长 id 也要发布成功");
-  Check(fushi_voice_hook::ReadAdapterReports(
-            h, out, fushi_voice_hook::kAdapterReportSlots, &seq) == 1,
+  my_comic_voice_hook::AdapterReportSlot huge[1] = {make(long_id, true, true, 0u)};
+  Check(my_comic_voice_hook::PublishAdapterReports(h, huge, 1) == 1, "超长 id 也要发布成功");
+  Check(my_comic_voice_hook::ReadAdapterReports(
+            h, out, my_comic_voice_hook::kAdapterReportSlots, &seq) == 1,
         "超长 id 仍读回 1 槽");
-  Check(strlen(out[0].id) == fushi_voice_hook::kAdapterReportIdChars - 1,
+  Check(strlen(out[0].id) == my_comic_voice_hook::kAdapterReportIdChars - 1,
         "超长 id 必须截断到槽宽减一");
 
   // (e) 槽数超过容量必须被夹住，绝不越界写。
-  fushi_voice_hook::AdapterReportSlot many[fushi_voice_hook::kAdapterReportSlots + 4] = {};
+  my_comic_voice_hook::AdapterReportSlot many[my_comic_voice_hook::kAdapterReportSlots + 4] = {};
   for (size_t i = 0; i < sizeof(many) / sizeof(many[0]); ++i) many[i] = make("x", true, false, 0u);
-  Check(fushi_voice_hook::PublishAdapterReports(
+  Check(my_comic_voice_hook::PublishAdapterReports(
             h, many, sizeof(many) / sizeof(many[0])) ==
-            fushi_voice_hook::kAdapterReportSlots,
+            my_comic_voice_hook::kAdapterReportSlots,
         "超过槽数必须被夹到 kAdapterReportSlots");
 
   // (f) 读侧容量小于已发布槽数时按容量截断，不得越界写调用方缓冲。
-  fushi_voice_hook::AdapterReportSlot small[2] = {};
-  Check(fushi_voice_hook::ReadAdapterReports(h, small, 2, &seq) == 2,
+  my_comic_voice_hook::AdapterReportSlot small[2] = {};
+  Check(my_comic_voice_hook::ReadAdapterReports(h, small, 2, &seq) == 2,
         "读侧必须按自己的容量截断");
 }
 
@@ -1177,60 +1177,60 @@ void TestAdmissionRoundTrip() {
   // (a) 从未上报过（seq==0）必须读成 Unknown。绝不能读成 EngineUnsupported——
   //     helper 刚起来的那几百毫秒里，"还不知道"被当成"不支持"就是稳定误报。
   uint32_t seq = 0xffffffffu;
-  fushi_voice_hook::LookupAdmissionReport read =
-      fushi_voice_hook::ReadLookupAdmission(h, &seq);
+  my_comic_voice_hook::LookupAdmissionReport read =
+      my_comic_voice_hook::ReadLookupAdmission(h, &seq);
   Check(seq == 0, "未上报时 seq 必须是 0");
-  Check(read.state == fushi_voice_hook::kLookupAdmissionUnknown,
+  Check(read.state == my_comic_voice_hook::kLookupAdmissionUnknown,
         "未上报必须读成 Unknown，不得读成 EngineUnsupported");
 
   // (b) 正常往返：状态 + 摘要都要原样回来。
-  fushi_voice_hook::LookupAdmissionReport rejected;
-  rejected.state = fushi_voice_hook::kLookupAdmissionIdentityRejected;
+  my_comic_voice_hook::LookupAdmissionReport rejected;
+  rejected.state = my_comic_voice_hook::kLookupAdmissionIdentityRejected;
   const char* digest =
       "005e71107ed70e662c41cb526879cdcf0b9486e067c0e5a306308688c17409ed";
   memcpy(rejected.executable_sha256, digest, strlen(digest) + 1);
-  Check(fushi_voice_hook::PublishLookupAdmission(h, rejected),
+  Check(my_comic_voice_hook::PublishLookupAdmission(h, rejected),
         "首次发布必须返回 true（内容确实变了）");
-  read = fushi_voice_hook::ReadLookupAdmission(h, &seq);
+  read = my_comic_voice_hook::ReadLookupAdmission(h, &seq);
   Check(seq == 1, "首次发布后 seq 必须是 1");
-  Check(read.state == fushi_voice_hook::kLookupAdmissionIdentityRejected,
+  Check(read.state == my_comic_voice_hook::kLookupAdmissionIdentityRejected,
         "状态必须原样回来");
   Check(strcmp(read.executable_sha256, digest) == 0,
         "exe 摘要必须原样回来——用户就是靠它报版本的");
 
   // (c) 幂等：内容没变时不得推进 seq。registry 每 16ms Poll 一次，无脑推 seq 会让
   //     host 每轮都当成新事件刷 UI。
-  Check(!fushi_voice_hook::PublishLookupAdmission(h, rejected),
+  Check(!my_comic_voice_hook::PublishLookupAdmission(h, rejected),
         "内容未变时必须返回 false");
-  fushi_voice_hook::ReadLookupAdmission(h, &seq);
+  my_comic_voice_hook::ReadLookupAdmission(h, &seq);
   Check(seq == 1, "内容未变时 seq 不得推进");
 
   // (d) 状态变化必须推进 seq。
-  fushi_voice_hook::LookupAdmissionReport installed;
-  installed.state = fushi_voice_hook::kLookupAdmissionSensorInstalled;
-  Check(fushi_voice_hook::PublishLookupAdmission(h, installed),
+  my_comic_voice_hook::LookupAdmissionReport installed;
+  installed.state = my_comic_voice_hook::kLookupAdmissionSensorInstalled;
+  Check(my_comic_voice_hook::PublishLookupAdmission(h, installed),
         "状态变化必须返回 true");
-  read = fushi_voice_hook::ReadLookupAdmission(h, &seq);
+  read = my_comic_voice_hook::ReadLookupAdmission(h, &seq);
   Check(seq == 2, "状态变化必须推进 seq");
-  Check(read.state == fushi_voice_hook::kLookupAdmissionSensorInstalled,
+  Check(read.state == my_comic_voice_hook::kLookupAdmissionSensorInstalled,
         "新状态必须生效");
   Check(read.executable_sha256[0] == '\0',
         "装上之后不再带摘要——那是给身份被拒的用户看的");
 
   // (e) 本构建不认识的状态值必须落回 Unknown，绝不猜。写侧可能是更新的 helper。
-  fushi_voice_hook::AtomicStoreShared32(&h->lookup_admission, 99u);
-  read = fushi_voice_hook::ReadLookupAdmission(h, &seq);
-  Check(read.state == fushi_voice_hook::kLookupAdmissionUnknown,
+  my_comic_voice_hook::AtomicStoreShared32(&h->lookup_admission, 99u);
+  read = my_comic_voice_hook::ReadLookupAdmission(h, &seq);
+  Check(read.state == my_comic_voice_hook::kLookupAdmissionUnknown,
         "未知状态值必须落回 Unknown");
 
   // (f) 摘要字段全是非 NUL 字节时读侧必须有界收尾，不得越界读。
-  fushi_voice_hook::AtomicStoreShared32(
-      &h->lookup_admission, fushi_voice_hook::kLookupAdmissionIdentityRejected);
+  my_comic_voice_hook::AtomicStoreShared32(
+      &h->lookup_admission, my_comic_voice_hook::kLookupAdmissionIdentityRejected);
   memset(const_cast<char*>(h->lookup_executable_sha256), 'a',
-         fushi_voice_hook::kHookModuleDigestChars);
-  read = fushi_voice_hook::ReadLookupAdmission(h, &seq);
+         my_comic_voice_hook::kHookModuleDigestChars);
+  read = my_comic_voice_hook::ReadLookupAdmission(h, &seq);
   Check(strlen(read.executable_sha256) ==
-            fushi_voice_hook::kHookModuleDigestChars - 1,
+            my_comic_voice_hook::kHookModuleDigestChars - 1,
         "无 NUL 的摘要必须被有界截断，不得越界");
 }
 
@@ -1240,18 +1240,18 @@ void TestSha256HexFormatting() {
                               0x2c, 0x41, 0xcb, 0x52, 0x68, 0x79, 0xcd, 0xcf,
                               0x0b, 0x94, 0x86, 0xe0, 0x67, 0xc0, 0xe5, 0xa3,
                               0x06, 0x30, 0x86, 0x88, 0xc1, 0x74, 0x09, 0xed};
-  char out[fushi_voice_hook::kHookModuleDigestChars] = {};
-  fushi_voice_hook::FormatSha256Hex(digest, sizeof(digest), out, sizeof(out));
+  char out[my_comic_voice_hook::kHookModuleDigestChars] = {};
+  my_comic_voice_hook::FormatSha256Hex(digest, sizeof(digest), out, sizeof(out));
   Check(strcmp(out,
                "005e71107ed70e662c41cb526879cdcf0b9486e067c0e5a306308688c17409ed") == 0,
         "摘要必须格式化成小写十六进制，前导零不得吞掉");
   // 缓冲不够时必须给空串而不是截断的半个摘要——半个摘要比没有更糟，用户会照着报错版本。
   char small[8] = {'x'};
-  fushi_voice_hook::FormatSha256Hex(digest, sizeof(digest), small, sizeof(small));
+  my_comic_voice_hook::FormatSha256Hex(digest, sizeof(digest), small, sizeof(small));
   Check(small[0] == '\0', "缓冲不足必须留空串，不得输出截断摘要");
   // 长度不对的摘要一律拒绝。
-  char out2[fushi_voice_hook::kHookModuleDigestChars] = {'x'};
-  fushi_voice_hook::FormatSha256Hex(digest, 16, out2, sizeof(out2));
+  char out2[my_comic_voice_hook::kHookModuleDigestChars] = {'x'};
+  my_comic_voice_hook::FormatSha256Hex(digest, 16, out2, sizeof(out2));
   Check(out2[0] == '\0', "非 32 字节摘要必须拒绝");
 }
 
@@ -1282,22 +1282,22 @@ void TestHeaderMirrorsCompileTimeConstants() {
   Check(sizeof(LookupFrame) % 8 == 0, "帧结构 8 对齐");
   Check(sizeof(LookupInputSlot) % 8 == 0, "输入槽结构 8 对齐");
   Check(sizeof(LookupInputSlot) == 32, "输入槽 ABI 尺寸保持 32 字节");
-  Check(fushi_voice_hook::kLookupInputDismissOutside == 5,
+  Check(my_comic_voice_hook::kLookupInputDismissOutside == 5,
         "位图卡外关闭控制 kind 固定为 5");
-  Check(fushi_voice_hook::kLookupInputVirtualKeyLeftButton == 0x0001u,
+  Check(my_comic_voice_hook::kLookupInputVirtualKeyLeftButton == 0x0001u,
         "输入 keys 的 bit0 固定表示 WebView2 左键");
-  Check(fushi_voice_hook::kLookupInputVirtualKeyShift == 0x0004u,
+  Check(my_comic_voice_hook::kLookupInputVirtualKeyShift == 0x0004u,
         "输入 keys 的 Shift 固定为 WebView2 bit2，不得压成 bit0");
-  Check(fushi_voice_hook::kLookupInputVirtualKeyControl == 0x0008u,
+  Check(my_comic_voice_hook::kLookupInputVirtualKeyControl == 0x0008u,
         "输入 keys 的 Control 固定为 WebView2 bit3");
-  Check(fushi_voice_hook::IsLookupCardCoordinateSpaceResolved(
-            fushi_voice_hook::kLookupCoordinateSpaceClientPhysicalPixels) &&
-            fushi_voice_hook::IsLookupCardCoordinateSpaceResolved(
-            fushi_voice_hook::kLookupCoordinateSpacePrimaryLayer) &&
-            !fushi_voice_hook::IsLookupCardCoordinateSpaceResolved(
-                fushi_voice_hook::kLookupCoordinateSpaceDesignSurface) &&
-            !fushi_voice_hook::IsLookupCardCoordinateSpaceResolved(
-                fushi_voice_hook::kLookupCoordinateSpaceLayoutLocal),
+  Check(my_comic_voice_hook::IsLookupCardCoordinateSpaceResolved(
+            my_comic_voice_hook::kLookupCoordinateSpaceClientPhysicalPixels) &&
+            my_comic_voice_hook::IsLookupCardCoordinateSpaceResolved(
+            my_comic_voice_hook::kLookupCoordinateSpacePrimaryLayer) &&
+            !my_comic_voice_hook::IsLookupCardCoordinateSpaceResolved(
+                my_comic_voice_hook::kLookupCoordinateSpaceDesignSurface) &&
+            !my_comic_voice_hook::IsLookupCardCoordinateSpaceResolved(
+                my_comic_voice_hook::kLookupCoordinateSpaceLayoutLocal),
         "client/primaryLayer 有完整 transform；design/layout-local 必须拒绝");
 }
 

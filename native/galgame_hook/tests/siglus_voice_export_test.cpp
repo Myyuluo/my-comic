@@ -14,7 +14,7 @@
 #include "voice_resource_filename.h"
 
 namespace {
-using namespace fushi_voice_hook::siglus;
+using namespace my_comic_voice_hook::siglus;
 using Status = VoiceBindingStatus;
 struct SiglusVoiceTask {
   uint64_t tick_ms = 0, offset = 0, text_event_id = 0, archive_revision = 0;
@@ -22,7 +22,7 @@ struct SiglusVoiceTask {
   bool proved_source = false, exported = false;
   wchar_t path[520] = {};
 };
-fushi_voice_hook::SharedHeader header{};
+my_comic_voice_hook::SharedHeader header{};
 auto* g_header = &header;
 constexpr uint32_t kDiagSiglusVoiceDumped = 0x80000000u;
 bool message_installed = true, source_installed = true;
@@ -140,12 +140,12 @@ void Reset() {
 }
 bool Captured() {
   return (header.reserved_luna & kDiagSiglusVoiceDumped) != 0 ||
-      (header.hook_diagnostics & fushi_voice_hook::kDiagVisualArtsOvkCaptured) != 0;
+      (header.hook_diagnostics & my_comic_voice_hook::kDiagVisualArtsOvkCaptured) != 0;
 }
 std::wstring ExportPath(const std::wstring& root, uint64_t tick, uint64_t seq) {
   // Literal expected shape deliberately does not call the production builder.
-  return root + L"\\fushi_gal_voice\\" + std::to_wstring(tick) +
-      L"_fushi_textseq" + std::to_wstring(seq) + L"_z0101.ovk_125.ogg";
+  return root + L"\\my_comic_gal_voice\\" + std::to_wstring(tick) +
+      L"_my_comic_textseq" + std::to_wstring(seq) + L"_z0101.ovk_125.ogg";
 }
 void CheckAndRemoveOutput(const std::wstring& path) {
   HANDLE file = ::CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ,
@@ -189,7 +189,7 @@ void TestRejectionAndArrival(const std::wstring& source, const std::wstring& roo
     ProcessSiglusMessageVoiceBindings();
     assert(Captured() && output_attempts == 1);
     assert((header.reserved_luna & kDiagSiglusVoiceDumped) != 0);
-    assert((header.hook_diagnostics & fushi_voice_hook::kDiagVisualArtsOvkCaptured) != 0);
+    assert((header.hook_diagnostics & my_comic_voice_hook::kDiagVisualArtsOvkCaptured) != 0);
     CheckAndRemoveOutput(ExportPath(root, 5000, 7));
     VoiceBinding binding;
     assert(g_siglus_voice_bindings.GetBinding(7, &binding) == Status::kStaleEvent);
@@ -298,7 +298,7 @@ int main() {
   TestSourceFailureAndDigest(source);
   ShutdownSiglusMessageVoice();
   assert(DeleteFileW(source.c_str()));
-  assert(RemoveDirectoryW((root + L"\\fushi_gal_voice").c_str()));
+  assert(RemoveDirectoryW((root + L"\\my_comic_gal_voice").c_str()));
   assert(RemoveDirectoryW(root.c_str()));
   assert(SetEnvironmentVariableW(L"TMP", tmp_chars == 0 ? nullptr : original_tmp));
   std::puts("siglus_voice_export_test: PASS");

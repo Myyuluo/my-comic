@@ -8,7 +8,7 @@
 #include "../hook/adapters/leaf_aquaplus_profile.h"
 
 int main() {
-  using namespace fushi_voice_hook;
+  using namespace my_comic_voice_hook;
   const auto &profile = kWhiteAlbum2LeafAquaplusProfile;
   assert(profile.d3d9_device_pointer_rva == 0x734430u);
   assert(profile.stack_cookie_rva == 0x0d1630u);

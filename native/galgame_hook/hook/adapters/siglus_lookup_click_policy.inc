@@ -60,10 +60,10 @@ SHORT FilterSiglusLookupLeftButtonSample(SHORT raw, uintptr_t return_address,
     // physical state at several other callsites, so those callers must be
     // filtered before the exact lookup-poller gate.  Otherwise a click can be
     // handled by WebView and still advance the game in the same frame.
-    return fushi_voice_hook::FilterSiglusLookupGetKeyState(
+    return my_comic_voice_hook::FilterSiglusLookupGetKeyState(
         raw, popup_shield || lookup_press_latched);
   }
-  SetSiglusLookupDiag(fushi_voice_hook::kLookupDiagSiglusGetKeyStateObserved);
+  SetSiglusLookupDiag(my_comic_voice_hook::kLookupDiagSiglusGetKeyStateObserved);
   if (IsSiglusLookupMessageTransactionProfile()) {
     return FilterSiglusLookupMessageTransactionSample(raw, popup_shield,
         direct_shield, bitmap_popup_visible, published_game);
@@ -88,7 +88,7 @@ SHORT FilterSiglusLookupLeftButtonSample(SHORT raw, uintptr_t return_address,
   // Freeze only scalar pending metadata before the existing lifecycle reset.
   // A completion record is emitted only if this owned up never reaches Queue.
   const bool owned_up = !button_down && g_siglus_lookup_click_sample_state.owner ==
-      fushi_voice_hook::SiglusLookupClickOwner::kLookup;
+      my_comic_voice_hook::SiglusLookupClickOwner::kLookup;
   SiglusLookupPressDiagnostic completion;
   if (owned_up) {
     completion.tick = GetTickCount64();
@@ -119,7 +119,7 @@ SHORT FilterSiglusLookupLeftButtonSample(SHORT raw, uintptr_t return_address,
   if (button_down) CancelSiglusLookupMessageTap();
   if (!runtime_enabled && !popup_shield && !lookup_press_latched &&
       g_siglus_lookup_click_sample_state.owner ==
-          fushi_voice_hook::SiglusLookupClickOwner::kIdle) {
+          my_comic_voice_hook::SiglusLookupClickOwner::kIdle) {
     if (observed != nullptr) {
       diagnostic.reason = SiglusLookupPressReason::kRuntimeDisabled;
       RecordSiglusLookupPressDiagnostic(diagnostic);
@@ -134,14 +134,14 @@ SHORT FilterSiglusLookupLeftButtonSample(SHORT raw, uintptr_t return_address,
   const bool fresh_down = button_down &&
                           g_siglus_lookup_click_sample_state.synchronized &&
                           g_siglus_lookup_click_sample_state.owner ==
-                              fushi_voice_hook::SiglusLookupClickOwner::kIdle;
+                              my_comic_voice_hook::SiglusLookupClickOwner::kIdle;
   HWND game = published_game;
   if (game == nullptr || !IsWindow(game))
     game = FindGameMainWindow();
   POINT pointer = {};
   const bool pointer_valid = !fresh_down || GetCursorPos(&pointer) != FALSE;
   SiglusLookupPayload pressed_payload;
-  uint16_t hit_index = fushi_voice_hook::kSiglusLookupNoGlyph;
+  uint16_t hit_index = my_comic_voice_hook::kSiglusLookupNoGlyph;
   bool hit = false;
   if (observed != nullptr) {
     diagnostic.sample_owner = static_cast<uint32_t>(g_siglus_lookup_click_sample_state.owner);
@@ -160,10 +160,10 @@ SHORT FilterSiglusLookupLeftButtonSample(SHORT raw, uintptr_t return_address,
   const bool native_input_allowed = view_allowed &&
       (fresh_down || (!button_down &&
           g_siglus_lookup_click_sample_state.owner ==
-              fushi_voice_hook::SiglusLookupClickOwner::kLookup)) &&
-      fushi_voice_hook::g_geometry_provider_registry.NativeInputAllowed(
-          g_header, fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-          fushi_voice_hook::kLookupGeometryProviderIdSiglus);
+              my_comic_voice_hook::SiglusLookupClickOwner::kLookup)) &&
+      my_comic_voice_hook::g_geometry_provider_registry.NativeInputAllowed(
+          g_header, my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+          my_comic_voice_hook::kLookupGeometryProviderIdSiglus);
   if (observed != nullptr && fresh_down) {
     diagnostic.reason = !runtime_enabled ? SiglusLookupPressReason::kRuntimeDisabled
         : !view_allowed ? SiglusLookupPressReason::kLiveViewRejected
@@ -178,9 +178,9 @@ SHORT FilterSiglusLookupLeftButtonSample(SHORT raw, uintptr_t return_address,
         BuildSiglusLookupPayloadAtPress(g_siglus_lookup_click_read_target, game,
                                         pointer, &pressed_payload, &hit_index, observed);
   }
-  const auto decision = fushi_voice_hook::AdvanceSiglusLookupClickSample(
+  const auto decision = my_comic_voice_hook::AdvanceSiglusLookupClickSample(
       native_input_allowed, button_down, popup_shield,
-      hit ? hit_index : fushi_voice_hook::kSiglusLookupNoGlyph,
+      hit ? hit_index : my_comic_voice_hook::kSiglusLookupNoGlyph,
       &g_siglus_lookup_click_sample_state);
   if (observed != nullptr) {
     diagnostic.flags |= decision.consume ? 8u : 0u;
@@ -233,7 +233,7 @@ SHORT FilterSiglusLookupLeftButtonSample(SHORT raw, uintptr_t return_address,
     g_siglus_lookup_left_button_filter_latched.store(true,
                                                      std::memory_order_release);
   }
-  const SHORT filtered = fushi_voice_hook::FilterSiglusLookupGetKeyState(
+  const SHORT filtered = my_comic_voice_hook::FilterSiglusLookupGetKeyState(
       raw, decision.consume || popup_shield || lookup_press_latched);
   if (!button_down) {
     // Keep the latch through the exact poller's up sample itself, then release
@@ -256,9 +256,9 @@ bool ConsumeSiglusLookupInputMessage(UINT message, LPARAM lparam,
   }
 
   const bool is_down =
-      message == fushi_voice_hook::kSiglusLookupWmLeftButtonDown ||
-      message == fushi_voice_hook::kSiglusLookupWmLeftButtonDoubleClick;
-  const bool is_up = message == fushi_voice_hook::kSiglusLookupWmLeftButtonUp;
+      message == my_comic_voice_hook::kSiglusLookupWmLeftButtonDown ||
+      message == my_comic_voice_hook::kSiglusLookupWmLeftButtonDoubleClick;
+  const bool is_up = message == my_comic_voice_hook::kSiglusLookupWmLeftButtonUp;
   const bool message_transaction = IsSiglusLookupMessageTransactionProfile();
   if (!is_down && !is_up && !message_transaction) {
     return false;
@@ -290,9 +290,9 @@ bool ConsumeSiglusLookupInputMessage(UINT message, LPARAM lparam,
   const bool native_input_allowed = is_down && !popup_shield &&
       (runtime_enabled = g_siglus_lookup_click_runtime_enabled.load(std::memory_order_acquire)) &&
       (view_allowed = SiglusLookupViewAllowsInput(game)) &&
-      fushi_voice_hook::g_geometry_provider_registry.NativeInputAllowed(
-          g_header, fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-          fushi_voice_hook::kLookupGeometryProviderIdSiglus);
+      my_comic_voice_hook::g_geometry_provider_registry.NativeInputAllowed(
+          g_header, my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+          my_comic_voice_hook::kLookupGeometryProviderIdSiglus);
   if (observed != nullptr) {
     diagnostic.flags = (runtime_enabled ? 1u : 0u) | (native_input_allowed ? 4u : 0u);
     diagnostic.reason = !runtime_enabled ? SiglusLookupPressReason::kRuntimeDisabled
@@ -303,7 +303,7 @@ bool ConsumeSiglusLookupInputMessage(UINT message, LPARAM lparam,
     POINT screen_point = {GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)};
     SiglusLookupClickTarget target;
     SiglusLookupPayload payload;
-    uint16_t glyph_index = fushi_voice_hook::kSiglusLookupNoGlyph;
+    uint16_t glyph_index = my_comic_voice_hook::kSiglusLookupNoGlyph;
     const bool screen_valid = ClientToScreen(game, &screen_point) != FALSE;
     if (observed != nullptr) {
       diagnostic.screen_x = screen_point.x;
@@ -324,7 +324,7 @@ bool ConsumeSiglusLookupInputMessage(UINT message, LPARAM lparam,
 
   const bool latched = g_siglus_lookup_message_left_button_latched.load(
       std::memory_order_acquire);
-  const auto decision = fushi_voice_hook::DecideSiglusLookupMouseMessage(
+  const auto decision = my_comic_voice_hook::DecideSiglusLookupMouseMessage(
       native_input_allowed, static_cast<uint32_t>(message), popup_shield,
       glyph_hit, latched);
   if (observed != nullptr) {
@@ -348,9 +348,9 @@ bool ConsumeSiglusLookupInputMessage(UINT message, LPARAM lparam,
         game != nullptr && GetForegroundWindow() == game &&
         tap.game_window == reinterpret_cast<uintptr_t>(game) &&
         SiglusLookupViewAllowsInput(game) &&
-        fushi_voice_hook::g_geometry_provider_registry.NativeInputAllowed(
-            g_header, fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-            fushi_voice_hook::kLookupGeometryProviderIdSiglus) &&
+        my_comic_voice_hook::g_geometry_provider_registry.NativeInputAllowed(
+            g_header, my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+            my_comic_voice_hook::kLookupGeometryProviderIdSiglus) &&
         SiglusLookupPayloadMatchesPublishedTarget(tap)) {
       QueueSiglusLookupClickSubmit(tap);
     }

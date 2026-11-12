@@ -9,13 +9,13 @@
    靠跑次数根本定位不了。Ren'Py 这边 Layout / Render / layout_cache 同样全部无锁。
 
 2. **`.inc` 里一行 `#include` 都不能有。** 它被 include 进 renpy_adapter.inc，而后者又在
-   dll_main.cpp 的匿名命名空间内部展开；头文件里的 `namespace fushi_voice_hook` 会在匿名
-   命名空间里再开一个同名嵌套命名空间，把真正的 `::fushi_voice_hook` 整个遮住 —— 症状是
+   dll_main.cpp 的匿名命名空间内部展开；头文件里的 `namespace my_comic_voice_hook` 会在匿名
+   命名空间里再开一个同名嵌套命名空间，把真正的 `::my_comic_voice_hook` 整个遮住 —— 症状是
    **之后每个 adapter 都报错**，一条都不指向肇事文件。（这个坑在通用呈现器上真踩过一次。）
 
 3. **坐标换算不得只认 GLDraw。** 真机实测：软件渲染器 `SWDraw` 上没有 `untranslate_mouse`
    （AttributeError），必须有降级路径。所以 bootstrap 里出现 `untranslate_mouse` 时，
-   同一段脚本里必须同时有 `virtual_box` 与 `fushi_client` 两级降级。
+   同一段脚本里必须同时有 `virtual_box` 与 `my_comic_client` 两级降级。
 
 4. **提交触发不得用左键。** Ren'Py 的左键属于引擎：点一下就推进剧情并重建 say screen，
    于是「点字查词」与「往下读」是同一个动作。真机实测一次点击把 text_writes 从 27 顶到 31，
@@ -23,26 +23,26 @@
 
 5. **不得裸赋值 config.periodic_callback。** 它是 Ren'Py **官方文档化**的扩展点（约
    20Hz），游戏与 mod 拿它跑自动存档、计时器、状态机。本 DLL 不卸载、没有还原路径，裸赋值
-   就是把游戏自己的周期逻辑**本局永久**顶掉，症状是「游戏某个功能莫名不动了」，跟 Fushi
+   就是把游戏自己的周期逻辑**本局永久**顶掉，症状是「游戏某个功能莫名不动了」，跟 MyComic
    完全对不上号。挂载前必须先取旧值并由 tick 链式调用（或直接 append 进复数列表
    config.periodic_callbacks）。
 
 6. **关查词必须有关闸，且关闸赋值排在 enable 早退之前。** 传感器种下去就没有卸载路径。
    native 侧若在 lookup_enabled == 0 时直接 return、不再写任何 Python 全局，而 Python 侧的
-   tick 又没有任何 enable 判据，就会继续每帧跑 _fushi_find_render 全树遍历 + 每字形 2 次
+   tick 又没有任何 enable 判据，就会继续每帧跑 _my_comic_find_render 全树遍历 + 每字形 2 次
    Python 级 mapper 调用，一直到游戏退出（实测 77 字形约 9k 次调用/秒）。所以
-   ProcessRenpyLookupTick 必须**先**把 fushi_lookup_on 写进去再判 enable，Python 侧 tick
+   ProcessRenpyLookupTick 必须**先**把 my_comic_lookup_on 写进去再判 enable，Python 侧 tick
    必须据它早退。
 
 7. **PYSRC 是窄字符串字面量，上限 16380 字节。** 不是宽串那个 8190 UTF-16 unit；中文注释
    一字 3 字节，很容易无声顶爆成 MSVC C2026（string too big），而那只在 Windows 构建门上红。
    写满了拆段，不要靠删注释腾地方。
 
-8. **宿主心跳必须能自锁、也必须能解锁。** 规则 6 的开关只覆盖「用户关掉查词」。Fushi
+8. **宿主心跳必须能自锁、也必须能解锁。** 规则 6 的开关只覆盖「用户关掉查词」。MyComic
    进程被**直接杀掉**时 native 一轮都不再跑，开关永远停在最后写下的 1，Python 侧照样全速
-   扫描到游戏退出——症状是「关了 Fushi 之后游戏还是卡」，跟 Fushi 完全对不上号。所以
-   native 每轮再写一个单调递增的 fushi_host_seq，Python 侧连续 N 轮没见它变就自锁早退；
-   心跳恢复递增必须立刻解锁，否则退化成「Fushi 重连后查词永久不工作」。自锁只能挡住我们
+   扫描到游戏退出——症状是「关了 MyComic 之后游戏还是卡」，跟 MyComic 完全对不上号。所以
+   native 每轮再写一个单调递增的 my_comic_host_seq，Python 侧连续 N 轮没见它变就自锁早退；
+   心跳恢复递增必须立刻解锁，否则退化成「MyComic 重连后查词永久不工作」。自锁只能挡住我们
    自己的扫描，**绝不能**挡住链式调用游戏原本的 periodic_callback。
 
 除源码扫描外，本文件还**真跑一遍** PYSRC（BootstrapBehaviourTest）：在合成的假
@@ -75,8 +75,8 @@ MSVC_NARROW_LITERAL_BYTES = 16380
 
 PERIODIC_ASSIGN_RE = re.compile(r"\.periodic_callback\s*=(?!=)")
 PERIODIC_READ_RE = re.compile(r"""getattr\(\s*\w+\s*,\s*['"]periodic_callback['"]""")
-PREV_SLOT = "fushi_prev_periodic"
-ENABLE_FLAG = "fushi_lookup_on"
+PREV_SLOT = "my_comic_prev_periodic"
+ENABLE_FLAG = "my_comic_lookup_on"
 
 
 def strip_comments(text: str) -> str:
@@ -159,14 +159,14 @@ def find_includes_in_inc(source: str) -> list[str]:
         line = stripped.count("\n", 0, match.start()) + 1
         faults.append(
             f"renpy_lookup.inc:{line} 出现 #include："
-            "它在匿名命名空间内展开，会把 ::fushi_voice_hook 整个遮住"
+            "它在匿名命名空间内展开，会把 ::my_comic_voice_hook 整个遮住"
         )
     return faults
 
 
 def find_gldraw_only_mapping(source: str) -> list[str]:
     """规则 3：坐标换算必须有非 GLDraw 的降级路径。"""
-    # 用**词边界**而不是裸子串：把 fushi_client 改名成 fushi_client_disabled 时，
+    # 用**词边界**而不是裸子串：把 my_comic_client 改名成 my_comic_client_disabled 时，
     # 裸 `in` 判据仍然为真、守卫静静放行（变异实测抓到过这一条）。短标识符的子串
     # 假阴性是这类守卫最常见的失效方式。
     def has_token(name: str) -> bool:
@@ -180,7 +180,7 @@ def find_gldraw_only_mapping(source: str) -> list[str]:
             "用了 untranslate_mouse 却没有 virtual_box 降级："
             "软件渲染器 SWDraw 上没有 untranslate_mouse（真机实测 AttributeError）"
         )
-    if not has_token("fushi_client"):
+    if not has_token("my_comic_client"):
         faults.append(
             "缺少基于客户区尺寸的最后一级降级："
             "SWDraw 的 get_physical_size 实测返回的是虚拟尺寸，不能当物理尺寸用"
@@ -242,21 +242,21 @@ def find_unchained_periodic_callback(source: str) -> list[str]:
         if PREV_SLOT not in script:
             faults.append(f"bootstrap 里没有 {PREV_SLOT} 槽：旧回调无处安放，等于没链")
             continue
-        tick = _python_function_body(script, "_fushi_lookup_tick")
+        tick = _python_function_body(script, "_my_comic_lookup_tick")
         if not tick:
-            faults.append("找不到 _fushi_lookup_tick 的函数体")
+            faults.append("找不到 _my_comic_lookup_tick 的函数体")
             continue
         # tick 必须把旧回调**调用**掉，不能只是存着好看。
         holder = re.search(
             r"(\w+)\s*=\s*\w+\.get\(\s*['\"]" + PREV_SLOT + r"['\"]", tick
         )
         if holder is None:
-            faults.append(f"_fushi_lookup_tick 没有读回 {PREV_SLOT}")
+            faults.append(f"_my_comic_lookup_tick 没有读回 {PREV_SLOT}")
             continue
         called = re.search(r"\b" + re.escape(holder.group(1)) + r"\s*\(\s*\)", tick)
         if called is None:
             faults.append(
-                f"_fushi_lookup_tick 读了 {PREV_SLOT} 却没有调用它："
+                f"_my_comic_lookup_tick 读了 {PREV_SLOT} 却没有调用它："
                 "游戏自己的周期逻辑仍然是哑的"
             )
     return faults
@@ -266,9 +266,9 @@ def find_missing_disable_gate(source: str) -> list[str]:
     """规则 6：关闸必须存在，且 native 侧赋值排在 enable 早退之前。"""
     faults: list[str] = []
     for script in bootstrap_scripts(source):
-        tick = _python_function_body(script, "_fushi_lookup_tick")
+        tick = _python_function_body(script, "_my_comic_lookup_tick")
         if not tick:
-            faults.append("找不到 _fushi_lookup_tick 的函数体")
+            faults.append("找不到 _my_comic_lookup_tick 的函数体")
             continue
         gate = re.search(
             r"if\s+not\s+\w+\.get\(\s*['\"]"
@@ -278,7 +278,7 @@ def find_missing_disable_gate(source: str) -> list[str]:
         )
         if gate is None:
             faults.append(
-                f"_fushi_lookup_tick 里没有 {ENABLE_FLAG} 早退："
+                f"_my_comic_lookup_tick 里没有 {ENABLE_FLAG} 早退："
                 "关掉查词后传感器会每帧全树遍历直到游戏退出"
             )
 
@@ -315,31 +315,31 @@ def find_oversized_bootstrap_literals(source: str) -> list[str]:
     return faults
 
 
-HEARTBEAT_GLOBAL = "fushi_host_seq"
-HEARTBEAT_LAST = "fushi_host_last"
-HEARTBEAT_STALL = "fushi_host_stall"
+HEARTBEAT_GLOBAL = "my_comic_host_seq"
+HEARTBEAT_LAST = "my_comic_host_last"
+HEARTBEAT_STALL = "my_comic_host_stall"
 NATIVE_HEARTBEAT_COUNTER = "g_renpy_host_seq"
 
 
 def find_missing_host_heartbeat(source: str) -> list[str]:
     """规则 8：宿主心跳必须存在、能自锁、能解锁，且不得挡住链式回调。
 
-    fushi_lookup_on 只覆盖"用户关掉查词"。Fushi 进程被**直接杀掉**时 native 一轮都不
+    my_comic_lookup_on 只覆盖"用户关掉查词"。MyComic 进程被**直接杀掉**时 native 一轮都不
     再跑，开关永远停在最后写下的 1，Python 侧照样全速扫描到游戏退出——症状是"关了
-    Fushi 之后游戏还是卡"，跟 Fushi 完全对不上号。所以 native 每轮还要写一个单调递增
-    的心跳，Python 侧连续 N 轮没见它变就自锁；心跳恢复必须立刻解锁，否则就变成"Fushi
+    MyComic 之后游戏还是卡"，跟 MyComic 完全对不上号。所以 native 每轮还要写一个单调递增
+    的心跳，Python 侧连续 N 轮没见它变就自锁；心跳恢复必须立刻解锁，否则就变成"MyComic
     重连后查词永久不工作"。自锁只能挡住我们自己的扫描，绝不能挡住游戏原本的回调。
     """
     faults: list[str] = []
     for script in bootstrap_scripts(source):
-        tick = _python_function_body(script, "_fushi_lookup_tick")
+        tick = _python_function_body(script, "_my_comic_lookup_tick")
         if not tick:
-            faults.append("找不到 _fushi_lookup_tick 的函数体")
+            faults.append("找不到 _my_comic_lookup_tick 的函数体")
             continue
         if HEARTBEAT_GLOBAL not in tick:
             faults.append(
-                f"_fushi_lookup_tick 不读宿主心跳 {HEARTBEAT_GLOBAL}："
-                "Fushi 被直接杀掉时开关停在 1，没有心跳就区分不出宿主没了"
+                f"_my_comic_lookup_tick 不读宿主心跳 {HEARTBEAT_GLOBAL}："
+                "MyComic 被直接杀掉时开关停在 1，没有心跳就区分不出宿主没了"
             )
             continue
         lock = re.search(r"\bstall\w*\s*>=\s*(\d+)\s*:\s*\n\s+return", tick)
@@ -351,7 +351,7 @@ def find_missing_host_heartbeat(source: str) -> list[str]:
         if unlock is None:
             faults.append(
                 f"心跳没有解锁路径（{HEARTBEAT_STALL} 从不归零）："
-                "会变成 Fushi 重连后查词永久不工作"
+                "会变成 MyComic 重连后查词永久不工作"
             )
         if HEARTBEAT_LAST not in tick:
             faults.append(f"心跳缺少上一轮读数 {HEARTBEAT_LAST}，无从判断它变没变")
@@ -429,7 +429,7 @@ class RealSourceTest(unittest.TestCase):
         self.assertEqual(
             [],
             find_missing_disable_gate(self.lookup),
-            "传感器种下去就没有卸载路径：关查词时必须先把 fushi_lookup_on 写 0 再早退，"
+            "传感器种下去就没有卸载路径：关查词时必须先把 my_comic_lookup_on 写 0 再早退，"
             "否则 Python 侧每帧继续全树遍历 + 每字形 2 次 mapper 调用直到游戏退出",
         )
 
@@ -440,7 +440,7 @@ class RealSourceTest(unittest.TestCase):
         self.assertEqual(
             [],
             find_missing_host_heartbeat(self.lookup),
-            "fushi_lookup_on 只覆盖用户关掉查词；Fushi 进程被直接杀掉时它会停在 1，"
+            "my_comic_lookup_on 只覆盖用户关掉查词；MyComic 进程被直接杀掉时它会停在 1，"
             "只有单调递增的宿主心跳能说明宿主没了。自锁必须能解锁，且绝不能挡住"
             "链式调用游戏自己的 periodic_callback",
         )
@@ -479,7 +479,7 @@ DIRTY_GL_ONLY = "px, py = draw.untranslate_mouse(vx, vy)"
 CLEAN_MAPPING = """
 fn = getattr(draw, 'untranslate_mouse', None)
 box = getattr(draw, 'virtual_box', None)
-cw, ch = _fs_g.get('fushi_client', (0, 0))
+cw, ch = _fs_g.get('my_comic_client', (0, 0))
 """
 
 DIRTY_LBUTTON = "const bool down = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;"
@@ -492,23 +492,23 @@ CLEAN_SHIFT = "const bool down = (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;"
 DIRTY_BARE_PERIODIC = """
 const char kRenpyLookupBootstrap[] = R"PYSRC(
 _fs_g = {}
-_fs_g.setdefault('fushi_lookup_on', 0)
+_fs_g.setdefault('my_comic_lookup_on', 0)
 
 
-def _fushi_lookup_tick():
+def _my_comic_lookup_tick():
     g = _fs_g
-    if not g.get('fushi_lookup_on', 0):
+    if not g.get('my_comic_lookup_on', 0):
         return
-    _fushi_lookup_scan()
+    _my_comic_lookup_scan()
 
 
 import renpy.config as _fs_config
-_fs_config.periodic_callback = _fushi_lookup_tick
+_fs_config.periodic_callback = _my_comic_lookup_tick
 )PYSRC";
 
 void ProcessRenpyLookupTick() {
   const bool lookup_on = g_header->lookup_enabled != 0;
-  Assign("_m.fushi_lookup_on=%d", lookup_on ? 1 : 0);
+  Assign("_m.my_comic_lookup_on=%d", lookup_on ? 1 : 0);
   if (!lookup_on) return;
 }
 """
@@ -516,26 +516,26 @@ void ProcessRenpyLookupTick() {
 DIRTY_SAVED_NOT_CALLED = """
 const char kRenpyLookupBootstrap[] = R"PYSRC(
 _fs_g = {}
-_fs_g.setdefault('fushi_lookup_on', 0)
+_fs_g.setdefault('my_comic_lookup_on', 0)
 
 
-def _fushi_lookup_tick():
+def _my_comic_lookup_tick():
     g = _fs_g
-    prev = g.get('fushi_prev_periodic')
-    if not g.get('fushi_lookup_on', 0):
+    prev = g.get('my_comic_prev_periodic')
+    if not g.get('my_comic_lookup_on', 0):
         return
-    _fushi_lookup_scan()
+    _my_comic_lookup_scan()
 
 
 import renpy.config as _fs_config
 _fs_prev = getattr(_fs_config, 'periodic_callback', None)
-_fs_g['fushi_prev_periodic'] = _fs_prev
-_fs_config.periodic_callback = _fushi_lookup_tick
+_fs_g['my_comic_prev_periodic'] = _fs_prev
+_fs_config.periodic_callback = _my_comic_lookup_tick
 )PYSRC";
 
 void ProcessRenpyLookupTick() {
   const bool lookup_on = g_header->lookup_enabled != 0;
-  Assign("_m.fushi_lookup_on=%d", lookup_on ? 1 : 0);
+  Assign("_m.my_comic_lookup_on=%d", lookup_on ? 1 : 0);
   if (!lookup_on) return;
 }
 """
@@ -543,28 +543,28 @@ void ProcessRenpyLookupTick() {
 DIRTY_ENABLE_RETURNS_FIRST = """
 const char kRenpyLookupBootstrap[] = R"PYSRC(
 _fs_g = {}
-_fs_g.setdefault('fushi_lookup_on', 0)
+_fs_g.setdefault('my_comic_lookup_on', 0)
 
 
-def _fushi_lookup_tick():
+def _my_comic_lookup_tick():
     g = _fs_g
-    prev = g.get('fushi_prev_periodic')
+    prev = g.get('my_comic_prev_periodic')
     if prev is not None:
         prev()
-    if not g.get('fushi_lookup_on', 0):
+    if not g.get('my_comic_lookup_on', 0):
         return
-    _fushi_lookup_scan()
+    _my_comic_lookup_scan()
 
 
 import renpy.config as _fs_config
 _fs_prev = getattr(_fs_config, 'periodic_callback', None)
-_fs_g['fushi_prev_periodic'] = _fs_prev
-_fs_config.periodic_callback = _fushi_lookup_tick
+_fs_g['my_comic_prev_periodic'] = _fs_prev
+_fs_config.periodic_callback = _my_comic_lookup_tick
 )PYSRC";
 
 void ProcessRenpyLookupTick() {
   if (g_header->lookup_enabled == 0) return;
-  Assign("_m.fushi_lookup_on=1");
+  Assign("_m.my_comic_lookup_on=1");
 }
 """
 
@@ -573,23 +573,23 @@ const char kRenpyLookupBootstrap[] = R"PYSRC(
 _fs_g = {}
 
 
-def _fushi_lookup_tick():
+def _my_comic_lookup_tick():
     g = _fs_g
-    prev = g.get('fushi_prev_periodic')
+    prev = g.get('my_comic_prev_periodic')
     if prev is not None:
         prev()
-    _fushi_lookup_scan()
+    _my_comic_lookup_scan()
 
 
 import renpy.config as _fs_config
 _fs_prev = getattr(_fs_config, 'periodic_callback', None)
-_fs_g['fushi_prev_periodic'] = _fs_prev
-_fs_config.periodic_callback = _fushi_lookup_tick
+_fs_g['my_comic_prev_periodic'] = _fs_prev
+_fs_config.periodic_callback = _my_comic_lookup_tick
 )PYSRC";
 
 void ProcessRenpyLookupTick() {
   const bool lookup_on = g_header->lookup_enabled != 0;
-  Assign("_m.fushi_lookup_on=%d", lookup_on ? 1 : 0);
+  Assign("_m.my_comic_lookup_on=%d", lookup_on ? 1 : 0);
   if (!lookup_on) return;
 }
 """
@@ -597,31 +597,31 @@ void ProcessRenpyLookupTick() {
 CLEAN_CHAINED = """
 const char kRenpyLookupBootstrap[] = R"PYSRC(
 _fs_g = {}
-_fs_g.setdefault('fushi_lookup_on', 0)
+_fs_g.setdefault('my_comic_lookup_on', 0)
 
 
-def _fushi_lookup_tick():
+def _my_comic_lookup_tick():
     g = _fs_g
-    prev = g.get('fushi_prev_periodic')
+    prev = g.get('my_comic_prev_periodic')
     if prev is not None:
         prev()
-    if not g.get('fushi_lookup_on', 0):
+    if not g.get('my_comic_lookup_on', 0):
         return
-    _fushi_lookup_scan()
+    _my_comic_lookup_scan()
 
 
 import renpy.config as _fs_config
-_fs_prev_tick = _fs_g.get('_fushi_lookup_tick')
+_fs_prev_tick = _fs_g.get('_my_comic_lookup_tick')
 _fs_prev = getattr(_fs_config, 'periodic_callback', None)
-if _fs_prev is _fushi_lookup_tick or _fs_prev is _fs_prev_tick:
-    _fs_prev = _fs_g.get('fushi_prev_periodic')
-_fs_g['fushi_prev_periodic'] = _fs_prev
-_fs_config.periodic_callback = _fushi_lookup_tick
+if _fs_prev is _my_comic_lookup_tick or _fs_prev is _fs_prev_tick:
+    _fs_prev = _fs_g.get('my_comic_prev_periodic')
+_fs_g['my_comic_prev_periodic'] = _fs_prev
+_fs_config.periodic_callback = _my_comic_lookup_tick
 )PYSRC";
 
 void ProcessRenpyLookupTick() {
   const bool lookup_on = g_header->lookup_enabled != 0;
-  Assign("_m.fushi_lookup_on=%d", lookup_on ? 1 : 0);
+  Assign("_m.my_comic_lookup_on=%d", lookup_on ? 1 : 0);
   if (!lookup_on) return;
 }
 """
@@ -630,63 +630,63 @@ void ProcessRenpyLookupTick() {
 CLEAN_HEARTBEAT = """
 const char kRenpyLookupBootstrap[] = R"PYSRC(
 _fs_g = {}
-_fs_g.setdefault('fushi_lookup_on', 0)
-_fs_g.setdefault('fushi_host_seq', 0)
-_fs_g.setdefault('fushi_host_last', -1)
-_fs_g.setdefault('fushi_host_stall', 0)
+_fs_g.setdefault('my_comic_lookup_on', 0)
+_fs_g.setdefault('my_comic_host_seq', 0)
+_fs_g.setdefault('my_comic_host_last', -1)
+_fs_g.setdefault('my_comic_host_stall', 0)
 
 
-def _fushi_lookup_tick():
+def _my_comic_lookup_tick():
     g = _fs_g
-    prev = g.get('fushi_prev_periodic')
+    prev = g.get('my_comic_prev_periodic')
     if prev is not None:
         prev()
-    if not g.get('fushi_lookup_on', 0):
+    if not g.get('my_comic_lookup_on', 0):
         return
-    seq = g.get('fushi_host_seq', 0)
-    if seq != g.get('fushi_host_last', -1):
-        g['fushi_host_last'] = seq
-        g['fushi_host_stall'] = 0
+    seq = g.get('my_comic_host_seq', 0)
+    if seq != g.get('my_comic_host_last', -1):
+        g['my_comic_host_last'] = seq
+        g['my_comic_host_stall'] = 0
     else:
-        stall = g.get('fushi_host_stall', 0) + 1
-        g['fushi_host_stall'] = stall
+        stall = g.get('my_comic_host_stall', 0) + 1
+        g['my_comic_host_stall'] = stall
         if stall >= 60:
             return
-    _fushi_lookup_scan()
+    _my_comic_lookup_scan()
 
 
 import renpy.config as _fs_config
 _fs_prev = getattr(_fs_config, 'periodic_callback', None)
-_fs_g['fushi_prev_periodic'] = _fs_prev
-_fs_config.periodic_callback = _fushi_lookup_tick
+_fs_g['my_comic_prev_periodic'] = _fs_prev
+_fs_config.periodic_callback = _my_comic_lookup_tick
 )PYSRC";
 
 void ProcessRenpyLookupTick() {
   const bool lookup_on = g_header->lookup_enabled != 0;
   ++g_renpy_host_seq;
-  Assign("_m.fushi_lookup_on=%d;_m.fushi_host_seq=%llu", lookup_on ? 1 : 0, seq);
+  Assign("_m.my_comic_lookup_on=%d;_m.my_comic_host_seq=%llu", lookup_on ? 1 : 0, seq);
   if (!lookup_on) return;
 }
 """
 
-_UNLOCK_LINE = "        g[" + repr("fushi_host_stall") + "] = 0"
+_UNLOCK_LINE = "        g[" + repr("my_comic_host_stall") + "] = 0"
 
 DIRTY_HEARTBEAT_NO_UNLOCK = CLEAN_HEARTBEAT.replace(_UNLOCK_LINE, "        pass")
 
 DIRTY_HEARTBEAT_BEFORE_PREV = CLEAN_HEARTBEAT.replace(
-    """    prev = g.get('fushi_prev_periodic')
+    """    prev = g.get('my_comic_prev_periodic')
     if prev is not None:
         prev()
-    if not g.get('fushi_lookup_on', 0):""",
-    """    prev = g.get('fushi_prev_periodic')
-    if not g.get('fushi_lookup_on', 0):""",
+    if not g.get('my_comic_lookup_on', 0):""",
+    """    prev = g.get('my_comic_prev_periodic')
+    if not g.get('my_comic_lookup_on', 0):""",
 ).replace(
     """            return
-    _fushi_lookup_scan()""",
+    _my_comic_lookup_scan()""",
     """            return
     if prev is not None:
         prev()
-    _fushi_lookup_scan()""",
+    _my_comic_lookup_scan()""",
 )
 
 DIRTY_STATIC_HEARTBEAT = CLEAN_HEARTBEAT.replace("  ++g_renpy_host_seq;", "")
@@ -714,7 +714,7 @@ class MutationSelfTest(unittest.TestCase):
 
     def test_renamed_client_fallback_is_red(self) -> None:
         # 子串假阴性回归：改名后裸 `in` 判据仍为真，词边界判据必须红。
-        renamed = CLEAN_MAPPING.replace("fushi_client", "fushi_client_disabled")
+        renamed = CLEAN_MAPPING.replace("my_comic_client", "my_comic_client_disabled")
         self.assertNotEqual([], find_gldraw_only_mapping(renamed))
 
     def test_left_button_submit_is_red(self) -> None:
@@ -829,27 +829,27 @@ class BootstrapBehaviourTest(unittest.TestCase):
         config = self._config(periodic_callback=game)
         namespace = _run_bootstrap(config)
 
-        tick = namespace["_fushi_lookup_tick"]
+        tick = namespace["_my_comic_lookup_tick"]
         self.assertIs(config.periodic_callback, tick)
-        self.assertIs(namespace["fushi_prev_periodic"], game)
+        self.assertIs(namespace["my_comic_prev_periodic"], game)
 
         scan = _Recorder()
-        namespace["_fushi_lookup_scan"] = scan
+        namespace["_my_comic_lookup_scan"] = scan
 
         # 查词还没开：游戏的回调照跑，扫描一次都不能跑。
         tick()
         self.assertEqual(1, game.calls)
         self.assertEqual(0, scan.calls)
-        self.assertEqual(0, namespace["fushi_lookup_ticks"])
+        self.assertEqual(0, namespace["my_comic_lookup_ticks"])
 
         # native 写了开关之后才扫描；游戏的回调仍然每轮都调。
-        namespace["fushi_lookup_on"] = 1
+        namespace["my_comic_lookup_on"] = 1
         tick()
         self.assertEqual(2, game.calls)
         self.assertEqual(1, scan.calls)
 
         # 关回去：扫描立刻停，游戏的回调不受影响。
-        namespace["fushi_lookup_on"] = 0
+        namespace["my_comic_lookup_on"] = 0
         tick()
         self.assertEqual(3, game.calls)
         self.assertEqual(1, scan.calls)
@@ -860,32 +860,32 @@ class BootstrapBehaviourTest(unittest.TestCase):
         first = _run_bootstrap(config)
         second = _run_bootstrap(config, namespace=first)
 
-        self.assertIs(second["fushi_prev_periodic"], game)
-        self.assertIsNot(second["_fushi_lookup_tick"], first["_fushi_lookup_tick"])
-        self.assertIs(config.periodic_callback, second["_fushi_lookup_tick"])
+        self.assertIs(second["my_comic_prev_periodic"], game)
+        self.assertIsNot(second["_my_comic_lookup_tick"], first["_my_comic_lookup_tick"])
+        self.assertIs(config.periodic_callback, second["_my_comic_lookup_tick"])
 
-        second["fushi_lookup_on"] = 1
+        second["my_comic_lookup_on"] = 1
         scan = _Recorder()
-        second["_fushi_lookup_scan"] = scan
-        second["_fushi_lookup_tick"]()
+        second["_my_comic_lookup_scan"] = scan
+        second["_my_comic_lookup_tick"]()
         # 自嵌套的话 game 会被调两次（旧 tick 链在新 tick 里）。
         self.assertEqual(1, game.calls)
         self.assertEqual(1, scan.calls)
 
     def test_host_heartbeat_self_locks_when_native_stops(self) -> None:
-        # Fushi 被直接杀掉：开关停在 1，只有心跳不再递增。自锁必须停掉**我们的**扫描，
+        # MyComic 被直接杀掉：开关停在 1，只有心跳不再递增。自锁必须停掉**我们的**扫描，
         # 而游戏自己的 periodic_callback 一帧都不能少调。
         game = _Recorder()
         config = self._config(periodic_callback=game)
         namespace = _run_bootstrap(config)
-        tick = namespace["_fushi_lookup_tick"]
+        tick = namespace["_my_comic_lookup_tick"]
         scan = _Recorder()
-        namespace["_fushi_lookup_scan"] = scan
-        namespace["fushi_lookup_on"] = 1
+        namespace["_my_comic_lookup_scan"] = scan
+        namespace["my_comic_lookup_on"] = 1
 
         # 宿主还活着：每轮心跳 +1，每轮都扫。
         for _ in range(5):
-            namespace["fushi_host_seq"] += 1
+            namespace["my_comic_host_seq"] += 1
             tick()
         self.assertEqual(5, scan.calls)
 
@@ -908,14 +908,14 @@ class BootstrapBehaviourTest(unittest.TestCase):
         self.assertEqual(game_before + 50, game.calls)
 
     def test_host_heartbeat_unlocks_when_native_resumes(self) -> None:
-        # Fushi 重连：心跳恢复递增就必须立刻恢复扫描，绝不能永久哑掉。
+        # MyComic 重连：心跳恢复递增就必须立刻恢复扫描，绝不能永久哑掉。
         game = _Recorder()
         config = self._config(periodic_callback=game)
         namespace = _run_bootstrap(config)
-        tick = namespace["_fushi_lookup_tick"]
+        tick = namespace["_my_comic_lookup_tick"]
         scan = _Recorder()
-        namespace["_fushi_lookup_scan"] = scan
-        namespace["fushi_lookup_on"] = 1
+        namespace["_my_comic_lookup_scan"] = scan
+        namespace["my_comic_lookup_on"] = 1
 
         for _ in range(500):
             tick()
@@ -923,12 +923,12 @@ class BootstrapBehaviourTest(unittest.TestCase):
         tick()
         self.assertEqual(locked, scan.calls, "没锁上，后面的解锁断言就没有意义")
 
-        namespace["fushi_host_seq"] += 1
+        namespace["my_comic_host_seq"] += 1
         tick()
         self.assertEqual(locked + 1, scan.calls)
         # 解锁之后继续正常工作。
         for _ in range(5):
-            namespace["fushi_host_seq"] += 1
+            namespace["my_comic_host_seq"] += 1
             tick()
         self.assertEqual(locked + 6, scan.calls)
 
@@ -937,24 +937,24 @@ class BootstrapBehaviourTest(unittest.TestCase):
         config = self._config(periodic_callbacks=[game])
         first = _run_bootstrap(config)
 
-        self.assertEqual([game, first["_fushi_lookup_tick"]], config.periodic_callbacks)
-        self.assertIsNone(first["fushi_prev_periodic"])
+        self.assertEqual([game, first["_my_comic_lookup_tick"]], config.periodic_callbacks)
+        self.assertIsNone(first["my_comic_prev_periodic"])
         self.assertFalse(hasattr(config, "periodic_callback"))
 
         second = _run_bootstrap(config, namespace=first)
         self.assertEqual(
-            [game, second["_fushi_lookup_tick"]], config.periodic_callbacks
+            [game, second["_my_comic_lookup_tick"]], config.periodic_callbacks
         )
 
     def test_no_previous_callback_still_installs(self) -> None:
         config = self._config()
         namespace = _run_bootstrap(config)
-        self.assertIs(config.periodic_callback, namespace["_fushi_lookup_tick"])
-        self.assertIsNone(namespace["fushi_prev_periodic"])
-        namespace["fushi_lookup_on"] = 1
+        self.assertIs(config.periodic_callback, namespace["_my_comic_lookup_tick"])
+        self.assertIsNone(namespace["my_comic_prev_periodic"])
+        namespace["my_comic_lookup_on"] = 1
         scan = _Recorder()
-        namespace["_fushi_lookup_scan"] = scan
-        namespace["_fushi_lookup_tick"]()
+        namespace["_my_comic_lookup_scan"] = scan
+        namespace["_my_comic_lookup_tick"]()
         self.assertEqual(1, scan.calls)
 
 

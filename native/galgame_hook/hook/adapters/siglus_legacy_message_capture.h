@@ -3,7 +3,7 @@
 #include <tuple>
 #include "siglus_native_message_capture.h"
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 // Use the existing full-register naked thunk. saved_esp is the pushfd ESP;
 // never recover original EDI/EBX/EBP from ordinary C++ register allocation.
 using SiglusLegacyMessageSavedRegisters = SiglusNativeMessageSavedRegisters;
@@ -165,4 +165,4 @@ bool ConsumeSiglusLegacyMessageTicket(const SiglusLegacyMessageLayout& layout,
   // event identity; source observation and audio binding are separate gates.
   return true;
 }
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

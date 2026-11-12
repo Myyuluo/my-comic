@@ -2,7 +2,7 @@
 
 #include "siglus_lookup.h"
 
-namespace fushi_voice_hook::siglus_family {
+namespace my_comic_voice_hook::siglus_family {
 
 // This is the measured x86 scenario/TextUnion argument ABI, not every release
 // called Siglus. Addresses are recovered independently; the field offsets and
@@ -136,9 +136,9 @@ inline bool OriginalOrExternalDetour(const exact_lookup::LoadedPeImage& image,
   return target < 0 || static_cast<uint64_t>(target) >= image.size;
 }
 
-}  // namespace fushi_voice_hook::siglus_family
+}  // namespace my_comic_voice_hook::siglus_family
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 // get_key_state_iat_rva must be resolved by import name (user32/GetKeyState)
 // by the caller. Returning true admits this ABI only; runtime dimensions and
@@ -227,4 +227,4 @@ inline bool ResolveSiglusFamilyProfile(
   return true;
 }
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

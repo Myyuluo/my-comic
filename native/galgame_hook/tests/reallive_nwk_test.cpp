@@ -14,7 +14,7 @@
 // 合成字节，不含任何游戏数据。压缩块由本文件的比特写入器按格式手工编码，期望样本按
 // 格式语义逐步手算（不调用被测解码器求期望值）。
 
-namespace nwk = fushi_voice_hook::reallive;
+namespace nwk = my_comic_voice_hook::reallive;
 
 namespace {
 

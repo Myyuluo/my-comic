@@ -18,7 +18,7 @@ namespace {
 std::wstring MakeTempRoot(const wchar_t* tag) {
   wchar_t temp[MAX_PATH] = {0};
   assert(GetTempPathW(MAX_PATH, temp) != 0);
-  std::wstring root = std::wstring(temp) + L"fushi_aos_test_" + tag + L"_" +
+  std::wstring root = std::wstring(temp) + L"my_comic_aos_test_" + tag + L"_" +
                       std::to_wstring(GetCurrentProcessId());
   assert(CreateDirectoryW(root.c_str(), nullptr) ||
          GetLastError() == ERROR_ALREADY_EXISTS);
@@ -61,7 +61,7 @@ int main() {
     const std::string good = MakeHeader("scr.aos");
     WriteBytes(root + L"\\aaa.aos", bad.data(), bad.size());
     WriteBytes(root + L"\\scr.aos", good.data(), good.size());
-    assert(fushi_voice_hook::MatchesAosSfaLayout(root));
+    assert(my_comic_voice_hook::MatchesAosSfaLayout(root));
     Remove(root, L"aaa.aos");
     Remove(root, L"scr.aos");
     RemoveDirectoryW(root.c_str());
@@ -71,7 +71,7 @@ int main() {
     const std::wstring root = MakeTempRoot(L"wrongname");
     const std::string h = MakeHeader("other.aos");
     WriteBytes(root + L"\\scr.aos", h.data(), h.size());
-    assert(!fushi_voice_hook::MatchesAosSfaLayout(root));
+    assert(!my_comic_voice_hook::MatchesAosSfaLayout(root));
     Remove(root, L"scr.aos");
     RemoveDirectoryW(root.c_str());
   }
@@ -80,7 +80,7 @@ int main() {
     const std::wstring root = MakeTempRoot(L"prefix");
     const std::string h = MakeHeader("scr.aos", /*zero_prefix=*/false);
     WriteBytes(root + L"\\scr.aos", h.data(), h.size());
-    assert(!fushi_voice_hook::MatchesAosSfaLayout(root));
+    assert(!my_comic_voice_hook::MatchesAosSfaLayout(root));
     Remove(root, L"scr.aos");
     RemoveDirectoryW(root.c_str());
   }
@@ -89,7 +89,7 @@ int main() {
     const std::wstring root = MakeTempRoot(L"prefixname");
     const std::string h = MakeHeader("scr");
     WriteBytes(root + L"\\scr.aos", h.data(), h.size());
-    assert(!fushi_voice_hook::MatchesAosSfaLayout(root));
+    assert(!my_comic_voice_hook::MatchesAosSfaLayout(root));
     Remove(root, L"scr.aos");
     RemoveDirectoryW(root.c_str());
   }
@@ -98,7 +98,7 @@ int main() {
     const std::wstring root = MakeTempRoot(L"case");
     const std::string h = MakeHeader("SCR.AOS");
     WriteBytes(root + L"\\scr.aos", h.data(), h.size());
-    assert(fushi_voice_hook::MatchesAosSfaLayout(root));
+    assert(my_comic_voice_hook::MatchesAosSfaLayout(root));
     Remove(root, L"scr.aos");
     RemoveDirectoryW(root.c_str());
   }
@@ -117,26 +117,26 @@ int main() {
     h[8] = '\x20'; h[9] = '\x2b';
     h[12] = '\xe9'; h[13] = '.'; h[14] = 'a'; h[15] = 'o'; h[16] = 's';
     WriteBytes(root + L"\\\u00e9.aos", h.data(), h.size());
-    assert(!fushi_voice_hook::MatchesAosSfaLayout(root));
+    assert(!my_comic_voice_hook::MatchesAosSfaLayout(root));
     Remove(root, L"\u00e9.aos");
     // 旧形状（名字本来就不同）也一并留着，不交叉覆盖不代表该删。
     const std::string mismatched = MakeHeader("scr.aos");
     WriteBytes(root + L"\\あ.aos", mismatched.data(), mismatched.size());
-    assert(!fushi_voice_hook::MatchesAosSfaLayout(root));
+    assert(!my_comic_voice_hook::MatchesAosSfaLayout(root));
     Remove(root, L"あ.aos");
     RemoveDirectoryW(root.c_str());
   }
   // 7. 空目录 / 太短的文件 → 不匹配且不崩。
   {
     const std::wstring root = MakeTempRoot(L"empty");
-    assert(!fushi_voice_hook::MatchesAosSfaLayout(root));
+    assert(!my_comic_voice_hook::MatchesAosSfaLayout(root));
     WriteBytes(root + L"\\tiny.aos", "\0\0\0\0", 4);
-    assert(!fushi_voice_hook::MatchesAosSfaLayout(root));
+    assert(!my_comic_voice_hook::MatchesAosSfaLayout(root));
     Remove(root, L"tiny.aos");
     RemoveDirectoryW(root.c_str());
   }
   // 8. 测试进程自己的目录不是 AOS 游戏 → 进程级探测为假。
-  assert(!fushi_voice_hook::MatchesAosSfaProfile(nullptr));
+  assert(!my_comic_voice_hook::MatchesAosSfaProfile(nullptr));
   std::printf("aos_sfa_adapter_test: ok\n");
   return 0;
 }

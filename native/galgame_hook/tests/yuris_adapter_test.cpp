@@ -27,9 +27,9 @@
 
 namespace {
 
-namespace yuris = fushi_voice_hook::yuris;
-namespace yl = fushi_voice_hook::yuris_lookup;
-namespace yv = fushi_voice_hook::yuris_voice;
+namespace yuris = my_comic_voice_hook::yuris;
+namespace yl = my_comic_voice_hook::yuris_lookup;
+namespace yv = my_comic_voice_hook::yuris_voice;
 
 void Put32(std::vector<uint8_t>* out, uint32_t value) {
   for (int i = 0; i < 4; ++i) out->push_back(static_cast<uint8_t>(value >> (8 * i)));
@@ -105,7 +105,7 @@ void TestYpfIdentity() {
                                      archive.size(), &resolved) ==
              yuris::YpfIndexResult::kValid);
       assert(resolved.swapped_lengths == swapped && resolved.offset_bytes == width);
-      assert(fushi_voice_hook::IsYurisArchiveHead(archive.data(), archive.size(),
+      assert(my_comic_voice_hook::IsYurisArchiveHead(archive.data(), archive.size(),
                                                   archive.size()));
       // The other name-length table reads entry 1 (13 <-> 16) differently.
       const yuris::YpfLayout other{!swapped, width};
@@ -124,7 +124,7 @@ void TestYpfIdentity() {
                                  {false, 4}, archive.size()));
     assert(yuris::YpfLayoutsAgree(archive.data() + 32, header.index_end - 32, header,
                                   {true, 4}, {false, 4}, archive.size()));
-    assert(fushi_voice_hook::IsYurisArchiveHead(archive.data(), archive.size(),
+    assert(my_comic_voice_hook::IsYurisArchiveHead(archive.data(), archive.size(),
                                                 archive.size()));
   }
   {  // every entry is checked, not only the first four
@@ -132,11 +132,11 @@ void TestYpfIdentity() {
                                            "voice\\a03.ogg", "voice\\a04.ogg",
                                            "voice\\a05.ogg"};
     std::vector<uint8_t> archive = BuildYpf(five, true, 4);
-    assert(fushi_voice_hook::IsYurisArchiveHead(archive.data(), archive.size(),
+    assert(my_comic_voice_hook::IsYurisArchiveHead(archive.data(), archive.size(),
                                                 archive.size()));
     const size_t entry = 4 + 1 + 13 + 10 + 4 + 4;
     archive[32 + 4 * entry + 4 + 1 + 13 + 1] = 7;  // entry 5: packed = 7
-    assert(!fushi_voice_hook::IsYurisArchiveHead(archive.data(), archive.size(),
+    assert(!my_comic_voice_hook::IsYurisArchiveHead(archive.data(), archive.size(),
                                                  archive.size()));
   }
   {  // the last entry must end exactly at index_end
@@ -145,7 +145,7 @@ void TestYpfIdentity() {
     assert(yuris::ParseYpfHeader(padded.data(), padded.size(), padded.size(), &header));
     assert(yuris::ResolveYpfLayout(padded.data(), padded.size(), header, padded.size(),
                                    nullptr) == yuris::YpfIndexResult::kNoLayout);
-    assert(!fushi_voice_hook::IsYurisArchiveHead(padded.data(), padded.size(),
+    assert(!my_comic_voice_hook::IsYurisArchiveHead(padded.data(), padded.size(),
                                                  padded.size()));
     // Fewer bytes than the index: never judged.
     assert(yuris::ResolveYpfLayout(padded.data(), header.index_end - 1, header,
@@ -155,18 +155,18 @@ void TestYpfIdentity() {
   std::vector<uint8_t> magic = BuildYpf(names, true, 4);
   magic[0] = 'X';
   assert(!yuris::ParseYpfHeader(magic.data(), magic.size(), magic.size(), nullptr));
-  assert(!fushi_voice_hook::IsYurisArchiveHead(magic.data(), magic.size(), magic.size()));
+  assert(!my_comic_voice_hook::IsYurisArchiveHead(magic.data(), magic.size(), magic.size()));
   std::vector<uint8_t> reserved = BuildYpf(names, true, 4);
   reserved[20] = 1;
   assert(!yuris::ParseYpfHeader(reserved.data(), reserved.size(), reserved.size(), nullptr));
   // A member past the end of the file is no archive.
   std::vector<uint8_t> cut = BuildYpf(names, true, 4);
   cut.resize(cut.size() - 1);
-  assert(!fushi_voice_hook::IsYurisArchiveHead(cut.data(), cut.size(), cut.size()));
+  assert(!my_comic_voice_hook::IsYurisArchiveHead(cut.data(), cut.size(), cut.size()));
   // A 16-byte placeholder ("YPD" + spaces) is not an archive.
   const uint8_t placeholder[16] = {'Y', 'P', 'D', ' ', ' ', ' ', ' ', ' ',
                                    ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '};
-  assert(!fushi_voice_hook::IsYurisArchiveHead(placeholder, 16, 16));
+  assert(!my_comic_voice_hook::IsYurisArchiveHead(placeholder, 16, 16));
 }
 
 // ── synthetic x86 images ────────────────────────────────────────────────────

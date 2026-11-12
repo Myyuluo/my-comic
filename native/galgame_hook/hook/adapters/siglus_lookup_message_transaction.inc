@@ -7,14 +7,14 @@ struct SiglusLookupMessageTransaction {
   bool pending = false;
 };
 SiglusLookupMessageTransaction g_siglus_lookup_message_transaction;
-thread_local fushi_voice_hook::SiglusLookupClickSampleState
+thread_local my_comic_voice_hook::SiglusLookupClickSampleState
     g_siglus_lookup_message_popup_sample;
 thread_local uint32_t g_siglus_lookup_message_popup_epoch = 0;
 
 bool IsSiglusLookupMessageTransactionProfile() {
   const auto* profile = ActiveSiglusLookupProfile();
   return profile != nullptr && profile->glyph_abi ==
-      fushi_voice_hook::SiglusGlyphLayoutAbi::kEcxEightArguments;
+      my_comic_voice_hook::SiglusGlyphLayoutAbi::kEcxEightArguments;
 }
 
 SHORT FilterSiglusLookupMessageTransactionSample(SHORT raw, bool popup_shield,
@@ -25,8 +25,8 @@ SHORT FilterSiglusLookupMessageTransactionSample(SHORT raw, bool popup_shield,
     g_siglus_lookup_message_popup_epoch = epoch;
     g_siglus_lookup_message_popup_sample = {};
   }
-  const auto popup_decision = fushi_voice_hook::AdvanceSiglusLookupClickSample(
-      false, down, popup_shield, fushi_voice_hook::kSiglusLookupNoGlyph,
+  const auto popup_decision = my_comic_voice_hook::AdvanceSiglusLookupClickSample(
+      false, down, popup_shield, my_comic_voice_hook::kSiglusLookupNoGlyph,
       &g_siglus_lookup_message_popup_sample);
   const bool message_owned = g_siglus_lookup_message_left_button_latched.load(
       std::memory_order_acquire);
@@ -47,7 +47,7 @@ SHORT FilterSiglusLookupMessageTransactionSample(SHORT raw, bool popup_shield,
   }
   // An up sample cannot release an in-flight WM transaction. After WM up,
   // retain the filter through this sample itself, then rearm the next press.
-  const SHORT filtered = fushi_voice_hook::FilterSiglusLookupGetKeyState(
+  const SHORT filtered = my_comic_voice_hook::FilterSiglusLookupGetKeyState(
       raw, popup_shield || message_owned || sampled_tail);
   if (!down && !message_owned)
     g_siglus_lookup_left_button_filter_latched.store(false, std::memory_order_release);
@@ -81,9 +81,9 @@ bool ConsumeSiglusLookupMessageTransaction(UINT message, LPARAM lparam,
         game != nullptr && GetForegroundWindow() == game &&
         pending.payload.game_window == reinterpret_cast<uintptr_t>(game) &&
         SiglusLookupViewAllowsInput(game) &&
-        fushi_voice_hook::g_geometry_provider_registry.NativeInputAllowed(
-            g_header, fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-            fushi_voice_hook::kLookupGeometryProviderIdSiglus) &&
+        my_comic_voice_hook::g_geometry_provider_registry.NativeInputAllowed(
+            g_header, my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+            my_comic_voice_hook::kLookupGeometryProviderIdSiglus) &&
         SiglusLookupPayloadMatchesPublishedTarget(pending.payload)) {
       QueueSiglusLookupClickSubmit(pending.payload);
     }
@@ -97,16 +97,16 @@ bool ConsumeSiglusLookupMessageTransaction(UINT message, LPARAM lparam,
   const bool runtime = g_siglus_lookup_click_runtime_enabled.load(std::memory_order_acquire);
   const bool view_allowed = runtime && SiglusLookupViewAllowsInput(game);
   const bool admitted = view_allowed && !popup_shield &&
-      fushi_voice_hook::g_geometry_provider_registry.NativeInputAllowed(
-          g_header, fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-          fushi_voice_hook::kLookupGeometryProviderIdSiglus);
+      my_comic_voice_hook::g_geometry_provider_registry.NativeInputAllowed(
+          g_header, my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+          my_comic_voice_hook::kLookupGeometryProviderIdSiglus);
   diagnostic.flags = (runtime ? 1u : 0u) | (admitted ? 4u : 0u);
   diagnostic.reason = !runtime ? SiglusLookupPressReason::kRuntimeDisabled
       : !view_allowed ? SiglusLookupPressReason::kLiveViewRejected
       : SiglusLookupPressReason::kNativeAdmissionRejected;
   SiglusLookupClickTarget target;
   SiglusLookupPayload payload;
-  uint16_t glyph_index = fushi_voice_hook::kSiglusLookupNoGlyph;
+  uint16_t glyph_index = my_comic_voice_hook::kSiglusLookupNoGlyph;
   POINT point = {GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)};
   bool hit = false;
   if (admitted && game != nullptr && ClientToScreen(game, &point)) {
@@ -116,7 +116,7 @@ bool ConsumeSiglusLookupMessageTransaction(UINT message, LPARAM lparam,
         BuildSiglusLookupPayloadAtPress(target, game, point, &payload,
                                        &glyph_index, &diagnostic);
   }
-  const auto decision = fushi_voice_hook::DecideSiglusLookupMouseMessage(
+  const auto decision = my_comic_voice_hook::DecideSiglusLookupMouseMessage(
       admitted, message, popup_shield, hit, latched);
   if (hit && decision.consume && !popup_shield) {
     g_siglus_lookup_message_transaction = {payload, epoch, thread_id, true};

@@ -4,7 +4,7 @@
 #include <cstdio>
 #include <memory>
 int main() {
-  using namespace fushi_voice_hook;
+  using namespace my_comic_voice_hook;
   auto header = std::make_unique<SharedHeader>();
   TextLane lane = {};
   TextSlot slot = {};

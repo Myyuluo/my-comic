@@ -38,7 +38,7 @@
 
 #if defined(_M_IX86)
 
-namespace fvp_lookup = fushi_voice_hook::fvp_lookup;
+namespace fvp_lookup = my_comic_voice_hook::fvp_lookup;
 
 constexpr uint32_t kFvpEventSlots = 8u;
 constexpr uint32_t kFvpModelSlots = 2u;
@@ -539,7 +539,7 @@ void QueueFvpSubmit(const FvpSubmit& submit) {
 bool FvpShieldActive(HWND game) {
   if (IsLookupOverlayInputShieldVisible()) return true;
   if (g_header == nullptr) return false;
-  const auto request = fushi_voice_hook::ReadLookupShieldRequest(g_header);
+  const auto request = my_comic_voice_hook::ReadLookupShieldRequest(g_header);
   return request.valid && request.active_buttons != 0u &&
          request.target_hwnd ==
              static_cast<uint64_t>(reinterpret_cast<uintptr_t>(game));
@@ -560,8 +560,8 @@ bool FvpPressEligible(HWND hwnd, WPARAM wparam, LPARAM lparam,
                       FvpSubmit* submit) {
   auto& rt = g_fvp_lookup;
   if (!rt.live.load(std::memory_order_acquire) || g_header == nullptr ||
-      g_stop || !fushi_voice_hook::HasLookupRegion(g_header) ||
-      fushi_voice_hook::AtomicLoadShared32(&g_header->lookup_enabled) == 0u) {
+      g_stop || !my_comic_voice_hook::HasLookupRegion(g_header) ||
+      my_comic_voice_hook::AtomicLoadShared32(&g_header->lookup_enabled) == 0u) {
     return FvpRefusePress(1u);
   }
   FvpModel& model = rt.input_model;
@@ -576,9 +576,9 @@ bool FvpPressEligible(HWND hwnd, WPARAM wparam, LPARAM lparam,
       rt.buffer_prints.Of(model.buffer) != model.buffer_prints) {
     return FvpRefusePress(3u);
   }
-  if (!fushi_voice_hook::g_geometry_provider_registry.NativeInputAllowed(
-          g_header, fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-          fushi_voice_hook::kLookupGeometryProviderIdFvp)) {
+  if (!my_comic_voice_hook::g_geometry_provider_registry.NativeInputAllowed(
+          g_header, my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+          my_comic_voice_hook::kLookupGeometryProviderIdFvp)) {
     return FvpRefusePress(4u);
   }
   if (FvpShieldActive(hwnd)) return FvpRefusePress(5u);
@@ -663,7 +663,7 @@ constexpr std::array<WNDPROC, kFvpWndProcSlots> kFvpWndProcDetours = {
 
 // ── HookWorker ─────────────────────────────────────────────────────────────
 
-// Worker-only, bounded diagnostics in %TEMP%\fushi_galhook.log.  Never logs
+// Worker-only, bounded diagnostics in %TEMP%\my_comic_galhook.log.  Never logs
 // dialogue text.
 void FvpLookupLog(const wchar_t* format, ...) {
   wchar_t line[512] = {};
@@ -674,7 +674,7 @@ void FvpLookupLog(const wchar_t* format, ...) {
   wchar_t path[MAX_PATH] = {};
   const DWORD length = GetTempPathW(MAX_PATH, path);
   if (length == 0 || length >= MAX_PATH - 20) return;
-  wcscat_s(path, L"fushi_galhook.log");
+  wcscat_s(path, L"my_comic_galhook.log");
   HANDLE file = g_orig_CreateFileW(path, FILE_APPEND_DATA, FILE_SHARE_READ,
                                    nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL,
                                    nullptr);
@@ -734,8 +734,8 @@ bool InstallFvpLookup() {
   LARGE_INTEGER frequency = {}, started = {}, finished = {};
   QueryPerformanceFrequency(&frequency);
   QueryPerformanceCounter(&started);
-  fushi_voice_hook::exact_lookup::LoadedPeImage image;
-  if (!fushi_voice_hook::exact_lookup::OpenLoadedPeImage(
+  my_comic_voice_hook::exact_lookup::LoadedPeImage image;
+  if (!my_comic_voice_hook::exact_lookup::OpenLoadedPeImage(
           GetModuleHandleW(nullptr), &image)) {
     rt.site_result = fvp_lookup::SiteResult::kNotX86;
   } else {
@@ -791,8 +791,8 @@ bool InstallFvpLookup() {
       rt.sites.glyph_advance, rt.sites.design_w, rt.sites.design_h,
       print ? 1 : 0, glyph ? 1 : 0, draw ? 1 : 0, scan_ms);
   if (rt.installed && g_header != nullptr) {
-    fushi_voice_hook::AtomicOrShared32(
-        &g_header->lookup_diag, fushi_voice_hook::kLookupDiagSensorInstalled);
+    my_comic_voice_hook::AtomicOrShared32(
+        &g_header->lookup_diag, my_comic_voice_hook::kLookupDiagSensorInstalled);
   }
   return rt.installed;
 }
@@ -810,7 +810,7 @@ constexpr wchar_t kFvpHookCode[] = L"ENGINE:FVP:text_print";
 constexpr char kFvpHookName[] = "FVP exact";
 
 uint64_t FvpLaneId(int32_t buffer) {
-  return fushi_voice_hook::NativeTextThreadIdFrom(
+  return my_comic_voice_hook::NativeTextThreadIdFrom(
       static_cast<uint64_t>(buffer) + 1u, kFvpHookCode, kFvpHookName);
 }
 
@@ -820,7 +820,7 @@ uint64_t PublishFvpTextLine(const std::wstring& text, int32_t buffer,
   auto& rt = g_fvp_lookup;
   if (!g_capture_enabled || g_header == nullptr || g_text_base == nullptr ||
       !g_text_cs_ready || text.empty() ||
-      text.size() * sizeof(wchar_t) > fushi_voice_hook::kTextSlotBytes) {
+      text.size() * sizeof(wchar_t) > my_comic_voice_hook::kTextSlotBytes) {
     return 0u;
   }
   const uint64_t thread_id = FvpLaneId(buffer);
@@ -830,21 +830,21 @@ uint64_t PublishFvpTextLine(const std::wstring& text, int32_t buffer,
       tick - rt.last_text_tick <= kFvpTextDedupeMs) {
     return rt.last_text_event;
   }
-  fushi_voice_hook::TextLaneWrite write;
+  my_comic_voice_hook::TextLaneWrite write;
   write.thread_id = thread_id;
   write.thread_address = address;
   write.thread_context = static_cast<uint64_t>(buffer);
   write.process_id = GetCurrentProcessId();
-  write.source_kind = fushi_voice_hook::kTextSourceFvp;
+  write.source_kind = my_comic_voice_hook::kTextSourceFvp;
   write.is_utf8 = 0;
   write.text = text.data();
   write.byte_len = static_cast<uint32_t>(text.size() * sizeof(wchar_t));
   write.hook_name = kFvpHookName;
   write.hook_code = kFvpHookCode;
   EnterCriticalSection(&g_text_cs);
-  const uint64_t event = fushi_voice_hook::WriteTextLaneEvent(
-      g_header, fushi_voice_hook::kNativeThreadPreviewStart,
-      fushi_voice_hook::kTextLaneCount, write);
+  const uint64_t event = my_comic_voice_hook::WriteTextLaneEvent(
+      g_header, my_comic_voice_hook::kNativeThreadPreviewStart,
+      my_comic_voice_hook::kTextLaneCount, write);
   LeaveCriticalSection(&g_text_cs);
   if (event == 0u) return 0u;
   NoteFvpFlag(kFvpFlagTextObserved);
@@ -975,7 +975,7 @@ void DrainFvpTextEvents() {
 // a window destroyed and recreated is evaluated again.
 struct FvpWindowSearch {
   uintptr_t base = 0u;
-  fushi_voice_hook::exact_lookup::LoadedPeImage image;
+  my_comic_voice_hook::exact_lookup::LoadedPeImage image;
   HWND window = nullptr;
   uintptr_t procedure = 0u;
   uintptr_t window_xor = 0u;
@@ -1033,7 +1033,7 @@ BOOL CALLBACK FvpCollectChildProcedure(HWND hwnd, LPARAM context) {
 bool CollectFvpWindowCandidate(fvp_lookup::WindowCandidate* candidate) {
   FvpWindowSearch search;
   search.base = g_fvp_lookup.image_base;
-  if (!fushi_voice_hook::exact_lookup::OpenLoadedPeImage(
+  if (!my_comic_voice_hook::exact_lookup::OpenLoadedPeImage(
           reinterpret_cast<HMODULE>(search.base), &search.image)) {
     return false;
   }
@@ -1138,9 +1138,9 @@ void RetireFvpLookup() {
   if (!rt.provider_offered) return;
   rt.provider_offered = false;
   if (g_header != nullptr) {
-    fushi_voice_hook::g_geometry_provider_registry.Retire(
-        g_header, fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-        fushi_voice_hook::kLookupGeometryProviderIdFvp);
+    my_comic_voice_hook::g_geometry_provider_registry.Retire(
+        g_header, my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+        my_comic_voice_hook::kLookupGeometryProviderIdFvp);
   }
 }
 
@@ -1314,7 +1314,7 @@ bool PublishFvpLookupHit(const FvpSubmit& submit) {
   if (submit.line.source_index == fvp_lookup::kNoSource ||
       submit.line.source_length == 0u || submit.line.source_index >= units ||
       submit.line.source_length > units - submit.line.source_index ||
-      fushi_voice_hook::LookupUtf16SourceLength(
+      my_comic_voice_hook::LookupUtf16SourceLength(
           model_line.data(), static_cast<uint32_t>(units),
           submit.line.source_index) != submit.line.source_length) {
     return FailFvpHit(submit, L"source-range");
@@ -1323,25 +1323,25 @@ bool PublishFvpLookupHit(const FvpSubmit& submit) {
       CP_UTF8, WC_ERR_INVALID_CHARS, model_line.data(), static_cast<int>(units),
       nullptr, 0, nullptr, nullptr);
   if (required <= 0 ||
-      static_cast<uint32_t>(required) > fushi_voice_hook::kLookupLineBytes) {
+      static_cast<uint32_t>(required) > my_comic_voice_hook::kLookupLineBytes) {
     return FailFvpHit(submit, L"line-bytes");
   }
-  char utf8[fushi_voice_hook::kLookupLineBytes] = {};
+  char utf8[my_comic_voice_hook::kLookupLineBytes] = {};
   if (WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, model_line.data(),
                           static_cast<int>(units), utf8, required, nullptr,
                           nullptr) != required) {
     return FailFvpHit(submit, L"utf8");
   }
-  fushi_voice_hook::LookupGeometryHitPublication publication;
+  my_comic_voice_hook::LookupGeometryHitPublication publication;
   publication.provider_kind =
-      fushi_voice_hook::kLookupGeometryProviderEngineExactLayout;
-  publication.provider_id = fushi_voice_hook::kLookupGeometryProviderIdFvp;
+      my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout;
+  publication.provider_id = my_comic_voice_hook::kLookupGeometryProviderIdFvp;
   publication.char_index = submit.line.source_index;
   publication.source_length = submit.line.source_length;
   publication.char_count = static_cast<uint32_t>(units);
   publication.coordinate_space =
-      fushi_voice_hook::kLookupCoordinateSpaceClientPhysicalPixels;
-  publication.writing_mode = fushi_voice_hook::kLookupWritingModeHorizontal;
+      my_comic_voice_hook::kLookupCoordinateSpaceClientPhysicalPixels;
+  publication.writing_mode = my_comic_voice_hook::kLookupWritingModeHorizontal;
   publication.text_generation = record->text_event;
   publication.geometry_generation = submit.generation;
   publication.glyph_x = submit.rect.x;
@@ -1350,11 +1350,11 @@ bool PublishFvpLookupHit(const FvpSubmit& submit) {
   publication.glyph_h = submit.rect.h;
   publication.view_w = submit.physical_w;
   publication.view_h = submit.physical_h;
-  publication.flags = fushi_voice_hook::kLookupHitFlagSubmit;
+  publication.flags = my_comic_voice_hook::kLookupHitFlagSubmit;
   publication.line_utf8 = reinterpret_cast<const uint8_t*>(utf8);
   publication.line_bytes = static_cast<uint32_t>(required);
   const bool published =
-      fushi_voice_hook::g_geometry_provider_registry.PublishHit(g_header,
+      my_comic_voice_hook::g_geometry_provider_registry.PublishHit(g_header,
                                                                 publication);
   if (published) NoteFvpFlag(kFvpFlagHitPublished);
   FvpLookupLog(
@@ -1410,15 +1410,15 @@ void ProcessFvpLookupTick() {
   // The text lane does not depend on the lookup switch.
   DrainFvpTextEvents();
   if (g_stop || g_header == nullptr ||
-      !fushi_voice_hook::HasLookupRegion(g_header) ||
-      fushi_voice_hook::AtomicLoadShared32(&g_header->lookup_enabled) == 0u) {
+      !my_comic_voice_hook::HasLookupRegion(g_header) ||
+      my_comic_voice_hook::AtomicLoadShared32(&g_header->lookup_enabled) == 0u) {
     NoteFvpRetire(1u);
     rt.watched_surface.store(0u, std::memory_order_release);
     RetireFvpLookup();
     return;
   }
-  fushi_voice_hook::AtomicOrShared32(
-      &g_header->lookup_diag, fushi_voice_hook::kLookupDiagSensorInstalled);
+  my_comic_voice_hook::AtomicOrShared32(
+      &g_header->lookup_diag, my_comic_voice_hook::kLookupDiagSensorInstalled);
   // A press the window procedure already swallowed is published (or its drop
   // logged) whatever the gates below say now: the game never saw it.
   const uint64_t claims = rt.claimed_presses.load(std::memory_order_acquire);
@@ -1445,7 +1445,7 @@ void ProcessFvpLookupTick() {
   std::wstring line;
   uint64_t event = 0u;
   uint64_t thread = 0u;
-  if (!fushi_voice_hook::ReadSelectedLookupText(
+  if (!my_comic_voice_hook::ReadSelectedLookupText(
           g_header, &line, &event, &thread, fvp_lookup::kMaxUnits)) {
     NoteFvpRetire(3u);
     rt.watched_surface.store(0u, std::memory_order_release);
@@ -1504,9 +1504,9 @@ void ProcessFvpLookupTick() {
           rt.model.design_w, rt.model.design_h);
     }
   }
-  if (fushi_voice_hook::g_geometry_provider_registry.OfferReady(
-          g_header, fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-          fushi_voice_hook::kLookupGeometryProviderIdFvp)) {
+  if (my_comic_voice_hook::g_geometry_provider_registry.OfferReady(
+          g_header, my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+          my_comic_voice_hook::kLookupGeometryProviderIdFvp)) {
     if (!rt.provider_offered) {
       FvpLookupLog(L"fvp-lookup: OfferReady gen=%llu glyphs=%u",
                    static_cast<unsigned long long>(rt.model.generation),
@@ -1514,8 +1514,8 @@ void ProcessFvpLookupTick() {
     }
     rt.provider_offered = true;
     NoteFvpFlag(kFvpFlagGeometryOffered);
-    fushi_voice_hook::AtomicOrShared32(
-        &g_header->lookup_diag, fushi_voice_hook::kLookupDiagGeometryObserved);
+    my_comic_voice_hook::AtomicOrShared32(
+        &g_header->lookup_diag, my_comic_voice_hook::kLookupDiagGeometryObserved);
     NoteFvpRetire(0u);
   } else {
     NoteFvpRetire(5u);

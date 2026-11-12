@@ -36,7 +36,7 @@
 
 #if defined(_M_IX86)
 
-namespace yuris_lookup = fushi_voice_hook::yuris_lookup;
+namespace yuris_lookup = my_comic_voice_hook::yuris_lookup;
 
 constexpr uint32_t kYurisGlyphSlots = 512u;
 constexpr uint32_t kYurisTextSlots = 8u;
@@ -372,7 +372,7 @@ void QueueYurisSubmit(const YurisSubmit& submit) {
 bool YurisShieldActive(HWND game) {
   if (IsLookupOverlayInputShieldVisible()) return true;
   if (g_header == nullptr) return false;
-  const auto request = fushi_voice_hook::ReadLookupShieldRequest(g_header);
+  const auto request = my_comic_voice_hook::ReadLookupShieldRequest(g_header);
   return request.valid && request.active_buttons != 0u &&
          request.target_hwnd ==
              static_cast<uint64_t>(reinterpret_cast<uintptr_t>(game));
@@ -395,8 +395,8 @@ bool RejectYurisPress(uint32_t reason) {
 bool YurisPressEligible(YurisSubmit* submit) {
   auto& rt = g_yuris_lookup;
   if (g_header == nullptr || g_stop ||
-      !fushi_voice_hook::HasLookupRegion(g_header) ||
-      fushi_voice_hook::AtomicLoadShared32(&g_header->lookup_enabled) == 0u) {
+      !my_comic_voice_hook::HasLookupRegion(g_header) ||
+      my_comic_voice_hook::AtomicLoadShared32(&g_header->lookup_enabled) == 0u) {
     return RejectYurisPress(1u);
   }
   YurisModel& model = rt.input_model;
@@ -406,9 +406,9 @@ bool YurisPressEligible(YurisSubmit* submit) {
   const HWND game = reinterpret_cast<HWND>(model.window);
   if (game == nullptr ||
       rt.glyph_count.load(std::memory_order_acquire) != model.glyph_seq ||
-      !fushi_voice_hook::g_geometry_provider_registry.NativeInputAllowed(
-          g_header, fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-          fushi_voice_hook::kLookupGeometryProviderIdYuris) ||
+      !my_comic_voice_hook::g_geometry_provider_registry.NativeInputAllowed(
+          g_header, my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+          my_comic_voice_hook::kLookupGeometryProviderIdYuris) ||
       YurisShieldActive(game) || GetForegroundWindow() != game ||
       (GetKeyState(VK_SHIFT) & 0x8000) != 0 ||
       (GetKeyState(VK_CONTROL) & 0x8000) != 0 ||
@@ -533,7 +533,7 @@ LRESULT CALLBACK YurisWndProcDetour(HWND hwnd, UINT message, WPARAM wparam,
 
 // ── HookWorker ─────────────────────────────────────────────────────────────
 
-// Worker-only, bounded diagnostics in %TEMP%\fushi_galhook.log.  Never logs
+// Worker-only, bounded diagnostics in %TEMP%\my_comic_galhook.log.  Never logs
 // dialogue text.
 void YurisLookupLog(const wchar_t* format, ...) {
   auto& rt = g_yuris_lookup;
@@ -547,7 +547,7 @@ void YurisLookupLog(const wchar_t* format, ...) {
   wchar_t path[MAX_PATH] = {};
   const DWORD length = GetTempPathW(MAX_PATH, path);
   if (length == 0 || length >= MAX_PATH - 20) return;
-  wcscat_s(path, L"fushi_galhook.log");
+  wcscat_s(path, L"my_comic_galhook.log");
   HANDLE file = g_orig_CreateFileW(path, FILE_APPEND_DATA, FILE_SHARE_READ,
                                    nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL,
                                    nullptr);
@@ -685,12 +685,12 @@ bool LoadYurisPristineView(yuris_lookup::ImageView* view,
 // IAT slot RVA of dll!symbol in the pristine copy (by name).
 uint32_t YurisImportSlot(const yuris_lookup::ImageView& view, const char* dll,
                          const char* symbol) {
-  fushi_voice_hook::exact_lookup::LoadedPeImage image;
+  my_comic_voice_hook::exact_lookup::LoadedPeImage image;
   image.base = view.bytes;
   image.size = view.size;
   image.absolute_base = view.va_base;
   return static_cast<uint32_t>(
-      fushi_voice_hook::reallive_lookup::FindImportSlotRva(image, dll, symbol));
+      my_comic_voice_hook::reallive_lookup::FindImportSlotRva(image, dll, symbol));
 }
 
 // The live bytes at a hook target still equal the pristine ones.
@@ -775,8 +775,8 @@ bool InstallYurisLookup() {
       static_cast<unsigned long>(rt.sites.key_loop), rt.sites.return_count,
       hooked ? 1 : 0, scan_ms);
   if (rt.installed && g_header != nullptr) {
-    fushi_voice_hook::AtomicOrShared32(
-        &g_header->lookup_diag, fushi_voice_hook::kLookupDiagSensorInstalled);
+    my_comic_voice_hook::AtomicOrShared32(
+        &g_header->lookup_diag, my_comic_voice_hook::kLookupDiagSensorInstalled);
   }
   return rt.installed;
 }
@@ -790,32 +790,32 @@ uint64_t PublishYurisTextLine(const std::wstring& text, uint64_t identity,
   *fresh = false;
   if (!g_capture_enabled || g_header == nullptr || g_text_base == nullptr ||
       !g_text_cs_ready || text.empty() ||
-      text.size() * sizeof(wchar_t) > fushi_voice_hook::kTextSlotBytes) {
+      text.size() * sizeof(wchar_t) > my_comic_voice_hook::kTextSlotBytes) {
     return 0u;
   }
   constexpr wchar_t kHookCode[] = L"ENGINE:YURIS:message_draw";
   constexpr char kHookName[] = "YU-RIS exact";
   const uint64_t thread_id =
-      fushi_voice_hook::NativeTextThreadIdFrom(identity, kHookCode, kHookName);
+      my_comic_voice_hook::NativeTextThreadIdFrom(identity, kHookCode, kHookName);
   if (thread_id == rt.last_text_thread && text == rt.last_text &&
       tick - rt.last_text_tick <= kYurisTextDedupeMs) {
     return rt.last_text_event;
   }
-  fushi_voice_hook::TextLaneWrite write;
+  my_comic_voice_hook::TextLaneWrite write;
   write.thread_id = thread_id;
   write.thread_address = address;
   write.thread_context = address;
   write.process_id = GetCurrentProcessId();
-  write.source_kind = fushi_voice_hook::kTextSourceYuris;
+  write.source_kind = my_comic_voice_hook::kTextSourceYuris;
   write.is_utf8 = 0;
   write.text = text.data();
   write.byte_len = static_cast<uint32_t>(text.size() * sizeof(wchar_t));
   write.hook_name = kHookName;
   write.hook_code = kHookCode;
   EnterCriticalSection(&g_text_cs);
-  const uint64_t event = fushi_voice_hook::WriteTextLaneEvent(
-      g_header, fushi_voice_hook::kNativeThreadPreviewStart,
-      fushi_voice_hook::kTextLaneCount, write);
+  const uint64_t event = my_comic_voice_hook::WriteTextLaneEvent(
+      g_header, my_comic_voice_hook::kNativeThreadPreviewStart,
+      my_comic_voice_hook::kTextLaneCount, write);
   LeaveCriticalSection(&g_text_cs);
   if (event == 0u) return 0u;
   // An exact engine producer is live: the GDI glyph fallback yields (YU-RIS
@@ -956,8 +956,8 @@ void FindYurisWindow() {
     HWND window = nullptr;
     uint32_t matches = 0u;
   } search;
-  fushi_voice_hook::exact_lookup::LoadedPeImage image;
-  if (!fushi_voice_hook::exact_lookup::OpenLoadedPeImage(
+  my_comic_voice_hook::exact_lookup::LoadedPeImage image;
+  if (!my_comic_voice_hook::exact_lookup::OpenLoadedPeImage(
           reinterpret_cast<HMODULE>(rt.image_base), &image)) {
     return;
   }
@@ -1028,9 +1028,9 @@ void RetireYurisLookup() {
   if (!rt.provider_offered) return;
   rt.provider_offered = false;
   if (g_header != nullptr) {
-    fushi_voice_hook::g_geometry_provider_registry.Retire(
-        g_header, fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-        fushi_voice_hook::kLookupGeometryProviderIdYuris);
+    my_comic_voice_hook::g_geometry_provider_registry.Retire(
+        g_header, my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+        my_comic_voice_hook::kLookupGeometryProviderIdYuris);
   }
 }
 
@@ -1322,7 +1322,7 @@ bool PublishYurisLookupHit(const YurisSubmit& submit) {
   if (submit.line.source_index == yuris_lookup::kNoSource ||
       submit.line.source_length == 0u || submit.line.source_index >= units ||
       submit.line.source_length > units - submit.line.source_index ||
-      fushi_voice_hook::LookupUtf16SourceLength(
+      my_comic_voice_hook::LookupUtf16SourceLength(
           model_line.data(), static_cast<uint32_t>(units),
           submit.line.source_index) != submit.line.source_length) {
     return FailYurisHit(submit, L"source-range");
@@ -1331,25 +1331,25 @@ bool PublishYurisLookupHit(const YurisSubmit& submit) {
       CP_UTF8, WC_ERR_INVALID_CHARS, model_line.data(),
       static_cast<int>(units), nullptr, 0, nullptr, nullptr);
   if (required <= 0 ||
-      static_cast<uint32_t>(required) > fushi_voice_hook::kLookupLineBytes) {
+      static_cast<uint32_t>(required) > my_comic_voice_hook::kLookupLineBytes) {
     return FailYurisHit(submit, L"line-bytes");
   }
-  char utf8[fushi_voice_hook::kLookupLineBytes] = {};
+  char utf8[my_comic_voice_hook::kLookupLineBytes] = {};
   if (WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, model_line.data(),
                           static_cast<int>(units), utf8, required, nullptr,
                           nullptr) != required) {
     return FailYurisHit(submit, L"utf8");
   }
-  fushi_voice_hook::LookupGeometryHitPublication publication;
+  my_comic_voice_hook::LookupGeometryHitPublication publication;
   publication.provider_kind =
-      fushi_voice_hook::kLookupGeometryProviderEngineExactLayout;
-  publication.provider_id = fushi_voice_hook::kLookupGeometryProviderIdYuris;
+      my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout;
+  publication.provider_id = my_comic_voice_hook::kLookupGeometryProviderIdYuris;
   publication.char_index = submit.line.source_index;
   publication.source_length = submit.line.source_length;
   publication.char_count = static_cast<uint32_t>(units);
   publication.coordinate_space =
-      fushi_voice_hook::kLookupCoordinateSpaceClientPhysicalPixels;
-  publication.writing_mode = fushi_voice_hook::kLookupWritingModeHorizontal;
+      my_comic_voice_hook::kLookupCoordinateSpaceClientPhysicalPixels;
+  publication.writing_mode = my_comic_voice_hook::kLookupWritingModeHorizontal;
   publication.text_generation = record->text_event;
   publication.geometry_generation = submit.generation;
   publication.glyph_x = submit.rect.x;
@@ -1358,11 +1358,11 @@ bool PublishYurisLookupHit(const YurisSubmit& submit) {
   publication.glyph_h = submit.rect.h;
   publication.view_w = submit.physical_w;
   publication.view_h = submit.physical_h;
-  publication.flags = fushi_voice_hook::kLookupHitFlagSubmit;
+  publication.flags = my_comic_voice_hook::kLookupHitFlagSubmit;
   publication.line_utf8 = reinterpret_cast<const uint8_t*>(utf8);
   publication.line_bytes = static_cast<uint32_t>(required);
   const bool published =
-      fushi_voice_hook::g_geometry_provider_registry.PublishHit(g_header,
+      my_comic_voice_hook::g_geometry_provider_registry.PublishHit(g_header,
                                                                 publication);
   YurisLookupLog(
       L"yuris-lookup: hit gen=%llu glyph=%u char=%u+%u rect=%d,%d %dx%d "
@@ -1421,14 +1421,14 @@ void ProcessYurisLookupTick() {
   // The text lane does not depend on the lookup switch.
   DrainYurisEvents();
   if (g_stop || g_header == nullptr ||
-      !fushi_voice_hook::HasLookupRegion(g_header) ||
-      fushi_voice_hook::AtomicLoadShared32(&g_header->lookup_enabled) == 0u) {
+      !my_comic_voice_hook::HasLookupRegion(g_header) ||
+      my_comic_voice_hook::AtomicLoadShared32(&g_header->lookup_enabled) == 0u) {
     NoteYurisRetire(1u);
     RetireYurisLookup();
     return;
   }
-  fushi_voice_hook::AtomicOrShared32(
-      &g_header->lookup_diag, fushi_voice_hook::kLookupDiagSensorInstalled);
+  my_comic_voice_hook::AtomicOrShared32(
+      &g_header->lookup_diag, my_comic_voice_hook::kLookupDiagSensorInstalled);
   const uint64_t claims = rt.claimed_presses.load(std::memory_order_acquire);
   if (claims != rt.logged_claims) {
     rt.logged_claims = claims;
@@ -1460,7 +1460,7 @@ void ProcessYurisLookupTick() {
   std::wstring line;
   uint64_t event = 0u;
   uint64_t thread = 0u;
-  if (!fushi_voice_hook::ReadSelectedLookupText(
+  if (!my_comic_voice_hook::ReadSelectedLookupText(
           g_header, &line, &event, &thread, yuris_lookup::kMaxCells)) {
     NoteYurisRetire(3u);
     RetireYurisLookup();
@@ -1497,12 +1497,12 @@ void ProcessYurisLookupTick() {
         rt.model.physical_w, rt.model.physical_h, rt.model.logical_w,
         rt.model.logical_h, rt.model.design_w, rt.model.design_h);
   }
-  if (fushi_voice_hook::g_geometry_provider_registry.OfferReady(
-          g_header, fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-          fushi_voice_hook::kLookupGeometryProviderIdYuris)) {
+  if (my_comic_voice_hook::g_geometry_provider_registry.OfferReady(
+          g_header, my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+          my_comic_voice_hook::kLookupGeometryProviderIdYuris)) {
     rt.provider_offered = true;
-    fushi_voice_hook::AtomicOrShared32(
-        &g_header->lookup_diag, fushi_voice_hook::kLookupDiagGeometryObserved);
+    my_comic_voice_hook::AtomicOrShared32(
+        &g_header->lookup_diag, my_comic_voice_hook::kLookupDiagGeometryObserved);
     NoteYurisRetire(0u);
   } else {
     NoteYurisRetire(5u);

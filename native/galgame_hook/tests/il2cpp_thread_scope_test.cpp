@@ -14,8 +14,8 @@
 
 #include "il2cpp_thread_scope.h"
 
-using fushi_voice_hook::Il2CppManagedThreadScope;
-using fushi_voice_hook::Il2CppThreadFns;
+using my_comic_voice_hook::Il2CppManagedThreadScope;
+using my_comic_voice_hook::Il2CppThreadFns;
 
 namespace {
 

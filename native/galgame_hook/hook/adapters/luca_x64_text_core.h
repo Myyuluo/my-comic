@@ -4,7 +4,7 @@
 
 #include "luca_text_core.h"
 
-namespace fushi_voice_hook::luca {
+namespace my_comic_voice_hook::luca {
 
 inline constexpr uint32_t kMaxMessageRecords = 8u;
 
@@ -268,4 +268,4 @@ class X64JapaneseRecordSelector {
   uint32_t selected_ = kMaxMessageRecords;
 };
 
-}  // namespace fushi_voice_hook::luca
+}  // namespace my_comic_voice_hook::luca

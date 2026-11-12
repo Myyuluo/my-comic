@@ -16,7 +16,7 @@
 
 #include <windows.h>
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 struct GameMainWindowSearch {
   DWORD pid = 0;
@@ -65,4 +65,4 @@ inline HWND FindGameMainWindow() {
   return FindGameMainWindowOfProcess(GetCurrentProcessId());
 }
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

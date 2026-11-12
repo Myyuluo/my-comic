@@ -8,7 +8,7 @@
 
 #include <cstddef>
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 inline bool IsLookupLineWhitespace(wchar_t c) {
   return c == L' ' || c == L'\t' || c == L'\r' || c == L'\n' || c == 0x3000;
@@ -107,4 +107,4 @@ inline bool LookupPageSentenceCovering(const wchar_t* page, size_t page_len,
   return false;
 }
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

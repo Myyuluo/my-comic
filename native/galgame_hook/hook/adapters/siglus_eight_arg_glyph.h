@@ -2,7 +2,7 @@
 
 #include "siglus_autoprofile.h"
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 // Static compiler-family proof only. The caller must separately prove live
 // owner, viewport, input and text-event identity before installing any hook.
@@ -281,4 +281,4 @@ inline bool Resolve(const exact_lookup::LoadedPeImage& image,
   return true;
 }
 }  // namespace siglus_eight_arg_glyph
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

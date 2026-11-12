@@ -9,10 +9,10 @@
 #include <cstdint>
 #include <cstring>
 
-using fushi_voice_hook::AudioResourceFormat;
-using fushi_voice_hook::DetectAudioResourceFormat;
-using fushi_voice_hook::FfmpegModuleKind;
-using fushi_voice_hook::ParseFfmpegModuleName;
+using my_comic_voice_hook::AudioResourceFormat;
+using my_comic_voice_hook::DetectAudioResourceFormat;
+using my_comic_voice_hook::FfmpegModuleKind;
+using my_comic_voice_hook::ParseFfmpegModuleName;
 
 int main() {
   const auto legacy = ParseFfmpegModuleName(L"avcodec-54.dll");

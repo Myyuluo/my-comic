@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# 产物校验：刚构建出来的 fushi_torrent bridge 共享库，必须把 C ABI 头文件里声明的
+# 产物校验：刚构建出来的 my_comic_torrent bridge 共享库，必须把 C ABI 头文件里声明的
 # **每一个** HT_EXPORT 符号都真的导出到动态符号表。
 #
 # 为什么这一层单独存在：build_windows_dll.ps1 / build_android_so.sh 的自检只到
 # 「文件存在」。而 FFI 的失败形态恰恰是「文件在、符号不在」——
 # `DynamicLibrary.lookup` 要等用户装上新包、点到那个功能才抛，CI 全绿。
 # 纯文本层的头文件 <-> Dart 绑定漂移由
-# fushi/test/media/torrent/torrent_ffi_bindings_parity_guard_test.dart 兜底；
+# my_comic/test/media/torrent/torrent_ffi_bindings_parity_guard_test.dart 兜底；
 # 这里补的是「头文件 <-> 真实二进制」那一段，只有真编出产物的地方才做得到。
 #
 # 用法: verify_torrent_abi.sh <so/dylib-path> <nm-binary>
@@ -18,7 +18,7 @@ NM="${2:?usage: verify_torrent_abi.sh <so-path> <nm-binary>}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-HEADER="$REPO_ROOT/native/fushi_torrent/fushi_torrent_include/fushi_torrent.h"
+HEADER="$REPO_ROOT/native/my_comic_torrent/my_comic_torrent_include/my_comic_torrent.h"
 
 [[ -f "$SO" ]] || { echo "::error::artifact not found: $SO" >&2; exit 1; }
 [[ -f "$HEADER" ]] || { echo "::error::header not found: $HEADER" >&2; exit 1; }
@@ -31,7 +31,7 @@ grep -oE 'HT_EXPORT[^;(]*\bht_[a-z0-9_]+[[:space:]]*\(' "$HEADER" \
   | grep -oE '\bht_[a-z0-9_]+' | sort -u > "$work/expected.txt"
 
 expected_count="$(wc -l < "$work/expected.txt" | tr -d ' ')"
-echo "C ABI symbols declared in fushi_torrent.h: $expected_count"
+echo "C ABI symbols declared in my_comic_torrent.h: $expected_count"
 
 # 扫描规模哨兵：正则被格式化/改写打断时，期望集会静默塌成 0 条，于是「全都导出了」
 # 恒真、这道校验变成空转。下界取当前 37 的保守值；真删符号是破坏性 ABI 变更，

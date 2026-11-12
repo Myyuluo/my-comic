@@ -14,7 +14,7 @@
 #include <cstdint>
 #include <cwchar>
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 // `>` 也是 KiriKiri 归档放置路径的分隔符（`归档>条目`）。取最后一段作落盘基名。
 inline bool IsKirikiriPathSeparator(wchar_t c) {
@@ -36,4 +36,4 @@ inline const wchar_t* KirikiriVoicePayloadExtension(const uint8_t* data,
   return nullptr;
 }
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

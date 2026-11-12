@@ -1,11 +1,11 @@
-// 听书 reveal → fushiProgressDetails 真渲染探针：逐 cue 调 highlightSentenceAudioCue(id, true)
+// 听书 reveal → myComicProgressDetails 真渲染探针：逐 cue 调 highlightSentenceAudioCue(id, true)
 //
 // 跑法（仓库根，不要 cd 进本目录）：
 //   flutter test test/reader/reader_headless_shell_dump_test.dart   # 先 dump 引擎到 systemTemp
 //   node tool/reader_pitch_headless/audiobook_reveal_progress_probe.mjs
-// 引擎产物不含 setup 脚本的 __fushiApplyReaderMargins（webview.part.dart），这里桩掉它，
+// 引擎产物不含 setup 脚本的 __myComicApplyReaderMargins（webview.part.dart），这里桩掉它，
 // 否则 initialize 在 applySentenceAudioCues 之前就抛错、cue 不会被包裹。
-// （= AudiobookBridge.highlight(reveal:true) 的 JS 终点），随后读 fushiProgressDetails()，
+// （= AudiobookBridge.highlight(reveal:true) 的 JS 终点），随后读 myComicProgressDetails()，
 // 断言 cue 首字落在回传的 [start,end) 内（reveal 翻到了 cue 所在页且进度协议读到了新页）。
 import fs from 'node:fs'; import path from 'node:path'; import os from 'node:os';
 import { createRequire } from 'node:module';
@@ -18,10 +18,10 @@ const CHROME = process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Applic
 const W = 1000, H = 800, PT = 24, PB = 32, PL = 20, PR = 28;
 
 function progressDetailsSource() {
-  const src = fs.readFileSync(path.join(REPO, 'fushi/lib/src/pages/implementations/reader_fushi/webview.part.dart'), 'utf8').replace(/\r\n/g, '\n');
-  const start = src.indexOf('window.fushiProgressDetails = function()');
+  const src = fs.readFileSync(path.join(REPO, 'my_comic/lib/src/pages/implementations/reader_my_comic/webview.part.dart'), 'utf8').replace(/\r\n/g, '\n');
+  const start = src.indexOf('window.myComicProgressDetails = function()');
   const end = src.indexOf('\n  };', start);
-  if (start < 0 || end < 0) throw new Error('fushiProgressDetails source not found');
+  if (start < 0 || end < 0) throw new Error('myComicProgressDetails source not found');
   return src.slice(start, end + 5);
 }
 
@@ -31,15 +31,15 @@ const paras = texts.map(t => `<p>${t}</p>`).join('\n');
 const cues = texts.map((t, i) => ({ id: 'cue' + i, text: t }));
 
 const GEOMETRIES = [
-  { name: 'paginated horizontal', engine: 'fushi_engine_paginated.html', continuous: false, settle: 120,
+  { name: 'paginated horizontal', engine: 'my_comic_engine_paginated.html', continuous: false, settle: 120,
     css: `html,body{margin:0;padding:0;}html{overflow:hidden;}
  body{width:${W}px;height:${H}px;padding:${PT}px ${PR}px ${PB}px ${PL}px;box-sizing:border-box;column-width:${W-PL-PR}px;column-gap:22px;column-fill:auto;font-size:22px;line-height:1.8;overflow:hidden;writing-mode:horizontal-tb;}
  p{margin:0 0 1em 0;}` },
-  { name: 'paginated vertical', engine: 'fushi_engine_paginated.html', continuous: false, settle: 120,
+  { name: 'paginated vertical', engine: 'my_comic_engine_paginated.html', continuous: false, settle: 120,
     css: `html,body{margin:0;padding:0;}html{overflow:hidden;}
  body{width:${W}px;height:${H}px;padding:${PT}px ${PR}px ${PB}px ${PL}px;box-sizing:border-box;writing-mode:vertical-rl;column-width:${H-PT-PB}px;column-gap:22px;column-fill:auto;font-size:22px;line-height:1.8;overflow:hidden;}
  p{margin:0 1em 0 0;}` },
-  { name: 'continuous horizontal', engine: 'fushi_engine_continuous.html', continuous: true, settle: 900,
+  { name: 'continuous horizontal', engine: 'my_comic_engine_continuous.html', continuous: true, settle: 900,
     css: `html,body{margin:0;padding:0;}
  body{padding:${PT}px ${PR}px ${PB}px ${PL}px;font-size:22px;line-height:1.8;writing-mode:horizontal-tb;}
  p{margin:0 0 1em 0;}` },
@@ -52,20 +52,20 @@ async function openChapter(geom) {
     chromeTopInset: 0, chromeBottomInset: 0, dartPageWidth: W, dartPageHeight: H,
     initialFragment: null, initialCharOffset: -1, initialProgress: 0, sentenceAudioCues: cues,
   };
-  const install = `<script>window.__fushiApplyReaderMargins = function(){};
-window.__fushiInstallShell(${JSON.stringify(CONFIG)});\n${progressDetailsSource()}</script>`;
+  const install = `<script>window.__myComicApplyReaderMargins = function(){};
+window.__myComicInstallShell(${JSON.stringify(CONFIG)});\n${progressDetailsSource()}</script>`;
   const full = `<!doctype html><html><head><meta charset="utf-8"><style>${geom.css}</style>\n${engine}\n${install}</head><body>${paras}</body></html>`;
   const b = await puppeteer.launch({executablePath: CHROME, headless: 'new', args: ['--no-sandbox']});
   const pg = await b.newPage(); await pg.setViewport({width: W, height: H});
   await pg.setRequestInterception(true);
   pg.on('request', async q => {
     const u = q.url();
-    if (u === 'https://fushi.local/chapter') return q.respond({status:200,contentType:'text/html',body:full});
-    if (u.startsWith('https://fushi.local')) return q.respond({status:404,body:''});
+    if (u === 'https://mycomic.local/chapter') return q.respond({status:200,contentType:'text/html',body:full});
+    if (u.startsWith('https://mycomic.local')) return q.respond({status:404,body:''});
     return q.continue();
   });
   pg.on('pageerror', e => console.log('  pageerror:', e.message));
-  await pg.goto('https://fushi.local/chapter', {waitUntil:'load', timeout:8000}).catch(()=>{});
+  await pg.goto('https://mycomic.local/chapter', {waitUntil:'load', timeout:8000}).catch(()=>{});
   await new Promise(r => setTimeout(r, 600));
   return { b, pg };
 }
@@ -76,13 +76,13 @@ async function run(geom) {
   const { b, pg } = await openChapter(geom);
   const problems = [];
   try {
-    const wrappers = await pg.evaluate(() => window.fushiReader.cueWrappers.size);
+    const wrappers = await pg.evaluate(() => window.myComicReader.cueWrappers.size);
     if (wrappers !== N) problems.push(`cueWrappers=${wrappers} != ${N}`);
-    let prev = await pg.evaluate(() => window.fushiProgressDetails());
+    let prev = await pg.evaluate(() => window.myComicProgressDetails());
     let flips = 0, samples = [];
     for (let i = 0; i < N; i++) {
       const res = await pg.evaluate((id) => {
-        const r = window.fushiReader;
+        const r = window.myComicReader;
         const w = r.cueWrappers.get(id)[0];
         const off = r.nodeStartOffsets.get(w.firstChild);
         const before = r.getPagePosition ? r.getPagePosition(r.getScrollContext()) : window.scrollY;
@@ -91,8 +91,8 @@ async function run(geom) {
       }, 'cue' + i);
       await new Promise(r => setTimeout(r, geom.settle));
       const after = await pg.evaluate(() => {
-        const r = window.fushiReader;
-        return { d: window.fushiProgressDetails(), pos: r.getPagePosition ? r.getPagePosition(r.getScrollContext()) : window.scrollY, pending: r._reanchorPending === true };
+        const r = window.myComicReader;
+        return { d: window.myComicProgressDetails(), pos: r.getPagePosition ? r.getPagePosition(r.getScrollContext()) : window.scrollY, pending: r._reanchorPending === true };
       });
       const s = details(after.d);
       const moved = after.pos !== res.before;

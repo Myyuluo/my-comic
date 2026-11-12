@@ -26,7 +26,7 @@ on:
     # full Windows job.
     branches: ['main']
     paths: &multiplatform_paths
-      - 'fushi/**'
+      - 'my_comic/**'
       - 'packages/**'
       # C ABI bridge 源码：只改 native/ 的 PR 以前触发不了任何构建，
       # 编译挂了要等下一个不相关改动才暴露。
@@ -117,8 +117,8 @@ jobs:
           cat "$files"
 
           app_common='^(pubspec\.(yaml|lock)$|ci/|third_party/[^/]+/pubspec\.yaml$|\.github/workflows/build-multiplatform\.yml$|\.github/actions/(provide-baked-secrets|native-artifact-store|native-store-names|pdfium-hook-cache)/)'
-          smoke='^fushi/(integration_test/(app_smoke_test\.dart$|test_helpers\.dart$|support/|helpers/)|tool/(comprehensive_test_runner\.dart$|generate_test_fixtures\.dart$|test_flow/))'
-          windows_only='^(fushi/windows/|packages/(flutter_inappwebview_windows|gamepads_windows)/|packages/[^/]+/windows/|native/galgame_hook/|third_party/([^/]+/windows/|[^/]*windows[^/]*/|libplacebo-win/|m_extension_server/|jogamp/)|tool/mihon/|tool/engine_overlay\.ps1$|tools/(build_magpie_slim|bundle_7za)\.ps1$|.github/actions/(flutter-engine-overlay)/)'
+          smoke='^my_comic/(integration_test/(app_smoke_test\.dart$|test_helpers\.dart$|support/|helpers/)|tool/(comprehensive_test_runner\.dart$|generate_test_fixtures\.dart$|test_flow/))'
+          windows_only='^(my_comic/windows/|packages/(flutter_inappwebview_windows|gamepads_windows)/|packages/[^/]+/windows/|native/galgame_hook/|third_party/([^/]+/windows/|[^/]*windows[^/]*/|libplacebo-win/|m_extension_server/|jogamp/)|tool/mihon/|tool/engine_overlay\.ps1$|tools/(build_magpie_slim|bundle_7za)\.ps1$|.github/actions/(flutter-engine-overlay)/)'
 
           route() {
             local key="$1" re="" v
@@ -135,7 +135,7 @@ jobs:
   # appSmoke），把 PR 上被路径门跳过的「只改 Dart 的 PR」在 develop 上补一遍。
   #
   # 为什么需要它、为什么是这种形状：
-  #   * release-desktop.yml 在每次 develop push（fushi/** packages/** native/** …）上都会做
+  #   * release-desktop.yml 在每次 develop push（my_comic/** packages/** native/** …）上都会做
   #     Windows release 构建——编译 / 链接这层兜底本来就在，而且是每次合并。
   #     它**没有**的是 appSmoke（Windows 真 app 冒烟）、debug 配置构建和 FFI 真调用
   #     测试；这些只在本 workflow 里。
@@ -201,7 +201,7 @@ jobs:
           tmdb-api-key: ${{ secrets.TMDB_API_KEY }}
           opensubtitles-api-key: ${{ secrets.OPENSUBTITLES_API_KEY }}
       - name: Flutter pub get
-        working-directory: fushi
+        working-directory: my_comic
         run: flutter pub get
       - name: Apply pub cache patches
         shell: bash
@@ -211,7 +211,7 @@ jobs:
       # strings.g.dart is gitignored; generate it deterministically before the
       # Windows debug build.
       - name: Generate l10n
-        working-directory: fushi
+        working-directory: my_comic
         run: dart run slang
       - name: Resolve native artifact store names
         id: native_store
@@ -219,13 +219,13 @@ jobs:
         with:
           platform: windows
       - name: Build Windows (debug)
-        working-directory: fushi
+        working-directory: my_comic
         run: >-
           flutter build windows --debug
       - name: Run game-stream input regression
         shell: pwsh
         run: |
-          cmake --build fushi\build\windows\x64 --config Debug --target fushi_windows_game_stream_input_gate
+          cmake --build my_comic\build\windows\x64 --config Debug --target my_comic_windows_game_stream_input_gate
           if ($LASTEXITCODE -ne 0) { throw "game-stream input regression failed ($LASTEXITCODE)" }
       # Mihon runtime 完全由 vendored 源码（m_extension_server + 离线 jogamp 仓库）+ 构建
       # 脚本决定（JDK / 服务端 commit 均在脚本里钉死；脚本再多读仓库里别的目录，必须同步
@@ -247,10 +247,10 @@ jobs:
           if ('${{ steps.mihon_runtime_store.outputs.hit }}' -ne 'true') {
             .\tool\mihon\build_desktop_runtime.ps1 `
               -OutputDirectory $built `
-              -DownloadCache "$env:RUNNER_TEMP\fushi-mihon-downloads"
+              -DownloadCache "$env:RUNNER_TEMP\mycomic-mihon-downloads"
             if ($LASTEXITCODE -ne 0) { throw "Mihon desktop runtime build failed ($LASTEXITCODE)" }
           }
-          $runtime = "fushi\build\windows\x64\runner\Debug\mihon_bridge"
+          $runtime = "my_comic\build\windows\x64\runner\Debug\mihon_bridge"
           if (Test-Path -LiteralPath $runtime) { Remove-Item -LiteralPath $runtime -Recurse -Force }
           Copy-Item -LiteralPath $built -Destination $runtime -Recurse
           foreach ($required in @(
@@ -302,7 +302,7 @@ jobs:
           }
           # BUG-1449：见 release-desktop.yml 同处注释。helper 作为普通文件直接装进
           # voice_hook\<arch>\，与本体同源；解压/校验走共用脚本，不要复制粘贴回来。
-          powershell -NoProfile -ExecutionPolicy Bypass -File native/galgame_hook/tools/install_into_bundle.ps1 -BundleDirectory "$PWD\fushi\build\windows\x64\runner\Debug"
+          powershell -NoProfile -ExecutionPolicy Bypass -File native/galgame_hook/tools/install_into_bundle.ps1 -BundleDirectory "$PWD\my_comic\build\windows\x64\runner\Debug"
           if ($LASTEXITCODE -ne 0) { throw "install_into_bundle.ps1 failed ($LASTEXITCODE)" }
       - name: Save galgame helper archives to native artifact store
         if: steps.galgame_helper_store.outputs.hit != 'true'
@@ -323,7 +323,7 @@ jobs:
           pwsh -NoProfile -ExecutionPolicy Bypass -File tools/build_magpie_slim.ps1
           if ($LASTEXITCODE -ne 0) { throw "build_magpie_slim.ps1 failed ($LASTEXITCODE)" }
           $sourceDir = Join-Path $PWD 'dist'
-          $targetDir = Join-Path $PWD 'fushi\build\windows\x64\runner\Debug\magpie_bundle'
+          $targetDir = Join-Path $PWD 'my_comic\build\windows\x64\runner\Debug\magpie_bundle'
           New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
           foreach ($file in @(
             'Magpie-hibiki-slim-x64.zip',
@@ -341,8 +341,8 @@ jobs:
           # 发现页与漫画导入的 7z/rar 离线解压依赖随包 7z.exe + 7z.dll
           # （LGPL，官方 GitHub 镜像 + SHA-256 钉死，fail-closed）。
           pwsh -NoProfile -ExecutionPolicy Bypass -File tools/bundle_7za.ps1 `
-            -BundleDirectory "$PWD\fushi\build\windows\x64\runner\Debug" `
-            -DownloadCache "$env:RUNNER_TEMP\fushi-7za-cache"
+            -BundleDirectory "$PWD\my_comic\build\windows\x64\runner\Debug" `
+            -DownloadCache "$env:RUNNER_TEMP\mycomic-7za-cache"
           if ($LASTEXITCODE -ne 0) { throw "bundle_7za.ps1 failed ($LASTEXITCODE)" }
       - name: Run Windows comprehensive automation contract
         id: windows_smoke

@@ -29,12 +29,12 @@ if(WIN32 AND MSVC AND CMAKE_SIZEOF_VOID_P EQUAL 4)
   set(_shield_generated "${CMAKE_CURRENT_BINARY_DIR}/generic_input_shield_install_production.inc")
   file(GENERATE OUTPUT "${_shield_generated}"
     CONTENT "// Generated from production source; do not edit.\n${_shield_family}\n${_shield_reservation}\n${_shield_install}")
-  add_executable(fushi_generic_input_shield_install_test
+  add_executable(my_comic_generic_input_shield_install_test
     "${_shield_native_root}/tests/generic_input_shield_install_test.cpp")
-  target_include_directories(fushi_generic_input_shield_install_test PRIVATE
+  target_include_directories(my_comic_generic_input_shield_install_test PRIVATE
     "${_shield_native_root}/include" "${CMAKE_CURRENT_BINARY_DIR}")
-  target_compile_features(fushi_generic_input_shield_install_test PRIVATE cxx_std_17)
-  target_compile_options(fushi_generic_input_shield_install_test PRIVATE /utf-8 /O2 /W4 /WX)
-  add_test(NAME fushi_generic_input_shield_install_test
-    COMMAND fushi_generic_input_shield_install_test)
+  target_compile_features(my_comic_generic_input_shield_install_test PRIVATE cxx_std_17)
+  target_compile_options(my_comic_generic_input_shield_install_test PRIVATE /utf-8 /O2 /W4 /WX)
+  add_test(NAME my_comic_generic_input_shield_install_test
+    COMMAND my_comic_generic_input_shield_install_test)
 endif()

@@ -1,5 +1,5 @@
-#ifndef FUSHI_VOICE_HOOK_UTTERANCE_WINDOW_H_
-#define FUSHI_VOICE_HOOK_UTTERANCE_WINDOW_H_
+#ifndef MYCOMIC_VOICE_HOOK_UTTERANCE_WINDOW_H_
+#define MYCOMIC_VOICE_HOOK_UTTERANCE_WINDOW_H_
 
 #include <cstddef>
 #include <cstdint>
@@ -22,7 +22,7 @@
 // 源 `audio ≈ wall`（实测偏差 <10%），判据不成立，下界原样退回 `text_ts - back_ms` ——
 // 对这类源的取音**逐字节等价于旧行为**（真机实测差异 0 字节）。1.25 这个倍率把「提前灌入」
 // （实测超出 20 倍以上）和「实时写入」（实测 <1.1 倍）分得很开，不在噪声量级上。
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 // 文本时刻之前仍算作本句的固定回看量（旧行为的唯一常量，保持不变）。
 constexpr int64_t kUtteranceBackMs = 200;
@@ -73,6 +73,6 @@ inline int64_t UtteranceLowerBoundMs(const UtteranceClipTiming* clips,
   return lower < base ? lower : base;
 }
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook
 
-#endif  // FUSHI_VOICE_HOOK_UTTERANCE_WINDOW_H_
+#endif  // MYCOMIC_VOICE_HOOK_UTTERANCE_WINDOW_H_

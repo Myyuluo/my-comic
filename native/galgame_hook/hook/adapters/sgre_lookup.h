@@ -10,7 +10,7 @@
 #include "sgre_anchors.h"
 #include "../../include/voice_hook_ipc.h"
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 // Engine-internal addresses (TextRender draw boundary, scenario text vtable,
 // DirectInput mouse device slot) are build-specific and come from
@@ -631,4 +631,4 @@ inline int FindSgreLookupGlyph(const SgreLookupGlyphGeometry* glyphs,
   return -1;
 }
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

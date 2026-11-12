@@ -36,13 +36,13 @@ struct IndexSlot {
 };
 
 bool CopyPath(PathSlot (&slots)[4], HANDLE handle, wchar_t (&out)[16]) {
-  return fushi_voice_hook::ReadTrackedHandle(
+  return my_comic_voice_hook::ReadTrackedHandle(
       slots, handle,
       [&out](const PathSlot& slot) { wcsncpy_s(out, slot.path, _TRUNCATE); });
 }
 
 void RememberPath(PathSlot (&slots)[4], HANDLE handle, const wchar_t* path) {
-  fushi_voice_hook::RememberTrackedHandle(
+  my_comic_voice_hook::RememberTrackedHandle(
       slots, handle,
       [path](PathSlot& slot) { wcsncpy_s(slot.path, path, _TRUNCATE); });
 }
@@ -50,9 +50,9 @@ void RememberPath(PathSlot (&slots)[4], HANDLE handle, const wchar_t* path) {
 }  // namespace
 
 int main() {
-  using fushi_voice_hook::ForgetTrackedHandle;
-  using fushi_voice_hook::IsTrackedHandle;
-  using fushi_voice_hook::RememberTrackedHandle;
+  using my_comic_voice_hook::ForgetTrackedHandle;
+  using my_comic_voice_hook::IsTrackedHandle;
+  using my_comic_voice_hook::RememberTrackedHandle;
 
   // ── 基本往返：登记 → 读到 → 摘掉 → 读不到 ──
   {
@@ -108,7 +108,7 @@ int main() {
     RememberPath(slots, Handle(0x71), L"b");
     const LONG seq_before = slots[0].seq;
     InterlockedIncrement(&slots[1].seq);  // 模拟槽位 1 正处在写窗口
-    fushi_voice_hook::ClearTrackedHandles(slots);
+    my_comic_voice_hook::ClearTrackedHandles(slots);
     Check(slots[0].handle == INVALID_HANDLE_VALUE &&
               slots[1].handle == INVALID_HANDLE_VALUE &&
               slots[2].handle == INVALID_HANDLE_VALUE &&
@@ -134,7 +134,7 @@ int main() {
                                  [](IndexSlot& s) { s.archive_index = 5; }),
           "third handle must be refused when the table is full");
     uint32_t index = 0;
-    Check(fushi_voice_hook::ReadTrackedHandle(
+    Check(my_comic_voice_hook::ReadTrackedHandle(
               slots, Handle(0x31),
               [&index](const IndexSlot& s) { index = s.archive_index; }) &&
               index == 4,
@@ -170,7 +170,7 @@ int main() {
           "once the writer finishes the slot reads normally");
 
     // 读者拷贝期间槽位被重写：seq 变化 → 拒绝本次读取。
-    bool accepted = fushi_voice_hook::ReadTrackedHandle(
+    bool accepted = my_comic_voice_hook::ReadTrackedHandle(
         slots, Handle(0x50), [&slots](const PathSlot&) {
           InterlockedIncrement(&slots[0].seq);
           InterlockedIncrement(&slots[0].seq);
@@ -181,8 +181,8 @@ int main() {
   // ── reserved 占位不会被当成任何真实句柄匹配 ──
   {
     IndexSlot slots[2];
-    slots[0].handle = fushi_voice_hook::TrackedHandleReserved();
-    Check(!IsTrackedHandle(slots, fushi_voice_hook::TrackedHandleReserved()),
+    slots[0].handle = my_comic_voice_hook::TrackedHandleReserved();
+    Check(!IsTrackedHandle(slots, my_comic_voice_hook::TrackedHandleReserved()),
           "reserved marker is not a trackable handle value");
     Check(!ForgetTrackedHandle(slots, Handle(0x1)),
           "reserved marker must never be forgotten by a real close");

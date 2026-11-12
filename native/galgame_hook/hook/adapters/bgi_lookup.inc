@@ -27,7 +27,7 @@
 
 #if defined(_M_IX86)
 
-namespace bgi_lookup = fushi_voice_hook::bgi_lookup;
+namespace bgi_lookup = my_comic_voice_hook::bgi_lookup;
 
 constexpr uint32_t kBgiEventSlots = 8u;
 constexpr uint32_t kBgiModelSlots = 2u;
@@ -348,7 +348,7 @@ void QueueBgiSubmit(const BgiSubmit& submit) {
 bool BgiShieldActive(HWND game) {
   if (IsLookupOverlayInputShieldVisible()) return true;
   if (g_header == nullptr) return false;
-  const auto request = fushi_voice_hook::ReadLookupShieldRequest(g_header);
+  const auto request = my_comic_voice_hook::ReadLookupShieldRequest(g_header);
   return request.valid && request.active_buttons != 0u &&
          request.target_hwnd ==
              static_cast<uint64_t>(reinterpret_cast<uintptr_t>(game));
@@ -380,8 +380,8 @@ bool BgiPressEligible(HWND hwnd, WPARAM wparam, LPARAM lparam,
                       BgiSubmit* submit) {
   auto& rt = g_bgi_lookup;
   if (!rt.live.load(std::memory_order_acquire) || g_header == nullptr ||
-      g_stop || !fushi_voice_hook::HasLookupRegion(g_header) ||
-      fushi_voice_hook::AtomicLoadShared32(&g_header->lookup_enabled) == 0u) {
+      g_stop || !my_comic_voice_hook::HasLookupRegion(g_header) ||
+      my_comic_voice_hook::AtomicLoadShared32(&g_header->lookup_enabled) == 0u) {
     return false;
   }
   BgiModel& model = rt.input_model;
@@ -392,9 +392,9 @@ bool BgiPressEligible(HWND hwnd, WPARAM wparam, LPARAM lparam,
   // means the page on screen may already be another one.
   if (reinterpret_cast<uintptr_t>(hwnd) != model.window ||
       rt.event_count.load(std::memory_order_acquire) != model.event_seq ||
-      !fushi_voice_hook::g_geometry_provider_registry.NativeInputAllowed(
-          g_header, fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-          fushi_voice_hook::kLookupGeometryProviderIdBgi) ||
+      !my_comic_voice_hook::g_geometry_provider_registry.NativeInputAllowed(
+          g_header, my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+          my_comic_voice_hook::kLookupGeometryProviderIdBgi) ||
       BgiShieldActive(hwnd) || GetForegroundWindow() != hwnd ||
       (wparam & (MK_SHIFT | MK_CONTROL | MK_RBUTTON | MK_MBUTTON)) != 0u ||
       (GetKeyState(VK_MENU) & 0x8000) != 0 || !BgiOwnerMatchesModel(model)) {
@@ -459,7 +459,7 @@ LRESULT CALLBACK BgiWndProcDetour(HWND hwnd, UINT message, WPARAM wparam,
 
 // ── HookWorker ─────────────────────────────────────────────────────────────
 
-// Worker-only, bounded diagnostics in %TEMP%\fushi_galhook.log.  Never logs
+// Worker-only, bounded diagnostics in %TEMP%\my_comic_galhook.log.  Never logs
 // dialogue text.
 void BgiLookupLog(const wchar_t* format, ...) {
   wchar_t line[512] = {};
@@ -470,7 +470,7 @@ void BgiLookupLog(const wchar_t* format, ...) {
   wchar_t path[MAX_PATH] = {};
   const DWORD length = GetTempPathW(MAX_PATH, path);
   if (length == 0 || length >= MAX_PATH - 20) return;
-  wcscat_s(path, L"fushi_galhook.log");
+  wcscat_s(path, L"my_comic_galhook.log");
   HANDLE file = g_orig_CreateFileW(path, FILE_APPEND_DATA, FILE_SHARE_READ,
                                    nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL,
                                    nullptr);
@@ -532,8 +532,8 @@ bool InstallBgiLookup() {
   LARGE_INTEGER frequency = {}, started = {}, finished = {};
   QueryPerformanceFrequency(&frequency);
   QueryPerformanceCounter(&started);
-  fushi_voice_hook::exact_lookup::LoadedPeImage image;
-  if (!fushi_voice_hook::exact_lookup::OpenLoadedPeImage(
+  my_comic_voice_hook::exact_lookup::LoadedPeImage image;
+  if (!my_comic_voice_hook::exact_lookup::OpenLoadedPeImage(
           GetModuleHandleW(nullptr), &image)) {
     rt.site_result = bgi_lookup::SiteResult::kNotX86;
   } else {
@@ -575,8 +575,8 @@ bool InstallBgiLookup() {
       static_cast<unsigned long>(rt.sites.screen_widths), hooked ? 1 : 0,
       scan_ms);
   if (rt.installed && g_header != nullptr) {
-    fushi_voice_hook::AtomicOrShared32(
-        &g_header->lookup_diag, fushi_voice_hook::kLookupDiagSensorInstalled);
+    my_comic_voice_hook::AtomicOrShared32(
+        &g_header->lookup_diag, my_comic_voice_hook::kLookupDiagSensorInstalled);
   }
   return rt.installed;
 }
@@ -594,13 +594,13 @@ const bgi_lookup::OwnerAbi* BgiOwnerAbi(uintptr_t vtable) {
   entry.vtable = vtable;
   // Only code and tables of the game's own image are decoded.
   const uintptr_t base = rt.image_base;
-  fushi_voice_hook::exact_lookup::LoadedPeImage image;
-  const bool opened = fushi_voice_hook::exact_lookup::OpenLoadedPeImage(
+  my_comic_voice_hook::exact_lookup::LoadedPeImage image;
+  const bool opened = my_comic_voice_hook::exact_lookup::OpenLoadedPeImage(
       reinterpret_cast<HMODULE>(base), &image);
   auto read = [&image, base, opened](uintptr_t address,
                                      size_t bytes) -> const uint8_t* {
     if (!opened || address < base || address - base >= image.size ||
-        fushi_voice_hook::exact_lookup::FindSectionForRva(
+        my_comic_voice_hook::exact_lookup::FindSectionForRva(
             image, address - base, bytes) == nullptr) {
       return nullptr;
     }
@@ -647,34 +647,34 @@ uint64_t PublishBgiTextLine(const std::wstring& text, uint64_t identity,
   auto& rt = g_bgi_lookup;
   if (!g_capture_enabled || g_header == nullptr || g_text_base == nullptr ||
       !g_text_cs_ready || text.empty() ||
-      text.size() * sizeof(wchar_t) > fushi_voice_hook::kTextSlotBytes) {
+      text.size() * sizeof(wchar_t) > my_comic_voice_hook::kTextSlotBytes) {
     return 0u;
   }
   constexpr wchar_t kHookCode[] = L"ENGINE:BGI:message_set_text";
   constexpr char kHookName[] = "BGI exact";
   const uint64_t thread_id =
-      fushi_voice_hook::NativeTextThreadIdFrom(identity, kHookCode, kHookName);
+      my_comic_voice_hook::NativeTextThreadIdFrom(identity, kHookCode, kHookName);
   // The engine lays a line out once; a repeat of the same line on the same
   // lane within the window is a re-render, not a new line.
   if (thread_id == rt.last_text_thread && text == rt.last_text &&
       tick - rt.last_text_tick <= kBgiTextDedupeMs) {
     return rt.last_text_event;
   }
-  fushi_voice_hook::TextLaneWrite write;
+  my_comic_voice_hook::TextLaneWrite write;
   write.thread_id = thread_id;
   write.thread_address = address;
   write.thread_context = address;
   write.process_id = GetCurrentProcessId();
-  write.source_kind = fushi_voice_hook::kTextSourceBgi;
+  write.source_kind = my_comic_voice_hook::kTextSourceBgi;
   write.is_utf8 = 0;
   write.text = text.data();
   write.byte_len = static_cast<uint32_t>(text.size() * sizeof(wchar_t));
   write.hook_name = kHookName;
   write.hook_code = kHookCode;
   EnterCriticalSection(&g_text_cs);
-  const uint64_t event = fushi_voice_hook::WriteTextLaneEvent(
-      g_header, fushi_voice_hook::kNativeThreadPreviewStart,
-      fushi_voice_hook::kTextLaneCount, write);
+  const uint64_t event = my_comic_voice_hook::WriteTextLaneEvent(
+      g_header, my_comic_voice_hook::kNativeThreadPreviewStart,
+      my_comic_voice_hook::kTextLaneCount, write);
   LeaveCriticalSection(&g_text_cs);
   if (event == 0u) return 0u;
   // An exact engine producer is live: the GDI glyph fallback yields (BGI
@@ -819,13 +819,13 @@ void TryHookBgiWindow() {
   rt.window_retry_tick = now;
   struct Search {
     uintptr_t base = 0u;
-    fushi_voice_hook::exact_lookup::LoadedPeImage image;
+    my_comic_voice_hook::exact_lookup::LoadedPeImage image;
     HWND window = nullptr;
     uintptr_t procedure = 0u;
     uint32_t matches = 0u;
   } search;
   search.base = rt.image_base;
-  if (!fushi_voice_hook::exact_lookup::OpenLoadedPeImage(
+  if (!my_comic_voice_hook::exact_lookup::OpenLoadedPeImage(
           reinterpret_cast<HMODULE>(search.base), &search.image)) {
     return;
   }
@@ -878,9 +878,9 @@ void RetireBgiLookup() {
   if (!rt.provider_offered) return;
   rt.provider_offered = false;
   if (g_header != nullptr) {
-    fushi_voice_hook::g_geometry_provider_registry.Retire(
-        g_header, fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-        fushi_voice_hook::kLookupGeometryProviderIdBgi);
+    my_comic_voice_hook::g_geometry_provider_registry.Retire(
+        g_header, my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+        my_comic_voice_hook::kLookupGeometryProviderIdBgi);
   }
 }
 
@@ -1048,7 +1048,7 @@ bool PublishBgiLookupHit(const BgiSubmit& submit) {
   if (glyph.line.source_index == bgi_lookup::kNoSource ||
       glyph.line.source_length == 0u || glyph.line.source_index >= units ||
       glyph.line.source_length > units - glyph.line.source_index ||
-      fushi_voice_hook::LookupUtf16SourceLength(
+      my_comic_voice_hook::LookupUtf16SourceLength(
           model_line.data(), static_cast<uint32_t>(units),
           glyph.line.source_index) != glyph.line.source_length) {
     return FailBgiHit(submit, L"source-range");
@@ -1057,25 +1057,25 @@ bool PublishBgiLookupHit(const BgiSubmit& submit) {
       CP_UTF8, WC_ERR_INVALID_CHARS, model_line.data(),
       static_cast<int>(units), nullptr, 0, nullptr, nullptr);
   if (required <= 0 ||
-      static_cast<uint32_t>(required) > fushi_voice_hook::kLookupLineBytes) {
+      static_cast<uint32_t>(required) > my_comic_voice_hook::kLookupLineBytes) {
     return FailBgiHit(submit, L"line-bytes");
   }
-  char utf8[fushi_voice_hook::kLookupLineBytes] = {};
+  char utf8[my_comic_voice_hook::kLookupLineBytes] = {};
   if (WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, model_line.data(),
                           static_cast<int>(units), utf8, required, nullptr,
                           nullptr) != required) {
     return FailBgiHit(submit, L"utf8");
   }
-  fushi_voice_hook::LookupGeometryHitPublication publication;
+  my_comic_voice_hook::LookupGeometryHitPublication publication;
   publication.provider_kind =
-      fushi_voice_hook::kLookupGeometryProviderEngineExactLayout;
-  publication.provider_id = fushi_voice_hook::kLookupGeometryProviderIdBgi;
+      my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout;
+  publication.provider_id = my_comic_voice_hook::kLookupGeometryProviderIdBgi;
   publication.char_index = glyph.line.source_index;
   publication.source_length = glyph.line.source_length;
   publication.char_count = static_cast<uint32_t>(units);
   publication.coordinate_space =
-      fushi_voice_hook::kLookupCoordinateSpaceClientPhysicalPixels;
-  publication.writing_mode = fushi_voice_hook::kLookupWritingModeHorizontal;
+      my_comic_voice_hook::kLookupCoordinateSpaceClientPhysicalPixels;
+  publication.writing_mode = my_comic_voice_hook::kLookupWritingModeHorizontal;
   publication.text_generation = record->text_event;
   publication.geometry_generation = submit.generation;
   publication.glyph_x = glyph.rect.x;
@@ -1084,11 +1084,11 @@ bool PublishBgiLookupHit(const BgiSubmit& submit) {
   publication.glyph_h = glyph.rect.h;
   publication.view_w = submit.physical_w;
   publication.view_h = submit.physical_h;
-  publication.flags = fushi_voice_hook::kLookupHitFlagSubmit;
+  publication.flags = my_comic_voice_hook::kLookupHitFlagSubmit;
   publication.line_utf8 = reinterpret_cast<const uint8_t*>(utf8);
   publication.line_bytes = static_cast<uint32_t>(required);
   const bool published =
-      fushi_voice_hook::g_geometry_provider_registry.PublishHit(g_header,
+      my_comic_voice_hook::g_geometry_provider_registry.PublishHit(g_header,
                                                                 publication);
   BgiLookupLog(
       L"bgi-lookup: hit gen=%llu glyph=%u char=%u+%u rect=%d,%d %dx%d "
@@ -1144,14 +1144,14 @@ void ProcessBgiLookupTick() {
   // The text lane does not depend on the lookup switch.
   DrainBgiTextEvents();
   if (g_stop || g_header == nullptr ||
-      !fushi_voice_hook::HasLookupRegion(g_header) ||
-      fushi_voice_hook::AtomicLoadShared32(&g_header->lookup_enabled) == 0u) {
+      !my_comic_voice_hook::HasLookupRegion(g_header) ||
+      my_comic_voice_hook::AtomicLoadShared32(&g_header->lookup_enabled) == 0u) {
     NoteBgiRetire(1u);
     RetireBgiLookup();
     return;
   }
-  fushi_voice_hook::AtomicOrShared32(
-      &g_header->lookup_diag, fushi_voice_hook::kLookupDiagSensorInstalled);
+  my_comic_voice_hook::AtomicOrShared32(
+      &g_header->lookup_diag, my_comic_voice_hook::kLookupDiagSensorInstalled);
   // A press the window procedure already swallowed is published (or its
   // drop logged) whatever the gates below say now: the game never saw it.
   const uint64_t claims = rt.claimed_presses.load(std::memory_order_acquire);
@@ -1176,7 +1176,7 @@ void ProcessBgiLookupTick() {
   std::wstring line;
   uint64_t event = 0u;
   uint64_t thread = 0u;
-  if (!fushi_voice_hook::ReadSelectedLookupText(
+  if (!my_comic_voice_hook::ReadSelectedLookupText(
           g_header, &line, &event, &thread, bgi_lookup::kMaxCells)) {
     NoteBgiRetire(3u);
     RetireBgiLookup();
@@ -1217,17 +1217,17 @@ void ProcessBgiLookupTick() {
           rt.model.design_w, rt.model.design_h);
     }
   }
-  if (fushi_voice_hook::g_geometry_provider_registry.OfferReady(
-          g_header, fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-          fushi_voice_hook::kLookupGeometryProviderIdBgi)) {
+  if (my_comic_voice_hook::g_geometry_provider_registry.OfferReady(
+          g_header, my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+          my_comic_voice_hook::kLookupGeometryProviderIdBgi)) {
     if (!rt.provider_offered) {
       BgiLookupLog(L"bgi-lookup: OfferReady gen=%llu glyphs=%u",
                    static_cast<unsigned long long>(rt.model.generation),
                    rt.model.count);
     }
     rt.provider_offered = true;
-    fushi_voice_hook::AtomicOrShared32(
-        &g_header->lookup_diag, fushi_voice_hook::kLookupDiagGeometryObserved);
+    my_comic_voice_hook::AtomicOrShared32(
+        &g_header->lookup_diag, my_comic_voice_hook::kLookupDiagGeometryObserved);
     NoteBgiRetire(0u);
   } else {
     NoteBgiRetire(5u);

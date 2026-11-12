@@ -7,8 +7,8 @@
 #include "siglus_legacy_glyph_sites.h"
 
 namespace {
-using namespace fushi_voice_hook;
-using namespace fushi_voice_hook::siglus_legacy_glyph;
+using namespace my_comic_voice_hook;
+using namespace my_comic_voice_hook::siglus_legacy_glyph;
 struct Layout {
   uintptr_t glyph=0x1000, dialogue=0x2200, text=0x3000;
   uintptr_t bridge=0x4100, writer=0x4800, owner=0x5000;

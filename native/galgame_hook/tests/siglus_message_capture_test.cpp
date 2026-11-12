@@ -25,7 +25,7 @@ ULONGLONG SiglusTestCommitClock() { return 5000; }
 #undef GetTickCount64
 
 namespace {
-using namespace fushi_voice_hook;
+using namespace my_comic_voice_hook;
 int checks = 0;
 void Check(bool value) { ++checks; assert(value); }
 
@@ -348,8 +348,8 @@ __declspec(naked) void InnerTail() {
 }
 void* outer_original = reinterpret_cast<void*>(&OuterTail);
 void* inner_original = reinterpret_cast<void*>(&InnerTail);
-FUSHI_SIGLUS_MESSAGE_THUNK(OuterProbe, ProbeObserver, outer_original)
-FUSHI_SIGLUS_MESSAGE_THUNK(InnerProbe, ProbeObserver, inner_original)
+MYCOMIC_SIGLUS_MESSAGE_THUNK(OuterProbe, ProbeObserver, outer_original)
+MYCOMIC_SIGLUS_MESSAGE_THUNK(InnerProbe, ProbeObserver, inner_original)
 void* probe_entry = nullptr;
 bool probe_caller_cleanup = false;
 __declspec(naked) void RunProbe() {

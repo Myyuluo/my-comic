@@ -5,7 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 inline constexpr size_t kLeafAquaplusLookupMaxTextUnits = 512u;
 inline constexpr uint16_t kLeafAquaplusAsyncPressedMask = 0x8001u;
@@ -524,4 +524,4 @@ ConsumeLeafAquaplusLookupShiftSample(uint16_t async_state,
   return submit;
 }
 
-} // namespace fushi_voice_hook
+} // namespace my_comic_voice_hook

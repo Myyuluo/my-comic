@@ -12,7 +12,7 @@
 
 #include <cstdint>
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 namespace x86 {
 
 // E8/E9 rel32 的目标 = 指令地址 + 5 + rel32。
@@ -146,4 +146,4 @@ uint8_t* FindFirstAcceptedCallTarget(const uint8_t* fn, uint32_t window, Accept 
 }
 
 }  // namespace x86
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

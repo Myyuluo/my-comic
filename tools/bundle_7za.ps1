@@ -14,7 +14,7 @@
 [CmdletBinding()]
 param(
   [Parameter(Mandatory = $true)][string]$BundleDirectory,
-  [string]$DownloadCache = "$env:TEMP\fushi-7za-cache"
+  [string]$DownloadCache = "$env:TEMP\mycomic-7za-cache"
 )
 
 $ErrorActionPreference = 'Stop'

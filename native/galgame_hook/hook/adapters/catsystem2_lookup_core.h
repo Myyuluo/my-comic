@@ -69,9 +69,9 @@
 #include "exact_lookup_signature.h"
 #include "../lookup_line_text_match.h"
 
-namespace fushi_voice_hook::catsystem2_lookup {
+namespace my_comic_voice_hook::catsystem2_lookup {
 
-namespace exact = fushi_voice_hook::exact_lookup;
+namespace exact = my_comic_voice_hook::exact_lookup;
 
 // ── signature helpers ──────────────────────────────────────────────────────
 
@@ -1657,4 +1657,4 @@ inline ClaimDecision DecideMessage(uint32_t message, bool eligible,
   return decision;
 }
 
-}  // namespace fushi_voice_hook::catsystem2_lookup
+}  // namespace my_comic_voice_hook::catsystem2_lookup

@@ -21,8 +21,8 @@ void Put(std::array<uint8_t, N>& bytes, size_t offset, T value) {
   std::memcpy(bytes.data() + offset, &value, sizeof(value));
 }
 
-void CheckLayout(fushi_voice_hook::SiglusGlyphLayoutAbi abi, size_t offset) {
-  using namespace fushi_voice_hook;
+void CheckLayout(my_comic_voice_hook::SiglusGlyphLayoutAbi abi, size_t offset) {
+  using namespace my_comic_voice_hook;
   // The two position pairs deliberately disagree to catch ABI conflation.
   std::array<uint8_t, 0x70> bytes{};
   for (size_t at : {0x58u, 0x5cu, 0x60u}) Put(bytes, at, 1.0f);
@@ -80,7 +80,7 @@ void CheckLayout(fushi_voice_hook::SiglusGlyphLayoutAbi abi, size_t offset) {
   CHECK(!DecodeSiglusGlyphRecord(abi, bytes.data(), bytes.size(), 1280, 720, nullptr));
 }
 void CheckEightArgumentTransform() {
-  using namespace fushi_voice_hook;
+  using namespace my_comic_voice_hook;
   std::array<uint8_t, 0x70> bytes{};
   Put(bytes, 4, uint32_t{0x3042});
   Put(bytes, 8, int32_t{26});
@@ -137,7 +137,7 @@ void CheckEightArgumentTransform() {
 }  // namespace
 
 int main() {
-  using namespace fushi_voice_hook;
+  using namespace my_comic_voice_hook;
   CheckLayout(SiglusGlyphLayoutAbi::kEcxTenArguments, 0x40);
   CheckLayout(SiglusGlyphLayoutAbi::kStackSixteenArguments, 0x34);
   CheckLayout(SiglusGlyphLayoutAbi::kEcxEightArguments, 0x40);

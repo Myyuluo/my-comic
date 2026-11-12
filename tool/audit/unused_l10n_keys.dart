@@ -5,8 +5,8 @@
 //   dart tool/audit/unused_l10n_keys.dart --report .scratch/independence-cleanup/reports/unused-l10n-keys.txt
 //   dart tool/audit/unused_l10n_keys.dart --json --report ...json
 //
-// key 集合来自 base `fushi/lib/i18n/strings.i18n.json`；默认扫描
-// `fushi/lib`、`fushi/test`、`fushi/integration_test` 里的 `.dart`，并排除生成的
+// key 集合来自 base `my_comic/lib/i18n/strings.i18n.json`；默认扫描
+// `my_comic/lib`、`my_comic/test`、`my_comic/integration_test` 里的 `.dart`，并排除生成的
 // `strings.g.dart`。只有报告，默认不因未使用 key 退出非零；清理完成后可用
 // `--fail-if-unused` 转为门禁。
 //
@@ -560,7 +560,7 @@ Usage: dart tool/audit/unused_l10n_keys.dart [options]
 
 Options:
   --root <dir>        仓库根目录（默认取 git toplevel）
-  --app <dir>         app 目录（默认 fushi，相对仓库根）
+  --app <dir>         app 目录（默认 my_comic，相对仓库根）
   --base <file>       base JSON（默认 lib/i18n/strings.i18n.json，相对 app）
   --scan <dir>        扫描目录（相对 app，可重复；默认 lib test integration_test）
   --allowlist <file>  动态访问 allowlist JSON（默认脚本同目录的 unused_l10n_allowlist.json）
@@ -632,7 +632,7 @@ void main(List<String> args) {
   }
 
   final String repoRoot = root ?? _defaultRepoRoot();
-  final String resolvedApp = app ?? 'fushi';
+  final String resolvedApp = app ?? 'my_comic';
   final String appRoot = _isAbsolute(resolvedApp)
       ? resolvedApp
       : '$repoRoot/$resolvedApp';

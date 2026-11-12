@@ -7,7 +7,7 @@
 #include <vector>
 
 namespace {
-namespace capture = fushi_voice_hook::siglus_eightarg_message;
+namespace capture = my_comic_voice_hook::siglus_eightarg_message;
 unsigned checks = 0;
 void Check(bool condition, const char* why) {
   ++checks;

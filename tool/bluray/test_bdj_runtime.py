@@ -1,6 +1,6 @@
 """BD-J bundle integrity and installer tests; optional actual JNI smoke test.
 
-Set FUSHI_BDJ_RUNTIME to an installed component and FUSHI_BDJ_DLL to libbluray-4.dll
+Set MYCOMIC_BDJ_RUNTIME to an installed component and MYCOMIC_BDJ_DLL to libbluray-4.dll
 to also run the private JVM and a generated, unencrypted BD-J title.
 """
 import ctypes
@@ -91,7 +91,7 @@ class BundleTests(unittest.TestCase):
             root = Path(temp)
             standalone = root / "standalone"
             shutil.copytree(BUNDLE, standalone)
-            runtime = Path(os.environ["FUSHI_BDJ_RUNTIME"]) if os.environ.get("FUSHI_BDJ_RUNTIME") else root / "not-installed"
+            runtime = Path(os.environ["MYCOMIC_BDJ_RUNTIME"]) if os.environ.get("MYCOMIC_BDJ_RUNTIME") else root / "not-installed"
             scripts = [standalone / "bdj_runtime.ps1", Path(__file__).with_name("bdj_runtime.ps1")]
             results = []
             for script in scripts:
@@ -215,23 +215,23 @@ class BundleTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)
             self.assertEqual(marker.read_text(), "in use")
 
-    @unittest.skipUnless(POWERSHELL and os.environ.get("FUSHI_BDJ_RUNTIME"), "installed runtime not configured")
+    @unittest.skipUnless(POWERSHELL and os.environ.get("MYCOMIC_BDJ_RUNTIME"), "installed runtime not configured")
     def test_actual_private_java8_runtime(self):
-        result = invoke_script("-Action", "Probe", "-Root", os.environ["FUSHI_BDJ_RUNTIME"])
+        result = invoke_script("-Action", "Probe", "-Root", os.environ["MYCOMIC_BDJ_RUNTIME"])
         self.assertEqual(result.returncode, 0, result.stderr)
         report = json.loads(result.stdout)
         self.assertTrue(report["ready"])
-        self.assertEqual(Path(report["componentRoot"]), Path(os.environ["FUSHI_BDJ_RUNTIME"]).resolve())
+        self.assertEqual(Path(report["componentRoot"]), Path(os.environ["MYCOMIC_BDJ_RUNTIME"]).resolve())
         self.assertIn("BDJ_RUNTIME_OK 1.8.0_504", report["probe"])
 
-    @unittest.skipUnless(POWERSHELL and os.environ.get("FUSHI_BDJ_ARCHIVE"), "offline runtime archive not configured")
+    @unittest.skipUnless(POWERSHELL and os.environ.get("MYCOMIC_BDJ_ARCHIVE"), "offline runtime archive not configured")
     def test_offline_install_atomic_publish_and_utf8_path_roundtrip(self):
-        with tempfile.TemporaryDirectory(prefix="fushi-bdj-install-") as temporary:
+        with tempfile.TemporaryDirectory(prefix="mycomic-bdj-install-") as temporary:
             parent = Path(temporary) / "中文路径 with spaces"
             stage = parent / (".bdj-install-" + uuid.uuid4().hex)
             root = parent / "installed"
             result = invoke_script("-Action", "Install", "-Root", root,
-                                   "-StagingDirectory", stage, "-Archive", os.environ["FUSHI_BDJ_ARCHIVE"])
+                                   "-StagingDirectory", stage, "-Archive", os.environ["MYCOMIC_BDJ_ARCHIVE"])
             self.assertEqual(result.returncode, 0, result.stderr)
             report = json.loads(result.stdout)
             self.assertEqual(Path(report["componentRoot"]), root)
@@ -239,12 +239,12 @@ class BundleTests(unittest.TestCase):
             self.assertTrue(Path(report["jvm"]).is_file())
             self.assertFalse(stage.exists())
 
-    @unittest.skipUnless(os.name == "nt" and os.environ.get("FUSHI_BDJ_RUNTIME")
-                         and os.environ.get("FUSHI_BDJ_DLL"), "native BD-J runtime not configured")
+    @unittest.skipUnless(os.name == "nt" and os.environ.get("MYCOMIC_BDJ_RUNTIME")
+                         and os.environ.get("MYCOMIC_BDJ_DLL"), "native BD-J runtime not configured")
     def test_actual_jni_and_bdj_window_startup(self):
-        runtime = Path(os.environ["FUSHI_BDJ_RUNTIME"]).resolve()
-        dll = Path(os.environ["FUSHI_BDJ_DLL"]).resolve()
-        with tempfile.TemporaryDirectory(prefix="fushi-bdj-") as temporary:
+        runtime = Path(os.environ["MYCOMIC_BDJ_RUNTIME"]).resolve()
+        dll = Path(os.environ["MYCOMIC_BDJ_DLL"]).resolve()
+        with tempfile.TemporaryDirectory(prefix="mycomic-bdj-") as temporary:
             fixture = Path(temporary)
             make_fixture(fixture)
             environment = dict(os.environ, LIBBLURAY_CP=str(runtime / "libbluray-j2se-1.5.0.jar"),

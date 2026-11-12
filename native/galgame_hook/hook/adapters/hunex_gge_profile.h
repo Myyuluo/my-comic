@@ -2,7 +2,7 @@
 
 #include <cwchar>
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 // This title/role pair is measured from the local WITCH ON THE HOLY NIGHT
 // v1.0 sample.  The HFA/HW parser is engine-generic, but data04000.hfa is not
@@ -34,4 +34,4 @@ inline bool IsHunexGgeVoiceArchivePath(const wchar_t* archive_path) {
          _wcsicmp(name, kHunexGgeMahoyoVoiceArchiveName) == 0;
 }
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

@@ -45,9 +45,9 @@
 #include "../siglus_ovk.h"
 #include "exact_lookup_signature.h"
 
-namespace fushi_voice_hook::malie_io {
+namespace my_comic_voice_hook::malie_io {
 
-namespace exact = fushi_voice_hook::exact_lookup;
+namespace exact = my_comic_voice_hook::exact_lookup;
 
 inline constexpr wchar_t kArchiveSchemeName[] = L"CFI";
 
@@ -987,4 +987,4 @@ class VoiceAssembler {
   uint32_t damaged_ = 0u;
 };
 
-}  // namespace fushi_voice_hook::malie_io
+}  // namespace my_comic_voice_hook::malie_io

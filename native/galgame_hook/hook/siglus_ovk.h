@@ -5,7 +5,7 @@
 #include <cstring>
 #include <string>
 
-namespace fushi_voice_hook::siglus {
+namespace my_comic_voice_hook::siglus {
 
 constexpr uint32_t kOvkEntryBytes = 16;
 constexpr uint32_t kMaxEntryBytes = 32u * 1024u * 1024u;
@@ -167,4 +167,4 @@ inline uint32_t CompleteOggBytes(const uint8_t* data, uint32_t bytes) {
   return 0;
 }
 
-}  // namespace fushi_voice_hook::siglus
+}  // namespace my_comic_voice_hook::siglus

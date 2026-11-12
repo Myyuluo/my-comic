@@ -7,7 +7,7 @@
 #include "exact_lookup_signature.h"
 #include "leaf_aquaplus_lookup.h"
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 inline constexpr uint16_t kLeafAquaplusPeMachineI386 = 0x014cu;
 inline constexpr std::array<const wchar_t*, 2>
@@ -203,4 +203,4 @@ inline constexpr size_t kD3dDevicePointerOperandOffset = 1u;
 
 }  // namespace leaf_exact
 
-} // namespace fushi_voice_hook
+} // namespace my_comic_voice_hook

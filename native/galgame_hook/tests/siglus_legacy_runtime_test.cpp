@@ -9,8 +9,8 @@
 #include <map>
 #include <vector>
 
-namespace rt = fushi_voice_hook::siglus_legacy_runtime;
-namespace sites = fushi_voice_hook::siglus_legacy_input_viewport;
+namespace rt = my_comic_voice_hook::siglus_legacy_runtime;
+namespace sites = my_comic_voice_hook::siglus_legacy_input_viewport;
 namespace {
 size_t checks = 0;
 void Check(bool ok) {

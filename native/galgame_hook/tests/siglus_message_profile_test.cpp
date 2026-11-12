@@ -10,8 +10,8 @@
 #include "siglus_message_profile.h"
 
 namespace {
-using namespace fushi_voice_hook;
-using namespace fushi_voice_hook::siglus_message;
+using namespace my_comic_voice_hook;
+using namespace my_comic_voice_hook::siglus_message;
 
 struct Layout {
   uintptr_t message = 0x1000u;

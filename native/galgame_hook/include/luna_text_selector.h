@@ -1,5 +1,5 @@
-#ifndef FUSHI_LUNA_TEXT_SELECTOR_H_
-#define FUSHI_LUNA_TEXT_SELECTOR_H_
+#ifndef MYCOMIC_LUNA_TEXT_SELECTOR_H_
+#define MYCOMIC_LUNA_TEXT_SELECTOR_H_
 
 #include <cstddef>
 #include <cstring>
@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 // 一个完整句的最小字符数。低于它不做前缀折叠，避免把「ああ」这类叠字噪声
 // （交给 LunaTextIsArtifact 判）或短感叹句误截。
@@ -275,7 +275,7 @@ class LunaPairedTailTracker {
 // Luna's x64 TYPEMOON hook reports the story renderer and the in-game toolbar
 // through the same hook address/name while keeping them in separate
 // ThreadParam contexts. LunaHook's thread picker preserves that boundary.
-// Fushi normally accepts sibling contexts from the same hook face to survive
+// MyComic normally accepts sibling contexts from the same hook face to survive
 // engines whose story callsite legitimately changes (BUG-1159), but doing so
 // for TYPEMOON merges toolbar descriptions into the selected story lane.
 //
@@ -537,6 +537,6 @@ class LunaTextSelector {
   std::map<uint64_t, uint64_t> thread_face_;
 };
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook
 
-#endif  // FUSHI_LUNA_TEXT_SELECTOR_H_
+#endif  // MYCOMIC_LUNA_TEXT_SELECTOR_H_

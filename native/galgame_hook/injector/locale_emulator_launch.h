@@ -6,7 +6,7 @@
 #include <cstdint>
 #include <iterator>
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 // Locale Emulator 2.5.0.1 passes this fixed prefix to LoaderDll!LeCreateProcess,
 // followed by a uint64 registry-redirection count. Keep the layout explicit: a
@@ -86,7 +86,7 @@ enum class LocaleThreadResumePolicy {
 // Locale Emulator always creates the target suspended. Launch strategies that
 // must observe a window or child process cannot wait on that suspended target;
 // they resume immediately and retain their existing delayed-attach behavior.
-// Normal launch keeps the primary thread suspended until Fushi's early hook is
+// Normal launch keeps the primary thread suspended until MyComic's early hook is
 // installed, preserving the KiriKiri startup boundary.
 inline LocaleThreadResumePolicy SelectLocaleThreadResumePolicy(
     bool locale_launched, bool delayed_attach, bool follow_child_processes) {
@@ -99,4 +99,4 @@ inline LocaleThreadResumePolicy SelectLocaleThreadResumePolicy(
   return LocaleThreadResumePolicy::kAfterEarlyInjection;
 }
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

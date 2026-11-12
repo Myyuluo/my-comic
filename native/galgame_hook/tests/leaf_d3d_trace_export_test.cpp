@@ -15,15 +15,15 @@ int wmain(int argc, wchar_t** argv) {
       LoadLibraryExW(argv[1], nullptr, DONT_RESOLVE_DLL_REFERENCES);
   assert(module != nullptr);
   FARPROC exported =
-      GetProcAddress(module, fushi_voice_hook::kLeafD3DTraceExportName);
+      GetProcAddress(module, my_comic_voice_hook::kLeafD3DTraceExportName);
   assert(exported != nullptr);
   const auto* trace = reinterpret_cast<
-      const fushi_voice_hook::LeafD3DTraceBuffer*>(exported);
-  assert(trace->magic == fushi_voice_hook::kLeafD3DTraceMagic);
-  assert(trace->version == fushi_voice_hook::kLeafD3DTraceVersion);
-  assert(trace->event_size == sizeof(fushi_voice_hook::LeafD3DTraceEvent));
-  assert(trace->slot_size == sizeof(fushi_voice_hook::LeafD3DTraceSlot));
-  assert(trace->capacity == fushi_voice_hook::kLeafD3DTraceCapacity);
+      const my_comic_voice_hook::LeafD3DTraceBuffer*>(exported);
+  assert(trace->magic == my_comic_voice_hook::kLeafD3DTraceMagic);
+  assert(trace->version == my_comic_voice_hook::kLeafD3DTraceVersion);
+  assert(trace->event_size == sizeof(my_comic_voice_hook::LeafD3DTraceEvent));
+  assert(trace->slot_size == sizeof(my_comic_voice_hook::LeafD3DTraceSlot));
+  assert(trace->capacity == my_comic_voice_hook::kLeafD3DTraceCapacity);
 
   const auto* base = reinterpret_cast<const uint8_t*>(module);
   const auto* dos = reinterpret_cast<const IMAGE_DOS_HEADER*>(base);
@@ -41,7 +41,7 @@ int wmain(int argc, wchar_t** argv) {
   uint32_t matching_names = 0;
   for (uint32_t i = 0; i < exports->NumberOfNames; ++i) {
     const char* name = reinterpret_cast<const char*>(base + names[i]);
-    if (std::strcmp(name, fushi_voice_hook::kLeafD3DTraceExportName) == 0) {
+    if (std::strcmp(name, my_comic_voice_hook::kLeafD3DTraceExportName) == 0) {
       ++matching_names;
     }
   }

@@ -28,7 +28,7 @@
 #include <cstdint>
 #include <cstring>
 
-namespace fushi_voice_hook::bgi {
+namespace my_comic_voice_hook::bgi {
 
 constexpr char kArc20Signature[] = "BURIKO ARC20";
 constexpr char kPackFileSignature[] = "PackFile    ";
@@ -311,4 +311,4 @@ inline bool ParseBwOggHeader(const uint8_t* header, size_t header_bytes,
   return true;
 }
 
-}  // namespace fushi_voice_hook::bgi
+}  // namespace my_comic_voice_hook::bgi

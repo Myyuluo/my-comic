@@ -5,10 +5,10 @@
 #include <cwchar>
 #include <string>
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 // 已有共享映射只能由创建它的那份驻留 hook DLL 继续服务。仅凭 ABI + hooked=1 不足以
-// 证明本次 injector 请求的是同一构建：Fushi 更新后，旧 DLL 仍会跟游戏进程一起驻留，
+// 证明本次 injector 请求的是同一构建：MyComic 更新后，旧 DLL 仍会跟游戏进程一起驻留，
 // 而旧映射也仍是 ready。此时复用会把新 helper 的能力误报成已生效。
 enum class HookModuleIdentityStatus {
   kMatch,
@@ -82,4 +82,4 @@ inline bool HookModuleIdentityRequiresRestart(HookModuleIdentityStatus status) {
          status == HookModuleIdentityStatus::kDigestMismatch;
 }
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

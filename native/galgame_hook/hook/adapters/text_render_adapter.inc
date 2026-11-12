@@ -52,13 +52,13 @@ uint64_t WriteTextRingEntryLocked(const wchar_t* text, int char_len,
   // LunaHook（引擎精确、干净）一旦活跃，GDI 文本 hook 让位，不再写文本环——否则游戏为粗体/描边
   // 每字重画会让 GetGlyphOutlineW 累加出「ここのの」式伪影，与 LunaHook 干净行混在一起污染卡片。
   // GDI 仅在 LunaHook 覆盖不到的引擎（luna_active==0）时作兜底文本源。音频 hook 不看此标志。
-  if (source_kind == fushi_voice_hook::kTextSourceGdi &&
+  if (source_kind == my_comic_voice_hook::kTextSourceGdi &&
       g_header->luna_active != 0) {
     return 0;
   }
   // v13：写进本线程自己那条道（游戏内 writer 用高段下标，与 injector 里的 LunaHook 互斥）。
   // 调用方已持 g_text_cs，认领与道内占号因此在本进程内串行；跨进程隔离靠区段划分。
-  fushi_voice_hook::TextLaneWrite write;
+  my_comic_voice_hook::TextLaneWrite write;
   write.thread_id = thread_id;
   write.thread_address = thread_address;
   write.thread_context = thread_context;
@@ -70,14 +70,14 @@ uint64_t WriteTextRingEntryLocked(const wchar_t* text, int char_len,
                    static_cast<uint32_t>(sizeof(wchar_t));
   write.hook_name = hook_name;
   write.hook_code = hook_code;
-  return fushi_voice_hook::WriteTextLaneEvent(
-      g_header, fushi_voice_hook::kNativeThreadPreviewStart,
-      fushi_voice_hook::kTextLaneCount, write, committed_tick_ms);
+  return my_comic_voice_hook::WriteTextLaneEvent(
+      g_header, my_comic_voice_hook::kNativeThreadPreviewStart,
+      my_comic_voice_hook::kTextLaneCount, write, committed_tick_ms);
 }
 
 void WriteTextRingLocked(const wchar_t* text, int char_len) {
   WriteTextRingEntryLocked(text, char_len, 1, 0, 0,
-                           fushi_voice_hook::kTextSourceGdi,
+                           my_comic_voice_hook::kTextSourceGdi,
                            "GDI fallback", nullptr);
 }
 
@@ -136,7 +136,7 @@ void ObserveSiglusLookupExactText(const wchar_t* text, uint32_t text_units,
                                   uint64_t text_event_id, uint64_t thread_id);
 bool IsSiglusLookupProfileMatched();
 bool IsSiglusLookupIdentityUndecided();
-const fushi_voice_hook::SiglusLookupProfile* ActiveSiglusLookupProfile();
+const my_comic_voice_hook::SiglusLookupProfile* ActiveSiglusLookupProfile();
 bool TryHookSiglusMessageText();
 bool IsSiglusMessageTextInstalled();
 bool IsSiglusMessageTextOwnershipBlocked();
@@ -228,7 +228,7 @@ uintptr_t __fastcall Detour_SiglusExactText(SiglusTextUnionW* self, void*) {
     const uint64_t text_event_id = WriteTextRingEntryLocked(
         text, static_cast<int>(length), thread_id,
         g_siglus_text_function_rva, callsite_rva,
-        fushi_voice_hook::kTextSourceSiglus, "SiglusEngine exact", hook_code);
+        my_comic_voice_hook::kTextSourceSiglus, "SiglusEngine exact", hook_code);
     // Carry the committed event identity from this exact write. The global
     // counter may already belong to a concurrent Luna writer, so never reread it.
     ObserveSiglusLookupExactText(text, length, callsite_rva,
@@ -262,8 +262,8 @@ bool InstallSiglusExactTextAt(void* target, uintptr_t rva) {
 bool TryHookSiglusExactText() {
   if (!IsSiglusEngine()) return true;
   if (IsSiglusExactTextInstalled()) return true;
-  if (fushi_voice_hook::ReadNativeTextOwner(g_header) !=
-      fushi_voice_hook::NativeTextOwner::kPending) return true;
+  if (my_comic_voice_hook::ReadNativeTextOwner(g_header) !=
+      my_comic_voice_hook::NativeTextOwner::kPending) return true;
   const bool resolved = IsSiglusLookupProfileMatched();
   // Do not let the historical first-match text locator patch an entry while
   // the lookup resolver is still checking whole-image uniqueness and its ABI.
@@ -274,14 +274,14 @@ bool TryHookSiglusExactText() {
     const auto* profile = ActiveSiglusLookupProfile();
     if (profile == nullptr) return false;
     if (profile->text_feed ==
-        fushi_voice_hook::SiglusLookupTextFeed::kLunaScenarioLane) {
+        my_comic_voice_hook::SiglusLookupTextFeed::kLunaScenarioLane) {
       // Resolve the full message/owner/frame contract before claiming this
       // scenario entry. A rejected family remains available to Luna.
       TryHookSiglusMessageText();
       return true;
     }
     if (profile->text_feed !=
-        fushi_voice_hook::SiglusLookupTextFeed::kNativeEcxTextUnion) return true;
+        my_comic_voice_hook::SiglusLookupTextFeed::kNativeEcxTextUnion) return true;
     TryHookSiglusMessageText();
     if (IsSiglusMessageTextInstalled() || IsSiglusMessageTextOwnershipBlocked())
       return true;
@@ -305,9 +305,9 @@ bool TryHookSiglusExactText() {
     const auto* section_base = reinterpret_cast<const uint8_t*>(module) +
                                section[i].VirtualAddress;
     if (!IsReadableSpan(section_base, section_bytes)) continue;
-    const size_t offset = fushi_voice_hook::siglus::FindExactTextFunctionOffset(
+    const size_t offset = my_comic_voice_hook::siglus::FindExactTextFunctionOffset(
         section_base, section_bytes);
-    if (offset == fushi_voice_hook::siglus::kInvalidTextFunctionOffset) {
+    if (offset == my_comic_voice_hook::siglus::kInvalidTextFunctionOffset) {
       continue;
     }
     void* target = const_cast<uint8_t*>(section_base + offset);

@@ -13,10 +13,10 @@
 
 namespace {
 
-using fushi_voice_hook::NativeLoopbackPolicyAction;
-using fushi_voice_hook::NativeLoopbackRequestSnapshot;
-using fushi_voice_hook::NativeLoopbackWorkerPhase;
-using fushi_voice_hook::SharedHeader;
+using my_comic_voice_hook::NativeLoopbackPolicyAction;
+using my_comic_voice_hook::NativeLoopbackRequestSnapshot;
+using my_comic_voice_hook::NativeLoopbackWorkerPhase;
+using my_comic_voice_hook::SharedHeader;
 
 static_assert(std::is_standard_layout_v<SharedHeader>);
 static_assert(std::is_trivially_copyable_v<SharedHeader>);
@@ -29,7 +29,7 @@ void Check(bool condition, const char* message) {
 
 void TestV16AndV17TailAbiAndDefaultDeny() {
   SharedHeader header{};
-  Check(fushi_voice_hook::kSharedVersion == 25,
+  Check(my_comic_voice_hook::kSharedVersion == 25,
         "shared ABI must be v25（game-stream native input 尾追加）");
   Check(offsetof(SharedHeader, native_loopback_request_seq) ==
             offsetof(SharedHeader, native_loopback_requested) + 4,
@@ -46,7 +46,7 @@ void TestV16AndV17TailAbiAndDefaultDeny() {
             offsetof(SharedHeader, native_loopback_applied_seq) + 4,
         "v17 digest must directly follow the final v16 word");
   const size_t digest_end = offsetof(SharedHeader, hook_module_sha256) +
-                            fushi_voice_hook::kHookModuleDigestChars;
+                            my_comic_voice_hook::kHookModuleDigestChars;
   Check(offsetof(SharedHeader, lookup_geometry_active_kind) ==
             (digest_end + 3u) / 4u * 4u,
         "v19 fields must append after the naturally aligned v17 digest");
@@ -55,14 +55,14 @@ void TestV16AndV17TailAbiAndDefaultDeny() {
   // 是**把字段插进既有布局**，不是禁止将来继续尾追加。
   Check(offsetof(SharedHeader, lookup_admission) >=
             offsetof(SharedHeader, hook_module_sha256) +
-                fushi_voice_hook::kHookModuleDigestChars,
+                my_comic_voice_hook::kHookModuleDigestChars,
         "v19 admission must be appended after the v17 digest, never inserted");
   // v22 在 v19 摘要之后追加了层原点块，v23 又在其后追加了 adapter 读数块，所以
   // 尾部不再是摘要、也不再是层原点块。守卫要防的始终是**把字段插进既有布局**，
   // 不是禁止继续尾追加——于是逐块锁：每一块紧接上一块，最后一块就是精确尾部。
   Check(offsetof(SharedHeader, lookup_layer_line_seq) ==
             (offsetof(SharedHeader, lookup_executable_sha256) +
-             fushi_voice_hook::kHookModuleDigestChars + 3u) /
+             my_comic_voice_hook::kHookModuleDigestChars + 3u) /
                 4u * 4u,
         "v22 layer-origin block must append right after the v19 digest");
   // v23 在层原点块之后又追加了 adapter 读数块，尾部因此再次后移。守的仍是同一条：
@@ -95,11 +95,11 @@ void TestV16AndV17TailAbiAndDefaultDeny() {
               sizeof(uint32_t) + 7u) /
              8u) * 8u,
         "v25 game-stream input must be the exact SharedHeader tail");
-  Check(fushi_voice_hook::AtomicLoadShared32(
+  Check(my_comic_voice_hook::AtomicLoadShared32(
             &header.native_loopback_requested) ==
-            fushi_voice_hook::kNativeLoopbackDeny,
+            my_comic_voice_hook::kNativeLoopbackDeny,
         "zero-initialized header must fail closed");
-  Check(!fushi_voice_hook::ReadNativeLoopbackRequest(&header).valid,
+  Check(!my_comic_voice_hook::ReadNativeLoopbackRequest(&header).valid,
         "seq zero is not a published request");
   Check(header.hook_module_sha256[0] == '\0',
         "zero-initialized header must expose no resident hook digest");
@@ -107,71 +107,71 @@ void TestV16AndV17TailAbiAndDefaultDeny() {
 
 void TestPublicationIsCoherentIdempotentAndStartsAtOne() {
   SharedHeader header{};
-  const uint32_t first = fushi_voice_hook::PublishNativeLoopbackRequest(
-      &header, fushi_voice_hook::kNativeLoopbackDeny);
+  const uint32_t first = my_comic_voice_hook::PublishNativeLoopbackRequest(
+      &header, my_comic_voice_hook::kNativeLoopbackDeny);
   Check(first == 1, "fresh mapping must publish seq=1");
-  auto request = fushi_voice_hook::ReadNativeLoopbackRequest(&header);
+  auto request = my_comic_voice_hook::ReadNativeLoopbackRequest(&header);
   Check(request.valid && request.seq == 1 &&
-            request.requested == fushi_voice_hook::kNativeLoopbackDeny,
+            request.requested == my_comic_voice_hook::kNativeLoopbackDeny,
         "fresh deny request must round-trip");
-  Check(fushi_voice_hook::PublishNativeLoopbackRequest(
-            &header, fushi_voice_hook::kNativeLoopbackDeny) == 1,
+  Check(my_comic_voice_hook::PublishNativeLoopbackRequest(
+            &header, my_comic_voice_hook::kNativeLoopbackDeny) == 1,
         "idempotent reconnect must not create a new generation");
 
-  Check(fushi_voice_hook::PublishNativeLoopbackRequest(
-            &header, fushi_voice_hook::kNativeLoopbackAllow) == 2,
+  Check(my_comic_voice_hook::PublishNativeLoopbackRequest(
+            &header, my_comic_voice_hook::kNativeLoopbackAllow) == 2,
         "deny->allow must advance generation");
-  Check(fushi_voice_hook::PublishNativeLoopbackRequest(
-            &header, fushi_voice_hook::kNativeLoopbackDeny) == 3,
+  Check(my_comic_voice_hook::PublishNativeLoopbackRequest(
+            &header, my_comic_voice_hook::kNativeLoopbackDeny) == 3,
         "allow->deny must advance generation");
-  Check(fushi_voice_hook::PublishNativeLoopbackRequest(
-            &header, fushi_voice_hook::kNativeLoopbackAllow) == 4,
+  Check(my_comic_voice_hook::PublishNativeLoopbackRequest(
+            &header, my_comic_voice_hook::kNativeLoopbackAllow) == 4,
         "rapid deny->allow must retain a distinct generation");
 
-  fushi_voice_hook::AtomicStoreShared32(
+  my_comic_voice_hook::AtomicStoreShared32(
       &header.native_loopback_request_seq,
-      fushi_voice_hook::kNativeLoopbackRequestWriteInProgress | 4u);
-  Check(!fushi_voice_hook::ReadNativeLoopbackRequest(&header).valid,
+      my_comic_voice_hook::kNativeLoopbackRequestWriteInProgress | 4u);
+  Check(!my_comic_voice_hook::ReadNativeLoopbackRequest(&header).valid,
         "reader must reject a writer-held seqlock");
-  fushi_voice_hook::AtomicStoreShared32(
+  my_comic_voice_hook::AtomicStoreShared32(
       &header.native_loopback_request_seq, 4u);
 }
 
 void TestOnlyExactAllowCanStart() {
   const NativeLoopbackRequestSnapshot unpublished{};
-  Check(fushi_voice_hook::DecideNativeLoopbackPolicyAction(
+  Check(my_comic_voice_hook::DecideNativeLoopbackPolicyAction(
             unpublished, NativeLoopbackWorkerPhase::kAbsent, false) ==
             NativeLoopbackPolicyAction::kNone,
         "unpublished policy must not start");
 
   const NativeLoopbackRequestSnapshot deny{
-      fushi_voice_hook::kNativeLoopbackDeny, 1, true};
-  Check(fushi_voice_hook::DecideNativeLoopbackPolicyAction(
+      my_comic_voice_hook::kNativeLoopbackDeny, 1, true};
+  Check(my_comic_voice_hook::DecideNativeLoopbackPolicyAction(
             deny, NativeLoopbackWorkerPhase::kAbsent, false) ==
             NativeLoopbackPolicyAction::kAcknowledgeStopped,
         "deny without a worker must acknowledge stopped");
-  Check(fushi_voice_hook::DecideNativeLoopbackPolicyAction(
+  Check(my_comic_voice_hook::DecideNativeLoopbackPolicyAction(
             deny, NativeLoopbackWorkerPhase::kRunning, false) ==
             NativeLoopbackPolicyAction::kRequestStop,
         "deny with a worker must request stop");
 
   const NativeLoopbackRequestSnapshot unknown{99, 2, true};
-  Check(fushi_voice_hook::DecideNativeLoopbackPolicyAction(
+  Check(my_comic_voice_hook::DecideNativeLoopbackPolicyAction(
             unknown, NativeLoopbackWorkerPhase::kAbsent, false) ==
             NativeLoopbackPolicyAction::kAcknowledgeStopped,
         "unknown requested value must fail closed");
 
   const NativeLoopbackRequestSnapshot allow{
-      fushi_voice_hook::kNativeLoopbackAllow, 3, true};
-  Check(fushi_voice_hook::DecideNativeLoopbackPolicyAction(
+      my_comic_voice_hook::kNativeLoopbackAllow, 3, true};
+  Check(my_comic_voice_hook::DecideNativeLoopbackPolicyAction(
             allow, NativeLoopbackWorkerPhase::kAbsent, false) ==
             NativeLoopbackPolicyAction::kStartWorker,
         "exact allow may start a worker");
-  Check(fushi_voice_hook::DecideNativeLoopbackPolicyAction(
+  Check(my_comic_voice_hook::DecideNativeLoopbackPolicyAction(
             allow, NativeLoopbackWorkerPhase::kRunning, false) ==
             NativeLoopbackPolicyAction::kAcknowledgeRunning,
         "running allow may be acknowledged");
-  Check(fushi_voice_hook::DecideNativeLoopbackPolicyAction(
+  Check(my_comic_voice_hook::DecideNativeLoopbackPolicyAction(
             allow, NativeLoopbackWorkerPhase::kAbsent, true) ==
             NativeLoopbackPolicyAction::kAcknowledgeFailed,
         "same failed generation must not restart forever");
@@ -179,130 +179,130 @@ void TestOnlyExactAllowCanStart() {
 
 void TestRapidDenyAllowForcesGenerationBarrier() {
   const NativeLoopbackRequestSnapshot worker_one{
-      fushi_voice_hook::kNativeLoopbackAllow, 1, true};
+      my_comic_voice_hook::kNativeLoopbackAllow, 1, true};
   const NativeLoopbackRequestSnapshot latest_allow{
-      fushi_voice_hook::kNativeLoopbackAllow, 3, true};
-  Check(fushi_voice_hook::NativeLoopbackWorkerMayCapture(worker_one, 1),
+      my_comic_voice_hook::kNativeLoopbackAllow, 3, true};
+  Check(my_comic_voice_hook::NativeLoopbackWorkerMayCapture(worker_one, 1),
         "worker may capture only its exact allow generation");
-  Check(!fushi_voice_hook::NativeLoopbackWorkerMayCapture(latest_allow, 1),
+  Check(!my_comic_voice_hook::NativeLoopbackWorkerMayCapture(latest_allow, 1),
         "allow1->deny2->allow3 must stop worker generation 1");
-  Check(fushi_voice_hook::DecideNativeLoopbackPolicyAction(
+  Check(my_comic_voice_hook::DecideNativeLoopbackPolicyAction(
             latest_allow, NativeLoopbackWorkerPhase::kStopping, false) ==
             NativeLoopbackPolicyAction::kPublishStopping,
         "latest allow cannot reuse a stopping old worker");
-  Check(fushi_voice_hook::DecideNativeLoopbackPolicyAction(
+  Check(my_comic_voice_hook::DecideNativeLoopbackPolicyAction(
             latest_allow, NativeLoopbackWorkerPhase::kAbsent, false) ==
             NativeLoopbackPolicyAction::kStartWorker,
         "latest allow may start only after old worker is reaped");
-  Check(!fushi_voice_hook::NativeLoopbackWorkerFailureApplies(
+  Check(!my_comic_voice_hook::NativeLoopbackWorkerFailureApplies(
             latest_allow, 1, false, 1),
         "generation 1 failure must not poison latest allow generation 3");
-  Check(fushi_voice_hook::NativeLoopbackWorkerFailureApplies(
+  Check(my_comic_voice_hook::NativeLoopbackWorkerFailureApplies(
             latest_allow, 3, false, 1),
         "failure applies only to its exact current generation");
-  Check(!fushi_voice_hook::NativeLoopbackWorkerFailureApplies(
+  Check(!my_comic_voice_hook::NativeLoopbackWorkerFailureApplies(
             latest_allow, 3, true, 1),
         "policy-driven stop is not a startup failure");
 }
 
 void TestOldGenerationCannotAcknowledgeNewRequest() {
   SharedHeader header{};
-  Check(fushi_voice_hook::PublishNativeLoopbackRequest(
-            &header, fushi_voice_hook::kNativeLoopbackAllow) == 1,
+  Check(my_comic_voice_hook::PublishNativeLoopbackRequest(
+            &header, my_comic_voice_hook::kNativeLoopbackAllow) == 1,
         "fresh allow must be generation 1");
   const NativeLoopbackRequestSnapshot old =
-      fushi_voice_hook::ReadNativeLoopbackRequest(&header);
-  Check(fushi_voice_hook::PublishNativeLoopbackRequest(
-            &header, fushi_voice_hook::kNativeLoopbackDeny) == 2,
+      my_comic_voice_hook::ReadNativeLoopbackRequest(&header);
+  Check(my_comic_voice_hook::PublishNativeLoopbackRequest(
+            &header, my_comic_voice_hook::kNativeLoopbackDeny) == 2,
         "deny must be generation 2");
-  Check(!fushi_voice_hook::PublishNativeLoopbackApplied(
-            &header, old, fushi_voice_hook::kNativeLoopbackStateRunning),
+  Check(!my_comic_voice_hook::PublishNativeLoopbackApplied(
+            &header, old, my_comic_voice_hook::kNativeLoopbackStateRunning),
         "old worker must not acknowledge after a newer request");
-  Check(fushi_voice_hook::AtomicLoadShared32(
+  Check(my_comic_voice_hook::AtomicLoadShared32(
             &header.native_loopback_applied_seq) == 0,
         "rejected old ack must not publish applied_seq");
 
   const NativeLoopbackRequestSnapshot deny =
-      fushi_voice_hook::ReadNativeLoopbackRequest(&header);
-  Check(fushi_voice_hook::PublishNativeLoopbackApplied(
-            &header, deny, fushi_voice_hook::kNativeLoopbackStateStopped),
+      my_comic_voice_hook::ReadNativeLoopbackRequest(&header);
+  Check(my_comic_voice_hook::PublishNativeLoopbackApplied(
+            &header, deny, my_comic_voice_hook::kNativeLoopbackStateStopped),
         "current deny may acknowledge only after stopped");
-  Check(fushi_voice_hook::AtomicLoadShared32(
+  Check(my_comic_voice_hook::AtomicLoadShared32(
             &header.native_loopback_state) ==
-            fushi_voice_hook::kNativeLoopbackStateStopped &&
-            fushi_voice_hook::AtomicLoadShared32(
+            my_comic_voice_hook::kNativeLoopbackStateStopped &&
+            my_comic_voice_hook::AtomicLoadShared32(
                 &header.native_loopback_applied_seq) == 2,
         "state must precede matching applied seq");
 }
 
 void TestSequenceWrapUsesIdentityNotOrdering() {
   SharedHeader header{};
-  fushi_voice_hook::AtomicStoreShared32(
+  my_comic_voice_hook::AtomicStoreShared32(
       &header.native_loopback_requested,
-      fushi_voice_hook::kNativeLoopbackDeny);
-  fushi_voice_hook::AtomicStoreShared32(
+      my_comic_voice_hook::kNativeLoopbackDeny);
+  my_comic_voice_hook::AtomicStoreShared32(
       &header.native_loopback_request_seq,
-      fushi_voice_hook::kNativeLoopbackRequestSequenceMask);
-  Check(fushi_voice_hook::PublishNativeLoopbackRequest(
-            &header, fushi_voice_hook::kNativeLoopbackAllow) == 1,
+      my_comic_voice_hook::kNativeLoopbackRequestSequenceMask);
+  Check(my_comic_voice_hook::PublishNativeLoopbackRequest(
+            &header, my_comic_voice_hook::kNativeLoopbackAllow) == 1,
         "31-bit generation wrap must skip reserved zero");
-  const auto request = fushi_voice_hook::ReadNativeLoopbackRequest(&header);
+  const auto request = my_comic_voice_hook::ReadNativeLoopbackRequest(&header);
   Check(request.valid && request.seq == 1 &&
-            fushi_voice_hook::NativeLoopbackWorkerMayCapture(request, 1),
+            my_comic_voice_hook::NativeLoopbackWorkerMayCapture(request, 1),
         "wrapped generation is compared by identity, not greater-than");
 }
 
 void TestGameStreamInputPublication() {
   SharedHeader header{};
-  const uint32_t first = fushi_voice_hook::PublishGameStreamInputRequest(
-      &header, 0x1234u, 7u, fushi_voice_hook::kGameStreamInputButtonLeft,
+  const uint32_t first = my_comic_voice_hook::PublishGameStreamInputRequest(
+      &header, 0x1234u, 7u, my_comic_voice_hook::kGameStreamInputButtonLeft,
       9000u);
   Check(first == 1, "fresh game-stream request must publish seq=1");
-  const auto request = fushi_voice_hook::ReadGameStreamInputRequest(&header);
+  const auto request = my_comic_voice_hook::ReadGameStreamInputRequest(&header);
   Check(request.valid && request.seq == 1 && request.target_hwnd == 0x1234u &&
             request.transaction_id == 7u && request.deadline_tick_ms == 9000u &&
-            request.active_buttons == fushi_voice_hook::kGameStreamInputButtonLeft,
+            request.active_buttons == my_comic_voice_hook::kGameStreamInputButtonLeft,
         "game-stream request must round-trip coherently");
-  fushi_voice_hook::AtomicStoreShared32(
+  my_comic_voice_hook::AtomicStoreShared32(
       &header.game_stream_input_request_seq,
-      fushi_voice_hook::kGameStreamInputRequestWriteInProgress | first);
-  Check(!fushi_voice_hook::ReadGameStreamInputRequest(&header).valid,
+      my_comic_voice_hook::kGameStreamInputRequestWriteInProgress | first);
+  Check(!my_comic_voice_hook::ReadGameStreamInputRequest(&header).valid,
         "writer-held game-stream request must be unreadable");
-  fushi_voice_hook::AtomicStoreShared32(&header.game_stream_input_request_seq,
+  my_comic_voice_hook::AtomicStoreShared32(&header.game_stream_input_request_seq,
                                         first);
-  Check(fushi_voice_hook::PublishGameStreamInputStatus(
-            &header, request, fushi_voice_hook::kGameStreamInputStatusApplied,
-            fushi_voice_hook::kGameStreamInputButtonLeft),
+  Check(my_comic_voice_hook::PublishGameStreamInputStatus(
+            &header, request, my_comic_voice_hook::kGameStreamInputStatusApplied,
+            my_comic_voice_hook::kGameStreamInputButtonLeft),
         "current game-stream request must accept applied status");
   const uint32_t first_status_seq = header.game_stream_input_status_seq;
   Check(header.game_stream_input_applied_seq == first &&
             first_status_seq != 0 &&
             header.game_stream_input_status ==
-                fushi_voice_hook::kGameStreamInputStatusApplied &&
+                my_comic_voice_hook::kGameStreamInputStatusApplied &&
             header.game_stream_input_observed_buttons ==
-                fushi_voice_hook::kGameStreamInputButtonLeft,
+                my_comic_voice_hook::kGameStreamInputButtonLeft,
         "game-stream status payload must precede applied seq");
-  Check(fushi_voice_hook::PublishGameStreamInputStatus(
-            &header, request, fushi_voice_hook::kGameStreamInputStatusExpired,
+  Check(my_comic_voice_hook::PublishGameStreamInputStatus(
+            &header, request, my_comic_voice_hook::kGameStreamInputStatusExpired,
             0u),
         "same game-stream request may publish a later terminal status");
   Check(header.game_stream_input_status_seq != first_status_seq &&
             header.game_stream_input_applied_seq == first &&
             header.game_stream_input_status ==
-                fushi_voice_hook::kGameStreamInputStatusExpired &&
+                my_comic_voice_hook::kGameStreamInputStatusExpired &&
             header.game_stream_input_observed_buttons == 0,
         "game-stream status publication generation must advance");
-  const uint32_t second = fushi_voice_hook::PublishGameStreamInputRequest(
+  const uint32_t second = my_comic_voice_hook::PublishGameStreamInputRequest(
       &header, 0x1234u, 7u, 0u, 9100u);
   Check(second == 2, "release must be its own game-stream generation");
   const uint32_t status_before_old_ack = header.game_stream_input_status_seq;
-  Check(!fushi_voice_hook::PublishGameStreamInputStatus(
-            &header, request, fushi_voice_hook::kGameStreamInputStatusApplied,
-            fushi_voice_hook::kGameStreamInputButtonLeft),
+  Check(!my_comic_voice_hook::PublishGameStreamInputStatus(
+            &header, request, my_comic_voice_hook::kGameStreamInputStatusApplied,
+            my_comic_voice_hook::kGameStreamInputButtonLeft),
         "old game-stream generation must not acknowledge after release");
   Check(header.game_stream_input_status_seq == status_before_old_ack &&
             header.game_stream_input_status ==
-                fushi_voice_hook::kGameStreamInputStatusExpired &&
+                my_comic_voice_hook::kGameStreamInputStatusExpired &&
             header.game_stream_input_observed_buttons == 0,
         "old game-stream ACK must not pollute current status payload");
 }

@@ -19,17 +19,17 @@
 
   Extracting at BUILD time removes the second copy entirely. The helper and the
   app are produced by one build and land through one installer, so they cannot
-  drift. fushi.iss packages via `Source: "{#SourceDir}\*"` with recursesubdirs,
+  drift. mycomic.iss packages via `Source: "{#SourceDir}\*"` with recursesubdirs,
   so this directory rides into the installer with no installer change at all.
 
   Integrity is not weakened, only moved earlier: the archive is verified against
   its sha256 sidecar HERE, at build time, and refuses to publish on mismatch. The
   old runtime check defended against a tampered *download*; for files that sit in
   the app directory it defended against an attacker who, by definition, could
-  equally well replace fushi.exe itself.
+  equally well replace MyComic.exe itself.
 
 .PARAMETER BundleDirectory
-  The built Flutter Windows bundle (the directory containing fushi.exe).
+  The built Flutter Windows bundle (the directory containing MyComic.exe).
 
 .PARAMETER DistDirectory
   Where build_distribution.ps1 wrote its archives. Defaults to the repo's
@@ -58,7 +58,7 @@ param(
   # checkout than the one being compiled now.  Tolerated for local Debug builds
   # (the stale helper is disabled and the build continues); refused for
   # Profile/Release, where it means a release artifact would be assembled from two
-  # different source trees.  Gated per configuration in fushi/windows/CMakeLists.txt.
+  # different source trees.  Gated per configuration in my_comic/windows/CMakeLists.txt.
   [switch] $AllowStaleDistribution
 )
 
@@ -75,8 +75,8 @@ if (-not (Test-Path -LiteralPath $fingerprintScript -PathType Leaf)) {
 #
 # Why this is not `Remove-Item -Recurse -Force`: the files under voice_hook\<arch>\
 # are exactly the ones that get injected into the user's game and are then held by
-# the host process until it exits (fushi_voice_hook.dll, LunaHook<arch>.dll -- see
-# the BUG-1708 notes in fushi/lib/src/mining/galgame_hook_runtime_stage.dart).  A
+# the host process until it exits (my_comic_voice_hook.dll, LunaHook<arch>.dll -- see
+# the BUG-1708 notes in my_comic/lib/src/mining/galgame_hook_runtime_stage.dart).  A
 # developer machine that ran a game a minute ago is the normal case, not an edge
 # case.  Windows refuses to delete a mapped image, so Remove-Item throws, the
 # script exits non-zero, and the FATAL_ERROR in the CMake install(CODE) rule fails
@@ -89,7 +89,7 @@ if (-not (Test-Path -LiteralPath $fingerprintScript -PathType Leaf)) {
 #
 # The runtime load rule (GalgameHookRuntimeStage._ensureStaged) is a plain
 # per-path existence check of
-#   <dir of fushi.exe>\voice_hook\<arch>\{fushi_voice_injector.exe, fushi_voice_hook.dll, ...}
+#   <dir of MyComic.exe>\voice_hook\<arch>\{my_comic_voice_injector.exe, my_comic_voice_hook.dll, ...}
 # and reports the architecture as unavailable the moment one of them is not at its
 # exact path.  So moving the directory aside *is* the "explicitly unavailable"
 # state that the app already knows how to read; no new marker file is invented.
@@ -107,7 +107,7 @@ if (-not (Test-Path -LiteralPath $fingerprintScript -PathType Leaf)) {
 # Delete `<Path>.stale*` directories left behind by an earlier build.  They are
 # already neutralized, so one that is still held is not an error -- but it is
 # reported rather than swallowed.
-function Remove-FushiHelperLeftovers {
+function Remove-MyComicHelperLeftovers {
   param([Parameter(Mandatory = $true)][string] $Path)
 
   $parent = Split-Path -Parent $Path
@@ -133,13 +133,13 @@ function Remove-FushiHelperLeftovers {
 # stops existing in one step.  There is never a half-deleted directory that still
 # happens to hold a complete set of files.  Deleting the renamed copy is cleanup;
 # failing at that changes nothing about the guarantee.
-function Disable-FushiStaleHelper {
+function Disable-MyComicStaleHelper {
   param(
     [Parameter(Mandatory = $true)][string] $Path,
     [Parameter(Mandatory = $true)][string] $Reason
   )
 
-  Remove-FushiHelperLeftovers -Path $Path
+  Remove-MyComicHelperLeftovers -Path $Path
   if (-not (Test-Path -LiteralPath $Path)) { return }
 
   $asidePath = $null
@@ -167,7 +167,7 @@ function Disable-FushiStaleHelper {
       "renaming it were both refused, so the app would keep loading it. " +
       "Rename error: $detail. Close whatever still holds those files -- the game " +
       'you last injected into (the hook DLL stays loaded until that process ' +
-      'exits), fushi_voice_injector.exe, a running Fushi, or an antivirus/indexer ' +
+      'exits), my_comic_voice_injector.exe, a running MyComic, or an antivirus/indexer ' +
       'scanning the directory -- and build again.')
   }
 
@@ -183,14 +183,14 @@ function Disable-FushiStaleHelper {
 }
 
 # Must stay identical to galgameHelperRequiredFiles() in
-# fushi/lib/src/mining/galgame_helper_installer.dart. Two copies of a contract
+# my_comic/lib/src/mining/galgame_helper_installer.dart. Two copies of a contract
 # is exactly the shape that caused BUG-1345, so it is pinned by a guard test:
-# fushi/test/mining/gal_helper_bundle_manifest_parity_test.dart parses this
+# my_comic/test/mining/gal_helper_bundle_manifest_parity_test.dart parses this
 # file and fails if the two lists ever diverge.
 $RequiredFiles = @{
   'x86' = @(
-    'fushi_voice_injector.exe',
-    'fushi_voice_hook.dll',
+    'my_comic_voice_injector.exe',
+    'my_comic_voice_hook.dll',
     'LunaHook32.dll',
     'LunaHost32.dll',
     'LoaderDll.dll',
@@ -198,11 +198,11 @@ $RequiredFiles = @{
     'LocaleEmulator-LGPL-3.0.txt'
   )
   'x64' = @(
-    'fushi_voice_injector.exe',
-    'fushi_voice_hook.dll',
+    'my_comic_voice_injector.exe',
+    'my_comic_voice_hook.dll',
     'LunaHook64.dll',
     'LunaHost64.dll',
-    'unity_audio_runtime/fushi_unity_audio_extract.exe',
+    'unity_audio_runtime/my_comic_unity_audio_extract.exe',
     'unity_audio_runtime/classdata.tpk',
     'unity_audio_runtime/vgmstream-cli.exe',
     'unity_audio_runtime/avcodec-vgmstream-59.dll',
@@ -223,7 +223,7 @@ $RequiredFiles = @{
 if (-not (Test-Path -LiteralPath $BundleDirectory -PathType Container)) {
   throw "Bundle directory does not exist: $BundleDirectory"
 }
-# Absolute from here on: Disable-FushiStaleHelper renames through
+# Absolute from here on: Disable-MyComicStaleHelper renames through
 # [IO.Directory]::Move, which resolves a relative path against the *process*
 # working directory rather than this script's.
 $BundleDirectory = [IO.Path]::GetFullPath($BundleDirectory)
@@ -250,7 +250,7 @@ $missingArtifacts = @(
 # remove the legacy archive unconditionally so it cannot repopulate stale plain
 # files after this script returns.
 $legacyBundle = Join-Path $BundleDirectory 'galgame_helper'
-Disable-FushiStaleHelper -Path $legacyBundle -Reason 'legacy runtime archive directory (BUG-1449)'
+Disable-MyComicStaleHelper -Path $legacyBundle -Reason 'legacy runtime archive directory (BUG-1449)'
 
 if ($missingArtifacts.Count -gt 0) {
   if (-not $AllowMissingDistribution) {
@@ -262,7 +262,7 @@ if ($missingArtifacts.Count -gt 0) {
   # bundle caused BUG-1881: SGRE injected pre-fix glyph geometry and selected a
   # different character (or no character) even though Flutter had just rebuilt.
   $plainBundle = Join-Path $BundleDirectory 'voice_hook'
-  Disable-FushiStaleHelper -Path $plainBundle -Reason 'no helper distribution was built for this checkout'
+  Disable-MyComicStaleHelper -Path $plainBundle -Reason 'no helper distribution was built for this checkout'
   Write-Host "galgame helper distribution is absent; bundle helper disabled: $BundleDirectory"
   return
 }
@@ -270,13 +270,13 @@ if ($missingArtifacts.Count -gt 0) {
 $recordedSourceFingerprint =
   ((Get-Content -LiteralPath $sourceFingerprintFile -Raw) -replace '[^0-9a-fA-F]', '').ToLowerInvariant()
 $currentSourceFingerprint =
-  Get-FushiHelperSourceFingerprint -SourceRoot ([IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..')))
+  Get-MyComicHelperSourceFingerprint -SourceRoot ([IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..')))
 if ($recordedSourceFingerprint -ne $currentSourceFingerprint) {
   if (-not $AllowStaleDistribution) {
     throw "Galgame helper distribution is stale: recorded=$recordedSourceFingerprint current=$currentSourceFingerprint (run build_distribution.ps1 again)"
   }
   $plainBundle = Join-Path $BundleDirectory 'voice_hook'
-  Disable-FushiStaleHelper -Path $plainBundle -Reason 'the helper distribution was built from a different checkout'
+  Disable-MyComicStaleHelper -Path $plainBundle -Reason 'the helper distribution was built from a different checkout'
   Write-Host "galgame helper distribution is stale; bundle helper disabled: $BundleDirectory"
   return
 }
@@ -289,7 +289,7 @@ foreach ($arch in @('x86', 'x64')) {
   # unpacked into a shipping bundle: what is inside is an injector executable and
   # a DLL that gets loaded into the user's game process.
   $expected = ((Get-Content -LiteralPath $sidecar -Raw) -replace '[^0-9a-fA-F]', '').ToLowerInvariant()
-  $actual = Get-FushiFileSha256Hex -Path $zip
+  $actual = Get-MyComicFileSha256Hex -Path $zip
   if ($expected -ne $actual) {
     throw "Helper archive sha256 mismatch for ${arch}: sidecar=$expected actual=$actual"
   }
@@ -299,7 +299,7 @@ foreach ($arch in @('x86', 'x64')) {
   # still mapped into the game the developer just closed, so the old directory has
   # to be moved aside rather than deleted in place.  Expand-Archive then writes
   # into a directory nothing holds.
-  Disable-FushiStaleHelper -Path $target -Reason "replacing $arch with the freshly built helper"
+  Disable-MyComicStaleHelper -Path $target -Reason "replacing $arch with the freshly built helper"
   New-Item -ItemType Directory -Force -Path $target | Out-Null
   Expand-Archive -LiteralPath $zip -DestinationPath $target -Force
 

@@ -51,14 +51,14 @@ class RuntimeClosureTests(unittest.TestCase):
                     collect(root / "libmpv-2.dll", root, root / "system")
 
 
-@unittest.skipUnless(os.environ.get("FUSHI_MPV_LIBRARY"), "Set FUSHI_MPV_LIBRARY to test the actual runtime")
+@unittest.skipUnless(os.environ.get("MYCOMIC_MPV_LIBRARY"), "Set MYCOMIC_MPV_LIBRARY to test the actual runtime")
 class NativeAbiTests(unittest.TestCase):
     def test_menu_state_render_and_truehd_capabilities(self):
         # unittest.mock imports asyncio/ssl. Conda's OpenSSL DLLs then occupy the
         # same Windows module names before libmpv starts. Test the application
         # runtime in a fresh process, not in an unrelated Python SSL host.
         result = subprocess.run([sys.executable, str(Path(__file__).with_name("probe_libmpv.py")),
-                                 os.environ["FUSHI_MPV_LIBRARY"]], capture_output=True, text=True,
+                                 os.environ["MYCOMIC_MPV_LIBRARY"]], capture_output=True, text=True,
                                 timeout=20, check=True)
         report = json.loads(result.stdout)
         self.assertEqual(report["disc_menu_option_result"], 0)
@@ -86,7 +86,7 @@ try:
 finally:
     m.close()
 """
-        subprocess.run([sys.executable, "-c", code, os.environ["FUSHI_MPV_LIBRARY"],
+        subprocess.run([sys.executable, "-c", code, os.environ["MYCOMIC_MPV_LIBRARY"],
                         str(Path(__file__).parent)], check=True, timeout=20)
 
 

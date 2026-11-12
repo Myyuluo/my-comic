@@ -13,8 +13,8 @@
 
 namespace {
 
-using fushi_voice_hook::LayerOriginPixelSolve;
-using fushi_voice_hook::SolveLayerOriginFromBgra;
+using my_comic_voice_hook::LayerOriginPixelSolve;
+using my_comic_voice_hook::SolveLayerOriginFromBgra;
 
 // 客户区 960x540，设计分辨率 1920x1080 ⇒ sx = sy = 0.5。
 constexpr int32_t kW = 960;

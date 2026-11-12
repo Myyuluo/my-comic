@@ -8,8 +8,8 @@
 #include <vector>
 
 namespace {
-using namespace fushi_voice_hook;
-using namespace fushi_voice_hook::siglus_legacy_resource;
+using namespace my_comic_voice_hook;
+using namespace my_comic_voice_hook::siglus_legacy_resource;
 int checks=0;
 void Check(bool ok) {
   ++checks;

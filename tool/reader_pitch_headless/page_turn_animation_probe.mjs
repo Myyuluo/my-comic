@@ -4,13 +4,13 @@
 //
 // 先生成真 shell：
 //   flutter test test/reader/reader_headless_shell_dump_test.dart   # 写 shell 到 systemTemp
-//   node tool/reader_pitch_headless/page_turn_animation_probe.mjs   # 截图写到 <systemTemp>/fushi_page_turn_probe
+//   node tool/reader_pitch_headless/page_turn_animation_probe.mjs   # 截图写到 <systemTemp>/my_comic_page_turn_probe
 // CHROME_PATH 指向 Chromium（Playwright headless shell 亦可）。退出码 0 = 每组都在
 // 动画中途观察到 View Transition 且落页正确。
 import fs from 'node:fs'; import path from 'node:path'; import os from 'node:os'; import puppeteer from 'puppeteer-core';
 const CHROME = process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 // 输出目录固定在系统临时目录下，不接受命令行路径（避免把任意路径当写入目标）。
-const OUT = path.join(os.tmpdir(), 'fushi_page_turn_probe');
+const OUT = path.join(os.tmpdir(), 'my_comic_page_turn_probe');
 fs.mkdirSync(OUT, { recursive: true });
 const W = 600, H = 800, DURATION = 2000;
 const css = (vertical) => vertical
@@ -33,34 +33,34 @@ async function run(vertical, effect) {
     pageTurnAnimation: effect, pageTurnDurationMs: DURATION, pageTurnFollowDrag: true,
     swipeLeftIsForward: !vertical,
   };
-  const engine = fs.readFileSync(process.env.FUSHI_ENGINE_HTML || path.join(os.tmpdir(), 'fushi_engine_paginated.html'), 'utf8');
-  const full = `<!doctype html><html><head><meta charset="utf-8"><style>${css(vertical)}</style></head><body>${paras}\n${engine}\n<script>window.__fushiInstallShell(${JSON.stringify(config)});</script></body></html>`;
+  const engine = fs.readFileSync(process.env.MYCOMIC_ENGINE_HTML || path.join(os.tmpdir(), 'my_comic_engine_paginated.html'), 'utf8');
+  const full = `<!doctype html><html><head><meta charset="utf-8"><style>${css(vertical)}</style></head><body>${paras}\n${engine}\n<script>window.__myComicInstallShell(${JSON.stringify(config)});</script></body></html>`;
   const b = await puppeteer.launch({ executablePath: CHROME, headless: 'new', args: ['--no-sandbox'] });
   try {
     const pg = await b.newPage(); await pg.setViewport({ width: W, height: H });
     await pg.setRequestInterception(true);
-    pg.on('request', q => q.url() === 'https://fushi.local/chapter'
+    pg.on('request', q => q.url() === 'https://mycomic.local/chapter'
       ? q.respond({ status: 200, contentType: 'text/html', body: full })
-      : q.url().startsWith('https://fushi.local') ? q.respond({ status: 404, body: '' }) : q.continue());
-    await pg.goto('https://fushi.local/chapter', { waitUntil: 'load', timeout: 8000 }).catch(() => {});
+      : q.url().startsWith('https://mycomic.local') ? q.respond({ status: 404, body: '' }) : q.continue());
+    await pg.goto('https://mycomic.local/chapter', { waitUntil: 'load', timeout: 8000 }).catch(() => {});
     await new Promise(r => setTimeout(r, 500));
     const tag = `${vertical ? 'vertical' : 'horizontal'}-${effect}`;
-    const before = await pg.evaluate(() => { const r = window.fushiReader; const c = r.getScrollContext(); return r.getPagePosition(c); });
+    const before = await pg.evaluate(() => { const r = window.myComicReader; const c = r.getScrollContext(); return r.getPagePosition(c); });
     await pg.screenshot({ path: path.join(OUT, `${tag}-0.png`) });
-    const result = await pg.evaluate(() => window.fushiReader.paginate('forward'));
+    const result = await pg.evaluate(() => window.myComicReader.paginate('forward'));
     const mid = [];
     for (const pct of [25, 50]) {
       await new Promise(r => setTimeout(r, DURATION * 0.25));
       mid.push(await pg.evaluate(() => ({
         animations: document.getAnimations().length,
-        marker: document.documentElement.getAttribute('data-fushi-pt'),
+        marker: document.documentElement.getAttribute('data-mycomic-pt'),
       })));
       await pg.screenshot({ path: path.join(OUT, `${tag}-${pct}.png`) });
     }
     await new Promise(r => setTimeout(r, DURATION));
     const after = await pg.evaluate(() => {
-      const r = window.fushiReader; const c = r.getScrollContext();
-      return { pos: r.getPagePosition(c), pageSize: c.pageSize, marker: document.documentElement.getAttribute('data-fushi-pt') };
+      const r = window.myComicReader; const c = r.getScrollContext();
+      return { pos: r.getPagePosition(c), pageSize: c.pageSize, marker: document.documentElement.getAttribute('data-mycomic-pt') };
     });
     await pg.screenshot({ path: path.join(OUT, `${tag}-100.png`) });
     const ok = result === 'scrolled' && mid.every(m => m.animations > 0) &&

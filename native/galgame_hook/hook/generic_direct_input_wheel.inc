@@ -6,19 +6,19 @@ std::atomic<bool> g_kirikiri_z_only_wheel_observed{false};
 std::atomic<uint32_t> g_wheel_diagnostic_budget{64};
 struct WheelConsumer {
   void* identity = nullptr;
-  fushi_voice_hook::LookupWheelCursor cursor;
+  my_comic_voice_hook::LookupWheelCursor cursor;
   uint32_t diagnostics = 0;
   LONG raw = 0, delivered = 0;
   uint64_t diagnostic_generation = 0;
   bool diagnostic_pending = false, diagnostic_ready = false;
 };
 WheelConsumer g_wheel_consumers[32]{};
-fushi_voice_hook::LookupWheelSource* g_wheel_source = nullptr;
+my_comic_voice_hook::LookupWheelSource* g_wheel_source = nullptr;
 HANDLE g_wheel_source_mapping = nullptr, g_wheel_source_ack = nullptr;
 HANDLE g_wheel_source_host = nullptr;
 DWORD g_wheel_source_host_pid = 0;
 SRWLOCK g_wheel_consumer_lock = SRWLOCK_INIT;
-std::atomic<fushi_voice_hook::LookupWheelSource*> g_wheel_source_published{nullptr};
+std::atomic<my_comic_voice_hook::LookupWheelSource*> g_wheel_source_published{nullptr};
 
 void GenericWheelLogLine(const wchar_t* line) {
 #if defined(_M_IX86)
@@ -56,17 +56,17 @@ void PrepareKirikiriWheelSource() {
   if (!g_kirikiri_z_only_wheel_observed.load(std::memory_order_acquire)) return;
   HWND game = FindGameMainWindow();
   if (!game) return;
-  SetPropW(game, fushi_voice_hook::kLookupWheelSourceRequiredProperty,
+  SetPropW(game, my_comic_voice_hook::kLookupWheelSourceRequiredProperty,
            reinterpret_cast<HANDLE>(1));
   if (g_wheel_source) return;
   wchar_t name[128]{};
-  if (!fushi_voice_hook::WheelSourceName(GetCurrentProcessId(),
+  if (!my_comic_voice_hook::WheelSourceName(GetCurrentProcessId(),
                                       GetCurrentProcess(), name, 128)) return;
   HANDLE mapping = OpenFileMappingW(FILE_MAP_ALL_ACCESS, FALSE, name);
   if (!mapping) return;
-  auto* source = static_cast<fushi_voice_hook::LookupWheelSource*>(
+  auto* source = static_cast<my_comic_voice_hook::LookupWheelSource*>(
       MapViewOfFile(mapping, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(*g_wheel_source)));
-  if (!source || source->magic != fushi_voice_hook::kLookupWheelSourceMagic ||
+  if (!source || source->magic != my_comic_voice_hook::kLookupWheelSourceMagic ||
       source->game_pid != GetCurrentProcessId()) {
     if (source) UnmapViewOfFile(source);
     CloseHandle(mapping); return;
@@ -315,7 +315,7 @@ void StripHostOverlayWheelFromMouseState(void* device, DWORD bytes, LPVOID state
     // Mark the requirement at first proven real poll, before a popup can
     // mistake the worker's next tick for a non-DirectInput wheel engine.
     HWND game = FindGameMainWindow();
-    if (game) SetPropW(game, fushi_voice_hook::kLookupWheelSourceRequiredProperty,
+    if (game) SetPropW(game, my_comic_voice_hook::kLookupWheelSourceRequiredProperty,
                       reinterpret_cast<HANDLE>(1));
     g_kirikiri_z_only_wheel_observed.store(true, std::memory_order_release);
   }
@@ -328,12 +328,12 @@ void StripHostOverlayWheelFromMouseState(void* device, DWORD bytes, LPVOID state
     LONG neutral = 0; memcpy(state, &neutral, sizeof(neutral));
     return;
   }
-  auto snapshot = fushi_voice_hook::ReadWheelSource(source);
+  auto snapshot = my_comic_voice_hook::ReadWheelSource(source);
   // A crashed host cannot leave a ready mapping producing permanent silence.
   // The original DI buffer is still drained on every call. Producer loss stays
   // neutral until reconnection; raw zero does not prove an LL event settled.
   AcquireSRWLockExclusive(&g_wheel_consumer_lock);
-  const DWORD host_pid = fushi_voice_hook::LoadWheelWord(&source->host_pid);
+  const DWORD host_pid = my_comic_voice_hook::LoadWheelWord(&source->host_pid);
   if (host_pid != g_wheel_source_host_pid) {
     if (g_wheel_source_host) CloseHandle(g_wheel_source_host);
     g_wheel_source_host_pid = host_pid;
@@ -348,11 +348,11 @@ void StripHostOverlayWheelFromMouseState(void* device, DWORD bytes, LPVOID state
     if (!entry.identity) { entry.identity = identity; consumer = &entry; break; }
   LONG raw = 0; memcpy(&raw, state, sizeof(raw));
   const LONG filtered = consumer ?
-      fushi_voice_hook::ConsumeOutsideWheel(snapshot, raw, &consumer->cursor) : 0;
+      my_comic_voice_hook::ConsumeOutsideWheel(snapshot, raw, &consumer->cursor) : 0;
   memcpy(state, &filtered, sizeof(filtered));
   if (source && snapshot.coherent && snapshot.ready && consumer && consumer->cursor.bound) {
-    fushi_voice_hook::StoreWheelTotal(&source->consumer_generation, snapshot.generation);
-    fushi_voice_hook::StoreWheelWord(&source->consumer_ready, 1);
+    my_comic_voice_hook::StoreWheelTotal(&source->consumer_generation, snapshot.generation);
+    my_comic_voice_hook::StoreWheelWord(&source->consumer_ready, 1);
     if (g_wheel_source_ack) SetEvent(g_wheel_source_ack);
   }
   bool log = consumer && consumer->diagnostics < 16 &&

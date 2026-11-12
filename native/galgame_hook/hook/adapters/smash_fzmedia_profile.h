@@ -16,13 +16,13 @@
 
 // 锚点推导头必须在这里（全局作用域，经 generated/profile_includes.inc 进入 dll_main）
 // 被首次包含：dll_main 的 adapter 展开区在匿名命名空间里，若由 adapter.inc 首次包含，
-// 会生出 `anonymous::fushi_voice_hook::smash_fzmedia` 遮蔽全局同名命名空间，随后所有
-// `fushi_voice_hook::...` 限定名都会解析错（Leaf 的 profile.h 拉 exact_lookup_signature.h
+// 会生出 `anonymous::my_comic_voice_hook::smash_fzmedia` 遮蔽全局同名命名空间，随后所有
+// `my_comic_voice_hook::...` 限定名都会解析错（Leaf 的 profile.h 拉 exact_lookup_signature.h
 // 是同一个原因）。
 #include "smash_fzmedia_anchors.h"
 #include "smash_fzmedia_shared.h"
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 // ── 模块名过滤（registry onModuleLoaded 的粗筛）────────────────────────────
 inline bool SmashFzmediaModuleNameStartsWith(const wchar_t* module_name,
@@ -328,4 +328,4 @@ inline bool PartialPublishDue(uint64_t run_end_ms, uint64_t now_ms) {
 }
 
 }  // namespace smash_fzmedia
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

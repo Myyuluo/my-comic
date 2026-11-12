@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <string>
 
-namespace fushi_voice_hook::siglus {
+namespace my_comic_voice_hook::siglus {
 
 constexpr uint32_t kVoiceMemberRadix = 100000;
 constexpr uint32_t kNoVoiceKey = UINT32_MAX;
@@ -262,4 +262,4 @@ class VoiceBindingCache {
   uint64_t resource_clock_ = 0;
 };
 
-}  // namespace fushi_voice_hook::siglus
+}  // namespace my_comic_voice_hook::siglus

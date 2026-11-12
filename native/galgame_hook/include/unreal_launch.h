@@ -31,7 +31,7 @@
 #include <cstring>
 #include <string>
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 // IoStore TOC 头 16 字节魔数（UE4.25+ / UE5）。
 constexpr const char kUnrealIoStoreTocMagic[] = "-==--==--==--==-";
@@ -129,4 +129,4 @@ inline bool DirectoryLooksLikeUnrealIostore(const std::wstring& directory) {
          MatchesUnrealIostoreLayout(directory);
 }
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

@@ -25,9 +25,9 @@
 #include "adapters/unity_mono_audio.h"
 #include "adapters/unity_mono_lookup_core.h"
 
-using namespace fushi_voice_hook;
-namespace ul = fushi_voice_hook::unity_mono_lookup;
-namespace ua = fushi_voice_hook::unity_mono_audio;
+using namespace my_comic_voice_hook;
+namespace ul = my_comic_voice_hook::unity_mono_lookup;
+namespace ua = my_comic_voice_hook::unity_mono_audio;
 
 namespace {
 

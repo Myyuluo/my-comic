@@ -8,9 +8,9 @@
 #include <string>
 
 namespace {
-using fushi_voice_hook::SiglusLookupTextSnapshot;
+using my_comic_voice_hook::SiglusLookupTextSnapshot;
 constexpr size_t kSiglusLookupMaxTextUnits =
-    fushi_voice_hook::kSiglusLookupTextCapacity;
+    my_comic_voice_hook::kSiglusLookupTextCapacity;
 constexpr size_t kSiglusLookupTextSlots = 4;
 volatile LONG64 g_siglus_lookup_text_count = 0;
 uint64_t g_siglus_lookup_text_processed_seq = 0;

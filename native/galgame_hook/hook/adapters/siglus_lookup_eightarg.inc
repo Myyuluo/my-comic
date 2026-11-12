@@ -1,8 +1,8 @@
 // Eight-argument runtime state. Included after the bounded memory reader.
-namespace siglus_eightarg = fushi_voice_hook::siglus_eightarg_lookup_family;
-namespace siglus_eightarg_live = fushi_voice_hook::siglus_eightarg_runtime;
-namespace siglus_eightarg_owner = fushi_voice_hook::siglus_eightarg_owner;
-namespace siglus_eightarg_message = fushi_voice_hook::siglus_eightarg_message;
+namespace siglus_eightarg = my_comic_voice_hook::siglus_eightarg_lookup_family;
+namespace siglus_eightarg_live = my_comic_voice_hook::siglus_eightarg_runtime;
+namespace siglus_eightarg_owner = my_comic_voice_hook::siglus_eightarg_owner;
+namespace siglus_eightarg_message = my_comic_voice_hook::siglus_eightarg_message;
 siglus_eightarg::Sites g_siglus_eightarg_sites;
 std::atomic<uint64_t> g_siglus_eightarg_occurrence{0};
 uint64_t g_siglus_eightarg_worker_occurrence = 0;
@@ -10,14 +10,14 @@ __declspec(thread) uint64_t g_siglus_eightarg_thread_occurrence = 0;
 __declspec(thread) siglus_eightarg_message::Owner g_siglus_eightarg_thread_body = {};
 struct SiglusEightArgBinding {
   uint64_t occurrence = 0;
-  fushi_voice_hook::SiglusLookupTextIdentity identity;
+  my_comic_voice_hook::SiglusLookupTextIdentity identity;
   siglus_eightarg_message::Owner body{};
 };
 SRWLOCK g_siglus_eightarg_binding_lock = SRWLOCK_INIT;
 SiglusEightArgBinding g_siglus_eightarg_binding;
 
-bool IsEightArgSiglusLookup(const fushi_voice_hook::SiglusLookupProfile& profile) {
-  return profile.glyph_abi == fushi_voice_hook::SiglusGlyphLayoutAbi::kEcxEightArguments;
+bool IsEightArgSiglusLookup(const my_comic_voice_hook::SiglusLookupProfile& profile) {
+  return profile.glyph_abi == my_comic_voice_hook::SiglusGlyphLayoutAbi::kEcxEightArguments;
 }
 bool ReadSiglusEightArgSnapshot(siglus_eightarg_live::Snapshot* out) {
   return siglus_eightarg_live::ReadSnapshot(
@@ -49,7 +49,7 @@ bool ReadSiglusEightArgBinding(SiglusEightArgBinding* out) {
 void SyncSiglusEightArgOccurrence();
 bool BindSiglusEightArgText(uint64_t occurrence,
                           const siglus_eightarg_message::Owner& body,
-                          fushi_voice_hook::SiglusLookupTextIdentity identity) {
+                          my_comic_voice_hook::SiglusLookupTextIdentity identity) {
   if (occurrence == 0 || identity.event_id == 0 || identity.thread_id == 0 ||
       occurrence != g_siglus_eightarg_occurrence.load(std::memory_order_acquire))
     return false;
@@ -67,8 +67,8 @@ bool BindSiglusEightArgText(uint64_t occurrence,
   ReleaseSRWLockExclusive(&g_siglus_eightarg_binding_lock);
   return current;
 }
-bool ReadSiglusEightArgView(HWND game, const fushi_voice_hook::SiglusLookupProfile& profile,
-                           fushi_voice_hook::SiglusLookupEngineView* view) {
+bool ReadSiglusEightArgView(HWND game, const my_comic_voice_hook::SiglusLookupProfile& profile,
+                           my_comic_voice_hook::SiglusLookupEngineView* view) {
   SiglusEightArgBinding binding;
   siglus_eightarg_live::Snapshot snapshot;
   siglus_eightarg_owner::Path path;
@@ -130,7 +130,7 @@ void SyncSiglusEightArgOccurrence() {
   g_siglus_lookup_glyph_processed_seq = processed;
   g_siglus_lookup_active_line_units = 0;
   g_siglus_lookup_text_identity = {};
-  fushi_voice_hook::g_geometry_provider_registry.Retire(g_header,
-      fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-      fushi_voice_hook::kLookupGeometryProviderIdSiglus);
+  my_comic_voice_hook::g_geometry_provider_registry.Retire(g_header,
+      my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+      my_comic_voice_hook::kLookupGeometryProviderIdSiglus);
 }

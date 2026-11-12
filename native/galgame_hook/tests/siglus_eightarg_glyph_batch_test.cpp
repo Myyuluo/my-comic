@@ -5,7 +5,7 @@
 #include <thread>
 
 namespace {
-using namespace fushi_voice_hook;
+using namespace my_comic_voice_hook;
 namespace batch = siglus_eightarg_glyph_batch;
 unsigned checks = 0;
 void Check(bool value) {

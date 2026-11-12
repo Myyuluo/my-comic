@@ -14,10 +14,10 @@ struct SiglusFrozenArchive {
 };
 std::array<SiglusFrozenArchive, kSiglusFrozenArchiveCapacity>
     g_siglus_frozen_archives;
-fushi_voice_hook::siglus::VoiceBindingCache<> g_siglus_voice_bindings;
+my_comic_voice_hook::siglus::VoiceBindingCache<> g_siglus_voice_bindings;
 std::array<uint64_t, kSiglusPendingVoiceCapacity> g_siglus_pending_voice_ids = {};
 size_t g_siglus_pending_voice_cursor = 0;
-std::array<uint8_t, fushi_voice_hook::siglus::kVoiceMemberIndexScratchBytes>
+std::array<uint8_t, my_comic_voice_hook::siglus::kVoiceMemberIndexScratchBytes>
     g_siglus_member_index_scratch = {};
 
 bool SameSiglusArchiveFile(const BY_HANDLE_FILE_INFORMATION& a,
@@ -67,9 +67,9 @@ bool ReadSiglusArchiveComponent(const wchar_t* path, uint32_t* component) {
 
 uint64_t ObserveSiglusMessageResource(HANDLE file, const uint8_t* index,
     size_t index_bytes, uint64_t file_bytes,
-    const fushi_voice_hook::siglus::OvkEntry& entry, uint32_t expected_key) {
+    const my_comic_voice_hook::siglus::OvkEntry& entry, uint32_t expected_key) {
   if (!IsSiglusMessageVoiceMappingProved()) return 0;
-  wchar_t canonical[fushi_voice_hook::siglus::kVoiceSourcePathCapacity] = {};
+  wchar_t canonical[my_comic_voice_hook::siglus::kVoiceSourcePathCapacity] = {};
   const DWORD chars = GetFinalPathNameByHandleW(file, canonical,
       static_cast<DWORD>(std::size(canonical)), FILE_NAME_NORMALIZED);
   uint32_t component = 0;
@@ -87,7 +87,7 @@ uint64_t ObserveSiglusMessageResource(HANDLE file, const uint8_t* index,
   BY_HANDLE_FILE_INFORMATION identity = {};
   std::array<uint8_t, 32> digest = {};
   const bool validated = GetFileInformationByHandle(file, &identity) != FALSE &&
-      fushi_voice_hook::siglus::ValidateUniqueVoiceMemberIndex(index, index_bytes,
+      my_comic_voice_hook::siglus::ValidateUniqueVoiceMemberIndex(index, index_bytes,
           file_bytes, g_siglus_member_index_scratch.data(),
           g_siglus_member_index_scratch.size()) &&
       HashSiglusMemberIndex(index, index_bytes, &digest);
@@ -115,14 +115,14 @@ uint64_t ObserveSiglusMessageResource(HANDLE file, const uint8_t* index,
   }
   const auto status = g_siglus_voice_bindings.ObserveResource({component,
       entry.member_id, canonical, entry.offset, archive->revision});
-  using Status = fushi_voice_hook::siglus::VoiceBindingStatus;
+  using Status = my_comic_voice_hook::siglus::VoiceBindingStatus;
   return status == Status::kAccepted || status == Status::kDuplicate
       ? archive->revision : 0;
 }
 
 bool ValidateSiglusMessageVoiceTask(const SiglusVoiceTask& task,
-    uint64_t revision, const fushi_voice_hook::siglus::OvkEntry& entry) {
-  using namespace fushi_voice_hook::siglus;
+    uint64_t revision, const my_comic_voice_hook::siglus::OvkEntry& entry) {
+  using namespace my_comic_voice_hook::siglus;
   if (task.text_event_id == 0 || revision == 0 ||
       revision != task.archive_revision ||
       entry.member_id != task.voice_key % kVoiceMemberRadix) return false;
@@ -143,7 +143,7 @@ bool ValidateSiglusMessageVoiceTask(const SiglusVoiceTask& task,
 void QueueSiglusMessageVoice(uint64_t event_id, uint32_t voice_key,
                              uint64_t tick_ms) {
   if (!IsSiglusMessageVoiceMappingProved() || event_id == 0 ||
-      voice_key == fushi_voice_hook::siglus::kNoVoiceKey) return;
+      voice_key == my_comic_voice_hook::siglus::kNoVoiceKey) return;
   // Bound unresolved history by events, never by elapsed time. Dropped old
   // identities cannot resurrect because the cache retains a sequence watermark.
   uint64_t& displaced = g_siglus_pending_voice_ids[g_siglus_pending_voice_cursor];
@@ -156,7 +156,7 @@ void QueueSiglusMessageVoice(uint64_t event_id, uint32_t voice_key,
 
 void ProcessSiglusMessageVoiceBindings() {
   if (!IsSiglusMessageVoiceMappingProved()) return;
-  using namespace fushi_voice_hook::siglus;
+  using namespace my_comic_voice_hook::siglus;
   for (size_t i = 0; i != kSiglusPendingVoiceCapacity; ++i) {
     VoiceBinding binding;
     if (g_siglus_voice_bindings.NextBinding(&binding) != VoiceBindingStatus::kReady)
@@ -180,7 +180,7 @@ void QueueProvedSiglusVoiceResource(uint32_t key, const wchar_t* path,
                                      uint32_t offset, uint32_t length) {
   if (!IsSiglusMessageVoiceMappingProved() || path == nullptr ||
       key == UINT32_MAX || length == 0 ||
-      wcslen(path) >= fushi_voice_hook::siglus::kVoiceSourcePathCapacity) return;
+      wcslen(path) >= my_comic_voice_hook::siglus::kVoiceSourcePathCapacity) return;
   SiglusVoiceTask task;
   task.voice_key = key;
   task.offset = offset;

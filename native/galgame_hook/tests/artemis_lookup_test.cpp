@@ -13,8 +13,8 @@
 #include "artemis_lookup_core.h"
 #include "../artemis_pfs.h"
 
-namespace core = fushi_voice_hook::artemis_lookup;
-namespace exact = fushi_voice_hook::exact_lookup;
+namespace core = my_comic_voice_hook::artemis_lookup;
+namespace exact = my_comic_voice_hook::exact_lookup;
 
 namespace {
 
@@ -705,7 +705,7 @@ void TestRevealedLine() {
 }
 
 void TestArchiveSetLeaf() {
-  using fushi_voice_hook::artemis::IsArchiveSetLeaf;
+  using my_comic_voice_hook::artemis::IsArchiveSetLeaf;
   assert(IsArchiveSetLeaf(L"Amakano3.pfs"));
   assert(IsArchiveSetLeaf(L"Amakano3.pfs.000"));
   assert(IsArchiveSetLeaf(L"game.PFS.012"));
@@ -720,7 +720,7 @@ void TestArchiveSetLeaf() {
 }
 
 void TestRangeStartingAt() {
-  using fushi_voice_hook::artemis::FindRangeStartingAt;
+  using my_comic_voice_hook::artemis::FindRangeStartingAt;
   struct Range {
     uint64_t offset;
     uint32_t size;

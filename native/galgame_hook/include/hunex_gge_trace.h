@@ -3,14 +3,14 @@
 #include <cstddef>
 #include <cstdint>
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 // Fixed, numeric-only telemetry for the structurally admitted HUNEX/GGE
 // renderer and sampled-input paths.  Text spans remain deliberately excluded.
 // A structurally admitted story frame may expose only its current raw scalar,
 // UTF-16 index, and consumed count so the traversal can be diagnosed without
 // exporting the user's game text.
-inline constexpr char kHunexGgeTraceExportName[] = "FushiHunexGgeTraceV3";
+inline constexpr char kHunexGgeTraceExportName[] = "MyComicHunexGgeTraceV3";
 inline constexpr uint32_t kHunexGgeTraceMagic = 0x33544748u;  // "HGT3"
 // v4（BUG-2134）：头部增加四个投影 detour 的调用计数。probe 与 helper 同源构建，
 // 版本号不匹配时 probe 直接拒读，不存在跨版本误解释。
@@ -396,4 +396,4 @@ static_assert(sizeof(HunexGgeTraceSlot) == 464,
 static_assert(offsetof(HunexGgeTraceBuffer, slots) == 976,
               "HUNEX/GGE trace header ABI drifted");
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

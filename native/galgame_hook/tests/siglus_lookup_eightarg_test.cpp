@@ -13,7 +13,7 @@
 #include <thread>
 
 namespace {
-using namespace fushi_voice_hook;
+using namespace my_comic_voice_hook;
 unsigned checks = 0;
 void Check(bool condition) {
   ++checks;

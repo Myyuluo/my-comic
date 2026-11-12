@@ -4,7 +4,7 @@
 #include <cassert>
 #include "../hook/siglus_voice_binding.h"
 
-using namespace fushi_voice_hook::siglus;
+using namespace my_comic_voice_hook::siglus;
 using Status = VoiceBindingStatus;
 using Cache = VoiceBindingCache<2, 2, 2>;
 

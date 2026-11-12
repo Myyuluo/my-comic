@@ -29,7 +29,7 @@ $port = Get-MihonFreeLoopbackPort
 $token = New-MihonAuthToken
 $dataRoot = Join-Path (
     [IO.Path]::GetTempPath()
-) ("fushi-mihon-extension-e2e-" + [Guid]::NewGuid().ToString("N"))
+) ("mycomic-mihon-extension-e2e-" + [Guid]::NewGuid().ToString("N"))
 [IO.Directory]::CreateDirectory($dataRoot) | Out-Null
 
 $startInfo = [Diagnostics.ProcessStartInfo]::new()
@@ -38,7 +38,7 @@ $startInfo.UseShellExecute = $false
 $startInfo.CreateNoWindow = $true
 $startInfo.RedirectStandardOutput = $true
 $startInfo.RedirectStandardError = $true
-$startInfo.Environment["FUSHI_MIHON_TOKEN"] = $token
+$startInfo.Environment["MYCOMIC_MIHON_TOKEN"] = $token
 $startInfo.ArgumentList.Add("-Xmx768m")
 $startInfo.ArgumentList.Add("-Djava.awt.headless=true")
 $startInfo.ArgumentList.Add(
@@ -101,7 +101,7 @@ try {
             Start-Sleep -Milliseconds 200
         }
     } while ([DateTime]::UtcNow -lt $deadline)
-    if ($null -eq $capabilities -or $capabilities.fushiMihonBridge -ne 1) {
+    if ($null -eq $capabilities -or $capabilities.myComicMihonBridge -ne 1) {
         throw "M-Extension-Server did not expose the required capability."
     }
 

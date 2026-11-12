@@ -27,7 +27,7 @@
 
 #if defined(_M_IX86) || defined(_M_X64)
 
-namespace luca = fushi_voice_hook::luca;
+namespace luca = my_comic_voice_hook::luca;
 
 constexpr uint32_t kLucaRecordChars = 1024u;
 constexpr uint32_t kLucaMessageSlots = 16u;
@@ -144,7 +144,7 @@ LucaReaderFn g_luca_read_string_original = nullptr;
 LucaStringReaderFn g_luca_read_string_original = nullptr;
 #endif
 
-// Worker-only, bounded diagnostics in %TEMP%\fushi_galhook.log.  Never logs
+// Worker-only, bounded diagnostics in %TEMP%\my_comic_galhook.log.  Never logs
 // dialogue text.
 void LucaLog(const wchar_t* format, ...) {
   auto& rt = g_luca;
@@ -158,7 +158,7 @@ void LucaLog(const wchar_t* format, ...) {
   wchar_t path[MAX_PATH] = {};
   const DWORD length = GetTempPathW(MAX_PATH, path);
   if (length == 0 || length >= MAX_PATH - 20) return;
-  wcscat_s(path, L"fushi_galhook.log");
+  wcscat_s(path, L"my_comic_galhook.log");
   HANDLE file = g_orig_CreateFileW(path, FILE_APPEND_DATA, FILE_SHARE_READ,
                                    nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL,
                                    nullptr);
@@ -354,10 +354,10 @@ const char* LucaSiteResultName(luca::MessageSiteResult result) {
 // (the code may still be encrypted); every other result is final.
 bool ResolveLucaSites() {
   auto& rt = g_luca;
-  fushi_voice_hook::exact_lookup::LoadedPeImage image;
-  if (!fushi_voice_hook::exact_lookup::OpenLoadedPeImage(
+  my_comic_voice_hook::exact_lookup::LoadedPeImage image;
+  if (!my_comic_voice_hook::exact_lookup::OpenLoadedPeImage(
           GetModuleHandleW(nullptr), &image,
-          fushi_voice_hook::exact_lookup::LoadedPeSectionExtent::kVirtualSize) ||
+          my_comic_voice_hook::exact_lookup::LoadedPeSectionExtent::kVirtualSize) ||
       image.machine !=
 #if defined(_M_IX86)
           IMAGE_FILE_MACHINE_I386
@@ -374,9 +374,9 @@ bool ResolveLucaSites() {
   for (size_t i = 0; i < image.section_count && span_count < spans.size();
        ++i) {
     const auto& section = image.sections[i];
-    if (!fushi_voice_hook::exact_lookup::SectionHasRole(
+    if (!my_comic_voice_hook::exact_lookup::SectionHasRole(
             &section, IMAGE_SCN_MEM_EXECUTE) ||
-        !fushi_voice_hook::exact_lookup::IsReadableSpan(section.bytes,
+        !my_comic_voice_hook::exact_lookup::IsReadableSpan(section.bytes,
                                                         section.size)) {
       continue;
     }
@@ -395,7 +395,7 @@ bool ResolveLucaSites() {
       return false;
     }
     const uint8_t* count = image.base + x64.record_count_rva;
-    if (!fushi_voice_hook::exact_lookup::IsReadableSpan(count, sizeof(uint32_t))) {
+    if (!my_comic_voice_hook::exact_lookup::IsReadableSpan(count, sizeof(uint32_t))) {
       rt.site_result = luca::MessageSiteResult::kBadTarget;
       return false;
     }
@@ -459,7 +459,7 @@ bool InstallLucaText() {
   if (!hooked) rt.live.store(false, std::memory_order_release);
   if (hooked) {
     NoteLucaDiag(kLucaDiagHooksReady);
-    if (!fushi_voice_hook::ReadLucaDesignSize(&rt.design_w, &rt.design_h)) {
+    if (!my_comic_voice_hook::ReadLucaDesignSize(&rt.design_w, &rt.design_h)) {
       rt.design_w = rt.design_h = 0;
     }
     InstallLucaLookup(rt.spans.data(), rt.span_count);
@@ -486,7 +486,7 @@ uint64_t PublishLucaTextLine(const std::wstring& text, uint64_t tick) {
   auto& rt = g_luca;
   if (!g_capture_enabled || g_header == nullptr || g_text_base == nullptr ||
       !g_text_cs_ready || text.empty() ||
-      text.size() * sizeof(wchar_t) > fushi_voice_hook::kTextSlotBytes) {
+      text.size() * sizeof(wchar_t) > my_comic_voice_hook::kTextSlotBytes) {
     return 0u;
   }
   if (text == rt.last_text && tick - rt.last_text_tick <= kLucaTextDedupeMs) {
@@ -495,22 +495,22 @@ uint64_t PublishLucaTextLine(const std::wstring& text, uint64_t tick) {
   constexpr wchar_t kHookCode[] = L"ENGINE:LUCA:message";
   constexpr char kHookName[] = "LucaSystem exact";
   const uint64_t identity = rt.image_base + rt.sites.record_return;
-  fushi_voice_hook::TextLaneWrite write;
+  my_comic_voice_hook::TextLaneWrite write;
   write.thread_id =
-      fushi_voice_hook::NativeTextThreadIdFrom(identity, kHookCode, kHookName);
+      my_comic_voice_hook::NativeTextThreadIdFrom(identity, kHookCode, kHookName);
   write.thread_address = identity;
   write.thread_context = identity;
   write.process_id = GetCurrentProcessId();
-  write.source_kind = fushi_voice_hook::kTextSourceLuca;
+  write.source_kind = my_comic_voice_hook::kTextSourceLuca;
   write.is_utf8 = 0;
   write.text = text.data();
   write.byte_len = static_cast<uint32_t>(text.size() * sizeof(wchar_t));
   write.hook_name = kHookName;
   write.hook_code = kHookCode;
   EnterCriticalSection(&g_text_cs);
-  const uint64_t event = fushi_voice_hook::WriteTextLaneEvent(
-      g_header, fushi_voice_hook::kNativeThreadPreviewStart,
-      fushi_voice_hook::kTextLaneCount, write);
+  const uint64_t event = my_comic_voice_hook::WriteTextLaneEvent(
+      g_header, my_comic_voice_hook::kNativeThreadPreviewStart,
+      my_comic_voice_hook::kTextLaneCount, write);
   LeaveCriticalSection(&g_text_cs);
   if (event == 0u) return 0u;
   // An exact engine producer is live: the GDI glyph fallback yields.
@@ -575,10 +575,10 @@ void LoadLucaVoiceDirectory(const std::wstring& directory, size_t* scanned) {
     uint64_t size = 0u;
     std::vector<uint8_t> head;
     luca::PakIndex header;
-    if (!fushi_voice_hook::engine_dir::FileSize(archive.path, &size) ||
+    if (!my_comic_voice_hook::engine_dir::FileSize(archive.path, &size) ||
         !ReadLucaFileRange(archive.path, 0u, luca::kPakHeaderBytes, &head) ||
         !luca::ParsePakHeader(head.data(), head.size(), size, &header) ||
-        luca::PakIndexBytes(header) > fushi_voice_hook::kLucaProbeIndexBytes ||
+        luca::PakIndexBytes(header) > my_comic_voice_hook::kLucaProbeIndexBytes ||
         !ReadLucaFileRange(archive.path, 0u,
                            static_cast<uint32_t>(luca::PakIndexBytes(header)),
                            &head) ||
@@ -606,7 +606,7 @@ void LoadLucaVoiceArchives() {
   if (rt.archives_loaded) return;
   rt.archives_loaded = true;
   std::wstring directory;
-  if (!fushi_voice_hook::engine_dir::ModuleDirectory(&directory)) return;
+  if (!my_comic_voice_hook::engine_dir::ModuleDirectory(&directory)) return;
   directory += L"\\files";
   size_t scanned = 0u;
   LoadLucaVoiceDirectory(directory, &scanned);
@@ -680,7 +680,7 @@ void PublishLucaVoice(uint32_t voice_id, uint64_t tick, uint64_t text_event) {
     NoteLucaDiag(kLucaDiagVoicePublished);
     // The bytes are the engine's own resource for this line, so the host can
     // pair per line instead of falling back to PCM / loopback.
-    SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagGameResourcePublished);
+    SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagGameResourcePublished);
   }
 }
 
@@ -748,8 +748,8 @@ void DrainLucaMessages() {
 
 volatile LONG g_luca_diag = 0;
 bool InstallLucaText() { return false; }
-fushi_voice_hook::luca::TextOwnerDecision LucaTextOwnerDecision() {
-  return fushi_voice_hook::luca::TextOwnerDecision::kLunaAllowed;
+my_comic_voice_hook::luca::TextOwnerDecision LucaTextOwnerDecision() {
+  return my_comic_voice_hook::luca::TextOwnerDecision::kLunaAllowed;
 }
 void DrainLucaMessages() {}
 void ProcessLucaLookupTick() {}
@@ -760,7 +760,7 @@ bool FilterLucaLeftButtonSample(int16_t*, uintptr_t) { return false; }
 
 #endif
 
-class LucaAdapter final : public fushi_voice_hook::EngineAdapter {
+class LucaAdapter final : public my_comic_voice_hook::EngineAdapter {
  public:
   const char* id() const override { return "luca"; }
   // The identity is a property of the files next to the executable: measured
@@ -769,7 +769,7 @@ class LucaAdapter final : public fushi_voice_hook::EngineAdapter {
   bool probe() const override {
     int state = probe_state_.load(std::memory_order_acquire);
     if (state == 0) {
-      state = fushi_voice_hook::MatchesLucaProfile(nullptr) ? 1 : 2;
+      state = my_comic_voice_hook::MatchesLucaProfile(nullptr) ? 1 : 2;
       probe_state_.store(state, std::memory_order_release);
     }
     return state == 1;
@@ -787,7 +787,7 @@ class LucaAdapter final : public fushi_voice_hook::EngineAdapter {
   // only text source left, so it must not stay fenced by a Pending owner.
   void FailTextStartup() {
     if (!probe()) return;
-    fushi_voice_hook::CompleteNativeTextOwner(g_header, false, false);
+    my_comic_voice_hook::CompleteNativeTextOwner(g_header, false, false);
   }
   // HookWorker: finish a deferred site resolution, then drain messages.
   void ProcessPendingEvents() {
@@ -800,25 +800,25 @@ class LucaAdapter final : public fushi_voice_hook::EngineAdapter {
     DrainLucaMessages();
     ProcessLucaLookupTick();
   }
-  fushi_voice_hook::LookupAdmissionReport lookupAdmission() const override {
-    fushi_voice_hook::LookupAdmissionReport report;
+  my_comic_voice_hook::LookupAdmissionReport lookupAdmission() const override {
+    my_comic_voice_hook::LookupAdmissionReport report;
     if (LucaLookupSensorInstalled()) {
-      report.state = fushi_voice_hook::kLookupAdmissionSensorInstalled;
+      report.state = my_comic_voice_hook::kLookupAdmissionSensorInstalled;
       return report;
     }
     if (LucaLookupSitesRejected()) {
-      report.state = fushi_voice_hook::kLookupAdmissionIdentityRejected;
+      report.state = my_comic_voice_hook::kLookupAdmissionIdentityRejected;
       strncpy_s(report.executable_sha256,
-                fushi_voice_hook::HostExecutableSha256Hex(), _TRUNCATE);
+                my_comic_voice_hook::HostExecutableSha256Hex(), _TRUNCATE);
       return report;
     }
-    report.state = probe() ? fushi_voice_hook::kLookupAdmissionIdentityAccepted
-                           : fushi_voice_hook::kLookupAdmissionEngineUnsupported;
+    report.state = probe() ? my_comic_voice_hook::kLookupAdmissionIdentityAccepted
+                           : my_comic_voice_hook::kLookupAdmissionEngineUnsupported;
     return report;
   }
-  fushi_voice_hook::AdapterCapability capabilities() const override {
-    return fushi_voice_hook::AdapterCapability::kText |
-           fushi_voice_hook::AdapterCapability::kResourceAudio;
+  my_comic_voice_hook::AdapterCapability capabilities() const override {
+    return my_comic_voice_hook::AdapterCapability::kText |
+           my_comic_voice_hook::AdapterCapability::kResourceAudio;
   }
   void onModuleLoaded(const wchar_t*) override {}
   void shutdown() override {
@@ -831,7 +831,7 @@ class LucaAdapter final : public fushi_voice_hook::EngineAdapter {
     ShutdownLucaLookup();
     installed_ = false;
   }
-  fushi_voice_hook::AdapterDiagnostics diagnostics() const override {
+  my_comic_voice_hook::AdapterDiagnostics diagnostics() const override {
     return {id(), probe(), installed_,
             static_cast<uint32_t>(
                 InterlockedCompareExchange(&g_luca_diag, 0, 0))};
@@ -844,13 +844,13 @@ class LucaAdapter final : public fushi_voice_hook::EngineAdapter {
   // directory identity alone never holds Pending across the retry window.
   void SettleTextOwner() {
     switch (LucaTextOwnerDecision()) {
-      case fushi_voice_hook::luca::TextOwnerDecision::kNativeOwned:
-        fushi_voice_hook::CompleteNativeTextOwner(g_header, true, false);
+      case my_comic_voice_hook::luca::TextOwnerDecision::kNativeOwned:
+        my_comic_voice_hook::CompleteNativeTextOwner(g_header, true, false);
         return;
-      case fushi_voice_hook::luca::TextOwnerDecision::kLunaAllowed:
-        fushi_voice_hook::CompleteNativeTextOwner(g_header, false, false);
+      case my_comic_voice_hook::luca::TextOwnerDecision::kLunaAllowed:
+        my_comic_voice_hook::CompleteNativeTextOwner(g_header, false, false);
         return;
-      case fushi_voice_hook::luca::TextOwnerDecision::kUndecided:
+      case my_comic_voice_hook::luca::TextOwnerDecision::kUndecided:
         return;
     }
   }

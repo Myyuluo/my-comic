@@ -13,7 +13,7 @@
 #include "../hook/adapters/reallive_profile.h"
 #include "../hook/visual_arts_ovk.h"
 
-namespace rl = fushi_voice_hook::reallive;
+namespace rl = my_comic_voice_hook::reallive;
 
 namespace {
 void PutLe32(std::vector<uint8_t>* bytes, size_t at, uint32_t value) {
@@ -53,7 +53,7 @@ bool MatchesImage(const std::vector<uint8_t>& image) {
   rl::IdentityInputs in;
   in.image_measured = true;
   in.image_markers = ScanInChunks(image, 4096);
-  return fushi_voice_hook::MatchesRealliveProfile(in);
+  return my_comic_voice_hook::MatchesRealliveProfile(in);
 }
 
 // 形似 RealLive 系 exe（含 Kinetic Novel 改名版）的字符串表：ASCII 配置/剧本名。
@@ -125,8 +125,8 @@ void TestImageSignature() {
   // 未测量的映像不得当作匹配。
   rl::IdentityInputs unmeasured;
   unmeasured.image_markers = markers;
-  assert(!fushi_voice_hook::MatchesRealliveProfile(unmeasured));
-  assert(!fushi_voice_hook::MatchesRealliveProfile(rl::IdentityInputs{}));
+  assert(!my_comic_voice_hook::MatchesRealliveProfile(unmeasured));
+  assert(!my_comic_voice_hook::MatchesRealliveProfile(rl::IdentityInputs{}));
 }
 
 void TestDirectorySignature() {
@@ -145,18 +145,18 @@ void TestDirectorySignature() {
 
   rl::IdentityInputs in;
   in.reallive_directory = true;
-  assert(fushi_voice_hook::MatchesRealliveProfile(in));
+  assert(my_comic_voice_hook::MatchesRealliveProfile(in));
   // Siglus 目录或 Siglus exe 一票否决。
   in.siglus_directory = true;
-  assert(!fushi_voice_hook::MatchesRealliveProfile(in));
+  assert(!my_comic_voice_hook::MatchesRealliveProfile(in));
   in.siglus_directory = false;
   in.siglus_executable = true;
-  assert(!fushi_voice_hook::MatchesRealliveProfile(in));
+  assert(!my_comic_voice_hook::MatchesRealliveProfile(in));
   // 映像里有 Siglus 标志时，目录签名也不能翻案。
   in.siglus_executable = false;
   in.image_measured = true;
   in.image_markers = rl::kImageMarkerSiglusVeto;
-  assert(!fushi_voice_hook::MatchesRealliveProfile(in));
+  assert(!my_comic_voice_hook::MatchesRealliveProfile(in));
 }
 
 void TestSharedOvkContainer() {
@@ -166,8 +166,8 @@ void TestSharedOvkContainer() {
   PutLe32(&archive, 8, 20);
   PutLe32(&archive, 12, 7);
   PutLe32(&archive, 16, 250);
-  fushi_voice_hook::visual_arts::OvkEntry entry;
-  assert(fushi_voice_hook::visual_arts::FindEntryAtOffset(
+  my_comic_voice_hook::visual_arts::OvkEntry entry;
+  assert(my_comic_voice_hook::visual_arts::FindEntryAtOffset(
       archive.data(), archive.size(), 51, 20, &entry));
   assert(entry.byte_len == 31 && entry.member_id == 7 &&
          entry.sample_count == 250);

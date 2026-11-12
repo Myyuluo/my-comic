@@ -28,7 +28,7 @@
 #include "../luca_pak.h"
 #include "engine_dir_signature.h"
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 // Real indexes are 8 bytes per member plus a name table; larger files are not
 // used as identity evidence (the scan moves on).
@@ -91,7 +91,7 @@ inline bool IsLucaSystemCnf(const std::string& text) {
 }
 
 inline bool IsLucaArchiveFile(const std::wstring& path) {
-  namespace luca = ::fushi_voice_hook::luca;
+  namespace luca = ::my_comic_voice_hook::luca;
   uint64_t size = 0u;
   uint8_t header_bytes[luca::kPakHeaderBytes] = {0};
   DWORD read = 0;
@@ -176,4 +176,4 @@ inline bool MatchesLucaProfile(const wchar_t*) {
   return MatchesLucaLayout(directory);
 }
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

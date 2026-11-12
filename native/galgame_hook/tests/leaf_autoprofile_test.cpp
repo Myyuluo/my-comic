@@ -19,9 +19,9 @@
 
 namespace {
 
-namespace el = fushi_voice_hook::exact_lookup;
-namespace ap = fushi_voice_hook::leaf_autoprofile;
-namespace lx = fushi_voice_hook::leaf_exact;
+namespace el = my_comic_voice_hook::exact_lookup;
+namespace ap = my_comic_voice_hook::leaf_autoprofile;
+namespace lx = my_comic_voice_hook::leaf_exact;
 
 constexpr uint32_t kImageBase = 0x00400000u;
 constexpr uint32_t kSectionAlign = 0x1000u;
@@ -377,7 +377,7 @@ PlantedSites PlantCallShapes(SyntheticImage& image, int32_t shift) {
   return s;
 }
 
-void ExpectResolved(const fushi_voice_hook::LeafAquaplusProfile& p,
+void ExpectResolved(const my_comic_voice_hook::LeafAquaplusProfile& p,
                     const PlantedSites& s) {
   assert(p.glyph_dispatch_rva == kDispatchRva);
   assert(p.raster_glyph_return_rva == s.raster_glyph_return);
@@ -398,7 +398,7 @@ void ResolvesEveryReturnSiteFromShapes() {
   el::LoadedPeImage image = synthetic.Open();
   ap::DerivedAnchors anchors;
   assert(ap::DeriveLeafAnchors(image, &anchors));
-  fushi_voice_hook::LeafAquaplusProfile resolved{};
+  my_comic_voice_hook::LeafAquaplusProfile resolved{};
   assert(ap::ResolveLeafProfile(image, anchors, SyntheticDeltas(), &resolved));
   ExpectResolved(resolved, planted);
 }
@@ -410,7 +410,7 @@ void ResolvesAfterASmallShift() {
   el::LoadedPeImage image = synthetic.Open();
   ap::DerivedAnchors anchors;
   assert(ap::DeriveLeafAnchors(image, &anchors));
-  fushi_voice_hook::LeafAquaplusProfile resolved{};
+  my_comic_voice_hook::LeafAquaplusProfile resolved{};
   assert(ap::ResolveLeafProfile(image, anchors, SyntheticDeltas(), &resolved));
   ExpectResolved(resolved, planted);
 }
@@ -426,7 +426,7 @@ void RejectsWhenAShapeIsAbsent() {
   el::LoadedPeImage image = synthetic.Open();
   ap::DerivedAnchors anchors;
   assert(ap::DeriveLeafAnchors(image, &anchors));
-  fushi_voice_hook::LeafAquaplusProfile resolved{};
+  my_comic_voice_hook::LeafAquaplusProfile resolved{};
   assert(!ap::ResolveLeafProfile(image, anchors, SyntheticDeltas(), &resolved));
 }
 
@@ -441,7 +441,7 @@ void RejectsAmbiguousWindow() {
   el::LoadedPeImage image = synthetic.Open();
   ap::DerivedAnchors anchors;
   assert(ap::DeriveLeafAnchors(image, &anchors));
-  fushi_voice_hook::LeafAquaplusProfile resolved{};
+  my_comic_voice_hook::LeafAquaplusProfile resolved{};
   assert(!ap::ResolveLeafProfile(image, anchors, SyntheticDeltas(), &resolved));
 }
 
@@ -453,7 +453,7 @@ void RejectsGlyphReturnsWithDifferentTargets() {
   el::LoadedPeImage image = synthetic.Open();
   ap::DerivedAnchors anchors;
   assert(ap::DeriveLeafAnchors(image, &anchors));
-  fushi_voice_hook::LeafAquaplusProfile resolved{};
+  my_comic_voice_hook::LeafAquaplusProfile resolved{};
   assert(!ap::ResolveLeafProfile(image, anchors, SyntheticDeltas(), &resolved));
 }
 }  // namespace

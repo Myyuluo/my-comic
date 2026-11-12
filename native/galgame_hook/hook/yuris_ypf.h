@@ -29,7 +29,7 @@
 #include <cstdint>
 #include <cstring>
 
-namespace fushi_voice_hook::yuris {
+namespace my_comic_voice_hook::yuris {
 
 constexpr uint32_t kYpfMagic = 0x00465059u;  // "YPF\0"
 constexpr size_t kYpfHeaderBytes = 32u;
@@ -234,4 +234,4 @@ inline YpfIndexResult ResolveYpfLayout(const uint8_t* bytes, size_t size,
   return YpfIndexResult::kValid;
 }
 
-}  // namespace fushi_voice_hook::yuris
+}  // namespace my_comic_voice_hook::yuris

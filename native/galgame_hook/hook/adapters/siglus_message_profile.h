@@ -3,7 +3,7 @@
 #include "siglus_autoprofile.h"
 #include "siglus_resource_mapping.h"
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 enum class SiglusMessageOwnerRegister : uint8_t { kNone, kEsi, kEdi };
 
@@ -210,4 +210,4 @@ inline bool ResolveSiglusMessageProfile(
   // the runtime caller binds the proved resource source to actual file identity.
   return true;
 }
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

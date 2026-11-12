@@ -8,9 +8,9 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
-$app = Join-Path $repo 'fushi'
+$app = Join-Path $repo 'my_comic'
 $android = Join-Path $app 'android'
-$package = 'app.fushi.reader.streamqa'
+$package = 'app.mycomic.reader.streamqa'
 if ($Action -ne 'Build' -and $Serial -notmatch '^[A-Za-z0-9_.:-]+$') {
     throw 'Install and Run require an explicit valid adb -Serial'
 }
@@ -65,7 +65,7 @@ if ($Action -eq 'Build') {
 allprojects { project ->
     project.pluginManager.withPlugin('com.android.application') {
         project.extensions.getByName('androidComponents').finalizeDsl { android ->
-            android.defaultConfig.applicationId = 'app.fushi.reader.streamqa'
+            android.defaultConfig.applicationId = 'app.mycomic.reader.streamqa'
         }
     }
 }

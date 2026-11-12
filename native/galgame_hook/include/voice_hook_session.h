@@ -1,13 +1,13 @@
-#ifndef FUSHI_VOICE_HOOK_SESSION_H_
-#define FUSHI_VOICE_HOOK_SESSION_H_
+#ifndef MYCOMIC_VOICE_HOOK_SESSION_H_
+#define MYCOMIC_VOICE_HOOK_SESSION_H_
 
 #include <cstdint>
 
 #include "voice_hook_ipc.h"
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
-// 同一游戏进程内，hook DLL 会持有共享内存直到游戏退出。host/injector 被 Fushi 停掉后
+// 同一游戏进程内，hook DLL 会持有共享内存直到游戏退出。host/injector 被 MyComic 停掉后
 // 再连接时，CreateFileMapping 会返回既有映射；此时绝不能 memset，否则 DLL 的工作线程
 // 不会重新执行，hooked 会永久被清成 0。
 enum class MappingSessionAction {
@@ -45,6 +45,6 @@ inline MappingSessionAction InspectMappingSession(
   return MappingSessionAction::kReuseReady;
 }
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook
 
-#endif  // FUSHI_VOICE_HOOK_SESSION_H_
+#endif  // MYCOMIC_VOICE_HOOK_SESSION_H_

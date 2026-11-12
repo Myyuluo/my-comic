@@ -10,7 +10,7 @@
 #include "kogado_hy_text.inc"
 #include "kogado_hy_lookup.inc"
 
-class KogadoHyAdapter final : public fushi_voice_hook::EngineAdapter {
+class KogadoHyAdapter final : public my_comic_voice_hook::EngineAdapter {
  public:
   const char* id() const override { return "kogado_hy"; }
   // The identity is a property of the main executable: measured once, then
@@ -19,7 +19,7 @@ class KogadoHyAdapter final : public fushi_voice_hook::EngineAdapter {
   bool probe() const override {
     int state = probe_state_.load(std::memory_order_acquire);
     if (state == 0) {
-      state = fushi_voice_hook::MatchesKogadoHyProfile(nullptr) ? 1 : 2;
+      state = my_comic_voice_hook::MatchesKogadoHyProfile(nullptr) ? 1 : 2;
       probe_state_.store(state, std::memory_order_release);
     }
     return state == 1;
@@ -36,23 +36,23 @@ class KogadoHyAdapter final : public fushi_voice_hook::EngineAdapter {
     ProcessKogadoHyTextTick();
     ProcessKogadoHyLookupTick();
   }
-  fushi_voice_hook::LookupAdmissionReport lookupAdmission() const override {
-    fushi_voice_hook::LookupAdmissionReport report;
+  my_comic_voice_hook::LookupAdmissionReport lookupAdmission() const override {
+    my_comic_voice_hook::LookupAdmissionReport report;
     if (KogadoHyLookupSensorInstalled()) {
-      report.state = fushi_voice_hook::kLookupAdmissionSensorInstalled;
+      report.state = my_comic_voice_hook::kLookupAdmissionSensorInstalled;
       return report;
     }
     if (KogadoHyLookupSitesRejected()) {
-      report.state = fushi_voice_hook::kLookupAdmissionIdentityRejected;
+      report.state = my_comic_voice_hook::kLookupAdmissionIdentityRejected;
       strncpy_s(report.executable_sha256,
-                fushi_voice_hook::HostExecutableSha256Hex(), _TRUNCATE);
+                my_comic_voice_hook::HostExecutableSha256Hex(), _TRUNCATE);
       return report;
     }
-    report.state = fushi_voice_hook::kLookupAdmissionIdentityAccepted;
+    report.state = my_comic_voice_hook::kLookupAdmissionIdentityAccepted;
     return report;
   }
-  fushi_voice_hook::AdapterCapability capabilities() const override {
-    return fushi_voice_hook::AdapterCapability::kText;
+  my_comic_voice_hook::AdapterCapability capabilities() const override {
+    return my_comic_voice_hook::AdapterCapability::kText;
   }
   void onModuleLoaded(const wchar_t*) override {}
   void shutdown() override {
@@ -60,7 +60,7 @@ class KogadoHyAdapter final : public fushi_voice_hook::EngineAdapter {
     ShutdownKogadoHyText();
     installed_ = false;
   }
-  fushi_voice_hook::AdapterDiagnostics diagnostics() const override {
+  my_comic_voice_hook::AdapterDiagnostics diagnostics() const override {
     return {id(), probe(), installed_,
             static_cast<uint32_t>(
                 InterlockedCompareExchange(&g_kogado_hy_diag, 0, 0))};

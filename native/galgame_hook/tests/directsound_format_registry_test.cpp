@@ -9,8 +9,8 @@
 #include "directsound_format_registry.h"
 
 int main() {
-  using fushi_voice_hook::DirectSoundFormatRegistry;
-  using fushi_voice_hook::DirectSoundPcmFormat;
+  using my_comic_voice_hook::DirectSoundFormatRegistry;
+  using my_comic_voice_hook::DirectSoundPcmFormat;
 
   DirectSoundFormatRegistry<32> registry;
   const uintptr_t bgm = 0x1000;

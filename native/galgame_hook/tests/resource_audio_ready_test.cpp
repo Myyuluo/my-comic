@@ -8,17 +8,17 @@
 
 #include "voice_hook_ipc.h"
 
-using fushi_voice_hook::HasReadyGameResourceAudio;
-using fushi_voice_hook::kDiagKirikiriVoiceStreamHookReady;
-using fushi_voice_hook::kDiagFfmpegResourceHooksReady;
-using fushi_voice_hook::kDiagVisualArtsOvkHooksReady;
-using fushi_voice_hook::kDiagSiglusOvkHooksReady;
-using fushi_voice_hook::kXAudioDiagGameResourcePublished;
-using fushi_voice_hook::kXAudioDiagHunexHfaHooksReady;
-using fushi_voice_hook::kXAudioDiagLeafLacHooksReady;
-using fushi_voice_hook::kDiagUnityIl2CppHooksReady;
-using fushi_voice_hook::kDiagUnityResourceExtractorReady;
-using fushi_voice_hook::kDiagElfAi6ArcHooksReady;
+using my_comic_voice_hook::HasReadyGameResourceAudio;
+using my_comic_voice_hook::kDiagKirikiriVoiceStreamHookReady;
+using my_comic_voice_hook::kDiagFfmpegResourceHooksReady;
+using my_comic_voice_hook::kDiagVisualArtsOvkHooksReady;
+using my_comic_voice_hook::kDiagSiglusOvkHooksReady;
+using my_comic_voice_hook::kXAudioDiagGameResourcePublished;
+using my_comic_voice_hook::kXAudioDiagHunexHfaHooksReady;
+using my_comic_voice_hook::kXAudioDiagLeafLacHooksReady;
+using my_comic_voice_hook::kDiagUnityIl2CppHooksReady;
+using my_comic_voice_hook::kDiagUnityResourceExtractorReady;
+using my_comic_voice_hook::kDiagElfAi6ArcHooksReady;
 
 int main() {
   assert(!HasReadyGameResourceAudio(0, 0));
@@ -39,7 +39,7 @@ int main() {
       0, kDiagUnityIl2CppHooksReady | kDiagUnityResourceExtractorReady));
   // Unity Mono: the playback hook word lives in reserved_hook_diagnostics and
   // still needs the injector's extractor.
-  using fushi_voice_hook::kDiagUnityAudioPlaybackHookReady;
+  using my_comic_voice_hook::kDiagUnityAudioPlaybackHookReady;
   assert(!HasReadyGameResourceAudio(0, 0, kDiagUnityAudioPlaybackHookReady));
   assert(HasReadyGameResourceAudio(0, kDiagUnityResourceExtractorReady,
                                    kDiagUnityAudioPlaybackHookReady));

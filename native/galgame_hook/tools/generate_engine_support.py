@@ -367,9 +367,9 @@ _LOOKUP_OFFER_CALL = re.compile(
 )
 _LOOKUP_OFFER_PAIR = re.compile(
     r"g_geometry_provider_registry\s*\.\s*OfferReady\s*\(\s*"
-    r"g_header\s*,\s*(?:fushi_voice_hook::)?"
+    r"g_header\s*,\s*(?:my_comic_voice_hook::)?"
     r"(kLookupGeometryProvider[A-Za-z0-9_]+)\s*,\s*"
-    r"(?:fushi_voice_hook::)?"
+    r"(?:my_comic_voice_hook::)?"
     r"(kLookupGeometryProviderId[A-Za-z0-9_]+)\s*\)",
     re.DOTALL,
 )
@@ -378,9 +378,9 @@ _LOOKUP_PUBLISH_CALL = re.compile(
 )
 _LOOKUP_PUBLICATION_PAIR = re.compile(
     r"([A-Za-z_][A-Za-z0-9_]*)\.provider_kind\s*=\s*"
-    r"(?:fushi_voice_hook::)?"
+    r"(?:my_comic_voice_hook::)?"
     r"(kLookupGeometryProvider[A-Za-z0-9_]+)\s*;\s*"
-    r"\1\.provider_id\s*=\s*(?:fushi_voice_hook::)?"
+    r"\1\.provider_id\s*=\s*(?:my_comic_voice_hook::)?"
     r"(kLookupGeometryProviderId[A-Za-z0-9_]+)\s*;",
     re.DOTALL,
 )

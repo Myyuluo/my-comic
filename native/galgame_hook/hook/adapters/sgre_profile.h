@@ -18,7 +18,7 @@
 
 #pragma comment(lib, "bcrypt.lib")
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 // ── Identity ────────────────────────────────────────────────────────────────
 //
@@ -252,4 +252,4 @@ inline SgreAnchorSet ResolveSgreRuntimeAnchors(
   return anchors;
 }
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

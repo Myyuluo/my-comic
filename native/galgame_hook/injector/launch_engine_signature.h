@@ -15,11 +15,11 @@
 #include "siglus_launch_win32.h"
 #include "unreal_launch.h"
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 inline bool DirectoryHasEngineSignature(const std::wstring& dir) {
   return DirectoryLooksLikeSiglusOnDisk(dir) ||
          DirectoryLooksLikeUnrealIostore(dir) || MatchesCatSystem2Layout(dir);
 }
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

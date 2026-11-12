@@ -9,7 +9,7 @@ BOOL WINAPI LeGetFileVersionInfoW(LPCWSTR name, DWORD handle, DWORD size,
     BOOL result = global->HookStub.StubGetFileVersionInfoW(name, handle, size, data);
     if (result && data != nullptr)
     {
-        fushi_locale_emulator::CopyVersionResourceWithLocale(
+        my_comic_locale_emulator::CopyVersionResourceWithLocale(
             data, size, data, size, (unsigned short)global->GetLeb()->LocaleID);
     }
     return result;
@@ -23,7 +23,7 @@ BOOL WINAPI LeGetFileVersionInfoExW(DWORD flags, LPCWSTR name, DWORD handle,
         flags, name, handle, size, data);
     if (result && data != nullptr)
     {
-        fushi_locale_emulator::CopyVersionResourceWithLocale(
+        my_comic_locale_emulator::CopyVersionResourceWithLocale(
             data, size, data, size, (unsigned short)global->GetLeb()->LocaleID);
     }
     return result;

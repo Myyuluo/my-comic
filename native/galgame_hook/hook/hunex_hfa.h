@@ -8,7 +8,7 @@
 #include <utility>
 #include <vector>
 
-namespace fushi_voice_hook::hunex {
+namespace my_comic_voice_hook::hunex {
 
 inline constexpr char kHunexHfaMagic[] = "HUNEXGGEFA10";
 inline constexpr uint32_t kHunexHfaHeaderBytes = 16u;
@@ -371,4 +371,4 @@ inline HunexVoiceReadKind ClassifyHunexVoiceRead(
   return HunexVoiceReadKind::kNone;
 }
 
-}  // namespace fushi_voice_hook::hunex
+}  // namespace my_comic_voice_hook::hunex

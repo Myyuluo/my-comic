@@ -18,7 +18,7 @@
 #include "exact_lookup_signature.h"
 #include "leaf_aquaplus_profile.h"
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 namespace leaf_autoprofile {
 
 struct DerivedAnchors {
@@ -495,4 +495,4 @@ inline bool ResolveLeafProfile(const exact_lookup::LoadedPeImage& image,
 }
 
 }  // namespace leaf_autoprofile
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

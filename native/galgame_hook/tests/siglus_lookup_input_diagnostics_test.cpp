@@ -14,7 +14,7 @@
 #include "../hook/geometry_provider_registry.h"
 
 namespace {
-using namespace fushi_voice_hook;
+using namespace my_comic_voice_hook;
 #include "../hook/adapters/siglus_lookup_worker_types.inc"
 SharedHeader* g_header = nullptr;
 bool g_capture_enabled = true;

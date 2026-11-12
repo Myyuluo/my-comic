@@ -39,10 +39,10 @@
 #include "catsystem2_lookup_core.h"
 #include "exact_lookup_signature.h"
 
-namespace fushi_voice_hook::catsystem2_voice {
+namespace my_comic_voice_hook::catsystem2_voice {
 
-namespace exact = fushi_voice_hook::exact_lookup;
-namespace cs2 = fushi_voice_hook::catsystem2_lookup;
+namespace exact = my_comic_voice_hook::exact_lookup;
+namespace cs2 = my_comic_voice_hook::catsystem2_lookup;
 
 // ── engine layout (proven by the ReadEntry plain path) ──────────────────────
 
@@ -541,4 +541,4 @@ inline std::wstring BuildVoiceStorageName(const wchar_t* archive,
   return name;
 }
 
-}  // namespace fushi_voice_hook::catsystem2_voice
+}  // namespace my_comic_voice_hook::catsystem2_voice

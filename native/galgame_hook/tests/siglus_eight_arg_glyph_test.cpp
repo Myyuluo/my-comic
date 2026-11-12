@@ -4,7 +4,7 @@
 #include "siglus_eight_arg_glyph.h"
 
 namespace {
-using namespace fushi_voice_hook;
+using namespace my_comic_voice_hook;
 using namespace siglus_eight_arg_glyph;
 unsigned checks = 0;
 struct Piece { uintptr_t at; exact_lookup::MaskedPattern pattern; };

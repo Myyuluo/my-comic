@@ -10,7 +10,7 @@
 #include "siglus_image.h"
 
 namespace {
-using namespace fushi_voice_hook;
+using namespace my_comic_voice_hook;
 exact_lookup::LoadedPeImage opened_image{};
 HMODULE expected_module=reinterpret_cast<HMODULE>(0x12340000);
 bool open_allowed=true;
@@ -23,7 +23,7 @@ void Check(bool value,const char* boundary) {
 }
 // The sole production seam: PE mapping is synthetic, but both complete pure
 // resolvers and the actual live admission functions below execute unchanged.
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 bool TestOpenSiglusLoadedImage(HMODULE module,exact_lookup::LoadedPeImage* image) {
   ++open_calls;
   if(!open_allowed || module!=expected_module || image==nullptr)return false;

@@ -34,7 +34,7 @@
 #include <cstdint>
 #include <cstring>
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 namespace smash_fzmedia {
 
 constexpr uint32_t kMaxLineUnits = 512;   // UTF-16 code units per published line
@@ -212,4 +212,4 @@ inline int32_t HitTestClient(const LineSnapshot& line,
 }
 
 }  // namespace smash_fzmedia
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

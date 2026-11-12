@@ -36,7 +36,7 @@
 // provider or refuses the click, and the click then reaches the game
 // unchanged.
 
-namespace umono_lookup = fushi_voice_hook::unity_mono_lookup;
+namespace umono_lookup = my_comic_voice_hook::unity_mono_lookup;
 
 constexpr uint32_t kUmModelSlots = 2u;
 constexpr uint32_t kUmSubmitSlots = 8u;
@@ -181,7 +181,7 @@ struct UnityMonoLookupRuntime {
 };
 
 UnityMonoLookupRuntime g_um_lookup;
-using UmFixedUpdateFn = void(FUSHI_MONO_MANAGED_CALL*)(void*);
+using UmFixedUpdateFn = void(MYCOMIC_MONO_MANAGED_CALL*)(void*);
 UmFixedUpdateFn g_um_fixed_update_original = nullptr;
 // Fungus: SayDialog.LateUpdate (same managed shape: instance, no argument).
 UmFixedUpdateFn g_um_late_update_original = nullptr;
@@ -722,7 +722,7 @@ void UmSampleFrame(uintptr_t instance, bool text_known, uintptr_t current_text,
   rt.slot_tick[slot].store(now, std::memory_order_release);
 }
 
-void FUSHI_MONO_MANAGED_CALL UmFixedUpdateDetour(void* self) {
+void MYCOMIC_MONO_MANAGED_CALL UmFixedUpdateDetour(void* self) {
   g_um_fixed_update_original(self);
   auto& rt = g_um_lookup;
   rt.fixed_hits.fetch_add(1u, std::memory_order_relaxed);
@@ -737,7 +737,7 @@ void FUSHI_MONO_MANAGED_CALL UmFixedUpdateDetour(void* self) {
 }
 
 // Fungus: after SayDialog.LateUpdate (the Writer assigned this frame's text).
-void FUSHI_MONO_MANAGED_CALL UmFungusLateUpdateDetour(void* self) {
+void MYCOMIC_MONO_MANAGED_CALL UmFungusLateUpdateDetour(void* self) {
   g_um_late_update_original(self);
   auto& rt = g_um_lookup;
   rt.fixed_hits.fetch_add(1u, std::memory_order_relaxed);
@@ -771,7 +771,7 @@ void QueueUmSubmit(const UmSubmit& submit) {
 bool UmShieldActive(HWND game) {
   if (IsLookupOverlayInputShieldVisible()) return true;
   if (g_header == nullptr) return false;
-  const auto request = fushi_voice_hook::ReadLookupShieldRequest(g_header);
+  const auto request = my_comic_voice_hook::ReadLookupShieldRequest(g_header);
   return request.valid && request.active_buttons != 0u &&
          request.target_hwnd ==
              static_cast<uint64_t>(reinterpret_cast<uintptr_t>(game));
@@ -786,8 +786,8 @@ bool UmPressEligible(HWND hwnd, WPARAM wparam, LPARAM lparam,
                      UmSubmit* submit) {
   auto& rt = g_um_lookup;
   if (!rt.live.load(std::memory_order_acquire) || g_header == nullptr ||
-      g_stop || !fushi_voice_hook::HasLookupRegion(g_header) ||
-      fushi_voice_hook::AtomicLoadShared32(&g_header->lookup_enabled) == 0u) {
+      g_stop || !my_comic_voice_hook::HasLookupRegion(g_header) ||
+      my_comic_voice_hook::AtomicLoadShared32(&g_header->lookup_enabled) == 0u) {
     return false;
   }
   UmModel& model = rt.input_model;
@@ -809,9 +809,9 @@ bool UmPressEligible(HWND hwnd, WPARAM wparam, LPARAM lparam,
       model.text_owner == 0u ||
       !ReadUmValue(model.text_owner + model.text_offset, &text) ||
       text != model.text_object ||
-      !fushi_voice_hook::g_geometry_provider_registry.NativeInputAllowed(
-          g_header, fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-          fushi_voice_hook::kLookupGeometryProviderIdUnityMono) ||
+      !my_comic_voice_hook::g_geometry_provider_registry.NativeInputAllowed(
+          g_header, my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+          my_comic_voice_hook::kLookupGeometryProviderIdUnityMono) ||
       UmShieldActive(hwnd) || GetForegroundWindow() != hwnd ||
       (wparam & (MK_SHIFT | MK_CONTROL | MK_RBUTTON | MK_MBUTTON)) != 0u ||
       (GetKeyState(VK_MENU) & 0x8000) != 0) {
@@ -897,7 +897,7 @@ LRESULT CALLBACK UmLookupWindowProc(HWND hwnd, UINT message, WPARAM wparam,
 
 // ── HookWorker ─────────────────────────────────────────────────────────────
 
-// Worker-only, bounded diagnostics in %TEMP%\fushi_galhook.log.  Never logs
+// Worker-only, bounded diagnostics in %TEMP%\my_comic_galhook.log.  Never logs
 // dialogue text.
 void UmLookupLog(const wchar_t* format, ...) {
   wchar_t line[512] = {};
@@ -908,7 +908,7 @@ void UmLookupLog(const wchar_t* format, ...) {
   wchar_t path[MAX_PATH] = {};
   const DWORD length = GetTempPathW(MAX_PATH, path);
   if (length == 0 || length >= MAX_PATH - 20) return;
-  wcscat_s(path, L"fushi_galhook.log");
+  wcscat_s(path, L"my_comic_galhook.log");
   HANDLE file = g_orig_CreateFileW(path, FILE_APPEND_DATA, FILE_SHARE_READ,
                                    nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL,
                                    nullptr);
@@ -930,7 +930,7 @@ void UmLookupLog(const wchar_t* format, ...) {
 }
 
 HWND FindUmGameWindow() {
-  const HWND candidate = fushi_voice_hook::FindGameMainWindow();
+  const HWND candidate = my_comic_voice_hook::FindGameMainWindow();
   if (candidate == nullptr) return nullptr;
   wchar_t class_name[64] = {};
   if (GetClassNameW(candidate, class_name,
@@ -993,9 +993,9 @@ void TeardownUmSubclass() {
   // original_proc stays set: an in-flight call may still chain through it.
 }
 
-fushi_voice_hook::unity_mono_lookup::MonoLookupApi LoadUnityMonoLookupApi(
+my_comic_voice_hook::unity_mono_lookup::MonoLookupApi LoadUnityMonoLookupApi(
     HMODULE runtime) {
-  fushi_voice_hook::unity_mono_lookup::MonoLookupApi api;
+  my_comic_voice_hook::unity_mono_lookup::MonoLookupApi api;
   LoadMonoExport(runtime, "mono_class_get_field_from_name",
                  &api.class_get_field_from_name);
   LoadMonoExport(runtime, "mono_field_get_offset", &api.field_get_offset);
@@ -1021,7 +1021,7 @@ fushi_voice_hook::unity_mono_lookup::MonoLookupApi LoadUnityMonoLookupApi(
 // plan admitted the per-glyph message framework.  Resolves every site; the
 // detour itself is installed by InstallUnityMonoLookupHooks after detach.
 void* ResolveUnityMonoLookup(
-    const fushi_voice_hook::MonoEmbeddingApi& api, HMODULE runtime,
+    const my_comic_voice_hook::MonoEmbeddingApi& api, HMODULE runtime,
     void* domain) {
   auto& rt = g_um_lookup;
   if (rt.resolved) return nullptr;
@@ -1044,7 +1044,7 @@ void* ResolveUnityMonoLookup(
 // text path's attach scope, after the plan admitted SayDialog.DoSay).
 // Returns the JIT entry of SayDialog.LateUpdate (nullptr: rejected).
 void* ResolveUnityMonoFungusLookup(
-    const fushi_voice_hook::MonoEmbeddingApi& api, HMODULE runtime) {
+    const my_comic_voice_hook::MonoEmbeddingApi& api, HMODULE runtime) {
   auto& rt = g_um_lookup;
   if (rt.resolved) return nullptr;
   rt.resolved = true;
@@ -1119,8 +1119,8 @@ bool InstallUnityMonoLookupHooks(void* code) {
         rt.sites.cached_ptr_offset, main_thread, hooked ? 1 : 0);
   }
   if (rt.installed && g_header != nullptr) {
-    fushi_voice_hook::AtomicOrShared32(
-        &g_header->lookup_diag, fushi_voice_hook::kLookupDiagSensorInstalled);
+    my_comic_voice_hook::AtomicOrShared32(
+        &g_header->lookup_diag, my_comic_voice_hook::kLookupDiagSensorInstalled);
   }
   return rt.installed;
 }
@@ -1135,9 +1135,9 @@ void RetireUmLookup() {
   if (!rt.provider_offered) return;
   rt.provider_offered = false;
   if (g_header != nullptr) {
-    fushi_voice_hook::g_geometry_provider_registry.Retire(
-        g_header, fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-        fushi_voice_hook::kLookupGeometryProviderIdUnityMono);
+    my_comic_voice_hook::g_geometry_provider_registry.Retire(
+        g_header, my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+        my_comic_voice_hook::kLookupGeometryProviderIdUnityMono);
   }
 }
 
@@ -1320,7 +1320,7 @@ bool PublishUmLookupHit(const UmSubmit& submit) {
   const auto& glyph = model.glyphs[submit.glyph];
   const size_t units = rt.model_line.size();
   if (glyph.source == umono_lookup::kNoSource || glyph.source >= units ||
-      fushi_voice_hook::LookupUtf16SourceLength(
+      my_comic_voice_hook::LookupUtf16SourceLength(
           rt.model_line.data(), static_cast<uint32_t>(units), glyph.source) !=
           1u) {
     return false;
@@ -1329,25 +1329,25 @@ bool PublishUmLookupHit(const UmSubmit& submit) {
       CP_UTF8, WC_ERR_INVALID_CHARS, rt.model_line.data(),
       static_cast<int>(units), nullptr, 0, nullptr, nullptr);
   if (required <= 0 ||
-      static_cast<uint32_t>(required) > fushi_voice_hook::kLookupLineBytes) {
+      static_cast<uint32_t>(required) > my_comic_voice_hook::kLookupLineBytes) {
     return false;
   }
-  char utf8[fushi_voice_hook::kLookupLineBytes] = {};
+  char utf8[my_comic_voice_hook::kLookupLineBytes] = {};
   if (WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, rt.model_line.data(),
                           static_cast<int>(units), utf8, required, nullptr,
                           nullptr) != required) {
     return false;
   }
-  fushi_voice_hook::LookupGeometryHitPublication publication;
+  my_comic_voice_hook::LookupGeometryHitPublication publication;
   publication.provider_kind =
-      fushi_voice_hook::kLookupGeometryProviderEngineExactLayout;
-  publication.provider_id = fushi_voice_hook::kLookupGeometryProviderIdUnityMono;
+      my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout;
+  publication.provider_id = my_comic_voice_hook::kLookupGeometryProviderIdUnityMono;
   publication.char_index = glyph.source;
   publication.source_length = 1u;
   publication.char_count = static_cast<uint32_t>(units);
   publication.coordinate_space =
-      fushi_voice_hook::kLookupCoordinateSpaceClientPhysicalPixels;
-  publication.writing_mode = fushi_voice_hook::kLookupWritingModeHorizontal;
+      my_comic_voice_hook::kLookupCoordinateSpaceClientPhysicalPixels;
+  publication.writing_mode = my_comic_voice_hook::kLookupWritingModeHorizontal;
   publication.text_generation = rt.model_text_event;
   publication.geometry_generation = model.generation;
   publication.glyph_x = glyph.rect.x;
@@ -1356,11 +1356,11 @@ bool PublishUmLookupHit(const UmSubmit& submit) {
   publication.glyph_h = glyph.rect.h;
   publication.view_w = model.physical_w;
   publication.view_h = model.physical_h;
-  publication.flags = fushi_voice_hook::kLookupHitFlagSubmit;
+  publication.flags = my_comic_voice_hook::kLookupHitFlagSubmit;
   publication.line_utf8 = reinterpret_cast<const uint8_t*>(utf8);
   publication.line_bytes = static_cast<uint32_t>(required);
   const bool published =
-      fushi_voice_hook::g_geometry_provider_registry.PublishHit(g_header,
+      my_comic_voice_hook::g_geometry_provider_registry.PublishHit(g_header,
                                                                 publication);
   UmLookupLog(
       L"unity-mono-lookup: hit gen=%llu glyph=%u char=%u/%u rect=%d,%d %dx%d "
@@ -1414,14 +1414,14 @@ void ProcessUnityMonoLookupTick() {
   auto& rt = g_um_lookup;
   if (!rt.installed) return;
   if (g_stop || g_header == nullptr ||
-      !fushi_voice_hook::HasLookupRegion(g_header) ||
-      fushi_voice_hook::AtomicLoadShared32(&g_header->lookup_enabled) == 0u) {
+      !my_comic_voice_hook::HasLookupRegion(g_header) ||
+      my_comic_voice_hook::AtomicLoadShared32(&g_header->lookup_enabled) == 0u) {
     NoteUmRetire(1u);
     RetireUmLookup();
     return;
   }
-  fushi_voice_hook::AtomicOrShared32(
-      &g_header->lookup_diag, fushi_voice_hook::kLookupDiagSensorInstalled);
+  my_comic_voice_hook::AtomicOrShared32(
+      &g_header->lookup_diag, my_comic_voice_hook::kLookupDiagSensorInstalled);
 
   // The click claim lives in the game window's procedure; (re)bind it to the
   // current Unity window (a fullscreen toggle can recreate it).
@@ -1447,7 +1447,7 @@ void ProcessUnityMonoLookupTick() {
   std::wstring line;
   uint64_t event = 0u;
   uint64_t thread = 0u;
-  if (!fushi_voice_hook::ReadSelectedLookupText(
+  if (!my_comic_voice_hook::ReadSelectedLookupText(
           g_header, &line, &event, &thread, umono_lookup::kMaxLineUnits)) {
     NoteUmRetire(4u);
     RetireUmLookup();
@@ -1486,17 +1486,17 @@ void ProcessUnityMonoLookupTick() {
           rt.model.screen_h);
     }
   }
-  if (fushi_voice_hook::g_geometry_provider_registry.OfferReady(
-          g_header, fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-          fushi_voice_hook::kLookupGeometryProviderIdUnityMono)) {
+  if (my_comic_voice_hook::g_geometry_provider_registry.OfferReady(
+          g_header, my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+          my_comic_voice_hook::kLookupGeometryProviderIdUnityMono)) {
     if (!rt.provider_offered) {
       UmLookupLog(L"unity-mono-lookup: OfferReady gen=%llu glyphs=%u",
                   static_cast<unsigned long long>(rt.model.generation),
                   rt.model.count);
     }
     rt.provider_offered = true;
-    fushi_voice_hook::AtomicOrShared32(
-        &g_header->lookup_diag, fushi_voice_hook::kLookupDiagGeometryObserved);
+    my_comic_voice_hook::AtomicOrShared32(
+        &g_header->lookup_diag, my_comic_voice_hook::kLookupDiagGeometryObserved);
     NoteUmRetire(0u);
   } else {
     NoteUmRetire(6u);

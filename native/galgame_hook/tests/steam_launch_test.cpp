@@ -9,12 +9,12 @@
 #include "steam_launch.h"
 
 int main() {
-  using fushi_voice_hook::ParseAcfQuotedValue;
-  using fushi_voice_hook::ParseSteamLibraryPath;
-  using fushi_voice_hook::BuildSteamRunUri;
-  using fushi_voice_hook::ChooseSteamLaunchStrategy;
-  using fushi_voice_hook::SteamLibraryPath;
-  using fushi_voice_hook::SteamLaunchStrategy;
+  using my_comic_voice_hook::ParseAcfQuotedValue;
+  using my_comic_voice_hook::ParseSteamLibraryPath;
+  using my_comic_voice_hook::BuildSteamRunUri;
+  using my_comic_voice_hook::ChooseSteamLaunchStrategy;
+  using my_comic_voice_hook::SteamLibraryPath;
+  using my_comic_voice_hook::SteamLaunchStrategy;
 
   SteamLibraryPath path;
   assert(ParseSteamLibraryPath(

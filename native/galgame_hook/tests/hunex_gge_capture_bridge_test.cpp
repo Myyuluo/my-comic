@@ -12,9 +12,9 @@
 #include <limits>
 #include <thread>
 
-namespace bridge = fushi_voice_hook::hunex_capture_bridge;
+namespace bridge = my_comic_voice_hook::hunex_capture_bridge;
 
-namespace fushi_voice_hook::hunex_capture_bridge {
+namespace my_comic_voice_hook::hunex_capture_bridge {
 
 struct TraversalCaptureBridgeTestPeer {
   static void HoldCallback(TraversalCaptureBridge *capture_bridge) {
@@ -32,7 +32,7 @@ struct TraversalCaptureBridgeTestPeer {
   }
 };
 
-} // namespace fushi_voice_hook::hunex_capture_bridge
+} // namespace my_comic_voice_hook::hunex_capture_bridge
 
 namespace {
 

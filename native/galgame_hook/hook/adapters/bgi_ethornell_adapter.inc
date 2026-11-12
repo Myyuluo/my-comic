@@ -71,7 +71,7 @@ void RememberBgiVoiceArc(HANDLE handle, const wchar_t* path) {
       handle == INVALID_HANDLE_VALUE || !IsBgiArchivePath(path)) {
     return;
   }
-  fushi_voice_hook::RememberTrackedHandle(
+  my_comic_voice_hook::RememberTrackedHandle(
       g_bgi_handles, handle, [path](BgiArcHandle& slot) {
         wcsncpy_s(slot.path, path, _TRUNCATE);
       });
@@ -79,14 +79,14 @@ void RememberBgiVoiceArc(HANDLE handle, const wchar_t* path) {
 
 bool CopyBgiVoiceArcPath(HANDLE handle, wchar_t* out, size_t out_chars) {
   if (out == nullptr || out_chars == 0) return false;
-  return fushi_voice_hook::ReadTrackedHandle(
+  return my_comic_voice_hook::ReadTrackedHandle(
       g_bgi_handles, handle, [out, out_chars](const BgiArcHandle& slot) {
         wcsncpy_s(out, out_chars, slot.path, _TRUNCATE);
       });
 }
 
 void ForgetBgiVoiceArc(HANDLE handle) {
-  fushi_voice_hook::ForgetTrackedHandle(g_bgi_handles, handle);
+  my_comic_voice_hook::ForgetTrackedHandle(g_bgi_handles, handle);
 }
 
 void QueueBgiVoice(const wchar_t* path, uint64_t read_offset) {
@@ -115,7 +115,7 @@ void ObserveBgiVoiceArcRead(HANDLE file, const void* buffer, DWORD done,
     if (memcmp(bytes, "OggS", 4) == 0) {
       audio_start = true;
     } else if (done >= 12 && memcmp(bytes + 4, "bw  ", 4) == 0) {
-      const uint32_t ogg_offset = fushi_voice_hook::bgi::ReadLe32(bytes);
+      const uint32_t ogg_offset = my_comic_voice_hook::bgi::ReadLe32(bytes);
       audio_start = ogg_offset >= 8 && ogg_offset <= done - 4 &&
                     memcmp(bytes + ogg_offset, "OggS", 4) == 0;
     }
@@ -168,9 +168,9 @@ void RememberBgiArchiveVerdict(const wchar_t* path, uint64_t file_size,
 // failure counts as a rejected member, never as a voice verdict.
 bool ClassifyBgiVoiceArchive(HANDLE file, const uint8_t* index,
                              size_t index_bytes,
-                             const ::fushi_voice_hook::bgi::ArcLayout& layout,
+                             const ::my_comic_voice_hook::bgi::ArcLayout& layout,
                              uint64_t file_size) {
-  namespace bgi = ::fushi_voice_hook::bgi;
+  namespace bgi = ::my_comic_voice_hook::bgi;
   bgi::VoiceArchiveTally tally;
   const uint32_t samples = bgi::VoiceClassifySampleCount(layout.count);
   for (uint32_t k = 0; k < samples; ++k) {
@@ -197,7 +197,7 @@ bool ClassifyBgiVoiceArchive(HANDLE file, const uint8_t* index,
 }
 
 void ProcessBgiVoiceTask(BgiVoiceTask* task) {
-  namespace bgi = ::fushi_voice_hook::bgi;
+  namespace bgi = ::my_comic_voice_hook::bgi;
   HANDLE file = g_orig_CreateFileW(
       task->path, GENERIC_READ,
       FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
@@ -266,7 +266,7 @@ void ProcessBgiVoiceTask(BgiVoiceTask* task) {
     valid = ogg != nullptr &&
             SetFilePointerEx(file, at, nullptr, FILE_BEGIN) != FALSE &&
             ReadExact(file, ogg, ogg_size) &&
-            fushi_voice_hook::siglus::CompleteOggBytes(ogg, ogg_size) ==
+            my_comic_voice_hook::siglus::CompleteOggBytes(ogg, ogg_size) ==
                 ogg_size;
   }
   const bool duplicate = valid &&
@@ -288,7 +288,7 @@ void ProcessBgiVoiceTask(BgiVoiceTask* task) {
     wcsncpy_s(g_bgi_last_path, task->path, _TRUNCATE);
     if (g_header != nullptr) {
       g_header->hook_diagnostics |=
-          fushi_voice_hook::kDiagBgiArcVoiceCaptured;
+          my_comic_voice_hook::kDiagBgiArcVoiceCaptured;
     }
   }
   free(ogg);
@@ -306,12 +306,12 @@ void ProcessBgiVoiceTasks() {
 }
 
 bool TryHookBgiArcVoice() {
-  if (!fushi_voice_hook::MatchesBgiEthornellProfile(nullptr)) return false;
+  if (!my_comic_voice_hook::MatchesBgiEthornellProfile(nullptr)) return false;
   const bool ready = TryHookSiglusOvk();
   if (ready) {
     InterlockedExchange(&g_bgi_arc_enabled, 1);
     if (g_header != nullptr) {
-      g_header->hook_diagnostics |= fushi_voice_hook::kDiagBgiArcHooksReady;
+      g_header->hook_diagnostics |= my_comic_voice_hook::kDiagBgiArcHooksReady;
     }
   }
   return ready;
@@ -319,14 +319,14 @@ bool TryHookBgiArcVoice() {
 
 void StopBgiArcVoice() {
   InterlockedExchange(&g_bgi_arc_enabled, 0);
-  fushi_voice_hook::ClearTrackedHandles(g_bgi_handles);
+  my_comic_voice_hook::ClearTrackedHandles(g_bgi_handles);
 }
 
-class BgiEthornellAdapter final : public fushi_voice_hook::EngineAdapter {
+class BgiEthornellAdapter final : public my_comic_voice_hook::EngineAdapter {
  public:
   const char* id() const override { return "bgi_ethornell"; }
   bool probe() const override {
-    return fushi_voice_hook::MatchesBgiEthornellProfile(nullptr);
+    return my_comic_voice_hook::MatchesBgiEthornellProfile(nullptr);
   }
   bool install() override {
     // 文本道与查词站点只来自 exe 自身结构、与语音归档无关：身份成立就装（语音层失败时
@@ -340,28 +340,28 @@ class BgiEthornellAdapter final : public fushi_voice_hook::EngineAdapter {
     ProcessBgiVoiceTasks();
     ProcessBgiLookupTick();
   }
-  fushi_voice_hook::LookupAdmissionReport lookupAdmission() const override {
-    fushi_voice_hook::LookupAdmissionReport report;
+  my_comic_voice_hook::LookupAdmissionReport lookupAdmission() const override {
+    my_comic_voice_hook::LookupAdmissionReport report;
     if (BgiLookupSensorInstalled()) {
-      report.state = fushi_voice_hook::kLookupAdmissionSensorInstalled;
+      report.state = my_comic_voice_hook::kLookupAdmissionSensorInstalled;
       return report;
     }
     // Sites were resolved and rejected: terminal for this executable, so the
     // host gets the digest to report instead of waiting for a gate.
     if (BgiLookupSitesRejected()) {
-      report.state = fushi_voice_hook::kLookupAdmissionIdentityRejected;
+      report.state = my_comic_voice_hook::kLookupAdmissionIdentityRejected;
       strncpy_s(report.executable_sha256,
-                fushi_voice_hook::HostExecutableSha256Hex(), _TRUNCATE);
+                my_comic_voice_hook::HostExecutableSha256Hex(), _TRUNCATE);
       return report;
     }
     // The registry only asks after probe() held (identity is structural).
-    report.state = fushi_voice_hook::kLookupAdmissionIdentityAccepted;
+    report.state = my_comic_voice_hook::kLookupAdmissionIdentityAccepted;
     return report;
   }
-  fushi_voice_hook::AdapterCapability capabilities() const override {
-    return fushi_voice_hook::AdapterCapability::kText |
-           fushi_voice_hook::AdapterCapability::kResourceAudio |
-           fushi_voice_hook::AdapterCapability::kPcmAudio;
+  my_comic_voice_hook::AdapterCapability capabilities() const override {
+    return my_comic_voice_hook::AdapterCapability::kText |
+           my_comic_voice_hook::AdapterCapability::kResourceAudio |
+           my_comic_voice_hook::AdapterCapability::kPcmAudio;
   }
   void onModuleLoaded(const wchar_t*) override {}
   void shutdown() override {
@@ -371,7 +371,7 @@ class BgiEthornellAdapter final : public fushi_voice_hook::EngineAdapter {
     installed_ = false;
     ready_ = false;
   }
-  fushi_voice_hook::AdapterDiagnostics diagnostics() const override {
+  my_comic_voice_hook::AdapterDiagnostics diagnostics() const override {
     return {id(), probe(), installed_,
             g_header == nullptr ? 0u : g_header->hook_diagnostics};
   }

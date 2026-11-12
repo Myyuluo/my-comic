@@ -8,7 +8,7 @@
 
 #include "../hook/adapters/luca_x64_text_core.h"
 
-namespace luca = fushi_voice_hook::luca;
+namespace luca = my_comic_voice_hook::luca;
 
 namespace {
 

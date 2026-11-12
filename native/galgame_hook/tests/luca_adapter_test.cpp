@@ -17,7 +17,7 @@
 #include "../hook/luca_pak.h"
 #include "../include/native_text_owner.h"
 
-namespace luca = fushi_voice_hook::luca;
+namespace luca = my_comic_voice_hook::luca;
 
 namespace {
 
@@ -444,14 +444,14 @@ void TestSystemCnf() {
   const std::string cnf =
       "TARGET_PLATFORM\tWIN32\r\nCOMPANY\t\t\"X\"\r\nSCREEN_WIDTH\t1280\r\n"
       "SCREEN_HEIGHT\t720\r\n";
-  assert(fushi_voice_hook::IsLucaSystemCnf(cnf));
+  assert(my_comic_voice_hook::IsLucaSystemCnf(cnf));
   int32_t w = 0, h = 0;
-  assert(fushi_voice_hook::LucaSystemCnfInt(cnf, "SCREEN_WIDTH", &w) &&
+  assert(my_comic_voice_hook::LucaSystemCnfInt(cnf, "SCREEN_WIDTH", &w) &&
          w == 1280);
-  assert(fushi_voice_hook::LucaSystemCnfInt(cnf, "SCREEN_HEIGHT", &h) &&
+  assert(my_comic_voice_hook::LucaSystemCnfInt(cnf, "SCREEN_HEIGHT", &h) &&
          h == 720);
-  assert(!fushi_voice_hook::IsLucaSystemCnf("[System]\nWidth=1280\n"));
-  assert(!fushi_voice_hook::IsLucaSystemCnf("XTARGET_PLATFORM\tWIN32\n"));
+  assert(!my_comic_voice_hook::IsLucaSystemCnf("[System]\nWidth=1280\n"));
+  assert(!my_comic_voice_hook::IsLucaSystemCnf("XTARGET_PLATFORM\tWIN32\n"));
 }
 
 // ── Directory identity (luca_profile.h) on real, synthetic directories ─────
@@ -465,7 +465,7 @@ class ScratchGameDir {
     wchar_t temp[MAX_PATH] = {};
     const DWORD length = GetTempPathW(MAX_PATH, temp);
     assert(length != 0u && length < MAX_PATH);
-    root_ = std::wstring(temp) + L"fushi_luca_probe_" +
+    root_ = std::wstring(temp) + L"my_comic_luca_probe_" +
             std::to_wstring(GetCurrentProcessId()) + L"_" +
             std::to_wstring(++counter);
     MakeDir(L"");
@@ -576,7 +576,7 @@ void TestLayoutIdentity() {
     dir.MakeDir(L"files");
     dir.Write(L"files\\SCRIPT.PAK", MakePak(3u, 0u, 0x2Cu, 0u, 100u));
     dir.Write(L"files\\VOICE.PAK", MakeNamedPak(4u, 0x38u));
-    assert(fushi_voice_hook::MatchesLucaLayout(dir.root()) == kX64BranchEnabled);
+    assert(my_comic_voice_hook::MatchesLucaLayout(dir.root()) == kX64BranchEnabled);
   }
   // Positive, original layout: system.cnf + one self-consistent PAK (both
   // architectures).
@@ -585,7 +585,7 @@ void TestLayoutIdentity() {
     dir.WriteText(L"system.cnf", kLucaCnf);
     dir.MakeDir(L"files");
     dir.Write(L"files\\SCRIPT.PAK", MakePak(3u, 0u, 0x2Cu, 0u, 100u));
-    assert(fushi_voice_hook::MatchesLucaLayout(dir.root()));
+    assert(my_comic_voice_hook::MatchesLucaLayout(dir.root()));
   }
 
   // Negative: a non-Luca x64 game that ships `.pak` files of its own.
@@ -595,7 +595,7 @@ void TestLayoutIdentity() {
     dir.Write(L"files\\data.pak", MakeForeignPackPak());
     dir.Write(L"files\\patch.pak", MakeForeignZipPak());
     dir.Write(L"files\\sound.pak", std::vector<uint8_t>(0x1000u, 0u));
-    assert(!fushi_voice_hook::MatchesLucaLayout(dir.root()));
+    assert(!my_comic_voice_hook::MatchesLucaLayout(dir.root()));
   }
   // Negative: Luca-looking headers whose indexes are not self-consistent.
   {
@@ -603,7 +603,7 @@ void TestLayoutIdentity() {
     dir.MakeDir(L"files");
     dir.Write(L"files\\A.PAK", MakeOverlappingPak());
     dir.Write(L"files\\B.PAK", MakeTruncatedMemberPak());
-    assert(!fushi_voice_hook::MatchesLucaLayout(dir.root()));
+    assert(!my_comic_voice_hook::MatchesLucaLayout(dir.root()));
   }
   // Negative: exactly one self-consistent PAK without system.cnf, alone or
   // beside inconsistent / foreign ones (one coincidence is not an engine).
@@ -611,10 +611,10 @@ void TestLayoutIdentity() {
     ScratchGameDir dir;
     dir.MakeDir(L"files");
     dir.Write(L"files\\ONLY.PAK", MakePak(3u, 0u, 0x2Cu, 0u, 100u));
-    assert(!fushi_voice_hook::MatchesLucaLayout(dir.root()));
+    assert(!my_comic_voice_hook::MatchesLucaLayout(dir.root()));
     dir.Write(L"files\\BROKEN.PAK", MakeOverlappingPak());
     dir.Write(L"files\\data.pak", MakeForeignPackPak());
-    assert(!fushi_voice_hook::MatchesLucaLayout(dir.root()));
+    assert(!my_comic_voice_hook::MatchesLucaLayout(dir.root()));
   }
   // Negative: two valid PAKs, but not in the engine's `files\` root (next to
   // the exe, or only in a subdirectory of files\).
@@ -626,7 +626,7 @@ void TestLayoutIdentity() {
     dir.MakeDir(L"files\\sub");
     dir.Write(L"files\\sub\\C.PAK", MakePak(3u, 0u, 0x2Cu, 0u, 100u));
     dir.Write(L"files\\sub\\D.PAK", MakePak(2u, 10u, 0x28u, 0u, 100u));
-    assert(!fushi_voice_hook::MatchesLucaLayout(dir.root()));
+    assert(!my_comic_voice_hook::MatchesLucaLayout(dir.root()));
   }
   // Negative: a Luca boot file does not admit foreign or broken archives.
   {
@@ -635,23 +635,23 @@ void TestLayoutIdentity() {
     dir.MakeDir(L"files");
     dir.Write(L"files\\data.pak", MakeForeignPackPak());
     dir.Write(L"files\\A.PAK", MakeOverlappingPak());
-    assert(!fushi_voice_hook::MatchesLucaLayout(dir.root()));
+    assert(!my_comic_voice_hook::MatchesLucaLayout(dir.root()));
   }
   // A directory without system.cnf or files\ is not LucaSystem.
-  assert(!fushi_voice_hook::MatchesLucaLayout(L"C:\\nonexistent-luca-dir"));
+  assert(!my_comic_voice_hook::MatchesLucaLayout(L"C:\\nonexistent-luca-dir"));
 }
 
 // ── Text-owner handshake follows MESSAGE-site evidence ─────────────────────
 
 // Mirrors LucaAdapter::SettleTextOwner.
-void ApplyOwnerDecision(fushi_voice_hook::SharedHeader* header,
+void ApplyOwnerDecision(my_comic_voice_hook::SharedHeader* header,
                         luca::TextOwnerDecision decision) {
   switch (decision) {
     case luca::TextOwnerDecision::kNativeOwned:
-      fushi_voice_hook::CompleteNativeTextOwner(header, true, false);
+      my_comic_voice_hook::CompleteNativeTextOwner(header, true, false);
       return;
     case luca::TextOwnerDecision::kLunaAllowed:
-      fushi_voice_hook::CompleteNativeTextOwner(header, false, false);
+      my_comic_voice_hook::CompleteNativeTextOwner(header, false, false);
       return;
     case luca::TextOwnerDecision::kUndecided:
       return;
@@ -659,10 +659,10 @@ void ApplyOwnerDecision(fushi_voice_hook::SharedHeader* header,
 }
 
 void TestTextOwnerFollowsSiteEvidence() {
-  using fushi_voice_hook::NativeTextLunaStartupGate;
-  using fushi_voice_hook::NativeTextOwner;
-  using fushi_voice_hook::ReadNativeTextOwner;
-  using fushi_voice_hook::SharedHeader;
+  using my_comic_voice_hook::NativeTextLunaStartupGate;
+  using my_comic_voice_hook::NativeTextOwner;
+  using my_comic_voice_hook::ReadNativeTextOwner;
+  using my_comic_voice_hook::SharedHeader;
   const std::vector<uint8_t> luca_code = MakeMessageCode(0x300u, 0x20u, 0x180u);
   std::vector<uint8_t> twice = luca_code;
   std::memcpy(twice.data() + 0x380u, luca_code.data() + 0x300u,
@@ -683,7 +683,7 @@ void TestTextOwnerFollowsSiteEvidence() {
         luca::ResolveMessageSites(&span, 1u, &sites);
     assert(result != luca::MessageSiteResult::kResolved);
     SharedHeader h{};
-    fushi_voice_hook::InitializeNativeTextOwner(&h, true);
+    my_comic_voice_hook::InitializeNativeTextOwner(&h, true);
     NativeTextLunaStartupGate gate;
     // Before any scan the candidate holds Pending; Luna waits.
     ApplyOwnerDecision(&h, luca::DecideTextOwner(false, result, false));
@@ -709,7 +709,7 @@ void TestTextOwnerFollowsSiteEvidence() {
     assert(luca::ResolveMessageSites(&span, 1u, &sites) ==
            luca::MessageSiteResult::kResolved);
     SharedHeader h{};
-    fushi_voice_hook::InitializeNativeTextOwner(&h, true);
+    my_comic_voice_hook::InitializeNativeTextOwner(&h, true);
     ApplyOwnerDecision(&h, luca::DecideTextOwner(
                                true, luca::MessageSiteResult::kResolved, false));
     assert(ReadNativeTextOwner(&h) == NativeTextOwner::kLunaAllowed);
@@ -718,7 +718,7 @@ void TestTextOwnerFollowsSiteEvidence() {
   // never starts.
   {
     SharedHeader h{};
-    fushi_voice_hook::InitializeNativeTextOwner(&h, true);
+    my_comic_voice_hook::InitializeNativeTextOwner(&h, true);
     NativeTextLunaStartupGate gate;
     ApplyOwnerDecision(&h, luca::DecideTextOwner(
                                true, luca::MessageSiteResult::kResolved, true));

@@ -3,7 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 // Generic, engine-independent left-button filtering primitives used by the
 // v19 lookup input shield.  They deliberately know nothing about HWNDs, hooks
@@ -373,4 +373,4 @@ inline InputShieldFilterResult FilterDirectInputBufferedLeftButton(
   return out;
 }
 
-} // namespace fushi_voice_hook
+} // namespace my_comic_voice_hook

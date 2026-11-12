@@ -60,10 +60,10 @@
 //     二次破坏——而事后 `check` 仍然报通过（号仍唯一、索引仍同步），**不会报警**。
 //
 // 环境变量（都可不设；前三个只影响 `--scan`）：
-//   FUSHI_BUG_REMOTE=origin              远端名
-//   FUSHI_BUG_SKIP_REMOTE_FETCH=1        跳过 git fetch（离线/急用；仍扫已缓存 remote-tracking 并警告）
-//   FUSHI_BUG_REMOTE_TIMEOUT=25          fetch 超时秒数
-//   FUSHI_BUG_BASE=origin/develop        基线 ref（取号、撞号态作用域；等价于 `--base`）
+//   MYCOMIC_BUG_REMOTE=origin              远端名
+//   MYCOMIC_BUG_SKIP_REMOTE_FETCH=1        跳过 git fetch（离线/急用；仍扫已缓存 remote-tracking 并警告）
+//   MYCOMIC_BUG_REMOTE_TIMEOUT=25          fetch 超时秒数
+//   MYCOMIC_BUG_BASE=origin/develop        基线 ref（取号、撞号态作用域；等价于 `--base`）
 //
 // 零外部依赖（只用 dart:*）。运行目录 = 仓库根（docs/ 在其下）。
 
@@ -486,10 +486,10 @@ BranchScan localOnlyScan(String reason) =>
 /// 本仓实测：worktree list 0.5s + 693 个工作区 listSync 3.0s + 1804 个 ref 全量树/blob 2.0s。
 Future<BranchScan> scanBranchBugNumbers() async {
   final env = Platform.environment;
-  final remote = env['FUSHI_BUG_REMOTE'] ?? 'origin';
-  final skipRaw = env['FUSHI_BUG_SKIP_REMOTE_FETCH'] ?? '';
+  final remote = env['MYCOMIC_BUG_REMOTE'] ?? 'origin';
+  final skipRaw = env['MYCOMIC_BUG_SKIP_REMOTE_FETCH'] ?? '';
   final skipFetch = skipRaw.isNotEmpty && skipRaw != '0';
-  final timeoutSeconds = int.tryParse(env['FUSHI_BUG_REMOTE_TIMEOUT'] ?? '') ?? 25;
+  final timeoutSeconds = int.tryParse(env['MYCOMIC_BUG_REMOTE_TIMEOUT'] ?? '') ?? 25;
 
   final inRepo = await runGit(<String>[
     'rev-parse',
@@ -502,7 +502,7 @@ Future<BranchScan> scanBranchBugNumbers() async {
   var fetched = false;
   var fetchNote = '';
   if (skipFetch) {
-    fetchNote = 'FUSHI_BUG_SKIP_REMOTE_FETCH 已设，主动跳过 fetch';
+    fetchNote = 'MYCOMIC_BUG_SKIP_REMOTE_FETCH 已设，主动跳过 fetch';
   } else {
     final fetch = await runGit(<String>[
       'fetch',
@@ -1238,11 +1238,11 @@ class RenumberScope {
 Set<String> splitGitZ(String raw) =>
     raw.split('\u0000').where((String p) => p.isNotEmpty).map(normalizeRelPath).toSet();
 
-/// 解析基线 ref：显式 `--base` > `FUSHI_BUG_BASE` > [defaultBaseRefCandidates]。
+/// 解析基线 ref：显式 `--base` > `MYCOMIC_BUG_BASE` > [defaultBaseRefCandidates]。
 /// 返回第一个真实存在的 ref 名；都不存在返回 null。
 Future<String?> resolveBaseRef(String? explicit) async {
   final env = Platform.environment;
-  final fromEnv = (env['FUSHI_BUG_BASE'] ?? '').trim();
+  final fromEnv = (env['MYCOMIC_BUG_BASE'] ?? '').trim();
   final wanted = (explicit != null && explicit.trim().isNotEmpty)
       ? explicit.trim()
       : (fromEnv.isNotEmpty ? fromEnv : null);
@@ -1275,7 +1275,7 @@ Future<RenumberScope> resolveRenumberScope({String? baseRef}) async {
   }
   final resolved = await resolveBaseRef(baseRef);
   if (resolved == null) {
-    final tried = (baseRef ?? Platform.environment['FUSHI_BUG_BASE'] ?? '').trim();
+    final tried = (baseRef ?? Platform.environment['MYCOMIC_BUG_BASE'] ?? '').trim();
     return RenumberScope.unavailable(
       tried.isNotEmpty
           ? 'base ref `$tried` 不存在'
@@ -1630,7 +1630,7 @@ Future<CollisionGroup> resolveCollisionGroup(
 }) async {
   final resolved = await resolveBaseRef(baseRef);
   if (resolved == null) {
-    final tried = (baseRef ?? Platform.environment['FUSHI_BUG_BASE'] ?? '').trim();
+    final tried = (baseRef ?? Platform.environment['MYCOMIC_BUG_BASE'] ?? '').trim();
     throw BugToolError(
       'BUG-${padNum(number)} 撞号：$bugsDir/ 里有 ${candidates.length} 份同号文件'
       '（${candidates.join('、')}）。撞号意味着基线上本来就有一条合法的同号 bug，'

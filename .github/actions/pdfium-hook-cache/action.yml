@@ -17,7 +17,7 @@
 # `purpose` keeps jobs on the same runner OS apart: a Linux test job downloads
 # linux-x64, a Linux APK job android-arm64 -- under one shared key whichever job
 # saved first would leave the other downloading forever.
-# Guard: fushi/test/build/pdfium_hook_cache_guard_test.dart.
+# Guard: my_comic/test/build/pdfium_hook_cache_guard_test.dart.
 name: PDFium hook cache
 description: Restore / save the PDFium binaries pdfium_dart's build hook downloads.
 inputs:

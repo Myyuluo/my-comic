@@ -41,13 +41,13 @@ int main() {
   };
   for (size_t i = 0; i < sizeof(body); ++i) image[0xab + i] = body[i];
 
-  ok &= Expect(fushi_voice_hook::siglus::FindExactTextFunctionOffset(
+  ok &= Expect(my_comic_voice_hook::siglus::FindExactTextFunctionOffset(
                    image.data(), image.size()) == 0x80,
                "Siglus body signature should resolve the padded function start");
   image[0xab + 14] = 0x01;
-  ok &= Expect(fushi_voice_hook::siglus::FindExactTextFunctionOffset(
+  ok &= Expect(my_comic_voice_hook::siglus::FindExactTextFunctionOffset(
                    image.data(), image.size()) ==
-                   fushi_voice_hook::siglus::kInvalidTextFunctionOffset,
+                   my_comic_voice_hook::siglus::kInvalidTextFunctionOffset,
                "near misses must not install an unsafe engine hook");
 
   if (ok) {

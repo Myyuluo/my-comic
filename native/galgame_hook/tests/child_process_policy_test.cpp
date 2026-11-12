@@ -8,9 +8,9 @@
 #include <cassert>
 #include <vector>
 
-using fushi_voice_hook::ChildProcessCandidate;
-using fushi_voice_hook::SelectGameChildProcess;
-using fushi_voice_hook::ChildProcessLineage;
+using my_comic_voice_hook::ChildProcessCandidate;
+using my_comic_voice_hook::SelectGameChildProcess;
+using my_comic_voice_hook::ChildProcessLineage;
 
 void TestRetainedLauncherLineage() {
   ChildProcessLineage lineage({100, 10});

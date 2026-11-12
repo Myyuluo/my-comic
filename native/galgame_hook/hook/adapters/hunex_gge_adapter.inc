@@ -38,7 +38,7 @@ struct HunexGgePendingStoryCompose {
   uint64_t story_thread_address = 0u;
   uint64_t raw_text_hash = 0u;
   uint32_t render_thread_id = 0u;
-  fushi_voice_hook::hunex_capture_bridge::LogicalRect final_glyph_rect = {};
+  my_comic_voice_hook::hunex_capture_bridge::LogicalRect final_glyph_rect = {};
   HunexGgeCpuSurfaceIdentity final_glyph_surface = {};
   ULONGLONG sealed_tick = 0u;
 };
@@ -176,7 +176,7 @@ struct HunexGgeDrawContext {
   uint64_t text_hash = 0;
   uint32_t text_units = 0;
   uint32_t visible_units = 0;
-  fushi_voice_hook::hunex_lookup::GlyphTraceCursor glyph_trace_cursor;
+  my_comic_voice_hook::hunex_lookup::GlyphTraceCursor glyph_trace_cursor;
   uint32_t arg7 = 0;
   int32_t x = 0;
   int32_t y = 0;
@@ -194,7 +194,7 @@ struct HunexGgeBodyTraversalFence {
   uint32_t raw_text_units = 0u;
   uint32_t last_raw_utf16_index = 0u;
   uint32_t next_visible_glyph_ordinal = 0u;
-  fushi_voice_hook::hunex_lookup_core::RawTextLayout raw_text_layout;
+  my_comic_voice_hook::hunex_lookup_core::RawTextLayout raw_text_layout;
 };
 
 struct HunexGgeSurfaceComposeContext {
@@ -223,7 +223,7 @@ struct HunexGgeSurfaceComposeContext {
 };
 
 HunexGgeRuntimeAnchors g_hunex_gge_anchors;
-fushi_voice_hook::hunex_capture_bridge::TraversalCaptureBridge
+my_comic_voice_hook::hunex_capture_bridge::TraversalCaptureBridge
     g_hunex_gge_capture_bridge;
 HunexGgeLookupRuntime g_hunex_gge_lookup_runtime;
 HunexGgeDrawTextFn g_orig_hunex_gge_draw_text = nullptr;
@@ -306,7 +306,7 @@ void PublishHunexGgeStoryCompose(const HunexGgePendingStoryCompose& story) {
   target.sequence.store(sequence + 2u, std::memory_order_release);
   if (story.active) {
     InterlockedIncrement64(reinterpret_cast<volatile LONG64*>(
-        &FushiHunexGgeTraceV3.story_sealed_published));
+        &MyComicHunexGgeTraceV3.story_sealed_published));
   }
 }
 
@@ -357,37 +357,37 @@ thread_local HunexGgeProjectionDiagnosticDedup
     g_hunex_gge_projection_diagnostic_dedup;
 
 using HunexGgeCaptureQuarantineReason =
-    fushi_voice_hook::hunex_capture_bridge::CaptureQuarantineReason;
+    my_comic_voice_hook::hunex_capture_bridge::CaptureQuarantineReason;
 static_assert(
     static_cast<uint32_t>(HunexGgeCaptureQuarantineReason::kNone) ==
-        fushi_voice_hook::kHunexGgeTraceCaptureQuarantineNone,
+        my_comic_voice_hook::kHunexGgeTraceCaptureQuarantineNone,
     "HUNEX capture quarantine reason ABI drifted");
 static_assert(
     static_cast<uint32_t>(
         HunexGgeCaptureQuarantineReason::kReentrantCallback) ==
-        fushi_voice_hook::kHunexGgeTraceCaptureQuarantineReentrantCallback,
+        my_comic_voice_hook::kHunexGgeTraceCaptureQuarantineReentrantCallback,
     "HUNEX capture quarantine reason ABI drifted");
 static_assert(
     static_cast<uint32_t>(
         HunexGgeCaptureQuarantineReason::kInvalidRenderThreadId) ==
-        fushi_voice_hook::
+        my_comic_voice_hook::
             kHunexGgeTraceCaptureQuarantineInvalidRenderThreadId,
     "HUNEX capture quarantine reason ABI drifted");
 static_assert(
     static_cast<uint32_t>(
         HunexGgeCaptureQuarantineReason::kRenderThreadConflict) ==
-        fushi_voice_hook::kHunexGgeTraceCaptureQuarantineRenderThreadConflict,
+        my_comic_voice_hook::kHunexGgeTraceCaptureQuarantineRenderThreadConflict,
     "HUNEX capture quarantine reason ABI drifted");
 static_assert(
     static_cast<uint32_t>(
         HunexGgeCaptureQuarantineReason::kLineIdentityOrFenceInvalid) ==
-        fushi_voice_hook::
+        my_comic_voice_hook::
             kHunexGgeTraceCaptureQuarantineLineIdentityOrFenceInvalid,
     "HUNEX capture quarantine reason ABI drifted");
 static_assert(
     static_cast<uint32_t>(
         HunexGgeCaptureQuarantineReason::kSlotSequenceOverflow) ==
-        fushi_voice_hook::
+        my_comic_voice_hook::
             kHunexGgeTraceCaptureQuarantineSlotSequenceOverflow,
     "HUNEX capture quarantine reason ABI drifted");
 
@@ -398,7 +398,7 @@ uint64_t g_hunex_gge_lookup_last_raw_text_hash = 0u;
 uint64_t g_hunex_gge_lookup_last_story_thread_address = 0u;
 uint16_t g_hunex_gge_lookup_last_raw_text_units = 0u;
 std::array<uint16_t,
-           fushi_voice_hook::hunex_capture_bridge::kTextCapacity>
+           my_comic_voice_hook::hunex_capture_bridge::kTextCapacity>
     g_hunex_gge_lookup_last_raw_text = {};
 
 enum HunexGgeLookupWorkerTraceState : LONG {
@@ -421,8 +421,8 @@ volatile LONG g_hunex_gge_lookup_worker_invalid_events = 0;
 
 void SetHunexGgeLookupWorkerTraceState(
     HunexGgeLookupWorkerTraceState state,
-    fushi_voice_hook::HunexGgeSelectedTextFailure selected_failure =
-        fushi_voice_hook::HunexGgeSelectedTextFailure::kNone,
+    my_comic_voice_hook::HunexGgeSelectedTextFailure selected_failure =
+        my_comic_voice_hook::HunexGgeSelectedTextFailure::kNone,
     uint32_t stable_events = 0u, uint32_t invalid_events = 0u) {
   InterlockedExchange(&g_hunex_gge_lookup_worker_selected_failure,
                       static_cast<LONG>(selected_failure));
@@ -438,7 +438,7 @@ void SetHunexGgeLookupWorkerTraceState(
 }
 
 void PublishHunexGgeLookupGateDiagnostics(uint32_t gate_mask) {
-  auto* trace = &FushiHunexGgeTraceV3;
+  auto* trace = &MyComicHunexGgeTraceV3;
   InterlockedExchange(
       reinterpret_cast<volatile LONG*>(&trace->lookup_gate_mask),
       static_cast<LONG>(gate_mask));
@@ -458,11 +458,11 @@ void PublishHunexGgeLookupGateDiagnostics(uint32_t gate_mask) {
 }
 
 void StampHunexGgeBodySubmitLookupDiagnostics(
-    fushi_voice_hook::HunexGgeTraceEvent* event) {
+    my_comic_voice_hook::HunexGgeTraceEvent* event) {
   if (event == nullptr) return;
   event->lookup_gate_mask = static_cast<uint32_t>(InterlockedCompareExchange(
       reinterpret_cast<volatile LONG*>(
-          &FushiHunexGgeTraceV3.lookup_gate_mask),
+          &MyComicHunexGgeTraceV3.lookup_gate_mask),
       0, 0));
   event->capture_quarantine_reason = static_cast<uint32_t>(
       g_hunex_gge_capture_bridge.quarantine_reason());
@@ -471,9 +471,9 @@ void StampHunexGgeBodySubmitLookupDiagnostics(
   event->capture_quarantine_conflicting_thread_id =
       g_hunex_gge_capture_bridge.quarantine_conflicting_thread_id();
   if (event->capture_quarantine_reason !=
-      fushi_voice_hook::kHunexGgeTraceCaptureQuarantineNone) {
+      my_comic_voice_hook::kHunexGgeTraceCaptureQuarantineNone) {
     event->lookup_gate_mask |=
-        fushi_voice_hook::kHunexGgeTraceLookupCaptureQuarantined;
+        my_comic_voice_hook::kHunexGgeTraceLookupCaptureQuarantined;
   }
 }
 
@@ -490,25 +490,25 @@ uint32_t HunexGgeRva(uintptr_t address) {
 uint64_t ReadStableHunexGgeTextWindowThroughSeq() {
   if (g_header == nullptr)
     return 0u;
-  const uint64_t before = fushi_voice_hook::AtomicLoadPreview64(
+  const uint64_t before = my_comic_voice_hook::AtomicLoadPreview64(
       &g_header->text_write_count);
   MemoryBarrier();
-  const uint64_t after = fushi_voice_hook::AtomicLoadPreview64(
+  const uint64_t after = my_comic_voice_hook::AtomicLoadPreview64(
       &g_header->text_write_count);
   return before != 0u && before == after ? after : 0u;
 }
 
 bool IsHunexGgeCaptureMutationAdmitted() {
   return !g_stop && g_header != nullptr &&
-         fushi_voice_hook::HasLookupRegion(g_header) &&
+         my_comic_voice_hook::HasLookupRegion(g_header) &&
          g_header->lookup_enabled != 0u &&
          InterlockedCompareExchange(
              &g_hunex_gge_capture_mutation_admitted, 0, 0) != 0 &&
          !g_hunex_gge_capture_bridge.quarantined();
 }
 
-void PublishHunexGgeTrace(fushi_voice_hook::HunexGgeTraceEvent event) {
-  auto* trace = &FushiHunexGgeTraceV3;
+void PublishHunexGgeTrace(my_comic_voice_hook::HunexGgeTraceEvent event) {
+  auto* trace = &MyComicHunexGgeTraceV3;
   // The exported v3 event keeps sequence at the front for a fixed cross-arch
   // layout.  Serialize writers without waiting, then advance next_sequence
   // only after the complete slot is visible; a contending renderer/input
@@ -561,7 +561,7 @@ bool ReadHunexGgeCpuSurfaceIdentity(const void* descriptor,
 // BUG-2135：在上传 wrapper 对象前 0x200 字节里找出「指向 sane CPU 表面」的指针槽。
 // 纯观测，SEH 兜底，命中即记录偏移与尺寸；最多记 4 个。
 void ScanHunexGgeUploadDescriptorOffsets(void* wrapper) {
-  auto* trace = &FushiHunexGgeTraceV3;
+  auto* trace = &MyComicHunexGgeTraceV3;
   const auto* bytes = static_cast<const uint8_t*>(wrapper);
   for (uint32_t offset = 0u; offset + sizeof(void*) <= 0x200u;
        offset += sizeof(void*)) {
@@ -604,14 +604,14 @@ struct HunexGgePendingQuad;
 // BUG-2135：待定正文行活着时记录 quad 的纹理尺寸与顶点包围盒（最多 4 条）。只观测。
 void RecordHunexGgeStoryQuad(const HunexGgePendingQuad& quad) {
   InterlockedIncrement64(reinterpret_cast<volatile LONG64*>(
-      &FushiHunexGgeTraceV3.quad_reached_record));
+      &MyComicHunexGgeTraceV3.quad_reached_record));
   // 读**进程内发布副本**而不是 thread_local：quad 段不在封存字形的那条线程上。
   HunexGgePendingStoryCompose story;
   if (!ReadHunexGgePublishedStoryCompose(&story) || !story.active ||
       !IsFreshHunexGgeProjectionTick(story.sealed_tick, GetTickCount64())) {
     return;
   }
-  auto* trace = &FushiHunexGgeTraceV3;
+  auto* trace = &MyComicHunexGgeTraceV3;
   InterlockedIncrement64(
       reinterpret_cast<volatile LONG64*>(&trace->story_quad_seen));
   const uint32_t slot = static_cast<uint32_t>(InterlockedCompareExchange(
@@ -650,7 +650,7 @@ void RecordHunexGgeStoryQuad(const HunexGgePendingQuad& quad) {
 
 void RecordHunexGgePendingUploadDim(uint32_t width, uint32_t height) {
   if (width == 0u || height == 0u) return;
-  auto* trace = &FushiHunexGgeTraceV3;
+  auto* trace = &MyComicHunexGgeTraceV3;
   for (uint32_t index = 0u; index < 6u; ++index) {
     auto* w = reinterpret_cast<volatile LONG*>(
         &trace->pending_upload_dims[index * 2u]);
@@ -689,7 +689,7 @@ void RecordHunexGgeCompositorCallerRva(uintptr_t return_address) {
   const uintptr_t offset = return_address - module;
   if (offset > 0xFFFFFFFFull) return;
   const uint32_t rva = static_cast<uint32_t>(offset);
-  auto* trace = &FushiHunexGgeTraceV3;
+  auto* trace = &MyComicHunexGgeTraceV3;
   for (uint32_t index = 0u; index < 4u; ++index) {
     auto* slot = reinterpret_cast<volatile LONG*>(&trace->compositor_caller_rvas[index]);
     const LONG existing = InterlockedCompareExchange(slot, 0, 0);
@@ -711,9 +711,9 @@ void RecordHunexGgeCompositorCallerRva(uintptr_t return_address) {
 }
 
 void PublishHunexGgeProjectionDiagnostic(
-    fushi_voice_hook::HunexGgeTraceEvent event,
-    fushi_voice_hook::HunexGgeProjectionTraceStage stage,
-    fushi_voice_hook::HunexGgeProjectionTraceFailure failure) {
+    my_comic_voice_hook::HunexGgeTraceEvent event,
+    my_comic_voice_hook::HunexGgeProjectionTraceStage stage,
+    my_comic_voice_hook::HunexGgeProjectionTraceFailure failure) {
   const uint32_t stage_value = static_cast<uint32_t>(stage);
   const int32_t failure_value = static_cast<int32_t>(failure);
   if (event.story_line_base == 0u || event.story_line_hash == 0u ||
@@ -733,7 +733,7 @@ void PublishHunexGgeProjectionDiagnostic(
   if ((emitted & failure_bit) != 0u) return;
   emitted |= failure_bit;
   event.kind = static_cast<uint32_t>(
-      fushi_voice_hook::HunexGgeTraceKind::kProjectionDiagnostic);
+      my_comic_voice_hook::HunexGgeTraceKind::kProjectionDiagnostic);
   event.arg7 = stage_value;
   event.result = failure_value;
   PublishHunexGgeTrace(event);
@@ -752,7 +752,7 @@ uint32_t HunexGgeContainingFunctionRva(uintptr_t address) {
 }
 
 bool CaptureHunexGgeViewportTransform(
-    fushi_voice_hook::HunexGgeTraceEvent* event) {
+    my_comic_voice_hook::HunexGgeTraceEvent* event) {
   if (event == nullptr || g_hunex_gge_anchors.viewport_rect == 0u ||
       g_hunex_gge_anchors.scale_x == 0u ||
       g_hunex_gge_anchors.scale_y == 0u) {
@@ -782,7 +782,7 @@ bool CaptureHunexGgeViewportTransform(
       std::memcpy(&event->scale_y_bits, &scale_y,
                   sizeof(event->scale_y_bits));
       event->evidence_flags |=
-          fushi_voice_hook::kHunexGgeTraceEvidenceViewportTransformRead;
+          my_comic_voice_hook::kHunexGgeTraceEvidenceViewportTransformRead;
       valid = true;
     }
   } __except (EXCEPTION_EXECUTE_HANDLER) {
@@ -797,30 +797,30 @@ bool ReadHunexGgeStoryLine(uintptr_t line_base, uint16_t* copied,
   if (line_base == 0u || copied == nullptr || units == nullptr ||
       hash == nullptr ||
       copied_capacity <
-          fushi_voice_hook::hunex_lookup::kBodySubmitMaxLineUnits) {
+          my_comic_voice_hook::hunex_lookup::kBodySubmitMaxLineUnits) {
     return false;
   }
   *units = 0u;
   *hash = 0u;
   bool terminated = false;
   __try {
-    terminated = fushi_voice_hook::hunex_lookup::
+    terminated = my_comic_voice_hook::hunex_lookup::
         CopyBoundedNullTerminatedUtf16(
             reinterpret_cast<const uint16_t*>(line_base),
-            fushi_voice_hook::hunex_lookup::kBodySubmitMaxLineUnits,
+            my_comic_voice_hook::hunex_lookup::kBodySubmitMaxLineUnits,
             copied, copied_capacity, units);
   } __except (EXCEPTION_EXECUTE_HANDLER) {
     terminated = false;
   }
   if (!terminated) return false;
-  *hash = fushi_voice_hook::hunex_lookup::HashUtf16Units(copied, *units);
+  *hash = my_comic_voice_hook::hunex_lookup::HashUtf16Units(copied, *units);
   return *units != 0u && *hash != 0u;
 }
 
 bool CaptureHunexGgeStoryLine(
     uintptr_t line_base, uint16_t* copied, size_t copied_capacity,
     uint32_t* units, uint64_t* hash,
-    fushi_voice_hook::HunexGgeTraceEvent* event) {
+    my_comic_voice_hook::HunexGgeTraceEvent* event) {
   if (line_base == 0u || copied == nullptr || units == nullptr ||
       hash == nullptr || event == nullptr) {
     return false;
@@ -836,7 +836,7 @@ bool CaptureHunexGgeStoryLine(
   event->story_line_hash = *hash;
   event->story_line_units = *units;
   event->evidence_flags |=
-      fushi_voice_hook::kHunexGgeTraceEvidenceStoryLineBounded;
+      my_comic_voice_hook::kHunexGgeTraceEvidenceStoryLineBounded;
   return true;
 }
 
@@ -943,7 +943,7 @@ void CompleteHunexGgeSurfaceComposeContext(
   const ULONGLONG now = GetTickCount64();
   if (!completed.story.active) {
     if (completed.diagnostic_story.active) {
-      fushi_voice_hook::HunexGgeTraceEvent event;
+      my_comic_voice_hook::HunexGgeTraceEvent event;
       event.draw_sequence = completed.generation;
       event.text_hash = completed.line_this;
       event.draw_arg12_bits = completed.wrapper_destination;
@@ -952,12 +952,12 @@ void CompleteHunexGgeSurfaceComposeContext(
       event.story_line_hash = completed.diagnostic_story.raw_text_hash;
       event.draw_arg13 = completed.blend;
       PublishHunexGgeProjectionDiagnostic(
-          event, fushi_voice_hook::HunexGgeProjectionTraceStage::kWrapper,
+          event, my_comic_voice_hook::HunexGgeProjectionTraceStage::kWrapper,
           IsFreshHunexGgeProjectionTick(
               completed.diagnostic_story.sealed_tick, now)
-              ? fushi_voice_hook::HunexGgeProjectionTraceFailure::
+              ? my_comic_voice_hook::HunexGgeProjectionTraceFailure::
                     kWrapperDestinationUnreadable
-              : fushi_voice_hook::HunexGgeProjectionTraceFailure::
+              : my_comic_voice_hook::HunexGgeProjectionTraceFailure::
                     kWrapperStoryExpired);
     }
     return;
@@ -989,41 +989,41 @@ void CompleteHunexGgeSurfaceComposeContext(
     pending.updated_tick = now;
     g_hunex_gge_pending_surface_chain = pending;
   }
-  fushi_voice_hook::HunexGgeProjectionTraceFailure diagnostic_failure =
-      fushi_voice_hook::HunexGgeProjectionTraceFailure::kNone;
+  my_comic_voice_hook::HunexGgeProjectionTraceFailure diagnostic_failure =
+      my_comic_voice_hook::HunexGgeProjectionTraceFailure::kNone;
   if (completed.compositor_call_count == 0u) {
-    diagnostic_failure = fushi_voice_hook::HunexGgeProjectionTraceFailure::
+    diagnostic_failure = my_comic_voice_hook::HunexGgeProjectionTraceFailure::
         kCompositorNotObserved;
   } else if (completed.compositor_descriptor_count == 0u) {
-    diagnostic_failure = fushi_voice_hook::HunexGgeProjectionTraceFailure::
+    diagnostic_failure = my_comic_voice_hook::HunexGgeProjectionTraceFailure::
         kCompositorDescriptorUnreadable;
   } else if (completed.candidate_count == 0u) {
-    diagnostic_failure = fushi_voice_hook::HunexGgeProjectionTraceFailure::
+    diagnostic_failure = my_comic_voice_hook::HunexGgeProjectionTraceFailure::
         kCompositorStorySurfaceMismatch;
   } else if (completed.candidate_count != 1u) {
-    diagnostic_failure = fushi_voice_hook::HunexGgeProjectionTraceFailure::
+    diagnostic_failure = my_comic_voice_hook::HunexGgeProjectionTraceFailure::
         kCompositorCandidateAmbiguous;
   } else if (completed.blend == 0u &&
              CountHunexGgeOriginalSurfaceMatches(
                  completed, completed.candidate_destination) != 1u) {
-    diagnostic_failure = fushi_voice_hook::HunexGgeProjectionTraceFailure::
+    diagnostic_failure = my_comic_voice_hook::HunexGgeProjectionTraceFailure::
         kCompositorDestinationMismatch;
   } else if (completed.blend != 0u && completed.final_link_count == 0u) {
-    diagnostic_failure = fushi_voice_hook::HunexGgeProjectionTraceFailure::
+    diagnostic_failure = my_comic_voice_hook::HunexGgeProjectionTraceFailure::
         kCompositorFinalLinkMissing;
   } else if (completed.blend != 0u && completed.final_link_count != 1u) {
-    diagnostic_failure = fushi_voice_hook::HunexGgeProjectionTraceFailure::
+    diagnostic_failure = my_comic_voice_hook::HunexGgeProjectionTraceFailure::
         kCompositorFinalLinkAmbiguous;
   } else if (completed.blend != 0u &&
              CountHunexGgeOriginalSurfaceMatches(
                  completed, completed.final_destination) != 1u) {
-    diagnostic_failure = fushi_voice_hook::HunexGgeProjectionTraceFailure::
+    diagnostic_failure = my_comic_voice_hook::HunexGgeProjectionTraceFailure::
         kCompositorDestinationMismatch;
   } else if (!unique_chain || !IsSaneHunexGgeCpuSurface(final_surface)) {
-    diagnostic_failure = fushi_voice_hook::HunexGgeProjectionTraceFailure::
+    diagnostic_failure = my_comic_voice_hook::HunexGgeProjectionTraceFailure::
         kCompositorFinalSurfaceInvalid;
   }
-  fushi_voice_hook::HunexGgeTraceEvent diagnostic;
+  my_comic_voice_hook::HunexGgeTraceEvent diagnostic;
   diagnostic.draw_sequence = completed.generation;
   diagnostic.text_hash = completed.line_this;
   diagnostic.draw_arg12_bits = completed.wrapper_destination;
@@ -1042,12 +1042,12 @@ void CompleteHunexGgeSurfaceComposeContext(
       HunexGgeRva(g_hunex_gge_anchors.surface_compositor);
   if (completed.compositor_call_count != 0u) {
     diagnostic.evidence_flags |=
-        fushi_voice_hook::kHunexGgeTraceEvidenceSurfaceComposeGraph;
+        my_comic_voice_hook::kHunexGgeTraceEvidenceSurfaceComposeGraph;
   }
   if (completed.destinations_read ||
       completed.compositor_descriptor_count != 0u) {
     diagnostic.evidence_flags |=
-        fushi_voice_hook::kHunexGgeTraceEvidenceSurfaceDescriptorsRead;
+        my_comic_voice_hook::kHunexGgeTraceEvidenceSurfaceDescriptorsRead;
   }
   std::memcpy(diagnostic.descriptor_words,
               completed.original_destination_a.words,
@@ -1057,7 +1057,7 @@ void CompleteHunexGgeSurfaceComposeContext(
               sizeof(completed.original_destination_b.words));
   PublishHunexGgeProjectionDiagnostic(
       diagnostic,
-      fushi_voice_hook::HunexGgeProjectionTraceStage::kCompositor,
+      my_comic_voice_hook::HunexGgeProjectionTraceStage::kCompositor,
       diagnostic_failure);
   if (completed.candidate_count != 0u ||
       !IsFreshHunexGgeProjectionTick(completed.story.sealed_tick, now)) {
@@ -1260,7 +1260,7 @@ bool SolveHunexGgeAffineProjection(const HunexGgeProjectionEvidence& evidence,
 // 1006/0.931481=1080。
 bool ReadHunexGgeDesignSize(uint32_t* design_w, uint32_t* design_h) {
   if (design_w == nullptr || design_h == nullptr) return false;
-  fushi_voice_hook::HunexGgeTraceEvent probe;
+  my_comic_voice_hook::HunexGgeTraceEvent probe;
   if (!CaptureHunexGgeViewportTransform(&probe)) return false;
   const double width = static_cast<double>(probe.viewport_right) -
                        static_cast<double>(probe.viewport_left);
@@ -1289,10 +1289,10 @@ bool ReadHunexGgeDesignSize(uint32_t* design_w, uint32_t* design_h) {
 // client = (layer + origin) * client / design —— 该式已在两种窗口尺寸 × 三条行上实测成立。
 // 不依赖 sprite draw 那条证据链（真机已证明它在 WoH 正文上五段全灭）。
 bool TransformHunexGgeProjectionByLayerOrigin(
-    fushi_voice_hook::hunex_lookup_core::RubyTextProjection* projection,
+    my_comic_voice_hook::hunex_lookup_core::RubyTextProjection* projection,
     int32_t origin_x, int32_t origin_y, uint32_t design_w, uint32_t design_h,
     int32_t client_width, int32_t client_height) {
-  namespace core = fushi_voice_hook::hunex_lookup_core;
+  namespace core = my_comic_voice_hook::hunex_lookup_core;
   if (projection == nullptr || projection->glyph_count == 0u ||
       design_w == 0u || design_h == 0u || client_width <= 0 ||
       client_height <= 0) {
@@ -1329,8 +1329,8 @@ bool TransformHunexGgeProjectionByLayerOrigin(
 bool TransformHunexGgeProjectionToClient(
     const HunexGgeProjectionEvidence& evidence,
     const HunexGgeAffineProjection& transform,
-    fushi_voice_hook::hunex_lookup_core::RubyTextProjection* projection) {
-  namespace core = fushi_voice_hook::hunex_lookup_core;
+    my_comic_voice_hook::hunex_lookup_core::RubyTextProjection* projection) {
+  namespace core = my_comic_voice_hook::hunex_lookup_core;
   if (projection == nullptr || projection->glyph_count == 0u ||
       !IsSaneHunexGgeCpuSurface(evidence.surface) ||
       evidence.viewport_width <= 0 || evidence.viewport_height <= 0 ||
@@ -1433,17 +1433,17 @@ bool TransformHunexGgeProjectionToClient(
 }
 
 bool BuildHunexGgeClientProjection(
-    const fushi_voice_hook::hunex_capture_bridge::TraversalSnapshot& snapshot,
+    const my_comic_voice_hook::hunex_capture_bridge::TraversalSnapshot& snapshot,
     int32_t client_width, int32_t client_height,
-    fushi_voice_hook::hunex_lookup_core::RubyTextProjection* projection) {
-  namespace bridge = fushi_voice_hook::hunex_capture_bridge;
-  namespace core = fushi_voice_hook::hunex_lookup_core;
+    my_comic_voice_hook::hunex_lookup_core::RubyTextProjection* projection) {
+  namespace bridge = my_comic_voice_hook::hunex_capture_bridge;
+  namespace core = my_comic_voice_hook::hunex_lookup_core;
   // BUG-2134：本函数每个拒绝点原本都是裸 return false，worker 侧整段无诊断。这里补一个
   // 只负责报点的闭包：身份取自 snapshot（发布器要求 story_line_base/hash 非 0），
   // 判据与控制流一字未动。
   const auto reject =
-      [&](fushi_voice_hook::HunexGgeProjectionTraceFailure failure) {
-        fushi_voice_hook::HunexGgeTraceEvent event;
+      [&](my_comic_voice_hook::HunexGgeProjectionTraceFailure failure) {
+        my_comic_voice_hook::HunexGgeTraceEvent event;
         event.story_line_base = snapshot.story_thread_address;
         event.story_line_hash = snapshot.raw_text_hash;
         event.draw_sequence = snapshot.epoch;
@@ -1452,7 +1452,7 @@ bool BuildHunexGgeClientProjection(
         event.glyph_ordinal = snapshot.glyph_count;
         event.draw_arg13 = snapshot.raw_text_units;
         PublishHunexGgeProjectionDiagnostic(
-            event, fushi_voice_hook::HunexGgeProjectionTraceStage::kWorker,
+            event, my_comic_voice_hook::HunexGgeProjectionTraceStage::kWorker,
             failure);
         return false;
       };
@@ -1460,7 +1460,7 @@ bool BuildHunexGgeClientProjection(
       snapshot.raw_text_units > core::kTextCapacity ||
       snapshot.glyph_count == 0u ||
       snapshot.glyph_count > core::kGlyphCapacity) {
-    return reject(fushi_voice_hook::HunexGgeProjectionTraceFailure::
+    return reject(my_comic_voice_hook::HunexGgeProjectionTraceFailure::
                       kWorkerInputShapeRejected);
   }
   std::array<char16_t, core::kTextCapacity> raw_text = {};
@@ -1482,7 +1482,7 @@ bool BuildHunexGgeClientProjection(
   if (!core::ProjectRubyText(raw_text.data(), snapshot.raw_text_units,
                              raw_glyphs.data(), snapshot.glyph_count,
                              projection)) {
-    return reject(fushi_voice_hook::HunexGgeProjectionTraceFailure::
+    return reject(my_comic_voice_hook::HunexGgeProjectionTraceFailure::
                       kWorkerRubyProjectionRejected);
   }
   // 九个子条件拆开报点：它们指向的排障方向完全不同——没有证据说明 sprite draw 那一段
@@ -1550,20 +1550,20 @@ bool BuildHunexGgeClientProjection(
     // 单字成行的没有分辨力（任何一小块高光都能凑出同样的宽度），不拿去求解。
     if (best_inked < 4u) has_bounds = false;
     if (has_bounds) {
-      fushi_voice_hook::PublishLookupLayerLine(
+      my_comic_voice_hook::PublishLookupLayerLine(
           g_header, design_w, design_h, projection->glyph_count, line_left,
           line_top, line_right, line_bottom);
     }
     int32_t origin_x = 0, origin_y = 0;
     if (has_bounds &&
-        fushi_voice_hook::ReadLookupLayerOrigin(g_header, &origin_x,
+        my_comic_voice_hook::ReadLookupLayerOrigin(g_header, &origin_x,
                                                 &origin_y)) {
       if (TransformHunexGgeProjectionByLayerOrigin(
               projection, origin_x, origin_y, design_w, design_h,
               client_width, client_height)) {
         return true;
       }
-      return reject(fushi_voice_hook::HunexGgeProjectionTraceFailure::
+      return reject(my_comic_voice_hook::HunexGgeProjectionTraceFailure::
                         kWorkerClientTransformRejected);
     }
   }
@@ -1572,35 +1572,35 @@ bool BuildHunexGgeClientProjection(
   if (!ReadHunexGgeProjectionEvidence(&evidence) ||
       evidence.generation == 0u || evidence.draw_sequence == 0u ||
       evidence.texture == 0u) {
-    return reject(fushi_voice_hook::HunexGgeProjectionTraceFailure::
+    return reject(my_comic_voice_hook::HunexGgeProjectionTraceFailure::
                       kWorkerEvidenceUnavailable);
   }
   if (evidence.story_thread_address != snapshot.story_thread_address ||
       evidence.raw_text_hash != snapshot.raw_text_hash) {
-    return reject(fushi_voice_hook::HunexGgeProjectionTraceFailure::
+    return reject(my_comic_voice_hook::HunexGgeProjectionTraceFailure::
                       kWorkerEvidenceStoryMismatch);
   }
   if (evidence.render_thread_id != snapshot.render_thread_id) {
-    return reject(fushi_voice_hook::HunexGgeProjectionTraceFailure::
+    return reject(my_comic_voice_hook::HunexGgeProjectionTraceFailure::
                       kWorkerEvidenceThreadMismatch);
   }
   if (evidence.client_width != client_width ||
       evidence.client_height != client_height) {
-    return reject(fushi_voice_hook::HunexGgeProjectionTraceFailure::
+    return reject(my_comic_voice_hook::HunexGgeProjectionTraceFailure::
                       kWorkerEvidenceClientMismatch);
   }
   if (!IsFreshHunexGgeProjectionTick(evidence.published_tick,
                                      GetTickCount64())) {
     return reject(
-        fushi_voice_hook::HunexGgeProjectionTraceFailure::kWorkerEvidenceStale);
+        my_comic_voice_hook::HunexGgeProjectionTraceFailure::kWorkerEvidenceStale);
   }
   HunexGgeAffineProjection transform;
   if (!SolveHunexGgeAffineProjection(evidence, &transform)) {
     return reject(
-        fushi_voice_hook::HunexGgeProjectionTraceFailure::kWorkerAffineRejected);
+        my_comic_voice_hook::HunexGgeProjectionTraceFailure::kWorkerAffineRejected);
   }
   if (!TransformHunexGgeProjectionToClient(evidence, transform, projection)) {
-    return reject(fushi_voice_hook::HunexGgeProjectionTraceFailure::
+    return reject(my_comic_voice_hook::HunexGgeProjectionTraceFailure::
                       kWorkerClientTransformRejected);
   }
   return true;
@@ -1627,7 +1627,7 @@ bool HasFreshHunexGgeProjectionEvidenceForRetain() {
 }
 
 bool IsSameHunexGgeMatchedRawLine(
-    const fushi_voice_hook::hunex_capture_bridge::TraversalSnapshot& snapshot,
+    const my_comic_voice_hook::hunex_capture_bridge::TraversalSnapshot& snapshot,
     uint64_t selected_thread_id) {
   return selected_thread_id != 0u &&
          selected_thread_id == g_hunex_gge_lookup_last_selected_thread_id &&
@@ -1641,7 +1641,7 @@ bool IsSameHunexGgeMatchedRawLine(
 }
 
 void RememberHunexGgeMatchedRawLine(
-    const fushi_voice_hook::hunex_capture_bridge::TraversalSnapshot& snapshot,
+    const my_comic_voice_hook::hunex_capture_bridge::TraversalSnapshot& snapshot,
     uint64_t selected_thread_id, uint64_t selected_text_seq) {
   g_hunex_gge_lookup_last_selected_thread_id = selected_thread_id;
   g_hunex_gge_lookup_last_selected_text_seq = selected_text_seq;
@@ -1685,7 +1685,7 @@ HunexGgeLookupPointerSample SampleHunexGgeLookupPointer() {
 
 void CopyHunexGgeGlyphEvidence(
     const HunexGgeGlyphEvidence& source,
-    fushi_voice_hook::HunexGgeTraceEvent* event) {
+    my_comic_voice_hook::HunexGgeTraceEvent* event) {
   if (event == nullptr || !source.valid) return;
   event->glyph_calls_since_render = source.calls_since_render;
   event->related_caller_rva = source.caller_rva;
@@ -1753,7 +1753,7 @@ void Detour_HunexGgeDrawText(
       text_object, &current.text_hash, &current.text_units,
       &current.visible_units);
   current.draw_sequence = static_cast<uint64_t>(InterlockedIncrement64(
-      reinterpret_cast<volatile LONG64*>(&FushiHunexGgeTraceV3.draw_calls)));
+      reinterpret_cast<volatile LONG64*>(&MyComicHunexGgeTraceV3.draw_calls)));
   current.arg7 = arg7;
   current.x = x;
   current.y = y;
@@ -1769,9 +1769,9 @@ void Detour_HunexGgeDrawText(
   }
   g_hunex_gge_draw_context = current;
   if (current.active) {
-    fushi_voice_hook::HunexGgeTraceEvent event;
+    my_comic_voice_hook::HunexGgeTraceEvent event;
     event.kind = static_cast<uint32_t>(
-        fushi_voice_hook::HunexGgeTraceKind::kDraw);
+        my_comic_voice_hook::HunexGgeTraceKind::kDraw);
     event.draw_sequence = current.draw_sequence;
     event.text_hash = current.text_hash;
     std::memcpy(&event.draw_arg12_bits, &arg12,
@@ -1787,7 +1787,7 @@ void Detour_HunexGgeDrawText(
     event.alignment_mode = current.alignment_mode;
     if (current.alignment_mode_read) {
       event.evidence_flags |=
-          fushi_voice_hook::kHunexGgeTraceEvidenceAlignmentModeRead;
+          my_comic_voice_hook::kHunexGgeTraceEvidenceAlignmentModeRead;
     }
     CaptureHunexGgeViewportTransform(&event);
     PublishHunexGgeTrace(event);
@@ -1803,7 +1803,7 @@ void Detour_HunexGgeGlyph(void* descriptor, void* output, uint32_t scalar,
       reinterpret_cast<uintptr_t>(_ReturnAddress());
   g_orig_hunex_gge_glyph(descriptor, output, scalar, raster, arg5, arg6);
   InterlockedIncrement64(reinterpret_cast<volatile LONG64*>(
-      &FushiHunexGgeTraceV3.glyph_calls));
+      &MyComicHunexGgeTraceV3.glyph_calls));
   const uint32_t scalar_width = scalar > 0xffffu ? 2u : 1u;
 
   HunexGgeGlyphEvidence observed;
@@ -1831,19 +1831,19 @@ void Detour_HunexGgeGlyph(void* descriptor, void* output, uint32_t scalar,
   g_hunex_gge_recent_glyph = observed;
 
   auto& context = g_hunex_gge_draw_context;
-  fushi_voice_hook::HunexGgeTraceKind kind;
+  my_comic_voice_hook::HunexGgeTraceKind kind;
   const bool first =
       return_address == g_hunex_gge_anchors.direct_first_glyph_return;
   const bool second =
       return_address == g_hunex_gge_anchors.direct_second_glyph_return;
   if (context.active && first) {
-    kind = fushi_voice_hook::HunexGgeTraceKind::kGlyphDirectFirst;
+    kind = my_comic_voice_hook::HunexGgeTraceKind::kGlyphDirectFirst;
   } else if (context.active && second) {
-    kind = fushi_voice_hook::HunexGgeTraceKind::kGlyphDirectSecond;
+    kind = my_comic_voice_hook::HunexGgeTraceKind::kGlyphDirectSecond;
   } else {
-    fushi_voice_hook::HunexGgeTraceEvent event;
+    my_comic_voice_hook::HunexGgeTraceEvent event;
     event.kind = static_cast<uint32_t>(
-        fushi_voice_hook::HunexGgeTraceKind::kGlyphUncorrelated);
+        my_comic_voice_hook::HunexGgeTraceKind::kGlyphUncorrelated);
     event.caller_rva = HunexGgeRva(return_address);
     event.scalar_width = scalar_width;
     event.glyph_calls_since_render = observed.calls_since_render;
@@ -1859,7 +1859,7 @@ void Detour_HunexGgeGlyph(void* descriptor, void* output, uint32_t scalar,
     return;
   }
   const auto position =
-      fushi_voice_hook::hunex_lookup::ObserveGlyphTraceCall(
+      my_comic_voice_hook::hunex_lookup::ObserveGlyphTraceCall(
           &context.glyph_trace_cursor,
           first, scalar_width);
   if (!position.valid) return;
@@ -1872,7 +1872,7 @@ void Detour_HunexGgeGlyph(void* descriptor, void* output, uint32_t scalar,
              context.pending_glyph.calls_since_render != UINT32_MAX) {
     ++context.pending_glyph.calls_since_render;
   }
-  fushi_voice_hook::HunexGgeTraceEvent event;
+  my_comic_voice_hook::HunexGgeTraceEvent event;
   event.kind = static_cast<uint32_t>(kind);
   event.draw_sequence = context.draw_sequence;
   event.text_hash = context.text_hash;
@@ -1889,7 +1889,7 @@ void Detour_HunexGgeGlyph(void* descriptor, void* output, uint32_t scalar,
   event.alignment_mode = context.alignment_mode;
   if (context.alignment_mode_read) {
     event.evidence_flags |=
-        fushi_voice_hook::kHunexGgeTraceEvidenceAlignmentModeRead;
+        my_comic_voice_hook::kHunexGgeTraceEvidenceAlignmentModeRead;
   }
   if (observed.valid) {
     std::memcpy(event.descriptor_words, observed.descriptor_words,
@@ -1908,7 +1908,7 @@ void* Detour_HunexGgeRenderItem(void* arg1, void* arg2, void* arg3,
   const uintptr_t return_address =
       reinterpret_cast<uintptr_t>(_ReturnAddress());
   InterlockedIncrement64(reinterpret_cast<volatile LONG64*>(
-      &FushiHunexGgeTraceV3.render_item_calls));
+      &MyComicHunexGgeTraceV3.render_item_calls));
 
   auto& context = g_hunex_gge_draw_context;
   const bool exact_draw =
@@ -1924,11 +1924,11 @@ void* Detour_HunexGgeRenderItem(void* arg1, void* arg2, void* arg3,
   const bool capture_admitted_at_entry =
       body_submit && IsHunexGgeCaptureMutationAdmitted();
 
-  fushi_voice_hook::HunexGgeTraceEvent event;
-  fushi_voice_hook::hunex_lookup::BodySubmitCallerFrameDiagnostic
+  my_comic_voice_hook::HunexGgeTraceEvent event;
+  my_comic_voice_hook::hunex_lookup::BodySubmitCallerFrameDiagnostic
       body_frame;
   std::array<uint16_t,
-             fushi_voice_hook::hunex_capture_bridge::kTextCapacity>
+             my_comic_voice_hook::hunex_capture_bridge::kTextCapacity>
       body_raw_text;
   uint32_t body_raw_text_units = 0u;
   uint64_t body_raw_text_hash = 0u;
@@ -1936,11 +1936,11 @@ void* Detour_HunexGgeRenderItem(void* arg1, void* arg2, void* arg3,
   bool body_frame_ready = false;
   event.kind = static_cast<uint32_t>(
       exact_draw
-          ? fushi_voice_hook::HunexGgeTraceKind::kRenderItemCorrelated
+          ? my_comic_voice_hook::HunexGgeTraceKind::kRenderItemCorrelated
           : body_submit
-                ? fushi_voice_hook::HunexGgeTraceKind::
+                ? my_comic_voice_hook::HunexGgeTraceKind::
                       kRenderItemBodyUncorrelated
-                : fushi_voice_hook::HunexGgeTraceKind::
+                : my_comic_voice_hook::HunexGgeTraceKind::
                       kRenderItemUncorrelated);
   event.caller_rva = HunexGgeRva(return_address);
   if (exact_draw) {
@@ -1955,20 +1955,20 @@ void* Detour_HunexGgeRenderItem(void* arg1, void* arg2, void* arg3,
     event.alignment_mode = context.alignment_mode;
     if (context.alignment_mode_read) {
       event.evidence_flags |=
-          fushi_voice_hook::kHunexGgeTraceEvidenceAlignmentModeRead;
+          my_comic_voice_hook::kHunexGgeTraceEvidenceAlignmentModeRead;
     }
     event.evidence_flags |=
-        fushi_voice_hook::kHunexGgeTraceEvidenceGlyphCallGraphCorrelated;
+        my_comic_voice_hook::kHunexGgeTraceEvidenceGlyphCallGraphCorrelated;
     CopyHunexGgeGlyphEvidence(context.pending_glyph, &event);
   } else if (g_hunex_gge_recent_glyph.valid) {
     event.evidence_flags |=
-        fushi_voice_hook::kHunexGgeTraceEvidenceGlyphProximityObserved;
+        my_comic_voice_hook::kHunexGgeTraceEvidenceGlyphProximityObserved;
     CopyHunexGgeGlyphEvidence(g_hunex_gge_recent_glyph, &event);
   }
 
   if (body_submit) {
     event.evidence_flags |=
-        fushi_voice_hook::kHunexGgeTraceEvidenceBodySubmitGraph;
+        my_comic_voice_hook::kHunexGgeTraceEvidenceBodySubmitGraph;
     __try {
       // The scanner admitted the wrapper shape and its single call to this
       // mover.  First advance from the mover return slot to the body-wrapper
@@ -1977,7 +1977,7 @@ void* Detour_HunexGgeRenderItem(void* arg1, void* arg2, void* arg3,
           static_cast<const uint8_t*>(_AddressOfReturnAddress());
       const auto* wrapper_return_slot =
           mover_return_slot +
-          fushi_voice_hook::hunex_lookup::
+          my_comic_voice_hook::hunex_lookup::
               kBodySubmitWrapperReturnSlotOffset;
       const uintptr_t outer_return =
           *reinterpret_cast<const uintptr_t*>(wrapper_return_slot);
@@ -1986,20 +1986,20 @@ void* Detour_HunexGgeRenderItem(void* arg1, void* arg2, void* arg3,
       if (event.outer_caller_rva != 0u &&
           event.outer_function_rva != 0u) {
         event.evidence_flags |=
-            fushi_voice_hook::kHunexGgeTraceEvidenceOuterCallerRead;
-        fushi_voice_hook::hunex_lookup::
+            my_comic_voice_hook::kHunexGgeTraceEvidenceOuterCallerRead;
+        my_comic_voice_hook::hunex_lookup::
             BodySubmitCallerFrameDiagnostic frame;
-        if (fushi_voice_hook::hunex_lookup::
+        if (my_comic_voice_hook::hunex_lookup::
                 ReadBodySubmitCallerFrameDiagnostic(
                     wrapper_return_slot,
-                    fushi_voice_hook::hunex_lookup::
+                    my_comic_voice_hook::hunex_lookup::
                         kBodySubmitCallerFrameReadBytes,
                     &frame)) {
           event.story_scalar_present = frame.raw_scalar == 0u ? 0u : 1u;
           event.story_raw_utf16_index = frame.raw_utf16_index;
           event.story_consumed = frame.consumed;
           event.story_line_base = static_cast<uint64_t>(frame.line_base);
-          event.evidence_flags |= fushi_voice_hook::
+          event.evidence_flags |= my_comic_voice_hook::
               kHunexGgeTraceEvidenceStoryFrameSlotsRead;
           // BUG-2136：正文文本层原点探针。字形 render x/y 是文本层局部坐标
           // （1920x1080 逻辑单位），客户区映射 client = (render + origin) * client/(1920,1080)
@@ -2007,7 +2007,7 @@ void* Detour_HunexGgeRenderItem(void* arg1, void* arg2, void* arg3,
           // 字节与 render_item 另三个参数都已 dump 过、无候选；本轮改抄 body_submit 的
           // **调用帧窗口**（0x000..0x180，已知 0x78/0x7c/0x88/0xdc 四个槽都在其中，说明
           // 正文绘制状态就摊在这里）。只读、只抄一次、不参与任何几何判据。
-          if (FushiHunexGgeTraceV3.body_arg_captured == 0u) {
+          if (MyComicHunexGgeTraceV3.body_arg_captured == 0u) {
             uint32_t window[3][32] = {};
             bool copied = false;
             __try {
@@ -2018,9 +2018,9 @@ void* Detour_HunexGgeRenderItem(void* arg1, void* arg2, void* arg3,
             if (copied &&
                 InterlockedCompareExchange(
                     reinterpret_cast<volatile LONG*>(
-                        &FushiHunexGgeTraceV3.body_arg_captured),
+                        &MyComicHunexGgeTraceV3.body_arg_captured),
                     1, 0) == 0) {
-              std::memcpy(FushiHunexGgeTraceV3.body_arg_words, window,
+              std::memcpy(MyComicHunexGgeTraceV3.body_arg_words, window,
                           sizeof(window));
             }
           }
@@ -2057,13 +2057,13 @@ void* Detour_HunexGgeRenderItem(void* arg1, void* arg2, void* arg3,
               traversal_fence.raw_text_hash = body_raw_text_hash;
               traversal_fence.raw_text_units = body_raw_text_units;
               std::array<char16_t,
-                         fushi_voice_hook::hunex_lookup_core::kTextCapacity>
+                         my_comic_voice_hook::hunex_lookup_core::kTextCapacity>
                   parsed_raw_text = {};
               for (uint32_t index = 0u; index < body_raw_text_units; ++index) {
                 parsed_raw_text[index] =
                     static_cast<char16_t>(body_raw_text[index]);
               }
-              if (fushi_voice_hook::hunex_lookup_core::AnalyzeRawTextLayout(
+              if (my_comic_voice_hook::hunex_lookup_core::AnalyzeRawTextLayout(
                       parsed_raw_text.data(), body_raw_text_units,
                       &traversal_fence.raw_text_layout)) {
                 traversal_fence.raw_text_layout_valid = true;
@@ -2096,7 +2096,7 @@ void* Detour_HunexGgeRenderItem(void* arg1, void* arg2, void* arg3,
       std::memcpy(event.render_item_words, render_item,
                   sizeof(event.render_item_words));
       event.evidence_flags |=
-          fushi_voice_hook::kHunexGgeTraceEvidenceRenderItemPositionRead;
+          my_comic_voice_hook::kHunexGgeTraceEvidenceRenderItemPositionRead;
       render_item_read = true;
     }
   } __except (EXCEPTION_EXECUTE_HANDLER) {
@@ -2106,22 +2106,22 @@ void* Detour_HunexGgeRenderItem(void* arg1, void* arg2, void* arg3,
 
   if (body_submit && body_frame_ready && render_item_read &&
       IsHunexGgeCaptureMutationAdmitted()) {
-    fushi_voice_hook::hunex_lookup::BodyGlyphMetricDiagnostic glyph_metrics;
-    if (fushi_voice_hook::hunex_lookup::ReadBodyGlyphMetricDiagnostic(
+    my_comic_voice_hook::hunex_lookup::BodyGlyphMetricDiagnostic glyph_metrics;
+    if (my_comic_voice_hook::hunex_lookup::ReadBodyGlyphMetricDiagnostic(
             event.descriptor_words, _countof(event.descriptor_words),
             event.output_words, _countof(event.output_words),
             body_frame.raw_scalar, body_frame.consumed, event.scalar_width,
             &glyph_metrics)) {
-      event.evidence_flags |= fushi_voice_hook::
+      event.evidence_flags |= my_comic_voice_hook::
           kHunexGgeTraceEvidenceBodyGlyphMetricsMatched;
-      fushi_voice_hook::hunex_capture_bridge::LogicalRect rect;
+      my_comic_voice_hook::hunex_capture_bridge::LogicalRect rect;
       rect.x = event.render_x;
       rect.y = event.render_y;
       rect.width = static_cast<int32_t>(glyph_metrics.bitmap_width);
       rect.height = static_cast<int32_t>(glyph_metrics.bitmap_height);
       auto& traversal_fence = g_hunex_gge_body_traversal_fence;
       uint32_t visible_glyph_ordinal =
-          fushi_voice_hook::hunex_capture_bridge::kInvalidVisibleGlyphOrdinal;
+          my_comic_voice_hook::hunex_capture_bridge::kInvalidVisibleGlyphOrdinal;
       const uint32_t expected_visible_glyph_count =
           traversal_fence.raw_text_layout.visible_glyph_count;
       event.text_units = body_raw_text_units;
@@ -2129,7 +2129,7 @@ void* Detour_HunexGgeRenderItem(void* arg1, void* arg2, void* arg3,
       event.utf16_char_index = body_frame.raw_utf16_index;
       event.scalar_width = body_frame.consumed;
       if (traversal_fence.raw_text_layout_valid) {
-        event.evidence_flags |= fushi_voice_hook::
+        event.evidence_flags |= my_comic_voice_hook::
             kHunexGgeTraceEvidenceRawTextLayoutValid;
         const uint32_t ordinal =
             traversal_fence.next_visible_glyph_ordinal;
@@ -2140,7 +2140,7 @@ void* Detour_HunexGgeRenderItem(void* arg1, void* arg2, void* arg3,
               body_frame.consumed == expected.width &&
               body_frame.raw_scalar == expected.scalar) {
             visible_glyph_ordinal = ordinal;
-            event.evidence_flags |= fushi_voice_hook::
+            event.evidence_flags |= my_comic_voice_hook::
                 kHunexGgeTraceEvidenceRawTextTokenMatched;
           } else {
             traversal_fence.raw_text_layout_valid = false;
@@ -2158,11 +2158,11 @@ void* Detour_HunexGgeRenderItem(void* arg1, void* arg2, void* arg3,
           body_story_thread_address, 0u,
           visible_glyph_ordinal, expected_visible_glyph_count);
       if (capture_outcome.glyph_accepted) {
-        event.evidence_flags |= fushi_voice_hook::
+        event.evidence_flags |= my_comic_voice_hook::
             kHunexGgeTraceEvidenceCaptureGlyphAccepted;
         ++traversal_fence.next_visible_glyph_ordinal;
         const bool final_accepted_glyph =
-            visible_glyph_ordinal != fushi_voice_hook::hunex_capture_bridge::
+            visible_glyph_ordinal != my_comic_voice_hook::hunex_capture_bridge::
                                          kInvalidVisibleGlyphOrdinal &&
             expected_visible_glyph_count != 0u &&
             visible_glyph_ordinal + 1u == expected_visible_glyph_count;
@@ -2180,7 +2180,7 @@ void* Detour_HunexGgeRenderItem(void* arg1, void* arg2, void* arg3,
         }
       }
       if (capture_outcome.snapshot_published) {
-        event.evidence_flags |= fushi_voice_hook::
+        event.evidence_flags |= my_comic_voice_hook::
             kHunexGgeTraceEvidenceCaptureSnapshotPublished;
         HunexGgePendingStoryCompose pending;
         pending.active = true;
@@ -2199,7 +2199,7 @@ void* Detour_HunexGgeRenderItem(void* arg1, void* arg2, void* arg3,
           PublishHunexGgeStoryCompose(pending);
           InterlockedExchange(
               reinterpret_cast<volatile LONG*>(
-                  &FushiHunexGgeTraceV3.pending_upload_story_tid),
+                  &MyComicHunexGgeTraceV3.pending_upload_story_tid),
               static_cast<LONG>(pending.render_thread_id));
         } else {
           g_hunex_gge_pending_story_compose = {};
@@ -2207,7 +2207,7 @@ void* Detour_HunexGgeRenderItem(void* arg1, void* arg2, void* arg3,
         }
       }
       if (capture_outcome.quarantined) {
-        event.evidence_flags |= fushi_voice_hook::
+        event.evidence_flags |= my_comic_voice_hook::
             kHunexGgeTraceEvidenceCaptureQuarantined;
       }
     }
@@ -2253,7 +2253,7 @@ uint32_t Detour_HunexGgeSurfaceComposeWrapper(
   // BUG-2134：无条件调用计数。诊断事件只在能归属到语义行时才发，靠「零事件」
   // 无法分辨「从没被调用」与「调用了但当时没有待定故事行」。
   InterlockedIncrement64(reinterpret_cast<volatile LONG64*>(
-      &FushiHunexGgeTraceV3.surface_compose_wrapper_calls));
+      &MyComicHunexGgeTraceV3.surface_compose_wrapper_calls));
   const HunexGgeSurfaceComposeContext previous =
       g_hunex_gge_surface_compose_context;
   HunexGgeSurfaceComposeContext current;
@@ -2288,7 +2288,7 @@ uint32_t Detour_HunexGgeSurfaceCompose(
     uint32_t layout_selector, uint32_t node_filter) {
   // BUG-2134：无条件调用计数（同 wrapper）。
   InterlockedIncrement64(reinterpret_cast<volatile LONG64*>(
-      &FushiHunexGgeTraceV3.surface_compose_calls));
+      &MyComicHunexGgeTraceV3.surface_compose_calls));
   const HunexGgeSurfaceComposeContext previous =
       g_hunex_gge_surface_compose_context;
   // The admitted wrapper's non-zero path is the one legitimate nested entry:
@@ -2336,7 +2336,7 @@ uint32_t Detour_HunexGgeSurfaceCompositor(
     const void* source, uint32_t mode, uint32_t alpha) {
   // BUG-2134：无条件调用计数（同 wrapper）。
   InterlockedIncrement64(reinterpret_cast<volatile LONG64*>(
-      &FushiHunexGgeTraceV3.surface_compositor_calls));
+      &MyComicHunexGgeTraceV3.surface_compositor_calls));
   const uintptr_t return_address =
       reinterpret_cast<uintptr_t>(_ReturnAddress());
   RecordHunexGgeCompositorCallerRva(return_address);
@@ -2360,7 +2360,7 @@ uint32_t Detour_HunexGgeSurfaceCompositor(
     if (story.active && story.render_thread_id == GetCurrentThreadId() &&
         IsFreshHunexGgeProjectionTick(story.sealed_tick, now)) {
       InterlockedIncrement64(reinterpret_cast<volatile LONG64*>(
-          &FushiHunexGgeTraceV3.body_compose_attempts));
+          &MyComicHunexGgeTraceV3.body_compose_attempts));
       HunexGgeCpuSurfaceIdentity destination_identity;
       HunexGgeCpuSurfaceIdentity source_identity;
       const bool descriptors_ok =
@@ -2376,16 +2376,16 @@ uint32_t Detour_HunexGgeSurfaceCompositor(
           destination_ok && IsSaneHunexGgeCpuSurface(destination_identity);
       if (source_ok) {
         InterlockedIncrement64(reinterpret_cast<volatile LONG64*>(
-            &FushiHunexGgeTraceV3.body_compose_source_matches));
+            &MyComicHunexGgeTraceV3.body_compose_source_matches));
       }
       if (surface_ok) {
         InterlockedIncrement64(reinterpret_cast<volatile LONG64*>(
-            &FushiHunexGgeTraceV3.body_compose_published));
+            &MyComicHunexGgeTraceV3.body_compose_published));
         HunexGgePendingSurfaceChain pending;
         pending.active = true;
         pending.generation = static_cast<uint64_t>(InterlockedIncrement64(
             reinterpret_cast<volatile LONG64*>(
-                &FushiHunexGgeTraceV3.next_sequence)));
+                &MyComicHunexGgeTraceV3.next_sequence)));
         pending.story_thread_address = story.story_thread_address;
         pending.raw_text_hash = story.raw_text_hash;
         pending.render_thread_id = story.render_thread_id;
@@ -2393,7 +2393,7 @@ uint32_t Detour_HunexGgeSurfaceCompositor(
         pending.updated_tick = now;
         g_hunex_gge_pending_surface_chain = pending;
       } else {
-        fushi_voice_hook::HunexGgeTraceEvent reject;
+        my_comic_voice_hook::HunexGgeTraceEvent reject;
         reject.story_line_base = story.story_thread_address;
         reject.story_line_hash = story.raw_text_hash;
         // 目标落点与该行末字形矩形一并带出，「差多少」一眼可见。
@@ -2425,18 +2425,18 @@ uint32_t Detour_HunexGgeSurfaceCompositor(
         }
         PublishHunexGgeProjectionDiagnostic(
             reject,
-            fushi_voice_hook::HunexGgeProjectionTraceStage::kCompositor,
+            my_comic_voice_hook::HunexGgeProjectionTraceStage::kCompositor,
             !descriptors_ok
-                ? fushi_voice_hook::HunexGgeProjectionTraceFailure::
+                ? my_comic_voice_hook::HunexGgeProjectionTraceFailure::
                       kBodyComposeDescriptorUnreadable
                 : !source_ok
-                      ? fushi_voice_hook::HunexGgeProjectionTraceFailure::
+                      ? my_comic_voice_hook::HunexGgeProjectionTraceFailure::
                             kBodyComposeSourceMismatch
                       : !destination_ok
-                            ? fushi_voice_hook::
+                            ? my_comic_voice_hook::
                                   HunexGgeProjectionTraceFailure::
                                       kBodyComposeDestinationMismatch
-                            : fushi_voice_hook::
+                            : my_comic_voice_hook::
                                   HunexGgeProjectionTraceFailure::
                                       kBodyComposeSurfaceInsane);
       }
@@ -2483,11 +2483,11 @@ uint32_t Detour_HunexGgeSurfaceCompositor(
     ++context.compositor_call_count;
   }
 
-  fushi_voice_hook::HunexGgeTraceEvent event;
+  my_comic_voice_hook::HunexGgeTraceEvent event;
   bool descriptors_read = false;
   if (ordinal != 0u && destination != nullptr && source != nullptr) {
     event.kind = static_cast<uint32_t>(
-        fushi_voice_hook::HunexGgeTraceKind::kSurfaceCompose);
+        my_comic_voice_hook::HunexGgeTraceKind::kSurfaceCompose);
     event.draw_sequence = context.generation;
     event.text_hash = reinterpret_cast<uintptr_t>(destination);
     event.draw_arg12_bits = reinterpret_cast<uintptr_t>(source);
@@ -2504,7 +2504,7 @@ uint32_t Detour_HunexGgeSurfaceCompositor(
     event.arg7 = mode;
     event.draw_arg13 = alpha;
     event.evidence_flags =
-        fushi_voice_hook::kHunexGgeTraceEvidenceSurfaceComposeGraph;
+        my_comic_voice_hook::kHunexGgeTraceEvidenceSurfaceComposeGraph;
     HunexGgeCpuSurfaceIdentity destination_identity;
     HunexGgeCpuSurfaceIdentity source_identity;
     descriptors_read = ReadHunexGgeCpuSurfaceIdentity(
@@ -2517,7 +2517,7 @@ uint32_t Detour_HunexGgeSurfaceCompositor(
                   sizeof(event.descriptor_words));
       std::memcpy(event.output_words, source_identity.words,
                   sizeof(destination_identity.words));
-      event.evidence_flags |= fushi_voice_hook::
+      event.evidence_flags |= my_comic_voice_hook::
           kHunexGgeTraceEvidenceSurfaceDescriptorsRead;
       if (context.story.active && ordinal <= 2u &&
           SameHunexGgeCpuSurface(source_identity,
@@ -2553,7 +2553,7 @@ uint32_t Detour_HunexGgeTextureUpload(void* wrapper, uint32_t flags) {
   // BUG-2134：无条件调用计数。诊断事件只在能归属到语义行时才发，靠「零事件」
   // 无法分辨「从没被调用」与「调用了但当时没有待定故事行」。
   InterlockedIncrement64(reinterpret_cast<volatile LONG64*>(
-      &FushiHunexGgeTraceV3.texture_upload_calls));
+      &MyComicHunexGgeTraceV3.texture_upload_calls));
   HunexGgeCpuSurfaceIdentity upload_surface;
   const void* descriptor = nullptr;
   bool descriptor_read = false;
@@ -2571,13 +2571,13 @@ uint32_t Detour_HunexGgeTextureUpload(void* wrapper, uint32_t flags) {
   // BUG-2135：无条件记录上传线程，与字形封存线程对照。pending story 是 thread_local，
   // 若两者不同，则上传侧永远看不到它——整条链的单线程连续性假设不成立。
   InterlockedExchange(reinterpret_cast<volatile LONG*>(
-                          &FushiHunexGgeTraceV3.pending_upload_caller_tid),
+                          &MyComicHunexGgeTraceV3.pending_upload_caller_tid),
                       static_cast<LONG>(GetCurrentThreadId()));
   // 描述符可读性与「待定正文行是否活着」都必须在描述符门**之外**计数，否则读不出
   // 描述符时会被误读成「没有上传发生在待定期」（BUG-2135）。
   InterlockedIncrement64(reinterpret_cast<volatile LONG64*>(
-      descriptor_read ? &FushiHunexGgeTraceV3.upload_descriptor_ok
-                      : &FushiHunexGgeTraceV3.upload_descriptor_fail));
+      descriptor_read ? &MyComicHunexGgeTraceV3.upload_descriptor_ok
+                      : &MyComicHunexGgeTraceV3.upload_descriptor_fail));
   {
     const HunexGgePendingStoryCompose& probe_story =
         g_hunex_gge_pending_story_compose;
@@ -2585,12 +2585,12 @@ uint32_t Detour_HunexGgeTextureUpload(void* wrapper, uint32_t flags) {
         IsFreshHunexGgeProjectionTick(probe_story.sealed_tick,
                                       GetTickCount64())) {
       InterlockedIncrement64(reinterpret_cast<volatile LONG64*>(
-          &FushiHunexGgeTraceV3.upload_with_active_story));
+          &MyComicHunexGgeTraceV3.upload_with_active_story));
       // 只在待定正文行活着时扫一次，避免热路径开销；找出真正承载 CPU 表面的槽位。
       if (!descriptor_read && wrapper != nullptr &&
           InterlockedCompareExchange(
               reinterpret_cast<volatile LONG*>(
-                  &FushiHunexGgeTraceV3.upload_desc_offset_count),
+                  &MyComicHunexGgeTraceV3.upload_desc_offset_count),
               0, 0) < 4) {
         ScanHunexGgeUploadDescriptorOffsets(wrapper);
       }
@@ -2605,12 +2605,12 @@ uint32_t Detour_HunexGgeTextureUpload(void* wrapper, uint32_t flags) {
     if (story.active &&
         IsFreshHunexGgeProjectionTick(story.sealed_tick, GetTickCount64())) {
       InterlockedIncrement64(reinterpret_cast<volatile LONG64*>(
-          &FushiHunexGgeTraceV3.pending_upload_any_thread));
+          &MyComicHunexGgeTraceV3.pending_upload_any_thread));
       InterlockedExchange(reinterpret_cast<volatile LONG*>(
-                              &FushiHunexGgeTraceV3.pending_upload_story_tid),
+                              &MyComicHunexGgeTraceV3.pending_upload_story_tid),
                           static_cast<LONG>(story.render_thread_id));
       InterlockedExchange(reinterpret_cast<volatile LONG*>(
-                              &FushiHunexGgeTraceV3.pending_upload_caller_tid),
+                              &MyComicHunexGgeTraceV3.pending_upload_caller_tid),
                           static_cast<LONG>(GetCurrentThreadId()));
       RecordHunexGgePendingUploadDim(upload_surface.words[1],
                                      upload_surface.words[2]);
@@ -2618,11 +2618,11 @@ uint32_t Detour_HunexGgeTextureUpload(void* wrapper, uint32_t flags) {
     if (story.active && story.render_thread_id == GetCurrentThreadId() &&
         IsFreshHunexGgeProjectionTick(story.sealed_tick, GetTickCount64())) {
       InterlockedIncrement64(reinterpret_cast<volatile LONG64*>(
-          &FushiHunexGgeTraceV3.glyph_texture_upload_attempts));
+          &MyComicHunexGgeTraceV3.glyph_texture_upload_attempts));
       if (SameHunexGgeCpuSurface(upload_surface,
                                  story.final_glyph_surface)) {
         InterlockedIncrement64(reinterpret_cast<volatile LONG64*>(
-            &FushiHunexGgeTraceV3.glyph_texture_upload_matches));
+            &MyComicHunexGgeTraceV3.glyph_texture_upload_matches));
       }
     }
   }
@@ -2643,7 +2643,7 @@ uint32_t Detour_HunexGgeTextureUpload(void* wrapper, uint32_t flags) {
     if (pending.active &&
         pending.render_thread_id == GetCurrentThreadId() &&
         IsFreshHunexGgeProjectionTick(pending.updated_tick, now)) {
-      fushi_voice_hook::HunexGgeTraceEvent event;
+      my_comic_voice_hook::HunexGgeTraceEvent event;
       event.draw_sequence = pending.generation;
       event.text_hash = reinterpret_cast<uintptr_t>(wrapper);
       event.story_line_base = pending.story_thread_address;
@@ -2653,16 +2653,16 @@ uint32_t Detour_HunexGgeTextureUpload(void* wrapper, uint32_t flags) {
       event.glyph_ordinal = flags;
       event.draw_arg13 = result;
       PublishHunexGgeProjectionDiagnostic(
-          event, fushi_voice_hook::HunexGgeProjectionTraceStage::kTexture,
-          fushi_voice_hook::HunexGgeProjectionTraceFailure::
+          event, my_comic_voice_hook::HunexGgeProjectionTraceStage::kTexture,
+          my_comic_voice_hook::HunexGgeProjectionTraceFailure::
               kTextureSurfaceMismatch);
     }
     return result;
   }
   const auto publish_texture_failure =
-      [&](fushi_voice_hook::HunexGgeProjectionTraceFailure failure,
+      [&](my_comic_voice_hook::HunexGgeProjectionTraceFailure failure,
           uintptr_t texture) {
-        fushi_voice_hook::HunexGgeTraceEvent event;
+        my_comic_voice_hook::HunexGgeTraceEvent event;
         event.draw_sequence = pending.generation;
         event.text_hash = reinterpret_cast<uintptr_t>(wrapper);
         event.draw_arg12_bits = texture;
@@ -2673,18 +2673,18 @@ uint32_t Detour_HunexGgeTextureUpload(void* wrapper, uint32_t flags) {
         event.glyph_ordinal = flags;
         event.draw_arg13 = result;
         event.evidence_flags =
-            fushi_voice_hook::kHunexGgeTraceEvidenceSurfaceComposeGraph |
-            fushi_voice_hook::kHunexGgeTraceEvidenceSurfaceDescriptorsRead;
+            my_comic_voice_hook::kHunexGgeTraceEvidenceSurfaceComposeGraph |
+            my_comic_voice_hook::kHunexGgeTraceEvidenceSurfaceDescriptorsRead;
         std::memcpy(event.descriptor_words, pending.surface.words,
                     sizeof(event.descriptor_words));
         PublishHunexGgeProjectionDiagnostic(
             event,
-            fushi_voice_hook::HunexGgeProjectionTraceStage::kTexture,
+            my_comic_voice_hook::HunexGgeProjectionTraceStage::kTexture,
             failure);
       };
   if (FAILED(static_cast<HRESULT>(result))) {
     publish_texture_failure(
-        fushi_voice_hook::HunexGgeProjectionTraceFailure::
+        my_comic_voice_hook::HunexGgeProjectionTraceFailure::
             kTextureUploadFailed,
         0u);
     return result;
@@ -2698,7 +2698,7 @@ uint32_t Detour_HunexGgeTextureUpload(void* wrapper, uint32_t flags) {
   }
   if (texture == 0u) {
     publish_texture_failure(
-        fushi_voice_hook::HunexGgeProjectionTraceFailure::
+        my_comic_voice_hook::HunexGgeProjectionTraceFailure::
             kTextureObjectMissing,
         0u);
     return result;
@@ -2710,9 +2710,9 @@ uint32_t Detour_HunexGgeTextureUpload(void* wrapper, uint32_t flags) {
       1u;
   pending.updated_tick = now;
 
-  fushi_voice_hook::HunexGgeTraceEvent event;
+  my_comic_voice_hook::HunexGgeTraceEvent event;
   event.kind = static_cast<uint32_t>(
-      fushi_voice_hook::HunexGgeTraceKind::kTextureUpload);
+      my_comic_voice_hook::HunexGgeTraceKind::kTextureUpload);
   event.draw_sequence = pending.generation;
   event.text_hash = reinterpret_cast<uintptr_t>(wrapper);
   event.draw_arg12_bits = texture;
@@ -2723,9 +2723,9 @@ uint32_t Detour_HunexGgeTextureUpload(void* wrapper, uint32_t flags) {
   event.arg7 = flags;
   event.result = static_cast<int32_t>(result);
   event.evidence_flags =
-      fushi_voice_hook::kHunexGgeTraceEvidenceSurfaceComposeGraph |
-      fushi_voice_hook::kHunexGgeTraceEvidenceSurfaceDescriptorsRead |
-      fushi_voice_hook::kHunexGgeTraceEvidenceTextureIdentityLinked;
+      my_comic_voice_hook::kHunexGgeTraceEvidenceSurfaceComposeGraph |
+      my_comic_voice_hook::kHunexGgeTraceEvidenceSurfaceDescriptorsRead |
+      my_comic_voice_hook::kHunexGgeTraceEvidenceTextureIdentityLinked;
   std::memcpy(event.descriptor_words, pending.surface.words,
               sizeof(event.descriptor_words));
   PublishHunexGgeTrace(event);
@@ -2737,7 +2737,7 @@ uint32_t Detour_HunexGgeQuadVertex(void* manager, const float* xy,
                                   const int32_t* texture_dimensions) {
   // BUG-2134：无条件调用计数（同上）。
   InterlockedIncrement64(reinterpret_cast<volatile LONG64*>(
-      &FushiHunexGgeTraceV3.quad_vertex_calls));
+      &MyComicHunexGgeTraceV3.quad_vertex_calls));
   float input_xy[8] = {};
   float input_uv[8] = {};
   int32_t dimensions[2] = {};
@@ -2767,7 +2767,7 @@ uint32_t Detour_HunexGgeQuadVertex(void* manager, const float* xy,
   // 正文链」区分。只在 surface chain 仍 active 且同线程新鲜（= 能归属到某条语义行）时补
   // 诊断；不改任何判据与控制流。
   const auto publish_quad_failure =
-      [&](fushi_voice_hook::HunexGgeProjectionTraceFailure failure) {
+      [&](my_comic_voice_hook::HunexGgeProjectionTraceFailure failure) {
         const auto& chain = g_hunex_gge_pending_surface_chain;
         if (!chain.active ||
             chain.render_thread_id != GetCurrentThreadId() ||
@@ -2775,7 +2775,7 @@ uint32_t Detour_HunexGgeQuadVertex(void* manager, const float* xy,
                                            GetTickCount64())) {
           return;
         }
-        fushi_voice_hook::HunexGgeTraceEvent event;
+        my_comic_voice_hook::HunexGgeTraceEvent event;
         event.draw_sequence = chain.generation;
         event.text_hash = reinterpret_cast<uintptr_t>(manager);
         event.story_line_base = chain.story_thread_address;
@@ -2784,7 +2784,7 @@ uint32_t Detour_HunexGgeQuadVertex(void* manager, const float* xy,
         event.render_y = dimensions[1];
         event.draw_arg13 = result;
         PublishHunexGgeProjectionDiagnostic(
-            event, fushi_voice_hook::HunexGgeProjectionTraceStage::kSprite,
+            event, my_comic_voice_hook::HunexGgeProjectionTraceStage::kSprite,
             failure);
       };
   if (result != 4u || !inputs_read || mode != 1 || dimensions[0] <= 0 ||
@@ -2792,7 +2792,7 @@ uint32_t Detour_HunexGgeQuadVertex(void* manager, const float* xy,
       dimensions[1] > 32768 || !std::isfinite(offset_x) ||
       !std::isfinite(offset_y)) {
     publish_quad_failure(
-        fushi_voice_hook::HunexGgeProjectionTraceFailure::kQuadShapeRejected);
+        my_comic_voice_hook::HunexGgeProjectionTraceFailure::kQuadShapeRejected);
     g_hunex_gge_pending_quad = {};
     return result;
   }
@@ -2813,7 +2813,7 @@ uint32_t Detour_HunexGgeQuadVertex(void* manager, const float* xy,
     vertex_buffer = 0u;
   }
   if (vertex_buffer == 0u) {
-    publish_quad_failure(fushi_voice_hook::HunexGgeProjectionTraceFailure::
+    publish_quad_failure(my_comic_voice_hook::HunexGgeProjectionTraceFailure::
                              kQuadVertexBufferMissing);
     g_hunex_gge_pending_quad = {};
     return result;
@@ -2833,7 +2833,7 @@ uint32_t Detour_HunexGgeQuadVertex(void* manager, const float* xy,
     const float normalized_v = input_uv[index * 2u + 1u] / dimensions[1];
     if (!std::isfinite(final_x) || !std::isfinite(final_y) ||
         !std::isfinite(normalized_u) || !std::isfinite(normalized_v)) {
-      publish_quad_failure(fushi_voice_hook::HunexGgeProjectionTraceFailure::
+      publish_quad_failure(my_comic_voice_hook::HunexGgeProjectionTraceFailure::
                                kQuadProjectionNotFinite);
       g_hunex_gge_pending_quad = {};
       return result;
@@ -2951,7 +2951,7 @@ uint32_t Detour_HunexGgeSpriteDraw(void* renderer, void* texture,
                                    void* vertex_buffer, uint32_t mode) {
   // BUG-2134：无条件调用计数（同上）。
   InterlockedIncrement64(reinterpret_cast<volatile LONG64*>(
-      &FushiHunexGgeTraceV3.sprite_draw_calls));
+      &MyComicHunexGgeTraceV3.sprite_draw_calls));
   const uint64_t draw_sequence =
       g_hunex_gge_sprite_draw_sequence.fetch_add(
           1u, std::memory_order_relaxed) +
@@ -2964,32 +2964,32 @@ uint32_t Detour_HunexGgeSpriteDraw(void* renderer, void* texture,
       surface_chain.active && surface_chain.texture != 0u &&
       surface_chain.texture == reinterpret_cast<uintptr_t>(texture);
   bool exact_chain = false;
-  fushi_voice_hook::HunexGgeProjectionTraceFailure diagnostic_failure =
-      fushi_voice_hook::HunexGgeProjectionTraceFailure::kNone;
+  my_comic_voice_hook::HunexGgeProjectionTraceFailure diagnostic_failure =
+      my_comic_voice_hook::HunexGgeProjectionTraceFailure::kNone;
   if (linked_surface_texture) {
     if (mode != 1u) {
-      diagnostic_failure = fushi_voice_hook::HunexGgeProjectionTraceFailure::
+      diagnostic_failure = my_comic_voice_hook::HunexGgeProjectionTraceFailure::
           kSpriteModeRejected;
     } else if (surface_chain.render_thread_id != GetCurrentThreadId()) {
-      diagnostic_failure = fushi_voice_hook::HunexGgeProjectionTraceFailure::
+      diagnostic_failure = my_comic_voice_hook::HunexGgeProjectionTraceFailure::
           kSpriteRenderThreadMismatch;
     } else if (!IsFreshHunexGgeProjectionTick(surface_chain.updated_tick,
                                               now)) {
-      diagnostic_failure = fushi_voice_hook::HunexGgeProjectionTraceFailure::
+      diagnostic_failure = my_comic_voice_hook::HunexGgeProjectionTraceFailure::
           kSpriteSurfaceExpired;
     } else if (!quad.valid) {
-      diagnostic_failure = fushi_voice_hook::HunexGgeProjectionTraceFailure::
+      diagnostic_failure = my_comic_voice_hook::HunexGgeProjectionTraceFailure::
           kSpriteQuadMissing;
     } else if (quad.vertex_buffer !=
                reinterpret_cast<uintptr_t>(vertex_buffer)) {
-      diagnostic_failure = fushi_voice_hook::HunexGgeProjectionTraceFailure::
+      diagnostic_failure = my_comic_voice_hook::HunexGgeProjectionTraceFailure::
           kSpriteVertexMismatch;
     } else if (!IsFreshHunexGgeProjectionTick(quad.updated_tick, now)) {
-      diagnostic_failure = fushi_voice_hook::HunexGgeProjectionTraceFailure::
+      diagnostic_failure = my_comic_voice_hook::HunexGgeProjectionTraceFailure::
           kSpriteQuadExpired;
     } else if (!CaptureHunexGgeD3DProjectionSizes(
                    renderer, texture, surface_chain, quad, &evidence)) {
-      diagnostic_failure = fushi_voice_hook::HunexGgeProjectionTraceFailure::
+      diagnostic_failure = my_comic_voice_hook::HunexGgeProjectionTraceFailure::
           kSpriteProjectionSizesRejected;
     } else {
       exact_chain = true;
@@ -2999,7 +2999,7 @@ uint32_t Detour_HunexGgeSpriteDraw(void* renderer, void* texture,
       g_orig_hunex_gge_sprite_draw(renderer, texture, vertex_buffer, mode);
   if (linked_surface_texture &&
       (!exact_chain || FAILED(static_cast<HRESULT>(result)))) {
-    fushi_voice_hook::HunexGgeTraceEvent diagnostic;
+    my_comic_voice_hook::HunexGgeTraceEvent diagnostic;
     diagnostic.draw_sequence = surface_chain.generation;
     diagnostic.text_hash = reinterpret_cast<uintptr_t>(texture);
     diagnostic.draw_arg12_bits = reinterpret_cast<uintptr_t>(vertex_buffer);
@@ -3011,17 +3011,17 @@ uint32_t Detour_HunexGgeSpriteDraw(void* renderer, void* texture,
     diagnostic.render_x = static_cast<int32_t>(surface_chain.surface.words[1]);
     diagnostic.render_y = static_cast<int32_t>(surface_chain.surface.words[2]);
     diagnostic.evidence_flags =
-        fushi_voice_hook::kHunexGgeTraceEvidenceSurfaceComposeGraph |
-        fushi_voice_hook::kHunexGgeTraceEvidenceSurfaceDescriptorsRead |
-        fushi_voice_hook::kHunexGgeTraceEvidenceTextureIdentityLinked;
+        my_comic_voice_hook::kHunexGgeTraceEvidenceSurfaceComposeGraph |
+        my_comic_voice_hook::kHunexGgeTraceEvidenceSurfaceDescriptorsRead |
+        my_comic_voice_hook::kHunexGgeTraceEvidenceTextureIdentityLinked;
     if (quad.valid &&
         quad.vertex_buffer == reinterpret_cast<uintptr_t>(vertex_buffer)) {
       diagnostic.evidence_flags |=
-          fushi_voice_hook::kHunexGgeTraceEvidenceQuadIdentityLinked;
+          my_comic_voice_hook::kHunexGgeTraceEvidenceQuadIdentityLinked;
     }
     if (exact_chain) {
       diagnostic.evidence_flags |=
-          fushi_voice_hook::kHunexGgeTraceEvidenceProjectionSizesRead;
+          my_comic_voice_hook::kHunexGgeTraceEvidenceProjectionSizesRead;
     }
     std::memcpy(diagnostic.descriptor_words, surface_chain.surface.words,
                 sizeof(diagnostic.descriptor_words));
@@ -3033,18 +3033,18 @@ uint32_t Detour_HunexGgeSpriteDraw(void* renderer, void* texture,
       }
     }
     PublishHunexGgeProjectionDiagnostic(
-        diagnostic, fushi_voice_hook::HunexGgeProjectionTraceStage::kSprite,
+        diagnostic, my_comic_voice_hook::HunexGgeProjectionTraceStage::kSprite,
         exact_chain
-            ? fushi_voice_hook::HunexGgeProjectionTraceFailure::
+            ? my_comic_voice_hook::HunexGgeProjectionTraceFailure::
                   kSpriteDrawFailed
             : diagnostic_failure);
   }
   if (exact_chain && SUCCEEDED(static_cast<HRESULT>(result))) {
     evidence.draw_sequence = draw_sequence;
     PublishHunexGgeProjectionEvidence(evidence);
-    fushi_voice_hook::HunexGgeTraceEvent event;
+    my_comic_voice_hook::HunexGgeTraceEvent event;
     event.kind = static_cast<uint32_t>(
-        fushi_voice_hook::HunexGgeTraceKind::kSpriteQuad);
+        my_comic_voice_hook::HunexGgeTraceKind::kSpriteQuad);
     event.draw_sequence = evidence.generation;
     event.text_hash = evidence.texture;
     event.draw_arg12_bits = evidence.vertex_buffer;
@@ -3060,11 +3060,11 @@ uint32_t Detour_HunexGgeSpriteDraw(void* renderer, void* texture,
     event.draw_arg13 = static_cast<uint32_t>(draw_sequence);
     event.result = static_cast<int32_t>(result);
     event.evidence_flags =
-        fushi_voice_hook::kHunexGgeTraceEvidenceSurfaceComposeGraph |
-        fushi_voice_hook::kHunexGgeTraceEvidenceSurfaceDescriptorsRead |
-        fushi_voice_hook::kHunexGgeTraceEvidenceTextureIdentityLinked |
-        fushi_voice_hook::kHunexGgeTraceEvidenceQuadIdentityLinked |
-        fushi_voice_hook::kHunexGgeTraceEvidenceProjectionSizesRead;
+        my_comic_voice_hook::kHunexGgeTraceEvidenceSurfaceComposeGraph |
+        my_comic_voice_hook::kHunexGgeTraceEvidenceSurfaceDescriptorsRead |
+        my_comic_voice_hook::kHunexGgeTraceEvidenceTextureIdentityLinked |
+        my_comic_voice_hook::kHunexGgeTraceEvidenceQuadIdentityLinked |
+        my_comic_voice_hook::kHunexGgeTraceEvidenceProjectionSizesRead;
     std::memcpy(event.descriptor_words, evidence.surface.words,
                 sizeof(event.descriptor_words));
     for (size_t index = 0u; index < 8u; ++index) {
@@ -3116,7 +3116,7 @@ int __fastcall Detour_HunexGgeSemanticSubmit(
         transformed_y, edge_mask);
   }
 
-  namespace core = fushi_voice_hook::hunex_lookup_core;
+  namespace core = my_comic_voice_hook::hunex_lookup_core;
   uint16_t sampled_raw = 0u;
   if ((exact_held_mask & 0x1u) != 0u) sampled_raw |= 0x8000u;
   if ((exact_edge_mask & 0x1u) != 0u) sampled_raw |= 0x0001u;
@@ -3126,10 +3126,10 @@ int __fastcall Detour_HunexGgeSemanticSubmit(
       SampleHunexGgeLookupPointer();
   const bool native_lookup_allowed =
       engine_active != 0u &&
-      fushi_voice_hook::g_geometry_provider_registry.NativeInputAllowed(
+      my_comic_voice_hook::g_geometry_provider_registry.NativeInputAllowed(
           g_header,
-          fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-          fushi_voice_hook::kLookupGeometryProviderIdHunexGge);
+          my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+          my_comic_voice_hook::kLookupGeometryProviderIdHunexGge);
   const HunexGgeLookupSampleResult lookup_result =
       SampleHunexGgeLookupLeftButton(
           &g_hunex_gge_lookup_runtime, GetCurrentThreadId(), sampled_raw,
@@ -3143,7 +3143,7 @@ int __fastcall Detour_HunexGgeSemanticSubmit(
   if (lookup_result.thread_conflict && g_header != nullptr) {
     InterlockedOr(reinterpret_cast<volatile LONG*>(&g_header->lookup_diag),
                   static_cast<LONG>(
-                      fushi_voice_hook::kLookupDiagSensorFault));
+                      my_comic_voice_hook::kLookupDiagSensorFault));
   }
 
   const bool raw_active =
@@ -3182,19 +3182,19 @@ SHORT WINAPI Detour_HunexGgeGetAsyncKeyState(int virtual_key) {
   uint16_t sampled_raw = static_cast<uint16_t>(original_raw);
   const uintptr_t return_address =
       reinterpret_cast<uintptr_t>(_ReturnAddress());
-  fushi_voice_hook::HunexGgeTraceKind kind =
-      fushi_voice_hook::HunexGgeTraceKind::kInputGeneric;
+  my_comic_voice_hook::HunexGgeTraceKind kind =
+      my_comic_voice_hook::HunexGgeTraceKind::kInputGeneric;
   bool recognized_caller = true;
   if (return_address == g_hunex_gge_anchors.generic_key_return) {
-    kind = fushi_voice_hook::HunexGgeTraceKind::kInputGeneric;
+    kind = my_comic_voice_hook::HunexGgeTraceKind::kInputGeneric;
   } else if (return_address == g_hunex_gge_anchors.left_button_return) {
-    kind = fushi_voice_hook::HunexGgeTraceKind::kInputLeftButton;
+    kind = my_comic_voice_hook::HunexGgeTraceKind::kInputLeftButton;
   } else {
     recognized_caller = false;
   }
   const bool admitted_lookup_sample =
       recognized_caller &&
-      kind == fushi_voice_hook::HunexGgeTraceKind::kInputGeneric &&
+      kind == my_comic_voice_hook::HunexGgeTraceKind::kInputGeneric &&
       (virtual_key == VK_SHIFT || virtual_key == VK_RBUTTON ||
        virtual_key == VK_MBUTTON);
   HunexGgeLookupSampleResult lookup_result;
@@ -3211,10 +3211,10 @@ SHORT WINAPI Detour_HunexGgeGetAsyncKeyState(int virtual_key) {
           : HunexGgeLookupPointerSample{};
   if (admitted_lookup_sample) {
     const bool native_lookup_allowed =
-        fushi_voice_hook::g_geometry_provider_registry.NativeInputAllowed(
+        my_comic_voice_hook::g_geometry_provider_registry.NativeInputAllowed(
             g_header,
-            fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-            fushi_voice_hook::kLookupGeometryProviderIdHunexGge);
+            my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+            my_comic_voice_hook::kLookupGeometryProviderIdHunexGge);
     lookup_result = HandleHunexGgeGetAsyncKeyState(
         &g_hunex_gge_lookup_runtime, virtual_key, GetCurrentThreadId(),
         sampled_raw, pointer_sample,
@@ -3222,33 +3222,33 @@ SHORT WINAPI Detour_HunexGgeGetAsyncKeyState(int virtual_key) {
     if (lookup_result.popup_transaction && bitmap_popup_visible &&
         pointer_sample.foreground_game_point &&
         (sampled_raw &
-         fushi_voice_hook::hunex_lookup_core::kAsyncPressedMask) != 0u) {
+         my_comic_voice_hook::hunex_lookup_core::kAsyncPressedMask) != 0u) {
       (void)RequestLookupOverlayOutsideDismiss();
     }
     if (lookup_result.thread_conflict && g_header != nullptr) {
       InterlockedOr(reinterpret_cast<volatile LONG*>(&g_header->lookup_diag),
                     static_cast<LONG>(
-                        fushi_voice_hook::kLookupDiagSensorFault));
+                        my_comic_voice_hook::kLookupDiagSensorFault));
     }
   }
   if (recognized_caller) {
     InterlockedIncrement64(reinterpret_cast<volatile LONG64*>(
-        &FushiHunexGgeTraceV3.input_calls));
+        &MyComicHunexGgeTraceV3.input_calls));
   }
   if (recognized_caller &&
       (virtual_key == VK_LBUTTON || virtual_key == VK_SHIFT ||
-       kind == fushi_voice_hook::HunexGgeTraceKind::kInputLeftButton)) {
+       kind == my_comic_voice_hook::HunexGgeTraceKind::kInputLeftButton)) {
     if (virtual_key >= 0 && virtual_key < 256) {
       const size_t kind_index =
-          kind == fushi_voice_hook::HunexGgeTraceKind::kInputGeneric ? 0u
+          kind == my_comic_voice_hook::HunexGgeTraceKind::kInputGeneric ? 0u
                                                                     : 1u;
       const LONG encoded = static_cast<LONG>(
-          fushi_voice_hook::hunex_lookup::EncodeInputTraceState(original_raw));
+          my_comic_voice_hook::hunex_lookup::EncodeInputTraceState(original_raw));
       const LONG previous = InterlockedExchange(
           &g_hunex_gge_input_trace_state[kind_index][virtual_key], encoded);
-      if (fushi_voice_hook::hunex_lookup::IsInputTraceStateChange(
+      if (my_comic_voice_hook::hunex_lookup::IsInputTraceStateChange(
               static_cast<uint32_t>(previous), original_raw)) {
-        fushi_voice_hook::HunexGgeTraceEvent event;
+        my_comic_voice_hook::HunexGgeTraceEvent event;
         event.kind = static_cast<uint32_t>(kind);
         event.caller_rva = HunexGgeRva(return_address);
         event.arg7 = static_cast<uint32_t>(virtual_key);
@@ -3261,7 +3261,7 @@ SHORT WINAPI Detour_HunexGgeGetAsyncKeyState(int virtual_key) {
                           ? lookup_result.filtered_state
                           : sampled_raw;
   if (virtual_key == VK_LBUTTON) {
-    namespace core = fushi_voice_hook::hunex_lookup_core;
+    namespace core = my_comic_voice_hook::hunex_lookup_core;
     const uint16_t raw_bits = sampled_raw;
     const bool raw_active = (raw_bits & core::kAsyncPressedMask) != 0u;
     bool consume = lookup_result.consume ||
@@ -3399,9 +3399,9 @@ bool ScanHunexGgeRuntimeAnchors() {
   const LONG cached =
       InterlockedCompareExchange(&g_hunex_gge_trace_scan_state, 2, 0);
   if (cached != 0) return cached == 1;
-  auto* trace = &FushiHunexGgeTraceV3;
+  auto* trace = &MyComicHunexGgeTraceV3;
   trace->scanner_status |=
-      fushi_voice_hook::kHunexGgeTraceScannerProfileMatched;
+      my_comic_voice_hook::kHunexGgeTraceScannerProfileMatched;
   HMODULE module = GetModuleHandleW(nullptr);
   if (module == nullptr) {
     InterlockedExchange(&g_hunex_gge_trace_scan_state, -1);
@@ -3457,63 +3457,63 @@ bool ScanHunexGgeRuntimeAnchors() {
                                 sections[index].VirtualAddress;
           const size_t bytes = sections[index].Misc.VirtualSize;
           const auto draw_match =
-              fushi_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
+              my_comic_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
                   section, bytes,
-                  fushi_voice_hook::hunex_lookup::kDrawEntryPattern);
+                  my_comic_voice_hook::hunex_lookup::kDrawEntryPattern);
           const auto glyph_match =
-              fushi_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
+              my_comic_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
                   section, bytes,
-                  fushi_voice_hook::hunex_lookup::kGlyphEntryPattern);
+                  my_comic_voice_hook::hunex_lookup::kGlyphEntryPattern);
           const auto poller_match =
-              fushi_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
+              my_comic_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
                   section, bytes,
-                  fushi_voice_hook::hunex_lookup::kKeyPollerEntryPattern);
+                  my_comic_voice_hook::hunex_lookup::kKeyPollerEntryPattern);
           const auto pump_match =
-              fushi_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
+              my_comic_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
                   section, bytes,
-                  fushi_voice_hook::hunex_lookup::kInputPumpEntryPattern);
+                  my_comic_voice_hook::hunex_lookup::kInputPumpEntryPattern);
           const auto semantic_submit_match =
-              fushi_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
+              my_comic_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
                   section, bytes,
-                  fushi_voice_hook::hunex_lookup::
+                  my_comic_voice_hook::hunex_lookup::
                       kSemanticSubmitEntryPattern);
           const auto surface_compose_match =
-              fushi_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
+              my_comic_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
                   section, bytes,
-                  fushi_voice_hook::hunex_lookup::
+                  my_comic_voice_hook::hunex_lookup::
                       kSurfaceComposeEntryPattern);
           const auto surface_compose_wrapper_match =
-              fushi_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
+              my_comic_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
                   section, bytes,
-                  fushi_voice_hook::hunex_lookup::
+                  my_comic_voice_hook::hunex_lookup::
                       kSurfaceComposeWrapperEntryPattern);
           const auto texture_upload_match =
-              fushi_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
+              my_comic_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
                   section, bytes,
-                  fushi_voice_hook::hunex_lookup::
+                  my_comic_voice_hook::hunex_lookup::
                       kTextureUploadEntryPattern);
           const auto quad_vertex_match =
-              fushi_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
+              my_comic_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
                   section, bytes,
-                  fushi_voice_hook::hunex_lookup::kQuadVertexEntryPattern);
+                  my_comic_voice_hook::hunex_lookup::kQuadVertexEntryPattern);
           const auto sprite_draw_match =
-              fushi_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
+              my_comic_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
                   section, bytes,
-                  fushi_voice_hook::hunex_lookup::kSpriteDrawEntryPattern);
+                  my_comic_voice_hook::hunex_lookup::kSpriteDrawEntryPattern);
           if (draw_match.count == 1u && draw_count == 0u)
             draw = section + draw_match.offset;
           if (glyph_match.count == 1u && glyph_count == 0u)
             glyph = section + glyph_match.offset;
           if (bytes >=
-              fushi_voice_hook::hunex_lookup::kBodySubmitEntryPattern.size) {
+              my_comic_voice_hook::hunex_lookup::kBodySubmitEntryPattern.size) {
             for (size_t offset = 0u;
                  offset <= bytes -
-                               fushi_voice_hook::hunex_lookup::
+                               my_comic_voice_hook::hunex_lookup::
                                    kBodySubmitEntryPattern.size;
                  ++offset) {
-              if (!fushi_voice_hook::hunex_lookup::MatchesMaskedPattern(
+              if (!my_comic_voice_hook::hunex_lookup::MatchesMaskedPattern(
                       section + offset,
-                      fushi_voice_hook::hunex_lookup::
+                      my_comic_voice_hook::hunex_lookup::
                           kBodySubmitEntryPattern)) {
                 continue;
               }
@@ -3579,7 +3579,7 @@ bool ScanHunexGgeRuntimeAnchors() {
   if (surface_compose_wrapper_count == 1u &&
       surface_compose_count == 1u) {
     trace->scanner_status |=
-        fushi_voice_hook::kHunexGgeTraceScannerSurfaceComposeUnique;
+        my_comic_voice_hook::kHunexGgeTraceScannerSurfaceComposeUnique;
   }
   const bool projection_entries_unique =
       texture_upload_count == 1u && quad_vertex_count == 1u &&
@@ -3587,7 +3587,7 @@ bool ScanHunexGgeRuntimeAnchors() {
       quad_vertex != nullptr && sprite_draw != nullptr;
   if (projection_entries_unique) {
     trace->scanner_status |=
-        fushi_voice_hook::kHunexGgeTraceScannerProjectionEntriesUnique;
+        my_comic_voice_hook::kHunexGgeTraceScannerProjectionEntriesUnique;
   }
   if (!pe_valid || image_size == 0u || draw_count != 1u ||
       glyph_count != 1u || body_submit_count == 0u ||
@@ -3600,10 +3600,10 @@ bool ScanHunexGgeRuntimeAnchors() {
     return false;
   }
   trace->scanner_status |=
-      fushi_voice_hook::kHunexGgeTraceScannerPe64 |
-      fushi_voice_hook::kHunexGgeTraceScannerDrawUnique |
-      fushi_voice_hook::kHunexGgeTraceScannerGlyphUnique |
-      fushi_voice_hook::kHunexGgeTraceScannerInputUnique;
+      my_comic_voice_hook::kHunexGgeTraceScannerPe64 |
+      my_comic_voice_hook::kHunexGgeTraceScannerDrawUnique |
+      my_comic_voice_hook::kHunexGgeTraceScannerGlyphUnique |
+      my_comic_voice_hook::kHunexGgeTraceScannerInputUnique;
 
   const uint8_t* draw_span = nullptr;
   const uint8_t* poller_span = nullptr;
@@ -3616,36 +3616,36 @@ bool ScanHunexGgeRuntimeAnchors() {
   const uintptr_t module_address = reinterpret_cast<uintptr_t>(module);
   if (!GetHunexGgeFunctionSpan(
           draw, module_address,
-          fushi_voice_hook::hunex_lookup::kDrawScanBytes, &draw_span,
+          my_comic_voice_hook::hunex_lookup::kDrawScanBytes, &draw_span,
           &draw_bytes) ||
       !GetHunexGgeFunctionSpan(
           key_poller, module_address,
-          fushi_voice_hook::hunex_lookup::kKeyPollerScanBytes, &poller_span,
+          my_comic_voice_hook::hunex_lookup::kKeyPollerScanBytes, &poller_span,
           &poller_bytes) ||
       !GetHunexGgeFunctionSpan(
           key_poller, module_address,
-          fushi_voice_hook::hunex_lookup::kKeyPollerHeldMaskScanBytes,
+          my_comic_voice_hook::hunex_lookup::kKeyPollerHeldMaskScanBytes,
           &poller_held_mask_span, &poller_held_mask_bytes) ||
       !GetHunexGgeFunctionSpan(
           input_pump, module_address,
-          fushi_voice_hook::hunex_lookup::kInputPumpScanBytes, &pump_span,
+          my_comic_voice_hook::hunex_lookup::kInputPumpScanBytes, &pump_span,
           &pump_bytes)) {
     InterlockedExchange(&g_hunex_gge_trace_scan_state, -1);
     return false;
   }
 
   const auto first_glyph =
-      fushi_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
+      my_comic_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
           draw_span, draw_bytes,
-          fushi_voice_hook::hunex_lookup::kDrawFirstGlyphCallPattern);
+          my_comic_voice_hook::hunex_lookup::kDrawFirstGlyphCallPattern);
   const auto second_glyph =
-      fushi_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
+      my_comic_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
           draw_span, draw_bytes,
-          fushi_voice_hook::hunex_lookup::kDrawSecondGlyphCallPattern);
+          my_comic_voice_hook::hunex_lookup::kDrawSecondGlyphCallPattern);
   const auto render_item_call =
-      fushi_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
+      my_comic_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
           draw_span, draw_bytes,
-          fushi_voice_hook::hunex_lookup::kDrawRenderItemCallPattern);
+          my_comic_voice_hook::hunex_lookup::kDrawRenderItemCallPattern);
   uintptr_t first_glyph_target = 0u;
   uintptr_t first_glyph_return = 0u;
   uintptr_t second_glyph_target = 0u;
@@ -3655,18 +3655,18 @@ bool ScanHunexGgeRuntimeAnchors() {
   uintptr_t render_item_target = 0u;
   uintptr_t render_item_return = 0u;
   const uint32_t raw_glyph_calls =
-      fushi_voice_hook::hunex_lookup::FindRel32CallReturnsToTarget(
+      my_comic_voice_hook::hunex_lookup::FindRel32CallReturnsToTarget(
           draw_span, draw_bytes, reinterpret_cast<uintptr_t>(glyph),
           &raw_first_return, &raw_second_return);
   const bool draw_graph_valid =
       first_glyph.count == 1u && second_glyph.count == 1u &&
-      fushi_voice_hook::hunex_lookup::DecodeRel32CallTarget(
+      my_comic_voice_hook::hunex_lookup::DecodeRel32CallTarget(
           draw_span + first_glyph.offset +
-              fushi_voice_hook::hunex_lookup::kDrawFirstGlyphCallOffset,
+              my_comic_voice_hook::hunex_lookup::kDrawFirstGlyphCallOffset,
           &first_glyph_target, &first_glyph_return) &&
-      fushi_voice_hook::hunex_lookup::DecodeRel32CallTarget(
+      my_comic_voice_hook::hunex_lookup::DecodeRel32CallTarget(
           draw_span + second_glyph.offset +
-              fushi_voice_hook::hunex_lookup::kDrawSecondGlyphCallOffset,
+              my_comic_voice_hook::hunex_lookup::kDrawSecondGlyphCallOffset,
           &second_glyph_target, &second_glyph_return) &&
       first_glyph_target == reinterpret_cast<uintptr_t>(glyph) &&
       second_glyph_target == reinterpret_cast<uintptr_t>(glyph) &&
@@ -3676,25 +3676,25 @@ bool ScanHunexGgeRuntimeAnchors() {
   uintptr_t raw_render_item_return = 0u;
   const bool render_item_call_decoded =
       render_item_call.count == 1u &&
-      fushi_voice_hook::hunex_lookup::DecodeRel32CallTarget(
+      my_comic_voice_hook::hunex_lookup::DecodeRel32CallTarget(
           draw_span + render_item_call.offset +
-              fushi_voice_hook::hunex_lookup::kDrawRenderItemCallOffset,
+              my_comic_voice_hook::hunex_lookup::kDrawRenderItemCallOffset,
           &render_item_target, &render_item_return) &&
       HunexGgeImageContains(module_address, image_size, render_item_target,
-                            sizeof(fushi_voice_hook::hunex_lookup::
+                            sizeof(my_comic_voice_hook::hunex_lookup::
                                        kRenderItemEntryBytes));
   const uint8_t* render_item_span = nullptr;
   size_t render_item_bytes = 0u;
   const bool render_item_graph_valid =
       render_item_call_decoded &&
-      fushi_voice_hook::hunex_lookup::MatchesMaskedPattern(
+      my_comic_voice_hook::hunex_lookup::MatchesMaskedPattern(
           reinterpret_cast<const uint8_t*>(render_item_target),
-          fushi_voice_hook::hunex_lookup::kRenderItemEntryPattern) &&
+          my_comic_voice_hook::hunex_lookup::kRenderItemEntryPattern) &&
       GetHunexGgeFunctionSpan(
           reinterpret_cast<const uint8_t*>(render_item_target),
-          module_address, fushi_voice_hook::hunex_lookup::kRenderItemScanBytes,
+          module_address, my_comic_voice_hook::hunex_lookup::kRenderItemScanBytes,
           &render_item_span, &render_item_bytes) &&
-      fushi_voice_hook::hunex_lookup::FindRel32CallReturnsToTarget(
+      my_comic_voice_hook::hunex_lookup::FindRel32CallReturnsToTarget(
           draw_span, draw_bytes, render_item_target, &raw_render_item_return,
           nullptr) == 1u &&
       raw_render_item_return == render_item_return;
@@ -3708,21 +3708,21 @@ bool ScanHunexGgeRuntimeAnchors() {
       size_t candidate_bytes = 0u;
       if (!GetHunexGgeFunctionSpan(
               body_submit_candidates[index], module_address,
-              fushi_voice_hook::hunex_lookup::kRenderItemScanBytes,
+              my_comic_voice_hook::hunex_lookup::kRenderItemScanBytes,
               &candidate_span, &candidate_bytes) ||
           candidate_bytes <
-              fushi_voice_hook::hunex_lookup::kBodySubmitCallOffset + 5u) {
+              my_comic_voice_hook::hunex_lookup::kBodySubmitCallOffset + 5u) {
         continue;
       }
       uintptr_t candidate_target = 0u;
       uintptr_t candidate_return = 0u;
       uintptr_t raw_candidate_return = 0u;
-      if (!fushi_voice_hook::hunex_lookup::DecodeRel32CallTarget(
+      if (!my_comic_voice_hook::hunex_lookup::DecodeRel32CallTarget(
               candidate_span +
-                  fushi_voice_hook::hunex_lookup::kBodySubmitCallOffset,
+                  my_comic_voice_hook::hunex_lookup::kBodySubmitCallOffset,
               &candidate_target, &candidate_return) ||
           candidate_target != render_item_target ||
-          fushi_voice_hook::hunex_lookup::FindRel32CallReturnsToTarget(
+          my_comic_voice_hook::hunex_lookup::FindRel32CallReturnsToTarget(
               candidate_span, candidate_bytes, render_item_target,
               &raw_candidate_return, nullptr) != 1u ||
           raw_candidate_return != candidate_return) {
@@ -3757,27 +3757,27 @@ bool ScanHunexGgeRuntimeAnchors() {
   if (surface_compose_count == 1u && surface_compose != nullptr &&
       GetHunexGgeFunctionSpan(
           surface_compose, module_address,
-          fushi_voice_hook::hunex_lookup::kSurfaceComposeScanBytes,
+          my_comic_voice_hook::hunex_lookup::kSurfaceComposeScanBytes,
           &surface_compose_span, &surface_compose_bytes)) {
     const auto first_compose_call =
-        fushi_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
+        my_comic_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
             surface_compose_span, surface_compose_bytes,
-            fushi_voice_hook::hunex_lookup::
+            my_comic_voice_hook::hunex_lookup::
                 kSurfaceComposeFirstCallPattern);
     const auto second_compose_call =
-        fushi_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
+        my_comic_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
             surface_compose_span, surface_compose_bytes,
-            fushi_voice_hook::hunex_lookup::
+            my_comic_voice_hook::hunex_lookup::
                 kSurfaceComposeSecondCallPattern);
     const auto final_first_compose_call =
-        fushi_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
+        my_comic_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
             surface_compose_span, surface_compose_bytes,
-            fushi_voice_hook::hunex_lookup::
+            my_comic_voice_hook::hunex_lookup::
                 kSurfaceComposeFinalFirstCallPattern);
     const auto final_second_compose_call =
-        fushi_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
+        my_comic_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
             surface_compose_span, surface_compose_bytes,
-            fushi_voice_hook::hunex_lookup::
+            my_comic_voice_hook::hunex_lookup::
                 kSurfaceComposeFinalSecondCallPattern);
     uintptr_t second_target = 0u;
     uintptr_t final_first_target = 0u;
@@ -3788,28 +3788,28 @@ bool ScanHunexGgeRuntimeAnchors() {
         first_compose_call.count == 1u &&
         second_compose_call.count == 1u &&
         second_compose_call.offset == first_compose_call.offset + 0x3du &&
-        fushi_voice_hook::hunex_lookup::DecodeRel32CallTarget(
+        my_comic_voice_hook::hunex_lookup::DecodeRel32CallTarget(
             surface_compose_span + first_compose_call.offset +
-                fushi_voice_hook::hunex_lookup::
+                my_comic_voice_hook::hunex_lookup::
                     kSurfaceComposeCallOffset,
             &surface_compositor_target,
             &surface_compose_first_return) &&
-        fushi_voice_hook::hunex_lookup::DecodeRel32CallTarget(
+        my_comic_voice_hook::hunex_lookup::DecodeRel32CallTarget(
             surface_compose_span + second_compose_call.offset +
-                fushi_voice_hook::hunex_lookup::
+                my_comic_voice_hook::hunex_lookup::
                     kSurfaceComposeCallOffset,
             &second_target, &surface_compose_second_return) &&
         second_target == surface_compositor_target &&
         final_first_compose_call.count == 1u &&
         final_second_compose_call.count == 1u &&
-        fushi_voice_hook::hunex_lookup::DecodeRel32CallTarget(
+        my_comic_voice_hook::hunex_lookup::DecodeRel32CallTarget(
             surface_compose_span + final_first_compose_call.offset +
-                fushi_voice_hook::hunex_lookup::
+                my_comic_voice_hook::hunex_lookup::
                     kSurfaceComposeFinalFirstCallOffset,
             &final_first_target, &surface_compose_final_first_return) &&
-        fushi_voice_hook::hunex_lookup::DecodeRel32CallTarget(
+        my_comic_voice_hook::hunex_lookup::DecodeRel32CallTarget(
             surface_compose_span + final_second_compose_call.offset +
-                fushi_voice_hook::hunex_lookup::
+                my_comic_voice_hook::hunex_lookup::
                     kSurfaceComposeFinalSecondCallOffset,
             &final_second_target, &surface_compose_final_second_return) &&
         final_first_target == surface_compositor_target &&
@@ -3818,13 +3818,13 @@ bool ScanHunexGgeRuntimeAnchors() {
         calls_decoded &&
         HunexGgeImageContains(
             module_address, image_size, surface_compositor_target,
-            sizeof(fushi_voice_hook::hunex_lookup::
+            sizeof(my_comic_voice_hook::hunex_lookup::
                        kSurfaceCompositorEntryBytes)) &&
-        fushi_voice_hook::hunex_lookup::MatchesMaskedPattern(
+        my_comic_voice_hook::hunex_lookup::MatchesMaskedPattern(
             reinterpret_cast<const uint8_t*>(surface_compositor_target),
-            fushi_voice_hook::hunex_lookup::
+            my_comic_voice_hook::hunex_lookup::
                 kSurfaceCompositorEntryPattern) &&
-        fushi_voice_hook::hunex_lookup::FindRel32CallReturnsToTarget(
+        my_comic_voice_hook::hunex_lookup::FindRel32CallReturnsToTarget(
             surface_compose_span, surface_compose_bytes,
             surface_compositor_target, &raw_first_return,
             &raw_second_return) == 4u &&
@@ -3841,22 +3841,22 @@ bool ScanHunexGgeRuntimeAnchors() {
       surface_compose_wrapper != nullptr &&
       GetHunexGgeFunctionSpan(
           surface_compose_wrapper, module_address,
-          fushi_voice_hook::hunex_lookup::kSurfaceComposeWrapperScanBytes,
+          my_comic_voice_hook::hunex_lookup::kSurfaceComposeWrapperScanBytes,
           &surface_compose_wrapper_span, &surface_compose_wrapper_bytes)) {
     const auto inner_call =
-        fushi_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
+        my_comic_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
             surface_compose_wrapper_span, surface_compose_wrapper_bytes,
-            fushi_voice_hook::hunex_lookup::
+            my_comic_voice_hook::hunex_lookup::
                 kSurfaceComposeWrapperInnerCallPattern);
     const auto zero_first_call =
-        fushi_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
+        my_comic_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
             surface_compose_wrapper_span, surface_compose_wrapper_bytes,
-            fushi_voice_hook::hunex_lookup::
+            my_comic_voice_hook::hunex_lookup::
                 kSurfaceComposeWrapperZeroFirstCallPattern);
     const auto zero_second_call =
-        fushi_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
+        my_comic_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
             surface_compose_wrapper_span, surface_compose_wrapper_bytes,
-            fushi_voice_hook::hunex_lookup::
+            my_comic_voice_hook::hunex_lookup::
                 kSurfaceComposeWrapperZeroSecondCallPattern);
     uintptr_t wrapper_inner_target = 0u;
     uintptr_t wrapper_inner_return = 0u;
@@ -3870,19 +3870,19 @@ bool ScanHunexGgeRuntimeAnchors() {
         zero_second_call.count == 1u &&
         inner_call.offset < zero_first_call.offset &&
         zero_second_call.offset == zero_first_call.offset + 0x39u &&
-        fushi_voice_hook::hunex_lookup::DecodeRel32CallTarget(
+        my_comic_voice_hook::hunex_lookup::DecodeRel32CallTarget(
             surface_compose_wrapper_span + inner_call.offset +
-                fushi_voice_hook::hunex_lookup::
+                my_comic_voice_hook::hunex_lookup::
                     kSurfaceComposeWrapperInnerCallOffset,
             &wrapper_inner_target, &wrapper_inner_return) &&
-        fushi_voice_hook::hunex_lookup::DecodeRel32CallTarget(
+        my_comic_voice_hook::hunex_lookup::DecodeRel32CallTarget(
             surface_compose_wrapper_span + zero_first_call.offset +
-                fushi_voice_hook::hunex_lookup::
+                my_comic_voice_hook::hunex_lookup::
                     kSurfaceComposeWrapperZeroCallOffset,
             &zero_first_target, &surface_compose_zero_first_return) &&
-        fushi_voice_hook::hunex_lookup::DecodeRel32CallTarget(
+        my_comic_voice_hook::hunex_lookup::DecodeRel32CallTarget(
             surface_compose_wrapper_span + zero_second_call.offset +
-                fushi_voice_hook::hunex_lookup::
+                my_comic_voice_hook::hunex_lookup::
                     kSurfaceComposeWrapperZeroCallOffset,
             &zero_second_target, &surface_compose_zero_second_return) &&
         wrapper_inner_target == reinterpret_cast<uintptr_t>(surface_compose) &&
@@ -3890,12 +3890,12 @@ bool ScanHunexGgeRuntimeAnchors() {
         zero_second_target == surface_compositor_target;
     surface_compose_wrapper_graph_valid =
         wrapper_calls_decoded &&
-        fushi_voice_hook::hunex_lookup::FindRel32CallReturnsToTarget(
+        my_comic_voice_hook::hunex_lookup::FindRel32CallReturnsToTarget(
             surface_compose_wrapper_span, surface_compose_wrapper_bytes,
             reinterpret_cast<uintptr_t>(surface_compose), &raw_inner_return,
             nullptr) == 1u &&
         raw_inner_return == wrapper_inner_return &&
-        fushi_voice_hook::hunex_lookup::FindRel32CallReturnsToTarget(
+        my_comic_voice_hook::hunex_lookup::FindRel32CallReturnsToTarget(
             surface_compose_wrapper_span, surface_compose_wrapper_bytes,
             surface_compositor_target, &raw_zero_first_return,
             &raw_zero_second_return) == 2u &&
@@ -3907,7 +3907,7 @@ bool ScanHunexGgeRuntimeAnchors() {
       surface_compose_wrapper_graph_valid;
   if (surface_compose_graph_valid) {
     trace->scanner_status |=
-        fushi_voice_hook::kHunexGgeTraceScannerSurfaceComposeCallsValid;
+        my_comic_voice_hook::kHunexGgeTraceScannerSurfaceComposeCallsValid;
   }
 
   bool projection_graph_valid = false;
@@ -3921,77 +3921,77 @@ bool ScanHunexGgeRuntimeAnchors() {
     projection_graph_valid =
         GetHunexGgeFunctionSpan(
             texture_upload, module_address,
-            fushi_voice_hook::hunex_lookup::kTextureUploadScanBytes,
+            my_comic_voice_hook::hunex_lookup::kTextureUploadScanBytes,
             &upload_span, &upload_bytes) &&
         GetHunexGgeFunctionSpan(
             quad_vertex, module_address,
-            fushi_voice_hook::hunex_lookup::kQuadVertexScanBytes,
+            my_comic_voice_hook::hunex_lookup::kQuadVertexScanBytes,
             &quad_span, &quad_bytes) &&
         GetHunexGgeFunctionSpan(
             sprite_draw, module_address,
-            fushi_voice_hook::hunex_lookup::kSpriteDrawScanBytes,
+            my_comic_voice_hook::hunex_lookup::kSpriteDrawScanBytes,
             &sprite_span, &sprite_bytes) &&
-        fushi_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
+        my_comic_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
             upload_span, upload_bytes,
-            fushi_voice_hook::hunex_lookup::kTextureUploadCommitPattern)
+            my_comic_voice_hook::hunex_lookup::kTextureUploadCommitPattern)
                 .count == 1u &&
-        fushi_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
+        my_comic_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
             quad_span, quad_bytes,
-            fushi_voice_hook::hunex_lookup::kQuadVertexBodyPattern)
+            my_comic_voice_hook::hunex_lookup::kQuadVertexBodyPattern)
                 .count == 1u &&
-        fushi_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
+        my_comic_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
             sprite_span, sprite_bytes,
-            fushi_voice_hook::hunex_lookup::kSpriteDrawBodyPattern)
+            my_comic_voice_hook::hunex_lookup::kSpriteDrawBodyPattern)
                 .count == 1u;
   }
   if (projection_graph_valid) {
     trace->scanner_status |=
-        fushi_voice_hook::kHunexGgeTraceScannerProjectionGraphValid;
+        my_comic_voice_hook::kHunexGgeTraceScannerProjectionGraphValid;
   }
 
   const auto generic =
-      fushi_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
+      my_comic_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
           poller_span, poller_bytes,
-          fushi_voice_hook::hunex_lookup::kGenericKeyPollPattern);
+          my_comic_voice_hook::hunex_lookup::kGenericKeyPollPattern);
   const auto pump_to_poller =
-      fushi_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
+      my_comic_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
           pump_span, pump_bytes,
-          fushi_voice_hook::hunex_lookup::kPumpCallsPollerPattern);
+          my_comic_voice_hook::hunex_lookup::kPumpCallsPollerPattern);
   const auto semantic_submit_call =
-      fushi_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
+      my_comic_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
           pump_span, pump_bytes,
-          fushi_voice_hook::hunex_lookup::
+          my_comic_voice_hook::hunex_lookup::
               kPumpSemanticSubmitCallPattern);
   const auto poller_held_mask_store =
-      fushi_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
+      my_comic_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
           poller_held_mask_span, poller_held_mask_bytes,
-          fushi_voice_hook::hunex_lookup::
+          my_comic_voice_hook::hunex_lookup::
               kKeyPollerStoresHeldMaskPattern);
   const auto pump_held_mask_load =
-      fushi_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
+      my_comic_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
           pump_span, pump_bytes,
-          fushi_voice_hook::hunex_lookup::kPumpLoadsHeldMaskPattern);
+          my_comic_voice_hook::hunex_lookup::kPumpLoadsHeldMaskPattern);
   const auto cursor_pair =
-      fushi_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
+      my_comic_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
           pump_span, pump_bytes,
-          fushi_voice_hook::hunex_lookup::kCursorPairPattern);
+          my_comic_voice_hook::hunex_lookup::kCursorPairPattern);
   const auto cursor_scale_x =
-      fushi_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
+      my_comic_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
           pump_span, pump_bytes,
-          fushi_voice_hook::hunex_lookup::kCursorViewportScaleXPattern);
+          my_comic_voice_hook::hunex_lookup::kCursorViewportScaleXPattern);
   const auto cursor_scale_y =
-      fushi_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
+      my_comic_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
           pump_span, pump_bytes,
-          fushi_voice_hook::hunex_lookup::kCursorScaleYPattern);
+          my_comic_voice_hook::hunex_lookup::kCursorScaleYPattern);
   const auto left_button =
-      fushi_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
+      my_comic_voice_hook::hunex_lookup::FindUniqueMaskedPattern(
           pump_span, pump_bytes,
-          fushi_voice_hook::hunex_lookup::kLeftButtonPollPattern);
+          my_comic_voice_hook::hunex_lookup::kLeftButtonPollPattern);
   uintptr_t pump_target = 0u;
   uintptr_t pump_return = 0u;
   uintptr_t ignored_return = 0u;
   const uint32_t raw_poller_calls =
-      fushi_voice_hook::hunex_lookup::FindRel32CallReturnsToTarget(
+      my_comic_voice_hook::hunex_lookup::FindRel32CallReturnsToTarget(
           pump_span, pump_bytes, reinterpret_cast<uintptr_t>(key_poller),
           &pump_return, &ignored_return);
   uintptr_t generic_slot = 0u;
@@ -4009,7 +4009,7 @@ bool ScanHunexGgeRuntimeAnchors() {
   uintptr_t held_mask_from_poller = 0u;
   uintptr_t held_mask_from_pump = 0u;
   const uint32_t raw_semantic_submit_calls =
-      fushi_voice_hook::hunex_lookup::FindRel32CallReturnsToTarget(
+      my_comic_voice_hook::hunex_lookup::FindRel32CallReturnsToTarget(
           pump_span, pump_bytes,
           reinterpret_cast<uintptr_t>(semantic_submit),
           &raw_semantic_submit_return, nullptr);
@@ -4018,28 +4018,28 @@ bool ScanHunexGgeRuntimeAnchors() {
       poller_held_mask_store.count == 1u &&
       pump_held_mask_load.count == 1u && left_button.count == 1u &&
       semantic_submit_call.offset < left_button.offset &&
-      fushi_voice_hook::hunex_lookup::DecodeRel32CallTarget(
+      my_comic_voice_hook::hunex_lookup::DecodeRel32CallTarget(
           pump_span + semantic_submit_call.offset +
-              fushi_voice_hook::hunex_lookup::
+              my_comic_voice_hook::hunex_lookup::
                   kPumpSemanticSubmitCallOffset,
           &semantic_submit_target, &semantic_submit_return) &&
       semantic_submit_target ==
           reinterpret_cast<uintptr_t>(semantic_submit) &&
       raw_semantic_submit_calls == 1u &&
       raw_semantic_submit_return == semantic_submit_return &&
-      fushi_voice_hook::hunex_lookup::DecodeRipRelativeAddress(
+      my_comic_voice_hook::hunex_lookup::DecodeRipRelativeAddress(
           poller_held_mask_span + poller_held_mask_store.offset +
-              fushi_voice_hook::hunex_lookup::
+              my_comic_voice_hook::hunex_lookup::
                   kKeyPollerHeldMaskStoreInstructionOffset,
-          fushi_voice_hook::hunex_lookup::kHeldMaskDisplacementOffset,
-          fushi_voice_hook::hunex_lookup::kHeldMaskInstructionBytes,
+          my_comic_voice_hook::hunex_lookup::kHeldMaskDisplacementOffset,
+          my_comic_voice_hook::hunex_lookup::kHeldMaskInstructionBytes,
           &held_mask_from_poller) &&
-      fushi_voice_hook::hunex_lookup::DecodeRipRelativeAddress(
+      my_comic_voice_hook::hunex_lookup::DecodeRipRelativeAddress(
           pump_span + pump_held_mask_load.offset +
-              fushi_voice_hook::hunex_lookup::
+              my_comic_voice_hook::hunex_lookup::
                   kPumpHeldMaskLoadInstructionOffset,
-          fushi_voice_hook::hunex_lookup::kHeldMaskDisplacementOffset,
-          fushi_voice_hook::hunex_lookup::kHeldMaskInstructionBytes,
+          my_comic_voice_hook::hunex_lookup::kHeldMaskDisplacementOffset,
+          my_comic_voice_hook::hunex_lookup::kHeldMaskInstructionBytes,
           &held_mask_from_pump) &&
       held_mask_from_poller == held_mask_from_pump &&
       HunexGgeImageContains(module_address, image_size,
@@ -4048,53 +4048,53 @@ bool ScanHunexGgeRuntimeAnchors() {
       generic.count == 1u && pump_to_poller.count == 1u &&
       cursor_pair.count == 1u && left_button.count == 1u &&
       semantic_input_graph_valid &&
-      fushi_voice_hook::hunex_lookup::DecodeRel32CallTarget(
+      my_comic_voice_hook::hunex_lookup::DecodeRel32CallTarget(
           pump_span + pump_to_poller.offset +
-              fushi_voice_hook::hunex_lookup::kPumpCallsPollerCallOffset,
+              my_comic_voice_hook::hunex_lookup::kPumpCallsPollerCallOffset,
           &pump_target, nullptr) &&
       pump_target == reinterpret_cast<uintptr_t>(key_poller) &&
       raw_poller_calls == 1u && pump_return != 0u &&
-      fushi_voice_hook::hunex_lookup::DecodeRipIndirectCallSlot(
+      my_comic_voice_hook::hunex_lookup::DecodeRipIndirectCallSlot(
           poller_span + generic.offset +
-              fushi_voice_hook::hunex_lookup::kGenericKeyPollCallOffset,
+              my_comic_voice_hook::hunex_lookup::kGenericKeyPollCallOffset,
           &generic_slot, &generic_return) &&
-      fushi_voice_hook::hunex_lookup::DecodeRipIndirectCallSlot(
+      my_comic_voice_hook::hunex_lookup::DecodeRipIndirectCallSlot(
           pump_span + left_button.offset +
-              fushi_voice_hook::hunex_lookup::kLeftButtonPollCallOffset,
+              my_comic_voice_hook::hunex_lookup::kLeftButtonPollCallOffset,
           &left_button_slot, &left_button_return) &&
-      fushi_voice_hook::hunex_lookup::DecodeRipIndirectCallSlot(
+      my_comic_voice_hook::hunex_lookup::DecodeRipIndirectCallSlot(
           pump_span + cursor_pair.offset +
-              fushi_voice_hook::hunex_lookup::kCursorGetPositionCallOffset,
+              my_comic_voice_hook::hunex_lookup::kCursorGetPositionCallOffset,
           &cursor_position_slot, nullptr) &&
-      fushi_voice_hook::hunex_lookup::DecodeRipIndirectCallSlot(
+      my_comic_voice_hook::hunex_lookup::DecodeRipIndirectCallSlot(
           pump_span + cursor_pair.offset +
-              fushi_voice_hook::hunex_lookup::kCursorScreenToClientCallOffset,
+              my_comic_voice_hook::hunex_lookup::kCursorScreenToClientCallOffset,
           &screen_to_client_slot, nullptr) &&
       generic_slot == left_button_slot;
   const bool cursor_transform_valid =
       cursor_scale_x.count == 1u && cursor_scale_y.count == 1u &&
       cursor_scale_y.offset ==
           cursor_scale_x.offset +
-              fushi_voice_hook::hunex_lookup::kCursorScaleYRelativeOffset &&
-      fushi_voice_hook::hunex_lookup::DecodeRipRelativeAddress(
+              my_comic_voice_hook::hunex_lookup::kCursorScaleYRelativeOffset &&
+      my_comic_voice_hook::hunex_lookup::DecodeRipRelativeAddress(
           pump_span + cursor_scale_x.offset,
-          fushi_voice_hook::hunex_lookup::
+          my_comic_voice_hook::hunex_lookup::
               kCursorViewportDisplacementOffset,
-          fushi_voice_hook::hunex_lookup::kCursorViewportInstructionBytes,
+          my_comic_voice_hook::hunex_lookup::kCursorViewportInstructionBytes,
           &viewport_rect) &&
-      fushi_voice_hook::hunex_lookup::DecodeRipRelativeAddress(
+      my_comic_voice_hook::hunex_lookup::DecodeRipRelativeAddress(
           pump_span + cursor_scale_x.offset +
-              fushi_voice_hook::hunex_lookup::
+              my_comic_voice_hook::hunex_lookup::
                   kCursorScaleXInstructionOffset,
-          fushi_voice_hook::hunex_lookup::kCursorScaleXDisplacementOffset,
-          fushi_voice_hook::hunex_lookup::kCursorScaleInstructionBytes,
+          my_comic_voice_hook::hunex_lookup::kCursorScaleXDisplacementOffset,
+          my_comic_voice_hook::hunex_lookup::kCursorScaleInstructionBytes,
           &scale_x) &&
-      fushi_voice_hook::hunex_lookup::DecodeRipRelativeAddress(
+      my_comic_voice_hook::hunex_lookup::DecodeRipRelativeAddress(
           pump_span + cursor_scale_y.offset +
-              fushi_voice_hook::hunex_lookup::
+              my_comic_voice_hook::hunex_lookup::
                   kCursorScaleYInstructionOffset,
-          fushi_voice_hook::hunex_lookup::kCursorScaleYDisplacementOffset,
-          fushi_voice_hook::hunex_lookup::kCursorScaleInstructionBytes,
+          my_comic_voice_hook::hunex_lookup::kCursorScaleYDisplacementOffset,
+          my_comic_voice_hook::hunex_lookup::kCursorScaleInstructionBytes,
           &scale_y) &&
       scale_y == scale_x + sizeof(float) &&
       HunexGgeImageContains(module_address, image_size, viewport_rect,
@@ -4144,11 +4144,11 @@ bool ScanHunexGgeRuntimeAnchors() {
   }
 
   trace->scanner_status |=
-      fushi_voice_hook::kHunexGgeTraceScannerDrawCallsValid |
-      fushi_voice_hook::kHunexGgeTraceScannerInputCallsValid |
-      fushi_voice_hook::kHunexGgeTraceScannerRenderItemCallValid |
-      fushi_voice_hook::kHunexGgeTraceScannerCursorTransformValid |
-      fushi_voice_hook::kHunexGgeTraceScannerBodySubmitValid;
+      my_comic_voice_hook::kHunexGgeTraceScannerDrawCallsValid |
+      my_comic_voice_hook::kHunexGgeTraceScannerInputCallsValid |
+      my_comic_voice_hook::kHunexGgeTraceScannerRenderItemCallValid |
+      my_comic_voice_hook::kHunexGgeTraceScannerCursorTransformValid |
+      my_comic_voice_hook::kHunexGgeTraceScannerBodySubmitValid;
   g_hunex_gge_anchors.module = module_address;
   g_hunex_gge_anchors.image_size = image_size;
   g_hunex_gge_anchors.draw = reinterpret_cast<uintptr_t>(draw);
@@ -4168,7 +4168,7 @@ bool ScanHunexGgeRuntimeAnchors() {
       uintptr_t direct_return = 0u;
       uintptr_t direct_return_alt = 0u;
       body_compositor_call_count =
-          fushi_voice_hook::hunex_lookup::FindRel32CallReturnsToTarget(
+          my_comic_voice_hook::hunex_lookup::FindRel32CallReturnsToTarget(
               draw_span, draw_bytes, surface_compositor_target,
               &direct_return, &direct_return_alt);
       // 实测 WoH 的 draw 里对 compositor 恰有**两处** rel32 调用，运行期只有其中一处
@@ -4380,11 +4380,11 @@ bool TryHookHunexGgeRuntimeTrace() {
   if (!InstallHunexGgeHookGroup(hooks, _countof(hooks))) {
     return false;
   }
-  FushiHunexGgeTraceV3.scanner_status |=
-      fushi_voice_hook::kHunexGgeTraceScannerSurfaceComposeHooksReady |
-      fushi_voice_hook::kHunexGgeTraceScannerProjectionHooksReady;
-  FushiHunexGgeTraceV3.scanner_status |=
-      fushi_voice_hook::kHunexGgeTraceScannerHooksReady;
+  MyComicHunexGgeTraceV3.scanner_status |=
+      my_comic_voice_hook::kHunexGgeTraceScannerSurfaceComposeHooksReady |
+      my_comic_voice_hook::kHunexGgeTraceScannerProjectionHooksReady;
+  MyComicHunexGgeTraceV3.scanner_status |=
+      my_comic_voice_hook::kHunexGgeTraceScannerHooksReady;
   InterlockedExchange(&g_hunex_gge_trace_hooks_ready, 1);
   return true;
 }
@@ -4499,7 +4499,7 @@ bool IsHunexGgeProfileMatched() {
   const DWORD chars = GetModuleFileNameW(
       nullptr, executable, static_cast<DWORD>(std::size(executable)));
   return chars > 0u && chars < std::size(executable) &&
-         fushi_voice_hook::MatchesHunexGgeTitleProfile(executable);
+         my_comic_voice_hook::MatchesHunexGgeTitleProfile(executable);
 }
 
 bool BuildHunexVoiceArchivePath(wchar_t* out, size_t out_chars) {
@@ -4511,7 +4511,7 @@ bool BuildHunexVoiceArchivePath(wchar_t* out, size_t out_chars) {
   if (slash == nullptr) return false;
   slash[1] = 0;
   return wcscat_s(out, out_chars,
-                  fushi_voice_hook::kHunexGgeMahoyoVoiceArchiveName) == 0;
+                  my_comic_voice_hook::kHunexGgeMahoyoVoiceArchiveName) == 0;
 }
 
 void StampHunexVoiceArchivePath(const wchar_t* path,
@@ -4535,7 +4535,7 @@ void StampHunexVoiceArchivePath(const wchar_t* path,
 bool ReadHunexVoiceMember(HANDLE file, const HunexVoiceRange& range,
                           uint8_t** member) {
   if (file == INVALID_HANDLE_VALUE || member == nullptr || range.size == 0u ||
-      range.size > fushi_voice_hook::hunex::kMaxHunexHwBytes) {
+      range.size > my_comic_voice_hook::hunex::kMaxHunexHwBytes) {
     return false;
   }
   *member = static_cast<uint8_t*>(malloc(range.size));
@@ -4553,7 +4553,7 @@ bool ReadHunexVoiceMember(HANDLE file, const HunexVoiceRange& range,
 
 bool LoadHunexVoiceArchive(const wchar_t* path, HunexVoiceArchive* out) {
   if (path == nullptr || out == nullptr ||
-      !fushi_voice_hook::IsHunexGgeVoiceArchivePath(path) ||
+      !my_comic_voice_hook::IsHunexGgeVoiceArchivePath(path) ||
       g_orig_CreateFileW == nullptr || g_orig_ReadFile == nullptr ||
       g_orig_CloseHandle == nullptr) {
     return false;
@@ -4565,26 +4565,26 @@ bool LoadHunexVoiceArchive(const wchar_t* path, HunexVoiceArchive* out) {
   if (file == INVALID_HANDLE_VALUE) return false;
 
   HunexVoiceFileIdentity identity;
-  uint8_t header[fushi_voice_hook::hunex::kHunexHfaHeaderBytes] = {};
+  uint8_t header[my_comic_voice_hook::hunex::kHunexHfaHeaderBytes] = {};
   uint8_t* index = nullptr;
   HunexVoiceRange* ranges = nullptr;
   uint32_t range_count = 0u;
-  fushi_voice_hook::hunex::HunexHfaArchiveInfo info;
+  my_comic_voice_hook::hunex::HunexHfaArchiveInfo info;
   bool valid = ReadHunexVoiceFileIdentity(file, &identity) &&
                ReadExact(file, header, sizeof(header)) &&
-               memcmp(header, fushi_voice_hook::hunex::kHunexHfaMagic,
-                      sizeof(fushi_voice_hook::hunex::kHunexHfaMagic) - 1u) ==
+               memcmp(header, my_comic_voice_hook::hunex::kHunexHfaMagic,
+                      sizeof(my_comic_voice_hook::hunex::kHunexHfaMagic) - 1u) ==
                    0;
   uint64_t index_bytes = 0u;
   if (valid) {
     const uint32_t count =
-        fushi_voice_hook::hunex::ReadHunexLe32(header + 12u);
+        my_comic_voice_hook::hunex::ReadHunexLe32(header + 12u);
     index_bytes =
-        fushi_voice_hook::hunex::kHunexHfaHeaderBytes +
+        my_comic_voice_hook::hunex::kHunexHfaHeaderBytes +
         static_cast<uint64_t>(count) *
-            fushi_voice_hook::hunex::kHunexHfaRecordBytes;
+            my_comic_voice_hook::hunex::kHunexHfaRecordBytes;
     valid = count > 0u &&
-            count <= fushi_voice_hook::hunex::kMaxHunexHfaEntries &&
+            count <= my_comic_voice_hook::hunex::kMaxHunexHfaEntries &&
             index_bytes <= identity.file_bytes && index_bytes <= UINT32_MAX;
   }
   if (valid) {
@@ -4594,7 +4594,7 @@ bool LoadHunexVoiceArchive(const wchar_t* path, HunexVoiceArchive* out) {
       memcpy(index, header, sizeof(header));
       valid = ReadExact(file, index + sizeof(header),
                         static_cast<uint32_t>(index_bytes - sizeof(header))) &&
-              fushi_voice_hook::hunex::ParseHunexHfaIndex(
+              my_comic_voice_hook::hunex::ParseHunexHfaIndex(
                   index, static_cast<size_t>(index_bytes), identity.file_bytes,
                   &info);
     }
@@ -4604,8 +4604,8 @@ bool LoadHunexVoiceArchive(const wchar_t* path, HunexVoiceArchive* out) {
         malloc(static_cast<size_t>(info.count) * sizeof(HunexVoiceRange)));
     valid = ranges != nullptr;
     for (uint32_t id = 0u; valid && id < info.count; ++id) {
-      fushi_voice_hook::hunex::HunexHfaEntry entry;
-      valid = fushi_voice_hook::hunex::ReadHunexHfaEntryAtIndex(
+      my_comic_voice_hook::hunex::HunexHfaEntry entry;
+      valid = my_comic_voice_hook::hunex::ReadHunexHfaEntryAtIndex(
           index, static_cast<size_t>(index_bytes), identity.file_bytes, id,
           &entry);
       if (!valid) break;
@@ -4620,9 +4620,9 @@ bool LoadHunexVoiceArchive(const wchar_t* path, HunexVoiceArchive* out) {
                 return left.offset < right.offset;
               });
     uint8_t* member = nullptr;
-    fushi_voice_hook::hunex::HunexHwOggInfo hw;
+    my_comic_voice_hook::hunex::HunexHwOggInfo hw;
     valid = ReadHunexVoiceMember(file, ranges[0], &member) &&
-            fushi_voice_hook::hunex::ParseHunexHwOgg(
+            my_comic_voice_hook::hunex::ParseHunexHwOgg(
                 member, ranges[0].size, &hw);
     free(member);
   }
@@ -4673,7 +4673,7 @@ int FindHunexVoiceArchive(const HunexVoiceFileIdentity& identity) {
 void RememberHunexVoiceHfa(HANDLE handle, const wchar_t* path) {
   if (InterlockedCompareExchange(&g_hunex_voice_enabled, 0, 0) == 0 ||
       handle == INVALID_HANDLE_VALUE ||
-      !fushi_voice_hook::IsHunexGgeVoiceArchivePath(path)) {
+      !my_comic_voice_hook::IsHunexGgeVoiceArchivePath(path)) {
     return;
   }
   HunexVoiceFileIdentity identity;
@@ -4681,18 +4681,18 @@ void RememberHunexVoiceHfa(HANDLE handle, const wchar_t* path) {
   const int archive_index = FindHunexVoiceArchive(identity);
   if (archive_index < 0) return;
 
-  if (fushi_voice_hook::RememberTrackedHandle(
+  if (my_comic_voice_hook::RememberTrackedHandle(
           g_hunex_voice_handles, handle,
           [archive_index](HunexVoiceHandle& slot) {
             slot.archive_index = static_cast<uint32_t>(archive_index);
           })) {
-    SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagHunexHfaHandleTracked);
+    SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagHunexHfaHandleTracked);
   }
 }
 
 bool CopyHunexVoiceArchiveIndex(HANDLE handle, uint32_t* archive_index) {
   if (archive_index == nullptr) return false;
-  return fushi_voice_hook::ReadTrackedHandle(
+  return my_comic_voice_hook::ReadTrackedHandle(
       g_hunex_voice_handles, handle,
       [archive_index](const HunexVoiceHandle& slot) {
         *archive_index = slot.archive_index;
@@ -4700,7 +4700,7 @@ bool CopyHunexVoiceArchiveIndex(HANDLE handle, uint32_t* archive_index) {
 }
 
 void ForgetHunexVoiceHfa(HANDLE handle) {
-  fushi_voice_hook::ForgetTrackedHandle(g_hunex_voice_handles, handle);
+  my_comic_voice_hook::ForgetTrackedHandle(g_hunex_voice_handles, handle);
 }
 
 bool QueueHunexVoice(uint32_t archive_index, uint64_t offset,
@@ -4749,8 +4749,8 @@ void ObserveHunexVoiceHfaRead(HANDLE file, const void* buffer, DWORD done,
   } __except (EXCEPTION_EXECUTE_HANDLER) {
     return;
   }
-  if (fushi_voice_hook::hunex::ReadHunexLe32(prefix) !=
-          fushi_voice_hook::hunex::kHunexHwHeaderBytes &&
+  if (my_comic_voice_hook::hunex::ReadHunexLe32(prefix) !=
+          my_comic_voice_hook::hunex::kHunexHwHeaderBytes &&
       memcmp(prefix, "OggS", 4u) != 0) {
     return;
   }
@@ -4761,27 +4761,27 @@ void ObserveHunexVoiceHfaRead(HANDLE file, const void* buffer, DWORD done,
     const DWORD chars = GetFinalPathNameByHandleW(
         file, path, static_cast<DWORD>(std::size(path)), FILE_NAME_NORMALIZED);
     if (chars == 0u || chars >= std::size(path) ||
-        !fushi_voice_hook::IsHunexGgeVoiceArchivePath(path)) {
+        !my_comic_voice_hook::IsHunexGgeVoiceArchivePath(path)) {
       return;
     }
     RememberHunexVoiceHfa(file, path);
     if (!CopyHunexVoiceArchiveIndex(file, &archive_index)) return;
   }
-  SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagHunexHfaReadObserved);
+  SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagHunexHfaReadObserved);
 
   LARGE_INTEGER zero = {};
   LARGE_INTEGER current = {};
   if (!SetFilePointerEx(file, zero, &current, FILE_CURRENT) ||
       current.QuadPart < done) {
-    SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagHunexHfaTaskRejected);
+    SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagHunexHfaTaskRejected);
     return;
   }
   const uint64_t start = static_cast<uint64_t>(current.QuadPart) - done;
   const bool queued = QueueHunexVoice(archive_index, start, done, prefix,
                                       GetTickCount64());
   SetXAudioDiagnostic(queued
-                          ? fushi_voice_hook::kXAudioDiagHunexHfaVoiceQueued
-                          : fushi_voice_hook::kXAudioDiagHunexHfaTaskRejected);
+                          ? my_comic_voice_hook::kXAudioDiagHunexHfaVoiceQueued
+                          : my_comic_voice_hook::kXAudioDiagHunexHfaTaskRejected);
 }
 
 bool FindHunexVoiceRange(const HunexVoiceArchive& archive,
@@ -4794,13 +4794,13 @@ bool FindHunexVoiceRange(const HunexVoiceArchive& archive,
   uint64_t member_offset = task.offset;
   bool payload = false;
   if (memcmp(task.prefix, "OggS", 4u) == 0) {
-    if (task.offset < fushi_voice_hook::hunex::kHunexHwHeaderBytes) {
+    if (task.offset < my_comic_voice_hook::hunex::kHunexHwHeaderBytes) {
       return false;
     }
-    member_offset -= fushi_voice_hook::hunex::kHunexHwHeaderBytes;
+    member_offset -= my_comic_voice_hook::hunex::kHunexHwHeaderBytes;
     payload = true;
-  } else if (fushi_voice_hook::hunex::ReadHunexLe32(task.prefix) !=
-             fushi_voice_hook::hunex::kHunexHwHeaderBytes) {
+  } else if (my_comic_voice_hook::hunex::ReadHunexLe32(task.prefix) !=
+             my_comic_voice_hook::hunex::kHunexHwHeaderBytes) {
     return false;
   }
 
@@ -4814,13 +4814,13 @@ bool FindHunexVoiceRange(const HunexVoiceArchive& archive,
       first = middle + 1u;
     } else {
       if (archive.ranges[middle].size <=
-          fushi_voice_hook::hunex::kHunexHwHeaderBytes) {
+          my_comic_voice_hook::hunex::kHunexHwHeaderBytes) {
         return false;
       }
       const uint32_t available =
           payload
               ? archive.ranges[middle].size -
-                    fushi_voice_hook::hunex::kHunexHwHeaderBytes
+                    my_comic_voice_hook::hunex::kHunexHwHeaderBytes
               : archive.ranges[middle].size;
       if (task.read_bytes > available) {
         return false;
@@ -4839,7 +4839,7 @@ void ProcessHunexVoiceTask(HunexVoiceTask* task) {
   if (task == nullptr || task->generation != generation ||
       task->archive_index != 0u ||
       InterlockedCompareExchange(&g_hunex_voice_archive_count, 0, 0) != 1) {
-    SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagHunexHfaTaskRejected);
+    SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagHunexHfaTaskRejected);
     return;
   }
   const HunexVoiceArchive& archive = g_hunex_voice_archive;
@@ -4847,7 +4847,7 @@ void ProcessHunexVoiceTask(HunexVoiceTask* task) {
   bool payload_start = false;
   if (!FindHunexVoiceRange(archive, *task, &range_index, &payload_start) ||
       range_index >= archive.range_count) {
-    SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagHunexHfaTaskRejected);
+    SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagHunexHfaTaskRejected);
     return;
   }
   (void)payload_start;
@@ -4862,17 +4862,17 @@ void ProcessHunexVoiceTask(HunexVoiceTask* task) {
       FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
       OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
   if (file == INVALID_HANDLE_VALUE) {
-    SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagHunexHfaTaskRejected);
+    SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagHunexHfaTaskRejected);
     return;
   }
   const HunexVoiceRange range = archive.ranges[range_index];
   HunexVoiceFileIdentity identity;
   uint8_t* member = nullptr;
-  fushi_voice_hook::hunex::HunexHwOggInfo hw;
+  my_comic_voice_hook::hunex::HunexHwOggInfo hw;
   bool valid = ReadHunexVoiceFileIdentity(file, &identity) &&
                SameHunexVoiceFileIdentity(identity, archive.identity) &&
                ReadHunexVoiceMember(file, range, &member) &&
-               fushi_voice_hook::hunex::ParseHunexHwOgg(member, range.size,
+               my_comic_voice_hook::hunex::ParseHunexHwOgg(member, range.size,
                                                         &hw);
   if (valid) {
     wchar_t storage_name[64] = {};
@@ -4884,9 +4884,9 @@ void ProcessHunexVoiceTask(HunexVoiceTask* task) {
     g_hunex_voice_last_range = range_index;
     g_hunex_voice_last_tick = task->tick_ms;
     SetXAudioDiagnostic(
-        fushi_voice_hook::kXAudioDiagGameResourcePublished);
+        my_comic_voice_hook::kXAudioDiagGameResourcePublished);
   } else {
-    SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagHunexHfaTaskRejected);
+    SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagHunexHfaTaskRejected);
   }
   free(member);
   g_orig_CloseHandle(file);
@@ -4909,14 +4909,14 @@ bool TryHookHunexGgeResourceAudio() {
   }
   if (!TryHookSiglusOvk() || !LoadHunexVoiceArchives()) return false;
   InterlockedExchange(&g_hunex_voice_enabled, 1);
-  SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagHunexHfaHooksReady);
+  SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagHunexHfaHooksReady);
   return true;
 }
 
 void StopHunexGgeResourceAudio() {
   InterlockedExchange(&g_hunex_voice_enabled, 0);
   InterlockedIncrement(&g_hunex_voice_generation);
-  fushi_voice_hook::ClearTrackedHandles(g_hunex_voice_handles);
+  my_comic_voice_hook::ClearTrackedHandles(g_hunex_voice_handles);
   InterlockedExchange(&g_hunex_voice_archive_count, 0);
   HunexVoiceRange* ranges = g_hunex_voice_archive.ranges;
   g_hunex_voice_archive = {};
@@ -4934,10 +4934,10 @@ void StopHunexGgeResourceAudio() {
 
 void DisableHunexGgeLookupRuntime(bool reset_worker_state) {
   if (g_header != nullptr) {
-    fushi_voice_hook::g_geometry_provider_registry.Retire(
+    my_comic_voice_hook::g_geometry_provider_registry.Retire(
         g_header,
-        fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-        fushi_voice_hook::kLookupGeometryProviderIdHunexGge);
+        my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+        my_comic_voice_hook::kLookupGeometryProviderIdHunexGge);
   }
   SetHunexGgeLookupRuntimeEnabled(&g_hunex_gge_lookup_runtime, false);
   InvalidateHunexGgeLookupModel(&g_hunex_gge_lookup_runtime);
@@ -4947,8 +4947,8 @@ void DisableHunexGgeLookupRuntime(bool reset_worker_state) {
 struct HunexGgeSnapshotSelection {
   uint64_t selected_text_seq = 0u;
   uint64_t latest_strict_selected_line_seq = 0u;
-  fushi_voice_hook::HunexGgeSelectedTextFailure failure =
-      fushi_voice_hook::HunexGgeSelectedTextFailure::kNone;
+  my_comic_voice_hook::HunexGgeSelectedTextFailure failure =
+      my_comic_voice_hook::HunexGgeSelectedTextFailure::kNone;
   // BUG-2133：把候选计数带出来。只有它们能把同一个 kNoExactRawLine 分成两种完全不同
   // 的根因——「选定车道在窗口内根本没有事件」与「有事件但字节不等」。此前两个计数
   // 在这里被整个丢掉，真机上只剩两 bit 信息，分型无从谈起。
@@ -4957,12 +4957,12 @@ struct HunexGgeSnapshotSelection {
 };
 
 HunexGgeSnapshotSelection MatchHunexGgeSnapshotToSelectedText(
-    const fushi_voice_hook::hunex_capture_bridge::TraversalSnapshot& snapshot,
+    const my_comic_voice_hook::hunex_capture_bridge::TraversalSnapshot& snapshot,
     uint64_t selected_thread_id) {
   HunexGgeSnapshotSelection outcome;
   const auto read_selected_text =
       [&](uint64_t window_after_seq, uint64_t window_through_seq) {
-    fushi_voice_hook::HunexGgeSelectedTextRequest request;
+    my_comic_voice_hook::HunexGgeSelectedTextRequest request;
     request.header = g_header;
     request.mapped_bytes = g_mapped_view_bytes;
     request.current_process_id = GetCurrentProcessId();
@@ -4973,16 +4973,16 @@ HunexGgeSnapshotSelection MatchHunexGgeSnapshotToSelectedText(
     request.exact_raw_tagged_text =
         reinterpret_cast<const wchar_t*>(snapshot.raw_text.data());
     request.exact_raw_tagged_text_units = snapshot.raw_text_units;
-    return fushi_voice_hook::ReadHunexGgeSelectedLunaText(request);
+    return my_comic_voice_hook::ReadHunexGgeSelectedLunaText(request);
   };
 
-  fushi_voice_hook::HunexGgeSelectedTextResult selected = {};
+  my_comic_voice_hook::HunexGgeSelectedTextResult selected = {};
   bool selected_read_attempted = false;
   // BUG-2133：留住第一次读的结果。下面那次延迟读的窗口是 (seal_seq, now]，而 now 由
   // **任意车道**的任意文本事件推进（含 thread-discovered）；选定车道在那一小段里通常
   // 一条新行都没有，于是延迟读必然产出「窗口内空无一物」的 kNoExactRawLine，把第一次
   // 读真正有意义的失败码整体盖掉——真机 WoH 上读到的永远是 6、从不是 8，正是这条噪声。
-  fushi_voice_hook::HunexGgeSelectedTextResult first_read = {};
+  my_comic_voice_hook::HunexGgeSelectedTextResult first_read = {};
   bool first_read_attempted = false;
   if (selected_thread_id != 0u &&
       snapshot.text_window_through_seq >
@@ -5002,7 +5002,7 @@ HunexGgeSnapshotSelection MatchHunexGgeSnapshotToSelectedText(
   // bytes/thread-address requirements so prefetched or toolbar text cannot
   // become the selected story model.
   if (selected.disposition !=
-      fushi_voice_hook::HunexGgeSelectedTextDisposition::kUseExactMatch) {
+      my_comic_voice_hook::HunexGgeSelectedTextDisposition::kUseExactMatch) {
     const uint64_t deferred_after_seq =
         snapshot.text_window_through_seq >
                 g_hunex_gge_lookup_last_selected_text_seq
@@ -5039,7 +5039,7 @@ HunexGgeSnapshotSelection MatchHunexGgeSnapshotToSelectedText(
         (std::max)(first_read.invalid_selected_events,
                    selected.invalid_selected_events);
     if (selected.disposition ==
-            fushi_voice_hook::HunexGgeSelectedTextDisposition::
+            my_comic_voice_hook::HunexGgeSelectedTextDisposition::
                 kUseExactMatch &&
         selected.matched_seq != 0u) {
       outcome.selected_text_seq = selected.matched_seq;
@@ -5068,10 +5068,10 @@ bool RetainHunexGgeLookupModel(uint64_t selected_thread_id,
           std::memory_order_acquire) >= kHunexGgeLookupModelSlots) {
     return false;
   }
-  if (!fushi_voice_hook::g_geometry_provider_registry.OfferReady(
+  if (!my_comic_voice_hook::g_geometry_provider_registry.OfferReady(
           g_header,
-          fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-          fushi_voice_hook::kLookupGeometryProviderIdHunexGge)) {
+          my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+          my_comic_voice_hook::kLookupGeometryProviderIdHunexGge)) {
     return false;
   }
   SetHunexGgeLookupRuntimeEnabled(&g_hunex_gge_lookup_runtime, true);
@@ -5109,7 +5109,7 @@ bool PrepareHunexGgeCaptureForLookup(bool capture_requested) {
 void ProcessHunexGgeLookupTick() {
   const bool lookup_requested =
       !g_stop && g_header != nullptr &&
-      fushi_voice_hook::HasLookupRegion(g_header) &&
+      my_comic_voice_hook::HasLookupRegion(g_header) &&
       g_header->lookup_enabled != 0u;
   const bool exact_profile_admitted =
       IsHunexGgeProfileMatched() &&
@@ -5133,7 +5133,7 @@ void ProcessHunexGgeLookupTick() {
   if ((capture_quarantined || input_thread_conflict) && g_header != nullptr) {
     InterlockedOr(reinterpret_cast<volatile LONG*>(&g_header->lookup_diag),
                   static_cast<LONG>(
-                      fushi_voice_hook::kLookupDiagSensorFault));
+                      my_comic_voice_hook::kLookupDiagSensorFault));
   }
   const HWND game = lookup_requested ? FindGameMainWindow() : nullptr;
   const bool shield_ready = MaintainHunexGgeSampledInputShield(
@@ -5142,25 +5142,25 @@ void ProcessHunexGgeLookupTick() {
       input_hook_ready && !input_thread_conflict);
   uint32_t lookup_gate_mask = 0u;
   if (lookup_requested) {
-    lookup_gate_mask |= fushi_voice_hook::kHunexGgeTraceLookupRequested;
+    lookup_gate_mask |= my_comic_voice_hook::kHunexGgeTraceLookupRequested;
   }
   if (exact_profile_admitted) {
     lookup_gate_mask |=
-        fushi_voice_hook::kHunexGgeTraceLookupExactProfileAdmitted;
+        my_comic_voice_hook::kHunexGgeTraceLookupExactProfileAdmitted;
   }
   if (input_hook_ready) {
-    lookup_gate_mask |= fushi_voice_hook::kHunexGgeTraceLookupInputHookReady;
+    lookup_gate_mask |= my_comic_voice_hook::kHunexGgeTraceLookupInputHookReady;
   }
   if (shield_ready) {
-    lookup_gate_mask |= fushi_voice_hook::kHunexGgeTraceLookupShieldReady;
+    lookup_gate_mask |= my_comic_voice_hook::kHunexGgeTraceLookupShieldReady;
   }
   if (capture_quarantined) {
     lookup_gate_mask |=
-        fushi_voice_hook::kHunexGgeTraceLookupCaptureQuarantined;
+        my_comic_voice_hook::kHunexGgeTraceLookupCaptureQuarantined;
   }
   if (input_thread_conflict) {
     lookup_gate_mask |=
-        fushi_voice_hook::kHunexGgeTraceLookupInputThreadConflict;
+        my_comic_voice_hook::kHunexGgeTraceLookupInputThreadConflict;
   }
   PublishHunexGgeLookupGateDiagnostics(lookup_gate_mask);
   if (!lookup_requested || !capture_mutation_admitted ||
@@ -5180,31 +5180,31 @@ void ProcessHunexGgeLookupTick() {
 
   InterlockedOr(reinterpret_cast<volatile LONG*>(&g_header->lookup_diag),
                 static_cast<LONG>(
-                    fushi_voice_hook::kLookupDiagSensorInstalled));
+                    my_comic_voice_hook::kLookupDiagSensorInstalled));
 
   const uint64_t selected_thread_id =
-      fushi_voice_hook::SelectedTextThreadId(g_header);
+      my_comic_voice_hook::SelectedTextThreadId(g_header);
 
   // The newest body-wrapper traversal is often the top toolbar, not the
   // selected story sentence. Enumerate every stable recent slot and bind in
   // the safe direction used by Leaf: selected semantic line -> exact recent
   // geometry candidate. Never weaken exact raw/thread/function matching.
-  fushi_voice_hook::hunex_capture_bridge::TraversalSnapshot snapshot;
+  my_comic_voice_hook::hunex_capture_bridge::TraversalSnapshot snapshot;
   HunexGgeSnapshotSelection snapshot_selection;
   bool any_snapshot = false;
   bool matched_snapshot = false;
   uint32_t newest_rejected_epoch = 0u;
-  fushi_voice_hook::HunexGgeSelectedTextFailure newest_failure =
-      fushi_voice_hook::HunexGgeSelectedTextFailure::kNone;
+  my_comic_voice_hook::HunexGgeSelectedTextFailure newest_failure =
+      my_comic_voice_hook::HunexGgeSelectedTextFailure::kNone;
   // 与 newest_failure 同源保留：失败码离开候选计数就无法分型（BUG-2133）。
   uint32_t newest_stable_events = 0u;
   uint32_t newest_invalid_events = 0u;
   uint64_t newest_selected_line_seq = 0u;
   for (uint32_t slot_index = 0u;
        slot_index <
-       fushi_voice_hook::hunex_capture_bridge::kSnapshotSlotCount;
+       my_comic_voice_hook::hunex_capture_bridge::kSnapshotSlotCount;
        ++slot_index) {
-    fushi_voice_hook::hunex_capture_bridge::TraversalSnapshot candidate;
+    my_comic_voice_hook::hunex_capture_bridge::TraversalSnapshot candidate;
     if (!g_hunex_gge_capture_bridge.ReadSealedSlot(slot_index, &candidate)) {
       continue;
     }
@@ -5282,7 +5282,7 @@ void ProcessHunexGgeLookupTick() {
 
   const uint64_t selected_text_seq = snapshot_selection.selected_text_seq;
 
-  fushi_voice_hook::hunex_lookup_core::RubyTextProjection projection;
+  my_comic_voice_hook::hunex_lookup_core::RubyTextProjection projection;
   if (!BuildHunexGgeClientProjection(snapshot, client_width, client_height,
                                      &projection)) {
     SetHunexGgeLookupWorkerTraceState(
@@ -5305,17 +5305,17 @@ void ProcessHunexGgeLookupTick() {
     DisableHunexGgeLookupRuntime(false);
     return;
   }
-  if (!fushi_voice_hook::g_geometry_provider_registry.OfferReady(
+  if (!my_comic_voice_hook::g_geometry_provider_registry.OfferReady(
           g_header,
-          fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-          fushi_voice_hook::kLookupGeometryProviderIdHunexGge)) {
+          my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+          my_comic_voice_hook::kLookupGeometryProviderIdHunexGge)) {
     SetHunexGgeLookupWorkerTraceState(kHunexGgeLookupWorkerGateClosed);
     DisableHunexGgeLookupRuntime(false);
     return;
   }
   InterlockedOr(reinterpret_cast<volatile LONG*>(&g_header->lookup_diag),
                 static_cast<LONG>(
-                    fushi_voice_hook::kLookupDiagGeometryObserved));
+                    my_comic_voice_hook::kLookupDiagGeometryObserved));
   RememberHunexGgeMatchedRawLine(snapshot, selected_thread_id,
                                  selected_text_seq);
   SetHunexGgeLookupWorkerTraceState(
@@ -5331,7 +5331,7 @@ void ProcessHunexGgeLookupTick() {}
 
 #endif  // _M_X64
 
-class HunexGgeAdapter final : public fushi_voice_hook::EngineAdapter {
+class HunexGgeAdapter final : public my_comic_voice_hook::EngineAdapter {
  public:
   const char* id() const override { return "hunex_gge"; }
   bool probe() const override { return IsHunexGgeProfileMatched(); }
@@ -5360,12 +5360,12 @@ class HunexGgeAdapter final : public fushi_voice_hook::EngineAdapter {
     ProcessHunexVoiceTasks();
     ProcessHunexGgeLookupTick();
   }
-  fushi_voice_hook::AdapterCapability capabilities() const override {
-    return fushi_voice_hook::AdapterCapability::kText |
-           fushi_voice_hook::AdapterCapability::kResourceAudio;
+  my_comic_voice_hook::AdapterCapability capabilities() const override {
+    return my_comic_voice_hook::AdapterCapability::kText |
+           my_comic_voice_hook::AdapterCapability::kResourceAudio;
   }
-  fushi_voice_hook::LookupAdmissionReport lookupAdmission() const override {
-    fushi_voice_hook::LookupAdmissionReport report;
+  my_comic_voice_hook::LookupAdmissionReport lookupAdmission() const override {
+    my_comic_voice_hook::LookupAdmissionReport report;
 #if defined(_M_X64)
     const bool scanner_admitted =
         InterlockedCompareExchange(&g_hunex_gge_trace_scan_state, 0, 0) == 1;
@@ -5374,10 +5374,10 @@ class HunexGgeAdapter final : public fushi_voice_hook::EngineAdapter {
         g_orig_hunex_gge_get_async_key_state != nullptr &&
         !g_hunex_gge_capture_bridge.quarantined();
     report.state = scanner_admitted && hooks_ready
-                       ? fushi_voice_hook::kLookupAdmissionSensorInstalled
-                       : fushi_voice_hook::kLookupAdmissionIdentityAccepted;
+                       ? my_comic_voice_hook::kLookupAdmissionSensorInstalled
+                       : my_comic_voice_hook::kLookupAdmissionIdentityAccepted;
 #else
-    report.state = fushi_voice_hook::kLookupAdmissionEngineUnsupported;
+    report.state = my_comic_voice_hook::kLookupAdmissionEngineUnsupported;
 #endif
     return report;
   }
@@ -5399,10 +5399,10 @@ class HunexGgeAdapter final : public fushi_voice_hook::EngineAdapter {
     StopHunexGgeResourceAudio();
 #if defined(_M_X64)
     if (g_header != nullptr) {
-      fushi_voice_hook::g_geometry_provider_registry.Retire(
+      my_comic_voice_hook::g_geometry_provider_registry.Retire(
           g_header,
-          fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-          fushi_voice_hook::kLookupGeometryProviderIdHunexGge);
+          my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+          my_comic_voice_hook::kLookupGeometryProviderIdHunexGge);
     }
     ShutdownHunexGgeLookupRuntime(&g_hunex_gge_lookup_runtime, g_header);
     InterlockedExchange(&g_hunex_gge_capture_mutation_admitted, 0);
@@ -5412,7 +5412,7 @@ class HunexGgeAdapter final : public fushi_voice_hook::EngineAdapter {
 #endif
     installed_ = false;
   }
-  fushi_voice_hook::AdapterDiagnostics diagnostics() const override {
+  my_comic_voice_hook::AdapterDiagnostics diagnostics() const override {
     return {id(), probe(), installed_,
             g_header == nullptr ? 0u : g_header->xaudio_diagnostics};
   }

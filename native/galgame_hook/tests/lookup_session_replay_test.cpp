@@ -46,31 +46,31 @@
 
 namespace {
 
-using fushi_voice_hook::IsLookupFrameSane;
-using fushi_voice_hook::kClipCount;
-using fushi_voice_hook::kLookupBitmapBytes;
-using fushi_voice_hook::kLookupFrameCount;
-using fushi_voice_hook::kLookupFrameDismiss;
-using fushi_voice_hook::kLookupHitFlagSubmit;
-using fushi_voice_hook::kLookupInputSlotCount;
-using fushi_voice_hook::kLookupLineBytes;
-using fushi_voice_hook::kLoopbackMarkerCount;
-using fushi_voice_hook::kTextLaneCount;
-using fushi_voice_hook::kTextLaneSlotCount;
-using fushi_voice_hook::kThreadPreviewCount;
-using fushi_voice_hook::LookupBitmapAt;
-using fushi_voice_hook::LookupFrame;
-using fushi_voice_hook::LookupFrameAt;
-using fushi_voice_hook::LookupHitOf;
-using fushi_voice_hook::LookupHitSlot;
-using fushi_voice_hook::LookupInputSlot;
-using fushi_voice_hook::LookupInputsOf;
-using fushi_voice_hook::LookupRegionBytes;
-using fushi_voice_hook::LoopbackMarker;
-using fushi_voice_hook::SharedHeader;
-using fushi_voice_hook::ShouldApplyLookupFrame;
-using fushi_voice_hook::ThreadPreviewSlot;
-using fushi_voice_hook::VoiceClip;
+using my_comic_voice_hook::IsLookupFrameSane;
+using my_comic_voice_hook::kClipCount;
+using my_comic_voice_hook::kLookupBitmapBytes;
+using my_comic_voice_hook::kLookupFrameCount;
+using my_comic_voice_hook::kLookupFrameDismiss;
+using my_comic_voice_hook::kLookupHitFlagSubmit;
+using my_comic_voice_hook::kLookupInputSlotCount;
+using my_comic_voice_hook::kLookupLineBytes;
+using my_comic_voice_hook::kLoopbackMarkerCount;
+using my_comic_voice_hook::kTextLaneCount;
+using my_comic_voice_hook::kTextLaneSlotCount;
+using my_comic_voice_hook::kThreadPreviewCount;
+using my_comic_voice_hook::LookupBitmapAt;
+using my_comic_voice_hook::LookupFrame;
+using my_comic_voice_hook::LookupFrameAt;
+using my_comic_voice_hook::LookupHitOf;
+using my_comic_voice_hook::LookupHitSlot;
+using my_comic_voice_hook::LookupInputSlot;
+using my_comic_voice_hook::LookupInputsOf;
+using my_comic_voice_hook::LookupRegionBytes;
+using my_comic_voice_hook::LoopbackMarker;
+using my_comic_voice_hook::SharedHeader;
+using my_comic_voice_hook::ShouldApplyLookupFrame;
+using my_comic_voice_hook::ThreadPreviewSlot;
+using my_comic_voice_hook::VoiceClip;
 
 int g_failures = 0;
 
@@ -162,7 +162,7 @@ struct FakeMapping {
 
   FakeMapping() {
     const uint64_t text_bytes =
-        fushi_voice_hook::TextRegionBytes(kTextLaneCount, kTextLaneSlotCount);
+        my_comic_voice_hook::TextRegionBytes(kTextLaneCount, kTextLaneSlotCount);
     const uint64_t clip_bytes =
         static_cast<uint64_t>(kClipCount) * sizeof(VoiceClip);
     const uint64_t marker_bytes =
@@ -179,8 +179,8 @@ struct FakeMapping {
     memset(bytes.data(), 0, static_cast<size_t>(mapped_bytes));
 
     SharedHeader* h = header();
-    h->magic = fushi_voice_hook::kSharedMagic;
-    h->version = fushi_voice_hook::kSharedVersion;
+    h->magic = my_comic_voice_hook::kSharedMagic;
+    h->version = my_comic_voice_hook::kSharedVersion;
     h->ring_capacity = kRingCapacity;
     h->text_region_offset =
         static_cast<uint32_t>(sizeof(SharedHeader) + kRingCapacity);
@@ -331,14 +331,14 @@ class LookupSessionModel {
     if (hit == nullptr) return;
     const std::string line = event.Str("line");
     hit->provider_kind =
-        fushi_voice_hook::kLookupGeometryProviderRuntimeLayout;
-    hit->provider_id = fushi_voice_hook::kLookupGeometryProviderIdKirikiri;
+        my_comic_voice_hook::kLookupGeometryProviderRuntimeLayout;
+    hit->provider_id = my_comic_voice_hook::kLookupGeometryProviderIdKirikiri;
     hit->char_index = static_cast<uint32_t>(event.Int("index"));
     hit->source_length = 1;
     hit->char_count = static_cast<uint32_t>(event.Int("chars"));
     hit->coordinate_space =
-        fushi_voice_hook::kLookupCoordinateSpacePrimaryLayer;
-    hit->writing_mode = fushi_voice_hook::kLookupWritingModeHorizontal;
+        my_comic_voice_hook::kLookupCoordinateSpacePrimaryLayer;
+    hit->writing_mode = my_comic_voice_hook::kLookupWritingModeHorizontal;
     hit->text_generation = hook_any_hit_seq_;
     hit->geometry_generation = hook_any_hit_seq_;
     hit->glyph_x = static_cast<int32_t>(event.IntAt("glyph", 0));
@@ -359,7 +359,7 @@ class LookupSessionModel {
     hit->seq = hook_any_hit_seq_;
     h->lookup_geometry_active_kind = hit->provider_kind;
     h->lookup_geometry_active_id = hit->provider_id;
-    h->lookup_geometry_status = fushi_voice_hook::kLookupGeometryStatusActive;
+    h->lookup_geometry_status = my_comic_voice_hook::kLookupGeometryStatusActive;
     h->lookup_geometry_text_generation = hit->text_generation;
     h->lookup_geometry_generation = hit->geometry_generation;
     hook_submit_hit_seq_ = hook_any_hit_seq_;
@@ -482,7 +482,7 @@ class LookupSessionModel {
     if (!IsLookupFrameSane(h, best) ||
         static_cast<uint32_t>(best_seq % h->lookup_frame_count) != best_index) {
       ++counters_.insane_frames_rejected;
-      h->lookup_diag |= fushi_voice_hook::kLookupDiagFrameRejected;
+      h->lookup_diag |= my_comic_voice_hook::kLookupDiagFrameRejected;
       return;
     }
     const uint8_t* pixels = LookupBitmapAt(h, best_index);
@@ -501,7 +501,7 @@ class LookupSessionModel {
         best->hit_seq == hook_any_hit_seq_ ? best->highlight_len : 0;
     counters_.card_transcript.push_back("show:" +
                                         std::to_string(best->hit_seq));
-    h->lookup_diag |= fushi_voice_hook::kLookupDiagFramePresented;
+    h->lookup_diag |= my_comic_voice_hook::kLookupDiagFramePresented;
   }
 
   // 只在**真的贴上去了**（或真的收起来了）之后记账，不记"选中了但随后被闸门拒掉"。
@@ -554,11 +554,11 @@ class LookupSessionModel {
     h->lookup_frame_count_written = 0;
     h->lookup_input_count = 0;
     h->lookup_geometry_active_kind =
-        fushi_voice_hook::kLookupGeometryProviderUnknown;
+        my_comic_voice_hook::kLookupGeometryProviderUnknown;
     h->lookup_geometry_active_id =
-        fushi_voice_hook::kLookupGeometryProviderIdUnknown;
+        my_comic_voice_hook::kLookupGeometryProviderIdUnknown;
     h->lookup_geometry_status =
-        fushi_voice_hook::kLookupGeometryStatusUnavailable;
+        my_comic_voice_hook::kLookupGeometryStatusUnavailable;
     h->lookup_geometry_text_generation = 0;
     h->lookup_geometry_generation = 0;
     hook_any_hit_seq_ = 0;
@@ -654,13 +654,13 @@ void TestAnyAndSubmitHitFencesInReplay() {
     const LookupHitSlot* shared_submit = LookupHitOf(mapping.header());
     Check(shared_submit != nullptr && shared_submit->seq == 1 &&
               shared_submit->provider_kind ==
-                  fushi_voice_hook::kLookupGeometryProviderRuntimeLayout &&
+                  my_comic_voice_hook::kLookupGeometryProviderRuntimeLayout &&
               shared_submit->provider_id ==
-                  fushi_voice_hook::kLookupGeometryProviderIdKirikiri &&
+                  my_comic_voice_hook::kLookupGeometryProviderIdKirikiri &&
               shared_submit->char_index == 1 &&
               shared_submit->source_length == 1 &&
               shared_submit->writing_mode ==
-                  fushi_voice_hook::kLookupWritingModeHorizontal &&
+                  my_comic_voice_hook::kLookupWritingModeHorizontal &&
               shared_submit->line_bytes == 1 &&
               shared_submit->line_utf8[0] == 'B' &&
               mapping.header()->lookup_hit_count == 1,
@@ -697,15 +697,15 @@ void TestAnyAndSubmitHitFencesInReplay() {
 }
 
 void TestCardCoordinateSpaceFenceInReplay() {
-  Check(fushi_voice_hook::IsLookupCardCoordinateSpaceResolved(
-            fushi_voice_hook::kLookupCoordinateSpaceClientPhysicalPixels) &&
-            fushi_voice_hook::IsLookupCardCoordinateSpaceResolved(
-            fushi_voice_hook::kLookupCoordinateSpacePrimaryLayer),
+  Check(my_comic_voice_hook::IsLookupCardCoordinateSpaceResolved(
+            my_comic_voice_hook::kLookupCoordinateSpaceClientPhysicalPixels) &&
+            my_comic_voice_hook::IsLookupCardCoordinateSpaceResolved(
+            my_comic_voice_hook::kLookupCoordinateSpacePrimaryLayer),
         "replay client/primaryLayer hit 必须可进入各自已证明的卡片坐标链");
-  Check(!fushi_voice_hook::IsLookupCardCoordinateSpaceResolved(
-                fushi_voice_hook::kLookupCoordinateSpaceDesignSurface) &&
-            !fushi_voice_hook::IsLookupCardCoordinateSpaceResolved(
-                fushi_voice_hook::kLookupCoordinateSpaceLayoutLocal),
+  Check(!my_comic_voice_hook::IsLookupCardCoordinateSpaceResolved(
+                my_comic_voice_hook::kLookupCoordinateSpaceDesignSurface) &&
+            !my_comic_voice_hook::IsLookupCardCoordinateSpaceResolved(
+                my_comic_voice_hook::kLookupCoordinateSpaceLayoutLocal),
         "design/layout-local 没有唯一 transform 时不得原样解释为 card view");
 }
 

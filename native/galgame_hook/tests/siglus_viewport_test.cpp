@@ -10,8 +10,8 @@
 
 namespace {
 
-using fushi_voice_hook::exact_lookup::LoadedPeImage;
-namespace viewport = fushi_voice_hook::siglus_viewport;
+using my_comic_voice_hook::exact_lookup::LoadedPeImage;
+namespace viewport = my_comic_voice_hook::siglus_viewport;
 
 // Entirely synthetic loaded PE32 image; the preferred VA is deliberately
 // independent of the host allocation so these tests run on x86 and x64.

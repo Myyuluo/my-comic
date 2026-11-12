@@ -1,4 +1,4 @@
-// 重建 fushi/assets/lnreader/lnreader_libs.js：
+// 重建 my_comic/assets/lnreader/lnreader_libs.js：
 //   cd tool/lnreader && npm ci && npm run build
 // 产物入库（运行时不需要 node），版本钉在 package.json / package-lock.json。
 import { build } from 'esbuild';
@@ -12,7 +12,7 @@ await build({
     here,
     '..',
     '..',
-    'fushi',
+    'my_comic',
     'assets',
     'lnreader',
     'lnreader_libs.js',

@@ -2,7 +2,7 @@
 
 #include "siglus_autoprofile.h"
 
-namespace fushi_voice_hook::siglus_legacy_input_viewport {
+namespace my_comic_voice_hook::siglus_legacy_input_viewport {
 namespace ex = exact_lookup;
 namespace family = siglus_family;
 
@@ -424,4 +424,4 @@ inline bool Resolve(const ex::LoadedPeImage& image, const Imports& imports,
   return true;
 }
 
-}  // namespace fushi_voice_hook::siglus_legacy_input_viewport
+}  // namespace my_comic_voice_hook::siglus_legacy_input_viewport

@@ -11,7 +11,7 @@
 
 #include "unreal_launch.h"
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 inline bool MatchesUnrealIostoreProfile(const wchar_t*) {
   wchar_t executable[MAX_PATH] = {0};
@@ -22,4 +22,4 @@ inline bool MatchesUnrealIostoreProfile(const wchar_t*) {
   return MatchesUnrealIostoreLayout(executable);
 }
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

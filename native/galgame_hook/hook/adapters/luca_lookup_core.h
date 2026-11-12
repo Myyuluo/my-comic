@@ -35,7 +35,7 @@
 
 #include "luca_text_core.h"
 
-namespace fushi_voice_hook::luca {
+namespace my_comic_voice_hook::luca {
 
 // ── layout routine site ──────────────────────────────────────────────────
 
@@ -401,4 +401,4 @@ inline bool ConsumeShiftSample(uint16_t raw, ShiftState* state) {
 
 inline void ResetShiftState(ShiftState* state) { *state = ShiftState{}; }
 
-}  // namespace fushi_voice_hook::luca
+}  // namespace my_comic_voice_hook::luca

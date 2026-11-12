@@ -40,7 +40,7 @@ void SetName(Module* module, const wchar_t* name, USHORT length) {
 }
 
 Module* Find(LIST_ENTRY* head, unsigned int* inspected) {
-  return fushi_locale_emulator::FindKernel32Module<Module>(
+  return my_comic_locale_emulator::FindKernel32Module<Module>(
       head, [head, inspected](LIST_ENTRY* entry) {
         assert(entry != head);  // The regression: never inspect the sentinel.
         ++*inspected;

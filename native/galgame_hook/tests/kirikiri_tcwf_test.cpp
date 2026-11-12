@@ -9,7 +9,7 @@
 
 #include "kirikiri_tcwf.h"
 
-namespace tcwf = fushi_voice_hook::tcwf;
+namespace tcwf = my_comic_voice_hook::tcwf;
 
 namespace {
 

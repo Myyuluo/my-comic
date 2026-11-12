@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Behavioral contract for Fushi's minimal desktop FFmpeg.
+# Behavioral contract for MyComic's minimal desktop FFmpeg.
 #
 # A full host FFmpeg generates tiny representative inputs. The minimal binary
 # must then execute the same argument shapes used by desktop_audio_clipper.dart
@@ -47,7 +47,7 @@ assert_log_contains() {
 cat >"$WORK/sub.srt" <<'EOF'
 1
 00:00:00,100 --> 00:00:01,400
-Fushi minimal FFmpeg smoke test.
+MyComic minimal FFmpeg smoke test.
 EOF
 
 cat >"$WORK/sub.ass" <<'EOF'
@@ -62,7 +62,7 @@ Style: Default,Arial,20,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
-Dialogue: 0,0:00:00.10,0:00:01.40,Default,,0,0,0,,Fushi ASS smoke test.
+Dialogue: 0,0:00:00.10,0:00:01.40,Default,,0,0,0,,MyComic ASS smoke test.
 EOF
 
 echo "[ffmpeg-min-smoke] generating representative inputs in $WORK"
@@ -339,14 +339,14 @@ codec_case ffv1 mkv 1 "${SRC_V[@]}" "${SRC_A[@]}" -c:v ffv1 -c:a flac
 codec_case huffyuv avi 1 "${SRC_V[@]}" "${SRC_A[@]}" -c:v huffyuv -c:a pcm_s16le
 
 echo "[ffmpeg-min-smoke] raw PCM muxer for ASR (s16le, BUG-3504)"
-# Same shape as fushi_asr_core's asr_pcm_source.dart: raw PCM muxers take exactly
+# Same shape as my_comic_asr_core's asr_pcm_source.dart: raw PCM muxers take exactly
 # one stream, hence the explicit -map (the fixture also carries a mov_text track).
 run "$FFMPEG_MIN" -hide_banner -loglevel error -y -i "$MP4_FIXTURE" -map 0:a:0 -vn -sn -dn \
   -ac 1 -ar 16000 -c:a pcm_s16le -f s16le "$WORK/asr.pcm"
 assert_nonempty "$WORK/asr.pcm"
 
 echo "[ffmpeg-min-smoke] TLS certificate pinning option (-tls_pin_sha256, BUG-3504)"
-# Desktop mining from a paired Fushi host passes the TOFU fingerprint of its
+# Desktop mining from a paired MyComic host passes the TOFU fingerprint of its
 # self-signed cert; an ffmpeg without the pin patch rejects the whole command.
 if ! "$FFMPEG_MIN" -hide_banner -h protocol=tls 2>&1 | grep -q tls_pin_sha256; then
   echo "MISSING OPTION: tls protocol has no tls_pin_sha256 (patch not applied)" >&2
@@ -358,7 +358,7 @@ if command -v openssl >/dev/null 2>&1; then
   (cd "$WORK/tls" &&
     MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' \
     openssl req -x509 -newkey rsa:2048 -nodes -keyout key.pem -out cert.pem \
-      -days 1 -subj "/CN=fushi-pin-test" >/dev/null 2>&1)
+      -days 1 -subj "/CN=mycomic-pin-test" >/dev/null 2>&1)
   # Text payload on purpose: Windows `s_server -WWW` reads files in text mode
   # and truncates binary ones (a .wav came back as 40 bytes).
   printf '1\n00:00:00,000 --> 00:00:01,000\npinned\n\n' >"$WORK/tls/cue.srt"
@@ -430,7 +430,7 @@ done
 
 echo "[ffmpeg-min-smoke] synthesizing audiobook clip video (loop PNG + audio -> mov)"
 # TODO-1096: mirror buildFfmpegImageAudioToVideoArgs
-# (fushi/lib/src/media/audiobook/audiobook_clip_export.dart). The clip export
+# (my_comic/lib/src/media/audiobook/audiobook_clip_export.dart). The clip export
 # feeds a single text PNG as a looping video stream (`-loop 1 -i clip.png`) and
 # muxes mjpeg video + aac audio into a .mov. Reading the named PNG needs the
 # image2 demuxer; a missing image2 makes ffmpeg exit -1094995529
@@ -443,7 +443,7 @@ run "$FIXTURE_FFMPEG" -hide_banner -loglevel error -i "$WORK/clip.mov" -f null -
 
 echo "[ffmpeg-min-smoke] probing audio RMS energy envelope (aresample/asetnsamples/astats/ametadata)"
 # TODO-1096: mirror buildFfmpegPcmEnvelopeArgs
-# (fushi/lib/src/media/video/audio_energy_probe.dart). Subtitle auto-align
+# (my_comic/lib/src/media/video/audio_energy_probe.dart). Subtitle auto-align
 # (TODO-701) probes per-frame RMS energy through the SAME bundled ffmpeg via
 # `-af aresample=R,asetnsamples=n=N:p=0,astats=metadata=1:reset=1,ametadata=print:key=...`
 # `-f null -`. A minimal build missing asetnsamples/astats/ametadata parses
@@ -483,7 +483,7 @@ assert_log_contains "$WORK/rms.log" "lavfi.astats.Overall.RMS_level"
 echo "[ffmpeg-min-smoke] verifying network protocols (http/https/tls for YouTube mining)"
 # TODO-1214: YouTube/remote mining feeds ffmpeg an http(s) googlevideo stream and
 # adds -reconnect* input options (buildFfmpegRemoteInputArgs,
-# fushi/lib/src/utils/misc/desktop_audio_clipper.dart). A build without
+# my_comic/lib/src/utils/misc/desktop_audio_clipper.dart). A build without
 # --enable-network has NO http/https protocol, so opening the URL and the
 # -reconnect option both fail (AVERROR_OPTION_NOT_FOUND). Assert the protocols
 # exist up front so a dropped --enable-network fails loudly here, not at runtime.
@@ -646,7 +646,7 @@ done
 
 echo "[ffmpeg-min-smoke] verifying movtext encoder + soft-subtitle clip mux"
 # Clip export muxes the subtitle the user is actually watching into the exported
-# .mp4 as a soft subtitle stream. The cues live in Dart memory (Fushi renders
+# .mp4 as a soft subtitle stream. The cues live in Dart memory (MyComic renders
 # subtitles in a Flutter overlay, not via libmpv), so they are written out as a
 # temporary SRT and fed to ffmpeg as a second input -- which needs the srt
 # demuxer + subrip decoder on the way in, and the movtext ENCODER on the way out
@@ -678,7 +678,7 @@ run "$FIXTURE_FFMPEG" -hide_banner -loglevel error -y \
 assert_nonempty "$WORK/clip-subbed.srt"
 
 echo "[ffmpeg-min-smoke] verifying audiobook studio loudness + M4B export"
-# Audiobook studio (fushi/lib/src/media/audiobook/tts/studio/). Mirrors the app:
+# Audiobook studio (my_comic/lib/src/media/audiobook/tts/studio/). Mirrors the app:
 #   1. per-chapter encode (buildTtsChapterEncodeArgs): ffconcat list of TTS
 #      segments + Dart-written silence WAVs -> aresample async + loudnorm (EBU
 #      R128) + aresample 44.1k -> AAC, `-f mp4` into a chapter .m4a;
@@ -726,10 +726,10 @@ done
 } > "$WORK/book/book.ffconcat"
 cat >"$WORK/book/book.ffmeta" <<'META'
 ;FFMETADATA1
-title=Fushi Smoke Book
-album=Fushi Smoke Book
-artist=Fushi Narrator
-album_artist=Fushi Narrator
+title=MyComic Smoke Book
+album=MyComic Smoke Book
+artist=MyComic Narrator
+album_artist=MyComic Narrator
 
 [CHAPTER]
 TIMEBASE=1/1000
@@ -753,7 +753,7 @@ for cover in cover.jpg cover.png; do
   "$FIXTURE_FFMPEG" -hide_banner -i "$WORK/book/book-$cover.m4b" >"$WORK/book/book-$cover.log" 2>&1 || true
   assert_log_contains "$WORK/book/book-$cover.log" "major_brand *: *M4[AB]"
   assert_log_contains "$WORK/book/book-$cover.log" "Chapter #0:1"
-  assert_log_contains "$WORK/book/book-$cover.log" "title *: *Fushi Smoke Book"
+  assert_log_contains "$WORK/book/book-$cover.log" "title *: *MyComic Smoke Book"
   assert_log_contains "$WORK/book/book-$cover.log" "attached pic"
   run "$FIXTURE_FFMPEG" -hide_banner -loglevel error -i "$WORK/book/book-$cover.m4b" -map 0:a -f null -
 done
@@ -773,15 +773,15 @@ if [ ! -x "$FFPROBE_MIN" ]; then
 fi
 
 # Shape 1: container tag extraction -- buildFfprobeFormatTagsArgs()
-# (fushi/lib/src/utils/misc/desktop_audio_clipper.dart). Feeds an audiobook file
+# (my_comic/lib/src/utils/misc/desktop_audio_clipper.dart). Feeds an audiobook file
 # and reads format.tags.{title,artist,album}; a null result makes the importer
 # fall back to the bare filename.
 run "$FIXTURE_FFMPEG" -hide_banner -loglevel error -y \
   -f lavfi -i "sine=frequency=440:duration=1" \
   -c:a aac \
-  -metadata title="Fushi Probe Title" \
-  -metadata artist="Fushi Probe Artist" \
-  -metadata album="Fushi Probe Album" \
+  -metadata title="MyComic Probe Title" \
+  -metadata artist="MyComic Probe Artist" \
+  -metadata album="MyComic Probe Album" \
   "$WORK/tagged.m4a"
 "$FFPROBE_MIN" -v quiet -print_format json -show_format \
   "$WORK/tagged.m4a" >"$WORK/tags.json" 2>"$WORK/tags.err" || {
@@ -790,11 +790,11 @@ run "$FIXTURE_FFMPEG" -hide_banner -loglevel error -y \
   exit 1
 }
 assert_nonempty "$WORK/tags.json"
-assert_log_contains "$WORK/tags.json" "Fushi Probe Title"
-assert_log_contains "$WORK/tags.json" "Fushi Probe Artist"
+assert_log_contains "$WORK/tags.json" "MyComic Probe Title"
+assert_log_contains "$WORK/tags.json" "MyComic Probe Artist"
 
 # Shape 2: font attachment enumeration -- _enumerateFontAttachments()
-# (fushi/lib/src/media/video/subtitle_embedded_fonts.dart). `-select_streams t`
+# (my_comic/lib/src/media/video/subtitle_embedded_fonts.dart). `-select_streams t`
 # lists only attachment streams; the result drives ASS rendering with the video's
 # own embedded fonts instead of the system fallback.
 printf 'not-a-real-font-but-ffprobe-only-lists-the-stream' >"$WORK/fake.ttf"

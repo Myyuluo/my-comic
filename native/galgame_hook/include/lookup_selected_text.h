@@ -3,7 +3,7 @@
 #include <array>
 #include <string>
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 inline bool SelectedLookupLaneUnchanged(const SharedHeader *header,
                                         const TextLane *lane,
                                         const TextSlot *slot, uint64_t thread,
@@ -73,4 +73,4 @@ inline bool ReadSelectedLookupText(SharedHeader *header, std::wstring *line,
   }
   return false;
 }
-} // namespace fushi_voice_hook
+} // namespace my_comic_voice_hook

@@ -6,7 +6,7 @@
 #include <cstdint>
 #include <limits>
 
-namespace fushi_voice_hook::hunex_capture_bridge {
+namespace my_comic_voice_hook::hunex_capture_bridge {
 
 // The story renderer can submit one callback per visible glyph. This bridge is
 // deliberately a fixed-size callback-to-worker hand-off: the callback never
@@ -901,4 +901,4 @@ private:
   uint32_t next_epoch_ = 1u;
 };
 
-} // namespace fushi_voice_hook::hunex_capture_bridge
+} // namespace my_comic_voice_hook::hunex_capture_bridge

@@ -7,8 +7,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include <vector>
-namespace v = fushi_voice_hook::siglus_eightarg_input_viewport;
-namespace ex = fushi_voice_hook::exact_lookup;
+namespace v = my_comic_voice_hook::siglus_eightarg_input_viewport;
+namespace ex = my_comic_voice_hook::exact_lookup;
 namespace {
 size_t checks = 0;
 void CheckAt(bool value, int line) {

@@ -1,5 +1,5 @@
-#ifndef FUSHI_VOICE_HOOK_IPC_H_
-#define FUSHI_VOICE_HOOK_IPC_H_
+#ifndef MYCOMIC_VOICE_HOOK_IPC_H_
+#define MYCOMIC_VOICE_HOOK_IPC_H_
 
 #include <windows.h>
 
@@ -12,17 +12,17 @@
 
 // galgame 一键制卡 C 阶段（docs/specs/galgame-mining）—— 引擎级 voice hook 的**进程间契约**。
 //
-// 部署红线：这套 injector + hook DLL 是**独立可选 helper 组件**，和 `fushi.exe` 物理隔离、
+// 部署红线：这套 injector + hook DLL 是**独立可选 helper 组件**，和 `MyComic.exe` 物理隔离、
 // 分离分发（`CreateRemoteThread`/`WriteProcessMemory` 注入必被杀软启发式报毒，编进本体会污
-// 染整个 app 的分发口碑）。Fushi 主进程把 injector 当子进程拉起、通过下面这块共享内存消费
+// 染整个 app 的分发口碑）。MyComic 主进程把 injector 当子进程拉起、通过下面这块共享内存消费
 // 干净语音 PCM——被标记的注入代码只待在这个隔离组件里。
 //
 // 数据流（混音前的干净语音轨）：
 //   game.exe 内的 hook DLL：在 XAudio2/DirectSound 把语音送进混音**之前** memcpy 进环形缓冲
 //     → 只在音频回调里 memcpy + 更新 write_pos（零阻塞：写盘/编码/IPC 全部移出回调，爆音红线）
 //   共享内存：header + 紧随其后的 PCM 环形缓冲
-//   Fushi host（经 injector）：读环形缓冲最近 N 毫秒 → 波形选区 → 制卡出口（复用 A 阶段流水线）
-namespace fushi_voice_hook {
+//   MyComic host（经 injector）：读环形缓冲最近 N 毫秒 → 波形选区 → 制卡出口（复用 A 阶段流水线）
+namespace my_comic_voice_hook {
 
 // 共享内存魔数 'HVH1'（小端）与当前契约版本。跨进程读到不匹配即拒绝，防旧/坏映射。
 constexpr uint32_t kSharedMagic = 0x31485648;  // 'H''V''H''1'
@@ -65,7 +65,7 @@ constexpr uint32_t kSharedMagic = 0x31485648;  // 'H''V''H''1'
 //     lookup_frame_applied_seq。host 只有看到该确认才能抓游戏窗口；发布成功不等于游戏渲染树
 //     已经干净，拿普通 dismiss 的 MethodChannel 返回值当屏障会稳定把 popup 拍进卡片图片。
 // v16：在头部最尾追加 injected WASAPI loopback 的 fail-closed 控制/确认。旧实现只门控
-//     Fushi 宿主进程里的 loopback，却让游戏内 DLL 一加载就无条件创建另一个系统混音捕获线程；
+//     MyComic 宿主进程里的 loopback，却让游戏内 DLL 一加载就无条件创建另一个系统混音捕获线程；
 //     cleanOnly/resourceOnly 因而仍会录音。request_seq 最后发布请求，applied_seq 最后确认
 //     Stop/Release/线程退出；版本不匹配时 DLL 拒绝映射，旧 helper 不能绕过默认 deny。
 // v17：在头部最尾追加**本次注入所用 hook DLL 的 SHA-256**（`hook_module_sha256`）。
@@ -73,7 +73,7 @@ constexpr uint32_t kSharedMagic = 0x31485648;  // 'H''V''H''1'
 //     injector——它见到已存在的映射时，拿 header 里这条记录跟本次请求 DLL 现算的摘要比。
 //     为什么磁盘摘要不够：驻留身份判据先比路径，路径不等直接 kPathMismatch，所以能走到
 //     摘要比较时两条路径已经相等；此时若两侧都用 Sha256File 读磁盘，读的是同一个文件，
-//     摘要恒等，kDigestMismatch 永不可达。而这道门要挡的恰恰是「Fushi 自更新把磁盘上那份
+//     摘要恒等，kDigestMismatch 永不可达。而这道门要挡的恰恰是「MyComic 自更新把磁盘上那份
 //     DLL 换成新构建、游戏进程里仍驻留旧映像」——路径没变、磁盘上是新文件，磁盘里根本
 //     不含「进程里驻留的是哪个构建」这条信息。它只存在于当初完成注入的那一方，所以必须
 //     由注入者在建映射时留档。纯尾部追加：前面各区偏移逐字节不动。
@@ -159,20 +159,20 @@ constexpr uint32_t kStableIpcVersion = 1;
 //
 //   * injected SGRE adapter 先把 Required 置 1，声明该精确游戏不允许退回已经
 //     证伪的 HHOOK-only 路径；GetDeviceState detour 真正就绪后才最后提交 Ready；
-//   * Fushi 看到 Required 但没有 Ready 时 fail closed；只有 Ready 同时存在才把
+//   * MyComic 看到 Required 但没有 Ready 时 fail closed；只有 Ready 同时存在才把
 //     当前 direct popup HWND 发布到游戏 HWND；
 //   * detour 只接受仍存在、且 owner 正是游戏 HWND 的该 popup，随后仅清
 //     DIMOUSESTATE2::rgbButtons，绝不碰 lX/lY/lZ。
 //
-// HWND 自带进程崩溃生命周期：Fushi 退出后窗口会被系统销毁，注入侧即使看到陈旧
+// HWND 自带进程崩溃生命周期：MyComic 退出后窗口会被系统销毁，注入侧即使看到陈旧
 // property 也会因 IsWindow/GW_OWNER 校验而 fail open，不会把游戏永久锁死。这里没有
 // 改 SharedHeader 布局，所以不升 kSharedVersion；两端共享名字只是为了杜绝手抄漂移。
 inline constexpr wchar_t kSgreDirectInputShieldReadyProperty[] =
-    L"Fushi.SGRE.DirectInputShield.Ready";
+    L"MyComic.SGRE.DirectInputShield.Ready";
 inline constexpr wchar_t kSgreDirectInputShieldRequiredProperty[] =
-    L"Fushi.SGRE.DirectInputShield.Required";
+    L"MyComic.SGRE.DirectInputShield.Required";
 inline constexpr wchar_t kSgreDirectInputShieldWindowProperty[] =
-    L"Fushi.SGRE.DirectInputShield.Window";
+    L"MyComic.SGRE.DirectInputShield.Window";
 inline constexpr uintptr_t kSgreDirectInputShieldReadyValue = 1u;
 inline constexpr uintptr_t kSgreDirectInputShieldRequiredValue = 1u;
 
@@ -184,11 +184,11 @@ inline constexpr uintptr_t kSgreDirectInputShieldRequiredValue = 1u;
 // than DIMOUSESTATE2, and an old host that only understands SGRE must not
 // mistake one contract for the other.
 inline constexpr wchar_t kSiglusSampledInputShieldReadyProperty[] =
-    L"Fushi.Siglus.SampledInputShield.Ready";
+    L"MyComic.Siglus.SampledInputShield.Ready";
 inline constexpr wchar_t kSiglusSampledInputShieldRequiredProperty[] =
-    L"Fushi.Siglus.SampledInputShield.Required";
+    L"MyComic.Siglus.SampledInputShield.Required";
 inline constexpr wchar_t kSiglusSampledInputShieldWindowProperty[] =
-    L"Fushi.Siglus.SampledInputShield.Window";
+    L"MyComic.Siglus.SampledInputShield.Window";
 inline constexpr uintptr_t kSiglusSampledInputShieldReadyValue = 1u;
 inline constexpr uintptr_t kSiglusSampledInputShieldRequiredValue = 1u;
 
@@ -199,15 +199,15 @@ inline constexpr uintptr_t kSiglusSampledInputShieldRequiredValue = 1u;
 // sampled-input transaction lifetime.  Unknown Leaf builds never publish
 // Required because executable admission remains hash-pinned in the adapter.
 inline constexpr wchar_t kLeafAquaplusSampledInputShieldReadyProperty[] =
-    L"Fushi.LeafAquaplus.SampledInputShield.Ready";
+    L"MyComic.LeafAquaplus.SampledInputShield.Ready";
 inline constexpr wchar_t kLeafAquaplusSampledInputShieldRequiredProperty[] =
-    L"Fushi.LeafAquaplus.SampledInputShield.Required";
+    L"MyComic.LeafAquaplus.SampledInputShield.Required";
 inline constexpr wchar_t kLeafAquaplusSampledInputShieldWindowProperty[] =
-    L"Fushi.LeafAquaplus.SampledInputShield.Window";
+    L"MyComic.LeafAquaplus.SampledInputShield.Window";
 inline constexpr wchar_t kLeafAquaplusSampledInputShieldTailRequestProperty[] =
-    L"Fushi.LeafAquaplus.SampledInputShield.TailRequest";
+    L"MyComic.LeafAquaplus.SampledInputShield.TailRequest";
 inline constexpr wchar_t kLeafAquaplusSampledInputShieldTailAckProperty[] =
-    L"Fushi.LeafAquaplus.SampledInputShield.TailAck";
+    L"MyComic.LeafAquaplus.SampledInputShield.TailAck";
 inline constexpr uintptr_t kLeafAquaplusSampledInputShieldReadyValue = 1u;
 inline constexpr uintptr_t kLeafAquaplusSampledInputShieldRequiredValue = 1u;
 
@@ -218,15 +218,15 @@ inline constexpr uintptr_t kLeafAquaplusSampledInputShieldRequiredValue = 1u;
 // has observed a later neutral poll, so a lookup click cannot advance the
 // game after the popup has already been dismissed.
 inline constexpr wchar_t kHunexGgeSampledInputShieldReadyProperty[] =
-    L"Fushi.HunexGge.SampledInputShield.Ready";
+    L"MyComic.HunexGge.SampledInputShield.Ready";
 inline constexpr wchar_t kHunexGgeSampledInputShieldRequiredProperty[] =
-    L"Fushi.HunexGge.SampledInputShield.Required";
+    L"MyComic.HunexGge.SampledInputShield.Required";
 inline constexpr wchar_t kHunexGgeSampledInputShieldWindowProperty[] =
-    L"Fushi.HunexGge.SampledInputShield.Window";
+    L"MyComic.HunexGge.SampledInputShield.Window";
 inline constexpr wchar_t kHunexGgeSampledInputShieldTailRequestProperty[] =
-    L"Fushi.HunexGge.SampledInputShield.TailRequest";
+    L"MyComic.HunexGge.SampledInputShield.TailRequest";
 inline constexpr wchar_t kHunexGgeSampledInputShieldTailAckProperty[] =
-    L"Fushi.HunexGge.SampledInputShield.TailAck";
+    L"MyComic.HunexGge.SampledInputShield.TailAck";
 inline constexpr uintptr_t kHunexGgeSampledInputShieldReadyValue = 1u;
 inline constexpr uintptr_t kHunexGgeSampledInputShieldRequiredValue = 1u;
 
@@ -238,11 +238,11 @@ inline constexpr uintptr_t kHunexGgeSampledInputShieldRequiredValue = 1u;
 // swallowing client-area left down/up while a card is published in Window.
 // No tail handshake: message consumption has no sampled low bit to drain.
 inline constexpr wchar_t kSmashFzmediaSampledInputShieldReadyProperty[] =
-    L"Fushi.SmashFzmedia.SampledInputShield.Ready";
+    L"MyComic.SmashFzmedia.SampledInputShield.Ready";
 inline constexpr wchar_t kSmashFzmediaSampledInputShieldRequiredProperty[] =
-    L"Fushi.SmashFzmedia.SampledInputShield.Required";
+    L"MyComic.SmashFzmedia.SampledInputShield.Required";
 inline constexpr wchar_t kSmashFzmediaSampledInputShieldWindowProperty[] =
-    L"Fushi.SmashFzmedia.SampledInputShield.Window";
+    L"MyComic.SmashFzmedia.SampledInputShield.Window";
 inline constexpr uintptr_t kSmashFzmediaSampledInputShieldReadyValue = 1u;
 inline constexpr uintptr_t kSmashFzmediaSampledInputShieldRequiredValue = 1u;
 inline constexpr uint32_t kLeafAquaplusSampledInputLeftButton = 0x1u;
@@ -370,7 +370,7 @@ constexpr uint32_t kTextSourceLuca = 12;
 // other engine adapters were in flight; no branch in this repository uses
 // 13-14 (checked 2026-10-03 across all local refs). The host maps unknown kinds
 // to the generic 'hook:' lane, so a new kind must be registered here AND in
-// GalHookedLine.textThreadKey/textThreadLabel (fushi/lib/src/mining/
+// GalHookedLine.textThreadKey/textThreadLabel (my_comic/lib/src/mining/
 // galgame_audio_source.dart) in the same change; register the number here
 // first.
 // Malie exact text: the click unit the message window's segment parser hands
@@ -603,9 +603,9 @@ constexpr uint32_t kXAudioDiag2KirikiriLookupBootstrapFired = 0x01000000u;     /
 constexpr uint32_t kXAudioDiag2KirikiriLookupBootstrapFaulted = 0x02000000u;   // TVPExecuteScript 抛了（SEH 拦下）
 // bootstrap 脚本跑完之后，TJS 侧那个 System.addContinuousHandler 回调每帧都在前置条件
 // `typeof global.kag == "Object" && typeof global.kag.addHook == "Object"` 上静默 return，
-// 症状与「脚本没跑」完全同形（都是 fushiLookupNotify 不存在、控制台无 [FushiLookup] 行）。
+// 症状与「脚本没跑」完全同形（都是 myComicLookupNotify 不存在、控制台无 [MyComicLookup] 行）。
 // 这三位把前置条件拆开量：脚本活着吗 / kag 出来了吗 / 这个 KAG 分支有 addHook 吗。
-constexpr uint32_t kXAudioDiag2KirikiriLookupTjsBootstrapFnAlive = 0x04000000u;  // global.fushiLookupBootstrap 仍在
+constexpr uint32_t kXAudioDiag2KirikiriLookupTjsBootstrapFnAlive = 0x04000000u;  // global.myComicLookupBootstrap 仍在
 constexpr uint32_t kXAudioDiag2KirikiriLookupKagObjectReady = 0x08000000u;       // global.kag 是对象
 constexpr uint32_t kXAudioDiag2KirikiriLookupKagAddHookReady = 0x10000000u;      // global.kag.addHook 存在
 
@@ -625,7 +625,7 @@ constexpr uint32_t kDiagKirikiriVoiceStreamHookReady = 0x00020000u;
 constexpr uint32_t kDiagKirikiriVoiceStreamDumped = 0x00080000u;
 constexpr uint32_t kDiagSiglusOvkHooksReady = 0x10000000u;
 
-// reserved_luna 里 KiriKiri 经典 KAG3 的采集自证位。TJS 侧的 fushiLookupClassicSource
+// reserved_luna 里 KiriKiri 经典 KAG3 的采集自证位。TJS 侧的 myComicLookupClassicSource
 // 位 3 = 「至少给一个消息层实例挂上过 classic 采集包装」。它与位 0（classic 分支跑到了）
 // 必须分开读：分支跑到但一个层都没挂上，说明 kag.fore.messages 不是标准 KAG3 结构——
 // 这两种失败在真机上完全同形，而 lookup_diag 与 xaudiodiag2 两个 32 位字都已用满，
@@ -766,7 +766,7 @@ struct LoopbackMarker {
 
 // ══ v14 游戏内查词区 ════════════════════════════════════════════════════
 // KiriKiri/KAGEX 在**游戏渲染树内部**显示词典卡片。注入侧只做几何传感、
-// 位图落地和输入转发；分词、查词、排版、卡片像素全部由 host（Fushi 既有
+// 位图落地和输入转发；分词、查词、排版、卡片像素全部由 host（MyComic 既有
 // popup.html + WebView2 离屏合成）负责。跨进程边界上因此只有一块位图和一串整数。
 //
 // 三条通道各自单写单读，无锁：
@@ -818,7 +818,7 @@ constexpr uint32_t kLookupDiagClassicGeometry = 0x00000200u;
 // 层的类才拦得住。合成一位就会把"装上了但永远不触发"误读成"这条路能用"。
 constexpr uint32_t kLookupDiagClassicProcessCh = 0x00000400u;
 
-// 传感器在游戏事件循环里吞下过异常（TJS 侧 fushiLookupFaults > 0）。
+// 传感器在游戏事件循环里吞下过异常（TJS 侧 myComicLookupFaults > 0）。
 //
 // 注入进别人的事件循环，异常就绝不允许逃逸——逃出去 KiriKiri 会弹「致命的なエラー」
 // 把玩家这一局打断。但"不逃逸"必须与"看得见"成对出现：只 catch 不计数，查词会安静地
@@ -932,10 +932,10 @@ constexpr uint32_t kLookupGeometryProviderIdLuca = 25u;
 // 26-27 (checked 2026-10-04 across all local refs and upstream/develop).
 // Every production pair is whitelisted in three places that must change
 // together: IsProductionProviderPair
-// (fushi/windows/runner/lookup_hit_validation.h),
-// isGalLookupProductionProviderPair (fushi/lib/src/platform/
+// (my_comic/windows/runner/lookup_hit_validation.h),
+// isGalLookupProductionProviderPair (my_comic/lib/src/platform/
 // gal_hook_text_overlay_channel.dart) and its contract test
-// (fushi/test/lookup/gal_ingame_lookup_contract_test.dart, which pins 26-27 as
+// (my_comic/test/lookup/gal_ingame_lookup_contract_test.dart, which pins 26-27 as
 // rejected). Register a new id here first.
 // Malie RICHTEXT3D message exact layout provider (append-only id).
 constexpr uint32_t kLookupGeometryProviderIdMalie = 28u;
@@ -1047,7 +1047,7 @@ constexpr uint32_t kHookModuleDigestChars = 65;
 //     是**状态机的当前状态**。用位表达就能同时置上 IdentityRejected 和 SensorInstalled，
 //     造出一个不存在的状态；读侧于是必须按某个约定的优先级去猜"现在到底算哪个"，而那个
 //     约定不在协议里、只活在读者脑子里。今天三家传感器各写各的私有位（Siglus 四个 admission
-//     位、Leaf 写进 FushiLeafD3DTraceV1.reserved、KiriKiri 什么都不写），host 一个都读不懂，
+//     位、Leaf 写进 MyComicLeafD3DTraceV1.reserved、KiriKiri 什么都不写），host 一个都读不懂，
 //     正是这个缺失的直接后果。单值枚举让不可能状态**无法被表达**，问题从根上消失。
 //
 // 单调性：不保证。这是"当前状态"不是"历史最高水位"，传感器卸载后退回 IdentityAccepted
@@ -1267,7 +1267,7 @@ struct SharedHeader {
   uint32_t clip_region_offset;      // clip 索引起始
   volatile uint64_t text_write_count;  // 单调：已写文本事件数（host 取 last..count 的新事件）
   volatile uint64_t clip_write_count;  // 单调：已写语音 clip 数
-  // 0=尚未选定（v12 起文本环恒空）；非 0=用户在 Fushi 选择的 TextSlot::thread_id。
+  // 0=尚未选定（v12 起文本环恒空）；非 0=用户在 MyComic 选择的 TextSlot::thread_id。
   // injector 无条件过滤重复伪影，再仅写该线程/同一 hook face。
   volatile uint64_t selected_text_thread_id;
   // LunaHook（引擎精确）出干净行后 injector 置 1；置 1 后游戏内 GDI 文本 hook 让位不再写文本，
@@ -1323,7 +1323,7 @@ struct SharedHeader {
   volatile uint64_t lookup_hit_count;    // hook→host 单调：命中事件数
   volatile uint64_t lookup_frame_count_written;  // host→hook 单调：已投位图帧数
   volatile uint64_t lookup_input_count;  // hook→host 单调：已转发的卡片输入事件数
-  // host→hook 开关。取代 prototype 的 FUSHI_KIRIKIRI_LOOKUP_* 环境变量——把认证 token
+  // host→hook 开关。取代 prototype 的 MYCOMIC_KIRIKIRI_LOOKUP_* 环境变量——把认证 token
   // 塞进游戏进程环境块是安全缺陷（任何拿得到 PROCESS_QUERY_INFORMATION 的进程都能读），
   // 且环境变量在进程启动后改不了，做不到运行期开关。形态照抄 selected_text_thread_id。
   volatile uint32_t lookup_enabled;
@@ -2833,17 +2833,17 @@ static_assert(sizeof(LoopbackMarker) % 8 == 0, "LoopbackMarker must stay 8-align
 // injector 创建、hook DLL 打开：共享内存 + 「就绪」事件（DLL 装好后 SetEvent，injector 据此
 // 确认注入成功并读回格式）。
 //
-// injector 与 hook DLL 同一次构建产出、同目录随 fushi.exe 落地（BUG-1449，运行期不下载
+// injector 与 hook DLL 同一次构建产出、同目录随 MyComic.exe 落地（BUG-1449，运行期不下载
 // helper），两侧永远同版本，所以只有一套名字。改名前 Hibiki 的 `HibikiVoiceHook*` 命名空间
 // 只在旧 Hibiki 安装自带的 hibiki_voice_* 组件里存在，本源码不再产出那组文件。
 inline std::wstring SharedMemoryName(DWORD target_pid) {
-  return std::wstring(L"Local\\FushiVoiceHook_") + std::to_wstring(target_pid);
+  return std::wstring(L"Local\\MyComicVoiceHook_") + std::to_wstring(target_pid);
 }
 inline std::wstring ReadyEventName(DWORD target_pid) {
-  return std::wstring(L"Local\\FushiVoiceHookReady_") +
+  return std::wstring(L"Local\\MyComicVoiceHookReady_") +
          std::to_wstring(target_pid);
 }
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook
 
-#endif  // FUSHI_VOICE_HOOK_IPC_H_
+#endif  // MYCOMIC_VOICE_HOOK_IPC_H_

@@ -1,5 +1,5 @@
-#ifndef FUSHI_HUNEX_GGE_SELECTED_TEXT_H_
-#define FUSHI_HUNEX_GGE_SELECTED_TEXT_H_
+#ifndef MYCOMIC_HUNEX_GGE_SELECTED_TEXT_H_
+#define MYCOMIC_HUNEX_GGE_SELECTED_TEXT_H_
 
 #include <cstddef>
 #include <cstdint>
@@ -7,7 +7,7 @@
 
 #include "voice_hook_ipc.h"
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 // The TYPEMOON HUNEX/GGE hook publishes the renderer's raw tagged UTF-16 line
 // (for example, ruby remains encoded as <rREADING>BASE</r>). Geometry capture
@@ -381,6 +381,6 @@ static_assert(hunex_gge_selected_text_detail::kTextPayloadCapacity >
                   kHunexGgeSelectedTextMaxUnits * sizeof(wchar_t),
               "selected-text snapshot must fit below the producer clamp");
 
-} // namespace fushi_voice_hook
+} // namespace my_comic_voice_hook
 
-#endif // FUSHI_HUNEX_GGE_SELECTED_TEXT_H_
+#endif // MYCOMIC_HUNEX_GGE_SELECTED_TEXT_H_
