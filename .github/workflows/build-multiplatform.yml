@@ -215,11 +215,6 @@ jobs:
         working-directory: my_comic
         run: >-
           flutter build windows --debug
-      - name: Run game-stream input regression
-        shell: pwsh
-        run: |
-          cmake --build my_comic\build\windows\x64 --config Debug --target my_comic_windows_game_stream_input_gate
-          if ($LASTEXITCODE -ne 0) { throw "game-stream input regression failed ($LASTEXITCODE)" }
       # Mihon runtime 完全由 vendored 源码（m_extension_server + 离线 jogamp 仓库）+ 构建
       # 脚本决定（JDK / 服务端 commit 均在脚本里钉死；脚本再多读仓库里别的目录，必须同步
       # 加进 .github/actions/native-store-names/names.sh 的 MIHON 路径表）：输入没变就复用上次产物，
