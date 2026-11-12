@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:file_picker/file_picker.dart';
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -27,18 +27,27 @@ typedef CreateBackupSavePathPicker =
 
 /// Opens the save dialog for a `.tachibk` backup, starting in the Backup
 /// directory (`<Content root>/autobackup`) with the spec's default file name.
+///
+/// Uses `file_selector`'s Windows IFileSaveDialog backend, which applies
+/// [initialDirectory] with `SetFolder`. file_picker's legacy
+/// `GetSaveFileNameW` path ignores the initial directory after the dialog has
+/// been shown once (Windows 7+ remembers the last folder instead).
 Future<String?> pickMihonBackupSavePath({
   required String initialDirectory,
   required String fileName,
-  FilePicker? picker,
-}) {
-  return (picker ?? FilePicker.platform).saveFile(
-    dialogTitle: t.backup_export_mihon_title,
-    fileName: fileName,
+}) async {
+  final FileSaveLocation? location = await getSaveLocation(
+    acceptedTypeGroups: <XTypeGroup>[
+      XTypeGroup(
+        label: t.backup_export_mihon_title,
+        extensions: const <String>['tachibk'],
+      ),
+    ],
     initialDirectory: initialDirectory,
-    type: FileType.custom,
-    allowedExtensions: const <String>['tachibk'],
+    suggestedName: fileName,
+    confirmButtonText: t.backup_export_mihon_title,
   );
+  return location?.path;
 }
 
 /// 「创建备份」页：Bookshelf / Settings group cards with a bottom 创建 button.
