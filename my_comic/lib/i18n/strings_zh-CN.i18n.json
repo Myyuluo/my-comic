@@ -812,6 +812,7 @@
   "margin_right": "右边距",
   "margin_top": "上边距",
   "media_file_location_failed": "无法打开文件位置。",
+  "media_file_location_not_downloaded": "该漫画没有下载。",
   "media_file_location_open": "打开文件位置",
   "media_import_segment_extensions": "扩展",
   "media_import_segment_sources": "图源",

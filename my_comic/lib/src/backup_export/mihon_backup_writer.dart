@@ -10,9 +10,11 @@ import 'package:my_comic/src/backup_import/mihon_backup_parser.dart';
 /// round-trips through the importer. Field numbers are copied from Mihon
 /// v0.21.3 `eu.kanade.tachiyomi.data.backup.models.*`; see ADR 0005/0007.
 ///
-/// Proto3 semantics: default scalars are omitted. The one deliberate exception
-/// is `BackupManga.favorite`, whose Kotlin default is `true`; only the
-/// `false` case is written.
+/// Kotlinx serialization treats fields **without a Kotlin default** as
+/// required: they must be present even when the value is the proto3 default
+/// (0 / empty). Fields with a Kotlin default may be omitted. Only
+/// `BackupManga.favorite` needs the special false-case write because its
+/// Kotlin default is `true`.
 class MihonBackupWriter {
   const MihonBackupWriter();
 
@@ -47,8 +49,9 @@ class MihonBackupWriter {
 
   Uint8List _encodeManga(MihonBackupManga manga) {
     final _ProtoWriter w = _ProtoWriter();
-    w.varintOrOmit(1, manga.source);
-    w.stringOrOmit(2, manga.url);
+    // source and url have no Kotlin defaults: always present.
+    w.varint(1, manga.source);
+    w.string(2, manga.url);
     w.stringOrOmit(3, manga.title);
     w.stringOrOmit(4, manga.artist);
     w.stringOrOmit(5, manga.author);
@@ -79,8 +82,9 @@ class MihonBackupWriter {
 
   Uint8List _encodeChapter(MihonBackupChapter chapter) {
     final _ProtoWriter w = _ProtoWriter();
-    w.stringOrOmit(1, chapter.url);
-    w.stringOrOmit(2, chapter.name);
+    // url and name have no Kotlin defaults: always present.
+    w.string(1, chapter.url);
+    w.string(2, chapter.name);
     w.stringOrOmit(3, chapter.scanlator);
     if (chapter.read) w.varint(4, 1);
     if (chapter.bookmark) w.varint(5, 1);
@@ -94,16 +98,18 @@ class MihonBackupWriter {
 
   Uint8List _encodeHistory(MihonBackupHistory history) {
     final _ProtoWriter w = _ProtoWriter();
-    w.stringOrOmit(1, history.url);
-    w.varintOrOmit(2, history.lastRead);
+    // url and lastRead have no Kotlin defaults: always present.
+    w.string(1, history.url);
+    w.varint(2, history.lastRead);
     w.varintOrOmit(3, history.readDuration);
     return w.takeBytes();
   }
 
   Uint8List _encodeTracking(MihonBackupTracking tracking) {
     final _ProtoWriter w = _ProtoWriter();
-    w.varintOrOmit(1, tracking.syncId);
-    w.varintOrOmit(2, tracking.libraryId);
+    // syncId and libraryId have no Kotlin defaults: always present.
+    w.varint(1, tracking.syncId);
+    w.varint(2, tracking.libraryId ?? 0);
     w.varintOrOmit(3, tracking.mediaIdInt);
     w.stringOrOmit(4, tracking.trackingUrl);
     w.stringOrOmit(5, tracking.title);
@@ -120,7 +126,8 @@ class MihonBackupWriter {
 
   Uint8List _encodeCategory(MihonBackupCategory category) {
     final _ProtoWriter w = _ProtoWriter();
-    w.stringOrOmit(1, category.name);
+    // name has no Kotlin default: always present.
+    w.string(1, category.name);
     w.varintOrOmit(2, category.order);
     w.varintOrOmit(3, category.id);
     return w.takeBytes();
@@ -129,13 +136,15 @@ class MihonBackupWriter {
   Uint8List _encodeSource(int id, String name) {
     final _ProtoWriter w = _ProtoWriter();
     w.stringOrOmit(1, name);
-    w.varintOrOmit(2, id);
+    // sourceId has no Kotlin default: always present.
+    w.varint(2, id);
     return w.takeBytes();
   }
 
   Uint8List _encodeSourcePreferences(MihonBackupSourcePreferences preferences) {
     final _ProtoWriter w = _ProtoWriter();
-    w.stringOrOmit(1, preferences.sourceKey);
+    // sourceKey has no Kotlin default: always present.
+    w.string(1, preferences.sourceKey);
     for (final MihonBackupPreference preference in preferences.preferences) {
       w.bytes(2, _encodePreference(preference));
     }
@@ -144,7 +153,8 @@ class MihonBackupWriter {
 
   Uint8List _encodePreference(MihonBackupPreference preference) {
     final _ProtoWriter w = _ProtoWriter();
-    w.stringOrOmit(1, preference.key);
+    // key has no Kotlin default: always present.
+    w.string(1, preference.key);
     w.bytes(2, _encodePreferenceValue(preference.value));
     return w.takeBytes();
   }
@@ -160,15 +170,17 @@ class MihonBackupWriter {
     final _ProtoWriter payload = _ProtoWriter();
     switch (value.type) {
       case MihonBackupPreferenceType.string:
-        payload.stringOrOmit(1, value.value as String?);
+        // Every PreferenceValue subclass field has no Kotlin default; write
+        // the payload field even when it equals the proto3 default.
+        payload.string(1, value.value as String);
       case MihonBackupPreferenceType.boolean:
-        if (value.value == true) payload.varint(1, 1);
+        payload.varint(1, value.value == true ? 1 : 0);
       case MihonBackupPreferenceType.integer:
-        payload.varintOrOmit(1, value.value as int?);
+        payload.varint(1, value.value as int);
       case MihonBackupPreferenceType.long:
-        payload.varintOrOmit(1, value.value as int?);
+        payload.varint(1, value.value as int);
       case MihonBackupPreferenceType.float:
-        payload.float32OrOmit(1, value.value as double?);
+        payload.float32(1, value.value as double);
       case MihonBackupPreferenceType.stringSet:
         final Object? raw = value.value;
         for (final String item
@@ -194,11 +206,13 @@ class MihonBackupWriter {
 
   Uint8List _encodeExtensionStore(MihonBackupExtensionStore store) {
     final _ProtoWriter w = _ProtoWriter();
-    w.stringOrOmit(1, store.indexUrl);
-    w.stringOrOmit(2, store.name);
+    // indexUrl, name, contactWebsite and signingKey have no Kotlin defaults:
+    // always present, even when empty.
+    w.string(1, store.indexUrl);
+    w.string(2, store.name);
     w.stringOrOmit(3, store.badgeLabel);
-    w.stringOrOmit(4, store.contactWebsite);
-    w.stringOrOmit(5, store.signingKey);
+    w.string(4, store.contactWebsite);
+    w.string(5, store.signingKey);
     if (store.contactDiscord != null) {
       w.string(6, store.contactDiscord!);
     }
