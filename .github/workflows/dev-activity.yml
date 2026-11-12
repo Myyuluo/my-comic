@@ -30,7 +30,7 @@ concurrency:
 
 permissions:
   contents: write
-  # Needed to read release.yml's run history, which is the only record of how
+  # Needed to read release-desktop.yml's run history, which is the only record of how
   # many debug builds shipped: every debug publish overwrites one rolling tag,
   # so the Releases API reports a single release regardless of build count.
   actions: read

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Fushi emulator test workflow
+# MyComic emulator test workflow
 # Usage: bash ci/emulator-test.sh [--skip-build] [--skip-push]
 #
 # Prerequisites:
@@ -15,7 +15,7 @@ ADB="${ADB:-$(command -v adb 2>/dev/null || echo /d/android_sdk/platform-tools/a
 EMULATOR="${EMULATOR:-$(command -v emulator 2>/dev/null || echo /d/android_sdk/emulator/emulator)}"
 FLUTTER="${FLUTTER:-$(command -v flutter 2>/dev/null || echo /d/flutter_sdk/flutter_extracted/flutter/bin/flutter)}"
 DEVICE="${DEVICE:-emulator-5554}"
-PKG="${PKG:-app.fushi.reader}"
+PKG="${PKG:-app.mycomic.reader}"
 APK="build/app/outputs/flutter-apk/app-release.apk"
 SCREENSHOT_DIR="../test_screenshots"
 
@@ -28,7 +28,7 @@ for arg in "$@"; do
   esac
 done
 
-cd "$(dirname "$0")/../fushi"
+cd "$(dirname "$0")/../my_comic"
 
 # --- 1. Start emulator if not running ---
 if ! $ADB devices 2>/dev/null | grep -q "$DEVICE.*device"; then
@@ -60,11 +60,11 @@ echo ">>> Installed."
 # --- 4. Push test resources ---
 if [ "$SKIP_PUSH" = false ]; then
   echo ">>> Pushing test resources..."
-  TMPDIR_LOCAL="/d/tmp_fushi_test"
+  TMPDIR_LOCAL="/d/tmp_my_comic_test"
   mkdir -p "$TMPDIR_LOCAL"
 
   # HBK-AUDIT-077: source fixtures from env-overridable paths; defaults point at
-  # the repo's documented fixtures dir (see fushi/CLAUDE.md) instead of one
+  # the repo's documented fixtures dir (see my_comic/CLAUDE.md) instead of one
   # developer's personal media. Missing files warn rather than hard-fail.
   FIXTURES_DIR="${FIXTURES_DIR:-$(cd "$(dirname "$0")/.." && pwd)/.codex-test/fixtures/kagami}"
   cp "${DICT_ZIP:-/d/辞典/[JA-JA] 明鏡国語辞典 第三版[2025-08-18].zip}" "$TMPDIR_LOCAL/meikyo3.zip" 2>/dev/null || echo "WARN: set DICT_ZIP to a dictionary .zip"

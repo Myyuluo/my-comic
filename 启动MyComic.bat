@@ -2,7 +2,7 @@
 setlocal
 rem Builds my-comic when the checkout changed, bundles the Mihon extension
 rem runtime into the Release directory, then launches:
-rem   fushi\build\windows\x64\runner\Release\fushi.exe
+rem   my_comic\build\windows\x64\runner\Release\MyComic.exe
 set "ROOT=%~dp0"
 powershell -NoProfile -ExecutionPolicy Bypass -File "%ROOT%script\build_and_run.ps1" %*
 if errorlevel 1 (

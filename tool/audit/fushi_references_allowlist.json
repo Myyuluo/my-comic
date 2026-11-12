@@ -1,0 +1,145 @@
+{
+  "description": "Fushi 引用扫描器 allowlist。只放行 GPL 来源与历史记录：许可证、第三方 NOTICE/PATCHES/UPSTREAM、UPSTREAM.md、ADR 与未列入删除名单的历史文档、GLOSSARY 的上游术语定义、第三方 provenance，以及 README/About 的『基于 Fushi v3.0.0』署名与来源/兼容说明。docs/bugs、docs/readme、docs/agent 已由 ticket 11 删除。git 历史不在扫描范围内（扫描器只看 git ls-files 的工作区内容）。任何其他命中都应视为需要清理的残留。",
+  "rules": [
+    {
+      "path": "LICENSE",
+      "reason": "GPL-3.0 许可证正文与上游版权行"
+    },
+    {
+      "path": "COPYING",
+      "reason": "GPL 许可证副本"
+    },
+    {
+      "path": "**/NOTICE*",
+      "reason": "第三方 NOTICE / 许可证声明"
+    },
+    {
+      "path": "**/PATCHES.md",
+      "reason": "第三方 patch 来源说明"
+    },
+    {
+      "path": "**/UPSTREAM*",
+      "reason": "上游来源说明（快照、commit、许可证）"
+    },
+    {
+      "path": "**/CLAUDE.upstream.md",
+      "reason": "上游 CLAUDE 文档历史快照"
+    },
+    {
+      "path": "third_party/**",
+      "reason": "vendored 第三方源码与补丁；保留上游代码与 patch 来源记录"
+    },
+    {
+      "path": "ci/patches/**",
+      "reason": "第三方 patch 与补丁说明"
+    },
+    {
+      "path": "references/**",
+      "reason": "外部扩展/上游参考文档（历史资料）"
+    },
+    {
+      "path": "docs/**",
+      "reason": "ADR 与未列入删除名单的历史文档（specs/plans/reviews 等），保留 Fushi 作为来源记录"
+    },
+    {
+      "path": "my_comic/docs/**",
+      "reason": "上游历史文档（例如 docs/reviews、第三方许可说明）"
+    },
+    {
+      "path": ".scratch/**",
+      "reason": "fork 自己的 spec / ticket / 评审记录，Fushi 仅作来源上下文"
+    },
+    {
+      "path": "tool/audit/**",
+      "reason": "扫描器自身必须包含被扫描的词作为 needle 与 allowlist 示例"
+    },
+    {
+      "path": "my_comic/test/tools/audit/**",
+      "reason": "扫描器测试的 fixture 与断言必须包含被扫描的词"
+    },
+    {
+      "path": "GLOSSARY.md",
+      "reason": "领域术语表保留 Fushi 作为上游来源术语的定义"
+    },
+    {
+      "path": "README.md",
+      "line_pattern": "[Ff]ushi v3\\.0\\.0|Fushi contributors|Fushi-based|fushi://|fushi-",
+      "reason": "README 的来源署名、兼容基线与旧 fushi://、fushi- 兼容性说明"
+    },
+    {
+      "path": "README.zh-CN.md",
+      "line_pattern": "[Ff]ushi v3\\.0\\.0|Fushi 贡献者|fushi://|fushi-",
+      "reason": "README 的来源署名、兼容基线与旧 fushi://、fushi- 兼容性说明"
+    },
+    {
+      "path": "my_comic/lib/**",
+      "line_pattern": "[Ff]ushi v3\\.0\\.0",
+      "reason": "About / 设置页的来源署名"
+    },
+    {
+      "path": "my_comic/lib/src/media/manga/mihon/desktop_mihon_runtime.dart",
+      "line_pattern": "FUSHI_MIHON_(TOKEN|PROXY_POLICY_PORT|READY)",
+      "reason": "M-Extension-Server 是预编译的固定 sidecar；FUSHI_MIHON_* 环境变量与 FUSHI_MIHON_READY 是冻结的二进制契约，宿主同时发送/接受新旧名字"
+    },
+    {
+      "path": "my_comic/test/media/manga/desktop_mihon_sidecar_contract_test.dart",
+      "line_pattern": "FUSHI_MIHON_(TOKEN|PROXY_POLICY_PORT|READY)|fushiMihonBridge",
+      "reason": "sidecar 冻结契约的回归测试"
+    },
+    {
+      "path": "my_comic/lib/src/media/manga/mihon/mihon_models.dart",
+      "line_pattern": "fushiMihonBridge",
+      "reason": "预编译 M-Extension-Server 的 capabilities 键"
+    },
+    {
+      "path": "my_comic/lib/src/media/manga/mihon/mihon_cookie_jar.dart",
+      "line_pattern": "[Xx]-[Ff]ushi-",
+      "reason": "预编译 M-Extension-Server 的 cookie 线格式头"
+    },
+    {
+      "path": "my_comic/test/media/manga/mihon_cookie_jar_test.dart",
+      "line_pattern": "[Xx]-[Ff]ushi-",
+      "reason": "sidecar cookie 线格式契约测试"
+    },
+    {
+      "path": "my_comic/windows/runner/Runner.rc",
+      "line_pattern": "Fushi contributors",
+      "reason": "Windows exe 版本资源里的 GPL 上游版权署名"
+    },
+    {
+      "path": "packages/**",
+      "line_pattern": "[Ff]ushi v3\\.0\\.0",
+      "reason": "About / 设置页的来源署名"
+    },
+    {
+      "path": "CLAUDE.md",
+      "line_pattern": "Fushi v3\\.0\\.0",
+      "reason": "ADR 0008 UI fidelity 的上游版本引用"
+    },
+    {
+      "path": "script/build_and_run.ps1",
+      "line_pattern": "Fushi v3\\.0\\.0",
+      "reason": "打包 runtime 的上游 v3.0.0 出处（ADR-0009）"
+    },
+    {
+      "path": "my_comic/test/settings/about_attribution_test.dart",
+      "line_pattern": "Fushi v3\\.0\\.0|Fushi contributors",
+      "reason": "About 来源署名与上游版权断言"
+    },
+    {
+      "path": "my_comic/test/media/manga/mihon_bundled_runtime_guard_test.dart",
+      "line_pattern": "Fushi v3\\.0\\.0",
+      "reason": "打包 runtime 的上游 v3.0.0 出处断言"
+    },
+    {
+      "path": ".github/workflows/main.yml",
+      "line_pattern": "[Ff]ushi references|fushi_references\\.dart",
+      "reason": "CI 的残留扫描门禁步骤名与命令路径"
+    },
+    {
+      "path": "my_comic/tool/pre_push_check.dart",
+      "line_pattern": "[Ff]ushi reference|fushi_references\\.dart",
+      "reason": "pre-push 调用同一个残留扫描器"
+    }
+  ]
+}

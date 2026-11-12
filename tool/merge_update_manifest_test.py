@@ -145,7 +145,7 @@ def test_macos_arm64_zip_supersedes_legacy_macos_zip():
     def mac(seq, suffix):
         tag = "v0.11.1-debug." + str(seq) + "+sha" + str(seq)
         version = "0.11.1-debug." + str(seq)
-        name = "fushi-0.11.1-debug." + str(seq) + suffix
+        name = "mycomic-0.11.1-debug." + str(seq) + suffix
         assets = [{"name": name, "browser_download_url": _url(tag, name)}]
         return tag, version, assets, name
 
@@ -163,7 +163,7 @@ def test_macos_dmg_travels_with_its_zip():
     def mac(seq, suffixes):
         tag = "v0.11.1-debug." + str(seq) + "+sha" + str(seq)
         version = "0.11.1-debug." + str(seq)
-        names = ["fushi-0.11.1-debug." + str(seq) + s for s in suffixes]
+        names = ["mycomic-0.11.1-debug." + str(seq) + s for s in suffixes]
         assets = [{"name": n, "browser_download_url": _url(tag, n)} for n in names]
         return tag, version, assets, names
 
@@ -290,7 +290,7 @@ def test_empty_live_list_clears_retained():
 # ── BUG-1516 ①b: cross-family desktop mirror ───────────────────────────────
 #
 # The hibiki-family manifest's TOP LEVEL belongs to the Android bridge, but its
-# desktop slots must carry Fushi installers (Windows/macOS migrate by installer
+# desktop slots must carry MyComic installers (Windows/macOS migrate by installer
 # overwrite; Android cannot cross package names). So the mirror contributes
 # assets and must not touch anything else.
 
@@ -303,7 +303,7 @@ def _mirror(existing, platform_fn, seq):
         channel="debug",
         version=version,
         prerelease=True,
-        notes="fushi notes " + str(seq),
+        notes="my_comic notes " + str(seq),
         release_sequence=seq,
         new_assets=assets,
         advertise_top_level=False,

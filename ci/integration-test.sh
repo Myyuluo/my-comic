@@ -1,20 +1,18 @@
 #!/usr/bin/env bash
-# Fully-automated, EMULATOR-ONLY integration test runner for Fushi.
+# Fully-automated, EMULATOR-ONLY integration test runner for MyComic.
 #
-# One command: boots/selects an emulator, builds the debug APK once, provisions
-# every prerequisite (AnkiDroid + a collection + permission grant, dictionary
-# fixture on /sdcard), then runs EVERY integration_test target and aggregates
-# the results. No real device, no manual `flutter drive`, no manual adb
-# push/tap. A real (physical) device is deliberately ignored — only serials
-# matching emulator-<port> are used.
+# One command: boots/selects an emulator, builds the debug APK once, then runs
+# every remaining integration_test target and aggregates the results. No real
+# device, no manual `flutter drive`. A real (physical) device is deliberately
+# ignored — only serials matching emulator-<port> are used.
 #
 # Usage:
 #   bash ci/integration-test.sh                      # boot/select emulator, run all
 #   bash ci/integration-test.sh --skip-build         # reuse the existing app-debug.apk
 #   bash ci/integration-test.sh --only=app_smoke,reader_pagination
-#   bash ci/integration-test.sh --avd=fushi_gpu_test
+#   bash ci/integration-test.sh --avd=my_comic_gpu_test
 #
-# Env overrides: ADB, EMULATOR, FLUTTER, AVD, PKG, DICT_ZIP, ANKI_APK_URL
+# Env overrides: ADB, EMULATOR, FLUTTER, AVD, PKG
 #
 # NOTE: this runner does NOT use `set -e` — a failing target must not abort the
 # remaining targets; failures are collected and reported in the final summary.
@@ -24,19 +22,15 @@ ADB="${ADB:-$(command -v adb 2>/dev/null || echo /d/android_sdk/platform-tools/a
 EMULATOR="${EMULATOR:-$(command -v emulator 2>/dev/null || echo /d/android_sdk/emulator/emulator)}"
 FLUTTER="${FLUTTER:-$(command -v flutter 2>/dev/null || echo /d/flutter_sdk/flutter_extracted/flutter/bin/flutter)}"
 AVD="${AVD:-}"   # resolved lazily below (boot block) if left empty
-PKG="${PKG:-app.fushi.reader}"
-# Dictionary fixture for popup_dictionary / reader_dictionary. Those tests look
-# up basic vocabulary (猫 / 食べる), so the fixture must be a GENERAL J-J/J-C
-# dictionary — a grammar/bunkei dict would return zero results and fail them.
-# Resolution (below): explicit DICT_ZIP, else a general dict matched by name
-# under DICT_DIR, else any zip as a last resort.
-DICT_DIR="${DICT_DIR:-/d/辞典}"
-DICT_ZIP="${DICT_ZIP:-}"
-
-# NOTE: win_path() (MSYS /d/foo -> Windows D:/foo for native adb.exe) is provided
-# by ci/lib/provision-ankidroid.sh, which is sourced below before any caller uses
-# it (the dictionary push at the bottom of this script). Defining it in the
-# shared lib keeps it usable by the APK install there too (single definition).
+PKG="${PKG:-app.mycomic.reader}"
+# MSYS /d/foo -> Windows D:/foo for native adb.exe.
+win_path() {
+  if command -v cygpath >/dev/null 2>&1; then
+    cygpath -w "$1"
+  else
+    printf '%s' "$1"
+  fi
+}
 APK_REL="build/app/outputs/flutter-apk/app-debug.apk"
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
@@ -62,20 +56,20 @@ if [ -z "$DEVICE" ]; then
   # Resolve which AVD to boot (lazily — only needed when nothing is online,
   # so a host that already has an emulator up needs no AVD at all). The
   # default is NOT hardcoded to one fixed name that may not exist on this
-  # host: prefer the GPU-verified `fushi_gpu_test` image (android-34,
+  # host: prefer the GPU-verified `my_comic_gpu_test` image (android-34,
   # renders real Flutter pixels) if present, else fall back to the first AVD
   # `emulator -list-avds` reports. An explicit --avd=/AVD= override wins.
   if [ -z "$AVD" ]; then
     _avds="$("$EMULATOR" -list-avds 2>/dev/null | tr -d '\r')"
-    if printf '%s\n' "$_avds" | grep -qx "fushi_gpu_test"; then
-      AVD="fushi_gpu_test"
+    if printf '%s\n' "$_avds" | grep -qx "my_comic_gpu_test"; then
+      AVD="my_comic_gpu_test"
     else
       AVD="$(printf '%s\n' "$_avds" | grep -v '^[[:space:]]*$' | head -1)"
     fi
     if [ -z "$AVD" ]; then
       echo ">>> FAIL: no AVD available — 'emulator -list-avds' is empty and" >&2
       echo ">>>       no --avd=/AVD= was given. Create one (e.g. an android-34" >&2
-      echo ">>>       'fushi_gpu_test' image) or pass --avd=<name>." >&2
+      echo ">>>       'my_comic_gpu_test' image) or pass --avd=<name>." >&2
       exit 1
     fi
   fi
@@ -130,10 +124,7 @@ if [ -n "$_sdk" ] && [ "$_sdk" -ge 36 ] 2>/dev/null; then
   MSYS_NO_PATHCONV=1 $ADBD shell cmd overlay disable com.android.internal.systemui.navbar.gestural >/dev/null 2>&1 || true
 fi
 
-# shellcheck source=ci/lib/provision-ankidroid.sh
-source "$REPO_ROOT/ci/lib/provision-ankidroid.sh"
-
-cd "$REPO_ROOT/fushi"
+cd "$REPO_ROOT/my_comic"
 
 # ── Build once ──
 if [ "$SKIP_BUILD" = false ]; then
@@ -149,11 +140,11 @@ if [ ! -f "$APK_REL" ]; then
 fi
 
 # ── Pre-install with all runtime perms granted (preserved across flutter
-#    drive's -r reinstall, so the AnkiDroid grant survives the run). ──
-echo ">>> Pre-installing Fushi with runtime permissions granted..."
+#    drive's -r reinstall). ──
+echo ">>> Pre-installing MyComic with runtime permissions granted..."
 MSYS_NO_PATHCONV=1 $ADBD install -r -g "$(win_path "$APK_REL")"
 
-# Re-enable the default launcher activity-alias. Fushi's runtime icon switcher
+# Re-enable the default launcher activity-alias. MyComic's runtime icon switcher
 # (IconSwitchHelper) disables .MainActivityDefault when the user picks a
 # different launcher icon; a fresh `install -r` can land with that alias still
 # disabled, leaving the app with no enabled LAUNCHER component — `flutter drive`
@@ -162,11 +153,10 @@ MSYS_NO_PATHCONV=1 $ADBD install -r -g "$(win_path "$APK_REL")"
 MSYS_NO_PATHCONV=1 $ADBD shell pm enable "$PKG/.MainActivityDefault" >/dev/null 2>&1 || true
 
 # All-Files-Access (MANAGE_EXTERNAL_STORAGE) is an appop, NOT a runtime
-# permission, so `install -g` does not grant it. Without it the app process gets
-# "Permission denied" (errno 13) reading the dictionary fixture pushed to
-# /sdcard/Download (scoped storage blocks the app uid even though adb's shell
-# uid can write there). It must be set with `--uid` (the per-package form fails
-# on API 35), and the grant DOES survive flutter drive's -r reinstall.
+# permission, so `install -g` does not grant it. The app needs it to read
+# user-selected manga directories through dart:io. It must be set with `--uid`
+# (the per-package form fails on API 35), and the grant DOES survive flutter
+# drive's -r reinstall.
 #
 # CRITICAL: appops must NOT run in the post-install window before the package
 # manager has registered the new uid — `appops set --uid <pkg>` then fails with
@@ -183,20 +173,17 @@ for _ in $(seq 1 15); do
   sleep 1
 done
 
-# ── Target list (classified by prerequisite for the summary) ──
-# Resolved here (before provisioning) so we only pay for prerequisites the
-# selected targets actually need — e.g. a `--only=app_smoke` run must not boot
-# and onboard AnkiDroid.
+# ── Target list ──
+# Only targets that still exist after the manga-only cleanup. Video /
+# dictionary / Anki / audiobook integration targets were deleted with their
+# features; listing them would only produce misleading SKIP lines.
 ALL_TARGETS=(
-  card_source_return
-  app_smoke settings_validation navigation_stability home_keyboard
-  gamepad_navigation feature_flows
-  comprehensive_imports comprehensive_reader_lookup comprehensive_settings
-  video_discovery_download_pipeline
-  reader_pagination reader_caret reader_popup_caret reader_computer_use_flow
-  image_pause_detection
-  popup_dictionary anki_integration
-  regression user_path reader_dictionary reader_keyboard
+  app_smoke
+  settings_validation
+  user_path
+  desktop_reader_columns_dom
+  desktop_reader_css_dom
+  desktop_settings_smoke
 )
 
 TARGETS=()
@@ -208,57 +195,6 @@ fi
 if [ ${#TARGETS[@]} -eq 0 ]; then
   echo ">>> FAIL: no targets to run (empty --only?)." >&2
   exit 2
-fi
-
-# Only anki_integration needs the (slow) AnkiDroid install + collection
-# onboarding. Gate the provisioning on the selected target set.
-NEEDS_ANKI=false
-for t in "${TARGETS[@]}"; do
-  if [ "$t" = anki_integration ]; then
-    NEEDS_ANKI=true
-    break
-  fi
-done
-
-# ── Provision external prerequisites (best effort; failures only affect the
-#    targets that need them, reported in the summary). ──
-ANKI_OK=false
-if [ "$NEEDS_ANKI" = true ]; then
-  if provision_ankidroid && grant_fushi_ankidroid_permission; then
-    ANKI_OK=true
-  else
-    echo ">>> WARN: AnkiDroid not fully provisioned — anki_integration may fail." >&2
-  fi
-else
-  echo ">>> Skipping AnkiDroid provisioning (anki_integration not selected)."
-fi
-
-DICT_OK=false
-# Resolve the dictionary fixture: explicit DICT_ZIP, else a GENERAL dictionary
-# matched by name (明鏡/明镜/国語/国语 — these have the basic vocab the lookup
-# tests search for), else any zip as a last resort. `find` tolerates the
-# [..]/CJK characters that break a literal path match.
-if [ -z "$DICT_ZIP" ] || [ ! -f "$DICT_ZIP" ]; then
-  DICT_ZIP="$(find "$DICT_DIR" -maxdepth 1 \
-      \( -name '*明鏡*.zip' -o -name '*明镜*.zip' -o -name '*国語*.zip' \
-         -o -name '*国语*.zip' \) 2>/dev/null | head -1)"
-  [ -z "$DICT_ZIP" ] && \
-    DICT_ZIP="$(find "$DICT_DIR" -maxdepth 1 -name '*.zip' 2>/dev/null | head -1)"
-fi
-if [ -n "$DICT_ZIP" ] && [ -f "$DICT_ZIP" ]; then
-  # Push to shared /sdcard/Download (NOT the app external-files dir): ordinary
-  # install -r preserves data, but Flutter's failed-install recovery can uninstall
-  # the old app first and clear its private/external app directories. The flag
-  # below only disables post-test cleanup, not that separate installation risk.
-  # The app reads this shared fixture via MANAGE_EXTERNAL_STORAGE granted above.
-  DICT_DEST="/sdcard/Download/test_dict.zip"
-  echo ">>> Pushing dictionary fixture ($(basename "$DICT_ZIP")) to $DICT_DEST..."
-  # Push from a Windows-form source path (see win_path) under MSYS_NO_PATHCONV.
-  if MSYS_NO_PATHCONV=1 $ADBD push "$(win_path "$DICT_ZIP")" "$DICT_DEST" >/dev/null; then
-    DICT_OK=true
-  fi
-else
-  echo ">>> WARN: no dictionary zip found under $DICT_DIR — popup_dictionary may fail." >&2
 fi
 
 PASS=(); FAIL=(); SKIP=(); NOTES=()
@@ -288,22 +224,20 @@ run_target() {
      && ! grep -q "Some tests failed" "$log"; then
     echo ">>> PASS $t"
     PASS+=("$t")
-    # Surface intentionally-skipped sub-assertions (e.g. regression's
-    # HBK-REG-001 play-bar geometry, which only runs with a real audiobook) so
-    # a green PASS is not mistaken for full coverage.
+    # Surface intentionally-skipped sub-assertions so a green PASS is not
+    # mistaken for full coverage.
     local skipped
     skipped=$(grep -ioE "SKIP [A-Z0-9_-]+" "$log" | sort -u | tr '\n' ' ')
     [ -n "$skipped" ] && NOTES+=("$t: ${skipped% }")
   else
     echo ">>> FAIL $t  (see $log)"
     FAIL+=("$t")
-    grep -iE "fail\(|Expected:|Exception|Error:|No books|Dictionary fixture|AnkiFetch" "$log" | head -3
+    grep -iE "fail\(|Expected:|Exception|Error:|No books" "$log" | head -3
   fi
 }
 
 # ── Proxy is two-phased. Earlier internet-facing setup — `flutter build apk`
-#    fetching native deps (libmpv android .jar, sqlite3 .dll) and the AnkiDroid
-#    APK curl download — may rely on HTTPS_PROXY/HTTP_PROXY. But `flutter drive`
+#    fetching native deps may rely on HTTPS_PROXY/HTTP_PROXY. But `flutter drive`
 #    below talks to the Dart VM service on 127.0.0.1:<port>; routing that
 #    localhost socket through an HTTP proxy makes it get closed mid-handshake
 #    (HttpException: Connection closed), failing EVERY target. All downloads are
@@ -318,8 +252,6 @@ done
 echo ""
 echo "==================== INTEGRATION SUMMARY ===================="
 echo "Emulator     : $DEVICE"
-echo "AnkiDroid    : $([ "$ANKI_OK" = true ] && echo provisioned || echo NOT-provisioned)"
-echo "Dictionary   : $([ "$DICT_OK" = true ] && echo pushed || echo NOT-pushed)"
 echo "PASS (${#PASS[@]}): ${PASS[*]:-none}"
 echo "SKIP (${#SKIP[@]}): ${SKIP[*]:-none}"
 echo "FAIL (${#FAIL[@]}): ${FAIL[*]:-none}"

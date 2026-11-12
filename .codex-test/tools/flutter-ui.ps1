@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-  Fushi Flutter UI tool - cross-platform UI element location and interaction
+  MyComic Flutter UI tool - cross-platform UI element location and interaction
   via Flutter VM Service. Equivalent of adb-ui.ps1 for Windows/macOS/Linux/iOS.
 
 .DESCRIPTION
@@ -364,7 +364,7 @@ switch ($Action) {
 
     'screenshot' {
         $ts = Get-Date -Format 'yyyyMMdd_HHmmss'
-        $path = if ($Rest -and $Rest[0]) { $Rest[0] } else { "d:\APP\vs_claude_code\fushi\.codex-test\flutter_screenshot_$ts.png" }
+        $path = if ($Rest -and $Rest[0]) { $Rest[0] } else { "d:\APP\vs_claude_code\my_comic\.codex-test\flutter_screenshot_$ts.png" }
         $screenshotDone = $false
 
         # Strategy 1: Windows .NET desktop capture (only useful for desktop Flutter apps)

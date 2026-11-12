@@ -1,0 +1,112 @@
+import 'package:drift/drift.dart' show Value;
+import 'package:drift/native.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:my_comic_core/my_comic_core.dart';
+
+Future<MyComicDatabase> _openDb() async {
+  final db = MyComicDatabase.forTesting(NativeDatabase.memory());
+  addTearDown(db.close);
+  return db;
+}
+
+void main() {
+  group('ReaderPositions table', () {
+    test('upsert and retrieve by bookUid', () async {
+      final db = await _openDb();
+      final now = DateTime.now().millisecondsSinceEpoch;
+
+      await db.upsertReaderPosition(
+        ReaderPositionsCompanion.insert(
+          bookUid: 'book-42',
+          sectionIndex: 3,
+          normCharOffset: 1500,
+          updatedAt: now,
+        ),
+      );
+
+      final row = await db.getReaderPosition('book-42');
+      expect(row, isNotNull);
+      expect(row!.sectionIndex, 3);
+      expect(row.normCharOffset, 1500);
+    });
+
+    test('getReaderPosition returns null for absent book', () async {
+      final db = await _openDb();
+
+      expect(await db.getReaderPosition('book-999'), isNull);
+    });
+
+    test('upsert replaces existing position', () async {
+      final db = await _openDb();
+      final now = DateTime.now().millisecondsSinceEpoch;
+
+      await db.upsertReaderPosition(
+        ReaderPositionsCompanion.insert(
+          bookUid: 'book-1',
+          sectionIndex: 0,
+          normCharOffset: 0,
+          updatedAt: now,
+        ),
+      );
+      await db.upsertReaderPosition(
+        ReaderPositionsCompanion.insert(
+          bookUid: 'book-1',
+          sectionIndex: 5,
+          normCharOffset: 3000,
+          updatedAt: now + 1000,
+        ),
+      );
+
+      final row = await db.getReaderPosition('book-1');
+      expect(row!.sectionIndex, 5);
+      expect(row.normCharOffset, 3000);
+    });
+
+    test('deleteReaderPosition removes the row', () async {
+      final db = await _openDb();
+      final now = DateTime.now().millisecondsSinceEpoch;
+      await db.upsertReaderPosition(
+        ReaderPositionsCompanion.insert(
+          bookUid: 'book-10',
+          sectionIndex: 0,
+          normCharOffset: 0,
+          updatedAt: now,
+        ),
+      );
+
+      final count = await db.deleteReaderPosition('book-10');
+
+      expect(count, 1);
+      expect(await db.getReaderPosition('book-10'), isNull);
+    });
+
+    test('charOffset defaults to -1 and round-trips (BUG-162)', () async {
+      final db = await _openDb();
+      final now = DateTime.now().millisecondsSinceEpoch;
+      // 默认 -1（= 无精确偏移）。
+      await db.upsertReaderPosition(
+        ReaderPositionsCompanion.insert(
+          bookUid: 'book-co',
+          sectionIndex: 1,
+          normCharOffset: 4200,
+          updatedAt: now,
+        ),
+      );
+      expect((await db.getReaderPosition('book-co'))!.charOffset, -1);
+
+      // 精确偏移往返。
+      await db.upsertReaderPosition(
+        ReaderPositionsCompanion(
+          bookUid: const Value('book-co'),
+          sectionIndex: const Value(1),
+          normCharOffset: const Value(4200),
+          charOffset: const Value(1234),
+          updatedAt: Value(now),
+        ),
+      );
+      final row = await db.getReaderPosition('book-co');
+      expect(row!.charOffset, 1234);
+    });
+  });
+
+}

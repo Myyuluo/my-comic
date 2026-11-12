@@ -17,7 +17,7 @@ name: PR merge gate
 # 会连带改变直推工作流，属于用户决策，不由自动化代做。
 #
 # 白名单只放两个人：仓库所有者，以及长期协作者 W1ght。改名单请连同下面的
-# 守卫测试 fushi/test/tools/pr_merge_gate_allowlist_guard_test.dart 一起改。
+# 守卫测试 my_comic/test/tools/pr_merge_gate_allowlist_guard_test.dart 一起改。
 
 on:
   pull_request_target:

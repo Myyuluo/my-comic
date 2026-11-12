@@ -1,258 +1,100 @@
 <div align="center">
 
-# Fushi
+# MyComic
 
-<img src="docs/static-assets/fushi-logo.png" alt="Fushi logo" width="160">
+**A Mihon-compatible manga reader for Windows.**
 
-![Platform](https://img.shields.io/badge/platform-Android%20%7C%20Windows%20%7C%20macOS%20%7C%20iOS%20%7C%20Linux-lightgrey)
+[English](README.md) | [简体中文](README.zh-CN.md)
+
+![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078D4)
 ![License](https://img.shields.io/badge/license-GPLv3-blue)
 ![Flutter](https://img.shields.io/badge/Flutter-3.47.6-02569B?logo=flutter&logoColor=white)
 
-**English** | [简体中文](README.zh-CN.md) | [繁體中文](docs/readme/README.zh-Hant.md) | [日本語](docs/readme/README.ja.md) | [한국어](docs/readme/README.ko.md) | [Español](docs/readme/README.es.md) | [Français](docs/readme/README.fr.md) | [Deutsch](docs/readme/README.de.md) | [Português](docs/readme/README.pt-BR.md) | [Русский](docs/readme/README.ru.md) | [Tiếng Việt](docs/readme/README.vi.md) | [ภาษาไทย](docs/readme/README.th.md) | [Bahasa Indonesia](docs/readme/README.id.md) | [Italiano](docs/readme/README.it.md) | [Nederlands](docs/readme/README.nl.md) | [Türkçe](docs/readme/README.tr.md) | [العربية](docs/readme/README.ar.md)
-
-[![fushi.moe](https://img.shields.io/badge/%F0%9F%8C%90%20fushi.moe-0969DA?style=for-the-badge)](https://fushi.moe/)
-
-[![Download Latest](https://img.shields.io/badge/%E2%AC%87%20Download%20Latest-2EA44F?style=for-the-badge)](https://fushi.moe/)
-[![Join our Discord](https://img.shields.io/badge/Join%20our%20Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/WhjwyGmm7f)
-
 </div>
 
+MyComic is an independent Windows desktop manga reader based on the frozen Fushi v3.0.0 snapshot (GPL-3.0); it is not affiliated with or endorsed by the Fushi or Mihon projects.
 
-## Platform Support
+## Features
 
-| Platform | Status | Notes |
-|---|---|---|
-| Android | ✅ | Android 7.0 (API 24) or later |
-| Windows | ✅ | Galgame text and voice hooking is Windows-only |
-| macOS | ✅ | Apple Silicon only; Intel Macs are not supported |
-| iOS | ✅ ([TestFlight](https://testflight.apple.com/join/j88d69jx)) | No discovery, online sources, or download center (App Store guidelines) |
-| Linux | 🔧 Build from source | No prebuilt release yet; the EPUB reader needs WPE WebKit |
-| Fushi Server | 🧪 Beta ([fushi-server](https://github.com/hajisensai/fushi-server/releases)) | Headless host for Linux / Windows / macOS with a web UI — see [packages/fushi_server](packages/fushi_server/README.md) |
+- **Library** — keep manga on your shelf, organize them with tags, search and filter, and continue where you left off.
+- **Manga pages and global search** — browse details, chapter lists and source genres, and search every enabled online source from one place.
+- **Reader** — spread, vertical-page and webtoon reading modes with per-series preferences, reading progress and history.
+- **Online sources** — browse, search and read through Mihon extensions installed from extension stores.
+- **Downloads** — download chapters for offline reading, saved as CBZ archives by default (plain folders are also supported), with pause, resume, retry and cancel controls.
+- **Local source** — read manga folders and CBZ files in place from your Content root without importing or copying them.
+- **History** — one entry per series with the last-read chapter and cover.
+- **Backup** — import and export Mihon-compatible `.tachibk` backups.
+- **Four interface languages** — English, 简体中文, 繁體中文, 日本語; the interface follows the system language and falls back to English.
+- **Onboarding** — a three-step guide for language, theme and Content root, reopenable from Settings.
 
-**Design system** — every platform defaults to **Material 3 Expressive**; a **Cupertino** (Apple-style) design system can be selected in *Settings › Appearance › Design system*; with Cupertino, the window background uses Mica on Windows 11 and vibrancy on macOS (unless the system's reduce-transparency or high-contrast setting is on).
+## Mihon compatibility
 
-> The languages available for dictionary lookup are determined by the imported dictionaries and Yomitan transformation tables, independently of the interface language. iOS updates arrive through TestFlight a few days later than on the other platforms.
+MyComic is a **Mihon-compatible desktop reader**, not an official Mihon product or a port of the Mihon app:
 
-### Interface Languages (17)
+- It runs **Mihon extensions** through a bundled extension runtime, so you do not need to install Java or run a separate server.
+- It imports and exports **Mihon v0.21.3 `.tachibk` backups**; backup categories map to MyComic tags.
+- Extension behavior is compatible with the frozen Fushi v3.0.0 baseline.
 
-English · 简体中文 · 繁體中文 · 日本語 · 한국어 · Español · Français · Deutsch · Português (Brasil) · Русский · Tiếng Việt · ภาษาไทย · Bahasa Indonesia · Italiano · Nederlands · Türkçe · العربية
+## Install on Windows
 
-## Installation
+1. Download the latest `mycomic-<version>-windows-setup.exe` from [GitHub Releases](https://github.com/Myyuluo/my-comic/releases).
+2. Run the installer. It installs per user (`%LOCALAPPDATA%\MyComic`) and does not require administrator rights.
+3. Start **MyComic** from the Start menu or the desktop shortcut.
 
-Download the latest release from the [Fushi website](https://fushi.moe/) — Android APK, Windows installer, and macOS builds (Apple Silicon only; Intel Macs are not supported) are available; iOS is installed through [TestFlight](https://testflight.apple.com/join/j88d69jx). Linux has no prebuilt app release yet; build it from source. The headless Fushi Server is released separately on [hajisensai/fushi-server](https://github.com/hajisensai/fushi-server/releases).
+Requirements: **Windows 10 or Windows 11 (64-bit)**.
 
-> Requires Android 7.0 (API 24) or higher.
+> Upgrading from an older Fushi-based build: MyComic is a clean break. Uninstall the old application manually before installing MyComic; user data in the Program state root is not migrated. Old `fushi://` deep links and `fushi-` update assets are no longer compatible, so update or reinstall manually once. Downloads, local manga and backups under your Content root (`Documents\MyComic` by default) stay where they are.
 
-## Building
+## Build from source
 
-One-command prep (`flutter pub get` + apply patches), then build:
+Prerequisites: Windows 10/11 (64-bit), [Flutter](https://docs.flutter.dev/get-started/install/windows) **3.47.6**, Visual Studio 2022 with the **Desktop development with C++** workload, and Git Bash (used by the dependency patch script). Inno Setup 6 is only needed to compile the installer locally; CI builds the release installer.
 
-```bash
-# From the repository root
-bash tool/bootstrap.sh          # Windows PowerShell: .\tool\bootstrap.ps1
+```powershell
+# From the repository root: flutter pub get + apply third-party patches
+.\tool\bootstrap.ps1
 
-cd fushi
-# Android
-flutter build apk --release --target-platform android-arm64 --split-per-abi
-# Desktop
+# Run the app
+cd my_comic
+flutter run -d windows
+
+# Build a release executable
 flutter build windows --release
-flutter build macos --release
-flutter build linux --release
-# iOS
-flutter build ipa --release
-
-# Headless server (from packages/fushi_server; use `dart build cli`, not `dart compile exe`)
-dart build cli
+# Output: my_comic\build\windows\x64\runner\Release\MyComic.exe
 ```
 
-`tool/bootstrap.sh` / `tool/bootstrap.ps1` collapse `flutter pub get` and `ci/apply-patches.sh` into a single command. This project is locked to Flutter 3.47.6 (Dart SDK `>=3.8.0 <4.0.0`); earlier Flutter versions cannot build it because Material and Cupertino are consumed as the `material_ui` / `cupertino_ui` packages. Some upstream dependencies are vendored under `third_party/` or patched by `ci/apply-patches.sh` — see [docs/agent/build.md](docs/agent/build.md) for details, including the Linux desktop build dependencies.
+Quality gates used by CI:
 
-<details>
-<summary><b>Tech Stack</b></summary>
-
-| Layer | Technology |
-|---|---|
-| Framework | Flutter 3.47.6 (Dart SDK `>=3.8.0 <4.0.0`), Riverpod |
-| Platforms | Android / Windows / macOS / iOS / Linux, plus a headless server |
-| UI | `material_ui` (Material 3 Expressive) / `cupertino_ui` (Cupertino) |
-| Reader | WebView paging engine (derived from the Hoshi Reader family) |
-| Video | media_kit (libmpv core) + libplacebo |
-| Storage | Drift (SQLite, WAL) + fushidicts (C++ FFI dictionary engine) |
-| NLP | Yomitan transformation tables (multilingual lemmatization) + kana_kit (kana conversion); tokenization via fushidicts FFI |
-| On-device AI | ONNX Runtime for speech recognition (subtitle generation) and manga OCR; algorithms live in [fushi-subtitles](https://github.com/hajisensai/fushi-subtitles) |
-| Downloads | libtorrent 2.x via a C-ABI FFI bridge (external qBittorrent as fallback) |
-| Sync | Cloud backends + Fushi Interconnect (LAN, remote addresses, and an iroh P2P tunnel) |
-| Shared engine | `fushi_engine` — pure-Dart core shared by the app and Fushi Server |
-| Card Creation | AnkiDroid API + AnkiConnect |
-| i18n | Slang (17 languages) |
-
-</details>
-
-<details>
-<summary><b>Project Structure</b></summary>
-
-```
-Fushi/                      # Repository root (Melos workspace: fushi_workspace)
-├── fushi/                  # Flutter app main directory
-│   ├── lib/
-│   │   ├── i18n/            # Internationalization (17 languages, Slang)
-│   │   ├── src/
-│   │   │   ├── pages/       # Pages (library pages, reader, video player, settings, etc.)
-│   │   │   ├── reader/      # Reader WebView JS/CSS scripts
-│   │   │   ├── media/       # Books, manga, video, audiobooks, online sources
-│   │   │   ├── lookup/      # Dictionary lookup popups and overlays
-│   │   │   ├── mining/      # Card creation (incl. galgame mining)
-│   │   │   ├── sync/        # Cloud sync, Interconnect, media servers
-│   │   │   └── models/      # Data models and state management (AppModel)
-│   │   └── main.dart
-│   └── android/             # Android project
-├── packages/                # Dart packages
-│   ├── fushi_core/          #   Database schema, preferences
-│   ├── fushi_engine/        #   Pure-Dart engine shared with the server
-│   ├── fushi_server/        #   Headless server CLI + web UI
-│   ├── fushi_cli/           #   Desktop command-line client
-│   ├── fushi_dictionary/    #   Dictionary engine bindings and importers
-│   ├── fushi_anki/ · fushi_audio/ · fushi_platform/ · fushi_srs/
-│   ├── fushi_torrent/ · fushi_p2p/   # libtorrent / iroh FFI bindings
-│   └── …                    #   Vendored forks (inappwebview Windows/Linux, gamepads)
-├── native/                  # Native sources: fushidicts, fushi_torrent, fushi_p2p (Rust), galgame_hook, …
-├── services/                # Log collector and leaderboard backends (deployed separately)
-├── tools/browser-extension/ # Browser lookup extension
-├── third_party/             # Vendored patched packages (dependency_overrides)
-├── ci/                      # Build patches and CI scripts
-├── tool/                    # bootstrap / setup_worktree / bug tracker scripts
-└── docs/                    # Development documentation (incl. docs/agent/ operations manual)
+```powershell
+cd my_comic
+dart run slang                 # regenerate localization code
+flutter analyze --no-pub
+flutter test --no-pub
 ```
 
-</details>
+The Melos workspace packages live in `packages/my_comic_*`; vendored patched dependencies live in `third_party/` and are applied by the bootstrap script. The Windows installer definition is `my_comic/windows/installer/mycomic.iss`.
 
-Video import supports grouping by work or folder. See the [video workflow](docs/specs/2026-09-07-video-library-workflow.md) and [MAL/TMDB metadata with AniDB file hashing](docs/specs/2026-09-07-mal-tmdb-anidb-hash.md) for matching and background tasks.
+## Data and privacy
 
-[Optional online service setup](docs/specs/2026-09-07-online-services-setup.md) explains bundled application identities, personal credentials, and the dismissible video setup reminder.
+- **Content root** — `Documents\MyComic` by default, containing `downloads`, `autobackup` and `local`. It is not removed when you uninstall the app.
+- **Program state** — the database, settings, extensions and caches live next to the installed application; uninstalling removes them.
+- **No telemetry** — MyComic does not send usage statistics, and it has no accounts, cloud sync, feedback center or leaderboard. Network access happens only when you use online sources or extensions, and update checks query this repository's GitHub Releases.
 
-## Privacy & Data
+## Project layout
 
-Fushi stores imported books, dictionaries, fonts, audiobook data, videos, reading progress, highlights, statistics, and settings in the app's local storage.
+```
+my_comic/           Flutter application (Dart package `my_comic`)
+packages/           Workspace packages (`my_comic_core`, `my_comic_engine`, ...)
+native/             Native components and Windows integration
+third_party/        Vendored/patch source for dependencies
+ci/                 Dependency patches and CI helpers
+tool/               Bootstrap, audit and developer scripts
+docs/adr/           Architecture decision records
+```
 
-- **Sync** — Google Drive / OneDrive / Dropbox use OAuth sign-in; WebDAV / FTP / SFTP / Fushi Server use the server address and credentials you provide. Fushi Interconnect connects paired devices directly (LAN, IPv6, overlay networks, or public addresses), falling back to an end-to-end iroh P2P tunnel when no direct route works; pairing links always ask for confirmation.
-- **Anki** — card creation talks to AnkiDroid or the AnkiConnect address you configure.
-- **Usage statistics** — once a day, desktop and Android builds send a random install ID, the app version, platform, and update channel to fushi.moe to count active users; no account, library, or reading data is included and IP addresses are not stored. Turn it off with *Share usage statistics* in the update settings. iOS builds do not send it.
-- **Only when you ask** — log upload (after a one-time consent prompt), in-app feedback, and the leaderboard (off by default; uploads your library titles and progress only after you opt in).
-- **Manga OCR** — the default engine is Google Lens, which sends the page image to Google; switch to the on-device model or system OCR in settings to keep images local.
-- **AI features** — requests go only to the LLM provider you configure and assign to a feature; with no provider assigned, nothing is sent.
-- **Third-party services** — metadata, subtitle, and online-source features contact the services listed under [Content sources and integrations](#content-sources-and-integrations) only when you use them.
-
-## Development Activity
-
-[![Development Activity](docs/assets/dev-activity.svg)](https://github.com/hajisensai/Fushi/commits/develop)
-
-Day-to-day work lands on `develop`; `main` only receives release merges. The chart is displayed here on `main` but is generated from `develop`, so it reflects actual development rather than merge traffic.
-
-The three lanes are the update channels the app itself offers, and each is scaled to its own peak — debug builds outnumber stable releases by two orders of magnitude, so a shared scale would flatten the other two lanes to nothing.
-
-| Lane | What it counts | How you get it |
-|---|---|---|
-| **Debug (rolling)** | Successful push builds of [release.yml](.github/workflows/release.yml) | Rolling prerelease, republished on every push |
-| **Beta** | `v<version>-beta.<seq>` prereleases | Manually dispatched test build |
-| **Stable** | `v<version>` releases | Latest release |
-
-> The chart above is generated inside this repository (no third-party service) and refreshed daily by the [Update Dev Activity Chart](.github/workflows/dev-activity.yml) workflow.
-
-## Star History
-
-[![GitHub stars](https://img.shields.io/github/stars/hajisensai/Fushi?style=flat&logo=github&label=Stars)](https://github.com/hajisensai/Fushi/stargazers)
-
-[![Star History](docs/assets/star-history.svg)](https://github.com/hajisensai/Fushi/stargazers)
-
-> The chart above is generated inside this repository (no third-party service) and refreshed daily by the [Update Star History](.github/workflows/star-history.yml) workflow.
-
-## Acknowledgments
-
-Fushi builds on the following projects and ecosystem:
-
-### Learning tools and prior art
-
-| Project | Description |
-|---|---|
-| [jidoujisho](https://github.com/arianneorpilla/jidoujisho) | Japanese immersive learning tool |
-| [Hoshi Reader](https://github.com/Manhhao/Hoshi-Reader) | iOS Japanese reader; reader paging engine reference |
-| [Hoshi Reader Android](https://github.com/HuangAntimony/Hoshi-Reader-Android) | Android native Japanese reader |
-| [hoshidicts](https://github.com/Manhhao/hoshidicts) | C++ dictionary engine |
-| [Sasayaki](https://github.com/Manhhao/Hoshi-Reader/blob/develop/SASAYAKI.md) | Audiobook sync solution |
-| [Tsubasa](https://github.com/SonicSandbox/Tsubasa-sync) | Subtitle-to-reference timing alignment algorithm (GPL-3.0); basis for auto-aligning downloaded subtitles to embedded tracks |
-| [Yomitan](https://github.com/yomidevs/yomitan) | Dictionary format, transformation tables, and lookup experience reference |
-| [Lapis](https://github.com/donkuri/lapis) | Anki note type |
-| [AnkiDroid](https://github.com/ankidroid/Anki-Android) | Android card creation integration |
-| [Ankiconnect Android](https://github.com/KamWithK/AnkiconnectAndroid) | Local audio and AnkiDroid interaction reference |
-| [ッツ Ebook Reader](https://github.com/ttu-ttu/ebook-reader) | Reader, statistics, and sync compatibility reference |
-| [media_kit](https://github.com/media-kit/media-kit) | Flutter video playback framework (libmpv core) |
-| [Niratan](https://github.com/W1ght/Niratan) | Immersion language learning suite for macOS |
-
-### Engines and native components
-
-| Project | Description |
-|---|---|
-| [LunaHook](https://github.com/HIllya51/LunaTranslator) | Galgame text hooking engine (vendored DLLs loaded by the injector) |
-| [MinHook](https://github.com/TsudaKageyu/minhook) | Inline hooking library used by the galgame injector |
-| [libtorrent](https://github.com/arvidn/libtorrent) | Built-in torrent download engine |
-| [mpv](https://github.com/mpv-player/mpv) | libmpv playback core behind media_kit |
-| [FFmpeg](https://ffmpeg.org) | Media probing, clipping, and audio extraction |
-| [libplacebo](https://github.com/haasn/libplacebo) | GPU video shaders and HDR tone mapping |
-| [flutter_inappwebview](https://github.com/pichillilorenzo/flutter_inappwebview) | WebView engine that renders the EPUB reader |
-| [ONNX Runtime](https://github.com/microsoft/onnxruntime) | On-device inference for speech recognition and OCR |
-| [iroh](https://github.com/n0-computer/iroh) | P2P tunnel for remote Fushi Interconnect connections |
-| [zstd](https://github.com/facebook/zstd) · [xxHash](https://github.com/Cyan4973/xxHash) · [libdeflate](https://github.com/ebiggers/libdeflate) · [glaze](https://github.com/stephenberry/glaze) · [unordered_dense](https://github.com/martinus/unordered_dense) · [utf8proc](https://github.com/JuliaStrings/utf8proc) · [utfcpp](https://github.com/nemtrif/utfcpp) | Dictionary engine dependencies |
-
-### On-device models
-
-| Project | Description |
-|---|---|
-| [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) | Zipformer speech recognition model packages and VAD builds |
-| [ReazonSpeech k2-v2](https://huggingface.co/reazon-research/reazonspeech-k2-v2) | Japanese speech recognition model |
-| [Parakeet TDT-CTC 0.6B ja](https://huggingface.co/nvidia/parakeet-tdt_ctc-0.6b-ja) | Japanese speech recognition model |
-| [Kitsune](https://huggingface.co/subthx/kitsune-onnx) | Japanese speech recognition model (CC BY-NC 4.0, downloaded from its Hugging Face repository) |
-| [Omnilingual ASR](https://github.com/facebookresearch/omnilingual-asr) | Multilingual CTC speech recognition model |
-| [Silero VAD](https://github.com/snakers4/silero-vad) | Voice activity detection model |
-| [comic-text-and-bubble-detector](https://huggingface.co/ogkalu/comic-text-and-bubble-detector) | Manga text and speech bubble detection model |
-| [manga-panel-detector-yolo26n](https://huggingface.co/leoxs22/manga-panel-detector-yolo26n) | Manga panel detection model, trained on [Manga109-s](http://www.manga109.org/en/download_s.html) |
-| [PP-OCRv6](https://github.com/PaddlePaddle/PaddleOCR) small det / rec · [PP-OCRv6_manga](https://huggingface.co/Kellenok/PP-OCRv6_manga) | Text line detection and recognition; the manga-tuned rec (trained with [Manga109-s](http://www.manga109.org/en/download_s.html) and [AnimeText](https://huggingface.co/datasets/deepghs/AnimeText)) powers the per-column CTC local OCR model |
-
-> The manga panel detection model and PP-OCRv6_manga are trained with the Manga109-s dataset (Matsui et al. 2017; Aizawa et al. 2020), whose terms require this use of the dataset to be clearly indicated. PP-OCRv6_manga (Apache-2.0) is additionally trained with the AnimeText dataset, which is licensed CC BY-NC-SA 4.0; the app downloads that model from its Hugging Face repository and does not redistribute it.
-
-### Content sources and integrations
-
-| Project | Description |
-|---|---|
-| [Mihon](https://github.com/mihonapp/mihon) | Manga source extension ecosystem |
-| [Aniyomi](https://github.com/aniyomiorg/aniyomi) | Anime source extension ecosystem (extensions-lib 14–16 hosted by the same runtime) |
-| [M-Extension-Server](https://github.com/kodjodevf/M-Extension-Server) | Manga extension runtime for desktop (vendored, MPL-2.0) |
-| [Mangayomi](https://github.com/kodjodevf/mangayomi) | Mihon / Aniyomi extension adaptation reference |
-| [LNReader](https://github.com/LNReader/lnreader-plugins) | Light novel source plugin ecosystem |
-| [Jellyfin](https://jellyfin.org) · [Emby](https://emby.media) · [Plex](https://www.plex.tv) | Media servers browsable from the video library |
-| [asbplayer](https://github.com/asbplayer/asbplayer) | Streaming subtitle bridge reference for the browser extension |
-| [Shoko Server](https://github.com/ShokoAnime/ShokoServer) | Anime identification and scraping architecture reference |
-| [ReinaManager](https://github.com/huoshen80/ReinaManager) | Galgame library information architecture reference |
-| [AniDB](https://anidb.net) | Anime, episode, and file identity |
-| [MyAnimeList](https://myanimelist.net) (via [Jikan](https://jikan.moe)) | Anime metadata |
-| [TMDB](https://www.themoviedb.org) | Supplementary metadata and artwork |
-| [VNDB](https://vndb.org) | Visual novel metadata |
-| [Jimaku](https://jimaku.cc) | Japanese subtitle source |
-| [OpenSubtitles](https://www.opensubtitles.com) | Subtitle source |
-
-> This application uses TMDB and the TMDB APIs but is not endorsed, certified, or otherwise approved by TMDB.
+Start with [CLAUDE.md](CLAUDE.md) for repository rules, [GLOSSARY.md](GLOSSARY.md) for domain terms, and [`docs/adr/0024-windows-only-independent-identity.md`](docs/adr/0024-windows-only-independent-identity.md) for the Windows-only, independent-identity decision. Upstream provenance is recorded in [UPSTREAM.md](UPSTREAM.md).
 
 ## License
 
-Distributed under the GNU General Public License v3.0. See [LICENSE](LICENSE) for details.
+MyComic is distributed under the **GNU General Public License v3.0**; see [LICENSE](LICENSE) for the full text. Third-party licenses and notices are kept in `third_party/` (including `LICENSE`, `NOTICE` and `PATCHES.md`) and in [`my_comic/docs/licenses/`](my_comic/docs/licenses/).
 
-## Maintainer
-
-Fushi is maintained by [hajisensai](https://github.com/hajisensai). Website: [fushi.moe](https://fushi.moe). Contact: [contact@fushi.moe](mailto:contact@fushi.moe).
-
-<div align="center">
-
-<br>
-
-**English** | [简体中文](README.zh-CN.md) | [繁體中文](docs/readme/README.zh-Hant.md) | [日本語](docs/readme/README.ja.md) | [한국어](docs/readme/README.ko.md) | [Español](docs/readme/README.es.md) | [Français](docs/readme/README.fr.md) | [Deutsch](docs/readme/README.de.md) | [Português](docs/readme/README.pt-BR.md) | [Русский](docs/readme/README.ru.md) | [Tiếng Việt](docs/readme/README.vi.md) | [ภาษาไทย](docs/readme/README.th.md) | [Bahasa Indonesia](docs/readme/README.id.md) | [Italiano](docs/readme/README.it.md) | [Nederlands](docs/readme/README.nl.md) | [Türkçe](docs/readme/README.tr.md) | [العربية](docs/readme/README.ar.md)
-
-</div>
+Copyright © 2026 Fushi contributors. Copyright © 2026 MyComic contributors.

@@ -28,7 +28,7 @@ param(
     [string] $TimestampUrl = 'http://timestamp.digicert.com',
 
     # 显示在 UAC 提权对话框上的程序描述。
-    [string] $Description = 'Fushi',
+    [string] $Description = 'MyComic',
 
     # 先确保 SimplySign 已连接（未连接时用 seed 自动登录）。
     [switch] $AutoConnect,

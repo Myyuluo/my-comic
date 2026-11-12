@@ -25,7 +25,7 @@ dayjs.extend(relativeTime);
 dayjs.extend(calendar);
 dayjs.extend(duration);
 
-globalThis.__fushiLnReaderLibs = {
+globalThis.__myComicLnReaderLibs = {
   cheerio,
   htmlparser2,
   dayjs,

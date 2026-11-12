@@ -18,7 +18,7 @@ if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
 }
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$runnerDir = Join-Path $repoRoot 'fushi/windows/runner'
+$runnerDir = Join-Path $repoRoot 'my_comic/windows/runner'
 $testNames = @('game_stream_webrtc_capture_helper_test', 'game_stream_audio_feed_clock_test')
 $outputDir = Join-Path $repoRoot '.codex-test/game-stream-capture-test'
 New-Item -ItemType Directory -Path $outputDir -Force | Out-Null

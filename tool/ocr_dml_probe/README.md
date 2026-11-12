@@ -3,7 +3,7 @@
 回答一个问题：**某个 ONNX 模型在本机 ORT 的 DirectML EP 上到底能不能建出会话，
 建得起来的话比 CPU 快多少。**
 
-存在的理由：`fushi/lib/src/ocr/ocr_inference.dart` 的 Windows EP 偏好表写着
+存在的理由：`my_comic/lib/src/ocr/ocr_inference.dart` 的 Windows EP 偏好表写着
 「不要 DirectML」，依据是 2026-09-02 的实测。那条注释同时写了「要改回来先重新
 拿数」——这个目录就是拿数的量具。没有它，那句话是空的。
 
@@ -42,7 +42,7 @@ sha256sum ort-dml.nupkg directml.nupkg
 
 unzip -q ort-dml.nupkg -d ort && unzip -q directml.nupkg -d dml
 
-# 2) 取模型（清单见 fushi/lib/src/ocr/manga_ocr_model_manifest.dart）
+# 2) 取模型（清单见 my_comic/lib/src/ocr/manga_ocr_model_manifest.dart）
 curl -L --proxy http://127.0.0.1:34151 --ssl-no-revoke -o detector-v4-s_int8.onnx \
   https://huggingface.co/ogkalu/comic-text-and-bubble-detector/resolve/main/detector-v4-s_int8.onnx
 ```

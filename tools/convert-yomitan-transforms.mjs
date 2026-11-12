@@ -3,7 +3,7 @@
  * convert-yomitan-transforms.mjs
  *
  * Reads Yomitan language transform descriptor files and outputs minified JSON
- * for each language. The JSON is consumed by the fushidicts C++ deinflector.
+ * for each language. The JSON is consumed by the my_comicdicts C++ deinflector.
  *
  * Usage:  node convert-yomitan-transforms.mjs
  *
@@ -24,7 +24,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const YOMITAN_LANG_DIR = path.resolve(__dirname, '../../yomitan/ext/js/language');
 const ORIGINAL_TRANSFORMS = path.join(YOMITAN_LANG_DIR, 'language-transforms.js');
 const BACKUP_TRANSFORMS   = ORIGINAL_TRANSFORMS + '.bak';
-const OUTPUT_DIR = path.resolve(__dirname, '../fushi/assets/transforms');
+const OUTPUT_DIR = path.resolve(__dirname, '../my_comic/assets/transforms');
 
 // ---------------------------------------------------------------------------
 // Language table: code → { dir, file, exportName }

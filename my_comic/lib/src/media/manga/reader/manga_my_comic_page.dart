@@ -1,0 +1,5457 @@
+import 'dart:async';
+import 'dart:convert';
+import 'package:my_comic/src/utils/misc/exit_after_persist.dart';
+import 'dart:io';
+import 'dart:isolate';
+import 'dart:math' as math;
+
+import 'package:drift/drift.dart' show Value;
+import 'package:flutter/foundation.dart' show compute;
+import 'package:material_ui/material_ui.dart';
+import 'package:flutter/services.dart' hide ModifierKey;
+import 'package:flutter_inappwebview/flutter_inappwebview.dart';
+import 'package:my_comic/src/utils/components/glass/my_comic_icon.dart';
+import 'package:path/path.dart' as p;
+import 'package:window_manager/window_manager.dart';
+
+import 'package:my_comic/src/media/manga/reader/source_review_compat.dart';
+import 'package:my_comic_engine/media/manga/reader_position.dart';
+import 'package:my_comic_core/my_comic_core.dart';
+import 'package:my_comic/src/media/sources/reader_my_comic_source.dart';
+import 'package:my_comic/src/models/my_comic_reader_palette.dart';
+import 'package:my_comic/src/models/module_id.dart';
+
+import 'package:my_comic/src/utils/misc/screen_wakelock.dart';
+
+import 'package:my_comic/src/media/manga/manga_overlay_html.dart';
+import 'package:my_comic/src/media/manga/manga_reading_mode.dart';
+import 'package:my_comic_engine/media/manga/download_library_storage.dart';
+import 'package:my_comic_engine/media/manga/manga_storage.dart';
+import 'package:my_comic/src/media/manga/manga_view_prefs.dart';
+import 'package:my_comic/src/media/manga/manga_reader_preferences.dart';
+import 'package:my_comic/src/media/manga/manga_spread_model.dart';
+import 'package:my_comic/src/utils/adaptive/my_comic_fold_posture.dart';
+import 'package:my_comic/src/media/manga/mihon/manga_page_provider.dart';
+import 'package:my_comic/src/media/manga/history/manga_history.dart';
+import 'package:my_comic/src/media/manga/library/manga_adjacent_chapter.dart';
+import 'package:my_comic/src/media/manga/mihon/online_manga_reader_session.dart';
+import 'package:my_comic/src/media/manga/download/download_library_index.dart';
+import 'package:my_comic/src/media/manga/library/manga_chapter_list.dart';
+import 'package:my_comic/src/media/manga/library/online_manga_library_entry.dart';
+import 'package:my_comic/src/media/manga/library/online_manga_library_service.dart';
+import 'package:my_comic/src/media/manga/library/online_manga_runtime_adapter.dart';
+import 'package:my_comic/src/media/online/online_source_error_text.dart';
+import 'package:my_comic_engine/media/manga/local_source/local_source_library.dart'
+    show updateLocalSourceCurrentChapter;
+import 'package:my_comic_engine/media/manga/local_source/local_source_layout.dart';
+import 'package:my_comic_engine/media/manga/local_source/local_source_metadata.dart';
+import 'package:my_comic_engine/media/manga/local_source/local_source_reader.dart';
+import 'package:my_comic_engine/media/manga/mokuro_payload.dart';
+
+import 'package:my_comic/src/media/manga/library/online_manga_chapter_updates.dart'
+    show mangaChapterDisplayName;
+import 'package:my_comic/src/media/manga/reader/manga_reader_chrome.dart';
+import 'package:my_comic/src/utils/components/my_comic_desktop_title_bar.dart'
+    show MyComicTitleBarColorScope, MyComicTitleBarColors, myComicTitleBarColorsOn;
+import 'package:my_comic/src/media/manga/reader/manga_reader_settings_sheet.dart';
+import 'package:my_comic/src/media/manga/reader/manga_reader_page_grid.dart';
+import 'package:my_comic/src/media/manga/reader/manga_session_page_image.dart';
+import 'package:my_comic/src/media/manga/reader/manga_reader_quick_settings_sheet.dart';
+import 'package:my_comic/src/media/manga/reader/manga_volume_key_paging_controller.dart';
+import 'package:my_comic/src/focus/page_focus_ownership.dart';
+import 'package:my_comic/src/shortcuts/context_menu_trigger.dart'
+    show contextMenuButtonNumberMatches;
+import 'package:my_comic/src/shortcuts/gamepad_service.dart'
+    show GamepadButtonIntent;
+import 'package:my_comic/src/shortcuts/global_navigation.dart'
+    show
+        desktopWindowFullscreenSupported,
+        readDesktopWindowFullscreen,
+        setDesktopWindowFullscreen;
+import 'package:my_comic/src/shortcuts/window_fullscreen_hosts.dart'
+    show WindowFullscreenHost;
+import 'package:my_comic/src/shortcuts/input_binding.dart'
+    show
+        GamepadButton,
+        InputBinding,
+        ModifierKey,
+        MouseBinding,
+        activeModifierKeys,
+        domMouseButtonFromPointerButtons;
+import 'package:my_comic/src/shortcuts/mouse_binding_dispatch.dart'
+    show dispatchClaimedMouseAction, resolveMouseBindingActionForButton;
+import 'package:my_comic/src/shortcuts/manga_arrow_override.dart';
+import 'package:my_comic/src/shortcuts/shortcut_action.dart';
+import 'package:my_comic/src/shortcuts/shortcut_registry.dart';
+import 'package:my_comic/src/focus/webview_key_bridge.dart';
+import 'package:my_comic/src/media/manga/reader/manga_window_load_gate.dart';
+import 'package:my_comic/src/pages/base_source_page.dart';
+import 'package:my_comic/src/reader/reader_chrome_controller.dart';
+import 'package:my_comic/src/media/manga/library/manga_resume_point.dart';
+import 'package:my_comic/src/media/manga/reader/manga_chapter_drawer.dart';
+import 'package:my_comic/src/reader/reader_desktop_chrome.dart'
+    show ReaderHeaderAction, ReaderSideSheetSide, showReaderSideSheet;
+
+import 'package:my_comic/src/reader/reader_session_remote.dart';
+import 'package:my_comic/src/reader/illustration_zoom_viewer.dart'
+    show copyImageFileToClipboard, shareImageFile;
+import 'package:my_comic/src/startup/exit_flush_registry.dart';
+import 'package:my_comic/src/webview/webview_death_guard.dart';
+import 'package:my_comic/utils.dart';
+
+/// Manga reader implementation owned by the standalone manga module.
+///
+/// Public navigation exports this page through `pages.dart`; generic reader
+/// code does not own manga rendering or interaction.
+enum MangaReaderInputAction {
+  previous,
+  next,
+  dismissDictionary,
+
+  /// 「返回上一级」在本页没有更内层可退时的落点：退出漫画（走 maybePop，页面自己的
+  /// [PopScope] 闸门照跑）。与 [dismissDictionary] 是同一个键（默认 Esc）的两级——
+  /// 弹窗可见先关弹窗，没弹窗才退出，判据在 [MangaMyComicPage.inputActionForShortcut]。
+  backOrExit,
+
+  /// 键盘平移（默认 Ctrl+方向键）：在放大后的页面上把**视野**朝该方向挪一步。
+  ///
+  /// 与 [previous]/[next] 是不同语义——翻页换的是 spread，平移只动当前页的视野，
+  /// 所以不吃「webtoon 让位原生滚动」「弹窗可见让位」那两道翻页门控（见
+  /// [MangaMyComicPage.inputActionForShortcut]）：webtoon 的上下平移本来就等于滚文档。
+  panUp,
+  panDown,
+  panLeft,
+  panRight,
+
+  /// BUG-1888：切换界面（顶栏页码/工具按钮 + 左上返回键）。漫画此前**没有任何**
+  /// 隐藏界面的方式，这两块恒挂在画面上遮住页图；移动端还联动系统栏沉浸，隐藏
+  /// 界面即真全屏。
+  toggleChrome,
+
+  /// Toggle the desktop window's fullscreen presentation without rebuilding
+  /// the manga WebView or losing its current OCR/selection state.
+  toggleFullscreen,
+}
+
+/// 一次键盘平移移动的视口比例。按比例而非像素，1080p 与 4K 手感一致。
+const double kMangaPanStepFraction = 0.15;
+
+/// 「落在末页」的起始页码：远大于任何章的页数，装载链在页数已知处把它钳到
+/// `pageCount - 1`（`_presentPayload` 与在线直读落点都是 `clamp(0, n - 1)`）。
+/// 换章往回翻时用它，让上一章**一开始**就停在末页，而不是先画第 0 页再跳。
+const int kMangaLandOnLastPage = 1 << 30;
+
+enum _MangaReaderInputSource {
+  flutter,
+  nativeWebView,
+  volumeKey,
+  gamepad,
+  mouse,
+  floatingBall,
+
+  /// 桌面控制通道（`my_comic_cli reader next/prev`）。
+  remote,
+}
+
+/// 漫画页 **Flutter 侧**鼠标通道的解析阶梯：只有 manga 自己的 scope。
+///
+/// `universal`（返回上一级）/ `global`（全屏、整页滚动）由 app 根的
+/// `_handleGlobalPointerDown` 统一兜底并执行——与键盘「页面没接就冒泡到最外层」同构。
+/// 页面再解析一遍就会与根兜底对同一次按下各派发一次（一键退两级）。
+/// BUG-2031 修正：Flutter 腿与 JS 腿**共用这一条**，且与键盘那条
+/// `_resolveMangaKeyAction` 逐段一致。第一版 Flutter 侧只放 `manga`，于是
+/// `globalBack` 在页内解析不到 —— 而 [MangaMyComicPage.inputActionForShortcut] 早就
+/// 把它映成逐级的 [MangaReaderInputAction.backOrExit]（弹窗可见先关弹窗，没弹窗才
+/// 退出漫画）。够不着它的结果是侧键退出直接落到 app 根的平 `maybePop()`，比键盘
+/// Esc 少了一级。防双派发靠 [MouseBindingDispatch] 认领，不靠把阶梯修窄。
+const List<ShortcutScope> _kMangaMouseLadder = <ShortcutScope>[
+  ShortcutScope.manga,
+  ShortcutScope.universal,
+  ShortcutScope.global,
+];
+
+/// Serializes burst page-turn input across asynchronous WebView window loads.
+///
+/// While one step is awaiting `loadData`, later inputs are reduced to a net
+/// delta instead of being discarded. Once the in-flight step finishes, the
+/// same drain continues until the accumulated intent reaches zero.
+class MangaTurnQueue {
+  int _pendingDelta = 0;
+  bool _draining = false;
+
+  @visibleForTesting
+  int get pendingDelta => _pendingDelta;
+
+  @visibleForTesting
+  bool get isDraining => _draining;
+
+  Future<void> enqueue(
+    int delta, {
+    required int maxMagnitude,
+    required bool Function() canApply,
+    required Future<void> Function(int step) applyStep,
+  }) async {
+    if (delta == 0 || maxMagnitude <= 0) return;
+    _pendingDelta = (_pendingDelta + delta)
+        .clamp(-maxMagnitude, maxMagnitude)
+        .toInt();
+    await drain(canApply: canApply, applyStep: applyStep);
+  }
+
+  /// 丢弃所有未消费的步数（换章：攒下的步数属于旧章）。正在执行的那一步不受
+  /// 影响，drain 循环在它返回后看到 0 就停。
+  void clear() => _pendingDelta = 0;
+
+  /// 正在跑的 drain 循环结束时完成；没在 drain 时立即完成。
+  Completer<void>? _drainDone;
+
+  /// 等到眼下这一轮 drain 跑完（[enqueue] 在已有 drain 进行中时会立刻返回，
+  /// 它排进去的那一步要等那一轮 drain 才消费）。
+  ///
+  /// 横滑跟手松手后，JS 要等 Dart「处理完这次翻页请求」才判断换没换页、没换才
+  /// 回弹（BUG-3219）。只等 [enqueue] 不够：连滑时第二下的 enqueue 撞上第一下
+  /// 还在跑的 drain 就立即返回，JS 以为没翻页先回弹，紧接着 drain 又把它翻过去，
+  /// 页面「弹回去再翻过来」。**不能**在 applyStep 内部 await 它（自己等自己）。
+  Future<void> get whenIdle => _drainDone?.future ?? Future<void>.value();
+
+  Future<void> drain({
+    required bool Function() canApply,
+    required Future<void> Function(int step) applyStep,
+  }) async {
+    if (_draining || !canApply()) return;
+    _draining = true;
+    final Completer<void> done = Completer<void>();
+    _drainDone = done;
+    try {
+      while (_pendingDelta != 0 && canApply()) {
+        final int step = _pendingDelta > 0 ? 1 : -1;
+        _pendingDelta -= step;
+        await applyStep(step);
+      }
+    } finally {
+      _draining = false;
+      _drainDone = null;
+      done.complete();
+    }
+  }
+}
+
+/// 窗口文档 generation 闸门（BUG-1153）。
+///
+/// WebView2 的 `loadData` Future 只证明导航被受理，旧文档可能还要多显示一帧、
+/// 或迟到一次 `onLoadStop`。每份窗口文档都嵌了一个单调递增的 generation
+/// （`window.__mangaDocumentGeneration`），收尾回调必须先用它证明「这份文档就是
+/// 我刚请求的那一份」，否则整套解锁/平移/记进度都会作用在错的文档上。
+///
+/// 这里是纯函数，是为了让「旧 generation 被丢弃」这条不变量能被真正断言，而不是
+/// 只断言 HTML 里写了个数字。
+class MangaWindowGeneration {
+  const MangaWindowGeneration._();
+
+  /// 把 JS 回报的 `window.__mangaDocumentGeneration` 解析成 int。
+  ///
+  /// WebView 桥在不同平台上分别回 num / String，解析不出一律 null（fail-closed，
+  /// 后续比较必然不等，回调被丢弃）。
+  static int? parse(Object? raw) => switch (raw) {
+    final num value => value.round(),
+    final String value => int.tryParse(value),
+    _ => null,
+  };
+
+  /// 回报值与 [current] 严格相等才放行。
+  ///
+  /// 严格相等而不是 `>=`：既要丢掉迟到的旧文档（更小），也要丢掉解析失败与任何
+  /// 对不上号的值。
+  static bool isCurrent(Object? rawGeneration, int current) =>
+      parse(rawGeneration) == current;
+}
+
+enum _MangaContextAction {
+  previous,
+  next,
+  jump,
+  direction,
+  zoomIn,
+  zoomOut,
+  copyImage,
+  shareImage,
+  saveImage,
+  setCover,
+}
+
+Future<int?> showMangaPageJumpDialog(
+  BuildContext context, {
+  required int currentPage,
+  required int total,
+}) {
+  String input = '$currentPage';
+  return showAppDialog<int>(
+    context: context,
+    builder: (BuildContext dialogContext) => MyComicAlertDialog(
+      title: Text(t.manga_jump_to_page),
+      content: MyComicTextFormFieldControl(
+        initialValue: input,
+        autofocus: true,
+        keyboardType: TextInputType.number,
+        inputFormatters: <TextInputFormatter>[
+          FilteringTextInputFormatter.digitsOnly,
+        ],
+        decoration: InputDecoration(
+          labelText: t.manga_page_number_hint(total: total),
+        ),
+        onFieldSubmitted: (String value) =>
+            Navigator.pop(dialogContext, int.tryParse(value)),
+        onChanged: (String value) => input = value,
+      ),
+      actions: <Widget>[
+        MyComicTextButton(
+          onPressed: () => Navigator.pop(dialogContext),
+          child: Text(t.dialog_cancel),
+        ),
+        MyComicFilledButton(
+          onPressed: () => Navigator.pop(dialogContext, int.tryParse(input)),
+          child: Text(t.dialog_ok),
+        ),
+      ],
+    ),
+  );
+}
+
+/// 漫画阅读器页面：媒体源路由 / 页图渲染 / 翻页与阅读进度。
+///
+/// 页图在 WebView 里渲染（文档由 [mangaWindowDocument] 生成），阅读位置汇入
+/// 共享设施 [ReaderPositionRepository]（sectionIndex=0-based 页码）。
+///
+/// 漫画阅读器不提供查词、Anki 制卡与统计入口（ADR-0002）；页面只保留 paged
+/// LTR/RTL、Webtoon/vertical、双页、翻页与 Reading progress 保存。
+///
+/// 身份统一 `hoshi://book/<bookKey>`（无漫画专属 scheme 特例），关书自动同步天然工作。
+/// 存储契约：`p.join(row.extractDir, row.epubPath)` 指向 `manga.json`；页图在
+/// `<书目录>/images/<manga.json 里 url 的相对路径>`（url 恒正斜杠，落盘按平台分隔符）。
+///
+/// 页面拥有专属虚拟域 [kMangaHost]（`manga.local`，与阅读器 `mycomic.local` 互异，两个
+/// 拦截器绝不混叠），经带路径穿越守卫的拦截器 serve 本地页图。spread 模式窗口化
+/// loadData-per-window + translateX 翻页；webtoon 整本单文档竖滚（不窗口化）。
+class MangaMyComicPage extends BaseSourcePage {
+  const MangaMyComicPage({
+    super.key,
+    required super.item,
+    required this.bookKey,
+    this.initialChapterIndex,
+    this.initialPage,
+    this.sourceReview,
+  });
+
+  /// 点名的章（下标，见 [mangaReaderOpenChapterIndex]）。null = 没点名（直接
+  /// 开书）：在线源按「重新打开位置」偏好选章，Local source 按
+  /// `LocalSourceMetadata.currentChapterKey` 恢复；本地卷（无章节表）忽略。
+  final int? initialChapterIndex;
+
+  /// 调用方点名的起始页（0 起计，越界钳到末页）；只作用于首次装载——本地卷取代
+  /// 书级保存位置，在线章取代该章的章级进度。null = 按保存位置恢复。桌面控制通道
+  /// `library open --page` 用它。
+  final int? initialPage;
+
+  /// `EpubBooks` 主键（净化后的标题），由 `hoshi://book/<bookKey>` 解析而来。
+  ///
+  /// 在线书架条目也只带 bookKey：读哪一章由 `sourceMetadata` 的
+  /// `currentChapterIndex` 决定，且该章必须已下载（设计稿 2026-09-12 §1），阅读器
+  /// 不再有任何在线取图路径。
+  final String bookKey;
+
+  /// Immutable card locator. Its position is applied only on the initial load.
+  final CardSourceLink? sourceReview;
+
+  /// 漫画拦截器专属虚拟域。必须与阅读器的 `mycomic.local` 互异。
+  static const String kMangaHost = 'manga.local';
+
+  /// WKWebView 不支持用 `shouldInterceptRequest` 接管 http(s) 子资源；Apple
+  /// 平台必须通过 WKURLSchemeHandler 注册一个非标准 scheme。
+  static const String kMangaResourceScheme = 'mycomic-manga';
+
+  static String horizontalKeyTurn({
+    required String direction,
+    required bool rightKey,
+  }) {
+    final bool rtl = direction == 'rtl';
+    return rightKey == rtl ? 'prev' : 'next';
+  }
+
+  /// 把注册表解析出的 [ShortcutAction] 落成本页的输入动作。
+  ///
+  /// 键位本身由 `ShortcutRegistry`（`ShortcutScope.manga`）解析，左右方向键的朝向
+  /// 再由 [resolveMangaArrowPageTurn] 按跨页方向校正——两步都在调用侧完成，本函数
+  /// 只负责「拿到动作之后，当前上下文该不该执行它」这层门控。
+  ///
+  /// [crossPageStep] = 触发键是否为**跨页步进**语义（左/右方向键、D-pad 左右与
+  /// 手柄翻页键 RB/LB），两道门控都不适用：webtoon 的纵向滚动不影响跨页步进
+  /// （手柄没有原生滚动路径，webtoon 也用锚点跳页）；词典弹窗可见时也要「关弹窗
+  /// 并翻页」（本页与阅读器的关键差异）。其余前进/后退键则要让位——弹窗可见时空格
+  /// 归词典自己，webtoon 模式下纵向键归 WebView 原生滚动。
+  static MangaReaderInputAction? inputActionForShortcut({
+    required ShortcutAction? action,
+    required bool crossPageStep,
+    required bool dictionaryShown,
+    required MangaReadingMode mode,
+  }) {
+    if (action == null) return null;
+    if (action == ShortcutAction.globalToggleFullscreen) {
+      return MangaReaderInputAction.toggleFullscreen;
+    }
+    if (action == ShortcutAction.mangaDismissDict) {
+      return dictionaryShown ? MangaReaderInputAction.dismissDictionary : null;
+    }
+    // 「返回上一级」（universal，默认 Esc / 手柄 B）的两级阶梯：弹窗可见先关弹窗，
+    // 没弹窗才退出漫画。此前本页**根本没有退出动作**——Esc 只绑 mangaDismissDict，
+    // 无弹窗时解析成 null 就地丢弃；而正文是原生 WebView，键经 JS 桥
+    // （`stopPropagation: true`）转进 Dart，丢弃后也不会再冒泡到全局 Esc 兜底，
+    // 于是漫画里按 Esc 是**死键**、退不出去。这一支就是那个 bug 的根因修复。
+    if (action == ShortcutAction.globalBack) {
+      return dictionaryShown
+          ? MangaReaderInputAction.dismissDictionary
+          : MangaReaderInputAction.backOrExit;
+    }
+    // BUG-1888：切换界面。与平移同理排在两道翻页门控**之前**——它既不翻页也不动
+    // 视野，「webtoon 让位原生滚动」与「弹窗可见让位」对它都不适用：正在查词时
+    // 想把顶栏收掉看清页图，是完全合理的操作。
+    if (action == ShortcutAction.mangaToggleChrome) {
+      return MangaReaderInputAction.toggleChrome;
+    }
+    // 平移排在两道翻页门控**之前**：它动的是当前页的视野、不是 spread，所以
+    // 「webtoon 让位原生滚动」与「弹窗可见让位」都不适用——webtoon 的上下平移本身
+    // 就是滚文档，弹窗开着时也该能挪画面去看被挡住的部分。
+    final MangaReaderInputAction? pan = switch (action) {
+      ShortcutAction.mangaPanUp => MangaReaderInputAction.panUp,
+      ShortcutAction.mangaPanDown => MangaReaderInputAction.panDown,
+      ShortcutAction.mangaPanLeft => MangaReaderInputAction.panLeft,
+      ShortcutAction.mangaPanRight => MangaReaderInputAction.panRight,
+      _ => null,
+    };
+    if (pan != null) return pan;
+    if (!crossPageStep) {
+      if (dictionaryShown) return null;
+      if (mode.isContinuous) return null;
+    }
+    return switch (action) {
+      ShortcutAction.mangaPageForward => MangaReaderInputAction.next,
+      ShortcutAction.mangaPageBackward => MangaReaderInputAction.previous,
+      _ => null,
+    };
+  }
+
+  static MangaReaderInputAction? wheelInputAction(Offset delta) {
+    final double dominant = delta.dy.abs() >= delta.dx.abs()
+        ? delta.dy
+        : delta.dx;
+    if (dominant.abs() < 2) return null;
+    return dominant > 0
+        ? MangaReaderInputAction.next
+        : MangaReaderInputAction.previous;
+  }
+
+  /// Native WebView2 owns keyboard focus while the user is reading. Forward
+  /// navigation keys from the manga document to Dart so page turns do not
+  /// depend on the platform view bubbling key events through Flutter.
+  /// 走共享生成器而非自写一份：手写版少了「放行修饰键组合 / IME 组字 / 输入框」
+  /// 三条放行判据，会吞掉 Ctrl+方向键，以及词典搜索框里的方向键。
+  ///
+  /// `forwardRepeats: false` 保留本页既有语义（按住方向键不堆翻页风暴）；
+  /// `stopPropagation: true` 保留独占（这些键必须只给 Dart）。`'Esc'` 与
+  /// `'Escape'` 都列进键表，旧浏览器归一由 [_handleNativeNavigationKey] 完成。
+  @visibleForTesting
+  static final String navigationKeyBridgeScript = webViewKeyBridgeScript(
+    handlerName: 'onMangaNavigationKey',
+    keys: const <String>['ArrowLeft', 'ArrowRight', 'Escape', 'Esc', 'F11'],
+    forwardRepeats: false,
+    stopPropagation: true,
+  );
+
+  /// 键盘平移专用的第二座桥。
+  ///
+  /// 单独一座而不是往 [navigationKeyBridgeScript] 的键表里加：翻页那座是
+  /// `forwardRepeats: false`（本页有意「按住方向键不堆翻页风暴」），而平移恰恰要连发
+  /// ——按住 Ctrl+↓ 应该持续挪画面。生成器按 handlerName 派生独立闭包与安装守卫，
+  /// 同一 document 里多座桥共存互不干扰（见 webViewKeyBridgeScript 文档）。
+  ///
+  /// 键表是**默认键位**的 token。回传后仍走 [_handleNativeNavigationKey] →
+  /// 注册表解析，所以改键在 Flutter 持焦路径立即生效；但 WebView2 持焦时只有列在
+  /// 这张表里的键会被截获——这是翻页桥既有的同款限制（它的表同样是硬编码的
+  /// ArrowLeft/ArrowRight），不是本次新引入的，要根治得让两座桥的 token 表都从
+  /// 注册表实时生成，单独立项。
+  @visibleForTesting
+  static final String panKeyBridgeScript = webViewKeyBridgeScript(
+    handlerName: 'onMangaPanKey',
+    keys: const <String>[
+      'Ctrl+ArrowUp',
+      'Ctrl+ArrowDown',
+      'Ctrl+ArrowLeft',
+      'Ctrl+ArrowRight',
+    ],
+    forwardRepeats: true,
+    stopPropagation: true,
+  );
+
+  /// 第三座桥：**鼠标按钮**。
+  ///
+  /// 与前两座（键盘）分开的两个理由，都不是风格问题：
+  ///   · 按钮表必须**按当前绑定实时生成**——桥只回传列在表里的按钮号，硬编码就等于
+  ///     「改了绑定，WebView 持有指针时还按老按钮响应」；
+  ///   · 复用键盘那两座的 handlerName 会连带把它们的**键表覆盖成空**（脚本每次注入
+  ///     都重写 `window[keysVar]`），翻页键当场失效。
+  ///
+  /// 只在**指针归 WebView** 的平台安装（[hostOwnsWebViewPointerInput] 为 false）。
+  /// Windows 上指针先到 Flutter，页面根 [Listener] 已经接住，再装一份 JS 监听会让
+  /// 中键/右键各触发两次（翻页会翻两页）。
+  @visibleForTesting
+  static String mouseBridgeScript(List<int> buttons) => webViewKeyBridgeScript(
+    handlerName: 'onMangaMouseButton',
+    mouseButtons: buttons,
+    installMouseListeners: true,
+    stopPropagation: true,
+  );
+
+  /// 本页鼠标桥要拦截的按钮号：manga / universal / global 三段阶梯上**所有**已绑
+  /// 按钮的并集（与 [_kMangaMouseLadder] 同源）。
+  ///
+  /// 取并集而不是只取 manga：桥不做解析，它只决定「哪些按钮值得回传」，解析仍由
+  /// Dart 侧的 [_handleNativeNavigationKey] 按完整阶梯做。漏一个按钮号，那个绑定在
+  /// WebView 持有指针时就是死的。
+  @visibleForTesting
+  static List<int> mouseBridgeButtons(MyComicShortcutRegistry registry) {
+    final List<int> buttons = <int>[];
+    for (final ShortcutScope scope in _kMangaMouseLadder) {
+      for (final ShortcutAction action in ShortcutAction.actionsForScope(
+        scope,
+      )) {
+        for (final MouseBinding binding
+            in registry.bindingsFor(action).mouseBindings) {
+          if (!buttons.contains(binding.button)) buttons.add(binding.button);
+        }
+      }
+    }
+    return buttons;
+  }
+
+  /// 纯路径解析 + 穿越守卫。[relative] 在 [imagesRoot] 内解析到存在的文件时返回
+  /// 规范绝对路径（**保留磁盘上的真实大小写**），否则 null（越界/缺文件都不 serve）。
+  /// 从 WebView 路径抽出，安全边界无需 WebView 后端即可单测。
+  ///
+  /// BUG-1221：**越界校验**与**真实读写路径**必须用同一条路径的两种不同形式——
+  /// - 校验用 `p.canonicalize`（在 Windows 上整体小写化，见 `path` 包
+  ///   `style/windows.dart:181`，正好让 `../` 逃逸判定不被大小写差异绕过）；
+  /// - 返回值用 `p.absolute` + `p.normalize`（同样绝对化并折叠 `.`/`..` 段，但
+  ///   **保留大小写**）。
+  ///
+  /// 此前返回的是 canonicalize 的结果：漫画包里 `Vol1/P001.JPG` 这类混合大小写的
+  /// 条目被记成 `vol1/p001.jpg`。Windows 文件系统不区分大小写所以侥幸能读，但这个
+  /// 返回值会流出本次读取——`_updateCurrentPageImagePath` 把它存进
+  /// `_currentPageImagePath`，制卡时经 `ensureMangaCoverPng` 直接当作 Anki 封面
+  /// 源路径，媒体名因此被小写化；在大小写敏感平台上更是 `existsSync` 直接为 false
+  /// （页图 404、制卡无封面）。与 `EpubParser._resolveWithinExtract`（BUG-1218）
+  /// 及 `_safeArchivePath`（TODO-739）同款做法。
+  ///
+  /// 注意比 EPUB 侧多一个 `p.absolute`：本函数的契约是返回**绝对**路径，而
+  /// `p.normalize` 与 `canonicalize` 不同、**不会**绝对化。
+  static String? resolveMangaResource(String imagesRoot, String relative) =>
+      MangaStorage.resolvePageFilePath(imagesRoot, relative);
+
+  /// `manga.local/img/` 之后的 percent-encoded 段 → 裸相对路径；非法编码 → null。
+  ///
+  /// 解码只在这里（URL 边界）做一次，与 [mangaImageUrl] 的逐段 `encodeComponent`
+  /// 对称；[resolveMangaResource] 只吃裸路径（BUG-2500）。外来 URL 编码非法是输入
+  /// 校验失败，按「解析不到」处理，不让异常掀翻拦截器。
+  ///
+  /// **两类异常都要接**（实测）：`100%.jpg` / `%.jpg` / `%2` / `%GG` 这类 percent
+  /// 语法本身非法的抛 `ArgumentError`；`%FF` / `%C3%28` 这类语法合法、解出来却不是
+  /// 合法 UTF-8 的抛 `FormatException`。WebView 可以请求任意 `manga.local` URL，
+  /// 后者同样可达。不能合并写成 `on Exception`——`ArgumentError` 继承 `Error`
+  /// 而不是 `Exception`，那样反而会把前一半漏掉。
+  static String? decodeMangaImagePath(String encodedRelative) {
+    try {
+      return Uri.decodeComponent(encodedRelative);
+    } on ArgumentError {
+      return null;
+    } on FormatException {
+      return null;
+    }
+  }
+
+  /// 纯函数：`manga.local` 图片 URL → 树内文件路径；host 不对/越界/缺文件 → null。
+  static String? resolveImageUrlToFile(String imagesRoot, String imgUrl) {
+    final Uri? uri = Uri.tryParse(imgUrl);
+    if (uri == null || uri.host != kMangaHost) return null;
+    if (!uri.path.startsWith('/img/')) return null;
+    final String? relative = decodeMangaImagePath(
+      uri.path.substring('/img/'.length),
+    );
+    if (relative == null) return null;
+    return resolveMangaResource(imagesRoot, relative);
+  }
+
+  /// 将 manga.json 中相对漫画根目录的 `images/foo.jpg` 转为相对
+  /// [_imagesDir]（其本身已经是 `<book>/images`）的 `foo.jpg`。旧版
+  /// `.mokuro` 直接保存 `foo.jpg`，因此两种格式都要兼容。
+  static String mangaImageRelativePath(String storedUrl) =>
+      MangaStorage.pageRelativePath(storedUrl);
+
+  /// Resolve the exact image for a 0-based manga [pageIndex].
+  ///
+  /// Keeping this separate from spread navigation prevents mining a selection
+  /// on the second page of a two-page spread with the spread's first image.
+  static String? resolveMangaPageImage(
+    MokuroPayload payload,
+    String imagesRoot,
+    int pageIndex,
+  ) {
+    if (pageIndex < 0 || pageIndex >= payload.images.length) return null;
+    return resolveMangaResource(
+      imagesRoot,
+      mangaImageRelativePath(payload.images[pageIndex].url),
+    );
+  }
+
+  /// 纯函数：manga.json 的相对 url → WebView 可加载的拦截器 URL。逐段
+  /// percent-encode（保留 `/` 结构），与拦截器侧 `Uri.decodeComponent` 对称
+  /// （镜像 epubUrl 的 HBK-AUDIT-127 编解码对称纪律）。
+  ///
+  /// [version]：页会话代次，作查询串挂在 URL 上（拦截器只认 path，不受影响）。
+  /// 已下载章的页名各章同形（`images/page-000001.*`），不带代次时换章后的新文档
+  /// 与旧章同名页 URL 完全相同，响应又带 `max-age`，WebView 会直接复用旧章页图。
+  ///
+  /// [scope]：页图所属卷的身份（[mangaPageScope]），同样只进查询串。不同卷的页名
+  /// 也常同形（`page_000000.jpg`、`001.jpg`），没有它时先开卷 2 再开卷 1，卷 1 的
+  /// 首页 URL 与卷 2 一字不差，WebView 把卷 2 的缓存页图端给卷 1。
+  static String mangaImageUrl(
+    String relativeUrl, {
+    bool useCustomScheme = false,
+    int? version,
+    String? scope,
+  }) {
+    final String normalized = mangaImageRelativePath(relativeUrl);
+    final String encoded = normalized
+        .split('/')
+        .map(Uri.encodeComponent)
+        .join('/');
+    final String scheme = useCustomScheme ? kMangaResourceScheme : 'https';
+    final List<String> params = <String>[
+      if (scope != null) 's=${Uri.encodeQueryComponent(scope)}',
+      if (version != null) 'v=$version',
+    ];
+    final String query = params.isEmpty ? '' : '?${params.join('&')}';
+    return '$scheme://$kMangaHost/img/$encoded$query';
+  }
+
+  /// 纯函数：页图目录 → 稳定的短作用域串（FNV-1a 32 位，十六进制）。同一目录恒
+  /// 得同一个值（保住同卷内的缓存复用），不同目录的同名页 URL 因此不同。
+  static String mangaPageScope(String imagesDir) {
+    final String normalized = p.normalize(imagesDir).replaceAll(r'\', '/');
+    int hash = 0x811c9dc5;
+    for (final int byte in utf8.encode(normalized)) {
+      hash ^= byte;
+      hash = (hash * 0x01000193) & 0xffffffff;
+    }
+    return hash.toRadixString(16).padLeft(8, '0');
+  }
+
+  /// 纯函数：围绕 [current]、半径 [radius] 的连续 spread 窗口，clamp 到
+  /// [0, spreadCount)。驱动单文档窗口化（哪些 spread 的 <img>/OCR 节点存活）。
+  static List<int> mangaWindowRange({
+    required int spreadCount,
+    required int current,
+    required int radius,
+  }) {
+    if (spreadCount <= 0) return const <int>[];
+    final int lo = (current - radius).clamp(0, spreadCount - 1);
+    final int hi = (current + radius).clamp(0, spreadCount - 1);
+    return <int>[for (int i = lo; i <= hi; i++) i];
+  }
+
+  /// 纯函数：[spreadIndex] 的首页页码（越界回 0）。
+  static int firstPageOfSpread(
+    List<MangaSpreadEntry> spreads,
+    int spreadIndex,
+  ) {
+    if (spreadIndex < 0 || spreadIndex >= spreads.length) return 0;
+    return spreads[spreadIndex].pageIndices.first;
+  }
+
+  /// 纯函数：包含 [page] 的 spread 序号（无命中回 0）。
+  static int spreadIndexForPage(List<MangaSpreadEntry> spreads, int page) {
+    for (int i = 0; i < spreads.length; i++) {
+      if (spreads[i].pageIndices.contains(page)) return i;
+    }
+    return 0;
+  }
+
+  /// 纯函数：[spreadIndex] 要持久化的 (页码, 页内 fraction)。spread 模式 fraction
+  /// 钉 0；webtoon 带页内归一化偏移。
+  static (int, double) mangaProgressForSpread(
+    List<MangaSpreadEntry> spreads,
+    int spreadIndex, {
+    required double webtoonFraction,
+    required bool isWebtoon,
+  }) {
+    final int page = firstPageOfSpread(spreads, spreadIndex);
+    return (page, isWebtoon ? webtoonFraction : 0.0);
+  }
+
+  /// 纯函数：持久化页码 → 恢复的 spread 序号（clamp 越界存档）。
+  static int restoreSpreadFromProgress(
+    List<MangaSpreadEntry> spreads,
+    int lastPage,
+  ) {
+    if (spreads.isEmpty) return 0;
+    final int clamped = lastPage.clamp(0, _maxPage(spreads));
+    return spreadIndexForPage(spreads, clamped);
+  }
+
+  static int _maxPage(List<MangaSpreadEntry> spreads) {
+    int m = 0;
+    for (final MangaSpreadEntry s in spreads) {
+      for (final int page in s.pageIndices) {
+        if (page > m) m = page;
+      }
+    }
+    return m;
+  }
+
+  /// 纯函数：页内阅读模式切换（分页 ↔ 长条，各自保留用户选的变体）。
+  ///
+  /// 四值枚举下不能再写成二元 `spread ? webtoon : spread`：用户选了
+  /// `pagedVertical` / `webtoonGaps` 之后按一次顶栏切换就会被打回 spread/webtoon，
+  /// 默默丢掉他选的布局。
+  static MangaReadingMode toggleMangaMode(MangaReadingMode mode) =>
+      switch (mode) {
+        MangaReadingMode.spread => MangaReadingMode.webtoon,
+        MangaReadingMode.pagedVertical => MangaReadingMode.webtoonGaps,
+        MangaReadingMode.webtoon => MangaReadingMode.spread,
+        MangaReadingMode.webtoonGaps => MangaReadingMode.pagedVertical,
+      };
+
+  /// 纯函数：[MangaReadingMode] → 持久化的 `EpubBooks.mangaReadingMode` 字符串。
+  static String modeToDbString(MangaReadingMode mode) {
+    return mode.storageKey;
+  }
+
+  /// 纯函数：持久化字符串 → [MangaReadingMode]（未知取 spread）。
+  static MangaReadingMode modeFromDbString(String s) {
+    return MangaReadingModeSemantics.fromStorageKey(s);
+  }
+
+  /// 大书的 manga.json 解析下放 isolate（不卡 UI）。
+  ///
+  /// 必须是**静态**方法：闭包在实例方法里创建时，Dart VM 的作用域上下文可能把
+  /// `this`（整个 State → binding）一并塞进闭包 context，`Isolate.run` 发送消息时
+  /// 直接炸 "object is unsendable"。静态方法的 context 只含 [jsonStr]，恒可发送。
+  static Future<MokuroPayload> parseMangaJsonOffUi(String jsonStr) {
+    return Isolate.run<MokuroPayload>(() => parseMangaJson(jsonStr));
+  }
+
+  /// 纯函数：`EpubBooks.mangaReadingMode` 列值 → 用户覆盖模式。null/空 = 未覆盖
+  /// （调用方回落 [detectReadingMode] 自动判定）。
+  static MangaReadingMode? modeOverrideFromDb(String? s) {
+    if (s == null || s.isEmpty) return null;
+    return modeFromDbString(s);
+  }
+
+  /// Restore and live settings use the same precedence, including after the
+  /// user removes the current book's override with Reset to defaults.
+  static MangaReadingMode resolveReaderMode({
+    required MangaReaderPreferences preferences,
+    required MokuroPayload payload,
+    required bool hasModeOverride,
+    String? legacyMode,
+  }) {
+    if (!hasModeOverride) {
+      final MangaReadingMode? legacy = modeOverrideFromDb(legacyMode);
+      if (legacy != null) return legacy;
+    }
+    return preferences.autoMode ? detectReadingMode(payload) : preferences.mode;
+  }
+
+  /// 纯函数：webtoon 页内 fraction（0..1）→ `ReaderPositions.charOffset` 千分比
+  /// 整数（0..1000）。漫画无章内字符偏移，charOffset 被复用为滚动位置存储。
+  static int webtoonFractionToCharOffset(double fraction) {
+    return (fraction.clamp(0.0, 1.0) * 1000).round();
+  }
+
+  /// [webtoonFractionToCharOffset] 的逆：charOffset（可空/脏值容错）→ fraction。
+  static double charOffsetToWebtoonFraction(int? charOffset) {
+    if (charOffset == null || charOffset <= 0) return 0;
+    return (charOffset / 1000).clamp(0.0, 1.0);
+  }
+
+  @override
+  BaseSourcePageState<MangaMyComicPage> createState() => _MangaMyComicPageState();
+}
+
+class _MangaMyComicPageState extends BaseSourcePageState<MangaMyComicPage>
+    with WidgetsBindingObserver, WindowListener {
+  InAppWebViewController? _controller;
+
+  @override
+  ModuleId? get popupDockModule => ModuleId.manga;
+
+  /// WebView 宿主 key（挂在死亡守卫重建子树**外面**：GlobalKey 若挂在重建子树里，
+  /// 重建时元素会被 reparent 复用，WebView 就不是新的了）。
+  final GlobalKey _webViewHostKey = GlobalKey(debugLabel: 'manga_webview_host');
+  EpubBookRow? _bookRow;
+
+  // ── 书架条目的「章」上下文 ──────────────────────────────────────────
+  //
+  // 在线漫画与 Local source（runtime = local）共用。三个字段一起构成「我现在
+  // 读的是这本书的第几章」，是换章、每章进度落库和读完标记的唯一依据。本地源
+  // 没有 service，章节目录来自 `chaptersJson`。
+  OnlineMangaLibraryService? _shelfLibraryService;
+  OnlineMangaLibraryEntry? _shelfEntry;
+  int _shelfChapterIndex = -1;
+
+  /// 正在换章：挡住换章期间的翻页与重复触发。
+  bool _switchingChapter = false;
+
+  /// 桌面控制通道遥控面（见 [_MangaPageSessionRemote]）。
+  late final _MangaPageSessionRemote _sessionRemote = _MangaPageSessionRemote(
+    this,
+  );
+
+  /// 正在换去的章（[_switchingChapter] 期间有效），加载指示上显示它的章名。
+  int? _switchingChapterTarget;
+
+  /// 「已经是最新/第一章了」这一章内是否已经提示过。开新章时归零。
+  bool _edgeToastShown = false;
+
+  /// 当前选中的在线章还没下载、在线直读也没成（源不可用 / 取不到页）：正文区显示
+  /// 「本章未下载」态（入队 / 选章两个出口），
+  /// 顶部 chrome 不显示，返回键照常在。下载服务把这一章下完后自动装载。
+  bool _chapterNotDownloaded = false;
+
+  /// 当前章是在线直读（未下载，页经 [OnlineMangaReaderSession] 懒取）。
+  ///
+  /// 为真时阅读器内一切 OCR 入口 / 自动识别 / 任务接回都关着：设计稿 2026-09-12
+  /// §1.2 / §1.3 仍有效，OCR 只对下载完成的章在阅读器外起。
+  bool _streamingChapter = false;
+
+  /// 「本章未下载」态下观察下载表的订阅：任务表一变就复核磁盘判据。
+  StreamSubscription<void>? _downloadWatch;
+
+  /// 本会话里已经为哪些章做过「预下载下一话」判定（按当前章 key）。每章只判
+  /// 一次：翻页每一步都会进来，不去重就是每页一次数据库 + 磁盘探测。
+  final Set<String> _prefetchCheckedChapterKeys = <String>{};
+
+  /// 当前章在书架体系里的身份；非书架在线条目为 null。
+  String? get _shelfChapterKey {
+    final OnlineMangaLibraryEntry? entry = _shelfEntry;
+    if (entry == null ||
+        _shelfChapterIndex < 0 ||
+        _shelfChapterIndex >= entry.chapters.length) {
+      return null;
+    }
+    return entry.chapters[_shelfChapterIndex].key;
+  }
+
+  /// v82：阅读位置子表键（= **持久化**书行的 `uid`）。与 [_bookRow] 分开存：
+  /// 在线阅读无持久行时 [_bookRow] 是现造 uid 的内存兜底行（v81，仅供 UI 元数据），
+  /// 那个随机 uid 不在库里、绝不能拿去写 reader_positions（每次会话都变，写了就是
+  /// 永远 JOIN 不上的孤儿行）。null = 无持久行/旧行空 uid → 位置读写跳过。
+  String? _bookUid;
+
+  /// `<书目录>/images`（页图根，拦截器/封面解析的穿越守卫边界）。
+  String? _imagesDir;
+  MangaReaderSession? _pageSession;
+  Map<String, int> _localPageIndices = const <String, int>{};
+  MokuroPayload? _payload;
+  MangaReadingMode _mode = MangaReadingMode.spread;
+  List<MangaSpreadEntry> _spreads = <MangaSpreadEntry>[];
+  bool _loadFailed = false;
+
+  /// BUG-1888：界面（顶栏 + 左上返回键）是否可见。隐藏态下右上角仍留一个半透明
+  /// 「显示界面」按钮——漫画正文是原生 WebView，空白点击手势全在注入的 JS 里且
+  /// 已被翻页占用，没有这个按钮的话触屏设备再没有第二条通道能把界面唤回来。
+  bool _chromeVisible = true;
+
+  /// 顶栏形态偏好快照（打开书时读一次，见 [AppModel.mangaChromeFloating]）：
+  /// true = 悬浮（不占布局、默认收起、点页面中央 / 顶边悬停唤出、自动收起）；
+  /// false = 固定（常驻、占 [kMangaChromeBarHeight]，正文 WebView 让位）。
+  bool _chromeFloating = true;
+
+  /// 悬浮态的唤出 / 自动收起状态机（与 EPUB 阅读器共用同一台控制器）。固定态下
+  /// 它的 `transientVisible` 无意义，顶栏只看 [_chromeVisible]。
+  final ReaderChromeController _chrome = ReaderChromeController();
+
+  bool _isWindowFullscreen = false;
+  bool _ownsWindowFullscreen = false;
+  bool _fullscreenTransitioning = false;
+
+  /// 双页布局偏好：页内菜单运行时切换，不持久化，默认自动（横屏双页/竖屏单页）。
+  MangaSpreadPreference _spreadPreference = MangaSpreadPreference.auto;
+  String _spreadDirection = 'rtl';
+
+  /// 顶栏方向按钮已发出、但 [_reapplyReaderPreferences] 还没读回的目标方向。
+  /// [_spreadDirection] 要等写库 + 重读完才更新，连点时第二下若按它取反，读到的
+  /// 还是旧值，两下写成同一个方向（第二下被吞）。按钮与早退都以在途值为准。
+  String? _pendingSpreadDirection;
+  MangaReaderPreferences _readerPreferences = const MangaReaderPreferences();
+  bool _readerSettingsOpen = false;
+  int _zoomPercent = 100;
+
+  /// 观看偏好快照（打开书时从 [AppModel] 读一次，随文档注入 WebView）。
+  /// 与 [_zoomPercent] 不同，这三项没有页内切换入口，只在设置里改。
+  int _zoomSensitivity = kMangaZoomSensitivityDefault;
+
+  /// 用户选的翻页动画（全局 `manga_page_animation`）；实际播放的是按墨水屏 /
+  /// 系统「减弱动态效果」降级后的 [_effectivePageAnimation]。
+  MangaPageAnimation _pageAnimation = kMangaPageAnimationDefault;
+  PageTurnAnimationSpeed _pageAnimationSpeed = PageTurnAnimationSpeed.normal;
+  bool _pageTurnFollowDrag = kMangaPageTurnFollowDragDefault;
+
+  /// [pageTurnMotionEnabledOf]（墨水屏主题 / 系统「减弱动态效果」；阅读器自身的
+  /// 墨水屏开关在 [_effectivePageAnimation] 里另判，它随偏好变而非依赖变），在
+  /// [didChangeDependencies] 里跟随系统设置变化。
+  bool _motionEnabled = true;
+  bool _tapZonePaging = true;
+  MangaTapZoneLayout _tapZoneLayout = MangaTapZoneLayout.leftRight;
+  MangaBackground _background = MangaBackground.black;
+  MangaScaleType _scaleType = MangaScaleType.fitScreen;
+  int _longStripSidePadding = 0;
+  bool _disableZoomOut = false;
+  bool _animateDoubleTap = true;
+  bool _invertHorizontal = false;
+  bool _invertVertical = false;
+  bool _invertBoth = false;
+  bool _cropBorders = false;
+  bool _splitWidePages = false;
+  bool _rotateWidePages = false;
+  bool _autoZoomWide = false;
+  bool _panWide = true;
+  String _zoomStartPosition = 'automatic';
+  bool _invertVolumeKeys = false;
+  String _saveDirectory = 'chapter';
+
+  /// 双页配对偏移（0/1）与宽页独占；两者都只影响 [_buildSpreadsFor] 的配对。
+  int _spreadOffset = 1;
+  bool _widePageSolo = true;
+
+  /// 最近一次实际生效的布局（由 [_buildSpreadsFor] 记账），didChangeMetrics
+  /// 只在解析结果真变时才重建 spread 序列，避免键盘弹出等无关 metrics 抖动。
+  MangaPageLayout _pageLayout = MangaPageLayout.single;
+
+  /// 当前生效的双页铰链缝（逻辑像素，[myComicHingeGutterPx]）；与 [_pageLayout] 同时
+  /// 在 [_buildSpreadsFor] 定下，窗口文档按它给两页之间留缝。
+  double _spreadGutterPx = 0;
+
+  /// 按当前折叠状态与布局解析铰链缝：只有双页才有「两页之间」。WebView 铺满窗口，
+  /// 两页以窗口中线为界居中排列。
+  double _resolveSpreadGutter(MangaPageLayout layout) {
+    if (layout != MangaPageLayout.double) return 0;
+    return myComicHingeGutterPx(
+      fold: MyComicFoldState.of(context),
+      contentCenterX: MediaQuery.sizeOf(context).width / 2,
+    );
+  }
+
+  int _currentSpread = 0;
+  int _currentPage = 0;
+  double _currentFraction = 0;
+  Timer? _progressDebounce;
+  int _lastSavedPage = -1;
+  double _lastSavedFraction = -1;
+
+  /// 页码指示器专用（避免 webtoon 滚动高频 setState 重建整棵 Stack/WebView）。
+  final ValueNotifier<int> _pageNotifier = ValueNotifier<int>(0);
+
+  /// 当前稳定文档里物化了 OCR 字符节点的 spread 集合。所有图片页始终留在同一份
+  /// lazy-loaded 文档里；这里只跟踪受控的密集命中层。
+  Set<int> _loadedSpreads = <int>{};
+
+  /// 首次文档加载守卫。之后所有翻页只移动稳定 strip 并替换当前 OCR 层；所有输入
+  /// 仍经 [_turnQueue] 串行化，避免快速反向操作交叠 DOM 更新。
+  bool _navigating = false;
+  final MangaTurnQueue _turnQueue = MangaTurnQueue();
+
+  /// 当前在飞窗口加载的收尾信号与排队等它的重装请求数（[_loadInitialWindow]）。
+  Completer<void>? _windowLoadDone;
+  int _windowLoadWaiters = 0;
+
+  /// 每装一次页会话（开书 / 换章）取一个新代次，编进页图 URL
+  /// （[MangaMyComicPage.mangaImageUrl]）。代次取自进程级计数器而不是每个阅读器各数
+  /// 各的：后者每次新开阅读器都从 1 起，退出再开另一卷时代次与上一卷相同。
+  int _pageSessionGeneration = 0;
+  static int _pageSessionGenerationCounter = 0;
+
+  /// 当前页会话的卷作用域（[MangaMyComicPage.mangaPageScope]），随 [_imagesDir] 定。
+  String? _pageScope;
+
+  /// 窗口文档加载的所有权闸门：generation 与 ready 锁只能经它读写，迟到的旧回调
+  /// 不能解开新窗口的锁（BUG-1170），页面销毁时在飞加载被显式放弃（BUG-1171）。
+  final MangaWindowLoadGate _windowGate = MangaWindowLoadGate();
+
+  /// renderer 死亡处置（救命动作 = 下面 [InAppWebView.onRenderProcessGone] 传了
+  /// 非 null 回调，否则 Android 会连坐杀掉整个 app）。
+  ///
+  /// 抢救三件事，缺一都会在重建后出错：
+  /// - `_flushPosition()`：600ms debounce（[_recordProgress]）里还没落盘的页码；
+  /// - `_windowGate.abandon()`：renderer 死时若有 `loadData` 在飞，它的 ready 锁
+  ///   永远等不到 `onLoadStop`，会挂满 10s 超时再从 `unawaited` 调用点抛未捕获
+  ///   异步异常（BUG-1171 同源），并且 `_navigating` 会卡 true 让重建后的
+  ///   `_loadInitialWindow()` 直接早退成白屏；
+  /// - `_controller = null`：报废的 controller 上 `evaluateJavascript` 只会抛。
+  ///
+  /// 重建安全性：恢复锚是 `_currentSpread` / `_currentFraction`，它们由 JS 的
+  /// `onMangaScroll` / `onMangaTurn` 实时更新，永远是**当前真实位置**，不是进入
+  /// 本章时的快照 —— 所以重建后 `onWebViewCreated → _loadInitialWindow() →
+  /// _markWindowReady()` 把同一个 spread 重新应用回去，不会写回退的进度。
+  late final WebViewDeathGuard _webViewDeathGuard = WebViewDeathGuard(
+    surface: 'manga_reader',
+    flushBeforeRebuild: () async {
+      _releaseWebView();
+      await _flushPosition();
+    },
+    afterRebuild: () {
+      if (mounted) setState(() {});
+    },
+  );
+
+  /// WebView 离开组件树时交还它的 controller 与在飞的加载锁（renderer 死亡、
+  /// 「本章未下载」、加载失败三条路都走这里）。`_controller` 只在 WebView 挂着时
+  /// 非 null：换章重装（[_presentPayload]）据此判断是在现有文档上重装，还是等
+  /// 重新挂上的 WebView 由 `onWebViewCreated` 装首窗——拿已销毁的 controller
+  /// 去 `loadData` 要么抛、要么空等满 10 秒超时（BUG-2884）。
+  void _releaseWebView() {
+    _windowGate.abandon();
+    _controller = null;
+  }
+
+  /// 当前 spread 首页图的绝对文件路径（右键菜单「保存图片 / 设为封面」与在线
+  /// 直读取页共用）。加载/翻页/滚动/切模式全路径更新；缺文件/解析失败置 null。
+  String? _currentPageImagePath;
+
+  /// 裁白边读像素失败已记过日志（见 `onMangaImageTransformUnavailable`）。
+  bool _imageTransformFailureLogged = false;
+
+  // 窗口只保留当前 spread；图片页本身全部留在稳定的 lazy strip。
+  static const int _kWindowRadius = 0;
+
+  /// 漫画正文的键盘焦点节点（本页唯一持有者）。
+  final FocusNode _focusNode = FocusNode(debugLabel: 'mangaKeyboard');
+
+  /// 本页键盘焦点的单一所有者：所有回收走它，判据集中在 [_canOwnMangaFocus]。
+  ///
+  /// 统一前漫画页**一处焦点回收都没有**（视频页 29 处、阅读器页 28 处），而它同样
+  /// 把正文交给原生 WebView 渲染——桌面上用户在漫画 WebView 里点/拖一次，OS 焦点
+  /// 就归了 WebView2，整页 `autofocus: true` 只在首帧生效、之后再没有任何路径把
+  /// 焦点要回来，方向键翻页从此失效且**无自愈**。
+  late final PageFocusOwnership _focusOwnership = PageFocusOwnership(
+    node: _focusNode,
+    canOwn: _canOwnMangaFocus,
+  );
+
+  /// 「漫画正文此刻应当持有键盘」的统一判据。
+  bool _canOwnMangaFocus(FocusReclaimCause cause) {
+    if (!mounted) return false;
+    // 任何原因都不能夺走压在本页上面的路由（设置侧边弹窗 / 章节列表 / 看图）的
+    // 焦点：设置面板每改一项都会整窗重载 → contentReady，早先只有 appResumed
+    // 查这一条，于是焦点被收回正文、面板里的 Esc 与方向键全部失效。词典弹窗是
+    // 原生 WebView 而非路由，不受此限。
+    final ModalRoute<Object?>? owner = ModalRoute.of(context);
+    if (owner != null && !owner.isCurrent) return false;
+    switch (cause) {
+      // 与阅读器**相反**：阅读器在词典弹窗可见时让位（弹窗自持焦点，BUG-136），
+      // 漫画不能让——[MangaMyComicPage.keyInputAction] 规定弹窗可见时左右键仍要
+      // 「关弹窗并翻页」、Escape 要关弹窗，这些键必须抵达 [_handleReaderKey]。
+      // 词典弹窗是纯原生 WebView、没有 Flutter 焦点节点，不主动收回就全部落空。
+      // 这也正是本页覆写 [capturesDictionaryPopupNavigationKeys] 的同一诉求。
+      case FocusReclaimCause.popupRendered:
+        return isDictionaryShown;
+      case FocusReclaimCause.gesture:
+      case FocusReclaimCause.popupDismissed:
+      case FocusReclaimCause.contentReady:
+      case FocusReclaimCause.overlayClosed:
+      case FocusReclaimCause.surfaceRemounted:
+      // 本页顶部 chrome（页码 + 阅读模式切换）是常驻的，不参与焦点遍历，
+      // 显隐后重新确认焦点仍在正文即可。
+      case FocusReclaimCause.chromeToggled:
+        return true;
+      // 回前台是全局生命周期回调，本页上方可能压着全屏看图路由 / 对话框；
+      // 此时抢焦点会夺走它们的键盘（Never break userspace）。
+      case FocusReclaimCause.appResumed:
+        return true;
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _volumeKeyPagingController = MangaVolumeKeyPagingController(
+      onPrevious: () => _executeReaderInputAction(
+        MangaReaderInputAction.previous,
+        source: _MangaReaderInputSource.volumeKey,
+      ),
+      onNext: () => _executeReaderInputAction(
+        MangaReaderInputAction.next,
+        source: _MangaReaderInputSource.volumeKey,
+      ),
+    );
+    _chrome.addListener(_onChromeChanged);
+    WidgetsBinding.instance.addObserver(this);
+    // 桌面控制通道（`my_comic_cli reader ...`）的遥控面；dispose 注销。
+    readerSessionRemotes.register(_sessionRemote);
+    if (Platform.isWindows || Platform.isLinux) {
+      windowManager.addListener(this);
+    }
+    if (desktopWindowFullscreenSupported) {
+      unawaited(_readInitialFullscreenState());
+    }
+    // 进程退出兜底：把未落盘的页码 + 学习段 flush 掉（与 EPUB/PDF 阅读器同纪律）。
+    ExitFlushRegistry.instance.register(_flushForExit);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadBook());
+    // TODO-2936：应用「漫画」媒体类型 / 本书 book 级的 Profile 绑定（与 EPUB/
+    // 视频阅读器同范式：非致命、与开书链并行；漫画的 bookKey 就是 Profile 的
+    // book 级 entryKey，见 book_format_convert.dart 的身份说明）。
+  }
+
+  bool _sourceLocatorApplied = false;
+  bool get _sourceReviewActive => false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // 系统「减弱动态效果」/ 墨水屏主题切换要立即传到 WebView（翻页动画降成无）。
+    final bool motionEnabled = pageTurnMotionEnabledOf(context, eink: false);
+    if (motionEnabled != _motionEnabled) {
+      _motionEnabled = motionEnabled;
+      unawaited(_pushPageAnimationToJs());
+    }
+  }
+
+  Future<void> _continueSourceReading() async {
+    final OnlineMangaLibraryService? service = _shelfLibraryService;
+    final OnlineMangaLibraryEntry? entry = _shelfEntry;
+    if (service != null && entry != null && _shelfChapterIndex >= 0) {
+      await service.selectChapter(
+        bookKey: widget.bookKey,
+        entry: entry,
+        chapterIndex: _shelfChapterIndex,
+      );
+    }
+    await _flushPosition();
+  }
+
+  @override
+  void dispose() {
+    readerSessionRemotes.unregister(_sessionRemote);
+    if (Platform.isWindows || Platform.isLinux) {
+      windowManager.removeListener(this);
+    }
+    if (_ownsWindowFullscreen) {
+      _ownsWindowFullscreen = false;
+      unawaited(_restoreOwnedFullscreenAfterDispose());
+    }
+    // 交还音量键所有权：必须早于其它拆栈，且无条件执行。
+    _volumeKeyPagingController.dispose();
+    ExitFlushRegistry.instance.unregister(_flushForExit);
+    WidgetsBinding.instance.removeObserver(this);
+    // 加载中的窗口必须以明确状态收尾：否则 _loadInitialWindow 会挂满 10s 超时，
+    // 再从 unawaited 调用点抛出未捕获异步异常（BUG-1171）。
+    _windowGate.abandon();
+    _progressDebounce?.cancel();
+    unawaited(_downloadWatch?.cancel());
+    _downloadWatch = null;
+    _dictionaryTurnDismissTimer?.cancel();
+    final MangaReaderSession? pageSession = _pageSession;
+    _pageSession = null;
+    if (pageSession != null) {
+      unawaited(_closePageSession(pageSession));
+    }
+    // 崩溃 / 异常拆栈的兜底（正常退出走 onSourcePagePop 的 await 路径）：dispose
+    // 是同步的，这里**一笔 DB 写都不许发起**——无人 await 的事务与随后的
+    // `db.close()` 互等。最后的位置交给退出汇合点统一 await。
+    ExitFlushRegistry.instance.defer(_flushPosition);
+    _pageNotifier.dispose();
+    _chrome
+      ..removeListener(_onChromeChanged)
+      ..dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  void _onChromeChanged() {
+    if (mounted) setState(() {});
+  }
+
+  /// 固定态下正文 WebView 顶部让出的高度（0 = 全出血）。所有 JS→Flutter 的
+  /// 视口坐标（查词选区 / 右键菜单锚点）都加这个偏移；顶栏自己按同一个
+  /// `MediaQuery.padding.top` 画，两边同源。
+  double get _chromeTopInset => mangaChromeTopInset(
+    floating: _chromeFloating,
+    chromeVisible: _chromeVisible,
+    statusBarInset: MediaQuery.paddingOf(context).top,
+  );
+
+  /// 固定态下正文 WebView 底部让出的高度（0 = 全出血）。与 [_chromeTopInset] 同源
+  /// 同构。只有一页的书没有滑块，但底部悬浮工具栏照画，让位量不变（滑块那一行
+  /// 留空，工具栏不跳位）。
+  double get _chromeBottomInset => mangaChromeBottomInset(
+    floating: _chromeFloating,
+    chromeVisible: _chromeVisible,
+    contentReady: _chromeContentReady,
+    gestureInset: MediaQuery.paddingOf(context).bottom,
+  );
+
+  /// 悬浮态：正文中央空白点击在「唤出」与「收起」间切换（EPUB 阅读器同款，用户
+  /// 2026-09-14 拍板的统一口径：**点击是唯一的开关**，鼠标移动不唤出、唤出后也不
+  /// 自动收起，移动端单击同为开 / 关）。固定态 / 界面已隐藏（M 键）时仍是 no-op。
+  void _toggleFloatingChrome() {
+    if (!_chromeFloating || !_chromeVisible) return;
+    if (_chrome.transientVisible) {
+      _chrome.hideTransient();
+    } else {
+      _chrome.showTransient();
+    }
+  }
+
+  Future<void> _readInitialFullscreenState() async {
+    final bool? fullscreen = await readDesktopWindowFullscreen();
+    if (!mounted || fullscreen == null || fullscreen == _isWindowFullscreen) {
+      return;
+    }
+    setState(() => _isWindowFullscreen = fullscreen);
+  }
+
+  Future<void> _changeMangaFullscreen({bool? requested}) async {
+    if (!desktopWindowFullscreenSupported || _fullscreenTransitioning) return;
+    _fullscreenTransitioning = true;
+    try {
+      final bool fullscreen =
+          requested ??
+          !((await readDesktopWindowFullscreen()) ?? _isWindowFullscreen);
+      if (!mounted) return;
+      // Claim ownership before the native transition starts. If the route is
+      // removed while the platform call is in flight, dispose can still issue
+      // the matching exit instead of leaking a borderless fullscreen window.
+      if (fullscreen) {
+        _ownsWindowFullscreen = true;
+      }
+      final bool? applied = await setDesktopWindowFullscreen(fullscreen);
+      if (!mounted) {
+        if (fullscreen && _ownsWindowFullscreen) {
+          _ownsWindowFullscreen = false;
+          await _restoreOwnedFullscreenAfterDispose();
+        }
+        return;
+      }
+      if (applied == null) {
+        if (fullscreen) _ownsWindowFullscreen = false;
+        return;
+      }
+      _ownsWindowFullscreen = applied;
+      if (_isWindowFullscreen != applied) {
+        setState(() => _isWindowFullscreen = applied);
+      }
+    } finally {
+      _fullscreenTransitioning = false;
+    }
+  }
+
+  Future<void> _setMangaFullscreen(bool fullscreen) =>
+      _changeMangaFullscreen(requested: fullscreen);
+
+  Future<void> _toggleMangaFullscreen() => _changeMangaFullscreen();
+
+  /// 「返回上一级」在漫画页的一级：全屏中先退全屏，返回 true 吞掉这次返回。
+  ///
+  /// 判据不再只认 [_ownsWindowFullscreen]（「这次全屏是我进的」）：用户用快捷键
+  /// （默认 F11）进的全屏不会置那个标志，可他眼里那和按全屏按钮进的是同一个全屏，
+  /// Esc 都该先把它退掉，而不是连人带全屏一起退出漫画。所有权标志仍然保留——它管的是
+  /// 另一件事（页面在 native 往返途中被拆掉时由谁负责把全屏还回去）。
+  ///
+  /// 非全屏时只多读一次窗口状态，随后照常退页。
+  Future<bool> _exitOwnedFullscreenBeforePop() async {
+    if (!_ownsWindowFullscreen &&
+        (await readDesktopWindowFullscreen()) != true) {
+      return false;
+    }
+    if (!mounted) return false;
+    await _setMangaFullscreen(false);
+    return true;
+  }
+
+  Future<void> _restoreOwnedFullscreenAfterDispose() async {
+    await setDesktopWindowFullscreen(false);
+  }
+
+  @override
+  void onWindowEnterFullScreen() {
+    if (!mounted || _isWindowFullscreen) return;
+    setState(() => _isWindowFullscreen = true);
+  }
+
+  @override
+  void onWindowLeaveFullScreen() {
+    _ownsWindowFullscreen = false;
+    if (!mounted || !_isWindowFullscreen) return;
+    setState(() => _isWindowFullscreen = false);
+  }
+
+  Future<void> _closePageSession(MangaReaderSession session) async {
+    await session.close();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive) {
+      unawaited(_flushPosition());
+    } else if (state == AppLifecycleState.resumed) {
+      // OS 层焦点丢失后 Flutter 不保证归还到原节点：切窗回来若不收回，翻页键全死。
+      _focusOwnership.reclaim(FocusReclaimCause.appResumed);
+    }
+  }
+
+  @override
+  Future<void> onSourcePagePop() async {
+    if (_ownsWindowFullscreen) {
+      await _setMangaFullscreen(false);
+    }
+    // 关书只落盘位置；返回书架的正常路径 await 落盘，保证书架 recency/进度立刻正确。
+    await _flushPosition();
+  }
+
+  @override
+  void didChangeMetrics() {
+    super.didChangeMetrics();
+    // 旋转/窗口尺寸变化：自动布局可能在单页↔双页间翻转。didChangeMetrics 触发时
+    // MediaQuery 可能尚未反映新尺寸，推迟到帧后再解析；只有解析结果真变才重建。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(_applySpreadLayoutIfChanged());
+    });
+  }
+
+  /// 若视口/偏好解析出的布局与当前生效布局不同，重建 spread 序列并保持当前页。
+  Future<void> _applySpreadLayoutIfChanged() async {
+    final MokuroPayload? payload = _payload;
+    if (payload == null || _mode != MangaReadingMode.spread) return;
+    final MangaPageLayout layout = _resolveLayout(_mode);
+    // 横屏双页时半开 / 展平不改变单双页，但铰链缝变了也要重挂文档。
+    if (layout == _pageLayout &&
+        _resolveSpreadGutter(layout) == _spreadGutterPx) {
+      return;
+    }
+    await _rebuildSpreadsPreservingPage(payload);
+  }
+
+  /// 以新布局重建 spread 序列：保持当前 spread 首页所在页，重挂窗口文档并
+  /// 落一次进度（sectionIndex 仍是 spread 首页页码，语义不变）。
+  Future<void> _rebuildSpreadsPreservingPage(MokuroPayload payload) async {
+    final int currentPage = MangaMyComicPage.firstPageOfSpread(
+      _spreads,
+      _currentSpread,
+    );
+    final List<MangaSpreadEntry> spreads = _buildSpreadsFor(payload, _mode);
+    setState(() {
+      _spreads = spreads;
+      _currentSpread = MangaMyComicPage.spreadIndexForPage(spreads, currentPage);
+      _currentPage = MangaMyComicPage.firstPageOfSpread(spreads, _currentSpread);
+    });
+    _pageNotifier.value = _currentPage;
+    await _loadInitialWindow();
+    _updateCurrentPageImagePath();
+    _recordProgress();
+  }
+
+  /// 页内菜单切换布局偏好（自动/单页/双页；运行时状态，不落库）。
+  Future<void> _setSpreadPreference(MangaSpreadPreference preference) async {
+    if (preference == _spreadPreference) return;
+    setState(() => _spreadPreference = preference);
+    unawaited(appModel.setMangaSpreadPreference(preference.key));
+    final MokuroPayload? payload = _payload;
+    if (payload == null || _mode != MangaReadingMode.spread) return;
+    if (_resolveLayout(_mode) != _pageLayout) {
+      await _rebuildSpreadsPreservingPage(payload);
+    }
+  }
+
+  // ── 加载 / 恢复 ───────────────────────────────────────────────────────
+
+  Future<void> _loadBook() async {
+    final MyComicDatabase db = appModel.database;
+    final EpubBookRow? row = await db.getEpubBook(widget.bookKey);
+    if (!mounted) return;
+    if (row == null) {
+      _releaseWebView();
+      setState(() => _loadFailed = true);
+      return;
+    }
+    // 打开章节进入阅读器 = 一次阅读会话：写 / 更新历史（每部 Manga 一条）。
+    // 只打开作品详情页不会走到这里；无痕阅读由 [_recordOpenHistory] 统一跳过。
+    await _recordOpenHistory(row);
+    // Local source（ADR 0013）：章节目录原地读取，不复制、不需要 manga.json。
+    if (LocalSourceMetadata.tryParse(row.sourceMetadata) != null) {
+      await _loadLocalSourceChapter(row, initialLoad: true);
+      return;
+    }
+    final OnlineMangaLibraryEntry? onlineEntry =
+        OnlineMangaLibraryEntry.tryParse(row.sourceMetadata);
+    if (onlineEntry != null) {
+      await _loadOnlineBookFromShelf(row, onlineEntry);
+      return;
+    }
+    // 存储契约（与 PDF 同构）：extractDir/epubPath 指向 manga.json；页图在
+    // 同目录的 images/ 下（manga.json 里的 url 是 images/ 内正斜杠相对路径）。
+    await _loadLocalPayload(
+      row: row,
+      mangaJsonPath: p.join(row.extractDir, row.epubPath),
+      initialPage: widget.initialPage,
+    );
+  }
+
+  /// 打开章节进入阅读器时写 / 更新历史（ADR 0018）。
+  ///
+  /// - 每部 Manga 一条：`media_open_history` 的 PK 是 (mediaSource, mediaId)，
+  ///   重复阅读只刷新 `openedAt`，历史页按它倒序置顶。
+  /// - 无痕阅读：跳过新增与更新，已有历史原样保留。
+  /// - 来源回看（source review）是只读会话，与进度落库同一口径不写。
+  /// - 历史写失败不能挡住开书：记日志后继续。
+  Future<void> _recordOpenHistory(EpubBookRow row) async {
+    if (_sourceReviewActive || appModel.incognitoReading) return;
+    try {
+      await recordMangaHistoryOpened(
+        db: appModel.database,
+        row: row,
+        onlineEntry: OnlineMangaLibraryEntry.tryParse(row.sourceMetadata),
+      );
+    } on Object catch (error, stack) {
+      ErrorLogService.instance.log(
+        'MangaMyComicPage.recordOpenHistory',
+        error,
+        stack,
+      );
+    }
+  }
+
+  /// Local source 章节：按 `sourceMetadata` 标记分流，页图从 `local` 的
+  /// 章节目录 / CBZ 原地读取（不复制、不要求 manga.json）。
+  ///
+  /// 章级上下文与在线书架条目等价：章节目录来自 `chaptersJson`，当前章是
+  /// `LocalSourceMetadata.currentChapterKey`（打开 / 换章时更新），页内进度写
+  /// `manga_chapter_states`。直接开书（没点名章）按 currentChapterKey 恢复；
+  /// 单章老数据没有章状态时仍回落到书级 `reader_positions`。
+  Future<void> _loadLocalSourceChapter(
+    EpubBookRow row, {
+    int? chapterIndex,
+    int? initialPage,
+    bool initialLoad = false,
+  }) async {
+    final List<LocalSourceChapterRecord> chapters = decodeLocalSourceChapters(
+      row.chaptersJson,
+    );
+    final int index = _resolveLocalSourceChapterIndex(
+      row,
+      chapters,
+      requested: chapterIndex,
+    );
+    if (index < 0) {
+      _releaseWebView();
+      setState(() {
+        _bookRow = row;
+        _loadFailed = true;
+      });
+      return;
+    }
+    final LocalSourceChapterRecord chapter = chapters[index];
+    final LocalSourceResolvedChapter? resolved =
+        await LocalSourceReader.resolveChapter(
+          db: appModel.database,
+          bookKey: row.bookKey,
+          chapterIndex: index,
+          localSourceRoot: appModel.appPaths.localComicRoot,
+          downloadsRoot: appModel.appPaths.downloadsRoot,
+        );
+    if (!mounted) return;
+    if (resolved == null) {
+      _releaseWebView();
+      setState(() {
+        _bookRow = row;
+        _loadFailed = true;
+      });
+      return;
+    }
+    // 先挂好当前章：[_presentPayload] 的首次落库要写到正确的章。
+    _applyLocalChapterContext(row, chapters, index);
+    final int? resumePage = await _localChapterInitialPage(
+      row,
+      chapter,
+      chapterCount: chapters.length,
+      initialPage: initialLoad
+          ? (initialPage ?? widget.initialPage)
+          : initialPage,
+    );
+    if (!mounted) return;
+    final File? archiveFile = resolved.archiveFile;
+    if (archiveFile != null) {
+      await _loadLocalSourceArchiveChapter(
+        row: row,
+        resolved: resolved,
+        archiveFile: archiveFile,
+        initialPage: resumePage,
+      );
+    } else {
+      final String chapterDir = resolved.chapterDirectory.path;
+      await _presentPayload(
+        row: row.copyWith(extractDir: chapterDir, epubPath: ''),
+        payload: resolved.payload,
+        imagesDir: chapterDir,
+        openSession: (List<String> relativePagePaths) => LocalMangaPageProvider(
+          imagesRoot: Directory(chapterDir),
+          relativePaths: relativePagePaths,
+        ).open(),
+        initialPage: resumePage,
+      );
+    }
+    if (!mounted) return;
+    await updateLocalSourceCurrentChapter(
+      db: appModel.database,
+      bookKey: row.bookKey,
+      chapterKey: chapter.key,
+    );
+  }
+
+  /// 直接开书按 `currentChapterKey` 解析当前章；点名的章优先，失配回落第 1 章。
+  int _resolveLocalSourceChapterIndex(
+    EpubBookRow row,
+    List<LocalSourceChapterRecord> chapters, {
+    int? requested,
+  }) {
+    if (chapters.isEmpty) return -1;
+    final int named = requested ?? widget.initialChapterIndex ?? -1;
+    if (named >= 0 && named < chapters.length) return named;
+    final String? currentKey = LocalSourceMetadata.tryParse(
+      row.sourceMetadata,
+    )?.currentChapterKey;
+    if (currentKey != null) {
+      final int index = chapters.indexWhere(
+        (LocalSourceChapterRecord item) => item.key == currentKey,
+      );
+      if (index >= 0) return index;
+    }
+    return 0;
+  }
+
+  /// 把本地章节目录借成共享的在线条目形态（runtime = local，无 service）：
+  /// `_shelfChapterKey` / 章状态写入 / 章节抽屉都走在线源同一套逻辑。
+  void _applyLocalChapterContext(
+    EpubBookRow row,
+    List<LocalSourceChapterRecord> chapters,
+    int index,
+  ) {
+    _shelfLibraryService = null;
+    _shelfEntry = localSourceMangaLibraryEntry(
+      seriesKey: row.bookKey,
+      title: row.title,
+      chapters: chapters,
+      currentChapterIndex: index,
+    );
+    _shelfChapterIndex = index;
+    _edgeToastShown = false;
+  }
+
+  /// 打开某一章的起始页：调用方点名 > 该章的章级进度 > 单章作品的书级位置。
+  ///
+  /// 多章作品没有章状态时从第 1 页开始（不能回落到书级 reader_positions：
+  /// 那一行是上一章读到的页，BUG-1924）。单章老数据只有书级位置，返回 null
+  /// 让 [_presentPayload] 按书级位置恢复。
+  Future<int?> _localChapterInitialPage(
+    EpubBookRow row,
+    LocalSourceChapterRecord chapter, {
+    required int chapterCount,
+    int? initialPage,
+  }) async {
+    if (initialPage != null) return initialPage;
+    if (row.uid.isEmpty) return chapterCount <= 1 ? null : 0;
+    final MangaChapterStateRow? state = await appModel.database
+        .getMangaChapterState(bookUid: row.uid, chapterKey: chapter.key);
+    if (state != null) {
+      return resolveMangaChapterResumePoint(
+        state,
+        target: MangaResumeTargetKey.fromKey(appModel.mangaResumeTarget),
+      );
+    }
+    return chapterCount <= 1 ? null : 0;
+  }
+
+  /// CBZ 章节：页缓存由页会话按需解到 app cache，`local` 里的原包只读。
+  Future<void> _loadLocalSourceArchiveChapter({
+    required EpubBookRow row,
+    required LocalSourceResolvedChapter resolved,
+    required File archiveFile,
+    required int? initialPage,
+  }) async {
+    final LocalSourceArchiveReaderSession session =
+        await LocalSourceArchiveReaderSession.open(
+          archivePath: archiveFile.path,
+          cacheRoot: Directory(
+            p.join(
+              appModel.temporaryDirectory.path,
+              kLocalSourceArchiveCacheDirName,
+            ),
+          ),
+          relativePaths: resolved.pages
+              .map((LocalSourcePage page) => page.relativePath)
+              .toList(growable: false),
+        );
+    if (!mounted) {
+      await session.close();
+      return;
+    }
+    try {
+      await _presentPayload(
+        row: row.copyWith(
+          extractDir: resolved.chapterDirectory.path,
+          epubPath: '',
+        ),
+        payload: resolved.payload,
+        imagesDir: session.directory.path,
+        openSession: (List<String> _) async => session,
+        initialPage: initialPage,
+      );
+    } on Object {
+      // _presentPayload 在挂上页会话之前抛错时，会话还没人接管。
+      if (!identical(_pageSession, session)) unawaited(session.close());
+      rethrow;
+    }
+  }
+
+  /// 从一份本地 `manga.json + images/` 装载正文。
+  ///
+  /// 本地导入卷与**已下载的在线章**共用这一条：后者的章目录就是同一个形状
+  /// （设计稿 2026-09-12 §2.1），阅读器不再有第二条「在线」装载路径。[row] 是要挂到
+  /// [_bookRow] 上的行——在线章传的是 `extractDir` 改成章目录的副本，整卷 OCR
+  /// 接回、缓存恢复、卡图路径都据此定位。
+  ///
+  /// [initialPage] 非空 = 章级进度（`manga_chapter_states`）已定好起始页，**不读**
+  /// 书级 `reader_positions`——那一行装的是上一章读到哪（BUG-1924）；null = 本地卷，
+  /// 按书级位置恢复。
+  Future<void> _loadLocalPayload({
+    required EpubBookRow row,
+    required String mangaJsonPath,
+    String? imagesDirectory,
+    int? initialPage,
+  }) async {
+    final File jsonFile = File(mangaJsonPath);
+    if (!jsonFile.existsSync()) {
+      _releaseWebView();
+      setState(() {
+        _bookRow = row;
+        _loadFailed = true;
+      });
+      return;
+    }
+    // 本地卷 / 旧哈希章：页图在 `images/` 子目录；Download library 章：页图
+    // 平铺在章目录本身（`pages.json` 的 url 是裸文件名）。
+    final String imagesDir =
+        imagesDirectory ?? p.join(p.dirname(mangaJsonPath), 'images');
+
+    final String jsonStr = await jsonFile.readAsString();
+    final MokuroPayload payload = await MangaMyComicPage.parseMangaJsonOffUi(
+      jsonStr,
+    );
+    if (!mounted) return;
+    await _presentPayload(
+      row: row,
+      payload: payload,
+      imagesDir: imagesDir,
+      openSession: (List<String> relativePagePaths) => LocalMangaPageProvider(
+        imagesRoot: Directory(imagesDir),
+        relativePaths: relativePagePaths,
+      ).open(),
+      initialPage: initialPage,
+    );
+  }
+
+  /// 把一份已解析的 [payload] 装进阅读器：偏好 / 覆盖 / 阅读模式 / 进度恢复 / 页会话
+  /// 挂接。本地卷、已下载的在线章（[_loadLocalPayload]）与在线直读章
+  /// （[_openStreamingChapter]）共用这一条，只有页会话来源不同。
+  ///
+  /// [streaming] = 在线直读：阅读器内不触发、不接回任何 OCR（设计稿 2026-09-12
+  /// §1.2 / §1.3 仍有效；OCR 只对下载完成的章在阅读器外起）。
+  Future<void> _presentPayload({
+    required EpubBookRow row,
+    required MokuroPayload payload,
+    required String imagesDir,
+    required Future<MangaReaderSession> Function(List<String> relativePagePaths)
+    openSession,
+    int? initialPage,
+    bool streaming = false,
+  }) async {
+    final MyComicDatabase db = appModel.database;
+    _spreadPreference = MangaSpreadPreferenceKey.fromKey(
+      appModel.mangaSpreadPreference,
+    );
+    _spreadDirection = appModel.mangaReadingDirection == 'ltr' ? 'ltr' : 'rtl';
+    _zoomPercent = appModel.mangaZoomPercent.clamp(
+      kMangaZoomMinPercent,
+      kMangaZoomMaxPercent,
+    );
+    _zoomSensitivity = appModel.mangaZoomSensitivity.clamp(
+      kMangaZoomSensitivityMin,
+      kMangaZoomSensitivityMax,
+    );
+    _readPageTurnPreferences();
+    _tapZonePaging = appModel.mangaTapZonePaging;
+    _tapZoneLayout = MangaTapZoneLayoutKey.fromKey(appModel.mangaTapZoneLayout);
+    _background = MangaBackgroundKey.fromKey(appModel.mangaBackground);
+    _widePageSolo = appModel.mangaWidePageSolo;
+    _chromeFloating = appModel.mangaChromeFloating;
+    _applyVolumeKeyPaging(appModel.mangaVolumeKeyPaging);
+    MangaReaderPreferences readerPreferences = appModel.mangaReaderPreferences;
+    // 这本书的覆盖里是否**显式**定过阅读模式（含「自动」）：定过就压过旧列。
+    bool readerOverrideHasMode = false;
+    bool hasFullscreenOverride = false;
+    bool hasKeepScreenOnOverride = false;
+    if (row.uid.isNotEmpty) {
+      try {
+        final MangaReaderOverrideRow? override = await db
+            .getMangaReaderOverride(row.uid);
+        if (override != null && !override.deleted) {
+          final Object? decoded = jsonDecode(override.overridesJson);
+          if (decoded is Map) {
+            hasFullscreenOverride = decoded['fullscreen'] is bool;
+            hasKeepScreenOnOverride = decoded['keepScreenOn'] is bool;
+            readerOverrideHasMode =
+                decoded.containsKey('mode') || decoded.containsKey('autoMode');
+            readerPreferences = MangaReaderPreferences.resolve(
+              readerPreferences,
+              decoded.cast<String, Object?>(),
+            );
+          }
+        }
+      } on Object catch (error, stack) {
+        ErrorLogService.instance.log(
+          'MangaMyComicPage.readerOverride',
+          error,
+          stack,
+        );
+      }
+    }
+    _readerPreferences = readerPreferences;
+    // 全局值是默认，本书覆盖（快捷设置「错开一页」）压过它。
+    _spreadOffset = readerPreferences.spreadOffset >= 1 ? 1 : 0;
+    try {
+      // 没有本书覆盖时不碰 wakelock：openMedia 已按全局「保持屏幕常亮」设好，漫画
+      // 默认值（true）不能把用户全局关掉的常亮再打开。
+      if (hasKeepScreenOnOverride) {
+        // 永不抛错：wakelock 失败（Linux 无 ScreenSaver D-Bus 服务）不能连带跳过下面的全屏恢复。
+        await setScreenWakelock(
+          enable: readerPreferences.keepScreenOn,
+          source: 'manga restore',
+        );
+      }
+      if (hasFullscreenOverride && desktopWindowFullscreenSupported) {
+        await _setMangaFullscreen(readerPreferences.fullscreen);
+      }
+    } on Object catch (error, stack) {
+      ErrorLogService.instance.log(
+        'MangaMyComicPage.restoreDevicePreferences',
+        error,
+        stack,
+      );
+    }
+    if (!mounted) return;
+    _spreadDirection = readerPreferences.direction == 'ltr' ? 'ltr' : 'rtl';
+    _background = MangaBackgroundKey.fromKey(readerPreferences.background);
+    _zoomPercent = readerPreferences.zoomStart.clamp(
+      kMangaZoomMinPercent,
+      kMangaZoomMaxPercent,
+    );
+    _tapZoneLayout = switch (readerPreferences.tapZones) {
+      MangaTapZonePreset.defaultZones => MangaTapZoneLayout.defaultZones,
+      MangaTapZonePreset.lShaped => MangaTapZoneLayout.lShaped,
+      MangaTapZonePreset.kindle => MangaTapZoneLayout.kindle,
+      MangaTapZonePreset.edge => MangaTapZoneLayout.edge,
+      MangaTapZonePreset.rightAndLeft => MangaTapZoneLayout.leftRight,
+      MangaTapZonePreset.disabled => MangaTapZoneLayout.disabled,
+      MangaTapZonePreset.topBottom => MangaTapZoneLayout.topBottom,
+    };
+    _scaleType = readerPreferences.scaleType;
+    _longStripSidePadding = readerPreferences.longStripSidePadding;
+    _disableZoomOut = readerPreferences.disableZoomOut;
+    _animateDoubleTap = readerPreferences.animateDoubleTap;
+    _invertHorizontal = readerPreferences.invertHorizontal;
+    _invertVertical = readerPreferences.invertVertical;
+    _invertBoth = readerPreferences.invertBoth;
+    _cropBorders = readerPreferences.cropBorders;
+    _splitWidePages = readerPreferences.splitWidePages;
+    _rotateWidePages = readerPreferences.rotateWidePages;
+    _autoZoomWide = readerPreferences.autoZoomWide;
+    _panWide = readerPreferences.panWide;
+    _zoomStartPosition = readerPreferences.zoomStartPosition;
+    _invertVolumeKeys = readerPreferences.invertVolumeKeys;
+    _saveDirectory = readerPreferences.saveDirectory;
+    _applyVolumeKeyPaging(
+      readerPreferences.volumeKeys,
+      invertDirection: _invertVolumeKeys,
+    );
+    if (readerPreferences.tapZones == MangaTapZonePreset.disabled) {
+      _tapZonePaging = false;
+    }
+
+    // 阅读模式优先级：每作品覆盖 > 旧列 `epub_books.manga_reading_mode` > 全局
+    // （autoMode 时按页图长宽比中位数自动判定）。
+    //
+    // 旧列不能排在覆盖之前：v112 迁移恰恰给「用过旧模式切换按钮」的书写了覆盖行，
+    // 若旧列压制覆盖，用户在新面板里选 pagedVertical / webtoonGaps 会写进覆盖却
+    // 仍按旧列的 spread/webtoon 渲染——设置看起来没生效。旧列保留为回退，降级回
+    // 旧版本照样能读。
+    final MangaReadingMode mode = MangaMyComicPage.resolveReaderMode(
+      preferences: readerPreferences,
+      payload: payload,
+      hasModeOverride: readerOverrideHasMode,
+      legacyMode: row.mangaReadingMode,
+    );
+    final List<MangaSpreadEntry> spreads = _buildSpreadsFor(payload, mode);
+    final List<String> relativePagePaths = payload.images
+        .map(
+          (MokuroImage image) =>
+              MangaMyComicPage.mangaImageRelativePath(image.url),
+        )
+        .toList(growable: false);
+    final MangaReaderSession localPageSession = await openSession(
+      relativePagePaths,
+    );
+    if (!mounted) {
+      await localPageSession.close();
+      return;
+    }
+
+    // 恢复进度：sectionIndex=0-based 页码；webtoon 的页内 fraction 从 charOffset
+    // （千分比 0..1000）换算回来。v82：键 = 书行 uid（行在手直接取）。
+    _bookUid = row.uid.isEmpty ? null : row.uid;
+    int restoredPage = 0;
+    double restoredFraction = 0;
+    ReaderPosition? saved;
+    if (initialPage != null) {
+      restoredPage = initialPage.clamp(
+        0,
+        math.max(0, payload.images.length - 1),
+      );
+    } else {
+      try {
+        if (_bookUid != null) {
+          saved = await ReaderPositionRepository(db).findByBookUid(_bookUid!);
+        }
+      } catch (e, stack) {
+        ErrorLogService.instance.log('MangaMyComicPage.restore', e, stack);
+      }
+      if (!mounted) return;
+      if (saved != null &&
+          saved.sectionIndex >= 0 &&
+          saved.sectionIndex < payload.images.length) {
+        restoredPage = saved.sectionIndex;
+        if (mode.isContinuous) {
+          restoredFraction = MangaMyComicPage.charOffsetToWebtoonFraction(
+            saved.charOffset,
+          );
+        }
+      }
+    }
+    if (!_sourceLocatorApplied && widget.sourceReview?.pageIndex != null) {
+      restoredPage = widget.sourceReview!.pageIndex!;
+      if (restoredPage >= payload.images.length) {
+        await localPageSession.close();
+        if (!mounted) return;
+        _releaseWebView();
+        setState(() => _loadFailed = true);
+        return;
+      }
+      restoredFraction = 0;
+      _sourceLocatorApplied = true;
+    }
+
+    final int restoredSpread = MangaMyComicPage.restoreSpreadFromProgress(
+      spreads,
+      restoredPage,
+    );
+    final MangaReaderSession? previousLocalPageSession = _pageSession;
+    // 换章：上一章直读会话的页图目录随会话一起关。
+    _pageSession = localPageSession;
+    _pageSessionGeneration = ++_pageSessionGenerationCounter;
+    _pageScope = MangaMyComicPage.mangaPageScope(imagesDir);
+    _localPageIndices = <String, int>{
+      for (int index = 0; index < relativePagePaths.length; index++)
+        _localPageKey(relativePagePaths[index]): index,
+    };
+    if (previousLocalPageSession != null) {
+      unawaited(previousLocalPageSession.close());
+    }
+    unawaited(_downloadWatch?.cancel());
+    _downloadWatch = null;
+    setState(() {
+      _bookRow = row;
+      _imagesDir = imagesDir;
+      _payload = payload;
+      _mode = mode;
+      _spreads = spreads;
+      _currentSpread = restoredSpread;
+      _currentPage = MangaMyComicPage.firstPageOfSpread(spreads, restoredSpread);
+      _currentFraction = restoredFraction;
+      _lastSavedPage = saved != null ? restoredPage : -1;
+      _lastSavedFraction = saved != null ? restoredFraction : -1;
+      _chapterNotDownloaded = false;
+      _streamingChapter = streaming;
+      _loadFailed = false;
+    });
+    _pageNotifier.value = _currentPage;
+    // 换章 = 同一个 WebView 换正文。首次打开由 onWebViewCreated 装首窗；换章时
+    // WebView 一直挂在树上、那条回调不会再来，必须在这里按新 payload 重装窗口
+    // 文档——否则屏上留着旧章文档，只有页码 / OCR 层跟着变成新章（跨章后「只有
+    // 第一页更新了」）。调用方（换章落末页）随后在新文档上 translate，所以要 await。
+    if (_controller != null) await _loadInitialWindow();
+    if (!mounted) return;
+  }
+
+  Future<void> _loadOnlineBookFromShelf(
+    EpubBookRow row,
+    OnlineMangaLibraryEntry entry,
+  ) async {
+    try {
+      final OnlineMangaLibraryService service = appModel
+          .onlineMangaLibraryService(entry.runtime);
+      int chapterIndex = mangaReaderOpenChapterIndex(
+        entry,
+        await appModel.database.getMangaChapterStates(row.uid),
+        requested: widget.initialChapterIndex,
+        target: MangaResumeTargetKey.fromKey(appModel.mangaResumeTarget),
+      );
+      if (!_sourceLocatorApplied &&
+          widget.sourceReview != null &&
+          widget.sourceReview!.chapterId == null) {
+        throw StateError('The card source has no chapter identity');
+      }
+      if (!_sourceLocatorApplied && widget.sourceReview?.chapterId != null) {
+        chapterIndex = entry.chapters.indexWhere(
+          (OnlineMangaChapter chapter) =>
+              chapter.key == widget.sourceReview!.chapterId,
+        );
+      }
+      if (chapterIndex < 0) {
+        throw StateError('The manga has no chapters');
+      }
+      // 票 02：阅读不得创建或重指 Download library 目录。目录只在下载 worker
+      // 真正开始章节下载时物化；已下载章经 `DownloadLibraryIndex` 的映射解析，
+      // 旧布局 `extractDir` 保持原样（用户自行搬移后运行重建索引）。
+      if (_sourceReviewActive) {
+        entry = entry.copyWith(currentChapterIndex: chapterIndex);
+      } else if (entry.currentChapterIndex != chapterIndex) {
+        entry = await service.selectChapter(
+          bookKey: row.bookKey,
+          entry: entry,
+          chapterIndex: chapterIndex,
+        );
+        chapterIndex = entry.currentChapterIndex!;
+      }
+      await _openShelfChapter(
+        row: row,
+        service: service,
+        entry: entry,
+        chapterIndex: chapterIndex,
+        explicitInitialPage: widget.initialPage,
+      );
+    } on Object catch (error, stack) {
+      ErrorLogService.instance.log(
+        'MangaMyComicPage.loadOnlineShelf',
+        error,
+        stack,
+      );
+      if (mounted) {
+        _releaseWebView();
+        setState(() {
+          _bookRow = row;
+          _loadFailed = true;
+        });
+      }
+    }
+  }
+
+  /// 打开书架条目的第 [chapterIndex] 章。
+  ///
+  /// 首次进入和「换章」共用这一条路径，所以换章不会走出任何首次进入没走过的
+  /// 分支——OCR 接回、进度恢复全部一致。
+  ///
+  /// 已下载的章（判据只问 [DownloadLibraryIndex.isChapterDownloaded]）从章目录
+  /// 按本地卷装载；未下载的章
+  /// 在线直读（[_openStreamingChapter]，2026-09-26 用户撤回设计稿 §1.1「必须先下载
+  /// 再读」）。直读失败（源不可用 / 页表为空 / 首屏页取不到）才退到「本章未下载」态，
+  /// 由用户入队或换章，下载表一变就复核。
+  ///
+  /// [landOnLastPage]：往回翻进上一章时直接以末页作为**起始页**装载（BUG-3222）。
+  /// 此前是按章级进度（多半是第 0 页）装好、首帧画出来之后再 `_jumpToPage`
+  /// 翻到末页——用户先看到上一章开头闪一下，再看到它滑到末尾。页数在装载前
+  /// 未知，所以用 [kMangaLandOnLastPage] 这个「越界即末页」的页码交给装载链，
+  /// 由已知页数的那一层（[_presentPayload] / 直读落点）钳到末页。
+  Future<void> _openShelfChapter({
+    required EpubBookRow row,
+    required OnlineMangaLibraryService service,
+    required OnlineMangaLibraryEntry entry,
+    required int chapterIndex,
+    bool landOnLastPage = false,
+    int? explicitInitialPage,
+  }) async {
+    final OnlineMangaChapter chapter = entry.chapters[chapterIndex];
+    _shelfLibraryService = service;
+    _shelfEntry = entry;
+    _shelfChapterIndex = chapterIndex;
+    _edgeToastShown = false;
+    // 章目录通过数据库映射解析（新布局）；未下载的章用 chapterKey 的纯派生当
+    // 直读会话的页名作用域（不会创建目录，也不按标题推导路径）。
+    final DownloadLibraryIndex index = DownloadLibraryIndex(appModel.database);
+    final MangaChapterContainer? container = await index.resolveChapter(
+      bookKey: row.bookKey,
+      chapterKey: chapter.key,
+    );
+    final bool downloaded = await index.isChapterDownloaded(
+      bookKey: row.bookKey,
+      chapterKey: chapter.key,
+    );
+    final Directory chapterDir =
+        container?.directory ??
+        downloadChapterDirectory(
+          row.extractDir,
+          downloadChapterFolderName(
+            mangaDirPath: row.extractDir,
+            raw: chapter.key,
+          ),
+        );
+    // 每章进度：切回读过一半的旧章要落回原页，而不是从头开始（v88 前
+    // selectChapter 会把唯一那行 reader_positions 清零，上一章位置永久丢失）。
+    //
+    // 书架在线章**一律显式给页码**（读到一半给 lastPage，其余给 0），不能留
+    // null：`_loadLocalPayload` 在 `initialPage == null` 时会回落到整本**唯一
+    // 那行** `reader_positions`，而那一行装的是**上一章**读到哪。读完第 3 话第
+    // 20 页 → 自动换到未读的第 4 话 → 第 4 话从第 20 页开始，整章整章跳过内容。
+    // 每章进度的真相源是 `manga_chapter_states`；书级那行只服务单章 / 本地条目。
+    int initialPage = landOnLastPage ? kMangaLandOnLastPage : 0;
+    if (explicitInitialPage != null) {
+      // 调用方点名的页（首次装载）：不再按章级进度挑页。
+      initialPage = explicitInitialPage;
+    } else if (!landOnLastPage && row.uid.isNotEmpty) {
+      final MangaChapterStateRow? state = await appModel.database
+          .getMangaChapterState(bookUid: row.uid, chapterKey: chapter.key);
+      // 读完过的章怎么开由「重新打开时」偏好决定：跳过读完的章节（furthest）=
+      // 从头看（「重读」是明确意图）；最后阅读位置 = 落回上次停下的那一页，停在
+      // 末尾才从头。
+      initialPage = resolveMangaChapterResumePoint(
+        state,
+        target: MangaResumeTargetKey.fromKey(appModel.mangaResumeTarget),
+      );
+    }
+    if (!mounted) return;
+    // 下载库 CBZ 章节（票 07）：走 Local source 的压缩包阅读路径。放在「未下载
+    // 直读」之前——页序按包根 `pages.json`，缺失/损坏时与 Local source 同口径回退
+    // 图片条目自然序，因此手工放置的 CBZ 也能读；包本身打不开才退回既有直读 /
+    // 「本章未下载」态。
+    if (container != null && container.isArchive) {
+      if (await _openArchiveShelfChapter(
+        row: row,
+        archiveFile: container.archiveFile!,
+        initialPage: initialPage,
+      )) {
+        return;
+      }
+      if (!mounted) return;
+    }
+    if (!downloaded) {
+      if (await _openStreamingChapter(
+        row: row,
+        service: service,
+        entry: entry,
+        chapter: chapter,
+        chapterDir: chapterDir,
+        initialPage: initialPage,
+      )) {
+        return;
+      }
+      if (!mounted) return;
+      _releaseWebView();
+      setState(() {
+        _bookRow = row;
+        // 换章直读失败时这里还挂着旧章正文：清掉，免得旧页码被当成新章进度落库。
+        _payload = null;
+        _chapterNotDownloaded = true;
+      });
+      _watchDownloadsForCurrentChapter();
+      return;
+    }
+    if (container == null || container.isArchive) {
+      // 压缩包存在但打不开（损坏 / 空包）：显示既有失败态，不把文件路径当成
+      // 章节目录读。
+      setState(() {
+        _payload = null;
+        _chapterNotDownloaded = true;
+      });
+      _watchDownloadsForCurrentChapter();
+      return;
+    }
+    await _loadLocalPayload(
+      row: row.copyWith(
+        epubPath: p.basename(container.manifestFile!.path),
+        extractDir: container.directory!.path,
+      ),
+      mangaJsonPath: container.manifestFile!.path,
+      imagesDirectory: container.imagesDirectory!.path,
+      initialPage: initialPage,
+    );
+  }
+
+  /// 下载库 CBZ 章节：复用 Local source 的压缩包阅读路径。
+  ///
+  /// 页表按包根 `pages.json`（顺序 + 声明宽高），缺失/损坏时与 Local source 同口径
+  /// 回退图片条目自然序。页只在需要时由页会话解到 app 临时目录的会话私有缓存；
+  /// 原包只读、不复制、不展开进受管目录。返回 false = 包打不开或没有可读页，
+  /// 调用方退回既有直读 / 「本章未下载」态。
+  Future<bool> _openArchiveShelfChapter({
+    required EpubBookRow row,
+    required File archiveFile,
+    required int initialPage,
+  }) async {
+    final LocalSourceArchiveChapterContent? content;
+    try {
+      content = await LocalSourceReader.readArchiveContent(archiveFile.path);
+    } on Object catch (error, stack) {
+      ErrorLogService.instance.log(
+        'MangaMyComicPage.openArchiveChapter',
+        error,
+        stack,
+      );
+      return false;
+    }
+    if (!mounted || content == null) return false;
+    final LocalSourceArchiveReaderSession session;
+    try {
+      session = await LocalSourceArchiveReaderSession.open(
+        archivePath: archiveFile.path,
+        cacheRoot: Directory(
+          p.join(
+            appModel.temporaryDirectory.path,
+            kLocalSourceArchiveCacheDirName,
+          ),
+        ),
+        relativePaths: content.pages
+            .map((LocalSourcePage page) => page.relativePath)
+            .toList(growable: false),
+      );
+    } on Object catch (error, stack) {
+      ErrorLogService.instance.log(
+        'MangaMyComicPage.openArchiveChapter',
+        error,
+        stack,
+      );
+      return false;
+    }
+    if (!mounted) {
+      await session.close();
+      return false;
+    }
+    try {
+      await _presentPayload(
+        // 压缩包在作品目录里：extractDir 仍是漫画根（存图 / 进度归属不变）。
+        row: row.copyWith(
+          extractDir: p.dirname(archiveFile.path),
+          epubPath: '',
+        ),
+        payload: content.payload,
+        imagesDir: session.directory.path,
+        openSession: (List<String> _) async => session,
+        initialPage: initialPage,
+      );
+      return true;
+    } on Object catch (error, stack) {
+      ErrorLogService.instance.log(
+        'MangaMyComicPage.openArchiveChapter',
+        error,
+        stack,
+      );
+      // _presentPayload 在挂上页会话之前抛错时，会话还没人接管。
+      if (!identical(_pageSession, session)) unawaited(session.close());
+      return false;
+    }
+  }
+
+  /// 在线直读 [chapter]：解析页表 → 开 [OnlineMangaReaderSession] → 先取落点页量
+  /// 尺寸 → 占位几何的 payload 交给 [_presentPayload]。
+  ///
+  /// 返回 false = 直读不成（已记日志、已 toast），调用方退到「本章未下载」态；
+  /// 页面已卸载时返回 true（调用方什么都不用再做）。
+  Future<bool> _openStreamingChapter({
+    required EpubBookRow row,
+    required OnlineMangaLibraryService service,
+    required OnlineMangaLibraryEntry entry,
+    required OnlineMangaChapter chapter,
+    required Directory chapterDir,
+    required int initialPage,
+  }) async {
+    OnlineMangaReaderSession? pendingSession;
+    try {
+      final OnlineMangaRuntimeAdapter adapter = service.adapter;
+      final List<OnlineMangaPageRef> pages = await adapter.resolveChapterPages(
+        entry: entry,
+        chapter: chapter,
+      );
+      if (pages.isEmpty) throw StateError('The chapter has no pages');
+      if (!mounted) return true;
+      final OnlineMangaPageCancellable? cancellable =
+          adapter is OnlineMangaPageCancellable
+          ? adapter as OnlineMangaPageCancellable
+          : null;
+      late final OnlineMangaReaderSession session;
+      session = await OnlineMangaReaderSession.open(
+        cacheRoot: Directory(
+          p.join(appModel.temporaryDirectory.path, kMangaStreamCacheDirName),
+        ),
+        bookKey: row.bookKey,
+        chapterKey: chapter.key,
+        pageIdentities: <String>[
+          for (int index = 0; index < pages.length; index++)
+            'online\u001f${row.bookKey}\u001f${chapter.key}\u001f$index'
+                '\u001f${pages[index].sourceUrl ?? ''}',
+        ],
+        fetchPage: (int index) => adapter.fetchChapterPage(pages[index]),
+        cancelPages: cancellable == null
+            ? null
+            : (Iterable<int> indices) => cancellable.cancelChapterPages(
+                <OnlineMangaPageRef>[for (final int i in indices) pages[i]],
+              ),
+        onPageMeasured: (int index, int width, int height) =>
+            _onStreamingPageMeasured(session, index, width, height),
+      );
+      pendingSession = session;
+      // 先取落点页：源不可用就在这里失败、退回「本章未下载」态，不留一屏坏图；
+      // 顺带拿它的真实比例当全章占位几何（比固定竖版比例更接近，自动阅读模式的
+      // 长宽比判定也据此）。其余页的真实尺寸在取到时回写（JS 侧图片 load 时自校正）。
+      final int landing = initialPage.clamp(0, pages.length - 1);
+      final MangaPageBytes first = await session.page(landing);
+      if (!mounted) {
+        await session.close();
+        return true;
+      }
+      final MokuroSize placeholder = first.hasDimensions
+          ? MokuroSize(first.width!.toDouble(), first.height!.toDouble())
+          : const MokuroSize(1000, 1414);
+      final MokuroPayload payload = MokuroPayload(
+        images: <MokuroImage>[
+          for (int index = 0; index < pages.length; index++)
+            MokuroImage(
+              // 带章摘要一段：各章页名同形，URL 不能在章与章之间撞（WebView 缓存）。
+              url:
+                  '${MangaStorage.kImagesDirName}/'
+                  '${p.basename(chapterDir.path)}/'
+                  'page-${(index + 1).toString().padLeft(6, '0')}',
+              size: placeholder,
+              blocks: const <MokuroBlock>[],
+            ),
+        ],
+      );
+      // 交出去之后会话归阅读器管（_presentPayload 挂上或自己关），这里不再关。
+      pendingSession = null;
+      await _presentPayload(
+        row: row.copyWith(
+          epubPath: p.basename(downloadPagesManifestFile(chapterDir).path),
+          extractDir: chapterDir.path,
+        ),
+        payload: payload,
+        imagesDir: session.directory.path,
+        openSession: (List<String> _) async => session,
+        initialPage: initialPage,
+        streaming: true,
+      );
+      return true;
+    } on Object catch (error, stack) {
+      await pendingSession?.close();
+      ErrorLogService.instance.log(
+        'MangaMyComicPage.openStreamingChapter',
+        error,
+        stack,
+      );
+      if (mounted) {
+        MyComicToast.show(
+          // 原始异常已进上面的错误日志；toast 只给归一后的短句。
+          msg: error is OnlineMangaUnavailable
+              ? error.userMessage
+              : describeOnlineSourceError(error),
+          severity: ToastSeverity.error,
+        );
+      }
+      return false;
+    }
+  }
+
+  /// 直读页取到真实尺寸：回写内存里的 payload，之后重建窗口 / 单双页判定按真值走。
+  /// 不重建 spread——JS 侧图片 load 时已自行校正页框比例。
+  void _onStreamingPageMeasured(
+    OnlineMangaReaderSession session,
+    int index,
+    int width,
+    int height,
+  ) {
+    final MokuroPayload? payload = _payload;
+    if (!mounted ||
+        !_streamingChapter ||
+        !identical(session, _pageSession) ||
+        payload == null ||
+        index < 0 ||
+        index >= payload.images.length) {
+      return;
+    }
+    final MokuroImage previous = payload.images[index];
+    if (previous.size.width == width && previous.size.height == height) {
+      return;
+    }
+    final List<MokuroImage> images = List<MokuroImage>.of(payload.images);
+    images[index] = MokuroImage(
+      url: previous.url,
+      size: MokuroSize(width.toDouble(), height.toDouble()),
+      blocks: previous.blocks,
+    );
+    _payload = MokuroPayload(images: images, ocr: payload.ocr);
+  }
+
+  /// 「本章未下载」态：把当前章交给下载服务。
+  Future<void> _enqueueCurrentChapterDownload() async {
+    final OnlineMangaLibraryEntry? entry = _shelfEntry;
+    if (entry == null ||
+        _shelfChapterIndex < 0 ||
+        _shelfChapterIndex >= entry.chapters.length) {
+      return;
+    }
+    try {
+      await appModel.mangaDownloadService.enqueueChapter(
+        entry: entry,
+        chapter: entry.chapters[_shelfChapterIndex],
+        autoOcr: false,
+      );
+      if (mounted) MyComicToast.show(msg: t.manga_chapter_download_queued);
+    } on Object catch (error, stack) {
+      ErrorLogService.instance.log('MangaMyComicPage.enqueue', error, stack);
+      if (mounted) {
+        MyComicToast.show(msg: '$error', severity: ToastSeverity.error);
+      }
+    }
+  }
+
+  /// 「本章未下载」态下盯着下载表：本章下完就自动装载，用户不用退出重进。
+  void _watchDownloadsForCurrentChapter() {
+    if (_downloadWatch != null) return;
+    _downloadWatch = appModel.mangaDownloadService.watchJobs().listen(
+      (_) => unawaited(_reloadIfCurrentChapterArrived()),
+      onError: (Object error, StackTrace stack) {
+        ErrorLogService.instance.log(
+          'MangaMyComicPage.watchDownloads',
+          error,
+          stack,
+        );
+      },
+    );
+  }
+
+  Future<void> _reloadIfCurrentChapterArrived() async {
+    final OnlineMangaLibraryService? service = _shelfLibraryService;
+    final OnlineMangaLibraryEntry? entry = _shelfEntry;
+    final EpubBookRow? row = _bookRow;
+    final String? chapterKey = _shelfChapterKey;
+    if (!mounted ||
+        !_chapterNotDownloaded ||
+        _switchingChapter ||
+        service == null ||
+        entry == null ||
+        row == null ||
+        chapterKey == null) {
+      return;
+    }
+    if (!await DownloadLibraryIndex(
+      appModel.database,
+    ).isChapterDownloaded(bookKey: row.bookKey, chapterKey: chapterKey)) {
+      return;
+    }
+    if (!mounted || !_chapterNotDownloaded) return;
+    await _openShelfChapter(
+      row: row,
+      service: service,
+      entry: entry,
+      chapterIndex: _shelfChapterIndex,
+    );
+  }
+
+  /// 当前视口是否横屏（宽 > 高）。自动布局的唯一判据。
+  bool get _viewportIsLandscape {
+    final Size size = MediaQuery.sizeOf(context);
+    return size.width > size.height;
+  }
+
+  /// 解析当前应生效的页布局：webtoon 恒单页（竖滚流布局与双页互斥）；spread 按
+  /// 偏好 + 视口横竖（[resolveMangaPageLayout] 纯函数）。
+  MangaPageLayout _resolveLayout(MangaReadingMode mode) {
+    if (mode.isContinuous) {
+      return MangaPageLayout.single;
+    }
+    return resolveMangaPageLayout(
+      preference: _spreadPreference,
+      isLandscape: _viewportIsLandscape,
+      // 折叠姿态变化与窗口尺寸变化同走 didChangeMetrics → _applySpreadLayoutIfChanged。
+      bookPosture: MyComicFoldState.of(context).isBook,
+    );
+  }
+
+  /// 每页是否宽页（见开き），按 mokuro 已给的原始像素尺寸判定，不解码图片。
+  /// 关闭「宽页独占」偏好时返回空表 = 全部按普通页配对。
+  List<bool> _soloPagesFor(MokuroPayload payload) {
+    if (!_widePageSolo) return const <bool>[];
+    return <bool>[
+      for (final MokuroImage image in payload.images)
+        isMangaWidePage(width: image.size.width, height: image.size.height),
+    ];
+  }
+
+  /// 构建 spread 序列。webtoon 每页独立；spread 模式按解析出的布局配对（双页
+  /// 两两配对，奇数尾页独占；RTL 左右排序由覆盖层 direction:rtl 落实——DOM 序
+  /// 前一页序在右，符合日漫右开本）。
+  ///
+  /// [MangaSpreadEntry] 的两条偏移来源：`spreadOffset` 是「封面算不算第 0 页」
+  /// （各家扫描不统一，选错整卷左右页全反，默认 1 = 日漫惯例封面独占）；宽页表
+  /// 让见开き页独占一屏并顺带把其后页序重新对齐。
+  List<MangaSpreadEntry> _buildSpreadsFor(
+    MokuroPayload payload,
+    MangaReadingMode mode,
+  ) {
+    final MangaPageLayout layout = _resolveLayout(mode);
+    _pageLayout = layout;
+    _spreadGutterPx = _resolveSpreadGutter(layout);
+    return buildMangaSpreads(
+      payload.images.length,
+      soloPages: _soloPagesFor(payload),
+      layout: layout,
+      spreadOffset: _spreadOffset,
+    );
+  }
+
+  // ── 拦截器（manga.local）──────────────────────────────────────────────
+
+  static WebResourceResponse _notFound(String reason) {
+    debugPrint('[MangaMyComic] 404: $reason');
+    return WebResourceResponse(
+      contentType: 'text/plain',
+      statusCode: 404,
+      reasonPhrase: 'Not Found',
+      headers: <String, String>{'Access-Control-Allow-Origin': '*'},
+      data: Uint8List(0),
+    );
+  }
+
+  static WebResourceResponse _forbidden(String reason) {
+    debugPrint('[MangaMyComic] 403: $reason');
+    return WebResourceResponse(
+      contentType: 'text/plain',
+      statusCode: 403,
+      reasonPhrase: 'Forbidden',
+      headers: <String, String>{'Access-Control-Allow-Origin': '*'},
+      data: Uint8List(0),
+    );
+  }
+
+  Future<WebResourceResponse?> _interceptRequest(WebUri url) async {
+    if (url.host != MangaMyComicPage.kMangaHost) return null;
+    final String path = url.path;
+    if (!path.startsWith('/img/')) return _notFound('unknown path: $path');
+    final String? decodedRelative = MangaMyComicPage.decodeMangaImagePath(
+      path.substring('/img/'.length),
+    );
+    if (decodedRelative == null) return _notFound('bad encoding: $path');
+    final MangaReaderSession? pageSession = _pageSession;
+    final int? pageIndex = _localPageIndices[_localPageKey(decodedRelative)];
+    if (pageSession != null && pageIndex != null) {
+      try {
+        final MangaPageBytes page = await pageSession.page(pageIndex);
+        return WebResourceResponse(
+          contentType: page.contentType,
+          statusCode: 200,
+          reasonPhrase: 'OK',
+          headers: <String, String>{
+            'Access-Control-Allow-Origin': '*',
+            'Cache-Control': 'private, max-age=3600',
+          },
+          data: page.bytes,
+        );
+      } on Object catch (error, stackTrace) {
+        ErrorLogService.instance.log('MangaMyComicPage.page', error, stackTrace);
+        return WebResourceResponse(
+          contentType: 'text/plain',
+          statusCode: 502,
+          reasonPhrase: 'Bad Gateway',
+          data: Uint8List(0),
+        );
+      }
+    }
+    final String? imagesDir = _imagesDir;
+    if (imagesDir == null) {
+      return _notFound('imagesDir not ready: ${url.path}');
+    }
+    final String? filePath = MangaMyComicPage.resolveMangaResource(
+      imagesDir,
+      decodedRelative,
+    );
+    if (filePath == null) {
+      // 区分穿越（403）与缺文件（404）：规范化 join 后越界即穿越企图。
+      final String canonicalRoot = p.canonicalize(imagesDir);
+      final String candidate = p.canonicalize(
+        p.join(canonicalRoot, decodedRelative),
+      );
+      if (!p.isWithin(canonicalRoot, candidate)) {
+        return _forbidden('path traversal blocked: $decodedRelative');
+      }
+      return _notFound('resource not found: $decodedRelative');
+    }
+    return WebResourceResponse(
+      contentType: _mangaMimeForPath(filePath),
+      statusCode: 200,
+      reasonPhrase: 'OK',
+      headers: <String, String>{
+        'Access-Control-Allow-Origin': '*',
+        'Cache-Control': 'max-age=3600',
+      },
+      data: await File(filePath).readAsBytes(),
+    );
+  }
+
+  Future<CustomSchemeResponse?> _loadMangaCustomScheme(
+    WebResourceRequest request,
+  ) async {
+    if (request.url.scheme != MangaMyComicPage.kMangaResourceScheme) {
+      return null;
+    }
+    final WebResourceResponse? response = await _interceptRequest(request.url);
+    if (response == null) return null;
+    return CustomSchemeResponse(
+      data: response.data ?? Uint8List(0),
+      contentType: response.contentType ?? 'application/octet-stream',
+      contentEncoding: response.contentEncoding ?? 'binary',
+    );
+  }
+
+  static String _localPageKey(String path) =>
+      p.normalize(path.replaceAll(r'\', '/')).replaceAll(r'\', '/');
+
+  static String _mangaMimeForPath(String path) {
+    final String ext = p.extension(path).toLowerCase();
+    switch (ext) {
+      case '.png':
+        return 'image/png';
+      case '.webp':
+        return 'image/webp';
+      case '.gif':
+        return 'image/gif';
+      case '.jpg':
+      case '.jpeg':
+      default:
+        return 'image/jpeg';
+    }
+  }
+
+  // ── 单文档窗口化 ─────────────────────────────────────────────────────
+
+  /// 生成当前窗口文档 HTML。
+  ///
+  /// spread（loadData-per-window）：只物化 [_currentSpread] 附近窗口内的 spread，
+  /// flex-row + overflow:hidden 视口 + translateX 到当前 spread；翻出窗口才重
+  /// loadData。webtoon：**整本**一次性渲染进单文档（窗口化只是 spread 的优化），
+  /// 靠文档竖滚翻页，滚动绝不重载（否则在手指下抹掉重建/抢滚）。
+  String _buildWindowDocument({
+    required int documentGeneration,
+  }) {
+    final MokuroPayload payload = _payload!;
+    final bool isWebtoon = _mode.isContinuous;
+
+    final List<int> keptSpreads = MangaMyComicPage.mangaWindowRange(
+      spreadCount: _spreads.length,
+      current: _currentSpread,
+      // Continuous mode keeps the immediately adjacent pages queryable while
+      // they enter the viewport; spread mode only needs the visible spread.
+      radius: isWebtoon ? 1 : _kWindowRadius,
+    );
+    _loadedSpreads = keptSpreads.toSet();
+    final List<MokuroImage> pages = <MokuroImage>[];
+    final List<String> imgSrcs = <String>[];
+    final List<int> pageSpreadIndices = <int>[];
+    final List<int> pagesPerSpread = <int>[];
+    final List<int> pageNumbers = <int>[];
+    for (int page = 0; page < payload.images.length; page++) {
+      if (page < 0 || page >= payload.images.length) continue;
+      final MokuroImage image = payload.images[page];
+      pages.add(image);
+      imgSrcs.add(
+        MangaMyComicPage.mangaImageUrl(
+          image.url,
+          useCustomScheme: webViewUsesCustomSchemeTransport,
+          version: _pageSessionGeneration,
+          scope: _pageScope,
+        ),
+      );
+      final int spreadIndex = MangaMyComicPage.spreadIndexForPage(_spreads, page);
+      pageSpreadIndices.add(spreadIndex);
+      pagesPerSpread.add(
+        spreadIndex >= 0 && spreadIndex < _spreads.length
+            ? _spreads[spreadIndex].pageIndices.length
+            : 1,
+      );
+      // 真实整卷页码（data-page，补扫模式回传的 pageIndex 语义）。
+      pageNumbers.add(page);
+    }
+    return mangaWindowDocument(
+      pages,
+      imgSrcs,
+      mode: _mode,
+      readerPreferences: _readerPreferences,
+      readingModeLabel: switch (_mode) {
+        MangaReadingMode.spread => t.manga_reading_mode_spread,
+        MangaReadingMode.pagedVertical => t.manga_reading_mode_vertical,
+        MangaReadingMode.webtoon => t.manga_reading_mode_webtoon,
+        MangaReadingMode.webtoonGaps => t.manga_reading_mode_gaps,
+      },
+      spreadDirection: _spreadDirection,
+      spreadGutterPx: _spreadGutterPx,
+      zoomPercent: _zoomPercent,
+      pageSpreadIndices: pageSpreadIndices,
+      pagesPerSpread: pagesPerSpread,
+      pageNumbers: pageNumbers,
+      currentSpread: _currentSpread,
+      restoreFraction: isWebtoon ? _currentFraction : 0,
+      documentGeneration: documentGeneration,
+      zoomSensitivity: _zoomSensitivity,
+      pageAnimation: _effectivePageAnimation,
+      pageAnimationSpeed: _pageAnimationSpeed,
+      followDrag: _pageTurnFollowDrag,
+      tapZonePaging: _tapZonePaging,
+      tapZoneLayout: _tapZoneLayout,
+      backgroundCss: _backgroundCssValue,
+      scaleType: _scaleType,
+      longStripSidePadding: _longStripSidePadding,
+      disableZoomOut: _disableZoomOut,
+      animateDoubleTap: _animateDoubleTap,
+      invertHorizontal: _invertHorizontal,
+      invertVertical: _invertVertical,
+      invertBoth: _invertBoth,
+      cropBorders: _cropBorders,
+      splitWidePages: _splitWidePages,
+      rotateWidePages: _rotateWidePages,
+      autoZoomWidePages: _autoZoomWide,
+      panWidePages: _panWide,
+      // 这个值是**双击判定窗口**（`isDouble = now - lastTapT <= DBL_MS`），不是动画
+      // 时长——关掉「双击缩放动画」不该把双击手势本身废掉（传 0 会被 clamp 成
+      // 100ms，常人两击根本打不进这个窗口）。动画开关走 animateDoubleTap，JS 侧的
+      // 注释也是这么写的。
+      doubleTapAnimationMs: 300,
+      zoomStartPosition: _zoomStartPosition,
+    );
+  }
+
+  /// 阅读器底色（[MangaBackground]）解析成一个 Flutter 颜色。
+  ///
+  /// `theme` 档取 `colorScheme.surface` 而不是 `scaffoldBackgroundColor`：后者在
+  /// 部分主题下是纯白/纯黑的极值，与「跟随主题」想要的中性面色不是一回事。
+  Color get _backgroundColor {
+    if (_readerPreferences.einkMode) return Colors.white;
+    final String? fixed = _background.fixedCss;
+    switch (fixed) {
+      case '#000':
+        return Colors.black;
+      case '#fff':
+        return Colors.white;
+      case '#2b2b2b':
+        return const Color(0xFF2B2B2B);
+      default:
+        return _themedMangaBackground;
+    }
+  }
+
+  /// 「跟随主题」档的漫画底色：M3E 阅读配色的 [MyComicReaderPalette.mangaBackground]
+  /// （neutral 95 / 4——比小说纸色压一档，页图四周更沉、不抢画面，仍与 app 表面
+  /// 同一色相家族）。Scaffold 与 WebView 文档底色都从这里取，保证同源。
+  Color get _themedMangaBackground {
+    final ColorScheme scheme = Theme.of(context).colorScheme;
+    // 全局墨水屏：表面已塌成纯黑白，不再派生带色调的中性灰（会被抖动）。
+    if (isEinkTheme(context)) return scheme.surface;
+    return myComicReaderPaletteFor(scheme, scheme.brightness).mangaBackground;
+  }
+
+  /// 桌面自绘顶栏该跟的颜色＝本页最顶上一排像素。2026-10 重设计后顶栏是离页顶
+  /// [kMangaChromeTopGap] 的浮动胶囊，最顶一排恒是页面底色——除非回看横幅在顶
+  /// （固定态顶栏收起时它贴页顶）。
+  MyComicTitleBarColors _desktopTitleBarColors(BuildContext context) {
+    final Color background = _backgroundColor;
+    // 固定态顶栏可见时横幅贴在让出的区域下沿，最顶一排仍是底色；其余情况横幅
+    // 贴页顶（悬浮胶囊浮在它上面、不占最顶一排）。
+
+    return myComicTitleBarColorsOn(background);
+  }
+
+  /// 同一个底色给 WebView 文档用的 CSS 值。两处**必须**同源：页图是
+  /// `object-fit:contain`，非等比视口下页图四周露出的就是 body 底色，而 Scaffold
+  /// 底色透过 WebView 之外的区域（顶栏让位的条、底栏）露出——两者不一致会在正文
+  /// 边界切出一条色差带。
+  String get _backgroundCssValue {
+    if (_readerPreferences.einkMode) return '#fff';
+    final String? fixed = _background.fixedCss;
+    if (fixed != null) return fixed;
+    final Color c = _themedMangaBackground;
+    final int r = (c.r * 255.0).round().clamp(0, 255);
+    final int g = (c.g * 255.0).round().clamp(0, 255);
+    final int b = (c.b * 255.0).round().clamp(0, 255);
+    return 'rgb($r,$g,$b)';
+  }
+
+  /// （重）加载当前 spread 的窗口文档。设置在飞守卫，让并发翻页不能交叠 loadData；
+  /// `_loadedSpreads`（在 [_buildWindowDocument] 内同步赋值）只在本次成功后生效，
+  /// 失败回滚为旧文档的集合（否则 translateX 目标缺失、transform 归 0）。
+  Future<void> _loadInitialWindow() async {
+    // 在飞的加载装的是它发起那一刻的 payload / spread 快照。后到的重装请求（换章、
+    // 改设置）不能直接丢掉——丢了屏上就停在旧文档——等它收尾再按当前状态重装。
+    while (_navigating) {
+      final Completer<void>? inFlight = _windowLoadDone;
+      if (inFlight == null) return;
+      _windowLoadWaiters++;
+      try {
+        await inFlight.future;
+      } finally {
+        _windowLoadWaiters--;
+      }
+      if (!mounted) return;
+    }
+    if (_payload == null || _controller == null) return;
+    _navigating = true;
+    final Completer<void> done = _windowLoadDone = Completer<void>();
+    final Set<int> previousLoaded = Set<int>.of(_loadedSpreads);
+    final MangaWindowLoadTicket ticket = _windowGate.begin();
+    try {
+      final String doc = _buildWindowDocument(
+        documentGeneration: ticket.generation,
+      );
+      await _controller!.loadData(
+        data: doc,
+        baseUrl: WebUri('https://${MangaMyComicPage.kMangaHost}/'),
+        mimeType: 'text/html',
+        encoding: 'utf-8',
+      );
+      // WebView2's loadData Future only confirms navigation was accepted. The
+      // old document can remain visible for another event-loop turn (or a
+      // stale onLoadStop can arrive), so keep navigation locked until the
+      // loaded document proves it owns this exact generation.
+      final MangaWindowLoadOutcome outcome = await ticket.outcome.timeout(
+        const Duration(seconds: 10),
+      );
+      if (outcome == MangaWindowLoadOutcome.abandoned) {
+        // 页面已在加载途中销毁（dispose 显式收尾）：不再碰 State，也不把它当
+        // 失败上抛——调用方全是 unawaited，抛出等于未捕获异步异常（BUG-1171）。
+        return;
+      }
+      // 首窗图作为制卡卡图（ERRATA C2）；在 _spreads/_currentSpread 定型后解析。
+      _updateCurrentPageImagePath();
+    } catch (_) {
+      _loadedSpreads = previousLoaded;
+      rethrow;
+    } finally {
+      _windowGate.finish(ticket);
+      _navigating = false;
+      done.complete();
+      // 有重装在排队时不 drain：排着的翻页要落在重装后的新文档上，由那次重装
+      // 收尾时再放行。
+      if (mounted && _spreads.isNotEmpty && _windowLoadWaiters == 0) {
+        unawaited(
+          _turnQueue.drain(
+            // 与章边界那条 drain 同口径：换章期间排队的 step 直接丢掉。
+            canApply: () => mounted && !_navigating && !_switchingChapter,
+            applyStep: _applyMangaTurnStep,
+          ),
+        );
+      }
+    }
+  }
+
+  // ── 翻页导航 ─────────────────────────────────────────────────────────
+
+  /// 按 [dir] 推进当前 spread（'next' = 页序 +1 / 'prev' = -1，clamp 到书范围）。
+  /// 新 spread 仍在已加载窗口内 → 只 JS translateX；越出 → 围绕它重 loadData 新窗口。
+  /// 同步更新制卡卡图（ERRATA C2）并记进度。
+  Future<void> _onMangaTurn(String dir) async {
+    if (_spreads.isEmpty) return;
+    // 换章装载期间的翻页输入一律丢弃（BUG-3221）。此前这里照常 enqueue：
+    // canApply 只是让 drain 暂停，pendingDelta 却一直在累加——用户嫌换章卡、
+    // 多滑了几下，新章一装好这些积攒的步数就被逐页消费，「加载完后它还真给
+    // 往后翻几页」。这些输入是对着旧章 / 加载画面发的，对新章没有意义。
+    if (_switchingChapter) return;
+    final int delta = dir == 'next' ? 1 : -1;
+    await _turnQueue.enqueue(
+      delta,
+      maxMagnitude: _spreads.length,
+      // 换章期间必须停止 drain：换章是在 applyStep 里 await 的，队列里剩下的
+      // step 会在新章上继续消费。长按翻页撞到章尾时，那意味着一次按键连跳好几
+      // 章。换章开始时队列被清空（[_switchToChapter]），换章期间的输入在上面
+      // 就被丢掉，这里只负责暂停 drain。
+      canApply: () => mounted && !_navigating && !_switchingChapter,
+      applyStep: _applyMangaTurnStep,
+    );
+  }
+
+  Future<void> _applyMangaTurnStep(int delta) async {
+    if (_splitWidePages && !_mode.isContinuous) {
+      final InAppWebViewController? controller = _controller;
+      final MangaReaderSession? session = _pageSession;
+      final int spread = _currentSpread;
+      final Object? consumed = await controller?.evaluateJavascript(
+        source:
+            '(window.__mangaTurnWithinPage && '
+            'window.__mangaTurnWithinPage(${delta > 0})) ? 1 : 0;',
+      );
+      // This runs inside the existing serialized turn queue. A half-page turn
+      // consumes the step once; a replaced session must not receive its tail.
+      if (!mounted ||
+          !identical(controller, _controller) ||
+          !identical(session, _pageSession) ||
+          spread != _currentSpread ||
+          _navigating ||
+          _switchingChapter) {
+        return;
+      }
+      if (MangaWindowGeneration.parse(consumed) == 1) return;
+    }
+    final int target = (_currentSpread + delta)
+        .clamp(0, _spreads.length - 1)
+        .toInt();
+    if (target == _currentSpread) {
+      // 到头了。v88 前这里就是死钳位直接 return——于是在线漫画读完最后一页就
+      // 走不动了，既不翻章也没有任何提示，配合「书架永远开同一章」构成了
+      // 「加入书架后只能看第一章」。现在到头 = 换章信号。
+      await _onReachedChapterEdge(delta);
+      return;
+    }
+    _currentSpread = target;
+    await _controller?.evaluateJavascript(
+      source:
+          'window.__mangaApplyTranslate && '
+          'window.__mangaApplyTranslate($target);',
+    );
+    await _updateLoadedSpreadWindow(target);
+    _updateCurrentPageImagePath();
+    _recordProgress();
+  }
+
+  // ── 换章 ───────────────────────────────────────────────────────────
+
+  /// 阅读顺序上的相邻章，按本书生效的「跳过已读 / 跳过重复章节」过滤；没有
+  /// 可去的章返回 null。
+  ///
+  /// 在线条目（含 `.tachibk` 导入作品）先由 [resolveAdjacentMangaChapter] 按
+  /// `sourceOrder`（缺失时章节号 / 上传日期）构造规范阅读顺序，数组顺序不参与；
+  /// 本地源按扫描的自然顺序（第 1 话→第 N 话），往后读是下标 +1。
+  Future<int?> _adjacentChapterIndex({required bool forward}) async {
+    final OnlineMangaLibraryEntry? entry = _shelfEntry;
+    final EpubBookRow? row = _bookRow;
+    if (entry == null) return null;
+    final MangaReaderPreferences prefs = _readerPreferences;
+    Set<String> readKeys = const <String>{};
+    if (prefs.skipRead && row != null && row.uid.isNotEmpty) {
+      final Map<String, MangaChapterStateRow> states = await appModel.database
+          .getMangaChapterStates(row.uid);
+      readKeys = <String>{
+        for (final MapEntry<String, MangaChapterStateRow> e in states.entries)
+          if (e.value.readAt != null) e.key,
+      };
+    }
+    if (entry.runtime == OnlineMangaRuntimeKind.local) {
+      final int step = forward ? 1 : -1;
+      for (
+        int i = _shelfChapterIndex + step;
+        i >= 0 && i < entry.chapters.length;
+        i += step
+      ) {
+        if (prefs.skipRead && readKeys.contains(entry.chapters[i].key)) {
+          continue;
+        }
+        return i;
+      }
+      return null;
+    }
+    return resolveAdjacentMangaChapter(
+      chapters: entry.chapters,
+      currentIndex: _shelfChapterIndex,
+      forward: forward,
+      readChapterKeys: readKeys,
+      skipRead: prefs.skipRead,
+      skipDuplicate: prefs.skipDuplicate,
+    );
+  }
+
+  /// 预下载下一话（对齐 Mihon「预下载」）：读在线章过了约 2/3（短章一进来就
+  /// 算），且下一话没下载、没在队列里，就把它排进下载队列——连续阅读不必在每个
+  /// 章节边界停下来等下载。每章每会话只判一次；本地书与来源回看会话不参与。
+  ///
+  /// 只有当前章本身是已下载章时才往后预下载（与 Mihon 同口径）：在线直读
+  /// （[_streamingChapter]）的用户选的就是不下载，读到哪就把下一话持久化下到
+  /// 哪会悄悄累积流量与存储、并与直读会话一起对源站翻倍并发（所有者 2026-09-26
+  /// 拍板）。
+  Future<void> _maybePrefetchNextChapter() async {
+    final OnlineMangaLibraryEntry? entry = _shelfEntry;
+    final EpubBookRow? row = _bookRow;
+    final String? chapterKey = _shelfChapterKey;
+    final int pageCount = _payload?.images.length ?? 0;
+    if (entry == null ||
+        entry.runtime == OnlineMangaRuntimeKind.local ||
+        row == null ||
+        chapterKey == null ||
+        _chapterNotDownloaded ||
+        _streamingChapter ||
+        _switchingChapter ||
+        _sourceReviewActive ||
+        !_readerPreferences.downloadAhead ||
+        _prefetchCheckedChapterKeys.contains(chapterKey) ||
+        !shouldPrefetchNextMangaChapter(
+          currentPage: _currentPage,
+          pageCount: pageCount,
+        )) {
+      return;
+    }
+    _prefetchCheckedChapterKeys.add(chapterKey);
+    try {
+      final int? target = await _adjacentChapterIndex(forward: true);
+      if (target == null || !mounted) return;
+      final OnlineMangaChapter next = entry.chapters[target];
+      // 锁定章入队必败（要登录购买），预下载不替用户去撞。
+      if (next.locked) return;
+      if (await DownloadLibraryIndex(
+        appModel.database,
+      ).isChapterDownloaded(bookKey: row.bookKey, chapterKey: next.key)) {
+        return;
+      }
+      // 已有任务行就不动：排队 / 下载中本来就会下完；失败 / 已取消是用户看得见
+      // 的状态，后台静默重排会把「我取消了」悄悄推翻。
+      final MangaDownloadJobRow? job = (await appModel.mangaDownloadService
+          .jobsForBook(row.bookKey))[next.key];
+      if (job != null && job.status != MangaDownloadJobStatus.done) return;
+      if (!mounted) return;
+      await appModel.mangaDownloadService.enqueueChapter(
+        entry: entry,
+        chapter: next,
+        autoOcr: false,
+      );
+    } on Object catch (error, stack) {
+      ErrorLogService.instance.log(
+        'MangaMyComicPage.prefetchNextChapter',
+        error,
+        stack,
+      );
+    }
+  }
+
+  /// 读到当前章的边界（[delta] > 0 = 想往后翻）。
+  ///
+  /// 在线源与本地源共用这一条边界逻辑：本地源的相邻章方向由
+  /// [_adjacentChapterIndex] 按自然顺序（第 1 话→第 N 话）解析，往回翻落在
+  /// 上一话最后一页。
+  Future<void> _onReachedChapterEdge(int delta) async {
+    final OnlineMangaLibraryEntry? entry = _shelfEntry;
+    if (entry == null || _switchingChapter) return;
+    final bool forward = delta > 0;
+    if (forward) {
+      // 翻到最后一页 = 这一章读完了。先落已读标记再考虑换章：即使没有下一章
+      // （追到最新话），「读完了」也必须记上，否则作品页永远显示未读。
+      await _markCurrentChapterRead();
+    }
+    final int? target = await _adjacentChapterIndex(forward: forward);
+    if (target == null) {
+      // 一章只提示一次。队列会把长按攒下的 pendingDelta 一步步喂进来，每一步都
+      // 撞在同一个边界上——不去重就是一串一模一样的 toast 糊住屏幕。
+      if (mounted && !_edgeToastShown) {
+        _edgeToastShown = true;
+        MyComicToast.show(
+          msg: forward
+              ? t.manga_series_last_chapter_reached
+              : t.manga_series_first_chapter_reached,
+        );
+      }
+      return;
+    }
+    await _switchToChapter(target, landOnLastPage: !forward);
+  }
+
+  /// 切到第 [index] 章。
+  ///
+  /// [landOnLastPage]：往回翻时应该落在上一章的**最后**一页，否则「往回翻一页」
+  /// 会诡异地跳到上一章开头。
+  Future<void> _switchToChapter(
+    int index, {
+    bool landOnLastPage = false,
+  }) async {
+    final OnlineMangaLibraryEntry? entry = _shelfEntry;
+    final EpubBookRow? row = _bookRow;
+    if (entry == null ||
+        row == null ||
+        _switchingChapter ||
+        index < 0 ||
+        index >= entry.chapters.length) {
+      return;
+    }
+    // Local source 没有在线 service：按本地章节目录原地换章。
+    if (entry.runtime == OnlineMangaRuntimeKind.local) {
+      await _switchToLocalChapter(index, landOnLastPage: landOnLastPage);
+      return;
+    }
+    final OnlineMangaLibraryService? service = _shelfLibraryService;
+    if (service == null) return;
+    setState(() {
+      _switchingChapter = true;
+      _switchingChapterTarget = index;
+    });
+    // 换章前排队的剩余步（长按 / 连滑撞到章尾时攒下的）属于旧章，丢掉，否则
+    // 新章一装好就被继续消费成「自己往后翻几页」（BUG-3221）。
+    _turnQueue.clear();
+    try {
+      // 目标章下没下载都能换：已下载从章目录读，未下载在线直读（2026-09-26 用户
+      // 撤回设计稿 §1.1），分流在 [_openShelfChapter] 里只做一次。
+      // 注意 [_bookRow] 在读章时指向**章目录**副本，漫画根要从数据库行重新解析。
+      final EpubBookRow bookRow =
+          (await appModel.database.getEpubBook(row.bookKey)) ?? row;
+      // 换章前把当前章的进度落库，否则「翻到下一章再翻回来」会丢掉刚读的位置。
+      await _saveCurrentChapterState();
+      final OnlineMangaLibraryEntry selected = _sourceReviewActive
+          ? entry.copyWith(currentChapterIndex: index)
+          : await service.selectChapter(
+              bookKey: row.bookKey,
+              entry: entry,
+              chapterIndex: index,
+            );
+      await _openShelfChapter(
+        row: bookRow,
+        service: service,
+        entry: selected,
+        chapterIndex: index,
+        landOnLastPage: landOnLastPage,
+      );
+      // 阅读器内切章也是一次「打开章节进入阅读器」：刷新同一部作品的历史
+      // openedAt（每部一条，历史页随之置顶）。
+      await _recordOpenHistory(bookRow);
+      // 末页是装载时的起始页，不再「装好再跳」（BUG-3222）；这里只把落点记成
+      // 本章进度（与翻页同一条路径）。直读失败退到「本章未下载」态时没有正文。
+      if (landOnLastPage && mounted && !_chapterNotDownloaded) {
+        _recordProgress();
+      }
+    } on Object catch (error, stack) {
+      ErrorLogService.instance.log(
+        'MangaMyComicPage.switchChapter',
+        error,
+        stack,
+      );
+      if (mounted) {
+        MyComicToast.show(msg: '$error', severity: ToastSeverity.error);
+      }
+    } finally {
+      if (mounted) setState(() => _switchingChapter = false);
+    }
+  }
+
+  /// 本地源手动换章：落当前章进度 → 从数据库重取作品根行 → 原地装载目标章。
+  ///
+  /// 与在线换章同一套状态机（[_switchingChapter] 挡输入、清队列、落旧章），
+  /// 只是装载走 [_loadLocalSourceChapter] 而不是下载库 / 在线直读。
+  Future<void> _switchToLocalChapter(
+    int index, {
+    bool landOnLastPage = false,
+  }) async {
+    final EpubBookRow? row = _bookRow;
+    final OnlineMangaLibraryEntry? entry = _shelfEntry;
+    if (row == null ||
+        entry == null ||
+        index < 0 ||
+        index >= entry.chapters.length) {
+      return;
+    }
+    setState(() {
+      _switchingChapter = true;
+      _switchingChapterTarget = index;
+    });
+    _turnQueue.clear();
+    try {
+      // [_bookRow] 在读章时指向章目录副本，作品根行要从数据库重新解析。
+      final EpubBookRow bookRow =
+          (await appModel.database.getEpubBook(row.bookKey)) ?? row;
+      await _saveCurrentChapterState();
+      await _loadLocalSourceChapter(
+        bookRow,
+        chapterIndex: index,
+        initialPage: landOnLastPage ? kMangaLandOnLastPage : null,
+      );
+      // 本地源内切章同样是「打开章节进入阅读器」：刷新同一部作品的历史
+      // openedAt（每部一条，历史页随之置顶）。
+      await _recordOpenHistory(bookRow);
+      if (landOnLastPage && mounted && _payload != null) {
+        _recordProgress();
+      }
+    } on Object catch (error, stack) {
+      ErrorLogService.instance.log(
+        'MangaMyComicPage.switchLocalChapter',
+        error,
+        stack,
+      );
+      if (mounted) {
+        MyComicToast.show(msg: '$error', severity: ToastSeverity.error);
+      }
+    } finally {
+      if (mounted) setState(() => _switchingChapter = false);
+    }
+  }
+
+  /// 把当前页码写进 `manga_chapter_states`。
+  Future<void> _saveCurrentChapterState({int? readAt}) async {
+    if (_sourceReviewActive) return;
+    final EpubBookRow? row = _bookRow;
+    final String? chapterKey = _shelfChapterKey;
+    // 没装载正文（「本章未下载」态）就没有进度可写：写一行 lastPage 0 会把这章
+    // 的 updatedAt 推到最新，让作品页「继续阅读」误落到一章没读过的上面。
+    if (row == null ||
+        chapterKey == null ||
+        row.uid.isEmpty ||
+        _payload == null) {
+      return;
+    }
+    await appModel.database.saveMangaChapterState(
+      bookUid: row.uid,
+      chapterKey: chapterKey,
+      lastPage: _currentPage,
+      lastFraction: _mode.isContinuous
+          ? MangaMyComicPage.webtoonFractionToCharOffset(_currentFraction)
+          : -1,
+      pageCount: _payload?.images.length,
+      readAt: readAt,
+    );
+  }
+
+  Future<void> _markCurrentChapterRead() async {
+    // 无痕阅读：翻到章尾自动写「已读」属于 History 的可见信号，跳过。显式
+    // 「标记已读 / 取消已读」是用户动作（作品页 / 书架级联的 DB 调用），不经过
+    // 这里，照常生效。
+    if (!appModel.readerHistoryPolicy.autoMarkChapterRead) return;
+    await _saveCurrentChapterState(
+      readAt: DateTime.now().millisecondsSinceEpoch,
+    );
+  }
+
+  /// 记账当前窗口加载了哪些 spread。页面图片全部留在稳定的 lazy strip 里，
+  /// 换 spread 不重建 WebView 文档（也就不会产生键盘输入空窗）。
+  Future<void> _updateLoadedSpreadWindow(int spreadIndex) async {
+    if (spreadIndex < 0 || spreadIndex >= _spreads.length) return;
+    _loadedSpreads = MangaMyComicPage.mangaWindowRange(
+      spreadCount: _spreads.length,
+      current: spreadIndex,
+      radius: _mode.isContinuous ? 1 : _kWindowRadius,
+    ).toSet();
+  }
+
+  Future<void> _jumpToPageAnchor(String dir) async {
+    if (_spreads.isEmpty || _navigating) return;
+    final int delta = dir == 'next' ? 1 : -1;
+    final int target = (_currentSpread + delta)
+        .clamp(0, _spreads.length - 1)
+        .toInt();
+    if (target == _currentSpread) return;
+    _currentSpread = target;
+    _currentFraction = 0;
+    await _controller?.evaluateJavascript(
+      source:
+          'window.__mangaScrollToSpread && '
+          'window.__mangaScrollToSpread($target, 0);',
+    );
+    await _updateLoadedSpreadWindow(target);
+    _updateCurrentPageImagePath();
+    _recordProgress();
+  }
+
+  /// 桌面键盘翻页（webtoon 交 WebView 原生竖滚，方向键一律 ignored）。
+  ///
+  /// - 只认 KeyDownEvent；KeyRepeatEvent（按住）丢弃，按住方向键不堆翻页风暴。
+  /// - 查词弹窗显示时，左右键关闭弹窗并翻页，Escape 只关闭弹窗；避免原生词典
+  ///   WebView 持焦后把翻页键吞掉或让 Escape 落到外层退书。
+  KeyEventResult _handleReaderKey(FocusNode node, KeyEvent event) {
+    // 长按连发**只放给平移**：按住方向键持续挪画面是正常操作，而翻页恒不连发
+    // （本页既有语义，与 navigationKeyBridgeScript 的 forwardRepeats:false 同口径，
+    // 两条输入路径必须一致，否则 WebView 持焦与否手感不同）。
+    final bool repeat = event is KeyRepeatEvent;
+    if (event is! KeyDownEvent && !repeat) {
+      return KeyEventResult.ignored;
+    }
+    final MangaReaderInputAction? action = _resolveMangaKeyAction(
+      event.logicalKey,
+      activeModifierKeys(),
+      physicalKey: event.physicalKey,
+    );
+    if (action == null) return KeyEventResult.ignored;
+    if (repeat && _panStepFor(action) == null) {
+      return KeyEventResult.ignored;
+    }
+    _executeReaderInputAction(action, source: _MangaReaderInputSource.flutter);
+    return KeyEventResult.handled;
+  }
+
+  MangaReaderInputAction? _lastReaderInputAction;
+  _MangaReaderInputSource? _lastReaderInputSource;
+  DateTime? _lastReaderInputAt;
+  Timer? _dictionaryTurnDismissTimer;
+
+  /// 是否已接管音量键。
+  ///
+  /// [VolumeKeyChannel] 是**进程级单例**，EPUB 阅读器也会往同一个 handler 槽里写
+  /// （`audiobook.part.dart` 的 `_setupVolumeKeyHandlers` 无条件覆盖）。漫画页接管后
+  /// 必须在 dispose 里交还——清 handler 并关掉原生拦截，否则退出漫画后音量键继续被
+  /// `MainActivity.dispatchKeyEvent` 吞掉，用户调不动系统音量（BUG-196 的老坑）。
+  late final MangaVolumeKeyPagingController _volumeKeyPagingController;
+
+  void _applyVolumeKeyPaging(bool enabled, {bool invertDirection = false}) {
+    // 只有 Android 侧 dispatchKeyEvent 会转发音量键；其它平台连通道都没有。
+    _volumeKeyPagingController.apply(
+      enabled: enabled,
+      platformSupported: Platform.isAndroid,
+      invertDirection: invertDirection,
+    );
+  }
+
+  /// 平移动作 → 传给 `window.__mangaPanBy` 的**视口比例**步长；非平移动作返回 null。
+  ///
+  /// 符号按「视野怎么动」给（与滚动条直觉一致，JS 侧再翻成内容位移）：
+  /// dx>0 视野右移，dy>0 视野下移。
+  static Offset? _panStepFor(MangaReaderInputAction action) {
+    const double s = kMangaPanStepFraction;
+    return switch (action) {
+      MangaReaderInputAction.panLeft => const Offset(-s, 0),
+      MangaReaderInputAction.panRight => const Offset(s, 0),
+      MangaReaderInputAction.panUp => const Offset(0, -s),
+      MangaReaderInputAction.panDown => const Offset(0, s),
+      _ => null,
+    };
+  }
+
+  void _executeReaderInputAction(
+    MangaReaderInputAction action, {
+    required _MangaReaderInputSource source,
+  }) {
+    if (action == MangaReaderInputAction.toggleFullscreen) {
+      unawaited(_toggleMangaFullscreen());
+      return;
+    }
+    // 平移在这里就地返回：它不翻页、不关词典、也不该被翻页的跨源去抖吃掉（按住
+    // 方向键连续挪画面是正常操作，而翻页去抖正是为了压掉连发）。
+    final Offset? panStep = _panStepFor(action);
+    if (panStep != null) {
+      unawaited(
+        _controller?.evaluateJavascript(
+              source:
+                  'window.__mangaPanBy && '
+                  'window.__mangaPanBy(${panStep.dx}, ${panStep.dy});',
+            ) ??
+            Future<void>.value(),
+      );
+      return;
+    }
+    // BUG-1888：切换界面与平移同理就地返回——它不翻页、不关词典，也不该被翻页的
+    // 跨源去抖吃掉（那道去抖压的是「同一次翻页被 Flutter 与 WebView 桥各报一次」，
+    // 与本动作无关）。
+    if (action == MangaReaderInputAction.toggleChrome) {
+      _toggleMangaChrome();
+      return;
+    }
+    final DateTime now = DateTime.now();
+    if (_lastReaderInputAction == action &&
+        _lastReaderInputSource != source &&
+        _lastReaderInputAt != null &&
+        now.difference(_lastReaderInputAt!) <
+            const Duration(milliseconds: 60)) {
+      return;
+    }
+    _lastReaderInputAction = action;
+    _lastReaderInputSource = source;
+    _lastReaderInputAt = now;
+    if (action == MangaReaderInputAction.dismissDictionary) {
+      _dictionaryTurnDismissTimer?.cancel();
+      clearDictionaryResult();
+      return;
+    }
+    if (action == MangaReaderInputAction.backOrExit) {
+      // 退出漫画：走 maybePop 让本页 [PopScope] 闸门照常跑（落库 / 收尾），与顶栏
+      // 返回按钮同一条路，不直接 pop。
+      unawaited(Navigator.of(context).maybePop());
+      return;
+    }
+    if (isDictionaryShown) {
+      // Keep the native dictionary WebView focused through a key burst. Removing
+      // it on the first arrow creates a short HWND focus hand-off in which the
+      // immediately following real key can be lost. The page turn is queued
+      // now; only the visual popup dismissal waits for the burst to settle.
+      _dictionaryTurnDismissTimer?.cancel();
+      _dictionaryTurnDismissTimer = Timer(
+        const Duration(milliseconds: 180),
+        () {
+          if (mounted) clearDictionaryResult();
+        },
+      );
+    }
+    final String turn = action == MangaReaderInputAction.next ? 'next' : 'prev';
+    unawaited(
+      _mode.isContinuous ? _jumpToPageAnchor(turn) : _onMangaTurn(turn),
+    );
+  }
+
+  /// 注册表解析 → 跨页方向校正 → 上下文门控。键盘路径与 WebView 桥回传路径共用，
+  /// 保证「改键」对两条路径同时生效（否则改了键，WebView 持焦时又变回默认键位）。
+  ///
+  /// [physicalKey] 只由 Flutter 键盘路径传入（BUG-2948：macOS 上 Shift+/ 的逻辑键是
+  /// `question`，由注册表按物理键收拢）；WebView 桥回传的是按 DOM `code` 拼的注册表
+  /// token，本就是表内键名，不需要。
+  MangaReaderInputAction? _resolveMangaKeyAction(
+    LogicalKeyboardKey key,
+    Set<ModifierKey> modifiers, {
+    PhysicalKeyboardKey? physicalKey,
+  }) {
+    final MyComicShortcutRegistry registry = appModel.shortcutRegistry;
+    final ShortcutAction? bound =
+        registry.resolveKeyboard(
+          key,
+          modifiers: modifiers,
+          scope: ShortcutScope.manga,
+          physicalKey: physicalKey,
+        ) ??
+        // 兜底「返回上一级」（universal，默认 Esc）。排在 manga scope 之后：本页专属
+        // 键永远优先。跨页方向校正只作用于翻页动作，globalBack 原样穿过。
+        registry.resolveKeyboard(
+          key,
+          modifiers: modifiers,
+          scope: ShortcutScope.universal,
+          physicalKey: physicalKey,
+        ) ??
+        registry.resolveKeyboard(
+          key,
+          modifiers: modifiers,
+          scope: ShortcutScope.global,
+          physicalKey: physicalKey,
+        );
+    final ShortcutAction? corrected =
+        resolveMangaArrowPageTurn(
+          key: key,
+          modifiers: modifiers,
+          rtl: _spreadDirection == 'rtl',
+          boundAction: bound,
+        ) ??
+        bound;
+    return MangaMyComicPage.inputActionForShortcut(
+      action: corrected,
+      crossPageStep:
+          key == LogicalKeyboardKey.arrowLeft ||
+          key == LogicalKeyboardKey.arrowRight,
+      dictionaryShown: isDictionaryShown,
+      mode: _mode,
+    );
+  }
+
+  /// 手柄按钮 → 本页输入动作（桌面轮询 [GamepadButtonIntent] 与 Android 原生
+  /// gameButton* 键事件汇合到同一入口，与阅读器 `_handleGamepadButton` 同构）。
+  ///
+  /// 解析阶梯与键盘路径一致：manga scope 优先，未命中兜底 universal（「返回上一
+  /// 级」，默认手柄 B）——所以手柄 B 走的是与 Esc 相同的两级阶梯（弹窗可见先关
+  /// 弹窗、没弹窗才退出漫画），而不是 GamepadService 的全局 maybePop 兜底直接退页。
+  /// D-pad 左/右经 [resolveMangaDpadPageTurn] 按跨页方向（日漫默认 rtl）校正。
+  ///
+  /// 手柄翻页键一律**跨页步进**语义（crossPageStep: true）：手柄没有原生滚动路径，
+  /// webtoon 模式下也该用锚点跳页；弹窗可见时关弹窗并翻页。
+  MangaReaderInputAction? _resolveMangaGamepadAction(GamepadButton button) {
+    final MyComicShortcutRegistry registry = appModel.shortcutRegistry;
+    final ShortcutAction? bound =
+        registry.resolveGamepad(button, scope: ShortcutScope.manga) ??
+        registry.resolveGamepad(button, scope: ShortcutScope.universal) ??
+        registry.resolveGamepad(button, scope: ShortcutScope.global);
+    final ShortcutAction? corrected =
+        resolveMangaDpadPageTurn(
+          button: button,
+          rtl: _spreadDirection == 'rtl',
+          boundAction: bound,
+        ) ??
+        bound;
+    return MangaMyComicPage.inputActionForShortcut(
+      action: corrected,
+      crossPageStep: true,
+      dictionaryShown: isDictionaryShown,
+      mode: _mode,
+    );
+  }
+
+  /// 消费一枚手柄按钮；false 交回 GamepadService 的兜底（A=激活、dpad=移焦）。
+  bool _handleGamepadButton(GamepadButton button) {
+    final MangaReaderInputAction? action = _resolveMangaGamepadAction(button);
+    if (action == null) return false;
+    _executeReaderInputAction(action, source: _MangaReaderInputSource.gamepad);
+    return true;
+  }
+
+  /// 鼠标按钮 → 本页动作。与 [_resolveMangaKeyAction] 共用同一个上下文门控
+  /// [MangaMyComicPage.inputActionForShortcut]，所以「弹窗可见时让位 / webtoon 纵向让位
+  /// 原生滚动」两条既有语义对鼠标一并成立。
+  ///
+  /// `crossPageStep: false`：跨页步进语义是**方向键专属**（左右方向键要按 rtl 校正
+  /// 朝向），鼠标按钮没有方向可言，与空格/PageDown 这类前进键同类。
+  MangaReaderInputAction? _resolveMangaMouseAction(
+    int button,
+    List<ShortcutScope> ladder,
+  ) {
+    final ShortcutAction? bound = resolveMouseBindingActionForButton(
+      registry: appModel.shortcutRegistry,
+      button: button,
+      ladder: ladder,
+    );
+    return MangaMyComicPage.inputActionForShortcut(
+      action: bound,
+      crossPageStep: false,
+      dictionaryShown: isDictionaryShown,
+      mode: _mode,
+    );
+  }
+
+  /// 漫画页 Flutter 侧的鼠标绑定入口（挂在 build 的页面根 [Listener] 上）。
+  void _handleMangaPointerDown(PointerDownEvent event) {
+    // BUG-2031 审查②：两条腿的互斥必须是**构造性**的，不能只门控一侧。
+    //
+    // 原先只有 JS 那条腿带 [hostOwnsWebViewPointerInput] 门控，本 Flutter 腿是**无条件
+    // 挂载**的，注释却写着「两条路按平台互斥」。那个判据是从查词弹窗那边提上来的——
+    // 弹窗在 Android 上是独立 Activity，确实在 Flutter 命中树之外；但本页正文的 WebView
+    // 是**树内 platform view**，祖先 [Listener] 照样收得到指针（同一条「opaque 只排除
+    // 兄弟、不排除祖先」的事实）。于是非 Windows 上同一次按下可能被 Flutter 腿与 JS 腿
+    // 各执行一次，而 JS 腿没有 pointer id、无法参与认领协议。
+    //
+    // 补上这道门后，任一平台恒只有一条腿活着。代价是非 Windows 上**页面外壳**（正文
+    // WebView 之外）的鼠标绑定不生效——那恰是本轮之前的行为（本页当时根本没有 Flutter
+    // 侧鼠标腿），故不是回归；正文区照常由 JS 腿覆盖完整阶梯。
+    if (!hostOwnsWebViewPointerInput) return;
+    final int? button = domMouseButtonFromPointerButtons(event.buttons);
+    if (button == null) return;
+    final MangaReaderInputAction? action = _resolveMangaMouseAction(
+      button,
+      _kMangaMouseLadder,
+    );
+    if (action == null) return;
+    dispatchClaimedMouseAction(event, () {
+      _executeReaderInputAction(action, source: _MangaReaderInputSource.mouse);
+      return true;
+    });
+  }
+
+  /// 返回**本次是否真的执行了**动作。BUG-2031：查词弹窗 barrier 那条路要靠这个
+  /// 回答决定要不要向 `MouseBindingDispatch` 认领这次鼠标按下。
+  bool _handleNativeNavigationKey(String key) {
+    // 鼠标桥回传的是 `Mouse<n>`（与键盘 token 取值域天然不相交：
+    // `InputBinding.deserialize('Mouse3')` 与 `MouseBinding.deserialize('Escape')`
+    // 都是 null），故先试鼠标、再试键盘，不需要额外的类型标记位。与查词弹窗桥
+    // [resolveDictionaryPopupInputToken] 同一范式。
+    final MouseBinding? mouse = MouseBinding.deserialize(key);
+    if (mouse != null) {
+      final MangaReaderInputAction? mouseAction = _resolveMangaMouseAction(
+        mouse.button,
+        _kMangaMouseLadder,
+      );
+      if (mouseAction == null) return false;
+      _executeReaderInputAction(
+        mouseAction,
+        source: _MangaReaderInputSource.nativeWebView,
+      );
+      return true;
+    }
+    // token 按 [InputBinding.serialize] 解析：正文 WebView 的桥发裸 `event.key`
+    // （`ArrowLeft`），弹窗桥发注册表 token（可能是任意键名、可能带修饰键前缀），
+    // 两者都能被同一个 deserialize 吃下——旧的三分支 switch 只认硬编码的方向键与
+    // Escape，用户把翻页/关词典改绑到别的键后，WebView 持焦的这条路径就整个失效。
+    // `Esc` 是旧浏览器对 Escape 的别名，不在注册表键名表里，单独归一。
+    final InputBinding? binding = key == 'Esc'
+        ? const InputBinding(key: LogicalKeyboardKey.escape)
+        : InputBinding.deserialize(key);
+    if (binding == null) return false;
+    final MangaReaderInputAction? action = _resolveMangaKeyAction(
+      binding.key,
+      binding.modifiers,
+    );
+    if (action == null) return false;
+    _executeReaderInputAction(
+      action,
+      source: _MangaReaderInputSource.nativeWebView,
+    );
+    return true;
+  }
+
+  /// webtoon 滚动报告：从 JS 量得的视口更新页内 fraction + 当前页/spread。
+  /// 整本单文档，滚动**绝不**重载——只更新进度与当前页图路径。[fraction] 是视口顶
+  /// 所在页的**页内**归一化偏移（与 `__mangaScrollToSpread` 恢复口径一致）。
+  Future<void> _onMangaScroll(String payloadJson) async {
+    if (!_mode.isContinuous || _spreads.isEmpty) return;
+    final Object? decoded = jsonDecode(payloadJson);
+    if (decoded is! Map) return;
+    final double fraction = (decoded['fraction'] as num?)?.toDouble() ?? 0;
+    final int topSpread =
+        ((decoded['topPage'] as num?)?.toInt() ?? _currentSpread)
+            .clamp(0, _spreads.length - 1)
+            .toInt();
+    _currentFraction = fraction.clamp(0.0, 1.0);
+    final bool spreadChanged = topSpread != _currentSpread;
+    _currentSpread = topSpread;
+    if (spreadChanged) {
+      await _updateLoadedSpreadWindow(topSpread);
+      _updateCurrentPageImagePath();
+    }
+    _recordProgress();
+  }
+
+  /// 解析当前 spread 首页图的绝对文件路径（右键菜单「保存图片 / 设为封面」与在线
+  /// 直读取页共用）。加载/翻页/滚动/切模式全路径调用；缺文件/解析失败置 null。
+  void _updateCurrentPageImagePath() {
+    final MokuroPayload? payload = _payload;
+    final String? imagesDir = _imagesDir;
+    if (payload == null || imagesDir == null || _spreads.isEmpty) {
+      _currentPageImagePath = null;
+      return;
+    }
+    final int page = MangaMyComicPage.firstPageOfSpread(_spreads, _currentSpread);
+    if (page < 0 || page >= payload.images.length) {
+      _currentPageImagePath = null;
+      return;
+    }
+    final MangaReaderSession? session = _pageSession;
+    // 在线直读章的页名不带扩展名、只在会话缓存里：按页序问会话（还没取到 → null，
+    // 制卡时再经 [_currentMangaPageFile] 现取）。
+    _currentPageImagePath = session is OnlineMangaReaderSession
+        ? session.cachedFilePath(page)
+        : MangaMyComicPage.resolveMangaResource(
+            imagesDir,
+            MangaMyComicPage.mangaImageRelativePath(payload.images[page].url),
+          );
+  }
+
+  // ── 阅读模式覆盖 ─────────────────────────────────────────────────────
+
+  /// 页内切换 spread/webtoon，并把用户覆盖写进 `EpubBooks.mangaReadingMode`
+  /// （之后开书恒用覆盖值，不再自动判定）。跨布局保当前页。
+  Future<void> _toggleReadingMode() async {
+    final MokuroPayload? payload = _payload;
+    if (_bookRow == null || payload == null) return;
+    final MangaReadingMode next = MangaMyComicPage.toggleMangaMode(_mode);
+    final int currentPage = MangaMyComicPage.firstPageOfSpread(
+      _spreads,
+      _currentSpread,
+    );
+    final MyComicDatabase db = appModel.database;
+    try {
+      await (db.update(
+        db.epubBooks,
+      )..where(($EpubBooksTable t) => t.bookKey.equals(widget.bookKey))).write(
+        EpubBooksCompanion(
+          mangaReadingMode: Value<String?>(MangaMyComicPage.modeToDbString(next)),
+        ),
+      );
+      if (_bookRow!.uid.isNotEmpty) {
+        // 局部改动走 patch：整行替换会把该书其余覆盖全抹掉，并经 LWW 同步给对端。
+        await db.patchMangaReaderOverride(_bookRow!.uid, <String, Object?>{
+          'mode': next.storageKey,
+          'autoMode': false,
+        });
+      }
+    } catch (e, stack) {
+      ErrorLogService.instance.log('MangaMyComicPage.toggleMode', e, stack);
+    }
+    if (!mounted) return;
+    final List<MangaSpreadEntry> spreads = _buildSpreadsFor(payload, next);
+    setState(() {
+      _mode = next;
+      _spreads = spreads;
+      _currentSpread = MangaMyComicPage.spreadIndexForPage(spreads, currentPage);
+      _currentPage = currentPage;
+      _currentFraction = 0;
+    });
+    _pageNotifier.value = _currentPage;
+    await _loadInitialWindow();
+    // 布局变化会换掉当前 spread 背后的页（ERRATA C2）。
+    _updateCurrentPageImagePath();
+    MyComicToast.show(
+      msg: next == MangaReadingMode.webtoon
+          ? t.manga_reading_mode_webtoon
+          : t.manga_reading_mode_spread,
+    );
+  }
+
+  // ── 页码进度持久化 ───────────────────────────────────────────────────
+
+  void _recordProgress() {
+    // 唯一收口：本方法写 _pageNotifier 并新建 debounce Timer，两者都在 dispose
+    // 里被释放/取消。所有调用点都在若干 await 之后（翻页/滚动/窗口就绪），迟到的
+    // 回调必须在这里被挡掉，否则 ValueNotifier used after being disposed，并留下
+    // dispose 之后才触发的泄漏定时器（BUG-1171）。
+    if (!mounted) return;
+    final (int page, double fraction) = MangaMyComicPage.mangaProgressForSpread(
+      _spreads,
+      _currentSpread,
+      webtoonFraction: _currentFraction,
+      isWebtoon: _mode.isContinuous,
+    );
+    _currentPage = page;
+    _pageNotifier.value = page;
+    unawaited(_maybePrefetchNextChapter());
+    // 600ms debounce：连续翻页/滚动只落最后一次。
+    _progressDebounce?.cancel();
+    _progressDebounce = Timer(const Duration(milliseconds: 600), () {
+      unawaited(_persistPosition(page, fraction));
+    });
+  }
+
+  Future<void> _persistPosition(int page, double fraction) async {
+    if (_sourceReviewActive) return;
+    _lastSavedPage = page;
+    _lastSavedFraction = fraction;
+    final MyComicDatabase db = appModel.database;
+    // 无痕阅读：在**落库时**现取策略，设置里切完下一次保存立即生效。续读位置
+    // 与在线漫画当前章时间戳照写，History 的可见信号（reader_positions.updatedAt
+    // / readAt / 书级完成标记）由策略统一决定。
+    final ReaderHistoryPolicy history = appModel.readerHistoryPolicy;
+    final bool isWebtoon = _mode.isContinuous;
+    // v82：uid 缺失 = 库里没有这本书的持久行（内存兜底行不算），位置与「已读完」
+    // 都无处可落，整段跳过——不拿 bookKey / 现造 uid 兜底写孤儿行。
+    final String? bookUid = _bookUid;
+    if (bookUid == null) return;
+    try {
+      await ReaderPositionRepository(db).save(
+        bookUid: bookUid,
+        sectionIndex: page,
+        normCharOffset: 0,
+        // 漫画无章内字符偏移。**必须显式传值**（传 null 会掉进 EPUB 专用的「跨
+        // section 精确锚失效」启发式）：spread 恒 0；webtoon 复用 charOffset 存
+        // 页内滚动千分比（0..1000），恢复时换算回 fraction。
+        charOffset: isWebtoon
+            ? MangaMyComicPage.webtoonFractionToCharOffset(fraction)
+            : 0,
+        history: history,
+      );
+    } catch (e, stack) {
+      ErrorLogService.instance.log('MangaMyComicPage._persistPosition', e, stack);
+    }
+    // 翻到最后一页 → 幂等写「已读完」（判据用总页数），但**只有规范阅读顺序的
+    // 最后一章（最新一话）**才算整部作品读完；读完旧章只写章级 readAt。
+    // 没有章上下文的本地卷（`_shelfEntry == null`）仍保持旧行为：整卷即一本书。
+    // 无痕期间不写——书级完成标记是 History 的可见信号。
+    final int pageCount = _payload?.images.length ?? 0;
+    final bool atLastPage = pageCount > 0 && page >= pageCount - 1;
+    final OnlineMangaLibraryEntry? shelfEntry = _shelfEntry;
+    final bool isLastChapter =
+        shelfEntry == null ||
+        isLastMangaChapterInReadingOrder(
+          chapters: shelfEntry.chapters,
+          index: _shelfChapterIndex,
+          ordering: shelfEntry.runtime == OnlineMangaRuntimeKind.local
+              ? MangaChapterOrdering.natural
+              : MangaChapterOrdering.canonical,
+        );
+    if (atLastPage && isLastChapter && history.autoMarkBookCompleted) {
+      try {
+        await db.markEpubBookCompletedIfUnset(widget.bookKey, DateTime.now());
+      } catch (e, stack) {
+        ErrorLogService.instance.log('MangaMyComicPage.markCompleted', e, stack);
+      }
+    }
+    // 每章状态跟着同一个收口走：位置写哪儿、章状态就写哪儿，不另开一条会漏的
+    // 时机。书架在线条目才有「章」，本地卷 _shelfChapterKey 恒 null 自然跳过。
+    final String? chapterKey = _shelfChapterKey;
+    if (chapterKey == null) return;
+    try {
+      await db.saveMangaChapterState(
+        bookUid: bookUid,
+        chapterKey: chapterKey,
+        lastPage: page,
+        lastFraction: isWebtoon
+            ? MangaMyComicPage.webtoonFractionToCharOffset(fraction)
+            : -1,
+        pageCount: pageCount > 0 ? pageCount : null,
+        // 无痕期间不自动写章节已读；既有 readAt 由 saveMangaChapterState
+        // 回填保留（已有历史不清空）。章节 updatedAt 仍推进，保证在线漫画
+        // 「继续阅读」指向当前章。
+        readAt: atLastPage && history.autoMarkChapterRead
+            ? DateTime.now().millisecondsSinceEpoch
+            : null,
+      );
+    } catch (e, stack) {
+      ErrorLogService.instance.log('MangaMyComicPage.saveChapterState', e, stack);
+    }
+  }
+
+  /// 进程退出 / 退后台的统一 flush（[ExitFlushRegistry]）：只落位置。
+  Future<void> _flushForExit() async {
+    await _flushPosition();
+  }
+
+  Future<void> _flushPosition() async {
+    _progressDebounce?.cancel();
+    if (_bookRow == null || _payload == null) return;
+    if (_currentPage != _lastSavedPage ||
+        (_mode.isContinuous && _currentFraction != _lastSavedFraction)) {
+      await _persistPosition(_currentPage, _currentFraction);
+    }
+  }
+
+  Future<void> _setSpreadDirection(String direction) async {
+    final String normalized = direction == 'ltr' ? 'ltr' : 'rtl';
+    if ((_pendingSpreadDirection ?? _spreadDirection) == normalized) return;
+    final EpubBookRow? row = _bookRow;
+    if (row == null || row.uid.isEmpty) return;
+    _pendingSpreadDirection = normalized;
+    try {
+      if (!await _patchReaderOverride(row.uid, <String, Object?>{
+        'direction': normalized,
+      })) {
+        return;
+      }
+      if (!mounted) return;
+        await _reapplyReaderPreferences();
+    } finally {
+      // 只有最后一次点击负责清空：更早的那次收尾时在途值已是后来者的。
+      if (_pendingSpreadDirection == normalized) _pendingSpreadDirection = null;
+    }
+  }
+
+  /// 读出本书现有覆盖、并入 [patch] 后写回。覆盖行损坏（非对象 JSON）按空覆盖
+  /// 处理而不是抛——顶栏按钮走 `unawaited`，抛出去就是未处理的异步异常。
+  /// 写库失败记日志并提示，返回 false 让调用方别再按新值重排。
+  Future<bool> _patchReaderOverride(
+    String uid,
+    Map<String, Object?> patch,
+  ) async {
+    try {
+      final MangaReaderOverrideRow? saved = await appModel.database
+          .getMangaReaderOverride(uid);
+      Map<String, Object?> values = <String, Object?>{};
+      if (saved != null && !saved.deleted) {
+        final Object? decoded = jsonDecode(saved.overridesJson);
+        if (decoded is Map) values = decoded.cast<String, Object?>();
+      }
+      await appModel.database.setMangaReaderOverride(uid, <String, Object?>{
+        ...values,
+        ...patch,
+      });
+      return true;
+    } on Object catch (error, stack) {
+      ErrorLogService.instance.log(
+        'MangaMyComicPage.patchReaderOverride',
+        error,
+        stack,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          MyComicSnackBar(content: Text(t.manga_reader_save_failed)),
+        );
+      }
+      return false;
+    }
+  }
+
+  /// 页内缩放（右键菜单 ± / 捏合 / 滚轮 / 双击）只是本次阅读的会话状态。
+  ///
+  /// BUG-2782：此前它们都回写「默认缩放」偏好（`manga_zoom_percent`），笔记本
+  /// 触控板随手一捏就把 110% 钉成以后每本漫画的起始缩放，「适应屏幕」看起来
+  /// 装不下整页。默认缩放只归设置项写。
+  Future<void> _setZoomPercent(int value) async {
+    final int normalized = value.clamp(
+      kMangaZoomMinPercent,
+      kMangaZoomMaxPercent,
+    );
+    if (_zoomPercent == normalized) return;
+    setState(() => _zoomPercent = normalized);
+    await _controller?.evaluateJavascript(
+      source:
+          'window.__mangaSetZoom && '
+          'window.__mangaSetZoom($normalized);',
+    );
+  }
+
+  /// 实际播放的翻页动画：墨水屏 / 系统「减弱动态效果」一律无（规则只在
+  /// [effectivePageTurnAnimation] 写一次）。
+  MangaPageAnimation get _effectivePageAnimation => effectivePageTurnAnimation(
+    _pageAnimation,
+    motionEnabled: _motionEnabled && !_readerPreferences.einkMode,
+  );
+
+  /// 从全局偏好读翻页动画三项（效果 / 速度 / 跟手）。
+  void _readPageTurnPreferences() {
+    _pageAnimation = mangaPageAnimationFromKey(appModel.mangaPageAnimation);
+    _pageAnimationSpeed = PageTurnAnimationSpeed.fromKey(
+      appModel.mangaPageAnimationSpeed,
+    );
+    _pageTurnFollowDrag = appModel.mangaPageTurnFollowDrag;
+  }
+
+  /// 把当前生效的翻页动画推给已加载的文档（不重建 WebView 文档）。窗口重载时
+  /// 文档生成器直接读同一组字段，两条路径同源。
+  Future<void> _pushPageAnimationToJs() async {
+    final InAppWebViewController? controller = _controller;
+    if (controller == null) return;
+    final MangaPageAnimation effective = _effectivePageAnimation;
+    try {
+      await controller.evaluateJavascript(
+        source:
+            'window.__mangaSetPageAnimation && '
+            "window.__mangaSetPageAnimation('${effective.key}', "
+            '${_pageAnimationSpeed.durationMs}, $_pageTurnFollowDrag);',
+      );
+    } on Object catch (error, stack) {
+      ErrorLogService.instance.log(
+        'MangaMyComicPage.pushPageAnimation',
+        error,
+        stack,
+      );
+    }
+  }
+
+  /// 阅读器面板改了翻页动画三项：写全局偏好，立即推给当前文档。
+  Future<void> _setPageTurnSettings(MangaPageTurnSettings value) async {
+    await appModel.setMangaPageAnimation(value.animation.key);
+    await appModel.setMangaPageAnimationSpeed(value.speed.key);
+    await appModel.setMangaPageTurnFollowDrag(value.followDrag);
+    if (!mounted) return;
+    setState(() {
+      _pageAnimation = value.animation;
+      _pageAnimationSpeed = value.speed;
+      _pageTurnFollowDrag = value.followDrag;
+    });
+    await _pushPageAnimationToJs();
+  }
+
+  Future<void> _jumpToPage(int oneBasedPage) async {
+    final MokuroPayload? payload = _payload;
+    if (payload == null || payload.images.isEmpty) return;
+    final int page = (oneBasedPage - 1).clamp(0, payload.images.length - 1);
+    final int target = MangaMyComicPage.spreadIndexForPage(_spreads, page);
+    _currentSpread = target;
+    _currentFraction = 0;
+    if (_mode.isContinuous) {
+      await _controller?.evaluateJavascript(
+        source:
+            'window.__mangaScrollToSpread && '
+            'window.__mangaScrollToSpread($target, 0);',
+      );
+      await _updateLoadedSpreadWindow(target);
+    } else {
+      await _controller?.evaluateJavascript(
+        source:
+            'window.__mangaApplyTranslate && '
+            'window.__mangaApplyTranslate($target);',
+      );
+      await _updateLoadedSpreadWindow(target);
+    }
+    _updateCurrentPageImagePath();
+    _recordProgress();
+  }
+
+  /// 阅读器里的章节选择器。
+  ///
+  /// 列表复用作品页那一份 [MangaChapterList]：两处对「已读怎么显示、当前章怎么
+  /// 高亮、排序默认哪个方向」的答案必须一致，各写一份必然漂移。
+  Future<void> _showChapterPicker() async {
+    final OnlineMangaLibraryEntry? entry = _shelfEntry;
+    final EpubBookRow? row = _bookRow;
+    if (entry == null || row == null) return;
+    final Map<String, MangaChapterStateRow> states = row.uid.isEmpty
+        ? const <String, MangaChapterStateRow>{}
+        : await appModel.database.getMangaChapterStates(row.uid);
+    // 本地源章节就在磁盘上原地可读，恒为「已下载」，不查下载库。
+    final Set<String> downloaded = entry.runtime == OnlineMangaRuntimeKind.local
+        ? entry.chapters
+              .map((OnlineMangaChapter chapter) => chapter.key)
+              .toSet()
+        : await DownloadLibraryIndex(appModel.database).downloadedChapterKeys(
+            row.bookKey,
+            entry.chapters.map((OnlineMangaChapter chapter) => chapter.key),
+          );
+    if (!mounted) return;
+    // 左侧侧栏（对齐 Mihon / Mangatan 的章节抽屉）；设置面板固定在右侧，两者
+    // 不抢同一条边。
+    final int? target = await showReaderSideSheet<int>(
+      context: context,
+      side: ReaderSideSheetSide.left,
+      builder: (BuildContext sheetContext) => MangaChapterDrawer(
+        entry: entry,
+        states: states,
+        currentChapterKey: _shelfChapterKey,
+        downloadedChapterKeys: downloaded,
+        initialNewestFirst: appModel.mangaChapterListNewestFirst,
+        onNewestFirstChanged: (bool value) =>
+            unawaited(appModel.setMangaChapterListNewestFirst(value)),
+        onClose: () => Navigator.of(sheetContext).pop(),
+        onChapterTap: (OnlineMangaChapter chapter) => Navigator.of(
+          sheetContext,
+        ).pop(entry.indexOfChapterKey(chapter.key)),
+      ),
+    );
+    if (target != null && target >= 0) {
+      await _switchToChapter(target);
+    }
+  }
+
+  /// 集成测试探针：在正文 WebView 里跑一段脚本（BUG-2813 点字命中取证）。
+  @visibleForTesting
+  Future<Object?> debugEvaluateJavascript(String source) async =>
+      _controller?.evaluateJavascript(source: source);
+
+  @visibleForTesting
+  Future<Object?> debugReaderDomSnapshot() async =>
+      _controller?.evaluateJavascript(
+        source: """
+    JSON.stringify({
+      filter: document.querySelector('.manga-source img') ? getComputedStyle(document.querySelector('.manga-source img')).filter : null,
+      direction: document.querySelector('.manga-spread') ? getComputedStyle(document.querySelector('.manga-spread')).direction : null,
+      page: document.querySelector('.manga-page')?.getAttribute('data-page'),
+      source: document.querySelector('.manga-source')?.style.transform
+    })
+  """,
+      );
+
+  Future<void> _syncAutoScrollPause() async {
+    if (!mounted) return;
+    await _controller?.evaluateJavascript(
+      source:
+          'window.__mangaPauseAutoScroll && window.__mangaPauseAutoScroll($_readerSettingsOpen);',
+    );
+  }
+
+  Future<void> _showReaderSettings() async {
+    final EpubBookRow? row = _bookRow;
+    if (row == null || row.uid.isEmpty || !mounted) return;
+    Map<String, Object?> override = <String, Object?>{};
+    try {
+      final MangaReaderOverrideRow? saved = await appModel.database
+          .getMangaReaderOverride(row.uid);
+      if (saved != null && !saved.deleted) {
+        final Object? decoded = jsonDecode(saved.overridesJson);
+        if (decoded is Map) override = decoded.cast<String, Object?>();
+      }
+    } on Object catch (error, stack) {
+      ErrorLogService.instance.log(
+        'MangaMyComicPage.readerSettingsLoad',
+        error,
+        stack,
+      );
+    }
+    if (!mounted) return;
+    _readerSettingsOpen = true;
+    await _syncAutoScrollPause();
+    try {
+      if (!mounted) return;
+      await showMangaReaderSettingsSheet(
+        context: context,
+        pageTurn: MangaPageTurnSettings(
+          animation: _pageAnimation,
+          speed: _pageAnimationSpeed,
+          followDrag: _pageTurnFollowDrag,
+        ),
+        onPageTurnChanged: _setPageTurnSettings,
+        globalDefaults: appModel.mangaReaderPreferences
+            .copyWithJson(<String, Object?>{
+              if (desktopWindowFullscreenSupported)
+                'fullscreen': _isWindowFullscreen,
+              'keepScreenOn': ReaderMyComicSource.instance.keepScreenAwake,
+            }),
+        overrides: override,
+        onChanged: (Map<String, Object?> value) async {
+          // 只有落库失败才抛给面板（面板据此回滚）。落库已成功时重应用出错
+          // 不能再抛：面板会回滚成旧值，而库里已是新值，下次开书两边对不上。
+          await appModel.database.setMangaReaderOverride(row.uid, value);
+          try {
+            await _reapplyReaderPreferences();
+          } on Object catch (error, stack) {
+            ErrorLogService.instance.log(
+              'MangaMyComicPage.readerSettingsApply',
+              error,
+              stack,
+            );
+          }
+        },
+        // 面板切到「全局」时的写入：稀疏补丁合进**偏好里的**全局默认（不是上面
+        // 那份叠了窗口全屏 / 常亮运行态的副本），再按本书覆盖重应用。
+        onGlobalChanged: (Map<String, Object?> patch) async {
+          await appModel.setMangaReaderPreferences(
+            appModel.mangaReaderPreferences.copyWithJson(patch),
+          );
+          try {
+            await _reapplyReaderPreferences();
+          } on Object catch (error, stack) {
+            ErrorLogService.instance.log(
+              'MangaMyComicPage.readerSettingsApply',
+              error,
+              stack,
+            );
+          }
+        },
+        supportedDeviceKeys: <String>{
+          if (Platform.isAndroid ||
+              Platform.isIOS ||
+              desktopWindowFullscreenSupported)
+            'fullscreen',
+          'keepScreenOn',
+          if (Platform.isAndroid) 'invertVolumeKeys',
+        },
+      );
+    } finally {
+      _readerSettingsOpen = false;
+      await _syncAutoScrollPause();
+    }
+  }
+
+  /// 重新读这本书的每作品覆盖、与全局默认合并后应用到当前会话。
+  ///
+  /// 只动「改完即可见」的视觉/手势字段；阅读模式变化会连带重建单元边界（与顶栏
+  /// 切换同一条路径）。
+  Future<void> _reapplyReaderPreferences() async {
+    final EpubBookRow? row = _bookRow;
+    final MokuroPayload? payload = _payload;
+    if (row == null || payload == null || !mounted) return;
+    MangaReaderPreferences prefs = appModel.mangaReaderPreferences;
+    bool hasModeOverride = false;
+    bool hasFullscreenOverride = false;
+    bool hasKeepScreenOnOverride = false;
+    if (row.uid.isNotEmpty) {
+      try {
+        final MangaReaderOverrideRow? override = await appModel.database
+            .getMangaReaderOverride(row.uid);
+        if (override != null && !override.deleted) {
+          final Object? decoded = jsonDecode(override.overridesJson);
+          if (decoded is Map) {
+            final Map<String, Object?> map = decoded.cast<String, Object?>();
+            hasFullscreenOverride = map['fullscreen'] is bool;
+            hasKeepScreenOnOverride = map['keepScreenOn'] is bool;
+            hasModeOverride =
+                map.containsKey('mode') || map.containsKey('autoMode');
+            prefs = MangaReaderPreferences.resolve(prefs, map);
+          }
+        }
+      } on Object catch (error, stack) {
+        ErrorLogService.instance.log(
+          'MangaMyComicPage.reapplyReaderPreferences',
+          error,
+          stack,
+        );
+      }
+    }
+    if (!mounted) return;
+    final MangaReadingMode nextMode = MangaMyComicPage.resolveReaderMode(
+      preferences: prefs,
+      payload: payload,
+      hasModeOverride: hasModeOverride,
+      legacyMode: row.mangaReadingMode,
+    );
+    final int currentPage = MangaMyComicPage.firstPageOfSpread(
+      _spreads,
+      _currentSpread,
+    );
+    // 与开书（[_loadLocalPayload]）同一口径：桌面窗口全屏只听本书显式覆盖；没有
+    // 覆盖（含「恢复默认」清掉覆盖）时窗口保持现状，不拿全局默认去强切全屏。
+    final bool fullscreenChanged = desktopWindowFullscreenSupported
+        ? hasFullscreenOverride && prefs.fullscreen != _isWindowFullscreen
+        : prefs.fullscreen != _readerPreferences.fullscreen;
+    // 跨页偏移（封面算不算第 0 页）改了也要重排 spread 序列：它和阅读模式一样
+    // 决定页序配对（快捷设置「错开一页」立即生效）。
+    final int nextSpreadOffset = prefs.spreadOffset >= 1 ? 1 : 0;
+    final bool modeChanged =
+        nextMode != _mode || nextSpreadOffset != _spreadOffset;
+    _spreadOffset = nextSpreadOffset;
+    final List<MangaSpreadEntry> spreads = modeChanged
+        ? _buildSpreadsFor(payload, nextMode)
+        : _spreads;
+    // 会话缩放（捏合 / 滚轮）与默认缩放是两份状态（BUG-2782）：只有默认缩放
+    // 本身被改了才跟过去，改背景、点击区这类无关项不能把缩放跳回默认值。
+    // 缩放方式也算相关项（BUG-2845）：选「适应屏幕」就是要整页重新适配，
+    // 会话里捏出来的放大不能留着把页面继续裁掉。
+    final bool resetSessionZoom =
+        prefs.zoomStart != _readerPreferences.zoomStart ||
+        prefs.scaleType != _readerPreferences.scaleType;
+    setState(() {
+      _readerPreferences = prefs;
+      // 翻页动画只认全局 `manga_page_animation`（animateTransitions 是它的旧投影，
+      // 作品覆盖里残留的旧值不再生效）；墨水屏的降级在 _effectivePageAnimation。
+      _readPageTurnPreferences();
+      _spreadDirection = prefs.direction == 'ltr' ? 'ltr' : 'rtl';
+      _background = MangaBackgroundKey.fromKey(prefs.background);
+      if (resetSessionZoom) {
+        _zoomPercent = prefs.zoomStart.clamp(
+          kMangaZoomMinPercent,
+          kMangaZoomMaxPercent,
+        );
+      }
+      _tapZoneLayout = switch (prefs.tapZones) {
+        MangaTapZonePreset.defaultZones => MangaTapZoneLayout.defaultZones,
+        MangaTapZonePreset.lShaped => MangaTapZoneLayout.lShaped,
+        MangaTapZonePreset.kindle => MangaTapZoneLayout.kindle,
+        MangaTapZonePreset.edge => MangaTapZoneLayout.edge,
+        MangaTapZonePreset.rightAndLeft => MangaTapZoneLayout.leftRight,
+        MangaTapZonePreset.disabled => MangaTapZoneLayout.disabled,
+        MangaTapZonePreset.topBottom => MangaTapZoneLayout.topBottom,
+      };
+      _tapZonePaging = prefs.tapZones != MangaTapZonePreset.disabled;
+      _scaleType = prefs.scaleType;
+      _longStripSidePadding = prefs.longStripSidePadding;
+      _disableZoomOut = prefs.disableZoomOut;
+      _animateDoubleTap = prefs.animateDoubleTap;
+      _invertHorizontal = prefs.invertHorizontal;
+      _invertVertical = prefs.invertVertical;
+      _invertBoth = prefs.invertBoth;
+      _cropBorders = prefs.cropBorders;
+      _splitWidePages = prefs.splitWidePages;
+      _rotateWidePages = prefs.rotateWidePages;
+      _autoZoomWide = prefs.autoZoomWide;
+      _panWide = prefs.panWide;
+      _zoomStartPosition = prefs.zoomStartPosition;
+      _invertVolumeKeys = prefs.invertVolumeKeys;
+      _saveDirectory = prefs.saveDirectory;
+      if (modeChanged) {
+        _mode = nextMode;
+        _spreads = spreads;
+        _currentSpread = MangaMyComicPage.spreadIndexForPage(
+          spreads,
+          currentPage,
+        );
+        _currentPage = currentPage;
+        _currentFraction = 0;
+      }
+    });
+    _applyVolumeKeyPaging(prefs.volumeKeys, invertDirection: _invertVolumeKeys);
+    try {
+      // 保持亮屏同理：没有本书覆盖时回到全局「保持屏幕常亮」（openMedia 的口径）。
+      await setScreenWakelock(
+        enable: hasKeepScreenOnOverride
+            ? prefs.keepScreenOn
+            : ReaderMyComicSource.instance.keepScreenAwake,
+        source: 'manga settings',
+      );
+      if (fullscreenChanged) {
+        if (desktopWindowFullscreenSupported) {
+          await _setMangaFullscreen(prefs.fullscreen);
+        } else if (Platform.isAndroid || Platform.isIOS) {
+          await SystemChrome.setEnabledSystemUIMode(
+            prefs.fullscreen
+                ? SystemUiMode.immersiveSticky
+                : SystemUiMode.edgeToEdge,
+          );
+        }
+      }
+    } on Object catch (error, stack) {
+      ErrorLogService.instance.log(
+        'MangaMyComicPage.devicePreferences',
+        error,
+        stack,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          MyComicSnackBar(content: Text(t.manga_reader_save_failed)),
+        );
+      }
+    }
+
+    // 上面每个 await 期间页面都可能已被关掉（顶栏方向按钮是 unawaited 调进来的）。
+    if (!mounted) return;
+    if (modeChanged) {
+      _pageNotifier.value = _currentPage;
+      await _loadInitialWindow();
+      if (!mounted) return;
+      _updateCurrentPageImagePath();
+    } else {
+      // 视觉项（缩放模式 / 裁边 / 长条边距 / 反转 / tapZone / 背景）都编进窗口
+      // 文档，重新加载当前窗口即生效。
+      await _loadInitialWindow();
+      if (!mounted) return;
+    }
+    await _syncAutoScrollPause();
+  }
+
+  Future<void> _showPageJumpDialog() async {
+    final int total = _payload?.images.length ?? 0;
+    if (total <= 0) return;
+    final int? page = await showMangaPageJumpDialog(
+      context,
+      currentPage: _currentPage + 1,
+      total: total,
+    );
+    if (page != null) {
+      await _jumpToPage(page);
+    }
+  }
+
+  // ── 2026-10 重设计的 chrome 入口（页面一览 / 快捷设置 / 章节按钮 / 章末卡片）──
+
+  /// 第 [pageIndex] 页的本地缩略图（拖动气泡 / 页面一览）。只认已经在盘上的页图
+  /// （本地卷 / 已下载章）：在线直读的页不为了缩略图去发请求，取不到就返回
+  /// null，调用方画页码占位。
+  ///
+  /// 下载库 CBZ 章（票 07）的页在会话缓存里按需解压：盘上还没有这一页时交给
+  /// [MangaSessionPageImage]，只在真正解码该格子时才向会话要文件——打开页面一览
+  /// 不会预解整包。
+  ImageProvider? _pageThumbnail(int pageIndex) {
+    final MokuroPayload? payload = _payload;
+    final String? imagesDir = _imagesDir;
+    if (payload == null || imagesDir == null) return null;
+    final String? path = MangaMyComicPage.resolveMangaPageImage(
+      payload,
+      imagesDir,
+      pageIndex,
+    );
+    if (path != null && File(path).existsSync()) {
+      return ResizeImage(
+        FileImage(File(path)),
+        width: 240,
+        policy: ResizeImagePolicy.fit,
+      );
+    }
+    final MangaReaderSession? session = _pageSession;
+    if (_streamingChapter ||
+        session == null ||
+        pageIndex < 0 ||
+        pageIndex >= session.pageCount) {
+      return null;
+    }
+    return ResizeImage(
+      MangaSessionPageImage(session: session, pageIndex: pageIndex),
+      width: 240,
+      policy: ResizeImagePolicy.fit,
+    );
+  }
+
+  /// 当前屏上的页（双页 spread 两页都算），页面一览里高亮它们。
+  Set<int> _currentScreenPages() {
+    final int page = _pageNotifier.value;
+    final int spreadIndex = MangaMyComicPage.spreadIndexForPage(_spreads, page);
+    if (spreadIndex >= 0 && spreadIndex < _spreads.length) {
+      return _spreads[spreadIndex].pageIndices.toSet();
+    }
+    return <int>{page};
+  }
+
+  /// 换章装载中的加载指示（BUG-3221），显示正在换去的那一章的章名。
+  Widget _buildChapterSwitchingOverlay() {
+    final OnlineMangaLibraryEntry? entry = _shelfEntry;
+    final int? target = _switchingChapterTarget;
+    return MangaChapterSwitchingOverlay(
+      visible: _switchingChapter,
+      label: t.manga_chapter_switching_loading,
+      chapterName:
+          entry != null &&
+              target != null &&
+              target >= 0 &&
+              target < entry.chapters.length
+          ? mangaChapterDisplayName(entry.chapters[target])
+          : null,
+    );
+  }
+
+  Future<void> _showPageGrid() async {
+    final int total = _payload?.images.length ?? 0;
+    if (total <= 0 || !mounted) return;
+    final int? page = await showMangaPageGridSheet(
+      context: context,
+      pageCount: total,
+      currentPages: _currentScreenPages(),
+      thumbnail: _pageThumbnail,
+    );
+    if (page != null && mounted) await _jumpToPage(page + 1);
+  }
+
+  /// 快捷设置面板：阅读方向 / 单双页 / 缩放 / 底色 / 亮度。写入与「全部设置」
+  /// 同一份本书覆盖（[_patchReaderOverride]）并同样重应用；方向单独走
+  /// [_setSpreadDirection]（与顶栏方向按钮同一执行体，连点不丢）。
+  Future<void> _showQuickSettings() async {
+    final EpubBookRow? row = _bookRow;
+    if (row == null || row.uid.isEmpty || !mounted) return;
+    _readerSettingsOpen = true;
+    await _syncAutoScrollPause();
+    bool openAll = false;
+    try {
+      if (!mounted) return;
+      openAll =
+          await showMangaReaderQuickSettingsSheet(
+            context: context,
+            preferences: _readerPreferences,
+            currentMode: _mode,
+            spreadPreference: _spreadPreference,
+            onSpreadPreferenceChanged: (MangaSpreadPreference value) =>
+                unawaited(_setSpreadPreference(value)),
+            onPatch: (Map<String, Object?> patch) async {
+              if (patch.length == 1 && patch['direction'] is String) {
+                await _setSpreadDirection(patch['direction']! as String);
+                return;
+              }
+              if (!await _patchReaderOverride(row.uid, patch)) {
+                throw StateError('manga reader override not saved');
+              }
+              if (!mounted) return;
+              try {
+                await _reapplyReaderPreferences();
+              } on Object catch (error, stack) {
+                ErrorLogService.instance.log(
+                  'MangaMyComicPage.quickSettingsApply',
+                  error,
+                  stack,
+                );
+              }
+            },
+          ) ??
+          false;
+    } finally {
+      _readerSettingsOpen = false;
+      await _syncAutoScrollPause();
+    }
+    if (openAll && mounted) await _showReaderSettings();
+  }
+
+  /// 底栏上一章 / 下一章：与翻过章节边界同一判据（[_adjacentChapterIndex]，
+  /// 尊重「跳过已读 / 重复」），但**不**记已读——按钮是跳转，不是读完。
+  Future<void> _goToAdjacentChapter({required bool forward}) async {
+    if (_shelfEntry == null || _switchingChapter) return;
+    final int? target = await _adjacentChapterIndex(forward: forward);
+    if (!mounted) return;
+    if (target == null) {
+      MyComicToast.show(
+        msg: forward
+            ? t.manga_series_last_chapter_reached
+            : t.manga_series_first_chapter_reached,
+      );
+      return;
+    }
+    await _switchToChapter(target);
+  }
+
+  Future<File?> _currentMangaPageFile() async {
+    final String? known = _currentPageImagePath;
+    if (known != null && await File(known).exists()) return File(known);
+    final MokuroPayload? payload = _payload;
+    final String? imagesDir = _imagesDir;
+    if (payload == null || imagesDir == null) return null;
+    final int page = _currentPage.clamp(0, payload.images.length - 1);
+    final String? path = MangaMyComicPage.resolveMangaPageImage(
+      payload,
+      imagesDir,
+      page,
+    );
+    if (path != null) return File(path);
+    final MangaReaderSession? session = _pageSession;
+    if (session == null || page >= session.pageCount) return null;
+    return session.localFile(page);
+  }
+
+  Future<void> _saveCurrentMangaPage() async {
+    final File? source = await _currentMangaPageFile();
+    final EpubBookRow? row = _bookRow;
+    if (source == null || row == null || !await source.exists()) return;
+    // 读章时 [_bookRow] 指向章目录副本；存图仍落在漫画根（数据库行是权威）。
+    final String root =
+        (await appModel.database.getEpubBook(row.bookKey))?.extractDir ??
+        row.extractDir;
+    final String chapter = _shelfChapterKey ?? 'chapter';
+    final String book = safeWindowsFileName(row.title);
+    final String savePath = switch (_saveDirectory) {
+      'flat' => p.join(root, 'saved'),
+      'book' => p.join(root, 'saved', book),
+      _ => p.join(root, 'saved', book, chapter),
+    };
+    final Directory destination = Directory(savePath);
+    await destination.create(recursive: true);
+    final String name = p.basename(source.path);
+    await source.copy(p.join(destination.path, name));
+    if (mounted) MyComicToast.show(msg: t.manga_page_save);
+  }
+
+  Future<void> _setCurrentMangaPageAsCover() async {
+    final File? source = await _currentMangaPageFile();
+    final EpubBookRow? row = _bookRow;
+    if (source == null || row == null || !await source.exists()) return;
+    final String relative = p
+        .relative(source.path, from: row.extractDir)
+        .replaceAll('\\', '/');
+    await (appModel.database.update(appModel.database.epubBooks)
+          ..where((t) => t.uid.equals(row.uid)))
+        .write(EpubBooksCompanion(coverPath: Value<String?>(relative)));
+    if (mounted) MyComicToast.show(msg: t.manga_page_set_cover);
+  }
+
+  Future<void> _showReaderContextMenu(String payloadJson) async {
+    Object? decoded;
+    try {
+      decoded = jsonDecode(payloadJson);
+    } on FormatException {
+      return;
+    }
+    if (decoded is! Map || !mounted) return;
+    final double x = (decoded['x'] as num?)?.toDouble() ?? 0;
+    // JS clientY 是 WebView 视口坐标；固定态顶栏让位时 WebView 顶部不在屏幕 0。
+    final double y =
+        ((decoded['y'] as num?)?.toDouble() ?? 0) + _chromeTopInset;
+    // BUG-1438（与 BUG-129/261/381/781 同族）：JS 报的 clientX/clientY 是 **真实屏幕
+    // 坐标**——漫画页整棵子树被 MyComicAppUiScaleNeutralizer 中和回净缩放=1（见
+    // manga_my_comic_source.dart），WebView 全出血铺满真实视口。但 showMenu 的
+    // RelativeRect 落在根 Navigator 的 Overlay 坐标系，而该 Overlay 在全局
+    // MyComicAppUiScale 的 FittedBox 之内（**缩放画布**空间，尺寸 = 真实视口 / scale）。
+    //
+    // 修复前把真实坐标直接当画布坐标喂进去，菜单实际渲染在「点击点 × scale」：
+    // 界面大小 125% 时右键点在 (800,600) 菜单跑到 (1000,750)，越靠右下偏得越远；
+    // 调小到 50% 则菜单缩向左上角。同理 MediaQuery.of(context).size 在中和层内是
+    // **真实视口**尺寸（比 overlay.size 大 scale 倍），当作 RelativeRect 的 right/bottom
+    // 会让贴边翻转判断一起失准。
+    //
+    // 修法与同族一致：不读 scale 数值逆算（自动模式下生效 scale ≠ appModel.appUiScale），
+    // 而用 Overlay 的 RenderBox 沿真实渲染变换链把锚点映射到 Overlay 本地坐标——中间的
+    // FittedBox 缩放被 render transform 自动吸收，对任意 scale 自洽；scale=1 时变换为
+    // 单位阵，逐像素等价（向后兼容）。边界同步改用 overlay.size。
+    final RenderBox overlay =
+        Overlay.of(context).context.findRenderObject()! as RenderBox;
+    final Offset anchor = overlay.globalToLocal(Offset(x, y));
+    final _MangaContextAction? action =
+        await showMyComicMenu<_MangaContextAction>(
+          context: context,
+          position: RelativeRect.fromRect(
+            Rect.fromLTWH(anchor.dx, anchor.dy, 1, 1),
+            Offset.zero & overlay.size,
+          ),
+          items: <PopupMenuEntry<_MangaContextAction>>[
+            PopupMenuItem<_MangaContextAction>(
+              value: _MangaContextAction.previous,
+              child: Text(t.manga_previous_page),
+            ),
+            PopupMenuItem<_MangaContextAction>(
+              value: _MangaContextAction.next,
+              child: Text(t.manga_next_page),
+            ),
+            PopupMenuItem<_MangaContextAction>(
+              value: _MangaContextAction.jump,
+              child: Text(t.manga_jump_to_page),
+            ),
+            PopupMenuItem<_MangaContextAction>(
+              value: _MangaContextAction.direction,
+              child: Text(
+                _spreadDirection == 'rtl'
+                    ? t.manga_direction_ltr
+                    : t.manga_direction_rtl,
+              ),
+            ),
+            PopupMenuItem<_MangaContextAction>(
+              value: _MangaContextAction.zoomIn,
+              enabled: _zoomPercent < kMangaZoomMaxPercent,
+              child: Text('${t.manga_zoom} + ($_zoomPercent%)'),
+            ),
+            PopupMenuItem<_MangaContextAction>(
+              value: _MangaContextAction.zoomOut,
+              enabled: _zoomPercent > kMangaZoomMinPercent,
+              child: Text('${t.manga_zoom} − ($_zoomPercent%)'),
+            ),
+            PopupMenuItem<_MangaContextAction>(
+              value: _MangaContextAction.copyImage,
+              child: Text(t.manga_page_copy),
+            ),
+            PopupMenuItem<_MangaContextAction>(
+              value: _MangaContextAction.shareImage,
+              child: Text(t.manga_page_share),
+            ),
+            PopupMenuItem<_MangaContextAction>(
+              value: _MangaContextAction.saveImage,
+              child: Text(t.manga_page_save),
+            ),
+            PopupMenuItem<_MangaContextAction>(
+              value: _MangaContextAction.setCover,
+              child: Text(t.manga_page_set_cover),
+            ),
+          ],
+        );
+    if (!mounted || action == null) return;
+    switch (action) {
+      case _MangaContextAction.previous:
+        await (_mode.isContinuous
+            ? _jumpToPageAnchor('prev')
+            : _onMangaTurn('prev'));
+        return;
+      case _MangaContextAction.next:
+        await (_mode.isContinuous
+            ? _jumpToPageAnchor('next')
+            : _onMangaTurn('next'));
+        return;
+      case _MangaContextAction.jump:
+        await _showPageJumpDialog();
+        return;
+      case _MangaContextAction.direction:
+        await _setSpreadDirection(_spreadDirection == 'rtl' ? 'ltr' : 'rtl');
+        return;
+      case _MangaContextAction.zoomIn:
+        await _setZoomPercent(_zoomPercent + 10);
+        return;
+      case _MangaContextAction.zoomOut:
+        await _setZoomPercent(_zoomPercent - 10);
+        return;
+      case _MangaContextAction.copyImage:
+        final File? file = await _currentMangaPageFile();
+        if (file != null) await copyImageFileToClipboard(file);
+        return;
+      case _MangaContextAction.shareImage:
+        final File? file = await _currentMangaPageFile();
+        if (file != null) await shareImageFile(file);
+        return;
+      case _MangaContextAction.saveImage:
+        await _saveCurrentMangaPage();
+        return;
+      case _MangaContextAction.setCover:
+        await _setCurrentMangaPageAsCover();
+        return;
+    }
+  }
+
+  // ── UI ───────────────────────────────────────────────────────────────
+
+  @override
+  Widget build(BuildContext context) {
+    // 漫画页是**窗口全屏的合法宿主**之一：全屏键（默认 F11）只在小说 / 漫画 / 视频里
+    // 能进入全屏，靠的就是下面那层 [WindowFullscreenHost] 声明。用局部变量而不是把
+    // 整棵树往里缩一级，纯粹是为了不给这个文件制造一次全量重缩进的 diff。
+    final Widget page = PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (bool didPop, dynamic result) async {
+        if (didPop) return;
+        // Cache the navigator before either async cleanup step; this callback
+        // must not read BuildContext after an await.
+        final NavigatorState navigator = Navigator.of(context);
+        // Fullscreen is a presentation layer above the reader route. Back/Esc
+        // leaves that layer first and keeps the current WebView/page intact.
+        if (await _exitOwnedFullscreenBeforePop()) return;
+        if (!mounted) return;
+        // 上面那次 await 期间外部导航（长按图标快捷方式 / 卡片来源回跳）可能已经
+        // 经 closeActive 收页；也可能连按两次返回。退出流程只许跑一遍。
+        if (!claimSourceExit()) return;
+        // BUG-2119 口径（视频页 / 小说页 / PDF 页同此）：**退出不等落库**。
+        // onWillPop 是位置 flush + closeMedia 两笔 drift 写，而一条 SQLITE_BUSY 后
+        // 未 reset 的写语句能让整条连接上每次 COMMIT 都抛错（2026-09-04 真机）；
+        // 旧写法 `await onWillPop(); navigator.pop();` 一旦挂在那个 await 上就再也
+        // pop 不了：`canPop: false` 已经关掉了 iOS 的侧滑返回，iOS 又没有系统返回
+        // 键，页内的返回按钮按下去也没反应，用户只能杀进程重开。
+        exitAfterPersist(
+          persist: onWillPop,
+          exit: () => navigator.pop(),
+          onPersistError: (Object error, StackTrace stack) => ErrorLogService
+              .instance
+              .log('MangaMyComic.exitFlush', error, stack),
+        );
+      },
+      child: Scaffold(
+        // 底色跟随「漫画 · 底色」偏好；与 WebView 文档的 html,body 同源
+        // （[_backgroundCssValue]），否则正文边界会切出一条色差带。
+        backgroundColor: _backgroundColor,
+        resizeToAvoidBottomInset: false,
+        // 屏幕尺寸 Stack：WebView 以 scale 1.0、inset 0 渲染。
+        // 键盘兜底必须包住正文与 chrome。
+        //
+        // 手柄同理：桌面轮询路径把 GamepadButtonIntent 派给 primaryFocus 所在
+        // 子树的 Actions，Android 的 gameButton* 键事件经全局 wrapper 转成同一
+        // Intent——Actions 必须是正文 WebView 的共同祖先，手柄键才仍经过本页。
+        body: Actions(
+          actions: <Type, Action<Intent>>{
+            GamepadButtonIntent: CallbackAction<GamepadButtonIntent>(
+              onInvoke: (GamepadButtonIntent intent) =>
+                  _handleGamepadButton(intent.button),
+            ),
+          },
+          child: Focus(
+            focusNode: _focusNode,
+            autofocus: true,
+            onKeyEvent: _handleReaderKey,
+            // 鼠标通道与键盘/手柄挂在同一层，作用域同样是「正文 WebView + chrome +
+            // 词典弹层」的共同祖先。`translucent` 让本层自己占住命中（默认
+            // deferToChild 在空白区收不到按下）；[Listener] 不进手势竞技场也不消费
+            // 事件，下层 WebView / 弹层照常收到同一次按下。
+            //
+            // ⚠️ 本 Listener 只覆盖**指针归 Flutter 的**那部分：原生 WebView（正文页图
+            // 与 OCR 文本层）在 Windows 之外会把指针整个吃掉，那片区域由页内 JS 的鼠标
+            // 桥回传（见注入处）。两条路按平台互斥，不会重复触发。
+            child: Listener(
+              behavior: HitTestBehavior.translucent,
+              onPointerDown: _handleMangaPointerDown,
+              child: Stack(
+                fit: StackFit.expand,
+                children: <Widget>[
+                  // 固定态顶栏让位：WebView 顶部下移，JS 视口坐标经
+                  // [_chromeTopInset] 换算回屏幕坐标（选区 / 右键菜单两处）。
+                  Positioned.fill(
+                    top: _chromeTopInset,
+                    bottom: _chromeBottomInset,
+                    child: _buildBody(),
+                  ),
+                  // 顶栏 = 返回键 + 标题/页码 + 动作组。
+                  //
+                  // 返回键是本页**唯一**的出口，它的可见性只能由用户意图
+                  // （[_chromeVisible]）决定，绝不能再挂内容状态门控。
+                  //
+                  // 旧条件是 `_bookRow != null && !_loadFailed && _chromeVisible`：
+                  // 加载失败或一直没就绪时，正文区只剩一行「找不到书籍文件」，而
+                  // 这颗按钮**跟着一起消失**。漫画正文是原生 WebView、空白点击已被
+                  // 翻页占用，页内没有第二条退出通道；iOS 又没有系统返回键，
+                  // `PopScope(canPop: false)` 还顺手关掉了侧滑返回——三者叠加的结果
+                  // 是用户只能杀进程。出口不是内容的一部分，不随内容存亡。
+                  //
+                  // 所以栏本体只受 [_chromeVisible]（固定态）/ 加悬浮唤出态门控；
+                  // 内容门控只落在栏里的**动作组**上（[_buildTopChrome]）：没有正文
+                  // 时页码 / 布局 / 缩放全无意义，栏只剩返回键。
+                  //
+                  // 2026-10 重设计：栏是浮动胶囊，显隐经 [MangaChromeReveal] 做
+                  // fade + slide（顶部向上退、底部向下退），退场播完才卸载。
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    child: MangaChromeReveal(
+                      // 正文就绪前后各是一个 Reveal：悬浮态加载中无条件画栏
+                      // （出口），书一就绪就该**立即**收起，而不是对着首屏页图
+                      // 播一段退场；之后的显隐（中央点击 / M 键）才走动效。
+                      key: ValueKey<bool>(_chromeContentReady),
+                      visible: mangaChromeBarPainted(
+                        floating: _chromeFloating,
+                        chromeVisible: _chromeVisible,
+                        transientVisible: _chrome.transientVisible,
+                        contentReady: _chromeActionsEnabled,
+                      ),
+                      child: _buildTopChrome(),
+                    ),
+                  ),
+                  // 换章装载中：正文上盖一层加载指示（BUG-3221）。章末不再弹「下一章」
+                  // 卡片——翻过末页本来就直接换章，卡片只是多余的一步（用户反馈）；
+                  // 换章真正缺的是「正在加载」的反馈，否则用户以为没翻动、会多滑。
+                  Positioned.fill(child: _buildChapterSwitchingOverlay()),
+                  // 底部 chrome = 页码滑块胶囊 + M3E 悬浮工具栏（按钮组 + FAB）。
+                  // 可见性与顶栏同判据（同一条 chrome），但额外要求有正文——没有
+                  // 页就没有可跳的页，工具栏动作也无意义。
+                  //
+                  // 滑块单独 ExcludeFocus（见 [_buildBottomChrome]）：Slider 是可
+                  // Tab 到的焦点节点，拿到焦点后左右方向键被它自己的 Shortcuts
+                  // 吃掉、到不了 _handleReaderKey（docs/agent/focus-ownership.md）；
+                  // 鼠标/触摸拖动不经焦点，功能不受影响。工具栏按钮与顶栏按钮一样
+                  // 可 Tab 遍历（Enter 确认），方向键照常冒泡到本页翻页。
+                  Positioned(
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    child: MangaChromeReveal(
+                      fromTop: false,
+                      visible:
+                          _chromeActionsEnabled &&
+                          mangaChromeBarPainted(
+                            floating: _chromeFloating,
+                            chromeVisible: _chromeVisible,
+                            transientVisible: _chrome.transientVisible,
+                            contentReady: _chromeActionsEnabled,
+                          ),
+                      child: _buildBottomChrome(),
+                    ),
+                  ),
+                  // 隐藏界面时角落常驻页码：全出血阅读下唯一的进度可见性。
+                  if (!_chromeVisible &&
+                      _chromeContentReady &&
+                      _readerPreferences.showPageNumber)
+                    Positioned(
+                      bottom: 8,
+                      left: 8,
+                      child: SafeArea(
+                        child: MangaHiddenPageBadge(
+                          pageListenable: _pageNotifier,
+                          label: _pageLabel,
+                        ),
+                      ),
+                    ),
+                  // BUG-1888：隐藏态唯一的唤回入口（理由见 [_chromeVisible]）。
+                  // 与返回键同理不挂内容门控——否则「隐藏界面后内容加载失败」会把
+                  // 唤回按钮一并抹掉，连带返回键再也叫不回来。
+                  if (!_chromeVisible)
+                    Positioned(
+                      top: 0,
+                      right: 0,
+                      child: SafeArea(
+                        child: Opacity(
+                          opacity: 0.35,
+                          child: MyComicIconButtonControl(
+                            key: const ValueKey<String>(
+                              'manga_chrome_show_button',
+                            ),
+                            tooltip: t.manga_interface_show,
+                            iconSize: 20,
+                            color: Colors.white,
+                            icon: const MyComicIcon(Icons.visibility_outlined),
+                            onPressed: _toggleMangaChrome,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    // 桌面自绘顶栏挂在 Navigator 外只认根主题 surface；漫画页最顶上一排可能是
+    // 顶栏（固定 / 悬浮暗条）、回看横幅或「漫画 · 底色」（黑 / 白 / 灰），都
+    // 与 surface 不同源，不上报就在页顶切出一条异色带。零布局。
+    return WindowFullscreenHost(
+      child: MyComicTitleBarColorScope(
+        colors: _desktopTitleBarColors(context),
+        child: page,
+      ),
+    );
+  }
+
+  /// BUG-1888：切换界面可见性。移动端联动系统栏——隐藏界面即进入沉浸式全屏；
+  /// 桌面的窗口级全屏走全局 F11（[ShortcutAction.globalToggleFullscreen]），
+  /// 与本页无关，两者可叠加使用。
+  void _toggleMangaChrome() {
+    setState(() {
+      _chromeVisible = !_chromeVisible;
+    });
+    _applyMangaImmersiveMode();
+  }
+
+  /// 移动端系统栏跟随界面可见性：隐藏 → immersiveSticky（连状态栏/导航栏一起
+  /// 收掉，边缘滑动可临时唤出）；显示 → 回到 edgeToEdge，与 [AppModel.openMedia]
+  /// 打开媒体后的常规形态一致。桌面无系统栏概念，直接返回。
+  void _applyMangaImmersiveMode() {
+    if (!Platform.isAndroid && !Platform.isIOS) return;
+    SystemChrome.setEnabledSystemUIMode(
+      _chromeVisible ? SystemUiMode.edgeToEdge : SystemUiMode.immersiveSticky,
+      overlays: _chromeVisible
+          ? SystemUiOverlay.values
+          : const <SystemUiOverlay>[],
+    );
+  }
+
+  /// 正文是否就绪（与界面可见性无关）。加载失败 / 本章未下载都算没有正文。
+  ///
+  /// 单独拆出来是因为隐藏态（[_chromeVisible] == false）下仍要画页码角标，而
+  /// [_chromeActionsEnabled] 把可见性也算了进去，在隐藏态恒假。
+  bool get _chromeContentReady =>
+      _bookRow != null && !_loadFailed && !_chapterNotDownloaded;
+
+  /// 顶栏动作是否有意义：没有正文（加载失败 / 本章未下载）时只剩返回键。
+  bool get _chromeActionsEnabled => _chromeContentReady && _chromeVisible;
+
+  /// 栏主标题：书架条目（在线 / 本地图源）= 章节名；本地卷 = 书名。
+  String get _chromeTitle {
+    final OnlineMangaLibraryEntry? entry = _shelfEntry;
+    if (entry != null &&
+        _shelfChapterIndex >= 0 &&
+        _shelfChapterIndex < entry.chapters.length) {
+      return mangaChapterDisplayName(entry.chapters[_shelfChapterIndex]);
+    }
+    return _bookRow?.title ?? '';
+  }
+
+  /// 栏副标题（第二行）：书架在线条目 = 作品名；本地卷没有第二行。
+  String? get _chromeSubtitle {
+    final OnlineMangaLibraryEntry? entry = _shelfEntry;
+    if (entry != null &&
+        _shelfChapterIndex >= 0 &&
+        _shelfChapterIndex < entry.chapters.length) {
+      return entry.series.title;
+    }
+    return null;
+  }
+
+  /// 这一帧的 chrome 排布：哪些动作在顶部胶囊 / 底部工具栏 / 「更多」。顶栏与
+  /// 底栏各算一次（纯函数、动作表是轻量值对象），两边读到的是同一份结论。
+  MangaChromePlan _chromePlan() {
+    final bool ready = _chromeActionsEnabled;
+    return planMangaChrome(
+      width: MediaQuery.sizeOf(context).width,
+      groups: ready ? _chromeActionGroups() : const <List<MangaChromeAction>>[],
+    );
+  }
+
+  Widget _buildTopChrome() {
+    final bool ready = _chromeActionsEnabled;
+    final MangaChromePlan plan = _chromePlan();
+    return MangaReaderTopBar(
+      key: const ValueKey<String>('manga_reader_top_bar'),
+      title: ready ? _chromeTitle : '',
+      subtitle: ready ? _chromeSubtitle : null,
+      floating: _chromeFloating,
+      backTooltip: MaterialLocalizations.of(context).backButtonTooltip,
+      onBack: () => Navigator.of(context).maybePop(),
+      // 点标题 = 打开导航（与小说阅读器同口径）：书架在线条目是章节目录，本地卷
+      // 没有「章」，给页面一览。
+      onTitleTap: !ready
+          ? null
+          : _shelfEntry != null
+          ? (_switchingChapter ? null : () => unawaited(_showChapterPicker()))
+          : () => unawaited(_showPageGrid()),
+      titleTooltip: _shelfEntry != null
+          ? t.manga_series_chapters_action
+          : t.manga_reader_page_grid,
+      actions: plan.top,
+    );
+  }
+
+  /// 底部 chrome：页码滑块胶囊（整卷 1 页时不画）叠在悬浮工具栏 + FAB 上方。
+  Widget _buildBottomChrome() {
+    final MangaChromePlan plan = _chromePlan();
+    return MangaReaderBottomChrome(
+      key: const ValueKey<String>('manga_reader_bottom_chrome'),
+      slider: ExcludeFocus(
+        child: MangaReaderBottomBar(
+          key: const ValueKey<String>('manga_reader_bottom_bar'),
+          pageCount: _payload?.images.length ?? 0,
+          pageListenable: _pageNotifier,
+          currentPage: () => _pageNotifier.value,
+          rtl: _spreadDirection == 'rtl',
+          onPageCommitted: (int pageIndex) =>
+              unawaited(_jumpToPage(pageIndex + 1)),
+          onPageTap: () => unawaited(_showPageJumpDialog()),
+          pageTapTooltip: t.manga_jump_to_page,
+          onPreviousChapter: _shelfEntry == null
+              ? null
+              : () => unawaited(_goToAdjacentChapter(forward: false)),
+          onNextChapter: _shelfEntry == null
+              ? null
+              : () => unawaited(_goToAdjacentChapter(forward: true)),
+          previousChapterTooltip: t.manga_series_previous_chapter,
+          nextChapterTooltip: t.manga_series_next_chapter,
+          pagePreview: _pageThumbnail,
+          bubbleLabel: _pageLabelFor,
+        ),
+      ),
+      toolbar: MangaReaderToolbar(groups: plan.toolbar),
+    );
+  }
+
+  /// 页码胶囊文案：双页 spread 显示区间（如 `3-4 / 40`），单页原样。
+  String? _pageLabel() {
+    final int pageCount = _payload?.images.length ?? 0;
+    if (pageCount <= 0) return null;
+    return _pageLabelFor(_pageNotifier.value);
+  }
+
+  /// 任意 0-based 页号的读数（滑块拖动气泡用）：落在双页 spread 里时给区间。
+  String _pageLabelFor(int page) {
+    final int pageCount = _payload?.images.length ?? 0;
+    final int spreadIndex = MangaMyComicPage.spreadIndexForPage(_spreads, page);
+    final MangaSpreadEntry? entry =
+        (spreadIndex >= 0 && spreadIndex < _spreads.length)
+        ? _spreads[spreadIndex]
+        : null;
+    return (entry != null && entry.isSpread)
+        ? '${entry.pageIndices.first + 1}-'
+              '${entry.pageIndices.last + 1} / $pageCount'
+        : '${page + 1} / $pageCount';
+  }
+
+  /// chrome 全部动作，按组声明（组只是声明顺序；纯图标底栏摊平成一排），每颗带
+  /// [MangaChromeSlot] 与 priority（越大越晚收起）：
+  ///
+  ///  * 底部纯图标工具栏（高频，拇指区）：章节目录 8 / 页面一览 4 / 阅读模式 6 /
+  ///    单双页 3 / 翻页方向 2 / 快捷设置 10；窄屏放不下时按 priority 从低到高降到
+  ///    右上角（快捷设置最后降，翻页方向最先降）；
+  ///  * 右上角动作胶囊（默认全部平铺，放不下才按 priority 从低到高收进「⋯」）：
+  ///    窗口全屏 7（桌面）、全部设置 5、回到开头 1、隐藏界面 0（有快捷键 M /
+  ///    手柄 Y）。
+  List<List<MangaChromeAction>> _chromeActionGroups() {
+    return <List<MangaChromeAction>>[
+      <MangaChromeAction>[
+        // 章节目录：书架条目（在线 / 本地图源）才有「章」。本地卷（一卷一条目、
+        // 无章节）和源浏览预览（没有书架身份）都不显示，免得给出一个点开
+        // 必然是空的入口。
+        if (_shelfEntry != null)
+          MangaChromeAction(
+            key: const ValueKey<String>('manga_reader_chapters'),
+            icon: Icons.list_alt_outlined,
+            label: t.manga_series_chapters_action,
+            priority: 8,
+            onPressed: _switchingChapter
+                ? null
+                : () => unawaited(_showChapterPicker()),
+          ),
+        // 页面一览：全部页缩略图网格，点一页跳过去。
+        MangaChromeAction(
+          key: const ValueKey<String>('manga_reader_page_grid_button'),
+          icon: Icons.grid_view_rounded,
+          label: t.manga_reader_page_grid,
+          priority: 4,
+          onPressed: () => unawaited(_showPageGrid()),
+        ),
+      ],
+      <MangaChromeAction>[
+        MangaChromeAction(
+          key: const ValueKey<String>('manga_mode_toggle_button'),
+          icon: _mode.isContinuous
+              ? Icons.view_day_outlined
+              : Icons.auto_stories_outlined,
+          label: t.manga_mode_toggle,
+          priority: 6,
+          onPressed: () => unawaited(_toggleReadingMode()),
+        ),
+        // 布局偏好（自动/单页/双页）循环切换：只对 spread 模式有意义，webtoon 恒单页。
+        if (_mode == MangaReadingMode.spread)
+          MangaChromeAction(
+            key: const ValueKey<String>('manga_spread_preference_button'),
+            icon: _spreadPreferenceIcon,
+            label: '${t.spread_mode}: $_spreadPreferenceLabel',
+            priority: 3,
+            onPressed: () => unawaited(_cycleSpreadPreference()),
+          ),
+        MangaChromeAction(
+          key: const ValueKey<String>('manga_reader_direction_button'),
+          icon: _spreadDirection == 'rtl'
+              ? Icons.arrow_back
+              : Icons.arrow_forward,
+          label: _spreadDirection == 'rtl'
+              ? t.manga_direction_rtl
+              : t.manga_direction_ltr,
+          priority: 2,
+          onPressed: () => unawaited(
+            _setSpreadDirection(
+              (_pendingSpreadDirection ?? _spreadDirection) == 'rtl'
+                  ? 'ltr'
+                  : 'rtl',
+            ),
+          ),
+        ),
+      ],
+      <MangaChromeAction>[
+        // 快捷设置（方向 / 单双页 / 缩放 / 底色 / 亮度）；底部有「全部设置」。
+        MangaChromeAction(
+          key: const ValueKey<String>('manga_reader_quick_settings_button'),
+          icon: Icons.tune_rounded,
+          label: t.manga_reader_quick_settings,
+          priority: 10,
+          onPressed: () => unawaited(_showQuickSettings()),
+        ),
+      ],
+      <MangaChromeAction>[
+        if (desktopWindowFullscreenSupported)
+          MangaChromeAction(
+            key: const ValueKey<String>('manga_fullscreen_button'),
+            icon: _isWindowFullscreen
+                ? Icons.fullscreen_exit_rounded
+                : Icons.fullscreen_rounded,
+            label: t.shortcut_action_global_toggle_fullscreen,
+            slot: MangaChromeSlot.top,
+            priority: 7,
+            // The method itself serializes native transitions. Keeping the
+            // button enabled avoids rebuilding it as permanently disabled
+            // when the final state update occurs before the transition's
+            // finally block clears its guard.
+            onPressed: () => unawaited(_toggleMangaFullscreen()),
+          ),
+        MangaChromeAction(
+          key: const ValueKey<String>('manga_reader_start_button'),
+          icon: _mode.isContinuous || _mode == MangaReadingMode.pagedVertical
+              ? Icons.vertical_align_top
+              : (_spreadDirection == 'rtl'
+                    ? Icons.last_page
+                    : Icons.first_page),
+          label: t.manga_reader_back_to_start,
+          slot: MangaChromeSlot.top,
+          priority: 1,
+          onPressed: () => unawaited(_jumpToPage(1)),
+        ),
+        MangaChromeAction(
+          key: const ValueKey<String>('manga_reader_settings_button'),
+          icon: Icons.settings_outlined,
+          label: t.manga_reader_settings,
+          slot: MangaChromeSlot.top,
+          priority: 5,
+          onPressed: () => unawaited(_showReaderSettings()),
+        ),
+        // BUG-1888：隐藏界面。与快捷键（默认 M / 手柄 Y）同一个执行体。
+        MangaChromeAction(
+          key: const ValueKey<String>('manga_chrome_hide_button'),
+          icon: Icons.visibility_off_outlined,
+          label: t.manga_interface_hide,
+          slot: MangaChromeSlot.top,
+          onPressed: _toggleMangaChrome,
+        ),
+      ],
+    ];
+  }
+
+  IconData get _spreadPreferenceIcon {
+    switch (_spreadPreference) {
+      case MangaSpreadPreference.auto:
+        return Icons.auto_awesome_motion_outlined;
+      case MangaSpreadPreference.single:
+        return Icons.crop_portrait_outlined;
+      case MangaSpreadPreference.double:
+        return Icons.menu_book_outlined;
+    }
+  }
+
+  String get _spreadPreferenceLabel {
+    switch (_spreadPreference) {
+      case MangaSpreadPreference.auto:
+        return t.spread_auto;
+      case MangaSpreadPreference.single:
+        return t.spread_off;
+      case MangaSpreadPreference.double:
+        return t.spread_on;
+    }
+  }
+
+  /// 自动 → 单页 → 双页 → 自动。三态用一颗按钮循环，比弹菜单少一次点击，
+  /// 且能折进溢出菜单（菜单里没法再套菜单）。
+  Future<void> _cycleSpreadPreference() {
+    final MangaSpreadPreference next = switch (_spreadPreference) {
+      MangaSpreadPreference.auto => MangaSpreadPreference.single,
+      MangaSpreadPreference.single => MangaSpreadPreference.double,
+      MangaSpreadPreference.double => MangaSpreadPreference.auto,
+    };
+    return _setSpreadPreference(next);
+  }
+
+  Widget _buildBody() {
+    if (_loadFailed) {
+      return Center(
+        child: Text(
+          t.book_file_not_found,
+          style: const TextStyle(color: Colors.white70),
+        ),
+      );
+    }
+    if (_chapterNotDownloaded) return _buildChapterNotDownloaded();
+    if (_bookRow == null || _imagesDir == null || _payload == null) {
+      return const MyComicLoadingView();
+    }
+    // 平台无关的「内容已加载」标记：非 Linux 是原生 WebView，Linux 是无后端占位
+    // （`manga_webview` key 仅存在于前者，随宿主平台变化）。加载成功的普适可观察
+    // 契约挂这里，widget 测试三端（含 Linux CI）一致命中，不再依赖平台门控的
+    // WebView key。
+    return KeyedSubtree(
+      key: const ValueKey<String>('manga_content_ready'),
+      child: KeyedSubtree(key: _webViewHostKey, child: _buildWebView()),
+    );
+  }
+
+  /// 「本章未下载」态：未下载的章在线直读失败时的退路（入队 / 换章）。
+  ///
+  /// 两个出口：把本章交给下载队列（下完自动装载）、换到别的章。返回键由外层
+  /// 无条件提供，这里不再画第二个。
+  Widget _buildChapterNotDownloaded() {
+    final OnlineMangaLibraryEntry? entry = _shelfEntry;
+    final String chapterName =
+        entry != null &&
+            _shelfChapterIndex >= 0 &&
+            _shelfChapterIndex < entry.chapters.length
+        ? entry.chapters[_shelfChapterIndex].name
+        : '';
+    // 本态恒画在黑底阅读区上：Apple 浅色 app 的主按钮是黑色强调色，压在黑底上
+    // 直接隐形，整块换成恒深色档主题（MD3 / 深色 app 原样，结构不变）。
+    return MyComicAppleDarkTier(
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              const MyComicIcon(
+                Icons.cloud_download_outlined,
+                size: 48,
+                color: Colors.white70,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                t.manga_chapter_not_downloaded,
+                key: const ValueKey<String>('manga_chapter_not_downloaded'),
+                style: const TextStyle(color: Colors.white70),
+                textAlign: TextAlign.center,
+              ),
+              if (chapterName.isNotEmpty) ...<Widget>[
+                const SizedBox(height: 4),
+                Text(
+                  chapterName,
+                  style: const TextStyle(color: Colors.white54),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 12,
+                runSpacing: 8,
+                alignment: WrapAlignment.center,
+                children: <Widget>[
+                  MyComicFilledButton.icon(
+                    key: const ValueKey<String>(
+                      'manga_reader_enqueue_download',
+                    ),
+                    onPressed: () =>
+                        unawaited(_enqueueCurrentChapterDownload()),
+                    icon: const MyComicIcon(Icons.download),
+                    label: Text(t.manga_chapter_download_action),
+                  ),
+                  MyComicOutlinedButton.icon(
+                    key: const ValueKey<String>('manga_reader_pick_chapter'),
+                    onPressed: _switchingChapter
+                        ? null
+                        : () => unawaited(_showChapterPicker()),
+                    icon: const MyComicIcon(Icons.list_alt_outlined),
+                    label: Text(t.manga_series_chapters_action),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 构造原生 WebView（widget 测试宿主的加载早退路径永不触达这里）。
+  Widget _buildWebView() {
+    // 重建 key 挂在 WebView **之上**：`manga_webview` 这个 ValueKey 是集成测试
+    // finder 的锚点，不能随代次变化。
+    return KeyedSubtree(
+      key: _webViewDeathGuard.rebuildKey,
+      child: _buildWebViewSurface(),
+    );
+  }
+
+  Widget _buildWebViewSurface() {
+    return InAppWebView(
+      key: const ValueKey<String>('manga_webview'),
+      initialSettings: InAppWebViewSettings(
+        verticalScrollBarEnabled: false,
+        horizontalScrollBarEnabled: false,
+        scrollbarFadingEnabled: false,
+        databaseEnabled: false,
+        domStorageEnabled: false,
+        useShouldInterceptRequest: true,
+        resourceCustomSchemes: const <String>[
+          MangaMyComicPage.kMangaResourceScheme,
+        ],
+        transparentBackground: true,
+        // BUG-3356 同款：WKWebView 的 `allowsBackForwardNavigationGestures` 在
+        // inappwebview 里默认 true，屏幕边缘横滑是 WebView 自己的历史前进 / 后退。
+        // spread 模式每越出窗口就重新 `loadData` 一份窗口文档，历史里堆着旧窗口，
+        // 侧滑会把画面退回旧 spread 窗口（宿主的 `_currentSpread` 却没动）。翻页 / 跨章
+        // 完全由宿主拥有，WebView 历史不对应任何阅读动作，关掉。只作用于 iOS / macOS。
+        allowsBackForwardNavigationGestures: false,
+      ),
+      onWebViewCreated: (InAppWebViewController controller) {
+        _controller = controller;
+        // 空白 tap 本身是 no-op；但指针已让原生 WebView 夺走 OS 焦点，焦点回收
+        // 必须做，否则此后方向键翻页全部失效。
+        controller.addJavaScriptHandler(
+          handlerName: 'onTapEmpty',
+          callback: (List<dynamic> _) {
+            _focusOwnership.reclaim(FocusReclaimCause.gesture);
+            _toggleFloatingChrome();
+          },
+        );
+        controller.addJavaScriptHandler(
+          handlerName: 'onMangaReaderHide',
+          callback: (List<dynamic> args) {
+            if (!mounted ||
+                _readerSettingsOpen ||
+                args.isEmpty ||
+                args.first is! bool) {
+              return;
+            }
+            final bool hide = args.first as bool;
+            if (_chromeVisible == hide) _toggleMangaChrome();
+          },
+        );
+        // 裁白边要读像素；跨域无 CORS 的页图读不了，JS 侧保持原尺寸显示（安全
+        // 降级），这里只负责留痕，否则「开了裁边却没裁」无从排查。每本书记一次。
+        controller.addJavaScriptHandler(
+          handlerName: 'onMangaImageTransformUnavailable',
+          callback: (List<dynamic> args) {
+            if (_imageTransformFailureLogged) return;
+            _imageTransformFailureLogged = true;
+            ErrorLogService.instance.log(
+              'MangaMyComicPage.imageTransformUnavailable',
+              StateError(
+                'crop borders unavailable: '
+                '${args.isEmpty ? 'unknown' : args.first}',
+              ),
+              StackTrace.current,
+            );
+          },
+        );
+        // 翻页：JS 手势机报方向（'next'/'prev'，页序语义），Dart 推进 spread。
+        controller.addJavaScriptHandler(
+          handlerName: 'onMangaTurn',
+          callback: (List<dynamic> args) {
+            if (args.isEmpty) return null;
+            // 手势/滚轮翻页经原生 WebView 触发，指针已夺焦：翻完把键盘收回，
+            // 否则「滑一下之后方向键就不灵了」（与阅读器 BUG-136 同源）。
+            _focusOwnership.reclaim(FocusReclaimCause.gesture);
+            // 返回 Future：桥在它完成后才答复 JS 的 callHandler Promise。横滑跟手
+            // 松手后靠这个答复判断「Dart 换没换页」，没换才回弹（BUG-3219）。
+            // 还要等进行中的那一轮 drain：连滑时本次 enqueue 会立即返回，步数要等
+            // 那一轮才消费（见 [MangaTurnQueue.whenIdle]）。
+            return _onMangaTurn(
+              args[0] as String,
+            ).then((void _) => _turnQueue.whenIdle);
+          },
+        );
+        controller.addJavaScriptHandler(
+          handlerName: 'onMangaNavigationKey',
+          callback: (List<dynamic> args) {
+            if (args.isEmpty || args[0] is! String) return;
+            _handleNativeNavigationKey(args[0] as String);
+          },
+        );
+        // 平移桥（第二座，允许连发）。回调与翻页桥同一个——token 一律走
+        // InputBinding.deserialize + 注册表解析，动作由绑定决定而不是由桥决定。
+        controller.addJavaScriptHandler(
+          handlerName: 'onMangaPanKey',
+          callback: (List<dynamic> args) {
+            if (args.isEmpty || args[0] is! String) return;
+            _handleNativeNavigationKey(args[0] as String);
+          },
+        );
+        // 鼠标桥（第三座，只在指针归 WebView 的平台安装）。回调同样汇进
+        // [_handleNativeNavigationKey]——它按 token 先试 MouseBinding 再试
+        // InputBinding，动作由绑定决定而不是由桥决定。
+        controller.addJavaScriptHandler(
+          handlerName: 'onMangaMouseButton',
+          callback: (List<dynamic> args) {
+            if (args.isEmpty || args[0] is! String) return;
+            _handleNativeNavigationKey(args[0] as String);
+          },
+        );
+        controller.addJavaScriptHandler(
+          handlerName: 'onMangaContextMenu',
+          callback: (List<dynamic> args) {
+            if (args.isEmpty || args[0] is! String) return;
+            // BUG-2111：页内 JS 那一路仍然硬判 `e.button === 2`，因为漫画的右键还兼着
+            // 「缩放态下按住拖拽平移」（rightDrag），换键会牵连那半边。所以归属判据补在
+            // 这里：右键若已经被别的漫画动作占用，菜单让位——否则一次右键既翻页又弹菜单，
+            // 正是本 bug 在漫画页的形态。判据与 Flutter 那二十余处入口是同一个函数。
+            if (!contextMenuButtonNumberMatches(
+              registry: appModel.shortcutRegistry,
+              button: 2,
+              ladder: _kMangaMouseLadder,
+            )) {
+              return;
+            }
+            unawaited(_showReaderContextMenu(args[0] as String));
+          },
+        );
+        controller.addJavaScriptHandler(
+          // 只同步会话状态，不写默认缩放偏好（BUG-2782）。
+          handlerName: 'onMangaZoomChanged',
+          callback: (List<dynamic> args) {
+            if (args.isEmpty) return;
+            final int? value = switch (args[0]) {
+              final num number => number.round(),
+              final String text => int.tryParse(text),
+              _ => null,
+            };
+            if (value == null) return;
+            final int normalized = value.clamp(
+              kMangaZoomMinPercent,
+              kMangaZoomMaxPercent,
+            );
+            if (_zoomPercent == normalized) return;
+            if (mounted) {
+              setState(() => _zoomPercent = normalized);
+            } else {
+              _zoomPercent = normalized;
+            }
+          },
+        );
+        // webtoon 滚动报告：更新 fraction/页码（绝不重载）。
+        controller.addJavaScriptHandler(
+          handlerName: 'onMangaScroll',
+          callback: (List<dynamic> args) {
+            if (args.isEmpty) return;
+            unawaited(_onMangaScroll(args[0] as String));
+          },
+        );
+        unawaited(_loadInitialWindow());
+      },
+      shouldInterceptRequest:
+          (InAppWebViewController controller, WebResourceRequest request) =>
+              _interceptRequest(request.url),
+      onLoadResourceWithCustomScheme:
+          (InAppWebViewController controller, WebResourceRequest request) =>
+              _loadMangaCustomScheme(request),
+      onReceivedError:
+          (
+            InAppWebViewController controller,
+            WebResourceRequest request,
+            WebResourceError error,
+          ) async {
+            if (!(request.isForMainFrame ?? false)) return;
+            // Windows WebView2 对未解析虚拟域的主帧导航报错，即使 shouldInterceptRequest
+            // 已提供文档。视作加载完成（镜像 reader_my_comic 的同款处理）。
+            if (Platform.isWindows &&
+                request.url.host == MangaMyComicPage.kMangaHost) {
+              unawaited(_markWindowReady(controller));
+            }
+          },
+      onLoadStop: (InAppWebViewController controller, WebUri? url) async {
+        await _markWindowReady(controller);
+        await _syncAutoScrollPause();
+      },
+      // 非 null 本身就是救命动作：Java 侧据此 `return true`，不再连坐杀 app。
+      onWebContentProcessDidTerminate: (InAppWebViewController _) =>
+          unawaited(_webViewDeathGuard.handleWebContentTerminated()),
+      onRenderProcessGone:
+          (InAppWebViewController _, RenderProcessGoneDetail detail) =>
+              unawaited(
+                _webViewDeathGuard.handleDeath(
+                  didCrash: detail.didCrash,
+                  rendererPriorityAtExit: detail.rendererPriorityAtExit,
+                ),
+              ),
+    );
+  }
+
+  /// 当前窗口加载完成：记录当前页位置（onLoadStop 与 Windows 的
+  /// onReceivedError-as-success 分支共用）。
+  Future<void> _markWindowReady(InAppWebViewController controller) async {
+    if (!mounted) return;
+    Object? rawGeneration;
+    try {
+      rawGeneration = await controller.evaluateJavascript(
+        source: 'window.__mangaDocumentGeneration',
+      );
+    } catch (_) {
+      return;
+    }
+    // 入口闸门（BUG-1153）：这份文档必须自证就是当前 generation。
+    if (!MangaWindowGeneration.isCurrent(
+      rawGeneration,
+      _windowGate.generation,
+    )) {
+      return;
+    }
+    // 但入口比一次远远不够（BUG-1170）：下面三个 await 期间窗口可能被换掉
+    // （10s 超时放弃旧窗口 → 新一轮 begin() 递增 generation 并换新锁），迟到的旧
+    // 回调会解开**新**窗口的锁，导航锁被错误解除，WebView 还在加载旧内容就被判定
+    // 就绪。所以这里取本次加载的凭据，每个 await 之后再复问一次归属。
+    final MangaWindowLoadTicket? ticket = _windowGate.ticketFor(
+      MangaWindowGeneration.parse(rawGeneration),
+    );
+    if (ticket == null) {
+      return;
+    }
+    await controller.evaluateJavascript(
+      source: MangaMyComicPage.navigationKeyBridgeScript,
+    );
+    if (!mounted || !_windowGate.owns(ticket)) {
+      return;
+    }
+    await controller.evaluateJavascript(
+      source: MangaMyComicPage.panKeyBridgeScript,
+    );
+    if (!mounted || !_windowGate.owns(ticket)) {
+      return;
+    }
+    // 鼠标桥：只在**指针归 WebView** 的平台装。Windows 上指针先到 Flutter，页面根
+    // [Listener]（[_handleMangaPointerDown]）已经接住，再装一份就会双触发。
+    // 按钮表按当前绑定实时生成，改绑后换窗即生效。
+    if (!hostOwnsWebViewPointerInput) {
+      await controller.evaluateJavascript(
+        source: MangaMyComicPage.mouseBridgeScript(
+          MangaMyComicPage.mouseBridgeButtons(appModel.shortcutRegistry),
+        ),
+      );
+      if (!mounted || !_windowGate.owns(ticket)) {
+        return;
+      }
+    }
+    if (_mode.isContinuous) {
+      await controller.evaluateJavascript(
+        source:
+            'window.__mangaScrollToSpread && '
+            'window.__mangaScrollToSpread($_currentSpread, $_currentFraction);',
+      );
+    } else {
+      await controller.evaluateJavascript(
+        source:
+            'window.__mangaApplyTranslate && '
+            'window.__mangaApplyTranslate($_currentSpread);',
+      );
+    }
+    if (!mounted || !_windowGate.owns(ticket)) {
+      return;
+    }
+    _windowGate.complete(ticket, MangaWindowLoadOutcome.ready);
+    _recordProgress();
+    // 正文就绪的确定性落焦：整页 autofocus 会抢在 WebView 内容就绪之前，焦点落在
+    // 表面层；换窗（翻到下一个加载窗口）同样会重挂平台视图。这里在每个就绪落点
+    // 补一次，让首开/换窗后第一次按方向键就作用在漫画上。
+    _focusOwnership.reclaim(FocusReclaimCause.contentReady);
+  }
+}
+
+/// 漫画阅读页对桌面控制通道（`my_comic_cli reader ...`）的遥控实现：翻页走
+/// [_MangaMyComicPageState._executeReaderInputAction]（翻页键 / 悬浮球同一入口，含
+/// webtoon 锚点跳页与跨话翻页），跳页走页码跳转的 `_jumpToPage`，切话走章节列表
+/// 的 `_switchToChapter`。正文没装好时快照为 null、动作为 no-op。
+class _MangaPageSessionRemote implements ReaderSessionRemote {
+  _MangaPageSessionRemote(this._state);
+
+  final _MangaMyComicPageState _state;
+
+  MokuroPayload? get _payload => _state.mounted ? _state._payload : null;
+
+  @override
+  ReaderSessionSnapshot? snapshot() {
+    final MokuroPayload? payload = _payload;
+    if (payload == null) return null;
+    final OnlineMangaLibraryEntry? entry = _state._shelfEntry;
+    final bool online = entry != null && _state._shelfChapterIndex >= 0;
+    return ReaderSessionSnapshot(
+      kind: ReaderSessionKind.manga,
+      bookKey: _state.widget.bookKey,
+      title: _state._bookRow?.title,
+      contentReady: !_state._switchingChapter,
+      pageIndex: _state._currentPage,
+      pageCount: payload.images.length,
+      chapterIndex: online ? _state._shelfChapterIndex : null,
+      chapterCount: online ? entry.chapters.length : null,
+    );
+  }
+
+  @override
+  Future<void> turnPage({required bool forward}) async {
+    if (_payload == null) return;
+    _state._executeReaderInputAction(
+      forward ? MangaReaderInputAction.next : MangaReaderInputAction.previous,
+      source: _MangaReaderInputSource.remote,
+    );
+  }
+
+  @override
+  Future<bool> goToPage(int pageIndex) async {
+    final MokuroPayload? payload = _payload;
+    if (payload == null ||
+        pageIndex < 0 ||
+        pageIndex >= payload.images.length) {
+      return false;
+    }
+    await _state._jumpToPage(pageIndex + 1);
+    return true;
+  }
+
+  @override
+  Future<bool> goToChapter(int chapterIndex, {double progress = 0}) async {
+    final OnlineMangaLibraryEntry? entry = _state._shelfEntry;
+    if (_payload == null ||
+        entry == null ||
+        chapterIndex < 0 ||
+        chapterIndex >= entry.chapters.length) {
+      return false;
+    }
+    await _state._switchToChapter(chapterIndex);
+    return _state.mounted && _state._shelfChapterIndex == chapterIndex;
+  }
+
+  @override
+  Future<bool> goToBookPercent(double percent) async => false;
+}

@@ -55,7 +55,7 @@ def utc(text: str) -> dt.datetime:
 
 
 def test_classify_real_tags() -> None:
-    """Every tag shape observed in hajisensai/Fushi's release list."""
+    """Every tag shape observed in Myyuluo/my-comic's release list."""
     # Real stable releases.
     check(classify_release("v2.1.1", False, False) == "stable", "v2.1.1 -> stable")
     check(classify_release("v1.0.0", False, False) == "stable", "v1.0.0 -> stable")
@@ -77,8 +77,8 @@ def test_classify_real_tags() -> None:
     # The rolling debug tags carry no per-build history and must never be
     # counted as a channel release; the debug lane comes from Actions runs.
     check(
-        classify_release("fushi-debug-rolling", True, False) is None,
-        "fushi-debug-rolling excluded",
+        classify_release("mycomic-debug-rolling", True, False) is None,
+        "mycomic-debug-rolling excluded",
     )
     check(
         classify_release("debug-rolling", True, False) is None,

@@ -31,7 +31,7 @@ if [[ -n "$app_executable" ]]; then
     case "$want" in
       arm64) want_java="$runtime_directory/runtime-macos-arm64/bin/java" ;;
       x86_64)
-        echo "app 本体带了 x86_64 切片，但 macOS 版只出 arm64（不再支持 Intel Mac），Mihon runtime 也只有 arm64 镜像；检查 fushi/macos/Runner.xcodeproj 的 EXCLUDED_ARCHS。" >&2
+        echo "app 本体带了 x86_64 切片，但 macOS 版只出 arm64（不再支持 Intel Mac），Mihon runtime 也只有 arm64 镜像；检查 my_comic/macos/Runner.xcodeproj 的 EXCLUDED_ARCHS。" >&2
         exit 1
         ;;
       *)
@@ -76,7 +76,7 @@ import secrets
 print(secrets.token_urlsafe(32))
 PY
 )"
-data_directory="$(mktemp -d "${TMPDIR:-/tmp}/fushi-mihon-smoke.XXXXXX")"
+data_directory="$(mktemp -d "${TMPDIR:-/tmp}/mycomic-mihon-smoke.XXXXXX")"
 stdout_log="$data_directory/server.out.log"
 stderr_log="$data_directory/server.err.log"
 pid=""
@@ -90,7 +90,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-FUSHI_MIHON_TOKEN="$token" "$java" -Xmx256m -Djava.awt.headless=true \
+MYCOMIC_MIHON_TOKEN="$token" "$java" -Xmx256m -Djava.awt.headless=true \
   -Djava.util.prefs.userRoot="$data_directory/preferences" \
   -jar "$server" "$port" "$data_directory" >"$stdout_log" 2>"$stderr_log" &
 pid="$!"
@@ -125,7 +125,7 @@ import json
 import sys
 value = json.loads(sys.argv[1])
 required = {
-    "fushiMihonBridge": 1,
+    "myComicMihonBridge": 1,
     "sourceFactory": True,
     "preferenceCallbacks": True,
     "imageProxy": True,

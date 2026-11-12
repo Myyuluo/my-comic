@@ -91,7 +91,7 @@ else {
             # 用 `ls-files -- <path>`(未 track 时输出空、退出码 0)而非
             # `--error-unmatch`：后者未命中会写 stderr，PS 5.1 把原生命令的 stderr
             # 包成 NativeCommandError 而中断整个脚本 —— 主 checkout 与 worktree 分处
-            # 目录改名前后的分支时(hibiki/ vs fushi/)必然逐个未命中，脚本会死在
+            # 目录改名前后的分支时(hibiki/ vs my_comic/)必然逐个未命中，脚本会死在
             # 第一个密钥文件上，连后面的 bootstrap 都不跑。
             $tracked = & git -C $here ls-files -- $f
             if (-not $tracked) {
@@ -112,12 +112,12 @@ else {
 }
 
 # --- 注册 i18n json 的按 key 三方合并驱动 -----------------------------------
-# .gitattributes 把 fushi/lib/i18n/*.i18n.json 标成 merge=fushi-i18n-json；驱动命令
+# .gitattributes 把 my_comic/lib/i18n/*.i18n.json 标成 merge=mycomic-i18n-json；驱动命令
 # 本身只能放 git config(不入库)。写的是仓库级 config，主 checkout 与所有 worktree
 # 共用，幂等。没注册时 git 退回按行合并，不会出错，只是相邻 key 照样冲突。
-& git -C $here config merge.fushi-i18n-json.name "Fushi i18n JSON key-level merge"
-& git -C $here config merge.fushi-i18n-json.driver "dart fushi/tool/i18n_merge_driver.dart %O %A %B"
-Write-Host "OK i18n json 合并驱动已注册(merge.fushi-i18n-json)" -ForegroundColor Green
+& git -C $here config merge.mycomic-i18n-json.name "MyComic i18n JSON key-level merge"
+& git -C $here config merge.mycomic-i18n-json.driver "dart my_comic/tool/i18n_merge_driver.dart %O %A %B"
+Write-Host "OK i18n json 合并驱动已注册(merge.mycomic-i18n-json)" -ForegroundColor Green
 
 # --- bootstrap(pub get + 打补丁) ------------------------------------------
 if ($SkipBootstrap) {
@@ -146,14 +146,14 @@ finally {
 # 新 worktree 第一次 flutter test 慢在 frontend_server 从零编译(2026-10-07 实测
 # 同一测试冷启动编译 4.7 分钟、预热后 3.2 分钟；重负载下冷编译曾到 20 分钟)，
 # 不在 native-asset hooks(0.5~1.5 分钟)或 unit_test_assets(约 20 秒)。
-# flutter test 用 fushi/build/test_cache/build/<md5>.cache.dill.track.dill 做
+# flutter test 用 my_comic/build/test_cache/build/<md5>.cache.dill.track.dill 做
 # --initialize-from-dill；文件名只由 dart-define / 前端参数 / Flutter 版本决定，
 # 与 worktree 路径无关，所以从兄弟 worktree 拷过来能被直接命中。
 # 内容安全性：frontend_server 拿到 dill 后按 package_config 重新解析每个
-# package: 库的文件路径，路径与 dill 里记录的不同(本仓 fushi 与 packages/* 必然
+# package: 库的文件路径，路径与 dill 里记录的不同(本仓 my_comic 与 packages/* 必然
 # 如此)就整库重编，只复用 Flutter SDK 与 pub cache 里路径不变的库；再逐个比对
 # 源码字节，变了的也重编。所以拷来的 dill 只影响速度、不影响正确性(实测预热
-# 后产出的 dill 里源 worktree 的 fushi/lib、packages 路径为 0 处)。收益因此只
+# 后产出的 dill 里源 worktree 的 my_comic/lib、packages 路径为 0 处)。收益因此只
 # 是 SDK 与 pub 依赖那部分的编译时间。
 # 只拷 dill：.dart_tool/hooks_runner 的 input.json / 依赖哈希文件里写死了源
 # worktree 的绝对路径，且 hook 依赖环境变量 PATH 的哈希(每个 shell 都不同)，
@@ -185,7 +185,7 @@ function Get-LockHash([string]$root) {
 }
 
 function Invoke-TestKernelCacheSeed([string]$targetRoot) {
-    $rel = 'fushi/build/test_cache/build'
+    $rel = 'my_comic/build/test_cache/build'
     $targetDir = Join-Path $targetRoot $rel
 
     $targetSdk = Get-FlutterSdkKey $targetRoot

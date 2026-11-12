@@ -9,7 +9,7 @@
 # 判据（2026-09 全月 542 次触发发布的 develop push + 分片后实测耗时模拟出的最优）：
 # 旧 run 第一个 job 开始得比新 run 创建早不足 8 分钟、且此刻不足 10 分钟就取消；
 # 普通 cancel 停不下 always() job 的，等 90 秒后 force-cancel。原理、数值与推导见
-# tool/cancel_superseded_runs.sh。守卫：fushi/test/build/release_workflow_supersede_guard_test.dart。
+# tool/cancel_superseded_runs.sh。守卫：my_comic/test/build/release_workflow_supersede_guard_test.dart。
 #
 # 本 workflow 不发布任何东西，只调 Actions API 取消 run。
 name: Supersede develop releases
@@ -37,7 +37,7 @@ jobs:
           REPO: ${{ github.repository }}
           HEAD_SHA: ${{ github.sha }}
           BRANCH: ${{ github.ref_name }}
-          WORKFLOWS: release.yml release-desktop.yml
+          WORKFLOWS: release-desktop.yml
           SUPERSEDE_WINDOW_MINUTES: '8'
           SUPERSEDE_MAX_ELAPSED_MINUTES: '10'
         run: bash tool/cancel_superseded_runs.sh

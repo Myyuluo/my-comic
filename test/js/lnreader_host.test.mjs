@@ -1,7 +1,7 @@
-// LNReader 插件宿主（fushi/assets/lnreader/lnreader_host.js）的真行为测试：
+// LNReader 插件宿主（my_comic/assets/lnreader/lnreader_host.js）的真行为测试：
 // 真加载入库的 cheerio/dayjs bundle 与宿主脚本，用一个 tsc 产物形态的插件验证
 // require 表、fetch 过桥规整、默认筛选值、存储持久化与章节 XHTML 规整。
-// Dart 侧契约见 fushi/lib/src/media/novel/online/lnreader_runtime.dart。
+// Dart 侧契约见 my_comic/lib/src/media/novel/online/lnreader_runtime.dart。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { JSDOM } from 'jsdom';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const assets = path.join(here, '..', '..', 'fushi', 'assets', 'lnreader');
+const assets = path.join(here, '..', '..', 'my_comic', 'assets', 'lnreader');
 
 function createHost(routes) {
   const dom = new JSDOM('<!doctype html><html><body></body></html>');
@@ -24,7 +24,7 @@ function createHost(routes) {
     XMLSerializer: dom.window.XMLSerializer,
   });
   ctx.globalThis = ctx;
-  ctx.__fushiLnReaderBridge = {
+  ctx.__myComicLnReaderBridge = {
     async fetch(request) {
       requests.push(request);
       const route = routes[request.url];
@@ -44,7 +44,7 @@ function createHost(routes) {
   };
   vm.runInContext(fs.readFileSync(path.join(assets, 'lnreader_libs.js'), 'utf8'), ctx);
   vm.runInContext(fs.readFileSync(path.join(assets, 'lnreader_host.js'), 'utf8'), ctx);
-  return { ln: ctx.__fushiLnReader, requests, persisted };
+  return { ln: ctx.__myComicLnReader, requests, persisted };
 }
 
 // tsc(ES5, CommonJS) 产物的形态：顶层 require、exports.default = new Plugin()。

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-cd "$ROOT/fushi"
+cd "$ROOT/my_comic"
 
 DART="${DART:-dart}"
 if [[ "${SKIP_FIXTURES:-}" != "1" ]]; then

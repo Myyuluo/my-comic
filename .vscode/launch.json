@@ -2,23 +2,23 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Fushi (debug)",
+      "name": "MyComic (debug)",
       "type": "dart",
       "request": "launch",
-      "program": "fushi/lib/main.dart"
+      "program": "my_comic/lib/main.dart"
     },
     {
-      "name": "Fushi (profile)",
+      "name": "MyComic (profile)",
       "type": "dart",
       "request": "launch",
-      "program": "fushi/lib/main.dart",
+      "program": "my_comic/lib/main.dart",
       "flutterMode": "profile"
     },
     {
-      "name": "Fushi (release)",
+      "name": "MyComic (release)",
       "type": "dart",
       "request": "launch",
-      "program": "fushi/lib/main.dart",
+      "program": "my_comic/lib/main.dart",
       "flutterMode": "release"
     }
   ]

@@ -14,12 +14,12 @@ function mirror(primary, scheme, paletteId) {
     '--md-primary': primary,
     '--text-color': scheme === 'dark' ? '#f8f8f8' : '#161616',
     '--background-color': scheme === 'dark' ? '#121212' : '#fafafa',
-    '--fushi-color-scheme': scheme,
-    '--fushi-theme-variant': 'vibrant',
-    '--fushi-theme-system': '1',
-    '--fushi-theme-neutral': '0',
-    '--fushi-pure-black': '0',
-    ...(paletteId ? { '--fushi-theme-palette-id': paletteId } : {}),
+    '--mycomic-color-scheme': scheme,
+    '--mycomic-theme-variant': 'vibrant',
+    '--mycomic-theme-system': '1',
+    '--mycomic-theme-neutral': '0',
+    '--mycomic-pure-black': '0',
+    ...(paletteId ? { '--mycomic-theme-palette-id': paletteId } : {}),
   };
 }
 
@@ -34,7 +34,7 @@ const second = {
 
 test('Android system mirror without seed is explicitly non-derivable', () => {
   const scope = createConsumer({ current: 'light', light: first.light });
-  assert.equal(scope.fushiThemePalette.specFromAppTheme(first.light), null);
+  assert.equal(scope.myComicThemePalette.specFromAppTheme(first.light), null);
 });
 
 test('missing opposite Android scheme returns CSS fallback, not a primary-seeded guess', () => {
@@ -54,19 +54,19 @@ test('palette identity rejects stale opposite mirror after wallpaper change', ()
 test('desktop OS accent mirror with explicit seed remains derivable', () => {
   const light = {
     ...first.light,
-    '--fushi-theme-seed': '#e91e63',
+    '--mycomic-theme-seed': '#e91e63',
   };
-  delete light['--fushi-theme-palette-id'];
+  delete light['--mycomic-theme-palette-id'];
   const scope = createConsumer({ current: 'light', light });
-  const expected = scope.fushiThemePalette.derive({ seed: '#e91e63', systemAccent: true }, 'dark');
-  assert.equal(scope.fushiTheme.tokens('dark')['--fushi-primary'], expected['--fushi-primary']);
+  const expected = scope.myComicThemePalette.derive({ seed: '#e91e63', systemAccent: true }, 'dark');
+  assert.equal(scope.myComicTheme.tokens('dark')['--mycomic-primary'], expected['--mycomic-primary']);
 });
 
 test('legacy non-system mirror keeps its explicitly approximate compatibility path', () => {
-  const legacy = { ...first.light, '--fushi-theme-system': '0' };
-  delete legacy['--fushi-theme-palette-id'];
+  const legacy = { ...first.light, '--mycomic-theme-system': '0' };
+  delete legacy['--mycomic-theme-palette-id'];
   const scope = createConsumer({ current: 'light', light: legacy });
-  const spec = scope.fushiThemePalette.specFromAppTheme(legacy);
+  const spec = scope.myComicThemePalette.specFromAppTheme(legacy);
   assert.ok(spec);
   assert.equal(spec.approximate, true);
 });

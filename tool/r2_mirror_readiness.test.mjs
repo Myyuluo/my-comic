@@ -10,12 +10,12 @@ const manifest = (tag, names) => ({
 });
 
 const FULL = [
-  'fushi-2.2.4-arm64-v8a.apk',
-  'fushi-2.2.4-armeabi-v7a.apk',
-  'fushi-2.2.4-x86_64.apk',
-  'fushi-2.2.4-windows-setup.exe',
-  'fushi-2.2.4-macos.zip',
-  'fushi-2.2.4-ios.ipa',
+  'mycomic-2.2.4-arm64-v8a.apk',
+  'mycomic-2.2.4-armeabi-v7a.apk',
+  'mycomic-2.2.4-x86_64.apk',
+  'mycomic-2.2.4-windows-setup.exe',
+  'mycomic-2.2.4-macos.zip',
+  'mycomic-2.2.4-ios.ipa',
 ];
 
 test('清单指向本 tag 且资产都在 release 上：就位', () => {
@@ -33,7 +33,7 @@ test('v2.2.4 的真实翻车形态：published 早到，清单还停在上一版
   // release 上此刻只有 bridge 包（12:12~12:56 传的），本体 13:44 之后才上传。
   // 旧实现就是在这一刻把 3 个 bridge apk 当全集镜像掉并报 success。
   const verdict = assessReadiness({
-    publishedManifest: manifest('v2.2.3', ['fushi-2.2.3-windows-setup.exe']),
+    publishedManifest: manifest('v2.2.3', ['mycomic-2.2.3-windows-setup.exe']),
     tag: 'v2.2.4',
     releaseAssetNames: [
       'bridge-2.1.1-arm64-v8a.apk',

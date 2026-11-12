@@ -1,6 +1,6 @@
 ﻿<#
 .SYNOPSIS
-  Fushi ADB UI tool - tap, swipe, dump, find without manual adb calls
+  MyComic ADB UI tool - tap, swipe, dump, find without manual adb calls
 .EXAMPLE
   .\adb-ui.ps1 dump              # full UI tree
   .\adb-ui.ps1 dump -Compact     # only interactive/labeled elements
@@ -30,7 +30,7 @@ param(
 
     [string]$Device = "",
     [switch]$Compact,
-    [string]$Package = "app.fushi.reader"
+    [string]$Package = "app.mycomic.reader"
 )
 
 # ─── Device auto-detection ───────────────────────────────────────────────────
@@ -321,7 +321,7 @@ switch ($Action) {
     }
     'screenshot' {
         $ts = Get-Date -Format "yyyyMMdd_HHmmss"
-        $local = if ($Rest -and $Rest[0]) { $Rest[0] } else { "d:\APP\vs_claude_code\fushi\.codex-test\screenshot_$ts.png" }
+        $local = if ($Rest -and $Rest[0]) { $Rest[0] } else { "d:\APP\vs_claude_code\my_comic\.codex-test\screenshot_$ts.png" }
         Shell "screencap -p /sdcard/ss.png" | Out-Null
         $dev = Resolve-Device
         & adb -s $dev pull /sdcard/ss.png $local 2>$null | Out-Null

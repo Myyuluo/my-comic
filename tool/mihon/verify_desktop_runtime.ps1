@@ -25,7 +25,7 @@ foreach ($required in @(
 
 $port = Get-MihonFreeLoopbackPort
 $token = New-MihonAuthToken
-$dataRoot = Join-Path ([IO.Path]::GetTempPath()) ("fushi-mihon-smoke-" + [Guid]::NewGuid().ToString("N"))
+$dataRoot = Join-Path ([IO.Path]::GetTempPath()) ("mycomic-mihon-smoke-" + [Guid]::NewGuid().ToString("N"))
 [IO.Directory]::CreateDirectory($dataRoot) | Out-Null
 
 $startInfo = [Diagnostics.ProcessStartInfo]::new()
@@ -34,7 +34,7 @@ $startInfo.UseShellExecute = $false
 $startInfo.CreateNoWindow = $true
 $startInfo.RedirectStandardOutput = $true
 $startInfo.RedirectStandardError = $true
-$startInfo.Environment["FUSHI_MIHON_TOKEN"] = $token
+$startInfo.Environment["MYCOMIC_MIHON_TOKEN"] = $token
 $startInfo.ArgumentList.Add("-Xmx512m")
 $startInfo.ArgumentList.Add("-Djava.awt.headless=true")
 $startInfo.ArgumentList.Add("-Djava.util.prefs.userRoot=$(Join-Path $dataRoot 'preferences')")
@@ -63,7 +63,7 @@ try {
         try {
             $capabilities = Invoke-RestMethod -Uri "$baseUri/capabilities" -Headers $authenticatedHeaders -TimeoutSec 2
             if (
-                $capabilities.fushiMihonBridge -eq 1 -and
+                $capabilities.myComicMihonBridge -eq 1 -and
                 $capabilities.sourceFactory -eq $true -and
                 $capabilities.preferenceCallbacks -eq $true -and
                 $capabilities.imageProxy -eq $true -and
@@ -77,7 +77,7 @@ try {
     } while ([DateTime]::UtcNow -lt $deadline)
     if (
         $null -eq $capabilities -or
-        $capabilities.fushiMihonBridge -ne 1 -or
+        $capabilities.myComicMihonBridge -ne 1 -or
         $capabilities.sourceFactory -ne $true -or
         $capabilities.preferenceCallbacks -ne $true -or
         $capabilities.imageProxy -ne $true -or
