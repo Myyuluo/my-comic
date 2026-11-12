@@ -4,7 +4,7 @@
 #include "siglus_legacy_glyph_sites.h"
 #include "siglus_voice_source.h"
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 // Static FPO / iterator-proxy string ABI proof, not an event-pairing or playback
 // claim. Only the source worker may resolve canonical file identity and verify
 // the archive member/range. No installed game path or hash admits this profile.
@@ -446,4 +446,4 @@ bool CaptureSiglusLegacyVoiceSource(const SiglusLegacyVoiceSourceLayout& layout,
   *out=task;
   return true;
 }
-} // namespace fushi_voice_hook
+} // namespace my_comic_voice_hook

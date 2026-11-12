@@ -8,7 +8,7 @@
 #include <vector>
 
 namespace {
-using namespace fushi_voice_hook;
+using namespace my_comic_voice_hook;
 namespace own = siglus_legacy_owner;
 struct Code {
   uint8_t* bytes = static_cast<uint8_t*>(VirtualAlloc(

@@ -10,11 +10,11 @@
 #include "voice_resource_pairing.h"
 
 int main() {
-  using fushi_voice_hook::BuildVoiceResourceFileName;
-  using fushi_voice_hook::ResolveFollowingSelectedText;
-  using fushi_voice_hook::ResolvePrecedingSelectedText;
-  using fushi_voice_hook::VoiceResourcePairState;
-  using fushi_voice_hook::VoiceTextCandidate;
+  using my_comic_voice_hook::BuildVoiceResourceFileName;
+  using my_comic_voice_hook::ResolveFollowingSelectedText;
+  using my_comic_voice_hook::ResolvePrecedingSelectedText;
+  using my_comic_voice_hook::VoiceResourcePairState;
+  using my_comic_voice_hook::VoiceTextCandidate;
 
   // Cross-engine guard: profiles without a proved text/resource contract keep
   // the legacy filename and cannot accidentally claim stable pairing.
@@ -23,7 +23,7 @@ int main() {
 
   // A profile may opt in only after a separate causal pairing decision.
   assert(BuildVoiceResourceFileName(1234, L"voice.ogg", 57) ==
-         L"1234_fushi_textseq57_voice.ogg");
+         L"1234_my_comic_textseq57_voice.ogg");
 
   const VoiceTextCandidate observed[] = {
       // Discovery/UI/wrong-thread rows cannot bind a resource.

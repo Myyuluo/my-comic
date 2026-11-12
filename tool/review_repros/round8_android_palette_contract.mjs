@@ -30,10 +30,10 @@ export function createConsumer(mirror, scheme = 'dark') {
 }
 
 export function assertExactMirror(scope, mirror, scheme) {
-  const expected = scope.fushiThemePalette.tokensFromAppTheme(mirror, scheme);
-  const actual = scope.fushiTheme.tokens(scheme);
+  const expected = scope.myComicThemePalette.tokensFromAppTheme(mirror, scheme);
+  const actual = scope.myComicTheme.tokens(scheme);
   assert.ok(actual, 'an available exact mirror must remain usable');
-  for (const key of ['--fushi-primary', '--fushi-bg', '--fushi-text']) {
+  for (const key of ['--mycomic-primary', '--mycomic-bg', '--mycomic-text']) {
     assert.equal(actual[key], expected[key], `${scheme} exact mirror: ${key}`);
   }
 }
@@ -42,14 +42,14 @@ export function assertUnknownOppositeScheme(pair) {
   for (const [present, missing] of [['light', 'dark'], ['dark', 'light']]) {
     const scope = createConsumer({ current: present, [present]: pair[present] }, missing);
     assertExactMirror(scope, pair[present], present);
-    assert.equal(scope.fushiTheme.tokens(missing), null,
+    assert.equal(scope.myComicTheme.tokens(missing), null,
       `${present} -> ${missing}: a full Android palette cannot be invented from its primary; ` +
       'null delegates to the existing CSS fallback');
   }
 }
 
 export function assertPaletteIdentityContract(first, second) {
-  const id = '--fushi-theme-palette-id';
+  const id = '--mycomic-theme-palette-id';
   assert.ok(first.light[id], 'producer must identify its complete Android palette');
   assert.equal(first.light[id], first.dark[id], 'both schemes must identify the same palette');
   assert.equal(second.light[id], second.dark[id], 'both new schemes must share their palette id');
@@ -59,12 +59,12 @@ export function assertPaletteIdentityContract(first, second) {
   assertExactMirror(scope, first.light, 'light');
   assertExactMirror(scope, first.dark, 'dark');
 
-  scope.fushiTheme.setAppMirror({ current: 'light', light: second.light, dark: first.dark });
+  scope.myComicTheme.setAppMirror({ current: 'light', light: second.light, dark: first.dark });
   assertExactMirror(scope, second.light, 'light');
-  assert.equal(scope.fushiTheme.tokens('dark'), null,
+  assert.equal(scope.myComicTheme.tokens('dark'), null,
     'after wallpaper changes, a previous palette dark mirror must not be reused or guessed');
 
-  scope.fushiTheme.setAppMirror({ current: 'dark', light: second.light, dark: second.dark });
+  scope.myComicTheme.setAppMirror({ current: 'dark', light: second.light, dark: second.dark });
   assertExactMirror(scope, second.light, 'light');
   assertExactMirror(scope, second.dark, 'dark');
 }

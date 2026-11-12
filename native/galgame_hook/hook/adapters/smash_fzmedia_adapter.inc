@@ -17,7 +17,7 @@
 // 与 lookup 侧（smash_fzmedia_lookup.inc）只经 smash_fzmedia_shared.h 的 LineSnapshot 通信。
 // 本文件在 dll_main.cpp 的匿名命名空间里展开。纯头（anchors / shared / exact_lookup）
 // 必须已在全局作用域被包含过（profile_includes.inc → smash_fzmedia_profile.h 负责），
-// 这里的包含只是 pragma once 的空操作，不得在此处首次引入任何 namespace fushi_voice_hook
+// 这里的包含只是 pragma once 的空操作，不得在此处首次引入任何 namespace my_comic_voice_hook
 // 的头，否则会生出匿名命名空间下的同名影子命名空间。
 #include "smash_fzmedia_lookup.h"
 #include "smash_fzmedia_profile.h"
@@ -45,17 +45,17 @@ HMODULE g_smash_fzmedia_module = nullptr;
 int ProbeSmashMainExecutableImportsUnsafe() {
   HMODULE exe = GetModuleHandleW(nullptr);
   if (exe == nullptr) return -1;
-  fushi_voice_hook::smash_fzmedia::ImageView view;
+  my_comic_voice_hook::smash_fzmedia::ImageView view;
   int result = -1;
   __try {
-    if (!fushi_voice_hook::smash_fzmedia::OpenImageView(
+    if (!my_comic_voice_hook::smash_fzmedia::OpenImageView(
             reinterpret_cast<const uint8_t*>(exe),
             reinterpret_cast<uintptr_t>(exe), &view)) {
       return -1;
     }
-    result = fushi_voice_hook::smash_fzmedia::ImportsSymbolFromDll(
-                 view, fushi_voice_hook::smash_fzmedia::kGameEngineDllPrefix,
-                 fushi_voice_hook::smash_fzmedia::kGameEngineImportSubstring)
+    result = my_comic_voice_hook::smash_fzmedia::ImportsSymbolFromDll(
+                 view, my_comic_voice_hook::smash_fzmedia::kGameEngineDllPrefix,
+                 my_comic_voice_hook::smash_fzmedia::kGameEngineImportSubstring)
                  ? 1
                  : 0;
   } __except (EXCEPTION_EXECUTE_HANDLER) {
@@ -67,19 +67,19 @@ int ProbeSmashMainExecutableImportsUnsafe() {
 // 1 = 五个导出前缀齐全；0 = 缺任一；-1 = 映像暂不可读。
 int ProbeSmashFzmediaExportsUnsafe(HMODULE module) {
   if (module == nullptr) return -1;
-  fushi_voice_hook::smash_fzmedia::ImageView view;
+  my_comic_voice_hook::smash_fzmedia::ImageView view;
   int result = -1;
   __try {
-    if (!fushi_voice_hook::smash_fzmedia::OpenImageView(
+    if (!my_comic_voice_hook::smash_fzmedia::OpenImageView(
             reinterpret_cast<const uint8_t*>(module),
             reinterpret_cast<uintptr_t>(module), &view)) {
       return -1;
     }
     result = 1;
     for (size_t i = 0u;
-         i < fushi_voice_hook::smash_fzmedia::kFzmediaRequiredExportCount; ++i) {
-      if (!fushi_voice_hook::smash_fzmedia::HasExportWithPrefix(
-              view, fushi_voice_hook::smash_fzmedia::kFzmediaRequiredExportPrefixes[i])) {
+         i < my_comic_voice_hook::smash_fzmedia::kFzmediaRequiredExportCount; ++i) {
+      if (!my_comic_voice_hook::smash_fzmedia::HasExportWithPrefix(
+              view, my_comic_voice_hook::smash_fzmedia::kFzmediaRequiredExportPrefixes[i])) {
         result = 0;
         break;
       }
@@ -98,8 +98,8 @@ HMODULE FindSmashFzmediaModule() {
   entry.dwSize = sizeof(entry);
   if (Module32FirstW(snap, &entry)) {
     do {
-      if (fushi_voice_hook::SmashFzmediaModuleNameStartsWith(
-              entry.szModule, fushi_voice_hook::smash_fzmedia::kMediaDllPrefixW)) {
+      if (my_comic_voice_hook::SmashFzmediaModuleNameStartsWith(
+              entry.szModule, my_comic_voice_hook::smash_fzmedia::kMediaDllPrefixW)) {
         found = entry.hModule;
         break;
       }
@@ -132,7 +132,7 @@ bool RefreshSmashIdentity(bool force) {
   if (exports < 0) return false;
   g_smash_fzmedia_module = media;
   InterlockedExchange(&g_smash_identity_state, 1);
-  SetSmashDiagnostic(fushi_voice_hook::smash_fzmedia::kDiagFamilyMatched);
+  SetSmashDiagnostic(my_comic_voice_hook::smash_fzmedia::kDiagFamilyMatched);
   return true;
 }
 
@@ -170,7 +170,7 @@ struct SmashSoundObjectRecord {
   void* object;
   int32_t category;
   uint64_t tick_ms;
-  char id[fushi_voice_hook::smash_fzmedia::kVoiceIdChars];
+  char id[my_comic_voice_hook::smash_fzmedia::kVoiceIdChars];
 };
 SmashSoundObjectRecord g_smash_sound_objects[kSmashSoundObjectSlots] = {};
 volatile LONG g_smash_sound_object_cursor = 0;
@@ -184,8 +184,8 @@ struct SmashVoiceSlot {
   uint64_t selected_thread_id;
   uint64_t baseline_text_seq;
   bool dedupe_checked;
-  char id[fushi_voice_hook::smash_fzmedia::kVoiceIdChars];
-  uint8_t data[fushi_voice_hook::smash_fzmedia::kVoiceSlotBytes];
+  char id[my_comic_voice_hook::smash_fzmedia::kVoiceIdChars];
+  uint8_t data[my_comic_voice_hook::smash_fzmedia::kVoiceSlotBytes];
 };
 SmashVoiceSlot g_smash_voice_slots[kSmashVoiceSlots] = {};
 
@@ -228,13 +228,13 @@ void RecordSmashSoundObject(void* object, int32_t category, const char* id,
 }
 
 bool LookupSmashSoundObject(void* object, int32_t* category,
-                            char id[fushi_voice_hook::smash_fzmedia::kVoiceIdChars]) {
+                            char id[my_comic_voice_hook::smash_fzmedia::kVoiceIdChars]) {
   for (int i = 0; i < kSmashSoundObjectSlots; ++i) {
     SmashSoundObjectRecord* record = &g_smash_sound_objects[i];
     const LONG before = InterlockedCompareExchange(&record->seq, 0, 0);
     if ((before & 1) != 0 || record->object != object) continue;
     const int32_t cat = record->category;
-    char copy[fushi_voice_hook::smash_fzmedia::kVoiceIdChars];
+    char copy[my_comic_voice_hook::smash_fzmedia::kVoiceIdChars];
     memcpy(copy, record->id, sizeof(copy));
     MemoryBarrier();
     if (InterlockedCompareExchange(&record->seq, 0, 0) != before) continue;
@@ -252,12 +252,12 @@ void ObserveSmashSoundCreateUnsafe(void* out_shared_ptr, const void* resource_id
   void* object = nullptr;
   const char* data = nullptr;
   size_t len = 0u;
-  char id[fushi_voice_hook::smash_fzmedia::kVoiceIdChars] = {};
+  char id[my_comic_voice_hook::smash_fzmedia::kVoiceIdChars] = {};
   __try {
     if (out_shared_ptr == nullptr || resource_id == nullptr) return;
     memcpy(&object, out_shared_ptr, sizeof(object));
     if (object == nullptr) return;
-    if (!fushi_voice_hook::smash_fzmedia::LocateMsvcStdString(
+    if (!my_comic_voice_hook::smash_fzmedia::LocateMsvcStdString(
             reinterpret_cast<const uint8_t*>(resource_id), &data, &len)) {
       return;
     }
@@ -274,14 +274,14 @@ void ReleaseSmashVectorBufferUnsafe(uint8_t* begin, uint8_t* capacity_end) {
   if (begin == nullptr || capacity_end < begin) return;
   const uint64_t capacity_bytes = static_cast<uint64_t>(capacity_end - begin);
   uint64_t stored_container = 0u;
-  if (capacity_bytes >= fushi_voice_hook::smash_fzmedia::kMsvcBigAllocationThreshold) {
+  if (capacity_bytes >= my_comic_voice_hook::smash_fzmedia::kMsvcBigAllocationThreshold) {
     memcpy(&stored_container, begin - sizeof(uint64_t), sizeof(stored_container));
   }
   const uint64_t block =
-      fushi_voice_hook::smash_fzmedia::ResolveMsvcVectorDeallocationPointer(
+      my_comic_voice_hook::smash_fzmedia::ResolveMsvcVectorDeallocationPointer(
           reinterpret_cast<uintptr_t>(begin), capacity_bytes, stored_container);
   if (block == 0u) {
-    SetSmashDiagnostic(fushi_voice_hook::smash_fzmedia::kDiagVoiceBufferLeaked);
+    SetSmashDiagnostic(my_comic_voice_hook::smash_fzmedia::kDiagVoiceBufferLeaked);
     return;
   }
   if (g_smash_api.operator_delete != nullptr) {
@@ -291,7 +291,7 @@ void ReleaseSmashVectorBufferUnsafe(uint8_t* begin, uint8_t* capacity_end) {
         reinterpret_cast<void*>(static_cast<uintptr_t>(block)),
         static_cast<size_t>(capacity_bytes));
   } else {
-    SetSmashDiagnostic(fushi_voice_hook::smash_fzmedia::kDiagVoiceBufferLeaked);
+    SetSmashDiagnostic(my_comic_voice_hook::smash_fzmedia::kDiagVoiceBufferLeaked);
   }
 }
 
@@ -317,7 +317,7 @@ uint32_t CaptureSmashVoiceUnsafe(void* object, uint8_t* out, uint32_t capacity) 
     if (vector.begin != nullptr && vector.end >= vector.begin) {
       const uint64_t bytes = static_cast<uint64_t>(vector.end - vector.begin);
       if (bytes <= capacity &&
-          fushi_voice_hook::smash_fzmedia::ValidateOggPayload(vector.begin, bytes)) {
+          my_comic_voice_hook::smash_fzmedia::ValidateOggPayload(vector.begin, bytes)) {
         memcpy(out, vector.begin, static_cast<size_t>(bytes));
         copied = static_cast<uint32_t>(bytes);
       }
@@ -331,9 +331,9 @@ uint32_t CaptureSmashVoiceUnsafe(void* object, uint8_t* out, uint32_t capacity) 
 
 void ObserveSmashSoundPlay(void* object) {
   int32_t category = 0;
-  char id[fushi_voice_hook::smash_fzmedia::kVoiceIdChars] = {};
+  char id[my_comic_voice_hook::smash_fzmedia::kVoiceIdChars] = {};
   if (!LookupSmashSoundObject(object, &category, id)) return;
-  if (!fushi_voice_hook::smash_fzmedia::IsVoiceCategory(category)) return;
+  if (!my_comic_voice_hook::smash_fzmedia::IsVoiceCategory(category)) return;
   SmashVoiceSlot* slot = nullptr;
   for (int i = 0; i < kSmashVoiceSlots; ++i) {
     if (InterlockedCompareExchange(&g_smash_voice_slots[i].state, 1, 0) == 0) {
@@ -342,11 +342,11 @@ void ObserveSmashSoundPlay(void* object) {
     }
   }
   if (slot == nullptr) {
-    SetSmashDiagnostic(fushi_voice_hook::smash_fzmedia::kDiagVoiceQueueFull);
+    SetSmashDiagnostic(my_comic_voice_hook::smash_fzmedia::kDiagVoiceQueueFull);
     return;
   }
   const uint32_t bytes = CaptureSmashVoiceUnsafe(
-      object, slot->data, fushi_voice_hook::smash_fzmedia::kVoiceSlotBytes);
+      object, slot->data, my_comic_voice_hook::smash_fzmedia::kVoiceSlotBytes);
   if (bytes == 0u) {
     InterlockedExchange(&slot->state, 0);
     return;
@@ -368,7 +368,7 @@ void ObserveSmashSoundPlay(void* object) {
   }
   MemoryBarrier();
   InterlockedExchange(&slot->state, 2);
-  SetSmashDiagnostic(fushi_voice_hook::smash_fzmedia::kDiagVoiceObserved);
+  SetSmashDiagnostic(my_comic_voice_hook::smash_fzmedia::kDiagVoiceObserved);
 }
 
 // this=rcx, 隐藏返回缓冲(shared_ptr<SoundObject>*)=rdx, id=r8, cat=r9d。
@@ -393,7 +393,7 @@ intptr_t Detour_SmashSoundObjectPlay(void* self, const void* play_info) {
 }
 
 bool ResolveSmashFzmediaApiUnsafe(HMODULE module, SmashFzmediaApi* api) {
-  namespace sf = fushi_voice_hook::smash_fzmedia;
+  namespace sf = my_comic_voice_hook::smash_fzmedia;
   sf::ImageView view;
   bool ok = false;
   __try {
@@ -445,10 +445,10 @@ bool ResolveSmashFzmediaApiUnsafe(HMODULE module, SmashFzmediaApi* api) {
           static_cast<uintptr_t>(target));
     }
     ok = (api->operator_delete != nullptr &&
-          fushi_voice_hook::exact_lookup::IsExecutableAddress(
+          my_comic_voice_hook::exact_lookup::IsExecutableAddress(
               reinterpret_cast<const void*>(api->operator_delete))) ||
          (api->operator_delete_sized != nullptr &&
-          fushi_voice_hook::exact_lookup::IsExecutableAddress(
+          my_comic_voice_hook::exact_lookup::IsExecutableAddress(
               reinterpret_cast<const void*>(api->operator_delete_sized)));
     if (!ok) {
       api->operator_delete = nullptr;
@@ -483,7 +483,7 @@ bool TryHookSmashFzmediaAudio() {
   }
   InterlockedExchange(&g_smash_audio_enabled, 1);
   InterlockedExchange(&g_smash_audio_hooks_ready, 1);
-  SetSmashDiagnostic(fushi_voice_hook::smash_fzmedia::kDiagFzmediaHooksReady);
+  SetSmashDiagnostic(my_comic_voice_hook::smash_fzmedia::kDiagFzmediaHooksReady);
   return true;
 }
 
@@ -491,7 +491,7 @@ bool TryHookSmashFzmediaAudio() {
 typedef uintptr_t (*SmashLayoutCharFn)(void* layer, void* run, uint64_t index,
                                        uint64_t* next);
 
-fushi_voice_hook::smash_fzmedia::TextAnchors g_smash_text_anchors;
+my_comic_voice_hook::smash_fzmedia::TextAnchors g_smash_text_anchors;
 uintptr_t g_smash_exe_base = 0u;
 volatile LONG g_smash_text_anchor_state = 0;  // 0 未解 / 1 已解
 volatile LONG g_smash_text_hook_ready = 0;
@@ -499,27 +499,27 @@ volatile LONG g_smash_text_enabled = 0;
 ULONGLONG g_smash_anchor_first_attempt_ms = 0u;
 ULONGLONG g_smash_anchor_next_attempt_ms = 0u;
 uint32_t g_smash_anchor_attempts = 0u;
-fushi_voice_hook::smash_fzmedia::TextAnchorStage g_smash_anchor_last_stage =
-    fushi_voice_hook::smash_fzmedia::TextAnchorStage::kNone;
+my_comic_voice_hook::smash_fzmedia::TextAnchorStage g_smash_anchor_last_stage =
+    my_comic_voice_hook::smash_fzmedia::TextAnchorStage::kNone;
 SmashLayoutCharFn g_orig_smash_layout_char = nullptr;
 
-bool ScanSmashTextAnchorsUnsafe(fushi_voice_hook::smash_fzmedia::TextAnchors* out,
-                                fushi_voice_hook::smash_fzmedia::TextAnchorStage* stage,
+bool ScanSmashTextAnchorsUnsafe(my_comic_voice_hook::smash_fzmedia::TextAnchors* out,
+                                my_comic_voice_hook::smash_fzmedia::TextAnchorStage* stage,
                                 uintptr_t* base_out) {
   HMODULE exe = GetModuleHandleW(nullptr);
   if (exe == nullptr) return false;
-  fushi_voice_hook::smash_fzmedia::ImageView view;
-  fushi_voice_hook::smash_fzmedia::TextAnchorResult result;
+  my_comic_voice_hook::smash_fzmedia::ImageView view;
+  my_comic_voice_hook::smash_fzmedia::TextAnchorResult result;
   __try {
-    if (!fushi_voice_hook::smash_fzmedia::OpenImageView(
+    if (!my_comic_voice_hook::smash_fzmedia::OpenImageView(
             reinterpret_cast<const uint8_t*>(exe),
             reinterpret_cast<uintptr_t>(exe), &view)) {
-      *stage = fushi_voice_hook::smash_fzmedia::TextAnchorStage::kImage;
+      *stage = my_comic_voice_hook::smash_fzmedia::TextAnchorStage::kImage;
       return false;
     }
-    result = fushi_voice_hook::smash_fzmedia::DeriveTextAnchors(view);
+    result = my_comic_voice_hook::smash_fzmedia::DeriveTextAnchors(view);
   } __except (EXCEPTION_EXECUTE_HANDLER) {
-    *stage = fushi_voice_hook::smash_fzmedia::TextAnchorStage::kImage;
+    *stage = my_comic_voice_hook::smash_fzmedia::TextAnchorStage::kImage;
     return false;
   }
   *stage = result.failed_stage;
@@ -530,14 +530,14 @@ bool ScanSmashTextAnchorsUnsafe(fushi_voice_hook::smash_fzmedia::TextAnchors* ou
 }
 
 // 游戏线程侧：段落装配器 + seqlock 邮箱。
-fushi_voice_hook::smash_fzmedia::ParagraphAssembler g_smash_assembler;
-wchar_t g_smash_run_scratch[fushi_voice_hook::smash_fzmedia::kMaxRunUnits] = {};
+my_comic_voice_hook::smash_fzmedia::ParagraphAssembler g_smash_assembler;
+wchar_t g_smash_run_scratch[my_comic_voice_hook::smash_fzmedia::kMaxRunUnits] = {};
 volatile LONG g_smash_assembler_busy = 0;
 
 struct SmashParagraphPost {
   uint64_t post_seq = 0u;
   uint64_t run_end_ms = 0u;  // 0 = run 仍在排版中
-  fushi_voice_hook::smash_fzmedia::LineSnapshot line;
+  my_comic_voice_hook::smash_fzmedia::LineSnapshot line;
 };
 struct SmashParagraphMailbox {
   volatile LONG seq = 0;  // 奇数 = 写入中
@@ -582,7 +582,7 @@ struct SmashLayoutObservation {
 bool ReadSmashLayoutBeforeUnsafe(const void* layer, const void* run, uint64_t index,
                                  SmashLayoutObservation* obs, wchar_t* text_out,
                                  uint32_t text_capacity, bool copy_text) {
-  const fushi_voice_hook::smash_fzmedia::TextAnchors& a = g_smash_text_anchors;
+  const my_comic_voice_hook::smash_fzmedia::TextAnchors& a = g_smash_text_anchors;
   const auto* run_bytes = reinterpret_cast<const uint8_t*>(run);
   const auto* layer_bytes = reinterpret_cast<const uint8_t*>(layer);
   __try {
@@ -612,7 +612,7 @@ bool ReadSmashLayoutBeforeUnsafe(const void* layer, const void* run, uint64_t in
 }
 
 bool ReadSmashCursorAfterUnsafe(const void* layer, float* x1, float* y1) {
-  const fushi_voice_hook::smash_fzmedia::TextAnchors& a = g_smash_text_anchors;
+  const my_comic_voice_hook::smash_fzmedia::TextAnchors& a = g_smash_text_anchors;
   const auto* layer_bytes = reinterpret_cast<const uint8_t*>(layer);
   __try {
     memcpy(x1, layer_bytes + a.cursor_x, sizeof(*x1));
@@ -627,7 +627,7 @@ bool ReadSmashCursorAfterUnsafe(const void* layer, float* x1, float* y1) {
 // 只做有界拷贝：run 文本 ≤ kMaxRunUnits、每字一个 GlyphCell、run 结束时一次快照投递。
 uintptr_t Detour_SmashLayoutChar(void* layer, void* run, uint64_t index,
                                  uint64_t* next) {
-  namespace sf = fushi_voice_hook::smash_fzmedia;
+  namespace sf = my_comic_voice_hook::smash_fzmedia;
   SmashLayoutObservation obs;
   bool observed = false;
   if (g_capture_enabled &&
@@ -674,7 +674,7 @@ uintptr_t Detour_SmashLayoutChar(void* layer, void* run, uint64_t index,
 // 锚点重扫策略：SteamStub 正版在入口后才解包 .text，扫失败每 500ms 重试、上限 120s；
 // install() 再次被调用（模块加载 / 启动）时 force 立即重试且不计预算。
 bool TryHookSmashText(ULONGLONG now, bool force) {
-  namespace sf = fushi_voice_hook::smash_fzmedia;
+  namespace sf = my_comic_voice_hook::smash_fzmedia;
   if (InterlockedCompareExchange(&g_smash_identity_state, 0, 0) != 1) return false;
   if (InterlockedCompareExchange(&g_smash_text_hook_ready, 0, 0) != 0) return true;
   if (InterlockedCompareExchange(&g_smash_text_anchor_state, 0, 0) == 0) {
@@ -683,7 +683,7 @@ bool TryHookSmashText(ULONGLONG now, bool force) {
       if (g_smash_anchor_first_attempt_ms != 0u &&
           now - g_smash_anchor_first_attempt_ms > sf::kAnchorRetryBudgetMs) {
         SetSmashDiagnostic(
-            fushi_voice_hook::smash_fzmedia::kDiagAnchorRetryExhausted);
+            my_comic_voice_hook::smash_fzmedia::kDiagAnchorRetryExhausted);
         return false;
       }
     }
@@ -696,7 +696,7 @@ bool TryHookSmashText(ULONGLONG now, bool force) {
     if (!ScanSmashTextAnchorsUnsafe(&anchors, &stage, &base)) {
       g_smash_anchor_last_stage = stage;
       SetSmashDiagnostic(
-          fushi_voice_hook::smash_fzmedia::kDiagTextAnchorsUnresolved);
+          my_comic_voice_hook::smash_fzmedia::kDiagTextAnchorsUnresolved);
       return false;
     }
     g_smash_text_anchors = anchors;
@@ -704,11 +704,11 @@ bool TryHookSmashText(ULONGLONG now, bool force) {
     g_smash_anchor_last_stage = stage;
     InterlockedExchange(&g_smash_text_anchor_state, 1);
     SetSmashDiagnostic(
-        fushi_voice_hook::smash_fzmedia::kDiagTextAnchorsResolved);
+        my_comic_voice_hook::smash_fzmedia::kDiagTextAnchorsResolved);
   }
   void* target = reinterpret_cast<void*>(g_smash_exe_base +
                                          g_smash_text_anchors.layout_char_rva);
-  if (!fushi_voice_hook::exact_lookup::IsExecutableAddress(target)) return false;
+  if (!my_comic_voice_hook::exact_lookup::IsExecutableAddress(target)) return false;
   HunexGgeHookSpec hooks[] = {
       {target, reinterpret_cast<void*>(&Detour_SmashLayoutChar),
        reinterpret_cast<void**>(&g_orig_smash_layout_char)},
@@ -716,7 +716,7 @@ bool TryHookSmashText(ULONGLONG now, bool force) {
   if (!InstallHunexGgeHookGroup(hooks, _countof(hooks))) return false;
   InterlockedExchange(&g_smash_text_enabled, 1);
   InterlockedExchange(&g_smash_text_hook_ready, 1);
-  SetSmashDiagnostic(fushi_voice_hook::smash_fzmedia::kDiagTextHookReady);
+  SetSmashDiagnostic(my_comic_voice_hook::smash_fzmedia::kDiagTextHookReady);
   return true;
 }
 
@@ -725,7 +725,7 @@ struct SmashTextWorkerState {
   uint64_t last_taken_post_seq = 0u;
   bool pending_valid = false;
   SmashParagraphPost pending;
-  wchar_t last_text[fushi_voice_hook::smash_fzmedia::kMaxLineUnits] = {};
+  wchar_t last_text[my_comic_voice_hook::smash_fzmedia::kMaxLineUnits] = {};
   uint32_t last_text_units = 0u;
   uint64_t last_first_tick_ms = 0u;
   uint64_t last_lane_write_ms = 0u;
@@ -736,9 +736,9 @@ SmashTextWorkerState g_smash_text_worker;
 
 // 同一段落的两次投递（run 开头写文本、run 结束带字格）只写一次文本道；同文本 1000ms
 // 内也不重写。每次投递都推进 generation 交给 lookup 侧。
-void PublishSmashParagraph(fushi_voice_hook::smash_fzmedia::LineSnapshot* line,
+void PublishSmashParagraph(my_comic_voice_hook::smash_fzmedia::LineSnapshot* line,
                            ULONGLONG now) {
-  namespace sf = fushi_voice_hook::smash_fzmedia;
+  namespace sf = my_comic_voice_hook::smash_fzmedia;
   if (!g_capture_enabled || g_header == nullptr || g_text_base == nullptr ||
       !g_text_cs_ready || line->unit_count == 0u ||
       line->unit_count > sf::kMaxLineUnits) {
@@ -759,23 +759,23 @@ void PublishSmashParagraph(fushi_voice_hook::smash_fzmedia::LineSnapshot* line,
     constexpr uint64_t kSmashFzmediaTextComponentIdentity = 0x534D415348545854ull;
     constexpr wchar_t kSmashTextHookCode[] = L"ENGINE:SMASH:kag_text_layer";
     constexpr char kSmashTextHookName[] = "smash exact";
-    const uint64_t thread_id = fushi_voice_hook::NativeTextThreadIdFrom(
+    const uint64_t thread_id = my_comic_voice_hook::NativeTextThreadIdFrom(
         kSmashFzmediaTextComponentIdentity, kSmashTextHookCode,
         kSmashTextHookName);
     EnterCriticalSection(&g_text_cs);
-    fushi_voice_hook::TextLaneWrite write;
+    my_comic_voice_hook::TextLaneWrite write;
     write.thread_id = thread_id;
     write.thread_address = g_smash_text_anchors.layout_char_rva;
     write.process_id = GetCurrentProcessId();
-    write.source_kind = fushi_voice_hook::kTextSourceSmashFzmedia;
+    write.source_kind = my_comic_voice_hook::kTextSourceSmashFzmedia;
     write.is_utf8 = 0;
     write.text = line->text;
     write.byte_len = line->unit_count * static_cast<uint32_t>(sizeof(wchar_t));
     write.hook_name = kSmashTextHookName;
     write.hook_code = kSmashTextHookCode;
-    text_event_id = fushi_voice_hook::WriteTextLaneEvent(
-        g_header, fushi_voice_hook::kNativeThreadPreviewStart,
-        fushi_voice_hook::kTextLaneCount, write);
+    text_event_id = my_comic_voice_hook::WriteTextLaneEvent(
+        g_header, my_comic_voice_hook::kNativeThreadPreviewStart,
+        my_comic_voice_hook::kTextLaneCount, write);
     LeaveCriticalSection(&g_text_cs);
     if (text_event_id == 0u) return;
     memcpy(worker->last_text, line->text,
@@ -787,15 +787,15 @@ void PublishSmashParagraph(fushi_voice_hook::smash_fzmedia::LineSnapshot* line,
     // 精确引擎文本比 GDI 字形回退干净；字段名历史上叫 luna，契约只是「有精确文本生产者」。
     g_header->luna_active = 1;
     SetSmashDiagnostic(
-        fushi_voice_hook::smash_fzmedia::kDiagParagraphPublished);
+        my_comic_voice_hook::smash_fzmedia::kDiagParagraphPublished);
   }
   line->text_event_id = text_event_id;
   line->generation = ++worker->generation;
-  fushi_voice_hook::smash_fzmedia::LookupPublishSnapshot(*line);
+  my_comic_voice_hook::smash_fzmedia::LookupPublishSnapshot(*line);
 }
 
 void ProcessSmashParagraphMailbox(ULONGLONG now) {
-  namespace sf = fushi_voice_hook::smash_fzmedia;
+  namespace sf = my_comic_voice_hook::smash_fzmedia;
   SmashTextWorkerState* worker = &g_smash_text_worker;
   if (InterlockedCompareExchange(&g_smash_text_hook_ready, 0, 0) == 0) return;
   SmashParagraphPost post;
@@ -818,7 +818,7 @@ void ProcessSmashParagraphMailbox(ULONGLONG now) {
 }
 
 // ── worker：语音落盘 ─────────────────────────────────────────────────────────
-char g_smash_last_voice_id[fushi_voice_hook::smash_fzmedia::kVoiceIdChars] = {};
+char g_smash_last_voice_id[my_comic_voice_hook::smash_fzmedia::kVoiceIdChars] = {};
 uint64_t g_smash_last_voice_tick_ms = 0u;
 
 uint64_t ReadSmashSharedU64(volatile uint64_t* value) {
@@ -830,11 +830,11 @@ uint64_t ReadSmashSharedU64(volatile uint64_t* value) {
 
 // 只扫选定线程那一条道（v13 分道后其余道与本次配对无关）。
 size_t CollectSmashSelectedLaneCandidates(
-    uint64_t selected_thread_id, fushi_voice_hook::VoiceTextCandidate* candidates,
+    uint64_t selected_thread_id, my_comic_voice_hook::VoiceTextCandidate* candidates,
     size_t capacity) {
   if (g_header == nullptr || g_text_base == nullptr || selected_thread_id == 0u)
     return 0u;
-  fushi_voice_hook::TextLane* lanes = fushi_voice_hook::TextLanesOf(g_header);
+  my_comic_voice_hook::TextLane* lanes = my_comic_voice_hook::TextLanesOf(g_header);
   const uint32_t lane_count = lanes == nullptr ? 0u : g_header->text_lane_count;
   uint32_t lane_index = 0u;
   bool lane_found = false;
@@ -853,17 +853,17 @@ size_t CollectSmashSelectedLaneCandidates(
   size_t count = 0u;
   for (uint64_t lane_seq = first_lane_seq;
        lane_seq <= lane_written && count < capacity; ++lane_seq) {
-    auto* slot = reinterpret_cast<fushi_voice_hook::TextSlot*>(
-        fushi_voice_hook::TextLaneSlotAt(g_header, lane_index, lane_seq));
+    auto* slot = reinterpret_cast<my_comic_voice_hook::TextSlot*>(
+        my_comic_voice_hook::TextLaneSlotAt(g_header, lane_index, lane_seq));
     if (slot == nullptr) continue;
     if (ReadSmashSharedU64(&slot->lane_seq) != lane_seq) continue;
     MemoryBarrier();
-    fushi_voice_hook::VoiceTextCandidate candidate;
+    my_comic_voice_hook::VoiceTextCandidate candidate;
     candidate.seq = ReadSmashSharedU64(&slot->seq);
     candidate.timestamp_ms = slot->timestamp_ms;
     candidate.thread_id = slot->thread_id;
     candidate.byte_len = slot->byte_len;
-    candidate.is_line = slot->event_kind == fushi_voice_hook::kTextEventLine;
+    candidate.is_line = slot->event_kind == my_comic_voice_hook::kTextEventLine;
     MemoryBarrier();
     if (ReadSmashSharedU64(&slot->lane_seq) != lane_seq) continue;
     candidates[count++] = candidate;
@@ -872,7 +872,7 @@ size_t CollectSmashSelectedLaneCandidates(
 }
 
 void ProcessSmashVoiceSlots(ULONGLONG now) {
-  namespace sf = fushi_voice_hook::smash_fzmedia;
+  namespace sf = my_comic_voice_hook::smash_fzmedia;
   for (int i = 0; i < kSmashVoiceSlots; ++i) {
     SmashVoiceSlot* slot = &g_smash_voice_slots[i];
     if (InterlockedCompareExchange(&slot->state, 3, 2) != 2) continue;
@@ -887,8 +887,8 @@ void ProcessSmashVoiceSlots(ULONGLONG now) {
       memcpy(g_smash_last_voice_id, slot->id, sizeof(g_smash_last_voice_id));
       g_smash_last_voice_tick_ms = slot->tick_ms;
     }
-    fushi_voice_hook::VoiceTextCandidate
-        candidates[fushi_voice_hook::kTextLaneSlotCount] = {};
+    my_comic_voice_hook::VoiceTextCandidate
+        candidates[my_comic_voice_hook::kTextLaneSlotCount] = {};
     uint64_t selected_thread_id = slot->selected_thread_id;
     if (g_header == nullptr ||
         ReadSmashSharedU64(&g_header->selected_text_thread_id) != selected_thread_id) {
@@ -897,10 +897,10 @@ void ProcessSmashVoiceSlots(ULONGLONG now) {
     const size_t candidate_count = CollectSmashSelectedLaneCandidates(
         selected_thread_id, candidates, _countof(candidates));
     const uint64_t deadline_ms = slot->tick_ms + sf::kVoicePairingWindowMs;
-    const auto decision = fushi_voice_hook::ResolveFollowingSelectedText(
+    const auto decision = my_comic_voice_hook::ResolveFollowingSelectedText(
         slot->tick_ms, deadline_ms, now, selected_thread_id,
         slot->baseline_text_seq, candidates, candidate_count);
-    if (decision.state == fushi_voice_hook::VoiceResourcePairState::kWait) {
+    if (decision.state == my_comic_voice_hook::VoiceResourcePairState::kWait) {
       InterlockedExchange(&slot->state, 2);
       continue;
     }
@@ -911,8 +911,8 @@ void ProcessSmashVoiceSlots(ULONGLONG now) {
                                 slot->tick_ms, decision.text_event_id);
     }
     if (written) {
-      SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagGameResourcePublished);
-      SetSmashDiagnostic(fushi_voice_hook::smash_fzmedia::kDiagVoicePublished);
+      SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagGameResourcePublished);
+      SetSmashDiagnostic(my_comic_voice_hook::smash_fzmedia::kDiagVoicePublished);
     }
     slot->bytes = 0u;
     slot->id[0] = '\0';
@@ -931,7 +931,7 @@ void ResetSmashWorkerState() {
 
 #endif  // _M_X64
 
-class SmashFzmediaAdapter final : public fushi_voice_hook::EngineAdapter {
+class SmashFzmediaAdapter final : public my_comic_voice_hook::EngineAdapter {
  public:
   const char* id() const override { return "smash_fzmedia"; }
   bool probe() const override {
@@ -942,13 +942,13 @@ class SmashFzmediaAdapter final : public fushi_voice_hook::EngineAdapter {
 #endif
   }
   bool install() override { return Install(true); }
-  fushi_voice_hook::AdapterCapability capabilities() const override {
-    return fushi_voice_hook::AdapterCapability::kText |
-           fushi_voice_hook::AdapterCapability::kResourceAudio;
+  my_comic_voice_hook::AdapterCapability capabilities() const override {
+    return my_comic_voice_hook::AdapterCapability::kText |
+           my_comic_voice_hook::AdapterCapability::kResourceAudio;
   }
   void onModuleLoaded(const wchar_t* module_name) override {
     if (module_name == nullptr ||
-        fushi_voice_hook::MatchesSmashFzmediaProfile(module_name)) {
+        my_comic_voice_hook::MatchesSmashFzmediaProfile(module_name)) {
       install();
     }
   }
@@ -958,17 +958,17 @@ class SmashFzmediaAdapter final : public fushi_voice_hook::EngineAdapter {
     Install(false);
     ProcessSmashParagraphMailbox(now);
     ProcessSmashVoiceSlots(now);
-    if (lookup_installed_) fushi_voice_hook::smash_fzmedia::LookupPoll(g_header, now);
+    if (lookup_installed_) my_comic_voice_hook::smash_fzmedia::LookupPoll(g_header, now);
 #endif
   }
-  fushi_voice_hook::LookupAdmissionReport lookupAdmission() const override {
-    fushi_voice_hook::LookupAdmissionReport report;
+  my_comic_voice_hook::LookupAdmissionReport lookupAdmission() const override {
+    my_comic_voice_hook::LookupAdmissionReport report;
 #if defined(_M_X64)
     report.state = lookup_sensor_available()
-                       ? fushi_voice_hook::kLookupAdmissionSensorInstalled
-                       : fushi_voice_hook::kLookupAdmissionIdentityAccepted;
+                       ? my_comic_voice_hook::kLookupAdmissionSensorInstalled
+                       : my_comic_voice_hook::kLookupAdmissionIdentityAccepted;
 #else
-    report.state = fushi_voice_hook::kLookupAdmissionEngineUnsupported;
+    report.state = my_comic_voice_hook::kLookupAdmissionEngineUnsupported;
 #endif
     return report;
   }
@@ -986,14 +986,14 @@ class SmashFzmediaAdapter final : public fushi_voice_hook::EngineAdapter {
     InterlockedExchange(&g_smash_text_enabled, 0);
     InterlockedExchange(&g_smash_audio_enabled, 0);
     if (lookup_installed_) {
-      fushi_voice_hook::smash_fzmedia::LookupShutdown(g_header);
+      my_comic_voice_hook::smash_fzmedia::LookupShutdown(g_header);
       lookup_installed_ = false;
     }
     ResetSmashWorkerState();
 #endif
     installed_ = false;
   }
-  fushi_voice_hook::AdapterDiagnostics diagnostics() const override {
+  my_comic_voice_hook::AdapterDiagnostics diagnostics() const override {
 #if defined(_M_X64)
     return {id(), probe(), installed_,
             static_cast<uint32_t>(
@@ -1019,7 +1019,7 @@ class SmashFzmediaAdapter final : public fushi_voice_hook::EngineAdapter {
     if (text_ready && !lookup_installed_ && g_header != nullptr &&
         (force || now >= lookup_next_attempt_ms_)) {
       lookup_next_attempt_ms_ = now + 500u;
-      lookup_installed_ = fushi_voice_hook::smash_fzmedia::LookupInstall(g_header);
+      lookup_installed_ = my_comic_voice_hook::smash_fzmedia::LookupInstall(g_header);
     }
     installed_ = installed_ || audio_ready || text_ready;
 #else

@@ -5,7 +5,7 @@
 
 #include "xaudio_source_format.h"
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 // Stable worker-side seam between generic XAudio capture and an engine
 // profile that can prove a compressed submission belongs to a voice archive.
@@ -45,4 +45,4 @@ class XAudioCompressedResourceDispatch {
   XAudioCompressedResourceHandler handler_ = nullptr;
 };
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

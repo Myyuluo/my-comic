@@ -1,6 +1,6 @@
 #pragma once
 
-namespace fushi_voice_hook::cmvs_layout {
+namespace my_comic_voice_hook::cmvs_layout {
 
 // HookFn may create a trampoline and then fail to enable the detour. The
 // trampoline belongs to the forwarding path; only a successful installer
@@ -25,4 +25,4 @@ class HookInstallation {
   bool enabled_ = false;
 };
 
-}  // namespace fushi_voice_hook::cmvs_layout
+}  // namespace my_comic_voice_hook::cmvs_layout

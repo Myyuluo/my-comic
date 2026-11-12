@@ -184,8 +184,8 @@ class AdapterReportGuardMutation(unittest.TestCase):
         # 去掉生成清单的 include：所有由脚手架登记的引擎一次性全掉出读数。
         dirty = self.registry.replace(
             '#include "generated/adapter_admission.inc"\n'
-            "    fushi_voice_hook::PublishAdapterReports",
-            "    fushi_voice_hook::PublishAdapterReports",
+            "    my_comic_voice_hook::PublishAdapterReports",
+            "    my_comic_voice_hook::PublishAdapterReports",
             1,
         )
         self.assertNotEqual(dirty, self.registry, "变异锚点必须真的存在")

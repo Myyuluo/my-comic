@@ -5,7 +5,7 @@
 
 #include "siglus_message_capture.h"
 
-namespace fushi_voice_hook::siglus_eightarg_message {
+namespace my_comic_voice_hook::siglus_eightarg_message {
 
 struct Layout {
   uint32_t message_return = 0;
@@ -106,4 +106,4 @@ bool Consume(const Layout& layout, uint32_t surface, uint32_t entry_esp,
   return true;
 }
 
-}  // namespace fushi_voice_hook::siglus_eightarg_message
+}  // namespace my_comic_voice_hook::siglus_eightarg_message

@@ -25,9 +25,9 @@
 
 #include "yuris_lookup_core.h"
 
-namespace fushi_voice_hook::yuris_voice {
+namespace my_comic_voice_hook::yuris_voice {
 
-namespace yl = fushi_voice_hook::yuris_lookup;
+namespace yl = my_comic_voice_hook::yuris_lookup;
 
 // A voice clip belongs to the first message shown within this window after
 // the clip opened.
@@ -238,4 +238,4 @@ inline size_t ResourceBasename(const char* name, size_t bound, char* out,
   return bytes;
 }
 
-}  // namespace fushi_voice_hook::yuris_voice
+}  // namespace my_comic_voice_hook::yuris_voice

@@ -31,12 +31,12 @@
 
 namespace {
 
-namespace ai6 = ::fushi_voice_hook::elf_ai6;
+namespace ai6 = ::my_comic_voice_hook::elf_ai6;
 
 std::wstring MakeTempRoot(const wchar_t* tag) {
   wchar_t temp[MAX_PATH] = {0};
   assert(GetTempPathW(MAX_PATH, temp) != 0);
-  std::wstring root = std::wstring(temp) + L"fushi_engine_identity_" + tag +
+  std::wstring root = std::wstring(temp) + L"my_comic_engine_identity_" + tag +
                       L"_" + std::to_wstring(GetCurrentProcessId());
   RemoveDirectoryW(root.c_str());
   assert(CreateDirectoryW(root.c_str(), nullptr) ||
@@ -94,7 +94,7 @@ int main() {
   // ── 1. BGI / Ethornell：`*.arc` 是自洽的 BURIKO ARC20 或 PackFile 索引 ───────
   // 两代格式各一份：1 条目、成员 8 字节、首条目 offset 0。
   const auto bgi_archive = [](bool arc20) {
-    namespace bgi = ::fushi_voice_hook::bgi;
+    namespace bgi = ::my_comic_voice_hook::bgi;
     const size_t entry = arc20 ? bgi::kArc20EntryBytes : bgi::kPackFileEntryBytes;
     const size_t name = arc20 ? bgi::kArc20NameBytes : bgi::kPackFileNameBytes;
     std::vector<uint8_t> a(bgi::kArcHeaderBytes + entry + 8, 0);
@@ -113,7 +113,7 @@ int main() {
     WriteBytes(root + L"\\data06010.arc", mpeg, sizeof(mpeg));
     const std::vector<uint8_t> archive = bgi_archive(arc20);
     WriteBytes(root + L"\\data04001.arc", archive.data(), archive.size());
-    assert(fushi_voice_hook::MatchesBgiEthornellLayout(root));
+    assert(my_comic_voice_hook::MatchesBgiEthornellLayout(root));
     RemoveTree(root);
   }
   {
@@ -124,12 +124,12 @@ int main() {
     const char magic_only[16] = "PackFile    \0\0\0";
     WriteBytes(root + L"\\data03100.arc", magic_only, sizeof(magic_only));
     char arc20_magic_only[16] = {0};
-    std::memcpy(arc20_magic_only, ::fushi_voice_hook::bgi::kArc20Signature,
-                ::fushi_voice_hook::bgi::kArc20SignatureBytes);
+    std::memcpy(arc20_magic_only, ::my_comic_voice_hook::bgi::kArc20Signature,
+                ::my_comic_voice_hook::bgi::kArc20SignatureBytes);
     arc20_magic_only[12] = 1;
     WriteBytes(root + L"\\data03110.arc", arc20_magic_only,
                sizeof(arc20_magic_only));
-    assert(!fushi_voice_hook::MatchesBgiEthornellLayout(root));
+    assert(!my_comic_voice_hook::MatchesBgiEthornellLayout(root));
     RemoveTree(root);
   }
   {
@@ -141,10 +141,10 @@ int main() {
     std::vector<uint8_t> ai6(256, 0);
     WriteLe32(ai6.data(), 1);
     WriteBytes(root + L"\\voice.arc", ai6.data(), ai6.size());
-    assert(!fushi_voice_hook::MatchesBgiEthornellLayout(root));
+    assert(!my_comic_voice_hook::MatchesBgiEthornellLayout(root));
     RemoveTree(root);
   }
-  assert(!fushi_voice_hook::MatchesBgiEthornellProfile(nullptr));
+  assert(!my_comic_voice_hook::MatchesBgiEthornellProfile(nullptr));
 
   // ── 2. CatSystem2：config\startup.xml + `*.int` 的 KIF\0 魔数（两者缺一不可）──
   {
@@ -153,13 +153,13 @@ int main() {
     const char xml[] = "<?xml version=\"1.0\"?><startup/>";
     WriteBytes(root + L"\\config\\startup.xml", xml, sizeof(xml) - 1);
     char kif[32] = {0};
-    std::memcpy(kif, ::fushi_voice_hook::catsystem2::kIntSignature,
-                ::fushi_voice_hook::catsystem2::kIntSignatureBytes);
+    std::memcpy(kif, ::my_comic_voice_hook::catsystem2::kIntSignature,
+                ::my_comic_voice_hook::catsystem2::kIntSignatureBytes);
     WriteBytes(root + L"\\voice.int", kif, sizeof(kif));
-    assert(fushi_voice_hook::MatchesCatSystem2Layout(root));
+    assert(my_comic_voice_hook::MatchesCatSystem2Layout(root));
     // 抽掉 startup.xml 后不再匹配：证明它是真判据而非装饰。
     DeleteFileW((root + L"\\config\\startup.xml").c_str());
-    assert(!fushi_voice_hook::MatchesCatSystem2Layout(root));
+    assert(!my_comic_voice_hook::MatchesCatSystem2Layout(root));
     RemoveTree(root);
   }
   {
@@ -169,7 +169,7 @@ int main() {
     WriteBytes(root + L"\\config\\startup.xml", xml, sizeof(xml) - 1);
     const char not_kif[8] = {'R', 'I', 'F', 'F', 0, 0, 0, 0};
     WriteBytes(root + L"\\voice.int", not_kif, sizeof(not_kif));
-    assert(!fushi_voice_hook::MatchesCatSystem2Layout(root));
+    assert(!my_comic_voice_hook::MatchesCatSystem2Layout(root));
     RemoveTree(root);
   }
   // BUG-2930：体验版「根目录 WCBOOTMENU 启动器 + data\cs2.exe」。注入器的启动器判据
@@ -183,8 +183,8 @@ int main() {
     const char xml[] = "<?xml version=\"1.0\"?><startup/>";
     WriteBytes(data + L"\\config\\startup.xml", xml, sizeof(xml) - 1);
     char kif[32] = {0};
-    std::memcpy(kif, ::fushi_voice_hook::catsystem2::kIntSignature,
-                ::fushi_voice_hook::catsystem2::kIntSignatureBytes);
+    std::memcpy(kif, ::my_comic_voice_hook::catsystem2::kIntSignature,
+                ::my_comic_voice_hook::catsystem2::kIntSignatureBytes);
     WriteBytes(data + L"\\scene.int", kif, sizeof(kif));
     const char stub[] = "MZ";
     WriteBytes(root + L"\\bootmenu.exe", stub, sizeof(stub) - 1);
@@ -193,7 +193,7 @@ int main() {
     // 注入器实际调用的那一个函数，不是 MatchesCatSystem2Layout 本身：注入器漏接
     // CatSystem2 这一条时这里必须变红。
     auto is_game_dir = [](const std::wstring& dir) {
-      return fushi_voice_hook::DirectoryHasEngineSignature(dir);
+      return my_comic_voice_hook::DirectoryHasEngineSignature(dir);
     };
     auto list_dirs = [](const std::wstring& dir) {
       std::vector<std::wstring> out;
@@ -209,25 +209,25 @@ int main() {
       FindClose(search);
       return out;
     };
-    assert(fushi_voice_hook::LooksLikeLauncherLayout(
-        root, fushi_voice_hook::kLauncherLayoutMaxDepth, is_game_dir,
+    assert(my_comic_voice_hook::LooksLikeLauncherLayout(
+        root, my_comic_voice_hook::kLauncherLayoutMaxDepth, is_game_dir,
         list_dirs));
     // 子目录只有 startup.xml、没有 KIF 归档：不是 CatSystem2，启动器判据随之失效。
     DeleteFileW((data + L"\\scene.int").c_str());
-    assert(!fushi_voice_hook::LooksLikeLauncherLayout(
-        root, fushi_voice_hook::kLauncherLayoutMaxDepth, is_game_dir,
+    assert(!my_comic_voice_hook::LooksLikeLauncherLayout(
+        root, my_comic_voice_hook::kLauncherLayoutMaxDepth, is_game_dir,
         list_dirs));
     WriteBytes(data + L"\\scene.int", kif, sizeof(kif));
     // 根目录自己就带签名（cs2.exe 与 KIF 同级）：被启动的就是游戏，不是启动器。
     assert(CreateDirectoryW((root + L"\\config").c_str(), nullptr));
     WriteBytes(root + L"\\config\\startup.xml", xml, sizeof(xml) - 1);
     WriteBytes(root + L"\\scene.int", kif, sizeof(kif));
-    assert(!fushi_voice_hook::LooksLikeLauncherLayout(
-        root, fushi_voice_hook::kLauncherLayoutMaxDepth, is_game_dir,
+    assert(!my_comic_voice_hook::LooksLikeLauncherLayout(
+        root, my_comic_voice_hook::kLauncherLayoutMaxDepth, is_game_dir,
         list_dirs));
     RemoveTree(root);
   }
-  assert(!fushi_voice_hook::MatchesCatSystem2Profile(nullptr));
+  assert(!my_comic_voice_hook::MatchesCatSystem2Profile(nullptr));
 
   // ── 3. elf AI6：voice.arc 索引自洽（首条目 packed==unpacked 且 offset==索引末尾）─
   {
@@ -245,20 +245,20 @@ int main() {
     WriteBe32(record + ai6::kNameBytes + 12, index_bytes);  // offset
     WriteBytes(root + L"\\voice.arc", archive.data(), archive.size());
     // 目录里没有 AI6WIN.exe，照样认得出来。
-    assert(fushi_voice_hook::ProbeElfAi6Layout(root, nullptr));
+    assert(my_comic_voice_hook::ProbeElfAi6Layout(root, nullptr));
 
     // packed != unpacked → 索引不自洽 → 不匹配。
     WriteBe32(record + ai6::kNameBytes + 8, payload + 1);
     WriteBytes(root + L"\\voice.arc", archive.data(), archive.size());
-    assert(!fushi_voice_hook::ProbeElfAi6Layout(root, nullptr));
+    assert(!my_comic_voice_hook::ProbeElfAi6Layout(root, nullptr));
     RemoveTree(root);
   }
-  assert(!fushi_voice_hook::MatchesElfAi6Profile(nullptr));
+  assert(!my_comic_voice_hook::MatchesElfAi6Profile(nullptr));
 
   // ── 4. Malie：身份不看磁盘，看主模块里能否从结构解析出 "CFI" I/O scheme 表
   //（hook/adapters/malie_engine_io_core.h；正反夹具在 tests/malie_engine_io_test.cpp）。
   // 测试进程自己的映像没有这张表 → 不得误认领。
-  assert(!fushi_voice_hook::MatchesMalieProfile(nullptr));
+  assert(!my_comic_voice_hook::MatchesMalieProfile(nullptr));
 
   std::printf("engine_identity_layout_test: ok\n");
   return 0;

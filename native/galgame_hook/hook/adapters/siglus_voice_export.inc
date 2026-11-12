@@ -21,13 +21,13 @@ void ProcessSiglusVoiceTask(SiglusVoiceTask* task) {
   size_t index_bytes = 0;
   uint8_t* index = nullptr;
   uint8_t* ogg = nullptr;
-  fushi_voice_hook::siglus::OvkEntry entry;
+  my_comic_voice_hook::siglus::OvkEntry entry;
   bool valid = identity_read && GetFileSizeEx(file, &size) && size.QuadPart > 0 &&
                ReadExact(file, &count, sizeof(count)) && count > 0 &&
-               count <= fushi_voice_hook::siglus::kMaxEntryCount;
+               count <= my_comic_voice_hook::siglus::kMaxEntryCount;
   if (valid) {
     const uint64_t index_bytes64 = sizeof(uint32_t) +
-        static_cast<uint64_t>(count) * fushi_voice_hook::siglus::kOvkEntryBytes;
+        static_cast<uint64_t>(count) * my_comic_voice_hook::siglus::kOvkEntryBytes;
     valid = index_bytes64 <= static_cast<uint64_t>(size.QuadPart) &&
             index_bytes64 <= SIZE_MAX;
     if (valid) {
@@ -40,7 +40,7 @@ void ProcessSiglusVoiceTask(SiglusVoiceTask* task) {
                           static_cast<uint32_t>(index_bytes - sizeof(count)));
       }
       if (valid) {
-        valid = fushi_voice_hook::siglus::FindEntryAtOffset(
+        valid = my_comic_voice_hook::siglus::FindEntryAtOffset(
             index, index_bytes, static_cast<uint64_t>(size.QuadPart),
             task->offset, &entry);
       }
@@ -54,7 +54,7 @@ void ProcessSiglusVoiceTask(SiglusVoiceTask* task) {
   if (valid) {
     ogg = static_cast<uint8_t*>(malloc(entry.byte_len));
     valid = ogg != nullptr && ReadExact(file, ogg, entry.byte_len) &&
-            fushi_voice_hook::siglus::CompleteOggBytes(ogg, entry.byte_len) ==
+            my_comic_voice_hook::siglus::CompleteOggBytes(ogg, entry.byte_len) ==
                 entry.byte_len;
   }
   if (valid) {
@@ -85,7 +85,7 @@ void ProcessSiglusVoiceTask(SiglusVoiceTask* task) {
     const wchar_t* slash = wcsrchr(task->path, L'\\');
     const wchar_t* base = slash != nullptr ? slash + 1 : task->path;
     const std::wstring storage =
-        fushi_voice_hook::siglus::BuildOvkVoiceStorageName(base, entry);
+        my_comic_voice_hook::siglus::BuildOvkVoiceStorageName(base, entry);
     // BUG-2341: an intact source entry is not a successfully exported resource.
     // Publish capture only after the writer has completed write and close.
     if (WriteVoiceOggAt(ogg, entry.byte_len, storage.c_str(), task->tick_ms,
@@ -94,7 +94,7 @@ void ProcessSiglusVoiceTask(SiglusVoiceTask* task) {
       if (g_header != nullptr) {
         g_header->reserved_luna |= kDiagSiglusVoiceDumped;
         g_header->hook_diagnostics |=
-            fushi_voice_hook::kDiagVisualArtsOvkCaptured;
+            my_comic_voice_hook::kDiagVisualArtsOvkCaptured;
       }
     }
   }

@@ -12,8 +12,8 @@
 
 #include "reallive_lookup_core.h"
 
-namespace core = fushi_voice_hook::reallive_lookup;
-namespace exact = fushi_voice_hook::exact_lookup;
+namespace core = my_comic_voice_hook::reallive_lookup;
+namespace exact = my_comic_voice_hook::exact_lookup;
 
 namespace {
 

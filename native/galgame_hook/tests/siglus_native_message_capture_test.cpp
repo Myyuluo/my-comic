@@ -7,7 +7,7 @@
 #include "siglus_native_message_capture.h"
 
 namespace {
-using namespace fushi_voice_hook;
+using namespace my_comic_voice_hook;
 struct Memory {
   std::map<uint32_t,uint32_t> words;
   bool operator()(uint32_t address,uint32_t* out) {
@@ -121,7 +121,7 @@ __declspec(naked) void Tail(){__asm {
   ret
 }}
 void* original=reinterpret_cast<void*>(&Tail);
-FUSHI_SIGLUS_NATIVE_MESSAGE_THUNK(Probe,Observe,original)
+MYCOMIC_SIGLUS_NATIVE_MESSAGE_THUNK(Probe,Observe,original)
 __declspec(naked) void Run(){__asm {
   pushfd
   pushad

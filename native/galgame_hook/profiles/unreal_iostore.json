@@ -25,7 +25,7 @@
     },
     {
       "kind": "real_sample",
-      "reference": "Static probe inventory notes a third-party UE4SS.dll plus ue4ss/Mods/KinomajoTrainer Lua scripts shipped next to the shipping exe by this Chinese release; recorded as ledger only, it is not part of the identity criterion and Fushi does not load or depend on it."
+      "reference": "Static probe inventory notes a third-party UE4SS.dll plus ue4ss/Mods/KinomajoTrainer Lua scripts shipped next to the shipping exe by this Chinese release; recorded as ledger only, it is not part of the identity criterion and MyComic does not load or depend on it."
     }
   ]
 }

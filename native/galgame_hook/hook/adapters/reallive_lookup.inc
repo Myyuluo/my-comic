@@ -30,7 +30,7 @@
 
 #if defined(_M_IX86)
 
-namespace reallive_lookup = fushi_voice_hook::reallive_lookup;
+namespace reallive_lookup = my_comic_voice_hook::reallive_lookup;
 
 constexpr uint32_t kRealliveModelSlots = 2u;
 constexpr uint32_t kRealliveSubmitSlots = 8u;
@@ -348,7 +348,7 @@ void QueueRealliveSubmit(const RealliveSubmit& submit) {
 bool RealliveShieldActive(HWND game) {
   if (IsLookupOverlayInputShieldVisible()) return true;
   if (g_header == nullptr) return false;
-  const auto request = fushi_voice_hook::ReadLookupShieldRequest(g_header);
+  const auto request = my_comic_voice_hook::ReadLookupShieldRequest(g_header);
   return request.valid && request.active_buttons != 0u &&
          request.target_hwnd ==
              static_cast<uint64_t>(reinterpret_cast<uintptr_t>(game));
@@ -399,8 +399,8 @@ bool RealliveGlyphPresentedNow(const RealliveModel& model,
 bool ReallivePressEligible(RealliveSubmit* submit) {
   auto& rt = g_reallive_lookup;
   if (g_header == nullptr || g_stop ||
-      !fushi_voice_hook::HasLookupRegion(g_header) ||
-      fushi_voice_hook::AtomicLoadShared32(&g_header->lookup_enabled) == 0u) {
+      !my_comic_voice_hook::HasLookupRegion(g_header) ||
+      my_comic_voice_hook::AtomicLoadShared32(&g_header->lookup_enabled) == 0u) {
     return false;
   }
   RealliveModel& model = rt.game_model;
@@ -411,9 +411,9 @@ bool ReallivePressEligible(RealliveSubmit* submit) {
   const HWND game = reinterpret_cast<HWND>(
       static_cast<uintptr_t>(ReadRealliveGlobal(rt.sites.window_rva)));
   if (game == nullptr || reinterpret_cast<uintptr_t>(game) != model.window ||
-      !fushi_voice_hook::g_geometry_provider_registry.NativeInputAllowed(
-          g_header, fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-          fushi_voice_hook::kLookupGeometryProviderIdReallive) ||
+      !my_comic_voice_hook::g_geometry_provider_registry.NativeInputAllowed(
+          g_header, my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+          my_comic_voice_hook::kLookupGeometryProviderIdReallive) ||
       RealliveShieldActive(game) || GetForegroundWindow() != game ||
       (GetKeyState(VK_SHIFT) & 0x8000) != 0 ||
       (GetKeyState(VK_CONTROL) & 0x8000) != 0 ||
@@ -493,7 +493,7 @@ __declspec(naked) void RealliveKeyJoinStub() {
 
 // ── HookWorker ─────────────────────────────────────────────────────────────
 
-// Worker-only, bounded diagnostics in %TEMP%\fushi_galhook.log (the injected
+// Worker-only, bounded diagnostics in %TEMP%\my_comic_galhook.log (the injected
 // side has no other text channel).  Never logs dialogue text.
 void RealliveLookupLog(const wchar_t* format, ...) {
   wchar_t line[512] = {};
@@ -504,7 +504,7 @@ void RealliveLookupLog(const wchar_t* format, ...) {
   wchar_t path[MAX_PATH] = {};
   const DWORD length = GetTempPathW(MAX_PATH, path);
   if (length == 0 || length >= MAX_PATH - 20) return;
-  wcscat_s(path, L"fushi_galhook.log");
+  wcscat_s(path, L"my_comic_galhook.log");
   HANDLE file = g_orig_CreateFileW(path, FILE_APPEND_DATA, FILE_SHARE_READ,
                                    nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL,
                                    nullptr);
@@ -591,9 +591,9 @@ bool InstallRealliveLookup() {
   LARGE_INTEGER frequency = {}, started = {}, finished = {};
   QueryPerformanceFrequency(&frequency);
   QueryPerformanceCounter(&started);
-  fushi_voice_hook::exact_lookup::LoadedPeImage image;
+  my_comic_voice_hook::exact_lookup::LoadedPeImage image;
   reallive_lookup::ImportSlots imports;
-  if (!fushi_voice_hook::exact_lookup::OpenLoadedPeImage(
+  if (!my_comic_voice_hook::exact_lookup::OpenLoadedPeImage(
           GetModuleHandleW(nullptr), &image)) {
     rt.site_result = reallive_lookup::SiteResult::kGlyphPathMissing;
   } else {
@@ -643,8 +643,8 @@ bool InstallRealliveLookup() {
       static_cast<unsigned long>(rt.sites.window_rva), hooked ? 1 : 0,
       scan_ms);
   if (rt.installed && g_header != nullptr) {
-    fushi_voice_hook::AtomicOrShared32(
-        &g_header->lookup_diag, fushi_voice_hook::kLookupDiagSensorInstalled);
+    my_comic_voice_hook::AtomicOrShared32(
+        &g_header->lookup_diag, my_comic_voice_hook::kLookupDiagSensorInstalled);
   }
   return rt.installed;
 }
@@ -659,9 +659,9 @@ void RetireRealliveLookup() {
   if (!rt.provider_offered) return;
   rt.provider_offered = false;
   if (g_header != nullptr) {
-    fushi_voice_hook::g_geometry_provider_registry.Retire(
-        g_header, fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-        fushi_voice_hook::kLookupGeometryProviderIdReallive);
+    my_comic_voice_hook::g_geometry_provider_registry.Retire(
+        g_header, my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+        my_comic_voice_hook::kLookupGeometryProviderIdReallive);
   }
 }
 
@@ -823,7 +823,7 @@ bool PublishRealliveLookupHit(const RealliveSubmit& submit) {
   if (glyph.line.source_index == reallive_lookup::kNoSource ||
       glyph.line.source_length == 0u || glyph.line.source_index >= units ||
       glyph.line.source_length > units - glyph.line.source_index ||
-      fushi_voice_hook::LookupUtf16SourceLength(
+      my_comic_voice_hook::LookupUtf16SourceLength(
           rt.model_line.data(), static_cast<uint32_t>(units),
           glyph.line.source_index) != glyph.line.source_length) {
     return false;
@@ -832,25 +832,25 @@ bool PublishRealliveLookupHit(const RealliveSubmit& submit) {
       CP_UTF8, WC_ERR_INVALID_CHARS, rt.model_line.data(),
       static_cast<int>(units), nullptr, 0, nullptr, nullptr);
   if (required <= 0 ||
-      static_cast<uint32_t>(required) > fushi_voice_hook::kLookupLineBytes) {
+      static_cast<uint32_t>(required) > my_comic_voice_hook::kLookupLineBytes) {
     return false;
   }
-  char utf8[fushi_voice_hook::kLookupLineBytes] = {};
+  char utf8[my_comic_voice_hook::kLookupLineBytes] = {};
   if (WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, rt.model_line.data(),
                           static_cast<int>(units), utf8, required, nullptr,
                           nullptr) != required) {
     return false;
   }
-  fushi_voice_hook::LookupGeometryHitPublication publication;
+  my_comic_voice_hook::LookupGeometryHitPublication publication;
   publication.provider_kind =
-      fushi_voice_hook::kLookupGeometryProviderEngineExactLayout;
-  publication.provider_id = fushi_voice_hook::kLookupGeometryProviderIdReallive;
+      my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout;
+  publication.provider_id = my_comic_voice_hook::kLookupGeometryProviderIdReallive;
   publication.char_index = glyph.line.source_index;
   publication.source_length = glyph.line.source_length;
   publication.char_count = static_cast<uint32_t>(units);
   publication.coordinate_space =
-      fushi_voice_hook::kLookupCoordinateSpaceClientPhysicalPixels;
-  publication.writing_mode = fushi_voice_hook::kLookupWritingModeHorizontal;
+      my_comic_voice_hook::kLookupCoordinateSpaceClientPhysicalPixels;
+  publication.writing_mode = my_comic_voice_hook::kLookupWritingModeHorizontal;
   publication.text_generation = rt.model_text_event;
   publication.geometry_generation = model.generation;
   publication.glyph_x = glyph.rect.x;
@@ -859,11 +859,11 @@ bool PublishRealliveLookupHit(const RealliveSubmit& submit) {
   publication.glyph_h = glyph.rect.h;
   publication.view_w = model.physical_w;
   publication.view_h = model.physical_h;
-  publication.flags = fushi_voice_hook::kLookupHitFlagSubmit;
+  publication.flags = my_comic_voice_hook::kLookupHitFlagSubmit;
   publication.line_utf8 = reinterpret_cast<const uint8_t*>(utf8);
   publication.line_bytes = static_cast<uint32_t>(required);
   const bool published =
-      fushi_voice_hook::g_geometry_provider_registry.PublishHit(g_header,
+      my_comic_voice_hook::g_geometry_provider_registry.PublishHit(g_header,
                                                                 publication);
   RealliveLookupLog(
       L"reallive-lookup: hit gen=%llu glyph=%u char=%u+%u rect=%d,%d %dx%d "
@@ -922,14 +922,14 @@ void ProcessRealliveLookupTick() {
   auto& rt = g_reallive_lookup;
   if (!rt.installed) return;
   if (g_stop || g_header == nullptr ||
-      !fushi_voice_hook::HasLookupRegion(g_header) ||
-      fushi_voice_hook::AtomicLoadShared32(&g_header->lookup_enabled) == 0u) {
+      !my_comic_voice_hook::HasLookupRegion(g_header) ||
+      my_comic_voice_hook::AtomicLoadShared32(&g_header->lookup_enabled) == 0u) {
     NoteRealliveRetire(1u);
     RetireRealliveLookup();
     return;
   }
-  fushi_voice_hook::AtomicOrShared32(
-      &g_header->lookup_diag, fushi_voice_hook::kLookupDiagSensorInstalled);
+  my_comic_voice_hook::AtomicOrShared32(
+      &g_header->lookup_diag, my_comic_voice_hook::kLookupDiagSensorInstalled);
 
   // The engine polls its keys many times per frame while it runs; a silent
   // poller is a suspended, minimised or dying game.
@@ -946,7 +946,7 @@ void ProcessRealliveLookupTick() {
   std::wstring line;
   uint64_t event = 0u;
   uint64_t thread = 0u;
-  if (!fushi_voice_hook::ReadSelectedLookupText(
+  if (!my_comic_voice_hook::ReadSelectedLookupText(
           g_header, &line, &event, &thread,
           reallive_lookup::kMaxSurfaceGlyphs)) {
     NoteRealliveRetire(3u);
@@ -988,17 +988,17 @@ void ProcessRealliveLookupTick() {
           rt.model.screen_h);
     }
   }
-  if (fushi_voice_hook::g_geometry_provider_registry.OfferReady(
-          g_header, fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-          fushi_voice_hook::kLookupGeometryProviderIdReallive)) {
+  if (my_comic_voice_hook::g_geometry_provider_registry.OfferReady(
+          g_header, my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+          my_comic_voice_hook::kLookupGeometryProviderIdReallive)) {
     if (!rt.provider_offered) {
       RealliveLookupLog(L"reallive-lookup: OfferReady gen=%llu glyphs=%u",
                         static_cast<unsigned long long>(rt.model.generation),
                         rt.model.count);
     }
     rt.provider_offered = true;
-    fushi_voice_hook::AtomicOrShared32(
-        &g_header->lookup_diag, fushi_voice_hook::kLookupDiagGeometryObserved);
+    my_comic_voice_hook::AtomicOrShared32(
+        &g_header->lookup_diag, my_comic_voice_hook::kLookupDiagGeometryObserved);
     NoteRealliveRetire(0u);
   } else {
     NoteRealliveRetire(5u);

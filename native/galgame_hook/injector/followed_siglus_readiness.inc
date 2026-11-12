@@ -8,7 +8,7 @@
             target_pid);
     if (!WaitForReadyGameWindow(target_process, target_pid, 20000)) {
       fprintf(stderr, "[launch] Siglus child did not reach delayed-attach readiness\n");
-      ReportFailureReason(fushi_voice_hook::LaunchFailureReason::kInjectionFailed, 1);
+      ReportFailureReason(my_comic_voice_hook::LaunchFailureReason::kInjectionFailed, 1);
       // The launcher already owns the running child's lifetime. A readiness
       // failure is not permission to inject it, resume the root, or terminate it.
       CloseHandle(child_process);

@@ -23,7 +23,7 @@
 //
 // This file is expanded inside dll_main.cpp's anonymous namespace.  The public
 // entry points declared in smash_fzmedia_lookup.h live in
-// fushi_voice_hook::smash_fzmedia, so the anonymous namespace is closed and
+// my_comic_voice_hook::smash_fzmedia, so the anonymous namespace is closed and
 // reopened around their thin definitions at the bottom.
 //
 // Decision logic (hit mapping, gesture table, origin gating, shield masks) is
@@ -32,30 +32,30 @@
 
 #if defined(_M_X64)
 
-namespace smash_lookup_core = fushi_voice_hook::smash_fzmedia::lookup_core;
+namespace smash_lookup_core = my_comic_voice_hook::smash_fzmedia::lookup_core;
 
 // Defined later in generic_input_shield.inc (same anonymous namespace).
 void MarkGenericShieldObserved(uint32_t surface);
 
 static_assert(smash_lookup_core::kShieldSurfaceWin32Messages ==
-                  fushi_voice_hook::kLookupShieldSurfaceWin32Messages,
+                  my_comic_voice_hook::kLookupShieldSurfaceWin32Messages,
               "smash lookup core surface mirror drifted");
 static_assert(smash_lookup_core::kShieldSurfaceEnginePrivate ==
-                  fushi_voice_hook::kLookupShieldSurfaceEnginePrivate,
+                  my_comic_voice_hook::kLookupShieldSurfaceEnginePrivate,
               "smash lookup core surface mirror drifted");
 
 constexpr uint32_t kSmashFzmediaLookupModelSlots = 2u;
 constexpr uint32_t kSmashFzmediaLookupSubmitSlots = 8u;
 constexpr wchar_t kSmashFzmediaGameWindowClass[] = L"GLFW30";
-constexpr wchar_t kSmashFzmediaDirectPopupClass[] = L"FushiGlobalLookupWindow";
+constexpr wchar_t kSmashFzmediaDirectPopupClass[] = L"MyComicGlobalLookupWindow";
 
 // One immutable geometry model: the paragraph plus the projection it was
 // validated against.  HookWorker republishes it whenever the paragraph, the
 // client size, the origin or the readiness verdict changes; the game thread
 // reads it through a two-slot seqlock in the subclass procedure.
 struct SmashFzmediaLookupModel {
-  fushi_voice_hook::smash_fzmedia::LineSnapshot line;
-  fushi_voice_hook::smash_fzmedia::StageProjection projection;
+  my_comic_voice_hook::smash_fzmedia::LineSnapshot line;
+  my_comic_voice_hook::smash_fzmedia::StageProjection projection;
   float origin_x = 0.0f;
   float origin_y = 0.0f;
   int32_t client_w = 0;
@@ -80,7 +80,7 @@ struct SmashFzmediaLookupRuntime {
   bool installed = false;
   bool has_line = false;
   bool model_dirty = false;
-  fushi_voice_hook::smash_fzmedia::LineSnapshot latest_line;
+  my_comic_voice_hook::smash_fzmedia::LineSnapshot latest_line;
   SmashFzmediaLookupModel current_model;
   smash_lookup_core::ProjectionEpoch epoch;
   smash_lookup_core::OriginCache origin_cache;
@@ -194,12 +194,12 @@ HWND GetValidPublishedSmashFzmediaShieldPopup(HWND game) {
   if (game == nullptr || !IsWindow(game) ||
       reinterpret_cast<uintptr_t>(GetPropW(
           game,
-          fushi_voice_hook::kSmashFzmediaSampledInputShieldReadyProperty)) !=
-          fushi_voice_hook::kSmashFzmediaSampledInputShieldReadyValue) {
+          my_comic_voice_hook::kSmashFzmediaSampledInputShieldReadyProperty)) !=
+          my_comic_voice_hook::kSmashFzmediaSampledInputShieldReadyValue) {
     return nullptr;
   }
   const HWND popup = reinterpret_cast<HWND>(GetPropW(
-      game, fushi_voice_hook::kSmashFzmediaSampledInputShieldWindowProperty));
+      game, my_comic_voice_hook::kSmashFzmediaSampledInputShieldWindowProperty));
   if (popup == nullptr || !IsWindow(popup) ||
       GetWindow(popup, GW_OWNER) != game) {
     return nullptr;
@@ -215,7 +215,7 @@ HWND GetValidPublishedSmashFzmediaShieldPopup(HWND game) {
 
 bool SmashFzmediaLookupShieldRequestTargets(HWND game) {
   if (g_header == nullptr || game == nullptr) return false;
-  const auto request = fushi_voice_hook::ReadLookupShieldRequest(g_header);
+  const auto request = my_comic_voice_hook::ReadLookupShieldRequest(g_header);
   return request.valid && request.active_buttons != 0u &&
          request.target_hwnd ==
              static_cast<uint64_t>(reinterpret_cast<uintptr_t>(game));
@@ -300,9 +300,9 @@ LRESULT CALLBACK SmashFzmediaLookupWindowProc(HWND hwnd, UINT message,
   input.shield_active = SmashFzmediaLookupShieldActive(hwnd);
   input.native_input_allowed =
       g_header != nullptr &&
-      fushi_voice_hook::g_geometry_provider_registry.NativeInputAllowed(
-          g_header, fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-          fushi_voice_hook::kLookupGeometryProviderIdSmashFzmedia);
+      my_comic_voice_hook::g_geometry_provider_registry.NativeInputAllowed(
+          g_header, my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+          my_comic_voice_hook::kLookupGeometryProviderIdSmashFzmedia);
   SmashFzmediaLookupSubmit candidate;
   if (smash_lookup_core::HitTestRequired(input) &&
       SmashFzmediaLookupHitTest(GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam),
@@ -404,31 +404,31 @@ void TeardownSmashFzmediaSubclass() {
 
 // ── shield contract properties (HookWorker) ─────────────────────────────────
 
-void RevokeSmashFzmediaShieldProperties(fushi_voice_hook::SharedHeader* header,
+void RevokeSmashFzmediaShieldProperties(my_comic_voice_hook::SharedHeader* header,
                                         bool remove_required) {
   auto& rt = g_smash_fzmedia_lookup;
   const HWND game = rt.property_window;
   if (game != nullptr && IsWindow(game)) {
     RemovePropW(game,
-                fushi_voice_hook::kSmashFzmediaSampledInputShieldReadyProperty);
+                my_comic_voice_hook::kSmashFzmediaSampledInputShieldReadyProperty);
     RemovePropW(
-        game, fushi_voice_hook::kSmashFzmediaSampledInputShieldWindowProperty);
+        game, my_comic_voice_hook::kSmashFzmediaSampledInputShieldWindowProperty);
     if (remove_required) {
       RemovePropW(
           game,
-          fushi_voice_hook::kSmashFzmediaSampledInputShieldRequiredProperty);
+          my_comic_voice_hook::kSmashFzmediaSampledInputShieldRequiredProperty);
     }
   }
   if (remove_required) rt.property_window = nullptr;
   if (header != nullptr) {
     InterlockedAnd(reinterpret_cast<volatile LONG*>(&header->lookup_diag),
                    static_cast<LONG>(
-                       ~fushi_voice_hook::kLookupDiagSampledInputShieldReady));
+                       ~my_comic_voice_hook::kLookupDiagSampledInputShieldReady));
   }
 }
 
 bool MaintainSmashFzmediaShieldProperties(
-    fushi_voice_hook::SharedHeader* header, HWND game, bool subclass_live) {
+    my_comic_voice_hook::SharedHeader* header, HWND game, bool subclass_live) {
   auto& rt = g_smash_fzmedia_lookup;
   if (game == nullptr || !IsWindow(game)) {
     RevokeSmashFzmediaShieldProperties(header, true);
@@ -440,13 +440,13 @@ bool MaintainSmashFzmediaShieldProperties(
   }
   if (reinterpret_cast<uintptr_t>(GetPropW(
           game,
-          fushi_voice_hook::kSmashFzmediaSampledInputShieldRequiredProperty)) !=
-          fushi_voice_hook::kSmashFzmediaSampledInputShieldRequiredValue &&
+          my_comic_voice_hook::kSmashFzmediaSampledInputShieldRequiredProperty)) !=
+          my_comic_voice_hook::kSmashFzmediaSampledInputShieldRequiredValue &&
       !SetPropW(
           game,
-          fushi_voice_hook::kSmashFzmediaSampledInputShieldRequiredProperty,
+          my_comic_voice_hook::kSmashFzmediaSampledInputShieldRequiredProperty,
           reinterpret_cast<HANDLE>(
-              fushi_voice_hook::kSmashFzmediaSampledInputShieldRequiredValue))) {
+              my_comic_voice_hook::kSmashFzmediaSampledInputShieldRequiredValue))) {
     RevokeSmashFzmediaShieldProperties(header, false);
     return false;
   }
@@ -456,39 +456,39 @@ bool MaintainSmashFzmediaShieldProperties(
   }
   if (reinterpret_cast<uintptr_t>(GetPropW(
           game,
-          fushi_voice_hook::kSmashFzmediaSampledInputShieldReadyProperty)) !=
-          fushi_voice_hook::kSmashFzmediaSampledInputShieldReadyValue &&
+          my_comic_voice_hook::kSmashFzmediaSampledInputShieldReadyProperty)) !=
+          my_comic_voice_hook::kSmashFzmediaSampledInputShieldReadyValue &&
       !SetPropW(
-          game, fushi_voice_hook::kSmashFzmediaSampledInputShieldReadyProperty,
+          game, my_comic_voice_hook::kSmashFzmediaSampledInputShieldReadyProperty,
           reinterpret_cast<HANDLE>(
-              fushi_voice_hook::kSmashFzmediaSampledInputShieldReadyValue))) {
+              my_comic_voice_hook::kSmashFzmediaSampledInputShieldReadyValue))) {
     RevokeSmashFzmediaShieldProperties(header, false);
     return false;
   }
   if (header != nullptr) {
     InterlockedOr(reinterpret_cast<volatile LONG*>(&header->lookup_diag),
                   static_cast<LONG>(
-                      fushi_voice_hook::kLookupDiagSampledInputShieldReady));
+                      my_comic_voice_hook::kLookupDiagSampledInputShieldReady));
   }
   return true;
 }
 
 // ── geometry model refresh (HookWorker) ─────────────────────────────────────
 
-void RetireSmashFzmediaProvider(fushi_voice_hook::SharedHeader* header) {
+void RetireSmashFzmediaProvider(my_comic_voice_hook::SharedHeader* header) {
   auto& rt = g_smash_fzmedia_lookup;
   if (!rt.provider_offered) return;
   rt.provider_offered = false;
-  fushi_voice_hook::g_geometry_provider_registry.Retire(
-      header, fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-      fushi_voice_hook::kLookupGeometryProviderIdSmashFzmedia);
+  my_comic_voice_hook::g_geometry_provider_registry.Retire(
+      header, my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+      my_comic_voice_hook::kLookupGeometryProviderIdSmashFzmedia);
 }
 
 // Returns true when the current paragraph projects completely inside the
 // client area with a host-solved origin, i.e. the provider may offer ready.
-bool RefreshSmashFzmediaLookupModel(fushi_voice_hook::SharedHeader* header,
+bool RefreshSmashFzmediaLookupModel(my_comic_voice_hook::SharedHeader* header,
                                     HWND window) {
-  namespace smash = fushi_voice_hook::smash_fzmedia;
+  namespace smash = my_comic_voice_hook::smash_fzmedia;
   auto& rt = g_smash_fzmedia_lookup;
   RECT client = {};
   if (!GetClientRect(window, &client)) return false;
@@ -507,21 +507,21 @@ bool RefreshSmashFzmediaLookupModel(fushi_voice_hook::SharedHeader* header,
   if (design_w == 0u || design_h == 0u) return false;
 
   const uint32_t origin_seq_before =
-      fushi_voice_hook::AtomicLoadShared32(&header->lookup_layer_origin_seq);
+      my_comic_voice_hook::AtomicLoadShared32(&header->lookup_layer_origin_seq);
   smash_lookup_core::AdvanceProjectionEpoch(&rt.epoch, design_w, design_h,
                                             origin_seq_before);
   if (request.valid) {
     // The helper only bumps the line seq when the payload changed, so calling
     // it every poll is free in steady state.
-    fushi_voice_hook::PublishLookupLayerLine(
+    my_comic_voice_hook::PublishLookupLayerLine(
         header, request.design_w, request.design_h, request.glyph_count,
         request.left, request.top, request.right, request.bottom);
   }
 
   int32_t host_x = 0, host_y = 0;
-  if (fushi_voice_hook::ReadLookupLayerOrigin(header, &host_x, &host_y)) {
+  if (my_comic_voice_hook::ReadLookupLayerOrigin(header, &host_x, &host_y)) {
     const uint32_t origin_seq_after =
-        fushi_voice_hook::AtomicLoadShared32(&header->lookup_layer_origin_seq);
+        my_comic_voice_hook::AtomicLoadShared32(&header->lookup_layer_origin_seq);
     if (origin_seq_after == origin_seq_before &&
         smash_lookup_core::OriginSeqUsable(rt.epoch, origin_seq_after)) {
       smash_lookup_core::RememberOrigin(&rt.origin_cache, design_w, design_h,
@@ -559,7 +559,7 @@ bool RefreshSmashFzmediaLookupModel(fushi_voice_hook::SharedHeader* header,
 
 // ── hit publication (HookWorker) ────────────────────────────────────────────
 
-bool PublishSmashFzmediaLookupHit(fushi_voice_hook::SharedHeader* header,
+bool PublishSmashFzmediaLookupHit(my_comic_voice_hook::SharedHeader* header,
                                   const SmashFzmediaLookupSubmit& submit) {
   auto& rt = g_smash_fzmedia_lookup;
   const SmashFzmediaLookupModel& model = rt.current_model;
@@ -571,33 +571,33 @@ bool PublishSmashFzmediaLookupHit(fushi_voice_hook::SharedHeader* header,
   }
   const wchar_t* text = model.line.text;
   const uint32_t units = model.line.unit_count;
-  const uint32_t source_length = fushi_voice_hook::LookupUtf16SourceLength(
+  const uint32_t source_length = my_comic_voice_hook::LookupUtf16SourceLength(
       text, units, submit.char_index);
   if (source_length == 0u) return false;
   const int required = WideCharToMultiByte(
       CP_UTF8, WC_ERR_INVALID_CHARS, text, static_cast<int>(units), nullptr, 0,
       nullptr, nullptr);
   if (required <= 0 ||
-      static_cast<uint32_t>(required) > fushi_voice_hook::kLookupLineBytes) {
+      static_cast<uint32_t>(required) > my_comic_voice_hook::kLookupLineBytes) {
     return false;
   }
-  char utf8[fushi_voice_hook::kLookupLineBytes] = {};
+  char utf8[my_comic_voice_hook::kLookupLineBytes] = {};
   if (WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, text,
                           static_cast<int>(units), utf8, required, nullptr,
                           nullptr) != required) {
     return false;
   }
-  fushi_voice_hook::LookupGeometryHitPublication publication;
+  my_comic_voice_hook::LookupGeometryHitPublication publication;
   publication.provider_kind =
-      fushi_voice_hook::kLookupGeometryProviderEngineExactLayout;
+      my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout;
   publication.provider_id =
-      fushi_voice_hook::kLookupGeometryProviderIdSmashFzmedia;
+      my_comic_voice_hook::kLookupGeometryProviderIdSmashFzmedia;
   publication.char_index = submit.char_index;
   publication.source_length = source_length;
   publication.char_count = units;
   publication.coordinate_space =
-      fushi_voice_hook::kLookupCoordinateSpaceClientPhysicalPixels;
-  publication.writing_mode = fushi_voice_hook::kLookupWritingModeHorizontal;
+      my_comic_voice_hook::kLookupCoordinateSpaceClientPhysicalPixels;
+  publication.writing_mode = my_comic_voice_hook::kLookupWritingModeHorizontal;
   // The paragraph generation is both the semantic and the layout generation:
   // the adapter republishes cells and text together, never one without the
   // other, so a hit can never pair an old cell array with a newer line.
@@ -609,25 +609,25 @@ bool PublishSmashFzmediaLookupHit(fushi_voice_hook::SharedHeader* header,
   publication.glyph_h = submit.h;
   publication.view_w = submit.client_w;
   publication.view_h = submit.client_h;
-  publication.flags = fushi_voice_hook::kLookupHitFlagSubmit;
+  publication.flags = my_comic_voice_hook::kLookupHitFlagSubmit;
   publication.line_utf8 = reinterpret_cast<const uint8_t*>(utf8);
   publication.line_bytes = static_cast<uint32_t>(required);
-  return fushi_voice_hook::g_geometry_provider_registry.PublishHit(header,
+  return my_comic_voice_hook::g_geometry_provider_registry.PublishHit(header,
                                                                    publication);
 }
 
 // ── lifecycle (HookWorker) ──────────────────────────────────────────────────
 
-bool SmashFzmediaLookupInstallImpl(fushi_voice_hook::SharedHeader* header) {
+bool SmashFzmediaLookupInstallImpl(my_comic_voice_hook::SharedHeader* header) {
   auto& rt = g_smash_fzmedia_lookup;
-  if (header == nullptr || !fushi_voice_hook::HasLookupRegion(header)) {
+  if (header == nullptr || !my_comic_voice_hook::HasLookupRegion(header)) {
     return false;
   }
   if (rt.installed) return true;
   rt.installed = true;
   rt.has_line = false;
   rt.model_dirty = false;
-  rt.latest_line = fushi_voice_hook::smash_fzmedia::LineSnapshot();
+  rt.latest_line = my_comic_voice_hook::smash_fzmedia::LineSnapshot();
   rt.current_model = SmashFzmediaLookupModel();
   rt.epoch = smash_lookup_core::ProjectionEpoch();
   rt.origin_cache = smash_lookup_core::OriginCache();
@@ -642,7 +642,7 @@ bool SmashFzmediaLookupInstallImpl(fushi_voice_hook::SharedHeader* header) {
   return true;
 }
 
-void SmashFzmediaLookupShutdownImpl(fushi_voice_hook::SharedHeader* header) {
+void SmashFzmediaLookupShutdownImpl(my_comic_voice_hook::SharedHeader* header) {
   auto& rt = g_smash_fzmedia_lookup;
   if (!rt.installed) return;
   RetireSmashFzmediaProvider(header);
@@ -655,11 +655,11 @@ void SmashFzmediaLookupShutdownImpl(fushi_voice_hook::SharedHeader* header) {
   rt.processed_submit_seq = rt.submit_count.load(std::memory_order_acquire);
 }
 
-void SmashFzmediaLookupPollImpl(fushi_voice_hook::SharedHeader* header,
+void SmashFzmediaLookupPollImpl(my_comic_voice_hook::SharedHeader* header,
                                 uint64_t /*now_ms*/) {
   auto& rt = g_smash_fzmedia_lookup;
   if (!rt.installed || header == nullptr ||
-      !fushi_voice_hook::HasLookupRegion(header)) {
+      !my_comic_voice_hook::HasLookupRegion(header)) {
     return;
   }
 
@@ -692,13 +692,13 @@ void SmashFzmediaLookupPollImpl(fushi_voice_hook::SharedHeader* header,
   const bool shield_ready = MaintainSmashFzmediaShieldProperties(
       header, window, subclass_live);
   if (shield_ready && header != nullptr) {
-    fushi_voice_hook::AtomicOrShared32(
-        &header->lookup_diag, fushi_voice_hook::kLookupDiagSensorInstalled);
+    my_comic_voice_hook::AtomicOrShared32(
+        &header->lookup_diag, my_comic_voice_hook::kLookupDiagSensorInstalled);
   }
 
   bool ready = false;
   if (subclass_live && rt.has_line &&
-      fushi_voice_hook::AtomicLoadShared32(&header->lookup_enabled) != 0u) {
+      my_comic_voice_hook::AtomicLoadShared32(&header->lookup_enabled) != 0u) {
     ready = RefreshSmashFzmediaLookupModel(header, window);
   } else if (rt.current_model.geometry_ready) {
     rt.current_model.geometry_ready = false;
@@ -706,13 +706,13 @@ void SmashFzmediaLookupPollImpl(fushi_voice_hook::SharedHeader* header,
   }
 
   if (ready) {
-    if (fushi_voice_hook::g_geometry_provider_registry.OfferReady(
-            g_header, fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-            fushi_voice_hook::kLookupGeometryProviderIdSmashFzmedia)) {
+    if (my_comic_voice_hook::g_geometry_provider_registry.OfferReady(
+            g_header, my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+            my_comic_voice_hook::kLookupGeometryProviderIdSmashFzmedia)) {
       rt.provider_offered = true;
-      fushi_voice_hook::AtomicOrShared32(
+      my_comic_voice_hook::AtomicOrShared32(
           &header->lookup_diag,
-          fushi_voice_hook::kLookupDiagGeometryObserved);
+          my_comic_voice_hook::kLookupDiagGeometryObserved);
     } else {
       ready = false;
     }
@@ -727,36 +727,36 @@ void SmashFzmediaLookupPollImpl(fushi_voice_hook::SharedHeader* header,
 }
 
 void SmashFzmediaLookupPublishSnapshotImpl(
-    const fushi_voice_hook::smash_fzmedia::LineSnapshot& snapshot) {
+    const my_comic_voice_hook::smash_fzmedia::LineSnapshot& snapshot) {
   auto& rt = g_smash_fzmedia_lookup;
   if (!rt.installed) return;
   rt.latest_line = snapshot;
   rt.has_line = snapshot.generation != 0u && snapshot.unit_count != 0u &&
                 snapshot.unit_count <=
-                    fushi_voice_hook::smash_fzmedia::kMaxLineUnits;
+                    my_comic_voice_hook::smash_fzmedia::kMaxLineUnits;
   rt.model_dirty = true;
 }
 
 #else  // !_M_X64
 
-bool SmashFzmediaLookupInstallImpl(fushi_voice_hook::SharedHeader*) {
+bool SmashFzmediaLookupInstallImpl(my_comic_voice_hook::SharedHeader*) {
   return false;
 }
-void SmashFzmediaLookupShutdownImpl(fushi_voice_hook::SharedHeader*) {}
-void SmashFzmediaLookupPollImpl(fushi_voice_hook::SharedHeader*, uint64_t) {}
+void SmashFzmediaLookupShutdownImpl(my_comic_voice_hook::SharedHeader*) {}
+void SmashFzmediaLookupPollImpl(my_comic_voice_hook::SharedHeader*, uint64_t) {}
 void SmashFzmediaLookupPublishSnapshotImpl(
-    const fushi_voice_hook::smash_fzmedia::LineSnapshot&) {}
+    const my_comic_voice_hook::smash_fzmedia::LineSnapshot&) {}
 
 #endif  // _M_X64
 
 // The declarations in smash_fzmedia_lookup.h live in
-// fushi_voice_hook::smash_fzmedia; definitions must appear in an enclosing
+// my_comic_voice_hook::smash_fzmedia; definitions must appear in an enclosing
 // namespace, so step out of dll_main.cpp's anonymous namespace for them and
 // step back in afterwards.  The anonymous helpers above remain visible here
 // through the implicit using-directive.
 }  // namespace
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 namespace smash_fzmedia {
 
 bool LookupInstall(SharedHeader* header) {
@@ -776,6 +776,6 @@ void LookupPublishSnapshot(const LineSnapshot& snapshot) {
 }
 
 }  // namespace smash_fzmedia
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook
 
 namespace {

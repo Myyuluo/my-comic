@@ -99,10 +99,10 @@ using UnityTextMeshSetText = void (*)(void*, void*, const void*);
 UnityTextMeshSetText g_orig_UnityTextMeshSetText = nullptr;
 using NaninovelRevealableSetText = void (*)(void*, void*, const void*);
 NaninovelRevealableSetText g_orig_NaninovelRevealableSetText = nullptr;
-fushi_voice_hook::UnityTextMeshReassembler<501>
+my_comic_voice_hook::UnityTextMeshReassembler<501>
     g_unity_text_mesh_reassembler;
 // 旧 KEMCO 式逐字形 TextMesh 约定的行为判据（见 unity_text_profile.h）。读写都在 g_cs 内。
-fushi_voice_hook::UnityLegacyGlyphBatchDetector g_unity_glyph_batch_detector;
+my_comic_voice_hook::UnityLegacyGlyphBatchDetector g_unity_glyph_batch_detector;
 alignas(8) volatile uint64_t g_unity_preview_generation = 0;
 
 int InvokeUnityInt(const void* method, void* instance) {
@@ -156,19 +156,19 @@ void WriteUnityTextEvent(uint64_t thread_id, void* text_component,
                          uint32_t event_kind) {
   if (!g_capture_enabled || g_header == nullptr || g_text_base == nullptr ||
       thread_id == 0 ||
-      (event_kind == fushi_voice_hook::kTextEventLine &&
+      (event_kind == my_comic_voice_hook::kTextEventLine &&
        (clean == nullptr || length <= 0))) {
     return;
   }
 
   // v13：写进本组件自己那条道（游戏内 writer 用高段下标）。认领与道内占号在 g_cs 下串行，
   // 与预览槽认领同一把锁、同一套下标分区。
-  fushi_voice_hook::TextLaneWrite write;
+  my_comic_voice_hook::TextLaneWrite write;
   write.thread_id = thread_id;
   write.thread_address = reinterpret_cast<uint64_t>(text_component);
   write.thread_context = reinterpret_cast<uint64_t>(text_component);
   write.process_id = GetCurrentProcessId();
-  write.source_kind = fushi_voice_hook::kTextSourceUnityTmp;
+  write.source_kind = my_comic_voice_hook::kTextSourceUnityTmp;
   write.event_kind = event_kind;
   write.is_utf8 = 0;
   write.text = (clean == nullptr || length <= 0) ? nullptr : clean;
@@ -178,9 +178,9 @@ void WriteUnityTextEvent(uint64_t thread_id, void* text_component,
   write.hook_name = hook_name;
   write.hook_code = hook_code;
   if (g_cs_ready) EnterCriticalSection(&g_cs);
-  fushi_voice_hook::WriteTextLaneEvent(
-      g_header, fushi_voice_hook::kNativeThreadPreviewStart,
-      fushi_voice_hook::kTextLaneCount, write);
+  my_comic_voice_hook::WriteTextLaneEvent(
+      g_header, my_comic_voice_hook::kNativeThreadPreviewStart,
+      my_comic_voice_hook::kTextLaneCount, write);
   if (g_cs_ready) LeaveCriticalSection(&g_cs);
 }
 
@@ -196,29 +196,29 @@ bool WriteUnityThreadPreview(uint64_t thread_id, const wchar_t* clean,
   }
 
   if (g_cs_ready) EnterCriticalSection(&g_cs);
-  auto* all_slots = reinterpret_cast<fushi_voice_hook::ThreadPreviewSlot*>(
+  auto* all_slots = reinterpret_cast<my_comic_voice_hook::ThreadPreviewSlot*>(
       reinterpret_cast<uint8_t*>(g_header) +
       g_header->thread_preview_offset);
   const uint32_t total_count =
       (std::min)(g_header->thread_preview_slot_count,
-                 fushi_voice_hook::kThreadPreviewCount);
-  if (total_count <= fushi_voice_hook::kNativeThreadPreviewStart) {
+                 my_comic_voice_hook::kThreadPreviewCount);
+  if (total_count <= my_comic_voice_hook::kNativeThreadPreviewStart) {
     if (g_cs_ready) LeaveCriticalSection(&g_cs);
     return false;
   }
   auto* native_slots =
-      all_slots + fushi_voice_hook::kNativeThreadPreviewStart;
+      all_slots + my_comic_voice_hook::kNativeThreadPreviewStart;
   const uint32_t native_count =
-      (std::min)(total_count - fushi_voice_hook::kNativeThreadPreviewStart,
-                 fushi_voice_hook::kNativeThreadPreviewCount);
-  auto* preview = fushi_voice_hook::FindThreadPreviewSlot(
+      (std::min)(total_count - my_comic_voice_hook::kNativeThreadPreviewStart,
+                 my_comic_voice_hook::kNativeThreadPreviewCount);
+  auto* preview = my_comic_voice_hook::FindThreadPreviewSlot(
       native_slots, native_count, thread_id);
   if (preview == nullptr) {
     // Native Unity components do not have a reliable ThreadRemove callback.
     // Recycle the oldest non-selected candidate instead of permanently
     // blinding the selector after 16 historical menu/text components.
     const uint64_t selected =
-        fushi_voice_hook::SelectedTextThreadId(g_header);
+        my_comic_voice_hook::SelectedTextThreadId(g_header);
     for (uint32_t i = 0; i < native_count; ++i) {
       auto* candidate = &native_slots[i];
       if (candidate->thread_id == selected) continue;
@@ -235,9 +235,9 @@ bool WriteUnityThreadPreview(uint64_t thread_id, const wchar_t* clean,
 
   const bool discovered = preview->thread_id != thread_id;
   const uint64_t generation =
-      fushi_voice_hook::NextThreadPreviewGeneration(
+      my_comic_voice_hook::NextThreadPreviewGeneration(
           &g_unity_preview_generation);
-  fushi_voice_hook::BeginThreadPreviewWrite(preview, generation);
+  my_comic_voice_hook::BeginThreadPreviewWrite(preview, generation);
   if (discovered) {
     preview->line_count = 0;
     preview->artifact_count = 0;
@@ -245,7 +245,7 @@ bool WriteUnityThreadPreview(uint64_t thread_id, const wchar_t* clean,
   preview->thread_id = thread_id;
   if (completed_line) preview->line_count++;
   const uint32_t max_bytes =
-      fushi_voice_hook::kThreadPreviewTextChars * sizeof(wchar_t);
+      my_comic_voice_hook::kThreadPreviewTextChars * sizeof(wchar_t);
   uint32_t byte_length = static_cast<uint32_t>(length) * sizeof(wchar_t);
   if (byte_length > max_bytes) byte_length = max_bytes;
   ZeroMemory(preview->text, sizeof(preview->text));
@@ -253,15 +253,15 @@ bool WriteUnityThreadPreview(uint64_t thread_id, const wchar_t* clean,
   preview->byte_len = byte_length;
   preview->event_flags = 0;
   preview->timestamp_ms = GetTickCount64();
-  fushi_voice_hook::PublishThreadPreviewWrite(preview, generation);
-  fushi_voice_hook::PublishThreadPreviewChange(
+  my_comic_voice_hook::PublishThreadPreviewWrite(preview, generation);
+  my_comic_voice_hook::PublishThreadPreviewChange(
       &g_header->thread_preview_write_count);
   if (g_cs_ready) LeaveCriticalSection(&g_cs);
 
   if (discovered) {
     WriteUnityTextEvent(
         thread_id, text_component, nullptr, 0, hook_name, hook_code,
-        fushi_voice_hook::kTextEventThreadDiscovered);
+        my_comic_voice_hook::kTextEventThreadDiscovered);
   }
   return true;
 }
@@ -276,7 +276,7 @@ void PublishUnityText(uint64_t thread_id, void* text_component,
   // 使用。旧实现在这里 return，等于 Unity 上非选定组件的台词从未被采集，换组件也追不回来。
   if (!completed_line) return;
   WriteUnityTextEvent(thread_id, text_component, clean, length, hook_name,
-                      hook_code, fushi_voice_hook::kTextEventLine);
+                      hook_code, my_comic_voice_hook::kTextEventLine);
 }
 
 // 与脚本运行时无关的发布入口：IL2CPP（il2cpp_string_*）与 Mono（mono_string_*，
@@ -329,7 +329,7 @@ bool RecordUnityTextChars(void* text_component, const wchar_t* chars,
       stable_across_components
           ? stable_identity_key
           : reinterpret_cast<uint64_t>(text_component);
-  const uint64_t thread_id = fushi_voice_hook::NativeTextThreadIdFrom(
+  const uint64_t thread_id = my_comic_voice_hook::NativeTextThreadIdFrom(
       component_identity, hook_code, hook_name);
   PublishUnityText(thread_id, text_component, clean, length, true, hook_name,
                    hook_code);
@@ -354,7 +354,7 @@ void FlushUnityTextMeshLine() {
   constexpr wchar_t kHookCode[] =
       L"UnityEngine.TextMesh.set_text(glyphs)";
   const uint64_t thread_id =
-      fushi_voice_hook::NativeTextThreadIdFrom(0, kHookCode, kHookName);
+      my_comic_voice_hook::NativeTextThreadIdFrom(0, kHookCode, kHookName);
   PublishUnityText(thread_id, nullptr, g_unity_text_mesh_reassembler.text(),
                    g_unity_text_mesh_reassembler.length(), true, kHookName,
                    kHookCode);
@@ -367,7 +367,7 @@ void AppendUnityTextMeshGlyphs(const wchar_t* chars, int length) {
   constexpr char kHookName[] = "Unity TextMesh line";
   constexpr wchar_t kHookCode[] = L"UnityEngine.TextMesh.set_text(glyphs)";
   const uint64_t thread_id =
-      fushi_voice_hook::NativeTextThreadIdFrom(0, kHookCode, kHookName);
+      my_comic_voice_hook::NativeTextThreadIdFrom(0, kHookCode, kHookName);
   for (int i = 0; chars != nullptr && i < length; ++i) {
     const wchar_t c = chars[i];
     if (g_unity_text_mesh_reassembler.ShouldTerminate(c, true)) {
@@ -396,7 +396,7 @@ void RecordUnityTextMesh(void* text_component, void* string_object) {
     return;
   }
   // 路由规则（判据、撤销、判定期不发布单字形）见 unity_text_profile.h。
-  using Route = fushi_voice_hook::UnityLegacyGlyphBatchDetector::Route;
+  using Route = my_comic_voice_hook::UnityLegacyGlyphBatchDetector::Route;
   const Route route =
       g_unity_glyph_batch_detector.Observe(chars, source_length);
   bool publish_component_text = false;
@@ -503,10 +503,10 @@ void ProcessUnityAudioEvent(const PendingUnityAudioEvent& event) {
   if (!g_capture_enabled || event.clip == nullptr || g_header == nullptr) return;
   // HookWorker 是普通 Win32 线程。先 attach 到 IL2CPP 域，再做 get_name/装箱/
   // array_new/GetData，避免在 Unity 播放 detour 内重入 Boehm GC。
-  const fushi_voice_hook::Il2CppThreadFns il2cpp_thread_fns{
+  const my_comic_voice_hook::Il2CppThreadFns il2cpp_thread_fns{
       g_il2cpp_thread_current, g_il2cpp_thread_attach, g_il2cpp_thread_detach,
       g_il2cpp_domain_get};
-  fushi_voice_hook::Il2CppManagedThreadScope managed_thread(il2cpp_thread_fns);
+  my_comic_voice_hook::Il2CppManagedThreadScope managed_thread(il2cpp_thread_fns);
   if (!managed_thread.safe()) {
     g_header->hook_diagnostics |= kDiagUnityIl2CppGetDataRejected;
     return;
@@ -838,14 +838,14 @@ bool TryHookUnityIl2CppAudio() {
   }
   HMODULE game = GetModuleHandleW(L"GameAssembly.dll");
   if (game == nullptr) return false;
-  // Fushi 的“启动并捕获”会先以 CREATE_SUSPENDED 创建游戏。旧版 IL2CPP 在播放器
+  // MyComic 的“启动并捕获”会先以 CREATE_SUSPENDED 创建游戏。旧版 IL2CPP 在播放器
   // 尚未创建窗口时连类型/方法枚举都可能进入未完成初始化的 Boehm GC；更不能在此时
   // 用 MH_EnableHook 再次枚举并挂起线程。外部窗口附加天然越过此门；启动模式则由
   // HookWorker 在窗口出现后按现有轮询节奏重试。
   if (!HasCurrentProcessTopLevelWindow()) {
     if (g_header != nullptr) {
       g_header->reserved_hook_diagnostics |=
-          fushi_voice_hook::kDiagUnityHooksDeferredUntilWindow;
+          my_comic_voice_hook::kDiagUnityHooksDeferredUntilWindow;
     }
     return false;
   }
@@ -940,19 +940,19 @@ bool TryHookUnityIl2CppAudio() {
   }
   if (g_header != nullptr) {
     g_header->reserved_hook_diagnostics |=
-        fushi_voice_hook::kDiagUnityTextScanReady;
+        my_comic_voice_hook::kDiagUnityTextScanReady;
     if (source_class != nullptr && clip_class != nullptr &&
         object_class != nullptr) {
       g_header->reserved_hook_diagnostics |=
-          fushi_voice_hook::kDiagUnityAudioClassFound;
+          my_comic_voice_hook::kDiagUnityAudioClassFound;
     }
     if (ui_text_class != nullptr) {
       g_header->reserved_hook_diagnostics |=
-          fushi_voice_hook::kDiagUnityUiTextClassFound;
+          my_comic_voice_hook::kDiagUnityUiTextClassFound;
     }
     if (text_mesh_class != nullptr) {
       g_header->reserved_hook_diagnostics |=
-          fushi_voice_hook::kDiagUnityTextMeshClassFound;
+          my_comic_voice_hook::kDiagUnityTextMeshClassFound;
     }
   }
 
@@ -970,7 +970,7 @@ bool TryHookUnityIl2CppAudio() {
         g_unity_object_get_name != nullptr;
     if (resource_methods_ready && g_header != nullptr) {
       g_header->reserved_hook_diagnostics |=
-          fushi_voice_hook::kDiagUnityAudioResourceMethodsFound;
+          my_comic_voice_hook::kDiagUnityAudioResourceMethodsFound;
     }
 
     const void* corlib = get_corlib == nullptr ? nullptr : get_corlib();
@@ -994,7 +994,7 @@ bool TryHookUnityIl2CppAudio() {
         g_unity_clip_get_data != nullptr;
     if (pcm_helpers_ready && g_header != nullptr) {
       g_header->reserved_hook_diagnostics |=
-          fushi_voice_hook::kDiagUnityAudioPcmMethodsFound;
+          my_comic_voice_hook::kDiagUnityAudioPcmMethodsFound;
     }
   }
 
@@ -1023,7 +1023,7 @@ bool TryHookUnityIl2CppAudio() {
         FindIl2CppMethod(ui_text_class, "set_text", text_params, 1);
     if (set_text != nullptr && g_header != nullptr) {
       g_header->reserved_hook_diagnostics |=
-          fushi_voice_hook::kDiagUnityUiTextMethodFound;
+          my_comic_voice_hook::kDiagUnityUiTextMethodFound;
     }
     ui_text_ready = HookFn(
         Il2CppMethodPointer(set_text),
@@ -1031,7 +1031,7 @@ bool TryHookUnityIl2CppAudio() {
         reinterpret_cast<void**>(&g_orig_UnityUiTextSetText));
     if (ui_text_ready && g_header != nullptr) {
       g_header->reserved_hook_diagnostics |=
-          fushi_voice_hook::kDiagUnityUiTextHookReady;
+          my_comic_voice_hook::kDiagUnityUiTextHookReady;
     }
   }
   bool text_mesh_ready = false;
@@ -1041,7 +1041,7 @@ bool TryHookUnityIl2CppAudio() {
         FindIl2CppMethod(text_mesh_class, "set_text", text_params, 1);
     if (set_text != nullptr && g_header != nullptr) {
       g_header->reserved_hook_diagnostics |=
-          fushi_voice_hook::kDiagUnityTextMeshMethodFound;
+          my_comic_voice_hook::kDiagUnityTextMeshMethodFound;
     }
     text_mesh_ready = HookFn(
         Il2CppMethodPointer(set_text),
@@ -1049,7 +1049,7 @@ bool TryHookUnityIl2CppAudio() {
         reinterpret_cast<void**>(&g_orig_UnityTextMeshSetText));
     if (text_mesh_ready && g_header != nullptr) {
       g_header->reserved_hook_diagnostics |=
-          fushi_voice_hook::kDiagUnityTextMeshHookReady;
+          my_comic_voice_hook::kDiagUnityTextMeshHookReady;
     }
   }
   bool naninovel_text_ready = false;
@@ -1107,7 +1107,7 @@ bool TryHookUnityIl2CppAudio() {
        play_helper != nullptr || one_shot_helper != nullptr ||
        play_delayed_helper != nullptr)) {
     g_header->reserved_hook_diagnostics |=
-        fushi_voice_hook::kDiagUnityAudioPlaybackMethodFound;
+        my_comic_voice_hook::kDiagUnityAudioPlaybackMethodFound;
   }
   any |= HookFn(Il2CppMethodPointer(play),
                 reinterpret_cast<void*>(&Detour_UnityAudioSourcePlay),
@@ -1143,7 +1143,7 @@ bool TryHookUnityIl2CppAudio() {
   if (any && g_header != nullptr) {
     g_header->hook_diagnostics |= kDiagUnityIl2CppHooksReady;
     g_header->reserved_hook_diagnostics |=
-        fushi_voice_hook::kDiagUnityAudioPlaybackHookReady;
+        my_comic_voice_hook::kDiagUnityAudioPlaybackHookReady;
   }
 
   return any && text_hooks_ready;

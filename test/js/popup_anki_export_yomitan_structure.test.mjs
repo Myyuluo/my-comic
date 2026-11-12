@@ -8,7 +8,7 @@
 //     css-style-applier.js `applyClassStyles` 按 ext/data/structured-content-style.json 把命中的
 //     规则写成内联样式（在元素已有内联样式之前）并删掉 class；再删掉除 `data-sc*` 外的 data-*。
 //
-// Fushi 修复前：导出外层是 <span>（Lapis 的 `.definition a span` 宽度上限与
+// MyComic 修复前：导出外层是 <span>（Lapis 的 `.definition a span` 宽度上限与
 // `.definition a:has(img)` 点击放大全部落空，「絵でわかる慣用句」插图从 2×2 变成一张一行），
 // gloss-* class 原样留在卡片上（词典写给弹窗的 CSS 在卡片上生效：旺文社「類語」表头被
 // `[data-sc縦中横] > .gloss-sc-span` 改成绝对定位竖排），`data-vertical-align` 没落成样式
@@ -22,11 +22,11 @@ import { JSDOM } from "jsdom";
 import { readFileSync } from "node:fs";
 
 const popupSrc = readFileSync(
-  new URL("../../fushi/assets/popup/popup.js", import.meta.url),
+  new URL("../../my_comic/assets/popup/popup.js", import.meta.url),
   "utf8",
 );
 const dictMediaSrc = readFileSync(
-  new URL("../../fushi/assets/popup/dict-media.js", import.meta.url),
+  new URL("../../my_comic/assets/popup/dict-media.js", import.meta.url),
   "utf8",
 );
 
@@ -180,7 +180,7 @@ test("导出图片外层是 Yomitan 同形的 <a target rel href=媒体文件名
       assert.ok(link, `${name}: <img src=${img.getAttribute("src")}> 外层必须是 <a>`);
       assert.equal(link.getAttribute("target"), "_blank");
       assert.equal(link.getAttribute("rel"), "noreferrer noopener");
-      assert.match(img.getAttribute("src"), /^fushi_dict_\d+\.(png|svg)$/);
+      assert.match(img.getAttribute("src"), /^my_comic_dict_\d+\.(png|svg)$/);
       assert.equal(
         link.getAttribute("href"),
         img.getAttribute("src"),
@@ -264,18 +264,18 @@ test("导出义项里没有 gloss-* / structured-content class，属性驱动的
   }
 });
 
-test("文本交叉引用照旧改写成 fushi 深链，内含的图标链接保留媒体 href", () => {
+test("文本交叉引用照旧改写成 my_comic 深链，内含的图标链接保留媒体 href", () => {
   const win = createPopup();
   const card = asCard(win, win.constructGlossaryHtml(0));
   const item = card.querySelector(`li[data-dictionary="${SANSEIDO_DICT}"]`);
   // 两层 <a> 在 HTML 解析时会被拆开（Yomitan 卡同样如此），所以按 href 找。
   const anchors = Array.from(item.querySelectorAll("a[href]"));
   assert.ok(
-    anchors.some((a) => a.getAttribute("href").startsWith("fushi://lookup?word=")),
-    "文本交叉引用必须改写成 fushi 深链",
+    anchors.some((a) => a.getAttribute("href").startsWith("mycomic://lookup?word=")),
+    "文本交叉引用必须改写成 my_comic 深链",
   );
   const iconLink = item.querySelector("img").closest("a");
-  assert.match(iconLink.getAttribute("href"), /^fushi_dict_\d+\.svg$/);
+  assert.match(iconLink.getAttribute("href"), /^my_comic_dict_\d+\.svg$/);
   // 三省堂「句」图标：与 Yomitan 卡一样，嵌套 <a> 被解析器拆开后图标落到 0.65em 上标之外，
   // 按正文字号显示（外层是 <span> 时不拆，图标被上标缩成 13px 并上浮）。
   assert.equal(

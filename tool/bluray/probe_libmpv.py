@@ -113,7 +113,7 @@ class Mpv:
         self.lib.mpv_terminate_destroy(self.handle)
 
 
-LUA_PROBE_MARKER = "fushi-lua-probe"
+LUA_PROBE_MARKER = "mycomic-lua-probe"
 
 
 def probe_lua(mpv, seconds=5):
@@ -125,7 +125,7 @@ def probe_lua(mpv, seconds=5):
     itself proves Lua scripts execute.
     """
     with tempfile.TemporaryDirectory() as temp:
-        script = Path(temp) / "fushi_lua_probe.lua"
+        script = Path(temp) / "my_comic_lua_probe.lua"
         script.write_text(f'mp.msg.info("{LUA_PROBE_MARKER} " .. _VERSION)\n', encoding="utf-8")
         mpv.lib.mpv_request_log_messages(mpv.handle, b"info")
         result = {"load_result": mpv.command("load-script", str(script)), "message": None}
@@ -194,7 +194,7 @@ def main():
     parser.add_argument("library")
     parser.add_argument("--disc")
     parser.add_argument("--seconds", type=float, default=5)
-    parser.add_argument("--preload", help="Preload an existing Fushi runtime before the new library")
+    parser.add_argument("--preload", help="Preload an existing MyComic runtime before the new library")
     args = parser.parse_args()
     preload = preload_runtime(args.preload) if args.preload else []
     report = probe(args.library, args.disc, args.seconds)

@@ -6,17 +6,17 @@
 // silently retained only four.  Keep the same 32 MiB budget, but divide it into
 // pages and let 1024 preallocated descriptors share those pages by actual byte
 // occupancy.  HookWorker is the only decoder/consumer.
-fushi_voice_hook::XAudioSourceFormatRegistry<512> g_xaudio_formats;
-fushi_voice_hook::XAudioCompressedResourceDispatch
+my_comic_voice_hook::XAudioSourceFormatRegistry<512> g_xaudio_formats;
+my_comic_voice_hook::XAudioCompressedResourceDispatch
     g_xaudio_compressed_resource_dispatch;
 
 bool RegisterXAudioCompressedResourceHandler(
-    fushi_voice_hook::XAudioCompressedResourceHandler handler) {
+    my_comic_voice_hook::XAudioCompressedResourceHandler handler) {
   return g_xaudio_compressed_resource_dispatch.Register(handler);
 }
 
 void UnregisterXAudioCompressedResourceHandler(
-    fushi_voice_hook::XAudioCompressedResourceHandler handler) {
+    my_comic_voice_hook::XAudioCompressedResourceHandler handler) {
   g_xaudio_compressed_resource_dispatch.Unregister(handler);
 }
 
@@ -85,7 +85,7 @@ struct XAudioCaptureJob {
   uint64_t submit_timestamp_ms = 0;
   uint64_t playback_timestamp_hint_ms = 0;
   uint32_t wait_trace_emitted = 0;
-  fushi_voice_hook::XAudioSourceSnapshot source;
+  my_comic_voice_hook::XAudioSourceSnapshot source;
 };
 
 struct XAudioDeferredOperation {
@@ -145,18 +145,18 @@ void IncrementXAudioCounter(volatile LONG64* counter) {
   InterlockedIncrement64(counter);
 }
 
-void PublishXAudioTrace(fushi_voice_hook::XAudioTraceEvent* event) {
+void PublishXAudioTrace(my_comic_voice_hook::XAudioTraceEvent* event) {
   if (event == nullptr) return;
   if (event->timestamp_ms == 0) event->timestamp_ms = GetTickCount64();
   if (event->thread_id == 0) event->thread_id = GetCurrentThreadId();
-  fushi_voice_hook::PublishXAudioTraceEvent(&FushiXAudioTraceV1, *event);
+  my_comic_voice_hook::PublishXAudioTraceEvent(&MyComicXAudioTraceV1, *event);
 }
 
-fushi_voice_hook::XAudioTraceEvent MakeXAudioSourceTrace(
-    fushi_voice_hook::XAudioTraceEventKind kind,
-    const fushi_voice_hook::XAudioSourceSnapshot* source = nullptr) {
-  fushi_voice_hook::XAudioTraceEvent event =
-      fushi_voice_hook::MakeXAudioTraceEvent(kind);
+my_comic_voice_hook::XAudioTraceEvent MakeXAudioSourceTrace(
+    my_comic_voice_hook::XAudioTraceEventKind kind,
+    const my_comic_voice_hook::XAudioSourceSnapshot* source = nullptr) {
+  my_comic_voice_hook::XAudioTraceEvent event =
+      my_comic_voice_hook::MakeXAudioTraceEvent(kind);
   if (source != nullptr) {
     event.source = source->source;
     event.engine = source->engine;
@@ -167,8 +167,8 @@ fushi_voice_hook::XAudioTraceEvent MakeXAudioSourceTrace(
 }
 
 void CaptureNormalizedXAudioTraceFormat(
-    const fushi_voice_hook::XAudioSourceFormat& source,
-    fushi_voice_hook::XAudioTraceFormat* destination) {
+    const my_comic_voice_hook::XAudioSourceFormat& source,
+    my_comic_voice_hook::XAudioTraceFormat* destination) {
   if (destination == nullptr) return;
   destination->present = 1;
   destination->parse_succeeded = 1;
@@ -182,7 +182,7 @@ void CaptureNormalizedXAudioTraceFormat(
   destination->adpcm_coefficient_count = source.coefficient_count;
   destination->adpcm_coefficients_copied = (std::min)(
       source.coefficient_count,
-      fushi_voice_hook::kXAudioTraceAdpcmCoefficientCount);
+      my_comic_voice_hook::kXAudioTraceAdpcmCoefficientCount);
   for (uint32_t i = 0; i < destination->adpcm_coefficients_copied; ++i) {
     destination->adpcm_coefficients[i][0] = source.coefficients[i].first;
     destination->adpcm_coefficients[i][1] = source.coefficients[i].second;
@@ -190,11 +190,11 @@ void CaptureNormalizedXAudioTraceFormat(
 }
 
 void PublishXAudioWorkerTrace(
-    fushi_voice_hook::XAudioTraceEventKind kind,
-    fushi_voice_hook::XAudioTraceOutcome outcome,
+    my_comic_voice_hook::XAudioTraceEventKind kind,
+    my_comic_voice_hook::XAudioTraceOutcome outcome,
     const XAudioCaptureJob& job, uint32_t detail0 = 0,
     uint32_t detail1 = 0) {
-  fushi_voice_hook::XAudioTraceEvent event =
+  my_comic_voice_hook::XAudioTraceEvent event =
       MakeXAudioSourceTrace(kind, &job.source);
   event.outcome = static_cast<uint32_t>(outcome);
   event.submit_timestamp_ms = job.submit_timestamp_ms;
@@ -377,7 +377,7 @@ void ReleaseXAudioCaptureJob(XAudioCaptureJob* job) {
   job->wma_packet_count = 0;
   job->wma_decoded_bytes = 0;
   job->wait_trace_emitted = 0;
-  job->source = fushi_voice_hook::XAudioSourceSnapshot{};
+  job->source = my_comic_voice_hook::XAudioSourceSnapshot{};
   if (bytes != 0) {
     InterlockedAdd64(&g_xaudio_capture_counters.arena_bytes_in_use,
                      -static_cast<LONG64>(bytes));
@@ -416,7 +416,7 @@ bool InitializeXAudioCaptureQueue() {
     InterlockedExchange(&event.state, 0);
   }
   InterlockedExchange(&g_xaudio_capture_queue_state, 2);
-  SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagQueueReady);
+  SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagQueueReady);
   return true;
 }
 
@@ -428,47 +428,47 @@ void ShutdownXAudioCaptureQueue() {
 }
 
 XAudioCaptureJob* PrepareXAudioCaptureJob(
-    const fushi_voice_hook::XAudioSourceSnapshot& source,
+    const my_comic_voice_hook::XAudioSourceSnapshot& source,
     const XAUDIO2_BUFFER* buffer, const XAUDIO2_BUFFER_WMA* wma,
     uint64_t submit_timestamp_ms,
-    fushi_voice_hook::XAudioTraceOutcome* rejection) {
+    my_comic_voice_hook::XAudioTraceOutcome* rejection) {
   if (rejection != nullptr) {
-    *rejection = fushi_voice_hook::XAudioTraceOutcome::kNone;
+    *rejection = my_comic_voice_hook::XAudioTraceOutcome::kNone;
   }
-  fushi_voice_hook::XAudioTraceOutcome reject =
-      fushi_voice_hook::XAudioTraceOutcome::kNone;
+  my_comic_voice_hook::XAudioTraceOutcome reject =
+      my_comic_voice_hook::XAudioTraceOutcome::kNone;
   uint32_t wma_table_bytes = 0;
   if (source.format.encoding ==
-      fushi_voice_hook::XAudioSourceEncoding::kWmaudio2) {
+      my_comic_voice_hook::XAudioSourceEncoding::kWmaudio2) {
     const uint64_t table_bytes =
         wma == nullptr ? 0 : static_cast<uint64_t>(wma->PacketCount) * 4u;
     if (wma == nullptr || wma->PacketCount == 0 ||
         wma->pDecodedPacketCumulativeBytes == nullptr ||
         table_bytes > kMaxXAudioCaptureBytes) {
-      reject = fushi_voice_hook::XAudioTraceOutcome::kRejectedCopyFailed;
+      reject = my_comic_voice_hook::XAudioTraceOutcome::kRejectedCopyFailed;
     } else {
       wma_table_bytes = static_cast<uint32_t>(table_bytes);
     }
   }
   if (buffer == nullptr) {
-    reject = fushi_voice_hook::XAudioTraceOutcome::kRejectedNullBuffer;
+    reject = my_comic_voice_hook::XAudioTraceOutcome::kRejectedNullBuffer;
   } else if (buffer->pAudioData == nullptr) {
-    reject = fushi_voice_hook::XAudioTraceOutcome::kRejectedNullAudioData;
+    reject = my_comic_voice_hook::XAudioTraceOutcome::kRejectedNullAudioData;
   } else if (buffer->AudioBytes == 0) {
-    reject = fushi_voice_hook::XAudioTraceOutcome::kRejectedZeroBytes;
+    reject = my_comic_voice_hook::XAudioTraceOutcome::kRejectedZeroBytes;
   } else if (buffer->AudioBytes > kMaxXAudioCaptureBytes) {
-    reject = fushi_voice_hook::XAudioTraceOutcome::kRejectedTooLarge;
+    reject = my_comic_voice_hook::XAudioTraceOutcome::kRejectedTooLarge;
   } else if (static_cast<uint64_t>(buffer->AudioBytes) + wma_table_bytes >
              kMaxXAudioCaptureBytes) {
-    reject = fushi_voice_hook::XAudioTraceOutcome::kRejectedTooLarge;
+    reject = my_comic_voice_hook::XAudioTraceOutcome::kRejectedTooLarge;
   } else if (InterlockedCompareExchange(&g_xaudio_capture_queue_state, 0, 0) !=
              2) {
-    reject = fushi_voice_hook::XAudioTraceOutcome::kRejectedQueueNotReady;
+    reject = my_comic_voice_hook::XAudioTraceOutcome::kRejectedQueueNotReady;
   }
-  if (reject != fushi_voice_hook::XAudioTraceOutcome::kNone) {
+  if (reject != my_comic_voice_hook::XAudioTraceOutcome::kNone) {
     if (rejection != nullptr) *rejection = reject;
     IncrementXAudioCounter(&g_xaudio_capture_counters.buffer_rejected);
-    SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagBufferRejected);
+    SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagBufferRejected);
     return nullptr;
   }
 
@@ -482,10 +482,10 @@ XAudioCaptureJob* PrepareXAudioCaptureJob(
   if (claimed == nullptr) {
     if (rejection != nullptr) {
       *rejection =
-          fushi_voice_hook::XAudioTraceOutcome::kRejectedDescriptorExhausted;
+          my_comic_voice_hook::XAudioTraceOutcome::kRejectedDescriptorExhausted;
     }
     IncrementXAudioCounter(&g_xaudio_capture_counters.descriptor_exhausted);
-    SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagDescriptorExhausted);
+    SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagDescriptorExhausted);
     return nullptr;
   }
 
@@ -497,21 +497,21 @@ XAudioCaptureJob* PrepareXAudioCaptureJob(
   if (!ReserveXAudioCapturePages(page_count, &first_page)) {
     if (rejection != nullptr) {
       *rejection =
-          fushi_voice_hook::XAudioTraceOutcome::kRejectedArenaExhausted;
+          my_comic_voice_hook::XAudioTraceOutcome::kRejectedArenaExhausted;
     }
     IncrementXAudioCounter(&g_xaudio_capture_counters.arena_exhausted);
-    SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagArenaExhausted);
+    SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagArenaExhausted);
     InterlockedExchange(&claimed->state, 0);
     return nullptr;
   }
   if (!CopyToXAudioCapturePages(first_page, buffer->pAudioData,
                                 buffer->AudioBytes)) {
     if (rejection != nullptr) {
-      *rejection = fushi_voice_hook::XAudioTraceOutcome::kRejectedCopyFailed;
+      *rejection = my_comic_voice_hook::XAudioTraceOutcome::kRejectedCopyFailed;
     }
     ReleaseXAudioCapturePages(first_page, page_count);
     IncrementXAudioCounter(&g_xaudio_capture_counters.buffer_rejected);
-    SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagBufferRejected);
+    SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagBufferRejected);
     InterlockedExchange(&claimed->state, 0);
     return nullptr;
   }
@@ -522,11 +522,11 @@ XAudioCaptureJob* PrepareXAudioCaptureJob(
               wma->pDecodedPacketCumulativeBytes),
           wma_table_bytes)) {
     if (rejection != nullptr) {
-      *rejection = fushi_voice_hook::XAudioTraceOutcome::kRejectedCopyFailed;
+      *rejection = my_comic_voice_hook::XAudioTraceOutcome::kRejectedCopyFailed;
     }
     ReleaseXAudioCapturePages(first_page, page_count);
     IncrementXAudioCounter(&g_xaudio_capture_counters.buffer_rejected);
-    SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagBufferRejected);
+    SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagBufferRejected);
     InterlockedExchange(&claimed->state, 0);
     return nullptr;
   }
@@ -558,12 +558,12 @@ XAudioCaptureJob* PrepareXAudioCaptureJob(
 void PublishXAudioCaptureJob(XAudioCaptureJob* job) {
   if (job == nullptr) return;
   IncrementXAudioCounter(&g_xaudio_capture_counters.jobs_queued);
-  SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagJobQueued);
+  SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagJobQueued);
   InterlockedExchange(&job->state, 2);
 }
 
 XAudioDeferredOperation* PrepareDeferredXAudioOperation(
-    const fushi_voice_hook::XAudioSourceSnapshot& source,
+    const my_comic_voice_hook::XAudioSourceSnapshot& source,
     uint32_t operation_set, XAudioDeferredOperationKind kind) {
   if (operation_set == XAUDIO2_COMMIT_NOW || source.engine == 0 ||
       source.source == 0 || source.generation == 0) {
@@ -585,14 +585,14 @@ XAudioDeferredOperation* PrepareDeferredXAudioOperation(
   }
   InterlockedDecrement(&g_xaudio_deferred_producers);
   IncrementXAudioCounter(&g_xaudio_capture_counters.deferred_exhausted);
-  SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagDeferredExhausted);
+  SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagDeferredExhausted);
   return nullptr;
 }
 
 void PublishDeferredXAudioOperation(XAudioDeferredOperation* operation) {
   if (operation == nullptr) return;
   IncrementXAudioCounter(&g_xaudio_capture_counters.deferred_queued);
-  SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagDeferredQueued);
+  SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagDeferredQueued);
   InterlockedExchange(&operation->state, 3);
   DrainXAudioControlEvents();
 }
@@ -650,22 +650,22 @@ XAudioDeferredCommitResult CommitDeferredXAudioOperations(
     if (!applied) {
       ++result.invalidated;
       IncrementXAudioCounter(&g_xaudio_capture_counters.stale_invalidated);
-      SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagStaleInvalidated);
+      SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagStaleInvalidated);
     } else {
       ++result.applied;
     }
-    fushi_voice_hook::XAudioTraceEvent trace = MakeXAudioSourceTrace(
+    my_comic_voice_hook::XAudioTraceEvent trace = MakeXAudioSourceTrace(
         operation->kind == XAudioDeferredOperationKind::kStart
-            ? fushi_voice_hook::XAudioTraceEventKind::kStart
-            : fushi_voice_hook::XAudioTraceEventKind::kStop);
+            ? my_comic_voice_hook::XAudioTraceEventKind::kStart
+            : my_comic_voice_hook::XAudioTraceEventKind::kStop);
     trace.timestamp_ms = timestamp_ms;
     trace.engine = operation->engine;
     trace.source = operation->source;
     trace.source_generation = operation->source_generation;
     trace.operation_set = operation->operation_set;
     trace.outcome = static_cast<uint32_t>(
-        applied ? fushi_voice_hook::XAudioTraceOutcome::kDeferredApplied
-                : fushi_voice_hook::XAudioTraceOutcome::kDeferredInvalidated);
+        applied ? my_comic_voice_hook::XAudioTraceOutcome::kDeferredApplied
+                : my_comic_voice_hook::XAudioTraceOutcome::kDeferredInvalidated);
     PublishXAudioTrace(&trace);
     InterlockedExchange(&operation->state, 0);
   }
@@ -680,19 +680,19 @@ void DiscardStaleDeferredXAudioOperations() {
       InterlockedExchange(&operation.state, 3);
       continue;
     }
-    fushi_voice_hook::XAudioTraceEvent trace = MakeXAudioSourceTrace(
+    my_comic_voice_hook::XAudioTraceEvent trace = MakeXAudioSourceTrace(
         operation.kind == XAudioDeferredOperationKind::kStart
-            ? fushi_voice_hook::XAudioTraceEventKind::kStart
-            : fushi_voice_hook::XAudioTraceEventKind::kStop);
+            ? my_comic_voice_hook::XAudioTraceEventKind::kStart
+            : my_comic_voice_hook::XAudioTraceEventKind::kStop);
     trace.engine = operation.engine;
     trace.source = operation.source;
     trace.source_generation = operation.source_generation;
     trace.operation_set = operation.operation_set;
     trace.outcome = static_cast<uint32_t>(
-        fushi_voice_hook::XAudioTraceOutcome::kDeferredInvalidated);
+        my_comic_voice_hook::XAudioTraceOutcome::kDeferredInvalidated);
     PublishXAudioTrace(&trace);
     IncrementXAudioCounter(&g_xaudio_capture_counters.stale_invalidated);
-    SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagStaleInvalidated);
+    SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagStaleInvalidated);
     InterlockedExchange(&operation.state, 0);
   }
 }
@@ -713,7 +713,7 @@ bool EnqueueXAudioCommitEvent(uintptr_t engine, uint32_t operation_set,
     return true;
   }
   IncrementXAudioCounter(&g_xaudio_capture_counters.commit_events_exhausted);
-  SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagCommitQueueExhausted);
+  SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagCommitQueueExhausted);
   return false;
 }
 
@@ -764,15 +764,15 @@ bool ProcessReadyXAudioCommitEvents() {
     const XAudioDeferredCommitResult result = CommitDeferredXAudioOperations(
         event->engine, event->operation_set,
         event->operation_sequence_fence, event->timestamp_ms);
-    fushi_voice_hook::XAudioTraceEvent trace = MakeXAudioSourceTrace(
-        fushi_voice_hook::XAudioTraceEventKind::kCommit);
+    my_comic_voice_hook::XAudioTraceEvent trace = MakeXAudioSourceTrace(
+        my_comic_voice_hook::XAudioTraceEventKind::kCommit);
     trace.timestamp_ms = event->timestamp_ms;
     trace.engine = event->engine;
     trace.operation_set = event->operation_set;
     trace.outcome = static_cast<uint32_t>(
-        fushi_voice_hook::XAudioTraceOutcome::kCommitApplied);
+        my_comic_voice_hook::XAudioTraceOutcome::kCommitApplied);
     trace.detail0 = static_cast<uint32_t>(
-        fushi_voice_hook::XAudioTraceCommitPhase::kApplied);
+        my_comic_voice_hook::XAudioTraceCommitPhase::kApplied);
     trace.detail1 = result.matched;
     trace.detail2 = result.applied;
     PublishXAudioTrace(&trace);
@@ -814,10 +814,10 @@ void ProcessPendingXAudioCaptureJobs() {
             job.source.source, job.source.generation,
             job.source.queue_generation)) {
       PublishXAudioWorkerTrace(
-          fushi_voice_hook::XAudioTraceEventKind::kWorkerInvalidate,
-          fushi_voice_hook::XAudioTraceOutcome::kStaleInvalidated, job);
+          my_comic_voice_hook::XAudioTraceEventKind::kWorkerInvalidate,
+          my_comic_voice_hook::XAudioTraceOutcome::kStaleInvalidated, job);
       IncrementXAudioCounter(&g_xaudio_capture_counters.stale_invalidated);
-      SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagStaleInvalidated);
+      SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagStaleInvalidated);
       ReleaseXAudioCaptureJob(&job);
       continue;
     }
@@ -835,8 +835,8 @@ void ProcessPendingXAudioCaptureJobs() {
       if (job.wait_trace_emitted == 0) {
         job.wait_trace_emitted = 1;
         PublishXAudioWorkerTrace(
-            fushi_voice_hook::XAudioTraceEventKind::kWorkerWait,
-            fushi_voice_hook::XAudioTraceOutcome::kWaitingForStart, job);
+            my_comic_voice_hook::XAudioTraceEventKind::kWorkerWait,
+            my_comic_voice_hook::XAudioTraceOutcome::kWaitingForStart, job);
       }
       InterlockedExchange(&job.state, 2);
       continue;
@@ -852,23 +852,23 @@ void ProcessPendingXAudioCaptureJobs() {
               job.source.source, job.source.generation,
               job.source.queue_generation)) {
         PublishXAudioWorkerTrace(
-            fushi_voice_hook::XAudioTraceEventKind::kWorkerInvalidate,
-            fushi_voice_hook::XAudioTraceOutcome::kStaleInvalidated, job);
+            my_comic_voice_hook::XAudioTraceEventKind::kWorkerInvalidate,
+            my_comic_voice_hook::XAudioTraceOutcome::kStaleInvalidated, job);
         IncrementXAudioCounter(&g_xaudio_capture_counters.stale_invalidated);
-        SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagStaleInvalidated);
+        SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagStaleInvalidated);
       } else {
         PublishXAudioWorkerTrace(
-            fushi_voice_hook::XAudioTraceEventKind::kWorkerInvalidate,
-            fushi_voice_hook::XAudioTraceOutcome::kDecodeRejected, job);
+            my_comic_voice_hook::XAudioTraceEventKind::kWorkerInvalidate,
+            my_comic_voice_hook::XAudioTraceOutcome::kDecodeRejected, job);
         IncrementXAudioCounter(&g_xaudio_capture_counters.decode_rejected);
-        SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagDecodeRejected);
+        SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagDecodeRejected);
       }
       ReleaseXAudioCaptureJob(&job);
       continue;
     }
 
     if (job.source.format.encoding ==
-        fushi_voice_hook::XAudioSourceEncoding::kWmaudio2) {
+        my_comic_voice_hook::XAudioSourceEncoding::kWmaudio2) {
       const uint64_t table_bytes =
           static_cast<uint64_t>(job.wma_packet_count) * 4u;
       const bool complete_submission =
@@ -876,7 +876,7 @@ void ProcessPendingXAudioCaptureJobs() {
           static_cast<uint64_t>(job.encoded_bytes) + table_bytes ==
               encoded.size();
       if (complete_submission) {
-        fushi_voice_hook::XAudioCompressedResourceSubmission submission;
+        my_comic_voice_hook::XAudioCompressedResourceSubmission submission;
         submission.source = job.source;
         submission.payload = encoded.data();
         submission.payload_bytes = job.encoded_bytes;
@@ -907,9 +907,9 @@ void ProcessPendingXAudioCaptureJobs() {
                       submission.packet_cumulative_bytes +
                           (static_cast<size_t>(job.wma_packet_count) - 1u) * 4u,
                       sizeof(decoded_bytes));
-          if (fushi_voice_hook::IsLikelyVoiceWmaSubmission(
+          if (my_comic_voice_hook::IsLikelyVoiceWmaSubmission(
                   job.source.format, job.wma_packet_count, decoded_bytes) &&
-              fushi_voice_hook::BuildXwmaResource(
+              my_comic_voice_hook::BuildXwmaResource(
                   job.source.format, encoded.data(), job.encoded_bytes,
                   submission.packet_cumulative_bytes, job.wma_packet_count,
                   &resource) &&
@@ -925,7 +925,7 @@ void ProcessPendingXAudioCaptureJobs() {
                                 static_cast<uint32_t>(resource.size()),
                                 storage_name, playback_timestamp)) {
               SetXAudioDiagnostic(
-                  fushi_voice_hook::kXAudioDiagRuntimeXwmaPublished);
+                  my_comic_voice_hook::kXAudioDiagRuntimeXwmaPublished);
             }
           }
         }
@@ -939,24 +939,24 @@ void ProcessPendingXAudioCaptureJobs() {
 
     const bool is_adpcm =
         job.source.format.encoding ==
-        fushi_voice_hook::XAudioSourceEncoding::kMicrosoftAdpcm;
+        my_comic_voice_hook::XAudioSourceEncoding::kMicrosoftAdpcm;
     const uint8_t* pcm = nullptr;
     uint64_t total_frames = 0;
     uint32_t output_block_align = job.source.format.block_align;
     uint32_t output_bits = job.source.format.bits_per_sample;
     uint32_t output_is_float =
         job.source.format.encoding ==
-                fushi_voice_hook::XAudioSourceEncoding::kPcmFloat
+                my_comic_voice_hook::XAudioSourceEncoding::kPcmFloat
             ? 1u
             : 0u;
     if (is_adpcm) {
-      if (!fushi_voice_hook::DecodeMicrosoftAdpcm(
+      if (!my_comic_voice_hook::DecodeMicrosoftAdpcm(
               job.source.format, encoded.data(), encoded.size(), &decoded)) {
         PublishXAudioWorkerTrace(
-            fushi_voice_hook::XAudioTraceEventKind::kWorkerInvalidate,
-            fushi_voice_hook::XAudioTraceOutcome::kDecodeRejected, job);
+            my_comic_voice_hook::XAudioTraceEventKind::kWorkerInvalidate,
+            my_comic_voice_hook::XAudioTraceOutcome::kDecodeRejected, job);
         IncrementXAudioCounter(&g_xaudio_capture_counters.decode_rejected);
-        SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagDecodeRejected);
+        SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagDecodeRejected);
         ReleaseXAudioCaptureJob(&job);
         continue;
       }
@@ -967,17 +967,17 @@ void ProcessPendingXAudioCaptureJobs() {
       total_frames = decoded.size() / job.source.format.channels;
       pcm = reinterpret_cast<const uint8_t*>(decoded.data());
     } else if (job.source.format.encoding ==
-                   fushi_voice_hook::XAudioSourceEncoding::kPcmInteger ||
+                   my_comic_voice_hook::XAudioSourceEncoding::kPcmInteger ||
                job.source.format.encoding ==
-                   fushi_voice_hook::XAudioSourceEncoding::kPcmFloat) {
+                   my_comic_voice_hook::XAudioSourceEncoding::kPcmFloat) {
       total_frames = encoded.size() / output_block_align;
       pcm = encoded.data();
     } else {
       PublishXAudioWorkerTrace(
-          fushi_voice_hook::XAudioTraceEventKind::kWorkerInvalidate,
-          fushi_voice_hook::XAudioTraceOutcome::kDecodeRejected, job);
+          my_comic_voice_hook::XAudioTraceEventKind::kWorkerInvalidate,
+          my_comic_voice_hook::XAudioTraceOutcome::kDecodeRejected, job);
       IncrementXAudioCounter(&g_xaudio_capture_counters.decode_rejected);
-      SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagDecodeRejected);
+      SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagDecodeRejected);
       ReleaseXAudioCaptureJob(&job);
       continue;
     }
@@ -999,20 +999,20 @@ void ProcessPendingXAudioCaptureJobs() {
               job.source.source, job.source.generation,
               job.source.queue_generation)) {
         PublishXAudioWorkerTrace(
-            fushi_voice_hook::XAudioTraceEventKind::kWorkerInvalidate,
-            fushi_voice_hook::XAudioTraceOutcome::kStaleInvalidated, job);
+            my_comic_voice_hook::XAudioTraceEventKind::kWorkerInvalidate,
+            my_comic_voice_hook::XAudioTraceOutcome::kStaleInvalidated, job);
         IncrementXAudioCounter(&g_xaudio_capture_counters.stale_invalidated);
-        SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagStaleInvalidated);
+        SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagStaleInvalidated);
       } else if (!g_capture_enabled || g_header == nullptr) {
         PublishXAudioWorkerTrace(
-            fushi_voice_hook::XAudioTraceEventKind::kWorkerInvalidate,
-            fushi_voice_hook::XAudioTraceOutcome::kCaptureDisabled, job);
+            my_comic_voice_hook::XAudioTraceEventKind::kWorkerInvalidate,
+            my_comic_voice_hook::XAudioTraceOutcome::kCaptureDisabled, job);
       } else {
         PublishXAudioWorkerTrace(
-            fushi_voice_hook::XAudioTraceEventKind::kWorkerInvalidate,
-            fushi_voice_hook::XAudioTraceOutcome::kDecodeRejected, job);
+            my_comic_voice_hook::XAudioTraceEventKind::kWorkerInvalidate,
+            my_comic_voice_hook::XAudioTraceOutcome::kDecodeRejected, job);
         IncrementXAudioCounter(&g_xaudio_capture_counters.decode_rejected);
-        SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagDecodeRejected);
+        SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagDecodeRejected);
       }
       ReleaseXAudioCaptureJob(&job);
       continue;
@@ -1031,8 +1031,8 @@ void ProcessPendingXAudioCaptureJobs() {
                        output_is_float,
                        playback_timestamp, total_at_write);
     PublishXAudioWorkerTrace(
-        fushi_voice_hook::XAudioTraceEventKind::kWorkerPublish,
-        fushi_voice_hook::XAudioTraceOutcome::kPublished, job, length,
+        my_comic_voice_hook::XAudioTraceEventKind::kWorkerPublish,
+        my_comic_voice_hook::XAudioTraceOutcome::kPublished, job, length,
         static_cast<uint32_t>((std::min)(total_frames,
                                         static_cast<uint64_t>(
                                             std::numeric_limits<uint32_t>::max()))));
@@ -1040,10 +1040,10 @@ void ProcessPendingXAudioCaptureJobs() {
       InterlockedOr(reinterpret_cast<volatile LONG*>(
                         &g_header->reserved_hook_diagnostics),
                     static_cast<LONG>(
-                        fushi_voice_hook::kDiagXAudioAdpcmPcmCaptured));
+                        my_comic_voice_hook::kDiagXAudioAdpcmPcmCaptured));
     }
     IncrementXAudioCounter(&g_xaudio_capture_counters.pcm_published);
-    SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagPcmPublished);
+    SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagPcmPublished);
     ReleaseXAudioCaptureJob(&job);
   }
 }
@@ -1051,18 +1051,18 @@ void ProcessPendingXAudioCaptureJobs() {
 HRESULT STDMETHODCALLTYPE Detour_SourceVoiceStart(IXAudio2SourceVoice* self,
                                                    UINT32 Flags,
                                                    UINT32 OperationSet) {
-  fushi_voice_hook::XAudioSourceSnapshot source;
+  my_comic_voice_hook::XAudioSourceSnapshot source;
   const bool registered =
       g_xaudio_formats.Lookup(reinterpret_cast<uintptr_t>(self), &source);
-  fushi_voice_hook::XAudioTraceEvent trace = MakeXAudioSourceTrace(
-      fushi_voice_hook::XAudioTraceEventKind::kStart,
+  my_comic_voice_hook::XAudioTraceEvent trace = MakeXAudioSourceTrace(
+      my_comic_voice_hook::XAudioTraceEventKind::kStart,
       registered ? &source : nullptr);
   trace.source = reinterpret_cast<uintptr_t>(self);
   trace.operation_set = OperationSet;
   trace.buffer_flags = Flags;
   trace.detail0 = static_cast<uint32_t>(
-      registered ? fushi_voice_hook::XAudioTraceLookupResult::kRegistered
-                 : fushi_voice_hook::XAudioTraceLookupResult::kMissing);
+      registered ? my_comic_voice_hook::XAudioTraceLookupResult::kRegistered
+                 : my_comic_voice_hook::XAudioTraceLookupResult::kMissing);
   XAudioDeferredOperation* staged = nullptr;
   if (registered && OperationSet != XAUDIO2_COMMIT_NOW) {
     staged = PrepareDeferredXAudioOperation(
@@ -1073,26 +1073,26 @@ HRESULT STDMETHODCALLTYPE Detour_SourceVoiceStart(IXAudio2SourceVoice* self,
   if (SUCCEEDED(hr)) {
     if (!registered) {
       trace.outcome = static_cast<uint32_t>(
-          fushi_voice_hook::XAudioTraceOutcome::kLookupMiss);
+          my_comic_voice_hook::XAudioTraceOutcome::kLookupMiss);
       IncrementXAudioCounter(&g_xaudio_capture_counters.registry_miss);
-      SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagRegistryMiss);
+      SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagRegistryMiss);
     } else if (OperationSet == XAUDIO2_COMMIT_NOW) {
       const bool applied = g_xaudio_formats.MarkStarted(
           source.source, source.generation, GetTickCount64());
       trace.outcome = static_cast<uint32_t>(
-          applied ? fushi_voice_hook::XAudioTraceOutcome::kImmediateApplied
-                  : fushi_voice_hook::XAudioTraceOutcome::kStaleInvalidated);
+          applied ? my_comic_voice_hook::XAudioTraceOutcome::kImmediateApplied
+                  : my_comic_voice_hook::XAudioTraceOutcome::kStaleInvalidated);
     } else {
       PublishDeferredXAudioOperation(staged);
       trace.outcome = static_cast<uint32_t>(
           staged != nullptr
-              ? fushi_voice_hook::XAudioTraceOutcome::kDeferredStaged
-              : fushi_voice_hook::XAudioTraceOutcome::kDeferredStageFailed);
+              ? my_comic_voice_hook::XAudioTraceOutcome::kDeferredStaged
+              : my_comic_voice_hook::XAudioTraceOutcome::kDeferredStageFailed);
     }
   } else {
     CancelDeferredXAudioOperation(staged);
     trace.outcome = static_cast<uint32_t>(
-        fushi_voice_hook::XAudioTraceOutcome::kOriginalFailed);
+        my_comic_voice_hook::XAudioTraceOutcome::kOriginalFailed);
   }
   PublishXAudioTrace(&trace);
   return hr;
@@ -1101,18 +1101,18 @@ HRESULT STDMETHODCALLTYPE Detour_SourceVoiceStart(IXAudio2SourceVoice* self,
 HRESULT STDMETHODCALLTYPE Detour_SourceVoiceStop(IXAudio2SourceVoice* self,
                                                   UINT32 Flags,
                                                   UINT32 OperationSet) {
-  fushi_voice_hook::XAudioSourceSnapshot source;
+  my_comic_voice_hook::XAudioSourceSnapshot source;
   const bool registered =
       g_xaudio_formats.Lookup(reinterpret_cast<uintptr_t>(self), &source);
-  fushi_voice_hook::XAudioTraceEvent trace = MakeXAudioSourceTrace(
-      fushi_voice_hook::XAudioTraceEventKind::kStop,
+  my_comic_voice_hook::XAudioTraceEvent trace = MakeXAudioSourceTrace(
+      my_comic_voice_hook::XAudioTraceEventKind::kStop,
       registered ? &source : nullptr);
   trace.source = reinterpret_cast<uintptr_t>(self);
   trace.operation_set = OperationSet;
   trace.buffer_flags = Flags;
   trace.detail0 = static_cast<uint32_t>(
-      registered ? fushi_voice_hook::XAudioTraceLookupResult::kRegistered
-                 : fushi_voice_hook::XAudioTraceLookupResult::kMissing);
+      registered ? my_comic_voice_hook::XAudioTraceLookupResult::kRegistered
+                 : my_comic_voice_hook::XAudioTraceLookupResult::kMissing);
   XAudioDeferredOperation* staged = nullptr;
   if (registered && OperationSet != XAUDIO2_COMMIT_NOW) {
     staged = PrepareDeferredXAudioOperation(
@@ -1123,26 +1123,26 @@ HRESULT STDMETHODCALLTYPE Detour_SourceVoiceStop(IXAudio2SourceVoice* self,
   if (SUCCEEDED(hr)) {
     if (!registered) {
       trace.outcome = static_cast<uint32_t>(
-          fushi_voice_hook::XAudioTraceOutcome::kLookupMiss);
+          my_comic_voice_hook::XAudioTraceOutcome::kLookupMiss);
       IncrementXAudioCounter(&g_xaudio_capture_counters.registry_miss);
-      SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagRegistryMiss);
+      SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagRegistryMiss);
     } else if (OperationSet == XAUDIO2_COMMIT_NOW) {
       const bool applied =
           g_xaudio_formats.MarkStopped(source.source, source.generation);
       trace.outcome = static_cast<uint32_t>(
-          applied ? fushi_voice_hook::XAudioTraceOutcome::kImmediateApplied
-                  : fushi_voice_hook::XAudioTraceOutcome::kStaleInvalidated);
+          applied ? my_comic_voice_hook::XAudioTraceOutcome::kImmediateApplied
+                  : my_comic_voice_hook::XAudioTraceOutcome::kStaleInvalidated);
     } else {
       PublishDeferredXAudioOperation(staged);
       trace.outcome = static_cast<uint32_t>(
           staged != nullptr
-              ? fushi_voice_hook::XAudioTraceOutcome::kDeferredStaged
-              : fushi_voice_hook::XAudioTraceOutcome::kDeferredStageFailed);
+              ? my_comic_voice_hook::XAudioTraceOutcome::kDeferredStaged
+              : my_comic_voice_hook::XAudioTraceOutcome::kDeferredStageFailed);
     }
   } else {
     CancelDeferredXAudioOperation(staged);
     trace.outcome = static_cast<uint32_t>(
-        fushi_voice_hook::XAudioTraceOutcome::kOriginalFailed);
+        my_comic_voice_hook::XAudioTraceOutcome::kOriginalFailed);
   }
   PublishXAudioTrace(&trace);
   return hr;
@@ -1150,16 +1150,16 @@ HRESULT STDMETHODCALLTYPE Detour_SourceVoiceStop(IXAudio2SourceVoice* self,
 
 HRESULT STDMETHODCALLTYPE Detour_FlushSourceBuffers(
     IXAudio2SourceVoice* self) {
-  fushi_voice_hook::XAudioSourceSnapshot source;
+  my_comic_voice_hook::XAudioSourceSnapshot source;
   const bool registered =
       g_xaudio_formats.Lookup(reinterpret_cast<uintptr_t>(self), &source);
-  fushi_voice_hook::XAudioTraceEvent trace = MakeXAudioSourceTrace(
-      fushi_voice_hook::XAudioTraceEventKind::kFlush,
+  my_comic_voice_hook::XAudioTraceEvent trace = MakeXAudioSourceTrace(
+      my_comic_voice_hook::XAudioTraceEventKind::kFlush,
       registered ? &source : nullptr);
   trace.source = reinterpret_cast<uintptr_t>(self);
   trace.detail0 = static_cast<uint32_t>(
-      registered ? fushi_voice_hook::XAudioTraceLookupResult::kRegistered
-                 : fushi_voice_hook::XAudioTraceLookupResult::kMissing);
+      registered ? my_comic_voice_hook::XAudioTraceLookupResult::kRegistered
+                 : my_comic_voice_hook::XAudioTraceLookupResult::kMissing);
   const FlushSourceBuffers_t original =
       OriginalHookForVtableSlot<FlushSourceBuffers_t>(
           self, kIdxFlushSourceBuffers, g_flush_source_buffers_originals);
@@ -1170,55 +1170,55 @@ HRESULT STDMETHODCALLTYPE Detour_FlushSourceBuffers(
     if (g_xaudio_formats.AdvanceQueueGeneration(source.source,
                                                  source.generation)) {
       trace.outcome = static_cast<uint32_t>(
-          fushi_voice_hook::XAudioTraceOutcome::kQueueGenerationAdvanced);
+          my_comic_voice_hook::XAudioTraceOutcome::kQueueGenerationAdvanced);
       IncrementXAudioCounter(&g_xaudio_capture_counters.flush_observed);
-      SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagFlushObserved);
+      SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagFlushObserved);
     } else {
       trace.outcome = static_cast<uint32_t>(
-          fushi_voice_hook::XAudioTraceOutcome::kStaleInvalidated);
+          my_comic_voice_hook::XAudioTraceOutcome::kStaleInvalidated);
       IncrementXAudioCounter(&g_xaudio_capture_counters.stale_invalidated);
-      SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagStaleInvalidated);
+      SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagStaleInvalidated);
     }
   } else if (FAILED(hr)) {
     trace.outcome = static_cast<uint32_t>(
-        fushi_voice_hook::XAudioTraceOutcome::kOriginalFailed);
+        my_comic_voice_hook::XAudioTraceOutcome::kOriginalFailed);
   } else {
     trace.outcome = static_cast<uint32_t>(
-        fushi_voice_hook::XAudioTraceOutcome::kLookupMiss);
+        my_comic_voice_hook::XAudioTraceOutcome::kLookupMiss);
   }
   PublishXAudioTrace(&trace);
   return hr;
 }
 
 void STDMETHODCALLTYPE Detour_DestroyVoice(IXAudio2Voice* self) {
-  fushi_voice_hook::XAudioSourceSnapshot source;
+  my_comic_voice_hook::XAudioSourceSnapshot source;
   const bool registered =
       g_xaudio_formats.Lookup(reinterpret_cast<uintptr_t>(self), &source);
-  fushi_voice_hook::XAudioTraceEvent trace = MakeXAudioSourceTrace(
-      fushi_voice_hook::XAudioTraceEventKind::kDestroy,
+  my_comic_voice_hook::XAudioTraceEvent trace = MakeXAudioSourceTrace(
+      my_comic_voice_hook::XAudioTraceEventKind::kDestroy,
       registered ? &source : nullptr);
   trace.source = reinterpret_cast<uintptr_t>(self);
   trace.detail0 = static_cast<uint32_t>(
-      registered ? fushi_voice_hook::XAudioTraceLookupResult::kRegistered
-                 : fushi_voice_hook::XAudioTraceLookupResult::kMissing);
+      registered ? my_comic_voice_hook::XAudioTraceLookupResult::kRegistered
+                 : my_comic_voice_hook::XAudioTraceLookupResult::kMissing);
   if (registered) {
     // DestroyVoice returns void and invalidates the object synchronously.  Make
     // the lifetime unreachable before entering the original implementation;
     // queued work then fails closed on generation validation.
     if (g_xaudio_formats.Unregister(source.source, source.generation)) {
       trace.outcome = static_cast<uint32_t>(
-          fushi_voice_hook::XAudioTraceOutcome::kSucceeded);
+          my_comic_voice_hook::XAudioTraceOutcome::kSucceeded);
       IncrementXAudioCounter(&g_xaudio_capture_counters.destroy_observed);
-      SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagDestroyObserved);
+      SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagDestroyObserved);
     } else {
       trace.outcome = static_cast<uint32_t>(
-          fushi_voice_hook::XAudioTraceOutcome::kStaleInvalidated);
+          my_comic_voice_hook::XAudioTraceOutcome::kStaleInvalidated);
       IncrementXAudioCounter(&g_xaudio_capture_counters.stale_invalidated);
-      SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagStaleInvalidated);
+      SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagStaleInvalidated);
     }
   } else {
     trace.outcome = static_cast<uint32_t>(
-        fushi_voice_hook::XAudioTraceOutcome::kLookupMiss);
+        my_comic_voice_hook::XAudioTraceOutcome::kLookupMiss);
   }
   g_orig_DestroyVoice(self);
   PublishXAudioTrace(&trace);
@@ -1226,12 +1226,12 @@ void STDMETHODCALLTYPE Detour_DestroyVoice(IXAudio2Voice* self) {
 
 HRESULT STDMETHODCALLTYPE Detour_CommitChanges(IXAudio2* self,
                                                 UINT32 OperationSet) {
-  fushi_voice_hook::XAudioTraceEvent trace = MakeXAudioSourceTrace(
-      fushi_voice_hook::XAudioTraceEventKind::kCommit);
+  my_comic_voice_hook::XAudioTraceEvent trace = MakeXAudioSourceTrace(
+      my_comic_voice_hook::XAudioTraceEventKind::kCommit);
   trace.engine = reinterpret_cast<uintptr_t>(self);
   trace.operation_set = OperationSet;
   trace.detail0 = static_cast<uint32_t>(
-      fushi_voice_hook::XAudioTraceCommitPhase::kObserved);
+      my_comic_voice_hook::XAudioTraceCommitPhase::kObserved);
   const uint64_t sequence_fence = static_cast<uint64_t>(
       InterlockedCompareExchange64(&g_xaudio_deferred_sequence, 0, 0));
   trace.detail1 = static_cast<uint32_t>(sequence_fence);
@@ -1240,22 +1240,22 @@ HRESULT STDMETHODCALLTYPE Detour_CommitChanges(IXAudio2* self,
   trace.hresult = static_cast<int32_t>(hr);
   if (SUCCEEDED(hr)) {
     IncrementXAudioCounter(&g_xaudio_capture_counters.commits_succeeded);
-    SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagCommitObserved);
+    SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagCommitObserved);
     const bool queued = EnqueueXAudioCommitEvent(
         reinterpret_cast<uintptr_t>(self), OperationSet, sequence_fence,
         GetTickCount64());
     trace.outcome = static_cast<uint32_t>(
-        queued ? fushi_voice_hook::XAudioTraceOutcome::kCommitQueued
-               : fushi_voice_hook::XAudioTraceOutcome::kCommitQueueExhausted);
+        queued ? my_comic_voice_hook::XAudioTraceOutcome::kCommitQueued
+               : my_comic_voice_hook::XAudioTraceOutcome::kCommitQueueExhausted);
     // Publish the API observation before a synchronous control drain emits the
     // corresponding applied event, preserving the causal order in the trace.
     PublishXAudioTrace(&trace);
     DrainXAudioControlEvents();
   } else {
     trace.outcome = static_cast<uint32_t>(
-        fushi_voice_hook::XAudioTraceOutcome::kOriginalFailed);
+        my_comic_voice_hook::XAudioTraceOutcome::kOriginalFailed);
     IncrementXAudioCounter(&g_xaudio_capture_counters.commits_failed);
-    SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagCommitFailed);
+    SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagCommitFailed);
     PublishXAudioTrace(&trace);
   }
   return hr;
@@ -1268,8 +1268,8 @@ HRESULT STDMETHODCALLTYPE Detour_CommitChanges(IXAudio2* self,
 HRESULT STDMETHODCALLTYPE Detour_SubmitSourceBuffer(
     IXAudio2SourceVoice* self, const XAUDIO2_BUFFER* pBuffer,
     const XAUDIO2_BUFFER_WMA* pBufferWMA) {
-  fushi_voice_hook::XAudioTraceEvent trace = MakeXAudioSourceTrace(
-      fushi_voice_hook::XAudioTraceEventKind::kSubmit);
+  my_comic_voice_hook::XAudioTraceEvent trace = MakeXAudioSourceTrace(
+      my_comic_voice_hook::XAudioTraceEventKind::kSubmit);
   trace.source = reinterpret_cast<uintptr_t>(self);
   trace.submit_timestamp_ms = trace.timestamp_ms;
   if (pBuffer != nullptr) {
@@ -1279,14 +1279,14 @@ HRESULT STDMETHODCALLTYPE Detour_SubmitSourceBuffer(
     trace.play_length = pBuffer->PlayLength;
     trace.buffer_context_present = pBuffer->pContext != nullptr ? 1u : 0u;
   }
-  fushi_voice_hook::CaptureXAudioTraceWma(pBufferWMA, &trace);
+  my_comic_voice_hook::CaptureXAudioTraceWma(pBufferWMA, &trace);
 
-  fushi_voice_hook::XAudioSourceSnapshot source;
+  my_comic_voice_hook::XAudioSourceSnapshot source;
   const bool registered =
       g_xaudio_formats.Lookup(reinterpret_cast<uintptr_t>(self), &source);
   trace.detail0 = static_cast<uint32_t>(
-      registered ? fushi_voice_hook::XAudioTraceLookupResult::kRegistered
-                 : fushi_voice_hook::XAudioTraceLookupResult::kMissing);
+      registered ? my_comic_voice_hook::XAudioTraceLookupResult::kRegistered
+                 : my_comic_voice_hook::XAudioTraceLookupResult::kMissing);
   if (registered) {
     trace.engine = source.engine;
     trace.source_generation = source.generation;
@@ -1300,45 +1300,45 @@ HRESULT STDMETHODCALLTYPE Detour_SubmitSourceBuffer(
   // staged descriptor remains invisible to HookWorker until success publishes
   // it; failure releases the private copy.
   XAudioCaptureJob* staged = nullptr;
-  fushi_voice_hook::XAudioTraceOutcome rejection =
-      fushi_voice_hook::XAudioTraceOutcome::kNone;
+  my_comic_voice_hook::XAudioTraceOutcome rejection =
+      my_comic_voice_hook::XAudioTraceOutcome::kNone;
   if (pBuffer == nullptr) {
-    rejection = fushi_voice_hook::XAudioTraceOutcome::kRejectedNullBuffer;
+    rejection = my_comic_voice_hook::XAudioTraceOutcome::kRejectedNullBuffer;
   } else if (pBuffer->pAudioData == nullptr) {
     rejection =
-        fushi_voice_hook::XAudioTraceOutcome::kRejectedNullAudioData;
+        my_comic_voice_hook::XAudioTraceOutcome::kRejectedNullAudioData;
   } else if (pBuffer->AudioBytes == 0) {
-    rejection = fushi_voice_hook::XAudioTraceOutcome::kRejectedZeroBytes;
+    rejection = my_comic_voice_hook::XAudioTraceOutcome::kRejectedZeroBytes;
     if (g_capture_enabled && g_header != nullptr) {
       if (registered) {
         IncrementXAudioCounter(&g_xaudio_capture_counters.buffer_rejected);
-        SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagBufferRejected);
+        SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagBufferRejected);
       } else {
         IncrementXAudioCounter(&g_xaudio_capture_counters.registry_miss);
-        SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagRegistryMiss);
+        SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagRegistryMiss);
       }
     }
   } else if (pBuffer->AudioBytes > kMaxXAudioCaptureBytes) {
-    rejection = fushi_voice_hook::XAudioTraceOutcome::kRejectedTooLarge;
+    rejection = my_comic_voice_hook::XAudioTraceOutcome::kRejectedTooLarge;
     if (g_capture_enabled && g_header != nullptr) {
       if (registered) {
         IncrementXAudioCounter(&g_xaudio_capture_counters.buffer_rejected);
-        SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagBufferRejected);
+        SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagBufferRejected);
       } else {
         IncrementXAudioCounter(&g_xaudio_capture_counters.registry_miss);
-        SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagRegistryMiss);
+        SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagRegistryMiss);
       }
     }
   } else if (!g_capture_enabled || g_header == nullptr) {
-    rejection = fushi_voice_hook::XAudioTraceOutcome::kCaptureDisabled;
+    rejection = my_comic_voice_hook::XAudioTraceOutcome::kCaptureDisabled;
   } else if (!registered) {
-    rejection = fushi_voice_hook::XAudioTraceOutcome::kLookupMiss;
+    rejection = my_comic_voice_hook::XAudioTraceOutcome::kLookupMiss;
     IncrementXAudioCounter(&g_xaudio_capture_counters.registry_miss);
-    SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagRegistryMiss);
+    SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagRegistryMiss);
   } else if (source.format.encoding ==
-                 fushi_voice_hook::XAudioSourceEncoding::kWmaudio2 &&
+                 my_comic_voice_hook::XAudioSourceEncoding::kWmaudio2 &&
              !HasXAudioCompressedResourceHandler()) {
-    rejection = fushi_voice_hook::XAudioTraceOutcome::kFormatUnsupported;
+    rejection = my_comic_voice_hook::XAudioTraceOutcome::kFormatUnsupported;
   } else {
     staged = PrepareXAudioCaptureJob(source, pBuffer, pBufferWMA,
                                      trace.timestamp_ms, &rejection);
@@ -1355,9 +1355,9 @@ HRESULT STDMETHODCALLTYPE Detour_SubmitSourceBuffer(
   if (FAILED(hr)) {
     if (staged != nullptr) ReleaseXAudioCaptureJob(staged);
     IncrementXAudioCounter(&g_xaudio_capture_counters.submit_failed);
-    SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagSubmitFailed);
+    SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagSubmitFailed);
     trace.outcome = static_cast<uint32_t>(
-        fushi_voice_hook::XAudioTraceOutcome::kOriginalFailed);
+        my_comic_voice_hook::XAudioTraceOutcome::kOriginalFailed);
     PublishXAudioTrace(&trace);
     return hr;
   }
@@ -1367,15 +1367,15 @@ HRESULT STDMETHODCALLTYPE Detour_SubmitSourceBuffer(
           staged->source.source, staged->source.generation,
           staged->source.queue_generation)) {
     IncrementXAudioCounter(&g_xaudio_capture_counters.stale_invalidated);
-    SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagStaleInvalidated);
+    SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagStaleInvalidated);
     ReleaseXAudioCaptureJob(staged);
     trace.detail2 = 1;
     trace.outcome = static_cast<uint32_t>(
-        fushi_voice_hook::XAudioTraceOutcome::kStaleInvalidated);
+        my_comic_voice_hook::XAudioTraceOutcome::kStaleInvalidated);
   } else if (staged != nullptr) {
     PublishXAudioCaptureJob(staged);
     trace.outcome = static_cast<uint32_t>(
-        fushi_voice_hook::XAudioTraceOutcome::kQueued);
+        my_comic_voice_hook::XAudioTraceOutcome::kQueued);
   } else {
     trace.outcome = static_cast<uint32_t>(rejection);
   }
@@ -1394,14 +1394,14 @@ HRESULT STDMETHODCALLTYPE Detour_CreateSourceVoice(
     const WAVEFORMATEX* pSourceFormat, UINT32 Flags, float MaxFrequencyRatio,
     IXAudio2VoiceCallback* pCallback, const XAUDIO2_VOICE_SENDS* pSendList,
     const XAUDIO2_EFFECT_CHAIN* pEffectChain) {
-  fushi_voice_hook::XAudioTraceEvent trace = MakeXAudioSourceTrace(
-      fushi_voice_hook::XAudioTraceEventKind::kCreate);
+  my_comic_voice_hook::XAudioTraceEvent trace = MakeXAudioSourceTrace(
+      my_comic_voice_hook::XAudioTraceEventKind::kCreate);
   trace.engine = reinterpret_cast<uintptr_t>(self);
   trace.buffer_flags = Flags;
-  fushi_voice_hook::XAudioSourceFormat format;
+  my_comic_voice_hook::XAudioSourceFormat format;
   const bool has_format =
-      fushi_voice_hook::ParseXAudioSourceFormat(pSourceFormat, &format);
-  fushi_voice_hook::CaptureXAudioTraceFormat(
+      my_comic_voice_hook::ParseXAudioSourceFormat(pSourceFormat, &format);
+  my_comic_voice_hook::CaptureXAudioTraceFormat(
       pSourceFormat, has_format,
       has_format ? static_cast<uint32_t>(format.encoding) : 0u,
       &trace.format);
@@ -1412,41 +1412,41 @@ HRESULT STDMETHODCALLTYPE Detour_CreateSourceVoice(
   if (SUCCEEDED(hr) && ppSourceVoice != nullptr && *ppSourceVoice != nullptr) {
     trace.source = reinterpret_cast<uintptr_t>(*ppSourceVoice);
     if (has_format) {
-      fushi_voice_hook::XAudioSourceSnapshot registered;
+      my_comic_voice_hook::XAudioSourceSnapshot registered;
       if (g_xaudio_formats.Register(
               reinterpret_cast<uintptr_t>(*ppSourceVoice),
               reinterpret_cast<uintptr_t>(self), format, &registered)) {
         trace.source_generation = registered.generation;
         trace.queue_generation = registered.queue_generation;
         trace.outcome = static_cast<uint32_t>(
-            fushi_voice_hook::XAudioTraceOutcome::kRegistryRegistered);
+            my_comic_voice_hook::XAudioTraceOutcome::kRegistryRegistered);
         if (format.encoding ==
-            fushi_voice_hook::XAudioSourceEncoding::kMicrosoftAdpcm) {
+            my_comic_voice_hook::XAudioSourceEncoding::kMicrosoftAdpcm) {
           if (g_header != nullptr) {
             InterlockedOr(reinterpret_cast<volatile LONG*>(
                               &g_header->reserved_hook_diagnostics),
                           static_cast<LONG>(
-                              fushi_voice_hook::kDiagXAudioAdpcmObserved));
+                              my_comic_voice_hook::kDiagXAudioAdpcmObserved));
           }
         } else {
           MaybeRecordPcmFormat(
               format.sample_rate, format.channels, format.bits_per_sample,
               format.encoding ==
-                      fushi_voice_hook::XAudioSourceEncoding::kPcmFloat
+                      my_comic_voice_hook::XAudioSourceEncoding::kPcmFloat
                   ? 1u
                   : 0u);
         }
       } else {
         trace.outcome = static_cast<uint32_t>(
-            fushi_voice_hook::XAudioTraceOutcome::kRegistryExhausted);
+            my_comic_voice_hook::XAudioTraceOutcome::kRegistryExhausted);
         IncrementXAudioCounter(&g_xaudio_capture_counters.registry_exhausted);
-        SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagRegistryExhausted);
+        SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagRegistryExhausted);
       }
     } else {
       trace.outcome = static_cast<uint32_t>(
-          fushi_voice_hook::XAudioTraceOutcome::kFormatUnsupported);
+          my_comic_voice_hook::XAudioTraceOutcome::kFormatUnsupported);
       IncrementXAudioCounter(&g_xaudio_capture_counters.unsupported_format);
-      SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagUnsupportedFormat);
+      SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagUnsupportedFormat);
     }
     HookFnWithOriginalRegistry(
         VtableSlot(*ppSourceVoice, kIdxSubmitSourceBuffer),
@@ -1467,7 +1467,7 @@ HRESULT STDMETHODCALLTYPE Detour_CreateSourceVoice(
            reinterpret_cast<void**>(&g_orig_DestroyVoice));
   } else {
     trace.outcome = static_cast<uint32_t>(
-        fushi_voice_hook::XAudioTraceOutcome::kOriginalFailed);
+        my_comic_voice_hook::XAudioTraceOutcome::kOriginalFailed);
   }
   PublishXAudioTrace(&trace);
   return hr;
@@ -1548,7 +1548,7 @@ void TryHookXAudio2Create() {
 HRESULT STDMETHODCALLTYPE Detour_DsbUnlock(IDirectSoundBuffer* self, LPVOID pv1,
                                            DWORD cb1, LPVOID pv2, DWORD cb2) {
   if (g_capture_enabled && g_header != nullptr) {
-    fushi_voice_hook::DirectSoundPcmFormat format;
+    my_comic_voice_hook::DirectSoundPcmFormat format;
     if (!g_dsound_formats.Lookup(reinterpret_cast<uintptr_t>(self), &format)) {
       return g_orig_DsbUnlock(self, pv1, cb1, pv2, cb2);
     }
@@ -1623,7 +1623,7 @@ HRESULT STDMETHODCALLTYPE Detour_CreateSoundBuffer(IDirectSound8* self,
           is_float = 1;
         }
       }
-      const fushi_voice_hook::DirectSoundPcmFormat format{
+      const my_comic_voice_hook::DirectSoundPcmFormat format{
           fmt->nSamplesPerSec, fmt->nChannels, fmt->wBitsPerSample, is_float};
       if (g_dsound_formats.Register(
               reinterpret_cast<uintptr_t>(*ppBuf), format)) {

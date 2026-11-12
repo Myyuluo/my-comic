@@ -47,7 +47,7 @@ def bind(lib, name, result, *args):
     return fn
 
 
-# Option sets that mirror Fushi's two "画质增强" states on Windows (media_kit
+# Option sets that mirror MyComic's two "画质增强" states on Windows (media_kit
 # defaults + VideoMpvConfig). "off" is exactly what makes vo=gpu pick dumb mode.
 COMMON = {"correct-downscaling": "no", "linear-downscaling": "no", "sigmoid-upscaling": "no",
           "deband": "no", "dither-depth": "no", "interpolation": "no"}

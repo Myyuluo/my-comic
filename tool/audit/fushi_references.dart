@@ -73,7 +73,7 @@ FushiReferenceCategory categorizeReference({
       normalized.startsWith('docs/bugs/') ||
       normalized.startsWith('docs/readme/') ||
       normalized.startsWith('docs/agent/') ||
-      normalized.startsWith('fushi/docs/') ||
+      normalized.startsWith('my_comic/docs/') ||
       normalized.startsWith('.scratch/')) {
     return FushiReferenceCategory.historicalDocs;
   }

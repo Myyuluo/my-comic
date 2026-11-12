@@ -25,7 +25,7 @@ struct TyranoAsarTask {
 
 TyranoAsarHandle g_tyrano_asar_handles[kTyranoAsarHandleSlots];
 TyranoAsarTask g_tyrano_asar_tasks[kTyranoAsarTaskSlots];
-std::vector<fushi_voice_hook::AsarVoiceEntry> g_tyrano_voice_entries;
+std::vector<my_comic_voice_hook::AsarVoiceEntry> g_tyrano_voice_entries;
 wchar_t g_tyrano_asar_path[32768] = {0};
 volatile LONG g_tyrano_asar_ready = 0;
 uint32_t g_tyrano_last_processed_entry = UINT32_MAX;
@@ -78,9 +78,9 @@ bool LoadTyranoAsarVoiceIndex() {
   g_orig_CloseHandle(file);
   if (!valid) return false;
 
-  std::vector<fushi_voice_hook::AsarVoiceEntry> entries;
+  std::vector<my_comic_voice_hook::AsarVoiceEntry> entries;
   const uint64_t data_base = 8u + static_cast<uint64_t>(header_size);
-  if (!fushi_voice_hook::ParseAsarVoiceEntries(
+  if (!my_comic_voice_hook::ParseAsarVoiceEntries(
           json.data(), json.size(), data_base, &entries) ||
       entries.empty()) {
     return false;
@@ -96,16 +96,16 @@ void RememberTyranoAsar(HANDLE handle, const wchar_t* path) {
       InterlockedCompareExchange(&g_tyrano_asar_ready, 0, 0) == 0) {
     return;
   }
-  fushi_voice_hook::RememberTrackedHandle(g_tyrano_asar_handles, handle,
+  my_comic_voice_hook::RememberTrackedHandle(g_tyrano_asar_handles, handle,
                                           [](TyranoAsarHandle&) {});
 }
 
 bool IsTyranoAsarHandle(HANDLE handle) {
-  return fushi_voice_hook::IsTrackedHandle(g_tyrano_asar_handles, handle);
+  return my_comic_voice_hook::IsTrackedHandle(g_tyrano_asar_handles, handle);
 }
 
 void ForgetTyranoAsar(HANDLE handle) {
-  fushi_voice_hook::ForgetTrackedHandle(g_tyrano_asar_handles, handle);
+  my_comic_voice_hook::ForgetTrackedHandle(g_tyrano_asar_handles, handle);
 }
 
 void QueueTyranoAsarVoice(uint32_t entry_index) {
@@ -207,11 +207,11 @@ void ProcessTyranoAsarTask(TyranoAsarTask* task) {
     valid = ogg != nullptr &&
             ReadExact(file, ogg, static_cast<uint32_t>(entry.byte_len));
     if (valid) {
-      const auto format = fushi_voice_hook::DetectAudioResourceFormat(
+      const auto format = my_comic_voice_hook::DetectAudioResourceFormat(
           ogg, static_cast<size_t>(entry.byte_len));
-      valid = format == fushi_voice_hook::AudioResourceFormat::kM4a ||
-              (format == fushi_voice_hook::AudioResourceFormat::kOgg &&
-               fushi_voice_hook::siglus::CompleteOggBytes(
+      valid = format == my_comic_voice_hook::AudioResourceFormat::kM4a ||
+              (format == my_comic_voice_hook::AudioResourceFormat::kOgg &&
+               my_comic_voice_hook::siglus::CompleteOggBytes(
                    ogg, static_cast<uint32_t>(entry.byte_len)) ==
                    entry.byte_len);
     }
@@ -233,7 +233,7 @@ void ProcessTyranoAsarTask(TyranoAsarTask* task) {
       g_tyrano_last_processed_tick = task->tick_ms;
       if (g_header != nullptr) {
         g_header->hook_diagnostics |=
-            fushi_voice_hook::kDiagTyranoAsarVoiceCaptured;
+            my_comic_voice_hook::kDiagTyranoAsarVoiceCaptured;
       }
     }
   }
@@ -256,7 +256,7 @@ bool TryHookTyranoAsarAudio() {
   const bool index_ready = file_hooks_ready && LoadTyranoAsarVoiceIndex();
   if (index_ready && g_header != nullptr) {
     g_header->hook_diagnostics |=
-        fushi_voice_hook::kDiagTyranoAsarHooksReady;
+        my_comic_voice_hook::kDiagTyranoAsarHooksReady;
   }
   return index_ready;
 }
@@ -265,7 +265,7 @@ void StopTyranoAsarAudio() {
   InterlockedExchange(&g_tyrano_asar_ready, 0);
   g_tyrano_voice_entries.clear();
   g_tyrano_asar_path[0] = 0;
-  fushi_voice_hook::ClearTrackedHandles(g_tyrano_asar_handles);
+  my_comic_voice_hook::ClearTrackedHandles(g_tyrano_asar_handles);
   g_tyrano_last_processed_entry = UINT32_MAX;
   g_tyrano_last_processed_tick = 0;
 }

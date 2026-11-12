@@ -6,7 +6,7 @@
 #include <cstdint>
 #include <limits>
 
-namespace fushi_voice_hook::hunex_lookup_core {
+namespace my_comic_voice_hook::hunex_lookup_core {
 
 // These containers are the callback-to-worker hand-off only. They have fixed
 // storage, never allocate, and deliberately know nothing about HUNEX addresses,
@@ -947,4 +947,4 @@ inline ShiftDecision AdvanceShiftSample(uint32_t sample_thread_id, uint16_t raw,
   return decision;
 }
 
-} // namespace fushi_voice_hook::hunex_lookup_core
+} // namespace my_comic_voice_hook::hunex_lookup_core

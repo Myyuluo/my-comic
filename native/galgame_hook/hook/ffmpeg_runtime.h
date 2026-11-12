@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <cwchar>
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 enum class FfmpegModuleKind : uint8_t {
   kNone = 0,
@@ -145,4 +145,4 @@ inline const wchar_t* AudioResourceExtension(AudioResourceFormat format) {
   }
 }
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

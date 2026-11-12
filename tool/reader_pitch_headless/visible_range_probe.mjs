@@ -1,6 +1,6 @@
 // 可见字符区间 [start, end) 的真渲染探针（统计口径「翻走即计 + 覆盖并集」）。
 //
-// Dart 侧每次进度采样读 `fushiProgressDetails()` 的第三/四段 = 当前可见区间两端
+// Dart 侧每次进度采样读 `myComicProgressDetails()` 的第三/四段 = 当前可见区间两端
 // （章内学习单位偏移）。起点 getFirstVisibleCharOffset 早有；终点 getLastVisibleCharOffset
 // 是新增（分页对角 caret 探测 + 二分降级 / 连续末边 walk）。本探针在三种几何下从章首逐页
 // / 逐屏翻到 isAtEnd，断言：
@@ -21,13 +21,13 @@ const W = 1000, H = 800, PT = 24, PB = 32, PL = 20, PR = 28;
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, '..', '..');
 
-// fushiProgressDetails 不在引擎产物里（它是 webview.part.dart 的 setup 脚本一段），按
+// myComicProgressDetails 不在引擎产物里（它是 webview.part.dart 的 setup 脚本一段），按
 // reader_production_js_behavior_test 的切法从源码切出真实协议函数注入，探的就是生产协议。
 function progressDetailsSource() {
-  const src = fs.readFileSync(path.join(REPO, 'fushi/lib/src/pages/implementations/reader_fushi/webview.part.dart'), 'utf8').replace(/\r\n/g, '\n');
-  const start = src.indexOf('window.fushiProgressDetails = function()');
+  const src = fs.readFileSync(path.join(REPO, 'my_comic/lib/src/pages/implementations/reader_my_comic/webview.part.dart'), 'utf8').replace(/\r\n/g, '\n');
+  const start = src.indexOf('window.myComicProgressDetails = function()');
   const end = src.indexOf('\n  };', start);
-  if (start < 0 || end < 0) throw new Error('fushiProgressDetails source not found');
+  if (start < 0 || end < 0) throw new Error('myComicProgressDetails source not found');
   return src.slice(start, end + 5);
 }
 
@@ -35,13 +35,13 @@ const paras = Array.from({length: 70}, (_, i) => `<p>P${i} これはテスト本
 
 const GEOMETRIES = [
   {
-    name: 'paginated horizontal', engine: 'fushi_engine_paginated.html', continuous: false,
+    name: 'paginated horizontal', engine: 'my_comic_engine_paginated.html', continuous: false,
     css: `html,body{margin:0;padding:0;}html{overflow:hidden;}
  body{width:${W}px;height:${H}px;padding:${PT}px ${PR}px ${PB}px ${PL}px;box-sizing:border-box;column-width:${W-PL-PR}px;column-gap:22px;column-fill:auto;font-size:22px;line-height:1.8;overflow:hidden;writing-mode:horizontal-tb;}
  p{margin:0 0 1em 0;}`,
   },
   {
-    name: 'paginated vertical', engine: 'fushi_engine_paginated.html', continuous: false,
+    name: 'paginated vertical', engine: 'my_comic_engine_paginated.html', continuous: false,
     // 竖排：列（= 一页的一条横带）沿 Y 轴堆叠，column-width 是列高 = V − pt − pb；行自右向左。
     css: `html,body{margin:0;padding:0;}html{overflow:hidden;}
  body{width:${W}px;height:${H}px;padding:${PT}px ${PR}px ${PB}px ${PL}px;box-sizing:border-box;writing-mode:vertical-rl;column-width:${H-PT-PB}px;column-gap:22px;column-fill:auto;font-size:22px;line-height:1.8;overflow:hidden;}
@@ -50,7 +50,7 @@ const GEOMETRIES = [
   {
     // 真实键盘翻屏路径：连续 shell paginate('forward') 滚 0.9×视口高（相邻屏重叠两行）。
     // 断言无缝（start_{i+1} <= end_i + 1）+ 并集全覆盖；重叠合法（不查 >= end_i − 1）。
-    name: 'continuous horizontal (paginate 0.9H)', engine: 'fushi_engine_continuous.html', continuous: true, step: 'paginate',
+    name: 'continuous horizontal (paginate 0.9H)', engine: 'my_comic_engine_continuous.html', continuous: true, step: 'paginate',
     css: `html,body{margin:0;padding:0;}
  body{padding:${PT}px ${PR}px ${PB}px ${PL}px;font-size:22px;line-height:1.8;writing-mode:horizontal-tb;}
  p{margin:0 0 1em 0;}`,
@@ -62,7 +62,7 @@ const GEOMETRIES = [
     // y=paddingTop+2，顶栏 inset 之下）之间两头都不算 → 每步最多漏一行（实测 4410 字
     // 8 步漏 125 字 ≈ 2.8%）。要闭合它只能把 end 判据改成「已开始可见」（rect.top < edge），
     // 代价是停读时底部半行被多计一行；口径取舍留给统计域决定，这里只把数字打出来。
-    name: 'continuous horizontal (scrollBy H, informational)', engine: 'fushi_engine_continuous.html', continuous: true, step: 'scrollBy', informational: true,
+    name: 'continuous horizontal (scrollBy H, informational)', engine: 'my_comic_engine_continuous.html', continuous: true, step: 'scrollBy', informational: true,
     css: `html,body{margin:0;padding:0;}
  body{padding:${PT}px ${PR}px ${PB}px ${PL}px;font-size:22px;line-height:1.8;writing-mode:horizontal-tb;}
  p{margin:0 0 1em 0;}`,
@@ -76,7 +76,7 @@ async function openChapter(geom) {
     chromeTopInset: 0, chromeBottomInset: 0, dartPageWidth: W, dartPageHeight: H,
     initialFragment: null, initialCharOffset: -1, initialProgress: 0, sentenceAudioCues: null,
   };
-  const install = `<script>window.__fushiInstallShell(${JSON.stringify(CONFIG)});\n${progressDetailsSource()}</script>`;
+  const install = `<script>window.__myComicInstallShell(${JSON.stringify(CONFIG)});\n${progressDetailsSource()}</script>`;
   // 引擎与安装脚本放 <head>：createWalker 走 document.body 的全部文本节点，脚本正文若在
   // body 里会被数进 totalChars（章总字数虚高、末页 end 跟着虚高）。生产路径引擎经
   // evaluateJavascript 注入、不进 DOM，head 放置与之等价。
@@ -86,12 +86,12 @@ async function openChapter(geom) {
   await pg.setRequestInterception(true);
   pg.on('request', async q => {
     const u = q.url();
-    if (u === 'https://fushi.local/chapter') return q.respond({status:200,contentType:'text/html',body:full});
-    if (u.startsWith('https://fushi.local')) return q.respond({status:404,body:''});
+    if (u === 'https://mycomic.local/chapter') return q.respond({status:200,contentType:'text/html',body:full});
+    if (u.startsWith('https://mycomic.local')) return q.respond({status:404,body:''});
     return q.continue();
   });
   pg.on('pageerror', e => console.log('  pageerror:', e.message));
-  await pg.goto('https://fushi.local/chapter', {waitUntil:'load', timeout:8000}).catch(()=>{});
+  await pg.goto('https://mycomic.local/chapter', {waitUntil:'load', timeout:8000}).catch(()=>{});
   await new Promise(r => setTimeout(r, 500));
   return { b, pg };
 }
@@ -100,8 +100,8 @@ async function walk(pg, geom) {
   const steps = [];
   for (let i = 0; i < 400; i++) {
     const s = await pg.evaluate(() => {
-      const r = window.fushiReader;
-      const d = window.fushiProgressDetails();
+      const r = window.myComicReader;
+      const d = window.myComicProgressDetails();
       const parts = d.split(',').map(Number);
       return { raw: d, current: parts[0], total: parts[1], start: parts[2], end: parts.length >= 4 ? parts[3] : -1, atEnd: r.isAtEnd() };
     });
@@ -113,13 +113,13 @@ async function walk(pg, geom) {
         window.scrollBy({left: 0, top: H, behavior: 'auto'});
         return window.scrollY !== before ? 'scrolled' : 'limit';
       }
-      return window.fushiReader.paginate('forward');
+      return window.myComicReader.paginate('forward');
     }, geom.step || 'paginate', H);
     await new Promise(r => setTimeout(r, 60));
     if (moved === 'limit') {
       const tail = await pg.evaluate(() => {
-        const d = window.fushiProgressDetails(); const p = d.split(',').map(Number);
-        return { raw: d, current: p[0], total: p[1], start: p[2], end: p.length >= 4 ? p[3] : -1, atEnd: window.fushiReader.isAtEnd() };
+        const d = window.myComicProgressDetails(); const p = d.split(',').map(Number);
+        return { raw: d, current: p[0], total: p[1], start: p[2], end: p.length >= 4 ? p[3] : -1, atEnd: window.myComicReader.isAtEnd() };
       });
       steps.push(tail);
       break;

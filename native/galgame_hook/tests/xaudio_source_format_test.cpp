@@ -49,17 +49,17 @@ int main() {
   wmaudio2.nAvgBytesPerSec = 4000;
   wmaudio2.nBlockAlign = 1487;
   wmaudio2.wBitsPerSample = 16;
-  fushi_voice_hook::XAudioSourceFormat wmaudio2_format;
-  assert(fushi_voice_hook::ParseXAudioSourceFormat(
+  my_comic_voice_hook::XAudioSourceFormat wmaudio2_format;
+  assert(my_comic_voice_hook::ParseXAudioSourceFormat(
       &wmaudio2, &wmaudio2_format));
   assert(wmaudio2_format.encoding ==
-         fushi_voice_hook::XAudioSourceEncoding::kWmaudio2);
+         my_comic_voice_hook::XAudioSourceEncoding::kWmaudio2);
   assert(wmaudio2_format.avg_bytes_per_second == 4000);
 
   const uint8_t original_wma[] = {0x11, 0x22, 0x33, 0x44, 0x55};
   const uint32_t original_dpds[] = {4096, 8192, 12288};
   std::vector<uint8_t> xwma;
-  assert(fushi_voice_hook::BuildXwmaResource(
+  assert(my_comic_voice_hook::BuildXwmaResource(
       wmaudio2_format, original_wma, sizeof(original_wma),
       reinterpret_cast<const uint8_t*>(original_dpds), 3, &xwma));
   assert(xwma.size() == 72);
@@ -73,10 +73,10 @@ int main() {
   const std::vector<uint8_t> format_bytes = MakeMonoFormat();
   const auto* wave =
       reinterpret_cast<const WAVEFORMATEX*>(format_bytes.data());
-  fushi_voice_hook::XAudioSourceFormat format;
-  assert(fushi_voice_hook::ParseXAudioSourceFormat(wave, &format));
+  my_comic_voice_hook::XAudioSourceFormat format;
+  assert(my_comic_voice_hook::ParseXAudioSourceFormat(wave, &format));
   assert(format.encoding ==
-         fushi_voice_hook::XAudioSourceEncoding::kMicrosoftAdpcm);
+         my_comic_voice_hook::XAudioSourceEncoding::kMicrosoftAdpcm);
   assert(format.sample_rate == 47968);
   assert(format.channels == 1);
   assert(format.bits_per_sample == 4);
@@ -84,8 +84,8 @@ int main() {
   assert(format.samples_per_block == 32);
   assert(format.coefficient_count == 7);
 
-  fushi_voice_hook::XAudioTraceFormat trace_format;
-  fushi_voice_hook::CaptureXAudioTraceFormat(
+  my_comic_voice_hook::XAudioTraceFormat trace_format;
+  my_comic_voice_hook::CaptureXAudioTraceFormat(
       wave, true, static_cast<uint32_t>(format.encoding), &trace_format);
   assert(trace_format.present == 1);
   assert(trace_format.parse_succeeded == 1);
@@ -119,11 +119,11 @@ int main() {
   };
   std::memcpy(extensible.SubFormat.Data4, wave_subtype_tail,
               sizeof(wave_subtype_tail));
-  fushi_voice_hook::XAudioTraceFormat extensible_trace;
-  fushi_voice_hook::CaptureXAudioTraceFormat(
+  my_comic_voice_hook::XAudioTraceFormat extensible_trace;
+  my_comic_voice_hook::CaptureXAudioTraceFormat(
       &extensible.Format, true,
       static_cast<uint32_t>(
-          fushi_voice_hook::XAudioSourceEncoding::kPcmInteger),
+          my_comic_voice_hook::XAudioSourceEncoding::kPcmInteger),
       &extensible_trace);
   assert(extensible_trace.extensible_valid_bits == 16);
   assert(extensible_trace.extensible_channel_mask == 3);
@@ -136,21 +136,21 @@ int main() {
   auto* custom = reinterpret_cast<WAVEFORMATEX*>(custom_bytes.data());
   custom->wFormatTag = 0x7777;
   custom->cbSize = 64;
-  fushi_voice_hook::XAudioTraceFormat custom_trace;
-  fushi_voice_hook::CaptureXAudioTraceFormat(custom, false, 0,
+  my_comic_voice_hook::XAudioTraceFormat custom_trace;
+  my_comic_voice_hook::CaptureXAudioTraceFormat(custom, false, 0,
                                               &custom_trace);
   assert(custom_trace.parse_succeeded == 0);
   assert(custom_trace.cb_size == 64);
   assert(custom_trace.extra_bytes_copied ==
-         fushi_voice_hook::kXAudioTraceExtraPrefixBytes);
+         my_comic_voice_hook::kXAudioTraceExtraPrefixBytes);
   for (uint32_t i = 0; i < custom_trace.extra_bytes_copied; ++i) {
     assert(custom_trace.extra_prefix[i] == 0x5a);
   }
 
-  fushi_voice_hook::XAudioTraceEvent null_wma_trace;
+  my_comic_voice_hook::XAudioTraceEvent null_wma_trace;
   XAUDIO2_BUFFER_WMA null_wma = {};
   null_wma.PacketCount = 3;
-  fushi_voice_hook::CaptureXAudioTraceWma(&null_wma, &null_wma_trace);
+  my_comic_voice_hook::CaptureXAudioTraceWma(&null_wma, &null_wma_trace);
   assert(null_wma_trace.wma_present == 1);
   assert(null_wma_trace.wma_packet_count == 3);
   assert(null_wma_trace.wma_decoded_range_present == 0);
@@ -161,16 +161,16 @@ int main() {
   XAUDIO2_BUFFER_WMA empty_wma = {};
   empty_wma.pDecodedPacketCumulativeBytes = decoded_cumulative_bytes;
   empty_wma.PacketCount = 0;
-  fushi_voice_hook::XAudioTraceEvent empty_wma_trace;
-  fushi_voice_hook::CaptureXAudioTraceWma(&empty_wma, &empty_wma_trace);
+  my_comic_voice_hook::XAudioTraceEvent empty_wma_trace;
+  my_comic_voice_hook::CaptureXAudioTraceWma(&empty_wma, &empty_wma_trace);
   assert(empty_wma_trace.wma_present == 1);
   assert(empty_wma_trace.wma_decoded_range_present == 0);
 
   XAUDIO2_BUFFER_WMA valid_wma = {};
   valid_wma.pDecodedPacketCumulativeBytes = decoded_cumulative_bytes;
   valid_wma.PacketCount = 3;
-  fushi_voice_hook::XAudioTraceEvent valid_wma_trace;
-  fushi_voice_hook::CaptureXAudioTraceWma(&valid_wma, &valid_wma_trace);
+  my_comic_voice_hook::XAudioTraceEvent valid_wma_trace;
+  my_comic_voice_hook::CaptureXAudioTraceWma(&valid_wma, &valid_wma_trace);
   assert(valid_wma_trace.wma_present == 1);
   assert(valid_wma_trace.wma_packet_count == 3);
   assert(valid_wma_trace.wma_decoded_range_present == 1);
@@ -179,13 +179,13 @@ int main() {
 
   // Publication is bounded and nonblocking.  A busy wrapped slot creates an
   // explicit sequence hole without touching its old committed payload.
-  static fushi_voice_hook::XAudioTraceBuffer trace_buffer;
-  fushi_voice_hook::XAudioTraceEvent trace_event =
-      fushi_voice_hook::MakeXAudioTraceEvent(
-          fushi_voice_hook::XAudioTraceEventKind::kSubmit);
+  static my_comic_voice_hook::XAudioTraceBuffer trace_buffer;
+  my_comic_voice_hook::XAudioTraceEvent trace_event =
+      my_comic_voice_hook::MakeXAudioTraceEvent(
+          my_comic_voice_hook::XAudioTraceEventKind::kSubmit);
   trace_event.source = 0x11223344;
   trace_event.audio_bytes = 4096;
-  assert(fushi_voice_hook::PublishXAudioTraceEvent(&trace_buffer,
+  assert(my_comic_voice_hook::PublishXAudioTraceEvent(&trace_buffer,
                                                    trace_event) == 1);
   assert(trace_buffer.slots[0].writing == 0);
   assert(trace_buffer.slots[0].event.sequence == 1);
@@ -194,34 +194,34 @@ int main() {
 
   const uint64_t old_sequence = trace_buffer.slots[0].event.sequence;
   const uint64_t old_source = trace_buffer.slots[0].event.source;
-  trace_buffer.next_sequence = fushi_voice_hook::kXAudioTraceCapacity;
+  trace_buffer.next_sequence = my_comic_voice_hook::kXAudioTraceCapacity;
   trace_buffer.slots[0].writing = 1;
   trace_event.source = 0x55667788;
-  assert(fushi_voice_hook::PublishXAudioTraceEvent(&trace_buffer,
+  assert(my_comic_voice_hook::PublishXAudioTraceEvent(&trace_buffer,
                                                    trace_event) == 0);
   assert(trace_buffer.next_sequence ==
-         fushi_voice_hook::kXAudioTraceCapacity + 1);
+         my_comic_voice_hook::kXAudioTraceCapacity + 1);
   assert(trace_buffer.dropped_busy == 1);
   assert(trace_buffer.slots[0].event.sequence == old_sequence);
   assert(trace_buffer.slots[0].event.source == old_source);
   trace_buffer.slots[0].writing = 0;
-  trace_buffer.next_sequence = fushi_voice_hook::kXAudioTraceCapacity * 2ull;
-  assert(fushi_voice_hook::PublishXAudioTraceEvent(&trace_buffer,
+  trace_buffer.next_sequence = my_comic_voice_hook::kXAudioTraceCapacity * 2ull;
+  assert(my_comic_voice_hook::PublishXAudioTraceEvent(&trace_buffer,
                                                    trace_event) ==
-         fushi_voice_hook::kXAudioTraceCapacity * 2ull + 1ull);
+         my_comic_voice_hook::kXAudioTraceCapacity * 2ull + 1ull);
   assert(trace_buffer.slots[0].writing == 0);
   assert(trace_buffer.slots[0].event.sequence ==
-         fushi_voice_hook::kXAudioTraceCapacity * 2ull + 1ull);
+         my_comic_voice_hook::kXAudioTraceCapacity * 2ull + 1ull);
   assert(trace_buffer.slots[0].event.source == 0x55667788);
 
-  fushi_voice_hook::XAudioSourceFormatRegistry<4> registry;
-  fushi_voice_hook::XAudioSourceSnapshot registered;
+  my_comic_voice_hook::XAudioSourceFormatRegistry<4> registry;
+  my_comic_voice_hook::XAudioSourceSnapshot registered;
   assert(registry.Register(0x1234, 0x9876, format, &registered));
   assert(registered.source == 0x1234);
   assert(registered.engine == 0x9876);
   assert(registered.generation != 0);
   assert(registered.queue_generation == 1);
-  fushi_voice_hook::XAudioSourceFormat looked_up;
+  my_comic_voice_hook::XAudioSourceFormat looked_up;
   assert(registry.Lookup(0x1234, &looked_up));
   assert(looked_up.samples_per_block == 32);
   assert(!registry.Lookup(0x5678, &looked_up));
@@ -235,12 +235,12 @@ int main() {
              registered.source, registered.generation,
              registered.queue_generation, submit_before_start) == 1400);
 
-  fushi_voice_hook::XAudioSourceSnapshot started;
+  my_comic_voice_hook::XAudioSourceSnapshot started;
   assert(registry.Lookup(registered.source, &started));
   assert(started.started);
   assert(registry.TimestampForSubmit(started, 1500) == 1500);
   assert(registry.MarkStopped(started.source, started.generation));
-  fushi_voice_hook::XAudioSourceSnapshot stopped;
+  my_comic_voice_hook::XAudioSourceSnapshot stopped;
   assert(registry.Lookup(registered.source, &stopped));
   assert(!stopped.started);
   assert(registry.TimestampForSubmit(stopped, 1600) == 0);
@@ -263,7 +263,7 @@ int main() {
   assert(registry.ResolvePlaybackTimestamp(
              stopped.source, stopped.generation, stopped.queue_generation,
              1600) == 0);
-  fushi_voice_hook::XAudioSourceSnapshot after_flush;
+  my_comic_voice_hook::XAudioSourceSnapshot after_flush;
   assert(registry.Lookup(stopped.source, &after_flush));
   assert(after_flush.started);
   assert(after_flush.queue_generation == advanced_queue_generation);
@@ -273,9 +273,9 @@ int main() {
   // deferred operation-set records must not become current again.
   const uint64_t destroyed_generation = after_flush.generation;
   assert(registry.Unregister(after_flush.source, destroyed_generation));
-  fushi_voice_hook::XAudioSourceSnapshot absent;
+  my_comic_voice_hook::XAudioSourceSnapshot absent;
   assert(!registry.Lookup(after_flush.source, &absent));
-  fushi_voice_hook::XAudioSourceSnapshot reused;
+  my_comic_voice_hook::XAudioSourceSnapshot reused;
   assert(registry.Register(0x1234, 0x9876, format, &reused));
   assert(reused.generation != destroyed_generation);
   assert(!registry.IsCurrentSource(reused.source, destroyed_generation));
@@ -291,7 +291,7 @@ int main() {
   block[6] = 0x03;
   block[7] = 0x10;
   std::vector<int16_t> decoded;
-  assert(fushi_voice_hook::DecodeMicrosoftAdpcm(
+  assert(my_comic_voice_hook::DecodeMicrosoftAdpcm(
       format, block.data(), block.size(), &decoded));
   assert(decoded.size() == 32);
   assert(decoded[0] == 900);
@@ -301,7 +301,7 @@ int main() {
 
   std::vector<uint8_t> malformed = format_bytes;
   reinterpret_cast<WAVEFORMATEX*>(malformed.data())->cbSize = 3;
-  assert(!fushi_voice_hook::ParseXAudioSourceFormat(
+  assert(!my_comic_voice_hook::ParseXAudioSourceFormat(
       reinterpret_cast<const WAVEFORMATEX*>(malformed.data()), &format));
   return 0;
 }

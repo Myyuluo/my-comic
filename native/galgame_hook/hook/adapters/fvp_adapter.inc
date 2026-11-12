@@ -98,7 +98,7 @@ int __fastcall FvpSoundLoadDetour(uintptr_t self, uintptr_t, const void* data,
   // Only a voice resource is copied: SE / BGM never take a slot.
   if (rt.play_thread.load(std::memory_order_acquire) == GetCurrentThreadId() &&
       data != nullptr && size >= 64u && size <= kFvpVoiceMaxBytes &&
-      fushi_voice_hook::fvp::IsVoiceResourceName(rt.play_name,
+      my_comic_voice_hook::fvp::IsVoiceResourceName(rt.play_name,
                                                  kFvpVoiceNameBytes)) {
     bool ogg = false;
     __try {
@@ -140,9 +140,9 @@ constexpr uint64_t kFvpVoiceBindWindowMs = 1500u;
 void WriteFvpVoiceSlot(FvpVoiceSlot& slot, uint64_t text_event) {
   auto& rt = g_fvp_voice;
   const uint32_t channels =
-      fushi_voice_hook::fvp::VorbisChannels(slot.data, slot.bytes);
+      my_comic_voice_hook::fvp::VorbisChannels(slot.data, slot.bytes);
   const bool complete =
-      fushi_voice_hook::siglus::CompleteOggBytes(slot.data, slot.bytes) ==
+      my_comic_voice_hook::siglus::CompleteOggBytes(slot.data, slot.bytes) ==
       slot.bytes;
   wchar_t storage[kFvpVoiceNameBytes + 8u] = {};
   fvp_lookup::AudioStorageName(slot.name, kFvpVoiceNameBytes, storage,
@@ -150,7 +150,7 @@ void WriteFvpVoiceSlot(FvpVoiceSlot& slot, uint64_t text_event) {
   bool written = false;
   // The resource name decides (a voice resource); the channel count only
   // corroborates that the bytes are an Ogg Vorbis stream.
-  const bool voice = fushi_voice_hook::fvp::IsVoiceResourceName(
+  const bool voice = my_comic_voice_hook::fvp::IsVoiceResourceName(
       slot.name, kFvpVoiceNameBytes);
   if (voice && channels != 0u && complete) {
     written = WriteVoiceOggAt(slot.data, slot.bytes, storage, slot.tick_ms,
@@ -158,7 +158,7 @@ void WriteFvpVoiceSlot(FvpVoiceSlot& slot, uint64_t text_event) {
     if (written) {
       NoteFvpFlag(kFvpFlagVoiceCaptured);
       // The host switches the session to the resource backend on this bit.
-      SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagGameResourcePublished);
+      SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagGameResourcePublished);
     }
   }
   if (rt.logged < kFvpModelLogBudget) {
@@ -180,13 +180,13 @@ void ProcessFvpVoiceSlots(uint64_t epoch_now) {
   const uint64_t selected =
       g_header == nullptr
           ? 0u
-          : fushi_voice_hook::AtomicLoadPreview64(
+          : my_comic_voice_hook::AtomicLoadPreview64(
                 &g_header->selected_text_thread_id);
   for (FvpVoiceSlot& slot : g_fvp_voice.slots) {
     InterlockedCompareExchange(&slot.state, 3, 2);  // claim new captures
     if (InterlockedCompareExchange(&slot.state, 3, 3) != 3) continue;
     // Not an Ogg Vorbis stream: nothing to bind, release without waiting.
-    if (fushi_voice_hook::fvp::VorbisChannels(slot.data, slot.bytes) == 0u) {
+    if (my_comic_voice_hook::fvp::VorbisChannels(slot.data, slot.bytes) == 0u) {
       WriteFvpVoiceSlot(slot, 0u);
       continue;
     }
@@ -221,8 +221,8 @@ bool InstallFvpVoice() {
   }
   if (!FvpLookupSitesResolved()) return false;
   rt.resolved = true;
-  fushi_voice_hook::exact_lookup::LoadedPeImage image;
-  if (!fushi_voice_hook::exact_lookup::OpenLoadedPeImage(
+  my_comic_voice_hook::exact_lookup::LoadedPeImage image;
+  if (!my_comic_voice_hook::exact_lookup::OpenLoadedPeImage(
           GetModuleHandleW(nullptr), &image)) {
     return false;
   }
@@ -280,14 +280,14 @@ void ShutdownFvpVoice() {}
 
 #endif  // _M_IX86
 
-class FvpAdapter final : public fushi_voice_hook::EngineAdapter {
+class FvpAdapter final : public my_comic_voice_hook::EngineAdapter {
  public:
   const char* id() const override { return "fvp"; }
   // The identity reads the HCB trailer from disk; it cannot change while the
   // process runs, so it is measured once.
   bool probe() const override {
     if (probe_state_ == 0) {
-      probe_state_ = fushi_voice_hook::MatchesFvpProfile(nullptr) ? 1 : 2;
+      probe_state_ = my_comic_voice_hook::MatchesFvpProfile(nullptr) ? 1 : 2;
     }
     return probe_state_ == 1;
   }
@@ -306,24 +306,24 @@ class FvpAdapter final : public fushi_voice_hook::EngineAdapter {
     ProcessFvpLookupTick();
     ProcessFvpVoiceSlots(epoch);
   }
-  fushi_voice_hook::LookupAdmissionReport lookupAdmission() const override {
-    fushi_voice_hook::LookupAdmissionReport report;
+  my_comic_voice_hook::LookupAdmissionReport lookupAdmission() const override {
+    my_comic_voice_hook::LookupAdmissionReport report;
     if (FvpLookupSensorInstalled()) {
-      report.state = fushi_voice_hook::kLookupAdmissionSensorInstalled;
+      report.state = my_comic_voice_hook::kLookupAdmissionSensorInstalled;
       return report;
     }
     if (FvpLookupSitesRejected()) {
-      report.state = fushi_voice_hook::kLookupAdmissionIdentityRejected;
+      report.state = my_comic_voice_hook::kLookupAdmissionIdentityRejected;
       strncpy_s(report.executable_sha256,
-                fushi_voice_hook::HostExecutableSha256Hex(), _TRUNCATE);
+                my_comic_voice_hook::HostExecutableSha256Hex(), _TRUNCATE);
       return report;
     }
-    report.state = fushi_voice_hook::kLookupAdmissionIdentityAccepted;
+    report.state = my_comic_voice_hook::kLookupAdmissionIdentityAccepted;
     return report;
   }
-  fushi_voice_hook::AdapterCapability capabilities() const override {
-    return fushi_voice_hook::AdapterCapability::kText |
-           fushi_voice_hook::AdapterCapability::kResourceAudio;
+  my_comic_voice_hook::AdapterCapability capabilities() const override {
+    return my_comic_voice_hook::AdapterCapability::kText |
+           my_comic_voice_hook::AdapterCapability::kResourceAudio;
   }
   void onModuleLoaded(const wchar_t*) override {}
   void shutdown() override {
@@ -333,7 +333,7 @@ class FvpAdapter final : public fushi_voice_hook::EngineAdapter {
     voice_installed_ = false;
     installed_ = false;
   }
-  fushi_voice_hook::AdapterDiagnostics diagnostics() const override {
+  my_comic_voice_hook::AdapterDiagnostics diagnostics() const override {
     return {id(), probe(), installed_,
             g_fvp_flags.load(std::memory_order_relaxed)};
   }

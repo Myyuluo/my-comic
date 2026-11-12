@@ -24,30 +24,30 @@
 // 用途：injector 早注入（--launch）目标游戏、放着游戏出声后，用它旁路读共享内存，直观确认
 // DirectSound/XAudio2 捕获真的在工作——hooked=1、格式被 hook 填上、total_written 在涨、峰值
 // 振幅从 silent 变 SOUND。**只读**，不注入、不写共享内存，故不需与目标同位数：命名文件映射
-// （Local\FushiVoiceHook_<pid>）跨 32/64 位可读，x64 reader 能读 32 位游戏里 hook 填的缓冲。
+// （Local\MyComicVoiceHook_<pid>）跨 32/64 位可读，x64 reader 能读 32 位游戏里 hook 填的缓冲。
 //
-// 用法：fushi_voice_ring_probe <pid> [轮数=30] [间隔ms=500]
+// 用法：my_comic_voice_ring_probe <pid> [轮数=30] [间隔ms=500]
 //   <pid>    injector 建共享内存时用的目标进程 pid（injector 打印的 pid=）
 //   轮数     采样轮数（缺省 30）
 //   间隔ms   每轮间隔毫秒（缺省 500）
 namespace {
 
-using fushi_voice_hook::kSharedMagic;
-using fushi_voice_hook::kSharedVersion;
-using fushi_voice_hook::SharedHeader;
-using fushi_voice_hook::SharedMemoryName;
+using my_comic_voice_hook::kSharedMagic;
+using my_comic_voice_hook::kSharedVersion;
+using my_comic_voice_hook::SharedHeader;
+using my_comic_voice_hook::SharedMemoryName;
 
 const char* NativeLoopbackStateName(uint32_t state) {
   switch (state) {
-    case fushi_voice_hook::kNativeLoopbackStateStopped:
+    case my_comic_voice_hook::kNativeLoopbackStateStopped:
       return "stopped";
-    case fushi_voice_hook::kNativeLoopbackStateStarting:
+    case my_comic_voice_hook::kNativeLoopbackStateStarting:
       return "starting";
-    case fushi_voice_hook::kNativeLoopbackStateRunning:
+    case my_comic_voice_hook::kNativeLoopbackStateRunning:
       return "running";
-    case fushi_voice_hook::kNativeLoopbackStateStopping:
+    case my_comic_voice_hook::kNativeLoopbackStateStopping:
       return "stopping";
-    case fushi_voice_hook::kNativeLoopbackStateFailed:
+    case my_comic_voice_hook::kNativeLoopbackStateFailed:
       return "failed";
     default:
       return "unknown";
@@ -108,16 +108,16 @@ double PeakAmplitude(const std::vector<uint8_t>& buf, uint32_t bits,
 // 导出文本环里所有台词行到 stdout：每行 `seq|ts_ms|utf8文本`。供外层做卡的句子来源。
 void DumpText(const SharedHeader* h) {
   // v13：文本按线程分道，寻址与归并只有契约头里那一份实现（host 读侧用的是同一个函数）。
-  static const fushi_voice_hook::TextSlot*
-      slots[fushi_voice_hook::kTextSlotCount];
-  const uint32_t found = fushi_voice_hook::CollectTextSlotsBySeq(
-      h, slots, fushi_voice_hook::kTextSlotCount, 0);
+  static const my_comic_voice_hook::TextSlot*
+      slots[my_comic_voice_hook::kTextSlotCount];
+  const uint32_t found = my_comic_voice_hook::CollectTextSlotsBySeq(
+      h, slots, my_comic_voice_hook::kTextSlotCount, 0);
   for (uint32_t i = 0; i < found; ++i) {
     const auto* slot = slots[i];
     if (slot->byte_len == 0) continue;
     char u8[1400] = {0};
     const uint8_t* txt = reinterpret_cast<const uint8_t*>(slot) +
-                         sizeof(fushi_voice_hook::TextSlot);
+                         sizeof(my_comic_voice_hook::TextSlot);
     if (slot->is_utf8) {
       uint32_t n = slot->byte_len;
       if (n > 1399) n = 1399;
@@ -136,21 +136,21 @@ void DumpText(const SharedHeader* h) {
 void DumpTextMeta(const SharedHeader* h) {
   printf("selected_text_thread_id=%llu text_write_count=%llu\n",
          static_cast<unsigned long long>(
-             fushi_voice_hook::SelectedTextThreadId(h)),
+             my_comic_voice_hook::SelectedTextThreadId(h)),
          static_cast<unsigned long long>(
-             fushi_voice_hook::AtomicLoadPreview64(&h->text_write_count)));
+             my_comic_voice_hook::AtomicLoadPreview64(&h->text_write_count)));
   // v13：按线程分道枚举（实现见契约头 CollectTextSlotsBySeq，host 读侧共用）。
-  static const fushi_voice_hook::TextSlot*
-      meta_slots[fushi_voice_hook::kTextSlotCount];
-  const uint32_t meta_found = fushi_voice_hook::CollectTextSlotsBySeq(
-      h, meta_slots, fushi_voice_hook::kTextSlotCount, 0);
+  static const my_comic_voice_hook::TextSlot*
+      meta_slots[my_comic_voice_hook::kTextSlotCount];
+  const uint32_t meta_found = my_comic_voice_hook::CollectTextSlotsBySeq(
+      h, meta_slots, my_comic_voice_hook::kTextSlotCount, 0);
   for (uint32_t mi = 0; mi < meta_found; ++mi) {
     const auto* slot = meta_slots[mi];
     const uint64_t seq = slot->seq;
     if (slot->byte_len == 0) continue;
     char text[1400] = {0};
     const uint8_t* raw = reinterpret_cast<const uint8_t*>(slot) +
-                         sizeof(fushi_voice_hook::TextSlot);
+                         sizeof(my_comic_voice_hook::TextSlot);
     if (slot->is_utf8 != 0) {
       memcpy(text, raw, (std::min)(slot->byte_len, 1399u));
     } else {
@@ -175,17 +175,17 @@ void DumpTextMeta(const SharedHeader* h) {
 
 void DumpTextEvents(const SharedHeader* h) {
   // v13：同上，按线程分道枚举。
-  static const fushi_voice_hook::TextSlot*
-      evt_slots[fushi_voice_hook::kTextSlotCount];
-  const uint32_t evt_found = fushi_voice_hook::CollectTextSlotsBySeq(
-      h, evt_slots, fushi_voice_hook::kTextSlotCount, 0);
+  static const my_comic_voice_hook::TextSlot*
+      evt_slots[my_comic_voice_hook::kTextSlotCount];
+  const uint32_t evt_found = my_comic_voice_hook::CollectTextSlotsBySeq(
+      h, evt_slots, my_comic_voice_hook::kTextSlotCount, 0);
   for (uint32_t ei = 0; ei < evt_found; ++ei) {
     const auto* slot = evt_slots[ei];
     const uint64_t seq = slot->seq;
     char text[1400] = {0};
     if (slot->byte_len != 0) {
       const uint8_t* raw = reinterpret_cast<const uint8_t*>(slot) +
-                           sizeof(fushi_voice_hook::TextSlot);
+                           sizeof(my_comic_voice_hook::TextSlot);
       if (slot->is_utf8 != 0) {
         memcpy(text, raw, (std::min)(slot->byte_len, 1399u));
       } else {
@@ -220,18 +220,18 @@ void DumpThreadPreviews(const SharedHeader* h) {
     return;
   }
   const uint32_t slots = (std::min)(h->thread_preview_slot_count,
-                                    fushi_voice_hook::kThreadPreviewCount);
-  const auto* base = reinterpret_cast<const fushi_voice_hook::ThreadPreviewSlot*>(
+                                    my_comic_voice_hook::kThreadPreviewCount);
+  const auto* base = reinterpret_cast<const my_comic_voice_hook::ThreadPreviewSlot*>(
       reinterpret_cast<const uint8_t*>(h) + h->thread_preview_offset);
   for (uint32_t i = 0; i < slots; i++) {
-    fushi_voice_hook::ThreadPreviewSnapshot snapshot;
-    if (!fushi_voice_hook::TryReadThreadPreviewSnapshot(base[i], &snapshot) ||
+    my_comic_voice_hook::ThreadPreviewSnapshot snapshot;
+    if (!my_comic_voice_hook::TryReadThreadPreviewSnapshot(base[i], &snapshot) ||
         snapshot.thread_id == 0) {
       continue;
     }
     uint32_t wlen = snapshot.byte_len / 2;
-    if (wlen > fushi_voice_hook::kThreadPreviewTextChars) {
-      wlen = fushi_voice_hook::kThreadPreviewTextChars;
+    if (wlen > my_comic_voice_hook::kThreadPreviewTextChars) {
+      wlen = my_comic_voice_hook::kThreadPreviewTextChars;
     }
     std::string escaped;
     for (uint32_t k = 0; k < wlen; k++) {
@@ -259,12 +259,12 @@ void DumpThreadPreviews(const SharedHeader* h) {
 
 void DumpUnityEvents(const SharedHeader* h) {
   const uint64_t count = h->unity_voice_write_count;
-  const uint64_t start = count > fushi_voice_hook::kUnityVoiceEventCount
-                             ? count - fushi_voice_hook::kUnityVoiceEventCount
+  const uint64_t start = count > my_comic_voice_hook::kUnityVoiceEventCount
+                             ? count - my_comic_voice_hook::kUnityVoiceEventCount
                              : 0;
   for (uint64_t seq = start + 1; seq <= count; ++seq) {
     const auto* event = &h->unity_voice_events[
-        (seq - 1) % fushi_voice_hook::kUnityVoiceEventCount];
+        (seq - 1) % my_comic_voice_hook::kUnityVoiceEventCount];
     if (event->seq != seq) continue;
     char clip[512] = {0};
     char bundle[1600] = {0};
@@ -286,17 +286,17 @@ bool DumpWav(const SharedHeader* h, const uint8_t* ring, uint64_t ts,
   const uint32_t cap = h->ring_capacity;
   const uint64_t clips = h->clip_write_count;
   if (cap == 0 || clips == 0) return false;
-  const uint32_t cslots = fushi_voice_hook::kClipCount;
+  const uint32_t cslots = my_comic_voice_hook::kClipCount;
   const uint8_t* cbase =
       reinterpret_cast<const uint8_t*>(h) + h->clip_region_offset;
   const uint64_t total = h->total_written;
   const uint64_t scan = (clips > cslots) ? clips - cslots : 0;
-  const fushi_voice_hook::VoiceClip* best = nullptr;
+  const my_comic_voice_hook::VoiceClip* best = nullptr;
   uint64_t bestDiff = ~0ull;
   for (uint64_t seq = scan + 1; seq <= clips; seq++) {
-    const auto* c = reinterpret_cast<const fushi_voice_hook::VoiceClip*>(
+    const auto* c = reinterpret_cast<const my_comic_voice_hook::VoiceClip*>(
         cbase + static_cast<size_t>((seq - 1) % cslots) *
-                    sizeof(fushi_voice_hook::VoiceClip));
+                    sizeof(my_comic_voice_hook::VoiceClip));
     if (c->seq != seq || c->byte_len == 0 || c->byte_len > cap) continue;
     if (total > c->total_at_write &&
         total - c->total_at_write > cap - c->byte_len)
@@ -335,7 +335,7 @@ bool DumpWav(const SharedHeader* h, const uint8_t* ring, uint64_t ts,
 
 // 把一条 clip 的 PCM 从环形读出追加到 out；已被环形覆盖返回 false。
 bool ReadClipPcm(const SharedHeader* h, const uint8_t* ring,
-                 const fushi_voice_hook::VoiceClip* c,
+                 const my_comic_voice_hook::VoiceClip* c,
                  std::vector<uint8_t>& out) {
   const uint32_t cap = h->ring_capacity;
   const uint32_t len = c->byte_len;
@@ -362,7 +362,7 @@ bool ReadClipPcm(const SharedHeader* h, const uint8_t* ring,
 // ——这里曾是它的第二份手抄拷贝，而取证工具报「非 16-bit 无能量」会把排查直接带偏
 // （BUG-1769 的定位就差点被这一点误导）。
 double ClipEnergy16(const SharedHeader* h, const uint8_t* ring,
-                    const fushi_voice_hook::VoiceClip* c) {
+                    const my_comic_voice_hook::VoiceClip* c) {
   const uint32_t cap = h->ring_capacity;
   const uint32_t len = c->byte_len;
   if (cap == 0 || len == 0 || len > cap) {
@@ -372,7 +372,7 @@ double ClipEnergy16(const SharedHeader* h, const uint8_t* ring,
       h->total_written - c->total_at_write > cap - len) {
     return 0.0;  // 已被环形覆盖
   }
-  return fushi_voice_hook::ClipEnergy16Scale(ring, cap, c->ring_offset % cap,
+  return my_comic_voice_hook::ClipEnergy16Scale(ring, cap, c->ring_offset % cap,
                                              len, c->bits_per_sample,
                                              c->is_float != 0);
 }
@@ -387,16 +387,16 @@ bool DumpUtterance(const SharedHeader* h, const uint8_t* ring, uint64_t ts,
   if (cap == 0 || clips == 0) {
     return false;
   }
-  const uint32_t cslots = fushi_voice_hook::kClipCount;
+  const uint32_t cslots = my_comic_voice_hook::kClipCount;
   const uint8_t* cbase =
       reinterpret_cast<const uint8_t*>(h) + h->clip_region_offset;
   const uint64_t scan = (clips > cslots) ? clips - cslots : 0;
   // 收集有效 clip 指针。
-  std::vector<const fushi_voice_hook::VoiceClip*> valid;
+  std::vector<const my_comic_voice_hook::VoiceClip*> valid;
   for (uint64_t seq = scan + 1; seq <= clips; seq++) {
-    const auto* c = reinterpret_cast<const fushi_voice_hook::VoiceClip*>(
+    const auto* c = reinterpret_cast<const my_comic_voice_hook::VoiceClip*>(
         cbase + static_cast<size_t>((seq - 1) % cslots) *
-                    sizeof(fushi_voice_hook::VoiceClip));
+                    sizeof(my_comic_voice_hook::VoiceClip));
     if (c->seq == seq && c->byte_len != 0 && c->byte_len <= cap) {
       valid.push_back(c);
     }
@@ -447,7 +447,7 @@ bool DumpUtterance(const SharedHeader* h, const uint8_t* ring, uint64_t ts,
   // GrabUtterance 共用同一份实现（BUG-1593）：clip 时间戳是**提交**时刻，流式引擎按缓冲
   // 深度提前灌入，固定 200ms 回看会整块丢掉句首。诊断工具必须和真实取音判据一致，否则
   // 拿它排障只会把人带偏。
-  std::vector<fushi_voice_hook::UtteranceClipTiming> timings;
+  std::vector<my_comic_voice_hook::UtteranceClipTiming> timings;
   for (const auto* c : valid) {
     if (any_energy && c->source_ptr != voice_src) {
       continue;
@@ -459,14 +459,14 @@ bool DumpUtterance(const SharedHeader* h, const uint8_t* ring, uint64_t ts,
             : static_cast<int64_t>(static_cast<int64_t>(c->byte_len) * 1000 /
                                    (static_cast<int64_t>(block) *
                                     static_cast<int64_t>(c->sample_rate)));
-    timings.push_back(fushi_voice_hook::UtteranceClipTiming{
+    timings.push_back(my_comic_voice_hook::UtteranceClipTiming{
         static_cast<int64_t>(c->timestamp_ms), dur});
   }
-  const int64_t lower_ts = fushi_voice_hook::UtteranceLowerBoundMs(
+  const int64_t lower_ts = my_comic_voice_hook::UtteranceLowerBoundMs(
       timings.data(), timings.size(), static_cast<int64_t>(ts));
 
   std::vector<uint8_t> pcm;
-  const fushi_voice_hook::VoiceClip* fmt = nullptr;
+  const my_comic_voice_hook::VoiceClip* fmt = nullptr;
   double peak = 1.0;
   for (const auto* c : valid) {
     if (any_energy && c->source_ptr != voice_src) {
@@ -541,16 +541,16 @@ void DumpSources(const SharedHeader* h, const uint8_t* ring, uint64_t ts,
     printf("no clips\n");
     return;
   }
-  const uint32_t cslots = fushi_voice_hook::kClipCount;
+  const uint32_t cslots = my_comic_voice_hook::kClipCount;
   const uint8_t* cbase =
       reinterpret_cast<const uint8_t*>(h) + h->clip_region_offset;
   const uint64_t scan = (clips > cslots) ? clips - cslots : 0;
   // 收集 [ts-300, ts+6000] 窗口内各源的 clip 指针。
-  std::map<uint64_t, std::vector<const fushi_voice_hook::VoiceClip*>> by_src;
+  std::map<uint64_t, std::vector<const my_comic_voice_hook::VoiceClip*>> by_src;
   for (uint64_t seq = scan + 1; seq <= clips; seq++) {
-    const auto* c = reinterpret_cast<const fushi_voice_hook::VoiceClip*>(
+    const auto* c = reinterpret_cast<const my_comic_voice_hook::VoiceClip*>(
         cbase + static_cast<size_t>((seq - 1) % cslots) *
-                    sizeof(fushi_voice_hook::VoiceClip));
+                    sizeof(my_comic_voice_hook::VoiceClip));
     if (c->seq != seq || c->byte_len == 0 || c->byte_len > cap) {
       continue;
     }
@@ -563,7 +563,7 @@ void DumpSources(const SharedHeader* h, const uint8_t* ring, uint64_t ts,
   int idx = 0;
   for (const auto& kv : by_src) {
     std::vector<uint8_t> pcm;
-    const fushi_voice_hook::VoiceClip* fmt = nullptr;
+    const my_comic_voice_hook::VoiceClip* fmt = nullptr;
     double eacc = 0;
     size_t esamp = 0;
     for (const auto* c : kv.second) {
@@ -614,19 +614,19 @@ void DumpSources(const SharedHeader* h, const uint8_t* ring, uint64_t ts,
 // ══ C.2f loopback 兜底混音取证 ═══════════════════════════════════════════════════
 // 收集 loopback 标记表里有效标记（seq 校验），按序号（=时间/位置单调）排。
 void CollectLoopbackMarkers(const SharedHeader* h,
-                            std::vector<fushi_voice_hook::LoopbackMarker>* out) {
+                            std::vector<my_comic_voice_hook::LoopbackMarker>* out) {
   out->clear();
   const uint64_t count = h->loopback_marker_count;
   const uint32_t slots = h->loopback_marker_slot_count
                              ? h->loopback_marker_slot_count
-                             : fushi_voice_hook::kLoopbackMarkerCount;
+                             : my_comic_voice_hook::kLoopbackMarkerCount;
   const uint8_t* base =
       reinterpret_cast<const uint8_t*>(h) + h->loopback_marker_offset;
   const uint64_t scan = (count > slots) ? count - slots : 0;
   for (uint64_t seq = scan + 1; seq <= count; seq++) {
-    const auto* m = reinterpret_cast<const fushi_voice_hook::LoopbackMarker*>(
+    const auto* m = reinterpret_cast<const my_comic_voice_hook::LoopbackMarker*>(
         base + static_cast<size_t>((seq - 1) % slots) *
-                   sizeof(fushi_voice_hook::LoopbackMarker));
+                   sizeof(my_comic_voice_hook::LoopbackMarker));
     if (m->seq == seq) {
       out->push_back(*m);
     }
@@ -636,7 +636,7 @@ void CollectLoopbackMarkers(const SharedHeader* h,
 // 用标记表把墙钟 tick 映射到 loopback 环线性字节位置 total。标记单调（tick/total 同增）：tick 落
 // 两标记间线性插值（自动处理静音间隙的 total 平段）；早于首标记按 byte_rate 反推夹到 [0,首total]；
 // 晚于末标记按 byte_rate 外推夹到 cur_total。无标记退化为 cur_total。
-uint64_t TickToTotal(const std::vector<fushi_voice_hook::LoopbackMarker>& mk,
+uint64_t TickToTotal(const std::vector<my_comic_voice_hook::LoopbackMarker>& mk,
                      uint64_t tick, uint64_t byte_rate, uint64_t cur_total) {
   if (mk.empty()) {
     return cur_total;
@@ -683,7 +683,7 @@ bool DumpLoopback(const SharedHeader* h, uint64_t ts_start, uint64_t ts_end,
       reinterpret_cast<const uint8_t*>(h) + h->loopback_ring_offset;
   const uint64_t byte_rate = static_cast<uint64_t>(sr) * ch * 2u;  // 16-bit 存储
   const uint64_t cur_total = h->loopback_total_written;
-  std::vector<fushi_voice_hook::LoopbackMarker> mk;
+  std::vector<my_comic_voice_hook::LoopbackMarker> mk;
   CollectLoopbackMarkers(h, &mk);
   uint64_t start_total = TickToTotal(mk, ts_start, byte_rate, cur_total);
   uint64_t end_total = TickToTotal(mk, ts_end, byte_rate, cur_total);
@@ -772,15 +772,15 @@ bool DumpLoopback(const SharedHeader* h, uint64_t ts_start, uint64_t ts_end,
 // 用来看播放模式（语音是不是连续多段同源、BGM 是不是另一持续源），设计整句合成分组用。
 void ListClips(const SharedHeader* h) {
   const uint64_t clips = h->clip_write_count;
-  const uint32_t cslots = fushi_voice_hook::kClipCount;
+  const uint32_t cslots = my_comic_voice_hook::kClipCount;
   const uint8_t* cbase =
       reinterpret_cast<const uint8_t*>(h) + h->clip_region_offset;
   const uint64_t scan = (clips > cslots) ? clips - cslots : 0;
   uint64_t prev_ts = 0;
   for (uint64_t seq = scan + 1; seq <= clips; seq++) {
-    const auto* c = reinterpret_cast<const fushi_voice_hook::VoiceClip*>(
+    const auto* c = reinterpret_cast<const my_comic_voice_hook::VoiceClip*>(
         cbase + static_cast<size_t>((seq - 1) % cslots) *
-                    sizeof(fushi_voice_hook::VoiceClip));
+                    sizeof(my_comic_voice_hook::VoiceClip));
     if (c->seq != seq) {
       continue;
     }
@@ -931,13 +931,13 @@ struct alignas(8) HunexGgeTraceHeaderSnapshot {
 };
 
 static_assert(sizeof(XAudioTraceHeaderSnapshot) ==
-                  offsetof(fushi_voice_hook::XAudioTraceBuffer, slots),
+                  offsetof(my_comic_voice_hook::XAudioTraceBuffer, slots),
               "remote XAudio trace header layout drifted");
 static_assert(sizeof(LeafD3DTraceHeaderSnapshot) ==
-                  offsetof(fushi_voice_hook::LeafD3DTraceBuffer, slots),
+                  offsetof(my_comic_voice_hook::LeafD3DTraceBuffer, slots),
               "remote Leaf D3D trace header layout drifted");
 static_assert(sizeof(HunexGgeTraceHeaderSnapshot) ==
-                  offsetof(fushi_voice_hook::HunexGgeTraceBuffer, slots),
+                  offsetof(my_comic_voice_hook::HunexGgeTraceBuffer, slots),
               "remote HUNEX/GGE trace header layout drifted");
 
 bool ReadRemoteExact(HANDLE process, uintptr_t address, void* destination,
@@ -1133,7 +1133,7 @@ bool ResolveRemotePeExportRva(HANDLE process,
 }
 
 bool IsExpectedHookModuleName(const std::wstring& name) {
-  return _wcsicmp(name.c_str(), L"fushi_voice_hook.dll") == 0;
+  return _wcsicmp(name.c_str(), L"my_comic_voice_hook.dll") == 0;
 }
 
 bool FindRemoteXAudioTrace(HANDLE process, DWORD pid,
@@ -1159,7 +1159,7 @@ bool FindRemoteXAudioTrace(HANDLE process, DWORD pid,
   for (const RemoteHookModule& module : modules) {
     uint32_t export_rva = 0;
     if (!ResolveRemotePeExportRva(
-            process, module, fushi_voice_hook::kXAudioTraceExportName,
+            process, module, my_comic_voice_hook::kXAudioTraceExportName,
             &export_rva)) {
       continue;
     }
@@ -1167,8 +1167,8 @@ bool FindRemoteXAudioTrace(HANDLE process, DWORD pid,
     XAudioTraceHeaderSnapshot header;
     if (!RemoteModuleAddress(module, export_rva, sizeof(header), &address) ||
         !ReadRemoteExact(process, address, &header, sizeof(header)) ||
-        header.magic != fushi_voice_hook::kXAudioTraceMagic ||
-        header.version != fushi_voice_hook::kXAudioTraceVersion) {
+        header.magic != my_comic_voice_hook::kXAudioTraceMagic ||
+        header.version != my_comic_voice_hook::kXAudioTraceVersion) {
       continue;
     }
     *found_module = module;
@@ -1200,7 +1200,7 @@ bool FindRemoteLeafD3DTrace(HANDLE process, DWORD pid,
   for (const RemoteHookModule& module : modules) {
     uint32_t export_rva = 0;
     if (!ResolveRemotePeExportRva(
-            process, module, fushi_voice_hook::kLeafD3DTraceExportName,
+            process, module, my_comic_voice_hook::kLeafD3DTraceExportName,
             &export_rva)) {
       continue;
     }
@@ -1208,8 +1208,8 @@ bool FindRemoteLeafD3DTrace(HANDLE process, DWORD pid,
     LeafD3DTraceHeaderSnapshot header;
     if (!RemoteModuleAddress(module, export_rva, sizeof(header), &address) ||
         !ReadRemoteExact(process, address, &header, sizeof(header)) ||
-        header.magic != fushi_voice_hook::kLeafD3DTraceMagic ||
-        header.version != fushi_voice_hook::kLeafD3DTraceVersion) {
+        header.magic != my_comic_voice_hook::kLeafD3DTraceMagic ||
+        header.version != my_comic_voice_hook::kLeafD3DTraceVersion) {
       continue;
     }
     *found_module = module;
@@ -1246,7 +1246,7 @@ bool FindRemoteHunexGgeTrace(HANDLE process, DWORD pid,
   for (const RemoteHookModule& module : modules) {
     uint32_t export_rva = 0;
     if (!ResolveRemotePeExportRva(
-            process, module, fushi_voice_hook::kHunexGgeTraceExportName,
+            process, module, my_comic_voice_hook::kHunexGgeTraceExportName,
             &export_rva)) {
       continue;
     }
@@ -1254,8 +1254,8 @@ bool FindRemoteHunexGgeTrace(HANDLE process, DWORD pid,
     HunexGgeTraceHeaderSnapshot header;
     if (!RemoteModuleAddress(module, export_rva, sizeof(header), &address) ||
         !ReadRemoteExact(process, address, &header, sizeof(header)) ||
-        header.magic != fushi_voice_hook::kHunexGgeTraceMagic ||
-        header.version != fushi_voice_hook::kHunexGgeTraceVersion) {
+        header.magic != my_comic_voice_hook::kHunexGgeTraceMagic ||
+        header.version != my_comic_voice_hook::kHunexGgeTraceVersion) {
       continue;
     }
     ++valid_candidates;
@@ -1279,7 +1279,7 @@ bool FindRemoteHunexGgeTrace(HANDLE process, DWORD pid,
 }
 
 const char* HunexGgeTraceKindName(uint32_t kind) {
-  using Kind = fushi_voice_hook::HunexGgeTraceKind;
+  using Kind = my_comic_voice_hook::HunexGgeTraceKind;
   switch (static_cast<Kind>(kind)) {
     case Kind::kDraw: return "draw";
     case Kind::kGlyphDirectFirst: return "glyph_direct_first";
@@ -1300,7 +1300,7 @@ const char* HunexGgeTraceKindName(uint32_t kind) {
 }
 
 const char* HunexGgeProjectionStageName(uint32_t stage) {
-  using Stage = fushi_voice_hook::HunexGgeProjectionTraceStage;
+  using Stage = my_comic_voice_hook::HunexGgeProjectionTraceStage;
   switch (static_cast<Stage>(stage)) {
     case Stage::kWrapper: return "wrapper";
     case Stage::kCompositor: return "compositor";
@@ -1312,7 +1312,7 @@ const char* HunexGgeProjectionStageName(uint32_t stage) {
 }
 
 const char* HunexGgeProjectionFailureName(int32_t failure) {
-  using Failure = fushi_voice_hook::HunexGgeProjectionTraceFailure;
+  using Failure = my_comic_voice_hook::HunexGgeProjectionTraceFailure;
   switch (static_cast<Failure>(failure)) {
     case Failure::kNone: return "none";
     case Failure::kWrapperStoryExpired: return "wrapper_story_expired";
@@ -1371,70 +1371,70 @@ const char* HunexGgeProjectionFailureName(int32_t failure) {
 
 void PrintHunexGgeScannerStatus(uint32_t status) {
   constexpr uint32_t kKnownStatus =
-      fushi_voice_hook::kHunexGgeTraceScannerProfileMatched |
-      fushi_voice_hook::kHunexGgeTraceScannerPe64 |
-      fushi_voice_hook::kHunexGgeTraceScannerDrawUnique |
-      fushi_voice_hook::kHunexGgeTraceScannerGlyphUnique |
-      fushi_voice_hook::kHunexGgeTraceScannerInputUnique |
-      fushi_voice_hook::kHunexGgeTraceScannerDrawCallsValid |
-      fushi_voice_hook::kHunexGgeTraceScannerInputCallsValid |
-      fushi_voice_hook::kHunexGgeTraceScannerHooksReady |
-      fushi_voice_hook::kHunexGgeTraceScannerRenderItemCallValid |
-      fushi_voice_hook::kHunexGgeTraceScannerCursorTransformValid |
-      fushi_voice_hook::kHunexGgeTraceScannerBodySubmitValid |
-      fushi_voice_hook::kHunexGgeTraceScannerSurfaceComposeUnique |
-      fushi_voice_hook::kHunexGgeTraceScannerSurfaceComposeCallsValid |
-      fushi_voice_hook::kHunexGgeTraceScannerSurfaceComposeHooksReady |
-      fushi_voice_hook::kHunexGgeTraceScannerProjectionEntriesUnique |
-      fushi_voice_hook::kHunexGgeTraceScannerProjectionGraphValid |
-      fushi_voice_hook::kHunexGgeTraceScannerProjectionHooksReady;
+      my_comic_voice_hook::kHunexGgeTraceScannerProfileMatched |
+      my_comic_voice_hook::kHunexGgeTraceScannerPe64 |
+      my_comic_voice_hook::kHunexGgeTraceScannerDrawUnique |
+      my_comic_voice_hook::kHunexGgeTraceScannerGlyphUnique |
+      my_comic_voice_hook::kHunexGgeTraceScannerInputUnique |
+      my_comic_voice_hook::kHunexGgeTraceScannerDrawCallsValid |
+      my_comic_voice_hook::kHunexGgeTraceScannerInputCallsValid |
+      my_comic_voice_hook::kHunexGgeTraceScannerHooksReady |
+      my_comic_voice_hook::kHunexGgeTraceScannerRenderItemCallValid |
+      my_comic_voice_hook::kHunexGgeTraceScannerCursorTransformValid |
+      my_comic_voice_hook::kHunexGgeTraceScannerBodySubmitValid |
+      my_comic_voice_hook::kHunexGgeTraceScannerSurfaceComposeUnique |
+      my_comic_voice_hook::kHunexGgeTraceScannerSurfaceComposeCallsValid |
+      my_comic_voice_hook::kHunexGgeTraceScannerSurfaceComposeHooksReady |
+      my_comic_voice_hook::kHunexGgeTraceScannerProjectionEntriesUnique |
+      my_comic_voice_hook::kHunexGgeTraceScannerProjectionGraphValid |
+      my_comic_voice_hook::kHunexGgeTraceScannerProjectionHooksReady;
   bool emitted = false;
   printf(" scanner=0x%08x{", status);
   const auto emit = [&emitted](const char* name) {
     printf("%s%s", emitted ? "," : "", name);
     emitted = true;
   };
-  if ((status & fushi_voice_hook::kHunexGgeTraceScannerProfileMatched) != 0)
+  if ((status & my_comic_voice_hook::kHunexGgeTraceScannerProfileMatched) != 0)
     emit("profile_matched");
-  if ((status & fushi_voice_hook::kHunexGgeTraceScannerPe64) != 0)
+  if ((status & my_comic_voice_hook::kHunexGgeTraceScannerPe64) != 0)
     emit("pe64");
-  if ((status & fushi_voice_hook::kHunexGgeTraceScannerDrawUnique) != 0)
+  if ((status & my_comic_voice_hook::kHunexGgeTraceScannerDrawUnique) != 0)
     emit("draw_unique");
-  if ((status & fushi_voice_hook::kHunexGgeTraceScannerGlyphUnique) != 0)
+  if ((status & my_comic_voice_hook::kHunexGgeTraceScannerGlyphUnique) != 0)
     emit("glyph_unique");
-  if ((status & fushi_voice_hook::kHunexGgeTraceScannerInputUnique) != 0)
+  if ((status & my_comic_voice_hook::kHunexGgeTraceScannerInputUnique) != 0)
     emit("input_unique");
-  if ((status & fushi_voice_hook::kHunexGgeTraceScannerDrawCallsValid) != 0)
+  if ((status & my_comic_voice_hook::kHunexGgeTraceScannerDrawCallsValid) != 0)
     emit("draw_calls_valid");
-  if ((status & fushi_voice_hook::kHunexGgeTraceScannerInputCallsValid) != 0)
+  if ((status & my_comic_voice_hook::kHunexGgeTraceScannerInputCallsValid) != 0)
     emit("input_calls_valid");
-  if ((status & fushi_voice_hook::kHunexGgeTraceScannerHooksReady) != 0)
+  if ((status & my_comic_voice_hook::kHunexGgeTraceScannerHooksReady) != 0)
     emit("hooks_ready");
   if ((status &
-       fushi_voice_hook::kHunexGgeTraceScannerRenderItemCallValid) != 0)
+       my_comic_voice_hook::kHunexGgeTraceScannerRenderItemCallValid) != 0)
     emit("render_item_call_valid");
   if ((status &
-       fushi_voice_hook::kHunexGgeTraceScannerCursorTransformValid) != 0)
+       my_comic_voice_hook::kHunexGgeTraceScannerCursorTransformValid) != 0)
     emit("cursor_transform_valid");
-  if ((status & fushi_voice_hook::kHunexGgeTraceScannerBodySubmitValid) != 0)
+  if ((status & my_comic_voice_hook::kHunexGgeTraceScannerBodySubmitValid) != 0)
     emit("body_submit_valid");
   if ((status &
-       fushi_voice_hook::kHunexGgeTraceScannerSurfaceComposeUnique) != 0)
+       my_comic_voice_hook::kHunexGgeTraceScannerSurfaceComposeUnique) != 0)
     emit("surface_compose_unique");
   if ((status &
-       fushi_voice_hook::kHunexGgeTraceScannerSurfaceComposeCallsValid) != 0)
+       my_comic_voice_hook::kHunexGgeTraceScannerSurfaceComposeCallsValid) != 0)
     emit("surface_compose_calls_valid");
   if ((status &
-       fushi_voice_hook::kHunexGgeTraceScannerSurfaceComposeHooksReady) != 0)
+       my_comic_voice_hook::kHunexGgeTraceScannerSurfaceComposeHooksReady) != 0)
     emit("surface_compose_hooks_ready");
   if ((status &
-       fushi_voice_hook::kHunexGgeTraceScannerProjectionEntriesUnique) != 0)
+       my_comic_voice_hook::kHunexGgeTraceScannerProjectionEntriesUnique) != 0)
     emit("projection_entries_unique");
   if ((status &
-       fushi_voice_hook::kHunexGgeTraceScannerProjectionGraphValid) != 0)
+       my_comic_voice_hook::kHunexGgeTraceScannerProjectionGraphValid) != 0)
     emit("projection_graph_valid");
   if ((status &
-       fushi_voice_hook::kHunexGgeTraceScannerProjectionHooksReady) != 0)
+       my_comic_voice_hook::kHunexGgeTraceScannerProjectionHooksReady) != 0)
     emit("projection_hooks_ready");
   const uint32_t unknown = status & ~kKnownStatus;
   if (unknown != 0) {
@@ -1447,21 +1447,21 @@ void PrintHunexGgeScannerStatus(uint32_t status) {
 
 const char* HunexGgeCaptureQuarantineReasonName(uint32_t reason) {
   switch (reason) {
-    case fushi_voice_hook::kHunexGgeTraceCaptureQuarantineNone:
+    case my_comic_voice_hook::kHunexGgeTraceCaptureQuarantineNone:
       return "none";
-    case fushi_voice_hook::
+    case my_comic_voice_hook::
         kHunexGgeTraceCaptureQuarantineReentrantCallback:
       return "reentrant_callback";
-    case fushi_voice_hook::
+    case my_comic_voice_hook::
         kHunexGgeTraceCaptureQuarantineInvalidRenderThreadId:
       return "invalid_render_tid";
-    case fushi_voice_hook::
+    case my_comic_voice_hook::
         kHunexGgeTraceCaptureQuarantineRenderThreadConflict:
       return "render_tid_conflict";
-    case fushi_voice_hook::
+    case my_comic_voice_hook::
         kHunexGgeTraceCaptureQuarantineLineIdentityOrFenceInvalid:
       return "line_identity_or_fence_invalid";
-    case fushi_voice_hook::
+    case my_comic_voice_hook::
         kHunexGgeTraceCaptureQuarantineSlotSequenceOverflow:
       return "slot_sequence_overflow";
     default:
@@ -1471,33 +1471,33 @@ const char* HunexGgeCaptureQuarantineReasonName(uint32_t reason) {
 
 void PrintHunexGgeLookupGate(uint32_t gate_mask) {
   constexpr uint32_t kKnownGateMask =
-      fushi_voice_hook::kHunexGgeTraceLookupRequested |
-      fushi_voice_hook::kHunexGgeTraceLookupExactProfileAdmitted |
-      fushi_voice_hook::kHunexGgeTraceLookupInputHookReady |
-      fushi_voice_hook::kHunexGgeTraceLookupShieldReady |
-      fushi_voice_hook::kHunexGgeTraceLookupCaptureQuarantined |
-      fushi_voice_hook::kHunexGgeTraceLookupInputThreadConflict;
+      my_comic_voice_hook::kHunexGgeTraceLookupRequested |
+      my_comic_voice_hook::kHunexGgeTraceLookupExactProfileAdmitted |
+      my_comic_voice_hook::kHunexGgeTraceLookupInputHookReady |
+      my_comic_voice_hook::kHunexGgeTraceLookupShieldReady |
+      my_comic_voice_hook::kHunexGgeTraceLookupCaptureQuarantined |
+      my_comic_voice_hook::kHunexGgeTraceLookupInputThreadConflict;
   bool emitted = false;
   printf(" lookup_gate=0x%08x{", gate_mask);
   const auto emit = [&emitted](const char* name) {
     printf("%s%s", emitted ? "," : "", name);
     emitted = true;
   };
-  if ((gate_mask & fushi_voice_hook::kHunexGgeTraceLookupRequested) != 0u)
+  if ((gate_mask & my_comic_voice_hook::kHunexGgeTraceLookupRequested) != 0u)
     emit("requested");
   if ((gate_mask &
-       fushi_voice_hook::kHunexGgeTraceLookupExactProfileAdmitted) != 0u)
+       my_comic_voice_hook::kHunexGgeTraceLookupExactProfileAdmitted) != 0u)
     emit("profile_admitted");
-  if ((gate_mask & fushi_voice_hook::kHunexGgeTraceLookupInputHookReady) !=
+  if ((gate_mask & my_comic_voice_hook::kHunexGgeTraceLookupInputHookReady) !=
       0u)
     emit("input_hook_ready");
-  if ((gate_mask & fushi_voice_hook::kHunexGgeTraceLookupShieldReady) != 0u)
+  if ((gate_mask & my_comic_voice_hook::kHunexGgeTraceLookupShieldReady) != 0u)
     emit("shield_ready");
   if ((gate_mask &
-       fushi_voice_hook::kHunexGgeTraceLookupCaptureQuarantined) != 0u)
+       my_comic_voice_hook::kHunexGgeTraceLookupCaptureQuarantined) != 0u)
     emit("capture_quarantined");
   if ((gate_mask &
-       fushi_voice_hook::kHunexGgeTraceLookupInputThreadConflict) != 0u)
+       my_comic_voice_hook::kHunexGgeTraceLookupInputThreadConflict) != 0u)
     emit("input_thread_conflict");
   const uint32_t unknown = gate_mask & ~kKnownGateMask;
   if (unknown != 0u) {
@@ -1526,7 +1526,7 @@ void PrintHunexGgeTraceWords(const char* label,
 }
 
 void PrintHunexGgeTraceEvent(
-    const fushi_voice_hook::HunexGgeTraceEvent& event) {
+    const my_comic_voice_hook::HunexGgeTraceEvent& event) {
   printf(
       "hunex_gge seq=%llu ts=%llu draw=%llu kind=%s tid=%u caller=%08x "
       "text_hash=%016llx units=%u/%u glyph_ordinal=%u utf16_index=%u "
@@ -1575,7 +1575,7 @@ void PrintHunexGgeTraceEvent(
       event.output_words[22], advance_23, advance_24, advance_25,
       static_cast<int32_t>(event.render_item_words[6]),
       static_cast<int32_t>(event.render_item_words[7]));
-  using Kind = fushi_voice_hook::HunexGgeTraceKind;
+  using Kind = my_comic_voice_hook::HunexGgeTraceKind;
   const Kind kind = static_cast<Kind>(event.kind);
   if (kind == Kind::kRenderItemBodyUncorrelated) {
     // BUG-2133：候选计数打在失败码旁边。stable=0&invalid=0 且 selected_failure=6
@@ -1685,7 +1685,7 @@ void PrintHunexGgeTraceEvent(
 }
 
 const char* XAudioTraceKindName(uint32_t kind) {
-  using Kind = fushi_voice_hook::XAudioTraceEventKind;
+  using Kind = my_comic_voice_hook::XAudioTraceEventKind;
   switch (static_cast<Kind>(kind)) {
     case Kind::kCreate: return "create";
     case Kind::kSubmit: return "submit";
@@ -1702,7 +1702,7 @@ const char* XAudioTraceKindName(uint32_t kind) {
 }
 
 const char* XAudioTraceOutcomeName(uint32_t outcome) {
-  using Outcome = fushi_voice_hook::XAudioTraceOutcome;
+  using Outcome = my_comic_voice_hook::XAudioTraceOutcome;
   switch (static_cast<Outcome>(outcome)) {
     case Outcome::kNone: return "none";
     case Outcome::kSucceeded: return "succeeded";
@@ -1742,7 +1742,7 @@ const char* XAudioTraceOutcomeName(uint32_t outcome) {
 }
 
 const char* XAudioTraceLookupName(uint32_t lookup) {
-  using Lookup = fushi_voice_hook::XAudioTraceLookupResult;
+  using Lookup = my_comic_voice_hook::XAudioTraceLookupResult;
   switch (static_cast<Lookup>(lookup)) {
     case Lookup::kNotAttempted: return "not_attempted";
     case Lookup::kRegistered: return "registered";
@@ -1751,7 +1751,7 @@ const char* XAudioTraceLookupName(uint32_t lookup) {
   return "unknown";
 }
 
-void PrintXAudioTraceFormat(const fushi_voice_hook::XAudioTraceFormat& format) {
+void PrintXAudioTraceFormat(const my_comic_voice_hook::XAudioTraceFormat& format) {
   if (format.present == 0) return;
   printf(
       " fmt={parse=%u enc=%u tag=0x%04x ch=%u rate=%u avg=%u align=%u "
@@ -1775,7 +1775,7 @@ void PrintXAudioTraceFormat(const fushi_voice_hook::XAudioTraceFormat& format) {
     printf(" extra=");
     const uint32_t copied = (std::min)(
         format.extra_bytes_copied,
-        fushi_voice_hook::kXAudioTraceExtraPrefixBytes);
+        my_comic_voice_hook::kXAudioTraceExtraPrefixBytes);
     for (uint32_t i = 0; i < copied; ++i) {
       printf("%02x", format.extra_prefix[i]);
     }
@@ -1787,7 +1787,7 @@ void PrintXAudioTraceFormat(const fushi_voice_hook::XAudioTraceFormat& format) {
            format.adpcm_coefficients_copied);
     const uint32_t copied = (std::min)(
         format.adpcm_coefficients_copied,
-        fushi_voice_hook::kXAudioTraceAdpcmCoefficientCount);
+        my_comic_voice_hook::kXAudioTraceAdpcmCoefficientCount);
     for (uint32_t i = 0; i < copied; ++i) {
       printf("%s%d:%d", i == 0 ? "[" : ",",
              format.adpcm_coefficients[i][0],
@@ -1797,7 +1797,7 @@ void PrintXAudioTraceFormat(const fushi_voice_hook::XAudioTraceFormat& format) {
   }
 }
 
-void PrintXAudioTraceEvent(const fushi_voice_hook::XAudioTraceEvent& event) {
+void PrintXAudioTraceEvent(const my_comic_voice_hook::XAudioTraceEvent& event) {
   printf(
       "seq=%llu ts=%llu tid=%llu kind=%s outcome=%s hr=0x%08x "
       "src=0x%llx engine=0x%llx gen=%llu qgen=%llu",
@@ -1810,7 +1810,7 @@ void PrintXAudioTraceEvent(const fushi_voice_hook::XAudioTraceEvent& event) {
       static_cast<unsigned long long>(event.engine),
       static_cast<unsigned long long>(event.source_generation),
       static_cast<unsigned long long>(event.queue_generation));
-  using Kind = fushi_voice_hook::XAudioTraceEventKind;
+  using Kind = my_comic_voice_hook::XAudioTraceEventKind;
   const Kind kind = static_cast<Kind>(event.kind);
   if (kind == Kind::kSubmit) {
     printf(
@@ -1831,7 +1831,7 @@ void PrintXAudioTraceEvent(const fushi_voice_hook::XAudioTraceEvent& event) {
            event.buffer_flags, XAudioTraceLookupName(event.detail0));
   } else if (kind == Kind::kCommit) {
     if (event.detail0 == static_cast<uint32_t>(
-                             fushi_voice_hook::XAudioTraceCommitPhase::kObserved)) {
+                             my_comic_voice_hook::XAudioTraceCommitPhase::kObserved)) {
       const uint64_t fence = static_cast<uint64_t>(event.detail1) |
                              (static_cast<uint64_t>(event.detail2) << 32);
       printf(" opset=%u phase=observed fence=%llu", event.operation_set,
@@ -1867,12 +1867,12 @@ bool DumpXAudioTrace(DWORD pid) {
                              &module_error)) {
     fprintf(stderr,
             "找不到 pid=%lu 中带 %s 数据导出的 live hook DLL：%lu\n",
-            pid, fushi_voice_hook::kXAudioTraceExportName, module_error);
+            pid, my_comic_voice_hook::kXAudioTraceExportName, module_error);
     CloseHandle(process);
     return false;
   }
   if (export_rva > module.image_size ||
-      sizeof(fushi_voice_hook::XAudioTraceBuffer) >
+      sizeof(my_comic_voice_hook::XAudioTraceBuffer) >
           static_cast<size_t>(module.image_size - export_rva) ||
       module.base > (std::numeric_limits<uintptr_t>::max)() - export_rva) {
     fprintf(stderr, "XAudio trace 导出 RVA 越过远程模块边界\n");
@@ -1880,11 +1880,11 @@ bool DumpXAudioTrace(DWORD pid) {
     return false;
   }
   const uintptr_t trace_address = module.base + export_rva;
-  if (header.magic != fushi_voice_hook::kXAudioTraceMagic ||
-      header.version != fushi_voice_hook::kXAudioTraceVersion ||
-      header.event_size != sizeof(fushi_voice_hook::XAudioTraceEvent) ||
-      header.slot_size != sizeof(fushi_voice_hook::XAudioTraceSlot) ||
-      header.capacity != fushi_voice_hook::kXAudioTraceCapacity ||
+  if (header.magic != my_comic_voice_hook::kXAudioTraceMagic ||
+      header.version != my_comic_voice_hook::kXAudioTraceVersion ||
+      header.event_size != sizeof(my_comic_voice_hook::XAudioTraceEvent) ||
+      header.slot_size != sizeof(my_comic_voice_hook::XAudioTraceSlot) ||
+      header.capacity != my_comic_voice_hook::kXAudioTraceCapacity ||
       header.next_sequence < 0 || header.dropped_busy < 0) {
     fprintf(stderr,
             "XAudio trace ABI 不匹配：magic=0x%08x version=%u event=%u "
@@ -1909,8 +1909,8 @@ bool DumpXAudioTrace(DWORD pid) {
   for (uint64_t expected = first; expected <= next; ++expected) {
     const uint64_t index = (expected - 1u) % header.capacity;
     const uint64_t slot_offset =
-        offsetof(fushi_voice_hook::XAudioTraceBuffer, slots) +
-        index * sizeof(fushi_voice_hook::XAudioTraceSlot);
+        offsetof(my_comic_voice_hook::XAudioTraceBuffer, slots) +
+        index * sizeof(my_comic_voice_hook::XAudioTraceSlot);
     if (slot_offset > (std::numeric_limits<uintptr_t>::max)() - trace_address) {
       ++unstable;
       continue;
@@ -1918,13 +1918,13 @@ bool DumpXAudioTrace(DWORD pid) {
     const uintptr_t slot_address =
         trace_address + static_cast<uintptr_t>(slot_offset);
     const uintptr_t sequence_address =
-        slot_address + offsetof(fushi_voice_hook::XAudioTraceSlot, event) +
-        offsetof(fushi_voice_hook::XAudioTraceEvent, sequence);
+        slot_address + offsetof(my_comic_voice_hook::XAudioTraceSlot, event) +
+        offsetof(my_comic_voice_hook::XAudioTraceEvent, sequence);
     LONG writing_before = 0;
     LONG writing_after = 0;
     uint64_t sequence_before = 0;
     uint64_t sequence_after = 0;
-    fushi_voice_hook::XAudioTraceSlot slot;
+    my_comic_voice_hook::XAudioTraceSlot slot;
     // Cross-process seqlock read: publication sequence, entire numeric slot,
     // then publication sequence again.  The try-claim flag closes the small
     // window before a wrapping writer invalidates the old sequence.
@@ -1970,21 +1970,21 @@ bool DumpLeafD3DTrace(DWORD pid) {
   if (!FindRemoteLeafD3DTrace(process, pid, &module, &export_rva, &header,
                               &module_error)) {
     fprintf(stderr, "live hook DLL export %s not found for pid=%lu: %lu\n",
-            fushi_voice_hook::kLeafD3DTraceExportName, pid, module_error);
+            my_comic_voice_hook::kLeafD3DTraceExportName, pid, module_error);
     CloseHandle(process);
     return false;
   }
   if (export_rva > module.image_size ||
-      sizeof(fushi_voice_hook::LeafD3DTraceBuffer) >
+      sizeof(my_comic_voice_hook::LeafD3DTraceBuffer) >
           static_cast<size_t>(module.image_size - export_rva) ||
       module.base > (std::numeric_limits<uintptr_t>::max)() - export_rva) {
     fprintf(stderr, "Leaf D3D trace export exceeds remote module bounds\n");
     CloseHandle(process);
     return false;
   }
-  if (header.event_size != sizeof(fushi_voice_hook::LeafD3DTraceEvent) ||
-      header.slot_size != sizeof(fushi_voice_hook::LeafD3DTraceSlot) ||
-      header.capacity != fushi_voice_hook::kLeafD3DTraceCapacity ||
+  if (header.event_size != sizeof(my_comic_voice_hook::LeafD3DTraceEvent) ||
+      header.slot_size != sizeof(my_comic_voice_hook::LeafD3DTraceSlot) ||
+      header.capacity != my_comic_voice_hook::kLeafD3DTraceCapacity ||
       header.next_sequence < 0 || header.dropped_busy < 0) {
     fprintf(stderr,
             "Leaf D3D trace ABI mismatch: magic=0x%08x version=%u event=%u "
@@ -2033,8 +2033,8 @@ bool DumpLeafD3DTrace(DWORD pid) {
   for (uint64_t expected = first; expected <= next; ++expected) {
     const uint64_t index = (expected - 1u) % header.capacity;
     const uint64_t slot_offset =
-        offsetof(fushi_voice_hook::LeafD3DTraceBuffer, slots) +
-        index * sizeof(fushi_voice_hook::LeafD3DTraceSlot);
+        offsetof(my_comic_voice_hook::LeafD3DTraceBuffer, slots) +
+        index * sizeof(my_comic_voice_hook::LeafD3DTraceSlot);
     if (slot_offset > (std::numeric_limits<uintptr_t>::max)() - trace_address) {
       ++unstable;
       continue;
@@ -2042,13 +2042,13 @@ bool DumpLeafD3DTrace(DWORD pid) {
     const uintptr_t slot_address =
         trace_address + static_cast<uintptr_t>(slot_offset);
     const uintptr_t sequence_address =
-        slot_address + offsetof(fushi_voice_hook::LeafD3DTraceSlot, event) +
-        offsetof(fushi_voice_hook::LeafD3DTraceEvent, sequence);
+        slot_address + offsetof(my_comic_voice_hook::LeafD3DTraceSlot, event) +
+        offsetof(my_comic_voice_hook::LeafD3DTraceEvent, sequence);
     LONG writing_before = 0;
     LONG writing_after = 0;
     uint64_t sequence_before = 0;
     uint64_t sequence_after = 0;
-    fushi_voice_hook::LeafD3DTraceSlot slot;
+    my_comic_voice_hook::LeafD3DTraceSlot slot;
     const bool stable =
         ReadRemoteExact(process, sequence_address, &sequence_before,
                         sizeof(sequence_before)) &&
@@ -2108,27 +2108,27 @@ bool DumpHunexGgeTrace(DWORD pid) {
       fprintf(stderr,
               "multiple live hook DLLs export valid %s data for pid=%lu; "
               "refusing an ambiguous trace\n",
-              fushi_voice_hook::kHunexGgeTraceExportName, pid);
+              my_comic_voice_hook::kHunexGgeTraceExportName, pid);
     } else {
       fprintf(stderr, "live hook DLL export %s not found for pid=%lu: %lu\n",
-              fushi_voice_hook::kHunexGgeTraceExportName, pid, module_error);
+              my_comic_voice_hook::kHunexGgeTraceExportName, pid, module_error);
     }
     CloseHandle(process);
     return false;
   }
   if (export_rva > module.image_size ||
-      sizeof(fushi_voice_hook::HunexGgeTraceBuffer) >
+      sizeof(my_comic_voice_hook::HunexGgeTraceBuffer) >
           static_cast<size_t>(module.image_size - export_rva) ||
       module.base > (std::numeric_limits<uintptr_t>::max)() - export_rva) {
     fprintf(stderr, "HUNEX/GGE trace export exceeds remote module bounds\n");
     CloseHandle(process);
     return false;
   }
-  if (header.magic != fushi_voice_hook::kHunexGgeTraceMagic ||
-      header.version != fushi_voice_hook::kHunexGgeTraceVersion ||
-      header.event_size != sizeof(fushi_voice_hook::HunexGgeTraceEvent) ||
-      header.slot_size != sizeof(fushi_voice_hook::HunexGgeTraceSlot) ||
-      header.capacity != fushi_voice_hook::kHunexGgeTraceCapacity ||
+  if (header.magic != my_comic_voice_hook::kHunexGgeTraceMagic ||
+      header.version != my_comic_voice_hook::kHunexGgeTraceVersion ||
+      header.event_size != sizeof(my_comic_voice_hook::HunexGgeTraceEvent) ||
+      header.slot_size != sizeof(my_comic_voice_hook::HunexGgeTraceSlot) ||
+      header.capacity != my_comic_voice_hook::kHunexGgeTraceCapacity ||
       header.next_sequence < 0 || header.dropped_busy < 0 ||
       header.draw_calls < 0 || header.glyph_calls < 0 ||
       header.render_item_calls < 0 ||
@@ -2261,8 +2261,8 @@ bool DumpHunexGgeTrace(DWORD pid) {
   for (uint64_t expected = first; expected <= next; ++expected) {
     const uint64_t index = (expected - 1u) % header.capacity;
     const uint64_t slot_offset =
-        offsetof(fushi_voice_hook::HunexGgeTraceBuffer, slots) +
-        index * sizeof(fushi_voice_hook::HunexGgeTraceSlot);
+        offsetof(my_comic_voice_hook::HunexGgeTraceBuffer, slots) +
+        index * sizeof(my_comic_voice_hook::HunexGgeTraceSlot);
     if (slot_offset > (std::numeric_limits<uintptr_t>::max)() - trace_address) {
       ++unstable;
       continue;
@@ -2270,13 +2270,13 @@ bool DumpHunexGgeTrace(DWORD pid) {
     const uintptr_t slot_address =
         trace_address + static_cast<uintptr_t>(slot_offset);
     const uintptr_t sequence_address =
-        slot_address + offsetof(fushi_voice_hook::HunexGgeTraceSlot, event) +
-        offsetof(fushi_voice_hook::HunexGgeTraceEvent, sequence);
+        slot_address + offsetof(my_comic_voice_hook::HunexGgeTraceSlot, event) +
+        offsetof(my_comic_voice_hook::HunexGgeTraceEvent, sequence);
     LONG writing_before = 0;
     LONG writing_after = 0;
     uint64_t sequence_before = 0;
     uint64_t sequence_after = 0;
-    fushi_voice_hook::HunexGgeTraceSlot slot;
+    my_comic_voice_hook::HunexGgeTraceSlot slot;
     const bool stable =
         ReadRemoteExact(process, sequence_address, &sequence_before,
                         sizeof(sequence_before)) &&
@@ -2308,7 +2308,7 @@ bool DumpHunexGgeTrace(DWORD pid) {
 int main(int argc, char** argv) {
   if (argc < 2) {
     fprintf(stderr,
-            "usage: fushi_voice_ring_probe <pid> [轮数=30] [间隔ms=500]\n"
+            "usage: my_comic_voice_ring_probe <pid> [轮数=30] [间隔ms=500]\n"
             "  或导出: <pid> --dump-text | --dump-text-events | --list-clips\n"
             "         <pid> --dump-xaudio-trace\n"
             "         <pid> --dump-leaf-d3d-trace\n"
@@ -2370,7 +2370,7 @@ int main(int argc, char** argv) {
   const uint8_t* ring =
       reinterpret_cast<const uint8_t*>(header) + sizeof(SharedHeader);
 
-  // Diagnostic equivalent of Fushi VoiceHookReader::SelectTextThread. This
+  // Diagnostic equivalent of MyComic VoiceHookReader::SelectTextThread. This
   // changes only the production IPC selector; text/resource events still have
   // to be produced by the live Luna/game hooks.
   if (select_text_thread) {
@@ -2396,7 +2396,7 @@ int main(int argc, char** argv) {
   }
   if (argc >= 3 && strcmp(argv[2], "--dump-layer") == 0) {
     // BUG-2136：注入侧发布的层空间行包围盒 + 宿主回传的原点，用来和实拍对账。
-    const auto line = fushi_voice_hook::ReadLookupLayerLine(header);
+    const auto line = my_comic_voice_hook::ReadLookupLayerLine(header);
     printf("layer line seq=%u valid=%d design=%ux%u glyphs=%u\n",
            line.seq, line.valid ? 1 : 0, line.design_w, line.design_h,
            line.glyph_count);
@@ -2404,7 +2404,7 @@ int main(int argc, char** argv) {
            line.right, line.bottom, line.right - line.left,
            line.bottom - line.top);
     int32_t ox = 0, oy = 0;
-    const bool has = fushi_voice_hook::ReadLookupLayerOrigin(header, &ox, &oy);
+    const bool has = my_comic_voice_hook::ReadLookupLayerOrigin(header, &ox, &oy);
     printf("  origin published=%d x=%d y=%d\n", has ? 1 : 0, ox, oy);
     UnmapViewOfFile(header);
     CloseHandle(mapping);
@@ -2413,11 +2413,11 @@ int main(int argc, char** argv) {
   if (argc >= 3 && strcmp(argv[2], "--dump-shield") == 0) {
     // BUG-2140：宿主与注入侧对 shield 的看法可能相反（宿主 request!=applied 卡死，
     // 注入侧却报 shield_ready）。直接读注入侧共享头里的原始字段，两边对账。
-    const auto req = fushi_voice_hook::ReadLookupShieldRequest(header);
+    const auto req = my_comic_voice_hook::ReadLookupShieldRequest(header);
     printf("shield request_seq=%u applied_seq=%u valid=%d owner_kind=%u\n",
-           fushi_voice_hook::AtomicLoadShared32(
+           my_comic_voice_hook::AtomicLoadShared32(
                const_cast<volatile uint32_t*>(&header->lookup_shield_request_seq)),
-           fushi_voice_hook::AtomicLoadShared32(
+           my_comic_voice_hook::AtomicLoadShared32(
                const_cast<volatile uint32_t*>(&header->lookup_shield_applied_seq)),
            req.valid ? 1 : 0, req.owner_kind);
     printf("  target_hwnd=0x%llx transaction_id=0x%llx active_buttons=0x%x allow_risk=%u\n",
@@ -2425,15 +2425,15 @@ int main(int argc, char** argv) {
            static_cast<unsigned long long>(req.transaction_id),
            req.active_buttons, req.allow_risk ? 1u : 0u);
     printf("  required=0x%x ready=0x%x observed=0x%x fault=0x%x status_flags=0x%x\n",
-           fushi_voice_hook::AtomicLoadShared32(
+           my_comic_voice_hook::AtomicLoadShared32(
                const_cast<volatile uint32_t*>(&header->lookup_shield_required_mask)),
-           fushi_voice_hook::AtomicLoadShared32(
+           my_comic_voice_hook::AtomicLoadShared32(
                const_cast<volatile uint32_t*>(&header->lookup_shield_ready_mask)),
-           fushi_voice_hook::AtomicLoadShared32(
+           my_comic_voice_hook::AtomicLoadShared32(
                const_cast<volatile uint32_t*>(&header->lookup_shield_observed_mask)),
-           fushi_voice_hook::AtomicLoadShared32(
+           my_comic_voice_hook::AtomicLoadShared32(
                const_cast<volatile uint32_t*>(&header->lookup_shield_fault_mask)),
-           fushi_voice_hook::AtomicLoadShared32(
+           my_comic_voice_hook::AtomicLoadShared32(
                const_cast<volatile uint32_t*>(&header->lookup_shield_status_flags)));
     UnmapViewOfFile(header);
     CloseHandle(mapping);
@@ -2569,11 +2569,11 @@ int main(int argc, char** argv) {
     // 只打 applicable 或 installed 为真的行：21 个 adapter 全打会把真正有信息的那几行
     // 淹掉；seq==0 时明确说"未上报"，不能与"一个都没认领"混为一谈。
     {
-      fushi_voice_hook::AdapterReportSlot reports[
-          fushi_voice_hook::kAdapterReportSlots] = {};
+      my_comic_voice_hook::AdapterReportSlot reports[
+          my_comic_voice_hook::kAdapterReportSlots] = {};
       uint32_t report_seq = 0;
-      const uint32_t n = fushi_voice_hook::ReadAdapterReports(
-          header, reports, fushi_voice_hook::kAdapterReportSlots, &report_seq);
+      const uint32_t n = my_comic_voice_hook::ReadAdapterReports(
+          header, reports, my_comic_voice_hook::kAdapterReportSlots, &report_seq);
       printf("\n     [adapters] seq=%u", report_seq);
       if (report_seq == 0) {
         printf(" (未上报：helper 未起或为 v22 之前的构建)");
@@ -2606,15 +2606,15 @@ int main(int argc, char** argv) {
     }
     if (twc > 0) {
       const uint32_t idx =
-          static_cast<uint32_t>((twc - 1) % fushi_voice_hook::kTextSlotCount);
+          static_cast<uint32_t>((twc - 1) % my_comic_voice_hook::kTextSlotCount);
       const uint8_t* tbase =
           reinterpret_cast<const uint8_t*>(header) + header->text_region_offset;
-      const auto* slot = reinterpret_cast<const fushi_voice_hook::TextSlot*>(
-          tbase + static_cast<size_t>(idx) * fushi_voice_hook::kTextSlotBytes);
+      const auto* slot = reinterpret_cast<const my_comic_voice_hook::TextSlot*>(
+          tbase + static_cast<size_t>(idx) * my_comic_voice_hook::kTextSlotBytes);
       if (slot->seq == twc && slot->byte_len > 0 && slot->is_utf8 == 0) {
         const wchar_t* w = reinterpret_cast<const wchar_t*>(
             reinterpret_cast<const uint8_t*>(slot) +
-            sizeof(fushi_voice_hook::TextSlot));
+            sizeof(my_comic_voice_hook::TextSlot));
         const int wlen = static_cast<int>(slot->byte_len / 2);
         char u8[700] = {0};
         WideCharToMultiByte(CP_UTF8, 0, w, wlen, u8, sizeof(u8) - 1, nullptr,
@@ -2624,7 +2624,7 @@ int main(int argc, char** argv) {
     }
     if (uwc > 0) {
       const auto* event = &header->unity_voice_events[
-          (uwc - 1) % fushi_voice_hook::kUnityVoiceEventCount];
+          (uwc - 1) % my_comic_voice_hook::kUnityVoiceEventCount];
       if (event->seq == uwc) {
         char clip_u8[512] = {0};
         char bundle_u8[1400] = {0};
@@ -2641,15 +2641,15 @@ int main(int argc, char** argv) {
     // 证明必须是 requested=0、request_seq==applied_seq、state=stopped，且新会话 diag 无
     // worker/Initialize 位，而不能只看 total==0。
     const uint32_t native_loopback_requested =
-        fushi_voice_hook::AtomicLoadShared32(
+        my_comic_voice_hook::AtomicLoadShared32(
             &header->native_loopback_requested);
     const uint32_t native_loopback_request_seq =
-        fushi_voice_hook::AtomicLoadShared32(
+        my_comic_voice_hook::AtomicLoadShared32(
             &header->native_loopback_request_seq);
     const uint32_t native_loopback_state =
-        fushi_voice_hook::AtomicLoadShared32(&header->native_loopback_state);
+        my_comic_voice_hook::AtomicLoadShared32(&header->native_loopback_state);
     const uint32_t native_loopback_applied_seq =
-        fushi_voice_hook::AtomicLoadShared32(
+        my_comic_voice_hook::AtomicLoadShared32(
             &header->native_loopback_applied_seq);
     printf(
         "     [lb] native_loopback_requested=%u request_seq=%u "

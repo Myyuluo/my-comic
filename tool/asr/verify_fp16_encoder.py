@@ -8,7 +8,7 @@
 
 用法（在仓库根）：
 
-    dart run fushi/tool/asr_convert_fp16.dart --in <encoder.onnx> --out <encoder.fp16.onnx>
+    dart run my_comic/tool/asr_convert_fp16.dart --in <encoder.onnx> --out <encoder.fp16.onnx>
     python tool/asr/verify_fp16_encoder.py --fp32 <encoder.onnx> --fp16 <encoder.fp16.onnx> \
         [--batch 32] [--frames 560] [--batch-dim N] [--time-dim T] [--runs 10]
 

@@ -13,12 +13,12 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$ROOT_DIR"
 
-echo "==> flutter pub get (fushi/)"
-(cd fushi && flutter pub get)
+echo "==> flutter pub get (my_comic/)"
+(cd my_comic && flutter pub get)
 
 echo "==> Applying pub-cache patches"
 bash ci/apply-patches.sh
 
 echo ""
 echo "Bootstrap complete. Build with, e.g.:"
-echo "  cd fushi && flutter build apk --release --split-per-abi"
+echo "  cd my_comic && flutter build apk --release --split-per-abi"

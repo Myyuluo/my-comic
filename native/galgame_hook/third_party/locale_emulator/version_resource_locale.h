@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: LGPL-3.0-or-later
-// Fushi modification, 2026-09-08. No Windows APIs or thread-local storage.
+// MyComic modification, 2026-09-08. No Windows APIs or thread-local storage.
 #pragma once
 #include <stddef.h>
 
-namespace fushi_locale_emulator {
+namespace my_comic_locale_emulator {
 namespace version_resource_detail {
 
 struct Block {
@@ -247,4 +247,4 @@ inline bool CopyVersionResourceWithLocale(const void* input,
   return true;
 }
 
-}  // namespace fushi_locale_emulator
+}  // namespace my_comic_locale_emulator

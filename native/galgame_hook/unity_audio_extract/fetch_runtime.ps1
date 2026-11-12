@@ -14,7 +14,7 @@ if ((Test-Path -LiteralPath $decoder) -and (Test-Path -LiteralPath $classdata)) 
 }
 
 $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) (
-  'fushi-unity-audio-runtime-' + [System.Guid]::NewGuid().ToString('N'))
+  'mycomic-unity-audio-runtime-' + [System.Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $tempRoot | Out-Null
 try {
   $vgmZip = Join-Path $tempRoot 'vgmstream-win64.zip'

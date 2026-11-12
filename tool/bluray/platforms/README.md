@@ -13,7 +13,7 @@
 | libplacebo | `7.360.1` |
 | Lua（仅 Android） | `5.2.4`，静态链接，`-Dlua=lua`（BUG-3325：用户 mpv 脚本要能跑） |
 
-`patches/android-build.patch` 即 fork 分支 `fushi/lua-enabled`
+`patches/android-build.patch` 即 fork 分支 `my_comic/lua-enabled`
 （`8a496a2`）相对基线的 `buildscripts/` 改动，与随包 jar 的云构建同源。
 
 `patches/mpv-gl-dovi-p5.patch` 保留纹理渲染器 `gl_video` 的 Dolby Vision
@@ -43,8 +43,8 @@ macOS SDK 探测覆盖 iOS 编译参数。iOS 没有 DiskArbitration，因此按
 验证本地产物时，向 CocoaPods / Flutter 构建进程同时传入：
 
 ```sh
-export FUSHI_LIBMPV_DARWIN_ARCHIVE=/absolute/path/to/frameworks.tar.gz
-export FUSHI_LIBMPV_DARWIN_SHA256=<SHA256SUMS中的对应值>
+export MYCOMIC_LIBMPV_DARWIN_ARCHIVE=/absolute/path/to/frameworks.tar.gz
+export MYCOMIC_LIBMPV_DARWIN_SHA256=<SHA256SUMS中的对应值>
 ```
 
 两份 Makefile 校验散列，并按内容散列隔离缓存。取消环境变量后恢复该插件已固定的
@@ -58,7 +58,7 @@ export FUSHI_LIBMPV_DARWIN_SHA256=<SHA256SUMS中的对应值>
 bash tool/bluray/platforms/build_android.sh
 ```
 
-详细目录参数见入口脚本。验证本地产物时，将 `FUSHI_LIBMPV_ANDROID_DIR`
+详细目录参数见入口脚本。验证本地产物时，将 `MYCOMIC_LIBMPV_ANDROID_DIR`
 指向包含四个 ABI 的 full jar 和 `sha256.json` 的输出目录；Gradle 校验散列
 后使用该目录，不需要先上传到 GitHub。未指定时使用 `third_party/media_kit_libs_android_video/native/` 下的固定随包产物。
 

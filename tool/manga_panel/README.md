@@ -20,7 +20,7 @@ of models derived from the dataset **provided that the use of the dataset is
 clearly indicated**, so the attribution travels with this manifest
 (`trainingData` in `model_manifest.json`,
 `kMangaPanelModelTrainingData*` in
-`packages/fushi_engine/lib/media/manga/panel_model_manifest.dart`) and with the
+`packages/my_comic_engine/lib/media/manga/panel_model_manifest.dart`) and with the
 `On-device models` table in the repository README — not only in the upstream
 model card.
 

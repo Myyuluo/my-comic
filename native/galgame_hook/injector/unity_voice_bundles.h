@@ -18,7 +18,7 @@
 #include <unordered_set>
 #include <vector>
 
-namespace fushi_voice_injector {
+namespace my_comic_voice_injector {
 
 inline std::wstring LowerAscii(const std::wstring& value) {
   std::wstring out = value;
@@ -108,4 +108,4 @@ class UnityVoiceNegativeCache {
   std::unordered_set<std::wstring> entries_;
 };
 
-}  // namespace fushi_voice_injector
+}  // namespace my_comic_voice_injector

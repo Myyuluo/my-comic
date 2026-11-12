@@ -1,4 +1,4 @@
-# Installs (or removes) Fushi's patched Flutter Windows engine in the Flutter
+# Installs (or removes) MyComic's patched Flutter Windows engine in the Flutter
 # SDK's artifact cache.
 #
 # Why: HDR video is composed inside Flutter's own swap chain, which needs a
@@ -49,7 +49,7 @@ function Expand-PublishedArtifacts {
   foreach ($key in @('engineVersion', 'patchVersion', 'url', 'sha256')) {
     if (-not $published.$key) { throw "$ManifestPath has no '$key'." }
   }
-  $work = Join-Path ([IO.Path]::GetTempPath()) "fushi-engine-$($published.patchVersion)"
+  $work = Join-Path ([IO.Path]::GetTempPath()) "mycomic-engine-$($published.patchVersion)"
   $zip = "$work.zip"
   if (Test-Path $work) { Remove-Item $work -Recurse -Force }
   # Invoke-WebRequest honours HTTPS_PROXY on PowerShell 7 and the system proxy
@@ -79,7 +79,7 @@ $engineVersion = (Get-Content (Join-Path $root 'bin\internal\engine.version') -R
 $modes = $Modes
 $files = @('flutter_windows.dll', 'flutter_windows.dll.lib', 'flutter_windows.dll.exp',
            'flutter_windows.dll.pdb', 'flutter_windows.h', 'flutter_texture_registrar.h')
-$marker = 'fushi-engine-overlay.json'
+$marker = 'mycomic-engine-overlay.json'
 
 foreach ($mode in $modes) {
   $dir = Join-Path $cache $mode

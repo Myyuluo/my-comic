@@ -19,7 +19,7 @@ try {
   for (const continuous of [false, true]) for (const vertical of [false, true]) {
     const width = 390, height = 844;
     const mode = continuous ? 'continuous' : 'paginated';
-    const engine = fs.readFileSync(path.join(os.tmpdir(), `fushi_full_engine_${mode}.js`), 'utf8');
+    const engine = fs.readFileSync(path.join(os.tmpdir(), `my_comic_full_engine_${mode}.js`), 'utf8');
     const css = `html,body{margin:0;padding:0} ${continuous ? '' : 'html{overflow:hidden}'} body{font-size:22px;line-height:1.8;writing-mode:${vertical ? 'vertical-rl' : 'horizontal-tb'};${continuous ? '' : `width:${width}px;height:${height}px;box-sizing:border-box;column-width:${vertical ? height : width}px;column-gap:0;column-fill:auto;overflow:hidden;`}}`;
     const config = {
       vnMode:false,continuousMode:continuous,initialFragment:null,initialCharOffset:-1,initialCharOffsetEnd:-1,initialProgress:0,
@@ -34,27 +34,27 @@ try {
       await page.setContent(`<html><head><meta name="viewport" content="width=device-width"><style>${css}</style></head><body>${text}</body></html>`);
       await page.evaluate(() => { window.__completions = 0; window.flutter_inappwebview = {callHandler(name) { if(name === 'onRestoreComplete') window.__completions++; return Promise.resolve(); }}; });
       await page.evaluate(engine);
-      await page.evaluate(c => window.__fushiEngine.install(c), {...config,...anchor});
+      await page.evaluate(c => window.__myComicEngine.install(c), {...config,...anchor});
       await page.waitForFunction(() => window.__completions > 0, {timeout:5000});
       await new Promise(r => setTimeout(r,150));
       return page;
     }
     const page = await open({});
     for (let i=0; i<4; i++) {
-      await page.evaluate(() => window.fushiReader.paginate('forward'));
+      await page.evaluate(() => window.myComicReader.paginate('forward'));
       await new Promise(r => setTimeout(r,100));
     }
-    const saved = await page.evaluate(() => ({detail:window.fushiProgressDetails(), progress:window.fushiReader.calculateProgress()}));
+    const saved = await page.evaluate(() => ({detail:window.myComicProgressDetails(), progress:window.myComicReader.calculateProgress()}));
     const offset = Number(saved.detail.split(',')[2]);
     assert(offset > 0, `${mode}/${vertical}: fixture did not leave chapter start`);
     const reopened = await open({initialCharOffset:offset,initialProgress:saved.progress});
-    const restored = await reopened.evaluate(() => ({detail:window.fushiProgressDetails(), scroll:[document.body.scrollLeft,document.body.scrollTop,window.scrollX,window.scrollY]}));
+    const restored = await reopened.evaluate(() => ({detail:window.myComicProgressDetails(), scroll:[document.body.scrollLeft,document.body.scrollTop,window.scrollX,window.scrollY]}));
         const geometry = await reopened.evaluate(offset => {
-      const r=window.fushiReader; const w=r.createWalker(); let node, n=0;
+      const r=window.myComicReader; const w=r.createWalker(); let node, n=0;
       while(node=w.nextNode()) { const size=r.countChars(node.textContent); if(n+size>offset) break; n+=size; }
       if(!node) return null;
       let i=0,k=0; const t=node.textContent;
-      while(i<t.length && k<offset-n) {if(window.fushiStudyUnits.isUnitEnd(t,i))k++; i+=t.codePointAt(i)>65535?2:1;}
+      while(i<t.length && k<offset-n) {if(window.myComicStudyUnits.isUnitEnd(t,i))k++; i+=t.codePointAt(i)>65535?2:1;}
       const range=document.createRange();range.setStart(node,i);range.collapse(true);
       const collapsed=range.getBoundingClientRect().toJSON();
       range.setEnd(node,Math.min(t.length,i+(t.codePointAt(i)>65535?2:1)));

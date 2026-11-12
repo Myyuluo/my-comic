@@ -57,7 +57,7 @@ foreach ($relativePath in $workflowPaths) {
   $content = Read-RepoFile $relativePath
 
   Require-Text $relativePath $content 'concurrency:' 'release publishers must serialize same-tag runs'
-  Require-Text $relativePath $content 'group: fushi-release-${{ github.workflow }}-${{ github.event_name == ''push'' && github.ref || github.event.release.tag_name || github.event.inputs.tag_name || github.sha }}' 'push publishes serialize per branch and same-tag dispatches serialize within the workflow'
+  Require-Text $relativePath $content 'group: mycomic-release-${{ github.workflow }}-${{ github.event_name == ''push'' && github.ref || github.event.release.tag_name || github.event.inputs.tag_name || github.sha }}' 'push publishes serialize per branch and same-tag dispatches serialize within the workflow'
   Require-Text $relativePath $content 'cancel-in-progress: false' 'a running publish must not be cancelled'
   Require-Text $relativePath $content 'fetch-depth: 0' 'release sequence uses full git history'
   Require-Text $relativePath $content 'RELEASE_SEQUENCE=$(bash tool/release_sequence.sh)' 'release sequence must come from the shared script'
@@ -118,7 +118,7 @@ foreach ($relativePath in $workflowPaths) {
     $failures.Add("${relativePath}: ROLLING_DEBUG_TAG='$tag' must end with 'debug-rolling' so the rolling debug release stays recognizable (TODO-1049)")
   }
   if ($tag -eq 'debug-rolling') {
-    $failures.Add("${relativePath}: ROLLING_DEBUG_TAG='debug-rolling' is frozen for the app.hibiki.reader family; Fushi must use a product-scoped rolling tag (BUG-1481)")
+    $failures.Add("${relativePath}: ROLLING_DEBUG_TAG='debug-rolling' is frozen for the app.hibiki.reader family; MyComic must use a product-scoped rolling tag (BUG-1481)")
   }
 }
 
@@ -126,14 +126,14 @@ foreach ($relativePath in $workflowPaths) {
 $desktopWorkflow = Read-RepoFile '.github/workflows/release-desktop.yml'
 Require-Text '.github/workflows/release-desktop.yml' $desktopWorkflow '--build-number "${{ steps.channel.outputs.release_sequence }}"' 'desktop build number must use the shared release sequence'
 Require-Text '.github/workflows/release-desktop.yml' $desktopWorkflow 'flutter build windows --release' 'desktop workflow must still publish Windows'
-Require-Text '.github/workflows/release-desktop.yml' $desktopWorkflow 'fushi-*-windows-setup.exe' 'desktop workflow must upload Windows installer assets'
+Require-Text '.github/workflows/release-desktop.yml' $desktopWorkflow 'mycomic-*-windows-setup.exe' 'desktop workflow must upload Windows installer assets'
 Require-Text '.github/workflows/release-desktop.yml' $desktopWorkflow 'Publish mirror update manifest (Windows assets)' 'Windows release assets must merge into the update manifest'
 Require-Text '.github/workflows/release-desktop.yml' $desktopWorkflow 'native/galgame_hook/tools/build_distribution.ps1 -RunTests' 'Windows releases must build the bundled offline galgame helper from the in-tree source'
-Require-Text '.github/workflows/release-desktop.yml' $desktopWorkflow 'install_into_bundle.ps1 -BundleDirectory "$PWD\fushi\build\windows\x64\runner\Release"' 'Windows release payload must unpack both helper architectures into the packaged Release bundle (BUG-1449)'
+Require-Text '.github/workflows/release-desktop.yml' $desktopWorkflow 'install_into_bundle.ps1 -BundleDirectory "$PWD\my_comic\build\windows\x64\runner\Release"' 'Windows release payload must unpack both helper architectures into the packaged Release bundle (BUG-1449)'
 
 $multiplatformWorkflow = Read-RepoFile '.github/workflows/build-multiplatform.yml'
 Require-Text '.github/workflows/build-multiplatform.yml' $multiplatformWorkflow 'native/galgame_hook/tools/build_distribution.ps1 -RunTests' 'Windows CI must exercise the same bundled helper build as release'
-Require-Text '.github/workflows/build-multiplatform.yml' $multiplatformWorkflow 'install_into_bundle.ps1 -BundleDirectory "$PWD\fushi\build\windows\x64\runner\Debug"' 'Windows debug bundle must exercise the same build-time helper unpack as release (BUG-1449)'
+Require-Text '.github/workflows/build-multiplatform.yml' $multiplatformWorkflow 'install_into_bundle.ps1 -BundleDirectory "$PWD\my_comic\build\windows\x64\runner\Debug"' 'Windows debug bundle must exercise the same build-time helper unpack as release (BUG-1449)'
 
 # BUG-1292: Magpie has no download path left, so the bundled slim archive is the
 # ONLY way window upscaling can ever install.

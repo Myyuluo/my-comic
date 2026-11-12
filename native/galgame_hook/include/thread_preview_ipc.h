@@ -1,5 +1,5 @@
-#ifndef FUSHI_THREAD_PREVIEW_IPC_H_
-#define FUSHI_THREAD_PREVIEW_IPC_H_
+#ifndef MYCOMIC_THREAD_PREVIEW_IPC_H_
+#define MYCOMIC_THREAD_PREVIEW_IPC_H_
 
 #include <windows.h>
 
@@ -7,7 +7,7 @@
 #include <cstdint>
 #include <cstring>
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 constexpr uint32_t kThreadPreviewCount = 64;
 constexpr uint32_t kThreadPreviewTextChars = 192;
@@ -166,6 +166,6 @@ inline bool TryReadThreadPreviewSnapshot(const ThreadPreviewSlot& slot,
   return false;
 }
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook
 
-#endif  // FUSHI_THREAD_PREVIEW_IPC_H_
+#endif  // MYCOMIC_THREAD_PREVIEW_IPC_H_

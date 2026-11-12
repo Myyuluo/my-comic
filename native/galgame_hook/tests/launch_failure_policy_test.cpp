@@ -9,16 +9,16 @@
 #include "launch_failure_policy.h"
 
 int main() {
-  using fushi_voice_hook::DecideLaunchedProcessDisposition;
-  using fushi_voice_hook::LaunchedProcessDisposition;
-  using fushi_voice_hook::LaunchFailureReason;
-  using fushi_voice_hook::LaunchFailureToken;
-  using fushi_voice_hook::NativeLoopbackAckTimeoutAbortsInjection;
+  using my_comic_voice_hook::DecideLaunchedProcessDisposition;
+  using my_comic_voice_hook::LaunchedProcessDisposition;
+  using my_comic_voice_hook::LaunchFailureReason;
+  using my_comic_voice_hook::LaunchFailureToken;
+  using my_comic_voice_hook::NativeLoopbackAckTimeoutAbortsInjection;
   // 这三个 using 是补上的：`#undef NDEBUG` 之前，用到它们的 assert 整条被预处理器
   // 删掉，编译器从没见过这些标识符。也就是说这些断言从来没有被编译过，更谈不上执行。
-  using fushi_voice_hook::LaunchedProcessIsSuspended;
-  using fushi_voice_hook::MustResumeAfterInjection;
-  using fushi_voice_hook::SuspendedStartupWaitBudgetMs;
+  using my_comic_voice_hook::LaunchedProcessIsSuspended;
+  using my_comic_voice_hook::MustResumeAfterInjection;
+  using my_comic_voice_hook::SuspendedStartupWaitBudgetMs;
 
   // 根因回归：CREATE_SUSPENDED 拉起的游戏在 ResumeThread 之前失败时，绝不允许把进程
   // 留在挂起态。旧实现对「就绪事件超时」「旧映射不可复用」这两条（都在 Resume 之前
@@ -55,7 +55,7 @@ int main() {
              true, false, LaunchFailureReason::kResumeFailed) ==
          LaunchedProcessDisposition::kTerminate);
 
-  // token 是与 Fushi 消费端共享的契约（Dart `GalHookInjectorFailure` 枚举名）。
+  // token 是与 MyComic 消费端共享的契约（Dart `GalHookInjectorFailure` 枚举名）。
   assert(std::strcmp(LaunchFailureToken(LaunchFailureReason::kReadyTimeout),
                      "readyTimeout") == 0);
   assert(std::strcmp(LaunchFailureToken(LaunchFailureReason::kBitnessMismatch),
@@ -99,7 +99,7 @@ int main() {
 
   // ---- 挂起窗口预算：绝不与宿主的整体超时同时到期 ----
   //
-  // Fushi 把 --wait-ms 与自己的握手超时同源下发（都是 readyTimeout=30000），并在到期时
+  // MyComic 把 --wait-ms 与自己的握手超时同源下发（都是 readyTimeout=30000），并在到期时
   // kill injector。若 injector 也拿满 30s 让游戏挂着等 hook，被 kill 时可能恰好还没
   // ResumeThread → 游戏永久挂起，且外部杀死时没有任何补偿代码会执行。
   assert(SuspendedStartupWaitBudgetMs(30000) == 5000);   // 上限封顶，留 25s 余量

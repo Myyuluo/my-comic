@@ -25,7 +25,7 @@
 #include <cwctype>
 #include <string>
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 constexpr const wchar_t* kAosArchivePattern = L"\\*.aos";
 constexpr size_t kAosHeaderProbeBytes = 64;
@@ -102,4 +102,4 @@ inline bool MatchesAosSfaProfile(const wchar_t*) {
   return MatchesAosSfaLayout(executable);
 }
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

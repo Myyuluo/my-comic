@@ -16,7 +16,7 @@
 static_assert(sizeof(void*) == 4, "This test exercises the real x86 stack ABI");
 
 namespace {
-using namespace fushi_voice_hook;
+using namespace my_comic_voice_hook;
 SiglusGlyphLayoutFn g_orig_SiglusGlyphLayout = nullptr;
 SiglusEightArgGlyphLayoutFn g_orig_SiglusEightArgGlyphLayout = nullptr;
 SiglusLegacyGlyphLayoutFn g_orig_SiglusLegacyGlyphLayout = nullptr;

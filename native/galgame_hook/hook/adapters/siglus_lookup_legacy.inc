@@ -1,24 +1,24 @@
 // Legacy family runtime reads are small bounded copies. The profile and sites
 // are immutable once admission publishes the profile pointer.
-namespace siglus_legacy_input = fushi_voice_hook::siglus_legacy_input_viewport;
-namespace siglus_legacy_live = fushi_voice_hook::siglus_legacy_runtime;
-namespace siglus_legacy_owner = fushi_voice_hook::siglus_legacy_owner;
+namespace siglus_legacy_input = my_comic_voice_hook::siglus_legacy_input_viewport;
+namespace siglus_legacy_live = my_comic_voice_hook::siglus_legacy_runtime;
+namespace siglus_legacy_owner = my_comic_voice_hook::siglus_legacy_owner;
 siglus_legacy_input::Sites g_siglus_legacy_input_sites;
-fushi_voice_hook::LegacyGlyphSites g_siglus_legacy_glyph_sites;
+my_comic_voice_hook::LegacyGlyphSites g_siglus_legacy_glyph_sites;
 siglus_legacy_owner::Sites g_siglus_legacy_owner_sites;
 SRWLOCK g_siglus_legacy_owner_lock = SRWLOCK_INIT;
 siglus_legacy_owner::Snapshot g_siglus_legacy_owner_snapshot;
 
-bool IsLegacySiglusLookup(const fushi_voice_hook::SiglusLookupProfile& profile) {
+bool IsLegacySiglusLookup(const my_comic_voice_hook::SiglusLookupProfile& profile) {
   return profile.glyph_abi ==
-      fushi_voice_hook::SiglusGlyphLayoutAbi::kStackSixteenArguments;
+      my_comic_voice_hook::SiglusGlyphLayoutAbi::kStackSixteenArguments;
 }
 
 bool ReadSiglusLegacyMemory(void*, uint32_t address, void* output, size_t bytes) {
   if (output == nullptr || bytes == 0 || bytes > 16) return false;
   __try {
     const void* source = reinterpret_cast<const void*>(address);
-    if (!fushi_voice_hook::exact_lookup::IsReadableSpan(source, bytes)) return false;
+    if (!my_comic_voice_hook::exact_lookup::IsReadableSpan(source, bytes)) return false;
     memcpy(output, source, bytes);
     return true;
   } __except (EXCEPTION_EXECUTE_HANDLER) { return false; }
@@ -33,7 +33,7 @@ bool ReadSiglusLegacySnapshot(siglus_legacy_live::Snapshot* snapshot) {
 }
 
 bool ReadSiglusLookupEngineView(HWND game,
-                                 fushi_voice_hook::SiglusLookupEngineView* view) {
+                                 my_comic_voice_hook::SiglusLookupEngineView* view) {
   if (view == nullptr) return false;
   *view = {};
   const auto* profile = ActiveSiglusLookupProfile();
@@ -62,7 +62,7 @@ bool ReadSiglusLookupEngineView(HWND game,
 }
 
 bool SiglusLookupViewAllowsInput(HWND game) {
-  fushi_voice_hook::SiglusLookupEngineView view;
+  my_comic_voice_hook::SiglusLookupEngineView view;
   return ReadSiglusLookupEngineView(game, &view);
 }
 
@@ -90,7 +90,7 @@ bool IsSiglusLookupGlyphOwned(void* self) {
   if (profile == nullptr) return false;
   if (IsEightArgSiglusLookup(*profile)) return IsSiglusEightArgGlyphOwned(self);
   if (profile->glyph_abi ==
-      fushi_voice_hook::SiglusGlyphLayoutAbi::kEcxTenArguments) return true;
+      my_comic_voice_hook::SiglusGlyphLayoutAbi::kEcxTenArguments) return true;
   // New ABI families must install their own occurrence-bound owner proof.
   if (!IsLegacySiglusLookup(*profile)) return false;
   if (!TryAcquireSRWLockShared(&g_siglus_legacy_owner_lock)) return false;

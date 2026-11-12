@@ -17,9 +17,9 @@
 
 #include "launcher_layout.h"
 
-using fushi_voice_hook::FindGameDirectoryBelow;
-using fushi_voice_hook::kLauncherLayoutMaxDepth;
-using fushi_voice_hook::LooksLikeLauncherLayout;
+using my_comic_voice_hook::FindGameDirectoryBelow;
+using my_comic_voice_hook::kLauncherLayoutMaxDepth;
+using my_comic_voice_hook::LooksLikeLauncherLayout;
 
 namespace {
 

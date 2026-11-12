@@ -20,7 +20,7 @@
 
 #include <cstdint>
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 // 屏幕坐标矩形（右/下开区间）。
 struct OverlayRect {
@@ -88,4 +88,4 @@ inline bool CardContainsScreenPoint(const OverlayRect& card, int32_t screen_x,
          screen_y >= card.top && screen_y < card.bottom;
 }
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

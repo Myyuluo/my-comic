@@ -30,7 +30,7 @@
 #include <cstdint>
 #include <cstring>
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 namespace smash_fzmedia {
 
 // x64 unwind-info CHAININFO flag.  <windows.h> only defines UNW_FLAG_CHAININFO
@@ -1046,4 +1046,4 @@ inline TextAnchorResult DeriveTextAnchors(const ImageView& image) {
 }
 
 }  // namespace smash_fzmedia
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

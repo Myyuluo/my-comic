@@ -3,7 +3,7 @@
 
 void CaptureSiglusLookupGlyph(void* self, uint8_t result,
                               uintptr_t return_address,
-                              fushi_voice_hook::SiglusGlyphLayoutAbi abi) {
+                              my_comic_voice_hook::SiglusGlyphLayoutAbi abi) {
   if (self == nullptr ||
       !g_siglus_lookup_capture_enabled.load(std::memory_order_acquire)) return;
   const uintptr_t module = reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));
@@ -15,14 +15,14 @@ void CaptureSiglusLookupGlyph(void* self, uint8_t result,
   // every other text object stay out of the lookup line.
   const bool selection = profile->selection_glyph_return_rva != 0 &&
       caller == profile->selection_glyph_return_rva &&
-      abi == fushi_voice_hook::SiglusGlyphLayoutAbi::kEcxTenArguments;
+      abi == my_comic_voice_hook::SiglusGlyphLayoutAbi::kEcxTenArguments;
   if (!selection && caller != profile->dialogue_glyph_return_rva) return;
-  const bool eightarg = abi == fushi_voice_hook::SiglusGlyphLayoutAbi::kEcxEightArguments;
+  const bool eightarg = abi == my_comic_voice_hook::SiglusGlyphLayoutAbi::kEcxEightArguments;
   uint32_t ordinal = 0, count = 0;
-  fushi_voice_hook::siglus_eightarg_owner::Vector vector;
+  my_comic_voice_hook::siglus_eightarg_owner::Vector vector;
   if (eightarg) {
     if (!ReadSiglusEightArgGlyphOrdinal(self, &ordinal, &count, &vector)) return;
-  } else if (abi != fushi_voice_hook::SiglusGlyphLayoutAbi::kEcxTenArguments &&
+  } else if (abi != my_comic_voice_hook::SiglusGlyphLayoutAbi::kEcxTenArguments &&
              !IsSiglusLookupGlyphOwned(self)) return;
   if (result == 0) {
     // The admitted eight-argument wrapper stops at the first failed ordinal.
@@ -30,13 +30,13 @@ void CaptureSiglusLookupGlyph(void* self, uint8_t result,
     if (eightarg) PublishSiglusLookupGlyphInvalidation();
     return;
   }
-  const size_t size = fushi_voice_hook::SiglusGlyphRecordBytes(abi);
+  const size_t size = my_comic_voice_hook::SiglusGlyphRecordBytes(abi);
   if (size == 0 || size > 0x70u) return;
   __try {
     uint8_t bytes[0x70] = {};
     memcpy(bytes, self, size);
-    fushi_voice_hook::SiglusGlyphRecord glyph;
-    if (fushi_voice_hook::DecodeSiglusGlyphRecord(
+    my_comic_voice_hook::SiglusGlyphRecord glyph;
+    if (my_comic_voice_hook::DecodeSiglusGlyphRecord(
             abi, bytes, size, profile->viewport_width,
             profile->viewport_height, &glyph)) {
       if (eightarg) CaptureSiglusEightArgGlyphRecord(glyph, ordinal, count, vector);
@@ -44,11 +44,11 @@ void CaptureSiglusLookupGlyph(void* self, uint8_t result,
                                          glyph.extent,
                                          selection ? kSiglusLookupGlyphEventSelection
                                                    : kSiglusLookupGlyphEventBody);
-    } else if (abi == fushi_voice_hook::SiglusGlyphLayoutAbi::kEcxEightArguments) {
+    } else if (abi == my_comic_voice_hook::SiglusGlyphLayoutAbi::kEcxEightArguments) {
       PublishSiglusLookupGlyphInvalidation();
     }
   } __except (EXCEPTION_EXECUTE_HANDLER) {
-    if (abi == fushi_voice_hook::SiglusGlyphLayoutAbi::kEcxEightArguments)
+    if (abi == my_comic_voice_hook::SiglusGlyphLayoutAbi::kEcxEightArguments)
       PublishSiglusLookupGlyphInvalidation();
   }
 }
@@ -63,7 +63,7 @@ uint8_t __fastcall Detour_SiglusGlyphLayout(void* self, void*, uintptr_t arg1,
   const uint8_t result = original(self, arg1, arg2, arg3, arg4, arg5,
                                   arg6, arg7, arg8, arg9, arg10);
   CaptureSiglusLookupGlyph(self, result, caller,
-      fushi_voice_hook::SiglusGlyphLayoutAbi::kEcxTenArguments);
+      my_comic_voice_hook::SiglusGlyphLayoutAbi::kEcxTenArguments);
   return result;
 }
 
@@ -78,7 +78,7 @@ uint8_t __fastcall Detour_SiglusEightArgGlyphLayout(void* self, void*,
   const uint8_t result = original(self, arg1, arg2, arg3, arg4,
                                   arg5, arg6, arg7, arg8);
   CaptureSiglusLookupGlyph(self, result, caller,
-      fushi_voice_hook::SiglusGlyphLayoutAbi::kEcxEightArguments);
+      my_comic_voice_hook::SiglusGlyphLayoutAbi::kEcxEightArguments);
   return result;
 }
 
@@ -95,6 +95,6 @@ uint8_t __stdcall Detour_SiglusLegacyGlyphLayout(void* self, uintptr_t arg1,
   const uint8_t result = original(self, arg1, arg2, arg3, arg4, arg5,
       arg6, arg7, arg8, arg9, arg10, arg11, arg12, arg13, arg14, arg15);
   CaptureSiglusLookupGlyph(self, result, caller,
-      fushi_voice_hook::SiglusGlyphLayoutAbi::kStackSixteenArguments);
+      my_comic_voice_hook::SiglusGlyphLayoutAbi::kStackSixteenArguments);
   return result;
 }

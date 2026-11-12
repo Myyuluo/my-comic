@@ -3,9 +3,9 @@
 #include <cstdint>
 #include <limits>
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 inline constexpr wchar_t kLookupWheelSourceRequiredProperty[] =
-    L"Fushi.LookupWheelSource.Required.v1";
+    L"MyComic.LookupWheelSource.Required.v1";
 inline constexpr uint32_t kLookupWheelSourceMagic = 0x314c4857u;
 
 // Separate, fixed-width mapping: the existing voice/lookup ABI is unchanged.
@@ -95,8 +95,8 @@ inline bool WheelSourceName(DWORD pid, HANDLE process, wchar_t* name,
   if (!GetProcessTimes(process, &created, &exited, &kernel, &user)) return false;
   const uint64_t stamp = (static_cast<uint64_t>(created.dwHighDateTime) << 32) |
                          created.dwLowDateTime;
-  return swprintf_s(name, capacity, L"Local\\FushiLookupWheel_%lu_%016llx",
+  return swprintf_s(name, capacity, L"Local\\MyComicLookupWheel_%lu_%016llx",
                     static_cast<unsigned long>(pid),
                     static_cast<unsigned long long>(stamp)) > 0;
 }
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

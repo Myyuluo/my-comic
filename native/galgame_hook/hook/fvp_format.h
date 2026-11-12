@@ -28,7 +28,7 @@
 #include <cstdint>
 #include <cstring>
 
-namespace fushi_voice_hook::fvp {
+namespace my_comic_voice_hook::fvp {
 
 constexpr uint32_t kMaxHcbTrailerBytes = 64u * 1024u;
 constexpr uint32_t kMaxHcbSyscalls = 1024u;
@@ -166,4 +166,4 @@ inline bool IsVoiceResourceName(const char* name, size_t name_bytes) {
   return false;
 }
 
-}  // namespace fushi_voice_hook::fvp
+}  // namespace my_comic_voice_hook::fvp

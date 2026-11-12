@@ -3,7 +3,7 @@
 #include "siglus_legacy_glyph_sites.h"
 #include "siglus_legacy_input_viewport.h"
 
-namespace fushi_voice_hook::siglus_legacy_owner {
+namespace my_comic_voice_hook::siglus_legacy_owner {
 namespace input = siglus_legacy_input_viewport;
 namespace glyph = siglus_legacy_glyph;
 using siglus_family::Signature;
@@ -244,4 +244,4 @@ inline bool ContainsCurrentGlyph(const Snapshot& snapshot, uint32_t self,
       Read(reader, found->entry, kEntryGlyphs, &glyphs) && Same(glyphs, found->glyphs) &&
       RootCurrent(snapshot, reader);
 }
-}  // namespace fushi_voice_hook::siglus_legacy_owner
+}  // namespace my_comic_voice_hook::siglus_legacy_owner

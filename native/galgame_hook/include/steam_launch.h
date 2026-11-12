@@ -1,11 +1,11 @@
-#ifndef FUSHI_STEAM_LAUNCH_H_
-#define FUSHI_STEAM_LAUNCH_H_
+#ifndef MYCOMIC_STEAM_LAUNCH_H_
+#define MYCOMIC_STEAM_LAUNCH_H_
 
 #include <algorithm>
 #include <cwctype>
 #include <string>
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 enum class SteamLaunchStrategy {
   kDirectExecutable,
@@ -76,6 +76,6 @@ inline std::wstring BuildSteamRunUri(const std::wstring& app_id) {
   return L"steam://run/" + app_id;
 }
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook
 
-#endif  // FUSHI_STEAM_LAUNCH_H_
+#endif  // MYCOMIC_STEAM_LAUNCH_H_

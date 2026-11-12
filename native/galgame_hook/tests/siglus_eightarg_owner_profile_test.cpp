@@ -14,7 +14,7 @@ namespace input_fixture {
 #undef Check
 }
 namespace {
-using namespace fushi_voice_hook;
+using namespace my_comic_voice_hook;
 namespace o = siglus_eightarg_owner_profile;
 namespace g = siglus_eight_arg_glyph;
 namespace in = siglus_eightarg_input_viewport;

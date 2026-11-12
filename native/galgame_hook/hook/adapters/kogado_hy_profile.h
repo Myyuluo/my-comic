@@ -8,7 +8,7 @@
 
 #include "kogado_hy_core.h"
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 // `base` is a loaded PE32 module (or a synthetic image laid out by section).
 inline bool IsKogadoHyImage(const uint8_t* base, size_t mapped_size) {
@@ -75,4 +75,4 @@ inline bool MatchesKogadoHyProfile(const wchar_t* module_name) {
   return IsKogadoHyImage(base, nt->OptionalHeader.SizeOfImage);
 }
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

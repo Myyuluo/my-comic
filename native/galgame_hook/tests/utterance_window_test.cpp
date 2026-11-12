@@ -18,8 +18,8 @@
 
 #include "voice_hook_utterance_window.h"
 
-using fushi_voice_hook::UtteranceClipTiming;
-using fushi_voice_hook::UtteranceLowerBoundMs;
+using my_comic_voice_hook::UtteranceClipTiming;
+using my_comic_voice_hook::UtteranceLowerBoundMs;
 
 namespace {
 
@@ -88,7 +88,7 @@ int main() {
     }
     const int64_t text_ts = t0 + 100 * 120;
     ExpectEq(UtteranceLowerBoundMs(clips.data(), clips.size(), text_ts),
-             text_ts - fushi_voice_hook::kUtteranceBackMs,
+             text_ts - my_comic_voice_hook::kUtteranceBackMs,
              "realtime stream unchanged");
   }
 
@@ -116,19 +116,19 @@ int main() {
     const int64_t text_ts = t0 + 399 * 30;
     const int64_t lower =
         UtteranceLowerBoundMs(clips.data(), clips.size(), text_ts);
-    Expect(text_ts - lower <= fushi_voice_hook::kUtteranceMaxBackMs,
-           "max back cap", text_ts - lower, fushi_voice_hook::kUtteranceMaxBackMs);
+    Expect(text_ts - lower <= my_comic_voice_hook::kUtteranceMaxBackMs,
+           "max back cap", text_ts - lower, my_comic_voice_hook::kUtteranceMaxBackMs);
   }
 
   // ⑥ 边界：空输入 / 全部段都已在窗口内 —— 下界恒为 ts-200，且永不晚于 ts-200。
   {
     const int64_t text_ts = 1000000;
     ExpectEq(UtteranceLowerBoundMs(nullptr, 0, text_ts),
-             text_ts - fushi_voice_hook::kUtteranceBackMs, "empty input");
+             text_ts - my_comic_voice_hook::kUtteranceBackMs, "empty input");
     std::vector<UtteranceClipTiming> clips{
         {text_ts - 100, 125}, {text_ts - 20, 125}, {text_ts + 60, 125}};
     ExpectEq(UtteranceLowerBoundMs(clips.data(), clips.size(), text_ts),
-             text_ts - fushi_voice_hook::kUtteranceBackMs, "all inside window");
+             text_ts - my_comic_voice_hook::kUtteranceBackMs, "all inside window");
   }
 
   if (g_failures != 0) {

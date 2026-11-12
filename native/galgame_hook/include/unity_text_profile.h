@@ -1,9 +1,9 @@
-#ifndef FUSHI_UNITY_TEXT_PROFILE_H_
-#define FUSHI_UNITY_TEXT_PROFILE_H_
+#ifndef MYCOMIC_UNITY_TEXT_PROFILE_H_
+#define MYCOMIC_UNITY_TEXT_PROFILE_H_
 
 #include <cwchar>
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 // 旧 Unity TextMesh 逐字渲染器的行终止约定（引擎行为判据，不看 exe 名 / 哈希）。
 //
@@ -121,6 +121,6 @@ class UnityLegacyGlyphBatchDetector {
   bool latched_ = false;
 };
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook
 
-#endif  // FUSHI_UNITY_TEXT_PROFILE_H_
+#endif  // MYCOMIC_UNITY_TEXT_PROFILE_H_

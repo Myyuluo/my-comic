@@ -2,7 +2,7 @@
 // (both toolchain shapes, every missing piece, chained fragments, overflow),
 // plus voice-group / member-name classification.
 //
-// Optional: `fushi_cmvs_voice_test <cmvs64.exe>...` maps each file as an image
+// Optional: `my_comic_cmvs_voice_test <cmvs64.exe>...` maps each file as an image
 // and prints the resolved sites (local measurement only; CTest passes none).
 #undef NDEBUG
 #include <cassert>
@@ -12,7 +12,7 @@
 
 #include "cmvs_voice_core.h"
 
-namespace cv = fushi_voice_hook::cmvs_voice;
+namespace cv = my_comic_voice_hook::cmvs_voice;
 
 namespace {
 

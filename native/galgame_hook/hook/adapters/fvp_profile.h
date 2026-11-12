@@ -19,11 +19,11 @@
 #include "../fvp_format.h"
 #include "engine_dir_signature.h"
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 // 单个文件是否是自洽的 FVP HCB 脚本（有界读：头 4 字节 + trailer，trailer 最多 64 KiB）。
 inline bool IsFvpHcbFile(const std::wstring& path) {
-  namespace fvp = ::fushi_voice_hook::fvp;
+  namespace fvp = ::my_comic_voice_hook::fvp;
   uint64_t size = 0u;
   if (!engine_dir::FileSize(path, &size) || size < 16u ||
       size > 0xffffffffull) {
@@ -91,4 +91,4 @@ inline bool MatchesFvpProfile(const wchar_t*) {
   return MatchesFvpLayout(directory);
 }
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

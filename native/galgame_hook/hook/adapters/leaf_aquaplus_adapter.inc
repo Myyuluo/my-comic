@@ -33,7 +33,7 @@ volatile LONG g_leaf_identity_first_failure_tick = 0;
 volatile LONG g_leaf_identity_last_attempt_tick = 0;
 volatile LONG g_leaf_exact_binary_structure_state =
     0; // 0 unknown, +1 hydrated structure match, -1 reject
-std::atomic<const fushi_voice_hook::LeafAquaplusProfile *>
+std::atomic<const my_comic_voice_hook::LeafAquaplusProfile *>
     g_leaf_aquaplus_profile{nullptr};
 
 using LeafDrawPrimitiveUPFn = HRESULT(STDMETHODCALLTYPE *)(IDirect3DDevice9 *,
@@ -71,7 +71,7 @@ std::atomic<uint32_t> g_leaf_input_poller_owner_tid{0};
 // 它曾被记成一个没有清除边的 bool 闩：admitted 区间是 374 字节的 RVA 区间
 // （0x44a83e~0x44a9b4），WA2 的消息泵或任意二级线程碰一次就永久置位，之后整个进程
 // 剩余生命周期查词全废，用户只看到「点了没反应」。改成 worker 每 tick 比较
-// FushiLeafD3DTraceV1.input_poller_conflicts 这个单调计数的增量：干扰线程一停，
+// MyComicLeafD3DTraceV1.input_poller_conflicts 这个单调计数的增量：干扰线程一停，
 // 下一 tick 自动恢复；当前判定结果同时发布到 trace 的 input_poller_contended，
 // 让「点了没反应」在 ring_probe 里可诊断（共享 lookup_diag 的 32 位已全部分配完，
 // 新增一位需要扩 SharedHeader 布局，故落在本 profile 自己的数值 trace 上）。
@@ -80,7 +80,7 @@ std::atomic<bool> g_leaf_lookup_click_transaction_active{false};
 volatile LONG g_leaf_d3d_trace_writer = 0;
 
 constexpr size_t kLeafLookupTextUnits =
-    fushi_voice_hook::kLeafAquaplusLookupMaxTextUnits;
+    my_comic_voice_hook::kLeafAquaplusLookupMaxTextUnits;
 constexpr size_t kLeafLookupCandidateSlots = 16u;
 constexpr size_t kLeafPrivateTraversalSlots = 16u;
 constexpr size_t kLeafLookupClickEventSlots = 4u;
@@ -98,7 +98,7 @@ struct LeafLookupGeometry {
   int32_t viewport_width = 0;
   int32_t viewport_height = 0;
   wchar_t text[kLeafLookupTextUnits] = {};
-  fushi_voice_hook::LeafAquaplusLookupGlyph glyphs[kLeafLookupTextUnits] = {};
+  my_comic_voice_hook::LeafAquaplusLookupGlyph glyphs[kLeafLookupTextUnits] = {};
 };
 
 struct LeafLookupBatchCandidate {
@@ -111,7 +111,7 @@ struct LeafLookupBatchCandidate {
   int32_t viewport_y = 0;
   int32_t viewport_width = 0;
   int32_t viewport_height = 0;
-  fushi_voice_hook::LeafAquaplusLookupGlyph glyphs[kLeafLookupTextUnits] = {};
+  my_comic_voice_hook::LeafAquaplusLookupGlyph glyphs[kLeafLookupTextUnits] = {};
 };
 
 struct LeafLookupPayload {
@@ -120,7 +120,7 @@ struct LeafLookupPayload {
   uint64_t geometry_generation = 0;
   uint32_t text_units = 0;
   uint32_t char_index = 0;
-  fushi_voice_hook::LeafAquaplusLookupRect rect;
+  my_comic_voice_hook::LeafAquaplusLookupRect rect;
   int32_t client_width = 0;
   int32_t client_height = 0;
   wchar_t text[kLeafLookupTextUnits] = {};
@@ -152,7 +152,7 @@ uint64_t g_leaf_geometry_generation = 0;
 uint64_t g_leaf_selected_thread_id = 0;
 uint64_t g_leaf_selected_face_id = 0;
 bool g_leaf_replay_recent_trace_for_next_line = false;
-fushi_voice_hook::LeafAquaplusLookupShiftState g_leaf_lookup_shift_state;
+my_comic_voice_hook::LeafAquaplusLookupShiftState g_leaf_lookup_shift_state;
 wchar_t g_leaf_active_line[kLeafLookupTextUnits] = {};
 uint32_t g_leaf_active_line_units = 0;
 LeafLookupGeometry g_leaf_active_geometry;
@@ -170,13 +170,13 @@ uint64_t g_leaf_last_hit_identity = 0;
 ULONGLONG g_leaf_last_hit_tick = 0;
 
 // Mutated only by WA2's admitted GetAsyncKeyState poller.
-fushi_voice_hook::LeafAquaplusLookupClickSampleState
+my_comic_voice_hook::LeafAquaplusLookupClickSampleState
     g_leaf_lookup_click_sample_state;
 LeafLookupClickTarget g_leaf_lookup_click_read_target;
 LeafLookupPayload g_leaf_lookup_pending_click;
 bool g_leaf_lookup_pending_click_valid = false;
 uint64_t g_leaf_lookup_poller_activation_epoch = 0;
-fushi_voice_hook::LeafAquaplusSampledInputTailState
+my_comic_voice_hook::LeafAquaplusSampledInputTailState
     g_leaf_sampled_input_tail_state;
 std::atomic<uint8_t> g_leaf_sampled_input_latched_buttons{0};
 
@@ -195,7 +195,7 @@ HWND GetValidPublishedLeafSampledInputShieldPopup(HWND game) {
   if (game == nullptr)
     return nullptr;
   const HWND popup = reinterpret_cast<HWND>(GetPropW(
-      game, fushi_voice_hook::kLeafAquaplusSampledInputShieldWindowProperty));
+      game, my_comic_voice_hook::kLeafAquaplusSampledInputShieldWindowProperty));
   if (popup == nullptr || !IsWindow(game) || !IsWindow(popup) ||
       GetWindow(popup, GW_OWNER) != game) {
     return nullptr;
@@ -204,7 +204,7 @@ HWND GetValidPublishedLeafSampledInputShieldPopup(HWND game) {
   if (GetClassNameW(
           popup, class_name,
           static_cast<int>(sizeof(class_name) / sizeof(class_name[0]))) <= 0 ||
-      lstrcmpW(class_name, L"FushiGlobalLookupWindow") != 0) {
+      lstrcmpW(class_name, L"MyComicGlobalLookupWindow") != 0) {
     return nullptr;
   }
   return popup;
@@ -214,8 +214,8 @@ bool IsLeafSampledInputShieldReadyPublished(HWND game) {
   return game != nullptr &&
          reinterpret_cast<uintptr_t>(GetPropW(
              game,
-             fushi_voice_hook::kLeafAquaplusSampledInputShieldReadyProperty)) ==
-             fushi_voice_hook::kLeafAquaplusSampledInputShieldReadyValue;
+             my_comic_voice_hook::kLeafAquaplusSampledInputShieldReadyProperty)) ==
+             my_comic_voice_hook::kLeafAquaplusSampledInputShieldReadyValue;
 }
 
 void RevokeLeafSampledInputShieldReady(HWND game) {
@@ -224,21 +224,21 @@ void RevokeLeafSampledInputShieldReady(HWND game) {
     // a host racing through its Ready -> SetProp(Window) -> Ready validation
     // cannot commit a popup while this helper is tearing the contract down.
     RemovePropW(game,
-                fushi_voice_hook::kLeafAquaplusSampledInputShieldReadyProperty);
+                my_comic_voice_hook::kLeafAquaplusSampledInputShieldReadyProperty);
     RemovePropW(
-        game, fushi_voice_hook::kLeafAquaplusSampledInputShieldWindowProperty);
+        game, my_comic_voice_hook::kLeafAquaplusSampledInputShieldWindowProperty);
     RemovePropW(
         game,
-        fushi_voice_hook::kLeafAquaplusSampledInputShieldTailRequestProperty);
+        my_comic_voice_hook::kLeafAquaplusSampledInputShieldTailRequestProperty);
     RemovePropW(
-        game, fushi_voice_hook::kLeafAquaplusSampledInputShieldTailAckProperty);
+        game, my_comic_voice_hook::kLeafAquaplusSampledInputShieldTailAckProperty);
   }
   g_leaf_sampled_input_game_window.store(nullptr, std::memory_order_release);
   g_leaf_sampled_input_last_health_tick = 0;
   if (g_header != nullptr) {
     InterlockedAnd(reinterpret_cast<volatile LONG *>(&g_header->lookup_diag),
                    static_cast<LONG>(
-                       ~fushi_voice_hook::kLookupDiagSampledInputShieldReady));
+                       ~my_comic_voice_hook::kLookupDiagSampledInputShieldReady));
   }
 }
 
@@ -261,7 +261,7 @@ bool RefreshLeafSampledInputPropertyWindow() {
   if (previous != nullptr && IsWindow(previous)) {
     RemovePropW(
         previous,
-        fushi_voice_hook::kLeafAquaplusSampledInputShieldRequiredProperty);
+        my_comic_voice_hook::kLeafAquaplusSampledInputShieldRequiredProperty);
   }
   g_leaf_sampled_input_property_window = current;
   return true;
@@ -273,15 +273,15 @@ bool PublishLeafSampledInputShieldRequired() {
     return false;
   if (reinterpret_cast<uintptr_t>(GetPropW(
           game,
-          fushi_voice_hook::kLeafAquaplusSampledInputShieldRequiredProperty)) ==
-      fushi_voice_hook::kLeafAquaplusSampledInputShieldRequiredValue) {
+          my_comic_voice_hook::kLeafAquaplusSampledInputShieldRequiredProperty)) ==
+      my_comic_voice_hook::kLeafAquaplusSampledInputShieldRequiredValue) {
     return true;
   }
   return SetPropW(
              game,
-             fushi_voice_hook::kLeafAquaplusSampledInputShieldRequiredProperty,
+             my_comic_voice_hook::kLeafAquaplusSampledInputShieldRequiredProperty,
              reinterpret_cast<HANDLE>(
-                 fushi_voice_hook::
+                 my_comic_voice_hook::
                      kLeafAquaplusSampledInputShieldRequiredValue)) != FALSE;
 }
 
@@ -292,18 +292,18 @@ bool PublishLeafSampledInputShieldReady() {
   g_leaf_sampled_input_game_window.store(game, std::memory_order_release);
   if (reinterpret_cast<uintptr_t>(GetPropW(
           game,
-          fushi_voice_hook::kLeafAquaplusSampledInputShieldReadyProperty)) !=
-          fushi_voice_hook::kLeafAquaplusSampledInputShieldReadyValue &&
+          my_comic_voice_hook::kLeafAquaplusSampledInputShieldReadyProperty)) !=
+          my_comic_voice_hook::kLeafAquaplusSampledInputShieldReadyValue &&
       !SetPropW(
-          game, fushi_voice_hook::kLeafAquaplusSampledInputShieldReadyProperty,
+          game, my_comic_voice_hook::kLeafAquaplusSampledInputShieldReadyProperty,
           reinterpret_cast<HANDLE>(
-              fushi_voice_hook::kLeafAquaplusSampledInputShieldReadyValue))) {
+              my_comic_voice_hook::kLeafAquaplusSampledInputShieldReadyValue))) {
     g_leaf_sampled_input_game_window.store(nullptr, std::memory_order_release);
     g_leaf_sampled_input_last_health_tick = 0;
     return false;
   }
   g_leaf_sampled_input_last_health_tick = GetTickCount64();
-  SetLeafLookupDiag(fushi_voice_hook::kLookupDiagSampledInputShieldReady);
+  SetLeafLookupDiag(my_comic_voice_hook::kLookupDiagSampledInputShieldReady);
   return true;
 }
 
@@ -653,7 +653,7 @@ bool IsLeafAquaplusProfileMatched() {
     // 所以只有**测量成功**才允许写缓存。重试有界：窗口用尽后照旧钉死，那时"读不到"
     // 才是个确定结论，而不是一次运气不好。
     SetXAudioDiagnostic2(
-        fushi_voice_hook::kXAudioDiag2LeafExecutableUnmeasurable);
+        my_comic_voice_hook::kXAudioDiag2LeafExecutableUnmeasurable);
     if (!LeafIdentityRetryWindowExhausted()) {
       return false;
     }
@@ -662,24 +662,24 @@ bool IsLeafAquaplusProfileMatched() {
     return false;
   }
   const auto *profile =
-      executable_read && fushi_voice_hook::MatchesLeafAquaplusProfile(
-                             fushi_voice_hook::kWhiteAlbum2LeafAquaplusProfile,
+      executable_read && my_comic_voice_hook::MatchesLeafAquaplusProfile(
+                             my_comic_voice_hook::kWhiteAlbum2LeafAquaplusProfile,
                              digest.data(), digest.size(), machine)
-          ? &fushi_voice_hook::kWhiteAlbum2LeafAquaplusProfile
+          ? &my_comic_voice_hook::kWhiteAlbum2LeafAquaplusProfile
           : nullptr;
   // 摘要已算出，交给共享槽。白2 的准入是**单个** exe hash，用户拿到不同发行版/补丁版
   // 就必然落空，此时唯一能推进事情的信息就是他这份 hash 是多少——而那一刻本 adapter
   // 的 probe() 也跟着落空、不再被问话，所以摘要不能留在自己家里（见 host_executable_digest.h）。
   // 本函数对**任何** x86 游戏都会跑到这里，于是共享槽在"谁都没认领"的场合也是满的。
   if (executable_read) {
-    fushi_voice_hook::PublishHostExecutableSha256(digest.data(), digest.size());
+    my_comic_voice_hook::PublishHostExecutableSha256(digest.data(), digest.size());
   }
   if (profile != nullptr) {
     // 哈希 + machine 已匹配。这一位必须在结构门**之前**置位：否则「exe 根本读不到 /
     // 哈希不是这个发行版」和「哈希对但二进制结构校验没过」在诊断上同形，而它们的处置
     // 完全不同（前者要用户报摘要，后者要重测锚点）。
     SetXAudioDiagnostic2(
-        fushi_voice_hook::kXAudioDiag2LeafIdentityHashMatched);
+        my_comic_voice_hook::kXAudioDiag2LeafIdentityHashMatched);
     const LONG structure_cached = InterlockedCompareExchange(
         &g_leaf_exact_binary_structure_state, 0, 0);
     bool structure_matched = structure_cached > 0;
@@ -703,7 +703,7 @@ bool IsLeafAquaplusProfileMatched() {
       // 后者对本进程自己的主映像会别名回已加载的那一份，修了等于没修（见该函数注释）。
       // 手工展开不经加载器、不执行代码、不施加重定位，因此绝对操作数仍编码首选基址，
       // 要用 image.absolute_base 告诉解码器这一点。
-      fushi_voice_hook::exact_lookup::LoadedPeImage image;
+      my_comic_voice_hook::exact_lookup::LoadedPeImage image;
       LeafPristineImage pristine;
       const bool pristine_ready =
           LoadLeafPristineImage(executable, &pristine);
@@ -723,7 +723,7 @@ bool IsLeafAquaplusProfileMatched() {
       // 只对 pristine_ready 设闸：OpenLoadedPeImage 之后的判定读的都是这份已在内存
       // 里的私有副本，是确定性的，再重试多少次结论都一样。
       if (!pristine_ready) {
-        SetXAudioDiagnostic2(fushi_voice_hook::kXAudioDiag2LeafImageUnopened);
+        SetXAudioDiagnostic2(my_comic_voice_hook::kXAudioDiag2LeafImageUnopened);
         if (!LeafIdentityRetryWindowExhausted()) {
           return false;
         }
@@ -731,7 +731,7 @@ bool IsLeafAquaplusProfileMatched() {
       const uintptr_t preferred_base = pristine.preferred_base;
       const bool opened =
           pristine_ready && preferred_base != 0u &&
-          fushi_voice_hook::exact_lookup::OpenLoadedPeImage(
+          my_comic_voice_hook::exact_lookup::OpenLoadedPeImage(
               reinterpret_cast<HMODULE>(pristine.base), &image) &&
           image.machine == IMAGE_FILE_MACHINE_I386 &&
           image.pointer_bits == 32u;
@@ -749,50 +749,50 @@ bool IsLeafAquaplusProfileMatched() {
               ? profile->input_poller_first_return_rva - 10u
               : 0u;
 
-      fushi_voice_hook::exact_lookup::UniquePatternMatch traversal;
-      fushi_voice_hook::exact_lookup::UniquePatternMatch raster;
-      fushi_voice_hook::exact_lookup::UniquePatternMatch input;
-      fushi_voice_hook::exact_lookup::UniquePatternMatch embed;
-      fushi_voice_hook::exact_lookup::UniquePatternMatch device;
+      my_comic_voice_hook::exact_lookup::UniquePatternMatch traversal;
+      my_comic_voice_hook::exact_lookup::UniquePatternMatch raster;
+      my_comic_voice_hook::exact_lookup::UniquePatternMatch input;
+      my_comic_voice_hook::exact_lookup::UniquePatternMatch embed;
+      my_comic_voice_hook::exact_lookup::UniquePatternMatch device;
       if (opened) {
-        traversal = fushi_voice_hook::exact_lookup::
+        traversal = my_comic_voice_hook::exact_lookup::
             FindUniqueAbsolute32PatternInExecutableSections(
                 image,
-                fushi_voice_hook::leaf_exact::kTextTraversalEntryPattern,
-                fushi_voice_hook::leaf_exact::
+                my_comic_voice_hook::leaf_exact::kTextTraversalEntryPattern,
+                my_comic_voice_hook::leaf_exact::
                     kTextTraversalCookieOperandOffset,
                 expected_cookie);
-        raster = fushi_voice_hook::exact_lookup::
+        raster = my_comic_voice_hook::exact_lookup::
             FindUniqueAbsolute32PatternInExecutableSections(
-                image, fushi_voice_hook::leaf_exact::kRasterDrawEntryPattern,
-                fushi_voice_hook::leaf_exact::kRasterDrawCookieOperandOffset,
+                image, my_comic_voice_hook::leaf_exact::kRasterDrawEntryPattern,
+                my_comic_voice_hook::leaf_exact::kRasterDrawCookieOperandOffset,
                 expected_cookie);
-        input = fushi_voice_hook::exact_lookup::
+        input = my_comic_voice_hook::exact_lookup::
             FindUniqueAbsolute32PatternInExecutableSections(
-                image, fushi_voice_hook::leaf_exact::kInputPollerEntryPattern,
-                fushi_voice_hook::leaf_exact::kInputPollerIatOperandOffset,
+                image, my_comic_voice_hook::leaf_exact::kInputPollerEntryPattern,
+                my_comic_voice_hook::leaf_exact::kInputPollerIatOperandOffset,
                 expected_input_iat);
-        embed = fushi_voice_hook::exact_lookup::
+        embed = my_comic_voice_hook::exact_lookup::
             FindUniquePatternInExecutableSections(
-                image, fushi_voice_hook::leaf_exact::kEmbedLoopAnchorPattern);
-        device = fushi_voice_hook::exact_lookup::
+                image, my_comic_voice_hook::leaf_exact::kEmbedLoopAnchorPattern);
+        device = my_comic_voice_hook::exact_lookup::
             FindUniqueAbsolute32PatternInExecutableSections(
-                image, fushi_voice_hook::leaf_exact::kD3dDeviceAccessPattern,
-                fushi_voice_hook::leaf_exact::
+                image, my_comic_voice_hook::leaf_exact::kD3dDeviceAccessPattern,
+                my_comic_voice_hook::leaf_exact::
                     kD3dDevicePointerOperandOffset,
                 expected_device);
       }
 
       const auto executable_rva = [&image](uintptr_t rva, size_t bytes = 1u) {
-        return fushi_voice_hook::exact_lookup::SectionHasRole(
-            fushi_voice_hook::exact_lookup::FindSectionForRva(image, rva,
+        return my_comic_voice_hook::exact_lookup::SectionHasRole(
+            my_comic_voice_hook::exact_lookup::FindSectionForRva(image, rva,
                                                                bytes),
             IMAGE_SCN_MEM_EXECUTE);
       };
       const auto data_rva = [&image](uintptr_t rva, size_t bytes,
                                      uint32_t required) {
-        return fushi_voice_hook::exact_lookup::SectionHasRole(
-            fushi_voice_hook::exact_lookup::FindSectionForRva(image, rva,
+        return my_comic_voice_hook::exact_lookup::SectionHasRole(
+            my_comic_voice_hook::exact_lookup::FindSectionForRva(image, rva,
                                                                bytes),
             required, IMAGE_SCN_MEM_EXECUTE);
       };
@@ -800,10 +800,10 @@ bool IsLeafAquaplusProfileMatched() {
           opened && input_anchor_rva != 0u &&
           executable_rva(profile->embed_leaf_hook_rva) &&
           executable_rva(profile->text_traversal_rva,
-                         sizeof(fushi_voice_hook::leaf_exact::
+                         sizeof(my_comic_voice_hook::leaf_exact::
                                     kTextTraversalEntryBytes)) &&
           executable_rva(profile->raster_draw_rva,
-                         sizeof(fushi_voice_hook::leaf_exact::
+                         sizeof(my_comic_voice_hook::leaf_exact::
                                     kRasterDrawEntryBytes)) &&
           executable_rva(profile->glyph_dispatch_rva) &&
           executable_rva(profile->input_poller_first_return_rva) &&
@@ -836,32 +836,32 @@ bool IsLeafAquaplusProfileMatched() {
               base + input_anchor_rva &&
           embed.count == 1u &&
           reinterpret_cast<uintptr_t>(embed.address) +
-                  fushi_voice_hook::leaf_exact::kEmbedHookOffsetFromAnchor ==
+                  my_comic_voice_hook::leaf_exact::kEmbedHookOffsetFromAnchor ==
               base + profile->embed_leaf_hook_rva &&
           device.count == 1u;
       const bool return_sites_ok =
           opened &&
-          fushi_voice_hook::exact_lookup::MatchesRel32CallEndingAt(
+          my_comic_voice_hook::exact_lookup::MatchesRel32CallEndingAt(
               image, profile->raster_glyph_return_rva,
               profile->raster_draw_rva) &&
-          fushi_voice_hook::exact_lookup::MatchesRel32CallEndingAt(
+          my_comic_voice_hook::exact_lookup::MatchesRel32CallEndingAt(
               image, profile->glyph_single_return_rva,
               profile->glyph_dispatch_rva) &&
-          fushi_voice_hook::exact_lookup::MatchesRel32CallEndingAt(
+          my_comic_voice_hook::exact_lookup::MatchesRel32CallEndingAt(
               image, profile->glyph_double_first_return_rva,
               profile->glyph_dispatch_rva) &&
-          fushi_voice_hook::exact_lookup::MatchesRel32CallEndingAt(
+          my_comic_voice_hook::exact_lookup::MatchesRel32CallEndingAt(
               image, profile->glyph_double_second_return_rva,
               profile->glyph_dispatch_rva) &&
-          fushi_voice_hook::exact_lookup::MatchesRegisterIndirectCallEndingAt(
+          my_comic_voice_hook::exact_lookup::MatchesRegisterIndirectCallEndingAt(
               image, profile->quad_draw_return_rva, 0xd0u) &&
-          fushi_voice_hook::exact_lookup::MatchesRegisterIndirectCallEndingAt(
+          my_comic_voice_hook::exact_lookup::MatchesRegisterIndirectCallEndingAt(
               image, profile->alternate_quad_draw_return_rva, 0xd0u) &&
-          fushi_voice_hook::exact_lookup::MatchesRegisterIndirectCallEndingAt(
+          my_comic_voice_hook::exact_lookup::MatchesRegisterIndirectCallEndingAt(
               image, profile->input_poller_first_return_rva, 0xd6u) &&
-          fushi_voice_hook::exact_lookup::MatchesRegisterIndirectCallEndingAt(
+          my_comic_voice_hook::exact_lookup::MatchesRegisterIndirectCallEndingAt(
               image, profile->input_poller_last_return_rva, 0xd6u) &&
-          fushi_voice_hook::exact_lookup::MatchesAbsoluteIndirectCallEndingAt(
+          my_comic_voice_hook::exact_lookup::MatchesAbsoluteIndirectCallEndingAt(
               image, profile->voice_archive_read_return_rva,
               profile->read_file_iat_rva);
       structure_matched = section_roles_ok && anchors_ok && return_sites_ok;
@@ -869,31 +869,31 @@ bool IsLeafAquaplusProfileMatched() {
       // 不被认领时，唯一能推进事情的信息就是这条 ~25 项 && 链断在哪一组。
       if (!structure_matched) {
         SetXAudioDiagnostic2(
-            fushi_voice_hook::kXAudioDiag2LeafStructureRejected);
+            my_comic_voice_hook::kXAudioDiag2LeafStructureRejected);
         if (!opened)
           SetXAudioDiagnostic2(
-              fushi_voice_hook::kXAudioDiag2LeafImageUnopened);
+              my_comic_voice_hook::kXAudioDiag2LeafImageUnopened);
         if (!section_roles_ok)
           SetXAudioDiagnostic2(
-              fushi_voice_hook::kXAudioDiag2LeafSectionRolesRejected);
+              my_comic_voice_hook::kXAudioDiag2LeafSectionRolesRejected);
         if (traversal.count != 1u)
           SetXAudioDiagnostic2(
-              fushi_voice_hook::kXAudioDiag2LeafTraversalAnchorMissed);
+              my_comic_voice_hook::kXAudioDiag2LeafTraversalAnchorMissed);
         if (raster.count != 1u)
           SetXAudioDiagnostic2(
-              fushi_voice_hook::kXAudioDiag2LeafRasterAnchorMissed);
+              my_comic_voice_hook::kXAudioDiag2LeafRasterAnchorMissed);
         if (input.count != 1u)
           SetXAudioDiagnostic2(
-              fushi_voice_hook::kXAudioDiag2LeafInputAnchorMissed);
+              my_comic_voice_hook::kXAudioDiag2LeafInputAnchorMissed);
         if (embed.count != 1u)
           SetXAudioDiagnostic2(
-              fushi_voice_hook::kXAudioDiag2LeafEmbedAnchorMissed);
+              my_comic_voice_hook::kXAudioDiag2LeafEmbedAnchorMissed);
         if (device.count != 1u)
           SetXAudioDiagnostic2(
-              fushi_voice_hook::kXAudioDiag2LeafDeviceAnchorMissed);
+              my_comic_voice_hook::kXAudioDiag2LeafDeviceAnchorMissed);
         if (section_roles_ok && anchors_ok && !return_sites_ok)
           SetXAudioDiagnostic2(
-              fushi_voice_hook::kXAudioDiag2LeafReturnSitesRejected);
+              my_comic_voice_hook::kXAudioDiag2LeafReturnSitesRejected);
       }
 #else
       structure_matched = false;
@@ -907,7 +907,7 @@ bool IsLeafAquaplusProfileMatched() {
   g_leaf_aquaplus_profile.store(profile, std::memory_order_release);
   if (profile != nullptr) {
     InterlockedOr(
-        reinterpret_cast<volatile LONG *>(&FushiLeafD3DTraceV1.reserved), 0x01);
+        reinterpret_cast<volatile LONG *>(&MyComicLeafD3DTraceV1.reserved), 0x01);
   }
   InterlockedExchange(&g_leaf_aquaplus_profile_state,
                       profile != nullptr ? 1 : -1);
@@ -934,7 +934,7 @@ struct LeafVoiceRange {
   uint64_t offset = 0;
   uint32_t size = 0;
   uint32_t id = 0;
-  char storage_name[fushi_voice_hook::leaf_aquaplus::kLacStoredNameBytes + 1u] =
+  char storage_name[my_comic_voice_hook::leaf_aquaplus::kLacStoredNameBytes + 1u] =
       {};
 };
 
@@ -1034,11 +1034,11 @@ bool LoadLeafVoiceArchive(const wchar_t *path, LeafVoiceArchive *out) {
     return false;
 
   LARGE_INTEGER file_size = {};
-  uint8_t header[fushi_voice_hook::leaf_aquaplus::kLacHeaderBytes] = {};
+  uint8_t header[my_comic_voice_hook::leaf_aquaplus::kLacHeaderBytes] = {};
   uint8_t *index = nullptr;
   LeafVoiceRange *ranges = nullptr;
   LeafVoiceFileIdentity identity;
-  fushi_voice_hook::leaf_aquaplus::LacArchiveInfo info;
+  my_comic_voice_hook::leaf_aquaplus::LacArchiveInfo info;
   uint64_t index_bytes = 0;
   bool valid = GetFileSizeEx(file, &file_size) && file_size.QuadPart > 0 &&
                ReadLeafVoiceFileIdentity(file, &identity) &&
@@ -1047,13 +1047,13 @@ bool LoadLeafVoiceArchive(const wchar_t *path, LeafVoiceArchive *out) {
                memcmp(header, "LAC\0", 4) == 0;
   if (valid) {
     const uint32_t count =
-        fushi_voice_hook::leaf_aquaplus::ReadLe32(header + 4u);
+        my_comic_voice_hook::leaf_aquaplus::ReadLe32(header + 4u);
     index_bytes =
-        fushi_voice_hook::leaf_aquaplus::kLacHeaderBytes +
+        my_comic_voice_hook::leaf_aquaplus::kLacHeaderBytes +
         static_cast<uint64_t>(count) *
-            fushi_voice_hook::leaf_aquaplus::kLacEntryBytes;
+            my_comic_voice_hook::leaf_aquaplus::kLacEntryBytes;
     valid = count > 0 &&
-            count <= fushi_voice_hook::leaf_aquaplus::kMaxEntryCount &&
+            count <= my_comic_voice_hook::leaf_aquaplus::kMaxEntryCount &&
             index_bytes <= static_cast<uint64_t>(file_size.QuadPart) &&
             index_bytes <= UINT32_MAX;
   }
@@ -1064,7 +1064,7 @@ bool LoadLeafVoiceArchive(const wchar_t *path, LeafVoiceArchive *out) {
       memcpy(index, header, sizeof(header));
       valid = ReadExact(file, index + sizeof(header),
                         static_cast<uint32_t>(index_bytes - sizeof(header))) &&
-              fushi_voice_hook::leaf_aquaplus::ParseVoiceArchiveIndex(
+              my_comic_voice_hook::leaf_aquaplus::ParseVoiceArchiveIndex(
                   index, static_cast<size_t>(index_bytes),
                   static_cast<uint64_t>(file_size.QuadPart), &info);
     }
@@ -1074,8 +1074,8 @@ bool LoadLeafVoiceArchive(const wchar_t *path, LeafVoiceArchive *out) {
         malloc(static_cast<size_t>(info.count) * sizeof(LeafVoiceRange)));
     valid = ranges != nullptr;
     for (uint32_t id = 0; valid && id < info.count; ++id) {
-      fushi_voice_hook::leaf_aquaplus::LacEntry entry;
-      valid = fushi_voice_hook::leaf_aquaplus::ReadVoiceEntryAtIndex(
+      my_comic_voice_hook::leaf_aquaplus::LacEntry entry;
+      valid = my_comic_voice_hook::leaf_aquaplus::ReadVoiceEntryAtIndex(
           index, static_cast<size_t>(index_bytes),
           static_cast<uint64_t>(file_size.QuadPart), id, &entry);
       if (!valid)
@@ -1113,7 +1113,7 @@ struct LeafVoiceArchiveStamp {
 };
 
 constexpr size_t kLeafVoiceArchivePathCount =
-    std::size(fushi_voice_hook::kWhiteAlbum2LeafVoiceArchiveRelativePaths);
+    std::size(my_comic_voice_hook::kWhiteAlbum2LeafVoiceArchiveRelativePaths);
 LeafVoiceArchiveStamp g_leaf_voice_load_stamps[kLeafVoiceArchivePathCount];
 bool g_leaf_voice_load_attempted = false;
 
@@ -1157,7 +1157,7 @@ bool LoadLeafVoiceArchives() {
   for (size_t index = 0; index < kLeafVoiceArchivePathCount; ++index) {
     paths[index] =
         std::wstring(executable) + L"\\" +
-        fushi_voice_hook::kWhiteAlbum2LeafVoiceArchiveRelativePaths[index];
+        my_comic_voice_hook::kWhiteAlbum2LeafVoiceArchiveRelativePaths[index];
     StampLeafVoiceArchivePath(paths[index].c_str(), &stamps[index]);
     if (!(stamps[index] == g_leaf_voice_load_stamps[index]))
       unchanged = false;
@@ -1195,25 +1195,25 @@ void RememberLeafAquaplusVoicePak(HANDLE handle, const wchar_t *path) {
   if (archive_index < 0)
     return;
 
-  if (fushi_voice_hook::RememberTrackedHandle(
+  if (my_comic_voice_hook::RememberTrackedHandle(
           g_leaf_voice_handles, handle, [archive_index](LeafVoiceHandle &slot) {
             slot.archive_index = static_cast<uint32_t>(archive_index);
           })) {
-    SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagLeafLacHandleTracked);
+    SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagLeafLacHandleTracked);
   }
 }
 
 bool CopyLeafVoiceArchiveIndex(HANDLE handle, uint32_t *archive_index) {
   if (archive_index == nullptr)
     return false;
-  return fushi_voice_hook::ReadTrackedHandle(
+  return my_comic_voice_hook::ReadTrackedHandle(
       g_leaf_voice_handles, handle, [archive_index](const LeafVoiceHandle &slot) {
         *archive_index = slot.archive_index;
       });
 }
 
 void ForgetLeafAquaplusVoicePak(HANDLE handle) {
-  fushi_voice_hook::ForgetTrackedHandle(g_leaf_voice_handles, handle);
+  my_comic_voice_hook::ForgetTrackedHandle(g_leaf_voice_handles, handle);
 }
 
 bool QueueLeafVoice(uint32_t archive_index, uint64_t offset,
@@ -1299,7 +1299,7 @@ void ObserveLeafAquaplusVoicePakRead(HANDLE file, const void *buffer,
   if (archive_index >= static_cast<uint32_t>(archive_count))
     return;
 
-  SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagLeafLacReadObserved);
+  SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagLeafLacReadObserved);
   __try {
     if (memcmp(buffer, "OggS", 4) != 0)
       return;
@@ -1320,8 +1320,8 @@ void ObserveLeafAquaplusVoicePakRead(HANDLE file, const void *buffer,
   const bool queued = QueueLeafVoice(archive_index, start, done,
                                      GetTickCount64());
   SetXAudioDiagnostic(queued
-                          ? fushi_voice_hook::kXAudioDiagLeafLacVoiceQueued
-                          : fushi_voice_hook::kXAudioDiagLeafLacTaskRejected);
+                          ? my_comic_voice_hook::kXAudioDiagLeafLacVoiceQueued
+                          : my_comic_voice_hook::kXAudioDiagLeafLacTaskRejected);
 }
 
 void ProcessLeafVoiceTask(LeafVoiceTask *task) {
@@ -1329,7 +1329,7 @@ void ProcessLeafVoiceTask(LeafVoiceTask *task) {
       InterlockedCompareExchange(&g_leaf_voice_archive_count, 0, 0);
   if (task == nullptr ||
       task->archive_index >= static_cast<uint32_t>(archive_count)) {
-    SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagLeafLacTaskRejected);
+    SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagLeafLacTaskRejected);
     return;
   }
   const LeafVoiceArchive &archive =
@@ -1337,12 +1337,12 @@ void ProcessLeafVoiceTask(LeafVoiceTask *task) {
   uint32_t range_index = 0;
   if (!FindLeafVoiceRangeIndex(archive, task->offset, &range_index) ||
       range_index >= archive.range_count) {
-    SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagLeafLacTaskRejected);
+    SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagLeafLacTaskRejected);
     return;
   }
   const LeafVoiceRange range = archive.ranges[range_index];
   if (task->read_bytes > range.size) {
-    SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagLeafLacTaskRejected);
+    SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagLeafLacTaskRejected);
     return;
   }
   if (task->archive_index == g_leaf_voice_last_archive &&
@@ -1357,7 +1357,7 @@ void ProcessLeafVoiceTask(LeafVoiceTask *task) {
       FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr,
       OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
   if (file == INVALID_HANDLE_VALUE) {
-    SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagLeafLacTaskRejected);
+    SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagLeafLacTaskRejected);
     return;
   }
   LeafVoiceFileIdentity identity;
@@ -1369,7 +1369,7 @@ void ProcessLeafVoiceTask(LeafVoiceTask *task) {
                ogg != nullptr &&
                SetFilePointerEx(file, at, nullptr, FILE_BEGIN) != FALSE &&
                ReadExact(file, ogg, range.size) &&
-               fushi_voice_hook::leaf_aquaplus::CompleteOggBytes(
+               my_comic_voice_hook::leaf_aquaplus::CompleteOggBytes(
                    ogg, range.size) == range.size;
   if (valid) {
     wchar_t member_name[64] = {};
@@ -1387,10 +1387,10 @@ void ProcessLeafVoiceTask(LeafVoiceTask *task) {
     g_leaf_voice_last_range = range_index;
     g_leaf_voice_last_tick = task->tick_ms;
     SetXAudioDiagnostic(
-        fushi_voice_hook::kXAudioDiagLeafLacVoicePublished |
-        fushi_voice_hook::kXAudioDiagGameResourcePublished);
+        my_comic_voice_hook::kXAudioDiagLeafLacVoicePublished |
+        my_comic_voice_hook::kXAudioDiagGameResourcePublished);
   } else {
-    SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagLeafLacTaskRejected);
+    SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagLeafLacTaskRejected);
   }
   free(ogg);
   g_orig_CloseHandle(file);
@@ -1411,29 +1411,29 @@ bool TryHookLeafAquaplusResourceAudio() {
   // 「音频降级成系统 Loopback」，分不出是身份、hook 还是归档——三者处置完全不同。
   // 这里只记录事实，判定与顺序一字未改。
   if (!IsLeafAquaplusProfileMatched()) {
-    SetXAudioDiagnostic2(fushi_voice_hook::kXAudioDiag2LeafProfileUnmatched);
+    SetXAudioDiagnostic2(my_comic_voice_hook::kXAudioDiag2LeafProfileUnmatched);
     return false;
   }
   if (InterlockedCompareExchange(&g_leaf_voice_enabled, 0, 0) != 0)
     return true;
   if (!TryHookSiglusOvk()) {
     SetXAudioDiagnostic2(
-        fushi_voice_hook::kXAudioDiag2LeafFileHooksUnavailable);
+        my_comic_voice_hook::kXAudioDiag2LeafFileHooksUnavailable);
     return false;
   }
   if (!LoadLeafVoiceArchives()) {
     SetXAudioDiagnostic2(
-        fushi_voice_hook::kXAudioDiag2LeafVoiceArchivesMissing);
+        my_comic_voice_hook::kXAudioDiag2LeafVoiceArchivesMissing);
     return false;
   }
   InterlockedExchange(&g_leaf_voice_enabled, 1);
-  SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagLeafLacHooksReady);
+  SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagLeafLacHooksReady);
   return true;
 }
 
 void StopLeafAquaplusResourceAudio() {
   InterlockedExchange(&g_leaf_voice_enabled, 0);
-  fushi_voice_hook::ClearTrackedHandles(g_leaf_voice_handles);
+  my_comic_voice_hook::ClearTrackedHandles(g_leaf_voice_handles);
   // 🔴 顺序不可颠倒：先把 count 撤成 0（这是任何消费者判定「档案表可用」的唯一
   // 闸门），再摘指针，最后才 free。反过来写会让 free 与「还没被撤发布的表」重叠。
   // 与 catsystem2_adapter.inc 的 StopCatSystem2PcmVoice 同一模式。
@@ -1475,7 +1475,7 @@ bool PublishLeafPrivateTraversal(const LeafPrivateTraversal &traversal) {
 }
 
 void PublishLeafD3DTraceTraversal(const LeafPrivateTraversal &traversal) {
-  auto *trace = &FushiLeafD3DTraceV1;
+  auto *trace = &MyComicLeafD3DTraceV1;
   if (traversal.glyph_count == 0 ||
       traversal.glyph_count > kLeafLookupTextUnits) {
     return;
@@ -1496,7 +1496,7 @@ void PublishLeafD3DTraceTraversal(const LeafPrivateTraversal &traversal) {
     auto *slot = &trace->slots[(sequence - 1u) % trace->capacity];
     InterlockedExchange(reinterpret_cast<volatile LONG *>(&slot->writing), 1);
     const auto &glyph = traversal.glyphs[index];
-    fushi_voice_hook::LeafD3DTraceEvent event;
+    my_comic_voice_hook::LeafD3DTraceEvent event;
     event.sequence = sequence;
     event.timestamp_ms = traversal.timestamp_ms;
     event.frame_sequence = traversal.frame_sequence;
@@ -1566,27 +1566,27 @@ bool CaptureLeafQuadBounds(const void *vertices, UINT stride, UINT count,
 }
 
 bool MatchesLeafTextTraversalEntry(const uint8_t *target) {
-  return fushi_voice_hook::exact_lookup::IsReadableSpan(
-             target, fushi_voice_hook::leaf_exact::
+  return my_comic_voice_hook::exact_lookup::IsReadableSpan(
+             target, my_comic_voice_hook::leaf_exact::
                          kTextTraversalEntryPattern.size) &&
-         fushi_voice_hook::exact_lookup::MatchesMaskedPattern(
+         my_comic_voice_hook::exact_lookup::MatchesMaskedPattern(
              target,
-             fushi_voice_hook::leaf_exact::kTextTraversalEntryPattern);
+             my_comic_voice_hook::leaf_exact::kTextTraversalEntryPattern);
 }
 
 bool MatchesLeafRasterDrawEntry(const uint8_t *target) {
-  return fushi_voice_hook::exact_lookup::IsReadableSpan(
+  return my_comic_voice_hook::exact_lookup::IsReadableSpan(
              target,
-             fushi_voice_hook::leaf_exact::kRasterDrawEntryPattern.size) &&
-         fushi_voice_hook::exact_lookup::MatchesMaskedPattern(
-             target, fushi_voice_hook::leaf_exact::kRasterDrawEntryPattern);
+             my_comic_voice_hook::leaf_exact::kRasterDrawEntryPattern.size) &&
+         my_comic_voice_hook::exact_lookup::MatchesMaskedPattern(
+             target, my_comic_voice_hook::leaf_exact::kRasterDrawEntryPattern);
 }
 
 bool DecodeLeafPackedCp932(uint16_t packed, wchar_t *decoded) {
   if (decoded == nullptr)
     return false;
-  fushi_voice_hook::LeafAquaplusPackedCp932Bytes unpacked;
-  if (!fushi_voice_hook::UnpackLeafAquaplusCp932(packed, &unpacked)) {
+  my_comic_voice_hook::LeafAquaplusPackedCp932Bytes unpacked;
+  if (!my_comic_voice_hook::UnpackLeafAquaplusCp932(packed, &unpacked)) {
     return false;
   }
   char bytes[2] = {static_cast<char>(unpacked.bytes[0]),
@@ -1689,8 +1689,8 @@ bool BuildLeafLookupPayloadAtPress(const LeafLookupClickTarget &target,
       origin.y != target.client_screen_y) {
     return false;
   }
-  fushi_voice_hook::LeafAquaplusLookupRect rect;
-  const int glyph_index = fushi_voice_hook::FindLeafAquaplusLookupGlyph(
+  my_comic_voice_hook::LeafAquaplusLookupRect rect;
+  const int glyph_index = my_comic_voice_hook::FindLeafAquaplusLookupGlyph(
       target.geometry.glyphs, target.geometry.glyph_count,
       target.geometry.viewport_x, target.geometry.viewport_y,
       target.geometry.viewport_width, target.geometry.viewport_height,
@@ -1773,16 +1773,16 @@ bool ClaimLeafInputPollerThread(uint32_t thread_id) {
           owner, thread_id, std::memory_order_acq_rel,
           std::memory_order_acquire)) {
     InterlockedExchange(reinterpret_cast<volatile LONG *>(
-                            &FushiLeafD3DTraceV1.input_poller_owner_tid),
+                            &MyComicLeafD3DTraceV1.input_poller_owner_tid),
                         static_cast<LONG>(thread_id));
     return true;
   }
   if (owner == thread_id)
     return true;
   InterlockedIncrement(reinterpret_cast<volatile LONG *>(
-      &FushiLeafD3DTraceV1.input_poller_conflicts));
+      &MyComicLeafD3DTraceV1.input_poller_conflicts));
   InterlockedExchange(reinterpret_cast<volatile LONG *>(
-                          &FushiLeafD3DTraceV1.input_poller_last_conflict_tid),
+                          &MyComicLeafD3DTraceV1.input_poller_last_conflict_tid),
                       static_cast<LONG>(thread_id));
   return false;
 }
@@ -1808,7 +1808,7 @@ void ReleaseDeadLeafInputPollerOwner() {
     return;
   g_leaf_input_poller_owner_tid.store(0, std::memory_order_release);
   InterlockedExchange(reinterpret_cast<volatile LONG *>(
-                          &FushiLeafD3DTraceV1.input_poller_owner_tid),
+                          &MyComicLeafD3DTraceV1.input_poller_owner_tid),
                       0);
 }
 
@@ -1833,7 +1833,7 @@ SHORT WINAPI Detour_LeafGetAsyncKeyState(int virtual_key) {
   const uint16_t raw = static_cast<uint16_t>(raw_signed);
   const uint8_t button_bit = static_cast<uint8_t>(1u << button_index);
   const bool raw_active =
-      (raw & fushi_voice_hook::kLeafAquaplusAsyncPressedMask) != 0;
+      (raw & my_comic_voice_hook::kLeafAquaplusAsyncPressedMask) != 0;
   const bool admitted_poller =
       IsLeafAdmittedInputPoller(reinterpret_cast<uintptr_t>(_ReturnAddress()));
   const bool poller_owner =
@@ -1850,12 +1850,12 @@ SHORT WINAPI Detour_LeafGetAsyncKeyState(int virtual_key) {
       game == nullptr
           ? 0u
           : static_cast<uint32_t>(reinterpret_cast<uintptr_t>(GetPropW(
-                game, fushi_voice_hook::
+                game, my_comic_voice_hook::
                           kLeafAquaplusSampledInputShieldTailRequestProperty)));
   uint32_t tail_buttons =
-      fushi_voice_hook::LeafAquaplusSampledInputTailButtons(tail_request);
+      my_comic_voice_hook::LeafAquaplusSampledInputTailButtons(tail_request);
   const bool orphaned_tail =
-      fushi_voice_hook::LeafAquaplusTailRequestIsOrphaned(
+      my_comic_voice_hook::LeafAquaplusTailRequestIsOrphaned(
           tail_request, direct_popup != nullptr);
   bool tail_consume = !orphaned_tail && (tail_buttons & button_bit) != 0;
   if (admitted_poller && !poller_owner) {
@@ -1873,35 +1873,35 @@ SHORT WINAPI Detour_LeafGetAsyncKeyState(int virtual_key) {
     const uint8_t latched =
         g_leaf_sampled_input_latched_buttons.load(std::memory_order_acquire);
     const bool consume =
-        fushi_voice_hook::LeafAquaplusConflictingPollerMustConsume(
+        my_comic_voice_hook::LeafAquaplusConflictingPollerMustConsume(
             popup_shield, tail_consume, (latched & button_bit) != 0,
             g_leaf_lookup_click_transaction_active.load(
                 std::memory_order_acquire),
             published_glyph_hit);
     return static_cast<SHORT>(
-        fushi_voice_hook::FilterLeafAquaplusAsyncKeyState(raw, consume));
+        my_comic_voice_hook::FilterLeafAquaplusAsyncKeyState(raw, consume));
   }
   if (admitted_poller && orphaned_tail) {
-    // Window properties outlive their publishing process.  If Fushi/popup
+    // Window properties outlive their publishing process.  If MyComic/popup
     // died, no real tail acknowledgement can ever be delivered; consuming the
     // stale token would lock this mouse button until the game exits.  Hidden
     // popups keep a valid HWND and therefore retain the normal drain path.
     if (game != nullptr && IsWindow(game)) {
       if (static_cast<uint32_t>(reinterpret_cast<uintptr_t>(GetPropW(
-              game, fushi_voice_hook::
+              game, my_comic_voice_hook::
                         kLeafAquaplusSampledInputShieldTailRequestProperty))) ==
           tail_request) {
         RemovePropW(game,
-                    fushi_voice_hook::
+                    my_comic_voice_hook::
                         kLeafAquaplusSampledInputShieldTailRequestProperty);
       }
       if (static_cast<uint32_t>(reinterpret_cast<uintptr_t>(GetPropW(
-              game, fushi_voice_hook::
+              game, my_comic_voice_hook::
                         kLeafAquaplusSampledInputShieldTailAckProperty))) ==
           tail_request) {
         RemovePropW(
             game,
-            fushi_voice_hook::kLeafAquaplusSampledInputShieldTailAckProperty);
+            my_comic_voice_hook::kLeafAquaplusSampledInputShieldTailAckProperty);
       }
     }
     g_leaf_sampled_input_tail_state = {};
@@ -1921,7 +1921,7 @@ SHORT WINAPI Detour_LeafGetAsyncKeyState(int virtual_key) {
     }
   }
   if (admitted_poller) {
-    const auto tail = fushi_voice_hook::AdvanceLeafAquaplusSampledInputTail(
+    const auto tail = my_comic_voice_hook::AdvanceLeafAquaplusSampledInputTail(
         tail_request, tail_buttons, button_bit, raw,
         &g_leaf_sampled_input_tail_state);
     tail_consume = tail_consume || tail.consume;
@@ -1930,7 +1930,7 @@ SHORT WINAPI Detour_LeafGetAsyncKeyState(int virtual_key) {
       if (game != nullptr && IsWindow(game) &&
           SetPropW(
               game,
-              fushi_voice_hook::kLeafAquaplusSampledInputShieldTailAckProperty,
+              my_comic_voice_hook::kLeafAquaplusSampledInputShieldTailAckProperty,
               reinterpret_cast<HANDLE>(static_cast<uintptr_t>(tail.token)))) {
         const HWND popup = GetValidPublishedLeafSampledInputShieldPopup(game);
         published =
@@ -1938,7 +1938,7 @@ SHORT WINAPI Detour_LeafGetAsyncKeyState(int virtual_key) {
             PostMessageW(
                 popup,
                 static_cast<UINT>(
-                    fushi_voice_hook::kSampledInputShieldReleaseWindowMessage),
+                    my_comic_voice_hook::kSampledInputShieldReleaseWindowMessage),
                 0, 0) != FALSE;
       }
       if (!published) {
@@ -1958,7 +1958,7 @@ SHORT WINAPI Detour_LeafGetAsyncKeyState(int virtual_key) {
     const bool may_begin =
         g_leaf_lookup_click_sample_state.synchronized &&
         g_leaf_lookup_click_sample_state.owner ==
-            fushi_voice_hook::LeafAquaplusLookupClickOwner::kIdle &&
+            my_comic_voice_hook::LeafAquaplusLookupClickOwner::kIdle &&
         (((raw & 0x8000u) != 0 &&
           !g_leaf_lookup_click_sample_state.last_high_down) ||
          ((raw & 0x8000u) == 0 && (raw & 0x0001u) != 0));
@@ -1973,7 +1973,7 @@ SHORT WINAPI Detour_LeafGetAsyncKeyState(int virtual_key) {
     }
     const auto owner_before = g_leaf_lookup_click_sample_state.owner;
     const auto decision =
-        fushi_voice_hook::AdvanceLeafAquaplusLookupClickSample(
+        my_comic_voice_hook::AdvanceLeafAquaplusLookupClickSample(
             raw, runtime_enabled && pointer_valid, popup_shield, glyph_hit,
             g_leaf_sentence_epoch_atomic.load(std::memory_order_acquire),
             &g_leaf_lookup_click_sample_state);
@@ -1996,13 +1996,13 @@ SHORT WINAPI Detour_LeafGetAsyncKeyState(int virtual_key) {
       }
       g_leaf_lookup_pending_click_valid = false;
     } else if (owner_before ==
-                   fushi_voice_hook::LeafAquaplusLookupClickOwner::kLookup &&
+                   my_comic_voice_hook::LeafAquaplusLookupClickOwner::kLookup &&
                (raw & 0x8000u) == 0) {
       g_leaf_lookup_pending_click_valid = false;
     }
     g_leaf_lookup_click_transaction_active.store(
         g_leaf_lookup_click_sample_state.owner !=
-                fushi_voice_hook::LeafAquaplusLookupClickOwner::kIdle ||
+                my_comic_voice_hook::LeafAquaplusLookupClickOwner::kIdle ||
             g_leaf_lookup_pending_click_valid,
         std::memory_order_release);
     decision_consume = decision.consume;
@@ -2017,7 +2017,7 @@ SHORT WINAPI Detour_LeafGetAsyncKeyState(int virtual_key) {
   const bool consume = popup_shield || tail_consume || decision_consume ||
                        (latched & button_bit) != 0;
   const SHORT filtered = static_cast<SHORT>(
-      fushi_voice_hook::FilterLeafAquaplusAsyncKeyState(raw, consume));
+      my_comic_voice_hook::FilterLeafAquaplusAsyncKeyState(raw, consume));
   if (!raw_active) {
     g_leaf_sampled_input_latched_buttons.fetch_and(
         static_cast<uint8_t>(~button_bit), std::memory_order_acq_rel);
@@ -2057,7 +2057,7 @@ HRESULT STDMETHODCALLTYPE Detour_LeafDrawPrimitiveUP(
                             traversal.suppression_depth == 0 && raster.active;
   if (glyph_active) {
     InterlockedIncrement64(reinterpret_cast<volatile LONG64 *>(
-        &FushiLeafD3DTraceV1.armed_draw_calls));
+        &MyComicLeafD3DTraceV1.armed_draw_calls));
   }
   const auto *profile = g_leaf_aquaplus_profile.load(std::memory_order_acquire);
   const uintptr_t module =
@@ -2065,17 +2065,17 @@ HRESULT STDMETHODCALLTYPE Detour_LeafDrawPrimitiveUP(
   const uintptr_t caller = reinterpret_cast<uintptr_t>(_ReturnAddress());
   if (glyph_active) {
     InterlockedExchange(reinterpret_cast<volatile LONG *>(
-                            &FushiLeafD3DTraceV1.last_primitive_type),
+                            &MyComicLeafD3DTraceV1.last_primitive_type),
                         static_cast<LONG>(primitive_type));
     InterlockedExchange(reinterpret_cast<volatile LONG *>(
-                            &FushiLeafD3DTraceV1.last_primitive_count),
+                            &MyComicLeafD3DTraceV1.last_primitive_count),
                         static_cast<LONG>(primitive_count));
     InterlockedExchange(reinterpret_cast<volatile LONG *>(
-                            &FushiLeafD3DTraceV1.last_vertex_stride),
+                            &MyComicLeafD3DTraceV1.last_vertex_stride),
                         static_cast<LONG>(stride));
     if (module != 0 && caller >= module && caller - module <= 0xffffffffull) {
       InterlockedExchange(reinterpret_cast<volatile LONG *>(
-                              &FushiLeafD3DTraceV1.last_caller_rva),
+                              &MyComicLeafD3DTraceV1.last_caller_rva),
                           static_cast<LONG>(caller - module));
     }
   }
@@ -2097,22 +2097,22 @@ HRESULT STDMETHODCALLTYPE Detour_LeafDrawPrimitiveUP(
           static_cast<uint32_t>(profile->alternate_quad_draw_return_rva);
     } else {
       InterlockedIncrement64(reinterpret_cast<volatile LONG64 *>(
-          &FushiLeafD3DTraceV1.caller_rejects));
+          &MyComicLeafD3DTraceV1.caller_rejects));
     }
     if (draw_format != 0) {
       DWORD fvf = 0;
       D3DVIEWPORT9 viewport = {};
       if (primitive_type != D3DPT_TRIANGLESTRIP) {
         InterlockedIncrement64(reinterpret_cast<volatile LONG64 *>(
-            &FushiLeafD3DTraceV1.primitive_type_rejects));
+            &MyComicLeafD3DTraceV1.primitive_type_rejects));
         raster.invalid = true;
       } else if (primitive_count != 2u) {
         InterlockedIncrement64(reinterpret_cast<volatile LONG64 *>(
-            &FushiLeafD3DTraceV1.primitive_count_rejects));
+            &MyComicLeafD3DTraceV1.primitive_count_rejects));
         raster.invalid = true;
       } else if (stride != expected_stride) {
         InterlockedIncrement64(reinterpret_cast<volatile LONG64 *>(
-            &FushiLeafD3DTraceV1.vertex_stride_rejects));
+            &MyComicLeafD3DTraceV1.vertex_stride_rejects));
         raster.invalid = true;
       } else if (device == nullptr || FAILED(device->GetFVF(&fvf)) ||
                  fvf != expected_fvf ||
@@ -2132,7 +2132,7 @@ HRESULT STDMETHODCALLTYPE Detour_LeafDrawPrimitiveUP(
         if (!CaptureLeafQuadBounds(vertices, stride, 4u, &left, &top, &right,
                                    &bottom)) {
           InterlockedIncrement64(reinterpret_cast<volatile LONG64 *>(
-              &FushiLeafD3DTraceV1.bounds_rejects));
+              &MyComicLeafD3DTraceV1.bounds_rejects));
           raster.invalid = true;
         } else {
           const float viewport_left = static_cast<float>(viewport.X);
@@ -2153,15 +2153,15 @@ HRESULT STDMETHODCALLTYPE Detour_LeafDrawPrimitiveUP(
                 raster.viewport_height !=
                     static_cast<int32_t>(viewport.Height)))) {
             InterlockedIncrement64(reinterpret_cast<volatile LONG64 *>(
-                &FushiLeafD3DTraceV1.bounds_rejects));
+                &MyComicLeafD3DTraceV1.bounds_rejects));
             raster.invalid = true;
           } else {
             InterlockedIncrement64(reinterpret_cast<volatile LONG64 *>(
-                &FushiLeafD3DTraceV1.quad_candidates));
+                &MyComicLeafD3DTraceV1.quad_candidates));
             InterlockedIncrement64(reinterpret_cast<volatile LONG64 *>(
                 draw_format == 1u
-                    ? &FushiLeafD3DTraceV1.primary_quad_candidates
-                    : &FushiLeafD3DTraceV1.alternate_quad_candidates));
+                    ? &MyComicLeafD3DTraceV1.primary_quad_candidates
+                    : &MyComicLeafD3DTraceV1.alternate_quad_candidates));
             if (!raster.bounds_ready) {
               raster.left = left;
               raster.top = top;
@@ -2200,7 +2200,7 @@ int __cdecl Detour_LeafRasterDraw(void *descriptor, void *vertices) {
   if (original == nullptr)
     return 0;
   InterlockedIncrement64(
-      reinterpret_cast<volatile LONG64 *>(&FushiLeafD3DTraceV1.glyph_calls));
+      reinterpret_cast<volatile LONG64 *>(&MyComicLeafD3DTraceV1.glyph_calls));
   auto &traversal = g_leaf_text_traversal_capture;
   auto &raster = g_leaf_raster_capture;
   if (raster.active) {
@@ -2244,11 +2244,11 @@ int __cdecl Detour_LeafRasterDraw(void *descriptor, void *vertices) {
     return original(descriptor, vertices);
   }
   packed_cp932 =
-      fushi_voice_hook::NormalizeLeafAquaplusPackedCp932(packed_cp932);
-  fushi_voice_hook::LeafAquaplusPackedCp932Bytes unpacked;
-  if (!fushi_voice_hook::UnpackLeafAquaplusCp932(packed_cp932, &unpacked)) {
+      my_comic_voice_hook::NormalizeLeafAquaplusPackedCp932(packed_cp932);
+  my_comic_voice_hook::LeafAquaplusPackedCp932Bytes unpacked;
+  if (!my_comic_voice_hook::UnpackLeafAquaplusCp932(packed_cp932, &unpacked)) {
     InterlockedIncrement64(reinterpret_cast<volatile LONG64 *>(
-        &FushiLeafD3DTraceV1.glyph_describe_failures));
+        &MyComicLeafD3DTraceV1.glyph_describe_failures));
     return original(descriptor, vertices);
   }
   raster = {};
@@ -2256,7 +2256,7 @@ int __cdecl Detour_LeafRasterDraw(void *descriptor, void *vertices) {
   raster.packed_cp932 = packed_cp932;
   raster.frame_sequence = traversal.traversal.frame_sequence;
   InterlockedIncrement64(reinterpret_cast<volatile LONG64 *>(
-      &FushiLeafD3DTraceV1.glyph_armed_calls));
+      &MyComicLeafD3DTraceV1.glyph_armed_calls));
   int result = 0;
   bool completed = false;
   __try {
@@ -2409,27 +2409,27 @@ bool StageLeafLookupPrivateTraversal(const LeafPrivateTraversal &traversal) {
       traversal.viewport_width <= 0 || traversal.viewport_height <= 0 ||
       (!initial_replay &&
        traversal.sentence_epoch_at_capture != g_leaf_sentence_epoch) ||
-      !fushi_voice_hook::IsLeafAquaplusTraceForSentence(
+      !my_comic_voice_hook::IsLeafAquaplusTraceForSentence(
           traversal.sequence, traversal.timestamp_ms,
           g_leaf_sentence_trace_floor, g_leaf_active_line_timestamp_ms)) {
     return false;
   }
   uint32_t char_indices[kLeafLookupTextUnits] = {};
   size_t visible_count = 0;
-  if (!fushi_voice_hook::CollectLeafAquaplusVisibleCharMap(
+  if (!my_comic_voice_hook::CollectLeafAquaplusVisibleCharMap(
           g_leaf_active_line, g_leaf_active_line_units, char_indices,
           kLeafLookupTextUnits, &visible_count) ||
       visible_count > traversal.glyph_count) {
     return false;
   }
-  fushi_voice_hook::LeafAquaplusGlyphDrawIdentity
+  my_comic_voice_hook::LeafAquaplusGlyphDrawIdentity
       draw_identities[kLeafLookupTextUnits] = {};
   for (uint32_t index = 0; index < traversal.glyph_count; ++index) {
     const auto &captured = traversal.glyphs[index];
     draw_identities[index] = {captured.draw_format, captured.caller_rva,
                               captured.vertex_stride, captured.fvf};
   }
-  if (!fushi_voice_hook::AreLeafAquaplusMatchedGlyphDrawsPrimary(
+  if (!my_comic_voice_hook::AreLeafAquaplusMatchedGlyphDrawsPrimary(
           draw_identities, traversal.glyph_count,
           static_cast<uint32_t>(profile->quad_draw_return_rva),
           profile->quad_vertex_stride, profile->quad_fvf)) {
@@ -2443,41 +2443,41 @@ bool StageLeafLookupPrivateTraversal(const LeafPrivateTraversal &traversal) {
     }
   }
 
-  fushi_voice_hook::LeafAquaplusLookupGlyph best[kLeafLookupTextUnits] = {};
+  my_comic_voice_hook::LeafAquaplusLookupGlyph best[kLeafLookupTextUnits] = {};
   bool found = false;
   uint32_t best_skipped = UINT32_MAX;
   double best_score = 0.0;
   for (uint32_t start = 0; start < traversal.glyph_count; ++start) {
     const wchar_t first_expected = g_leaf_active_line[char_indices[0]];
-    if (!fushi_voice_hook::LeafAquaplusDecodedGlyphMatchesText(
+    if (!my_comic_voice_hook::LeafAquaplusDecodedGlyphMatchesText(
             decoded[start], &first_expected, 1u, 0u)) {
       continue;
     }
-    fushi_voice_hook::LeafAquaplusLookupGlyph matched[kLeafLookupTextUnits] =
+    my_comic_voice_hook::LeafAquaplusLookupGlyph matched[kLeafLookupTextUnits] =
         {};
     uint32_t source_index = start;
     uint32_t matched_count = 0;
     for (uint32_t expected = 0; expected < visible_count; ++expected) {
       bool glyph_found = false;
       for (; source_index < traversal.glyph_count; ++source_index) {
-        if (!fushi_voice_hook::LeafAquaplusDecodedGlyphMatchesText(
+        if (!my_comic_voice_hook::LeafAquaplusDecodedGlyphMatchesText(
                 decoded[source_index], g_leaf_active_line,
                 g_leaf_active_line_units, char_indices[expected])) {
           continue;
         }
         const auto &captured = traversal.glyphs[source_index];
-        fushi_voice_hook::LeafAquaplusLookupGlyph glyph = {
+        my_comic_voice_hook::LeafAquaplusLookupGlyph glyph = {
             captured.left, captured.top, captured.right, captured.bottom,
             char_indices[expected]};
-        if (!fushi_voice_hook::IsSaneLeafAquaplusLookupGlyph(
+        if (!my_comic_voice_hook::IsSaneLeafAquaplusLookupGlyph(
                 glyph, traversal.viewport_x, traversal.viewport_y,
                 traversal.viewport_width, traversal.viewport_height)) {
           continue;
         }
         if (matched_count != 0) {
-          fushi_voice_hook::LeafAquaplusLookupGlyph pair[2] = {
+          my_comic_voice_hook::LeafAquaplusLookupGlyph pair[2] = {
               matched[matched_count - 1u], glyph};
-          if (!fushi_voice_hook::IsLeafAquaplusGlyphSequenceSpatiallyMonotonic(
+          if (!my_comic_voice_hook::IsLeafAquaplusGlyphSequenceSpatiallyMonotonic(
                   pair, 2u)) {
             continue;
           }
@@ -2491,7 +2491,7 @@ bool StageLeafLookupPrivateTraversal(const LeafPrivateTraversal &traversal) {
         break;
     }
     if (matched_count != visible_count ||
-        !fushi_voice_hook::IsLeafAquaplusGlyphSequenceSpatiallyMonotonic(
+        !my_comic_voice_hook::IsLeafAquaplusGlyphSequenceSpatiallyMonotonic(
             matched, matched_count)) {
       continue;
     }
@@ -2607,7 +2607,7 @@ void CommitBestLeafLookupGeometry() {
   best.generation = ++g_leaf_geometry_generation;
   g_leaf_active_geometry = best;
   g_leaf_active_geometry_valid = true;
-  SetLeafLookupDiag(fushi_voice_hook::kLookupDiagGeometryObserved);
+  SetLeafLookupDiag(my_comic_voice_hook::kLookupDiagGeometryObserved);
 }
 
 uint64_t CutLeafPrivateTraversalCommittedSequence() {
@@ -2630,7 +2630,7 @@ void InvalidateLeafLookupSentence(bool advance_epoch,
   g_leaf_active_line_units = 0;
   g_leaf_active_line_timestamp_ms = 0;
   g_leaf_sentence_trace_floor =
-      replay_recent_trace ? fushi_voice_hook::LeafAquaplusRecentTraceFloor(
+      replay_recent_trace ? my_comic_voice_hook::LeafAquaplusRecentTraceFloor(
                                 committed, kLeafPrivateTraversalSlots)
                           : committed;
   if (replay_recent_trace &&
@@ -2655,7 +2655,7 @@ void ConsumeLeafLookupSelectedText() {
   const auto *profile = g_leaf_aquaplus_profile.load(std::memory_order_acquire);
   if (profile == nullptr || g_header == nullptr)
     return;
-  const uint64_t selected = fushi_voice_hook::SelectedTextThreadId(g_header);
+  const uint64_t selected = my_comic_voice_hook::SelectedTextThreadId(g_header);
   const bool selection_changed = selected != g_leaf_selected_thread_id;
   if (selection_changed) {
     const bool had_semantic_state =
@@ -2674,10 +2674,10 @@ void ConsumeLeafLookupSelectedText() {
   if (module == 0)
     return;
   const uint64_t exact_address = module + profile->embed_leaf_hook_rva;
-  const fushi_voice_hook::TextSlot *slots[fushi_voice_hook::kTextSlotCount] =
+  const my_comic_voice_hook::TextSlot *slots[my_comic_voice_hook::kTextSlotCount] =
       {};
-  const uint32_t found = fushi_voice_hook::CollectTextSlotsBySeq(
-      g_header, slots, fushi_voice_hook::kTextSlotCount, 0);
+  const uint32_t found = my_comic_voice_hook::CollectTextSlotsBySeq(
+      g_header, slots, my_comic_voice_hook::kTextSlotCount, 0);
 
   // Resolve the selected hook face before evaluating any sibling lane in this
   // batch. v13 intentionally keeps ctx in thread_id but not in face_id; exact
@@ -2688,20 +2688,20 @@ void ConsumeLeafLookupSelectedText() {
     if (slot == nullptr)
       continue;
     const uint64_t lane_before =
-        fushi_voice_hook::AtomicLoadPreview64(&slot->lane_seq);
+        my_comic_voice_hook::AtomicLoadPreview64(&slot->lane_seq);
     const uint64_t global_seq =
-        fushi_voice_hook::AtomicLoadPreview64(&slot->seq);
+        my_comic_voice_hook::AtomicLoadPreview64(&slot->seq);
     const uint64_t thread_id = slot->thread_id;
     const uint64_t face_id = slot->face_id;
     const uint64_t thread_address = slot->thread_address;
     const uint32_t source_kind = slot->source_kind;
     const uint32_t event_kind = slot->event_kind;
     const uint64_t lane_after =
-        fushi_voice_hook::AtomicLoadPreview64(&slot->lane_seq);
+        my_comic_voice_hook::AtomicLoadPreview64(&slot->lane_seq);
     if (lane_before == 0 || lane_after != lane_before || global_seq == 0 ||
         thread_id != selected || face_id == 0 ||
-        source_kind != fushi_voice_hook::kTextSourceLuna ||
-        event_kind != fushi_voice_hook::kTextEventLine ||
+        source_kind != my_comic_voice_hook::kTextSourceLuna ||
+        event_kind != my_comic_voice_hook::kTextEventLine ||
         thread_address != exact_address || global_seq <= selected_face_seq) {
       continue;
     }
@@ -2710,11 +2710,11 @@ void ConsumeLeafLookupSelectedText() {
   }
 
   constexpr uint32_t kLeafTextPayloadCapacity =
-      fushi_voice_hook::kTextSlotBytes -
-      static_cast<uint32_t>(sizeof(fushi_voice_hook::TextSlot));
+      my_comic_voice_hook::kTextSlotBytes -
+      static_cast<uint32_t>(sizeof(my_comic_voice_hook::TextSlot));
   uint64_t newest_selected_event_seq = 0;
   auto newest_disposition =
-      fushi_voice_hook::LeafAquaplusSelectedLineEventDisposition::kIgnore;
+      my_comic_voice_hook::LeafAquaplusSelectedLineEventDisposition::kIgnore;
   uint64_t newest_timestamp_ms = 0;
   wchar_t newest[kLeafLookupTextUnits] = {};
   uint32_t newest_units = 0;
@@ -2723,19 +2723,19 @@ void ConsumeLeafLookupSelectedText() {
     if (slot == nullptr)
       continue;
     const uint64_t lane_before =
-        fushi_voice_hook::AtomicLoadPreview64(&slot->lane_seq);
+        my_comic_voice_hook::AtomicLoadPreview64(&slot->lane_seq);
     const uint64_t global_seq =
-        fushi_voice_hook::AtomicLoadPreview64(&slot->seq);
+        my_comic_voice_hook::AtomicLoadPreview64(&slot->seq);
     if (lane_before == 0 || global_seq == 0)
       continue;
     const uint32_t byte_len = slot->byte_len;
     const bool is_utf8 = slot->is_utf8 != 0;
-    const bool selected_lane = fushi_voice_hook::LunaSelectedThreadAccepts(
+    const bool selected_lane = my_comic_voice_hook::LunaSelectedThreadAccepts(
         selected, slot->thread_id, g_leaf_selected_face_id, slot->face_id);
     const bool selected_exact_line =
         selected_lane &&
-        slot->source_kind == fushi_voice_hook::kTextSourceLuna &&
-        slot->event_kind == fushi_voice_hook::kTextEventLine &&
+        slot->source_kind == my_comic_voice_hook::kTextSourceLuna &&
+        slot->event_kind == my_comic_voice_hook::kTextEventLine &&
         slot->thread_address == exact_address;
     const bool payload_shape_valid =
         !is_utf8 && byte_len != 0 && (byte_len % sizeof(wchar_t)) == 0 &&
@@ -2746,23 +2746,23 @@ void ConsumeLeafLookupSelectedText() {
     uint64_t candidate_timestamp_ms = 0;
     if (selected_exact_line && payload_shape_valid) {
       const auto *payload = reinterpret_cast<const uint8_t *>(slot) +
-                            sizeof(fushi_voice_hook::TextSlot);
+                            sizeof(my_comic_voice_hook::TextSlot);
       candidate_units = byte_len / sizeof(wchar_t);
       candidate_timestamp_ms = slot->timestamp_ms;
       memcpy(candidate, payload, byte_len);
     }
     const uint64_t lane_after =
-        fushi_voice_hook::AtomicLoadPreview64(&slot->lane_seq);
+        my_comic_voice_hook::AtomicLoadPreview64(&slot->lane_seq);
     if (lane_after != lane_before || lane_after == 0)
       continue;
     const uint64_t consumed_sequence =
         (std::max)(g_leaf_text_processed_seq, newest_selected_event_seq);
     const auto disposition =
-        fushi_voice_hook::ClassifyLeafAquaplusSelectedLineEvent(
+        my_comic_voice_hook::ClassifyLeafAquaplusSelectedLineEvent(
             global_seq, consumed_sequence, selected_exact_line, is_utf8,
             byte_len, kLeafTextPayloadCapacity, kLeafLookupTextUnits);
     if (disposition ==
-        fushi_voice_hook::LeafAquaplusSelectedLineEventDisposition::kIgnore) {
+        my_comic_voice_hook::LeafAquaplusSelectedLineEventDisposition::kIgnore) {
       continue;
     }
     newest_selected_event_seq = global_seq;
@@ -2771,7 +2771,7 @@ void ConsumeLeafLookupSelectedText() {
     newest_timestamp_ms = 0;
     memset(newest, 0, sizeof(newest));
     if (disposition ==
-        fushi_voice_hook::LeafAquaplusSelectedLineEventDisposition::
+        my_comic_voice_hook::LeafAquaplusSelectedLineEventDisposition::
             kUseUtf16Payload) {
       newest_units = candidate_units;
       newest_timestamp_ms = candidate_timestamp_ms;
@@ -2780,12 +2780,12 @@ void ConsumeLeafLookupSelectedText() {
     }
   }
   if (newest_disposition ==
-      fushi_voice_hook::LeafAquaplusSelectedLineEventDisposition::kIgnore) {
+      my_comic_voice_hook::LeafAquaplusSelectedLineEventDisposition::kIgnore) {
     return;
   }
   g_leaf_text_processed_seq = newest_selected_event_seq;
   if (newest_disposition !=
-      fushi_voice_hook::LeafAquaplusSelectedLineEventDisposition::
+      my_comic_voice_hook::LeafAquaplusSelectedLineEventDisposition::
           kUseUtf16Payload) {
     InvalidateLeafLookupSentence(g_leaf_active_line_units != 0);
     g_leaf_replay_recent_trace_for_next_line = false;
@@ -2793,7 +2793,7 @@ void ConsumeLeafLookupSelectedText() {
   }
   wchar_t normalized[kLeafLookupTextUnits] = {};
   size_t normalized_units = 0;
-  if (!fushi_voice_hook::NormalizeLeafAquaplusLookupText(
+  if (!my_comic_voice_hook::NormalizeLeafAquaplusLookupText(
           newest, newest_units, normalized, kLeafLookupTextUnits,
           &normalized_units) ||
       normalized_units == 0 || normalized_units > UINT32_MAX) {
@@ -2867,27 +2867,27 @@ bool InstallLeafAquaplusD3DTrace() {
   if (device == nullptr)
     return false;
   void **device_vtable = nullptr;
-  if (fushi_voice_hook::exact_lookup::IsReadableSpan(device, sizeof(void *))) {
+  if (my_comic_voice_hook::exact_lookup::IsReadableSpan(device, sizeof(void *))) {
     memcpy(&device_vtable, device, sizeof(device_vtable));
   }
   constexpr size_t kLeafD3dLastRequiredSlot = 83u;
   const bool device_abi_valid =
       device_vtable != nullptr &&
-      fushi_voice_hook::exact_lookup::IsReadableSpan(
+      my_comic_voice_hook::exact_lookup::IsReadableSpan(
           device_vtable, (kLeafD3dLastRequiredSlot + 1u) * sizeof(void *)) &&
-      fushi_voice_hook::exact_lookup::IsExecutableAddress(device_vtable[0]) &&
-      fushi_voice_hook::exact_lookup::IsExecutableAddress(device_vtable[1]) &&
-      fushi_voice_hook::exact_lookup::IsExecutableAddress(device_vtable[2]) &&
-      fushi_voice_hook::exact_lookup::IsExecutableAddress(
+      my_comic_voice_hook::exact_lookup::IsExecutableAddress(device_vtable[0]) &&
+      my_comic_voice_hook::exact_lookup::IsExecutableAddress(device_vtable[1]) &&
+      my_comic_voice_hook::exact_lookup::IsExecutableAddress(device_vtable[2]) &&
+      my_comic_voice_hook::exact_lookup::IsExecutableAddress(
           device_vtable[17]) &&
-      fushi_voice_hook::exact_lookup::IsExecutableAddress(
+      my_comic_voice_hook::exact_lookup::IsExecutableAddress(
           device_vtable[65]) &&
-      fushi_voice_hook::exact_lookup::IsExecutableAddress(
+      my_comic_voice_hook::exact_lookup::IsExecutableAddress(
           device_vtable[83]);
   if (!device_abi_valid)
     return false;
   InterlockedOr(
-      reinterpret_cast<volatile LONG *>(&FushiLeafD3DTraceV1.reserved), 0x02);
+      reinterpret_cast<volatile LONG *>(&MyComicLeafD3DTraceV1.reserved), 0x02);
   auto *traversal_target =
       reinterpret_cast<uint8_t *>(module) + profile->text_traversal_rva;
   const bool traversal_ready =
@@ -2907,21 +2907,21 @@ bool InstallLeafAquaplusD3DTrace() {
        g_leaf_raster_draw_original != nullptr);
   if (traversal_ready && raster_ready) {
     InterlockedOr(
-        reinterpret_cast<volatile LONG *>(&FushiLeafD3DTraceV1.reserved), 0x04);
+        reinterpret_cast<volatile LONG *>(&MyComicLeafD3DTraceV1.reserved), 0x04);
   }
   const bool present_ready = HookFn(
       device_vtable[17], reinterpret_cast<void *>(&Detour_LeafPresent),
       reinterpret_cast<void **>(&g_leaf_present_original));
   if (present_ready && g_leaf_present_original != nullptr) {
     InterlockedOr(
-        reinterpret_cast<volatile LONG *>(&FushiLeafD3DTraceV1.reserved), 0x08);
+        reinterpret_cast<volatile LONG *>(&MyComicLeafD3DTraceV1.reserved), 0x08);
   }
   const bool texture_ready = HookFn(
       device_vtable[65], reinterpret_cast<void *>(&Detour_LeafSetTexture),
       reinterpret_cast<void **>(&g_leaf_set_texture_original));
   if (texture_ready && g_leaf_set_texture_original != nullptr) {
     InterlockedOr(
-        reinterpret_cast<volatile LONG *>(&FushiLeafD3DTraceV1.reserved), 0x10);
+        reinterpret_cast<volatile LONG *>(&MyComicLeafD3DTraceV1.reserved), 0x10);
   }
   const bool draw_ready =
       HookFn(device_vtable[83],
@@ -2929,7 +2929,7 @@ bool InstallLeafAquaplusD3DTrace() {
              reinterpret_cast<void **>(&g_leaf_draw_primitive_up_original));
   if (draw_ready && g_leaf_draw_primitive_up_original != nullptr) {
     InterlockedOr(
-        reinterpret_cast<volatile LONG *>(&FushiLeafD3DTraceV1.reserved), 0x20);
+        reinterpret_cast<volatile LONG *>(&MyComicLeafD3DTraceV1.reserved), 0x20);
   }
   const bool ready = traversal_ready && raster_ready && present_ready &&
                      texture_ready && draw_ready &&
@@ -2941,7 +2941,7 @@ bool InstallLeafAquaplusD3DTrace() {
   g_leaf_d3d_trace_ready.store(ready, std::memory_order_release);
   if (ready) {
     InterlockedOr(
-        reinterpret_cast<volatile LONG *>(&FushiLeafD3DTraceV1.reserved), 0x40);
+        reinterpret_cast<volatile LONG *>(&MyComicLeafD3DTraceV1.reserved), 0x40);
   }
   return ready;
 #else
@@ -3003,24 +3003,24 @@ bool PublishLeafLookupHit(const LeafLookupPayload &payload) {
              static_cast<size_t>(payload.text_units) * sizeof(wchar_t)) != 0) {
     return false;
   }
-  char utf8[fushi_voice_hook::kLookupLineBytes] = {};
+  char utf8[my_comic_voice_hook::kLookupLineBytes] = {};
   const int bytes = WideCharToMultiByte(
       CP_UTF8, 0, payload.text, static_cast<int>(payload.text_units), utf8,
       static_cast<int>(sizeof(utf8)), nullptr, nullptr);
   if (bytes <= 0)
     return false;
-  fushi_voice_hook::LookupGeometryHitPublication publication;
+  my_comic_voice_hook::LookupGeometryHitPublication publication;
   publication.provider_kind =
-      fushi_voice_hook::kLookupGeometryProviderEngineExactLayout;
+      my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout;
   publication.provider_id =
-      fushi_voice_hook::kLookupGeometryProviderIdLeafAquaplus;
+      my_comic_voice_hook::kLookupGeometryProviderIdLeafAquaplus;
   publication.char_index = payload.char_index;
-  publication.source_length = fushi_voice_hook::LookupUtf16SourceLength(
+  publication.source_length = my_comic_voice_hook::LookupUtf16SourceLength(
       payload.text, payload.text_units, payload.char_index);
   publication.char_count = payload.text_units;
   publication.coordinate_space =
-      fushi_voice_hook::kLookupCoordinateSpaceClientPhysicalPixels;
-  publication.writing_mode = fushi_voice_hook::kLookupWritingModeHorizontal;
+      my_comic_voice_hook::kLookupCoordinateSpaceClientPhysicalPixels;
+  publication.writing_mode = my_comic_voice_hook::kLookupWritingModeHorizontal;
   publication.text_generation = payload.sentence_epoch;
   publication.geometry_generation = payload.geometry_generation;
   publication.glyph_x = payload.rect.x;
@@ -3029,10 +3029,10 @@ bool PublishLeafLookupHit(const LeafLookupPayload &payload) {
   publication.glyph_h = payload.rect.height;
   publication.view_w = payload.client_width;
   publication.view_h = payload.client_height;
-  publication.flags = fushi_voice_hook::kLookupHitFlagSubmit;
+  publication.flags = my_comic_voice_hook::kLookupHitFlagSubmit;
   publication.line_utf8 = reinterpret_cast<const uint8_t *>(utf8);
   publication.line_bytes = static_cast<uint32_t>(bytes);
-  return fushi_voice_hook::g_geometry_provider_registry.PublishHit(g_header, publication);
+  return my_comic_voice_hook::g_geometry_provider_registry.PublishHit(g_header, publication);
 }
 
 bool PublishLeafLookupPayload(const LeafLookupPayload &payload) {
@@ -3090,35 +3090,35 @@ void ProcessLeafAquaplusLookupTick() {
   const uint32_t poller_conflicts =
       static_cast<uint32_t>(InterlockedCompareExchange(
           reinterpret_cast<volatile LONG *>(
-              &FushiLeafD3DTraceV1.input_poller_conflicts),
+              &MyComicLeafD3DTraceV1.input_poller_conflicts),
           0, 0));
   const bool poller_contended =
       poller_conflicts != g_leaf_lookup_seen_poller_conflicts;
   g_leaf_lookup_seen_poller_conflicts = poller_conflicts;
   InterlockedExchange(reinterpret_cast<volatile LONG *>(
-                          &FushiLeafD3DTraceV1.input_poller_contended),
+                          &MyComicLeafD3DTraceV1.input_poller_contended),
                       poller_contended ? 1 : 0);
   if (poller_contended) {
     ReleaseDeadLeafInputPollerOwner();
     if (g_header != nullptr) {
-      fushi_voice_hook::g_geometry_provider_registry.Retire(
+      my_comic_voice_hook::g_geometry_provider_registry.Retire(
           g_header,
-          fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-          fushi_voice_hook::kLookupGeometryProviderIdLeafAquaplus,
-          fushi_voice_hook::kLookupGeometryStatusFaulted);
+          my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+          my_comic_voice_hook::kLookupGeometryProviderIdLeafAquaplus,
+          my_comic_voice_hook::kLookupGeometryStatusFaulted);
     }
     SetLeafLookupRuntimeEnabled(false);
     InvalidateLeafLookupClickTarget();
     return;
   }
   if (g_stop || g_header == nullptr ||
-      !fushi_voice_hook::HasLookupRegion(g_header) ||
+      !my_comic_voice_hook::HasLookupRegion(g_header) ||
       g_header->lookup_enabled == 0) {
     if (g_header != nullptr) {
-      fushi_voice_hook::g_geometry_provider_registry.Retire(
+      my_comic_voice_hook::g_geometry_provider_registry.Retire(
           g_header,
-          fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-          fushi_voice_hook::kLookupGeometryProviderIdLeafAquaplus);
+          my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+          my_comic_voice_hook::kLookupGeometryProviderIdLeafAquaplus);
     }
     SetLeafLookupRuntimeEnabled(false);
     InvalidateLeafLookupClickTarget();
@@ -3127,15 +3127,15 @@ void ProcessLeafAquaplusLookupTick() {
   const bool input_ready = InstallLeafSampledInputShield();
   const bool geometry_ready = InstallLeafAquaplusD3DTrace();
   if (!input_ready || !geometry_ready) {
-    fushi_voice_hook::g_geometry_provider_registry.Retire(
+    my_comic_voice_hook::g_geometry_provider_registry.Retire(
         g_header,
-        fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-        fushi_voice_hook::kLookupGeometryProviderIdLeafAquaplus);
+        my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+        my_comic_voice_hook::kLookupGeometryProviderIdLeafAquaplus);
     SetLeafLookupRuntimeEnabled(false);
     InvalidateLeafLookupClickTarget();
     return;
   }
-  SetLeafLookupDiag(fushi_voice_hook::kLookupDiagSensorInstalled);
+  SetLeafLookupDiag(my_comic_voice_hook::kLookupDiagSensorInstalled);
   ConsumeLeafLookupSelectedText();
   ConsumeLeafLookupPrivateTraversals();
   SetLeafLookupRuntimeEnabled(true);
@@ -3145,15 +3145,15 @@ void ProcessLeafAquaplusLookupTick() {
       g_leaf_active_geometry.sentence_epoch == g_leaf_sentence_epoch &&
       g_leaf_active_geometry.generation != 0;
   if (active_geometry_ready) {
-    fushi_voice_hook::g_geometry_provider_registry.OfferReady(
+    my_comic_voice_hook::g_geometry_provider_registry.OfferReady(
         g_header,
-        fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-        fushi_voice_hook::kLookupGeometryProviderIdLeafAquaplus);
+        my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+        my_comic_voice_hook::kLookupGeometryProviderIdLeafAquaplus);
   } else {
-    fushi_voice_hook::g_geometry_provider_registry.Retire(
+    my_comic_voice_hook::g_geometry_provider_registry.Retire(
         g_header,
-        fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-        fushi_voice_hook::kLookupGeometryProviderIdLeafAquaplus);
+        my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+        my_comic_voice_hook::kLookupGeometryProviderIdLeafAquaplus);
   }
 
   bool click_submitted = false;
@@ -3169,7 +3169,7 @@ void ProcessLeafAquaplusLookupTick() {
   const uint64_t activation_epoch =
       g_leaf_lookup_activation_epoch.load(std::memory_order_acquire);
   const bool shift_submit =
-      fushi_voice_hook::ConsumeLeafAquaplusLookupShiftSample(
+      my_comic_voice_hook::ConsumeLeafAquaplusLookupShiftSample(
           shift_state, activation_epoch, &g_leaf_lookup_shift_state);
   if (!g_leaf_active_geometry_valid ||
       g_leaf_active_geometry.sentence_epoch != g_leaf_sentence_epoch) {
@@ -3183,10 +3183,10 @@ void ProcessLeafAquaplusLookupTick() {
   POINT cursor = {};
   if (game == nullptr || !GetClientRect(game, &client) ||
       !ClientToScreen(game, &origin) || !GetCursorPos(&cursor)) {
-    fushi_voice_hook::g_geometry_provider_registry.Retire(
+    my_comic_voice_hook::g_geometry_provider_registry.Retire(
         g_header,
-        fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-        fushi_voice_hook::kLookupGeometryProviderIdLeafAquaplus);
+        my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+        my_comic_voice_hook::kLookupGeometryProviderIdLeafAquaplus);
     InvalidateLeafLookupClickTarget();
     return;
   }
@@ -3218,7 +3218,7 @@ void ProcessLeafAquaplusLookupTick() {
   }
 }
 
-class LeafAquaplusAdapter final : public fushi_voice_hook::EngineAdapter {
+class LeafAquaplusAdapter final : public my_comic_voice_hook::EngineAdapter {
 public:
   const char *id() const override { return "leaf_aquaplus"; }
   bool probe() const override { return IsLeafAquaplusProfileMatched(); }
@@ -3235,10 +3235,10 @@ public:
     ProcessLeafVoiceTasks();
     ProcessLeafAquaplusLookupTick();
   }
-  fushi_voice_hook::AdapterCapability capabilities() const override {
-    return fushi_voice_hook::AdapterCapability::kText |
-           fushi_voice_hook::AdapterCapability::kResourceAudio |
-           fushi_voice_hook::AdapterCapability::kPcmAudio;
+  my_comic_voice_hook::AdapterCapability capabilities() const override {
+    return my_comic_voice_hook::AdapterCapability::kText |
+           my_comic_voice_hook::AdapterCapability::kResourceAudio |
+           my_comic_voice_hook::AdapterCapability::kPcmAudio;
   }
   // v19 准入。这里只把已缓存的结论翻译成准入状态，不做任何判定。
   //
@@ -3249,22 +3249,22 @@ public:
   // 模块表稳定后收敛成 EngineUnsupported 并附上共享槽里的 exe 摘要。
   // 对照 Siglus：它的 probe() 是 `IsSiglusEngine()`（引擎探测），与 hash 门是两回事，
   // 所以它的 IdentityRejected 真能走到。别照着它给这里补一条。
-  fushi_voice_hook::LookupAdmissionReport lookupAdmission() const override {
-    fushi_voice_hook::LookupAdmissionReport report;
+  my_comic_voice_hook::LookupAdmissionReport lookupAdmission() const override {
+    my_comic_voice_hook::LookupAdmissionReport report;
     // 身份过了还要 D3D trace 真的装上——白2 的几何全靠那三个 vtable 槽，装不上就
     // 只有身份没有传感器。这一步失败在真机上很常见（D3D9 设备还没建好就轮询到了）。
     report.state = g_leaf_d3d_trace_ready.load(std::memory_order_acquire)
-                       ? fushi_voice_hook::kLookupAdmissionSensorInstalled
-                       : fushi_voice_hook::kLookupAdmissionIdentityAccepted;
+                       ? my_comic_voice_hook::kLookupAdmissionSensorInstalled
+                       : my_comic_voice_hook::kLookupAdmissionIdentityAccepted;
     return report;
   }
   void onModuleLoaded(const wchar_t *) override { install(); }
   void shutdown() override {
     if (g_header != nullptr) {
-      fushi_voice_hook::g_geometry_provider_registry.Retire(
+      my_comic_voice_hook::g_geometry_provider_registry.Retire(
           g_header,
-          fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-          fushi_voice_hook::kLookupGeometryProviderIdLeafAquaplus);
+          my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+          my_comic_voice_hook::kLookupGeometryProviderIdLeafAquaplus);
     }
     StopLeafAquaplusResourceAudio();
     SetLeafLookupRuntimeEnabled(false);
@@ -3274,21 +3274,21 @@ public:
     // 冲突基线对齐到当前计数，免得下一次 install 把旧计数当成新增量。
     g_leaf_input_poller_owner_tid.store(0, std::memory_order_release);
     InterlockedExchange(reinterpret_cast<volatile LONG *>(
-                            &FushiLeafD3DTraceV1.input_poller_owner_tid),
+                            &MyComicLeafD3DTraceV1.input_poller_owner_tid),
                         0);
     InterlockedExchange(reinterpret_cast<volatile LONG *>(
-                            &FushiLeafD3DTraceV1.input_poller_contended),
+                            &MyComicLeafD3DTraceV1.input_poller_contended),
                         0);
     g_leaf_lookup_seen_poller_conflicts =
         static_cast<uint32_t>(InterlockedCompareExchange(
             reinterpret_cast<volatile LONG *>(
-                &FushiLeafD3DTraceV1.input_poller_conflicts),
+                &MyComicLeafD3DTraceV1.input_poller_conflicts),
             0, 0));
     InvalidateLeafLookupClickTarget();
     RevokeLeafSampledInputShieldReady(g_leaf_sampled_input_property_window);
     installed_ = false;
   }
-  fushi_voice_hook::AdapterDiagnostics diagnostics() const override {
+  my_comic_voice_hook::AdapterDiagnostics diagnostics() const override {
     return {id(), probe(), installed_,
             g_header == nullptr ? 0u : g_header->lookup_diag};
   }

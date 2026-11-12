@@ -29,12 +29,12 @@
 //     （unity_adapter.inc）多一个 `const void* method`，照抄到 Mono 上会在 x86 把栈上的
 //     下一个槽当成参数转发、在 x64 多读一个寄存器——前者破坏调用方的栈约定，不能复用。
 #if defined(_M_IX86)
-#define FUSHI_MONO_MANAGED_CALL __cdecl
+#define MYCOMIC_MONO_MANAGED_CALL __cdecl
 #else
-#define FUSHI_MONO_MANAGED_CALL
+#define MYCOMIC_MONO_MANAGED_CALL
 #endif
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 enum class MonoManagedAbi : uint8_t {
   kUnsupported = 0,
@@ -57,7 +57,7 @@ constexpr MonoManagedAbi MonoManagedAbiForPointerBytes(size_t pointer_bytes) {
                               : MonoManagedAbi::kUnsupported;
 }
 
-// 本构建产物的托管调用约定。与 FUSHI_MONO_MANAGED_CALL 必须一致。
+// 本构建产物的托管调用约定。与 MYCOMIC_MONO_MANAGED_CALL 必须一致。
 #if defined(_M_IX86)
 constexpr MonoManagedAbi kMonoManagedAbiForBuild =
     MonoManagedAbi::kX86CdeclThisFirst;
@@ -512,4 +512,4 @@ inline MonoStringView ReadMonoStringBounded(
   return view;
 }
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

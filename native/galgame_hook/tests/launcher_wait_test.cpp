@@ -4,7 +4,7 @@
 #include <cstdio>
 #include <cstdlib>
 
-using namespace fushi_voice_hook;
+using namespace my_comic_voice_hook;
 namespace {
 void Check(bool ok) { if (!ok) std::abort(); }
 void TestInteractiveLineage() {

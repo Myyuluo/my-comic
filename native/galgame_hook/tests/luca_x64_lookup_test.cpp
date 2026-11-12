@@ -10,8 +10,8 @@
 #include <windows.h>
 #include <tlhelp32.h>
 #endif
-namespace luca = fushi_voice_hook::luca;
-namespace geom = fushi_voice_hook::luca_x64;
+namespace luca = my_comic_voice_hook::luca;
+namespace geom = my_comic_voice_hook::luca_x64;
 namespace {
 void Put32(std::vector<uint8_t>& bytes,size_t at,uint32_t value) {
   std::memcpy(bytes.data()+at,&value,4u);

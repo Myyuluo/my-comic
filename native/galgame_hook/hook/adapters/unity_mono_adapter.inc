@@ -66,7 +66,7 @@ constexpr LONG kUnityMonoFlagLookupInstalled = 0x10000000;
 constexpr LONG kUnityMonoFlagLookupRejected = 0x20000000;
 // Fungus SayDialog.DoSay 整句入口解析成功（框架结构判据成立）。
 constexpr LONG kUnityMonoFlagFungusSignature = 0x40000000;
-static_assert(fushi_voice_hook::kMonoTextHookCount <= 6,
+static_assert(my_comic_voice_hook::kMonoTextHookCount <= 6,
               "hook id bits must fit bits 8..13 / 16..21");
 
 volatile LONG g_unity_mono_flags = 0;
@@ -84,7 +84,7 @@ void MarkUnityMonoFlag(LONG flag) { InterlockedOr(&g_unity_mono_flags, flag); }
 // 只在 Unity 主线程上取（Object.GetName 是主线程引擎调用）。Mes 每条消息只调一次，
 // 所以每次现取、不按组件指针缓存：Boehm GC 会复用已销毁对象的地址，指针缓存会把
 // 新对象错认成旧角色。
-fushi_voice_hook::unity_mono_lookup::IcallGetNameFn g_unity_mono_object_get_name =
+my_comic_voice_hook::unity_mono_lookup::IcallGetNameFn g_unity_mono_object_get_name =
     nullptr;
 DWORD g_unity_mono_main_thread = 0;
 
@@ -94,12 +94,12 @@ uint64_t UnityMonoMessageRole(void* component) {
       GetCurrentThreadId() != g_unity_mono_main_thread) {
     return 0;
   }
-  const fushi_voice_hook::MonoStringView name =
-      fushi_voice_hook::ReadMonoStringBounded(
+  const my_comic_voice_hook::MonoStringView name =
+      my_comic_voice_hook::ReadMonoStringBounded(
           g_unity_mono_object_get_name(component), g_unity_mono_string_length,
           g_unity_mono_string_chars,
-          fushi_voice_hook::unity_mono_lookup::kMaxRoleNameUnits);
-  return fushi_voice_hook::unity_mono_lookup::MessageRoleKey(name.chars,
+          my_comic_voice_hook::unity_mono_lookup::kMaxRoleNameUnits);
+  return my_comic_voice_hook::unity_mono_lookup::MessageRoleKey(name.chars,
                                                              name.length);
 }
 
@@ -135,10 +135,10 @@ void RememberUnityMonoFungusStoryText(void* dialog) {
   g_um_fungus_story_texts[slot].store(story, std::memory_order_release);
 }
 
-using UnityMonoTextSetter = void(FUSHI_MONO_MANAGED_CALL*)(void*, void*);
-using UnityMonoTextSetterWithFlag = void(FUSHI_MONO_MANAGED_CALL*)(void*, void*,
+using UnityMonoTextSetter = void(MYCOMIC_MONO_MANAGED_CALL*)(void*, void*);
+using UnityMonoTextSetterWithFlag = void(MYCOMIC_MONO_MANAGED_CALL*)(void*, void*,
                                                                     uintptr_t);
-using UnityMonoMessageRendererMes = void*(FUSHI_MONO_MANAGED_CALL*)(void*, void*,
+using UnityMonoMessageRendererMes = void*(MYCOMIC_MONO_MANAGED_CALL*)(void*, void*,
                                                                      uintptr_t);
 UnityMonoTextSetter g_orig_UnityMonoTmpSetText = nullptr;
 UnityMonoTextSetterWithFlag g_orig_UnityMonoTmpSetTextBool = nullptr;
@@ -146,7 +146,7 @@ UnityMonoTextSetter g_orig_UnityMonoUiTextSetText = nullptr;
 UnityMonoTextSetter g_orig_UnityMonoTextMeshSetText = nullptr;
 UnityMonoMessageRendererMes g_orig_UnityMonoMessageRendererMes = nullptr;
 // IEnumerator SayDialog.DoSay(string, bool×5, AudioClip, Action)：bool 按整字转发。
-using UnityMonoFungusDoSay = void*(FUSHI_MONO_MANAGED_CALL*)(
+using UnityMonoFungusDoSay = void*(MYCOMIC_MONO_MANAGED_CALL*)(
     void*, void*, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, void*,
     void*);
 UnityMonoFungusDoSay g_orig_UnityMonoFungusDoSay = nullptr;
@@ -154,34 +154,34 @@ UnityMonoFungusDoSay g_orig_UnityMonoFungusDoSay = nullptr;
 // 游戏线程上的唯一工作：经导出 accessor 取 UTF-16 视图（纯指针运算，不分配、不进 GC），
 // 交给与 IL2CPP 共用的有界发布（RecordUnityTextChars 内部拷进定长 clean[501] 再写共享
 // 内存道）。不 attach、不 runtime_invoke、不做 IO。
-void RecordUnityMonoText(fushi_voice_hook::MonoTextHookId id, void* component,
+void RecordUnityMonoText(my_comic_voice_hook::MonoTextHookId id, void* component,
                          void* string_object) {
   MarkUnityMonoFlag(1L << (kUnityMonoFlagDetourFiredShift +
                            static_cast<LONG>(id)));
   if (!g_capture_enabled) return;
-  if (id == fushi_voice_hook::MonoTextHookId::kUiTextSetText &&
+  if (id == my_comic_voice_hook::MonoTextHookId::kUiTextSetText &&
       UnityMonoIsFungusStoryText(component)) {
     return;
   }
-  const fushi_voice_hook::MonoStringView view =
-      fushi_voice_hook::ReadMonoStringBounded(
+  const my_comic_voice_hook::MonoStringView view =
+      my_comic_voice_hook::ReadMonoStringBounded(
           string_object, g_unity_mono_string_length,
           g_unity_mono_string_chars, kUnityMonoTextMaxChars);
   if (view.length <= 0) return;
-  const fushi_voice_hook::MonoTextHookSpec& spec =
-      fushi_voice_hook::MonoTextHookSpecFor(id);
+  const my_comic_voice_hook::MonoTextHookSpec& spec =
+      my_comic_voice_hook::MonoTextHookSpecFor(id);
   const wchar_t* chars = view.chars;
   int length = view.length;
   // Fungus 整句：去掉框架自己的 {...} 控制标记（富文本 <...> 由共用发布入口剥）。
   wchar_t fungus_clean[kUnityMonoTextMaxChars] = {0};
-  if (id == fushi_voice_hook::MonoTextHookId::kFungusSayDialogDoSay) {
-    length = fushi_voice_hook::StripFungusTextTags(
+  if (id == my_comic_voice_hook::MonoTextHookId::kFungusSayDialogDoSay) {
+    length = my_comic_voice_hook::StripFungusTextTags(
         view.chars, view.length, fungus_clean, kUnityMonoTextMaxChars);
     chars = fungus_clean;
     if (length <= 0) return;
   }
   const uint64_t role =
-      id == fushi_voice_hook::MonoTextHookId::kMessageRendererMes
+      id == my_comic_voice_hook::MonoTextHookId::kMessageRendererMes
           ? UnityMonoMessageRole(component)
           : 0;
   if (RecordUnityTextChars(component, chars, length, spec.hook_name,
@@ -192,45 +192,45 @@ void RecordUnityMonoText(fushi_voice_hook::MonoTextHookId id, void* component,
 
 // Mono 托管签名：没有 IL2CPP 的尾随 MethodInfo*。bool 实参按整字转发（x86 栈槽 /
 // x64 R8 原样），不在本机侧重新规范化。
-void FUSHI_MONO_MANAGED_CALL Detour_UnityMonoTmpSetText(void* self,
+void MYCOMIC_MONO_MANAGED_CALL Detour_UnityMonoTmpSetText(void* self,
                                                         void* text) {
   g_orig_UnityMonoTmpSetText(self, text);
-  RecordUnityMonoText(fushi_voice_hook::MonoTextHookId::kTmpSetText, self,
+  RecordUnityMonoText(my_comic_voice_hook::MonoTextHookId::kTmpSetText, self,
                       text);
 }
 
-void FUSHI_MONO_MANAGED_CALL Detour_UnityMonoTmpSetTextBool(
+void MYCOMIC_MONO_MANAGED_CALL Detour_UnityMonoTmpSetTextBool(
     void* self, void* text, uintptr_t sync_text_input_box) {
   g_orig_UnityMonoTmpSetTextBool(self, text, sync_text_input_box);
-  RecordUnityMonoText(fushi_voice_hook::MonoTextHookId::kTmpSetTextBool, self,
+  RecordUnityMonoText(my_comic_voice_hook::MonoTextHookId::kTmpSetTextBool, self,
                       text);
 }
 
-void FUSHI_MONO_MANAGED_CALL Detour_UnityMonoUiTextSetText(void* self,
+void MYCOMIC_MONO_MANAGED_CALL Detour_UnityMonoUiTextSetText(void* self,
                                                            void* text) {
   g_orig_UnityMonoUiTextSetText(self, text);
-  RecordUnityMonoText(fushi_voice_hook::MonoTextHookId::kUiTextSetText, self,
+  RecordUnityMonoText(my_comic_voice_hook::MonoTextHookId::kUiTextSetText, self,
                       text);
 }
 
-void FUSHI_MONO_MANAGED_CALL Detour_UnityMonoTextMeshSetText(void* self,
+void MYCOMIC_MONO_MANAGED_CALL Detour_UnityMonoTextMeshSetText(void* self,
                                                              void* text) {
   g_orig_UnityMonoTextMeshSetText(self, text);
-  RecordUnityMonoText(fushi_voice_hook::MonoTextHookId::kTextMeshSetText, self,
+  RecordUnityMonoText(my_comic_voice_hook::MonoTextHookId::kTextMeshSetText, self,
                       text);
 }
 
 // 返回值是去掉排版标记后的整条消息正文；原样返回给调用方。
-void* FUSHI_MONO_MANAGED_CALL Detour_UnityMonoMessageRendererMes(
+void* MYCOMIC_MONO_MANAGED_CALL Detour_UnityMonoMessageRendererMes(
     void* self, void* message, uintptr_t skip) {
   void* plain = g_orig_UnityMonoMessageRendererMes(self, message, skip);
-  RecordUnityMonoText(fushi_voice_hook::MonoTextHookId::kMessageRendererMes,
+  RecordUnityMonoText(my_comic_voice_hook::MonoTextHookId::kMessageRendererMes,
                       self, plain);
   return plain;
 }
 
 // Fungus 整句入口：迭代器原样返回；text 参数就是当前显示语言的整句。
-void* FUSHI_MONO_MANAGED_CALL Detour_UnityMonoFungusDoSay(
+void* MYCOMIC_MONO_MANAGED_CALL Detour_UnityMonoFungusDoSay(
     void* self, void* text, uintptr_t clear_previous, uintptr_t wait_for_input,
     uintptr_t fade_when_done, uintptr_t stop_voiceover, uintptr_t wait_for_vo,
     void* voice_over_clip, void* on_complete) {
@@ -238,39 +238,39 @@ void* FUSHI_MONO_MANAGED_CALL Detour_UnityMonoFungusDoSay(
       self, text, clear_previous, wait_for_input, fade_when_done,
       stop_voiceover, wait_for_vo, voice_over_clip, on_complete);
   RememberUnityMonoFungusStoryText(self);
-  RecordUnityMonoText(fushi_voice_hook::MonoTextHookId::kFungusSayDialogDoSay,
+  RecordUnityMonoText(my_comic_voice_hook::MonoTextHookId::kFungusSayDialogDoSay,
                       self, text);
   return routine;
 }
 
 struct UnityMonoDetourBinding {
-  fushi_voice_hook::MonoTextHookId id;
+  my_comic_voice_hook::MonoTextHookId id;
   void* detour;
   void** original;
 };
 
 const UnityMonoDetourBinding kUnityMonoDetours[] = {
-    {fushi_voice_hook::MonoTextHookId::kTmpSetText,
+    {my_comic_voice_hook::MonoTextHookId::kTmpSetText,
      reinterpret_cast<void*>(&Detour_UnityMonoTmpSetText),
      reinterpret_cast<void**>(&g_orig_UnityMonoTmpSetText)},
-    {fushi_voice_hook::MonoTextHookId::kTmpSetTextBool,
+    {my_comic_voice_hook::MonoTextHookId::kTmpSetTextBool,
      reinterpret_cast<void*>(&Detour_UnityMonoTmpSetTextBool),
      reinterpret_cast<void**>(&g_orig_UnityMonoTmpSetTextBool)},
-    {fushi_voice_hook::MonoTextHookId::kUiTextSetText,
+    {my_comic_voice_hook::MonoTextHookId::kUiTextSetText,
      reinterpret_cast<void*>(&Detour_UnityMonoUiTextSetText),
      reinterpret_cast<void**>(&g_orig_UnityMonoUiTextSetText)},
-    {fushi_voice_hook::MonoTextHookId::kTextMeshSetText,
+    {my_comic_voice_hook::MonoTextHookId::kTextMeshSetText,
      reinterpret_cast<void*>(&Detour_UnityMonoTextMeshSetText),
      reinterpret_cast<void**>(&g_orig_UnityMonoTextMeshSetText)},
-    {fushi_voice_hook::MonoTextHookId::kMessageRendererMes,
+    {my_comic_voice_hook::MonoTextHookId::kMessageRendererMes,
      reinterpret_cast<void*>(&Detour_UnityMonoMessageRendererMes),
      reinterpret_cast<void**>(&g_orig_UnityMonoMessageRendererMes)},
-    {fushi_voice_hook::MonoTextHookId::kFungusSayDialogDoSay,
+    {my_comic_voice_hook::MonoTextHookId::kFungusSayDialogDoSay,
      reinterpret_cast<void*>(&Detour_UnityMonoFungusDoSay),
      reinterpret_cast<void**>(&g_orig_UnityMonoFungusDoSay)},
 };
 static_assert(sizeof(kUnityMonoDetours) / sizeof(kUnityMonoDetours[0]) ==
-                  fushi_voice_hook::kMonoTextHookCount,
+                  my_comic_voice_hook::kMonoTextHookCount,
               "every Mono text hook id needs exactly one detour binding");
 
 HMODULE FindLoadedUnityMonoRuntime() {
@@ -289,8 +289,8 @@ void LoadMonoExport(HMODULE runtime, const char* name, Fn* out) {
   *out = reinterpret_cast<Fn>(GetProcAddress(runtime, name));
 }
 
-fushi_voice_hook::MonoEmbeddingApi LoadUnityMonoEmbeddingApi(HMODULE runtime) {
-  fushi_voice_hook::MonoEmbeddingApi api;
+my_comic_voice_hook::MonoEmbeddingApi LoadUnityMonoEmbeddingApi(HMODULE runtime) {
+  my_comic_voice_hook::MonoEmbeddingApi api;
   LoadMonoExport(runtime, "mono_get_root_domain", &api.get_root_domain);
   LoadMonoExport(runtime, "mono_thread_attach", &api.thread_attach);
   LoadMonoExport(runtime, "mono_thread_detach", &api.thread_detach);
@@ -325,22 +325,22 @@ fushi_voice_hook::MonoEmbeddingApi LoadUnityMonoEmbeddingApi(HMODULE runtime) {
 // 判据与实测见 unity_mono_audio.h。游戏线程（Unity 主线程）上的 detour 只做：身份/线程
 // 门、Fungus 打字音排除、经 Object.GetName 引擎调用取 clip 名并**有界拷贝**进固定长环；
 // voice bundle 判定、去重、写共享环事件与日志全在 HookWorker（ProcessUnityMonoAudioEvents）。
-namespace umono_audio = fushi_voice_hook::unity_mono_audio;
+namespace umono_audio = my_comic_voice_hook::unity_mono_audio;
 static_assert(umono_audio::kClipNameUnits == kUnityClipNameChars,
               "Mono audio event names must fit the shared UnityVoiceEvent");
 
 umono_audio::AudioSites g_um_audio;
-using UmAudioPlayOneShotFn = void(FUSHI_UNITY_ICALL*)(void*, void*, float);
-using UmAudioPlayUlongFn = void(FUSHI_UNITY_ICALL*)(void*, uint64_t);
-using UmAudioPlayDoubleFn = void(FUSHI_UNITY_ICALL*)(void*, double);
-using UmAudioGetClipFn = void*(FUSHI_UNITY_ICALL*)(void*);
+using UmAudioPlayOneShotFn = void(MYCOMIC_UNITY_ICALL*)(void*, void*, float);
+using UmAudioPlayUlongFn = void(MYCOMIC_UNITY_ICALL*)(void*, uint64_t);
+using UmAudioPlayDoubleFn = void(MYCOMIC_UNITY_ICALL*)(void*, double);
+using UmAudioGetClipFn = void*(MYCOMIC_UNITY_ICALL*)(void*);
 UmAudioPlayOneShotFn g_orig_UmAudioPlayOneShotHelper = nullptr;
 UmAudioPlayUlongFn g_orig_UmAudioPlayHelper = nullptr;
 UmAudioPlayDoubleFn g_orig_UmAudioPlayDelayed = nullptr;
 UmAudioPlayOneShotFn g_orig_UmAudioLegacyPlayOneShot = nullptr;
 UmAudioPlayUlongFn g_orig_UmAudioLegacyPlay = nullptr;
-using UmWriterAudioNoArgFn = void(FUSHI_MONO_MANAGED_CALL*)(void*);
-using UmWriterAudioClipFn = void(FUSHI_MONO_MANAGED_CALL*)(void*, void*);
+using UmWriterAudioNoArgFn = void(MYCOMIC_MONO_MANAGED_CALL*)(void*);
+using UmWriterAudioClipFn = void(MYCOMIC_MONO_MANAGED_CALL*)(void*, void*);
 UmWriterAudioNoArgFn g_orig_UmWriterAudioOnGlyph = nullptr;
 UmWriterAudioClipFn g_orig_UmWriterAudioOnStart = nullptr;
 UmWriterAudioClipFn g_orig_UmWriterAudioOnVoiceover = nullptr;
@@ -372,8 +372,8 @@ void RecordUnityMonoAudio(void* source, void* clip, uint32_t flags) {
   }
   const auto get_name =
       reinterpret_cast<umono_lookup::IcallGetNameFn>(g_um_audio.get_name);
-  const fushi_voice_hook::MonoStringView name =
-      fushi_voice_hook::ReadMonoStringBounded(
+  const my_comic_voice_hook::MonoStringView name =
+      my_comic_voice_hook::ReadMonoStringBounded(
           get_name(clip), g_unity_mono_string_length,
           g_unity_mono_string_chars,
           static_cast<int>(umono_audio::kClipNameUnits) - 1);
@@ -396,46 +396,46 @@ void RecordUnityMonoAudio(void* source, void* clip, uint32_t flags) {
 
 // 引擎内部调用（C 函数，x86 cdecl / x64 Win64）：先记录再转发，detour 不持锁，原函数
 // 抛托管异常时 Mono 按 LMF 直接回到托管调用方，不经过本帧的收尾。
-void FUSHI_UNITY_ICALL Detour_UmAudioPlayOneShotHelper(void* source, void* clip,
+void MYCOMIC_UNITY_ICALL Detour_UmAudioPlayOneShotHelper(void* source, void* clip,
                                                        float volume) {
   RecordUnityMonoAudio(source, clip, 0u);
   g_orig_UmAudioPlayOneShotHelper(source, clip, volume);
 }
-void FUSHI_UNITY_ICALL Detour_UmAudioPlayHelper(void* source, uint64_t delay) {
+void MYCOMIC_UNITY_ICALL Detour_UmAudioPlayHelper(void* source, uint64_t delay) {
   RecordUnityMonoAudio(source, nullptr, 0u);
   g_orig_UmAudioPlayHelper(source, delay);
 }
-void FUSHI_UNITY_ICALL Detour_UmAudioPlayDelayed(void* source, double delay) {
+void MYCOMIC_UNITY_ICALL Detour_UmAudioPlayDelayed(void* source, double delay) {
   RecordUnityMonoAudio(source, nullptr, 0u);
   g_orig_UmAudioPlayDelayed(source, delay);
 }
-void FUSHI_UNITY_ICALL Detour_UmAudioLegacyPlayOneShot(void* source,
+void MYCOMIC_UNITY_ICALL Detour_UmAudioLegacyPlayOneShot(void* source,
                                                        void* clip,
                                                        float volume) {
   RecordUnityMonoAudio(source, clip, 0u);
   g_orig_UmAudioLegacyPlayOneShot(source, clip, volume);
 }
-void FUSHI_UNITY_ICALL Detour_UmAudioLegacyPlay(void* source, uint64_t delay) {
+void MYCOMIC_UNITY_ICALL Detour_UmAudioLegacyPlay(void* source, uint64_t delay) {
   RecordUnityMonoAudio(source, nullptr, 0u);
   g_orig_UmAudioLegacyPlay(source, delay);
 }
 
 // Fungus WriterAudio（托管，主线程）：打字音回调期间的播放不是语音；OnVoiceover 的
 // clip 是框架明说的这一句语音。层数只在主线程上动。
-void FUSHI_MONO_MANAGED_CALL Detour_UmWriterAudioOnGlyph(void* self) {
+void MYCOMIC_MONO_MANAGED_CALL Detour_UmWriterAudioOnGlyph(void* self) {
   const bool main = GetCurrentThreadId() == g_unity_mono_main_thread;
   if (main) ++g_um_writer_audio_depth;
   g_orig_UmWriterAudioOnGlyph(self);
   if (main && g_um_writer_audio_depth > 0) --g_um_writer_audio_depth;
 }
-void FUSHI_MONO_MANAGED_CALL Detour_UmWriterAudioOnStart(void* self,
+void MYCOMIC_MONO_MANAGED_CALL Detour_UmWriterAudioOnStart(void* self,
                                                          void* clip) {
   const bool main = GetCurrentThreadId() == g_unity_mono_main_thread;
   if (main) ++g_um_writer_audio_depth;
   g_orig_UmWriterAudioOnStart(self, clip);
   if (main && g_um_writer_audio_depth > 0) --g_um_writer_audio_depth;
 }
-void FUSHI_MONO_MANAGED_CALL Detour_UmWriterAudioOnVoiceover(void* self,
+void MYCOMIC_MONO_MANAGED_CALL Detour_UmWriterAudioOnVoiceover(void* self,
                                                              void* clip) {
   RecordUnityMonoAudio(nullptr, clip, umono_audio::kAudioFlagFungusVoiceover);
   const bool main = GetCurrentThreadId() == g_unity_mono_main_thread;
@@ -501,7 +501,7 @@ void ProcessUnityMonoAudioEvents() {
   // 资源模式而永远等不到文件）。
   if (bundle_known || g_um_audio.HasWriterAudio()) {
     g_header->reserved_hook_diagnostics |=
-        fushi_voice_hook::kDiagUnityAudioPlaybackHookReady;
+        my_comic_voice_hook::kDiagUnityAudioPlaybackHookReady;
   }
   for (uint32_t processed = 0; processed < umono_audio::kPendingAudioEvents;
        ++processed) {
@@ -561,11 +561,11 @@ void ProcessUnityMonoAudioEvents() {
   }
 }
 
-class UnityMonoAdapter final : public fushi_voice_hook::EngineAdapter {
+class UnityMonoAdapter final : public my_comic_voice_hook::EngineAdapter {
  public:
   const char* id() const override { return "unity_mono"; }
   bool probe() const override {
-    return fushi_voice_hook::MatchesUnityMonoProfile(nullptr);
+    return my_comic_voice_hook::MatchesUnityMonoProfile(nullptr);
   }
   // installed_ 表示「身份成立、共享文本/PCM 路径对此进程生效」；托管文本 hook 另由
   // text_done_ / 诊断字表达，它要等运行时与脚本程序集就绪，不在启动挂起期做。
@@ -582,10 +582,10 @@ class UnityMonoAdapter final : public fushi_voice_hook::EngineAdapter {
     }
     return installed_;
   }
-  fushi_voice_hook::AdapterCapability capabilities() const override {
-    return fushi_voice_hook::AdapterCapability::kText |
-           fushi_voice_hook::AdapterCapability::kPcmAudio |
-           fushi_voice_hook::AdapterCapability::kResourceAudio;
+  my_comic_voice_hook::AdapterCapability capabilities() const override {
+    return my_comic_voice_hook::AdapterCapability::kText |
+           my_comic_voice_hook::AdapterCapability::kPcmAudio |
+           my_comic_voice_hook::AdapterCapability::kResourceAudio;
   }
   void onModuleLoaded(const wchar_t* module_name) override {
     // 身份来自磁盘布局，启动时一次判定即可；模块通知只作重试接缝。
@@ -601,28 +601,28 @@ class UnityMonoAdapter final : public fushi_voice_hook::EngineAdapter {
     ShutdownUnityMonoLookup();
     installed_ = false;
   }
-  fushi_voice_hook::LookupAdmissionReport lookupAdmission() const override {
-    fushi_voice_hook::LookupAdmissionReport report;
+  my_comic_voice_hook::LookupAdmissionReport lookupAdmission() const override {
+    my_comic_voice_hook::LookupAdmissionReport report;
     if (UnityMonoLookupSensorInstalled()) {
-      report.state = fushi_voice_hook::kLookupAdmissionSensorInstalled;
+      report.state = my_comic_voice_hook::kLookupAdmissionSensorInstalled;
       return report;
     }
     // 站点解析过且被拒：本 exe 的终态，给 host 摘要让它去报告。
     if (UnityMonoLookupSitesRejected()) {
-      report.state = fushi_voice_hook::kLookupAdmissionIdentityRejected;
+      report.state = my_comic_voice_hook::kLookupAdmissionIdentityRejected;
       strncpy_s(report.executable_sha256,
-                fushi_voice_hook::HostExecutableSha256Hex(), _TRUNCATE);
+                my_comic_voice_hook::HostExecutableSha256Hex(), _TRUNCATE);
       return report;
     }
     // 托管解析已结束但脚本程序集里没有逐字消息框架：查词只覆盖这一框架。
     if (text_done_ && !lookup_framework_) {
-      report.state = fushi_voice_hook::kLookupAdmissionEngineUnsupported;
+      report.state = my_comic_voice_hook::kLookupAdmissionEngineUnsupported;
       return report;
     }
-    report.state = fushi_voice_hook::kLookupAdmissionIdentityAccepted;
+    report.state = my_comic_voice_hook::kLookupAdmissionIdentityAccepted;
     return report;
   }
-  fushi_voice_hook::AdapterDiagnostics diagnostics() const override {
+  my_comic_voice_hook::AdapterDiagnostics diagnostics() const override {
     return {id(), probe(), installed_,
             static_cast<uint32_t>(
                 InterlockedCompareExchange(&g_unity_mono_flags, 0, 0))};
@@ -657,7 +657,7 @@ class UnityMonoAdapter final : public fushi_voice_hook::EngineAdapter {
       text_done_ = true;
       return;
     }
-    const fushi_voice_hook::MonoEmbeddingApi api =
+    const my_comic_voice_hook::MonoEmbeddingApi api =
         LoadUnityMonoEmbeddingApi(runtime);
     if (!api.CompleteForResolution()) {
       MarkUnityMonoFlag(kUnityMonoFlagApiIncomplete);
@@ -668,7 +668,7 @@ class UnityMonoAdapter final : public fushi_voice_hook::EngineAdapter {
     if (domain == nullptr) return;
     MarkUnityMonoFlag(kUnityMonoFlagRootDomain);
 
-    void* code[fushi_voice_hook::kMonoTextHookCount] = {};
+    void* code[my_comic_voice_hook::kMonoTextHookCount] = {};
     uint32_t plan = 0;
     void* lookup_code = nullptr;
     void* get_name = nullptr;
@@ -678,20 +678,20 @@ class UnityMonoAdapter final : public fushi_voice_hook::EngineAdapter {
     void* writer_audio_code[umono_audio::kWriterAudioMethodCount] = {};
     bool fungus_framework = false;
     {
-      fushi_voice_hook::MonoAttachedThreadScope managed_thread(api, domain);
+      my_comic_voice_hook::MonoAttachedThreadScope managed_thread(api, domain);
       if (!managed_thread.attached()) {
         MarkUnityMonoFlag(kUnityMonoFlagThreadAttachFailed);
         return;
       }
-      const fushi_voice_hook::MonoTextResolution resolution =
-          fushi_voice_hook::ResolveUnityMonoTextMethods(api);
+      const my_comic_voice_hook::MonoTextResolution resolution =
+          my_comic_voice_hook::ResolveUnityMonoTextMethods(api);
       if (!resolution.script_assembly_loaded) return;  // 下一拍再看
       MarkUnityMonoFlag(kUnityMonoFlagScriptAssemblyReady);
       if (resolution.message_renderer_companion) {
         MarkUnityMonoFlag(kUnityMonoFlagMessageRendererSignature);
       }
-      plan = fushi_voice_hook::PlanUnityMonoTextHooks(resolution);
-      for (size_t i = 0; i < fushi_voice_hook::kMonoTextHookCount; ++i) {
+      plan = my_comic_voice_hook::PlanUnityMonoTextHooks(resolution);
+      for (size_t i = 0; i < my_comic_voice_hook::kMonoTextHookCount; ++i) {
         if ((plan & (1u << i)) == 0) continue;
         code[i] = api.compile_method(resolution.methods[i]);
         if (code[i] == nullptr) MarkUnityMonoFlag(kUnityMonoFlagCompileFailed);
@@ -701,18 +701,18 @@ class UnityMonoAdapter final : public fushi_voice_hook::EngineAdapter {
       // SayDialog.DoSay 在计划里即走 Fungus 分支。角色身份的 Object.GetName 与
       // 查词站点都在同一个 attach 作用域里取。
       const bool message_framework =
-          (plan & fushi_voice_hook::MonoTextHookBit(
-                      fushi_voice_hook::MonoTextHookId::kMessageRendererMes)) !=
+          (plan & my_comic_voice_hook::MonoTextHookBit(
+                      my_comic_voice_hook::MonoTextHookId::kMessageRendererMes)) !=
           0;
       fungus_framework =
           !message_framework &&
-          (plan & fushi_voice_hook::MonoTextHookBit(
-                      fushi_voice_hook::MonoTextHookId::kFungusSayDialogDoSay)) !=
+          (plan & my_comic_voice_hook::MonoTextHookBit(
+                      my_comic_voice_hook::MonoTextHookId::kFungusSayDialogDoSay)) !=
               0;
       if (fungus_framework) MarkUnityMonoFlag(kUnityMonoFlagFungusSignature);
       lookup_framework_ = message_framework || fungus_framework;
       if (message_framework) {
-        get_name = fushi_voice_hook::unity_mono_lookup::ResolveObjectGetName(
+        get_name = my_comic_voice_hook::unity_mono_lookup::ResolveObjectGetName(
             api, LoadUnityMonoLookupApi(runtime));
         lookup_code = ResolveUnityMonoLookup(api, runtime, domain);
       } else if (fungus_framework) {
@@ -746,7 +746,7 @@ class UnityMonoAdapter final : public fushi_voice_hook::EngineAdapter {
     }
     if (lookup_framework_ && !fungus_framework) {
       g_unity_mono_object_get_name =
-          reinterpret_cast<fushi_voice_hook::unity_mono_lookup::IcallGetNameFn>(
+          reinterpret_cast<my_comic_voice_hook::unity_mono_lookup::IcallGetNameFn>(
               get_name);
     }
     if (fungus_framework && lookup_code != nullptr) {

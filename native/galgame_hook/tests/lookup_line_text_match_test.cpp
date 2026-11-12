@@ -11,13 +11,13 @@
 namespace {
 
 bool Match(const wchar_t* a, const wchar_t* b) {
-  return fushi_voice_hook::LookupLineTextMatches(a, std::wcslen(a), b,
+  return my_comic_voice_hook::LookupLineTextMatches(a, std::wcslen(a), b,
                                                  std::wcslen(b));
 }
 
 bool Segment(const wchar_t* page, const wchar_t* sentence, size_t char_index,
              size_t* begin, size_t* end) {
-  return fushi_voice_hook::LookupPageSentenceCovering(
+  return my_comic_voice_hook::LookupPageSentenceCovering(
       page, std::wcslen(page), sentence, std::wcslen(sentence), char_index,
       begin, end);
 }
@@ -41,7 +41,7 @@ int main() {
   // 空 / 全空白不是身份。
   assert(!Match(L"", L""));
   assert(!Match(L"　", L" "));
-  assert(!fushi_voice_hook::LookupLineTextMatches(nullptr, 0, L"a", 1));
+  assert(!my_comic_voice_hook::LookupLineTextMatches(nullptr, 0, L"a", 1));
 
   // Fate/stay night[Realta Nua]（KAG3 NVL）真机：消息层整页累积，渲染面的「行」是
   // 两句拼在一起，文本道里一句一条。点第二句里的字要落到第二句。

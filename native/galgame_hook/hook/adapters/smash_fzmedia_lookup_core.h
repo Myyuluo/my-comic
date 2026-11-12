@@ -17,7 +17,7 @@
 
 #include "smash_fzmedia_shared.h"
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 namespace smash_fzmedia {
 namespace lookup_core {
 
@@ -365,4 +365,4 @@ inline ShieldMasks ReduceShieldMasks(bool runtime_installed,
 
 }  // namespace lookup_core
 }  // namespace smash_fzmedia
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

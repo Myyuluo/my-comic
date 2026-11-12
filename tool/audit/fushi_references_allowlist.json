@@ -22,11 +22,27 @@
       "reason": "上游来源说明"
     },
     {
+      "path": "**/CLAUDE.upstream.md",
+      "reason": "上游 CLAUDE 文档快照"
+    },
+    {
+      "path": "third_party/**",
+      "reason": "vendored 第三方源码与补丁；保留上游代码与 patch 来源记录"
+    },
+    {
+      "path": "ci/patches/**",
+      "reason": "第三方 patch 与补丁说明"
+    },
+    {
+      "path": "references/**",
+      "reason": "外部扩展/上游参考文档（历史资料）"
+    },
+    {
       "path": "docs/**",
       "reason": "ADR 与未列入删除名单的历史文档，保留 Fushi 作为来源记录"
     },
     {
-      "path": "fushi/docs/**",
+      "path": "my_comic/docs/**",
       "reason": "上游历史文档（例如 docs/reviews）"
     },
     {
@@ -38,7 +54,7 @@
       "reason": "扫描器自身必须包含被扫描的词作为 needle 与 allowlist 示例"
     },
     {
-      "path": "fushi/test/tools/audit/**",
+      "path": "my_comic/test/tools/audit/**",
       "reason": "扫描器测试的 fixture 与断言必须包含被扫描的词"
     },
     {
@@ -47,21 +63,23 @@
     },
     {
       "path": "README.md",
-      "line_pattern": "Fushi v3\\.0\\.0",
-      "reason": "README 的『基于 Fushi v3.0.0』来源署名"
+      "reason": "ticket 11 将重写 README；当前内容仍是上游文档"
     },
     {
       "path": "README.zh-CN.md",
-      "line_pattern": "Fushi v3\\.0\\.0",
-      "reason": "README 的『基于 Fushi v3.0.0』来源署名"
+      "reason": "ticket 11 将重写 README；当前内容仍是上游文档"
     },
     {
-      "path": "fushi/lib/**",
+      "path": "my_comic/README.md",
+      "reason": "ticket 11 将删除或重写应用子目录 README；当前内容仍是上游文档"
+    },
+    {
+      "path": "my_comic/lib/**",
       "line_pattern": "[Ff]ushi v3\\.0\\.0",
       "reason": "About / 设置页的来源署名"
     },
     {
-      "path": "fushi/windows/runner/Runner.rc",
+      "path": "my_comic/windows/runner/Runner.rc",
       "line_pattern": "Fushi contributors",
       "reason": "Windows exe 版本资源里的 GPL 上游版权署名"
     },
@@ -69,6 +87,26 @@
       "path": "packages/**",
       "line_pattern": "[Ff]ushi v3\\.0\\.0",
       "reason": "About / 设置页的来源署名"
+    },
+    {
+      "path": "CLAUDE.md",
+      "line_pattern": "Fushi v3\\.0\\.0",
+      "reason": "ADR 0008 UI fidelity 的上游版本引用"
+    },
+    {
+      "path": "script/build_and_run.ps1",
+      "line_pattern": "Fushi v3\\.0\\.0",
+      "reason": "打包 runtime 的上游 v3.0.0 出处（ADR-0009）"
+    },
+    {
+      "path": "my_comic/test/settings/about_attribution_test.dart",
+      "line_pattern": "Fushi v3\\.0\\.0|Fushi contributors",
+      "reason": "About 来源署名与上游版权断言"
+    },
+    {
+      "path": "my_comic/test/media/manga/mihon_bundled_runtime_guard_test.dart",
+      "line_pattern": "Fushi v3\\.0\\.0",
+      "reason": "打包 runtime 的上游 v3.0.0 出处断言"
     }
   ]
 }

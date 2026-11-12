@@ -14,8 +14,8 @@
 
 namespace {
 
-using fushi_voice_hook::exact_lookup::LoadedPeImage;
-using fushi_voice_hook::exact_lookup::MaskedPattern;
+using my_comic_voice_hook::exact_lookup::LoadedPeImage;
+using my_comic_voice_hook::exact_lookup::MaskedPattern;
 
 class ExecutableTestPage {
  public:
@@ -65,8 +65,8 @@ void WriteRel32Call(uint8_t* call, const uint8_t* target) {
 }  // namespace
 
 int main() {
-  using namespace fushi_voice_hook;
-  using namespace fushi_voice_hook::exact_lookup;
+  using namespace my_comic_voice_hook;
+  using namespace my_comic_voice_hook::exact_lookup;
 
   ExecutableTestPage page;
   LoadedPeImage image = TwoSectionImage(page.bytes);

@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <cstring>
 
-namespace fushi_voice_hook::qlie {
+namespace my_comic_voice_hook::qlie {
 
 inline bool ContainsFilePackSignature(const uint8_t* bytes, size_t size) {
   if (bytes == nullptr) return false;
@@ -19,4 +19,4 @@ inline bool ContainsFilePackSignature(const uint8_t* bytes, size_t size) {
   return false;
 }
 
-}  // namespace fushi_voice_hook::qlie
+}  // namespace my_comic_voice_hook::qlie

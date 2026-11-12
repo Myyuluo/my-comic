@@ -3,7 +3,7 @@
 
 为什么不像 google_oauth_secret.dart 那样直接 `json.dumps` 打一行：
 json.dumps 产出的是**双引号** Dart 字面量，而本文件**不在**
-fushi/analysis_options.yaml 的 analyzer.exclude 里，双引号会触发
+my_comic/analysis_options.yaml 的 analyzer.exclude 里，双引号会触发
 prefer_single_quotes（info）——CI 的 analyze 门把 info 也当失败（exit 1），
 于是每个带 OPENSUBTITLES_API_KEY secret 的 run 都必红。
 google_oauth_secret.dart / log_upload_secret.dart 能用双引号，只因为那两个

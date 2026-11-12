@@ -21,7 +21,7 @@
 #include <cstring>
 #include <string>
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 // XP3 归档头魔数（KiriKiri2 / KiriKiri Z 共用）。
 inline constexpr uint8_t kKirikiriXp3Magic[11] = {
@@ -82,4 +82,4 @@ inline KirikiriLaunchProfile SelectKirikiriLaunchProfile(bool directory_has_xp3_
   return profile;
 }
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

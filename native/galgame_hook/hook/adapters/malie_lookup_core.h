@@ -31,10 +31,10 @@
 
 #include "malie_engine_io_core.h"
 
-namespace fushi_voice_hook::malie_lookup {
+namespace my_comic_voice_hook::malie_lookup {
 
-namespace exact = fushi_voice_hook::exact_lookup;
-namespace mio = fushi_voice_hook::malie_io;
+namespace exact = my_comic_voice_hook::exact_lookup;
+namespace mio = my_comic_voice_hook::malie_io;
 
 inline constexpr wchar_t kTextClassName[] = L"RICHTEXT3D";
 inline constexpr size_t kClassTableScan = 0x80u;
@@ -708,4 +708,4 @@ inline WindowStep DecideWindowStep(const WindowCandidate& candidate,
   return WindowStep::kHook;
 }
 
-}  // namespace fushi_voice_hook::malie_lookup
+}  // namespace my_comic_voice_hook::malie_lookup

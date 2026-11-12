@@ -22,7 +22,7 @@ bool Check(bool condition, const char* message) {
 
 int main() {
   const auto environment =
-      fushi_voice_hook::BuildJapaneseLocaleEnvironment();
+      my_comic_voice_hook::BuildJapaneseLocaleEnvironment();
   bool ok = true;
   ok &= Check(environment.ansi_code_page == 932, "ANSI code page");
   ok &= Check(environment.oem_code_page == 932, "OEM code page");
@@ -38,12 +38,12 @@ int main() {
               "daylight timezone name");
   ok &= Check(environment.registry_redirection_count == 0,
               "registry redirect count");
-  ok &= Check(offsetof(fushi_voice_hook::LeEnvironmentBlock,
+  ok &= Check(offsetof(my_comic_voice_hook::LeEnvironmentBlock,
                        registry_redirection_count) == 256,
               "Locale Emulator ABI prefix");
 
-  using fushi_voice_hook::LocaleThreadResumePolicy;
-  using fushi_voice_hook::SelectLocaleThreadResumePolicy;
+  using my_comic_voice_hook::LocaleThreadResumePolicy;
+  using my_comic_voice_hook::SelectLocaleThreadResumePolicy;
   ok &= Check(SelectLocaleThreadResumePolicy(false, false, false) ==
                   LocaleThreadResumePolicy::kNotLocaleLaunched,
               "ordinary process is not resumed by locale policy");

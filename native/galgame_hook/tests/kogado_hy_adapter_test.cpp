@@ -14,7 +14,7 @@
 
 #include "../hook/adapters/kogado_hy_profile.h"
 
-namespace kh = fushi_voice_hook::kogado_hy;
+namespace kh = my_comic_voice_hook::kogado_hy;
 
 namespace {
 
@@ -338,11 +338,11 @@ void TestResolvesMessageRenderer() {
 
 void TestIdentityNeedsEveryHyExport() {
   const Image good = Build(Options());
-  assert(fushi_voice_hook::IsKogadoHyImage(good.bytes.data(), good.bytes.size()));
+  assert(my_comic_voice_hook::IsKogadoHyImage(good.bytes.data(), good.bytes.size()));
   Options options;
   options.draw_export = false;
   const Image missing = Build(options);
-  assert(!fushi_voice_hook::IsKogadoHyImage(missing.bytes.data(),
+  assert(!my_comic_voice_hook::IsKogadoHyImage(missing.bytes.data(),
                                             missing.bytes.size()));
   kh::Sites sites;
   assert(kh::ResolveSites(View(missing), &sites) == kh::SiteResult::kNoExports);
@@ -426,7 +426,7 @@ void TestNonHyImageHasNoExports() {
   Image image;
   EmitHeaders(&image);
   kh::Sites sites;
-  assert(!fushi_voice_hook::IsKogadoHyImage(image.bytes.data(),
+  assert(!my_comic_voice_hook::IsKogadoHyImage(image.bytes.data(),
                                             image.bytes.size()));
   assert(kh::ResolveSites(View(image), &sites) == kh::SiteResult::kNoExports);
 }

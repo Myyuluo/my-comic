@@ -14,8 +14,8 @@
 
 #include "malie_engine_io_core.h"
 
-namespace io = fushi_voice_hook::malie_io;
-namespace exact = fushi_voice_hook::exact_lookup;
+namespace io = my_comic_voice_hook::malie_io;
+namespace exact = my_comic_voice_hook::exact_lookup;
 
 namespace {
 

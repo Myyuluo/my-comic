@@ -1,4 +1,4 @@
-name: fushi_workspace
+name: my_comic_workspace
 publish_to: none
 
 environment:
@@ -14,18 +14,18 @@ environment:
 #     （join 后再 release、经 message-only 窗口把事件转回平台线程、原子标志、
 #     值类型回调 token）。等上游修好再撤。
 workspace:
-  - fushi
+  - my_comic
   - packages/flutter_inappwebview_windows
-  - packages/fushi_cli
-  - packages/fushi_core
-  - packages/fushi_engine
-  - packages/fushi_platform
+  - packages/my_comic_cli
+  - packages/my_comic_core
+  - packages/my_comic_engine
+  - packages/my_comic_platform
   - packages/gamepads_windows
 
 dev_dependencies:
   melos: ^7.7.0
 
-# 从 fushi/pubspec.yaml 整段搬来：pub workspace 只认根 pubspec 的
+# 从 my_comic/pubspec.yaml 整段搬来：pub workspace 只认根 pubspec 的
 # dependency_overrides，放在成员包里会被 pub 直接拒绝。
 # 注意：flutter_inappwebview_windows / gamepads_windows 两个 vendored 包
 # **不在**下面。它们是 workspace 成员，包名就是被替换的上游包名，解析时天然
@@ -74,8 +74,8 @@ dependency_overrides:
 # Melos 7 的配置位置就是这里（7.0 起 melos.yaml 被废弃）。包列表不再重复声明：
 # 成员由上面的 workspace: 决定，melos 直接读它。
 melos:
-  name: fushi_workspace
-  repository: https://github.com/hajisensai/Fushi
+  name: my_comic_workspace
+  repository: https://github.com/Myyuluo/my-comic
 
   command:
     bootstrap:
@@ -99,10 +99,10 @@ melos:
 
     dev:
       run: |
-        cd fushi && flutter run
-      description: Run Fushi in debug mode
+        cd my_comic && flutter run
+      description: Run MyComic in debug mode
 
     build:android:
       run: |
-        cd fushi && flutter build apk --release --target-platform android-arm64 --split-per-abi
+        cd my_comic && flutter build apk --release --target-platform android-arm64 --split-per-abi
       description: Build Android release APK

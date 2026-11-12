@@ -17,10 +17,10 @@
 //     x86 build compiles inert stubs so the Win32 helper still links.
 //
 // Inclusion contract: this header (and smash_fzmedia_shared.h) opens
-// namespace fushi_voice_hook, so dll_main.cpp must include it at file scope
+// namespace my_comic_voice_hook, so dll_main.cpp must include it at file scope
 // before its anonymous namespace; including it from an adapter .inc for the
-// first time would create an anonymous nested fushi_voice_hook namespace and
-// break every later `fushi_voice_hook::` lookup in that translation unit.
+// first time would create an anonymous nested my_comic_voice_hook namespace and
+// break every later `my_comic_voice_hook::` lookup in that translation unit.
 // smash_fzmedia_lookup.inc must be included from smash_fzmedia_adapter.inc at
 // its file scope (outside any class body): it closes and reopens the
 // anonymous namespace around the definitions of the entry points below.
@@ -33,7 +33,7 @@
 #include "smash_fzmedia_shared.h"
 #include "voice_hook_ipc.h"
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 namespace smash_fzmedia {
 
 // Registers the EngineExactLayout geometry provider (id
@@ -62,4 +62,4 @@ void LookupPoll(SharedHeader* header, uint64_t now_ms);
 void LookupPublishSnapshot(const LineSnapshot& snapshot);
 
 }  // namespace smash_fzmedia
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

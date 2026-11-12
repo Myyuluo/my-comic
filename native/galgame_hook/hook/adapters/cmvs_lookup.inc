@@ -2,7 +2,7 @@
 // layout update and drawing (0xd400), then publishes its root pointer; all
 // memory reads, text decoding and IPC
 // work stay on HookWorker. No GDI raster hook or guessed heap scan is installed.
-namespace cmvs_lookup = fushi_voice_hook::cmvs_layout;
+namespace cmvs_lookup = my_comic_voice_hook::cmvs_layout;
 using CmvsFrameFn = void(__fastcall*)(void*);
 CmvsFrameFn g_cmvs_frame_original = nullptr;
 cmvs_lookup::HookInstallation g_cmvs_hook_installation;
@@ -62,7 +62,7 @@ void __fastcall CmvsInputDetour(void* input, uint32_t a, uint32_t b) {
   const bool locked = TryAcquireSRWLockExclusive(&g_cmvs_shift_lock) != FALSE;
   bool eligible = false, available = false;
   if (locked && !g_stop && g_header && g_cmvs_shift_target_valid &&
-      fushi_voice_hook::AtomicLoadPreview64(&g_header->selected_text_thread_id) ==
+      my_comic_voice_hook::AtomicLoadPreview64(&g_header->selected_text_thread_id) ==
           g_cmvs_shift_target.thread &&
       g_cmvs_shift_target.input == reinterpret_cast<uintptr_t>(input)) {
     const auto& target = g_cmvs_shift_target;
@@ -76,9 +76,9 @@ void __fastcall CmvsInputDetour(void* input, uint32_t a, uint32_t b) {
         CmvsTargetStillLive(target)) {
       const HWND under = WindowFromPhysicalPoint(point);
       eligible = (under == game || IsChild(game, under)) &&
-          fushi_voice_hook::g_geometry_provider_registry.OwnsReadyProvider(g_header,
-              fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-              fushi_voice_hook::kLookupGeometryProviderIdCmvs);
+          my_comic_voice_hook::g_geometry_provider_registry.OwnsReadyProvider(g_header,
+              my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+              my_comic_voice_hook::kLookupGeometryProviderIdCmvs);
     }
     available = g_cmvs_shift_queue.available();
   }
@@ -229,7 +229,7 @@ bool InstallCmvsLookup() {
 
 bool ReadCmvsSelectedText(std::wstring* line, uint64_t* event,
                           uint64_t* selected_thread) {
-  return fushi_voice_hook::ReadSelectedLookupText(g_header, line, event,
+  return my_comic_voice_hook::ReadSelectedLookupText(g_header, line, event,
       selected_thread, cmvs_lookup::kMaxGlyphs);
 }
 
@@ -271,18 +271,18 @@ cmvs_lookup::ShiftTarget BuildCmvsShiftTarget(
 }
 
 bool PublishCmvsShiftTarget(const cmvs_lookup::ShiftTarget& target, uint64_t frame) {
-  char utf8[fushi_voice_hook::kLookupLineBytes]{};
+  char utf8[my_comic_voice_hook::kLookupLineBytes]{};
   const int bytes = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, target.text.data(),
       static_cast<int>(target.text_units), utf8, sizeof(utf8), nullptr, nullptr);
   if (bytes <= 0) return false;
-  fushi_voice_hook::LookupGeometryHitPublication publication;
-  publication.provider_kind = fushi_voice_hook::kLookupGeometryProviderEngineExactLayout;
-  publication.provider_id = fushi_voice_hook::kLookupGeometryProviderIdCmvs;
+  my_comic_voice_hook::LookupGeometryHitPublication publication;
+  publication.provider_kind = my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout;
+  publication.provider_id = my_comic_voice_hook::kLookupGeometryProviderIdCmvs;
   publication.char_index = target.source_index;
   publication.source_length = 1;
   publication.char_count = target.text_units;
-  publication.coordinate_space = fushi_voice_hook::kLookupCoordinateSpaceClientPhysicalPixels;
-  publication.writing_mode = fushi_voice_hook::kLookupWritingModeHorizontal;
+  publication.coordinate_space = my_comic_voice_hook::kLookupCoordinateSpaceClientPhysicalPixels;
+  publication.writing_mode = my_comic_voice_hook::kLookupWritingModeHorizontal;
   publication.text_generation = target.event;
   publication.geometry_generation = frame;
   publication.glyph_x = target.rectangle.x; publication.glyph_y = target.rectangle.y;
@@ -290,7 +290,7 @@ bool PublishCmvsShiftTarget(const cmvs_lookup::ShiftTarget& target, uint64_t fra
   publication.view_w = target.view_width; publication.view_h = target.view_height;
   publication.line_utf8 = reinterpret_cast<const uint8_t*>(utf8);
   publication.line_bytes = bytes;
-  return fushi_voice_hook::g_geometry_provider_registry.PublishHit(g_header, publication);
+  return my_comic_voice_hook::g_geometry_provider_registry.PublishHit(g_header, publication);
 }
 
 void ProcessPendingCmvsShift(
@@ -332,16 +332,16 @@ void ProcessPendingCmvsShift(
 
 void RetireCmvsLookup(bool discard_requests = true) {
   InvalidateCmvsShiftTarget(discard_requests);
-  if (g_header) fushi_voice_hook::g_geometry_provider_registry.Retire(
-      g_header, fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-      fushi_voice_hook::kLookupGeometryProviderIdCmvs);
+  if (g_header) my_comic_voice_hook::g_geometry_provider_registry.Retire(
+      g_header, my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+      my_comic_voice_hook::kLookupGeometryProviderIdCmvs);
   ClearLookupHoverHighlight();
 }
 
 void ProcessCmvsLookupTick() {
   if (!g_cmvs_identity_matched || !g_cmvs_hook_installation.enabled() ||
       !g_cmvs_input_installation.enabled()) return;
-  if (g_stop || !g_header || !fushi_voice_hook::HasLookupRegion(g_header) ||
+  if (g_stop || !g_header || !my_comic_voice_hook::HasLookupRegion(g_header) ||
       !g_header->lookup_enabled) { RetireCmvsLookup(); return; }
   CmvsRawReadScope captured_lock;
   auto* memory = &g_cmvs_raw_frame;
@@ -392,18 +392,18 @@ void ProcessCmvsLookupTick() {
     chosen = candidate; identity = mapping; quads = projected;
   }
   if (matches != 1 ||
-      fushi_voice_hook::AtomicLoadPreview64(&g_header->selected_text_thread_id) != thread) {
+      my_comic_voice_hook::AtomicLoadPreview64(&g_header->selected_text_thread_id) != thread) {
     RetireCmvsLookup(); return;
   }
   if (g_cmvs_frame_sequence.load(std::memory_order_acquire) != frame) {
     RetireCmvsLookup(false); return;
   }
-  fushi_voice_hook::g_geometry_provider_registry.OfferReady(g_header,
-      fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-      fushi_voice_hook::kLookupGeometryProviderIdCmvs);
-  if (!fushi_voice_hook::g_geometry_provider_registry.OwnsReadyProvider(g_header,
-      fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-      fushi_voice_hook::kLookupGeometryProviderIdCmvs)) { RetireCmvsLookup(); return; }
+  my_comic_voice_hook::g_geometry_provider_registry.OfferReady(g_header,
+      my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+      my_comic_voice_hook::kLookupGeometryProviderIdCmvs);
+  if (!my_comic_voice_hook::g_geometry_provider_registry.OwnsReadyProvider(g_header,
+      my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+      my_comic_voice_hook::kLookupGeometryProviderIdCmvs)) { RetireCmvsLookup(); return; }
   POINT cursor{}, origin{};
   uint64_t input = 0;
   if (!ClientToScreen(game, &origin) ||

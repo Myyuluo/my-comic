@@ -35,7 +35,7 @@
 #include <cstdint>
 #include <cstring>
 
-namespace fushi_voice_hook::cmvs_voice {
+namespace my_comic_voice_hook::cmvs_voice {
 
 inline constexpr size_t kSlotPathBytes = 0x800u;
 inline constexpr size_t kSlotStride = 0x808u;
@@ -267,4 +267,4 @@ inline bool HasOggHead(const uint8_t* data, uint32_t bytes) {
   return data != nullptr && bytes >= 4u && memcmp(data, "OggS", 4) == 0;
 }
 
-}  // namespace fushi_voice_hook::cmvs_voice
+}  // namespace my_comic_voice_hook::cmvs_voice

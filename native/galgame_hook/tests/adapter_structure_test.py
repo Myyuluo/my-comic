@@ -17,7 +17,7 @@ class AdapterStructureTest(unittest.TestCase):
         runtime = self._strip_comments((adapters / "cmvs_lookup.inc").read_text(encoding="utf-8"))
         for signature in (
             "bool lookup_sensor_available() const",
-            "fushi_voice_hook::LookupAdmissionReport lookupAdmission() const override",
+            "my_comic_voice_hook::LookupAdmissionReport lookupAdmission() const override",
         ):
             body = self._function_body(adapter, signature)
             self.assertIn("g_cmvs_hook_installation.enabled()", body)
@@ -59,7 +59,7 @@ class AdapterStructureTest(unittest.TestCase):
         install = self._function_body(lane, "bool TryHookCmvsVoice()")
         self.assertIn("FindGroupLoaderSites", install)
         capabilities = self._function_body(
-            adapter, "fushi_voice_hook::AdapterCapability capabilities() const override")
+            adapter, "my_comic_voice_hook::AdapterCapability capabilities() const override")
         self.assertIn("CmvsVoiceArmed()", capabilities)
         self.assertIn("AdapterCapability::kResourceAudio", capabilities)
 
@@ -292,7 +292,7 @@ class AdapterStructureTest(unittest.TestCase):
         source = self._strip_comments(
             (ROOT / "hook/adapters/kirikiri_adapter.inc").read_text(encoding="utf-8"))
         body = self._function_body(source, "void EnqueueKirikiriVoiceResourceOwned(")
-        gate = "fushi_voice_hook::KirikiriVoicePayloadExtension(data, len) == nullptr"
+        gate = "my_comic_voice_hook::KirikiriVoicePayloadExtension(data, len) == nullptr"
         self.assertIn(gate, body)
         self.assertLess(body.index(gate), body.index("g_kirikiri_voice_tasks[i]"))
         # COM IStream openers (the import stub and the TVPCreateStream convergence
@@ -312,23 +312,23 @@ class AdapterStructureTest(unittest.TestCase):
         # (KAGEX CustomMessageLayer, Senren Banka) must not leave the sensor with class-only
         # wrappers that never capture; the message layers get the classic processCh capture.
         source = (ROOT / "hook/adapters/kirikiri_adapter.inc").read_text(encoding="utf-8")
-        sweep_start = source.index("global.fushiLookupSweepLayerRenderers = function()")
-        sweep = source[sweep_start:source.index("global.fushiLookupFindGetRenderPatch", sweep_start)]
+        sweep_start = source.index("global.myComicLookupSweepLayerRenderers = function()")
+        sweep = source[sweep_start:source.index("global.myComicLookupFindGetRenderPatch", sweep_start)]
         # Never enumerate members (throwing getters crash the game, BUG-2116).
         self.assertNotIn("Dictionary.assign", sweep)
         self.assertNotIn(".assign(", sweep)
         self.assertIn("typeof layer[fields[f]] != \"Object\"", sweep)
-        self.assertIn("global.fushiLookupPatchRendererInstance(renderer)", sweep)
+        self.assertIn("global.myComicLookupPatchRendererInstance(renderer)", sweep)
         self.assertIn("return found;", sweep)
         # The msgwin plugin path keeps precedence; the fallback runs only without it.
         fallback = source[source.index("installStage = 32;"):source.index("installStage = 33;") + 200]
-        self.assertIn("if(global.fushiLookupSweepLayerRenderers() == 0)", fallback)
-        self.assertIn("global.fushiLookupClassicSource = global.fushiLookupClassicSource | 1;", fallback)
-        self.assertIn("global.fushiLookupSweepClassicLayers();", fallback)
+        self.assertIn("if(global.myComicLookupSweepLayerRenderers() == 0)", fallback)
+        self.assertIn("global.myComicLookupClassicSource = global.myComicLookupClassicSource | 1;", fallback)
+        self.assertIn("global.myComicLookupSweepClassicLayers();", fallback)
         # Re-sweep on KAG stable/run edges so re-created layers are covered too.
-        refresh = source[source.index("global.fushiLookupRefreshCaptureBridges = function()"):]
+        refresh = source[source.index("global.myComicLookupRefreshCaptureBridges = function()"):]
         refresh = refresh[:refresh.index("};")]
-        self.assertIn("global.fushiLookupSweepLayerRenderers();", refresh)
+        self.assertIn("global.myComicLookupSweepLayerRenderers();", refresh)
 
     def test_kirikiri_inert_msgwin_plugin_falls_back_to_classic(self) -> None:
         # BUG-2721: PARQUET (2021) registers kag.renderMsgwinPlugin but getRender returns
@@ -337,35 +337,35 @@ class AdapterStructureTest(unittest.TestCase):
         # branch. The criterion is the plugin's observed behaviour (never timing), and the
         # demotion is reversible once getRender yields a real render.
         source = (ROOT / "hook/adapters/kirikiri_adapter.inc").read_text(encoding="utf-8")
-        demote = source[source.index("global.fushiLookupDemoteInertMsgwin = function()"):]
-        demote = demote[:demote.index("global.fushiLookupRestoreActiveMsgwin = function()")]
-        self.assertIn("!global.fushiLookupMsgwinVoidSeen || global.fushiLookupMsgwinYielded", demote)
+        demote = source[source.index("global.myComicLookupDemoteInertMsgwin = function()"):]
+        demote = demote[:demote.index("global.myComicLookupRestoreActiveMsgwin = function()")]
+        self.assertIn("!global.myComicLookupMsgwinVoidSeen || global.myComicLookupMsgwinYielded", demote)
         self.assertIn("renders.count > 0)", demote)
-        self.assertIn("global.fushiLookupMsgwinDemoteExit = 4;", demote)
-        self.assertIn("if(global.fushiLookupSweepLayerRenderers() == 0)", demote)
-        self.assertIn("global.fushiLookupClassicSource = global.fushiLookupClassicSource | 1;", demote)
-        restore = source[source.index("global.fushiLookupRestoreActiveMsgwin = function()"):]
+        self.assertIn("global.myComicLookupMsgwinDemoteExit = 4;", demote)
+        self.assertIn("if(global.myComicLookupSweepLayerRenderers() == 0)", demote)
+        self.assertIn("global.myComicLookupClassicSource = global.myComicLookupClassicSource | 1;", demote)
+        restore = source[source.index("global.myComicLookupRestoreActiveMsgwin = function()"):]
         restore = restore[:restore.index("};")]
-        self.assertIn("global.fushiLookupClassicSource & ~1", restore)
+        self.assertIn("global.myComicLookupClassicSource & ~1", restore)
         # Observation lives in the getRender wrapper, after the game's own call.
-        wrapper = source[source.index("global.fushiLookupMakeGetRenderWrapper = function(owner)"):]
-        wrapper = wrapper[:wrapper.index("global.fushiLookupInstallGetRenderBridge = function()")]
+        wrapper = source[source.index("global.myComicLookupMakeGetRenderWrapper = function(owner)"):]
+        wrapper = wrapper[:wrapper.index("global.myComicLookupInstallGetRenderBridge = function()")]
         self.assertLess(wrapper.index("(original incontextof this)(...)"),
-                        wrapper.index("global.fushiLookupMsgwinVoidSeen = true;"))
-        self.assertIn("global.fushiLookupRestoreActiveMsgwin();", wrapper)
+                        wrapper.index("global.myComicLookupMsgwinVoidSeen = true;"))
+        self.assertIn("global.myComicLookupRestoreActiveMsgwin();", wrapper)
         # Checked on every capture-bridge refresh (KAG run edge), which does not depend on
         # geometry having been captured; the sentence-surface refresh would be circular.
-        refresh = source[source.index("global.fushiLookupRefreshCaptureBridges = function()"):]
+        refresh = source[source.index("global.myComicLookupRefreshCaptureBridges = function()"):]
         refresh = refresh[:refresh.index("};")]
-        self.assertIn("global.fushiLookupDemoteInertMsgwin();", refresh)
-        sweep = source[source.index("global.fushiLookupSweepLayerRenderers = function()"):]
+        self.assertIn("global.myComicLookupDemoteInertMsgwin();", refresh)
+        sweep = source[source.index("global.myComicLookupSweepLayerRenderers = function()"):]
         sweep = sweep[:sweep.index("return found;")]
-        self.assertIn("!global.fushiLookupMsgwinInert) return 0;", sweep)
+        self.assertIn("!global.myComicLookupMsgwinInert) return 0;", sweep)
         # Classic instance wrappers capture only while bit 0 is on, so a restored msgwin
         # build never has two geometry sources.
-        classic = source[source.index("global.fushiLookupPatchClassicLayer = function(layer)"):]
-        classic = classic[:classic.index("global.fushiLookupSweepClassicLayers = function()")]
-        self.assertEqual(classic.count("if((global.fushiLookupClassicSource & 1) != 0)"), 2)
+        classic = source[source.index("global.myComicLookupPatchClassicLayer = function(layer)"):]
+        classic = classic[:classic.index("global.myComicLookupSweepClassicLayers = function()")]
+        self.assertEqual(classic.count("if((global.myComicLookupClassicSource & 1) != 0)"), 2)
 
     def test_launch_runs_loader_init_gate_before_injection(self) -> None:
         # The primary thread initialises TLS-callback executables itself, but only when the
@@ -377,7 +377,7 @@ class AdapterStructureTest(unittest.TestCase):
         launch = self._function_body(source, "int RunLaunch(")
         self.assertIn("ReadPeLaunchLayout(exe)", launch)
         self.assertIn(
-            "fushi_voice_hook::SelectKirikiriLaunchProfile(LooksLikeKirikiriRuntime(exe))",
+            "my_comic_voice_hook::SelectKirikiriLaunchProfile(LooksLikeKirikiriRuntime(exe))",
             launch)
         admission = "ShouldUseLoaderInitGate(\n            pe_layout, true, kirikiri_profile.loader_init_gate)"
         self.assertIn(admission, launch)
@@ -396,7 +396,7 @@ class AdapterStructureTest(unittest.TestCase):
         # The KiriKiri judgment is the structural XP3 archive signature from the profile
         # header, not a title / exe-name / hash table.
         kirikiri = self._function_body(source, "bool LooksLikeKirikiriRuntime(")
-        self.assertIn("fushi_voice_hook::DirectoryLooksLikeKirikiri(", kirikiri)
+        self.assertIn("my_comic_voice_hook::DirectoryLooksLikeKirikiri(", kirikiri)
         self.assertIn('L"*.xp3"', kirikiri)
         self.assertNotIn("Sha256File", kirikiri)
         self.assertNotIn("ExecutableBaseName", kirikiri)
@@ -604,7 +604,7 @@ class AdapterStructureTest(unittest.TestCase):
     def test_geometry_publishers_declare_an_admitted_coordinate_space(self) -> None:
         """每个几何发布者的坐标域必须是被 host 直连路径认过的两种之一。
 
-        host 的直连覆盖窗（fushi/windows/runner/gal_direct_card_geometry.h）把
+        host 的直连覆盖窗（my_comic/windows/runner/gal_direct_card_geometry.h）把
         `view` 按等比缩放 + 居中映射到游戏客户区，再以字形矩形贴附卡片。该映射的正确性
         建立在一条**跨仓约定**上：
 
@@ -729,7 +729,7 @@ class AdapterStructureTest(unittest.TestCase):
             source, "bool PublishSgreLookupHit(uint64_t capture_generation"
         )
         self.assertIn(
-            "publication.text_generation = fushi_voice_hook::"
+            "publication.text_generation = my_comic_voice_hook::"
             "SgreLookupHitTextGeneration(",
             publish,
         )
@@ -743,7 +743,7 @@ class AdapterStructureTest(unittest.TestCase):
             source, "SgreLookupCaptureResult CopySgreLookupDrawState("
         )
         self.assertIn(
-            "expected_line_height = fushi_voice_hook::"
+            "expected_line_height = my_comic_voice_hook::"
             "SgreScenarioLineHeightForClient(",
             copy_draw,
         )
@@ -889,7 +889,7 @@ class AdapterStructureTest(unittest.TestCase):
             (ROOT / "hook" / "adapters" / "text_render_adapter.inc").read_text(
                 encoding="utf-8"))
         writer = self._function_body(text, "uint64_t WriteTextRingEntryLocked(")
-        self.assertIn("return fushi_voice_hook::WriteTextLaneEvent(", writer)
+        self.assertIn("return my_comic_voice_hook::WriteTextLaneEvent(", writer)
         native = self._function_body(text, "uintptr_t __fastcall Detour_SiglusExactText(")
         self.assertLess(native.index("text_event_id = WriteTextRingEntryLocked("),
                         native.index("ObserveSiglusLookupExactText("))
@@ -1179,7 +1179,7 @@ class AdapterStructureTest(unittest.TestCase):
         self.assertIn("kLookupGeometryProviderIdHunexGge", runtime)
         capabilities = self._function_body(
             source,
-            "fushi_voice_hook::AdapterCapability capabilities() const override",
+            "my_comic_voice_hook::AdapterCapability capabilities() const override",
         )
         self.assertIn("AdapterCapability::kText", capabilities)
         self.assertIn("AdapterCapability::kResourceAudio", capabilities)
@@ -1347,7 +1347,7 @@ class AdapterStructureTest(unittest.TestCase):
         main = (ROOT / "hook" / "dll_main.cpp").read_text(encoding="utf-8")
         probe = (ROOT / "tools" / "ring_probe.cpp").read_text(encoding="utf-8")
 
-        self.assertIn("FushiXAudioTraceV1", main)
+        self.assertIn("MyComicXAudioTraceV1", main)
         self.assertIn("__declspec(dllexport)", main)
         for marker in (
             "sizeof(XAudioTraceFormat) == 244",
@@ -1453,8 +1453,8 @@ class AdapterStructureTest(unittest.TestCase):
 
         self.assertIn(
             'extern "C" __declspec(dllexport) alignas(8)\n'
-            "    fushi_voice_hook::LeafD3DTraceBuffer "
-            "FushiLeafD3DTraceV1 = {};",
+            "    my_comic_voice_hook::LeafD3DTraceBuffer "
+            "MyComicLeafD3DTraceV1 = {};",
             main,
         )
         for marker in (
@@ -1622,7 +1622,7 @@ class AdapterStructureTest(unittest.TestCase):
             invalid_payload_branch.index("return;"),
         )
         normalization_failure_branch = selected_consumer.split(
-            "if (!fushi_voice_hook::NormalizeLeafAquaplusLookupText", 1
+            "if (!my_comic_voice_hook::NormalizeLeafAquaplusLookupText", 1
         )[1].split("const uint32_t normalized_count", 1)[0]
         self.assertLess(
             normalization_failure_branch.index("InvalidateLeafLookupSentence"),
@@ -1738,7 +1738,7 @@ class AdapterStructureTest(unittest.TestCase):
         admission = self._strip_comments(
             self._member_body(
                 leaf,
-                "fushi_voice_hook::LookupAdmissionReport lookupAdmission() const override",
+                "my_comic_voice_hook::LookupAdmissionReport lookupAdmission() const override",
             )
         )
         self.assertNotIn("kLookupAdmissionIdentityRejected", admission)
@@ -1747,7 +1747,7 @@ class AdapterStructureTest(unittest.TestCase):
         siglus_admission = self._strip_comments(
             self._member_body(
                 siglus,
-                "fushi_voice_hook::LookupAdmissionReport SiglusLookupAdmission()",
+                "my_comic_voice_hook::LookupAdmissionReport SiglusLookupAdmission()",
             )
         )
         self.assertIn("kLookupAdmissionIdentityRejected", siglus_admission)
@@ -1771,7 +1771,7 @@ class AdapterStructureTest(unittest.TestCase):
         admission = self._strip_comments(
             self._member_body(
                 adapter,
-                "fushi_voice_hook::LookupAdmissionReport lookupAdmission() const override",
+                "my_comic_voice_hook::LookupAdmissionReport lookupAdmission() const override",
             )
         )
         self.assertIn("kLookupAdmissionIdentityRejected", admission)
@@ -1912,7 +1912,7 @@ class AdapterStructureTest(unittest.TestCase):
         self.assertIn("RecordUnityTextChars(", detours)
         # Mono 托管签名没有 IL2CPP 的尾随 MethodInfo*。
         self.assertNotIn("const void* method", detours)
-        self.assertEqual(detours.count("FUSHI_MONO_MANAGED_CALL Detour_"), 6)
+        self.assertEqual(detours.count("MYCOMIC_MONO_MANAGED_CALL Detour_"), 6)
         # Fungus 整句先剥框架自己的 {...} 标记，再走共用发布入口。
         self.assertIn("StripFungusTextTags(", detours)
         # IL2CPP 与 Mono 共用同一发布入口，过滤口径不分叉。
@@ -2728,8 +2728,8 @@ class AdapterStructureTest(unittest.TestCase):
         self.assertNotIn("InstallUnityMonoLookupHooks(", scope)
         self.assertIn("InstallUnityMonoLookupHooks(lookup_code)", install)
         # Main-thread callbacks: bounded copies and engine reads only.
-        for name in ("void FUSHI_MONO_MANAGED_CALL UmFixedUpdateDetour(",
-                     "void FUSHI_MONO_MANAGED_CALL UmFungusLateUpdateDetour(",
+        for name in ("void MYCOMIC_MONO_MANAGED_CALL UmFixedUpdateDetour(",
+                     "void MYCOMIC_MONO_MANAGED_CALL UmFungusLateUpdateDetour(",
                      "void UmSampleFrame(",
                      "uint32_t SampleUmInstance(",
                      "uint32_t SampleUmFungus(",

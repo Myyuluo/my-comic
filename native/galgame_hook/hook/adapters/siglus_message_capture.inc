@@ -14,7 +14,7 @@ struct SiglusMessageTextTask {
   uint32_t voice_key = UINT32_MAX;
   uint32_t text_units = 0;
   uint64_t eightarg_epoch = 0;
-  fushi_voice_hook::siglus_eightarg_message::Owner eightarg_owner{};
+  my_comic_voice_hook::siglus_eightarg_message::Owner eightarg_owner{};
   wchar_t text[kSiglusMessageMaxTextUnits + 1] = {};
 };
 
@@ -22,32 +22,32 @@ struct SiglusMessageTextTask {
 // once either detour can execute. Callbacks never touch IPC or take a lock.
 std::atomic<int> g_siglus_message_install_state{0};
 std::atomic<bool> g_siglus_message_capture_enabled{false};
-fushi_voice_hook::SiglusMessageProfile g_siglus_message_profile;
-fushi_voice_hook::SiglusMessageLayout g_siglus_message_layout;
+my_comic_voice_hook::SiglusMessageProfile g_siglus_message_profile;
+my_comic_voice_hook::SiglusMessageLayout g_siglus_message_layout;
 bool g_siglus_message_native_ecx = false;
 bool g_siglus_message_legacy = false;
 bool g_siglus_message_eightarg = false;
-fushi_voice_hook::siglus_eightarg_message::Layout g_siglus_eightarg_message_layout;
-fushi_voice_hook::SiglusLegacyMessageProfile g_siglus_legacy_message_profile;
-fushi_voice_hook::SiglusLegacyMessageLayout g_siglus_legacy_message_layout;
-fushi_voice_hook::SiglusNativeMessageProfile g_siglus_native_message_profile;
-fushi_voice_hook::SiglusNativeMessageLayout g_siglus_native_message_layout;
+my_comic_voice_hook::siglus_eightarg_message::Layout g_siglus_eightarg_message_layout;
+my_comic_voice_hook::SiglusLegacyMessageProfile g_siglus_legacy_message_profile;
+my_comic_voice_hook::SiglusLegacyMessageLayout g_siglus_legacy_message_layout;
+my_comic_voice_hook::SiglusNativeMessageProfile g_siglus_native_message_profile;
+my_comic_voice_hook::SiglusNativeMessageLayout g_siglus_native_message_layout;
 uintptr_t g_siglus_message_scenario_rva = 0;
 void* g_orig_SiglusMessageEntry = nullptr;
 void* g_orig_SiglusMessageScenario = nullptr;
 void* g_siglus_message_targets[2] = {};
 bool g_siglus_message_created[2] = {};
 bool g_siglus_message_ever_enabled[2] = {};
-__declspec(thread) fushi_voice_hook::SiglusMessageTicket
+__declspec(thread) my_comic_voice_hook::SiglusMessageTicket
     g_siglus_message_ticket = {};
-__declspec(thread) fushi_voice_hook::SiglusNativeMessageTicket
+__declspec(thread) my_comic_voice_hook::SiglusNativeMessageTicket
     g_siglus_native_message_ticket = {};
-__declspec(thread) fushi_voice_hook::SiglusLegacyMessageTicket
+__declspec(thread) my_comic_voice_hook::SiglusLegacyMessageTicket
     g_siglus_legacy_message_ticket = {};
-__declspec(thread) fushi_voice_hook::siglus_eightarg_message::Ticket
+__declspec(thread) my_comic_voice_hook::siglus_eightarg_message::Ticket
     g_siglus_eightarg_message_ticket = {};
 __declspec(thread) uint64_t g_siglus_eightarg_message_epoch = 0;
-fushi_voice_hook::SiglusMessageQueue<SiglusMessageTextTask,
+my_comic_voice_hook::SiglusMessageQueue<SiglusMessageTextTask,
                                    kSiglusMessageTaskSlots>
     g_siglus_message_tasks;
 
@@ -67,7 +67,7 @@ void __stdcall ObserveSiglusMessageEntry(uint32_t owner, uint32_t entry_esp,
   if (!g_siglus_message_capture_enabled.load(std::memory_order_acquire) ||
       !g_capture_enabled) return;
   auto read = ReadSiglusMessageWord;
-  fushi_voice_hook::ArmSiglusMessageTicket(
+  my_comic_voice_hook::ArmSiglusMessageTicket(
       g_siglus_message_layout, owner, entry_esp, read, &g_siglus_message_ticket);
 }
 
@@ -75,7 +75,7 @@ void __stdcall ObserveSiglusMessageEntry(uint32_t owner, uint32_t entry_esp,
 // copy owns the bytes before the engine returns; publication remains on worker.
 void QueueSiglusMessageText(uint32_t text_union, uint32_t frozen_voice_key,
     uint64_t occurrence_epoch = 0,
-    const fushi_voice_hook::siglus_eightarg_message::Owner* eightarg_owner = nullptr) {
+    const my_comic_voice_hook::siglus_eightarg_message::Owner* eightarg_owner = nullptr) {
   if ((occurrence_epoch != 0) != (eightarg_owner != nullptr)) return;
   // ReadSiglusText validates the engine string union and its terminator. SEH
   // contains page lifetime changes between validation and the bounded copy.
@@ -109,20 +109,20 @@ void __stdcall ObserveSiglusMessageScenario(uint32_t surface,
     return;
   }
   auto read = ReadSiglusMessageWord;
-  fushi_voice_hook::SiglusMessageOwnerSnapshot frozen;
-  if (!fushi_voice_hook::ConsumeSiglusMessageTicket(
+  my_comic_voice_hook::SiglusMessageOwnerSnapshot frozen;
+  if (!my_comic_voice_hook::ConsumeSiglusMessageTicket(
           g_siglus_message_layout, surface, entry_esp, wrapper_ebp, read,
           &g_siglus_message_ticket, &frozen)) return;
   uint32_t argument_address = 0, text_union = 0;
-  if (!fushi_voice_hook::SiglusMessageCheckedAddress(entry_esp, 4,
+  if (!my_comic_voice_hook::SiglusMessageCheckedAddress(entry_esp, 4,
                                                    &argument_address) ||
       !read(argument_address, &text_union)) return;
   QueueSiglusMessageText(text_union, frozen.voice_key);
 }
 
-FUSHI_SIGLUS_MESSAGE_THUNK(Detour_SiglusMessageEntry,
+MYCOMIC_SIGLUS_MESSAGE_THUNK(Detour_SiglusMessageEntry,
                          ObserveSiglusMessageEntry, g_orig_SiglusMessageEntry)
-FUSHI_SIGLUS_MESSAGE_THUNK(Detour_SiglusMessageScenario,
+MYCOMIC_SIGLUS_MESSAGE_THUNK(Detour_SiglusMessageScenario,
                          ObserveSiglusMessageScenario,
                          g_orig_SiglusMessageScenario)
 
@@ -142,7 +142,7 @@ void __stdcall ObserveSiglusEightArgMessageEntry(uint32_t owner,
   const uint64_t epoch = BeginSiglusEightArgOccurrence();
   if (epoch == 0) return;
   auto read = ReadSiglusMessageWord;
-  if (fushi_voice_hook::siglus_eightarg_message::Arm(
+  if (my_comic_voice_hook::siglus_eightarg_message::Arm(
           g_siglus_eightarg_message_layout, owner, entry_esp, read,
           &g_siglus_eightarg_message_ticket))
     g_siglus_eightarg_message_epoch = epoch;
@@ -158,9 +158,9 @@ void __stdcall ObserveSiglusEightArgMessageScenario(uint32_t surface,
     return;
   }
   auto read = ReadSiglusMessageWord;
-  fushi_voice_hook::siglus_eightarg_message::Owner frozen{};
+  my_comic_voice_hook::siglus_eightarg_message::Owner frozen{};
   uint32_t text_union = 0;
-  if (!fushi_voice_hook::siglus_eightarg_message::Consume(
+  if (!my_comic_voice_hook::siglus_eightarg_message::Consume(
           g_siglus_eightarg_message_layout, surface, entry_esp, message_ebp,
           read, &g_siglus_eightarg_message_ticket, &frozen, &text_union)) return;
   // The original Scenario has not run yet. Keep its bounded owner metadata in
@@ -169,20 +169,20 @@ void __stdcall ObserveSiglusEightArgMessageScenario(uint32_t surface,
   QueueSiglusMessageText(text_union, UINT32_MAX, epoch, &frozen);
 }
 
-FUSHI_SIGLUS_MESSAGE_THUNK(Detour_SiglusEightArgMessageEntry,
+MYCOMIC_SIGLUS_MESSAGE_THUNK(Detour_SiglusEightArgMessageEntry,
     ObserveSiglusEightArgMessageEntry, g_orig_SiglusMessageEntry)
-FUSHI_SIGLUS_MESSAGE_THUNK(Detour_SiglusEightArgMessageScenario,
+MYCOMIC_SIGLUS_MESSAGE_THUNK(Detour_SiglusEightArgMessageScenario,
     ObserveSiglusEightArgMessageScenario, g_orig_SiglusMessageScenario)
 
 void __stdcall ObserveSiglusNativeMessageEntry(
-    const fushi_voice_hook::SiglusNativeMessageSavedRegisters* registers) {
+    const my_comic_voice_hook::SiglusNativeMessageSavedRegisters* registers) {
   g_siglus_native_message_ticket = {};
   if (registers == nullptr ||
       !g_siglus_message_capture_enabled.load(std::memory_order_acquire) ||
       !g_capture_enabled) return;
   __try {
     auto read = ReadSiglusMessageWord;
-    fushi_voice_hook::ArmSiglusNativeMessageTicket(
+    my_comic_voice_hook::ArmSiglusNativeMessageTicket(
         g_siglus_native_message_layout, *registers, read,
         &g_siglus_native_message_ticket);
   } __except (EXCEPTION_EXECUTE_HANDLER) {
@@ -191,7 +191,7 @@ void __stdcall ObserveSiglusNativeMessageEntry(
 }
 
 void __stdcall ObserveSiglusNativeMessageText(
-    const fushi_voice_hook::SiglusNativeMessageSavedRegisters* registers) {
+    const my_comic_voice_hook::SiglusNativeMessageSavedRegisters* registers) {
   if (registers == nullptr ||
       !g_siglus_message_capture_enabled.load(std::memory_order_acquire) ||
       !g_capture_enabled) {
@@ -200,8 +200,8 @@ void __stdcall ObserveSiglusNativeMessageText(
   }
   __try {
     auto read = ReadSiglusMessageWord;
-    fushi_voice_hook::SiglusMessageOwnerSnapshot frozen;
-    if (!fushi_voice_hook::ConsumeSiglusNativeMessageTicket(
+    my_comic_voice_hook::SiglusMessageOwnerSnapshot frozen;
+    if (!my_comic_voice_hook::ConsumeSiglusNativeMessageTicket(
             g_siglus_native_message_layout, *registers, read,
             &g_siglus_native_message_ticket, &frozen)) return;
     QueueSiglusMessageText(registers->ecx, frozen.voice_key);
@@ -210,9 +210,9 @@ void __stdcall ObserveSiglusNativeMessageText(
   }
 }
 
-FUSHI_SIGLUS_NATIVE_MESSAGE_THUNK(Detour_SiglusNativeMessageEntry,
+MYCOMIC_SIGLUS_NATIVE_MESSAGE_THUNK(Detour_SiglusNativeMessageEntry,
     ObserveSiglusNativeMessageEntry, g_orig_SiglusMessageEntry)
-FUSHI_SIGLUS_NATIVE_MESSAGE_THUNK(Detour_SiglusNativeMessageText,
+MYCOMIC_SIGLUS_NATIVE_MESSAGE_THUNK(Detour_SiglusNativeMessageText,
     ObserveSiglusNativeMessageText, g_orig_SiglusMessageScenario)
 
 bool ReadSiglusLegacyMessageMemory(uint32_t address, void* output, size_t bytes) {
@@ -227,19 +227,19 @@ bool ReadSiglusLegacyMessageMemory(uint32_t address, void* output, size_t bytes)
 }
 
 void __stdcall ObserveSiglusLegacyMessageEntry(
-    const fushi_voice_hook::SiglusNativeMessageSavedRegisters* registers) {
+    const my_comic_voice_hook::SiglusNativeMessageSavedRegisters* registers) {
   g_siglus_legacy_message_ticket = {};
   if (registers == nullptr ||
       !g_siglus_message_capture_enabled.load(std::memory_order_acquire) ||
       !g_capture_enabled) return;
   auto read = ReadSiglusLegacyMessageMemory;
-  fushi_voice_hook::ArmSiglusLegacyMessageTicket(
+  my_comic_voice_hook::ArmSiglusLegacyMessageTicket(
       g_siglus_legacy_message_layout, *registers, read,
       &g_siglus_legacy_message_ticket);
 }
 
 void __stdcall ObserveSiglusLegacyMessageText(
-    const fushi_voice_hook::SiglusNativeMessageSavedRegisters* registers) {
+    const my_comic_voice_hook::SiglusNativeMessageSavedRegisters* registers) {
   if (registers == nullptr ||
       !g_siglus_message_capture_enabled.load(std::memory_order_acquire) ||
       !g_capture_enabled) {
@@ -247,8 +247,8 @@ void __stdcall ObserveSiglusLegacyMessageText(
     return;
   }
   auto read = ReadSiglusLegacyMessageMemory;
-  fushi_voice_hook::SiglusLegacyMessageOccurrence frozen;
-  if (!fushi_voice_hook::ConsumeSiglusLegacyMessageTicket(
+  my_comic_voice_hook::SiglusLegacyMessageOccurrence frozen;
+  if (!my_comic_voice_hook::ConsumeSiglusLegacyMessageTicket(
           g_siglus_legacy_message_layout, *registers, read,
           &g_siglus_legacy_message_ticket, &frozen)) return;
   // The admitted legacy value owns a four-byte iterator proxy before the same
@@ -258,9 +258,9 @@ void __stdcall ObserveSiglusLegacyMessageText(
   QueueSiglusMessageText(frozen.string_object + 4, frozen.snapshot.voice_key);
 }
 
-FUSHI_SIGLUS_NATIVE_MESSAGE_THUNK(Detour_SiglusLegacyMessageEntry,
+MYCOMIC_SIGLUS_NATIVE_MESSAGE_THUNK(Detour_SiglusLegacyMessageEntry,
     ObserveSiglusLegacyMessageEntry, g_orig_SiglusMessageEntry)
-FUSHI_SIGLUS_NATIVE_MESSAGE_THUNK(Detour_SiglusLegacyMessageText,
+MYCOMIC_SIGLUS_NATIVE_MESSAGE_THUNK(Detour_SiglusLegacyMessageText,
     ObserveSiglusLegacyMessageText, g_orig_SiglusMessageScenario)
 
 bool IsSiglusMessageTextInstalled() {
@@ -302,12 +302,12 @@ bool RollbackSiglusMessageHooks() {
 }
 
 bool ResolveLiveSiglusMessage(HMODULE module,
-                             const fushi_voice_hook::SiglusLookupProfile& lane,
-                             fushi_voice_hook::SiglusMessageProfile* profile) {
+                             const my_comic_voice_hook::SiglusLookupProfile& lane,
+                             my_comic_voice_hook::SiglusMessageProfile* profile) {
   __try {
-    fushi_voice_hook::exact_lookup::LoadedPeImage image;
-    if (!fushi_voice_hook::OpenSiglusLoadedImage(module, &image) ||
-        !fushi_voice_hook::ResolveSiglusMessageProfile(image, lane, profile))
+    my_comic_voice_hook::exact_lookup::LoadedPeImage image;
+    if (!my_comic_voice_hook::OpenSiglusLoadedImage(module, &image) ||
+        !my_comic_voice_hook::ResolveSiglusMessageProfile(image, lane, profile))
       return false;
     // The pure resolver can inspect an external scenario detour for diagnosis;
     // installation must not redirect an already-owned Luna/native entry.
@@ -319,12 +319,12 @@ bool ResolveLiveSiglusMessage(HMODULE module,
 }
 
 bool ResolveLiveSiglusNativeMessage(HMODULE module,
-    const fushi_voice_hook::SiglusLookupProfile& lane,
-    fushi_voice_hook::SiglusNativeMessageProfile* profile) {
+    const my_comic_voice_hook::SiglusLookupProfile& lane,
+    my_comic_voice_hook::SiglusNativeMessageProfile* profile) {
   __try {
-    fushi_voice_hook::exact_lookup::LoadedPeImage image;
-    return fushi_voice_hook::OpenSiglusLoadedImage(module, &image) &&
-        fushi_voice_hook::ResolveSiglusNativeMessageProfile(image, lane, profile) &&
+    my_comic_voice_hook::exact_lookup::LoadedPeImage image;
+    return my_comic_voice_hook::OpenSiglusLoadedImage(module, &image) &&
+        my_comic_voice_hook::ResolveSiglusNativeMessageProfile(image, lane, profile) &&
         image.base[lane.exact_text_rva] == 0x53 &&
         image.base[profile->message_entry_rva] == 0x53;
   } __except (EXCEPTION_EXECUTE_HANDLER) {
@@ -333,10 +333,10 @@ bool ResolveLiveSiglusNativeMessage(HMODULE module,
 }
 
 bool ResolveLiveSiglusEightArgMessage(HMODULE module,
-    const fushi_voice_hook::SiglusEightArgGlyphSites& sites) {
+    const my_comic_voice_hook::SiglusEightArgGlyphSites& sites) {
   __try {
-    fushi_voice_hook::exact_lookup::LoadedPeImage image;
-    if (!fushi_voice_hook::OpenSiglusLoadedImage(module, &image) ||
+    my_comic_voice_hook::exact_lookup::LoadedPeImage image;
+    if (!my_comic_voice_hook::OpenSiglusLoadedImage(module, &image) ||
         sites.message_entry_rva == 0 || sites.scenario_entry_rva == 0 ||
         sites.message_caller_return_rva == 0 ||
         sites.message_scenario_return_rva == 0) return false;
@@ -345,16 +345,16 @@ bool ResolveLiveSiglusEightArgMessage(HMODULE module,
                          sites.message_caller_return_rva,
                          sites.message_scenario_return_rva}) {
       if (rva > UINT32_MAX - base ||
-          !fushi_voice_hook::siglus_family::ExecutableSpan(image, rva, 1)) return false;
+          !my_comic_voice_hook::siglus_family::ExecutableSpan(image, rva, 1)) return false;
     }
     // The full family has already been admitted. Verify the original loaded
     // entry patterns before taking ownership; never follow a Luna detour.
-    return fushi_voice_hook::siglus_eight_arg_glyph::At(image,
+    return my_comic_voice_hook::siglus_eight_arg_glyph::At(image,
                sites.message_entry_rva, 0,
-               fushi_voice_hook::siglus_eight_arg_glyph::kMessage.pattern()) &&
-        fushi_voice_hook::siglus_eight_arg_glyph::At(image,
+               my_comic_voice_hook::siglus_eight_arg_glyph::kMessage.pattern()) &&
+        my_comic_voice_hook::siglus_eight_arg_glyph::At(image,
                sites.scenario_entry_rva, 0,
-               fushi_voice_hook::siglus_eight_arg_glyph::kScenarioEntry.pattern());
+               my_comic_voice_hook::siglus_eight_arg_glyph::kScenarioEntry.pattern());
   } __except (EXCEPTION_EXECUTE_HANDLER) {
     return false;
   }
@@ -447,8 +447,8 @@ bool TryHookSiglusMessageText() {
     return InstallSiglusMessageHookGroup();
   }
   if (lane->glyph_abi ==
-      fushi_voice_hook::SiglusGlyphLayoutAbi::kStackSixteenArguments) {
-    if (!fushi_voice_hook::ResolveLiveSiglusLegacyMessage(
+      my_comic_voice_hook::SiglusGlyphLayoutAbi::kStackSixteenArguments) {
+    if (!my_comic_voice_hook::ResolveLiveSiglusLegacyMessage(
             module, *lane, g_siglus_legacy_glyph_sites,
             &g_siglus_legacy_message_profile)) {
       g_siglus_message_install_state.store(-1, std::memory_order_release);
@@ -469,9 +469,9 @@ bool TryHookSiglusMessageText() {
     return InstallSiglusMessageHookGroup();
   }
   if (lane->glyph_abi !=
-      fushi_voice_hook::SiglusGlyphLayoutAbi::kEcxTenArguments) return false;
+      my_comic_voice_hook::SiglusGlyphLayoutAbi::kEcxTenArguments) return false;
   if (lane->text_feed ==
-      fushi_voice_hook::SiglusLookupTextFeed::kNativeEcxTextUnion) {
+      my_comic_voice_hook::SiglusLookupTextFeed::kNativeEcxTextUnion) {
     if (!ResolveLiveSiglusNativeMessage(module, *lane,
                                         &g_siglus_native_message_profile)) {
       g_siglus_message_install_state.store(-1, std::memory_order_release);
@@ -495,7 +495,7 @@ bool TryHookSiglusMessageText() {
     return InstallSiglusMessageHookGroup();
   }
   if (lane->text_feed !=
-      fushi_voice_hook::SiglusLookupTextFeed::kLunaScenarioLane) return false;
+      my_comic_voice_hook::SiglusLookupTextFeed::kLunaScenarioLane) return false;
   if (!ResolveLiveSiglusMessage(module, *lane, &g_siglus_message_profile)) {
     g_siglus_message_install_state.store(-1, std::memory_order_release);
     return false;
@@ -531,10 +531,10 @@ void ProcessSiglusMessageTextTasks() {
         task.text, static_cast<int>(task.text_units), thread_id,
         g_siglus_message_scenario_rva,
         g_siglus_message_profile.scenario_return_rva,
-        fushi_voice_hook::kTextSourceSiglus, "SiglusEngine message", nullptr,
+        my_comic_voice_hook::kTextSourceSiglus, "SiglusEngine message", nullptr,
         &committed_tick_ms);
     if (event_id != 0) {
-      const fushi_voice_hook::SiglusLookupTextIdentity identity{event_id, thread_id};
+      const my_comic_voice_hook::SiglusLookupTextIdentity identity{event_id, thread_id};
       if (task.eightarg_epoch == 0 || BindSiglusEightArgText(
               task.eightarg_epoch, task.eightarg_owner, identity))
         PublishSiglusLookupTextSnapshot(task.text, task.text_units, identity);

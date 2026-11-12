@@ -168,7 +168,7 @@ if(NOT FLUTTER_WEBVIEW_WINDOWS_USE_TEXTURE_FALLBACK)
   # 通道代码；DLL 运行期动态加载，缺失 fail-open。随包 DLL 整批进 bundled_libraries。
   # Flutter 经 windows/flutter/ephemeral/.plugin_symlinks/<plugin> 编本插件：CMAKE_CURRENT_SOURCE_DIR 是
   # 符号链接路径，`../../../` 落不到仓库根。先按 REALPATH 解回真实包目录再上溯；解不到再按 app 工程
-  #（fushi/windows）相对仓库根兜底。
+  #（my_comic/windows）相对仓库根兜底。
   get_filename_component(_fiw_real_dir "${CMAKE_CURRENT_LIST_DIR}" REALPATH)
   set(LIBPLACEBO_WIN_DIR "${_fiw_real_dir}/../../../third_party/libplacebo-win")
   if(NOT EXISTS "${LIBPLACEBO_WIN_DIR}/include/libplacebo/config.h")

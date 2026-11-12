@@ -10,7 +10,7 @@ import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
 import { readFileSync } from "node:fs";
 
-const POPUP_URL = new URL("../../fushi/assets/popup/popup.js", import.meta.url);
+const POPUP_URL = new URL("../../my_comic/assets/popup/popup.js", import.meta.url);
 const popupSrc = readFileSync(POPUP_URL, "utf8");
 
 const VIEWPORT_W = 800;

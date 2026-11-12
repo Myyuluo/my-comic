@@ -21,7 +21,7 @@
 #include <cstring>
 #include <limits>
 
-namespace fushi_voice_hook::exact_lookup {
+namespace my_comic_voice_hook::exact_lookup {
 
 // A signature is only a candidate locator. Every production caller must also
 // validate the PE sections, call graph and ABI that give its sole match
@@ -562,4 +562,4 @@ inline bool PointerTableTargetsExecutableSections(const LoadedPeImage& image,
   return true;
 }
 
-}  // namespace fushi_voice_hook::exact_lookup
+}  // namespace my_comic_voice_hook::exact_lookup

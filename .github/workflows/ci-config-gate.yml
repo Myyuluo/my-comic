@@ -3,11 +3,11 @@
 # 为什么要有它：main.yml（Windows analyze + 全量单测）以前挂整个 `.github/workflows/**`，
 # push 挂整个 `tool/**` + `.github/workflows/**`——改任何一条 workflow 或 tool/bug.dart 都要
 # 白跑一整轮 Android 构建 / 发布构建。这些触发收窄到「各自真正读到的文件」之后，改 workflow
-# 或发布脚本的 PR / 直推就不再经过 fushi/test 全量——而钉死 workflow 不变式的守卫
+# 或发布脚本的 PR / 直推就不再经过 my_comic/test 全量——而钉死 workflow 不变式的守卫
 # （concurrency 组名、发布通道、缓存配额、路径过滤、密钥注入 parity、PR 合并白名单 …）
 # 恰恰住在那里。本门只跑那一批守卫，几分钟、一台 ubuntu，把这层保护留住。
 #
-# 选哪些测试：**按磁盘枚举，不写死清单**——fushi/test 下凡是引用 `.github/`（workflow /
+# 选哪些测试：**按磁盘枚举，不写死清单**——my_comic/test 下凡是引用 `.github/`（workflow /
 # composite action / 脚本）或根 `tool/`（`../tool/`、`../../tool/`）的测试文件都跑。新加
 # 一条 workflow 守卫自动落进来。另跑一遍 tool/check_release_policy.ps1（发布 workflow 的
 # 第一步），让发布策略红在 PR 上而不是红在发布当天。
@@ -54,15 +54,15 @@ jobs:
         with:
           purpose: test
       - name: Flutter pub get
-        working-directory: fushi
+        working-directory: my_comic
         run: flutter pub get
-      # 少数被选中的守卫会 import package:fushi 编 app 代码，需要与 main.yml 同样的补丁。
+      # 少数被选中的守卫会 import package:my_comic 编 app 代码，需要与 main.yml 同样的补丁。
       - name: Apply pub cache patches
         run: |
           chmod +x ci/apply-patches.sh
           bash ci/apply-patches.sh
       - name: Run workflow / release-script guard tests
-        working-directory: fushi
+        working-directory: my_comic
         shell: bash
         run: |
           set -euo pipefail

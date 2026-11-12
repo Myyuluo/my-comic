@@ -2,7 +2,7 @@
 
 #include "siglus_autoprofile.h"
 
-namespace fushi_voice_hook::siglus_native_family {
+namespace my_comic_voice_hook::siglus_native_family {
 using siglus_family::Signature;
 
 // Independent compiler/layout family: ECX points to a 24-byte UTF-16 string,
@@ -133,9 +133,9 @@ inline bool ReadableDataSlot(const exact_lookup::LoadedPeImage& image,
              IMAGE_SCN_MEM_READ, IMAGE_SCN_MEM_EXECUTE) &&
          exact_lookup::IsReadableSpan(image.base + *slot_rva, 4u);
 }
-}  // namespace fushi_voice_hook::siglus_native_family
+}  // namespace my_comic_voice_hook::siglus_native_family
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 // This pure resolver neither follows external code nor installs a hook. The
 // caller supplies GetProcAddress(USER32, "GetKeyState") from its own process.
@@ -230,4 +230,4 @@ inline bool ResolveSiglusNativeFamilyProfile(
       input_anchors.main_call + kMainInputCallOffset + 5u;
   return true;
 }
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

@@ -10,9 +10,9 @@
 
 #include "x86_insn_len.h"
 
-using fushi_voice_hook::x86::FindFirstAcceptedCallTarget;
-using fushi_voice_hook::x86::InsnLen32;
-using fushi_voice_hook::x86::RelCallDest;
+using my_comic_voice_hook::x86::FindFirstAcceptedCallTarget;
+using my_comic_voice_hook::x86::InsnLen32;
+using my_comic_voice_hook::x86::RelCallDest;
 
 namespace {
 

@@ -5,7 +5,7 @@
 #include "siglus_eightarg_message_capture.h"
 #include "siglus_glyph_record.h"
 
-namespace fushi_voice_hook::siglus_eightarg_glyph_batch {
+namespace my_comic_voice_hook::siglus_eightarg_glyph_batch {
 
 constexpr uint32_t kCapacity = 256;
 struct Identity {
@@ -108,4 +108,4 @@ class Collector {
   bool previous_valid_ = false, complete_ = false;
 };
 
-}  // namespace fushi_voice_hook::siglus_eightarg_glyph_batch
+}  // namespace my_comic_voice_hook::siglus_eightarg_glyph_batch

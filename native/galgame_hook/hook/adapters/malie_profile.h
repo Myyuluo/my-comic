@@ -24,7 +24,7 @@
 #include "malie_engine_io_core.h"
 #include "malie_lookup_core.h"
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 struct MalieProfileCache {
   std::atomic<uint32_t> state{
@@ -86,4 +86,4 @@ inline bool MatchesMalieProfile(const wchar_t*) {
   return MeasureMalieProfile() == malie_io::ProfileState::kMatched;
 }
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

@@ -1,4 +1,4 @@
-name: Fushi patched Flutter engine (Windows)
+name: MyComic patched Flutter engine (Windows)
 description: >-
   Installs the patched flutter_windows.dll (HDR output inside the Flutter
   compositor, ci/patches/flutter-engine/<version>/) into the runner's Flutter
@@ -11,7 +11,7 @@ runs:
     - name: Install patched Flutter Windows engine
       shell: pwsh
       run: |
-        $version = (Get-Content fushi/.fvmrc -Raw | ConvertFrom-Json).flutter
+        $version = (Get-Content my_comic/.fvmrc -Raw | ConvertFrom-Json).flutter
         $manifest = "ci/patches/flutter-engine/$version/artifacts.json"
         if (-not (Test-Path $manifest)) {
           # Without published artifacts the app still builds and runs on the

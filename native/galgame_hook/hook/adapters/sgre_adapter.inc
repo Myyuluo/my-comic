@@ -6,26 +6,26 @@
 
 #include "sgre_lookup.inc"
 
-fushi_voice_hook::SgreVoiceArchiveView g_sgre_voice_archive;
+my_comic_voice_hook::SgreVoiceArchiveView g_sgre_voice_archive;
 
 bool HandleSgreCompressedResource(
-    const fushi_voice_hook::XAudioCompressedResourceSubmission& submission) {
+    const my_comic_voice_hook::XAudioCompressedResourceSubmission& submission) {
   if (submission.source.format.encoding !=
-          fushi_voice_hook::XAudioSourceEncoding::kWmaudio2 ||
+          my_comic_voice_hook::XAudioSourceEncoding::kWmaudio2 ||
       submission.payload == nullptr || submission.payload_bytes == 0 ||
       submission.packet_cumulative_bytes == nullptr ||
       submission.packet_count == 0) {
     return false;
   }
-  fushi_voice_hook::SgreVoiceArchiveResourceParts archive_parts;
-  if (!fushi_voice_hook::FindSgreVoiceArchiveResourceParts(
+  my_comic_voice_hook::SgreVoiceArchiveResourceParts archive_parts;
+  if (!my_comic_voice_hook::FindSgreVoiceArchiveResourceParts(
           g_sgre_voice_archive, submission.payload,
           submission.payload_bytes, submission.packet_cumulative_bytes,
           submission.packet_count, &archive_parts)) {
     return false;
   }
   std::vector<uint8_t> resource;
-  if (!fushi_voice_hook::BuildXwmaResourceFromChunks(
+  if (!my_comic_voice_hook::BuildXwmaResourceFromChunks(
           archive_parts.fmt, archive_parts.fmt_bytes, archive_parts.dpds,
           archive_parts.dpds_bytes, submission.payload,
           submission.payload_bytes, &resource) ||
@@ -44,7 +44,7 @@ bool HandleSgreCompressedResource(
       submission.playback_timestamp_ms);
   if (published) {
     SetXAudioDiagnostic(
-        fushi_voice_hook::kXAudioDiagGameResourcePublished);
+        my_comic_voice_hook::kXAudioDiagGameResourcePublished);
   }
   return published;
 }
@@ -76,8 +76,8 @@ bool ResolveSgreAnchorsOnce() {
   }
 
   bool completed = false;
-  const fushi_voice_hook::SgreAnchorSet candidate =
-      fushi_voice_hook::ResolveSgreRuntimeAnchors(
+  const my_comic_voice_hook::SgreAnchorSet candidate =
+      my_comic_voice_hook::ResolveSgreRuntimeAnchors(
           &g_sgre_executable_sha256, &completed);
   if (!completed) {
     const LONG failure =
@@ -93,19 +93,19 @@ bool ResolveSgreAnchorsOnce() {
     // Bounded recovery is exhausted. Publish a terminal unresolved result so
     // admission stops saying "still checking" forever, but never substitute
     // a known-build RVA or otherwise guess past the failed live-image read.
-    g_sgre_anchors = fushi_voice_hook::SgreAnchorSet{};
+    g_sgre_anchors = my_comic_voice_hook::SgreAnchorSet{};
   } else {
     g_sgre_anchors = candidate;
   }
   g_sgre_anchors_resolved = true;
   SetXAudioDiagnostic2(g_sgre_anchors.complete()
-                          ? fushi_voice_hook::kXAudioDiag2SgreAnchorsResolved
-                          : fushi_voice_hook::kXAudioDiag2SgreAnchorsUnresolved);
+                          ? my_comic_voice_hook::kXAudioDiag2SgreAnchorsResolved
+                          : my_comic_voice_hook::kXAudioDiag2SgreAnchorsUnresolved);
   InterlockedExchange(&g_sgre_anchor_resolution_in_progress, 0);
   return true;
 }
 
-class SgreAdapter final : public fushi_voice_hook::EngineAdapter {
+class SgreAdapter final : public my_comic_voice_hook::EngineAdapter {
  public:
   const char* id() const override { return "sgre"; }
 
@@ -115,7 +115,7 @@ class SgreAdapter final : public fushi_voice_hook::EngineAdapter {
     // cache "no text anchors" for this process.
     ResolveSgreAnchorsOnce();
     if (!archive_family_probed_) {
-      archive_family_matched_ = fushi_voice_hook::MatchesSgreFamily();
+      archive_family_matched_ = my_comic_voice_hook::MatchesSgreFamily();
       archive_family_probed_ = true;
     }
     // Text/lookup can prove the engine family without any on-disk voice
@@ -128,7 +128,7 @@ class SgreAdapter final : public fushi_voice_hook::EngineAdapter {
     const bool was_matched = family_matched_;
     family_matched_ = archive_family_matched_ || anchor_family_matched_;
     if (family_matched_ && !was_matched) {
-      SetXAudioDiagnostic2(fushi_voice_hook::kXAudioDiag2SgreFamilyMatched);
+      SetXAudioDiagnostic2(my_comic_voice_hook::kXAudioDiag2SgreFamilyMatched);
     }
     return family_matched_;
   }
@@ -175,14 +175,14 @@ class SgreAdapter final : public fushi_voice_hook::EngineAdapter {
     }
     if (archive_family_matched_) {
       std::wstring archive_path;
-      if (fushi_voice_hook::SgreVoiceArchivePath(&archive_path) &&
-          fushi_voice_hook::OpenSgreVoiceArchive(
+      if (my_comic_voice_hook::SgreVoiceArchivePath(&archive_path) &&
+          my_comic_voice_hook::OpenSgreVoiceArchive(
               archive_path.c_str(), &g_sgre_voice_archive)) {
         if (RegisterXAudioCompressedResourceHandler(
                 &HandleSgreCompressedResource)) {
           audio_installed_ = true;
         } else {
-          fushi_voice_hook::CloseSgreVoiceArchive(&g_sgre_voice_archive);
+          my_comic_voice_hook::CloseSgreVoiceArchive(&g_sgre_voice_archive);
         }
       }
     }
@@ -190,9 +190,9 @@ class SgreAdapter final : public fushi_voice_hook::EngineAdapter {
     return installed_;
   }
 
-  fushi_voice_hook::AdapterCapability capabilities() const override {
-    return fushi_voice_hook::AdapterCapability::kText |
-           fushi_voice_hook::AdapterCapability::kResourceAudio;
+  my_comic_voice_hook::AdapterCapability capabilities() const override {
+    return my_comic_voice_hook::AdapterCapability::kText |
+           my_comic_voice_hook::AdapterCapability::kResourceAudio;
   }
 
   // 家族探测放宽之后，IdentityRejected 这一档在 SGRE 上是**活路径**——这与 Leaf 相反。
@@ -200,15 +200,15 @@ class SgreAdapter final : public fushi_voice_hook::EngineAdapter {
   // 对象结构证明。于是「音频家族成立、但当前 build 已改变 ABI/codegen，无法安全解析
   // 查词锚点」是可达终局：传感器不会靠等待变得可安装。摘要保留 SHA 只用于诊断和
   // 收集新兼容样本，不代表 SHA 白名单，也不参与未知版本的放行。
-  fushi_voice_hook::LookupAdmissionReport lookupAdmission() const override {
-    fushi_voice_hook::LookupAdmissionReport report;
+  my_comic_voice_hook::LookupAdmissionReport lookupAdmission() const override {
+    my_comic_voice_hook::LookupAdmissionReport report;
     // The draw detour alone is sufficient for the normal text lane, but it is
     // not sufficient for a clickable in-game lookup sensor: until the exact
     // DirectInput device detour publishes Ready, a host click could pass
     // through to the game. Keep admission fail-closed on that distinction.
     if (g_sgre_text_draw_original != nullptr &&
         IsSgreDirectInputShieldOperational()) {
-      report.state = fushi_voice_hook::kLookupAdmissionSensorInstalled;
+      report.state = my_comic_voice_hook::kLookupAdmissionSensorInstalled;
       return report;
     }
     // 锚点还没解析过 = 还在等 install()，是真的「等门」。
@@ -217,13 +217,13 @@ class SgreAdapter final : public fushi_voice_hook::EngineAdapter {
          IsSgreLookupStructureFaulted() ||
          !g_sgre_anchors.direct_input_shield_available() ||
          IsSgreDirectInputStructureFaulted())) {
-      report.state = fushi_voice_hook::kLookupAdmissionIdentityRejected;
-      fushi_voice_hook::FormatSha256Hex(
+      report.state = my_comic_voice_hook::kLookupAdmissionIdentityRejected;
+      my_comic_voice_hook::FormatSha256Hex(
           g_sgre_executable_sha256.data(), g_sgre_executable_sha256.size(),
-          report.executable_sha256, fushi_voice_hook::kHookModuleDigestChars);
+          report.executable_sha256, my_comic_voice_hook::kHookModuleDigestChars);
       return report;
     }
-    report.state = fushi_voice_hook::kLookupAdmissionIdentityAccepted;
+    report.state = my_comic_voice_hook::kLookupAdmissionIdentityAccepted;
     return report;
   }
 
@@ -250,21 +250,21 @@ class SgreAdapter final : public fushi_voice_hook::EngineAdapter {
 
   void shutdown() override {
     if (g_header != nullptr) {
-      fushi_voice_hook::g_geometry_provider_registry.Retire(
+      my_comic_voice_hook::g_geometry_provider_registry.Retire(
           g_header,
-          fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-          fushi_voice_hook::kLookupGeometryProviderIdSgre);
+          my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+          my_comic_voice_hook::kLookupGeometryProviderIdSgre);
     }
     ShutdownSgreDirectInputShield();
     if (audio_installed_) {
       UnregisterXAudioCompressedResourceHandler(&HandleSgreCompressedResource);
-      fushi_voice_hook::CloseSgreVoiceArchive(&g_sgre_voice_archive);
+      my_comic_voice_hook::CloseSgreVoiceArchive(&g_sgre_voice_archive);
       audio_installed_ = false;
     }
     installed_ = false;
   }
 
-  fushi_voice_hook::AdapterDiagnostics diagnostics() const override {
+  my_comic_voice_hook::AdapterDiagnostics diagnostics() const override {
     return {id(), probe(), installed_,
             g_header == nullptr ? 0u : g_header->xaudio_diagnostics};
   }

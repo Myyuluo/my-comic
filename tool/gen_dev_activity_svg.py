@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate a self-contained development-activity SVG for the Fushi repository.
+"""Generate a self-contained development-activity SVG for the MyComic repository.
 
 Two panels, one shared weekly x-axis:
 
@@ -23,13 +23,13 @@ Channel data sources (they are deliberately different -- see below):
   stable / beta
       GitHub Releases API. Classification mirrors the client's own
       ``releaseMatchesUpdateChannel``
-      (fushi/lib/src/utils/misc/update_checker_release.dart) so the chart and
+      (my_comic/lib/src/utils/misc/update_checker_release.dart) so the chart and
       the in-app update channels can never disagree.
 
   debug
       GitHub Actions API: successful ``push``-triggered runs of release-desktop.yml,
       deduplicated by head SHA. The Releases API is *not* usable here: every
-      push overwrites one rolling tag (``fushi-debug-rolling``), so the API
+      push overwrites one rolling tag (``mycomic-debug-rolling``), so the API
       reports a single release no matter how many debug builds shipped, and the
       legacy per-build ``v<x>-debug.<seq>+<sha>`` tags are garbage-collected by
       release-desktop.yml. Actions history is retained ~90 days, which is why the
@@ -38,7 +38,7 @@ Channel data sources (they are deliberately different -- see below):
 
 Usage:
     GITHUB_TOKEN=... python3 tool/gen_dev_activity_svg.py \
-        --repo hajisensai/Fushi --branch origin/develop \
+        --repo Myyuluo/my-comic --branch origin/develop \
         --out docs/assets/dev-activity.svg
 """
 
@@ -66,7 +66,7 @@ DEBUG_WORKFLOW = "release-desktop.yml"
 # GitHub caps any Actions run listing at 1000 items regardless of total_count.
 RUNS_LIST_CAP = 1000
 
-# Mirrors fushi/lib/src/utils/misc/update_checker_release.dart:26-31. Do not
+# Mirrors my_comic/lib/src/utils/misc/update_checker_release.dart:26-31. Do not
 # invent new patterns here -- a chart that classifies releases differently from
 # the client is worse than no chart.
 _BETA_TAG = re.compile(r"^v\d+(?:\.\d+)*-beta\.\d+$")
@@ -249,7 +249,7 @@ def _api_get(url: str, token: str) -> Tuple[object, Dict[str, str]]:
     req = urllib.request.Request(url)
     req.add_header("Accept", "application/vnd.github+json")
     req.add_header("X-GitHub-Api-Version", "2022-11-28")
-    req.add_header("User-Agent", "fushi-dev-activity")
+    req.add_header("User-Agent", "mycomic-dev-activity")
     if token:
         req.add_header("Authorization", f"Bearer {token}")
     try:
@@ -600,8 +600,8 @@ def main(argv: List[str]) -> int:
     )
     parser.add_argument(
         "--repo",
-        default=os.environ.get("DEV_ACTIVITY_REPO", "hajisensai/Fushi"),
-        help="owner/name of the repository (default: hajisensai/Fushi)",
+        default=os.environ.get("DEV_ACTIVITY_REPO", "Myyuluo/my-comic"),
+        help="owner/name of the repository (default: Myyuluo/my-comic)",
     )
     parser.add_argument(
         "--branch",

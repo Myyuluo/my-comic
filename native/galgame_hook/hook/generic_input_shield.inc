@@ -41,15 +41,15 @@ GenericDirectInputCreateFn g_generic_direct_input_create_w_original = nullptr;
 // DirectInputCreateEx 的签名与 DirectInput8Create 同形（带 REFIID），与 A/W 那两个不同。
 GenericDirectInput8CreateFn g_generic_direct_input_create_ex_original = nullptr;
 
-fushi_voice_hook::HookOriginalRegistry<16>
+my_comic_voice_hook::HookOriginalRegistry<16>
     g_generic_direct_input_create_device_originals;
-fushi_voice_hook::HookOriginalRegistry<16>
+my_comic_voice_hook::HookOriginalRegistry<16>
     g_generic_direct_input_release_originals;
-fushi_voice_hook::HookOriginalRegistry<16>
+my_comic_voice_hook::HookOriginalRegistry<16>
     g_generic_direct_input_set_data_format_originals;
-fushi_voice_hook::HookOriginalRegistry<16>
+my_comic_voice_hook::HookOriginalRegistry<16>
     g_generic_direct_input_get_device_state_originals;
-fushi_voice_hook::HookOriginalRegistry<16>
+my_comic_voice_hook::HookOriginalRegistry<16>
     g_generic_direct_input_get_device_data_originals;
 
 constexpr uint32_t kGenericKeyCoverageGetKeyState = 0x1u;
@@ -69,11 +69,11 @@ std::atomic<bool> g_generic_dinput_factory_w_hooked{false};
 std::atomic<bool> g_generic_dinput_factory_ex_hooked{false};
 
 SRWLOCK g_generic_shield_state_lock = SRWLOCK_INIT;
-fushi_voice_hook::LeftButtonShieldLatch g_generic_get_key_state_latch;
-fushi_voice_hook::LeftButtonShieldLatch g_generic_get_async_key_state_latch;
-fushi_voice_hook::LeftButtonShieldLatch g_generic_get_keyboard_state_latch;
-fushi_voice_hook::LeftButtonShieldLatch g_generic_raw_input_data_latch;
-fushi_voice_hook::LeftButtonShieldLatch g_generic_raw_input_buffer_latch;
+my_comic_voice_hook::LeftButtonShieldLatch g_generic_get_key_state_latch;
+my_comic_voice_hook::LeftButtonShieldLatch g_generic_get_async_key_state_latch;
+my_comic_voice_hook::LeftButtonShieldLatch g_generic_get_keyboard_state_latch;
+my_comic_voice_hook::LeftButtonShieldLatch g_generic_raw_input_data_latch;
+my_comic_voice_hook::LeftButtonShieldLatch g_generic_raw_input_buffer_latch;
 uint32_t g_generic_prearmed_request_seq = 0;
 
 enum class GenericDirectInputFormatState : uint8_t {
@@ -86,8 +86,8 @@ struct GenericDirectInputMouseDevice {
   void *device = nullptr;
   GenericDirectInputFormatState format = GenericDirectInputFormatState::kUnset;
   uint32_t state_bytes = 0;
-  fushi_voice_hook::LeftButtonShieldLatch immediate_latch;
-  fushi_voice_hook::LeftButtonShieldLatch buffered_latch;
+  my_comic_voice_hook::LeftButtonShieldLatch immediate_latch;
+  my_comic_voice_hook::LeftButtonShieldLatch buffered_latch;
   bool immediate_observed = false;
   bool buffered_observed = false;
 };
@@ -97,7 +97,7 @@ GenericDirectInputMouseDevice
     g_generic_direct_input_devices[kGenericDirectInputDeviceCapacity] = {};
 
 bool GenericShieldTargetIsCurrentProcess(
-    const fushi_voice_hook::LookupShieldRequestSnapshot &request) {
+    const my_comic_voice_hook::LookupShieldRequestSnapshot &request) {
   if (!request.valid || request.target_hwnd == 0)
     return false;
   const HWND target =
@@ -110,7 +110,7 @@ bool GenericShieldTargetIsCurrentProcess(
 }
 
 bool GenericShieldRequestActiveForSurface(
-    const fushi_voice_hook::LookupShieldRequestSnapshot &request,
+    const my_comic_voice_hook::LookupShieldRequestSnapshot &request,
     uint32_t /*surface*/) {
   // A writer-held request is intentionally unreadable and therefore fails
   // open here. Generic public-API coverage is always Partial (or a stricter
@@ -118,7 +118,7 @@ bool GenericShieldRequestActiveForSurface(
   // part of the explicit risk acceptance rather than a reason to pre-arm an
   // unknown set of sampled APIs and risk a tail that can never drain.
   if (!request.valid ||
-      (request.active_buttons & fushi_voice_hook::kLookupShieldButtonLeft) ==
+      (request.active_buttons & my_comic_voice_hook::kLookupShieldButtonLeft) ==
           0 ||
       g_header == nullptr || g_header->lookup_enabled == 0) {
     return false;
@@ -158,14 +158,14 @@ SHORT WINAPI Detour_GenericGetKeyState(int virtual_key) {
   SHORT state = original(virtual_key);
   if (virtual_key != VK_LBUTTON)
     return state;
-  MarkGenericShieldObserved(fushi_voice_hook::kLookupShieldSurfaceKeyState);
+  MarkGenericShieldObserved(my_comic_voice_hook::kLookupShieldSurfaceKeyState);
   g_generic_key_observed_coverage.fetch_or(kGenericKeyCoverageGetKeyState,
                                            std::memory_order_relaxed);
-  const auto request = fushi_voice_hook::ReadLookupShieldRequest(g_header);
+  const auto request = my_comic_voice_hook::ReadLookupShieldRequest(g_header);
   const bool active = GenericShieldRequestActiveForSurface(
-      request, fushi_voice_hook::kLookupShieldSurfaceKeyState);
+      request, my_comic_voice_hook::kLookupShieldSurfaceKeyState);
   AcquireSRWLockExclusive(&g_generic_shield_state_lock);
-  fushi_voice_hook::FilterSampledLeftButtonState(
+  my_comic_voice_hook::FilterSampledLeftButtonState(
       active, false, reinterpret_cast<int16_t *>(&state),
       &g_generic_get_key_state_latch);
   ReleaseSRWLockExclusive(&g_generic_shield_state_lock);
@@ -184,14 +184,14 @@ SHORT WINAPI Detour_GenericGetAsyncKeyState(int virtual_key) {
   // host-shield filter sees it (luca_lookup.inc).
   FilterLucaLeftButtonSample(reinterpret_cast<int16_t *>(&state),
                              reinterpret_cast<uintptr_t>(_ReturnAddress()));
-  MarkGenericShieldObserved(fushi_voice_hook::kLookupShieldSurfaceKeyState);
+  MarkGenericShieldObserved(my_comic_voice_hook::kLookupShieldSurfaceKeyState);
   g_generic_key_observed_coverage.fetch_or(kGenericKeyCoverageGetAsyncKeyState,
                                            std::memory_order_relaxed);
-  const auto request = fushi_voice_hook::ReadLookupShieldRequest(g_header);
+  const auto request = my_comic_voice_hook::ReadLookupShieldRequest(g_header);
   const bool active = GenericShieldRequestActiveForSurface(
-      request, fushi_voice_hook::kLookupShieldSurfaceKeyState);
+      request, my_comic_voice_hook::kLookupShieldSurfaceKeyState);
   AcquireSRWLockExclusive(&g_generic_shield_state_lock);
-  fushi_voice_hook::FilterSampledLeftButtonState(
+  my_comic_voice_hook::FilterSampledLeftButtonState(
       active, true, reinterpret_cast<int16_t *>(&state),
       &g_generic_get_async_key_state_latch);
   ReleaseSRWLockExclusive(&g_generic_shield_state_lock);
@@ -204,16 +204,16 @@ BOOL WINAPI Detour_GenericGetKeyboardState(PBYTE keys) {
   if (original == nullptr)
     return FALSE;
   const BOOL result = original(keys);
-  MarkGenericShieldObserved(fushi_voice_hook::kLookupShieldSurfaceKeyState);
+  MarkGenericShieldObserved(my_comic_voice_hook::kLookupShieldSurfaceKeyState);
   g_generic_key_observed_coverage.fetch_or(kGenericKeyCoverageGetKeyboardState,
                                            std::memory_order_relaxed);
   if (result == FALSE || keys == nullptr)
     return result;
-  const auto request = fushi_voice_hook::ReadLookupShieldRequest(g_header);
+  const auto request = my_comic_voice_hook::ReadLookupShieldRequest(g_header);
   const bool active = GenericShieldRequestActiveForSurface(
-      request, fushi_voice_hook::kLookupShieldSurfaceKeyState);
+      request, my_comic_voice_hook::kLookupShieldSurfaceKeyState);
   AcquireSRWLockExclusive(&g_generic_shield_state_lock);
-  fushi_voice_hook::FilterKeyboardStateLeftButton(
+  my_comic_voice_hook::FilterKeyboardStateLeftButton(
       active, keys, 256u, &g_generic_get_keyboard_state_latch);
   ReleaseSRWLockExclusive(&g_generic_shield_state_lock);
   return result;
@@ -276,16 +276,16 @@ UINT WINAPI Detour_GenericGetRawInputData(HRAWINPUT raw_handle, UINT command,
     }
   } __except (EXCEPTION_EXECUTE_HANDLER) {
     g_generic_shield_fault_mask.fetch_or(
-        fushi_voice_hook::kLookupShieldSurfaceRawInputData,
+        my_comic_voice_hook::kLookupShieldSurfaceRawInputData,
         std::memory_order_relaxed);
     return result;
   }
-  MarkGenericShieldObserved(fushi_voice_hook::kLookupShieldSurfaceRawInputData);
-  const auto request = fushi_voice_hook::ReadLookupShieldRequest(g_header);
+  MarkGenericShieldObserved(my_comic_voice_hook::kLookupShieldSurfaceRawInputData);
+  const auto request = my_comic_voice_hook::ReadLookupShieldRequest(g_header);
   const bool active = GenericShieldRequestActiveForSurface(
-      request, fushi_voice_hook::kLookupShieldSurfaceRawInputData);
+      request, my_comic_voice_hook::kLookupShieldSurfaceRawInputData);
   AcquireSRWLockExclusive(&g_generic_shield_state_lock);
-  fushi_voice_hook::FilterRawInputLeftButtonFlags(
+  my_comic_voice_hook::FilterRawInputLeftButtonFlags(
       active, &raw->data.mouse.usButtonFlags, &g_generic_raw_input_data_latch);
   ReleaseSRWLockExclusive(&g_generic_shield_state_lock);
   return result;
@@ -303,20 +303,20 @@ UINT WINAPI Detour_GenericGetRawInputBuffer(PRAWINPUT data, PUINT size,
     return result;
   if (!ValidateRawInputBuffer(data, result, input_bytes)) {
     g_generic_shield_fault_mask.fetch_or(
-        fushi_voice_hook::kLookupShieldSurfaceRawInputBuffer,
+        my_comic_voice_hook::kLookupShieldSurfaceRawInputBuffer,
         std::memory_order_relaxed);
     return result; // two-pass validation means the caller buffer is untouched
   }
-  const auto request = fushi_voice_hook::ReadLookupShieldRequest(g_header);
+  const auto request = my_comic_voice_hook::ReadLookupShieldRequest(g_header);
   const bool active = GenericShieldRequestActiveForSurface(
-      request, fushi_voice_hook::kLookupShieldSurfaceRawInputBuffer);
+      request, my_comic_voice_hook::kLookupShieldSurfaceRawInputBuffer);
   AcquireSRWLockExclusive(&g_generic_shield_state_lock);
   PRAWINPUT current = data;
   bool mouse_observed = false;
   for (UINT i = 0; i < result; ++i) {
     if (current->header.dwType == RIM_TYPEMOUSE) {
       mouse_observed = true;
-      fushi_voice_hook::FilterRawInputLeftButtonFlags(
+      my_comic_voice_hook::FilterRawInputLeftButtonFlags(
           active, &current->data.mouse.usButtonFlags,
           &g_generic_raw_input_buffer_latch);
     }
@@ -328,13 +328,13 @@ UINT WINAPI Detour_GenericGetRawInputBuffer(PRAWINPUT data, PUINT size,
                                           aligned_size);
   }
   if (result == 0) {
-    fushi_voice_hook::ObserveLeftButtonNeutralTail(
+    my_comic_voice_hook::ObserveLeftButtonNeutralTail(
         active, &g_generic_raw_input_buffer_latch);
   }
   ReleaseSRWLockExclusive(&g_generic_shield_state_lock);
   if (mouse_observed) {
     MarkGenericShieldObserved(
-        fushi_voice_hook::kLookupShieldSurfaceRawInputBuffer);
+        my_comic_voice_hook::kLookupShieldSurfaceRawInputBuffer);
   }
   return result;
 }
@@ -366,8 +366,8 @@ bool RegisterGenericDirectInputDevice(void *device) {
   }
   ReleaseSRWLockExclusive(&g_generic_shield_state_lock);
   g_generic_shield_uncovered_mask.fetch_or(
-      fushi_voice_hook::kLookupShieldSurfaceDirectInputImmediate |
-          fushi_voice_hook::kLookupShieldSurfaceDirectInputBuffered,
+      my_comic_voice_hook::kLookupShieldSurfaceDirectInputImmediate |
+          my_comic_voice_hook::kLookupShieldSurfaceDirectInputBuffered,
       std::memory_order_relaxed);
   return false;
 }
@@ -433,8 +433,8 @@ Detour_GenericDirectInputSetDataFormat(void *device, LPCDIDATAFORMAT format) {
   ReleaseSRWLockExclusive(&g_generic_shield_state_lock);
   if (!standard) {
     g_generic_shield_uncovered_mask.fetch_or(
-        fushi_voice_hook::kLookupShieldSurfaceDirectInputImmediate |
-            fushi_voice_hook::kLookupShieldSurfaceDirectInputBuffered,
+        my_comic_voice_hook::kLookupShieldSurfaceDirectInputImmediate |
+            my_comic_voice_hook::kLookupShieldSurfaceDirectInputBuffered,
         std::memory_order_relaxed);
   }
   return result;
@@ -454,10 +454,10 @@ HRESULT STDMETHODCALLTYPE Detour_GenericDirectInputGetDeviceState(
   }
   StripHostOverlayWheelFromMouseState(device, bytes, state);
   MarkGenericShieldObserved(
-      fushi_voice_hook::kLookupShieldSurfaceDirectInputImmediate);
-  const auto request = fushi_voice_hook::ReadLookupShieldRequest(g_header);
+      my_comic_voice_hook::kLookupShieldSurfaceDirectInputImmediate);
+  const auto request = my_comic_voice_hook::ReadLookupShieldRequest(g_header);
   const bool active = GenericShieldRequestActiveForSurface(
-      request, fushi_voice_hook::kLookupShieldSurfaceDirectInputImmediate);
+      request, my_comic_voice_hook::kLookupShieldSurfaceDirectInputImmediate);
   AcquireSRWLockExclusive(&g_generic_shield_state_lock);
   auto *record = FindGenericDirectInputDeviceLocked(device);
   if (record == nullptr ||
@@ -465,17 +465,17 @@ HRESULT STDMETHODCALLTYPE Detour_GenericDirectInputGetDeviceState(
       record->state_bytes != bytes) {
     ReleaseSRWLockExclusive(&g_generic_shield_state_lock);
     g_generic_shield_uncovered_mask.fetch_or(
-        fushi_voice_hook::kLookupShieldSurfaceDirectInputImmediate,
+        my_comic_voice_hook::kLookupShieldSurfaceDirectInputImmediate,
         std::memory_order_relaxed);
     return result;
   }
   record->immediate_observed = true;
   __try {
-    fushi_voice_hook::FilterDirectInputImmediateLeftButton(
+    my_comic_voice_hook::FilterDirectInputImmediateLeftButton(
         active, static_cast<uint8_t *>(state), bytes, &record->immediate_latch);
   } __except (EXCEPTION_EXECUTE_HANDLER) {
     g_generic_shield_fault_mask.fetch_or(
-        fushi_voice_hook::kLookupShieldSurfaceDirectInputImmediate,
+        my_comic_voice_hook::kLookupShieldSurfaceDirectInputImmediate,
         std::memory_order_relaxed);
   }
   ReleaseSRWLockExclusive(&g_generic_shield_state_lock);
@@ -497,23 +497,23 @@ HRESULT STDMETHODCALLTYPE Detour_GenericDirectInputGetDeviceData(
     return result;
   }
   MarkGenericShieldObserved(
-      fushi_voice_hook::kLookupShieldSurfaceDirectInputBuffered);
+      my_comic_voice_hook::kLookupShieldSurfaceDirectInputBuffered);
   if (object_bytes < sizeof(DWORD) * 2u) {
     g_generic_shield_uncovered_mask.fetch_or(
-        fushi_voice_hook::kLookupShieldSurfaceDirectInputBuffered,
+        my_comic_voice_hook::kLookupShieldSurfaceDirectInputBuffered,
         std::memory_order_relaxed);
     return result;
   }
-  const auto request = fushi_voice_hook::ReadLookupShieldRequest(g_header);
+  const auto request = my_comic_voice_hook::ReadLookupShieldRequest(g_header);
   const bool active = GenericShieldRequestActiveForSurface(
-      request, fushi_voice_hook::kLookupShieldSurfaceDirectInputBuffered);
+      request, my_comic_voice_hook::kLookupShieldSurfaceDirectInputBuffered);
   AcquireSRWLockExclusive(&g_generic_shield_state_lock);
   auto *record = FindGenericDirectInputDeviceLocked(device);
   if (record == nullptr ||
       record->format != GenericDirectInputFormatState::kStandardMouse) {
     ReleaseSRWLockExclusive(&g_generic_shield_state_lock);
     g_generic_shield_uncovered_mask.fetch_or(
-        fushi_voice_hook::kLookupShieldSurfaceDirectInputBuffered,
+        my_comic_voice_hook::kLookupShieldSurfaceDirectInputBuffered,
         std::memory_order_relaxed);
     return result;
   }
@@ -545,18 +545,18 @@ HRESULT STDMETHODCALLTYPE Detour_GenericDirectInputGetDeviceData(
       }
       ++write;
       if (!peek && !left) {
-        fushi_voice_hook::ObserveLeftButtonNeutralTail(active,
+        my_comic_voice_hook::ObserveLeftButtonNeutralTail(active,
                                                        &record->buffered_latch);
       }
     }
     *event_count = static_cast<DWORD>(write);
     if (!peek && count == 0) {
-      fushi_voice_hook::ObserveLeftButtonNeutralTail(active,
+      my_comic_voice_hook::ObserveLeftButtonNeutralTail(active,
                                                      &record->buffered_latch);
     }
   } __except (EXCEPTION_EXECUTE_HANDLER) {
     g_generic_shield_fault_mask.fetch_or(
-        fushi_voice_hook::kLookupShieldSurfaceDirectInputBuffered,
+        my_comic_voice_hook::kLookupShieldSurfaceDirectInputBuffered,
         std::memory_order_relaxed);
   }
   ReleaseSRWLockExclusive(&g_generic_shield_state_lock);
@@ -601,14 +601,14 @@ bool HookGenericDirectInputMouseDevice(void *device) {
       &g_generic_direct_input_set_data_format_originals);
   if (!release_ready || !state_ready || !data_ready || !format_ready) {
     g_generic_shield_uncovered_mask.fetch_or(
-        fushi_voice_hook::kLookupShieldSurfaceDirectInputImmediate |
-            fushi_voice_hook::kLookupShieldSurfaceDirectInputBuffered,
+        my_comic_voice_hook::kLookupShieldSurfaceDirectInputImmediate |
+            my_comic_voice_hook::kLookupShieldSurfaceDirectInputBuffered,
         std::memory_order_relaxed);
     return false;
   }
   g_generic_shield_ready_mask.fetch_or(
-      fushi_voice_hook::kLookupShieldSurfaceDirectInputImmediate |
-          fushi_voice_hook::kLookupShieldSurfaceDirectInputBuffered,
+      my_comic_voice_hook::kLookupShieldSurfaceDirectInputImmediate |
+          my_comic_voice_hook::kLookupShieldSurfaceDirectInputBuffered,
       std::memory_order_relaxed);
   return true;
 }
@@ -671,8 +671,8 @@ bool HookGenericDirectInputInterface(void *direct_input) {
     return true;
   }
   g_generic_shield_uncovered_mask.fetch_or(
-      fushi_voice_hook::kLookupShieldSurfaceDirectInputImmediate |
-          fushi_voice_hook::kLookupShieldSurfaceDirectInputBuffered,
+      my_comic_voice_hook::kLookupShieldSurfaceDirectInputImmediate |
+          my_comic_voice_hook::kLookupShieldSurfaceDirectInputBuffered,
       std::memory_order_relaxed);
   return false;
 }
@@ -793,7 +793,7 @@ void TryInstallGenericKeyAndRawInputShield() {
                    get_key_state,
                    reinterpret_cast<void *>(&Detour_GenericGetKeyState),
                    reinterpret_cast<void **>(&g_generic_get_key_state_original),
-                   fushi_voice_hook::kLookupShieldSurfaceKeyState)) {
+                   my_comic_voice_hook::kLookupShieldSurfaceKeyState)) {
       coverage |= kGenericKeyCoverageGetKeyState;
     }
   }
@@ -811,7 +811,7 @@ void TryInstallGenericKeyAndRawInputShield() {
                    reinterpret_cast<void *>(&Detour_GenericGetAsyncKeyState),
                    reinterpret_cast<void **>(
                        &g_generic_get_async_key_state_original),
-                   fushi_voice_hook::kLookupShieldSurfaceKeyState)) {
+                   my_comic_voice_hook::kLookupShieldSurfaceKeyState)) {
       coverage |= kGenericKeyCoverageGetAsyncKeyState;
     }
   }
@@ -827,15 +827,15 @@ void TryInstallGenericKeyAndRawInputShield() {
           get_keyboard_state,
           reinterpret_cast<void *>(&Detour_GenericGetKeyboardState),
           reinterpret_cast<void **>(&g_generic_get_keyboard_state_original),
-          fushi_voice_hook::kLookupShieldSurfaceKeyState)) {
+          my_comic_voice_hook::kLookupShieldSurfaceKeyState)) {
       coverage |= kGenericKeyCoverageGetKeyboardState;
     }
   }
   g_generic_key_coverage.store(coverage, std::memory_order_relaxed);
-  if (fushi_voice_hook::IsCompleteGenericKeyStateCoverage(
+  if (my_comic_voice_hook::IsCompleteGenericKeyStateCoverage(
           coverage, kGenericKeyCoverageAll, false)) {
     g_generic_shield_ready_mask.fetch_or(
-        fushi_voice_hook::kLookupShieldSurfaceKeyState,
+        my_comic_voice_hook::kLookupShieldSurfaceKeyState,
         std::memory_order_relaxed);
   }
 
@@ -844,10 +844,10 @@ void TryInstallGenericKeyAndRawInputShield() {
         reinterpret_cast<void *>(GetProcAddress(user32, "GetRawInputData")),
         reinterpret_cast<void *>(&Detour_GenericGetRawInputData),
         reinterpret_cast<void **>(&g_generic_get_raw_input_data_original),
-        fushi_voice_hook::kLookupShieldSurfaceRawInputData);
+        my_comic_voice_hook::kLookupShieldSurfaceRawInputData);
     if (g_generic_get_raw_input_data_original != nullptr) {
       g_generic_shield_ready_mask.fetch_or(
-          fushi_voice_hook::kLookupShieldSurfaceRawInputData,
+          my_comic_voice_hook::kLookupShieldSurfaceRawInputData,
           std::memory_order_relaxed);
     }
   }
@@ -856,17 +856,17 @@ void TryInstallGenericKeyAndRawInputShield() {
         reinterpret_cast<void *>(GetProcAddress(user32, "GetRawInputBuffer")),
         reinterpret_cast<void *>(&Detour_GenericGetRawInputBuffer),
         reinterpret_cast<void **>(&g_generic_get_raw_input_buffer_original),
-        fushi_voice_hook::kLookupShieldSurfaceRawInputBuffer);
+        my_comic_voice_hook::kLookupShieldSurfaceRawInputBuffer);
     if (g_generic_get_raw_input_buffer_original != nullptr) {
       g_generic_shield_ready_mask.fetch_or(
-          fushi_voice_hook::kLookupShieldSurfaceRawInputBuffer,
+          my_comic_voice_hook::kLookupShieldSurfaceRawInputBuffer,
           std::memory_order_relaxed);
     }
   }
 }
 
 bool ExactSgreOwnsDirectInput() {
-  static const bool exact = fushi_voice_hook::MatchesSgreFamily();
+  static const bool exact = my_comic_voice_hook::MatchesSgreFamily();
   return exact;
 }
 
@@ -880,8 +880,8 @@ void TryInstallGenericDirectInputFactories() {
         reinterpret_cast<void *>(GetProcAddress(dinput8, "DirectInput8Create")),
         reinterpret_cast<void *>(&Detour_GenericDirectInput8Create),
         reinterpret_cast<void **>(&g_generic_direct_input8_create_original),
-        fushi_voice_hook::kLookupShieldSurfaceDirectInputImmediate |
-            fushi_voice_hook::kLookupShieldSurfaceDirectInputBuffered);
+        my_comic_voice_hook::kLookupShieldSurfaceDirectInputImmediate |
+            my_comic_voice_hook::kLookupShieldSurfaceDirectInputBuffered);
     g_generic_dinput8_factory_hooked.store(ready, std::memory_order_relaxed);
   }
   HMODULE dinput = GetModuleHandleW(L"dinput.dll");
@@ -892,8 +892,8 @@ void TryInstallGenericDirectInputFactories() {
         reinterpret_cast<void *>(GetProcAddress(dinput, "DirectInputCreateA")),
         reinterpret_cast<void *>(&Detour_GenericDirectInputCreateA),
         reinterpret_cast<void **>(&g_generic_direct_input_create_a_original),
-        fushi_voice_hook::kLookupShieldSurfaceDirectInputImmediate |
-            fushi_voice_hook::kLookupShieldSurfaceDirectInputBuffered);
+        my_comic_voice_hook::kLookupShieldSurfaceDirectInputImmediate |
+            my_comic_voice_hook::kLookupShieldSurfaceDirectInputBuffered);
     g_generic_dinput_factory_a_hooked.store(ready, std::memory_order_relaxed);
   }
   if (!g_generic_dinput_factory_w_hooked.load(std::memory_order_relaxed)) {
@@ -901,8 +901,8 @@ void TryInstallGenericDirectInputFactories() {
         reinterpret_cast<void *>(GetProcAddress(dinput, "DirectInputCreateW")),
         reinterpret_cast<void *>(&Detour_GenericDirectInputCreateW),
         reinterpret_cast<void **>(&g_generic_direct_input_create_w_original),
-        fushi_voice_hook::kLookupShieldSurfaceDirectInputImmediate |
-            fushi_voice_hook::kLookupShieldSurfaceDirectInputBuffered);
+        my_comic_voice_hook::kLookupShieldSurfaceDirectInputImmediate |
+            my_comic_voice_hook::kLookupShieldSurfaceDirectInputBuffered);
     g_generic_dinput_factory_w_hooked.store(ready, std::memory_order_relaxed);
   }
   if (!g_generic_dinput_factory_ex_hooked.load(std::memory_order_relaxed)) {
@@ -912,8 +912,8 @@ void TryInstallGenericDirectInputFactories() {
         reinterpret_cast<void *>(GetProcAddress(dinput, "DirectInputCreateEx")),
         reinterpret_cast<void *>(&Detour_GenericDirectInputCreateEx),
         reinterpret_cast<void **>(&g_generic_direct_input_create_ex_original),
-        fushi_voice_hook::kLookupShieldSurfaceDirectInputImmediate |
-            fushi_voice_hook::kLookupShieldSurfaceDirectInputBuffered);
+        my_comic_voice_hook::kLookupShieldSurfaceDirectInputImmediate |
+            my_comic_voice_hook::kLookupShieldSurfaceDirectInputBuffered);
     g_generic_dinput_factory_ex_hooked.store(ready, std::memory_order_relaxed);
   }
 }
@@ -1042,31 +1042,31 @@ void PreArmGenericShieldForRequest(uint32_t request_seq,
     ReleaseSRWLockExclusive(&g_generic_shield_state_lock);
     return;
   }
-  if ((ready_required_mask & fushi_voice_hook::kLookupShieldSurfaceKeyState) !=
+  if ((ready_required_mask & my_comic_voice_hook::kLookupShieldSurfaceKeyState) !=
       0) {
     const uint32_t observed =
         g_generic_key_observed_coverage.load(std::memory_order_relaxed);
     if ((observed & kGenericKeyCoverageGetKeyState) != 0) {
-      fushi_voice_hook::PreArmLeftButtonShieldLatch(
+      my_comic_voice_hook::PreArmLeftButtonShieldLatch(
           &g_generic_get_key_state_latch);
     }
     if ((observed & kGenericKeyCoverageGetAsyncKeyState) != 0) {
-      fushi_voice_hook::PreArmLeftButtonShieldLatch(
+      my_comic_voice_hook::PreArmLeftButtonShieldLatch(
           &g_generic_get_async_key_state_latch);
     }
     if ((observed & kGenericKeyCoverageGetKeyboardState) != 0) {
-      fushi_voice_hook::PreArmLeftButtonShieldLatch(
+      my_comic_voice_hook::PreArmLeftButtonShieldLatch(
           &g_generic_get_keyboard_state_latch);
     }
   }
   if ((ready_required_mask &
-       fushi_voice_hook::kLookupShieldSurfaceRawInputData) != 0) {
-    fushi_voice_hook::PreArmLeftButtonShieldLatch(
+       my_comic_voice_hook::kLookupShieldSurfaceRawInputData) != 0) {
+    my_comic_voice_hook::PreArmLeftButtonShieldLatch(
         &g_generic_raw_input_data_latch);
   }
   if ((ready_required_mask &
-       fushi_voice_hook::kLookupShieldSurfaceRawInputBuffer) != 0) {
-    fushi_voice_hook::PreArmLeftButtonShieldLatch(
+       my_comic_voice_hook::kLookupShieldSurfaceRawInputBuffer) != 0) {
+    my_comic_voice_hook::PreArmLeftButtonShieldLatch(
         &g_generic_raw_input_buffer_latch);
   }
   for (auto &record : g_generic_direct_input_devices) {
@@ -1074,13 +1074,13 @@ void PreArmGenericShieldForRequest(uint32_t request_seq,
       continue;
     if (record.immediate_observed &&
         (ready_required_mask &
-         fushi_voice_hook::kLookupShieldSurfaceDirectInputImmediate) != 0) {
-      fushi_voice_hook::PreArmLeftButtonShieldLatch(&record.immediate_latch);
+         my_comic_voice_hook::kLookupShieldSurfaceDirectInputImmediate) != 0) {
+      my_comic_voice_hook::PreArmLeftButtonShieldLatch(&record.immediate_latch);
     }
     if (record.buffered_observed &&
         (ready_required_mask &
-         fushi_voice_hook::kLookupShieldSurfaceDirectInputBuffered) != 0) {
-      fushi_voice_hook::PreArmLeftButtonShieldLatch(&record.buffered_latch);
+         my_comic_voice_hook::kLookupShieldSurfaceDirectInputBuffered) != 0) {
+      my_comic_voice_hook::PreArmLeftButtonShieldLatch(&record.buffered_latch);
     }
   }
   g_generic_prearmed_request_seq = request_seq;
@@ -1093,22 +1093,22 @@ uint32_t GenericShieldPendingMask() {
   if (g_generic_get_key_state_latch.owned ||
       g_generic_get_async_key_state_latch.owned ||
       g_generic_get_keyboard_state_latch.owned) {
-    pending |= fushi_voice_hook::kLookupShieldSurfaceKeyState;
+    pending |= my_comic_voice_hook::kLookupShieldSurfaceKeyState;
   }
   if (g_generic_raw_input_data_latch.owned) {
-    pending |= fushi_voice_hook::kLookupShieldSurfaceRawInputData;
+    pending |= my_comic_voice_hook::kLookupShieldSurfaceRawInputData;
   }
   if (g_generic_raw_input_buffer_latch.owned) {
-    pending |= fushi_voice_hook::kLookupShieldSurfaceRawInputBuffer;
+    pending |= my_comic_voice_hook::kLookupShieldSurfaceRawInputBuffer;
   }
   for (const auto &record : g_generic_direct_input_devices) {
     if (record.device == nullptr)
       continue;
     if (record.immediate_latch.owned) {
-      pending |= fushi_voice_hook::kLookupShieldSurfaceDirectInputImmediate;
+      pending |= my_comic_voice_hook::kLookupShieldSurfaceDirectInputImmediate;
     }
     if (record.buffered_latch.owned) {
-      pending |= fushi_voice_hook::kLookupShieldSurfaceDirectInputBuffered;
+      pending |= my_comic_voice_hook::kLookupShieldSurfaceDirectInputBuffered;
     }
   }
   ReleaseSRWLockShared(&g_generic_shield_state_lock);
@@ -1123,20 +1123,20 @@ uint32_t GenericShieldPendingMask() {
 void AbandonSpeculativeGenericShieldLatches(bool request_active) {
   if (request_active) return;
   AcquireSRWLockExclusive(&g_generic_shield_state_lock);
-  fushi_voice_hook::AbandonSpeculativeLeftButtonLatch(
+  my_comic_voice_hook::AbandonSpeculativeLeftButtonLatch(
       request_active, &g_generic_get_key_state_latch);
-  fushi_voice_hook::AbandonSpeculativeLeftButtonLatch(
+  my_comic_voice_hook::AbandonSpeculativeLeftButtonLatch(
       request_active, &g_generic_get_async_key_state_latch);
-  fushi_voice_hook::AbandonSpeculativeLeftButtonLatch(
+  my_comic_voice_hook::AbandonSpeculativeLeftButtonLatch(
       request_active, &g_generic_get_keyboard_state_latch);
-  fushi_voice_hook::AbandonSpeculativeLeftButtonLatch(
+  my_comic_voice_hook::AbandonSpeculativeLeftButtonLatch(
       request_active, &g_generic_raw_input_data_latch);
-  fushi_voice_hook::AbandonSpeculativeLeftButtonLatch(
+  my_comic_voice_hook::AbandonSpeculativeLeftButtonLatch(
       request_active, &g_generic_raw_input_buffer_latch);
   for (auto &record : g_generic_direct_input_devices) {
-    fushi_voice_hook::AbandonSpeculativeLeftButtonLatch(
+    my_comic_voice_hook::AbandonSpeculativeLeftButtonLatch(
         request_active, &record.immediate_latch);
-    fushi_voice_hook::AbandonSpeculativeLeftButtonLatch(
+    my_comic_voice_hook::AbandonSpeculativeLeftButtonLatch(
         request_active, &record.buffered_latch);
   }
   ReleaseSRWLockExclusive(&g_generic_shield_state_lock);
@@ -1180,35 +1180,35 @@ ExactSampledShieldState ReadExactSampledShieldState(HWND game) {
     uint32_t extra_surfaces;
   };
   const Contract contracts[] = {
-      {fushi_voice_hook::kSgreDirectInputShieldRequiredProperty,
-       fushi_voice_hook::kSgreDirectInputShieldRequiredValue,
-       fushi_voice_hook::kSgreDirectInputShieldReadyProperty,
-       fushi_voice_hook::kSgreDirectInputShieldReadyValue,
-       fushi_voice_hook::kSgreDirectInputShieldWindowProperty, 0u},
-      {fushi_voice_hook::kSiglusSampledInputShieldRequiredProperty,
-       fushi_voice_hook::kSiglusSampledInputShieldRequiredValue,
-       fushi_voice_hook::kSiglusSampledInputShieldReadyProperty,
-       fushi_voice_hook::kSiglusSampledInputShieldReadyValue,
-       fushi_voice_hook::kSiglusSampledInputShieldWindowProperty, 0u},
-      {fushi_voice_hook::kLeafAquaplusSampledInputShieldRequiredProperty,
-       fushi_voice_hook::kLeafAquaplusSampledInputShieldRequiredValue,
-       fushi_voice_hook::kLeafAquaplusSampledInputShieldReadyProperty,
-       fushi_voice_hook::kLeafAquaplusSampledInputShieldReadyValue,
-       fushi_voice_hook::kLeafAquaplusSampledInputShieldWindowProperty, 0u},
-      {fushi_voice_hook::kHunexGgeSampledInputShieldRequiredProperty,
-       fushi_voice_hook::kHunexGgeSampledInputShieldRequiredValue,
-       fushi_voice_hook::kHunexGgeSampledInputShieldReadyProperty,
-       fushi_voice_hook::kHunexGgeSampledInputShieldReadyValue,
-       fushi_voice_hook::kHunexGgeSampledInputShieldWindowProperty, 0u},
+      {my_comic_voice_hook::kSgreDirectInputShieldRequiredProperty,
+       my_comic_voice_hook::kSgreDirectInputShieldRequiredValue,
+       my_comic_voice_hook::kSgreDirectInputShieldReadyProperty,
+       my_comic_voice_hook::kSgreDirectInputShieldReadyValue,
+       my_comic_voice_hook::kSgreDirectInputShieldWindowProperty, 0u},
+      {my_comic_voice_hook::kSiglusSampledInputShieldRequiredProperty,
+       my_comic_voice_hook::kSiglusSampledInputShieldRequiredValue,
+       my_comic_voice_hook::kSiglusSampledInputShieldReadyProperty,
+       my_comic_voice_hook::kSiglusSampledInputShieldReadyValue,
+       my_comic_voice_hook::kSiglusSampledInputShieldWindowProperty, 0u},
+      {my_comic_voice_hook::kLeafAquaplusSampledInputShieldRequiredProperty,
+       my_comic_voice_hook::kLeafAquaplusSampledInputShieldRequiredValue,
+       my_comic_voice_hook::kLeafAquaplusSampledInputShieldReadyProperty,
+       my_comic_voice_hook::kLeafAquaplusSampledInputShieldReadyValue,
+       my_comic_voice_hook::kLeafAquaplusSampledInputShieldWindowProperty, 0u},
+      {my_comic_voice_hook::kHunexGgeSampledInputShieldRequiredProperty,
+       my_comic_voice_hook::kHunexGgeSampledInputShieldRequiredValue,
+       my_comic_voice_hook::kHunexGgeSampledInputShieldReadyProperty,
+       my_comic_voice_hook::kHunexGgeSampledInputShieldReadyValue,
+       my_comic_voice_hook::kHunexGgeSampledInputShieldWindowProperty, 0u},
       // smash/fzmedia consumes clicks in a GWLP_WNDPROC subclass: the Win32
       // message surface is owned by the injected runtime, not by the host's
       // low-level hook, so it is required (and ready with the subclass).
-      {fushi_voice_hook::kSmashFzmediaSampledInputShieldRequiredProperty,
-       fushi_voice_hook::kSmashFzmediaSampledInputShieldRequiredValue,
-       fushi_voice_hook::kSmashFzmediaSampledInputShieldReadyProperty,
-       fushi_voice_hook::kSmashFzmediaSampledInputShieldReadyValue,
-       fushi_voice_hook::kSmashFzmediaSampledInputShieldWindowProperty,
-       fushi_voice_hook::kLookupShieldSurfaceWin32Messages},
+      {my_comic_voice_hook::kSmashFzmediaSampledInputShieldRequiredProperty,
+       my_comic_voice_hook::kSmashFzmediaSampledInputShieldRequiredValue,
+       my_comic_voice_hook::kSmashFzmediaSampledInputShieldReadyProperty,
+       my_comic_voice_hook::kSmashFzmediaSampledInputShieldReadyValue,
+       my_comic_voice_hook::kSmashFzmediaSampledInputShieldWindowProperty,
+       my_comic_voice_hook::kLookupShieldSurfaceWin32Messages},
   };
   for (const auto &contract : contracts) {
     if (reinterpret_cast<uintptr_t>(GetPropW(game, contract.required)) !=
@@ -1230,36 +1230,36 @@ ExactSampledShieldState ReadExactSampledShieldState(HWND game) {
 }
 
 void PublishGenericShieldStatusPayloadOnly(
-    const fushi_voice_hook::LookupShieldRequestSnapshot &request,
-    const fushi_voice_hook::LookupShieldStatusPublication &publication) {
+    const my_comic_voice_hook::LookupShieldRequestSnapshot &request,
+    const my_comic_voice_hook::LookupShieldStatusPublication &publication) {
   if (g_header == nullptr ||
-      !fushi_voice_hook::LookupShieldRequestMatches(g_header, request)) {
+      !my_comic_voice_hook::LookupShieldRequestMatches(g_header, request)) {
     return;
   }
-  fushi_voice_hook::AtomicStoreShared32(&g_header->lookup_shield_required_mask,
+  my_comic_voice_hook::AtomicStoreShared32(&g_header->lookup_shield_required_mask,
                                         publication.required_mask);
-  fushi_voice_hook::AtomicStoreShared32(&g_header->lookup_shield_ready_mask,
+  my_comic_voice_hook::AtomicStoreShared32(&g_header->lookup_shield_ready_mask,
                                         publication.ready_mask);
-  fushi_voice_hook::AtomicStoreShared32(&g_header->lookup_shield_observed_mask,
+  my_comic_voice_hook::AtomicStoreShared32(&g_header->lookup_shield_observed_mask,
                                         publication.observed_mask);
-  fushi_voice_hook::AtomicStoreShared32(&g_header->lookup_shield_fault_mask,
+  my_comic_voice_hook::AtomicStoreShared32(&g_header->lookup_shield_fault_mask,
                                         publication.fault_mask);
-  fushi_voice_hook::AtomicStoreShared32(
+  my_comic_voice_hook::AtomicStoreShared32(
       &g_header->lookup_shield_status_flags,
-      fushi_voice_hook::NormalizeLookupShieldStatusFlags(request, publication));
+      my_comic_voice_hook::NormalizeLookupShieldStatusFlags(request, publication));
 }
 
 void ProcessGenericLookupInputShield() {
   if (g_header == nullptr)
     return;
-  const auto request = fushi_voice_hook::ReadLookupShieldRequest(g_header);
+  const auto request = my_comic_voice_hook::ReadLookupShieldRequest(g_header);
   if (!request.valid)
     return;
 
-  fushi_voice_hook::LookupShieldStatusPublication status;
-  status.required_mask = fushi_voice_hook::kLookupShieldSurfaceKeyState |
-                         fushi_voice_hook::kLookupShieldSurfaceRawInputData |
-                         fushi_voice_hook::kLookupShieldSurfaceRawInputBuffer;
+  my_comic_voice_hook::LookupShieldStatusPublication status;
+  status.required_mask = my_comic_voice_hook::kLookupShieldSurfaceKeyState |
+                         my_comic_voice_hook::kLookupShieldSurfaceRawInputData |
+                         my_comic_voice_hook::kLookupShieldSurfaceRawInputBuffer;
   status.ready_mask =
       g_generic_shield_ready_mask.load(std::memory_order_relaxed);
   status.observed_mask =
@@ -1281,27 +1281,27 @@ void ProcessGenericLookupInputShield() {
   // Host only publishes AttachedGlyph after the synchronous HHOOK arm has
   // succeeded. These two bits describe that host-owned portion; other owners
   // do not get to infer it.
-  if (request.owner_kind == fushi_voice_hook::kLookupShieldOwnerAttachedGlyph) {
+  if (request.owner_kind == my_comic_voice_hook::kLookupShieldOwnerAttachedGlyph) {
     status.required_mask |=
-        fushi_voice_hook::kLookupShieldSurfaceWin32Messages |
-        fushi_voice_hook::kLookupShieldSurfaceLowLevelMouse;
+        my_comic_voice_hook::kLookupShieldSurfaceWin32Messages |
+        my_comic_voice_hook::kLookupShieldSurfaceLowLevelMouse;
     if (target_valid) {
-      status.ready_mask |= fushi_voice_hook::kLookupShieldSurfaceWin32Messages |
-                           fushi_voice_hook::kLookupShieldSurfaceLowLevelMouse;
+      status.ready_mask |= my_comic_voice_hook::kLookupShieldSurfaceWin32Messages |
+                           my_comic_voice_hook::kLookupShieldSurfaceLowLevelMouse;
     }
   }
 
   const ExactSampledShieldState exact =
       ReadExactSampledShieldState(target_valid ? game : nullptr);
   if (exact.declared != 0) {
-    status.required_mask |= fushi_voice_hook::kLookupShieldSurfaceEnginePrivate |
+    status.required_mask |= my_comic_voice_hook::kLookupShieldSurfaceEnginePrivate |
                             exact.extra_required_surfaces;
     if (exact.declared == 1 && exact.ready == 1) {
-      status.ready_mask |= fushi_voice_hook::kLookupShieldSurfaceEnginePrivate |
-                           fushi_voice_hook::kLookupShieldSurfaceKeyState |
+      status.ready_mask |= my_comic_voice_hook::kLookupShieldSurfaceEnginePrivate |
+                           my_comic_voice_hook::kLookupShieldSurfaceKeyState |
                            exact.extra_ready_surfaces;
     } else if (exact.declared > 1) {
-      status.fault_mask |= fushi_voice_hook::kLookupShieldSurfaceEnginePrivate;
+      status.fault_mask |= my_comic_voice_hook::kLookupShieldSurfaceEnginePrivate;
     }
   }
 
@@ -1309,30 +1309,30 @@ void ProcessGenericLookupInputShield() {
                              GetModuleHandleW(L"dinput8.dll") != nullptr;
   if (dinput_loaded && exact.declared == 0) {
     status.required_mask |=
-        fushi_voice_hook::kLookupShieldSurfaceDirectInputImmediate |
-        fushi_voice_hook::kLookupShieldSurfaceDirectInputBuffered;
+        my_comic_voice_hook::kLookupShieldSurfaceDirectInputImmediate |
+        my_comic_voice_hook::kLookupShieldSurfaceDirectInputBuffered;
   }
-  status.fault_mask = fushi_voice_hook::TargetScopedGenericShieldFaultMask(
+  status.fault_mask = my_comic_voice_hook::TargetScopedGenericShieldFaultMask(
       status.fault_mask, status.required_mask, target_valid);
 
   const uint32_t uncovered =
       g_generic_shield_uncovered_mask.load(std::memory_order_relaxed) &
       status.required_mask;
-  switch (fushi_voice_hook::ClassifyGenericShieldCoverage(
+  switch (my_comic_voice_hook::ClassifyGenericShieldCoverage(
       status.fault_mask, uncovered, status.ready_mask)) {
-  case fushi_voice_hook::GenericShieldCoverageConclusion::kFaulted:
-    status.status_flags = fushi_voice_hook::kLookupShieldStatusFaulted;
+  case my_comic_voice_hook::GenericShieldCoverageConclusion::kFaulted:
+    status.status_flags = my_comic_voice_hook::kLookupShieldStatusFaulted;
     break;
-  case fushi_voice_hook::GenericShieldCoverageConclusion::kKnownUncovered:
-    status.status_flags = fushi_voice_hook::kLookupShieldStatusKnownUncovered;
+  case my_comic_voice_hook::GenericShieldCoverageConclusion::kKnownUncovered:
+    status.status_flags = my_comic_voice_hook::kLookupShieldStatusKnownUncovered;
     break;
-  case fushi_voice_hook::GenericShieldCoverageConclusion::kPartial:
+  case my_comic_voice_hook::GenericShieldCoverageConclusion::kPartial:
     // Public API hooks alone are not executable-specific verification. Keep
     // generic coverage partial until the per-build 1,000-transaction evidence
     // gate is recorded; allow_risk is orthogonal and normalized by the helper.
-    status.status_flags = fushi_voice_hook::kLookupShieldStatusPartial;
+    status.status_flags = my_comic_voice_hook::kLookupShieldStatusPartial;
     break;
-  case fushi_voice_hook::GenericShieldCoverageConclusion::kUnknown:
+  case my_comic_voice_hook::GenericShieldCoverageConclusion::kUnknown:
     break;
   }
 
@@ -1340,11 +1340,11 @@ void ProcessGenericLookupInputShield() {
   // required+ready surface already observed in this game before that ack, so a
   // queued fast click stays hidden without deadlocking on unused API variants.
   if (target_valid && status.fault_mask == 0 &&
-      (request.active_buttons & fushi_voice_hook::kLookupShieldButtonLeft) !=
+      (request.active_buttons & my_comic_voice_hook::kLookupShieldButtonLeft) !=
           0) {
     PreArmGenericShieldForRequest(
         request.seq,
-        fushi_voice_hook::PreArmEligibleShieldMask(
+        my_comic_voice_hook::PreArmEligibleShieldMask(
             status.required_mask, status.ready_mask, status.observed_mask));
   }
 
@@ -1358,14 +1358,14 @@ void ProcessGenericLookupInputShield() {
     PublishGenericShieldStatusPayloadOnly(request, status);
     return; // applied_seq must not cross a hidden down/up/tail
   }
-  fushi_voice_hook::PublishLookupShieldStatus(g_header, request, status);
+  my_comic_voice_hook::PublishLookupShieldStatus(g_header, request, status);
 }
 
 void ShutdownGenericLookupInputShield() {
   if (g_header == nullptr)
     return;
-  fushi_voice_hook::AtomicStoreShared32(&g_header->lookup_shield_ready_mask, 0);
-  fushi_voice_hook::AtomicStoreShared32(
+  my_comic_voice_hook::AtomicStoreShared32(&g_header->lookup_shield_ready_mask, 0);
+  my_comic_voice_hook::AtomicStoreShared32(
       &g_header->lookup_shield_status_flags,
-      fushi_voice_hook::kLookupShieldStatusFaulted);
+      my_comic_voice_hook::kLookupShieldStatusFaulted);
 }

@@ -13,7 +13,7 @@
 
 #if defined(_M_IX86)
 
-namespace yuris_voice = fushi_voice_hook::yuris_voice;
+namespace yuris_voice = my_comic_voice_hook::yuris_voice;
 
 constexpr uint32_t kYurisClipSlots = 4u;
 constexpr uint32_t kYurisClipBytes = 1u << 20;
@@ -194,7 +194,7 @@ void ProcessYurisClip(YurisClipSlot& slot) {
       yuris_voice::OggVorbisChannels(slot.data, slot.bytes, &rate);
   char base[kYurisNameBytes] = {};
   if (channels != 1u ||
-      fushi_voice_hook::siglus::CompleteOggBytes(slot.data, slot.bytes) !=
+      my_comic_voice_hook::siglus::CompleteOggBytes(slot.data, slot.bytes) !=
           slot.bytes ||
       yuris_voice::ResourceBasename(slot.name, kYurisNameBytes, base,
                                     sizeof(base)) == 0u) {
@@ -230,7 +230,7 @@ void PublishYurisPendingVoice(YurisPendingVoice& pending,
     NoteYurisDiag(kYurisDiagVoiceCaptured);
     // The bytes are the engine's own resource (the decoder input), so the
     // host can pair per line instead of falling back to PCM / loopback.
-    SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagGameResourcePublished);
+    SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagGameResourcePublished);
   }
   pending.used = false;
   pending.data.clear();

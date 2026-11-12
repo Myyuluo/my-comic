@@ -3,7 +3,7 @@
 
 void PublishSiglusLookupTextSnapshot(
     const wchar_t *text, uint32_t text_units,
-    fushi_voice_hook::SiglusLookupTextIdentity identity) {
+    my_comic_voice_hook::SiglusLookupTextIdentity identity) {
   if (text == nullptr || text_units == 0) {
     return;
   }

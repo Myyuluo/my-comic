@@ -1,11 +1,11 @@
-#ifndef FUSHI_SGRE_FAMILY_H_
-#define FUSHI_SGRE_FAMILY_H_
+#ifndef MYCOMIC_SGRE_FAMILY_H_
+#define MYCOMIC_SGRE_FAMILY_H_
 
 #include <windows.h>
 
 #include <string>
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 // SGRE (MAGES wind3d11) audio-family identity, shared by the in-game SGRE
 // adapter (hook/adapters/sgre_profile.h, MatchesSgreFamily) and the injector.
@@ -45,6 +45,6 @@ inline bool SgreVoiceArchiveExistsBesideExecutable(
          (attributes & FILE_ATTRIBUTE_DIRECTORY) == 0;
 }
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook
 
-#endif  // FUSHI_SGRE_FAMILY_H_
+#endif  // MYCOMIC_SGRE_FAMILY_H_

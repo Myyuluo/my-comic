@@ -21,7 +21,7 @@
 
 namespace {
 
-namespace sf = fushi_voice_hook::smash_fzmedia;
+namespace sf = my_comic_voice_hook::smash_fzmedia;
 
 constexpr uint64_t kImageBase = 0x140000000ull;
 constexpr uint32_t kTextRva = 0x1000u;
@@ -507,7 +507,7 @@ void TestImportTableResolution() {
 }
 
 void TestModuleNameFilter() {
-  using fushi_voice_hook::MatchesSmashFzmediaProfile;
+  using my_comic_voice_hook::MatchesSmashFzmediaProfile;
   assert(!MatchesSmashFzmediaProfile(nullptr));
   assert(MatchesSmashFzmediaProfile(L"fzmedia-win64vc14-release-dynamic.dll"));
   assert(MatchesSmashFzmediaProfile(L"NULL-GE-win64vc14-release-dynamic.dll"));

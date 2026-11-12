@@ -10,7 +10,7 @@
 #include "qlie_pack.h"
 
 int main() {
-  using fushi_voice_hook::qlie::ContainsFilePackSignature;
+  using my_comic_voice_hook::qlie::ContainsFilePackSignature;
 
   const char measured_tail[] = {
       '\0', '\0', 'F', 'i', 'l', 'e', 'P', 'a', 'c', 'k', 'V', 'e', 'r',

@@ -18,13 +18,13 @@
 #include "../catsystem2_int.h"
 #include "engine_dir_signature.h"
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 constexpr const wchar_t* kCatSystem2ConfigRelativePath = L"\\config\\startup.xml";
 
 // 给定游戏根目录的结构判据；测试用临时目录直接喂它。
 //
-// 魔数从根限定 `::fushi_voice_hook::catsystem2`：本头在 dll_main.cpp 里是从匿名命名空间
+// 魔数从根限定 `::my_comic_voice_hook::catsystem2`：本头在 dll_main.cpp 里是从匿名命名空间
 // 内部被包的（catsystem2_adapter.inc → generated/adapter_includes.inc →
 // dll_main.cpp:604，在 128 的 `namespace {` 之内），而 catsystem2_int.h 早在
 // dll_main.cpp:61 顶层就包过了，include guard 会让里面这次变成空操作。
@@ -33,8 +33,8 @@ inline bool MatchesCatSystem2Layout(const std::wstring& directory) {
     return false;
   }
   return engine_dir::DirectoryHasFileStartingWith(
-      directory, L"*.int", ::fushi_voice_hook::catsystem2::kIntSignature,
-      ::fushi_voice_hook::catsystem2::kIntSignatureBytes);
+      directory, L"*.int", ::my_comic_voice_hook::catsystem2::kIntSignature,
+      ::my_comic_voice_hook::catsystem2::kIntSignatureBytes);
 }
 
 inline bool MatchesCatSystem2Profile(const wchar_t*) {
@@ -43,4 +43,4 @@ inline bool MatchesCatSystem2Profile(const wchar_t*) {
   return MatchesCatSystem2Layout(directory);
 }
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

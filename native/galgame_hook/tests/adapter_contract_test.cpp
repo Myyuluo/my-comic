@@ -10,7 +10,7 @@
 
 namespace {
 
-class FakeAdapter final : public fushi_voice_hook::EngineAdapter {
+class FakeAdapter final : public my_comic_voice_hook::EngineAdapter {
  public:
   const char* id() const override { return "fake"; }
   bool probe() const override { return applicable; }
@@ -18,13 +18,13 @@ class FakeAdapter final : public fushi_voice_hook::EngineAdapter {
     installed = true;
     return true;
   }
-  fushi_voice_hook::AdapterCapability capabilities() const override {
-    return fushi_voice_hook::AdapterCapability::kText |
-           fushi_voice_hook::AdapterCapability::kResourceAudio;
+  my_comic_voice_hook::AdapterCapability capabilities() const override {
+    return my_comic_voice_hook::AdapterCapability::kText |
+           my_comic_voice_hook::AdapterCapability::kResourceAudio;
   }
   void onModuleLoaded(const wchar_t*) override { ++module_notifications; }
   void shutdown() override { installed = false; }
-  fushi_voice_hook::AdapterDiagnostics diagnostics() const override {
+  my_comic_voice_hook::AdapterDiagnostics diagnostics() const override {
     return {id(), applicable, installed, 0x42u};
   }
 
@@ -37,7 +37,7 @@ class FakeAdapter final : public fushi_voice_hook::EngineAdapter {
 
 int main() {
   FakeAdapter adapter;
-  fushi_voice_hook::EngineAdapter* contract = &adapter;
+  my_comic_voice_hook::EngineAdapter* contract = &adapter;
   assert(contract->probe());
   assert(contract->install());
   contract->onModuleLoaded(L"engine.dll");
@@ -45,14 +45,14 @@ int main() {
 
   const auto capabilities = static_cast<uint32_t>(contract->capabilities());
   assert((capabilities & static_cast<uint32_t>(
-                             fushi_voice_hook::AdapterCapability::kText)) != 0);
+                             my_comic_voice_hook::AdapterCapability::kText)) != 0);
   assert((capabilities &
           static_cast<uint32_t>(
-              fushi_voice_hook::AdapterCapability::kResourceAudio)) != 0);
+              my_comic_voice_hook::AdapterCapability::kResourceAudio)) != 0);
   assert((capabilities & static_cast<uint32_t>(
-                             fushi_voice_hook::AdapterCapability::kPcmAudio)) == 0);
+                             my_comic_voice_hook::AdapterCapability::kPcmAudio)) == 0);
 
-  const fushi_voice_hook::AdapterDiagnostics diagnostics =
+  const my_comic_voice_hook::AdapterDiagnostics diagnostics =
       contract->diagnostics();
   assert(diagnostics.applicable);
   assert(diagnostics.installed);

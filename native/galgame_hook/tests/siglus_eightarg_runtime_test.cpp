@@ -9,7 +9,7 @@
 #include <vector>
 
 namespace {
-namespace runtime = fushi_voice_hook::siglus_eightarg_runtime;
+namespace runtime = my_comic_voice_hook::siglus_eightarg_runtime;
 unsigned checks = 0;
 void Check(bool condition, const char* why) {
   ++checks;

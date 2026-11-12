@@ -1,5 +1,5 @@
-#ifndef FUSHI_VOICE_HOOK_KIRIKIRI_EXPORTER_SCAN_H_
-#define FUSHI_VOICE_HOOK_KIRIKIRI_EXPORTER_SCAN_H_
+#ifndef MYCOMIC_VOICE_HOOK_KIRIKIRI_EXPORTER_SCAN_H_
+#define MYCOMIC_VOICE_HOOK_KIRIKIRI_EXPORTER_SCAN_H_
 
 // 从**已经 link 完**的 KiriKiri 插件反查 ITVPFunctionExporter 单例。
 //
@@ -31,7 +31,7 @@
 
 #include "exact_lookup_signature.h"
 
-namespace fushi_voice_hook::kirikiri_exporter {
+namespace my_comic_voice_hook::kirikiri_exporter {
 
 // 少于三个插件时交集不够窄，直接放弃：两个插件之间的公共值里混着大量 CRT/编译器共有的
 // 常量与同名全局，误报会把真调用门变成一串危险的盲试。
@@ -118,6 +118,6 @@ inline bool IntersectWritableWords(
   return !out->empty();
 }
 
-}  // namespace fushi_voice_hook::kirikiri_exporter
+}  // namespace my_comic_voice_hook::kirikiri_exporter
 
-#endif  // FUSHI_VOICE_HOOK_KIRIKIRI_EXPORTER_SCAN_H_
+#endif  // MYCOMIC_VOICE_HOOK_KIRIKIRI_EXPORTER_SCAN_H_

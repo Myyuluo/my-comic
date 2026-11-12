@@ -1,7 +1,7 @@
 #pragma once
 #include "cmvs_sprite_geometry_reader.h"
 
-namespace fushi_voice_hook::cmvs_layout {
+namespace my_comic_voice_hook::cmvs_layout {
 
 struct ShiftGesture {
   bool was_down = false;
@@ -82,4 +82,4 @@ struct ShiftQueue {
   void Clear() { first = 0; count = 0; }
 };
 
-}  // namespace fushi_voice_hook::cmvs_layout
+}  // namespace my_comic_voice_hook::cmvs_layout

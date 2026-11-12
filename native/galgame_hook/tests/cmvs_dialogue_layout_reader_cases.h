@@ -9,7 +9,7 @@
 #include <vector>
 
 namespace cmvs_reader_test {
-using namespace fushi_voice_hook::cmvs_layout;
+using namespace my_comic_voice_hook::cmvs_layout;
 constexpr uint64_t kBase = 0x140000000;
 constexpr uint64_t kRoot = 0x1000, kOwner = 0x3000, kNodes = 0x4000;
 struct Memory {

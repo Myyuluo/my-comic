@@ -29,7 +29,7 @@
 #   NOTES             release notes / body
 #   RELEASE_SEQUENCE  monotonic git rev-list count (NOT a workflow run-number)
 #   VERSION           normalized version (build_version_name)
-#   REPO              owner/repo, e.g. hajisensai/Fushi
+#   REPO              owner/repo, e.g. Myyuluo/my-comic
 #   GITHUB_TOKEN      token with contents:write on REPO
 #   ARTIFACTS_DIR     dir holding the built release assets for THIS platform
 #   ASSET_GLOB        glob (relative to ARTIFACTS_DIR) of this platform's assets
@@ -72,9 +72,9 @@ backoff_sleep() {
 # are skipped.
 #
 # BUG-1481: the filename MUST carry the product family, not just the channel.
-# Two products ship out of this ONE repo during the Hibiki->Fushi rename --
+# Two products ship out of this ONE repo during the Hibiki->MyComic rename --
 # `app.hibiki.reader` (the migration bridge, built from the bridge branch) and
-# `app.fushi.reader` (here). One repo means one `update-manifest` branch, so
+# `app.mycomic.reader` (here). One repo means one `update-manifest` branch, so
 # keying the file on channel alone made both families write the SAME file.
 # merge_update_manifest.py's monotonic seq guard (TODO-1173) then handed the
 # advertised top-level release to whichever family had the higher commit count,
@@ -85,11 +85,11 @@ backoff_sleep() {
 #
 # The historical names (`latest-<channel>.json`) belong to the HIBIKI family and
 # are FROZEN: Hibiki clients already in the wild (v1.2.0 and older) have that
-# exact URL compiled in and cannot be patched. Fushi has never shipped a
-# stable/beta release, so it is Fushi that moves to the suffixed names.
-# `fushi/test/tools/update_manifest_product_split_test.dart` pins this suffix
+# exact URL compiled in and cannot be patched. MyComic has never shipped a
+# stable/beta release, so it is MyComic that moves to the suffixed names.
+# `my_comic/test/tools/update_manifest_product_split_test.dart` pins this suffix
 # against the client-side constants in update_checker_release.dart.
-MANIFEST_PRODUCT_SUFFIX="-fushi"
+MANIFEST_PRODUCT_SUFFIX="-mycomic"
 case "$CHANNEL" in
   debug)  MANIFEST_FILE="latest-debug${MANIFEST_PRODUCT_SUFFIX}.json"
           LEGACY_MANIFEST_FILE="latest-debug.json" ;;
@@ -193,11 +193,11 @@ fi
 # exact opposite: `platform_updater.dart` keeps ReleaseProduct.any on
 # Windows/macOS on purpose ("桌面不做这层提升……Phase 5 有意如此") because there
 # the package rename is carried by the installer overwriting in place. A Hibiki
-# Windows client selecting `fushi-*-windows-setup.exe` and installing it IS the
+# Windows client selecting `mycomic-*-windows-setup.exe` and installing it IS the
 # desktop migration -- there is no desktop bridge (MigrationPage is Android-only).
 #
 # Splitting per FILE therefore cut the desktop migration path: latest-debug.json
-# stopped receiving Fushi assets, its Windows slot froze on the pre-split build,
+# stopped receiving MyComic assets, its Windows slot froze on the pre-split build,
 # and the rolling prune later deleted that file (the reported 404). Mirror the
 # desktop assets back in -- assets only, never the top level, which stays the
 # bridge's (see ADVERTISE_TOP_LEVEL in merge_update_manifest.py).
@@ -216,7 +216,7 @@ WORK_DIR="$(mktemp -d)"
 trap 'rm -rf "$WORK_DIR"' EXIT
 
 # Default to the real GitHub remote. MANIFEST_REMOTE_OVERRIDE lets the
-# offline race test (fushi/test/tools/update_manifest_publish_race_test.dart)
+# offline race test (my_comic/test/tools/update_manifest_publish_race_test.dart)
 # point at a local bare repo; it is never set in CI.
 REMOTE="${MANIFEST_REMOTE_OVERRIDE:-https://x-access-token:${GITHUB_TOKEN}@github.com/${REPO}.git}"
 git -C "$WORK_DIR" init -q

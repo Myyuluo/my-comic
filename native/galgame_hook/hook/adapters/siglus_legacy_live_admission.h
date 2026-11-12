@@ -4,7 +4,7 @@
 #include "siglus_legacy_message_profile.h"
 #include "siglus_legacy_resource.h"
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 // Shared by the live installers and their cross-architecture admission tests.
 inline bool ResolveLiveSiglusLegacyMessage(HMODULE module,
@@ -44,4 +44,4 @@ inline bool ResolveLiveSiglusLegacyVoiceSource(HMODULE module, uintptr_t proved_
   }
 }
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

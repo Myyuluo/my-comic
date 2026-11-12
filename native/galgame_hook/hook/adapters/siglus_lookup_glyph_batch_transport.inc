@@ -2,10 +2,10 @@
 // Unlike per-glyph reservations, the public frontier advances only after all
 // slots in a complete frame are committed. The worker never sees half a frame.
 SRWLOCK g_siglus_eightarg_glyph_publish_lock = SRWLOCK_INIT;
-bool PublishSiglusEightArgGlyphBatch(const fushi_voice_hook::SiglusGlyphRecord* glyphs,
+bool PublishSiglusEightArgGlyphBatch(const my_comic_voice_hook::SiglusGlyphRecord* glyphs,
                                     uint32_t count, uint64_t occurrence) {
   const bool invalid = glyphs == nullptr;
-  if (occurrence == 0 || count == 0 || count > fushi_voice_hook::kSiglusLookupMaxGlyphs ||
+  if (occurrence == 0 || count == 0 || count > my_comic_voice_hook::kSiglusLookupMaxGlyphs ||
       (invalid && count != 1) || !TryAcquireSRWLockExclusive(
           &g_siglus_eightarg_glyph_publish_lock)) return false;
   if (occurrence != g_siglus_eightarg_occurrence.load(std::memory_order_acquire)) {
@@ -32,6 +32,6 @@ bool PublishSiglusEightArgGlyphBatch(const fushi_voice_hook::SiglusGlyphRecord* 
   InterlockedExchange64(&g_siglus_lookup_glyph_event_count,
                         static_cast<LONG64>(previous + count));
   ReleaseSRWLockExclusive(&g_siglus_eightarg_glyph_publish_lock);
-  if (!invalid) SetSiglusLookupDiag(fushi_voice_hook::kLookupDiagSiglusGlyphObserved);
+  if (!invalid) SetSiglusLookupDiag(my_comic_voice_hook::kLookupDiagSiglusGlyphObserved);
   return true;
 }

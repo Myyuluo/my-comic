@@ -21,10 +21,10 @@
 
 #include "siglus_launch.h"
 
-using fushi_voice_hook::DirectoryLooksLikeSiglus;
-using fushi_voice_hook::kSiglusSignatureConfig;
-using fushi_voice_hook::kSiglusSignatureScene;
-using fushi_voice_hook::SiglusScenePackSuffix;
+using my_comic_voice_hook::DirectoryLooksLikeSiglus;
+using my_comic_voice_hook::kSiglusSignatureConfig;
+using my_comic_voice_hook::kSiglusSignatureScene;
+using my_comic_voice_hook::SiglusScenePackSuffix;
 
 namespace {
 

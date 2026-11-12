@@ -22,8 +22,8 @@
 
 #include "voice_clip_energy.h"
 
-using fushi_voice_hook::ClipEnergy16Scale;
-using fushi_voice_hook::ClipSampleAbs16Scale;
+using my_comic_voice_hook::ClipEnergy16Scale;
+using my_comic_voice_hook::ClipSampleAbs16Scale;
 
 namespace {
 

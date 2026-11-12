@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the existing Darwin framework pipeline with Fushi's menu-capable mpv.
+# Build the existing Darwin framework pipeline with MyComic's menu-capable mpv.
 # No upload, release, or app installation is performed.
 set -euo pipefail
 

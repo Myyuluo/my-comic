@@ -11,8 +11,8 @@ namespace fixtures {
 #include "siglus_eightarg_owner_profile_test.cpp"
 }
 namespace {
-namespace f = fushi_voice_hook::siglus_eightarg_lookup_family;
-namespace ex = fushi_voice_hook::exact_lookup;
+namespace f = my_comic_voice_hook::siglus_eightarg_lookup_family;
+namespace ex = my_comic_voice_hook::exact_lookup;
 unsigned checks = 0;
 void Empty(const f::Sites& sites) {
   assert(sites.glyph.glyph_entry_rva==0&&sites.glyph.manager_slot_rva==0);
@@ -42,7 +42,7 @@ void Reject(fixtures::Fixture& fixture) {
 // game, loader, imported function or production hook is invoked.
 struct Live {
   uint8_t* allocation = nullptr;
-  fushi_voice_hook::siglus_eightarg_input_viewport::Imports imports{};
+  my_comic_voice_hook::siglus_eightarg_input_viewport::Imports imports{};
   uintptr_t glyph_entry=0,message_entry=0,scenario_entry=0,sampler=0,input_message=0;
   Live() {
     for(uintptr_t candidate=0x10000000;candidate<0x70000000&&!allocation;candidate+=0x1000000)
@@ -94,14 +94,14 @@ int main(){
     case 7:fixture.Abs(fixture.normal+9,fixture.input.scene_slot+4);break;
     case 8:fixture.Rel(fixture.group+131,fixture.element+1);break;
     case 9:fixture.WordAt(fixture.normal+21,0xe68);break;
-    case 10:fixture.Put(0x1c000,fushi_voice_hook::siglus_eight_arg_glyph::kWrapper.pattern());break;
+    case 10:fixture.Put(0x1c000,my_comic_voice_hook::siglus_eight_arg_glyph::kWrapper.pattern());break;
     case 11:fixture.image.pointer_bits=64;break;
   }
     if(n==7||n==8||n==9){
-      fushi_voice_hook::SiglusEightArgGlyphSites glyph;
-      fushi_voice_hook::siglus_eightarg_input_viewport::Sites input;
-      assert(fushi_voice_hook::siglus_eight_arg_glyph::Resolve(fixture.image,&glyph));
-      assert(fushi_voice_hook::siglus_eightarg_input_viewport::Resolve(
+      my_comic_voice_hook::SiglusEightArgGlyphSites glyph;
+      my_comic_voice_hook::siglus_eightarg_input_viewport::Sites input;
+      assert(my_comic_voice_hook::siglus_eight_arg_glyph::Resolve(fixture.image,&glyph));
+      assert(my_comic_voice_hook::siglus_eightarg_input_viewport::Resolve(
           fixture.image,fixture.imports,&input));
     }
     Reject(fixture);

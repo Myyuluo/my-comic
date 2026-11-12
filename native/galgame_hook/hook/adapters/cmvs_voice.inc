@@ -13,7 +13,7 @@
 // cmvs_voice_core.h is included at the top of dll_main.cpp (outside the
 // anonymous namespace this file is expanded in).
 
-namespace cmvs_voice = fushi_voice_hook::cmvs_voice;
+namespace cmvs_voice = my_comic_voice_hook::cmvs_voice;
 
 // Worker / install-time log line (never called from the game-thread detour).
 void CmvsVoiceLog(const wchar_t* format, ...) {
@@ -25,7 +25,7 @@ void CmvsVoiceLog(const wchar_t* format, ...) {
   wchar_t path[MAX_PATH] = {};
   const DWORD length = GetTempPathW(MAX_PATH, path);
   if (length == 0 || length >= MAX_PATH - 20) return;
-  wcscat_s(path, L"fushi_galhook.log");
+  wcscat_s(path, L"my_comic_galhook.log");
   HANDLE file = CreateFileW(path, FILE_APPEND_DATA, FILE_SHARE_READ, nullptr,
                             OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
   if (file == INVALID_HANDLE_VALUE) return;
@@ -117,8 +117,8 @@ const std::array<void*, cmvs_voice::kMaxSites> kCmvsGroupLoadDetours =
 
 bool TryHookCmvsVoice() {
   if (InterlockedCompareExchange(&g_cmvs_voice_armed, 0, 0) != 0) return true;
-  fushi_voice_hook::exact_lookup::LoadedPeImage image;
-  if (!fushi_voice_hook::exact_lookup::OpenLoadedPeImage(
+  my_comic_voice_hook::exact_lookup::LoadedPeImage image;
+  if (!my_comic_voice_hook::exact_lookup::OpenLoadedPeImage(
           GetModuleHandleW(nullptr), &image)) {
     CmvsVoiceLog(L"cmvs-voice: main image unreadable");
     return false;
@@ -164,7 +164,7 @@ void ProcessCmvsVoiceTask(CmvsVoiceTask* task) {
       strcmp(task->name, g_cmvs_voice_last_name) == 0 &&
       task->tick_ms - g_cmvs_voice_last_tick <= 2000u;
   if (duplicate ||
-      fushi_voice_hook::siglus::CompleteOggBytes(task->data, task->bytes) !=
+      my_comic_voice_hook::siglus::CompleteOggBytes(task->data, task->bytes) !=
           task->bytes) {
     return;
   }
@@ -177,7 +177,7 @@ void ProcessCmvsVoiceTask(CmvsVoiceTask* task) {
   // The bytes are the archive member itself, so the host may switch the
   // session to per-line resource pairing; without this bit it stays on the
   // engine-PCM ring and pairs click SEs / BGM as voice.
-  SetXAudioDiagnostic(fushi_voice_hook::kXAudioDiagGameResourcePublished);
+  SetXAudioDiagnostic(my_comic_voice_hook::kXAudioDiagGameResourcePublished);
   strncpy_s(g_cmvs_voice_last_name, task->name, _TRUNCATE);
   g_cmvs_voice_last_tick = task->tick_ms;
   if (InterlockedIncrement(&g_cmvs_voice_written) == 1) {

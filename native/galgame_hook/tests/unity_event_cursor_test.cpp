@@ -11,12 +11,12 @@
 #include "voice_hook_session.h"
 #include "../injector/unity_voice_bundles.h"
 
-using fushi_voice_hook::AdvanceUnityEventCursorIfCommitted;
+using my_comic_voice_hook::AdvanceUnityEventCursorIfCommitted;
 
 // injector 侧：Unity 资源语音该到哪几个 voice bundle 里抽（多个 Addressables 语音组）。
 void TestVoiceBundleCandidates() {
-  using fushi_voice_injector::IsUnityVoiceBundleFileName;
-  using fushi_voice_injector::OrderUnityVoiceBundleCandidates;
+  using my_comic_voice_injector::IsUnityVoiceBundleFileName;
+  using my_comic_voice_injector::OrderUnityVoiceBundleCandidates;
   assert(IsUnityVoiceBundleFileName(L"voice(action)_assets_all_af.bundle"));
   assert(IsUnityVoiceBundleFileName(L"C:\\x\\VOICE_Main.BUNDLE"));
   assert(!IsUnityVoiceBundleFileName(L"se_assets_all_8c.bundle"));
@@ -56,9 +56,9 @@ void TestVoiceBundleCandidates() {
     many.push_back(L"voice" + std::to_wstring(100 + i) + L".bundle");
   }
   assert(OrderUnityVoiceBundleCandidates(opened, many, L"").size() ==
-         fushi_voice_injector::kMaxUnityVoiceBundleCandidates);
+         my_comic_voice_injector::kMaxUnityVoiceBundleCandidates);
 
-  fushi_voice_injector::UnityVoiceNegativeCache cache;
+  my_comic_voice_injector::UnityVoiceNegativeCache cache;
   assert(!cache.Contains(dir, L"se_003"));
   cache.Add(dir, L"se_003");
   assert(cache.Contains(dir, L"se_003"));

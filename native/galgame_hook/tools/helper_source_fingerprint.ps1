@@ -14,7 +14,7 @@
   and diagnostics intentionally do not invalidate a helper binary.
 #>
 
-function Get-FushiFileSha256Hex {
+function Get-MyComicFileSha256Hex {
   param([Parameter(Mandatory = $true)][string] $Path)
 
   $stream = [IO.File]::OpenRead($Path)
@@ -33,7 +33,7 @@ function Get-FushiFileSha256Hex {
   }
 }
 
-function Get-FushiHelperSourceFingerprint {
+function Get-MyComicHelperSourceFingerprint {
   param([Parameter(Mandatory = $true)][string] $SourceRoot)
 
   $root = [IO.Path]::GetFullPath($SourceRoot).TrimEnd('\', '/')
@@ -66,7 +66,7 @@ function Get-FushiHelperSourceFingerprint {
       'third_party/lunahook/LunaHook64.dll',
       'third_party/lunahook/LunaHost32.dll',
       'third_party/lunahook/LunaHost64.dll',
-      'unity_audio_extract/Fushi.UnityAudioExtract.csproj',
+      'unity_audio_extract/MyComic.UnityAudioExtract.csproj',
       'unity_audio_extract/Program.cs',
       'unity_audio_extract/fetch_runtime.ps1',
       'tools/build_distribution.ps1',
@@ -89,7 +89,7 @@ function Get-FushiHelperSourceFingerprint {
     $path = Join-Path $root ($relative -replace '/', '\')
     [void]$manifest.Append($relative)
     [void]$manifest.Append([char]0)
-    [void]$manifest.Append((Get-FushiFileSha256Hex -Path $path))
+    [void]$manifest.Append((Get-MyComicFileSha256Hex -Path $path))
     [void]$manifest.Append("`n")
   }
 

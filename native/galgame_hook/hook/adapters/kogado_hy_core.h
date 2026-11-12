@@ -39,7 +39,7 @@
 #include <string>
 #include <vector>
 
-namespace fushi_voice_hook::kogado_hy {
+namespace my_comic_voice_hook::kogado_hy {
 
 inline constexpr char kExportSetText[] =
     "@THyRGBText@SetText$qqr17System@AnsiString";
@@ -979,4 +979,4 @@ inline ClaimDecision DecideButtonMessage(ButtonMessage message,
   return decision;
 }
 
-}  // namespace fushi_voice_hook::kogado_hy
+}  // namespace my_comic_voice_hook::kogado_hy

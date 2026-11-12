@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <type_traits>
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 struct SiglusMessageLayout {
   uint32_t voice_key_offset = 0;
@@ -160,14 +160,14 @@ class SiglusMessageQueue {
   uint32_t read_ = 0;
 };
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook
 
 #if defined(_MSC_VER) && defined(_M_IX86)
 // The same machine-code body is exercised by the x86 executable test. pushad
 // saves ECX at +24 and EBP at +8; the original entry ESP is save-frame +36.
 // FX state also survives C++ copies; DF is cleared only while calling C++.
 // Original arguments/return address are untouched; only the trampoline owns ret.
-#define FUSHI_SIGLUS_MESSAGE_THUNK(name, observer, original) \
+#define MYCOMIC_SIGLUS_MESSAGE_THUNK(name, observer, original) \
   __declspec(naked) void name() {                           \
     __asm { pushfd }                                       \
     __asm { pushad }                                       \

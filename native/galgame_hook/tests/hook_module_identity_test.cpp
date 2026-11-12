@@ -8,9 +8,9 @@
 
 #include "hook_module_identity.h"
 
-using fushi_voice_hook::EvaluateHookModuleIdentity;
-using fushi_voice_hook::HookModuleIdentityRequiresRestart;
-using fushi_voice_hook::HookModuleIdentityStatus;
+using my_comic_voice_hook::EvaluateHookModuleIdentity;
+using my_comic_voice_hook::HookModuleIdentityRequiresRestart;
+using my_comic_voice_hook::HookModuleIdentityStatus;
 
 namespace {
 
@@ -57,7 +57,7 @@ std::string ExtractTopLevelFunctionBody(const std::string& source,
 // 纯函数判据本身。
 void TestIdentityReducer() {
   const std::wstring requested =
-      L"D:\\Fushi\\voice_hook\\x64\\fushi_voice_hook.dll";
+      L"D:\\MyComic\\voice_hook\\x64\\my_comic_voice_hook.dll";
   const std::string digest(64, 'a');
 
   assert(EvaluateHookModuleIdentity(false, requested, L"", digest, "") ==
@@ -68,14 +68,14 @@ void TestIdentityReducer() {
   // Windows 路径和 SHA 十六进制大小写不影响同一身份。
   assert(EvaluateHookModuleIdentity(
              true, requested,
-             L"d:\\fushi\\VOICE_HOOK\\x64\\fushi_voice_hook.dll",
+             L"d:\\my_comic\\VOICE_HOOK\\x64\\my_comic_voice_hook.dll",
              digest, std::string(64, 'A')) ==
          HookModuleIdentityStatus::kMatch);
 
   // 相同字节但来自旧 staging 路径也不能复用。
   assert(EvaluateHookModuleIdentity(
              true, requested,
-             L"D:\\stale\\voice_hook\\x64\\fushi_voice_hook.dll",
+             L"D:\\stale\\voice_hook\\x64\\my_comic_voice_hook.dll",
              digest, digest) == HookModuleIdentityStatus::kPathMismatch);
 
   // 同一路径若无法证明摘要或摘要不同，同样 fail closed。
@@ -105,7 +105,7 @@ void TestIdentityReducer() {
 // v17 把驻留侧摘要换成 header 里由**注入者本人**留下的记录之后，它才成为真实可达状态。
 void TestResidentDigestDecidesSameSameBuildMismatch() {
   const std::wstring path =
-      L"D:\\Fushi\\voice_hook\\x64\\fushi_voice_hook.dll";
+      L"D:\\MyComic\\voice_hook\\x64\\my_comic_voice_hook.dll";
   const std::string on_disk_now(64, 'c');   // 自更新后磁盘上的新构建
   const std::string resident_build(64, 'd');  // 游戏进程里还驻留着的旧构建
 
@@ -131,7 +131,7 @@ void TestResidentDigestDecidesSameSameBuildMismatch() {
 // 调用侧守卫。上面的纯函数判据再对，只要调用方把**两侧摘要都从磁盘读**，
 // kDigestMismatch 就重新恒不可达 —— 而这种退化纯函数测试一个字节都测不到。
 void TestInjectorTakesResidentDigestFromSharedHeader() {
-  const std::string source = ReadSourceFile(FUSHI_INJECTOR_MAIN_SOURCE);
+  const std::string source = ReadSourceFile(MYCOMIC_INJECTOR_MAIN_SOURCE);
   const std::string body = ExtractTopLevelFunctionBody(
       source, "HookModuleIdentityStatus InspectResidentHookIdentity(");
 

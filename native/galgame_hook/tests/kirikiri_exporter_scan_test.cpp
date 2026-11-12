@@ -15,12 +15,12 @@
 
 namespace {
 
-using fushi_voice_hook::kirikiri_exporter::CollectWritableWords;
-using fushi_voice_hook::kirikiri_exporter::DefaultReadableSpan;
-using fushi_voice_hook::kirikiri_exporter::IntersectWritableWords;
-using fushi_voice_hook::kirikiri_exporter::kMinPlugins;
-using fushi_voice_hook::kirikiri_exporter::kVtableProbeEntries;
-using fushi_voice_hook::kirikiri_exporter::LooksLikeExporter;
+using my_comic_voice_hook::kirikiri_exporter::CollectWritableWords;
+using my_comic_voice_hook::kirikiri_exporter::DefaultReadableSpan;
+using my_comic_voice_hook::kirikiri_exporter::IntersectWritableWords;
+using my_comic_voice_hook::kirikiri_exporter::kMinPlugins;
+using my_comic_voice_hook::kirikiri_exporter::kVtableProbeEntries;
+using my_comic_voice_hook::kirikiri_exporter::LooksLikeExporter;
 
 int g_failures = 0;
 

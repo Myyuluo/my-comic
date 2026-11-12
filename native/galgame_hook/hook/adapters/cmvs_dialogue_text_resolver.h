@@ -4,7 +4,7 @@
 #include "cmvs_dialogue_layout_reader.h"
 #include "../lookup_line_text_match.h"
 
-namespace fushi_voice_hook::cmvs_layout {
+namespace my_comic_voice_hook::cmvs_layout {
 
 inline constexpr uint16_t kNoSourceIndex = 0xffff;
 struct TextIdentity {
@@ -62,4 +62,4 @@ inline bool ResolveSelectedText(const Snapshot& snapshot,
   return true;
 }
 
-}  // namespace fushi_voice_hook::cmvs_layout
+}  // namespace my_comic_voice_hook::cmvs_layout

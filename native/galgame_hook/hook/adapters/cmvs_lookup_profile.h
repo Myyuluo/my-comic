@@ -5,7 +5,7 @@
 #include "cmvs_hook_installation.h"
 #include "cmvs_shift_transaction.h"
 
-namespace fushi_voice_hook::cmvs_layout {
+namespace my_comic_voice_hook::cmvs_layout {
 
 inline bool MatchesExecutable() {
 #ifndef _WIN64
@@ -37,4 +37,4 @@ inline bool MatchesExecutable() {
   return matches;
 #endif
 }
-}  // namespace fushi_voice_hook::cmvs_layout
+}  // namespace my_comic_voice_hook::cmvs_layout

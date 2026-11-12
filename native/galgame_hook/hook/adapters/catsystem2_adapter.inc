@@ -82,12 +82,12 @@ bool LoadCatSystem2Archive(const wchar_t* path, CatSystem2Archive* archive) {
       nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
   if (file == INVALID_HANDLE_VALUE) return false;
   LARGE_INTEGER file_size = {};
-  uint8_t header_bytes[fushi_voice_hook::catsystem2::kHeaderBytes] = {0};
-  fushi_voice_hook::catsystem2::Header header;
+  uint8_t header_bytes[my_comic_voice_hook::catsystem2::kHeaderBytes] = {0};
+  my_comic_voice_hook::catsystem2::Header header;
   uint8_t* index = nullptr;
   bool valid = GetFileSizeEx(file, &file_size) && file_size.QuadPart > 0 &&
                ReadExact(file, header_bytes, sizeof(header_bytes)) &&
-               fushi_voice_hook::catsystem2::ParseHeader(
+               my_comic_voice_hook::catsystem2::ParseHeader(
                    header_bytes, sizeof(header_bytes), &header) &&
                header.index_bytes <= static_cast<uint64_t>(file_size.QuadPart) &&
                header.index_bytes <= UINT32_MAX;
@@ -104,16 +104,16 @@ bool LoadCatSystem2Archive(const wchar_t* path, CatSystem2Archive* archive) {
   std::vector<CatSystem2VoiceRange> ranges;
   bool encrypted = false;
   for (uint32_t i = 0; valid && i < header.entry_count; ++i) {
-    fushi_voice_hook::catsystem2::EntryView entry;
-    valid = fushi_voice_hook::catsystem2::ParseEntry(
+    my_comic_voice_hook::catsystem2::EntryView entry;
+    valid = my_comic_voice_hook::catsystem2::ParseEntry(
         index, header.index_bytes, i,
         static_cast<uint64_t>(file_size.QuadPart), &entry);
     if (!valid) break;
-    if (fushi_voice_hook::catsystem2::IsEncryptionKey(entry)) {
+    if (my_comic_voice_hook::catsystem2::IsEncryptionKey(entry)) {
       encrypted = true;
       continue;
     }
-    if (!fushi_voice_hook::catsystem2::IsVoiceOgg(entry)) continue;
+    if (!my_comic_voice_hook::catsystem2::IsVoiceOgg(entry)) continue;
     CatSystem2VoiceRange range;
     range.offset = entry.offset;
     range.size = entry.size;
@@ -336,7 +336,7 @@ void ProcessCatSystem2VoiceTask(CatSystem2VoiceTask* task) {
   bool valid = ogg != nullptr &&
                SetFilePointerEx(file, at, nullptr, FILE_BEGIN) != FALSE &&
                ReadExact(file, ogg, range.size) &&
-               fushi_voice_hook::siglus::CompleteOggBytes(ogg, range.size) ==
+               my_comic_voice_hook::siglus::CompleteOggBytes(ogg, range.size) ==
                    range.size;
   if (valid) {
     wchar_t name[kCatSystem2NameBytes] = {0};
@@ -348,7 +348,7 @@ void ProcessCatSystem2VoiceTask(CatSystem2VoiceTask* task) {
     g_catsystem2_last_tick = task->tick_ms;
     if (g_header != nullptr) {
       g_header->hook_diagnostics |=
-          fushi_voice_hook::kDiagCatSystem2PcmVoiceCaptured;
+          my_comic_voice_hook::kDiagCatSystem2PcmVoiceCaptured;
     }
   }
   free(ogg);
@@ -417,8 +417,8 @@ volatile LONG g_cs2_engine_armed = 0;
 
 void RememberCatSystem2EngineArchive(HANDLE handle, const wchar_t* path) {
   if (InterlockedCompareExchange(&g_cs2_engine_armed, 0, 0) == 0) return;
-  fushi_voice_hook::ForgetTrackedHandle(g_cs2_foreign_archives, handle);
-  const bool remembered = fushi_voice_hook::RememberTrackedHandle(
+  my_comic_voice_hook::ForgetTrackedHandle(g_cs2_foreign_archives, handle);
+  const bool remembered = my_comic_voice_hook::RememberTrackedHandle(
       g_cs2_engine_archives, handle, [path](Cs2EngineArchive& slot) {
         wcsncpy_s(slot.leaf, CatSystem2PathLeaf(path), _TRUNCATE);
       });
@@ -430,14 +430,14 @@ void RememberCatSystem2EngineArchive(HANDLE handle, const wchar_t* path) {
   if (g_header != nullptr) {
     InterlockedOr(reinterpret_cast<volatile LONG*>(&g_header->hook_diagnostics),
                   static_cast<LONG>(
-                      fushi_voice_hook::kDiagCatSystem2PcmHooksReady));
+                      my_comic_voice_hook::kDiagCatSystem2PcmHooksReady));
   }
 }
 
 // CloseHandle detour path: lock-free table edits only (BUG-2046).
 void ForgetCatSystem2EngineArchive(HANDLE handle) {
-  fushi_voice_hook::ForgetTrackedHandle(g_cs2_engine_archives, handle);
-  fushi_voice_hook::ForgetTrackedHandle(g_cs2_foreign_archives, handle);
+  my_comic_voice_hook::ForgetTrackedHandle(g_cs2_engine_archives, handle);
+  my_comic_voice_hook::ForgetTrackedHandle(g_cs2_foreign_archives, handle);
   const LONG_PTR value = reinterpret_cast<LONG_PTR>(handle);
   for (volatile LONG_PTR& slot : g_cs2_unknown_archives) {
     InterlockedCompareExchangePointer(reinterpret_cast<PVOID volatile*>(&slot),
@@ -449,7 +449,7 @@ void ForgetCatSystem2EngineArchive(HANDLE handle) {
 // value store, deduplicated; a full list drops it until the next read).
 void NoteCatSystem2UnknownArchive(HANDLE handle) {
   const LONG_PTR value = reinterpret_cast<LONG_PTR>(handle);
-  if (!fushi_voice_hook::IsTrackableHandleValue(handle)) return;
+  if (!my_comic_voice_hook::IsTrackableHandleValue(handle)) return;
   for (volatile LONG_PTR& slot : g_cs2_unknown_archives) {
     if (slot == value) return;
   }
@@ -474,8 +474,8 @@ void ClassifyCatSystem2UnknownArchives() {
     const LONG_PTR value = slot;
     if (value == 0) continue;
     const HANDLE handle = reinterpret_cast<HANDLE>(value);
-    if (!fushi_voice_hook::IsTrackedHandle(g_cs2_engine_archives, handle) &&
-        !fushi_voice_hook::IsTrackedHandle(g_cs2_foreign_archives, handle)) {
+    if (!my_comic_voice_hook::IsTrackedHandle(g_cs2_engine_archives, handle) &&
+        !my_comic_voice_hook::IsTrackedHandle(g_cs2_foreign_archives, handle)) {
       // The value came from an archive object's own handle; a disk-file check
       // keeps a value closed and reused meanwhile (a pipe) away from the name
       // query.  CloseHandle also drops the value from this list.
@@ -491,7 +491,7 @@ void ClassifyCatSystem2UnknownArchives() {
             !IsCatSystem2IndexLaneHandle(handle)) {
           RememberCatSystem2EngineArchive(handle, path);
         } else {
-          fushi_voice_hook::RememberTrackedHandle(
+          my_comic_voice_hook::RememberTrackedHandle(
               g_cs2_foreign_archives, handle, [](Cs2ForeignArchive&) {});
         }
       }
@@ -503,7 +503,7 @@ void ClassifyCatSystem2UnknownArchives() {
 
 #if defined(_M_IX86)
 
-namespace cs2_voice = fushi_voice_hook::catsystem2_voice;
+namespace cs2_voice = my_comic_voice_hook::catsystem2_voice;
 
 constexpr int kCs2ChunkSlots = 64;
 constexpr uint32_t kCs2ChunkBytes = 8704;  // one vorbisfile read (8500) fits
@@ -613,12 +613,12 @@ bool ProbeCs2VoiceRead(uintptr_t archive, uintptr_t entry,
     return false;
   }
   const HANDLE handle = reinterpret_cast<HANDLE>(probe->handle);
-  probe->classified = fushi_voice_hook::ReadTrackedHandle(
+  probe->classified = my_comic_voice_hook::ReadTrackedHandle(
       g_cs2_engine_archives, handle, [probe](const Cs2EngineArchive& slot) {
         wcsncpy_s(probe->archive, slot.leaf, _TRUNCATE);
       });
   if (!probe->classified) {
-    if (fushi_voice_hook::IsTrackedHandle(g_cs2_foreign_archives, handle)) {
+    if (my_comic_voice_hook::IsTrackedHandle(g_cs2_foreign_archives, handle)) {
       return false;
     }
     NoteCatSystem2UnknownArchive(handle);
@@ -679,7 +679,7 @@ bool AdmitCs2UnclassifiedRead(const Cs2ReadProbe& probe,
 void QueueCs2VoiceBytes(const Cs2ReadProbe& probe, const uint8_t* buffer,
                         uint32_t done) {
   const uint64_t now = GetTickCount64();
-  const uint64_t selected = fushi_voice_hook::SelectedTextThreadId(g_header);
+  const uint64_t selected = my_comic_voice_hook::SelectedTextThreadId(g_header);
   for (uint32_t at = 0; at < done; at += kCs2ChunkBytes) {
     const uint32_t length = (std::min)(kCs2ChunkBytes, done - at);
     const uint32_t offset = probe.offset + at;
@@ -757,21 +757,21 @@ Cs2Member g_cs2_members[kCs2MemberSlots];  // worker-only
 // the newest one.  False when the selection is gone or has no lane.
 bool CollectCatSystem2SelectedLines(
     uint64_t selected_thread_id,
-    fushi_voice_hook::VoiceTextCandidate* candidates, size_t* candidate_count,
+    my_comic_voice_hook::VoiceTextCandidate* candidates, size_t* candidate_count,
     char* hook_name, size_t hook_name_bytes) {
   *candidate_count = 0;
   hook_name[0] = 0;
   if (g_header == nullptr || g_text_base == nullptr ||
       selected_thread_id == 0 ||
-      fushi_voice_hook::SelectedTextThreadId(g_header) != selected_thread_id) {
+      my_comic_voice_hook::SelectedTextThreadId(g_header) != selected_thread_id) {
     return false;
   }
-  fushi_voice_hook::TextLane* lanes = fushi_voice_hook::TextLanesOf(g_header);
+  my_comic_voice_hook::TextLane* lanes = my_comic_voice_hook::TextLanesOf(g_header);
   if (lanes == nullptr) return false;
   uint32_t lane_index = 0;
   bool lane_found = false;
   for (uint32_t i = 0; i < g_header->text_lane_count; ++i) {
-    if (fushi_voice_hook::AtomicLoadPreview64(&lanes[i].thread_id) ==
+    if (my_comic_voice_hook::AtomicLoadPreview64(&lanes[i].thread_id) ==
         selected_thread_id) {
       lane_index = i;
       lane_found = true;
@@ -780,31 +780,31 @@ bool CollectCatSystem2SelectedLines(
   }
   if (!lane_found) return false;
   const uint64_t lane_written =
-      fushi_voice_hook::AtomicLoadPreview64(&lanes[lane_index].write_count);
+      my_comic_voice_hook::AtomicLoadPreview64(&lanes[lane_index].write_count);
   const uint32_t lane_slots = g_header->text_lane_slot_count;
   const uint64_t first_lane_seq =
       lane_written > lane_slots ? lane_written - lane_slots + 1 : 1;
   for (uint64_t lane_seq = first_lane_seq;
        lane_seq <= lane_written &&
-       *candidate_count < fushi_voice_hook::kTextLaneSlotCount;
+       *candidate_count < my_comic_voice_hook::kTextLaneSlotCount;
        ++lane_seq) {
-    auto* slot = reinterpret_cast<TextSlot*>(fushi_voice_hook::TextLaneSlotAt(
+    auto* slot = reinterpret_cast<TextSlot*>(my_comic_voice_hook::TextLaneSlotAt(
         g_header, lane_index, lane_seq));
     if (slot == nullptr ||
-        fushi_voice_hook::AtomicLoadPreview64(&slot->lane_seq) != lane_seq) {
+        my_comic_voice_hook::AtomicLoadPreview64(&slot->lane_seq) != lane_seq) {
       continue;
     }
     MemoryBarrier();
-    fushi_voice_hook::VoiceTextCandidate candidate;
-    candidate.seq = fushi_voice_hook::AtomicLoadPreview64(&slot->seq);
+    my_comic_voice_hook::VoiceTextCandidate candidate;
+    candidate.seq = my_comic_voice_hook::AtomicLoadPreview64(&slot->seq);
     candidate.timestamp_ms = slot->timestamp_ms;
     candidate.thread_id = slot->thread_id;
     candidate.byte_len = slot->byte_len;
-    candidate.is_line = slot->event_kind == fushi_voice_hook::kTextEventLine;
+    candidate.is_line = slot->event_kind == my_comic_voice_hook::kTextEventLine;
     char name[sizeof(slot->hook_name)] = {0};
     memcpy(name, slot->hook_name, sizeof(name) - 1);
     MemoryBarrier();
-    if (fushi_voice_hook::AtomicLoadPreview64(&slot->lane_seq) != lane_seq) {
+    if (my_comic_voice_hook::AtomicLoadPreview64(&slot->lane_seq) != lane_seq) {
       continue;
     }
     candidates[(*candidate_count)++] = candidate;
@@ -820,8 +820,8 @@ bool CollectCatSystem2SelectedLines(
 bool ResolveCatSystem2VoiceText(const Cs2Member& member, uint64_t now,
                                 bool force, uint64_t* text_event_id) {
   *text_event_id = 0;
-  fushi_voice_hook::VoiceTextCandidate
-      candidates[fushi_voice_hook::kTextLaneSlotCount] = {};
+  my_comic_voice_hook::VoiceTextCandidate
+      candidates[my_comic_voice_hook::kTextLaneSlotCount] = {};
   size_t count = 0;
   char hook_name[sizeof(TextSlot::hook_name)] = {0};
   if (!CollectCatSystem2SelectedLines(member.selected_thread_id, candidates,
@@ -830,23 +830,23 @@ bool ResolveCatSystem2VoiceText(const Cs2Member& member, uint64_t now,
   }
   if (cs2_voice::SelectedLineOrder(hook_name) ==
       cs2_voice::LineOrder::kPrecedesVoice) {
-    const auto decision = fushi_voice_hook::ResolvePrecedingSelectedText(
+    const auto decision = my_comic_voice_hook::ResolvePrecedingSelectedText(
         member.first_tick, member.selected_thread_id, candidates, count,
         cs2_voice::kTextBindingWindowMs);
-    if (decision.state == fushi_voice_hook::VoiceResourcePairState::kMatched) {
+    if (decision.state == my_comic_voice_hook::VoiceResourcePairState::kMatched) {
       *text_event_id = decision.text_event_id;
     }
     return true;
   }
-  const auto decision = fushi_voice_hook::ResolveFollowingSelectedText(
+  const auto decision = my_comic_voice_hook::ResolveFollowingSelectedText(
       member.first_tick, member.first_tick + cs2_voice::kTextBindingWindowMs,
       now, member.selected_thread_id, 0, candidates, count);
-  if (decision.state == fushi_voice_hook::VoiceResourcePairState::kMatched) {
+  if (decision.state == my_comic_voice_hook::VoiceResourcePairState::kMatched) {
     *text_event_id = decision.text_event_id;
     return true;
   }
   return force ||
-         decision.state != fushi_voice_hook::VoiceResourcePairState::kWait;
+         decision.state != my_comic_voice_hook::VoiceResourcePairState::kWait;
 }
 
 void ReleaseCs2Member(Cs2Member* member) {
@@ -966,7 +966,7 @@ void AbsorbCs2Chunk(Cs2VoiceChunk* chunk_slot, uint64_t now) {
     // Provisional: keep it only if the archive was classified as an
     // engine-lane voice archive (classification ran before this pass).
     wchar_t leaf[kCs2ArchiveLeafChars] = {0};
-    if (!fushi_voice_hook::ReadTrackedHandle(
+    if (!my_comic_voice_hook::ReadTrackedHandle(
             g_cs2_engine_archives, reinterpret_cast<HANDLE>(chunk.handle),
             [&leaf](const Cs2EngineArchive& slot) {
               wcsncpy_s(leaf, slot.leaf, _TRUNCATE);
@@ -1027,11 +1027,11 @@ bool TryHookCatSystem2EngineVoice() {
     return g_cs2_engine_hooked;
   }
   g_cs2_engine_resolved = true;
-  fushi_voice_hook::exact_lookup::LoadedPeImage image;
+  my_comic_voice_hook::exact_lookup::LoadedPeImage image;
   cs2_voice::VoiceImportSlots imports;
   cs2_voice::VoiceSites sites;
   cs2_voice::VoiceSiteResult result = cs2_voice::VoiceSiteResult::kBigReadMissing;
-  if (fushi_voice_hook::exact_lookup::OpenLoadedPeImage(
+  if (my_comic_voice_hook::exact_lookup::OpenLoadedPeImage(
           GetModuleHandleW(nullptr), &image)) {
     imports.set_file_pointer = cs2_lookup::FindImportSlotRva(
         image, "kernel32.dll", "SetFilePointer");
@@ -1072,8 +1072,8 @@ void StopCatSystem2EngineVoice() {
   // The detour stays chained (MinHook owns it for the process lifetime);
   // disarming turns it into a pure forwarder.
   InterlockedExchange(&g_cs2_engine_armed, 0);
-  fushi_voice_hook::ClearTrackedHandles(g_cs2_engine_archives);
-  fushi_voice_hook::ClearTrackedHandles(g_cs2_foreign_archives);
+  my_comic_voice_hook::ClearTrackedHandles(g_cs2_engine_archives);
+  my_comic_voice_hook::ClearTrackedHandles(g_cs2_foreign_archives);
   for (volatile LONG_PTR& slot : g_cs2_unknown_archives) {
     InterlockedExchangePointer(reinterpret_cast<PVOID volatile*>(&slot),
                                nullptr);
@@ -1089,8 +1089,8 @@ void ProcessCatSystem2EngineVoice() {}
 bool TryHookCatSystem2EngineVoice() { return false; }
 void StopCatSystem2EngineVoice() {
   InterlockedExchange(&g_cs2_engine_armed, 0);
-  fushi_voice_hook::ClearTrackedHandles(g_cs2_engine_archives);
-  fushi_voice_hook::ClearTrackedHandles(g_cs2_foreign_archives);
+  my_comic_voice_hook::ClearTrackedHandles(g_cs2_engine_archives);
+  my_comic_voice_hook::ClearTrackedHandles(g_cs2_foreign_archives);
 }
 
 #endif  // _M_IX86
@@ -1102,7 +1102,7 @@ bool TryHookCatSystem2PcmVoice() {
   MarkCatSystem2Flag(kCs2FlagIndexLane);
   if (g_header != nullptr) {
     g_header->hook_diagnostics |=
-        fushi_voice_hook::kDiagCatSystem2PcmHooksReady;
+        my_comic_voice_hook::kDiagCatSystem2PcmHooksReady;
   }
   return true;
 }
@@ -1123,11 +1123,11 @@ void StopCatSystem2PcmVoice() {
   }
 }
 
-class CatSystem2Adapter final : public fushi_voice_hook::EngineAdapter {
+class CatSystem2Adapter final : public my_comic_voice_hook::EngineAdapter {
  public:
   const char* id() const override { return "catsystem2"; }
   bool probe() const override {
-    return fushi_voice_hook::MatchesCatSystem2Profile(nullptr);
+    return my_comic_voice_hook::MatchesCatSystem2Profile(nullptr);
   }
   bool install() override {
     if (!probe()) return false;
@@ -1148,28 +1148,28 @@ class CatSystem2Adapter final : public fushi_voice_hook::EngineAdapter {
     ProcessCatSystem2EngineVoice();
     ProcessCatSystem2LookupTick();
   }
-  fushi_voice_hook::LookupAdmissionReport lookupAdmission() const override {
-    fushi_voice_hook::LookupAdmissionReport report;
+  my_comic_voice_hook::LookupAdmissionReport lookupAdmission() const override {
+    my_comic_voice_hook::LookupAdmissionReport report;
     if (CatSystem2LookupSensorInstalled()) {
-      report.state = fushi_voice_hook::kLookupAdmissionSensorInstalled;
+      report.state = my_comic_voice_hook::kLookupAdmissionSensorInstalled;
       return report;
     }
     // Sites were resolved and rejected: terminal for this executable, so the
     // host gets the digest to report instead of waiting for a gate.
     if (CatSystem2LookupSitesRejected()) {
-      report.state = fushi_voice_hook::kLookupAdmissionIdentityRejected;
+      report.state = my_comic_voice_hook::kLookupAdmissionIdentityRejected;
       strncpy_s(report.executable_sha256,
-                fushi_voice_hook::HostExecutableSha256Hex(), _TRUNCATE);
+                my_comic_voice_hook::HostExecutableSha256Hex(), _TRUNCATE);
       return report;
     }
     // The registry only asks after probe() held (identity is structural).
-    report.state = fushi_voice_hook::kLookupAdmissionIdentityAccepted;
+    report.state = my_comic_voice_hook::kLookupAdmissionIdentityAccepted;
     return report;
   }
-  fushi_voice_hook::AdapterCapability capabilities() const override {
-    return fushi_voice_hook::AdapterCapability::kText |
-           fushi_voice_hook::AdapterCapability::kResourceAudio |
-           fushi_voice_hook::AdapterCapability::kPcmAudio;
+  my_comic_voice_hook::AdapterCapability capabilities() const override {
+    return my_comic_voice_hook::AdapterCapability::kText |
+           my_comic_voice_hook::AdapterCapability::kResourceAudio |
+           my_comic_voice_hook::AdapterCapability::kPcmAudio;
   }
   void onModuleLoaded(const wchar_t*) override {}
   void shutdown() override {
@@ -1179,7 +1179,7 @@ class CatSystem2Adapter final : public fushi_voice_hook::EngineAdapter {
     installed_ = false;
     ready_ = false;
   }
-  fushi_voice_hook::AdapterDiagnostics diagnostics() const override {
+  my_comic_voice_hook::AdapterDiagnostics diagnostics() const override {
     return {id(), probe(), installed_,
             static_cast<uint32_t>(
                 InterlockedCompareExchange(&g_catsystem2_flags, 0, 0))};

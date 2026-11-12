@@ -29,7 +29,7 @@
 #include <cwchar>
 #include <string>
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 constexpr const wchar_t* kUnityDataSuffix = L"_Data";
 constexpr const wchar_t* kUnityManagedAssembly = L"\\Managed\\Assembly-CSharp.dll";
@@ -77,4 +77,4 @@ inline bool MatchesUnityMonoProfile(const wchar_t*) {
   return MatchesUnityMonoLayout(directory, stem);
 }
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

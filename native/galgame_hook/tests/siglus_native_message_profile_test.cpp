@@ -6,8 +6,8 @@
 #include "siglus_native_message_profile.h"
 
 namespace {
-using namespace fushi_voice_hook;
-using namespace fushi_voice_hook::siglus_native_message;
+using namespace my_comic_voice_hook;
+using namespace my_comic_voice_hook::siglus_native_message;
 struct Layout { uintptr_t outer=0x1000,voice=0x2000,renderer=0x3000,text=0x4000; };
 struct Image {
   uint8_t* bytes = static_cast<uint8_t*>(VirtualAlloc(nullptr,0x9000,

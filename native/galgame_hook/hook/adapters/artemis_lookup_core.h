@@ -54,9 +54,9 @@
 #include "exact_lookup_signature.h"
 #include "../lookup_line_text_match.h"
 
-namespace fushi_voice_hook::artemis_lookup {
+namespace my_comic_voice_hook::artemis_lookup {
 
-namespace exact = fushi_voice_hook::exact_lookup;
+namespace exact = my_comic_voice_hook::exact_lookup;
 
 // ── engine layout (pinned by the signatures) ────────────────────────────────
 
@@ -1172,4 +1172,4 @@ inline bool HitTestModel(const ModelGlyph* glyphs, size_t count,
   return true;
 }
 
-}  // namespace fushi_voice_hook::artemis_lookup
+}  // namespace my_comic_voice_hook::artemis_lookup

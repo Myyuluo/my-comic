@@ -1,5 +1,5 @@
-#ifndef FUSHI_VOICE_CLIP_ENERGY_H_
-#define FUSHI_VOICE_CLIP_ENERGY_H_
+#ifndef MYCOMIC_VOICE_CLIP_ENERGY_H_
+#define MYCOMIC_VOICE_CLIP_ENERGY_H_
 
 #include <cstddef>
 #include <cstdint>
@@ -25,7 +25,7 @@
 // 做「全量拷贝到新 vector + 全量扫描」，而且**选源与拼接各算一遍**；环上限 64MB 时单次调用
 // 可达几百 MB 的拷贝与扫描，直接表现为宿主侧卡顿。这里改成零拷贝单遍扫描，跨环边界按两段
 // 处理（外加至多一个跨界样本），调用方再把结果缓存复用，总工作量降一个量级。
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 // 单个样本的绝对幅值，折算到 16-bit 标度。[p] 必须指向 bits/8 个可读字节。
 // 支持 PCM 8（无符号，128 为零点）/ 16 / 24 / 32-bit 整数与 32-bit 浮点；其余返回 -1。
@@ -205,6 +205,6 @@ inline double ClipEnergy16Scale(const uint8_t* ring, uint32_t cap, uint32_t off,
   return acc / static_cast<double>(n);
 }
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook
 
-#endif  // FUSHI_VOICE_CLIP_ENERGY_H_
+#endif  // MYCOMIC_VOICE_CLIP_ENERGY_H_

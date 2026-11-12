@@ -1,5 +1,5 @@
-#ifndef FUSHI_VOICE_HOOK_XAUDIO_TRACE_H_
-#define FUSHI_VOICE_HOOK_XAUDIO_TRACE_H_
+#ifndef MYCOMIC_VOICE_HOOK_XAUDIO_TRACE_H_
+#define MYCOMIC_VOICE_HOOK_XAUDIO_TRACE_H_
 
 #include <windows.h>
 #include <mmreg.h>
@@ -11,7 +11,7 @@
 #include <cstring>
 #include <type_traits>
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 // This diagnostic ABI is intentionally separate from SharedHeader.  A probe
 // locates the exported object in the remote hook DLL by PE export RVA and reads
@@ -22,7 +22,7 @@ constexpr uint32_t kXAudioTraceVersion = 1;
 constexpr uint32_t kXAudioTraceCapacity = 2048;
 constexpr uint32_t kXAudioTraceExtraPrefixBytes = 32;
 constexpr uint32_t kXAudioTraceAdpcmCoefficientCount = 32;
-constexpr char kXAudioTraceExportName[] = "FushiXAudioTraceV1";
+constexpr char kXAudioTraceExportName[] = "MyComicXAudioTraceV1";
 
 enum class XAudioTraceEventKind : uint32_t {
   kCreate = 1,
@@ -338,11 +338,11 @@ inline uint64_t PublishXAudioTraceEvent(XAudioTraceBuffer* trace,
   return sequence;
 }
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook
 
 // The object is defined exactly once by hook/dll_main.cpp before the adapter
 // include that publishes into it.  No extern declaration belongs here: MSVC
 // treats a later dllexport definition as a conflicting storage class, while
 // the probe deliberately resolves the C export name without linking to it.
 
-#endif  // FUSHI_VOICE_HOOK_XAUDIO_TRACE_H_
+#endif  // MYCOMIC_VOICE_HOOK_XAUDIO_TRACE_H_

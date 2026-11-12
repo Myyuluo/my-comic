@@ -18,7 +18,7 @@
 #include <cwchar>
 #include <string>
 
-namespace fushi_voice_hook::engine_dir {
+namespace my_comic_voice_hook::engine_dir {
 
 // 读文件开头若干字节。读不到（不存在/占用/空文件）一律 false，不区分——身份判据只关心
 // "有没有一个能证明是本引擎的文件"，证不出就是不匹配。
@@ -103,4 +103,4 @@ inline bool DirectoryHasFileStartingWith(const std::wstring& dir,
   return matched;
 }
 
-}  // namespace fushi_voice_hook::engine_dir
+}  // namespace my_comic_voice_hook::engine_dir

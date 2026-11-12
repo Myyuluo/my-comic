@@ -22,9 +22,9 @@
 // 窗口做不到的。
 
 // 注意：本文件被 include 进 dll_main.cpp 的**匿名命名空间内部**，所以这里一行 #include
-// 都不能有。头文件里的 `namespace fushi_voice_hook` 会在匿名命名空间里再开一个同名的
-// 嵌套命名空间，把真正的 ::fushi_voice_hook 整个遮住——症状是本文件之后的每个 adapter
-// 都报「不是 fushi_voice_hook 的成员」，而错误行全在别人家里。lookup_overlay_geometry.h
+// 都不能有。头文件里的 `namespace my_comic_voice_hook` 会在匿名命名空间里再开一个同名的
+// 嵌套命名空间，把真正的 ::my_comic_voice_hook 整个遮住——症状是本文件之后的每个 adapter
+// 都报「不是 my_comic_voice_hook 的成员」，而错误行全在别人家里。lookup_overlay_geometry.h
 // 由 dll_main.cpp 在文件作用域引入。
 
 // 引擎适配器已认领呈现（KiriKiri 的 TJS Layer）。通用呈现器只在无人认领时启动。
@@ -49,7 +49,7 @@ struct LookupOverlayState {
   // lookup_frame_applied_seq：host 只有看到这个确认才会去抓游戏窗口，而
   // ShowWindow(SW_HIDE) 返回不等于 DWM 已经把这一帧合成出去。留一拍给合成。
   uint64_t pending_suppress_ack_seq = 0;
-  fushi_voice_hook::OverlayRect card;
+  my_comic_voice_hook::OverlayRect card;
   bool visible = false;
   bool outside_dismiss_pending = false;
   bool tracking_mouse = false;
@@ -174,12 +174,12 @@ void WriteOverlaySharedU64(volatile uint64_t* value, uint64_t next) {
 void QueueOverlayInput(uint32_t kind, int32_t x, int32_t y, int32_t wheel,
                        uint32_t keys) {
   if (g_header == nullptr) return;
-  fushi_voice_hook::LookupInputSlot* inputs =
-      fushi_voice_hook::LookupInputsOf(g_header);
+  my_comic_voice_hook::LookupInputSlot* inputs =
+      my_comic_voice_hook::LookupInputsOf(g_header);
   const uint32_t slots = g_header->lookup_input_slot_count;
   if (inputs == nullptr || slots == 0) return;
   const uint64_t next = ReadOverlaySharedU64(&g_header->lookup_input_count) + 1;
-  fushi_voice_hook::LookupInputSlot* slot = &inputs[(next - 1) % slots];
+  my_comic_voice_hook::LookupInputSlot* slot = &inputs[(next - 1) % slots];
   slot->x = x;
   slot->y = y;
   slot->kind = kind;
@@ -191,18 +191,18 @@ void QueueOverlayInput(uint32_t kind, int32_t x, int32_t y, int32_t wheel,
 }
 
 uint32_t OverlayModifierKeys() {
-  uint32_t keys = fushi_voice_hook::kLookupInputVirtualKeyNone;
+  uint32_t keys = my_comic_voice_hook::kLookupInputVirtualKeyNone;
   if ((GetKeyState(VK_SHIFT) & 0x8000) != 0)
-    keys |= fushi_voice_hook::kLookupInputVirtualKeyShift;
+    keys |= my_comic_voice_hook::kLookupInputVirtualKeyShift;
   if ((GetKeyState(VK_CONTROL) & 0x8000) != 0)
-    keys |= fushi_voice_hook::kLookupInputVirtualKeyControl;
+    keys |= my_comic_voice_hook::kLookupInputVirtualKeyControl;
   // COREWEBVIEW2_MOUSE_EVENT_VIRTUAL_KEYS 没有 Alt；不得把它压到别的位上。
   return keys;
 }
 
 // 客户区在屏幕上的矩形。窗口已销毁或最小化时返回空。
-fushi_voice_hook::OverlayRect OwnerClientRect(HWND owner) {
-  fushi_voice_hook::OverlayRect result;
+my_comic_voice_hook::OverlayRect OwnerClientRect(HWND owner) {
+  my_comic_voice_hook::OverlayRect result;
   if (owner == nullptr || IsIconic(owner) || !IsWindow(owner)) return result;
   RECT client = {};
   if (!GetClientRect(owner, &client)) return result;
@@ -218,14 +218,14 @@ fushi_voice_hook::OverlayRect OwnerClientRect(HWND owner) {
 // 游戏主窗口判据只有一份：hook/game_main_window.h（dll_main.cpp 文件作用域引入，CTest 同源）。
 // 这里只是匿名命名空间内各 adapter 的无限定名转发；判据本身（含「隐藏 owner 不算 owner」，
 // BUG-2121 BCB VCL）别在这里再抄一遍。
-HWND FindGameMainWindow() { return fushi_voice_hook::FindGameMainWindow(); }
+HWND FindGameMainWindow() { return my_comic_voice_hook::FindGameMainWindow(); }
 
 void HideOverlay() {
   g_overlay.outside_dismiss_pending = false;
   if (!g_overlay.visible) return;
   g_overlay.visible = false;
   InterlockedExchange(&g_lookup_overlay_input_shield_visible, 0);
-  g_overlay.card = fushi_voice_hook::OverlayRect();
+  g_overlay.card = my_comic_voice_hook::OverlayRect();
   // 位置去重的记忆只在"同一张卡片持续显示"期间有效；卡片收起后必须清掉，
   // 否则下一张卡片在同一位置的第一次 move 会被当成重复丢掉。
   g_overlay.last_move_x = -1;
@@ -319,7 +319,7 @@ void PollOverlayFrame() {
   if (dismiss_epoch != 0 && dismiss_epoch == visible_epoch &&
       g_overlay.visible) {
     if (!g_overlay.outside_dismiss_pending) {
-      QueueOverlayInput(fushi_voice_hook::kLookupInputDismissOutside, 0, 0, 0,
+      QueueOverlayInput(my_comic_voice_hook::kLookupInputDismissOutside, 0, 0, 0,
                         0);
     }
     // Keep the card and its DirectInput mirror alive until Dart replies with
@@ -337,7 +337,7 @@ void PollOverlayFrame() {
     HideOverlay();
     return;
   }
-  if (g_header == nullptr || !fushi_voice_hook::HasLookupRegion(g_header)) return;
+  if (g_header == nullptr || !my_comic_voice_hook::HasLookupRegion(g_header)) return;
   if (g_header->lookup_enabled == 0) {
     HideOverlay();
     return;
@@ -374,16 +374,16 @@ void PollOverlayFrame() {
   // 第一帧读到的是全零槽（ready=0）直接 return，于是卡片一辈子不出现。
   // 更毒的是这个症状与「host 压根没投帧」完全同形，真机上分不开（契约头的注释就是
   // 为这件事写的）。KiriKiri 那条路径从来是扫全槽按 seq 选，所以躲过了这一劫。
-  fushi_voice_hook::LookupFrame* frame = nullptr;
+  my_comic_voice_hook::LookupFrame* frame = nullptr;
   uint32_t frame_index = 0;
   uint64_t seq_before = 0;
   for (uint32_t i = 0; i < frame_count; ++i) {
-    fushi_voice_hook::LookupFrame* candidate =
-        fushi_voice_hook::LookupFrameAt(g_header, i);
+    my_comic_voice_hook::LookupFrame* candidate =
+        my_comic_voice_hook::LookupFrameAt(g_header, i);
     if (candidate == nullptr) continue;
     if (candidate->ready == 0) continue;  // host 正在写这一槽
     if (g_overlay.outside_dismiss_pending &&
-        (candidate->flags & fushi_voice_hook::kLookupFrameDismiss) == 0) {
+        (candidate->flags & my_comic_voice_hook::kLookupFrameDismiss) == 0) {
       // Once an outside click owns the raw transaction, only its authoritative
       // dismiss frame may mutate this visible card.  Full/highlight frames from
       // a route transition stay hidden behind the pending control operation.
@@ -399,7 +399,7 @@ void PollOverlayFrame() {
   if (frame == nullptr) {
     // 没有新帧。窗口跟随：游戏窗口被拖动/缩放时卡片要跟着走，否则它会留在屏幕原地。
     if (g_overlay.visible) {
-      const fushi_voice_hook::OverlayRect client = OwnerClientRect(g_overlay.owner);
+      const my_comic_voice_hook::OverlayRect client = OwnerClientRect(g_overlay.owner);
       if (client.empty()) {
         HideOverlay();
       }
@@ -407,7 +407,7 @@ void PollOverlayFrame() {
     return;
   }
 
-  if ((frame->flags & fushi_voice_hook::kLookupFrameDismiss) != 0) {
+  if ((frame->flags & my_comic_voice_hook::kLookupFrameDismiss) != 0) {
     g_overlay.last_presented_seq = seq_before;
     ClearLookupTermHighlight();
     HideOverlay();
@@ -416,7 +416,7 @@ void PollOverlayFrame() {
   if (g_overlay.outside_dismiss_pending) return;
   // 制卡截图的临时抑制**不是** dismiss：只把卡片藏起来，不动 host 那侧的会话状态。
   // 确认延后一轮（见函数开头）。
-  if ((frame->flags & fushi_voice_hook::kLookupFrameCaptureSuppress) != 0) {
+  if ((frame->flags & my_comic_voice_hook::kLookupFrameCaptureSuppress) != 0) {
     g_overlay.last_presented_seq = seq_before;
     ClearLookupTermHighlight();
     HideOverlay();
@@ -427,19 +427,19 @@ void PollOverlayFrame() {
   // 引擎自己的图层上这件事做不到（那是 KiriKiri 专属），所以这里**消费掉**它而不是
   // 判成坏帧——不消费会每 16ms 重复命中同一槽，判成坏帧则会点亮误导性的 frame_rejected。
   // BUG-2087：区间本身记下来，自带高亮窗的适配器（SGRE）在卡片可见期间画它。
-  if ((frame->flags & fushi_voice_hook::kLookupFrameHighlightOnly) != 0) {
+  if ((frame->flags & my_comic_voice_hook::kLookupFrameHighlightOnly) != 0) {
     g_overlay.last_presented_seq = seq_before;
     SetLookupTermHighlight(frame->highlight_start, frame->highlight_len);
     return;
   }
   // 跨进程不可信的 width/height/pitch 必须先过这道闸门再谈拷贝。
-  if (!fushi_voice_hook::IsLookupFrameSane(g_header, frame)) {
+  if (!my_comic_voice_hook::IsLookupFrameSane(g_header, frame)) {
     g_overlay.last_presented_seq = seq_before;
-    g_header->lookup_diag |= fushi_voice_hook::kLookupDiagFrameRejected;
+    g_header->lookup_diag |= my_comic_voice_hook::kLookupDiagFrameRejected;
     return;
   }
   const uint8_t* pixels =
-      fushi_voice_hook::LookupBitmapAt(g_header, frame_index);
+      my_comic_voice_hook::LookupBitmapAt(g_header, frame_index);
   if (pixels == nullptr) return;
 
   const uint32_t width = frame->width;
@@ -456,8 +456,8 @@ void PollOverlayFrame() {
   if (g_overlay.owner == nullptr || !IsWindow(g_overlay.owner)) {
     g_overlay.owner = FindGameMainWindow();
   }
-  const fushi_voice_hook::OverlayRect client = OwnerClientRect(g_overlay.owner);
-  const fushi_voice_hook::OverlayRect card = fushi_voice_hook::ComputeOverlayRect(
+  const my_comic_voice_hook::OverlayRect client = OwnerClientRect(g_overlay.owner);
+  const my_comic_voice_hook::OverlayRect card = my_comic_voice_hook::ComputeOverlayRect(
       client, anchor_x, anchor_y, static_cast<int32_t>(width),
       static_cast<int32_t>(height));
   g_overlay.last_presented_seq = seq_before;
@@ -483,7 +483,7 @@ void PollOverlayFrame() {
   SetWindowPos(g_overlay.window, HWND_TOPMOST, 0, 0, 0, 0,
                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
   if (g_header != nullptr) {
-    g_header->lookup_diag |= fushi_voice_hook::kLookupDiagFramePresented;
+    g_header->lookup_diag |= my_comic_voice_hook::kLookupDiagFramePresented;
   }
 }
 
@@ -497,7 +497,7 @@ struct LookupHoverHighlightWindow {
 LookupHoverHighlightWindow g_hover_highlight;
 constexpr BYTE kHoverHighlightAlpha = 90;
 constexpr COLORREF kHoverHighlightColor = RGB(255, 214, 64);
-constexpr wchar_t kHoverHighlightClassName[] = L"FushiLookupHoverHighlight";
+constexpr wchar_t kHoverHighlightClassName[] = L"MyComicLookupHoverHighlight";
 
 LRESULT CALLBACK LookupHoverHighlightProc(HWND window, UINT message,
                                           WPARAM wparam, LPARAM lparam) {
@@ -617,22 +617,22 @@ LRESULT CALLBACK LookupOverlayProc(HWND window, UINT message, WPARAM wparam,
       if (mx == g_overlay.last_move_x && my == g_overlay.last_move_y) return 0;
       g_overlay.last_move_x = mx;
       g_overlay.last_move_y = my;
-      QueueOverlayInput(fushi_voice_hook::kLookupInputMove, mx, my, 0,
+      QueueOverlayInput(my_comic_voice_hook::kLookupInputMove, mx, my, 0,
                         OverlayModifierKeys());
       return 0;
     }
     case WM_MOUSELEAVE:
       g_overlay.tracking_mouse = false;
-      QueueOverlayInput(fushi_voice_hook::kLookupInputLeave, 0, 0, 0, 0);
+      QueueOverlayInput(my_comic_voice_hook::kLookupInputLeave, 0, 0, 0, 0);
       return 0;
     case WM_LBUTTONDOWN:
-      QueueOverlayInput(fushi_voice_hook::kLookupInputLeftDown,
+      QueueOverlayInput(my_comic_voice_hook::kLookupInputLeftDown,
                         GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam), 0,
                         OverlayModifierKeys() |
-                            fushi_voice_hook::kLookupInputVirtualKeyLeftButton);
+                            my_comic_voice_hook::kLookupInputVirtualKeyLeftButton);
       return 0;
     case WM_LBUTTONUP:
-      QueueOverlayInput(fushi_voice_hook::kLookupInputLeftUp,
+      QueueOverlayInput(my_comic_voice_hook::kLookupInputLeftUp,
                         GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam), 0,
                         OverlayModifierKeys());
       return 0;
@@ -641,9 +641,9 @@ LRESULT CALLBACK LookupOverlayProc(HWND window, UINT message, WPARAM wparam,
       POINT point = {GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)};
       int32_t local_x = 0;
       int32_t local_y = 0;
-      fushi_voice_hook::ScreenPointToCardLocal(g_overlay.card, point.x, point.y,
+      my_comic_voice_hook::ScreenPointToCardLocal(g_overlay.card, point.x, point.y,
                                                &local_x, &local_y);
-      QueueOverlayInput(fushi_voice_hook::kLookupInputWheel, local_x, local_y,
+      QueueOverlayInput(my_comic_voice_hook::kLookupInputWheel, local_x, local_y,
                         GET_WHEEL_DELTA_WPARAM(wparam), OverlayModifierKeys());
       return 0;
     }
@@ -663,7 +663,7 @@ DWORD WINAPI LookupOverlayThread(LPVOID) {
   wc.cbSize = sizeof(wc);
   wc.lpfnWndProc = &LookupOverlayProc;
   wc.hInstance = g_module;
-  wc.lpszClassName = L"FushiLookupOverlay";
+  wc.lpszClassName = L"MyComicLookupOverlay";
   wc.hCursor = LoadCursorW(nullptr, IDC_ARROW);
   if (RegisterClassExW(&wc) == 0 && GetLastError() != ERROR_CLASS_ALREADY_EXISTS) {
     return 0;

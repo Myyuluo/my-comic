@@ -42,7 +42,7 @@ $include = (Join-Path $angle 'include').Replace('\', '/')
 Run 'meson' @('setup', $build, $source, '--buildtype=release', '-Dlibmpv=true',
   '-Dcplayer=false', '-Dlibbluray=enabled', '-Dlua=luajit', '-Djavascript=disabled',
   '-Dtests=true', '-Degl-angle=enabled', "-Dc_args=-I$include")
-Push-Location (Join-Path $repoRoot 'fushi')
+Push-Location (Join-Path $repoRoot 'my_comic')
 try { Run 'dart' @('tool/heavy.dart', '--', 'ninja', '-C', $build, '-j', "$Jobs") }
 finally { Pop-Location }
 Run $python @((Join-Path $PSScriptRoot 'package_libmpv.py'), '--build', $build,

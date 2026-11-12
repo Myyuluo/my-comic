@@ -17,7 +17,7 @@ namespace {
 std::wstring MakeTempRoot(const wchar_t* tag) {
   wchar_t temp[MAX_PATH] = {0};
   assert(GetTempPathW(MAX_PATH, temp) != 0);
-  std::wstring root = std::wstring(temp) + L"fushi_cmvs_test_" + tag + L"_" +
+  std::wstring root = std::wstring(temp) + L"my_comic_cmvs_test_" + tag + L"_" +
                       std::to_wstring(GetCurrentProcessId());
   assert(CreateDirectoryW(root.c_str(), nullptr) || GetLastError() == ERROR_ALREADY_EXISTS);
   return root;
@@ -63,9 +63,9 @@ int main() {
     WriteBytes(root + L"\\cmvs.cfg", kConfig, sizeof(kConfig) - 1);
     WriteBytes(root + L"\\data\\pack\\script.cpz", kNotCpz, sizeof(kNotCpz) - 1);
     WriteBytes(root + L"\\data\\pack\\voice.cpz", kCpz6, sizeof(kCpz6) - 1);
-    assert(fushi_voice_hook::CmvsConfigPresent(root));
-    assert(fushi_voice_hook::CmvsPackArchivePresent(root));
-    assert(fushi_voice_hook::MatchesCmvsLayout(root));
+    assert(my_comic_voice_hook::CmvsConfigPresent(root));
+    assert(my_comic_voice_hook::CmvsPackArchivePresent(root));
+    assert(my_comic_voice_hook::MatchesCmvsLayout(root));
     RemoveTree(root);
   }
   // 2. 只有 cfg，没有归档 → 不匹配（fail closed）。
@@ -73,7 +73,7 @@ int main() {
     const std::wstring root = MakeTempRoot(L"cfg_only");
     MakePackDir(root);
     WriteBytes(root + L"\\cmvs.cfg", kConfig, sizeof(kConfig) - 1);
-    assert(!fushi_voice_hook::MatchesCmvsLayout(root));
+    assert(!my_comic_voice_hook::MatchesCmvsLayout(root));
     RemoveTree(root);
   }
   // 3. .cpz 后缀但魔数不是 CPZ → 不匹配。
@@ -82,8 +82,8 @@ int main() {
     MakePackDir(root);
     WriteBytes(root + L"\\cmvs.cfg", kConfig, sizeof(kConfig) - 1);
     WriteBytes(root + L"\\data\\pack\\voice.cpz", kNotCpz, sizeof(kNotCpz) - 1);
-    assert(!fushi_voice_hook::CmvsPackArchivePresent(root));
-    assert(!fushi_voice_hook::MatchesCmvsLayout(root));
+    assert(!my_comic_voice_hook::CmvsPackArchivePresent(root));
+    assert(!my_comic_voice_hook::MatchesCmvsLayout(root));
     RemoveTree(root);
   }
   // 4. cfg 节名不是 CMVS 的 → 不匹配。
@@ -92,12 +92,12 @@ int main() {
     MakePackDir(root);
     WriteBytes(root + L"\\cmvs.cfg", kOtherConfig, sizeof(kOtherConfig) - 1);
     WriteBytes(root + L"\\data\\pack\\voice.cpz", kCpz6, sizeof(kCpz6) - 1);
-    assert(!fushi_voice_hook::CmvsConfigPresent(root));
-    assert(!fushi_voice_hook::MatchesCmvsLayout(root));
+    assert(!my_comic_voice_hook::CmvsConfigPresent(root));
+    assert(!my_comic_voice_hook::MatchesCmvsLayout(root));
     RemoveTree(root);
   }
   // 5. 测试进程自己的目录不是 CMVS 游戏 → 进程级探测为假。
-  assert(!fushi_voice_hook::MatchesCmvsProfile(nullptr));
+  assert(!my_comic_voice_hook::MatchesCmvsProfile(nullptr));
   std::printf("cmvs_adapter_test: ok\n");
   return 0;
 }

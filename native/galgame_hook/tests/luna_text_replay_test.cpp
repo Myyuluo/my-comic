@@ -20,10 +20,10 @@ std::vector<std::string> Split(const std::string& value) {
 
 int main(int argc, char** argv) {
   {
-    if (!fushi_voice_hook::LunaTextRequiresExactThreadContext("typemoon") ||
-        fushi_voice_hook::LunaTextRequiresExactThreadContext("EmbedKrkrZ") ||
-        fushi_voice_hook::LunaTextRequiresExactThreadContext("SiglusEngine") ||
-        fushi_voice_hook::LunaTextRequiresExactThreadContext(nullptr)) {
+    if (!my_comic_voice_hook::LunaTextRequiresExactThreadContext("typemoon") ||
+        my_comic_voice_hook::LunaTextRequiresExactThreadContext("EmbedKrkrZ") ||
+        my_comic_voice_hook::LunaTextRequiresExactThreadContext("SiglusEngine") ||
+        my_comic_voice_hook::LunaTextRequiresExactThreadContext(nullptr)) {
       return 52;
     }
   }
@@ -32,20 +32,20 @@ int main(int argc, char** argv) {
         L"first\\nsecond\u00a5nthird\uffe5nfourth\\r\\nfifth%r"
         L"#ff8A00;\u30b3\u30b9\u30d7\u30ec%p-1;\u2500%p;\u2500";
     const std::wstring normalized =
-        fushi_voice_hook::LunaNormalizeMagesControls(
+        my_comic_voice_hook::LunaNormalizeMagesControls(
             escaped.c_str(), static_cast<int>(escaped.size()), true);
     if (normalized !=
         L"first\nsecond\nthird\nfourth\nfifth\n\u30b3\u30b9\u30d7\u30ec\u2500\u2500") {
       return 49;
     }
-    if (fushi_voice_hook::LunaNormalizeMagesControls(
+    if (my_comic_voice_hook::LunaNormalizeMagesControls(
             escaped.c_str(), static_cast<int>(escaped.size()), false) !=
         escaped) {
       return 50;
     }
     const std::wstring malformed =
         L"literal%text #ff8G00;kept #12345;kept %p-;kept";
-    if (fushi_voice_hook::LunaNormalizeMagesControls(
+    if (my_comic_voice_hook::LunaNormalizeMagesControls(
             malformed.c_str(), static_cast<int>(malformed.size()), true) !=
         malformed) {
       return 51;
@@ -53,7 +53,7 @@ int main(int argc, char** argv) {
   }
   // BUG-2705：EmbedKrkrZ 的「P P T」粘性尾巴（千恋＊万花光盘版原版：T = 当前循环音效标签）。
   {
-    using fushi_voice_hook::LunaPairedTailTracker;
+    using my_comic_voice_hook::LunaPairedTailTracker;
     const std::wstring tail = L"■自動車（車内／走行）";
     const std::wstring line1 = L"「あっ、はい。なんですか？」";
     const std::wstring line2 = L"「お客さんってば」";
@@ -149,7 +149,7 @@ int main(int argc, char** argv) {
   // CatSystem2 EmbedCS2: every message arrives twice on the same thread
   // 0.2–0.4 s apart (measured); only the immediate repeat is dropped.
   {
-    using fushi_voice_hook::LunaImmediateRepeatFilter;
+    using my_comic_voice_hook::LunaImmediateRepeatFilter;
     const std::wstring line = L"「性的なトラブルですね？」";
     const std::wstring name = L"幸";
     const std::wstring next = L"「う。挨拶すればいいってものじゃないのよ？」";
@@ -198,7 +198,7 @@ int main(int argc, char** argv) {
       L"\u3042\u308a\u304c\u3068\u3046\u3054\u3056\u3044\u307e\u3059\u3063\u300d";
   const std::wstring duplicated_line = single_line + single_line;
   const int normalized_length =
-      fushi_voice_hook::LunaNormalizedTextLengthForHook(
+      my_comic_voice_hook::LunaNormalizedTextLengthForHook(
           "EmbedKrkrZ", duplicated_line.c_str(),
           static_cast<int>(duplicated_line.size()));
   if (normalized_length != static_cast<int>(single_line.size()) ||
@@ -206,7 +206,7 @@ int main(int argc, char** argv) {
                    duplicated_line.c_str() + normalized_length) != single_line) {
     return 4;
   }
-  if (fushi_voice_hook::LunaTextIsArtifact(duplicated_line.c_str(),
+  if (my_comic_voice_hook::LunaTextIsArtifact(duplicated_line.c_str(),
                                              normalized_length)) {
     return 5;
   }
@@ -226,14 +226,14 @@ int main(int argc, char** argv) {
         previous_scene + previous_scene + rewind + rewind + quick_save +
         quick_save;
     const int typemoon_length =
-        fushi_voice_hook::LunaNormalizedTextLengthForHook(
+        my_comic_voice_hook::LunaNormalizedTextLengthForHook(
             "typemoon", paired_toolbar.c_str(),
             static_cast<int>(paired_toolbar.size()));
     if (typemoon_length != static_cast<int>(previous_scene.size()) ||
         std::wstring(paired_toolbar.c_str(),
                      paired_toolbar.c_str() + typemoon_length) !=
             previous_scene ||
-        fushi_voice_hook::LunaTextIsArtifact(paired_toolbar.c_str(),
+        my_comic_voice_hook::LunaTextIsArtifact(paired_toolbar.c_str(),
                                              typemoon_length)) {
       return 53;
     }
@@ -242,7 +242,7 @@ int main(int argc, char** argv) {
     // an unmatched tail, must remain intact.
     const std::wstring ordinary_dialogue =
         L"\u308f\u304b\u3063\u305f\u308f\u304b\u3063\u305f\u3001\u3067\u3082\u4eca\u306f\u623b\u308c\u306a\u3044\u3002";
-    if (fushi_voice_hook::LunaNormalizedTextLengthForHook(
+    if (my_comic_voice_hook::LunaNormalizedTextLengthForHook(
             "typemoon", ordinary_dialogue.c_str(),
             static_cast<int>(ordinary_dialogue.size())) !=
         static_cast<int>(ordinary_dialogue.size())) {
@@ -251,7 +251,7 @@ int main(int argc, char** argv) {
 
     // The fold remains hook-scoped.  Other engines keep an identical byte
     // shape verbatim, so the TYPEMOON fix cannot alter their previews/lanes.
-    if (fushi_voice_hook::LunaNormalizedTextLengthForHook(
+    if (my_comic_voice_hook::LunaNormalizedTextLengthForHook(
             "OtherEngine", paired_toolbar.c_str(),
             static_cast<int>(paired_toolbar.size())) !=
         static_cast<int>(paired_toolbar.size())) {
@@ -260,24 +260,24 @@ int main(int argc, char** argv) {
   }
 
   const int other_engine_length =
-      fushi_voice_hook::LunaNormalizedTextLengthForHook(
+      my_comic_voice_hook::LunaNormalizedTextLengthForHook(
           "OtherEngine", duplicated_line.c_str(),
           static_cast<int>(duplicated_line.size()));
   if (other_engine_length != static_cast<int>(duplicated_line.size()) ||
-      !fushi_voice_hook::LunaTextIsArtifact(duplicated_line.c_str(),
+      !my_comic_voice_hook::LunaTextIsArtifact(duplicated_line.c_str(),
                                              other_engine_length)) {
     return 6;
   }
 
   const std::wstring per_character_artifact = L"AABBCC";
   const int artifact_length =
-      fushi_voice_hook::LunaNormalizedTextLengthForHook(
+      my_comic_voice_hook::LunaNormalizedTextLengthForHook(
           "EmbedKrkrZ", per_character_artifact.c_str(),
           static_cast<int>(per_character_artifact.size()));
   if (artifact_length != static_cast<int>(per_character_artifact.size())) {
     return 7;
   }
-  if (!fushi_voice_hook::LunaTextIsArtifact(
+  if (!my_comic_voice_hook::LunaTextIsArtifact(
           per_character_artifact.c_str(), artifact_length)) {
     return 8;
   }
@@ -289,20 +289,20 @@ int main(int argc, char** argv) {
   const std::wstring dash_line = L"あーーーっ！\x2015\x2015\x2015\x2015";
   const std::wstring pause_only = L"\x2026\x2026\x2026\x2026";
   for (const std::wstring* clean : {&ellipsis_line, &dash_line, &pause_only}) {
-    if (fushi_voice_hook::LunaTextIsArtifact(
+    if (my_comic_voice_hook::LunaTextIsArtifact(
             clean->c_str(), static_cast<int>(clean->size()))) {
       return 91;
     }
   }
   std::wstring ellipsis_doubled;
   for (wchar_t c : ellipsis_line) ellipsis_doubled.append(2, c);
-  if (!fushi_voice_hook::LunaTextIsArtifact(
+  if (!my_comic_voice_hook::LunaTextIsArtifact(
           ellipsis_doubled.c_str(),
           static_cast<int>(ellipsis_doubled.size()))) {
     return 92;
   }
   const std::wstring ellipsis_whole_double = ellipsis_line + ellipsis_line;
-  if (!fushi_voice_hook::LunaTextIsArtifact(
+  if (!my_comic_voice_hook::LunaTextIsArtifact(
           ellipsis_whole_double.c_str(),
           static_cast<int>(ellipsis_whole_double.size()))) {
     return 93;
@@ -318,7 +318,7 @@ int main(int argc, char** argv) {
                                          ruby_variant + ruby_variant +
                                          single_line + single_line;
   const int ruby_normalized =
-      fushi_voice_hook::LunaNormalizedTextLengthForHook(
+      my_comic_voice_hook::LunaNormalizedTextLengthForHook(
           "EmbedKrkrZ", ruby_double_write.c_str(),
           static_cast<int>(ruby_double_write.size()));
   if (ruby_normalized != static_cast<int>(single_line.size()) ||
@@ -327,14 +327,14 @@ int main(int argc, char** argv) {
     return 21;
   }
   // 折叠只对 EmbedKrkrZ 生效，其它引擎的同形串必须原样保留。
-  if (fushi_voice_hook::LunaNormalizedTextLengthForHook(
+  if (my_comic_voice_hook::LunaNormalizedTextLengthForHook(
           "OtherEngine", ruby_double_write.c_str(),
           static_cast<int>(ruby_double_write.size())) !=
       static_cast<int>(ruby_double_write.size())) {
     return 22;
   }
   // 正常台词（无重复开头）绝不能被折叠。
-  if (fushi_voice_hook::LunaNormalizedTextLengthForHook(
+  if (my_comic_voice_hook::LunaNormalizedTextLengthForHook(
           "EmbedKrkrZ", single_line.c_str(),
           static_cast<int>(single_line.size())) !=
       static_cast<int>(single_line.size())) {
@@ -349,7 +349,7 @@ int main(int argc, char** argv) {
     const std::wstring doubled_prefix_line =
         L"\u308f\u304b\u3063\u305f\u308f\u304b\u3063\u305f"
         L"\u3001\u3082\u3046\u884c\u304f\u3088";
-    if (fushi_voice_hook::LunaNormalizedTextLengthForHook(
+    if (my_comic_voice_hook::LunaNormalizedTextLengthForHook(
             "EmbedKrkrZ", doubled_prefix_line.c_str(),
             static_cast<int>(doubled_prefix_line.size())) !=
         static_cast<int>(doubled_prefix_line.size())) {
@@ -359,7 +359,7 @@ int main(int argc, char** argv) {
     const std::wstring thanks_line =
         L"\u3042\u308a\u304c\u3068\u3046\u3042\u308a\u304c\u3068\u3046"
         L"\u3001\u672c\u5f53\u306b\u52a9\u304b\u3063\u305f";
-    if (fushi_voice_hook::LunaNormalizedTextLengthForHook(
+    if (my_comic_voice_hook::LunaNormalizedTextLengthForHook(
             "EmbedKrkrZ", thanks_line.c_str(),
             static_cast<int>(thanks_line.size())) !=
         static_cast<int>(thanks_line.size())) {
@@ -367,7 +367,7 @@ int main(int argc, char** argv) {
     }
     // 正向：真正的整串双写仍必须能折（否则 EmbedKrkrZ 原症状回来）。
     const std::wstring folded_prefix = doubled_prefix_line + doubled_prefix_line;
-    if (fushi_voice_hook::LunaNormalizedTextLengthForHook(
+    if (my_comic_voice_hook::LunaNormalizedTextLengthForHook(
             "EmbedKrkrZ", folded_prefix.c_str(),
             static_cast<int>(folded_prefix.size())) !=
         static_cast<int>(doubled_prefix_line.size())) {
@@ -386,11 +386,11 @@ int main(int argc, char** argv) {
     const wchar_t* krkr_code = L"HB0@4A1C30:krkr.exe";
     const char* krkr_name = "EmbedKrkrZ";
     const uint64_t krkr_addr = 0x4a1c30ull;
-    const uint64_t selected_thread = fushi_voice_hook::LunaTextThreadIdFrom(
+    const uint64_t selected_thread = my_comic_voice_hook::LunaTextThreadIdFrom(
         pid, krkr_addr, 0x18ff20ull, 0, krkr_code, krkr_name);
-    const uint64_t sibling_thread = fushi_voice_hook::LunaTextThreadIdFrom(
+    const uint64_t sibling_thread = my_comic_voice_hook::LunaTextThreadIdFrom(
         pid, krkr_addr, 0x18fe40ull, 0, krkr_code, krkr_name);
-    const uint64_t krkr_face = fushi_voice_hook::LunaTextFaceIdFrom(
+    const uint64_t krkr_face = my_comic_voice_hook::LunaTextFaceIdFrom(
         pid, krkr_addr, 0, krkr_code, krkr_name);
     if (selected_thread == sibling_thread) return 32;
 
@@ -398,26 +398,26 @@ int main(int argc, char** argv) {
     const wchar_t* siglus_code = L"HSN4@77A0:SiglusEngine.exe";
     const char* siglus_name = "SiglusEngine";
     const uint64_t siglus_addr = 0x77a0ull;
-    const uint64_t siglus_thread = fushi_voice_hook::LunaTextThreadIdFrom(
+    const uint64_t siglus_thread = my_comic_voice_hook::LunaTextThreadIdFrom(
         pid, siglus_addr, 0x18ff20ull, 0, siglus_code, siglus_name);
-    const uint64_t siglus_face = fushi_voice_hook::LunaTextFaceIdFrom(
+    const uint64_t siglus_face = my_comic_voice_hook::LunaTextFaceIdFrom(
         pid, siglus_addr, 0, siglus_code, siglus_name);
     if (krkr_face == siglus_face) return 33;
 
     // 同一 addr 上的 split H 码：ctx2 是引擎声明的语义分类（角色名 vs 正文），
     // 必须继续分面，否则角色名会混进正文流。
     const wchar_t* split_code = L"HBN8*0@4A1C30:krkr.exe";
-    const uint64_t split_body_face = fushi_voice_hook::LunaTextFaceIdFrom(
+    const uint64_t split_body_face = my_comic_voice_hook::LunaTextFaceIdFrom(
         pid, krkr_addr, 0x1ull, split_code, krkr_name);
-    const uint64_t split_name_face = fushi_voice_hook::LunaTextFaceIdFrom(
+    const uint64_t split_name_face = my_comic_voice_hook::LunaTextFaceIdFrom(
         pid, krkr_addr, 0x2ull, split_code, krkr_name);
     if (split_body_face == split_name_face) return 34;
-    const uint64_t split_body_thread = fushi_voice_hook::LunaTextThreadIdFrom(
+    const uint64_t split_body_thread = my_comic_voice_hook::LunaTextThreadIdFrom(
         pid, krkr_addr, 0x18ff20ull, 0x1ull, split_code, krkr_name);
-    const uint64_t split_name_thread = fushi_voice_hook::LunaTextThreadIdFrom(
+    const uint64_t split_name_thread = my_comic_voice_hook::LunaTextThreadIdFrom(
         pid, krkr_addr, 0x18fe40ull, 0x2ull, split_code, krkr_name);
 
-    fushi_voice_hook::LunaTextSelector face_selector;
+    my_comic_voice_hook::LunaTextSelector face_selector;
     if (!face_selector.AcceptsLine(selected_thread, false, selected_thread,
                                    krkr_face)) {
       return 35;  // 选定线程自己当然要放行
@@ -432,7 +432,7 @@ int main(int argc, char** argv) {
       return 37;
     }
     // split H 码负向：同 addr、同 hookcode，仅 ctx2 不同（角色名）→ 必须挡掉。
-    fushi_voice_hook::LunaTextSelector split_selector;
+    my_comic_voice_hook::LunaTextSelector split_selector;
     if (!split_selector.AcceptsLine(split_body_thread, false, split_body_thread,
                                     split_body_face)) {
       return 38;
@@ -448,7 +448,7 @@ int main(int argc, char** argv) {
   }
   {
     // face 未知（调用方给 0）时退回精确 thread_id 匹配，与旧实现语义一致。
-    fushi_voice_hook::LunaTextSelector legacy_selector;
+    my_comic_voice_hook::LunaTextSelector legacy_selector;
     if (legacy_selector.AcceptsLine(1002, false, 1001, 0)) {
       return 41;
     }
@@ -456,7 +456,7 @@ int main(int argc, char** argv) {
   {
     // BUG-1159 跨会话恢复路径：未选择阶段的行不进文本环，只靠 NoteFace 单独登记。
     // 只要选定线程本会话出过预览行，即使它一行都没通过准入判定，兄弟线程也必须能被认回。
-    fushi_voice_hook::LunaTextSelector restore_selector;
+    my_comic_voice_hook::LunaTextSelector restore_selector;
     const uint64_t remembered = 5001, sibling = 5002, face = 909;
     restore_selector.NoteFace(remembered, face);
     if (restore_selector.FaceOf(remembered) != face) return 42;
@@ -471,7 +471,7 @@ int main(int argc, char** argv) {
     // BUG-1193 / v12 核心：**没有显式选择就一行都不发布**，无论这行多干净、也无论
     // 之前那条 hook 表现多好。旧实现在这里会自动锁定赢家并放行，正是它把用户锁死在
     // 猜错的线程上。这条是防"自动选线程"以任何形式悄悄回归的守卫。
-    fushi_voice_hook::LunaTextSelector no_auto;
+    my_comic_voice_hook::LunaTextSelector no_auto;
     for (int i = 0; i < 16; ++i) {
       // 反复喂同一条线程的干净行——旧实现累计到阈值就会 primed 并放行。
       if (no_auto.AcceptsLine(7001, false, 0, 4242)) return 45;
@@ -486,7 +486,7 @@ int main(int argc, char** argv) {
 
   std::ifstream input(argv[1]);
   if (!input) return 2;
-  fushi_voice_hook::LunaTextSelector selector;
+  my_comic_voice_hook::LunaTextSelector selector;
   std::string line;
   int row = 0;
   while (std::getline(input, line)) {
@@ -499,7 +499,7 @@ int main(int argc, char** argv) {
     const std::wstring text(fields[2].begin(), fields[2].end());
     const bool actual = selector.AcceptsLine(
         std::stoull(fields[0]),
-        fushi_voice_hook::LunaTextIsArtifact(text.c_str(),
+        my_comic_voice_hook::LunaTextIsArtifact(text.c_str(),
                                                static_cast<int>(text.size())),
         std::stoull(fields[1]));
     if (actual != (fields[3] == "1")) return 100 + row;

@@ -15,20 +15,20 @@
 // 打印查词区的真实状态——传感器装没装、几何是从哪条采集面来的、有没有真上报过命中、命中的
 // 整行台词与字形矩形是什么。
 //
-// 为什么需要它：`lookup_enabled` 是 host 运行期开关，平时只有 Fushi 会置 1。要验证注入侧的
+// 为什么需要它：`lookup_enabled` 是 host 运行期开关，平时只有 MyComic 会置 1。要验证注入侧的
 // 传感器，不该被迫先跑通整个 app UI——那样一旦不出卡片，「传感器没装」和「host 没投帧」在
 // 现象上完全同形，真机上分不开。本工具把注入侧单独拎出来验，责任边界一刀切开。
 //
 // 只写 `lookup_enabled` 一个字段（host→hook 的开关，契约里本就归 host 写），其余全部只读：
 // 不注入、不投帧、不碰位图区。命名文件映射跨 32/64 位可读写，故 x64 工具能验 32 位游戏。
 //
-// 用法：fushi_voice_lookup_probe <pid> [轮数=60] [间隔ms=500] [--no-enable]
+// 用法：my_comic_voice_lookup_probe <pid> [轮数=60] [间隔ms=500] [--no-enable]
 namespace {
 
-using fushi_voice_hook::kSharedMagic;
-using fushi_voice_hook::kSharedVersion;
-using fushi_voice_hook::SharedHeader;
-using fushi_voice_hook::SharedMemoryName;
+using my_comic_voice_hook::kSharedMagic;
+using my_comic_voice_hook::kSharedVersion;
+using my_comic_voice_hook::SharedHeader;
+using my_comic_voice_hook::SharedMemoryName;
 
 struct DiagBit {
   uint32_t mask;
@@ -38,38 +38,38 @@ struct DiagBit {
 // 与 include/voice_hook_ipc.h 的 kLookupDiag* 一一对应。手拆十六进制是 SOP 明令禁止的，
 // 这张表就是符号化解释。
 const DiagBit kDiagBits[] = {
-    {fushi_voice_hook::kLookupDiagSensorInstalled, "sensor_installed"},
-    {fushi_voice_hook::kLookupDiagGeometryObserved, "geometry_observed"},
-    {fushi_voice_hook::kLookupDiagHitSubmitted, "hit_submitted"},
-    {fushi_voice_hook::kLookupDiagBufferRouteReady, "buffer_route_ready"},
-    {fushi_voice_hook::kLookupDiagFallbackPngRoute, "fallback_png_route"},
-    {fushi_voice_hook::kLookupDiagFramePresented, "frame_presented"},
-    {fushi_voice_hook::kLookupDiagExpressionReady, "expression_ready"},
-    {fushi_voice_hook::kLookupDiagFrameRejected, "frame_rejected"},
-    {fushi_voice_hook::kLookupDiagClassicTextSource, "classic_patch_installed"},
-    {fushi_voice_hook::kLookupDiagClassicGeometry, "classic_geometry_captured"},
-    {fushi_voice_hook::kLookupDiagClassicProcessCh, "classic_processch_fired"},
-    {fushi_voice_hook::kLookupDiagLunaKnownHookReady,
+    {my_comic_voice_hook::kLookupDiagSensorInstalled, "sensor_installed"},
+    {my_comic_voice_hook::kLookupDiagGeometryObserved, "geometry_observed"},
+    {my_comic_voice_hook::kLookupDiagHitSubmitted, "hit_submitted"},
+    {my_comic_voice_hook::kLookupDiagBufferRouteReady, "buffer_route_ready"},
+    {my_comic_voice_hook::kLookupDiagFallbackPngRoute, "fallback_png_route"},
+    {my_comic_voice_hook::kLookupDiagFramePresented, "frame_presented"},
+    {my_comic_voice_hook::kLookupDiagExpressionReady, "expression_ready"},
+    {my_comic_voice_hook::kLookupDiagFrameRejected, "frame_rejected"},
+    {my_comic_voice_hook::kLookupDiagClassicTextSource, "classic_patch_installed"},
+    {my_comic_voice_hook::kLookupDiagClassicGeometry, "classic_geometry_captured"},
+    {my_comic_voice_hook::kLookupDiagClassicProcessCh, "classic_processch_fired"},
+    {my_comic_voice_hook::kLookupDiagLunaKnownHookReady,
      "luna_known_hook_ready"},
-    {fushi_voice_hook::kLookupDiagSampledInputShieldReady,
+    {my_comic_voice_hook::kLookupDiagSampledInputShieldReady,
      "sampled_input_shield_ready"},
-    {fushi_voice_hook::kLookupDiagSiglusProfileMatched,
+    {my_comic_voice_hook::kLookupDiagSiglusProfileMatched,
      "siglus_profile_matched"},
-    {fushi_voice_hook::kLookupDiagSiglusGlyphHookReady,
+    {my_comic_voice_hook::kLookupDiagSiglusGlyphHookReady,
      "siglus_glyph_hook_ready"},
-    {fushi_voice_hook::kLookupDiagSiglusGetKeyStateHookReady,
+    {my_comic_voice_hook::kLookupDiagSiglusGetKeyStateHookReady,
      "siglus_get_key_state_hook_ready"},
-    {fushi_voice_hook::kLookupDiagSiglusGlyphObserved,
+    {my_comic_voice_hook::kLookupDiagSiglusGlyphObserved,
      "siglus_glyph_observed"},
-    {fushi_voice_hook::kLookupDiagSiglusGetKeyStateObserved,
+    {my_comic_voice_hook::kLookupDiagSiglusGetKeyStateObserved,
      "siglus_get_key_state_observed"},
-    {fushi_voice_hook::kLookupDiagSiglusProfileChecked,
+    {my_comic_voice_hook::kLookupDiagSiglusProfileChecked,
      "siglus_profile_checked"},
-    {fushi_voice_hook::kLookupDiagSiglusExecutableRead,
+    {my_comic_voice_hook::kLookupDiagSiglusExecutableRead,
      "siglus_executable_read"},
-    {fushi_voice_hook::kLookupDiagSiglusHashMatched,
+    {my_comic_voice_hook::kLookupDiagSiglusHashMatched,
      "siglus_hash_matched"},
-    {fushi_voice_hook::kLookupDiagSiglusMachineMatched,
+    {my_comic_voice_hook::kLookupDiagSiglusMachineMatched,
      "siglus_machine_matched"},
 };
 
@@ -86,12 +86,12 @@ void PrintDiag(uint32_t diag) {
 }
 
 // 命中槽里的整行台词是 UTF-8；控制台按 UTF-8 打印，调用方自行设置代码页。
-void PrintHit(const fushi_voice_hook::LookupHitSlot* hit) {
+void PrintHit(const my_comic_voice_hook::LookupHitSlot* hit) {
   if (hit == nullptr) return;
   const uint32_t bytes =
-      hit->line_bytes <= fushi_voice_hook::kLookupLineBytes
+      hit->line_bytes <= my_comic_voice_hook::kLookupLineBytes
           ? hit->line_bytes
-          : fushi_voice_hook::kLookupLineBytes;
+          : my_comic_voice_hook::kLookupLineBytes;
   std::string line(reinterpret_cast<const char*>(hit->line_utf8), bytes);
   std::printf(
       "  hit seq=%llu provider=%u/%u source=[%u,+%u]/%u "
@@ -136,9 +136,9 @@ bool PresentTestFrame(SharedHeader* header, int32_t anchor_x, int32_t anchor_y,
           0, 0)) +
       1u;
   const uint32_t index = static_cast<uint32_t>(publish_seq % frame_count);
-  fushi_voice_hook::LookupFrame* frame =
-      fushi_voice_hook::LookupFrameAt(header, index);
-  uint8_t* dst = fushi_voice_hook::LookupBitmapAt(header, index);
+  my_comic_voice_hook::LookupFrame* frame =
+      my_comic_voice_hook::LookupFrameAt(header, index);
+  uint8_t* dst = my_comic_voice_hook::LookupBitmapAt(header, index);
   if (frame == nullptr || dst == nullptr) return false;
 
   // 图案刻意做成一眼可辨且不可能被别的东西碰巧画出来：品红不透明边框 + 半透明青色
@@ -175,7 +175,7 @@ bool PresentTestFrame(SharedHeader* header, int32_t anchor_x, int32_t anchor_y,
   frame->flags = 0;
   frame->reserved = 0;
   frame->reserved2 = 0;
-  if (!fushi_voice_hook::IsLookupFrameSane(header, frame)) {
+  if (!my_comic_voice_hook::IsLookupFrameSane(header, frame)) {
     std::fprintf(stderr, "staged test frame failed IsLookupFrameSane\n");
     return false;
   }
@@ -197,7 +197,7 @@ bool PresentTestFrame(SharedHeader* header, int32_t anchor_x, int32_t anchor_y,
 int main(int argc, char** argv) {
   if (argc < 2) {
     std::fprintf(stderr,
-                 "usage: fushi_voice_lookup_probe <pid> [rounds] [interval_ms] "
+                 "usage: my_comic_voice_lookup_probe <pid> [rounds] [interval_ms] "
                  "[--no-enable]\n");
     return 2;
   }
@@ -236,7 +236,7 @@ int main(int argc, char** argv) {
   }
   std::printf("shm=%ls version=%u (tool built against %u)\n", shm.c_str(),
               header->version, kSharedVersion);
-  if (!fushi_voice_hook::HasLookupRegion(header)) {
+  if (!my_comic_voice_hook::HasLookupRegion(header)) {
     std::fprintf(stderr,
                  "no lookup region in this session (offset=%u frames=%u "
                  "slots=%u)\n",
@@ -254,8 +254,8 @@ int main(int argc, char** argv) {
     PresentTestFrame(header, 40, 40, 480, 200);
   }
 
-  const fushi_voice_hook::LookupHitSlot* hit =
-      fushi_voice_hook::LookupHitOf(header);
+  const my_comic_voice_hook::LookupHitSlot* hit =
+      my_comic_voice_hook::LookupHitOf(header);
   uint64_t last_hit_seq = 0;
   for (int round = 0; round < rounds; ++round) {
     // applied 是**截图抑制的回执**（lookup_frame_applied_seq）。制卡要先让注入侧藏卡

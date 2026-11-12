@@ -4,7 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 struct DirectSoundPcmFormat {
   uint32_t sample_rate = 0;
@@ -147,4 +147,4 @@ class DirectSoundFormatRegistry {
   Slot slots_[Capacity];
 };
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

@@ -10,7 +10,7 @@ runtime and used only for API Authorization headers.
 
 Usage:
     GITHUB_TOKEN=... python tool/gen_star_history_svg.py \
-        --repo hajisensai/Fushi --out docs/assets/star-history.svg
+        --repo Myyuluo/my-comic --out docs/assets/star-history.svg
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ def _request(url: str, token: str) -> Tuple[list, Dict[str, str]]:
     req = urllib.request.Request(url)
     req.add_header("Accept", "application/vnd.github.star+json")
     req.add_header("X-GitHub-Api-Version", "2022-11-28")
-    req.add_header("User-Agent", "fushi-star-history")
+    req.add_header("User-Agent", "mycomic-star-history")
     if token:
         req.add_header("Authorization", f"Bearer {token}")
     with urllib.request.urlopen(req, timeout=30) as resp:
@@ -257,8 +257,8 @@ def main(argv: List[str]) -> int:
     parser = argparse.ArgumentParser(description="Generate a star-history SVG.")
     parser.add_argument(
         "--repo",
-        default=os.environ.get("STAR_HISTORY_REPO", "hajisensai/Fushi"),
-        help="owner/name of the repository (default: hajisensai/Fushi)",
+        default=os.environ.get("STAR_HISTORY_REPO", "Myyuluo/my-comic"),
+        help="owner/name of the repository (default: Myyuluo/my-comic)",
     )
     parser.add_argument(
         "--out",

@@ -1,10 +1,10 @@
-#ifndef FUSHI_LAUNCH_COMMAND_LINE_H_
-#define FUSHI_LAUNCH_COMMAND_LINE_H_
+#ifndef MYCOMIC_LAUNCH_COMMAND_LINE_H_
+#define MYCOMIC_LAUNCH_COMMAND_LINE_H_
 
 #include <string>
 #include <vector>
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 // `CreateProcessW` 的 lpCommandLine 是**一个字符串**，子进程用 `CommandLineToArgvW`
 // （以及等价的 MSVCRT 启动代码）反解成 argv。因此 host 侧的「一个参数」要原样到达
@@ -68,6 +68,6 @@ inline std::wstring BuildLaunchCommandLine(
   return command_line;
 }
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook
 
-#endif  // FUSHI_LAUNCH_COMMAND_LINE_H_
+#endif  // MYCOMIC_LAUNCH_COMMAND_LINE_H_

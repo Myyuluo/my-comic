@@ -2,7 +2,7 @@
 
 #include "siglus_legacy_glyph_sites.h"
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 struct SiglusLegacyMessageProfile {
   uintptr_t message_entry_rva = 0;
@@ -133,4 +133,4 @@ inline bool ResolveSiglusLegacyMessageProfile(
   out->script_voice_flag_offset = 0x1a4;
   return true;
 }
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

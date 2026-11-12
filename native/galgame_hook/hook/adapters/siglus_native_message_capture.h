@@ -2,7 +2,7 @@
 
 #include "siglus_message_capture.h"
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 // Layout of pushad after pushfd, before the observer modifies any register.
 // pushad's saved ESP points to the saved flags, four bytes below entry ESP.
@@ -92,12 +92,12 @@ bool ConsumeSiglusNativeMessageTicket(
   // stack address, key or text. Only the later committed TextSlot supplies its ID.
   return true;
 }
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook
 
 #if defined(_MSC_VER) && defined(_M_IX86)
 // observer is __stdcall(const SiglusNativeMessageSavedRegisters*). The pointer
 // is callback-scoped; copy bounded scalars only. The trampoline alone owns ret.
-#define FUSHI_SIGLUS_NATIVE_MESSAGE_THUNK(name, observer, original) \
+#define MYCOMIC_SIGLUS_NATIVE_MESSAGE_THUNK(name, observer, original) \
   __declspec(naked) void name() {                                 \
     __asm { pushfd }                                              \
     __asm { pushad }                                              \

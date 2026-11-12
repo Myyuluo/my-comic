@@ -41,9 +41,9 @@
 
 #include "unity_mono_lookup_core.h"
 
-namespace fushi_voice_hook::unity_mono_audio {
+namespace my_comic_voice_hook::unity_mono_audio {
 
-namespace ul = fushi_voice_hook::unity_mono_lookup;
+namespace ul = my_comic_voice_hook::unity_mono_lookup;
 
 inline constexpr int kMonoTypeU8 = 0x0b;
 inline constexpr int kMonoTypeR8 = 0x0d;
@@ -226,4 +226,4 @@ inline bool IsDuplicatePlayback(RecentClip* recent, const wchar_t* name,
   return duplicate;
 }
 
-}  // namespace fushi_voice_hook::unity_mono_audio
+}  // namespace my_comic_voice_hook::unity_mono_audio

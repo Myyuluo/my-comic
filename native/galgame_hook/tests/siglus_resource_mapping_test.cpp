@@ -10,8 +10,8 @@
 #include <vector>
 
 namespace {
-using namespace fushi_voice_hook;
-using namespace fushi_voice_hook::siglus_resource;
+using namespace my_comic_voice_hook;
+using namespace my_comic_voice_hook::siglus_resource;
 struct Image {
   uint8_t *bytes = static_cast<uint8_t *>(VirtualAlloc(
       nullptr, 0x20000u, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE));

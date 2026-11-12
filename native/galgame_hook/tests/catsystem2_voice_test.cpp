@@ -13,8 +13,8 @@
 
 #include "catsystem2_voice_core.h"
 
-namespace voice = fushi_voice_hook::catsystem2_voice;
-namespace exact = fushi_voice_hook::exact_lookup;
+namespace voice = my_comic_voice_hook::catsystem2_voice;
+namespace exact = my_comic_voice_hook::exact_lookup;
 
 namespace {
 

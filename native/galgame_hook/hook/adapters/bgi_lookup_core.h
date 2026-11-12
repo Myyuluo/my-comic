@@ -53,9 +53,9 @@
 #include "exact_lookup_signature.h"
 #include "../lookup_line_text_match.h"
 
-namespace fushi_voice_hook::bgi_lookup {
+namespace my_comic_voice_hook::bgi_lookup {
 
-namespace exact = fushi_voice_hook::exact_lookup;
+namespace exact = my_comic_voice_hook::exact_lookup;
 
 // ── engine record layout (both generations) ────────────────────────────────
 
@@ -1203,4 +1203,4 @@ inline uint64_t LaneIdentity(uint32_t owner_vtable_rva, int32_t x, int32_t y) {
          static_cast<uint64_t>(static_cast<uint16_t>(y));
 }
 
-}  // namespace fushi_voice_hook::bgi_lookup
+}  // namespace my_comic_voice_hook::bgi_lookup

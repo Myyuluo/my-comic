@@ -2,7 +2,7 @@ using System.Diagnostics;
 using AssetsTools.NET;
 using AssetsTools.NET.Extra;
 
-namespace Fushi.UnityAudioExtract;
+namespace MyComic.UnityAudioExtract;
 
 internal static class Program
 {
@@ -21,7 +21,7 @@ internal static class Program
             Options options = Parse(args);
             string rawPath = Path.Combine(
                 Path.GetTempPath(),
-                $"fushi_unity_{Environment.ProcessId}_{Guid.NewGuid():N}.fsb");
+                $"my_comic_unity_{Environment.ProcessId}_{Guid.NewGuid():N}.fsb");
             try
             {
                 ExtractRawClip(options, rawPath);

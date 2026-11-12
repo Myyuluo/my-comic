@@ -1,7 +1,7 @@
 #pragma once
 #include "siglus_autoprofile.h"
 
-namespace fushi_voice_hook::siglus_eightarg_input_viewport {
+namespace my_comic_voice_hook::siglus_eightarg_input_viewport {
 namespace ex = exact_lookup;
 namespace family = siglus_family;
 // Structural sites only. Named USER32 imports must be independently verified
@@ -608,4 +608,4 @@ inline bool Resolve(const ex::LoadedPeImage& image, const Imports& imports,
              Message, Handler, Handler + 0x1c, vtable, scene};
   return true;
 }
-}  // namespace fushi_voice_hook::siglus_eightarg_input_viewport
+}  // namespace my_comic_voice_hook::siglus_eightarg_input_viewport

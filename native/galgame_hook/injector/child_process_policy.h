@@ -4,7 +4,7 @@
 #include <cwchar>
 #include <vector>
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 struct ProcessIdentity {
   uint32_t pid = 0;
@@ -155,4 +155,4 @@ inline uint32_t SelectGameChildProcess(
   return best_pid;
 }
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

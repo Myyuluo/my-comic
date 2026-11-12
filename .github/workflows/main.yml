@@ -12,7 +12,7 @@ on:
     # 路径清单 = 本 workflow 真正读到的输入。main app / workspace 包 / 原生桥 /
     # CI 补丁 / vendored 依赖 / 发布脚本与 workflow 守卫都覆盖。
     paths:
-      - 'fushi/**'
+      - 'my_comic/**'
       - 'packages/**'
       - 'native/**'
       - 'ci/**'
@@ -57,7 +57,7 @@ jobs:
           tmdb-api-key: ${{ secrets.TMDB_API_KEY }}
           opensubtitles-api-key: ${{ secrets.OPENSUBTITLES_API_KEY }}
       - name: Flutter pub get
-        working-directory: fushi
+        working-directory: my_comic
         run: flutter pub get --enforce-lockfile
       - name: Apply pub cache patches
         run: |
@@ -67,19 +67,19 @@ jobs:
       # analyze/test (ticket 06; the release/golden/debug-build workflows do
       # the same, and script/build_and_run.ps1 regenerates on every build).
       - name: Generate l10n
-        working-directory: fushi
+        working-directory: my_comic
         run: dart run slang
       - name: Run dart analyze
-        working-directory: fushi
+        working-directory: my_comic
         run: flutter analyze
       - name: Run package tests
         shell: bash
         run: |
           # 扫描面按磁盘枚举，不写死包清单。
           #   * vendored / fork / stub —— 上游产物，不归本仓测；
-          #   * fushi_torrent —— 测试要 dlopen 真 DLL，由 build-multiplatform.yml
+          #   * my_comic_torrent —— 测试要 dlopen 真 DLL，由 build-multiplatform.yml
           #     windows job 专门跑。
-          skip="flutter_inappwebview_windows gamepads_windows fushi_torrent"
+          skip="flutter_inappwebview_windows gamepads_windows my_comic_torrent"
           ran=0
           for pkg in packages/*/; do
             name=$(basename "$pkg")
@@ -88,7 +88,7 @@ jobs:
             esac
             if [ -d "$pkg/test" ]; then
               echo "::group::Testing $name"
-              (cd "$pkg" && dart ../../fushi/tool/flutter_test_failures.dart --output-dir=../../.codex-test/flutter-test/$name)
+              (cd "$pkg" && dart ../../my_comic/tool/flutter_test_failures.dart --output-dir=../../.codex-test/flutter-test/$name)
               echo "::endgroup::"
               ran=$((ran + 1))
             else
@@ -129,17 +129,17 @@ jobs:
           tmdb-api-key: ${{ secrets.TMDB_API_KEY }}
           opensubtitles-api-key: ${{ secrets.OPENSUBTITLES_API_KEY }}
       - name: Flutter pub get
-        working-directory: fushi
+        working-directory: my_comic
         run: flutter pub get --enforce-lockfile
       - name: Apply pub cache patches
         run: |
           chmod +x ci/apply-patches.sh
           bash ci/apply-patches.sh
       - name: Generate l10n
-        working-directory: fushi
+        working-directory: my_comic
         run: dart run slang
       # Golden image tests are excluded here and run in golden-tests.yml on the
       # Windows reference platform.
       - name: Run unit tests (main app, file shard ${{ matrix.shard }}/4)
-        working-directory: fushi
+        working-directory: my_comic
         run: dart run tool/flutter_test_failures.dart --file-shard=${{ matrix.shard }}/4 --exclude-tags golden

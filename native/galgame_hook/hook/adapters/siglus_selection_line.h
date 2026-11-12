@@ -6,7 +6,7 @@
 
 #include "siglus_lookup.h"
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 // Choice (selection) text never reaches the message-text hook: the engine lays
 // it out through its own caller of the shared glyph function, into the same
@@ -66,4 +66,4 @@ struct SiglusSelectionPassBuilder {
   }
 };
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

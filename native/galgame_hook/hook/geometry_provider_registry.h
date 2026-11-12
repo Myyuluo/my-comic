@@ -1,5 +1,5 @@
-#ifndef FUSHI_GALGAME_HOOK_GEOMETRY_PROVIDER_REGISTRY_H_
-#define FUSHI_GALGAME_HOOK_GEOMETRY_PROVIDER_REGISTRY_H_
+#ifndef MYCOMIC_GALGAME_HOOK_GEOMETRY_PROVIDER_REGISTRY_H_
+#define MYCOMIC_GALGAME_HOOK_GEOMETRY_PROVIDER_REGISTRY_H_
 
 #include <windows.h>
 
@@ -10,7 +10,7 @@
 
 #include "voice_hook_ipc.h"
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 // One complete lookup publication. Text identity and geometry travel together;
 // the registry never accepts either half independently.
@@ -844,6 +844,6 @@ class GeometryProviderRegistry {
 // declaration in dll_main.cpp while retaining one process-wide instance.
 inline GeometryProviderRegistry g_geometry_provider_registry;
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook
 
-#endif  // FUSHI_GALGAME_HOOK_GEOMETRY_PROVIDER_REGISTRY_H_
+#endif  // MYCOMIC_GALGAME_HOOK_GEOMETRY_PROVIDER_REGISTRY_H_

@@ -27,7 +27,7 @@ struct HunexGgeLookupModelInput {
   // Every logical_bounds rectangle in this projection must already be in game
   // client pixels.  The adapter owns the runtime-proved HUNEX viewport/scale
   // transform; this generic publication layer must not guess it.
-  const fushi_voice_hook::hunex_lookup_core::RubyTextProjection
+  const my_comic_voice_hook::hunex_lookup_core::RubyTextProjection
       *client_projection = nullptr;
 };
 
@@ -65,13 +65,13 @@ struct HunexGgeLookupRuntime {
     std::atomic<int32_t> client_height{0};
     std::atomic<uint32_t> text_units{0u};
     std::array<std::atomic<uint32_t>,
-               fushi_voice_hook::hunex_lookup_core::kTextCapacity>
+               my_comic_voice_hook::hunex_lookup_core::kTextCapacity>
         text = {};
     std::atomic<uint32_t> glyph_count{0u};
     std::array<std::atomic<uint32_t>,
-               fushi_voice_hook::hunex_lookup_core::kGlyphCapacity>
+               my_comic_voice_hook::hunex_lookup_core::kGlyphCapacity>
         glyph_raw_index = {};
-    std::array<AtomicGlyph, fushi_voice_hook::hunex_lookup_core::kGlyphCapacity>
+    std::array<AtomicGlyph, my_comic_voice_hook::hunex_lookup_core::kGlyphCapacity>
         glyphs = {};
   };
 
@@ -109,8 +109,8 @@ struct HunexGgeLookupRuntime {
   // same physical left-button bits. Once a lookup/popup press is owned, keep
   // those callers filtered until a neutral sample drains the transaction.
   std::atomic<uint8_t> sampled_input_latched_buttons{0u};
-  fushi_voice_hook::hunex_lookup_core::ClickSampleState click_state;
-  fushi_voice_hook::hunex_lookup_core::ShiftSampleState shift_state;
+  my_comic_voice_hook::hunex_lookup_core::ClickSampleState click_state;
+  my_comic_voice_hook::hunex_lookup_core::ShiftSampleState shift_state;
 
   std::atomic_flag tail_busy = ATOMIC_FLAG_INIT;
   std::atomic<uint32_t> tail_thread_id{0u};
@@ -129,16 +129,16 @@ struct HunexGgeLookupModelSnapshot {
   int32_t client_width = 0;
   int32_t client_height = 0;
   uint16_t text_units = 0u;
-  std::array<char16_t, fushi_voice_hook::hunex_lookup_core::kTextCapacity>
+  std::array<char16_t, my_comic_voice_hook::hunex_lookup_core::kTextCapacity>
       text = {};
   uint16_t glyph_count = 0u;
-  std::array<fushi_voice_hook::hunex_lookup_core::ProjectedGlyph,
-             fushi_voice_hook::hunex_lookup_core::kGlyphCapacity>
+  std::array<my_comic_voice_hook::hunex_lookup_core::ProjectedGlyph,
+             my_comic_voice_hook::hunex_lookup_core::kGlyphCapacity>
       glyphs = {};
 };
 
 bool IsValidHunexGgeLookupModelInput(const HunexGgeLookupModelInput &input) {
-  namespace core = fushi_voice_hook::hunex_lookup_core;
+  namespace core = my_comic_voice_hook::hunex_lookup_core;
   const auto *projection = input.client_projection;
   if (input.capture_epoch == 0u || input.selected_text_seq == 0u ||
       input.render_thread_id == 0u || input.client_width <= 0 ||
@@ -222,7 +222,7 @@ bool PublishHunexGgeLookupModel(HunexGgeLookupRuntime *runtime,
 
 bool ReadHunexGgeLookupModel(const HunexGgeLookupRuntime *runtime,
                              HunexGgeLookupModelSnapshot *output) {
-  namespace core = fushi_voice_hook::hunex_lookup_core;
+  namespace core = my_comic_voice_hook::hunex_lookup_core;
   if (output == nullptr)
     return false;
   *output = {};
@@ -295,8 +295,8 @@ bool ReadHunexGgeLookupModel(const HunexGgeLookupRuntime *runtime,
 bool HitTestHunexGgeLookupModel(
     const HunexGgeLookupRuntime *runtime,
     const HunexGgeLookupPointerSample &pointer,
-    fushi_voice_hook::hunex_lookup_core::Hit *output) {
-  namespace core = fushi_voice_hook::hunex_lookup_core;
+    my_comic_voice_hook::hunex_lookup_core::Hit *output) {
+  namespace core = my_comic_voice_hook::hunex_lookup_core;
   if (output != nullptr)
     *output = {};
   if (runtime == nullptr || !pointer.foreground_game_point)
@@ -364,8 +364,8 @@ bool HitTestHunexGgeLookupModel(
 
 bool QueueHunexGgeLookupSubmit(
     HunexGgeLookupRuntime *runtime,
-    const fushi_voice_hook::hunex_lookup_core::Hit &hit) {
-  namespace core = fushi_voice_hook::hunex_lookup_core;
+    const my_comic_voice_hook::hunex_lookup_core::Hit &hit) {
+  namespace core = my_comic_voice_hook::hunex_lookup_core;
   if (runtime == nullptr || !core::IsUsableHit(&hit, hit.capture_epoch)) {
     return false;
   }
@@ -396,12 +396,12 @@ bool QueueHunexGgeLookupSubmit(
 HWND GetValidPublishedHunexGgeShieldPopup(HWND game) {
   if (game == nullptr || !IsWindow(game) ||
       reinterpret_cast<uintptr_t>(GetPropW(
-          game, fushi_voice_hook::kHunexGgeSampledInputShieldReadyProperty)) !=
-          fushi_voice_hook::kHunexGgeSampledInputShieldReadyValue) {
+          game, my_comic_voice_hook::kHunexGgeSampledInputShieldReadyProperty)) !=
+          my_comic_voice_hook::kHunexGgeSampledInputShieldReadyValue) {
     return nullptr;
   }
   const HWND popup = reinterpret_cast<HWND>(GetPropW(
-      game, fushi_voice_hook::kHunexGgeSampledInputShieldWindowProperty));
+      game, my_comic_voice_hook::kHunexGgeSampledInputShieldWindowProperty));
   if (popup == nullptr || !IsWindow(popup) ||
       GetWindow(popup, GW_OWNER) != game) {
     return nullptr;
@@ -409,7 +409,7 @@ HWND GetValidPublishedHunexGgeShieldPopup(HWND game) {
   wchar_t class_name[64] = {};
   if (GetClassNameW(popup, class_name,
                     static_cast<int>(std::size(class_name))) <= 0 ||
-      lstrcmpW(class_name, L"FushiGlobalLookupWindow") != 0) {
+      lstrcmpW(class_name, L"MyComicGlobalLookupWindow") != 0) {
     return nullptr;
   }
   return popup;
@@ -426,9 +426,9 @@ uint32_t HunexGgeShieldButtonBit(int virtual_key) {
 }
 
 bool HunexGgeLookupShieldRequestActiveForLeft() {
-  const auto request = fushi_voice_hook::ReadLookupShieldRequest(g_header);
+  const auto request = my_comic_voice_hook::ReadLookupShieldRequest(g_header);
   if (!request.valid ||
-      (request.active_buttons & fushi_voice_hook::kLookupShieldButtonLeft) ==
+      (request.active_buttons & my_comic_voice_hook::kLookupShieldButtonLeft) ==
           0u ||
       g_header == nullptr || g_header->lookup_enabled == 0u ||
       request.target_hwnd == 0u) {
@@ -448,7 +448,7 @@ bool HunexGgeUnknownLeftButtonMustConsume(
     bool bitmap_popup_visible) {
   if (runtime == nullptr)
     return false;
-  namespace core = fushi_voice_hook::hunex_lookup_core;
+  namespace core = my_comic_voice_hook::hunex_lookup_core;
   const HWND game = runtime->shield_game_window.load(std::memory_order_acquire);
   const HWND direct_popup = GetValidPublishedHunexGgeShieldPopup(game);
   const bool popup_shield = bitmap_popup_visible || direct_popup != nullptr;
@@ -457,7 +457,7 @@ bool HunexGgeUnknownLeftButtonMustConsume(
           ? 0u
           : static_cast<uint32_t>(reinterpret_cast<uintptr_t>(GetPropW(
                 game,
-                fushi_voice_hook::
+                my_comic_voice_hook::
                     kHunexGgeSampledInputShieldTailRequestProperty)));
   const bool tail_shield = direct_popup != nullptr &&
                            (tail_request & 0x1u) != 0u;
@@ -481,14 +481,14 @@ bool ConsumeHunexGgeShieldTail(HunexGgeLookupRuntime *runtime, int virtual_key,
   const uint32_t request =
       static_cast<uint32_t>(reinterpret_cast<uintptr_t>(GetPropW(
           game,
-          fushi_voice_hook::kHunexGgeSampledInputShieldTailRequestProperty)));
+          my_comic_voice_hook::kHunexGgeSampledInputShieldTailRequestProperty)));
   if (request == 0u)
     return false;
   if (popup == nullptr) {
     RemovePropW(
-        game, fushi_voice_hook::kHunexGgeSampledInputShieldTailRequestProperty);
+        game, my_comic_voice_hook::kHunexGgeSampledInputShieldTailRequestProperty);
     RemovePropW(game,
-                fushi_voice_hook::kHunexGgeSampledInputShieldTailAckProperty);
+                my_comic_voice_hook::kHunexGgeSampledInputShieldTailAckProperty);
     return false;
   }
   const uint32_t requested_buttons = request & kHunexGgeShieldButtonMask;
@@ -511,7 +511,7 @@ bool ConsumeHunexGgeShieldTail(HunexGgeLookupRuntime *runtime, int virtual_key,
       state.drained_buttons = 0u;
       state.acknowledged_token = 0u;
     }
-    if ((raw & fushi_voice_hook::hunex_lookup_core::kAsyncPressedMask) != 0u) {
+    if ((raw & my_comic_voice_hook::hunex_lookup_core::kAsyncPressedMask) != 0u) {
       state.drained_buttons &= ~button_bit;
     } else {
       state.drained_buttons |= button_bit;
@@ -526,13 +526,13 @@ bool ConsumeHunexGgeShieldTail(HunexGgeLookupRuntime *runtime, int virtual_key,
   if (acknowledge) {
     const bool ack_set =
         SetPropW(
-            game, fushi_voice_hook::kHunexGgeSampledInputShieldTailAckProperty,
+            game, my_comic_voice_hook::kHunexGgeSampledInputShieldTailAckProperty,
             reinterpret_cast<HANDLE>(static_cast<uintptr_t>(request))) != FALSE;
     if (!ack_set ||
         PostMessageW(
             popup,
             static_cast<UINT>(
-                fushi_voice_hook::kSampledInputShieldReleaseWindowMessage),
+                my_comic_voice_hook::kSampledInputShieldReleaseWindowMessage),
             0, 0) == FALSE) {
       if (!runtime->tail_busy.test_and_set(std::memory_order_acquire)) {
         runtime->tail_state.acknowledged_token = 0u;
@@ -547,7 +547,7 @@ HunexGgeLookupSampleResult SampleHunexGgeLookupLeftButton(
     HunexGgeLookupRuntime *runtime, uint32_t sample_thread_id, uint16_t raw,
     const HunexGgeLookupPointerSample &pointer, bool bitmap_popup_visible,
     bool native_lookup_allowed) {
-  namespace core = fushi_voice_hook::hunex_lookup_core;
+  namespace core = my_comic_voice_hook::hunex_lookup_core;
   HunexGgeLookupSampleResult result;
   result.filtered_state = raw;
   if (runtime == nullptr)
@@ -589,7 +589,7 @@ HunexGgeLookupSampleResult SampleHunexGgeLookupLeftButton(
 HunexGgeLookupSampleResult
 SampleHunexGgeLookupOtherButton(HunexGgeLookupRuntime *runtime, int virtual_key,
                                 uint16_t raw, bool bitmap_popup_visible) {
-  namespace core = fushi_voice_hook::hunex_lookup_core;
+  namespace core = my_comic_voice_hook::hunex_lookup_core;
   HunexGgeLookupSampleResult result;
   result.filtered_state = raw;
   if (runtime == nullptr)
@@ -610,7 +610,7 @@ HunexGgeLookupSampleResult SampleHunexGgeLookupShift(
     HunexGgeLookupRuntime *runtime, uint32_t sample_thread_id, uint16_t raw,
     const HunexGgeLookupPointerSample &pointer, bool bitmap_popup_visible,
     bool native_lookup_allowed) {
-  namespace core = fushi_voice_hook::hunex_lookup_core;
+  namespace core = my_comic_voice_hook::hunex_lookup_core;
   HunexGgeLookupSampleResult result;
   result.filtered_state = raw;
   if (runtime == nullptr)
@@ -677,10 +677,10 @@ void SetHunexGgeLookupRuntimeEnabled(HunexGgeLookupRuntime *runtime,
 }
 
 bool PublishLatestHunexGgeLookupSubmit(HunexGgeLookupRuntime *runtime,
-                                       fushi_voice_hook::SharedHeader *header) {
-  namespace core = fushi_voice_hook::hunex_lookup_core;
+                                       my_comic_voice_hook::SharedHeader *header) {
+  namespace core = my_comic_voice_hook::hunex_lookup_core;
   if (runtime == nullptr || header == nullptr ||
-      !fushi_voice_hook::HasLookupRegion(header) ||
+      !my_comic_voice_hook::HasLookupRegion(header) ||
       header->lookup_enabled == 0u ||
       !runtime->enabled.load(std::memory_order_acquire)) {
     return false;
@@ -723,26 +723,26 @@ bool PublishLatestHunexGgeLookupSubmit(HunexGgeLookupRuntime *runtime,
       WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, wide, model.text_units,
                           nullptr, 0, nullptr, nullptr);
   if (required <= 0 ||
-      static_cast<uint32_t>(required) > fushi_voice_hook::kLookupLineBytes) {
+      static_cast<uint32_t>(required) > my_comic_voice_hook::kLookupLineBytes) {
     return false;
   }
-  char utf8[fushi_voice_hook::kLookupLineBytes] = {};
+  char utf8[my_comic_voice_hook::kLookupLineBytes] = {};
   if (WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, wide, model.text_units,
                           utf8, required, nullptr, nullptr) != required) {
     return false;
   }
-  fushi_voice_hook::LookupGeometryHitPublication publication;
+  my_comic_voice_hook::LookupGeometryHitPublication publication;
   publication.provider_kind =
-      fushi_voice_hook::kLookupGeometryProviderEngineExactLayout;
+      my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout;
   publication.provider_id =
-      fushi_voice_hook::kLookupGeometryProviderIdHunexGge;
+      my_comic_voice_hook::kLookupGeometryProviderIdHunexGge;
   publication.char_index = hit.utf16_index;
-  publication.source_length = fushi_voice_hook::LookupUtf16SourceLength(
+  publication.source_length = my_comic_voice_hook::LookupUtf16SourceLength(
       wide, model.text_units, hit.utf16_index);
   publication.char_count = model.text_units;
   publication.coordinate_space =
-      fushi_voice_hook::kLookupCoordinateSpaceClientPhysicalPixels;
-  publication.writing_mode = fushi_voice_hook::kLookupWritingModeHorizontal;
+      my_comic_voice_hook::kLookupCoordinateSpaceClientPhysicalPixels;
+  publication.writing_mode = my_comic_voice_hook::kLookupWritingModeHorizontal;
   // HUNEX redraws the same selected sentence every frame. The selected Luna
   // sequence is therefore the stable semantic and layout generation used by
   // the click transaction; a new selected line always advances both values.
@@ -754,36 +754,36 @@ bool PublishLatestHunexGgeLookupSubmit(HunexGgeLookupRuntime *runtime,
   publication.glyph_h = hit.rect.height;
   publication.view_w = model.client_width;
   publication.view_h = model.client_height;
-  publication.flags = fushi_voice_hook::kLookupHitFlagSubmit;
+  publication.flags = my_comic_voice_hook::kLookupHitFlagSubmit;
   publication.line_utf8 = reinterpret_cast<const uint8_t *>(utf8);
   publication.line_bytes = static_cast<uint32_t>(required);
-  return fushi_voice_hook::g_geometry_provider_registry.PublishHit(
+  return my_comic_voice_hook::g_geometry_provider_registry.PublishHit(
       header, publication);
 }
 
 bool TickHunexGgeLookupRuntime(HunexGgeLookupRuntime *runtime,
-                               fushi_voice_hook::SharedHeader *header) {
+                               my_comic_voice_hook::SharedHeader *header) {
   return PublishLatestHunexGgeLookupSubmit(runtime, header);
 }
 
 void RevokeHunexGgeSampledInputShield(HunexGgeLookupRuntime *runtime,
-                                      fushi_voice_hook::SharedHeader *header,
+                                      my_comic_voice_hook::SharedHeader *header,
                                       bool remove_required) {
   if (runtime == nullptr)
     return;
   const HWND game = runtime->shield_property_window;
   if (game != nullptr && IsWindow(game)) {
     RemovePropW(game,
-                fushi_voice_hook::kHunexGgeSampledInputShieldReadyProperty);
+                my_comic_voice_hook::kHunexGgeSampledInputShieldReadyProperty);
     RemovePropW(game,
-                fushi_voice_hook::kHunexGgeSampledInputShieldWindowProperty);
+                my_comic_voice_hook::kHunexGgeSampledInputShieldWindowProperty);
     RemovePropW(
-        game, fushi_voice_hook::kHunexGgeSampledInputShieldTailRequestProperty);
+        game, my_comic_voice_hook::kHunexGgeSampledInputShieldTailRequestProperty);
     RemovePropW(game,
-                fushi_voice_hook::kHunexGgeSampledInputShieldTailAckProperty);
+                my_comic_voice_hook::kHunexGgeSampledInputShieldTailAckProperty);
     if (remove_required) {
       RemovePropW(
-          game, fushi_voice_hook::kHunexGgeSampledInputShieldRequiredProperty);
+          game, my_comic_voice_hook::kHunexGgeSampledInputShieldRequiredProperty);
     }
   }
   runtime->shield_game_window.store(nullptr, std::memory_order_release);
@@ -791,12 +791,12 @@ void RevokeHunexGgeSampledInputShield(HunexGgeLookupRuntime *runtime,
   if (header != nullptr) {
     InterlockedAnd(reinterpret_cast<volatile LONG *>(&header->lookup_diag),
                    static_cast<LONG>(
-                       ~fushi_voice_hook::kLookupDiagSampledInputShieldReady));
+                       ~my_comic_voice_hook::kLookupDiagSampledInputShieldReady));
   }
 }
 
 bool MaintainHunexGgeSampledInputShield(HunexGgeLookupRuntime *runtime,
-                                        fushi_voice_hook::SharedHeader *header,
+                                        my_comic_voice_hook::SharedHeader *header,
                                         HWND game, bool exact_profile_admitted,
                                         bool input_hook_ready) {
   if (runtime == nullptr || !exact_profile_admitted || game == nullptr ||
@@ -813,12 +813,12 @@ bool MaintainHunexGgeSampledInputShield(HunexGgeLookupRuntime *runtime,
   }
   if (reinterpret_cast<uintptr_t>(GetPropW(
           game,
-          fushi_voice_hook::kHunexGgeSampledInputShieldRequiredProperty)) !=
-          fushi_voice_hook::kHunexGgeSampledInputShieldRequiredValue &&
+          my_comic_voice_hook::kHunexGgeSampledInputShieldRequiredProperty)) !=
+          my_comic_voice_hook::kHunexGgeSampledInputShieldRequiredValue &&
       !SetPropW(
-          game, fushi_voice_hook::kHunexGgeSampledInputShieldRequiredProperty,
+          game, my_comic_voice_hook::kHunexGgeSampledInputShieldRequiredProperty,
           reinterpret_cast<HANDLE>(
-              fushi_voice_hook::kHunexGgeSampledInputShieldRequiredValue))) {
+              my_comic_voice_hook::kHunexGgeSampledInputShieldRequiredValue))) {
     RevokeHunexGgeSampledInputShield(runtime, header, false);
     return false;
   }
@@ -827,12 +827,12 @@ bool MaintainHunexGgeSampledInputShield(HunexGgeLookupRuntime *runtime,
     return false;
   }
   if (reinterpret_cast<uintptr_t>(GetPropW(
-          game, fushi_voice_hook::kHunexGgeSampledInputShieldReadyProperty)) !=
-          fushi_voice_hook::kHunexGgeSampledInputShieldReadyValue &&
+          game, my_comic_voice_hook::kHunexGgeSampledInputShieldReadyProperty)) !=
+          my_comic_voice_hook::kHunexGgeSampledInputShieldReadyValue &&
       !SetPropW(game,
-                fushi_voice_hook::kHunexGgeSampledInputShieldReadyProperty,
+                my_comic_voice_hook::kHunexGgeSampledInputShieldReadyProperty,
                 reinterpret_cast<HANDLE>(
-                    fushi_voice_hook::kHunexGgeSampledInputShieldReadyValue))) {
+                    my_comic_voice_hook::kHunexGgeSampledInputShieldReadyValue))) {
     RevokeHunexGgeSampledInputShield(runtime, header, false);
     return false;
   }
@@ -841,7 +841,7 @@ bool MaintainHunexGgeSampledInputShield(HunexGgeLookupRuntime *runtime,
   if (header != nullptr) {
     InterlockedOr(reinterpret_cast<volatile LONG *>(&header->lookup_diag),
                   static_cast<LONG>(
-                      fushi_voice_hook::kLookupDiagSampledInputShieldReady));
+                      my_comic_voice_hook::kLookupDiagSampledInputShieldReady));
   }
   return true;
 }
@@ -850,10 +850,10 @@ bool ResetHunexGgeInputSampleStates(HunexGgeLookupRuntime *runtime) {
   if (runtime == nullptr)
     return false;
   const bool click_reset =
-      fushi_voice_hook::hunex_lookup_core::ResetClickSampleState(
+      my_comic_voice_hook::hunex_lookup_core::ResetClickSampleState(
           &runtime->click_state);
   const bool shift_reset =
-      fushi_voice_hook::hunex_lookup_core::ResetShiftSampleState(
+      my_comic_voice_hook::hunex_lookup_core::ResetShiftSampleState(
           &runtime->shift_state);
   bool tail_reset = false;
   if (!runtime->tail_busy.test_and_set(std::memory_order_acquire)) {
@@ -872,7 +872,7 @@ bool ResetHunexGgeInputSampleStates(HunexGgeLookupRuntime *runtime) {
 }
 
 void ShutdownHunexGgeLookupRuntime(HunexGgeLookupRuntime *runtime,
-                                   fushi_voice_hook::SharedHeader *header) {
+                                   my_comic_voice_hook::SharedHeader *header) {
   if (runtime == nullptr)
     return;
   SetHunexGgeLookupRuntimeEnabled(runtime, false);

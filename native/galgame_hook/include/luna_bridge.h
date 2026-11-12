@@ -1,5 +1,5 @@
-#ifndef FUSHI_LUNA_BRIDGE_H_
-#define FUSHI_LUNA_BRIDGE_H_
+#ifndef MYCOMIC_LUNA_BRIDGE_H_
+#define MYCOMIC_LUNA_BRIDGE_H_
 
 #include <windows.h>
 
@@ -8,9 +8,9 @@
 
 #include "luna_version.h"
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
-// Fushi-owned boundary around the vendored LunaTranslator v10.16.1.2 ABI.
+// MyComic-owned boundary around the vendored LunaTranslator v10.16.1.2 ABI.
 // Only this header may describe LunaHost callback layouts or exported functions.
 #pragma pack(push, 8)
 struct LunaThreadParam {
@@ -91,6 +91,6 @@ struct LunaBridgeExports {
   }
 };
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook
 
-#endif  // FUSHI_LUNA_BRIDGE_H_
+#endif  // MYCOMIC_LUNA_BRIDGE_H_

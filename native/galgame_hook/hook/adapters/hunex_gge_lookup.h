@@ -5,7 +5,7 @@
 #include <cstring>
 #include <limits>
 
-namespace fushi_voice_hook::hunex_lookup {
+namespace my_comic_voice_hook::hunex_lookup {
 
 inline constexpr size_t kInvalidOffset = std::numeric_limits<size_t>::max();
 
@@ -957,4 +957,4 @@ inline constexpr size_t kCursorScaleYInstructionOffset = 21u;
 inline constexpr size_t kCursorScaleYDisplacementOffset = 4u;
 inline constexpr size_t kCursorScaleYRelativeOffset = 0x4eu;
 
-}  // namespace fushi_voice_hook::hunex_lookup
+}  // namespace my_comic_voice_hook::hunex_lookup

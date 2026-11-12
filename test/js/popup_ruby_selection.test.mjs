@@ -19,7 +19,7 @@ import { JSDOM } from "jsdom";
 import { readFileSync } from "node:fs";
 
 const SELECTION_URL = new URL(
-  "../../fushi/assets/popup/selection.js",
+  "../../my_comic/assets/popup/selection.js",
   import.meta.url,
 );
 const selectionSrc = readFileSync(SELECTION_URL, "utf8");
@@ -55,16 +55,16 @@ test("mixed kanji/kana lookup skips ruby-reserve layout text", () => {
   const start = win.document.querySelector("#start").firstChild;
 
   assert.equal(
-    win.fushiSelection.selectFromPosition(start, 0, 20),
+    win.myComicSelection.selectFromPosition(start, 0, 20),
     "打ち合わせ",
   );
-  assert.equal(win.fushiSelection.getSentence(start, 0), "打ち合わせ。");
+  assert.equal(win.myComicSelection.getSentence(start, 0), "打ち合わせ。");
 });
 
 test("furigana hit resolves to the visible ruby base, not its reserve", () => {
   const win = createPopupSelection();
   const reading = win.document.querySelector("#second-reading").firstChild;
-  const resolved = win.fushiSelection.resolveRubyBase(reading);
+  const resolved = win.myComicSelection.resolveRubyBase(reading);
 
   assert.equal(resolved?.node.textContent, "合");
 });

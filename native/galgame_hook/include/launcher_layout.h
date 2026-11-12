@@ -25,7 +25,7 @@
 #include <string>
 #include <vector>
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 // 子目录搜索的默认深度上限。启动器再套也就两层（Start → StartData → gamedata），给到 3 层
 // 足够；再深就是在别人的资源树里乱翻，代价与误报都不划算。
@@ -70,4 +70,4 @@ bool LooksLikeLauncherLayout(const std::wstring& executable_directory,
               .empty();
 }
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

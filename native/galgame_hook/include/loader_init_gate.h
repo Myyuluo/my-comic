@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <cstring>
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 // 早注入的「加载器初始化门」判据（纯逻辑，可离线测试）。
 //
@@ -205,4 +205,4 @@ inline bool LoaderInitGateLeftProcessRunning(LoaderInitGateOutcome outcome) {
   return outcome == LoaderInitGateOutcome::kLeftRunning;
 }
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

@@ -10,9 +10,9 @@
 
 namespace {
 
-using fushi_voice_hook::exact_lookup::LoadedPeImage;
-using fushi_voice_hook::OpenSiglusLoadedImage;
-namespace lookup = fushi_voice_hook::exact_lookup;
+using my_comic_voice_hook::exact_lookup::LoadedPeImage;
+using my_comic_voice_hook::OpenSiglusLoadedImage;
+namespace lookup = my_comic_voice_hook::exact_lookup;
 
 class TestImage {
  public:

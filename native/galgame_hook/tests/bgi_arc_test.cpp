@@ -17,7 +17,7 @@
 #include <string>
 #include <vector>
 
-namespace bgi = ::fushi_voice_hook::bgi;
+namespace bgi = ::my_comic_voice_hook::bgi;
 
 namespace {
 

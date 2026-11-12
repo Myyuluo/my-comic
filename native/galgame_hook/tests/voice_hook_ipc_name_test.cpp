@@ -8,10 +8,10 @@
 #include <cassert>
 
 int main() {
-  using fushi_voice_hook::ReadyEventName;
-  using fushi_voice_hook::SharedMemoryName;
+  using my_comic_voice_hook::ReadyEventName;
+  using my_comic_voice_hook::SharedMemoryName;
 
-  assert(SharedMemoryName(32464) == L"Local\\FushiVoiceHook_32464");
-  assert(ReadyEventName(32464) == L"Local\\FushiVoiceHookReady_32464");
+  assert(SharedMemoryName(32464) == L"Local\\MyComicVoiceHook_32464");
+  assert(ReadyEventName(32464) == L"Local\\MyComicVoiceHookReady_32464");
   return 0;
 }

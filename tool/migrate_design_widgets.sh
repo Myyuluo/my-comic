@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Flutter 3.47：Material / Cupertino 从 SDK 拆成独立 pub 包 material_ui / cupertino_ui。
-# 本脚本把本仓（fushi/、packages/、third_party/ vendored 包）的 Dart 源码从
+# 本脚本把本仓（my_comic/、packages/、third_party/ vendored 包）的 Dart 源码从
 #   package:flutter/material.dart  -> package:material_ui/material_ui.dart
 #   package:flutter/cupertino.dart -> package:cupertino_ui/cupertino_ui.dart
 # 并保证用到它们的包 pubspec 里声明了依赖。可重复执行（幂等），合并其它
@@ -12,10 +12,10 @@
 #   bash tool/migrate_design_widgets.sh --pub-get  # 迁移后顺带 flutter pub get
 #
 # 等价性：官方 `dart fix --apply --code=migrate_design_widgets` 对本仓做的就是
-# 逐个 import URI 的原位替换（不排序、不动 show/hide/as），在 fushi_dictionary 上
-# 实测 diff 与本脚本逐字一致；这里用 sed 是因为 dart fix 要把整个 fushi 包
+# 逐个 import URI 的原位替换（不排序、不动 show/hide/as），在 my_comic_dictionary 上
+# 实测 diff 与本脚本逐字一致；这里用 sed 是因为 dart fix 要把整个 my_comic 包
 # （1600+ 个文件）载进分析器，单次数 GB 内存、几分钟，而且不覆盖 tool/ 等
-# 分析器排除的目录。想用官方工具交叉核对：在 fushi/ 下
+# 分析器排除的目录。想用官方工具交叉核对：在 my_comic/ 下
 #   dart fix --dry-run --code=migrate_design_widgets
 # 应输出 "Nothing to fix!"。
 #
@@ -24,10 +24,10 @@
 #   - references/**   ：只读子模块；
 #   - **/example/**   ：独立解析的示例工程，不在 workspace 里；
 #   - build/、.dart_tool/。
-# 少数 fushi 源码文件确需同时引用旧 SDK Material 类型（给未迁移的第三方包
+# 少数 my_comic 源码文件确需同时引用旧 SDK Material 类型（给未迁移的第三方包
 # 传 flutter/material 的 ThemeData 等），它们用 `as legacy` 前缀导入，
 # 本脚本只替换不带前缀的 import，所以不会碰它们（见
-# fushi/test/build/design_widgets_import_guard_test.dart 白名单）。
+# my_comic/test/build/design_widgets_import_guard_test.dart 白名单）。
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -50,8 +50,8 @@ LEGACY_IMPORT_RE="^import\s+'package:flutter/(material|cupertino)\.dart'(\s+(sho
 candidate_files() {
   # 先用 grep 粗筛（快），再由 perl 按多行规则精确判定。
   grep -rlE --include='*.dart' "^import 'package:flutter/(material|cupertino)\.dart'" \
-    fushi packages third_party 2>/dev/null |
-    grep -vE '(^|/)(\.dart_tool|example)/|^fushi/build/|^(packages|third_party)/[^/]+/build/' || true
+    my_comic packages third_party 2>/dev/null |
+    grep -vE '(^|/)(\.dart_tool|example)/|^my_comic/build/|^(packages|third_party)/[^/]+/build/' || true
 }
 
 list_legacy_files() {
@@ -100,10 +100,10 @@ ensure_dep() { # <pubspec> <pkg> <version>
   echo "  + $pkg $ver -> $pubspec"
 }
 
-for pubspec in fushi/pubspec.yaml packages/*/pubspec.yaml third_party/*/pubspec.yaml; do
+for pubspec in my_comic/pubspec.yaml packages/*/pubspec.yaml third_party/*/pubspec.yaml; do
   dir="$(dirname "$pubspec")"
   [[ -d "$dir/lib" || -d "$dir/test" ]] || continue
-  # 只看 lib/：dev 依赖面（test/）跟随主包；fushi 两者都已直接依赖。
+  # 只看 lib/：dev 依赖面（test/）跟随主包；my_comic 两者都已直接依赖。
   if grep -rqE --include='*.dart' "^import 'package:material_ui/" "$dir/lib" "$dir/test" "$dir/integration_test" 2>/dev/null; then
     ensure_dep "$pubspec" material_ui "$MATERIAL_UI_VERSION"
   fi
@@ -116,5 +116,5 @@ mapfile -t LEFT < <(list_legacy_files)
 echo "legacy design-widget imports left: ${#LEFT[@]}"
 
 if [[ $PUB_GET -eq 1 ]]; then
-  (cd fushi && flutter pub get)
+  (cd my_comic && flutter pub get)
 fi

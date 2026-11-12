@@ -2,7 +2,7 @@
 
 #include "siglus_autoprofile.h"
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 // Static mapping capability only. A request can still select a loose WAV/NWA.
 // Callers must bind only an actually observed OVK canonical file + file identity;
@@ -467,4 +467,4 @@ inline bool ResolveSiglusResourceMappingProfile(
   out->ogg_read_rva = ogg_read;
   return true;
 }
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

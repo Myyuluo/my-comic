@@ -7,15 +7,15 @@ void QueueProvedSiglusVoiceResource(uint32_t key, const wchar_t* path,
 constexpr uint32_t kSiglusVoiceSourceTaskSlots = 32;
 std::atomic<int> g_siglus_voice_source_state{0};
 std::atomic<bool> g_siglus_voice_source_enabled{false};
-fushi_voice_hook::SiglusResourceMappingProfile g_siglus_voice_source_profile;
-fushi_voice_hook::SiglusVoiceSourceLayout g_siglus_voice_source_layout;
+my_comic_voice_hook::SiglusResourceMappingProfile g_siglus_voice_source_profile;
+my_comic_voice_hook::SiglusVoiceSourceLayout g_siglus_voice_source_layout;
 bool g_siglus_voice_source_native_ecx = false;
 bool g_siglus_voice_source_legacy = false;
-fushi_voice_hook::SiglusLegacyResourceMappingProfile g_siglus_legacy_source_profile;
-fushi_voice_hook::SiglusLegacyVoiceSourceLayout g_siglus_legacy_source_layout;
-fushi_voice_hook::SiglusNativeResourceMappingProfile g_siglus_native_source_profile;
-fushi_voice_hook::SiglusNativeVoiceSourceLayout g_siglus_native_source_layout;
-fushi_voice_hook::SiglusMessageQueue<fushi_voice_hook::SiglusVoiceSourceTask,
+my_comic_voice_hook::SiglusLegacyResourceMappingProfile g_siglus_legacy_source_profile;
+my_comic_voice_hook::SiglusLegacyVoiceSourceLayout g_siglus_legacy_source_layout;
+my_comic_voice_hook::SiglusNativeResourceMappingProfile g_siglus_native_source_profile;
+my_comic_voice_hook::SiglusNativeVoiceSourceLayout g_siglus_native_source_layout;
+my_comic_voice_hook::SiglusMessageQueue<my_comic_voice_hook::SiglusVoiceSourceTask,
                                    kSiglusVoiceSourceTaskSlots>
     g_siglus_voice_source_tasks;
 void* g_siglus_voice_source_target = nullptr;
@@ -38,7 +38,7 @@ SiglusVoiceSourceObservations g_siglus_voice_source_observations;
 
 bool ReadSiglusVoiceSourceMemory(uint32_t address, void* output, size_t bytes) {
   if (address == 0 || output == nullptr || bytes == 0 ||
-      bytes > fushi_voice_hook::kSiglusVoiceSourcePathUnits * sizeof(wchar_t) ||
+      bytes > my_comic_voice_hook::kSiglusVoiceSourcePathUnits * sizeof(wchar_t) ||
       bytes > UINT32_MAX - address) return false;
   __try {
     memcpy(output, reinterpret_cast<const void*>(address), bytes);
@@ -66,27 +66,27 @@ void __stdcall ObserveSiglusVoiceSource(uint32_t reader, uint32_t entry_esp,
     if (return_address == admitted_return)
       observations.admitted_caller.fetch_add(1, std::memory_order_relaxed);
   }
-  fushi_voice_hook::SiglusVoiceSourceCall call;
+  my_comic_voice_hook::SiglusVoiceSourceCall call;
   call.reader = reader; call.entry_esp = entry_esp; call.caller_ebp = caller_ebp;
   // These are OUR pushad slots, not guessed engine stack locals. The shared
   // naked thunk saves ESI at saved-frame+4 and EBX at +16 (entryESP-36 frame).
   if (!ReadSiglusVoiceSourceMemory(entry_esp - 32, &call.original_esi, 4) ||
       !ReadSiglusVoiceSourceMemory(entry_esp - 20, &call.original_ebx, 4)) return;
   auto read = ReadSiglusVoiceSourceMemory;
-  fushi_voice_hook::SiglusVoiceSourceTask task;
+  my_comic_voice_hook::SiglusVoiceSourceTask task;
   bool captured = false;
   if (g_siglus_voice_source_legacy) {
     uint32_t original_edi = 0;
     if (!read(entry_esp - 36, &original_edi, 4)) return;
-    captured = fushi_voice_hook::CaptureSiglusLegacyVoiceSource(
+    captured = my_comic_voice_hook::CaptureSiglusLegacyVoiceSource(
         g_siglus_legacy_source_layout,
         {reader, entry_esp, original_edi, caller_ebp}, read, &task);
   } else {
     captured = g_siglus_voice_source_native_ecx
-      ? fushi_voice_hook::CaptureSiglusNativeVoiceSource(
+      ? my_comic_voice_hook::CaptureSiglusNativeVoiceSource(
             g_siglus_native_source_layout,
             {reader, entry_esp, caller_ebp, call.original_ebx}, read, &task)
-      : fushi_voice_hook::CaptureSiglusVoiceSource(
+      : my_comic_voice_hook::CaptureSiglusVoiceSource(
             g_siglus_voice_source_layout, call, read, &task);
   }
   if (captured) {
@@ -97,7 +97,7 @@ void __stdcall ObserveSiglusVoiceSource(uint32_t reader, uint32_t entry_esp,
   }
 }
 
-FUSHI_SIGLUS_MESSAGE_THUNK(Detour_SiglusVoiceSource, ObserveSiglusVoiceSource,
+MYCOMIC_SIGLUS_MESSAGE_THUNK(Detour_SiglusVoiceSource, ObserveSiglusVoiceSource,
                          g_orig_SiglusVoiceSource)
 
 bool IsSiglusVoiceSourceInstalled() {
@@ -145,11 +145,11 @@ bool InstallSiglusVoiceSourceHook() {
 }
 
 bool ResolveLiveSiglusVoiceSource(HMODULE module, uintptr_t proved_voice_entry,
-    fushi_voice_hook::SiglusResourceMappingProfile* profile) {
+    my_comic_voice_hook::SiglusResourceMappingProfile* profile) {
   __try {
-    fushi_voice_hook::exact_lookup::LoadedPeImage image;
-    return fushi_voice_hook::OpenSiglusLoadedImage(module, &image) &&
-        fushi_voice_hook::ResolveSiglusResourceMappingProfile(
+    my_comic_voice_hook::exact_lookup::LoadedPeImage image;
+    return my_comic_voice_hook::OpenSiglusLoadedImage(module, &image) &&
+        my_comic_voice_hook::ResolveSiglusResourceMappingProfile(
             image, proved_voice_entry, profile) &&
         // Do not take ownership of an external detour, even if a future pure
         // resolver permits it as a read-only diagnostic observation.
@@ -160,11 +160,11 @@ bool ResolveLiveSiglusVoiceSource(HMODULE module, uintptr_t proved_voice_entry,
 }
 
 bool ResolveLiveSiglusNativeVoiceSource(HMODULE module, uintptr_t proved_voice_entry,
-    fushi_voice_hook::SiglusNativeResourceMappingProfile* profile) {
+    my_comic_voice_hook::SiglusNativeResourceMappingProfile* profile) {
   __try {
-    fushi_voice_hook::exact_lookup::LoadedPeImage image;
-    return fushi_voice_hook::OpenSiglusLoadedImage(module, &image) &&
-        fushi_voice_hook::ResolveSiglusNativeResourceMappingProfile(
+    my_comic_voice_hook::exact_lookup::LoadedPeImage image;
+    return my_comic_voice_hook::OpenSiglusLoadedImage(module, &image) &&
+        my_comic_voice_hook::ResolveSiglusNativeResourceMappingProfile(
             image, proved_voice_entry, profile) &&
         image.base[profile->ogg_open_rva] == 0x55;
   } __except (EXCEPTION_EXECUTE_HANDLER) {
@@ -180,12 +180,12 @@ bool TryHookSiglusVoiceSource() {
   HMODULE module = GetModuleHandleW(nullptr);
   if (lane == nullptr || module == nullptr) return false;
   if (lane->glyph_abi ==
-      fushi_voice_hook::SiglusGlyphLayoutAbi::kEcxEightArguments) return false;
+      my_comic_voice_hook::SiglusGlyphLayoutAbi::kEcxEightArguments) return false;
   const uintptr_t base = reinterpret_cast<uintptr_t>(module);
   if (g_siglus_message_legacy) {
     if (lane->glyph_abi !=
-            fushi_voice_hook::SiglusGlyphLayoutAbi::kStackSixteenArguments ||
-        !fushi_voice_hook::ResolveLiveSiglusLegacyVoiceSource(module,
+            my_comic_voice_hook::SiglusGlyphLayoutAbi::kStackSixteenArguments ||
+        !my_comic_voice_hook::ResolveLiveSiglusLegacyVoiceSource(module,
             g_siglus_legacy_message_profile.voice_entry_rva,
             &g_siglus_legacy_source_profile)) {
       g_siglus_voice_source_state.store(-1, std::memory_order_release);
@@ -201,7 +201,7 @@ bool TryHookSiglusVoiceSource() {
     return InstallSiglusVoiceSourceHook();
   }
   if (lane->text_feed ==
-      fushi_voice_hook::SiglusLookupTextFeed::kNativeEcxTextUnion) {
+      my_comic_voice_hook::SiglusLookupTextFeed::kNativeEcxTextUnion) {
     if (!g_siglus_message_native_ecx ||
         !ResolveLiveSiglusNativeVoiceSource(module,
             g_siglus_native_message_profile.voice_entry_rva,
@@ -218,7 +218,7 @@ bool TryHookSiglusVoiceSource() {
     return InstallSiglusVoiceSourceHook();
   }
   if (lane->text_feed !=
-      fushi_voice_hook::SiglusLookupTextFeed::kLunaScenarioLane ||
+      my_comic_voice_hook::SiglusLookupTextFeed::kLunaScenarioLane ||
       g_siglus_message_native_ecx) return false;
   // The message entry is already detoured. Its immutable admitted proof is the
   // source of this voice entry, never a second scan or a nearby address guess.
@@ -242,7 +242,7 @@ bool TryHookSiglusVoiceSource() {
 void ProcessSiglusVoiceSourceTasks() {
   if (!g_capture_enabled || !g_siglus_voice_source_enabled.load(
                                 std::memory_order_acquire)) return;
-  fushi_voice_hook::SiglusVoiceSourceTask task;
+  my_comic_voice_hook::SiglusVoiceSourceTask task;
   for (uint32_t count = 0; count < kSiglusVoiceSourceTaskSlots; ++count) {
     if (!g_siglus_voice_source_tasks.TryPop(&task)) break;
     g_siglus_voice_source_observations.processed.fetch_add(

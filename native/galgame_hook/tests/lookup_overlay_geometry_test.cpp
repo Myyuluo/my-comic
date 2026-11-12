@@ -12,10 +12,10 @@
 
 #include "lookup_overlay_geometry.h"
 
-using fushi_voice_hook::CardContainsScreenPoint;
-using fushi_voice_hook::ComputeOverlayRect;
-using fushi_voice_hook::OverlayRect;
-using fushi_voice_hook::ScreenPointToCardLocal;
+using my_comic_voice_hook::CardContainsScreenPoint;
+using my_comic_voice_hook::ComputeOverlayRect;
+using my_comic_voice_hook::OverlayRect;
+using my_comic_voice_hook::ScreenPointToCardLocal;
 
 namespace {
 

@@ -38,9 +38,9 @@ bool SameSiglusArchiveFile(const BY_HANDLE_FILE_INFORMATION& a,
                            const BY_HANDLE_FILE_INFORMATION& b);
 uint64_t ObserveSiglusMessageResource(HANDLE file, const uint8_t* index,
     size_t index_bytes, uint64_t file_bytes,
-    const fushi_voice_hook::siglus::OvkEntry& entry, uint32_t expected_key);
+    const my_comic_voice_hook::siglus::OvkEntry& entry, uint32_t expected_key);
 bool ValidateSiglusMessageVoiceTask(const SiglusVoiceTask& task,
-    uint64_t revision, const fushi_voice_hook::siglus::OvkEntry& entry);
+    uint64_t revision, const my_comic_voice_hook::siglus::OvkEntry& entry);
 
 SiglusOvkHandle g_siglus_handles[kSiglusHandleSlots];
 SiglusVoiceTask g_siglus_tasks[kSiglusTaskSlots];
@@ -137,7 +137,7 @@ void RememberUnityVoiceBundle(const wchar_t* path) {
 
 void RememberSiglusOvk(HANDLE handle, const wchar_t* path) {
   if (handle == INVALID_HANDLE_VALUE || path == nullptr) return;
-  const bool remembered = fushi_voice_hook::RememberTrackedHandle(
+  const bool remembered = my_comic_voice_hook::RememberTrackedHandle(
       g_siglus_handles, handle, [path](SiglusOvkHandle& slot) {
         wcsncpy_s(slot.path, path, _TRUNCATE);
       });
@@ -146,21 +146,21 @@ void RememberSiglusOvk(HANDLE handle, const wchar_t* path) {
     if (g_header != nullptr) {
       g_header->reserved_luna |= kDiagSiglusOvkOpened;
       g_header->hook_diagnostics |=
-          fushi_voice_hook::kDiagVisualArtsOvkHooksReady;
+          my_comic_voice_hook::kDiagVisualArtsOvkHooksReady;
     }
   }
 }
 
 bool CopySiglusOvkPath(HANDLE handle, wchar_t* out, size_t out_chars) {
   if (out == nullptr || out_chars == 0) return false;
-  return fushi_voice_hook::ReadTrackedHandle(
+  return my_comic_voice_hook::ReadTrackedHandle(
       g_siglus_handles, handle, [out, out_chars](const SiglusOvkHandle& slot) {
         wcsncpy_s(out, out_chars, slot.path, _TRUNCATE);
       });
 }
 
 void ForgetSiglusOvk(HANDLE handle) {
-  fushi_voice_hook::ForgetTrackedHandle(g_siglus_handles, handle);
+  my_comic_voice_hook::ForgetTrackedHandle(g_siglus_handles, handle);
 }
 
 HANDLE WINAPI Detour_CreateFileW(LPCWSTR file_name, DWORD desired_access,
@@ -368,7 +368,7 @@ bool IsSiglusEngine() {
   if (slash == nullptr) return false;
 
   const std::wstring directory(path, static_cast<size_t>(slash - path));
-  return fushi_voice_hook::DirectoryLooksLikeSiglusOnDisk(directory);
+  return my_comic_voice_hook::DirectoryLooksLikeSiglusOnDisk(directory);
 }
 
 bool TryHookSiglusOvk() {

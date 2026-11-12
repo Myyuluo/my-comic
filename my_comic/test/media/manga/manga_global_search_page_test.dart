@@ -1,0 +1,270 @@
+import 'package:flutter/services.dart';
+import 'package:material_ui/material_ui.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:my_comic/i18n/strings.g.dart';
+import 'package:my_comic_core/my_comic_core.dart';
+
+import 'package:my_comic/src/media/manga/manga_global_search_page.dart';
+import 'package:my_comic/src/pages/implementations/media_library_shell.dart';
+
+const MangaOnlineSourceRow _sourceRow = MangaOnlineSourceRow(
+  mediaKind: 'manga',
+  extensionPackage: 'org.example.fixture',
+  sourceId: '1',
+  name: 'Good',
+  language: 'en',
+  baseUrl: 'https://example.com',
+  enabled: true,
+  pinned: false,
+  sortOrder: 0,
+);
+
+Widget _searchPageHarness({String? initialQuery}) => TranslationProvider(
+  child: MaterialApp(
+    home: MangaGlobalSearchPage(
+      mihonManager: null,
+      mihonSources: const <MangaOnlineSourceRow>[_sourceRow],
+      initialQuery: initialQuery,
+    ),
+  ),
+);
+
+void main() {
+  setUp(() => LocaleSettings.setLocale(AppLocale.zhCn));
+
+  // 空态此前只有一句「请先安装并启用扩展」：漫画库里根本没有叫「扩展」的 tab
+  // （来源都在「导入」视图装），而且没有任何可点的东西。现在文案指向「导入」，
+  // 并给一个按钮把用户带回壳里的「导入」视图。
+  //
+  // **弹掉本页由壳做**（[MediaLibraryShellScope.select]），本页只管调回调：本页
+  // 上面可能压着别的路由，也可能本身就压在别的页面上（发现详情页 → 全源搜索页
+  // 是两层）。下面两条分别钉住「压一层」和「压两层」两个真实入口。
+  Widget shellHarness({required int pushDepth}) {
+    Widget searchPage(BuildContext shellContext) => MangaGlobalSearchPage(
+          mihonManager: null,
+          mihonSources: const <Never>[],
+          onOpenSources: MediaLibraryShellScope.maybeOf(shellContext)
+              ?.actionFor(MediaLibraryViewKind.sources),
+        );
+
+    return TranslationProvider(
+      child: MaterialApp(
+        home: Scaffold(
+          body: MediaLibraryShell(
+            focusIdPrefix: 'manga-global-search-test',
+            views: <MediaLibraryViewSpec>[
+              MediaLibraryViewSpec(
+                kind: MediaLibraryViewKind.discover,
+                label: '发现',
+                builder: (BuildContext context, Widget navigation) => Builder(
+                  builder: (BuildContext inner) => TextButton(
+                    onPressed: () => Navigator.of(inner).push(
+                      MaterialPageRoute<void>(
+                        builder: (_) => pushDepth == 1
+                            ? searchPage(inner)
+                            : Scaffold(
+                                body: Builder(
+                                  builder: (BuildContext mid) => TextButton(
+                                    onPressed: () => Navigator.of(mid).push(
+                                      MaterialPageRoute<void>(
+                                        builder: (_) => searchPage(inner),
+                                      ),
+                                    ),
+                                    child: const Text('详情页'),
+                                  ),
+                                ),
+                              ),
+                      ),
+                    ),
+                    child: const Text('搜索'),
+                  ),
+                ),
+              ),
+              MediaLibraryViewSpec(
+                kind: MediaLibraryViewKind.sources,
+                label: '导入',
+                builder: (BuildContext context, Widget navigation) =>
+                    const Text('导入视图'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  testWidgets('Manga 全局搜索框首字输入后焦点仍在', (WidgetTester tester) async {
+    await tester.binding.setSurfaceSize(const Size(1000, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    await tester.pumpWidget(
+      TranslationProvider(
+        child: MaterialApp(
+          home: MangaGlobalSearchPage(
+            mihonManager: null,
+            mihonSources: const <Never>[],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final Finder field = find.byKey(
+      const ValueKey<String>('manga_global_search_field'),
+    );
+    expect(field, findsOneWidget);
+    await tester.showKeyboard(field);
+    await tester.pump();
+    expect(
+      tester.widget<TextField>(field).focusNode?.hasFocus,
+      isTrue,
+      reason: '前置条件：搜索框已聚焦',
+    );
+
+    // 模拟 IME 输入第一个字符，不走 tester.enterText 的重新聚焦路径。
+    tester.testTextInput.enterText('a');
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.widget<TextField>(field).focusNode?.hasFocus,
+      isTrue,
+      reason: '首字输入后焦点必须保持在搜索框',
+    );
+  });
+
+  testWidgets('输入不触发搜索，提交后才出现来源分区（submit-only）', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(_searchPageHarness());
+    await tester.pumpAndSettle();
+
+    expect(find.text(t.manga_global_search_prompt), findsOneWidget);
+    final Finder field = find.byKey(
+      const ValueKey<String>('manga_global_search_field'),
+    );
+    await tester.enterText(field, 'one');
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(t.manga_global_search_prompt),
+      findsOneWidget,
+      reason: '键入只改文本，不得触发全源搜索',
+    );
+    expect(find.text('Good'), findsNothing);
+
+    await tester.testTextInput.receiveAction(TextInputAction.search);
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Good'),
+      findsOneWidget,
+      reason: '提交后来源分区才出现（空宿主按错误状态呈现）',
+    );
+    expect(find.text(t.manga_global_search_prompt), findsNothing);
+  });
+
+  testWidgets('initialQuery 进入即自动搜索', (WidgetTester tester) async {
+    await tester.pumpWidget(_searchPageHarness(initialQuery: 'one'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Good'), findsOneWidget);
+    expect(find.text(t.manga_global_search_prompt), findsNothing);
+  });
+
+  testWidgets('Esc 清空搜索框并保留焦点', (WidgetTester tester) async {
+    await tester.pumpWidget(_searchPageHarness());
+    await tester.pumpAndSettle();
+
+    final Finder field = find.byKey(
+      const ValueKey<String>('manga_global_search_field'),
+    );
+    await tester.showKeyboard(field);
+    await tester.enterText(field, 'one');
+    await tester.pump();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    await tester.pumpAndSettle();
+
+    final TextField textField = tester.widget<TextField>(field);
+    expect(textField.controller?.text, isEmpty, reason: 'Esc 清空搜索框');
+    expect(textField.focusNode?.hasFocus, isTrue, reason: '清空后焦点仍在搜索框');
+  });
+
+  testWidgets(
+      'no sources: empty state names the Import tab and its button lands on it',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(shellHarness(pushDepth: 1));
+    // 壳的浮动工具栏叠在内容上，视图让位的高度要等工具栏首帧量出来
+    // （MyComicHeightReporter 的 post-frame 回调）再落一帧才生效。
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('搜索'));
+    await tester.pumpAndSettle();
+
+    expect(find.text(t.manga_global_search_no_sources), findsOneWidget);
+    expect(
+      t.manga_global_search_no_sources,
+      contains(t.nav_browse),
+      // 2026-09-27 起漫画来源在「浏览 › 来源」里装 / 启用（PR #1707 审查改文案）。
+      reason: '空态文案必须点名用户真能找到的那个 tab（「浏览」），不是「扩展」',
+    );
+    final Finder button =
+        find.byKey(const ValueKey<String>('manga_global_search_open_sources'));
+    expect(button, findsOneWidget);
+    // 图标必须是「导入」的图标：拼图块（extension_outlined）正是本 bug 的病根。
+    expect(
+      tester.widget<Icon>(
+        find.descendant(of: button, matching: find.byType(Icon)),
+      ).icon,
+      Icons.library_add_outlined,
+    );
+
+    await tester.tap(button);
+    await tester.pumpAndSettle();
+    expect(find.byType(MangaGlobalSearchPage), findsNothing,
+        reason: '搜索页必须被弹掉，用户回到壳里才看得见切过去的「导入」视图');
+    expect(find.text('导入视图'), findsOneWidget);
+  });
+
+  // BUG-1871 复审：第二个入口（发现详情页 → 全源搜索页）在搜索页下面还压着详情页。
+  // 「本页 pop 自己」那套写法在这里只弹掉一层，详情页仍盖在壳上面。
+  testWidgets('no sources: 从详情页进来（压两层）也落到「导入」视图',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(shellHarness(pushDepth: 2));
+    // 壳的浮动工具栏叠在内容上，视图让位的高度要等工具栏首帧量出来
+    // （MyComicHeightReporter 的 post-frame 回调）再落一帧才生效。
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('搜索'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('详情页'));
+    await tester.pumpAndSettle();
+    expect(find.byType(MangaGlobalSearchPage), findsOneWidget);
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('manga_global_search_open_sources')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(MangaGlobalSearchPage), findsNothing);
+    expect(find.text('详情页'), findsNothing, reason: '中间那层详情页也必须被弹掉');
+    expect(find.text('导入视图'), findsOneWidget);
+  });
+
+  testWidgets('no sources without a shell to switch: text only, no button',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(
+      TranslationProvider(
+        child: MaterialApp(
+          home: MangaGlobalSearchPage(
+            mihonManager: null,
+            mihonSources: const <Never>[],
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.text(t.manga_global_search_no_sources), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey<String>('manga_global_search_open_sources')),
+      findsNothing,
+    );
+  });
+}

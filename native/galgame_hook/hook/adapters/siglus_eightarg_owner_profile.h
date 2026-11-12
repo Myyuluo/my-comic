@@ -3,7 +3,7 @@
 #include "siglus_eight_arg_glyph.h"
 #include "siglus_eightarg_input_viewport.h"
 
-namespace fushi_voice_hook::siglus_eightarg_owner_profile {
+namespace my_comic_voice_hook::siglus_eightarg_owner_profile {
 namespace glyph = siglus_eight_arg_glyph;
 namespace input = siglus_eightarg_input_viewport;
 using siglus_family::Signature;
@@ -185,4 +185,4 @@ inline bool Resolve(const exact_lookup::LoadedPeImage& image,
       proved.render_group_entry_rva};
   return true;
 }
-}  // namespace fushi_voice_hook::siglus_eightarg_owner_profile
+}  // namespace my_comic_voice_hook::siglus_eightarg_owner_profile

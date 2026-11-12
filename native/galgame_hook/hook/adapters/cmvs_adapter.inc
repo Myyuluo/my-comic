@@ -10,10 +10,10 @@
 #include "cmvs_lookup.inc"
 #include "cmvs_voice.inc"
 
-class CmvsAdapter final : public fushi_voice_hook::EngineAdapter {
+class CmvsAdapter final : public my_comic_voice_hook::EngineAdapter {
  public:
   const char* id() const override { return "cmvs"; }
-  bool probe() const override { return fushi_voice_hook::MatchesCmvsProfile(nullptr); }
+  bool probe() const override { return my_comic_voice_hook::MatchesCmvsProfile(nullptr); }
   // 整体身份与查词的精确构建准入分开，其他 CMVS 版本保留共享文本/PCM 路径。
   bool install() override {
     installed_ = probe();
@@ -31,19 +31,19 @@ class CmvsAdapter final : public fushi_voice_hook::EngineAdapter {
     ProcessCmvsVoiceTasks();
     ProcessCmvsLookupTick();
   }
-  fushi_voice_hook::LookupAdmissionReport lookupAdmission() const override {
-    fushi_voice_hook::LookupAdmissionReport report;
+  my_comic_voice_hook::LookupAdmissionReport lookupAdmission() const override {
+    my_comic_voice_hook::LookupAdmissionReport report;
     report.state = (g_cmvs_hook_installation.enabled() && g_cmvs_input_installation.enabled())
-        ? fushi_voice_hook::kLookupAdmissionSensorInstalled
-        : g_cmvs_identity_matched ? fushi_voice_hook::kLookupAdmissionIdentityAccepted
-                                 : fushi_voice_hook::kLookupAdmissionEngineUnsupported;
+        ? my_comic_voice_hook::kLookupAdmissionSensorInstalled
+        : g_cmvs_identity_matched ? my_comic_voice_hook::kLookupAdmissionIdentityAccepted
+                                 : my_comic_voice_hook::kLookupAdmissionEngineUnsupported;
     return report;
   }
-  fushi_voice_hook::AdapterCapability capabilities() const override {
-    const auto base = fushi_voice_hook::AdapterCapability::kText |
-                      fushi_voice_hook::AdapterCapability::kPcmAudio;
+  my_comic_voice_hook::AdapterCapability capabilities() const override {
+    const auto base = my_comic_voice_hook::AdapterCapability::kText |
+                      my_comic_voice_hook::AdapterCapability::kPcmAudio;
     return CmvsVoiceArmed()
-        ? base | fushi_voice_hook::AdapterCapability::kResourceAudio
+        ? base | my_comic_voice_hook::AdapterCapability::kResourceAudio
         : base;
   }
   void onModuleLoaded(const wchar_t* module_name) override {
@@ -60,7 +60,7 @@ class CmvsAdapter final : public fushi_voice_hook::EngineAdapter {
     ReleaseSRWLockExclusive(&g_cmvs_raw_lock);
     installed_ = false;
   }
-  fushi_voice_hook::AdapterDiagnostics diagnostics() const override {
+  my_comic_voice_hook::AdapterDiagnostics diagnostics() const override {
     return {id(), probe(), installed_,
             g_header == nullptr ? 0u : g_header->hook_diagnostics};
   }

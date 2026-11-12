@@ -1,10 +1,10 @@
-#ifndef FUSHI_UNITY_TEXT_MESH_REASSEMBLER_H_
-#define FUSHI_UNITY_TEXT_MESH_REASSEMBLER_H_
+#ifndef MYCOMIC_UNITY_TEXT_MESH_REASSEMBLER_H_
+#define MYCOMIC_UNITY_TEXT_MESH_REASSEMBLER_H_
 
 #include <cstddef>
 #include <cwchar>
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 // Legacy Unity titles may call TextMesh.set_text once per rendered glyph. This
 // accumulator deliberately has no clock: a typewriter pause is not a semantic
@@ -49,6 +49,6 @@ class UnityTextMeshReassembler {
   bool truncated_ = false;
 };
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook
 
-#endif  // FUSHI_UNITY_TEXT_MESH_REASSEMBLER_H_
+#endif  // MYCOMIC_UNITY_TEXT_MESH_REASSEMBLER_H_

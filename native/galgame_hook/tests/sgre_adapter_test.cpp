@@ -19,7 +19,7 @@ namespace {
 int g_dispatch_calls = 0;
 
 bool FakeOtherEngineHandler(
-    const fushi_voice_hook::XAudioCompressedResourceSubmission&) {
+    const my_comic_voice_hook::XAudioCompressedResourceSubmission&) {
   ++g_dispatch_calls;
   return true;
 }
@@ -37,7 +37,7 @@ std::vector<uint8_t> MakeArchive(const std::vector<uint8_t>& payload,
 }  // namespace
 
 void TestAnchorResolution() {
-  using namespace fushi_voice_hook;
+  using namespace my_comic_voice_hook;
 
   // A measured digest identifies a consistency row only. It must not bypass
   // signature resolution or structural validation when no mapped image is
@@ -254,13 +254,13 @@ struct KeyboardAnchorImage {
   uint8_t text[0x200] = {};
   uint8_t rdata[0x40] = {};
   uint8_t data[0x100] = {};
-  fushi_voice_hook::SgreImageView image;
+  my_comic_voice_hook::SgreImageView image;
   static constexpr uintptr_t kKeyboardRva = 0x3010;
   static constexpr uintptr_t kBindingsRva = 0x3040;
   static constexpr uintptr_t kGuidRva = 0x2010;
 
   KeyboardAnchorImage() {
-    using namespace fushi_voice_hook;
+    using namespace my_comic_voice_hook;
     image.image_base = 0x10000000u;
     image.section_count = 3;
     std::memcpy(image.sections[0].name, ".text", 6);
@@ -309,7 +309,7 @@ struct KeyboardAnchorImage {
 };
 
 void TestRemoteKeyboardAnchors() {
-  using namespace fushi_voice_hook;
+  using namespace my_comic_voice_hook;
   {
     KeyboardAnchorImage fixture;
     const SgreResolvedAnchor keyboard =
@@ -394,16 +394,16 @@ struct BindingRecord {
 // vector.
 std::vector<uint8_t> MakeBindings(const std::vector<BindingRecord>& records) {
   std::vector<uint8_t> out(records.size() *
-                           fushi_voice_hook::kSgreKeyboardBindingStride);
+                           my_comic_voice_hook::kSgreKeyboardBindingStride);
   for (size_t i = 0; i < records.size(); ++i) {
-    std::memcpy(out.data() + i * fushi_voice_hook::kSgreKeyboardBindingStride,
+    std::memcpy(out.data() + i * my_comic_voice_hook::kSgreKeyboardBindingStride,
                 &records[i], sizeof(BindingRecord));
   }
   return out;
 }
 
 void TestGameStreamRemoteKeys() {
-  using namespace fushi_voice_hook;
+  using namespace my_comic_voice_hook;
   static_assert(sizeof(BindingRecord) == kSgreKeyboardBindingStride,
                 "binding record layout");
   // The runtime's default keyboard bindings (DIK -> action / alt): arrows ->
@@ -547,28 +547,28 @@ void TestGameStreamRemoteKeys() {
 int main() {
   TestRemoteKeyboardAnchors();
   TestGameStreamRemoteKeys();
-  assert(fushi_voice_hook::MatchesSgreExecutableHash(
-      fushi_voice_hook::kSgreExecutableSha256.data(),
-      fushi_voice_hook::kSgreExecutableSha256.size()));
-  auto wrong_hash = fushi_voice_hook::kSgreExecutableSha256;
+  assert(my_comic_voice_hook::MatchesSgreExecutableHash(
+      my_comic_voice_hook::kSgreExecutableSha256.data(),
+      my_comic_voice_hook::kSgreExecutableSha256.size()));
+  auto wrong_hash = my_comic_voice_hook::kSgreExecutableSha256;
   wrong_hash[0] ^= 0xff;
-  assert(!fushi_voice_hook::MatchesSgreExecutableHash(wrong_hash.data(),
+  assert(!my_comic_voice_hook::MatchesSgreExecutableHash(wrong_hash.data(),
                                                       wrong_hash.size()));
-  assert(!fushi_voice_hook::MatchesSgreExecutableHash(nullptr, 0));
+  assert(!my_comic_voice_hook::MatchesSgreExecutableHash(nullptr, 0));
   TestAnchorResolution();
 
   // BUG-1882 — SGRE polls c_dfDIMouse2 directly, so swallowing Win32 mouse
   // messages cannot stop the game from seeing the click. Pin the measured
   // build's mouse slot / ABI and the button-only release latch used by the
   // injected detour.
-  assert(fushi_voice_hook::kSgreDirectInputMouseDeviceRva == 0xA96E18u);
-  assert(fushi_voice_hook::kSgreDirectInputGetDeviceStateVtableIndex == 9u);
-  uint8_t mouse_state[fushi_voice_hook::kSgreDirectInputMouseStateBytes] = {};
+  assert(my_comic_voice_hook::kSgreDirectInputMouseDeviceRva == 0xA96E18u);
+  assert(my_comic_voice_hook::kSgreDirectInputGetDeviceStateVtableIndex == 9u);
+  uint8_t mouse_state[my_comic_voice_hook::kSgreDirectInputMouseStateBytes] = {};
   mouse_state[0] = 0x11;   // lX bytes must survive unchanged.
   mouse_state[8] = 0x22;   // lZ bytes must survive unchanged.
   mouse_state[12] = 0x80;  // button 0 down.
   mouse_state[19] = 0x80;  // button 7 down.
-  uint8_t latched = fushi_voice_hook::FilterSgreDirectInputMouseButtons(
+  uint8_t latched = my_comic_voice_hook::FilterSgreDirectInputMouseButtons(
       true, mouse_state, sizeof(mouse_state), 0);
   assert(latched == 0x81);
   assert(mouse_state[0] == 0x11 && mouse_state[8] == 0x22);
@@ -578,36 +578,36 @@ int main() {
   // down transaction remains invisible until each raw up is observed.
   mouse_state[12] = 0x80;
   mouse_state[19] = 0x80;
-  latched = fushi_voice_hook::FilterSgreDirectInputMouseButtons(
+  latched = my_comic_voice_hook::FilterSgreDirectInputMouseButtons(
       false, mouse_state, sizeof(mouse_state), latched);
   assert(latched == 0x81 && mouse_state[12] == 0 && mouse_state[19] == 0);
   mouse_state[12] = 0;
   mouse_state[19] = 0x80;
-  latched = fushi_voice_hook::FilterSgreDirectInputMouseButtons(
+  latched = my_comic_voice_hook::FilterSgreDirectInputMouseButtons(
       false, mouse_state, sizeof(mouse_state), latched);
   assert(latched == 0x80 && mouse_state[19] == 0);
   mouse_state[19] = 0;
-  latched = fushi_voice_hook::FilterSgreDirectInputMouseButtons(
+  latched = my_comic_voice_hook::FilterSgreDirectInputMouseButtons(
       false, mouse_state, sizeof(mouse_state), latched);
   assert(latched == 0);
 
 
   memset(mouse_state, 0, sizeof(mouse_state));
   mouse_state[0] = 0x44;
-  uint32_t remote_observed = fushi_voice_hook::ApplySgreGameStreamRemoteButtons(
-      true, fushi_voice_hook::kGameStreamInputButtonLeft, mouse_state,
+  uint32_t remote_observed = my_comic_voice_hook::ApplySgreGameStreamRemoteButtons(
+      true, my_comic_voice_hook::kGameStreamInputButtonLeft, mouse_state,
       sizeof(mouse_state));
-  assert(remote_observed == fushi_voice_hook::kGameStreamInputButtonLeft);
+  assert(remote_observed == my_comic_voice_hook::kGameStreamInputButtonLeft);
   assert(mouse_state[0] == 0x44);
   assert(mouse_state[12] == 0x80);
   mouse_state[12] = 0;
-  remote_observed = fushi_voice_hook::ApplySgreGameStreamRemoteButtons(
-      false, fushi_voice_hook::kGameStreamInputButtonLeft, mouse_state,
+  remote_observed = my_comic_voice_hook::ApplySgreGameStreamRemoteButtons(
+      false, my_comic_voice_hook::kGameStreamInputButtonLeft, mouse_state,
       sizeof(mouse_state));
   assert(remote_observed == 0 && mouse_state[12] == 0);
   uint8_t short_state[16] = {};
-  assert(fushi_voice_hook::ApplySgreGameStreamRemoteButtons(
-             true, fushi_voice_hook::kGameStreamInputButtonLeft, short_state,
+  assert(my_comic_voice_hook::ApplySgreGameStreamRemoteButtons(
+             true, my_comic_voice_hook::kGameStreamInputButtonLeft, short_state,
              sizeof(short_state)) == 0);
 
   // Remote confirm must never be judged by the shield latch, and the reported
@@ -623,40 +623,40 @@ int main() {
   memset(mouse_state, 0, sizeof(mouse_state));
   // Physical press while the lookup popup was up: the latch holds bit0.
   mouse_state[12] = 0x80;
-  uint8_t stuck = fushi_voice_hook::FilterSgreDirectInputMouseButtons(
+  uint8_t stuck = my_comic_voice_hook::FilterSgreDirectInputMouseButtons(
       true, mouse_state, sizeof(mouse_state), 0);
   assert(stuck == 0x01 && mouse_state[12] == 0);
 
   // Correct order: drain first against the *physical* state (button released
   // in the real device, so the latch clears) ...
   mouse_state[12] = 0;
-  stuck = fushi_voice_hook::FilterSgreDirectInputMouseButtons(
+  stuck = my_comic_voice_hook::FilterSgreDirectInputMouseButtons(
       false, mouse_state, sizeof(mouse_state), stuck);
   assert(stuck == 0 && "a real release must drain the latch");
   // ... then OR the remote confirm on top of the filtered result.
-  remote_observed = fushi_voice_hook::ApplySgreGameStreamRemoteButtons(
-      true, fushi_voice_hook::kGameStreamInputButtonLeft, mouse_state,
+  remote_observed = my_comic_voice_hook::ApplySgreGameStreamRemoteButtons(
+      true, my_comic_voice_hook::kGameStreamInputButtonLeft, mouse_state,
       sizeof(mouse_state));
   assert(mouse_state[12] == 0x80 && "remote confirm must reach the game");
-  assert(remote_observed == fushi_voice_hook::kGameStreamInputButtonLeft);
+  assert(remote_observed == my_comic_voice_hook::kGameStreamInputButtonLeft);
 
   // `observed` is a read-back, not an echo: if something downstream clears the
   // byte, the ACK must stop claiming the game saw it.
   mouse_state[12] = 0;
-  const uint32_t echoed = fushi_voice_hook::ApplySgreGameStreamRemoteButtons(
-      false, fushi_voice_hook::kGameStreamInputButtonLeft, mouse_state,
+  const uint32_t echoed = my_comic_voice_hook::ApplySgreGameStreamRemoteButtons(
+      false, my_comic_voice_hook::kGameStreamInputButtonLeft, mouse_state,
       sizeof(mouse_state));
   assert(echoed == 0 && "a refused injection must never report observed");
 
   // Once inactive and drained, unrelated real input must pass untouched. An
   // unknown state layout is also a strict no-op.
   mouse_state[13] = 0x80;
-  latched = fushi_voice_hook::FilterSgreDirectInputMouseButtons(
+  latched = my_comic_voice_hook::FilterSgreDirectInputMouseButtons(
       false, mouse_state, sizeof(mouse_state), latched);
   assert(latched == 0 && mouse_state[13] == 0x80);
   uint8_t unsupported[16] = {};
   unsupported[12] = 0x80;
-  assert(fushi_voice_hook::FilterSgreDirectInputMouseButtons(
+  assert(my_comic_voice_hook::FilterSgreDirectInputMouseButtons(
              true, unsupported, sizeof(unsupported), 0x04) == 0x04);
   assert(unsupported[12] == 0x80);
 
@@ -666,34 +666,34 @@ int main() {
   mouse_state[0] = 0x33;
   mouse_state[12] = 0x80;
   mouse_state[13] = 0x80;
-  latched = fushi_voice_hook::FilterSgreDirectInputMouseButtons(
+  latched = my_comic_voice_hook::FilterSgreDirectInputMouseButtons(
       false, mouse_state, sizeof(mouse_state),
-      fushi_voice_hook::kSgreLookupPrimaryButtonMask);
-  assert(latched == fushi_voice_hook::kSgreLookupPrimaryButtonMask);
+      my_comic_voice_hook::kSgreLookupPrimaryButtonMask);
+  assert(latched == my_comic_voice_hook::kSgreLookupPrimaryButtonMask);
   assert(mouse_state[0] == 0x33 && mouse_state[12] == 0 &&
          mouse_state[13] == 0x80);
 
-  using ClickAction = fushi_voice_hook::SgreLookupClickAction;
-  fushi_voice_hook::SgreLookupClickGestureState click;
+  using ClickAction = my_comic_voice_hook::SgreLookupClickAction;
+  my_comic_voice_hook::SgreLookupClickGestureState click;
   // Injection/enable may happen while left is already physically held. That
   // half-transaction passes through and only its release arms single-click.
-  assert(fushi_voice_hook::AdvanceSgreLookupClickGesture(true, true, true, true,
+  assert(my_comic_voice_hook::AdvanceSgreLookupClickGesture(true, true, true, true,
                                                         &click) ==
          ClickAction::kNone);
   assert(!click.synchronized && click.last_down && !click.active);
-  assert(fushi_voice_hook::AdvanceSgreLookupClickGesture(false, true, true, true,
+  assert(my_comic_voice_hook::AdvanceSgreLookupClickGesture(false, true, true, true,
                                                         &click) ==
          ClickAction::kNone);
   assert(click.synchronized && !click.last_down);
 
-  assert(fushi_voice_hook::AdvanceSgreLookupClickGesture(true, true, true, true,
+  assert(my_comic_voice_hook::AdvanceSgreLookupClickGesture(true, true, true, true,
                                                         &click) ==
          ClickAction::kBegin);
   assert(click.active);
-  assert(fushi_voice_hook::AdvanceSgreLookupClickGesture(true, true, false, true,
+  assert(my_comic_voice_hook::AdvanceSgreLookupClickGesture(true, true, false, true,
                                                         &click) ==
          ClickAction::kNone);
-  assert(fushi_voice_hook::AdvanceSgreLookupClickGesture(false, true, false, true,
+  assert(my_comic_voice_hook::AdvanceSgreLookupClickGesture(false, true, false, true,
                                                         &click) ==
          ClickAction::kSubmit);
   assert(!click.active && !click.last_down);
@@ -701,55 +701,55 @@ int main() {
   // 命中即承诺：down 已经从游戏的采样里抹掉了，位移**不是**取消理由。曾经的 6px
   // 拖动阈值会让手抖越界的点击既不查词、也不推进台词（游戏和用户两头空），
   // 那个特例已被消除——按住期间任意位移，抬起仍必须 kSubmit。
-  assert(fushi_voice_hook::AdvanceSgreLookupClickGesture(true, true, true, true,
+  assert(my_comic_voice_hook::AdvanceSgreLookupClickGesture(true, true, true, true,
                                                         &click) ==
          ClickAction::kBegin);
-  assert(fushi_voice_hook::AdvanceSgreLookupClickGesture(true, true, false,
+  assert(my_comic_voice_hook::AdvanceSgreLookupClickGesture(true, true, false,
                                                         true, &click) ==
          ClickAction::kNone);
-  assert(fushi_voice_hook::AdvanceSgreLookupClickGesture(false, true, false,
+  assert(my_comic_voice_hook::AdvanceSgreLookupClickGesture(false, true, false,
                                                         true, &click) ==
          ClickAction::kSubmit);
 
   // 仍然保留的两个取消理由，都是「这次消费本来就不该成立」：查词权限/屏蔽在按住
   // 期间掉电，或光标位置读不出来。下游本来就会吞掉这次点击，不构成额外损失。
-  assert(fushi_voice_hook::AdvanceSgreLookupClickGesture(true, true, true, true,
+  assert(my_comic_voice_hook::AdvanceSgreLookupClickGesture(true, true, true, true,
                                                         &click) ==
          ClickAction::kBegin);
-  assert(fushi_voice_hook::AdvanceSgreLookupClickGesture(true, false, false,
+  assert(my_comic_voice_hook::AdvanceSgreLookupClickGesture(true, false, false,
                                                         true, &click) ==
          ClickAction::kNone);
-  assert(fushi_voice_hook::AdvanceSgreLookupClickGesture(false, false, false,
+  assert(my_comic_voice_hook::AdvanceSgreLookupClickGesture(false, false, false,
                                                         true, &click) ==
          ClickAction::kCancel);
-  assert(fushi_voice_hook::AdvanceSgreLookupClickGesture(true, true, true, true,
+  assert(my_comic_voice_hook::AdvanceSgreLookupClickGesture(true, true, true, true,
                                                         &click) ==
          ClickAction::kBegin);
-  assert(fushi_voice_hook::AdvanceSgreLookupClickGesture(true, true, false,
+  assert(my_comic_voice_hook::AdvanceSgreLookupClickGesture(true, true, false,
                                                         false, &click) ==
          ClickAction::kNone);
-  assert(fushi_voice_hook::AdvanceSgreLookupClickGesture(false, true, false,
+  assert(my_comic_voice_hook::AdvanceSgreLookupClickGesture(false, true, false,
                                                         false, &click) ==
          ClickAction::kCancel);
 
   // A miss is a pass-through transaction. Becoming a hit while the same raw
   // button is held must never start consuming halfway through.
-  assert(fushi_voice_hook::AdvanceSgreLookupClickGesture(true, true, false, true,
+  assert(my_comic_voice_hook::AdvanceSgreLookupClickGesture(true, true, false, true,
                                                         &click) ==
          ClickAction::kNone);
-  assert(fushi_voice_hook::AdvanceSgreLookupClickGesture(true, true, true, true,
+  assert(my_comic_voice_hook::AdvanceSgreLookupClickGesture(true, true, true, true,
                                                         &click) ==
          ClickAction::kNone);
-  assert(fushi_voice_hook::AdvanceSgreLookupClickGesture(false, true, true, true,
+  assert(my_comic_voice_hook::AdvanceSgreLookupClickGesture(false, true, true, true,
                                                         &click) ==
          ClickAction::kNone);
-  assert(fushi_voice_hook::AdvanceSgreLookupClickGesture(true, true, true, false,
+  assert(my_comic_voice_hook::AdvanceSgreLookupClickGesture(true, true, true, false,
                                                         &click) ==
          ClickAction::kNone);
-  assert(fushi_voice_hook::AdvanceSgreLookupClickGesture(false, true, false, true,
+  assert(my_comic_voice_hook::AdvanceSgreLookupClickGesture(false, true, false, true,
                                                         &click) ==
          ClickAction::kNone);
-  assert(fushi_voice_hook::AdvanceSgreLookupClickGesture(false, true, true, true,
+  assert(my_comic_voice_hook::AdvanceSgreLookupClickGesture(false, true, true, true,
                                                         nullptr) ==
          ClickAction::kNone);
 
@@ -757,185 +757,185 @@ int main() {
   // glyph draw point and texture cell are already physical units. These are
   // live values from the admitted 3840x2160 process: glyph+0x40 advances 80,
   // while the discarded pre-draw glyph+0x94 field advances only 25.
-  const fushi_voice_hook::SgreLookupGlyphGeometry glyphs[] = {
+  const my_comic_voice_hook::SgreLookupGlyphGeometry glyphs[] = {
       {0.0f, 0.0f, 80.0f, 80.0f, 0},
       {80.0f, 0.0f, 80.0f, 80.0f, 0},
       {0.0f, 80.0f, 80.0f, 80.0f, 1},
   };
-  fushi_voice_hook::SgreLookupRect rect;
-  assert(fushi_voice_hook::SgreLookupRectForGlyph(glyphs[0], 1920, 1080,
+  my_comic_voice_hook::SgreLookupRect rect;
+  assert(my_comic_voice_hook::SgreLookupRectForGlyph(glyphs[0], 1920, 1080,
                                                    &rect));
   assert(rect.x == 320 && rect.y == 830 && rect.width == 80 &&
          rect.height == 80);
-  assert(fushi_voice_hook::FindSgreLookupGlyph(glyphs, 3, 1920, 1080, 401, 840,
+  assert(my_comic_voice_hook::FindSgreLookupGlyph(glyphs, 3, 1920, 1080, 401, 840,
                                                &rect) == 1);
-  assert(fushi_voice_hook::FindSgreLookupGlyph(glyphs, 3, 3840, 2160, 721, 1670,
+  assert(my_comic_voice_hook::FindSgreLookupGlyph(glyphs, 3, 3840, 2160, 721, 1670,
                                                &rect) == 1);
   assert(rect.x == 720 && rect.y == 1660 && rect.width == 80 &&
          rect.height == 80);
   // Non-16:9 clients keep the 1920x1080 render surface aspect-fitted. The
   // black-bar offset must be included in cursor hit testing.
-  assert(fushi_voice_hook::SgreLookupRectForGlyph(glyphs[0], 2622, 1206,
+  assert(my_comic_voice_hook::SgreLookupRectForGlyph(glyphs[0], 2622, 1206,
                                                    &rect));
   assert(rect.x == 596 && rect.y == 927 && rect.width == 80);
-  assert(fushi_voice_hook::FindSgreLookupGlyph(glyphs, 3, 2622, 1206, 600, 940,
+  assert(my_comic_voice_hook::FindSgreLookupGlyph(glyphs, 3, 2622, 1206, 600, 940,
                                                &rect) == 0);
-  assert(fushi_voice_hook::FindSgreLookupGlyph(glyphs, 3, 1920, 1080, 321, 920,
+  assert(my_comic_voice_hook::FindSgreLookupGlyph(glyphs, 3, 1920, 1080, 321, 920,
                                                &rect) == 2);
-  assert(fushi_voice_hook::FindSgreLookupGlyph(glyphs, 3, 1920, 1080, 100, 100,
+  assert(my_comic_voice_hook::FindSgreLookupGlyph(glyphs, 3, 1920, 1080, 100, 100,
                                                &rect) == -1);
   auto invalid = glyphs[0];
   invalid.width = -1.0f;
-  assert(!fushi_voice_hook::IsSaneSgreLookupGlyph(invalid));
+  assert(!my_comic_voice_hook::IsSaneSgreLookupGlyph(invalid));
 
-  assert(fushi_voice_hook::SgreLookupHitWidth(glyphs, 3, 0) == 80.0f);
-  assert(fushi_voice_hook::SgreLookupHitWidth(glyphs, 3, 1) == 80.0f);
+  assert(my_comic_voice_hook::SgreLookupHitWidth(glyphs, 3, 0) == 80.0f);
+  assert(my_comic_voice_hook::SgreLookupHitWidth(glyphs, 3, 1) == 80.0f);
 
   // The fixture above cannot fail: every width AND every advance in it is 80,
   // so gutting SgreLookupHitWidth into `return glyphs[i].width;` still passes.
   // Pin the two behaviours that actually justify the function with a fixture
   // whose advance differs from the texture box.
-  const fushi_voice_hook::SgreLookupGlyphGeometry narrow[] = {
+  const my_comic_voice_hook::SgreLookupGlyphGeometry narrow[] = {
       {0.0f, 0.0f, 80.0f, 80.0f, 0},
       {40.0f, 0.0f, 80.0f, 80.0f, 0},
       {0.0f, 80.0f, 80.0f, 80.0f, 1},
   };
   // Converge onto the next draw anchor so a half-width neighbour cannot make
   // two hit cells overlap.
-  assert(fushi_voice_hook::SgreLookupHitWidth(narrow, 3, 0) == 40.0f);
+  assert(my_comic_voice_hook::SgreLookupHitWidth(narrow, 3, 0) == 40.0f);
   // Row-final glyph has no following anchor on its row: reuse the previous
   // advance rather than the raw box.
-  assert(fushi_voice_hook::SgreLookupHitWidth(narrow, 3, 1) == 40.0f);
+  assert(my_comic_voice_hook::SgreLookupHitWidth(narrow, 3, 1) == 40.0f);
   // Row-leading glyph: neither neighbour is on this row, so the box stands.
-  assert(fushi_voice_hook::SgreLookupHitWidth(narrow, 3, 2) == 80.0f);
+  assert(my_comic_voice_hook::SgreLookupHitWidth(narrow, 3, 2) == 80.0f);
 
   // An advance wider than the texture cell must NOT widen the hit cell -- that
   // is what the std::min is for; without it a sparse row swallows the gaps.
-  const fushi_voice_hook::SgreLookupGlyphGeometry sparse[] = {
+  const my_comic_voice_hook::SgreLookupGlyphGeometry sparse[] = {
       {0.0f, 0.0f, 80.0f, 80.0f, 0},
       {200.0f, 0.0f, 80.0f, 80.0f, 0},
   };
-  assert(fushi_voice_hook::SgreLookupHitWidth(sparse, 2, 0) == 80.0f);
+  assert(my_comic_voice_hook::SgreLookupHitWidth(sparse, 2, 0) == 80.0f);
 
   // Malformed inputs return a rejecting value instead of reading out of bounds.
-  assert(fushi_voice_hook::SgreLookupHitWidth(glyphs, 3, 3) == 0.0f);
-  assert(fushi_voice_hook::SgreLookupHitWidth(nullptr, 3, 0) == 0.0f);
-  assert(fushi_voice_hook::FindSgreLookupGlyph(nullptr, 3, 1920, 1080, 0, 0,
+  assert(my_comic_voice_hook::SgreLookupHitWidth(glyphs, 3, 3) == 0.0f);
+  assert(my_comic_voice_hook::SgreLookupHitWidth(nullptr, 3, 0) == 0.0f);
+  assert(my_comic_voice_hook::FindSgreLookupGlyph(nullptr, 3, 1920, 1080, 0, 0,
                                                &rect) == -1);
-  assert(fushi_voice_hook::FindSgreLookupGlyph(glyphs, 0, 1920, 1080, 0, 0,
+  assert(my_comic_voice_hook::FindSgreLookupGlyph(glyphs, 0, 1920, 1080, 0, 0,
                                                &rect) == -1);
-  assert(!fushi_voice_hook::SgreLookupRectForGlyph(glyphs[0], 0, 1080, &rect));
+  assert(!my_comic_voice_hook::SgreLookupRectForGlyph(glyphs[0], 0, 1080, &rect));
   assert(
-      !fushi_voice_hook::SgreLookupRectForGlyph(glyphs[0], 1920, 1080, nullptr));
+      !my_comic_voice_hook::SgreLookupRectForGlyph(glyphs[0], 1920, 1080, nullptr));
 
   // The admitted draw surface stores one flattened glyph vector. Both native
   // and automatic line breaks reset (or repeat) the next x anchor, so visual
   // rows can be derived without interpreting UserHook1/MAGES control codes.
-  assert(!fushi_voice_hook::StartsNextSgreLookupLine(0.0f, 80.0f));
-  assert(!fushi_voice_hook::StartsNextSgreLookupLine(80.0f, 160.0f));
-  assert(fushi_voice_hook::StartsNextSgreLookupLine(2480.0f, 0.0f));
-  assert(fushi_voice_hook::StartsNextSgreLookupLine(80.0f, 80.0f));
+  assert(!my_comic_voice_hook::StartsNextSgreLookupLine(0.0f, 80.0f));
+  assert(!my_comic_voice_hook::StartsNextSgreLookupLine(80.0f, 160.0f));
+  assert(my_comic_voice_hook::StartsNextSgreLookupLine(2480.0f, 0.0f));
+  assert(my_comic_voice_hook::StartsNextSgreLookupLine(80.0f, 80.0f));
   // The scenario cell scales with the render target: design 40 at 1920x1080,
   // 80 at 3840x2160, 53.33 at 2560x1440. The gate must follow the live client
   // size instead of the historical 4K constant, otherwise a windowed 1080p
   // session never produces the exact text lane or lookup geometry.
-  assert(fushi_voice_hook::SgreLookupRenderScale(3840, 2160) == 2.0f);
-  assert(fushi_voice_hook::SgreLookupRenderScale(1920, 1080) == 1.0f);
-  assert(fushi_voice_hook::SgreLookupRenderScale(0, 1080) == 0.0f);
-  assert(fushi_voice_hook::SgreScenarioLineHeightForClient(3840, 2160) ==
+  assert(my_comic_voice_hook::SgreLookupRenderScale(3840, 2160) == 2.0f);
+  assert(my_comic_voice_hook::SgreLookupRenderScale(1920, 1080) == 1.0f);
+  assert(my_comic_voice_hook::SgreLookupRenderScale(0, 1080) == 0.0f);
+  assert(my_comic_voice_hook::SgreScenarioLineHeightForClient(3840, 2160) ==
          80.0f);
-  assert(fushi_voice_hook::SgreScenarioLineHeightForClient(1920, 1080) ==
+  assert(my_comic_voice_hook::SgreScenarioLineHeightForClient(1920, 1080) ==
          40.0f);
   const float expected_4k =
-      fushi_voice_hook::SgreScenarioLineHeightForClient(3840, 2160);
+      my_comic_voice_hook::SgreScenarioLineHeightForClient(3840, 2160);
   const float expected_1080p =
-      fushi_voice_hook::SgreScenarioLineHeightForClient(1920, 1080);
+      my_comic_voice_hook::SgreScenarioLineHeightForClient(1920, 1080);
   const float expected_1440p =
-      fushi_voice_hook::SgreScenarioLineHeightForClient(2560, 1440);
-  assert(fushi_voice_hook::MatchesSgreScenarioDrawMetrics(80.0f, 80.0f, true,
+      my_comic_voice_hook::SgreScenarioLineHeightForClient(2560, 1440);
+  assert(my_comic_voice_hook::MatchesSgreScenarioDrawMetrics(80.0f, 80.0f, true,
                                                           expected_4k));
-  assert(fushi_voice_hook::MatchesSgreScenarioDrawMetrics(40.0f, 40.0f, true,
+  assert(my_comic_voice_hook::MatchesSgreScenarioDrawMetrics(40.0f, 40.0f, true,
                                                           expected_1080p));
-  assert(fushi_voice_hook::MatchesSgreScenarioDrawMetrics(53.0f, 53.0f, true,
+  assert(my_comic_voice_hook::MatchesSgreScenarioDrawMetrics(53.0f, 53.0f, true,
                                                           expected_1440p));
   // A 4K-sized cell drawn into a 1080p client is not the dialogue surface.
-  assert(!fushi_voice_hook::MatchesSgreScenarioDrawMetrics(80.0f, 80.0f, true,
+  assert(!my_comic_voice_hook::MatchesSgreScenarioDrawMetrics(80.0f, 80.0f, true,
                                                            expected_1080p));
-  assert(!fushi_voice_hook::MatchesSgreScenarioDrawMetrics(33.0f, 33.0f, true,
+  assert(!my_comic_voice_hook::MatchesSgreScenarioDrawMetrics(33.0f, 33.0f, true,
                                                            expected_1080p));
   // Line height and glyph height must agree (one square cell).
-  assert(!fushi_voice_hook::MatchesSgreScenarioDrawMetrics(40.0f, 80.0f, true,
+  assert(!my_comic_voice_hook::MatchesSgreScenarioDrawMetrics(40.0f, 80.0f, true,
                                                            expected_1080p));
-  assert(!fushi_voice_hook::MatchesSgreScenarioDrawMetrics(80.0f, 80.0f, false,
+  assert(!my_comic_voice_hook::MatchesSgreScenarioDrawMetrics(80.0f, 80.0f, false,
                                                            expected_4k));
   // A hit's text_generation is the text-lane seq of the exact line (what the
   // host mines by); the capture generation is only a well-formedness fallback.
-  assert(fushi_voice_hook::SgreLookupHitTextGeneration(43, 11) == 43);
-  assert(fushi_voice_hook::SgreLookupHitTextGeneration(0, 11) == 11);
+  assert(my_comic_voice_hook::SgreLookupHitTextGeneration(43, 11) == 43);
+  assert(my_comic_voice_hook::SgreLookupHitTextGeneration(0, 11) == 11);
   // Typewriter reveal: only the fully revealed line is a text-lane line.
-  assert(!fushi_voice_hook::IsSgreScenarioLineFullyRevealed(2, 47));
-  assert(!fushi_voice_hook::IsSgreScenarioLineFullyRevealed(46, 47));
-  assert(fushi_voice_hook::IsSgreScenarioLineFullyRevealed(47, 47));
-  assert(!fushi_voice_hook::IsSgreScenarioLineFullyRevealed(0, 0));
+  assert(!my_comic_voice_hook::IsSgreScenarioLineFullyRevealed(2, 47));
+  assert(!my_comic_voice_hook::IsSgreScenarioLineFullyRevealed(46, 47));
+  assert(my_comic_voice_hook::IsSgreScenarioLineFullyRevealed(47, 47));
+  assert(!my_comic_voice_hook::IsSgreScenarioLineFullyRevealed(0, 0));
   // Client size unknown (shield not published yet): self-consistency band only.
-  assert(fushi_voice_hook::MatchesSgreScenarioDrawMetrics(40.0f, 40.0f, true,
+  assert(my_comic_voice_hook::MatchesSgreScenarioDrawMetrics(40.0f, 40.0f, true,
                                                           0.0f));
-  assert(fushi_voice_hook::MatchesSgreScenarioDrawMetrics(80.0f, 80.0f, true,
+  assert(my_comic_voice_hook::MatchesSgreScenarioDrawMetrics(80.0f, 80.0f, true,
                                                           0.0f));
-  assert(!fushi_voice_hook::MatchesSgreScenarioDrawMetrics(10.0f, 10.0f, true,
+  assert(!my_comic_voice_hook::MatchesSgreScenarioDrawMetrics(10.0f, 10.0f, true,
                                                            0.0f));
-  assert(!fushi_voice_hook::MatchesSgreScenarioDrawMetrics(400.0f, 400.0f,
+  assert(!my_comic_voice_hook::MatchesSgreScenarioDrawMetrics(400.0f, 400.0f,
                                                            true, 0.0f));
 
   // The production worker polls every 16 ms. Preserve held-key edge behavior,
   // but also consume a complete press/release reported only by the low bit.
   bool last_shift_down = false;
-  assert(!fushi_voice_hook::ConsumeSgreLookupShiftSample(0x0000,
+  assert(!my_comic_voice_hook::ConsumeSgreLookupShiftSample(0x0000,
                                                          &last_shift_down));
-  assert(fushi_voice_hook::ConsumeSgreLookupShiftSample(0x8001,
+  assert(my_comic_voice_hook::ConsumeSgreLookupShiftSample(0x8001,
                                                         &last_shift_down));
   assert(last_shift_down);
-  assert(!fushi_voice_hook::ConsumeSgreLookupShiftSample(0x8000,
+  assert(!my_comic_voice_hook::ConsumeSgreLookupShiftSample(0x8000,
                                                          &last_shift_down));
-  assert(!fushi_voice_hook::ConsumeSgreLookupShiftSample(0x0000,
+  assert(!my_comic_voice_hook::ConsumeSgreLookupShiftSample(0x0000,
                                                          &last_shift_down));
   assert(!last_shift_down);
-  assert(fushi_voice_hook::ConsumeSgreLookupShiftSample(0x0001,
+  assert(my_comic_voice_hook::ConsumeSgreLookupShiftSample(0x0001,
                                                         &last_shift_down));
   assert(!last_shift_down);
-  assert(!fushi_voice_hook::ConsumeSgreLookupShiftSample(0x0000, nullptr));
+  assert(!my_comic_voice_hook::ConsumeSgreLookupShiftSample(0x0000, nullptr));
 
   // Per-frame draw captures are transport updates, not new production
   // generations. Keep the epoch stable for identical UTF-16 and glyph layout,
   // and reject an up after either geometry or the client transform changes.
   constexpr char16_t kStableText[] = u"一二三";
-  assert(fushi_voice_hook::SameSgreLookupLogicalSnapshot(
+  assert(my_comic_voice_hook::SameSgreLookupLogicalSnapshot(
       kStableText, 3, glyphs, 3, 80.0f, kStableText, 3, glyphs, 3,
       80.0f));
-  fushi_voice_hook::SgreLookupGlyphGeometry moved_glyphs[] = {
+  my_comic_voice_hook::SgreLookupGlyphGeometry moved_glyphs[] = {
       glyphs[0], glyphs[1], glyphs[2]};
   moved_glyphs[1].x += 1.0f;
-  assert(!fushi_voice_hook::SameSgreLookupLogicalSnapshot(
+  assert(!my_comic_voice_hook::SameSgreLookupLogicalSnapshot(
       kStableText, 3, glyphs, 3, 80.0f, kStableText, 3, moved_glyphs, 3,
       80.0f));
-  assert(fushi_voice_hook::NextSgreLookupLogicalGeneration(0) == 1);
-  assert(fushi_voice_hook::NextSgreLookupLogicalGeneration(UINT64_MAX) == 1);
-  const fushi_voice_hook::SgreLookupClientSnapshot stable_client = {
+  assert(my_comic_voice_hook::NextSgreLookupLogicalGeneration(0) == 1);
+  assert(my_comic_voice_hook::NextSgreLookupLogicalGeneration(UINT64_MAX) == 1);
+  const my_comic_voice_hook::SgreLookupClientSnapshot stable_client = {
       0x4321u, -1600, 20, 1920, 1080};
-  assert(fushi_voice_hook::MatchesSgreLookupGenerationAndClient(
+  assert(my_comic_voice_hook::MatchesSgreLookupGenerationAndClient(
       11, stable_client, 11, stable_client));
   auto moved_client = stable_client;
   ++moved_client.screen_x;
-  assert(!fushi_voice_hook::MatchesSgreLookupGenerationAndClient(
+  assert(!my_comic_voice_hook::MatchesSgreLookupGenerationAndClient(
       11, stable_client, 11, moved_client));
-  assert(!fushi_voice_hook::MatchesSgreLookupGenerationAndClient(
+  assert(!my_comic_voice_hook::MatchesSgreLookupGenerationAndClient(
       11, stable_client, 12, stable_client));
 
   // Generic dispatch is inert until an explicitly matched engine registers a
   // handler. This is the cross-engine negative boundary: WMA by itself never
   // activates SGRE archive logic.
-  fushi_voice_hook::XAudioCompressedResourceDispatch dispatch;
-  fushi_voice_hook::XAudioCompressedResourceSubmission submission;
+  my_comic_voice_hook::XAudioCompressedResourceDispatch dispatch;
+  my_comic_voice_hook::XAudioCompressedResourceSubmission submission;
   assert(!dispatch.available());
   assert(!dispatch.Dispatch(submission));
   assert(g_dispatch_calls == 0);
@@ -955,11 +955,11 @@ int main() {
   }
   const uint32_t dpds[2] = {2048, 4096};
   std::vector<uint8_t> archive_bytes = MakeArchive(payload, dpds);
-  fushi_voice_hook::SgreVoiceArchiveView archive;
+  my_comic_voice_hook::SgreVoiceArchiveView archive;
   archive.data = archive_bytes.data();
   archive.bytes = archive_bytes.size();
-  fushi_voice_hook::SgreVoiceArchiveResourceParts parts;
-  assert(fushi_voice_hook::FindSgreVoiceArchiveResourceParts(
+  my_comic_voice_hook::SgreVoiceArchiveResourceParts parts;
+  assert(my_comic_voice_hook::FindSgreVoiceArchiveResourceParts(
       archive, payload.data(), payload.size(),
       reinterpret_cast<const uint8_t*>(dpds), 2, &parts));
   assert(parts.body_offset == 28);
@@ -967,7 +967,7 @@ int main() {
   assert(parts.dpds == archive_bytes.data() + 20);
 
   std::vector<uint8_t> xwma;
-  assert(fushi_voice_hook::BuildXwmaResourceFromChunks(
+  assert(my_comic_voice_hook::BuildXwmaResourceFromChunks(
       parts.fmt, parts.fmt_bytes, parts.dpds, parts.dpds_bytes,
       payload.data(), static_cast<uint32_t>(payload.size()), &xwma));
   assert(std::memcmp(xwma.data(), "RIFF", 4) == 0);
@@ -976,16 +976,16 @@ int main() {
                      payload.data(), payload.size()) == 0);
 
   uint32_t wrong_dpds[2] = {2048, 4097};
-  assert(!fushi_voice_hook::FindSgreVoiceArchiveResourceParts(
+  assert(!my_comic_voice_hook::FindSgreVoiceArchiveResourceParts(
       archive, payload.data(), payload.size(),
       reinterpret_cast<const uint8_t*>(wrong_dpds), 2, &parts));
   archive_bytes[0] = 0x62;
-  assert(!fushi_voice_hook::FindSgreVoiceArchiveResourceParts(
+  assert(!my_comic_voice_hook::FindSgreVoiceArchiveResourceParts(
       archive, payload.data(), payload.size(),
       reinterpret_cast<const uint8_t*>(dpds), 2, &parts));
   archive_bytes[0] = 0x61;
   archive_bytes[18] = 1;
-  assert(!fushi_voice_hook::FindSgreVoiceArchiveResourceParts(
+  assert(!my_comic_voice_hook::FindSgreVoiceArchiveResourceParts(
       archive, payload.data(), payload.size(),
       reinterpret_cast<const uint8_t*>(dpds), 2, &parts));
   return 0;

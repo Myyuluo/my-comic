@@ -9,7 +9,7 @@
 # 不通就把配法打在前面（只示警不拦路，实测单次探测会误报），pub get 真失败时
 # 再把同一份配法作为报错抛出，而不是甩一句光秃秃的 socket error。
 #   1) 调用方已设的 HTTPS_PROXY / HTTP_PROXY / ALL_PROXY（最高优先级）
-#   2) FUSHI_BOOTSTRAP_PROXY（只影响 bootstrap，不污染其它工具）
+#   2) MYCOMIC_BOOTSTRAP_PROXY（只影响 bootstrap，不污染其它工具）
 #   3) <主 checkout>/tool/bootstrap.local.env（gitignore，本机私有，一次配置长期生效）
 # 三条都没有也照常跑（CI / 直连可用的机器不受影响）。
 
@@ -23,17 +23,17 @@ try { [Console]::OutputEncoding = [Text.Encoding]::UTF8 } catch { }
 $root = Split-Path -Parent $PSScriptRoot
 
 # --- flutter 可执行文件 ----------------------------------------------------
-# 版本的唯一真相源是 fushi/.fvmrc（守卫 fushi/test/build/flutter_version_single_source_guard_test.dart
+# 版本的唯一真相源是 my_comic/.fvmrc（守卫 my_comic/test/build/flutter_version_single_source_guard_test.dart
 # 钉死它与 CI 同版）。按版本号找 SDK，绝不静默回退到 PATH 上版本不符的旧 flutter ——
 # 旧版本编不过本仓，pub get 还会把 lockfile 切走。
-# 顺序：FUSHI_FLUTTER（显式覆盖，不校验版本）> fvm 缓存 > 常见安装目录 > PATH 上版本相符的 flutter。
+# 顺序：MYCOMIC_FLUTTER（显式覆盖，不校验版本）> fvm 缓存 > 常见安装目录 > PATH 上版本相符的 flutter。
 # 这里没有任何本机私有路径：所有候选都是「按版本号拼出来的目录」。
 
 function Get-PinnedFlutterVersion {
     [OutputType([string])]
     param([string]$RepoRoot)
 
-    $fvmrc = Join-Path $RepoRoot 'fushi/.fvmrc'
+    $fvmrc = Join-Path $RepoRoot 'my_comic/.fvmrc'
     if (-not (Test-Path -LiteralPath $fvmrc)) {
         throw "找不到 $fvmrc，无法确定本仓钉定的 Flutter 版本。"
     }
@@ -114,11 +114,11 @@ function Resolve-FlutterExe {
     [OutputType([string])]
     param([string]$RepoRoot)
 
-    if ($env:FUSHI_FLUTTER) {
-        if (-not (Test-Path $env:FUSHI_FLUTTER)) {
-            throw "FUSHI_FLUTTER 指向的文件不存在: $($env:FUSHI_FLUTTER)"
+    if ($env:MYCOMIC_FLUTTER) {
+        if (-not (Test-Path $env:MYCOMIC_FLUTTER)) {
+            throw "MYCOMIC_FLUTTER 指向的文件不存在: $($env:MYCOMIC_FLUTTER)"
         }
-        return $env:FUSHI_FLUTTER
+        return $env:MYCOMIC_FLUTTER
     }
 
     $version = Get-PinnedFlutterVersion -RepoRoot $RepoRoot
@@ -173,14 +173,14 @@ function Resolve-FlutterExe {
 
     $pathNote = if ($mismatched.Count -gt 0) { "PATH 上的 flutter 版本不符：`n    " + ($mismatched -join "`n    ") } else { 'PATH 上没有 flutter。' }
     throw @"
-找不到 Flutter $version（版本取自 fushi/.fvmrc）。不会回退到其它版本：旧版本编不过本仓，pub get 还会改写 lockfile。
+找不到 Flutter $version（版本取自 my_comic/.fvmrc）。不会回退到其它版本：旧版本编不过本仓，pub get 还会改写 lockfile。
 $pathNote
 已查找的目录：
     $($checked -join "`n    ")
 任选其一后重跑：
   - fvm install $version
   - 把 Flutter $version 解压到上面任一目录
-  - 设 FUSHI_FLUTTER=<Flutter $version 的 flutter.bat 完整路径>
+  - 设 MYCOMIC_FLUTTER=<Flutter $version 的 flutter.bat 完整路径>
 "@
 }
 
@@ -283,7 +283,7 @@ function Test-PubDevReachable {
         $request.Method = 'HEAD'
         $request.Timeout = $TimeoutSec * 1000
         $request.ReadWriteTimeout = $TimeoutSec * 1000
-        $request.UserAgent = 'fushi-bootstrap'
+        $request.UserAgent = 'mycomic-bootstrap'
         if ($ProxyUrl) {
             $request.Proxy = New-Object Net.WebProxy($ProxyUrl, $true)
         }
@@ -306,9 +306,9 @@ function Resolve-BootstrapProxy {
     $fromEnv = Get-ProxyFromEnv
     if ($fromEnv) { return @{ Proxy = $fromEnv; Source = '调用方环境变量' } }
 
-    if ($env:FUSHI_BOOTSTRAP_PROXY) {
-        $explicit = $env:FUSHI_BOOTSTRAP_PROXY.Trim()
-        return @{ Proxy = $explicit; Source = 'FUSHI_BOOTSTRAP_PROXY' }
+    if ($env:MYCOMIC_BOOTSTRAP_PROXY) {
+        $explicit = $env:MYCOMIC_BOOTSTRAP_PROXY.Trim()
+        return @{ Proxy = $explicit; Source = 'MYCOMIC_BOOTSTRAP_PROXY' }
     }
 
     $configPath = Join-Path (Get-MainCheckoutRoot -Fallback $RepoRoot) 'tool/bootstrap.local.env'
@@ -331,7 +331,7 @@ function Get-ProxyHelpText {
        PowerShell: `$env:HTTPS_PROXY='http://<host>:<port>'; powershell -ExecutionPolicy Bypass -File tool/setup_worktree.ps1
        Bash:       HTTPS_PROXY=http://<host>:<port> powershell -ExecutionPolicy Bypass -File tool/setup_worktree.ps1
   2) 只给 bootstrap 用，不污染其它工具：
-       `$env:FUSHI_BOOTSTRAP_PROXY='http://<host>:<port>'
+       `$env:MYCOMIC_BOOTSTRAP_PROXY='http://<host>:<port>'
   3) 一次配置、所有 worktree 长期生效 —— 在主 checkout 建 tool/bootstrap.local.env
      （已 gitignore，仅本机，绝不入库）：
        HTTPS_PROXY=http://<host>:<port>
@@ -356,7 +356,7 @@ if ($proxy) {
 # 预检只是提前示警，不当闸门 —— 实测单次 HEAD 探测会误报（探测 10s 超时失败，
 # 同一时刻 pub get 自带重试仍然 45s 跑通）。拿它拦下能跑的环境是纯粹的倒退，
 # 所以这里只把话说在前面，真判死刑交给 pub get 自己。
-if (-not $env:FUSHI_BOOTSTRAP_SKIP_NETCHECK) {
+if (-not $env:MYCOMIC_BOOTSTRAP_SKIP_NETCHECK) {
     if (-not (Test-PubDevReachable -ProxyUrl $proxy)) {
         if ($proxy) {
             Write-Warning "预检没连通 pub.dev（经代理 $proxy，来源: $($resolved.Source)，10s 超时）。可能只是抖动，继续往下跑；接下来若 pub get 报网络错误，先确认该代理进程还活着、端口没变。"
@@ -365,7 +365,7 @@ if (-not $env:FUSHI_BOOTSTRAP_SKIP_NETCHECK) {
             Write-Warning "预检没连通 pub.dev（直连，10s 超时），且当前没有配置任何代理。可能只是抖动，继续往下跑；接下来若 pub get 卡住或报 socket error，按下面的办法配代理后重跑。"
             Write-Host (Get-ProxyHelpText) -ForegroundColor DarkYellow
         }
-        Write-Host "（本机就该直连、这条预检恒误报的话，设 FUSHI_BOOTSTRAP_SKIP_NETCHECK=1 可整个跳过预检。）" -ForegroundColor DarkGray
+        Write-Host "（本机就该直连、这条预检恒误报的话，设 MYCOMIC_BOOTSTRAP_SKIP_NETCHECK=1 可整个跳过预检。）" -ForegroundColor DarkGray
     }
 }
 
@@ -373,8 +373,8 @@ if (-not $env:FUSHI_BOOTSTRAP_SKIP_NETCHECK) {
 # .dart_tool/package_config.json，所有成员共用。
 #
 # 这里以前是逐个 cd 进 6 个包各跑一次 pub get —— 那是 Melos 6 的做法，也正是
-# 「主 app 与包各解析各的」的本地来源：fushi 被入库的 lock 钉在 sqlite3 3.3.3，
-# packages/fushi_core 自己解析却拿到 3.5.2，包测试验证的依赖版本和生产跑的不是
+# 「主 app 与包各解析各的」的本地来源：my_comic 被入库的 lock 钉在 sqlite3 3.3.3，
+# packages/my_comic_core 自己解析却拿到 3.5.2，包测试验证的依赖版本和生产跑的不是
 # 同一个。改用 workspace 后各包的 pubspec.lock 由 pub 自动删除，再逐个 pub get
 # 既是浪费也会重新制造 stray files。
 Write-Host "pub get: workspace root" -ForegroundColor Cyan
@@ -415,4 +415,4 @@ if ($patchExit -ne 0) {
 }
 
 Write-Host "`nBootstrap complete. Build with, e.g.:" -ForegroundColor Green
-Write-Host "  cd fushi; & '$flutter' build windows --release"
+Write-Host "  cd my_comic; & '$flutter' build windows --release"

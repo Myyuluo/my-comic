@@ -38,18 +38,18 @@ bool LbShouldStop(const LoopbackWorkerControl* control) {
           const_cast<volatile LONG*>(&control->stop_requested), 0, 0) != 0) {
     return true;
   }
-  const fushi_voice_hook::NativeLoopbackRequestSnapshot request =
-      fushi_voice_hook::ReadNativeLoopbackRequest(g_header);
+  const my_comic_voice_hook::NativeLoopbackRequestSnapshot request =
+      my_comic_voice_hook::ReadNativeLoopbackRequest(g_header);
   const uint32_t worker_request_seq =
       static_cast<uint32_t>(InterlockedCompareExchange(
           const_cast<volatile LONG*>(&control->request_seq), 0, 0));
-  return !fushi_voice_hook::NativeLoopbackWorkerMayCapture(
+  return !my_comic_voice_hook::NativeLoopbackWorkerMayCapture(
       request, worker_request_seq);
 }
 
 void LbDiag(uint32_t bits) {
   if (g_header != nullptr) {
-    fushi_voice_hook::AtomicOrShared32(&g_header->loopback_diag, bits);
+    my_comic_voice_hook::AtomicOrShared32(&g_header->loopback_diag, bits);
   }
 }
 
@@ -96,7 +96,7 @@ void LbConvertStore(const BYTE* src, uint32_t frames, uint32_t ch, LbSrcFmt src_
   if (zero_fill) {
     memset(out, 0, static_cast<size_t>(samples) * sizeof(int16_t));
     if (src_fmt == kLbUnknown) {
-      LbDiag(fushi_voice_hook::kLoopbackDiagUnknownFormat);
+      LbDiag(my_comic_voice_hook::kLoopbackDiagUnknownFormat);
     }
   } else if (src_fmt == kLbFloat32) {
     const float* f = reinterpret_cast<const float*>(src);
@@ -138,7 +138,7 @@ void LbConvertStore(const BYTE* src, uint32_t frames, uint32_t ch, LbSrcFmt src_
   g_header->loopback_total_written = start + len;
   g_header->loopback_write_pos = static_cast<uint32_t>((start + len) % cap);
   if (!zero_fill) {
-    LbDiag(fushi_voice_hook::kLoopbackDiagNonSilentPacket);
+    LbDiag(my_comic_voice_hook::kLoopbackDiagNonSilentPacket);
   }
 }
 
@@ -172,7 +172,7 @@ DWORD WINAPI LoopbackWorker(LPVOID context) {
     return 0;
   }
 
-  LbDiag(fushi_voice_hook::kLoopbackDiagWorkerEntered);
+  LbDiag(my_comic_voice_hook::kLoopbackDiagWorkerEntered);
   if (LbShouldStop(control)) {
     InterlockedExchange(&control->phase, kLbWorkerExited);
     return 0;
@@ -208,14 +208,14 @@ DWORD WINAPI LoopbackWorker(LPVOID context) {
   }
   if (SUCCEEDED(hr) && mix != nullptr && !LbShouldStop(control)) {
     src_fmt = LbParseFormat(mix, &rate, &ch);
-    LbDiag(fushi_voice_hook::kLoopbackDiagDeviceReady);
+    LbDiag(my_comic_voice_hook::kLoopbackDiagDeviceReady);
     g_header->loopback_sample_rate = rate;
     g_header->loopback_channels = ch;
     g_header->loopback_bits_per_sample = 16;
     g_header->loopback_block_align = ch * 2u;
     const REFERENCE_TIME kBufDur = 10000000;  // 1s (100ns units)
     // This diagnostic is the exact boundary the deny policy must never cross.
-    LbDiag(fushi_voice_hook::kLoopbackDiagInitializeAttempted);
+    LbDiag(my_comic_voice_hook::kLoopbackDiagInitializeAttempted);
     hr = client->Initialize(AUDCLNT_SHAREMODE_SHARED,
                             AUDCLNT_STREAMFLAGS_LOOPBACK, kBufDur, 0, mix,
                             nullptr);
@@ -228,7 +228,7 @@ DWORD WINAPI LoopbackWorker(LPVOID context) {
     hr = client->Start();
     started = SUCCEEDED(hr);
     if (started) {
-      LbDiag(fushi_voice_hook::kLoopbackDiagCaptureStarted);
+      LbDiag(my_comic_voice_hook::kLoopbackDiagCaptureStarted);
       InterlockedExchange(&control->phase, kLbWorkerRunning);
     }
   }
@@ -249,7 +249,7 @@ DWORD WINAPI LoopbackWorker(LPVOID context) {
       if (FAILED(gb)) break;
       const bool silent = (flags & AUDCLNT_BUFFERFLAGS_SILENT) != 0;
       if (silent) {
-        LbDiag(fushi_voice_hook::kLoopbackDiagSilentPacket);
+        LbDiag(my_comic_voice_hook::kLoopbackDiagSilentPacket);
       }
       LbConvertStore(data, frames, ch, src_fmt, silent, &scratch);
       capture->ReleaseBuffer(frames);
@@ -266,9 +266,9 @@ DWORD WINAPI LoopbackWorker(LPVOID context) {
   const bool policy_stopped = LbShouldStop(control);
   if (policy_stopped) {
     InterlockedExchange(&control->phase, kLbWorkerStopping);
-    LbDiag(fushi_voice_hook::kLoopbackDiagPolicyStopObserved);
+    LbDiag(my_comic_voice_hook::kLoopbackDiagPolicyStopObserved);
   } else if (!started) {
-    LbDiag(fushi_voice_hook::kLoopbackDiagFailed);
+    LbDiag(my_comic_voice_hook::kLoopbackDiagFailed);
   }
 
   // The controller may acknowledge stopped only after this complete reverse

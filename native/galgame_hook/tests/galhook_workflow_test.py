@@ -37,7 +37,7 @@ class GalhookWorkflowTest(unittest.TestCase):
     def test_new_scaffolds_and_registers_native_and_dart_guards(self) -> None:
         with tempfile.TemporaryDirectory() as raw:
             root = Path(raw) / "hook"
-            fushi_root = Path(raw) / "app"
+            my_comic_root = Path(raw) / "app"
             (root / "hook" / "generated").mkdir(parents=True)
             (root / "tests").mkdir()
             (root / "CMakeLists.txt").write_text("enable_testing()\n", encoding="utf-8")
@@ -58,8 +58,8 @@ class GalhookWorkflowTest(unittest.TestCase):
                     "sample_engine",
                     "--root",
                     str(root),
-                    "--fushi-root",
-                    str(fushi_root),
+                    "--mycomic-root",
+                    str(my_comic_root),
                 ],
                 check=True,
                 capture_output=True,
@@ -67,13 +67,13 @@ class GalhookWorkflowTest(unittest.TestCase):
             )
             self.assertTrue((root / "profiles" / "sample_engine.json").is_file())
             self.assertTrue((root / "hook" / "adapters" / "sample_engine_adapter.inc").is_file())
-            self.assertIn("fushi_sample_engine_adapter_test", (root / "CMakeLists.txt").read_text())
+            self.assertIn("my_comic_sample_engine_adapter_test", (root / "CMakeLists.txt").read_text())
             self.assertIn(
                 "sample_engine_profile.h",
                 (root / "hook" / "generated" / "profile_includes.inc").read_text(),
             )
             self.assertIn("sample_engine_.install", (root / "hook" / "generated" / "adapter_startup.inc").read_text())
-            self.assertTrue((fushi_root / "fushi" / "test" / "mining" / "sample_engine_pairing_test.dart").is_file())
+            self.assertTrue((my_comic_root / "my_comic" / "test" / "mining" / "sample_engine_pairing_test.dart").is_file())
 
     def test_replay_covers_filter_dedup_pairing_fallback_and_cleanup(self) -> None:
         completed = subprocess.run(
@@ -111,7 +111,7 @@ class GalhookWorkflowTest(unittest.TestCase):
         self.assertTrue(report["session_clean"])
         data = json.loads(fixture.read_text(encoding="utf-8"))
         dart_copy = (
-            ROOT.parent.parent / "fushi" / "test" / "fixtures" / "galhook"
+            ROOT.parent.parent / "my_comic" / "test" / "fixtures" / "galhook"
             / "luca_replay.json"
         )
         self.assertEqual(
@@ -140,7 +140,7 @@ class GalhookWorkflowTest(unittest.TestCase):
             "resource_audio", {event["kind"] for event in data["events"]}
         )
         dart_copy = (
-            ROOT.parent.parent / "fushi" / "test" / "fixtures" / "galhook"
+            ROOT.parent.parent / "my_comic" / "test" / "fixtures" / "galhook"
             / "kogado_hy_replay.json"
         )
         self.assertEqual(

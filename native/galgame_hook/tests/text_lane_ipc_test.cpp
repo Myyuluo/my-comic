@@ -20,13 +20,13 @@
 
 namespace {
 
-using fushi_voice_hook::kTextLaneCount;
-using fushi_voice_hook::kTextLaneSlotCount;
-using fushi_voice_hook::kTextSlotBytes;
-using fushi_voice_hook::SharedHeader;
-using fushi_voice_hook::TextLane;
-using fushi_voice_hook::TextLaneWrite;
-using fushi_voice_hook::TextSlot;
+using my_comic_voice_hook::kTextLaneCount;
+using my_comic_voice_hook::kTextLaneSlotCount;
+using my_comic_voice_hook::kTextSlotBytes;
+using my_comic_voice_hook::SharedHeader;
+using my_comic_voice_hook::TextLane;
+using my_comic_voice_hook::TextLaneWrite;
+using my_comic_voice_hook::TextSlot;
 
 int g_failures = 0;
 
@@ -44,12 +44,12 @@ struct FakeMapping {
   std::vector<uint8_t> bytes;
 
   FakeMapping() {
-    const uint64_t text_bytes = fushi_voice_hook::TextRegionBytes(
+    const uint64_t text_bytes = my_comic_voice_hook::TextRegionBytes(
         kTextLaneCount, kTextLaneSlotCount);
     bytes.assign(static_cast<size_t>(sizeof(SharedHeader) + text_bytes), 0);
     SharedHeader* h = header();
-    h->magic = fushi_voice_hook::kSharedMagic;
-    h->version = fushi_voice_hook::kSharedVersion;
+    h->magic = my_comic_voice_hook::kSharedMagic;
+    h->version = my_comic_voice_hook::kSharedVersion;
     h->text_region_offset = static_cast<uint32_t>(sizeof(SharedHeader));
     h->text_lane_count = kTextLaneCount;
     h->text_lane_slot_count = kTextLaneSlotCount;
@@ -66,20 +66,20 @@ uint64_t WriteLine(SharedHeader* header, uint32_t lane_begin, uint32_t lane_end,
   TextLaneWrite write;
   write.thread_id = thread_id;
   write.process_id = 4321;
-  write.source_kind = fushi_voice_hook::kTextSourceLuna;
-  write.event_kind = fushi_voice_hook::kTextEventLine;
+  write.source_kind = my_comic_voice_hook::kTextSourceLuna;
+  write.event_kind = my_comic_voice_hook::kTextEventLine;
   write.is_utf8 = 0;
   write.text = text.empty() ? nullptr : text.c_str();
   write.byte_len =
       static_cast<uint32_t>(text.size() * sizeof(wchar_t));
-  return fushi_voice_hook::WriteTextLaneEvent(header, lane_begin, lane_end,
+  return my_comic_voice_hook::WriteTextLaneEvent(header, lane_begin, lane_end,
                                                write);
 }
 
 // 读出某条线程当前仍在道内的所有行（与 host 读侧同一套寻址与同一套道内校验）。
 std::vector<std::wstring> ReadLane(SharedHeader* header, uint64_t thread_id) {
   std::vector<std::wstring> lines;
-  const TextLane* lanes = fushi_voice_hook::TextLanesOf(header);
+  const TextLane* lanes = my_comic_voice_hook::TextLanesOf(header);
   if (lanes == nullptr) return lines;
   for (uint32_t lane = 0; lane < header->text_lane_count; ++lane) {
     if (lanes[lane].thread_id != thread_id) continue;
@@ -90,7 +90,7 @@ std::vector<std::wstring> ReadLane(SharedHeader* header, uint64_t thread_id) {
             : 1;
     for (uint64_t lane_seq = first; lane_seq <= written; ++lane_seq) {
       const auto* slot = reinterpret_cast<const TextSlot*>(
-          fushi_voice_hook::TextLaneSlotAt(header, lane, lane_seq));
+          my_comic_voice_hook::TextLaneSlotAt(header, lane, lane_seq));
       if (slot == nullptr || slot->lane_seq != lane_seq) continue;
       const auto* chars = reinterpret_cast<const wchar_t*>(
           reinterpret_cast<const uint8_t*>(slot) + sizeof(TextSlot));
@@ -156,8 +156,8 @@ void TestLaneKeepsMostRecentLines() {
 void TestWriterSegmentsNeverShareALane() {
   FakeMapping mapping;
   SharedHeader* h = mapping.header();
-  const uint32_t luna_end = fushi_voice_hook::kLunaThreadPreviewCount;
-  const uint32_t native_begin = fushi_voice_hook::kNativeThreadPreviewStart;
+  const uint32_t luna_end = my_comic_voice_hook::kLunaThreadPreviewCount;
+  const uint32_t native_begin = my_comic_voice_hook::kNativeThreadPreviewStart;
 
   // 把 Luna 段占满，再让 native 段写：native 必须写进自己的段，而不是抢到 Luna 段里去。
   for (uint32_t i = 0; i < luna_end; ++i) {
@@ -169,7 +169,7 @@ void TestWriterSegmentsNeverShareALane() {
   Check(WriteLine(h, 0, luna_end, 0x9999, L"overflow") != 0,
         "段内满了应回收本段的道，而不是丢弃");
   {
-    const TextLane* all = fushi_voice_hook::TextLanesOf(h);
+    const TextLane* all = my_comic_voice_hook::TextLanesOf(h);
     bool inside_luna_segment = false;
     for (uint32_t i = 0; i < kTextLaneCount; ++i) {
       if (all[i].thread_id != 0x9999) continue;
@@ -181,7 +181,7 @@ void TestWriterSegmentsNeverShareALane() {
   Check(WriteLine(h, native_begin, kTextLaneCount, 0x7777, L"native") != 0,
         "native 段仍有空道可用（没被 Luna 段占走）");
 
-  const TextLane* lanes = fushi_voice_hook::TextLanesOf(h);
+  const TextLane* lanes = my_comic_voice_hook::TextLanesOf(h);
   bool native_thread_in_native_segment = false;
   for (uint32_t lane = 0; lane < kTextLaneCount; ++lane) {
     if (lanes[lane].thread_id != 0x7777) continue;
@@ -214,7 +214,7 @@ void TestGlobalSequenceStaysMonotonicAcrossLanes() {
 void TestLaneExhaustionIsRecycledAndCounted() {
   FakeMapping mapping;
   SharedHeader* h = mapping.header();
-  const uint32_t luna_end = fushi_voice_hook::kLunaThreadPreviewCount;
+  const uint32_t luna_end = my_comic_voice_hook::kLunaThreadPreviewCount;
   const uint64_t kSelected = 0x5555;
   h->selected_text_thread_id = kSelected;
 
@@ -251,7 +251,7 @@ void TestLaneExhaustionIsRecycledAndCounted() {
   for (uint32_t i = 1; i < luna_end; ++i) {
     WriteLine(fh, 0, luna_end, 0x7000 + i, L"filler");
   }
-  fushi_voice_hook::TextLane* lanes = fushi_voice_hook::TextLanesOf(fh);
+  my_comic_voice_hook::TextLane* lanes = my_comic_voice_hook::TextLanesOf(fh);
   for (uint32_t i = 0; i < luna_end; ++i) lanes[i].thread_id = kSelected;
   Check(WriteLine(fh, 0, luna_end, 0x9002, L"dropped") == 0,
         "无可回收的道时本行只能丢弃");

@@ -3,7 +3,7 @@
 #include "siglus_eightarg_owner_profile.h"
 #include "siglus_image.h"
 
-namespace fushi_voice_hook::siglus_eightarg_lookup_family {
+namespace my_comic_voice_hook::siglus_eightarg_lookup_family {
 struct Sites {
   SiglusEightArgGlyphSites glyph{};
   siglus_eightarg_input_viewport::Sites input{};
@@ -71,4 +71,4 @@ inline bool ResolveLive(HMODULE module,
     return false;
   }
 }
-}  // namespace fushi_voice_hook::siglus_eightarg_lookup_family
+}  // namespace my_comic_voice_hook::siglus_eightarg_lookup_family

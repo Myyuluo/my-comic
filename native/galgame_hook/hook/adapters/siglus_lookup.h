@@ -11,7 +11,7 @@
 #include "siglus_glyph_record.h"
 #include "siglus_glyph_abi.h"
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 inline constexpr uint16_t kSiglusLookupPeMachineI386 = 0x014cu;
 inline constexpr size_t kSiglusLookupCaptureCapacity = 512u;
@@ -1029,4 +1029,4 @@ inline bool ConsumeSiglusLookupShiftSample(uint16_t async_state,
   return rising_edge;
 }
 
-} // namespace fushi_voice_hook
+} // namespace my_comic_voice_hook

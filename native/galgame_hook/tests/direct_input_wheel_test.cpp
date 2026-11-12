@@ -59,7 +59,7 @@ HRESULT STDMETHODCALLTYPE Object(void* self, void* raw, DWORD offset, DWORD how)
 #include "../hook/generic_direct_input_wheel.inc"
 #undef GetForegroundWindow
 #undef GetWindowThreadProcessId
-fushi_voice_hook::LookupWheelSource source;
+my_comic_voice_hook::LookupWheelSource source;
 Device Mouse(DWORD z = 0) {
   Device out; out.z = z;
   out.vtable[0] = reinterpret_cast<void*>(&Query);
@@ -84,21 +84,21 @@ void TestEventOwnershipAndDelayedReads() {
   Reset(); auto device = Mouse();
   assert(State(&device, 120) == 0); assert(source.consumer_ready == 1);
   assert(State(&device, -120) == 0); // owned event: outside total never advances
-  fushi_voice_hook::PublishOutsideWheel(&source, -120);
+  my_comic_voice_hook::PublishOutsideWheel(&source, -120);
   assert(State(&device, 0) == -120); // owned +120 and outside -120 cancel in DI
   assert(State(&device, 0) == 0);
   assert(State(&device, 120) == 0);
-  fushi_voice_hook::PublishOutsideWheel(&source, 120);
+  my_comic_voice_hook::PublishOutsideWheel(&source, 120);
   assert(State(&device, 0) == 120); // journal arriving after DI read delivers once
   assert(State(&device, 120) == 0);
   assert(State(&device, -120) == 0); // close/move does not release the owned tail
-  fushi_voice_hook::PublishOutsideWheel(&source, -240);
+  my_comic_voice_hook::PublishOutsideWheel(&source, -240);
   assert(State(&device, -360) == -240);
 }
 void TestCanonicalIdentityAndLifecycle() {
   Reset(); auto base = Mouse(), alternate = Mouse(); alternate.identity = &base;
   assert(State(&base, 0) == 0);
-  fushi_voice_hook::PublishOutsideWheel(&source, 120);
+  my_comic_voice_hook::PublishOutsideWheel(&source, 120);
   assert(State(&alternate, 120) == 120); assert(State(&base, 0) == 0);
   source.sequence |= 1; assert(State(&base, 120) == 0); source.sequence += 1;
   source.generation = 2; source.outside_total = 999;
@@ -114,7 +114,7 @@ void TestCanonicalIdentityAndLifecycle() {
   base.property_ok = true; assert(State(&base, 120) == 0);
   source.ready = 1; source.generation = 3;
   assert(State(&base, 120) == 0);
-  fushi_voice_hook::PublishOutsideWheel(&source, 120);
+  my_comic_voice_hook::PublishOutsideWheel(&source, 120);
   assert(State(&base, 0) == 120);
   source.ready = 2; assert(State(&base, 120) == 0);
 }
@@ -122,7 +122,7 @@ void TestNegativeDevicesAndModes() {
   Reset(); auto device = Mouse(); assert(State(&device, 0) == 0);
   device.mode = DIPROPAXISMODE_ABS; assert(State(&device, 123) == 123);
   device.mode = DIPROPAXISMODE_REL; assert(State(&device, 120) == 0);
-  foreground_game = false; fushi_voice_hook::PublishOutsideWheel(&source, 120);
+  foreground_game = false; my_comic_voice_hook::PublishOutsideWheel(&source, 120);
   assert(State(&device, 120) == 0);
   foreground_game = true; assert(State(&device, 0) == 0);
   g_generic_kirikiri_wheel_enabled.store(false); assert(State(&device, 120) == 120);
@@ -138,7 +138,7 @@ void TestNegativeDevicesAndModes() {
 void TestCacheEvictionAndBoundedDiagnostics() {
   Reset(); Device devices[48];
   for (auto& device : devices) { device = Mouse(); assert(State(&device, 0) == 0); }
-  fushi_voice_hook::PublishOutsideWheel(&source, 120);
+  my_comic_voice_hook::PublishOutsideWheel(&source, 120);
   assert(State(&devices[47], 120) == 120);
   g_wheel_diagnostic_budget.store(1);
   ForgetGenericDirectInputKind(&devices[47]); assert(State(&devices[47], 0) == 0);

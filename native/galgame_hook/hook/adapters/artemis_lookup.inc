@@ -32,7 +32,7 @@
 
 #if defined(_M_X64)
 
-namespace artemis_lookup = fushi_voice_hook::artemis_lookup;
+namespace artemis_lookup = my_comic_voice_hook::artemis_lookup;
 
 using ArtemisGlyphFactoryFn = void*(__fastcall*)(void*, const char*, void*,
                                                  void*);
@@ -349,7 +349,7 @@ void QueueArtemisSubmit(const ArtemisSubmit& submit) {
 bool ArtemisShieldActive(HWND game) {
   if (IsLookupOverlayInputShieldVisible()) return true;
   if (g_header == nullptr) return false;
-  const auto request = fushi_voice_hook::ReadLookupShieldRequest(g_header);
+  const auto request = my_comic_voice_hook::ReadLookupShieldRequest(g_header);
   return request.valid && request.active_buttons != 0u &&
          request.target_hwnd ==
              static_cast<uint64_t>(reinterpret_cast<uintptr_t>(game));
@@ -363,8 +363,8 @@ bool ArtemisShieldActive(HWND game) {
 bool ArtemisPointEligible(uintptr_t window, POINT point,
                           ArtemisSubmit* submit) {
   if (g_header == nullptr || g_stop ||
-      !fushi_voice_hook::HasLookupRegion(g_header) ||
-      fushi_voice_hook::AtomicLoadShared32(&g_header->lookup_enabled) == 0u) {
+      !my_comic_voice_hook::HasLookupRegion(g_header) ||
+      my_comic_voice_hook::AtomicLoadShared32(&g_header->lookup_enabled) == 0u) {
     return false;
   }
   ArtemisModel& model = g_artemis_lookup.game_model;
@@ -373,9 +373,9 @@ bool ArtemisPointEligible(uintptr_t window, POINT point,
     return false;
   }
   const HWND game = reinterpret_cast<HWND>(window);
-  if (!fushi_voice_hook::g_geometry_provider_registry.NativeInputAllowed(
-          g_header, fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-          fushi_voice_hook::kLookupGeometryProviderIdArtemis) ||
+  if (!my_comic_voice_hook::g_geometry_provider_registry.NativeInputAllowed(
+          g_header, my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+          my_comic_voice_hook::kLookupGeometryProviderIdArtemis) ||
       ArtemisShieldActive(game) || GetForegroundWindow() != game ||
       (GetKeyState(VK_SHIFT) & 0x8000) != 0 ||
       (GetKeyState(VK_CONTROL) & 0x8000) != 0 ||
@@ -512,7 +512,7 @@ uint64_t __fastcall ArtemisInputUpdateDetour(void* input, uintptr_t now,
 
 // ── HookWorker ──────────────────────────────────────────────────────────────
 
-// Worker-only, bounded diagnostics in %TEMP%\fushi_galhook.log (the injected
+// Worker-only, bounded diagnostics in %TEMP%\my_comic_galhook.log (the injected
 // side has no other text channel).  Never logs dialogue text.
 void ArtemisLookupLog(const wchar_t* format, ...) {
   wchar_t line[512] = {};
@@ -523,7 +523,7 @@ void ArtemisLookupLog(const wchar_t* format, ...) {
   wchar_t path[MAX_PATH] = {};
   const DWORD length = GetTempPathW(MAX_PATH, path);
   if (length == 0 || length >= MAX_PATH - 20) return;
-  wcscat_s(path, L"fushi_galhook.log");
+  wcscat_s(path, L"my_comic_galhook.log");
   HANDLE file = g_orig_CreateFileW(path, FILE_APPEND_DATA, FILE_SHARE_READ,
                                    nullptr, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL,
                                    nullptr);
@@ -660,8 +660,8 @@ bool InstallArtemisLookup() {
   LARGE_INTEGER frequency = {}, started = {}, finished = {};
   QueryPerformanceFrequency(&frequency);
   QueryPerformanceCounter(&started);
-  fushi_voice_hook::exact_lookup::LoadedPeImage image;
-  if (!fushi_voice_hook::exact_lookup::OpenLoadedPeImage(
+  my_comic_voice_hook::exact_lookup::LoadedPeImage image;
+  if (!my_comic_voice_hook::exact_lookup::OpenLoadedPeImage(
           GetModuleHandleW(nullptr), &image)) {
     rt.site_result = artemis_lookup::SiteResult::kFactoryMissing;
   } else {
@@ -677,7 +677,7 @@ bool InstallArtemisLookup() {
   if (rt.site_result != artemis_lookup::SiteResult::kResolved) {
     uint8_t digest[32] = {};
     if (ComputeArtemisExecutableSha256(digest)) {
-      fushi_voice_hook::PublishHostExecutableSha256(digest, sizeof(digest));
+      my_comic_voice_hook::PublishHostExecutableSha256(digest, sizeof(digest));
     }
     ArtemisLookupLog(L"artemis-lookup: sites unresolved result=%u scan=%.1fms",
                      static_cast<unsigned>(rt.site_result), scan_ms);
@@ -716,8 +716,8 @@ bool InstallArtemisLookup() {
       factory ? 1 : 0, draw ? 1 : 0, update ? 1 : 0, scan_ms,
       static_cast<unsigned long long>(ArtemisProcessAgeMs()));
   if (rt.installed && g_header != nullptr) {
-    fushi_voice_hook::AtomicOrShared32(
-        &g_header->lookup_diag, fushi_voice_hook::kLookupDiagSensorInstalled);
+    my_comic_voice_hook::AtomicOrShared32(
+        &g_header->lookup_diag, my_comic_voice_hook::kLookupDiagSensorInstalled);
   }
   return rt.installed;
 }
@@ -732,9 +732,9 @@ void RetireArtemisLookup() {
   if (!rt.provider_offered) return;
   rt.provider_offered = false;
   if (g_header != nullptr) {
-    fushi_voice_hook::g_geometry_provider_registry.Retire(
-        g_header, fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-        fushi_voice_hook::kLookupGeometryProviderIdArtemis);
+    my_comic_voice_hook::g_geometry_provider_registry.Retire(
+        g_header, my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+        my_comic_voice_hook::kLookupGeometryProviderIdArtemis);
   }
 }
 
@@ -834,7 +834,7 @@ bool PublishArtemisLookupHit(const ArtemisSubmit& submit) {
   if (glyph.source_index == artemis_lookup::kNoSource ||
       glyph.source_length == 0u || glyph.source_index >= units ||
       glyph.source_length > units - glyph.source_index ||
-      fushi_voice_hook::LookupUtf16SourceLength(
+      my_comic_voice_hook::LookupUtf16SourceLength(
           rt.model_line.data(), static_cast<uint32_t>(units),
           glyph.source_index) != glyph.source_length) {
     return false;
@@ -843,25 +843,25 @@ bool PublishArtemisLookupHit(const ArtemisSubmit& submit) {
       CP_UTF8, WC_ERR_INVALID_CHARS, rt.model_line.data(),
       static_cast<int>(units), nullptr, 0, nullptr, nullptr);
   if (required <= 0 ||
-      static_cast<uint32_t>(required) > fushi_voice_hook::kLookupLineBytes) {
+      static_cast<uint32_t>(required) > my_comic_voice_hook::kLookupLineBytes) {
     return false;
   }
-  char utf8[fushi_voice_hook::kLookupLineBytes] = {};
+  char utf8[my_comic_voice_hook::kLookupLineBytes] = {};
   if (WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, rt.model_line.data(),
                           static_cast<int>(units), utf8, required, nullptr,
                           nullptr) != required) {
     return false;
   }
-  fushi_voice_hook::LookupGeometryHitPublication publication;
+  my_comic_voice_hook::LookupGeometryHitPublication publication;
   publication.provider_kind =
-      fushi_voice_hook::kLookupGeometryProviderEngineExactLayout;
-  publication.provider_id = fushi_voice_hook::kLookupGeometryProviderIdArtemis;
+      my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout;
+  publication.provider_id = my_comic_voice_hook::kLookupGeometryProviderIdArtemis;
   publication.char_index = glyph.source_index;
   publication.source_length = glyph.source_length;
   publication.char_count = static_cast<uint32_t>(units);
   publication.coordinate_space =
-      fushi_voice_hook::kLookupCoordinateSpaceClientPhysicalPixels;
-  publication.writing_mode = fushi_voice_hook::kLookupWritingModeHorizontal;
+      my_comic_voice_hook::kLookupCoordinateSpaceClientPhysicalPixels;
+  publication.writing_mode = my_comic_voice_hook::kLookupWritingModeHorizontal;
   publication.text_generation = rt.model_text_event;
   publication.geometry_generation = model.generation;
   publication.glyph_x = glyph.rect.x;
@@ -870,11 +870,11 @@ bool PublishArtemisLookupHit(const ArtemisSubmit& submit) {
   publication.glyph_h = glyph.rect.h;
   publication.view_w = model.physical_w;
   publication.view_h = model.physical_h;
-  publication.flags = fushi_voice_hook::kLookupHitFlagSubmit;
+  publication.flags = my_comic_voice_hook::kLookupHitFlagSubmit;
   publication.line_utf8 = reinterpret_cast<const uint8_t*>(utf8);
   publication.line_bytes = static_cast<uint32_t>(required);
   const bool published =
-      fushi_voice_hook::g_geometry_provider_registry.PublishHit(g_header,
+      my_comic_voice_hook::g_geometry_provider_registry.PublishHit(g_header,
                                                                 publication);
   ArtemisLookupLog(
       L"artemis-lookup: hit gen=%llu glyph=%u char=%u+%u rect=%d,%d %dx%d "
@@ -936,7 +936,7 @@ void PublishArtemisRevealedLine(ArtemisFrame& frame) {
   if (!artemis_lookup::ComposeRevealedLine(frame.glyphs.data(), count,
                                            frame.created, rt.creations_copy,
                                            &text, &first_seq) ||
-      text.size() * sizeof(wchar_t) > fushi_voice_hook::kTextSlotBytes ||
+      text.size() * sizeof(wchar_t) > my_comic_voice_hook::kTextSlotBytes ||
       (first_seq == rt.published_line_seq && text == rt.published_line)) {
     return;
   }
@@ -958,22 +958,22 @@ void PublishArtemisRevealedLine(ArtemisFrame& frame) {
   }
   constexpr wchar_t kHookCode[] = L"ENGINE:ARTEMIS:Layer::CreateGlyph";
   constexpr char kHookName[] = "Artemis exact";
-  fushi_voice_hook::TextLaneWrite write;
-  write.thread_id = fushi_voice_hook::NativeTextThreadIdFrom(
+  my_comic_voice_hook::TextLaneWrite write;
+  write.thread_id = my_comic_voice_hook::NativeTextThreadIdFrom(
       rt.sites.glyph_factory, kHookCode, kHookName);
   write.thread_address = rt.sites.glyph_factory;
   write.thread_context = rt.sites.glyph_factory;
   write.process_id = GetCurrentProcessId();
-  write.source_kind = fushi_voice_hook::kTextSourceArtemis;
+  write.source_kind = my_comic_voice_hook::kTextSourceArtemis;
   write.is_utf8 = 0;
   write.text = text.data();
   write.byte_len = static_cast<uint32_t>(text.size() * sizeof(wchar_t));
   write.hook_name = kHookName;
   write.hook_code = kHookCode;
   EnterCriticalSection(&g_text_cs);
-  const uint64_t event = fushi_voice_hook::WriteTextLaneEvent(
-      g_header, fushi_voice_hook::kNativeThreadPreviewStart,
-      fushi_voice_hook::kTextLaneCount, write);
+  const uint64_t event = my_comic_voice_hook::WriteTextLaneEvent(
+      g_header, my_comic_voice_hook::kNativeThreadPreviewStart,
+      my_comic_voice_hook::kTextLaneCount, write);
   LeaveCriticalSection(&g_text_cs);
   if (event == 0u) return;
   // An exact engine producer is live: the GDI glyph fallback yields.
@@ -1025,13 +1025,13 @@ void ProcessArtemisLookupTick() {
   const bool fresh = ReadFreshArtemisFrame(&frame);
   if (fresh && !g_stop) PublishArtemisRevealedLine(frame);
   if (g_stop || g_header == nullptr ||
-      !fushi_voice_hook::HasLookupRegion(g_header) ||
-      fushi_voice_hook::AtomicLoadShared32(&g_header->lookup_enabled) == 0u) {
+      !my_comic_voice_hook::HasLookupRegion(g_header) ||
+      my_comic_voice_hook::AtomicLoadShared32(&g_header->lookup_enabled) == 0u) {
     RetireArtemisLookup();
     return;
   }
-  fushi_voice_hook::AtomicOrShared32(
-      &g_header->lookup_diag, fushi_voice_hook::kLookupDiagSensorInstalled);
+  my_comic_voice_hook::AtomicOrShared32(
+      &g_header->lookup_diag, my_comic_voice_hook::kLookupDiagSensorInstalled);
   if (!fresh || !artemis_lookup::ProjectionUsable(frame.projection)) {
     RetireArtemisLookup();
     return;
@@ -1040,7 +1040,7 @@ void ProcessArtemisLookupTick() {
   std::wstring line;
   uint64_t event = 0u;
   uint64_t thread = 0u;
-  if (!fushi_voice_hook::ReadSelectedLookupText(
+  if (!my_comic_voice_hook::ReadSelectedLookupText(
           g_header, &line, &event, &thread, artemis_lookup::kMaxFrameGlyphs)) {
     RetireArtemisLookup();
     return;
@@ -1081,9 +1081,9 @@ void ProcessArtemisLookupTick() {
           static_cast<double>(frame.projection.offset_y));
     }
   }
-  if (fushi_voice_hook::g_geometry_provider_registry.OfferReady(
-          g_header, fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-          fushi_voice_hook::kLookupGeometryProviderIdArtemis)) {
+  if (my_comic_voice_hook::g_geometry_provider_registry.OfferReady(
+          g_header, my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+          my_comic_voice_hook::kLookupGeometryProviderIdArtemis)) {
     if (!rt.provider_offered) {
       ArtemisLookupLog(L"artemis-lookup: OfferReady gen=%llu glyphs=%u",
                        static_cast<unsigned long long>(rt.model.generation),
@@ -1091,8 +1091,8 @@ void ProcessArtemisLookupTick() {
     }
     rt.provider_offered = true;
     EnsureArtemisTapHook(rt.model.window);
-    fushi_voice_hook::AtomicOrShared32(
-        &g_header->lookup_diag, fushi_voice_hook::kLookupDiagGeometryObserved);
+    my_comic_voice_hook::AtomicOrShared32(
+        &g_header->lookup_diag, my_comic_voice_hook::kLookupDiagGeometryObserved);
   } else {
     RetireArtemisLookup();
     return;

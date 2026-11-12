@@ -24,14 +24,14 @@ if ([Environment]::OSVersion.Platform -ne [PlatformID]::Win32NT) {
 }
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$runnerDir = Join-Path $repoRoot 'fushi/windows/runner'
+$runnerDir = Join-Path $repoRoot 'my_comic/windows/runner'
 $testSource = Join-Path $runnerDir 'tests/game_stream_input_release_test.cpp'
 $productionSource = Join-Path $runnerDir 'game_stream_input.cpp'
 $outputDir = Join-Path $repoRoot '.codex-test/game-stream-input-test'
 $executable = Join-Path $outputDir 'game_stream_input_release_test.exe'
 
 if ([string]::IsNullOrWhiteSpace($FlutterIncludePath)) {
-    $FlutterIncludePath = Join-Path $repoRoot 'fushi/windows/flutter/ephemeral/cpp_client_wrapper/include'
+    $FlutterIncludePath = Join-Path $repoRoot 'my_comic/windows/flutter/ephemeral/cpp_client_wrapper/include'
 }
 if (!(Test-Path -LiteralPath (Join-Path $FlutterIncludePath 'flutter/encodable_value.h'))) {
     throw 'Flutter C++ headers are missing. Generate the Windows ephemeral files or pass -FlutterIncludePath.'

@@ -1,7 +1,7 @@
 {
-  "name": "fushi-lnreader-libs",
+  "name": "mycomic-lnreader-libs",
   "private": true,
-  "description": "Builds fushi/assets/lnreader/lnreader_libs.js: the third-party modules LNReader plugins require() at runtime.",
+  "description": "Builds my_comic/assets/lnreader/lnreader_libs.js: the third-party modules LNReader plugins require() at runtime.",
   "scripts": {
     "build": "node build_libs.mjs"
   },

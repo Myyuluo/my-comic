@@ -2,7 +2,7 @@
 
 #include "voice_hook_ipc.h"
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 inline NativeTextOwner ReadNativeTextOwner(const SharedHeader* header) {
   return header == nullptr ? NativeTextOwner::kPending
@@ -66,4 +66,4 @@ class NativeTextLunaStartupGate {
   bool finished_ = false;
 };
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

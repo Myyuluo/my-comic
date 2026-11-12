@@ -9,8 +9,8 @@
 
 #include "smash_fzmedia_lookup_core.h"
 
-namespace smash = fushi_voice_hook::smash_fzmedia;
-namespace core = fushi_voice_hook::smash_fzmedia::lookup_core;
+namespace smash = my_comic_voice_hook::smash_fzmedia;
+namespace core = my_comic_voice_hook::smash_fzmedia::lookup_core;
 
 namespace {
 

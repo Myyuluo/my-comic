@@ -23,7 +23,7 @@ void* Address(uintptr_t value) { return reinterpret_cast<void*>(value); }
 }  // namespace
 
 int main() {
-  fushi_voice_hook::HookOriginalRegistry<2> registry;
+  my_comic_voice_hook::HookOriginalRegistry<2> registry;
   void* const wave_target = Address(0x1000);
   void* const wave_original = Address(0x2000);
   void* const wma_target = Address(0x3000);

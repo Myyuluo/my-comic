@@ -17,7 +17,7 @@ description: >
 # 抓住——44 份拷贝里少一份，diff 上什么都看不出来。
 #
 # 收进一份之后，「新增一种烘进包的密钥」变成改一个文件；漏抄在结构上不可能
-# 发生。守卫见 fushi/test/build/baked_secret_stub_parity_guard_test.dart。
+# 发生。守卫见 my_comic/test/build/baked_secret_stub_parity_guard_test.dart。
 #
 # ## 调用约定
 #
@@ -58,7 +58,7 @@ runs:
   using: composite
   steps:
     # opensubtitles_default_key.dart 入库的是**空占位**（key = ''）且**不在**
-    # fushi/analysis_options.yaml 的 analyzer.exclude 里，所以写进去的必须是
+    # my_comic/analysis_options.yaml 的 analyzer.exclude 里，所以写进去的必须是
     # **单引号** Dart 字面量：json.dumps 那种双引号会触发 prefer_single_quotes
     # （info），而 CI 的 analyze 门把 info 也当失败（exit 1）——本地
     # `flutter analyze` 看到的是入库的单引号占位，所以本地恒绿、只有 CI 红。
@@ -66,13 +66,13 @@ runs:
     # 只因为那两个文件在 exclude 列表里；别把它们的写法照抄到不在 exclude 的
     # 文件上。转义（\ ' 与 $ 三者，$ 在单引号串里仍是插值符）交给独立脚本，
     # 免去 YAML→bash→sed 三层转义。守卫：
-    # fushi/test/tools/baked_secret_stub_quotes_guard_test.dart
+    # my_comic/test/tools/baked_secret_stub_quotes_guard_test.dart
     - name: Provide OpenSubtitles API key stub
       shell: bash
       env:
         OPENSUBTITLES_API_KEY: ${{ inputs.opensubtitles-api-key }}
       run: |
-        dst=packages/fushi_engine/lib/media/video/subtitle/opensubtitles_default_key.dart
+        dst=packages/my_comic_engine/lib/media/video/subtitle/opensubtitles_default_key.dart
         python3 "$GITHUB_ACTION_PATH/write_opensubtitles_key.py" "$dst"
     # google_oauth_secret.dart 是 gitignored 的（真值只存在于仓库 secret 与本机），
     # 所以这里连占位都可能不存在，缺文件时才从 .example.dart 复制。
@@ -81,14 +81,14 @@ runs:
       env:
         GOOGLE_OAUTH_CLIENT_SECRET: ${{ inputs.google-oauth-client-secret }}
       run: |
-        dst=fushi/lib/src/sync/google_oauth_secret.dart
+        dst=my_comic/lib/src/sync/google_oauth_secret.dart
         if [ -n "$GOOGLE_OAUTH_CLIENT_SECRET" ]; then
           oauth_secret_literal="$(python3 -c 'import json,os; print(json.dumps(os.environ["GOOGLE_OAUTH_CLIENT_SECRET"]))')"
           printf 'const String kGoogleOAuthClientSecret =\n    %s;\n' \
             "$oauth_secret_literal" \
             > "$dst"
         elif [ ! -f "$dst" ]; then
-          cp fushi/lib/src/sync/google_oauth_secret.example.dart "$dst"
+          cp my_comic/lib/src/sync/google_oauth_secret.example.dart "$dst"
         fi
 
     - name: Provide gitignored log upload secret stub
@@ -97,7 +97,7 @@ runs:
         LOG_UPLOAD_ENDPOINT: ${{ inputs.log-upload-endpoint }}
         LOG_UPLOAD_TOKEN: ${{ inputs.log-upload-token }}
       run: |
-        dst=fushi/lib/src/utils/misc/log_upload_secret.dart
+        dst=my_comic/lib/src/utils/misc/log_upload_secret.dart
         if [ -n "$LOG_UPLOAD_ENDPOINT" ]; then
           log_endpoint_literal="$(python3 -c 'import json,os; print(json.dumps(os.environ["LOG_UPLOAD_ENDPOINT"]))')"
           log_token_literal="$(python3 -c 'import json,os; print(json.dumps(os.environ.get("LOG_UPLOAD_TOKEN","")))')"
@@ -106,7 +106,7 @@ runs:
             "$log_token_literal" \
             > "$dst"
         elif [ ! -f "$dst" ]; then
-          cp fushi/lib/src/utils/misc/log_upload_secret.example.dart "$dst"
+          cp my_comic/lib/src/utils/misc/log_upload_secret.example.dart "$dst"
         fi
 
     - name: Provide gitignored dandanplay secret stub
@@ -115,14 +115,14 @@ runs:
         DANDANPLAY_APP_ID: ${{ inputs.dandanplay-app-id }}
         DANDANPLAY_APP_SECRET: ${{ inputs.dandanplay-app-secret }}
       run: |
-        dst=fushi/lib/src/media/video/dandanplay_secret.dart
+        dst=my_comic/lib/src/media/video/dandanplay_secret.dart
         if [ -n "$DANDANPLAY_APP_ID" ]; then
           printf "const String kDandanplayAppId = '%s';\nconst String kDandanplayAppSecret = '%s';\n" \
             "$DANDANPLAY_APP_ID" \
             "$DANDANPLAY_APP_SECRET" \
             > "$dst"
         elif [ ! -f "$dst" ]; then
-          cp fushi/lib/src/media/video/dandanplay_secret.example.dart "$dst"
+          cp my_comic/lib/src/media/video/dandanplay_secret.example.dart "$dst"
         fi
 
     # tmdb_default_key.dart 入库的是**空占位**（key = ''），所以一定存在；只重写
@@ -132,16 +132,16 @@ runs:
       env:
         TMDB_API_KEY: ${{ inputs.tmdb-api-key }}
       run: |
-        dst=fushi/lib/src/media/video/scraper/tmdb_default_key.dart
+        dst=my_comic/lib/src/media/video/scraper/tmdb_default_key.dart
         if [ ! -f "$dst" ]; then
-          cp fushi/lib/src/media/video/scraper/tmdb_default_key.example.dart "$dst"
+          cp my_comic/lib/src/media/video/scraper/tmdb_default_key.example.dart "$dst"
         fi
         if [ -n "$TMDB_API_KEY" ]; then
           # -i.bak（后缀紧贴 -i，中间不留空格）是 GNU sed 与 BSD/macOS sed 都
           # 接受的唯一就地编辑写法。裸 `sed -i "脚本" 文件` 只在 GNU sed 下成立：
           # BSD sed 的 -i 必须带备份后缀，会把紧跟的脚本吃成后缀、再把文件名当
           # 脚本，于是 macos/ios 作业固定报
-          # `sed: 1: "fushi/lib/src/media/vi ...": extra characters at the end of
+          # `sed: 1: "my_comic/lib/src/media/vi ...": extra characters at the end of
           # h command`。收进本 action 后这条坑只存在一份。
           sed -i.bak "s|^const String kBuiltinTmdbApiKey = '';|const String kBuiltinTmdbApiKey = '$TMDB_API_KEY';|" "$dst"
           rm -f "$dst.bak"

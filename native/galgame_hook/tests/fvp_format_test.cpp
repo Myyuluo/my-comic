@@ -11,7 +11,7 @@
 
 #include "fvp_format.h"
 
-namespace fvp = fushi_voice_hook::fvp;
+namespace fvp = my_comic_voice_hook::fvp;
 
 namespace {
 

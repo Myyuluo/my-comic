@@ -7,7 +7,7 @@
     fprintf(stderr, "[attach] waiting for Siglus readiness pid=%lu\n", pid);
     if (!WaitForReadyGameWindow(target, pid, 20000)) {
       fprintf(stderr, "[attach] Siglus did not reach delayed-attach readiness\n");
-      ReportFailureReason(fushi_voice_hook::LaunchFailureReason::kInjectionFailed, 1);
+      ReportFailureReason(my_comic_voice_hook::LaunchFailureReason::kInjectionFailed, 1);
       CloseHandle(target);
       return 1;
     }

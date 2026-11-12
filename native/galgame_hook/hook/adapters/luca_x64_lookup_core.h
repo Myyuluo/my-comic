@@ -5,7 +5,7 @@
 #include "luca_lookup_core.h"
 #include <limits>
 
-namespace fushi_voice_hook::luca_x64 {
+namespace my_comic_voice_hook::luca_x64 {
 
 inline constexpr uint32_t kTextRowCapacity = 0x3Cu;
 inline constexpr uint32_t kTextOriginX = 0x64u;
@@ -193,4 +193,4 @@ inline bool NormalizeRowOrigin(int16_t row_x,float row_y,int32_t relative_y,
   return true;
 }
 
-}  // namespace fushi_voice_hook::luca_x64
+}  // namespace my_comic_voice_hook::luca_x64

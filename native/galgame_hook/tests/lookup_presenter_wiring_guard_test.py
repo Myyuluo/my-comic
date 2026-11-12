@@ -30,9 +30,9 @@ Unity …）上，hit / input / frame 三通道和整条 Dart 编排层全都是
 
 6. `hook/lookup_overlay_window.inc` 里**一条 `#include` 都不能有**。
    它被 include 进 dll_main.cpp 的匿名命名空间内部，头文件里的
-   `namespace fushi_voice_hook` 会在匿名命名空间里再开一个同名嵌套命名空间，把真正的
-   `::fushi_voice_hook` 整个遮住。实测症状极具误导性：报错全在**之后每个 adapter**
-   里（「不是 fushi_voice_hook 的成员」「const object must be initialized」），
+   `namespace my_comic_voice_hook` 会在匿名命名空间里再开一个同名嵌套命名空间，把真正的
+   `::my_comic_voice_hook` 整个遮住。实测症状极具误导性：报错全在**之后每个 adapter**
+   里（「不是 my_comic_voice_hook 的成员」「const object must be initialized」），
    一条都不指向真正的肇事文件。
 
 调用点判定一律在**剥掉注释之后**做：只在注释里出现的调用不算调用点（对应的变异测试
@@ -268,7 +268,7 @@ def find_includes_in_overlay_inc(overlay_text: str) -> list[str]:
         line = stripped.count("\n", 0, match.start()) + 1
         faults.append(
             f"lookup_overlay_window.inc:{line} 出现 #include："
-            "它在匿名命名空间内展开，会把 ::fushi_voice_hook 整个遮住"
+            "它在匿名命名空间内展开，会把 ::my_comic_voice_hook 整个遮住"
         )
     return faults
 

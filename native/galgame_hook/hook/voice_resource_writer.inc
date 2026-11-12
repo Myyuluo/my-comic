@@ -6,13 +6,13 @@ bool WriteVoiceOggAt(const uint8_t* data, uint32_t len,
   wchar_t temp[MAX_PATH] = {0};
   const DWORD n = GetTempPathW(MAX_PATH, temp);
   if (n == 0 || n >= MAX_PATH) return false;
-  std::wstring dir = std::wstring(temp) + L"fushi_gal_voice";
+  std::wstring dir = std::wstring(temp) + L"my_comic_gal_voice";
   if (!CreateDirectoryW(dir.c_str(), nullptr) &&
       GetLastError() != ERROR_ALREADY_EXISTS) {
     return false;
   }
   std::wstring file =
-      dir + L"\\" + fushi_voice_hook::BuildVoiceResourceFileName(
+      dir + L"\\" + my_comic_voice_hook::BuildVoiceResourceFileName(
                           tick_ms, VoiceBaseName(storagename, data, len),
                           text_event_id);
   HANDLE f = CreateFileW(file.c_str(), GENERIC_WRITE, 0, nullptr,

@@ -8,7 +8,7 @@ import { findBareHeavyCommand } from './require_heavy_lease.mjs';
 test('bare heavy flutter / gradle runs are caught', () => {
   for (const cmd of [
     'flutter test test/a_test.dart --no-pub',
-    'cd fushi && flutter analyze --no-pub',
+    'cd my_comic && flutter analyze --no-pub',
     '& D:\\flutter\\bin\\flutter.bat test test/x_test.dart',
     '"D:/flutter/bin/flutter" --no-color build windows',
     'fvm flutter test',
@@ -30,7 +30,7 @@ test('wrapped, self-leasing, light or unrelated commands pass', () => {
     'grep -n "flutter test" docs/agent/fast-workflow.md',
     'echo flutter test',
     'git commit -m "flutter test fix"',
-    'FUSHI_HEAVY=off flutter test test/a_test.dart',
+    'MYCOMIC_HEAVY=off flutter test test/a_test.dart',
     '',
   ]) {
     assert.equal(findBareHeavyCommand(cmd), null, cmd);

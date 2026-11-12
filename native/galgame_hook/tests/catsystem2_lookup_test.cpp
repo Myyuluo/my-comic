@@ -12,8 +12,8 @@
 
 #include "catsystem2_lookup_core.h"
 
-namespace core = fushi_voice_hook::catsystem2_lookup;
-namespace exact = fushi_voice_hook::exact_lookup;
+namespace core = my_comic_voice_hook::catsystem2_lookup;
+namespace exact = my_comic_voice_hook::exact_lookup;
 
 namespace {
 
@@ -983,6 +983,6 @@ int main() {
   TestTracker();
   TestSuffixAndHit();
   TestClaim();
-  std::puts("fushi_catsystem2_lookup_test: ok");
+  std::puts("my_comic_catsystem2_lookup_test: ok");
   return 0;
 }

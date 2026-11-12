@@ -30,7 +30,7 @@
 #include <cstdint>
 #include <cstring>
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 // ── Anchor kinds ────────────────────────────────────────────────────────────
 
@@ -1276,4 +1276,4 @@ inline const char* SgreAnchorSourceName(SgreAnchorSource source) {
   return "unknown";
 }
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

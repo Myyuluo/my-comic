@@ -197,7 +197,7 @@ namespace flutter_inappwebview_plugin
       // app lifetime, so we intentionally do not pair a CoUninitialize.
       CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
       const std::wstring userDataFolder =
-        OptionalEnvWide(L"FUSHI_WEBVIEW2_USER_DATA_FOLDER");
+        OptionalEnvWide(L"MYCOMIC_WEBVIEW2_USER_DATA_FOLDER");
       // BUG-1091: allow media autoplay without a user gesture. WebView2 has NO
       // per-view equivalent of `mediaPlaybackRequiresUserGesture` (the Dart-side
       // setting silently did nothing on this fork), so Chromium's autoplay policy
@@ -211,7 +211,7 @@ namespace flutter_inappwebview_plugin
       // data folder must use identical options (mismatch fails with
       // 0x8007139F) — this is the plugin's single default-environment site.
       //
-      // BUG-3497: `fushi.local` is a virtual host served entirely by the
+      // BUG-3497: `mycomic.local` is a virtual host served entirely by the
       // WebResourceRequested interceptor, yet Chromium still resolves it on
       // every main-frame navigation. `.local` goes to Windows multicast name
       // resolution (mDNS/LLMNR), which only fails after ~2.7 s and is not
@@ -223,7 +223,7 @@ namespace flutter_inappwebview_plugin
       auto options = Make<CoreWebView2EnvironmentOptions>();
       options->put_AdditionalBrowserArguments(
         L"--autoplay-policy=no-user-gesture-required "
-        L"--host-resolver-rules=\"MAP fushi.local ~NOTFOUND\"");
+        L"--host-resolver-rules=\"MAP mycomic.local ~NOTFOUND\"");
       hr = CreateCoreWebView2EnvironmentWithOptions(
         nullptr, userDataFolder.empty() ? nullptr : userDataFolder.c_str(),
         options.Get(),
@@ -269,7 +269,7 @@ namespace flutter_inappwebview_plugin
       // Deliberately UNCONDITIONAL — not a missing knob. Exposing it as a
       // setting would need a matching Dart field in
       // flutter_inappwebview_platform_interface, which lives in pub-cache and is
-      // NOT forked here (only this windows package is vendored). And no Fushi
+      // NOT forked here (only this windows package is vendored). And no MyComic
       // surface wants a browser status bar: every WebView in this app renders
       // EPUB / dictionary content, never a browsing chrome.
       //
@@ -296,7 +296,7 @@ namespace flutter_inappwebview_plugin
     //
     // WebView2 defaults AllowExternalDrop=TRUE, which makes the runtime register
     // its own IDropTarget on the HOST top-level HWND so files can be dropped INTO
-    // the web page. Fushi only renders trusted EPUB/dictionary HTML in WebView,
+    // the web page. MyComic only renders trusted EPUB/dictionary HTML in WebView,
     // so dropping OS files into the page is never wanted. Worse, that registration
     // fights desktop_drop, which calls RegisterDragDrop once for the whole window:
     // WebView2 silently takes over the host HWND's drop target while a reader /
@@ -685,7 +685,7 @@ namespace flutter_inappwebview_plugin
               channelDelegate->onLoadStop(url);
             }
             else if (!InAppWebView::isSslError(webErrorType) && navigationAction) {
-              // 根治 fushi.local 假失败：拦截器已为该主框架 URL 注入 2xx 响应，
+              // 根治 mycomic.local 假失败：拦截器已为该主框架 URL 注入 2xx 响应，
               // 内容已渲染，引擎因自定义域 DNS 解析失败误报 IsSuccess=FALSE —— 当成功。
               if (url.has_value() && consumeMainFrameInjectedOk(url.value())) {
                 channelDelegate->onLoadStop(url);
@@ -1071,7 +1071,7 @@ namespace flutter_inappwebview_plugin
                   }
                   args->put_Response(response->toWebView2Response(webViewEnv));
                   // 根治准备：拦截器为主框架 document 注入了 2xx 响应时记下其 URL，
-                  // 供 NavigationCompleted 把 fushi.local 的 DNS 假失败纠正为成功。
+                  // 供 NavigationCompleted 把 mycomic.local 的 DNS 假失败纠正为成功。
                   COREWEBVIEW2_WEB_RESOURCE_CONTEXT resourceContext;
                   const int64_t statusCode = response->statusCode.value_or(200);
                   if (request->url.has_value() && statusCode >= 200 && statusCode < 300 &&

@@ -1,6 +1,6 @@
 #pragma once
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 inline bool MatchesArtemisProfile(const wchar_t*) {
   wchar_t executable[MAX_PATH] = {0};
@@ -23,4 +23,4 @@ inline bool MatchesArtemisProfile(const wchar_t*) {
   return true;
 }
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

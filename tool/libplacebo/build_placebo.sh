@@ -85,7 +85,7 @@ case "$output_dir" in
     ;;
 esac
 if [[ -z "$work_dir" ]]; then
-  work_dir="$(mktemp -d "${TMPDIR:-/tmp}/fushi-libplacebo.XXXXXX")"
+  work_dir="$(mktemp -d "${TMPDIR:-/tmp}/mycomic-libplacebo.XXXXXX")"
   trap 'rm -rf "$work_dir"' EXIT
 else
   mkdir -p "$work_dir"

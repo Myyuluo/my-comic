@@ -37,7 +37,7 @@
 
 #include "../lookup_line_text_match.h"
 
-namespace fushi_voice_hook::yuris_lookup {
+namespace my_comic_voice_hook::yuris_lookup {
 
 inline constexpr size_t kMaxTextBytes = 1024u;
 inline constexpr size_t kMaxCells = 256u;
@@ -1284,4 +1284,4 @@ class PublishedLines {
   size_t next_ = 0u;
 };
 
-}  // namespace fushi_voice_hook::yuris_lookup
+}  // namespace my_comic_voice_hook::yuris_lookup

@@ -8,7 +8,7 @@
 #include "../elf_ai6_arc.h"
 #include "engine_dir_signature.h"
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 struct ElfAi6FileIdentity {
   DWORD volume_serial = 0;
   DWORD file_index_high = 0;
@@ -85,4 +85,4 @@ inline bool ProbeElfAi6Profile(ElfAi6FileIdentity* identity_out) {
 inline bool MatchesElfAi6Profile(const wchar_t*) {
   return ProbeElfAi6Profile(nullptr);
 }
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

@@ -2,7 +2,7 @@
 
 #include "exact_lookup_signature.h"
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 // Protected Siglus retains a packed on-disk payload's SizeOfRawData in its
 // hydrated header. That payload can exceed SizeOfImage; it is not a mapped
@@ -36,4 +36,4 @@ inline bool OpenSiglusLoadedImage(HMODULE module,
   return true;
 }
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

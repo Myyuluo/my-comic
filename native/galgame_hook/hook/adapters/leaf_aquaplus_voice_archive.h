@@ -5,7 +5,7 @@
 #include <cstring>
 #include <limits>
 
-namespace fushi_voice_hook::leaf_aquaplus {
+namespace my_comic_voice_hook::leaf_aquaplus {
 
 inline constexpr uint32_t kLacHeaderBytes = 8u;
 inline constexpr uint32_t kLacEntryBytes = 0x28u;
@@ -230,4 +230,4 @@ inline uint32_t CompleteOggBytes(const uint8_t *data, uint32_t bytes) {
   return 0u;
 }
 
-} // namespace fushi_voice_hook::leaf_aquaplus
+} // namespace my_comic_voice_hook::leaf_aquaplus

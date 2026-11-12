@@ -17,7 +17,7 @@ uint64_t g_siglus_lookup_unpublished_glyph_frontier = 0;
 // glyph passes; the committed dialogue body is kept separately so republishing
 // that same body cannot flip lookup back onto rows that are no longer drawn.
 bool g_siglus_lookup_selection_active = false;
-fushi_voice_hook::SiglusSelectionPassBuilder g_siglus_lookup_selection_pass;
+my_comic_voice_hook::SiglusSelectionPassBuilder g_siglus_lookup_selection_pass;
 wchar_t g_siglus_lookup_dialogue_line[kSiglusLookupMaxTextUnits];
 uint32_t g_siglus_lookup_dialogue_line_units = 0;
 
@@ -26,12 +26,12 @@ uint32_t g_siglus_lookup_dialogue_line_units = 0;
 uint64_t g_siglus_lookup_term_generation = 0;
 
 void RetireSiglusLookupDisplayedLine() {
-  fushi_voice_hook::ResetSiglusLookupLayout(&g_siglus_lookup_layout);
-  fushi_voice_hook::ClearSiglusLookupGlyphCapture(&g_siglus_lookup_glyph_captures);
+  my_comic_voice_hook::ResetSiglusLookupLayout(&g_siglus_lookup_layout);
+  my_comic_voice_hook::ClearSiglusLookupGlyphCapture(&g_siglus_lookup_glyph_captures);
   InvalidateSiglusLookupClickTarget();
-  fushi_voice_hook::g_geometry_provider_registry.Retire(
-      g_header, fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-      fushi_voice_hook::kLookupGeometryProviderIdSiglus);
+  my_comic_voice_hook::g_geometry_provider_registry.Retire(
+      g_header, my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+      my_comic_voice_hook::kLookupGeometryProviderIdSiglus);
 }
 
 void EnterSiglusLookupSelection() {
@@ -68,11 +68,11 @@ bool CommitSiglusLookupSelectionLine() {
     g_siglus_lookup_active_line[index] = static_cast<wchar_t>(pass.line[index]);
   g_siglus_lookup_active_line_units = units;
   // Keep the captured pass: it is exactly the glyph run of the new line.
-  fushi_voice_hook::ResetSiglusLookupLayout(&g_siglus_lookup_layout);
+  my_comic_voice_hook::ResetSiglusLookupLayout(&g_siglus_lookup_layout);
   InvalidateSiglusLookupClickTarget();
-  fushi_voice_hook::g_geometry_provider_registry.Retire(
-      g_header, fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-      fushi_voice_hook::kLookupGeometryProviderIdSiglus);
+  my_comic_voice_hook::g_geometry_provider_registry.Retire(
+      g_header, my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+      my_comic_voice_hook::kLookupGeometryProviderIdSiglus);
   return true;
 }
 
@@ -269,8 +269,8 @@ void ResetSiglusLookupRuntimeLayout() {
   g_siglus_lookup_unpublished_glyph_frontier = 0;
   // The bound text event remains the same committed occurrence. Fresh glyphs
   // are required after reset; preserving its ID does not revive old geometry.
-  fushi_voice_hook::ResetSiglusLookupLayout(&g_siglus_lookup_layout);
-  fushi_voice_hook::ClearSiglusLookupGlyphCapture(&g_siglus_lookup_glyph_captures);
+  my_comic_voice_hook::ResetSiglusLookupLayout(&g_siglus_lookup_layout);
+  my_comic_voice_hook::ClearSiglusLookupGlyphCapture(&g_siglus_lookup_glyph_captures);
   g_siglus_lookup_selection_pass.Reset();
   g_siglus_lookup_glyph_processed_seq = static_cast<uint64_t>(
       InterlockedCompareExchange64(&g_siglus_lookup_glyph_event_count, 0, 0));
@@ -287,10 +287,10 @@ void ConsumeSiglusLookupCaptures() {
   if (ReadLatestSiglusLookupText(&text_snapshot, &text_seq)) {
     g_siglus_lookup_text_processed_seq = text_seq;
     const bool identity_changed =
-        !fushi_voice_hook::IsSiglusLookupTextIdentityCurrent(
+        !my_comic_voice_hook::IsSiglusLookupTextIdentityCurrent(
             text_snapshot.identity, g_siglus_lookup_text_identity);
     if (identity_changed) {
-      fushi_voice_hook::InvalidateSiglusLookupCurrentLayout(&g_siglus_lookup_layout);
+      my_comic_voice_hook::InvalidateSiglusLookupCurrentLayout(&g_siglus_lookup_layout);
       InvalidateSiglusLookupClickTarget();
       g_siglus_lookup_text_identity = text_snapshot.identity;
       changed = true;
@@ -316,11 +316,11 @@ void ConsumeSiglusLookupCaptures() {
       g_siglus_lookup_active_line_units = text_snapshot.text_units;
       memcpy(g_siglus_lookup_active_line, text_snapshot.text,
              static_cast<size_t>(text_snapshot.text_units) * sizeof(wchar_t));
-      fushi_voice_hook::ResetSiglusLookupLayout(&g_siglus_lookup_layout);
+      my_comic_voice_hook::ResetSiglusLookupLayout(&g_siglus_lookup_layout);
       InvalidateSiglusLookupClickTarget();
-      fushi_voice_hook::g_geometry_provider_registry.Retire(
-          g_header, fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-          fushi_voice_hook::kLookupGeometryProviderIdSiglus);
+      my_comic_voice_hook::g_geometry_provider_registry.Retire(
+          g_header, my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+          my_comic_voice_hook::kLookupGeometryProviderIdSiglus);
       changed = true;
     }
   }
@@ -334,9 +334,9 @@ void ConsumeSiglusLookupCaptures() {
       first = latest - kSiglusLookupGlyphEventSlots + 1;
       // Lost transport may have contained a layout change. A later matching
       // redraw cannot certify a press spanning that unobserved interval.
-      fushi_voice_hook::InvalidateSiglusLookupCurrentLayout(&g_siglus_lookup_layout);
+      my_comic_voice_hook::InvalidateSiglusLookupCurrentLayout(&g_siglus_lookup_layout);
       InvalidateSiglusLookupClickTarget();
-      fushi_voice_hook::ClearSiglusLookupGlyphCapture(
+      my_comic_voice_hook::ClearSiglusLookupGlyphCapture(
           &g_siglus_lookup_glyph_captures);
     }
     uint64_t processed_through = first - 1u;
@@ -366,18 +366,18 @@ void ConsumeSiglusLookupCaptures() {
         LeaveSiglusLookupSelection();
       }
       if (event.kind == kSiglusLookupGlyphEventInvalidation) {
-        fushi_voice_hook::ResetSiglusLookupLayout(&g_siglus_lookup_layout);
-        fushi_voice_hook::ClearSiglusLookupGlyphCapture(&g_siglus_lookup_glyph_captures);
+        my_comic_voice_hook::ResetSiglusLookupLayout(&g_siglus_lookup_layout);
+        my_comic_voice_hook::ClearSiglusLookupGlyphCapture(&g_siglus_lookup_glyph_captures);
         InvalidateSiglusLookupClickTarget();
-        fushi_voice_hook::g_geometry_provider_registry.Retire(g_header,
-            fushi_voice_hook::kLookupGeometryProviderEngineExactLayout,
-            fushi_voice_hook::kLookupGeometryProviderIdSiglus);
+        my_comic_voice_hook::g_geometry_provider_registry.Retire(g_header,
+            my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout,
+            my_comic_voice_hook::kLookupGeometryProviderIdSiglus);
         processed_through = seq;
         glyph_appended = true;
         changed = true;
         continue;
       }
-      fushi_voice_hook::AppendSiglusLookupGlyphCapture(
+      my_comic_voice_hook::AppendSiglusLookupGlyphCapture(
           static_cast<char16_t>(event.code_unit), event.design_x,
           event.design_y, event.extent, &g_siglus_lookup_glyph_captures);
       processed_through = seq;
@@ -395,7 +395,7 @@ void ConsumeSiglusLookupCaptures() {
     // Any known prefix remains conservatively invalid. In particular B before
     // a gap and A after it must never revive an older A press via equal gen.
     if (glyph_appended) {
-      fushi_voice_hook::InvalidateSiglusLookupCurrentLayout(&g_siglus_lookup_layout);
+      my_comic_voice_hook::InvalidateSiglusLookupCurrentLayout(&g_siglus_lookup_layout);
     }
     InvalidateSiglusLookupClickTarget();
     return;
@@ -406,11 +406,11 @@ void ConsumeSiglusLookupCaptures() {
   const auto *profile = ActiveSiglusLookupProfile();
   if (profile == nullptr)
     return;
-  if (fushi_voice_hook::UpdateSiglusLookupLayout(
+  if (my_comic_voice_hook::UpdateSiglusLookupLayout(
           *profile, g_siglus_lookup_glyph_captures,
           reinterpret_cast<const char16_t *>(g_siglus_lookup_active_line),
           g_siglus_lookup_active_line_units, &g_siglus_lookup_layout)) {
-    SetSiglusLookupDiag(fushi_voice_hook::kLookupDiagGeometryObserved);
+    SetSiglusLookupDiag(my_comic_voice_hook::kLookupDiagGeometryObserved);
   } else {
     // A committed same-line provider/popup survives a split redraw, but no
     // older click target or press may be used while the capture is incomplete.
@@ -424,24 +424,24 @@ bool PublishSiglusLookupHit(const SiglusLookupPayload &payload) {
       payload.char_index >= payload.text_units) {
     return false;
   }
-  char utf8[fushi_voice_hook::kLookupLineBytes] = {};
+  char utf8[my_comic_voice_hook::kLookupLineBytes] = {};
   const int bytes = WideCharToMultiByte(
       CP_UTF8, 0, payload.text, static_cast<int>(payload.text_units), utf8,
       static_cast<int>(sizeof(utf8)), nullptr, nullptr);
   if (bytes <= 0 || payload.geometry_generation == 0)
     return false;
-  fushi_voice_hook::LookupGeometryHitPublication publication;
+  my_comic_voice_hook::LookupGeometryHitPublication publication;
   publication.provider_kind =
-      fushi_voice_hook::kLookupGeometryProviderEngineExactLayout;
+      my_comic_voice_hook::kLookupGeometryProviderEngineExactLayout;
   publication.provider_id =
-      fushi_voice_hook::kLookupGeometryProviderIdSiglus;
+      my_comic_voice_hook::kLookupGeometryProviderIdSiglus;
   publication.char_index = payload.char_index;
-  publication.source_length = fushi_voice_hook::LookupUtf16SourceLength(
+  publication.source_length = my_comic_voice_hook::LookupUtf16SourceLength(
       payload.text, payload.text_units, payload.char_index);
   publication.char_count = payload.text_units;
   publication.coordinate_space =
-      fushi_voice_hook::kLookupCoordinateSpaceClientPhysicalPixels;
-  publication.writing_mode = fushi_voice_hook::kLookupWritingModeHorizontal;
+      my_comic_voice_hook::kLookupCoordinateSpaceClientPhysicalPixels;
+  publication.writing_mode = my_comic_voice_hook::kLookupWritingModeHorizontal;
   publication.text_generation = payload.text_identity.event_id;
   publication.geometry_generation = payload.geometry_generation;
   publication.glyph_x = payload.rect.x;
@@ -450,10 +450,10 @@ bool PublishSiglusLookupHit(const SiglusLookupPayload &payload) {
   publication.glyph_h = payload.rect.height;
   publication.view_w = payload.client_width;
   publication.view_h = payload.client_height;
-  publication.flags = fushi_voice_hook::kLookupHitFlagSubmit;
+  publication.flags = my_comic_voice_hook::kLookupHitFlagSubmit;
   publication.line_utf8 = reinterpret_cast<const uint8_t *>(utf8);
   publication.line_bytes = static_cast<uint32_t>(bytes);
-  if (!fushi_voice_hook::g_geometry_provider_registry.PublishHit(g_header, publication))
+  if (!my_comic_voice_hook::g_geometry_provider_registry.PublishHit(g_header, publication))
     return false;
   g_siglus_lookup_term_generation = payload.geometry_generation;
   return true;
@@ -470,9 +470,9 @@ bool IsSiglusLookupPayloadEligible(const SiglusLookupPayload &payload,
   const uint64_t latest_text = static_cast<uint64_t>(
       InterlockedCompareExchange64(&g_siglus_lookup_text_count, 0, 0));
   if (profile == nullptr ||
-      !fushi_voice_hook::IsSiglusLookupTextIdentityCurrent(
+      !my_comic_voice_hook::IsSiglusLookupTextIdentityCurrent(
           payload.text_identity, g_siglus_lookup_text_identity) ||
-      !fushi_voice_hook::IsSiglusLookupLayoutSubmissionCurrent(
+      !my_comic_voice_hook::IsSiglusLookupLayoutSubmissionCurrent(
           g_siglus_lookup_layout, payload.geometry_generation,
           payload.snapshot_epoch) || payload.text_units == 0 ||
       latest_text != g_siglus_lookup_text_processed_seq ||
@@ -481,7 +481,7 @@ bool IsSiglusLookupPayloadEligible(const SiglusLookupPayload &payload,
       memcmp(payload.text, g_siglus_lookup_active_line,
              static_cast<size_t>(payload.text_units) * sizeof(wchar_t)) != 0) {
     if (profile == nullptr) return reject(SiglusLookupRejectReason::kProfileUnavailable);
-    if (!fushi_voice_hook::IsSiglusLookupTextIdentityCurrent(
+    if (!my_comic_voice_hook::IsSiglusLookupTextIdentityCurrent(
             payload.text_identity, g_siglus_lookup_text_identity))
       return reject(SiglusLookupRejectReason::kTextIdentity);
     if (!g_siglus_lookup_layout.current_valid)
@@ -499,10 +499,10 @@ bool IsSiglusLookupPayloadEligible(const SiglusLookupPayload &payload,
   }
 
   const HWND game = reinterpret_cast<HWND>(payload.game_window);
-  fushi_voice_hook::SiglusLookupEngineView engine_view;
+  my_comic_voice_hook::SiglusLookupEngineView engine_view;
   if (!ReadSiglusLookupEngineView(game, &engine_view))
     return reject(SiglusLookupRejectReason::kEngineViewUnavailable);
-  if (!fushi_voice_hook::SameSiglusLookupEngineView(engine_view, payload.engine_view))
+  if (!my_comic_voice_hook::SameSiglusLookupEngineView(engine_view, payload.engine_view))
     return reject(SiglusLookupRejectReason::kEngineViewChanged);
   RECT client = {};
   POINT origin = {0, 0};
@@ -514,10 +514,10 @@ bool IsSiglusLookupPayloadEligible(const SiglusLookupPayload &payload,
     return reject(SiglusLookupRejectReason::kSampledWindowChanged);
   if (!GetClientRect(game, &client) || !ClientToScreen(game, &origin))
     return reject(SiglusLookupRejectReason::kClientUnavailable);
-  const fushi_voice_hook::SiglusLookupClientSnapshot active_client = {
+  const my_comic_voice_hook::SiglusLookupClientSnapshot active_client = {
       reinterpret_cast<uintptr_t>(game), origin.x, origin.y,
       client.right - client.left, client.bottom - client.top};
-  if (!fushi_voice_hook::MatchesSiglusLookupGenerationAndClient(
+  if (!my_comic_voice_hook::MatchesSiglusLookupGenerationAndClient(
           payload.geometry_generation,
           SiglusLookupPayloadClientSnapshot(payload),
           g_siglus_lookup_layout.generation, active_client)) {
@@ -529,8 +529,8 @@ bool IsSiglusLookupPayloadEligible(const SiglusLookupPayload &payload,
     const auto &glyph = g_siglus_lookup_layout.geometry.glyphs[index];
     if (glyph.char_index != payload.char_index)
       continue;
-    fushi_voice_hook::SiglusLookupRect expected;
-    if (!fushi_voice_hook::ProjectSiglusLookupRect(
+    my_comic_voice_hook::SiglusLookupRect expected;
+    if (!my_comic_voice_hook::ProjectSiglusLookupRect(
             *profile, engine_view, glyph.rect, active_client.width, active_client.height,
             &expected)) {
       return reject(SiglusLookupRejectReason::kGlyphProjection);

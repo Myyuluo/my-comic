@@ -1,7 +1,7 @@
 #pragma once
 #include "cmvs_dialogue_layout_reader.h"
 
-namespace fushi_voice_hook::cmvs_layout {
+namespace my_comic_voice_hook::cmvs_layout {
 
 struct PresentationRect { int32_t x = 0, y = 0, width = 0, height = 0; };
 struct Presentation {
@@ -89,4 +89,4 @@ inline Result CapturePresentation(ReadMemory read, void* context,
   return Result::kCaptured;
 }
 
-}  // namespace fushi_voice_hook::cmvs_layout
+}  // namespace my_comic_voice_hook::cmvs_layout

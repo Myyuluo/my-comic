@@ -16,7 +16,7 @@
 
 #include "voice_clip_energy.h"
 
-namespace fushi_voice_hook {
+namespace my_comic_voice_hook {
 
 constexpr double kSilentPeak16 = 1024.0;
 
@@ -105,4 +105,4 @@ inline bool IsSilentPcmWav(const uint8_t* d, size_t len) {
   return peak >= 0.0 && peak < kSilentPeak16;
 }
 
-}  // namespace fushi_voice_hook
+}  // namespace my_comic_voice_hook

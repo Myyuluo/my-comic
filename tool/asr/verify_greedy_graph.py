@@ -1,8 +1,8 @@
 """对拍 `buildAsrGreedyGraph`（Dart 运行时拼装的 RNN-T 贪心解码 Loop 图）与逐帧贪心参考。
 
 流程：
-1. `dart run fushi/tool/asr_build_greedy_graph.dart` 用真 decoder/joiner（int8 与 fp32 两套）
-   以及 `fushi/test/asr/fixtures/` 的极小合成夹具各拼一张图；
+1. `dart run my_comic/tool/asr_build_greedy_graph.dart` 用真 decoder/joiner（int8 与 fp32 两套）
+   以及 `my_comic/test/asr/fixtures/` 的极小合成夹具各拼一张图；
 2. `onnx.checker.check_model(full_check=True)`；
 3. kaldi-native-fbank（参数同 `asr_fbank.dart` 文件头 / `gen_fbank_golden.py`）→ int8 encoder →
    `encoder_out`；
@@ -21,7 +21,7 @@ int8 模型里 `DynamicQuantizeLinear` 的 scale 是整批求 min/max 得出的�
 用法（仓库根）：
 
     python tool/asr/verify_greedy_graph.py --models-dir <含 decoder/joiner/encoder/tokens 的目录> \
-        [--wav fushi/test/asr/fixtures/ja_tts_16k.wav] [--dart D:/flutter_sdk/.../dart.bat] \
+        [--wav my_comic/test/asr/fixtures/ja_tts_16k.wav] [--dart D:/flutter_sdk/.../dart.bat] \
         [--out-dir <临时目录>] [--repeat 3] [--strict-dart] [--skip-real] [--skip-tiny]
 
 依赖：onnx、onnxruntime、numpy、kaldi-native-fbank、soundfile（均 pip）。
@@ -45,8 +45,8 @@ import onnxruntime as ort
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-FUSHI = os.path.join(REPO, "fushi")
-FIXTURES = os.path.join(FUSHI, "test", "asr", "fixtures")
+MYCOMIC = os.path.join(REPO, "my_comic")
+FIXTURES = os.path.join(MYCOMIC, "test", "asr", "fixtures")
 NO_EMIT = -1
 
 
@@ -119,7 +119,7 @@ def build_graph(dart: str, decoder: str, joiner: str, out: str, blank: int, unk:
         str(unk),
     ]
     t0 = time.perf_counter()
-    res = subprocess.run(cmd, cwd=FUSHI, capture_output=True, text=True)
+    res = subprocess.run(cmd, cwd=MYCOMIC, capture_output=True, text=True)
     if res.returncode != 0:
         sys.stderr.write(res.stdout + res.stderr)
         raise SystemExit(f"构图失败：{' '.join(cmd)}")
@@ -367,7 +367,7 @@ def main() -> None:
 
     dart_exe = _checked_program(args.dart)
     out_dir = (_checked_dir("--out-dir", args.out_dir) if args.out_dir
-               else tempfile.mkdtemp(prefix="fushi_greedy_"))
+               else tempfile.mkdtemp(prefix="my_comic_greedy_"))
     all_ok = True
     try:
         if not args.skip_tiny:

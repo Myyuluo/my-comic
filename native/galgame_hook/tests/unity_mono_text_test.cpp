@@ -21,7 +21,7 @@
 
 #include "../hook/adapters/unity_mono_text.h"
 
-using namespace fushi_voice_hook;
+using namespace my_comic_voice_hook;
 
 namespace {
 

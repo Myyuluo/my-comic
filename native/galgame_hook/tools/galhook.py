@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fushi engine-adapter evidence/probe/new/replay workflow (stdlib only)."""
+"""MyComic engine-adapter evidence/probe/new/replay workflow (stdlib only)."""
 
 from __future__ import annotations
 
@@ -201,7 +201,7 @@ def command_probe(args: argparse.Namespace) -> int:
         bundle.writestr("diagnostic.json", json.dumps(report, ensure_ascii=False, indent=2) + "\n")
         bundle.writestr(
             "README.txt",
-            "Fushi galhook diagnostic bundle. Contains metadata only; no executable, script, image, or audio payloads.\n",
+            "MyComic galhook diagnostic bundle. Contains metadata only; no executable, script, image, or audio payloads.\n",
         )
     print(output)
     return 0
@@ -259,12 +259,12 @@ def command_new(args: argparse.Namespace) -> int:
     profile_header.write_text(
         f'''#pragma once
 
-namespace fushi_voice_hook {{
+namespace my_comic_voice_hook {{
 inline bool Matches{class_name}Profile(const wchar_t*) {{
   // Add only signatures measured from a real sample; an empty profile never matches.
   return false;
 }}
-}}  // namespace fushi_voice_hook
+}}  // namespace my_comic_voice_hook
 ''',
         encoding="utf-8",
     )
@@ -272,19 +272,19 @@ inline bool Matches{class_name}Profile(const wchar_t*) {{
         f'''// Generated adapter skeleton for {engine_id}; remains unverified until fixture + real-game evidence exist.
 #include "{engine_id}_profile.h"
 
-class {class_name}Adapter final : public fushi_voice_hook::EngineAdapter {{
+class {class_name}Adapter final : public my_comic_voice_hook::EngineAdapter {{
  public:
   const char* id() const override {{ return "{engine_id}"; }}
-  bool probe() const override {{ return fushi_voice_hook::Matches{class_name}Profile(nullptr); }}
+  bool probe() const override {{ return my_comic_voice_hook::Matches{class_name}Profile(nullptr); }}
   bool install() override {{ installed_ = false; return false; }}
-  fushi_voice_hook::AdapterCapability capabilities() const override {{
-    return fushi_voice_hook::AdapterCapability::kNone;
+  my_comic_voice_hook::AdapterCapability capabilities() const override {{
+    return my_comic_voice_hook::AdapterCapability::kNone;
   }}
   void onModuleLoaded(const wchar_t* module_name) override {{
-    if (fushi_voice_hook::Matches{class_name}Profile(module_name)) install();
+    if (my_comic_voice_hook::Matches{class_name}Profile(module_name)) install();
   }}
   void shutdown() override {{ installed_ = false; }}
-  fushi_voice_hook::AdapterDiagnostics diagnostics() const override {{
+  my_comic_voice_hook::AdapterDiagnostics diagnostics() const override {{
     return {{id(), probe(), installed_, 0}};
   }}
  private:
@@ -300,7 +300,7 @@ class {class_name}Adapter final : public fushi_voice_hook::EngineAdapter {{
 #undef NDEBUG
 
 #include "../hook/adapters/{engine_id}_profile.h"
-int main() {{ return fushi_voice_hook::Matches{class_name}Profile(nullptr) ? 1 : 0; }}
+int main() {{ return my_comic_voice_hook::Matches{class_name}Profile(nullptr) ? 1 : 0; }}
 ''',
         encoding="utf-8",
     )
@@ -324,15 +324,15 @@ int main() {{ return fushi_voice_hook::Matches{class_name}Profile(nullptr) ? 1 :
     _append_unique(generated / "adapter_admission.inc", f"    consider({engine_id}_);")
     _append_unique(
         root / "CMakeLists.txt",
-        f'''add_executable(fushi_{engine_id}_adapter_test "tests/{engine_id}_adapter_test.cpp")
-target_include_directories(fushi_{engine_id}_adapter_test PRIVATE "hook")
-add_test(NAME fushi_{engine_id}_adapter_test COMMAND fushi_{engine_id}_adapter_test)''',
+        f'''add_executable(my_comic_{engine_id}_adapter_test "tests/{engine_id}_adapter_test.cpp")
+target_include_directories(my_comic_{engine_id}_adapter_test PRIVATE "hook")
+add_test(NAME my_comic_{engine_id}_adapter_test COMMAND my_comic_{engine_id}_adapter_test)''',
     )
 
-    if args.fushi_root:
-        fushi = Path(args.fushi_root).resolve() / "fushi"
-        dart_fixture = fushi / "test" / "fixtures" / "galhook" / f"{engine_id}_replay.json"
-        dart_test = fushi / "test" / "mining" / f"{engine_id}_pairing_test.dart"
+    if args.my_comic_root:
+        my_comic = Path(args.my_comic_root).resolve() / "my_comic"
+        dart_fixture = my_comic / "test" / "fixtures" / "galhook" / f"{engine_id}_replay.json"
+        dart_test = my_comic / "test" / "mining" / f"{engine_id}_pairing_test.dart"
         dart_fixture.parent.mkdir(parents=True, exist_ok=True)
         dart_test.parent.mkdir(parents=True, exist_ok=True)
         dart_fixture.write_text(fixture.read_text(encoding="utf-8"), encoding="utf-8")
@@ -572,7 +572,7 @@ def build_parser() -> argparse.ArgumentParser:
     new = sub.add_parser("new")
     new.add_argument("engine_id")
     new.add_argument("--root", default=str(ROOT))
-    new.add_argument("--fushi-root")
+    new.add_argument("--mycomic-root")
     new.set_defaults(func=command_new)
     replay = sub.add_parser("replay")
     replay.add_argument("trace")

@@ -15,14 +15,14 @@
 
 namespace {
 
-using fushi_voice_hook::HunexGgeSelectedTextDisposition;
-using fushi_voice_hook::HunexGgeSelectedTextFailure;
-using fushi_voice_hook::HunexGgeSelectedTextRequest;
-using fushi_voice_hook::HunexGgeSelectedTextResult;
-using fushi_voice_hook::SharedHeader;
-using fushi_voice_hook::TextLane;
-using fushi_voice_hook::TextLaneWrite;
-using fushi_voice_hook::TextSlot;
+using my_comic_voice_hook::HunexGgeSelectedTextDisposition;
+using my_comic_voice_hook::HunexGgeSelectedTextFailure;
+using my_comic_voice_hook::HunexGgeSelectedTextRequest;
+using my_comic_voice_hook::HunexGgeSelectedTextResult;
+using my_comic_voice_hook::SharedHeader;
+using my_comic_voice_hook::TextLane;
+using my_comic_voice_hook::TextLaneWrite;
+using my_comic_voice_hook::TextSlot;
 
 constexpr uint32_t kProcessId = 4321;
 constexpr uint64_t kSelectedThread = 0x1111222233334444ull;
@@ -45,18 +45,18 @@ struct FakeMapping {
   std::vector<uint8_t> bytes;
 
   FakeMapping() {
-    const uint64_t text_bytes = fushi_voice_hook::TextRegionBytes(
-        fushi_voice_hook::kTextLaneCount, fushi_voice_hook::kTextLaneSlotCount);
+    const uint64_t text_bytes = my_comic_voice_hook::TextRegionBytes(
+        my_comic_voice_hook::kTextLaneCount, my_comic_voice_hook::kTextLaneSlotCount);
     bytes.assign(static_cast<size_t>(sizeof(SharedHeader) + text_bytes), 0);
     SharedHeader *h = header();
-    h->magic = fushi_voice_hook::kSharedMagic;
-    h->version = fushi_voice_hook::kSharedVersion;
-    h->ipc_protocol_version = fushi_voice_hook::kStableIpcVersion;
-    h->luna_bridge_abi_version = fushi_voice_hook::kLunaBridgeAbiVersion;
-    h->luna_vendored_version = fushi_voice_hook::kLunaVendoredVersion;
+    h->magic = my_comic_voice_hook::kSharedMagic;
+    h->version = my_comic_voice_hook::kSharedVersion;
+    h->ipc_protocol_version = my_comic_voice_hook::kStableIpcVersion;
+    h->luna_bridge_abi_version = my_comic_voice_hook::kLunaBridgeAbiVersion;
+    h->luna_vendored_version = my_comic_voice_hook::kLunaVendoredVersion;
     h->text_region_offset = static_cast<uint32_t>(sizeof(SharedHeader));
-    h->text_lane_count = fushi_voice_hook::kTextLaneCount;
-    h->text_lane_slot_count = fushi_voice_hook::kTextLaneSlotCount;
+    h->text_lane_count = my_comic_voice_hook::kTextLaneCount;
+    h->text_lane_slot_count = my_comic_voice_hook::kTextLaneSlotCount;
     h->selected_text_thread_id = kSelectedThread;
   }
 
@@ -70,10 +70,10 @@ struct LineOptions {
   uint64_t face_id = kSharedFace;
   uint64_t thread_address = kStoryAddress;
   uint32_t process_id = kProcessId;
-  uint32_t source_kind = fushi_voice_hook::kTextSourceLuna;
-  uint32_t event_kind = fushi_voice_hook::kTextEventLine;
+  uint32_t source_kind = my_comic_voice_hook::kTextSourceLuna;
+  uint32_t event_kind = my_comic_voice_hook::kTextEventLine;
   uint32_t is_utf8 = 0;
-  const char *hook_name = fushi_voice_hook::kHunexGgeLunaEngineIdentity;
+  const char *hook_name = my_comic_voice_hook::kHunexGgeLunaEngineIdentity;
 };
 
 uint64_t WriteLine(SharedHeader *header, const std::wstring &text,
@@ -90,8 +90,8 @@ uint64_t WriteLine(SharedHeader *header, const std::wstring &text,
   write.byte_len = static_cast<uint32_t>(text.size() * sizeof(wchar_t));
   write.hook_name = options.hook_name;
   write.hook_code = L"ENHQ-4C@structural:WoH.exe";
-  return fushi_voice_hook::WriteTextLaneEvent(
-      header, 0, fushi_voice_hook::kLunaThreadPreviewCount, write);
+  return my_comic_voice_hook::WriteTextLaneEvent(
+      header, 0, my_comic_voice_hook::kLunaThreadPreviewCount, write);
 }
 
 HunexGgeSelectedTextRequest RequestFor(
@@ -101,26 +101,26 @@ HunexGgeSelectedTextRequest RequestFor(
   request.header = header;
   request.mapped_bytes =
       sizeof(SharedHeader) +
-      fushi_voice_hook::TextRegionBytes(fushi_voice_hook::kTextLaneCount,
-                                        fushi_voice_hook::kTextLaneSlotCount);
+      my_comic_voice_hook::TextRegionBytes(my_comic_voice_hook::kTextLaneCount,
+                                        my_comic_voice_hook::kTextLaneSlotCount);
   request.current_process_id = kProcessId;
   request.exact_selected_thread_id = kSelectedThread;
   request.exact_thread_address = kStoryAddress;
   request.window_after_seq = 0;
   request.window_through_seq =
-      fushi_voice_hook::AtomicLoadPreview64(&header->text_write_count);
+      my_comic_voice_hook::AtomicLoadPreview64(&header->text_write_count);
   request.exact_raw_tagged_text = raw;
   request.exact_raw_tagged_text_units = raw_units;
   return request;
 }
 
 TextSlot *SelectedSlotAt(SharedHeader *header, uint64_t lane_seq) {
-  TextLane *lanes = fushi_voice_hook::TextLanesOf(header);
+  TextLane *lanes = my_comic_voice_hook::TextLanesOf(header);
   for (uint32_t index = 0; index < header->text_lane_count; ++index) {
     if (lanes[index].thread_id != kSelectedThread)
       continue;
     return reinterpret_cast<TextSlot *>(
-        fushi_voice_hook::TextLaneSlotAt(header, index, lane_seq));
+        my_comic_voice_hook::TextLaneSlotAt(header, index, lane_seq));
   }
   return nullptr;
 }
@@ -133,7 +133,7 @@ void TestExactRawLineWinsOverNewerPrefetch() {
         "fixture must publish current then prefetched future line");
 
   const HunexGgeSelectedTextResult result =
-      fushi_voice_hook::ReadHunexGgeSelectedLunaText(
+      my_comic_voice_hook::ReadHunexGgeSelectedLunaText(
           RequestFor(mapping.header()));
   Check(result.disposition == HunexGgeSelectedTextDisposition::kUseExactMatch,
         "newest prefetched slot must not replace exact current raw line");
@@ -148,7 +148,7 @@ void TestExactRawLineWinsOverNewerPrefetch() {
 void TestNoContentMatchFailsClosed() {
   FakeMapping mapping;
   WriteLine(mapping.header(), kFutureRaw);
-  const auto result = fushi_voice_hook::ReadHunexGgeSelectedLunaText(
+  const auto result = my_comic_voice_hook::ReadHunexGgeSelectedLunaText(
       RequestFor(mapping.header()));
   Check(result.disposition == HunexGgeSelectedTextDisposition::kNoMatch &&
             result.failure == HunexGgeSelectedTextFailure::kNoExactRawLine,
@@ -164,7 +164,7 @@ void TestNoExactRawLineIsClassifiableByCandidateCounts() {
   {
     FakeMapping mapping;
     WriteLine(mapping.header(), kFutureRaw);
-    const auto result = fushi_voice_hook::ReadHunexGgeSelectedLunaText(
+    const auto result = my_comic_voice_hook::ReadHunexGgeSelectedLunaText(
         RequestFor(mapping.header()));
     Check(result.failure == HunexGgeSelectedTextFailure::kNoExactRawLine &&
               result.stable_selected_events == 1u &&
@@ -183,10 +183,10 @@ void TestNoExactRawLineIsClassifiableByCandidateCounts() {
     auto request = RequestFor(mapping.header());
     request.window_after_seq = target_seq;
     request.window_through_seq =
-        fushi_voice_hook::AtomicLoadPreview64(
+        my_comic_voice_hook::AtomicLoadPreview64(
             &mapping.header()->text_write_count);
     const auto result =
-        fushi_voice_hook::ReadHunexGgeSelectedLunaText(request);
+        my_comic_voice_hook::ReadHunexGgeSelectedLunaText(request);
     Check(result.failure == HunexGgeSelectedTextFailure::kNoExactRawLine &&
               result.stable_selected_events == 0u &&
               result.invalid_selected_events == 0u,
@@ -198,7 +198,7 @@ void TestNoExactRawLineIsClassifiableByCandidateCounts() {
     FakeMapping mapping;
     WriteLine(mapping.header(), L"「あれ、鍵<rし>閉</r>まったまま？");
     const wchar_t* detagged = L"「あれ、鍵閉まったまま？";
-    const auto result = fushi_voice_hook::ReadHunexGgeSelectedLunaText(
+    const auto result = my_comic_voice_hook::ReadHunexGgeSelectedLunaText(
         RequestFor(mapping.header(), detagged,
                    static_cast<uint32_t>(wcslen(detagged))));
     Check(result.failure == HunexGgeSelectedTextFailure::kNoExactRawLine &&
@@ -216,7 +216,7 @@ void TestSameFaceSiblingNeverFallsBack() {
   sibling.face_id = kSharedFace;
   WriteLine(mapping.header(), kCurrentRaw, sibling);
 
-  const auto result = fushi_voice_hook::ReadHunexGgeSelectedLunaText(
+  const auto result = my_comic_voice_hook::ReadHunexGgeSelectedLunaText(
       RequestFor(mapping.header()));
   Check(result.disposition == HunexGgeSelectedTextDisposition::kNoMatch,
         "same face exact text on another thread must never be admitted");
@@ -235,7 +235,7 @@ void TestProcessSourceIdentityAndAddressAreExact() {
   }
   {
     LineOptions value;
-    value.source_kind = fushi_voice_hook::kTextSourceGdi;
+    value.source_kind = my_comic_voice_hook::kTextSourceGdi;
     cases.push_back({value, "non-Luna source must be rejected"});
   }
   {
@@ -256,14 +256,14 @@ void TestProcessSourceIdentityAndAddressAreExact() {
   }
   {
     LineOptions value;
-    value.event_kind = fushi_voice_hook::kTextEventThreadDiscovered;
+    value.event_kind = my_comic_voice_hook::kTextEventThreadDiscovered;
     cases.push_back({value, "thread discovery is not a line"});
   }
 
   for (const InvalidCase &invalid : cases) {
     FakeMapping mapping;
     WriteLine(mapping.header(), kCurrentRaw, invalid.options);
-    const auto result = fushi_voice_hook::ReadHunexGgeSelectedLunaText(
+    const auto result = my_comic_voice_hook::ReadHunexGgeSelectedLunaText(
         RequestFor(mapping.header()));
     Check(result.disposition ==
               HunexGgeSelectedTextDisposition::kInvalidSelectedEvent,
@@ -275,10 +275,10 @@ void TestTruncatedAndMalformedPayloadsAreRejected() {
   {
     FakeMapping mapping;
     const uint32_t payload_units =
-        fushi_voice_hook::hunex_gge_selected_text_detail::kTextPayloadCapacity /
+        my_comic_voice_hook::hunex_gge_selected_text_detail::kTextPayloadCapacity /
         sizeof(wchar_t);
     WriteLine(mapping.header(), std::wstring(payload_units + 32, L'x'));
-    const auto result = fushi_voice_hook::ReadHunexGgeSelectedLunaText(
+    const auto result = my_comic_voice_hook::ReadHunexGgeSelectedLunaText(
         RequestFor(mapping.header()));
     Check(result.disposition ==
               HunexGgeSelectedTextDisposition::kInvalidSelectedEvent,
@@ -294,7 +294,7 @@ void TestTruncatedAndMalformedPayloadsAreRejected() {
           reinterpret_cast<uint8_t *>(slot) + sizeof(TextSlot));
       payload[0] = static_cast<wchar_t>(0xD800);
     }
-    const auto result = fushi_voice_hook::ReadHunexGgeSelectedLunaText(
+    const auto result = my_comic_voice_hook::ReadHunexGgeSelectedLunaText(
         RequestFor(mapping.header()));
     Check(result.disposition ==
               HunexGgeSelectedTextDisposition::kInvalidSelectedEvent,
@@ -307,9 +307,9 @@ void TestTruncatedAndMalformedPayloadsAreRejected() {
     Check(slot != nullptr, "odd oversized fixture must find selected slot");
     if (slot != nullptr) {
       slot->byte_len =
-          fushi_voice_hook::kHunexGgeSelectedTextMaxUnits * sizeof(wchar_t) + 1;
+          my_comic_voice_hook::kHunexGgeSelectedTextMaxUnits * sizeof(wchar_t) + 1;
     }
-    const auto result = fushi_voice_hook::ReadHunexGgeSelectedLunaText(
+    const auto result = my_comic_voice_hook::ReadHunexGgeSelectedLunaText(
         RequestFor(mapping.header()));
     Check(result.disposition ==
               HunexGgeSelectedTextDisposition::kInvalidSelectedEvent,
@@ -322,7 +322,7 @@ void TestTruncatedAndMalformedPayloadsAreRejected() {
     Check(slot != nullptr, "odd payload fixture must find selected slot");
     if (slot != nullptr)
       slot->byte_len = odd_bytes;
-    const auto result = fushi_voice_hook::ReadHunexGgeSelectedLunaText(
+    const auto result = my_comic_voice_hook::ReadHunexGgeSelectedLunaText(
         RequestFor(mapping.header()));
     Check(result.disposition ==
               HunexGgeSelectedTextDisposition::kInvalidSelectedEvent,
@@ -330,10 +330,10 @@ void TestTruncatedAndMalformedPayloadsAreRejected() {
   }
   {
     FakeMapping mapping;
-    const std::wstring boundary(fushi_voice_hook::kHunexGgeSelectedTextMaxUnits,
+    const std::wstring boundary(my_comic_voice_hook::kHunexGgeSelectedTextMaxUnits,
                                 L'x');
     WriteLine(mapping.header(), boundary);
-    const auto result = fushi_voice_hook::ReadHunexGgeSelectedLunaText(
+    const auto result = my_comic_voice_hook::ReadHunexGgeSelectedLunaText(
         RequestFor(mapping.header(), boundary.data(),
                    static_cast<uint32_t>(boundary.size())));
     Check(result.disposition ==
@@ -350,7 +350,7 @@ void TestOldEventsAndUpperFenceCannotFallback() {
     WriteLine(mapping.header(), kFutureRaw);
     auto request = RequestFor(mapping.header());
     request.window_after_seq = old_match;
-    const auto result = fushi_voice_hook::ReadHunexGgeSelectedLunaText(request);
+    const auto result = my_comic_voice_hook::ReadHunexGgeSelectedLunaText(request);
     Check(result.disposition == HunexGgeSelectedTextDisposition::kNoMatch,
           "an exact but already-consumed event must not be reused");
   }
@@ -360,7 +360,7 @@ void TestOldEventsAndUpperFenceCannotFallback() {
     WriteLine(mapping.header(), kCurrentRaw);
     auto request = RequestFor(mapping.header());
     request.window_through_seq = upper;
-    const auto result = fushi_voice_hook::ReadHunexGgeSelectedLunaText(request);
+    const auto result = my_comic_voice_hook::ReadHunexGgeSelectedLunaText(request);
     Check(result.disposition == HunexGgeSelectedTextDisposition::kNoMatch,
           "an exact event published after the captured window must not match");
   }
@@ -372,7 +372,7 @@ void TestInvalidNewerEventPreventsOldMatchFallback() {
   LineOptions invalid;
   invalid.process_id = kProcessId + 1;
   WriteLine(mapping.header(), kFutureRaw, invalid);
-  const auto result = fushi_voice_hook::ReadHunexGgeSelectedLunaText(
+  const auto result = my_comic_voice_hook::ReadHunexGgeSelectedLunaText(
       RequestFor(mapping.header()));
   Check(result.disposition ==
                 HunexGgeSelectedTextDisposition::kInvalidSelectedEvent &&
@@ -384,7 +384,7 @@ void TestDuplicateExactMatchesAreAmbiguous() {
   FakeMapping mapping;
   WriteLine(mapping.header(), kCurrentRaw);
   WriteLine(mapping.header(), kCurrentRaw);
-  const auto result = fushi_voice_hook::ReadHunexGgeSelectedLunaText(
+  const auto result = my_comic_voice_hook::ReadHunexGgeSelectedLunaText(
       RequestFor(mapping.header()));
   Check(result.disposition == HunexGgeSelectedTextDisposition::kAmbiguous &&
             result.failure ==
@@ -399,9 +399,9 @@ void TestIncompleteSlotAndSelectionMismatchAreRejected() {
     TextSlot *slot = SelectedSlotAt(mapping.header(), 1);
     Check(slot != nullptr, "incomplete slot fixture must find selected slot");
     if (slot != nullptr) {
-      fushi_voice_hook::AtomicStorePreview64(&slot->lane_seq, 0);
+      my_comic_voice_hook::AtomicStorePreview64(&slot->lane_seq, 0);
     }
-    const auto result = fushi_voice_hook::ReadHunexGgeSelectedLunaText(
+    const auto result = my_comic_voice_hook::ReadHunexGgeSelectedLunaText(
         RequestFor(mapping.header()));
     Check(result.disposition == HunexGgeSelectedTextDisposition::kUnstable &&
               result.failure ==
@@ -412,7 +412,7 @@ void TestIncompleteSlotAndSelectionMismatchAreRejected() {
     FakeMapping mapping;
     WriteLine(mapping.header(), kCurrentRaw);
     mapping.header()->selected_text_thread_id = kOtherThread;
-    const auto result = fushi_voice_hook::ReadHunexGgeSelectedLunaText(
+    const auto result = my_comic_voice_hook::ReadHunexGgeSelectedLunaText(
         RequestFor(mapping.header()));
     Check(result.disposition == HunexGgeSelectedTextDisposition::kUnstable &&
               result.failure == HunexGgeSelectedTextFailure::kSelectionChanged,
@@ -427,7 +427,7 @@ void TestRequestAndHeaderMustBeSane() {
   {
     auto request = RequestFor(mapping.header());
     request.current_process_id = 0;
-    const auto result = fushi_voice_hook::ReadHunexGgeSelectedLunaText(request);
+    const auto result = my_comic_voice_hook::ReadHunexGgeSelectedLunaText(request);
     Check(result.disposition ==
               HunexGgeSelectedTextDisposition::kInvalidRequest,
           "zero current process is not an admission request");
@@ -435,7 +435,7 @@ void TestRequestAndHeaderMustBeSane() {
   {
     auto request = RequestFor(mapping.header());
     request.mapped_bytes = sizeof(SharedHeader) - 1;
-    const auto result = fushi_voice_hook::ReadHunexGgeSelectedLunaText(request);
+    const auto result = my_comic_voice_hook::ReadHunexGgeSelectedLunaText(request);
     Check(result.disposition ==
                   HunexGgeSelectedTextDisposition::kInvalidRequest &&
               result.failure == HunexGgeSelectedTextFailure::kHeaderContract,
@@ -444,7 +444,7 @@ void TestRequestAndHeaderMustBeSane() {
   {
     auto request = RequestFor(mapping.header());
     mapping.header()->text_region_offset = std::numeric_limits<uint32_t>::max();
-    const auto result = fushi_voice_hook::ReadHunexGgeSelectedLunaText(request);
+    const auto result = my_comic_voice_hook::ReadHunexGgeSelectedLunaText(request);
     Check(result.disposition ==
                   HunexGgeSelectedTextDisposition::kInvalidRequest &&
               result.failure == HunexGgeSelectedTextFailure::kHeaderContract,
@@ -456,7 +456,7 @@ void TestRequestAndHeaderMustBeSane() {
     auto request = RequestFor(overlap_mapping.header());
     overlap_mapping.header()->text_region_offset =
         static_cast<uint32_t>(sizeof(SharedHeader) - alignof(TextLane));
-    const auto result = fushi_voice_hook::ReadHunexGgeSelectedLunaText(request);
+    const auto result = my_comic_voice_hook::ReadHunexGgeSelectedLunaText(request);
     Check(result.disposition ==
                   HunexGgeSelectedTextDisposition::kInvalidRequest &&
               result.failure == HunexGgeSelectedTextFailure::kHeaderContract,
@@ -467,11 +467,11 @@ void TestRequestAndHeaderMustBeSane() {
     WriteLine(short_mapping.header(), kCurrentRaw);
     auto request = RequestFor(short_mapping.header());
     request.mapped_bytes = short_mapping.header()->text_region_offset +
-                           fushi_voice_hook::TextRegionBytes(
-                               fushi_voice_hook::kTextLaneCount,
-                               fushi_voice_hook::kTextLaneSlotCount) -
+                           my_comic_voice_hook::TextRegionBytes(
+                               my_comic_voice_hook::kTextLaneCount,
+                               my_comic_voice_hook::kTextLaneSlotCount) -
                            1;
-    const auto result = fushi_voice_hook::ReadHunexGgeSelectedLunaText(request);
+    const auto result = my_comic_voice_hook::ReadHunexGgeSelectedLunaText(request);
     Check(result.disposition ==
                   HunexGgeSelectedTextDisposition::kInvalidRequest &&
               result.failure == HunexGgeSelectedTextFailure::kHeaderContract,
@@ -482,7 +482,7 @@ void TestRequestAndHeaderMustBeSane() {
     WriteLine(misaligned_mapping.header(), kCurrentRaw);
     auto request = RequestFor(misaligned_mapping.header());
     misaligned_mapping.header()->text_region_offset += 1;
-    const auto result = fushi_voice_hook::ReadHunexGgeSelectedLunaText(request);
+    const auto result = my_comic_voice_hook::ReadHunexGgeSelectedLunaText(request);
     Check(result.disposition ==
                   HunexGgeSelectedTextDisposition::kInvalidRequest &&
               result.failure == HunexGgeSelectedTextFailure::kHeaderContract,
@@ -493,7 +493,7 @@ void TestRequestAndHeaderMustBeSane() {
     WriteLine(version_mapping.header(), kCurrentRaw);
     auto request = RequestFor(version_mapping.header());
     version_mapping.header()->version += 1;
-    const auto result = fushi_voice_hook::ReadHunexGgeSelectedLunaText(request);
+    const auto result = my_comic_voice_hook::ReadHunexGgeSelectedLunaText(request);
     Check(result.disposition ==
                   HunexGgeSelectedTextDisposition::kInvalidRequest &&
               result.failure == HunexGgeSelectedTextFailure::kHeaderContract,
