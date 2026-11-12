@@ -1,16 +1,24 @@
 <div align="center">
 
-# MyComic
+<img src="docs/assets/mycomic-logo-horizontal.png" alt="MyComic" width="480">
 
 **Mihon 兼容的 Windows 桌面漫画阅读器。**
 
-[English](README.md) | **简体中文**
+[English](README.en.md) | **简体中文**
 
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078D4)
 ![License](https://img.shields.io/badge/license-GPLv3-blue)
 ![Flutter](https://img.shields.io/badge/Flutter-3.47.6-02569B?logo=flutter&logoColor=white)
 
 </div>
+
+## 缘起
+
+该项目的诞生，是因为我用 Mihon 看漫画，结果下载漫画把手机存储空间塞满了，但我又不想将已下载的漫画删除，于是便想着能不能安装个 PC 版本的 Mihon 到电脑上，将备份倒过去，用电脑存储漫画。
+
+但我发现，GitHub 上并没有界面好看、操作又简单的 Mihon 桌面版本，唯一比较相近的便是 Fushi 这个开源项目：该项目能完美支持 Mihon 的插件仓库和功能，但无法读取 Mihon 的备份文件。
+
+经过我多方面的思考和学习，最后我决定，用 AI 做一个能完美支持 Mihon 插件和备份的 PC 桌面版漫画阅读器。
 
 MyComic 是一个独立的 Windows 桌面漫画阅读器，基于 Fushi v3.0.0（GPL-3.0）快照；它与 Fushi、Mihon 项目没有隶属关系，也未获得其背书。
 

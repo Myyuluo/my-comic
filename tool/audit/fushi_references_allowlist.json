@@ -63,13 +63,13 @@
     },
     {
       "path": "README.md",
-      "line_pattern": "[Ff]ushi v3\\.0\\.0|Fushi contributors|Fushi-based|fushi://|fushi-",
-      "reason": "README 的来源署名、兼容基线与旧 fushi://、fushi- 兼容性说明"
+      "line_pattern": "[Ff]ushi",
+      "reason": "README 的来源署名、项目缘起与旧 fushi://、fushi- 兼容性说明"
     },
     {
-      "path": "README.zh-CN.md",
-      "line_pattern": "[Ff]ushi v3\\.0\\.0|Fushi 贡献者|fushi://|fushi-",
-      "reason": "README 的来源署名、兼容基线与旧 fushi://、fushi- 兼容性说明"
+      "path": "README.en.md",
+      "line_pattern": "[Ff]ushi",
+      "reason": "English README 的来源署名、项目缘起与旧 fushi://、fushi- 兼容性说明"
     },
     {
       "path": "my_comic/lib/**",
