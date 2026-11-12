@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "version": "1.0.0-debug.2637",
+  "tag": "v1.0.0-debug.2637+bb25031",
+  "channel": "debug",
+  "prerelease": true,
+  "releaseSequence": 2637,
+  "notes": "Automated desktop debug-channel build from main @ bb25031. Push releases are always prerelease and never Latest.",
+  "assets": [
+    {
+      "name": "mycomic-1.0.0-debug.2637-windows-setup.exe",
+      "browser_download_url": "https://github.com/Myyuluo/my-comic/releases/download/mycomic-debug-rolling/mycomic-1.0.0-debug.2637-windows-setup.exe",
+      "releaseSequence": 2637,
+      "tag": "v1.0.0-debug.2637+bb25031",
+      "version": "1.0.0-debug.2637",
+      "size": 154695734,
+      "sha256": "19e8db48c97ae139b0df1557ee4dbb3c845c49c5c9e7ef3d95cbb7f11b8211e8"
+    }
+  ]
+}
