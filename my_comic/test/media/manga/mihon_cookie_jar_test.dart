@@ -210,7 +210,7 @@ void main() {
     });
   });
 
-  group('X-MyComic-Set-Cookie 线格式', () {
+  group('X-Fushi-Set-Cookie 线格式（冻结 sidecar 契约）', () {
     test('往返保真，含非 ASCII 与分号（裸放 JSON 头会静默损坏的那些）', () {
       final List<MangaCookie> original = <MangaCookie>[
         cookie('session', value: 'あ;b,c=d'),
@@ -341,7 +341,7 @@ void main() {
       // `dart:io` 的 HttpClient 无条件带 `User-Agent: Dart/x.y (dart:io)`
       // （宿主这里根本控制不到），于是每次调用都把源的 UA 改写成 Dart。
       // 现在源 UA 只走这个专用头，宿主不发即不改写。
-      expect(headers.containsKey('X-MyComic-Source-User-Agent'), isFalse);
+      expect(headers.containsKey('X-Fushi-Source-User-Agent'), isFalse);
     });
 
     test('baseUrl 解析不出 host 的源不注入，也不炸', () async {

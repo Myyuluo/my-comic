@@ -501,10 +501,10 @@ class DesktopMihonRuntime extends MihonBridgeRuntime
         '0',
         dataDirectory.path,
       ],
-      environment: <String, String>{
-        'MYCOMIC_MIHON_TOKEN': token,
-        'MYCOMIC_MIHON_PROXY_POLICY_PORT': '${proxyPolicy.port}',
-      },
+      environment: buildSidecarEnvironment(
+        token: token,
+        proxyPolicyPort: proxyPolicy.port,
+      ),
       mode: ProcessStartMode.normal,
     );
     if (_disposed) {
@@ -555,7 +555,7 @@ class DesktopMihonRuntime extends MihonBridgeRuntime
         .listen((String line) {
       log.write(line);
       if (announced.isCompleted) return;
-      final int? port = _parseReadyPort(line);
+      final int? port = parseReadyPort(line);
       if (port != null) announced.complete(port);
     });
     process.stderr
@@ -626,24 +626,50 @@ class DesktopMihonRuntime extends MihonBridgeRuntime
     );
   }
 
-  /// Readiness contract with the sidecar; mirrors
-  /// `MExtensionServerController.READY_LINE_PREFIX`.
-  static const String _readyLinePrefix = 'MYCOMIC_MIHON_READY port=';
+  /// The bundled M-Extension-Server jar is a pinned prebuilt binary. Its
+  /// environment and stdout marker names are a frozen sidecar contract and
+  /// cannot be renamed without rebuilding and re-pinning the jar. Send both
+  /// the current and legacy names; the pinned jar reads the legacy ones.
+  @visibleForTesting
+  static Map<String, String> buildSidecarEnvironment({
+    required String token,
+    required int proxyPolicyPort,
+  }) {
+    final String port = '$proxyPolicyPort';
+    return <String, String>{
+      'MYCOMIC_MIHON_TOKEN': token,
+      'FUSHI_MIHON_TOKEN': token,
+      'MYCOMIC_MIHON_PROXY_POLICY_PORT': port,
+      'FUSHI_MIHON_PROXY_POLICY_PORT': port,
+    };
+  }
+
+  /// Readiness contract with the sidecar; mirrors the pinned jar's
+  /// `MExtensionServerController.READY_LINE_PREFIX`, which still prints the
+  /// legacy marker. Accept both so a future rebuilt jar can switch over.
+  static const List<String> _readyLinePrefixes = <String>[
+    'MYCOMIC_MIHON_READY port=',
+    'FUSHI_MIHON_READY port=',
+  ];
 
   /// Extracts the announced port from one stdout line, or `null` if the line
   /// is ordinary log output.
   ///
   /// The child shares stdout with logback, so the marker is located rather
   /// than assumed to start the line.
-  static int? _parseReadyPort(String line) {
-    final int marker = line.indexOf(_readyLinePrefix);
-    if (marker < 0) return null;
-    final String tail = line.substring(marker + _readyLinePrefix.length);
-    final Match? digits = RegExp(r'^\d+').matchAsPrefix(tail);
-    if (digits == null) return null;
-    final int? port = int.tryParse(digits.group(0)!);
-    if (port == null || port <= 0 || port > 65535) return null;
-    return port;
+  @visibleForTesting
+  static int? parseReadyPort(String line) {
+    for (final String prefix in _readyLinePrefixes) {
+      final int marker = line.indexOf(prefix);
+      if (marker < 0) continue;
+      final String tail = line.substring(marker + prefix.length);
+      final Match? digits = RegExp(r'^\d+').matchAsPrefix(tail);
+      if (digits == null) continue;
+      final int? port = int.tryParse(digits.group(0)!);
+      if (port == null || port <= 0 || port > 65535) continue;
+      return port;
+    }
+    return null;
   }
 
   /// 把 sidecar 错误响应里的异常类型与 Java 栈拼成 `details`。

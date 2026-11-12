@@ -22,13 +22,16 @@ import 'package:my_comic/src/storage/app_paths.dart';
 ///
 /// 自有头 + 结构化载荷把这两条一起消掉：线格式无损，且传输层的头再也不会被误认
 /// 成源的身份。
-const String kMihonCookieHeader = 'X-MyComic-Cookies';
+/// Frozen sidecar contract: the pinned prebuilt M-Extension-Server jar reads
+/// and writes these exact header names. Rename only together with a rebuilt
+/// and re-pinned jar.
+const String kMihonCookieHeader = 'X-Fushi-Cookies';
 
 /// sidecar → 宿主：本次调用后该源 jar 里的 cookie（会话续期 / 轮转 token）。
 ///
 /// 头名小写：`package:http` 的 `Response.headers` 键一律小写化，直接用小写常量
 /// 查表，省掉一层大小写归一。（请求头由我们自己写，大小写不敏感。）
-const String kMihonSetCookieHeader = 'x-mycomic-set-cookie';
+const String kMihonSetCookieHeader = 'x-fushi-set-cookie';
 
 /// 两个方向共用的载荷编解码：**base64(UTF-8 JSON 数组)**。
 ///

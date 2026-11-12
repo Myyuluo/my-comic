@@ -55,7 +55,10 @@ class MihonCapabilities {
   factory MihonCapabilities.fromJson(Map<String, Object?> json) =>
       MihonCapabilities(
         bridgeVersion:
-            (json['myComicMihonBridge'] ?? json['mangatanMihonBridge'] ?? 0)
+            (json['myComicMihonBridge'] ??
+                    json['fushiMihonBridge'] ??
+                    json['mangatanMihonBridge'] ??
+                    0)
                 as int,
         sourceFactory: json['sourceFactory'] == true,
         preferenceCallbacks: json['preferenceCallbacks'] == true,
