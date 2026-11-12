@@ -78,8 +78,8 @@ void main() {
     );
 
     // 防守卫自己被重构掉底：若真 app 启动 / 遍历 API 改名，扫描集会静默清空。
-    expect(inScope, greaterThanOrEqualTo(25),
-        reason: '扫描集只剩 $inScope 个文件，远低于当前实际规模——很可能是 '
+    expect(inScope, greaterThanOrEqualTo(4),
+        reason: '扫描集只剩 $inScope 个文件，远低于当前实际规模（实测 5）——很可能是 '
             '真 app 启动或 FocusDriver 遍历 API 改名后守卫认不出来了，先修判据再跑。');
   });
 

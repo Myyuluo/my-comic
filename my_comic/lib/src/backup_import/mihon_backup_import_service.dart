@@ -25,6 +25,9 @@ import 'package:my_comic/src/utils/misc/trimmed_text.dart';
 export 'package:my_comic/src/media/manga/library/online_manga_library_entry.dart'
     show kUnavailableMihonExtensionPackage;
 
+/// `MangaExtensionStores.format` 的历史值：老式仓库条目（Mihon 备份的 `isLegacy`）。
+const String _kLegacyStoreFormat = 'legacy';
+
 /// Why a top-level `BackupPreference` was not applied to MyComic's settings.
 enum MihonBackupAppPreferenceSkipReason {
   /// The key is not one of MyComic's own app preference keys (Mihon native or
@@ -813,7 +816,7 @@ class MihonBackupImportService {
         .get();
     final Map<String, _ExistingEntry> existing = <String, _ExistingEntry>{};
     for (final EpubBookRow row in rows) {
-      if (row.format != 'manga') continue;
+      if (row.format != BookFormat.manga.dbValue) continue;
       final OnlineMangaLibraryEntry? entry = OnlineMangaLibraryEntry.tryParse(
         row.sourceMetadata,
       );
@@ -1283,8 +1286,10 @@ class MihonBackupImportService {
               store.contactWebsite.trim().isNotEmpty ||
               store.contactDiscord != null;
           final String mergedFormat = store.isLegacy == true
-              ? 'legacy'
-              : (current.format == 'legacy' ? format : current.format);
+              ? _kLegacyStoreFormat
+              : (current.format == _kLegacyStoreFormat
+                    ? format
+                    : current.format);
           await (database.update(
             database.mangaExtensionStores,
           )..where((t) => t.indexUrl.equals(indexUrl))).write(

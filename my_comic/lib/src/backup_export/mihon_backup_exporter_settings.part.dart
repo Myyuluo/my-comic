@@ -1,5 +1,8 @@
 part of 'mihon_backup_exporter.dart';
 
+/// `MangaExtensionStores.format` 的历史值：老式仓库条目（Mihon 备份的 `isLegacy`）。
+const String _kLegacyStoreFormat = 'legacy';
+
 /// 「应用设置」: MyComic's own `preferences` rows under their original key
 /// names, wrapped in Mihon's six standard value envelopes.
 class _AppSettingsExportSection {
@@ -44,7 +47,7 @@ class _AppSettingsExportSection {
     // The prefs-version counter is a per-install cache-invalidation signal
     // written on every preference change, not a user setting.
     if (key == MyComicDatabase.prefsVersionKey) return false;
-    if (PrefRedactionPolicy.isDeviceLocalOrCredential(key)) return false;
+    if (PrefRedactionPolicy.isDeviceLocal(key)) return false;
     if (includeSensitive) return true;
     return !PrefRedactionPolicy.isDeviceLocalOrCredential(key);
   }
@@ -88,7 +91,7 @@ class _MangaExtensionStoreExportSection {
           signingKey: row.signingKey ?? '',
           contactWebsite: (contact['website'] ?? '').trim(),
           contactDiscord: _nonEmpty((contact['discord'] ?? '').trim()),
-          isLegacy: row.format == 'legacy',
+          isLegacy: row.format == _kLegacyStoreFormat,
           extensionListUrl: row.extensionListUrl,
         ),
       );

@@ -411,17 +411,13 @@ void main() {
     });
   });
 
-  test('主 app 与弹窗词典的根部都挂了本层', () {
-    for (final String path in <String>[
-      'lib/main.dart',
-      'lib/popup_main.dart',
-    ]) {
-      expect(
-        File(path).readAsStringSync(),
-        contains('SmoothWheelScrollScope('),
-        reason: '$path 的 MaterialApp builder 必须包 SmoothWheelScrollScope',
-      );
-    }
+  test('主 app 根部挂了本层', () {
+    expect(
+      File('lib/main.dart').readAsStringSync(),
+      contains('SmoothWheelScrollScope('),
+      reason: 'lib/main.dart 的 MaterialApp builder 必须包 SmoothWheelScrollScope'
+          '（弹窗词典入口已随非漫画域删除）',
+    );
   });
 
   test('不得复活按控制器逐个接线的平行滚轮实现', () {

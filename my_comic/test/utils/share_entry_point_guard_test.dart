@@ -58,7 +58,7 @@ void main() {
     // 扫描本身失效（cwd 不是 my_comic/ / listSync 拿不到东西 / 过滤写反）必须红，
     // 不能静默退化成「零违规」的摆设。
     expectScanScale(scanned,
-        what: 'lib/ 下除分享入口外的 .dart', atLeast: 960, measured: 1201);
+        what: 'lib/ 下除分享入口外的 .dart', atLeast: 560, measured: 632);
 
     expect(
       offenders,

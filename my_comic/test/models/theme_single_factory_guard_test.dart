@@ -12,10 +12,6 @@ import 'package:my_comic/src/utils/components/my_comic_design_tokens.dart';
 /// ThemeData，组件主题（卡片圆角、浮动 snackbar、chip 形状…）全退回 Flutter 默认，
 /// 悬浮词典更是写死默认种子色、无视用户主题。
 void main() {
-  final TextTheme appText = MyComicTypeScale.buildTextTheme(
-    const TextStyle(fontFamily: 'MyComicTestFont'),
-  );
-
   group('源码守卫：lib 里只有工厂能构造 ThemeData', () {
     // 不吃标识符前缀：`CardThemeData(` / `MaterialVideoControlsThemeData(` 不算。
     final RegExp ctor = RegExp(
@@ -53,15 +49,6 @@ void main() {
       );
     });
 
-    test('悬浮词典入口跟随用户主题（与 popup_main 同一口径）', () {
-      final String src = File('lib/floating_dict_main.dart').readAsStringSync();
-      expect(
-        src,
-        contains('appModel.overrideDictionaryTheme ?? appModel.theme'),
-      );
-      expect(src, contains('appModel.darkTheme'));
-      expect(src, contains('appModel.themeMode'));
-    });
   });
 
   group('兜底主题', () {

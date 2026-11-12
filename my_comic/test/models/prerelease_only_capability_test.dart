@@ -88,7 +88,7 @@ void main() {
       }
     });
 
-    test('ModuleVisibility：正式版里即使 pref 开着，复习也不在可见集合中', () {
+    test('ModuleVisibility：非漫画模块（含复习）永远不进可见集合', () {
       ModuleVisibility resolve(String define) => ModuleVisibility.resolve(
         prefOf: (ModuleId _) => true,
         isWindows: true,
@@ -97,12 +97,20 @@ void main() {
         isAndroid: false,
         buildVersionDefine: define,
       );
-      final ModuleVisibility formal = resolve('2.7.0');
-      expect(formal.isEnabled(ModuleId.srs), isFalse);
-      expect(formal.isEnabled(ModuleId.books), isTrue);
-      expect(resolve('2.7.0-beta.3').isEnabled(ModuleId.srs), isTrue);
-      expect(resolve('2.7.0-debug.12215').isEnabled(ModuleId.srs), isTrue);
-      expect(resolve('').isEnabled(ModuleId.srs), isTrue);
+      // 独立化后可见性只保留漫画域（Manga / 浏览）；复习、书籍等旧模块即使
+      // pref 开着也不会进入导航 / 设置 / 后台自启。
+      for (final String define in <String>[
+        '2.7.0',
+        '2.7.0-beta.3',
+        '2.7.0-debug.12215',
+        '',
+      ]) {
+        final ModuleVisibility visibility = resolve(define);
+        expect(visibility.isEnabled(ModuleId.srs), isFalse, reason: define);
+        expect(visibility.isEnabled(ModuleId.books), isFalse, reason: define);
+        expect(visibility.isEnabled(ModuleId.manga), isTrue, reason: define);
+        expect(visibility.isEnabled(ModuleId.browse), isTrue, reason: define);
+      }
 
       expect(
         ModuleVisibility.all(
@@ -115,9 +123,9 @@ void main() {
         isFalse,
       );
       expect(
-        formal.enabled,
-        resolve('2.7.0-beta.3').enabled.difference(<ModuleId>{ModuleId.srs}),
-        reason: '正式版与预发布的可见集合只差复习。',
+        resolve('2.7.0').enabled,
+        resolve('2.7.0-beta.3').enabled,
+        reason: '可见集合只剩漫画域，与构建通道无关。',
       );
     });
 

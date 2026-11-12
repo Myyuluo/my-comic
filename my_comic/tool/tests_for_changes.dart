@@ -2,7 +2,7 @@
 //
 // ## 为什么要有这个工具
 //
-// `docs/agent/fast-workflow.md` 里的默认整批 35 条守卫，扫的是 Dart 源码树，
+// `tool/test_flow/pre_push_selection.dart` 里的默认整批守卫，扫的是 Dart 源码树，
 // 目录枚举、自动纳入新文件，所以「整批跑」就够了。真正会漏的是另一半：
 // **读 native / 非 Dart 树的守卫**（`my_comic/windows`、`my_comic/android`、
 // `packages/*/windows`、`native/`、`tools/browser-extension`、`.github/workflows`、

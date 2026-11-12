@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:my_comic_core/my_comic_core.dart';
 
 /// v118 `localAddedAt`（本机开始拥有的时刻）的写入单点：
-/// `insertEpubBook` / `upsertSrtBook` / `upsertVideoBook`。
+/// `insertEpubBook`（独立化后 srt/video 域已删除）。
 ///
 /// 契约：插入时未携带 → 当时 now；冲突转更新（整行 save、同 uid 重复登记）**永不
 /// 改写**；改 importedAt（互联下载沿用对端入库时刻）不碰它；删了再加 = 重新拥有，
@@ -65,59 +65,4 @@ void main() {
     });
   });
 
-  group('upsertVideoBook', () {
-    VideoBooksCompanion video({int? importedAt}) => VideoBooksCompanion(
-      bookUid: const Value<String>('v1'),
-      title: const Value<String>('V'),
-      videoPath: const Value<String>('/abs/v.mp4'),
-      importedAt: Value<int?>(importedAt),
-    );
-
-    test('插入未携带 → now；同 bookUid 重复登记只更新其它列、不改写 localAddedAt', () async {
-      final int before = nowMs();
-      await db.upsertVideoBook(video(importedAt: 1000));
-      final int after = nowMs();
-      final int first = (await db.getVideoBookByBookUid('v1'))!.localAddedAt!;
-      expect(first, inInclusiveRange(before, after));
-
-      await db.upsertVideoBook(
-        video(importedAt: 5).copyWith(localAddedAt: const Value<int?>(1)),
-      );
-      final VideoBookRow row = (await db.getVideoBookByBookUid('v1'))!;
-      expect(row.importedAt, 5, reason: '其它列照常按 upsert 覆盖');
-      expect(row.localAddedAt, first, reason: '重复登记不是重新拥有');
-    });
-  });
-
-  group('upsertSrtBook', () {
-    test('插入未携带 → now；按 id 整行 save 不改写 localAddedAt', () async {
-      final int before = nowMs();
-      await db.upsertSrtBook(
-        SrtBooksCompanion.insert(
-          uid: 's1',
-          title: 'S',
-          srtPath: '/abs/s.srt',
-          importedAt: 1000,
-        ),
-      );
-      final int after = nowMs();
-      final SrtBookRow inserted = (await db.getSrtBookByUid('s1'))!;
-      expect(inserted.localAddedAt, inInclusiveRange(before, after));
-
-      await db.upsertSrtBook(
-        SrtBooksCompanion(
-          id: Value<int>(inserted.id),
-          uid: const Value<String>('s1'),
-          title: const Value<String>('S renamed'),
-          srtPath: const Value<String>('/abs/s.srt'),
-          importedAt: const Value<int>(2000),
-          localAddedAt: const Value<int?>(1),
-        ),
-      );
-      final SrtBookRow saved = (await db.getSrtBookByUid('s1'))!;
-      expect(saved.title, 'S renamed');
-      expect(saved.importedAt, 2000);
-      expect(saved.localAddedAt, inserted.localAddedAt);
-    });
-  });
 }

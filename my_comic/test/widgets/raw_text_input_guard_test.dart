@@ -35,11 +35,6 @@ const Set<String> _componentFiles = <String>{
 
 /// 存量：(文件 → 控件 → 允许的次数)。迁移后降计数 / 删条目。
 const Map<String, Map<String, int>> _legacy = <String, Map<String, int>>{
-  // AI 下视频对话页底部输入条：Apple 下是浮在对话上的透明液态玻璃胶囊
-  // （Messages 输入条），共享 Apple 输入框是内容层实色框，形态不同。
-  'lib/src/pages/implementations/ai_video_acquisition_page.dart': <String, int>{
-    'GlassTextField': 1,
-  },
   // 设置页重设计把同一 Apple 玻璃搜索胶囊抽到共享 SettingsSearchBar；
   // 仅搬迁原有一处预算，不豁免整个 settings_kit，也不增加裸控件总数。
   'lib/src/settings/settings_kit.dart': <String, int>{

@@ -8,7 +8,7 @@ import 'package:test/test.dart';
 /// a private copy of `sanitizeTtuFilename` in `lib/src/utils/ttu_sanitize.dart`
 /// (`coreSingleVideoBookUid` / `corePlaylistBookUid` derive video identities
 /// from it). The
-/// app truth source lives in `my_comic/lib/src/sync/ttu_filename.dart`. If either
+/// app truth source lives in `my_comic_engine/lib/utils/misc/ttu_filename.dart`. If either
 /// body is edited without the other, cross-device book identity silently
 /// diverges — the same title would map to different keys on different code
 /// paths.
@@ -22,7 +22,7 @@ void main() {
       File('lib/src/utils/ttu_sanitize.dart').readAsStringSync(),
     );
     final String appBody = _extractSanitizeBody(
-      File('../my_comic_engine/lib/sync/ttu_filename.dart').readAsStringSync(),
+      File('../my_comic_engine/lib/utils/misc/ttu_filename.dart').readAsStringSync(),
     );
 
     expect(coreBody, isNotEmpty,

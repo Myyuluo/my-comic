@@ -76,7 +76,7 @@ void main() {
           if (e is File && e.path.endsWith('_test.dart'))
             e.path: e.lengthSync(),
       };
-      expect(files.length, greaterThan(1000));
+      expect(files.length, greaterThan(800));
       int covered = 0;
       for (int i = 0; i < 4; i++) {
         final List<String> shard =

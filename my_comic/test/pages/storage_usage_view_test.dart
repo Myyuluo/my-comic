@@ -8,7 +8,6 @@ import 'package:my_comic_core/my_comic_core.dart'
 import 'package:path/path.dart' as p;
 
 import 'package:my_comic/src/pages/implementations/storage_usage_view.dart';
-import 'package:my_comic/src/storage/storage_usage_actions.dart';
 import 'package:my_comic/src/storage/storage_usage_service.dart';
 import 'package:my_comic/src/utils/my_comic_icons.dart';
 import 'package:my_comic/utils.dart';
@@ -235,8 +234,8 @@ void main() {
   ) async {
     writeFile(p.join(support.path, 'my_comic.db'), 1000);
     writeFile(p.join(support.path, 'my_comic.db.corrupt-bak-1.db'), 7);
-    writeFile(p.join(support.path, 'hibiki.db.bak.v16.1780592923530'), 3);
-    writeFile(p.join(support.path, 'hibiki.db-wal.bak.v20.1'), 1);
+    writeFile(p.join(support.path, 'my_comic.db.bak.v16.1780592923530'), 3);
+    writeFile(p.join(support.path, 'my_comic.db-wal.bak.v20.1'), 1);
     int deleteCalls = 0;
 
     await tester.pumpWidget(
@@ -261,7 +260,7 @@ void main() {
     final String title = t.storage_entry_database_snapshots_label(n: 3);
     expect(find.text(title), findsOneWidget);
     expect(find.text('support/my_comic.db.corrupt-bak-1.db'), findsNothing);
-    expect(find.text('support/hibiki.db.bak.v16.1780592923530'), findsNothing);
+    expect(find.text('support/my_comic.db.bak.v16.1780592923530'), findsNothing);
     // 活库仍只读单列。
     expect(find.text('support/my_comic.db'), findsOneWidget);
     // 整个类目里只有快照条目有删除按钮。
@@ -468,67 +467,6 @@ void main() {
     }
     expect(deleted, <String>['uid2']);
     expect(File(ep2).existsSync(), isFalse);
-  });
-
-  testWidgets('设置页接线（fromActions）：视频明细与删除原语原样透传，不退回空列表', (
-    WidgetTester tester,
-  ) async {
-    final String dir = p.join(docs.path, 'remote_videos', 'anime_sources');
-    final String ep1 = p.join(dir, 'ep1.mp4');
-    writeFile(ep1, 3000);
-
-    await tester.pumpWidget(
-      wrap(
-        StorageUsageView.fromActions(
-          service: service(),
-          actions: StorageUsageActions(
-            booksProvider: () async => const <StorageBookRef>[],
-            dictionaryNamesProvider: () async => const <String>[],
-            deleteBook: (String _) async => null,
-            deleteSrtBook: (String _) async => null,
-            deleteDictionary: (String _) async => null,
-            deleteDatabaseSnapshots: () async =>
-                const DatabaseSnapshotDeletionResult(
-                  deleted: <String>[],
-                  failures: <String, String>{},
-                ),
-            deleteFiles: (List<String> _) async => null,
-            anime4kBytesProvider: () async => 0,
-            anime4kDelete: () async => const <String>[],
-            videosProvider: () async => <StorageVideoRef>[
-              StorageVideoRef(
-                id: 'uid1',
-                title: 'Episode 1',
-                videoPath: ep1,
-                group: '作品B',
-              ),
-            ],
-            deleteVideo: (String _) async => null,
-          ),
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-
-    await tester.ensureVisible(_rowText(t.storage_category_video_downloads));
-    await tester.pumpAndSettle();
-    await tester.tap(_rowText(t.storage_category_video_downloads));
-    await tester.pumpAndSettle();
-
-    expect(
-      find.byKey(const ValueKey<String>('storage_entry_group:作品B')),
-      findsOneWidget,
-      reason: 'videosProvider 必须透传：漏传时视频类目只剩磁盘目录一行',
-    );
-    expect(find.text('Episode 1'), findsOneWidget);
-    expect(
-      find.descendant(
-        of: find.byKey(const ValueKey<String>('storage_entry:uid1')),
-        matching: find.byTooltip(t.dialog_delete),
-      ),
-      findsOneWidget,
-      reason: 'deleteVideo 必须透传：漏传时视频明细没有删除按钮',
-    );
   });
 
   test('正式设置页正文经 fromActions 接线（不手写逐参转发）', () {

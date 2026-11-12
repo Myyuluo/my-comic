@@ -72,17 +72,4 @@ void main() {
         reason: '唯一成员被删书清掉后，合集应随移空自删（不留 0 成员孤儿卡）');
   });
 
-  test('deleteSrtBookByUid 清合集成员行（uid 键）+ 移空自删', () async {
-    await db.customStatement(
-      'INSERT INTO srt_books (uid, title, srt_path, imported_at, book_key) '
-      "VALUES ('su1', 'Srt', '/s.srt', 0, '')",
-    );
-    final int cid = await db.createMediaCollection('字幕集');
-    await db.addToCollection(cid, MediaKind.srt, 'su1');
-
-    await db.deleteSrtBookByUid('su1');
-
-    expect(await db.getMediaCollectionById(cid), isNull,
-        reason: 'srt 删除同样必须清成员行并触发移空自删（与 epub 同修）');
-  });
 }

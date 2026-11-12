@@ -11,6 +11,7 @@ import 'package:my_comic/src/pages/implementations/tag_filter_sheet.dart';
 import 'package:my_comic/src/settings/settings_context.dart';
 import 'package:my_comic/src/storage/app_paths.dart';
 import 'package:my_comic/src/utils/adaptive/adaptive_widgets.dart';
+import 'package:my_comic/src/utils/components/glass/my_comic_glass_controls.dart';
 import 'package:my_comic/src/utils/components/my_comic_design_tokens.dart';
 import 'package:my_comic/src/utils/components/my_comic_material_components.dart';
 import 'package:my_comic/src/utils/misc/show_app_dialog.dart';
@@ -160,7 +161,7 @@ class _MihonBackupImportProgressDialogState
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            const LinearProgressIndicator(),
+            const MyComicLinearProgressIndicator(),
             const SizedBox(height: 16),
             Text(
               progress == null

@@ -60,24 +60,17 @@ void main() {
     );
   });
 
-  test('透传行（本地无书）移出 → 墓碑照抄原键；非 epub 域键原样', () async {
+  test('透传行（本地无书）移出 → 墓碑照抄原键', () async {
     final int cid = await db.createMediaCollection('D');
     // 透传行：对端 bookKey,本地无 epub 行。
     await db.addToCollection(cid, MediaKind.epub, 'remote only book');
-    await db.upsertVideoBook(VideoBooksCompanion(
-      bookUid: const Value('video/v1'),
-      title: const Value('V1'),
-      videoPath: const Value('/v/v1.mkv'),
-    ));
-    await db.addToCollection(cid, MediaKind.video, 'video/v1');
 
     await db.removeFromCollection(cid, MediaKind.epub, 'remote only book');
-    await db.removeFromCollection(cid, MediaKind.video, 'video/v1');
 
     final Set<String> keys = (await db.getAllCollectionMemberTombstones())
         .map((CollectionMemberTombstoneRow t) => t.entryKey)
         .toSet();
-    expect(keys, containsAll(<String>{'remote only book', 'video/v1'}),
-        reason: '透传 epub 键与 video 键都原样落墓碑（反查不上/非 epub 不换算）');
+    expect(keys, contains('remote only book'),
+        reason: '反查不上本地 epub 行时墓碑原样照抄 wire 键');
   });
 }

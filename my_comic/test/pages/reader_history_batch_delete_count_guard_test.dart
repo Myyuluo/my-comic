@@ -4,9 +4,8 @@ import 'reader_history_source_corpus.dart';
 
 /// BUG-439 source guard: the shelf batch-delete must count only books whose
 /// rows were actually removed, never optimistically `deleted++` and then claim
-/// "已删除 N 本". Previously the SRT branch incremented unconditionally after
-/// `repo.delete(uid)` regardless of whether any row was deleted, so deleting an
-/// orphan/absent entry still inflated the toast count.
+/// "已删除 N 本"。独立化后书架只剩漫画域，批量删除统一走
+/// `removeMangaFromLibrary` 的 `result.removed` 结果。
 void main() {
   group('reader history batch delete honesty (BUG-439)', () {
     test('SRT branch only counts genuine deletions, not optimistic success',
@@ -26,25 +25,22 @@ void main() {
       final String body =
           end > start ? source.substring(start, end) : source.substring(start);
 
-      // BUG-3101 起 SRT 卡的删除收进 `ReaderMyComicSource.deleteSrtShelfBook`（配对
-      // EPUB 的走 deleteBook、纯字幕书走 repo，只走一条路径）；以前 deleteBook 后再
-      // `repo.delete(uid…)` 一次，行已被级联删掉、回报 0 行，计数少算。
       expect(
-        body.contains('deleteSrtShelfBook('),
+        body.contains('removeMangaFromLibrary('),
         isTrue,
-        reason: 'the SRT branch deletes via deleteSrtShelfBook (BUG-3101)',
+        reason: '漫画批量删除必须走统一的移出库入口',
       );
       expect(
         body.contains('await repo.delete(uid'),
         isFalse,
-        reason: 'BUG-3101：不得在 deleteBook 之后再按 uid 删一次 srt 行',
+        reason: '非漫画 SRT 分支已删除，不得再按 uid 删行',
       );
       // 不写死门控的字面形状：删除结果的类型会随需求扩展。BUG-439 的不变量是
       // **门控本身**——计数器只能由这次删除的返回值决定。票 02 起在线漫画 /
       // 本地漫画分支用 removeMangaFromLibrary 的成功结果累加 `succeeded`。
       expect(
         RegExp(
-          r'if \(removed(\.\w+)?( > 0)?\) \{?\s*(?:deleted|succeeded)\+\+',
+          r'if \((?:result\.)?removed(\.\w+)?( > 0)?\) \{?\s*(?:deleted|succeeded)\+\+',
         ).hasMatch(body),
         isTrue,
         reason: 'only real deletions may be counted (BUG-439).',

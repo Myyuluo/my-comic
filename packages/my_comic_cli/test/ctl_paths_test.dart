@@ -108,8 +108,8 @@ void main() {
           r'D:\explicit\MyComic.exe',
           r'D:\env\MyComic.exe',
           r'C:\L\MyComic\MyComic.exe',
-          r'C:\L\MyComic\MyComic.exe',
         ],
+        reason: 'CLI 同级与默认安装位置重合时只保留一次',
       );
     });
 

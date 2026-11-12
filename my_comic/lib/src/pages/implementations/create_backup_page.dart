@@ -12,6 +12,7 @@ import 'package:my_comic/src/utils/adaptive/adaptive_widgets.dart';
 import 'package:my_comic/src/utils/components/my_comic_design_tokens.dart';
 import 'package:my_comic/src/utils/components/my_comic_material_components.dart';
 import 'package:my_comic/src/utils/components/glass/my_comic_glass_buttons.dart';
+import 'package:my_comic/src/utils/components/glass/my_comic_glass_feedback.dart';
 import 'package:my_comic/src/utils/components/glass/my_comic_glass_toggles.dart';
 import 'package:my_comic/src/utils/components/settings_shared.dart';
 import 'package:my_comic/src/utils/my_comic_icons.dart';
@@ -398,7 +399,7 @@ class _CreateBackupProgressDialogState
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            LinearProgressIndicator(
+            MyComicLinearProgressIndicator(
               value: progress == null || progress.total == 0
                   ? null
                   : progress.processed / progress.total,

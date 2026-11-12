@@ -144,49 +144,7 @@ void main() {
     });
   });
 
-  group('下载管线 stop 不再无界忙等', () {
-    test('while (_running) 有超时放行', () {
-      final String source = File(
-        '../packages/my_comic_engine/lib/media/video/download/video_download_pipeline_service.dart',
-      ).readAsStringSync();
-
-      // 同文件里 VideoDownloadLeaseGuard 也有 stop()，锚点必须先框到目标类，
-      // 否则守卫会去检查一个跟退出路径无关的方法体（断言恒假 / 恒真都不对）。
-      final int classAt = source.indexOf('class VideoDownloadPipelineService {');
-      expect(classAt, isNonNegative);
-      final int stopAt =
-          source.indexOf('Future<void> stop({Duration? drainTimeout}) async {',
-              classAt);
-      expect(stopAt, isNonNegative,
-          reason: '上界必须是**可选参数**，不能是 stop() 的全局语义');
-      final String body = source.substring(stopAt, stopAt + 600);
-
-      expect(body, contains('while (_running)'));
-      expect(
-        body,
-        contains('drainTimeout != null && waited.elapsed >= drainTimeout'),
-        reason: '不传上界时必须等到真收尾：迁移导入 / 备份导入 / 数据根迁移也走 '
-            'closeDatabase，它们关库后要在文件层动整个 DB 目录，放行一个在飞的 '
-            '_process 是数据安全问题（BUG-1505），不是噪声问题。',
-      );
-    });
-
-    test('1.5s 上界只由退出路径传进来', () {
-      // 守卫必须钉「谁传」，而不只是「有没有这个常量」：把上界写死回 stop() 里，
-      // 上面那条断言换个写法也能绿，而 BUG-1505 会在迁移路径上原地复活。
-      final String mainSource = File('lib/main.dart').readAsStringSync();
-      final int hookAt =
-          mainSource.indexOf('_flushAndExitForWindowClose() async');
-      final int closeAt = mainSource.indexOf('.closeDatabase(', hookAt);
-      expect(closeAt, isNonNegative);
-      expect(
-        mainSource.substring(closeAt, closeAt + 240),
-        contains(
-            'pipelineDrainTimeout: VideoDownloadPipelineService.stopDrainTimeout'),
-        reason: '退出路径必须显式传上界；其余 closeDatabase 调用方一律等到真收尾',
-      );
-    });
-
+  group('退出路径', () {
     test('正在退出的首实例不得接管第二实例的文件（Windows 单实例）', () {
       final String runner = File('windows/runner/main.cpp').readAsStringSync();
       // main.dart 的退出链第一步就 windowManager.hide()，此后进程最长还活约 6s，

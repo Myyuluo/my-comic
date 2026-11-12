@@ -95,18 +95,14 @@ const List<String> _implementationFiles = <String>[
 /// 待迁移存量（相对 lib/ 的路径 → 当前处数上限）。多为 2026-10 并行改动中的
 /// 文件或隐藏 Cupertino 渲染器分支，合并后统一扫尾。只许减不许增。
 const Map<String, int> _pendingFiles = <String, int>{
-  'src/media/audiobook/audiobook_play_bar.dart': 1,
-  'src/media/audiobook/reader_quick_settings_sheet.dart': 3,
   'src/pages/implementations/home_page.dart': 1,
-  'src/pages/implementations/profile_management_page.dart': 1,
-  'src/pages/implementations/reader_my_comic/chrome.part.dart': 1,
-  'src/pages/implementations/reader_history/books.part.dart': 1,
-  'src/profile/profile_selector.dart': 1,
+  // 下载页全局暂停/继续：stock FilledButton 是 MyComicFloatingTextAction 的
+  // child（wrapper 只负责玻璃/悬浮形态，按钮本体保持 stadium 圆角）。
+  'src/pages/implementations/downloads_page.dart': 1,
   'src/reader/reader_panel_chrome_kit.dart': 1,
   'src/reader/reader_panel_kit.dart': 1,
   'src/settings/master_detail_settings_sheet.dart': 1,
   'src/settings/settings_kit.dart': 1,
-  'src/sync/sync_settings_schema/account.part.dart': 2,
   'src/utils/components/my_comic_m3e_overlays.dart': 1,
   'src/utils/components/settings_shared.dart': 1,
 };

@@ -113,10 +113,10 @@ void main() {
         .map((String r) => r.split('/')[1])
         .toSet();
     expectScanScale(scannedPackages.length,
-        what: 'packages/ 下枚举到的非 vendored 包', atLeast: 5, measured: 6);
+        what: 'packages/ 下枚举到的非 vendored 包', atLeast: 4, measured: 4);
 
     expectScanScale(scanned,
-        what: '${scanRoots.length} 个扫描根下的 .dart', atLeast: 3600, measured: 4589);
+        what: '${scanRoots.length} 个扫描根下的 .dart', atLeast: 1350, measured: 1678);
 
     expect(
       offenders,

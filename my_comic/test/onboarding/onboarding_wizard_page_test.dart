@@ -104,7 +104,11 @@ void main() {
     expect(find.text(t.onboarding_welcome_intro), findsOneWidget);
     expect(find.text(t.options_language), findsOneWidget);
     expect(find.text(t.dark_mode), findsOneWidget);
-    expect(find.text('Welcome to MyComic'), findsNothing, reason: '引导不得再出现上游品牌');
+    expect(
+      find.textContaining(RegExp('[Ff]ushi')),
+      findsNothing,
+      reason: '引导不得再出现上游品牌',
+    );
 
     await tapNext(tester);
 

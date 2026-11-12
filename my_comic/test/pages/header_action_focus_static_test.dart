@@ -5,20 +5,6 @@ import 'reader_history_source_corpus.dart';
 import '../helpers/source_guard.dart';
 
 void main() {
-  test('desktop dictionary page actions use MyComicIconButton', () {
-    final String source = File(
-      'lib/src/pages/implementations/dictionary_dialog_page.dart',
-    ).readAsStringSync();
-    final String desktopActions = source.substring(
-      source.indexOf('List<Widget> _buildDesktopPageActions()'),
-      source.indexOf('List<Widget> _buildMobilePageActions()'),
-    );
-
-    expect(desktopActions, contains('MyComicIconButton('));
-    expect(desktopActions, isNot(contains('\n      IconButton(')));
-    expect(desktopActions, isNot(contains('\n        IconButton(')));
-  });
-
   test('custom theme import and share use shared focusable hero buttons', () {
     final String source = File(
       'lib/src/pages/implementations/custom_theme_page.dart',
@@ -56,15 +42,4 @@ void main() {
     expect(selectionBar, isNot(contains('\n              IconButton(')));
   });
 
-  test('home dictionary compact toolbar uses MyComicIconButton action', () {
-    final String source = File(
-      'lib/src/pages/implementations/home_dictionary_page.dart',
-    ).readAsStringSync();
-    final int toolbarStart = source.indexOf('Widget _buildSearchHeader()');
-    final int bodyStart = source.indexOf('Widget _buildBody()');
-    final String toolbar = source.substring(toolbarStart, bodyStart);
-
-    expect(toolbar, contains('MyComicIconButton('));
-    expect(toolbar, isNot(contains('\n              IconButton(')));
-  });
 }

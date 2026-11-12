@@ -61,9 +61,9 @@ void main() {
     },
   );
 
-  test('retryInitialise() 在 _database.close() 之前先短路在飞 init (BUG-815)', () {
-    // 由真实方法体的配对括号决定窗口；新增 flush / 错误处理不能把 close 挤出固定
-    // 字符范围。掩掉注释和字符串，避免说明文字替代实际的控制流通过守卫。
+  test('retryInitialise() 先短路在飞 init，再走干净重起 (BUG-815)', () {
+    // 由真实方法体的配对括号决定窗口；新增错误处理不能把重起路径挤出固定字符
+    // 范围。掩掉注释和字符串，避免说明文字替代实际的控制流通过守卫。
     final String retryRegion = maskCommentsAndStrings(
       methodBody(src, 'Future<void> retryInitialise()'),
     );
@@ -84,27 +84,17 @@ void main() {
       reason: 'retryInitialise() 必须先检查 _initInFlight（在飞 init 短路）。',
     );
     final int inFlightCheckIdx = inFlightCheck!.start;
-    final int closeIdx = retryRegion.indexOf('_database.close()');
+    final int initialiseIdx = retryRegion.indexOf('await initialise();');
 
     expect(inFlightCheckIdx, greaterThan(inFlightReadIdx));
     expect(
-      closeIdx,
-      greaterThanOrEqualTo(0),
-      reason: 'retryInitialise() 仍应保留 error 后的干净重起（_database.close()）。',
+      initialiseIdx,
+      greaterThan(inFlightCheckIdx),
+      reason: '干净重起必须发生在在飞 init 短路之后。',
     );
 
-    // 关键不变量：in-flight 检查必须早于 _database.close()。否则慢启动下重试会关掉
-    // 首个在飞 init 正在用的 DB，并起第二个并发 init → 数据全空（BUG-815 症状）。
-    expect(
-      inFlightCheckIdx < closeIdx,
-      isTrue,
-      reason:
-          'BUG-815 回归：retryInitialise() 在 _database.close() 之前必须先短路在飞 init，'
-          '否则会关掉在飞 init 正在用的 DB → 并发双初始化 → 主页数据全空。',
-    );
-
-    // 必须在 in-flight 分支里 await 后直接 return；flush 失败分支里的 return
-    // 不能冒充这个短路，否则删掉在飞守卫的 return 仍会假绿。
+    // 必须在 in-flight 分支里 await 后直接 return；任何后面的 return 都不能冒充
+    // 这个短路，否则删掉在飞守卫的 return 仍会假绿。
     final String inFlightBranch = balancedBlockFrom(
       retryRegion,
       inFlightCheckIdx,
@@ -117,15 +107,12 @@ void main() {
       isTrue,
       reason: 'in-flight 分支必须 await 同一初始化后直接 return，不得进入拆卸路径。',
     );
-    final int inFlightEnd = inFlightCheckIdx + inFlightBranch.length;
-    expect(inFlightEnd, lessThan(closeIdx));
-    final int flushIdx = retryRegion.indexOf(
-      '_flushDictionaryWritesBeforeClose()',
-    );
-    expect(
-      flushIdx,
-      greaterThan(inFlightEnd),
-      reason: '在飞 init 短路必须位于 flush 之前，不得先操作正在初始化的仓库。',
-    );
+    // 独立化后的设计：retryInitialise 不再关闭数据库（关闭/重开由 initialise
+    // 自己的失败路径负责），因此这里只需钉住在飞分支早于任何状态重置。
+    final int resetIdx = retryRegion.indexOf('_initError = null;');
+    expect(resetIdx, greaterThan(inFlightCheckIdx),
+        reason: '在飞 init 短路必须早于 _initError 清零等拆卸动作。');
+    expect(retryRegion.contains('_database.close()'), isFalse,
+        reason: 'retryInitialise 不得从正在初始化的 DB 下面抽走 close（BUG-815）。');
   });
 }

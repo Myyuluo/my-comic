@@ -41,10 +41,6 @@ void main() {
         '禁用形态的**模式表本体**：那些字面量按定义必须出现在这里。单独成文件正是'
             '为了让守卫本体不含任何禁用形态，从而能被自己覆盖；本文件里没有任何'
             '扫描逻辑可以退化。',
-    'test/reader/reader_script_compactor_test.dart':
-        '这里的 `trimmed.startsWith(\'//\')` 不是「剥注释」，而是**被测对象自己的'
-            '契约断言**：ReaderScriptCompactor 只许删空行与注释行，测试逐条核对'
-            '被删掉的行确实是注释。换成掩码反而表达不了这个判据。',
   };
 
   // 模式表放在 helpers/banned_comment_strip.dart：那些字面量若写在本文件里，
@@ -76,7 +72,7 @@ void main() {
     // 扫描本身失效（路径变了 / listSync 拿不到东西）必须红，不能静默变成
     // 「零违规」的摆设。
     expectScanScale(scanned,
-        what: 'test/ 下未豁免的 .dart', atLeast: 1800, measured: 2199);
+        what: 'test/ 下未豁免的 .dart', atLeast: 800, measured: 954);
 
     expect(offenders, isEmpty,
         reason: '这些地方手写了注释剥离：\n${offenders.join('\n')}\n\n'

@@ -121,8 +121,8 @@ void main() {
     // 阈值仍要挡住「扫描根塌成空目录」这类假绿。
     expectScanScale(_scannedDartFiles(roots).length,
         what: 'lib/ + test/ + packages 下的 .dart（已排除生成物与冻结文件）',
-        atLeast: 1900,
-        measured: 1947);
+        atLeast: 1300,
+        measured: 1626);
   });
 
   test('落库入口收 BookFormat 而非裸 String（未知值编译期不可表达）', () {

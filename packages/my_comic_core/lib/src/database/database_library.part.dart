@@ -872,33 +872,24 @@ mixin _MyComicDbLibrary on _$MyComicDatabase, _MyComicDbTagsSync {
   /// 键形同 [getPrimaryCollectionIdByEntry]：`'<mediaType>|<entryKey>'`。
   Future<Map<String, ({int collectionId, int sortIndex})>>
       getLocalPrimaryCollectionMembership() async {
+    // 独立化后本机媒体只剩漫画域：只有 epub_books 里的行算「本机还在的条目」。
+    // video / srt / galgame 表不在漫画-only schema 里，引用它们会让这条查询在
+    // 全新安装上直接 SQL 报错。
     final List<QueryRow> rows = await customSelect(
       'SELECT i.media_type, i.entry_key, i.collection_id, i.sort_index '
       'FROM ('
       '  SELECT media_type, entry_key, MIN(collection_id) AS cid '
       '  FROM media_collection_items '
-      "  WHERE (media_type = 'video' "
-      '         AND entry_key IN (SELECT book_uid FROM video_books)) '
-      "     OR (media_type = 'epub' "
-      '         AND (entry_key IN (SELECT uid FROM epub_books) '
-      '              OR entry_key IN (SELECT book_key FROM epub_books))) '
-      "     OR (media_type = 'srt' "
-      '         AND entry_key IN (SELECT uid FROM srt_books)) '
-      "     OR (media_type = 'game' "
-      '         AND entry_key IN (SELECT CAST(id AS TEXT) FROM galgames)) '
+      "  WHERE media_type = 'epub' "
+      '    AND (entry_key IN (SELECT uid FROM epub_books) '
+      '         OR entry_key IN (SELECT book_key FROM epub_books)) '
       '  GROUP BY media_type, entry_key'
       ') p '
       'JOIN media_collection_items i '
       '  ON i.collection_id = p.cid '
       ' AND i.media_type = p.media_type '
       ' AND i.entry_key = p.entry_key',
-      readsFrom: {
-        mediaCollectionItems,
-        videoBooks,
-        epubBooks,
-        srtBooks,
-        galgames,
-      },
+      readsFrom: {mediaCollectionItems, epubBooks},
     ).get();
     return <String, ({int collectionId, int sortIndex})>{
       for (final QueryRow r in rows)

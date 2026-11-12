@@ -145,18 +145,16 @@ void main() {
     expect(find.text('A · B'), findsOneWidget);
   });
 
-  // 三张发现页各自抄一份 350 / 600 / 横幅判据迟早漂开：守住它们都接的是共享件。
-  group('三张发现页共用同一套交互件', () {
+  // 视频发现页已随非漫画域删除；剩下的媒体发现页与漫画发现页必须接同一套共享件。
+  group('两张发现页共用同一套交互件', () {
     String read(String path) => maskComments(File(path).readAsStringSync());
-    const String video =
-        'lib/src/pages/implementations/video_discovery_page.dart';
     const String media =
         'lib/src/pages/implementations/media_discovery_page.dart';
     const String manga =
         'lib/src/media/manga/discovery/manga_discovery_page.dart';
 
     test('失败横幅与滚到底翻页判据只有共享这一份', () {
-      for (final String path in <String>[video, media, manga]) {
+      for (final String path in <String>[media, manga]) {
         final String source = read(path);
         expect(
           source,
@@ -168,17 +166,14 @@ void main() {
       }
     });
 
-    test('原地刷新结果的两页走共享防抖；漫画页只在提交时搜', () {
-      for (final String path in <String>[video, media]) {
-        expect(read(path), contains('DiscoverySearchDebouncer('), reason: path);
-      }
+    test('原地刷新结果走共享防抖；漫画页只在提交时搜', () {
+      expect(read(media), contains('DiscoverySearchDebouncer('));
       final String mangaSource = read(manga);
       expect(mangaSource, isNot(contains('DiscoverySearchDebouncer(')));
       expect(mangaSource, contains('MangaGlobalSearchPage('));
     });
 
-    test('横滑行走共享 DiscoveryShelf', () {
-      expect(read(video), contains('return DiscoveryShelf('));
+    test('漫画发现页横滑行走共享 DiscoveryShelf', () {
       expect(read(manga), contains('return DiscoveryShelf('));
     });
   });

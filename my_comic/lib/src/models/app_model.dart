@@ -2607,21 +2607,12 @@ class AppModel with ChangeNotifier {
   Future<void> setMangaTapZonePaging(bool value) =>
       prefsRepo.setMangaTapZonePaging(value);
 
-  bool get mangaPanelNavigation =>
-      _prefsRepo?.mangaPanelNavigation ?? kMangaPanelNavigationDefault;
-  Future<void> setMangaPanelNavigation(bool value) =>
-      prefsRepo.setMangaPanelNavigation(value);
-
-  bool get mangaPanelNavigationEnabled => mangaPanelNavigation;
-
   /// 一键制卡默认裁到所在分镜。弹窗 / 悬浮词典 entry point 不经 `initialise()`，
   /// `_prefsRepo` 可能为空，回落到同一个默认值常量。
   bool get mangaMiningCropToPanel =>
       _prefsRepo?.mangaMiningCropToPanel ?? kMangaMiningCropToPanelDefault;
   Future<void> setMangaMiningCropToPanel(bool value) =>
       prefsRepo.setMangaMiningCropToPanel(value);
-  Future<void> setMangaPanelNavigationEnabled(bool value) =>
-      setMangaPanelNavigation(value);
 
   // 下面四个在漫画页 build 路径上被读（`_loadLocalPayload`），而弹窗词典与悬浮查词
   // 是不经 `initialise()` 的 entry point，那里 `_prefsRepo` 恒 null——裸 `prefsRepo`

@@ -50,7 +50,7 @@ void main() {
       // （primaryFocus 卡在 View Scope）。flutter_tester 里 FLUTTER_TEST 先行放行，
       // 运行时测不到这条分支，故按源码顺序守卫。
       final String source =
-          File('lib/src/sync/desktop_foreground_guard.dart').readAsStringSync();
+          File('lib/src/focus/desktop_foreground_guard.dart').readAsStringSync();
       final int start = source.indexOf('static bool isMainWindowForeground()');
       expect(start, greaterThan(-1));
       final int end = source.indexOf('\n  }\n', start);

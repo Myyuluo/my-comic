@@ -507,19 +507,14 @@ void main() {
       );
     });
 
-    test('三个共享卡片组件的 onSecondaryTap 参数只经 ContextMenuTrigger 落地', () {
-      // 自持 ContextMenuTrigger 的壳。galgame 海报卡改由 shelfCoverCard → MyComicCard
+    test('共享卡片组件的 onSecondaryTap 参数只经 ContextMenuTrigger 落地', () {
+      // 自持 ContextMenuTrigger 的壳。漫画卡片由 shelfCoverCard → MyComicCard
       // 落地（MyComicCard 两条设计路径都经 ContextMenuTrigger），下方单独守委托链。
       const List<String> shells = <String>[
         'lib/src/utils/components/my_comic_material_components.dart',
-        'lib/src/pages/implementations/series_shelf_card.dart',
       ];
       const List<({String path, String delegate})> delegators =
           <({String path, String delegate})>[
-        (
-          path: 'lib/src/utils/components/galgame_poster_card.dart',
-          delegate: 'shelfCoverCard(',
-        ),
         (
           path: 'lib/src/utils/components/shelf_card_widgets.dart',
           delegate: 'MyComicCard(',

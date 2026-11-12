@@ -2203,18 +2203,6 @@ class PreferencesRepository extends ChangeNotifier implements PrefStore {
     notifyListeners();
   }
 
-  bool get mangaPanelNavigation => getPref(
-        'manga_panel_navigation',
-        defaultValue: kMangaPanelNavigationDefault,
-      ) as bool;
-
-  Future<void> setMangaPanelNavigation(bool value) async {
-    await setPref('manga_panel_navigation', value);
-    notifyListeners();
-  }
-
-  bool get mangaPanelNavigationEnabled => mangaPanelNavigation;
-
   /// 一键制卡的卡图默认裁到所在分镜（只在分镜模型可用且非条漫时生效）。
   bool get mangaMiningCropToPanel => getPref(
         'manga_mining_crop_to_panel',
@@ -2225,9 +2213,6 @@ class PreferencesRepository extends ChangeNotifier implements PrefStore {
     await setPref('manga_mining_crop_to_panel', value);
     notifyListeners();
   }
-
-  Future<void> setMangaPanelNavigationEnabled(bool value) =>
-      setMangaPanelNavigation(value);
 
   /// 点击翻页的热区布局（[MangaTapZoneLayout] 的字符串键）。默认 `left_right`
   /// = 旧行为（左右各一条 25% 竖条）。只在 [mangaTapZonePaging] 开启时有意义。

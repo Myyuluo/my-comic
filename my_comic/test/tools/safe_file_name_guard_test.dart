@@ -86,7 +86,7 @@ void main() {
               .where((File f) => f.path.endsWith('.dart')),
     ];
     expectScanScale(files.length,
-        what: 'lib/ 下的 .dart', atLeast: 1120, measured: 1401);
+        what: 'lib/ 下的 .dart', atLeast: 620, measured: 707);
     for (final File f in files) {
       final String rel = f.path.replaceAll(r'\', '/');
       if (rel == _allowedFile || rel.endsWith('/$_allowedFile')) continue;

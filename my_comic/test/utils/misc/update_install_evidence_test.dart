@@ -307,8 +307,7 @@ void main() {
     test('两个更新检查入口都必须走这里（源码守卫）', () {
       // 绕过任一入口，那条路径就在半更新态下永判「已是最新」。
       const List<String> sources = <String>[
-        'lib/src/pages/implementations/home_page.dart',
-        // 手动检查编排（设置页 + 更新中心共用）。
+        // 启动期自动检查与手动检查（设置页 + 更新中心）共用的编排。
         'lib/src/updates/app_update_check.dart',
       ];
       for (final String path in sources) {

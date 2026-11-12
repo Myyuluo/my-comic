@@ -34,10 +34,12 @@ void main() {
       'lib/src/pages/implementations/browse_page.dart',
     );
 
-    test('视频源扩展内嵌在浏览模块里，独立页与入口卡已删', () {
-      expect(online, contains('MihonExtensionsPage('));
-      expect(online, contains('MihonInstalledSourcesSection('));
-      expect(online, contains('onOpenSource: _openAnimeSource'));
+    test('在线来源只住在浏览模块的漫画视图，视频独立页与入口卡已删', () {
+      expect(online, contains('MangaOnlineSourcesView('));
+      expect(
+        online,
+        contains(r"ValueKey<String>('manga_online_${widget.section.name}')"),
+      );
       expect(online, isNot(contains('VideoOnlineSourcesPage')));
       expect(online, isNot(contains('video_online_sources_entry')));
       expect(
@@ -45,17 +47,11 @@ void main() {
           'lib/src/media/video/online/video_online_sources_page.dart',
         ).existsSync(),
         isFalse,
-        reason: '独立页已并入浏览模块；再长出来就是又分叉了',
+        reason: '视频域已删除；在线来源只剩漫画一份',
       );
     });
 
     test('扩展节 widget key 固定、浏览页按域保活，切页签 / 切域不丢状态', () {
-      expect(
-        online,
-        contains(
-          r"ValueKey<String>('video_mihon_extensions_${widget.section.name}')",
-        ),
-      );
       expect(
         mangaOnline,
         contains(r"ValueKey<String>('manga_mihon_extensions_${section.name}')"),

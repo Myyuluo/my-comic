@@ -180,14 +180,6 @@ const Map<String, String> kCoveredElsewhere = <String, String>{
   'manga/Image scaling':
       'test/media/manga/manga_reader_preferences_test.dart + '
       'test/media/manga/manga_page_geometry_test.dart',
-  // AI 分镜逐格导航：写 appModel（changed=true），生效点全在阅读器里——开关关着
-  // 时既不建 ONNX detector 也不接管翻页，harness 里没有挂漫画阅读器。由源码守卫
-  // 咬住两个消费点确实都按这个开关收口（并且用的是四值枚举语义而不是裸比
-  // spread/webtoon），以及检测本身的预处理/释放契约。
-  'manga/AI panel navigation':
-      'test/media/manga/manga_panel_detection_offload_guard_test.dart'
-      '（两个消费点都按开关 + isWebtoon 收口）'
-      ' + packages/my_comic_engine/test/panel_detection_test.dart（检测契约）',
   // 一键制卡按分格裁图：写 appModel（changed=true），生效点是阅读器制卡时的
   // 裁切决策（resolveMangaCardImagePlan 的 cropToPanelByDefault），harness 里
   // 没有挂漫画阅读器。决策函数按开关取舍、阅读器把这个开关接进决策，两件事

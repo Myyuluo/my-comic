@@ -18,12 +18,11 @@ void main() {
       expect(fnEnd, greaterThan(fnStart));
       final String body = src.substring(fnStart, fnEnd);
 
-      // my-comic v1 只保留漫画域设置：外观 / 漫画 / 下载 / Tracking / 系统。
+      // my-comic v1 只保留漫画域设置：外观 / 漫画 / 下载 / 系统。
       const List<String> expectedOrder = <String>[
         'buildAppearanceDestination()',
         'buildMangaDestination()',
         'buildDownloadsDestination()',
-        'buildMediaTrackingDestination()',
         'buildSystemDestination()',
       ];
 

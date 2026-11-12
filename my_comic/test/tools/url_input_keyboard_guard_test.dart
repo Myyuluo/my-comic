@@ -184,7 +184,7 @@ void main() {
     // 扫描面自证：目录枚举型守卫最危险的失效是「一个文件都没扫到却绿着」。
     expect(scannedFiles, greaterThan(500),
         reason: '扫到的 .dart 文件太少（$scannedFiles），扫描面可能坏了');
-    expect(scannedWidgets, greaterThan(100),
+    expect(scannedWidgets, greaterThan(25),
         reason: '扫到的输入框太少（$scannedWidgets），构造式匹配可能坏了');
 
     expect(

@@ -41,27 +41,6 @@ void main() {
     );
   });
 
-  test('BUG-1658: 查词页页头必须在 DesktopContentLayout(dictionary) 之外', () {
-    final String src = File(
-      'lib/src/pages/implementations/home_dictionary_page.dart',
-    ).readAsStringSync();
-    final int header = src.indexOf('_buildPageHeader()');
-    final int layout = src.indexOf('DesktopContentLayout(');
-    expect(header, greaterThanOrEqualTo(0), reason: '查词页应有大标题页头');
-    expect(
-      layout,
-      greaterThanOrEqualTo(0),
-      reason: '查词正文仍应保留 dictionary 档的文字流留白',
-    );
-    // 代码顺序 = widget 树顺序：页头调用必须先于（即位于）DesktopContentLayout
-    // 之外，否则 dictionary 档的 16/24px 侧向留白会把页头挤得比库页窄（BUG-1658）。
-    expect(
-      header,
-      lessThan(layout),
-      reason: '查词页页头被包进 DesktopContentLayout，会与书架/视频/游戏页头错位',
-    );
-  });
-
   test('BUG-1658: 下载页不得回退旧 AppBar 小标题页头', () {
     for (final String path in <String>[
       'lib/src/pages/implementations/browse_page.dart',

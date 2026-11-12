@@ -84,7 +84,6 @@ void main() {
     final String utils = File(
       'lib/src/utils/misc/platform_utils.dart',
     ).readAsStringSync();
-    final String main = File('lib/main.dart').readAsStringSync();
     final String appModel = File(
       'lib/src/models/app_model.dart',
     ).readAsStringSync();
@@ -136,22 +135,6 @@ void main() {
         );
       },
     );
-
-    test('app startup uses the home-shell helper, not bare edgeToEdge', () {
-      expect(
-        main,
-        contains('setHomeShellSystemUiMode()'),
-        reason: 'startup must route the home default through the helper',
-      );
-      // 启动统一从 helper 获取首页模式。
-      expect(
-        main.contains(
-          'SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge)',
-        ),
-        isFalse,
-        reason: 'startup should call setHomeShellSystemUiMode, not edgeToEdge',
-      );
-    });
 
     test('closeMedia returns to the home-shell mode, not bare edgeToEdge', () {
       final String fn = bodyOf(appModel, 'Future<void> closeMedia(');

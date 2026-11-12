@@ -39,8 +39,8 @@
 // whose CI caught a regression they introduced, 15 were red only on source-scan
 // guards and 3 on guards plus other tests. Those guards name the files they
 // scan by path literal (tool/tests_for_changes.dart derives them), or scan whole
-// trees (the enumeration batch in docs/agent/fast-workflow.md, which the rules
-// only ran AFTER merging). This tool runs, in order:
+// trees (the enumeration batch in test_flow/pre_push_selection.dart, which the
+// rules only ran AFTER merging). This tool runs, in order:
 //   0. toolchain: the local Flutter must be the version CI pins (main.yml);
 //   1. app tests: the enumeration guard batch + path-literal-triggered tests
 //      (tests_for_changes, Dart trees included) + tests importing a changed
@@ -286,15 +286,14 @@ Future<void> main(List<String> args) async {
     for (final String t in listAppTestFiles(fs))
       t: File('$root/$t').readAsStringSync(),
   };
-  final String fastWorkflow =
-      File('$root/docs/agent/fast-workflow.md').readAsStringSync();
-  final List<String> guards = parseEnumerationGuards(fastWorkflow)
+  final List<String> guards = kEnumerationGuards
       .map((String t) => 'my_comic/$t')
       .where(testSources.containsKey)
       .toList();
-  if (guards.length < 40) {
-    _fail('enumeration guard list in docs/agent/fast-workflow.md parsed to '
-        '${guards.length} entries (expected ~50): the table format changed?');
+  if (guards.length < 20) {
+    _fail('enumeration guard list in test_flow/pre_push_selection.dart '
+        'matched ${guards.length} existing tests (expected ~25): the shop list '
+        'or the test layout changed?');
   }
   // Budget mode (default) keeps the local run to a few minutes; --wide uses
   // tests_for_changes' full rule (siblings + any-size directories, all import
