@@ -76,13 +76,10 @@ void main() {
       reason: '设置页不得再暴露 MyComic 备份导入/导出分类',
     );
 
-    final String ctl = read(
-      'lib/src/platform/desktop/ctl/ctl_data_routes.dart',
-    );
     expect(
-      ctl.contains('..._backupRoutes('),
+      File('lib/src/platform/desktop/ctl/ctl_data_routes.dart').existsSync(),
       isFalse,
-      reason: '桌面控制通道不得再注册 MyComic 备份导入/导出路由',
+      reason: '桌面控制通道的数据/备份路由文件已随非漫画 CTL 一起删除',
     );
   });
 

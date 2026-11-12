@@ -398,13 +398,6 @@ void main() {
   test('BUG-3034 getLocalPrimaryCollectionMembership：本机条目口径与旧两步一致',
       () async {
     final db = await _openDb();
-    for (final String uid in <String>['v1', 'v2']) {
-      await db.upsertVideoBook(VideoBooksCompanion(
-        bookUid: Value(uid),
-        title: Value(uid),
-        videoPath: Value('/abs/$uid.mp4'),
-      ));
-    }
     await db.insertEpubBook(EpubBooksCompanion.insert(
       bookKey: 'book-a',
       title: 'Book A',
@@ -417,11 +410,8 @@ void main() {
     final String epubUid = (await db.resolveEpubBookUid('book-a'))!;
     final int c1 = await db.createMediaCollection('C1');
     final int c2 = await db.createMediaCollection('C2');
-    await db.addToCollection(c2, MediaKind.video, 'ghost'); // 本机不存在
-    await db.addToCollection(c2, MediaKind.video, 'v2'); // c2 内 1
-    await db.addToCollection(c1, MediaKind.video, 'v1'); // c1 内 0
-    await db.addToCollection(c2, MediaKind.video, 'v1'); // c2 内 2（非主）
-    await db.addToCollection(c1, MediaKind.epub, epubUid); // c1 内 1
+    await db.addToCollection(c2, MediaKind.epub, 'ghost'); // 本机不存在
+    await db.addToCollection(c1, MediaKind.epub, epubUid); // c1 内 0
     await db.addToCollection(c2, MediaKind.epub, 'book-a'); // 旧 bookKey 键行
 
     final Map<String, ({int collectionId, int sortIndex})> local =
@@ -438,13 +428,11 @@ void main() {
           ),
     };
     // 本机不存在的成员被挡掉，其余逐键一致。
-    expect(local.containsKey('video|ghost'), isFalse);
-    expect(legacy.containsKey('video|ghost'), isTrue);
-    legacy.remove('video|ghost');
+    expect(local.containsKey('epub|ghost'), isFalse);
+    expect(legacy.containsKey('epub|ghost'), isTrue);
+    legacy.remove('epub|ghost');
     expect(local, legacy);
-    expect(local['video|v1'], (collectionId: c1, sortIndex: 0));
-    expect(local['video|v2'], (collectionId: c2, sortIndex: 1));
-    expect(local['epub|$epubUid'], (collectionId: c1, sortIndex: 1));
+    expect(local['epub|$epubUid'], (collectionId: c1, sortIndex: 0));
     // EPUB 旧 bookKey 键行也收（v83 前的成员行）。
     expect(local['epub|book-a']?.collectionId, c2);
   });

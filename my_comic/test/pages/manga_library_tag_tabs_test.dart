@@ -84,6 +84,7 @@ void main() {
     String title, {
     int position = 0,
     int duration = 1,
+    bool finished = false,
   }) async {
     await db.insertEpubBook(
       EpubBooksCompanion.insert(
@@ -95,6 +96,11 @@ void main() {
         chaptersJson: '[]',
         importedAt: 0,
         format: Value<String>(BookFormat.manga.dbValue),
+        // 「读完」由 completedAt 决定；position==duration 但没有 completedAt
+        // 在 classifyShelfReadStatus 里仍算在读（用户可能只是翻到末页）。
+        completedAt: finished
+            ? Value<DateTime?>(DateTime.utc(2026, 1, 1))
+            : const Value<DateTime?>(null),
       ),
     );
     mangaItems.add(
@@ -292,7 +298,7 @@ void main() {
   testWidgets('数量随阅读状态筛选实时更新，标签无命中时显示筛选空态', (WidgetTester tester) async {
     await seedManga('m1', '未读一', position: 0, duration: 100);
     await seedManga('m2', '在读一', position: 50, duration: 100);
-    await seedManga('m3', '读完一', position: 100, duration: 100);
+    await seedManga('m3', '读完一', position: 100, duration: 100, finished: true);
     await seedManga('m4', '未读二', position: 0, duration: 100);
     final int tagA = await db.createTag('连载', 0xFF112233);
     await db.addTagToBook('m3', tagA);

@@ -27,7 +27,7 @@ void main() {
       }
     }
     expectScanScale(scanned,
-        what: 'lib/ 下的 .dart', atLeast: 750, measured: 939);
+        what: 'lib/ 下的 .dart', atLeast: 560, measured: 633);
     expect(offenders, isEmpty,
         reason: 'desktop_drop should only be imported by MyComicFileDropTarget');
   });
@@ -66,9 +66,6 @@ void main() {
   });
 
   test('library drop handlers use globalPosition without converting again', () {
-    final String video = File(
-      'lib/src/pages/implementations/home_video_page.dart',
-    ).readAsStringSync();
     final String shelf = readReaderHistorySource();
 
     String functionBody(String source, String start, String end) {
@@ -79,32 +76,24 @@ void main() {
       return source.substring(startIndex, endIndex);
     }
 
-    final String videoDrop = functionBody(
-      video,
-      'void _handleVideoDrop(',
-      'Future<void> _openVideoImportPrefilled(',
-    );
-    expect(videoDrop.contains('Offset globalPosition'), isTrue);
-    expect(videoDrop.contains('_cardDropRegistry.hitTest(globalPosition)'),
-        isTrue);
-    expect(videoDrop.contains('localToGlobal('), isFalse,
-        reason: 'DropDoneDetails.globalPosition must not be converted again');
-    expect(videoDrop.contains('DropIntent.unsupportedSurface'), isTrue,
-        reason: 'recognized files on the wrong surface need visible feedback');
-
     // 书架落点要先离线程判「这个 .zip 是不是图片包」，故签名是 Future<void>；
     // 同步解包留在 drop 栈上会把 UI 线程卡死（见 image_archive_probe.dart）。
     final String shelfDrop = functionBody(
       shelf,
       'Future<void> _handleShelfDrop(',
-      'Future<bool?> _openBookImportPrefilled(',
+      'Future<void> _openMangaImportPrefilled(',
     );
     expect(shelfDrop.contains('Offset globalPosition'), isTrue);
-    expect(shelfDrop.contains('_cardDropRegistry.hitTest(globalPosition)'),
-        isTrue);
+    expect(shelfDrop.contains('probeDroppedImageArchives(paths, preferManga: true)'),
+        isTrue,
+        reason: '漫画库落点要先离线程判 .zip 是不是图片包');
+    expect(shelfDrop.contains('preferManga: true'), isTrue);
+    expect(shelfDrop.contains('surface: DropSurface.manga'), isTrue);
     expect(shelfDrop.contains('localToGlobal('), isFalse,
         reason: 'DropDoneDetails.globalPosition must not be converted again');
-    expect(shelfDrop.contains('DropIntent.unsupportedSurface'), isTrue,
-        reason: 'recognized files on the wrong surface need visible feedback');
+    expect(shelfDrop.contains('DropIntent.importNewManga'), isTrue,
+        reason: '漫画导入意图必须在落点处理');
+    expect(shelfDrop.contains('drag_drop_unsupported_on_books'), isTrue,
+        reason: '不认识的文件要给出可见提示，而不是静默吞掉');
   });
 }

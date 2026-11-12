@@ -86,7 +86,7 @@ void main() {
           ],
         ),
         home: Scaffold(
-          // 矮视口逼出滚动（reading 分组 26 项远超 240px）。
+          // 矮视口逼出滚动（漫画设置分组远超 240px）。
           body: SizedBox(
             height: 240,
             child: MyComicFocusRoot(
@@ -99,12 +99,12 @@ void main() {
                     readerSource: ReaderMyComicSource.instance,
                     refresh: () {},
                   );
-                  final SettingsDestination reading = buildSettingsSchema(sctx)
+                  final SettingsDestination manga = buildSettingsSchema(sctx)
                       .firstWhere((SettingsDestination d) =>
-                          d.id == SettingsDestinationId.reading);
+                          d.id == SettingsDestinationId.manga);
                   return MaterialSettingsRenderer().buildDetailContent(
                     settingsContext: sctx,
-                    destination: reading,
+                    destination: manga,
                     scrollController: controller,
                   );
                 },

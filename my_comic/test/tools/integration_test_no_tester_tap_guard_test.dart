@@ -116,7 +116,7 @@ void main() {
     }
 
     expectScanScale(scanned,
-        what: 'integration_test/ 下的 .dart', atLeast: 60, measured: 87);
+        what: 'integration_test/ 下的 .dart', atLeast: 20, measured: 27);
 
     // 1) No coordinate taps in files outside the temporary allowlist.
     expect(

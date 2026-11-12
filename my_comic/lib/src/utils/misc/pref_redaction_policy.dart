@@ -55,12 +55,18 @@ abstract final class PrefRedactionPolicy {
     'device_id',
   ];
 
-  /// key 是否属于「设备本地 / 凭据」，即备份出口必须剔除的一类。
-  static bool isDeviceLocalOrCredential(String key) {
+  /// 设备本地键：描述的是导出这台机器的状态，任何备份都不该带走。
+  static bool isDeviceLocal(String key) {
     final String lower = key.toLowerCase();
     for (final String prefix in deviceLocalPrefixes) {
       if (lower.startsWith(prefix)) return true;
     }
+    return false;
+  }
+
+  /// 凭据键：默认剔除，只有用户显式勾选「包含敏感设置」时才离开设备。
+  static bool isCredential(String key) {
+    final String lower = key.toLowerCase();
     if (sensitiveKeys.contains(key)) return true;
     for (final String prefix in sensitiveKeyPrefixes) {
       if (lower.startsWith(prefix)) return true;
@@ -70,4 +76,8 @@ abstract final class PrefRedactionPolicy {
     }
     return false;
   }
+
+  /// key 是否属于「设备本地 / 凭据」，即备份出口默认必须剔除的一类。
+  static bool isDeviceLocalOrCredential(String key) =>
+      isDeviceLocal(key) || isCredential(key);
 }

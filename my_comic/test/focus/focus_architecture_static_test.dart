@@ -38,8 +38,8 @@ void main() {
     expectScanScale(
       dartFiles.length,
       what: 'lib/src 下的 .dart',
-      atLeast: 750,
-      measured: 930,
+      atLeast: 560,
+      measured: 627,
     );
 
     for (final File file in dartFiles) {

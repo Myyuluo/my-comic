@@ -110,7 +110,7 @@ void main() {
     expectScanScale(
       scanned,
       what: 'lib/ 下的 .dart',
-      atLeast: 750,
+      atLeast: 560,
       measured: 939,
     );
     // `withHorizontal` 才是判据的真分母：扫描面还在、但「横向滚动区」的匹配写法

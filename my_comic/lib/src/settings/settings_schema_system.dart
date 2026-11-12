@@ -9,6 +9,7 @@ import 'package:my_comic/src/models/store_compliance.dart';
 import 'package:my_comic/src/media/manga/mihon/mihon_runtime_factory.dart';
 import 'package:my_comic/src/pages/implementations/updates_center_open.dart'
     show openUpdatesCenter;
+import 'package:my_comic/src/settings/settings_actions.dart';
 import 'package:my_comic/src/settings/settings_context.dart';
 import 'package:my_comic/src/settings/settings_destination.dart';
 import 'package:my_comic/src/updates/app_update_check.dart';
@@ -179,6 +180,17 @@ SettingsDestination buildSystemDestination() {
           // 「界面语言」（id 'appearance.language'）已归位到「外观 · 界面」分区
           //（与主题/明暗/缩放并列）；id 前缀本就是 appearance，此前放系统分类
           // 是历史错配。
+          SettingsNavigationItem(
+            id: 'system.keyboard_shortcuts',
+            title: t.shortcut_settings_title,
+            icon: MyComicIcons.keyboard,
+            onTap: (SettingsContext settingsContext) async {
+              await pushSettingsPage(
+                settingsContext,
+                (_) => const ShortcutSettingsPage(),
+              );
+            },
+          ),
           SettingsSwitchItem(
             id: 'system.focus_navigation',
             title: t.focus_navigation_enabled,

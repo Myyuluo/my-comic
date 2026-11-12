@@ -9,24 +9,41 @@
 /// guard batch never ran before push.
 library;
 
-/// Enumeration guards listed in docs/agent/fast-workflow.md, section
-/// "### 清单" (up to the next heading). That table is the single source of
-/// truth for the batch; parsing it keeps this tool from growing a second copy.
-List<String> parseEnumerationGuards(String fastWorkflowMarkdown) {
-  final int start = fastWorkflowMarkdown.indexOf('\n### 清单');
-  if (start < 0) return <String>[];
-  final RegExp nextHeading = RegExp(r'\n#{2,3} ');
-  final Match? end = nextHeading.firstMatch(
-    fastWorkflowMarkdown.substring(start + 1),
-  );
-  final String section = end == null
-      ? fastWorkflowMarkdown.substring(start)
-      : fastWorkflowMarkdown.substring(start, start + 1 + end.start);
-  final RegExp row =
-      RegExp(r'^\| `(test/[^`]+_test\.dart)` \|', multiLine: true);
-  return row.allMatches(section).map((Match m) => m.group(1)!).toSet().toList()
-    ..sort();
-}
+/// 目录枚举型守卫（扫描整棵源码树，因此「改了 Dart 树就整批跑」）。
+///
+/// 上游把这份清单挂在 `docs/agent/fast-workflow.md` 的「### 清单」表格里；
+/// 独立化清理删除了 `docs/agent/`，清单改为随工具一起入库，避免本地预检依赖
+/// 一份已不存在的历史文档。条目仍按 `my_comic/test/` 相对路径记录，调用方只跑
+/// 当前磁盘上真实存在的那些（[pre_push_check.dart] 用 testSources 过滤）。
+const List<String> kEnumerationGuards = <String>[
+  'test/database/package_schema_version_literal_guard_test.dart',
+  'test/focus/focus_architecture_static_test.dart',
+  'test/i18n/i18n_completeness_test.dart',
+  'test/media/drag_drop/drag_drop_platform_guard_test.dart',
+  'test/media/media_cover_write_guard_test.dart',
+  'test/media/sources/book_history_split_guard_test.dart',
+  'test/models/preference_keys_guard_test.dart',
+  'test/pages/library_view_labels_unique_test.dart',
+  'test/storage/path_rebase_coverage_guard_test.dart',
+  'test/tools/book_format_discipline_guard_test.dart',
+  'test/tools/dart_source_no_raw_nul_guard_test.dart',
+  'test/tools/duplicate_policy_naming_guard_test.dart',
+  'test/tools/image_picker_usage_guard_test.dart',
+  'test/tools/integration_test_no_tester_tap_guard_test.dart',
+  'test/tools/itest_focus_navigation_prerequisite_guard_test.dart',
+  'test/tools/media_kind_persistence_guard_test.dart',
+  'test/tools/my_comic_rename_guard_test.dart',
+  'test/tools/outbound_http_discipline_guard_test.dart',
+  'test/tools/outbound_user_agent_guard_test.dart',
+  'test/tools/safe_file_name_guard_test.dart',
+  'test/tools/source_guard_adoption_test.dart',
+  'test/tools/tests_for_changes_guard_test.dart',
+  'test/utils/net/network_image_proxy_guard_test.dart',
+  'test/utils/share_entry_point_guard_test.dart',
+  'test/webview/webview_render_process_gone_guard_test.dart',
+  'test/widgets/horizontal_drag_scroll_guard_test.dart',
+  'test/widgets/reorderable_scale_safety_guard_test.dart',
+];
 
 /// Whether [changed] touches a Dart source tree the enumeration guard batch
 /// scans. When it does not (docs / workflows / native only), the batch is

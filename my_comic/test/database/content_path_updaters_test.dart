@@ -60,29 +60,4 @@ void main() {
     });
   });
 
-  group('updateAudiobookPaths (full-data backup restore)', () {
-    test('rewrites audioRoot/audioPathsJson/alignmentPath', () async {
-      final db = await _openDb();
-      await db.upsertAudiobook(AudiobooksCompanion.insert(
-        bookKey: 'Bk',
-        alignmentFormat: 'srt',
-        alignmentPath: '/old/audiobooks/h/align.srt',
-        audioRoot: const Value('/old/audiobooks/h'),
-        audioPathsJson: const Value('["/old/audiobooks/h/a.mp3"]'),
-      ));
-
-      await db.updateAudiobookPaths(
-        'Bk',
-        audioRoot: '/new/audiobooks/h',
-        audioPathsJson: '["/new/audiobooks/h/a.mp3"]',
-        alignmentPath: '/new/audiobooks/h/align.srt',
-      );
-
-      final row = await db.getAudiobookByBookKey('Bk');
-      expect(row!.audioRoot, '/new/audiobooks/h');
-      expect(row.audioPathsJson, '["/new/audiobooks/h/a.mp3"]');
-      expect(row.alignmentPath, '/new/audiobooks/h/align.srt');
-      expect(row.alignmentFormat, 'srt', reason: 'non-path column untouched');
-    });
-  });
 }

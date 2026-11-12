@@ -1,39 +1,17 @@
 # Bug 跟踪
 
-> 约定（Claude/Codex 必须遵守）：用户报一个 bug → **先沿真实代码路径验真伪**（复现或定位根因）。
+> **历史归档说明（2026-11-12，独立化清理）：**`docs/bugs/` 下的 3148 份上游 bug
+> 正文、`tool/bug.dart` 与 `.github/workflows/bug-number-settle.yml` 已随上游归档
+> 一并删除；本文件仅保留当年的索引作为来源记录，下面的链接因此指向已删除的历史
+> 文件。当前工作项与规格请见 `.scratch/<feature>/`（见 `docs/agents/issue-tracker.md`）。
 >
-> **数据结构：一 bug 一文件。** 每条 bug 是 `docs/bugs/BUG-NNN[-slug].md` 一个独立文件；
-> 本文件（`docs/BUGS.md`）只是「头部约定 + 自动生成的索引表」，索引区**勿手改**。
-> 这样并发 agent 各写各的文件，永不在同一处产生 git 冲突；撞号也只是两个不同文件名，
-> 改个名即可，不再有冲突标记手术。
->
-> 新建一条：`dart run tool/bug.dart new <slug> [标题...]`（取「本地 + origin/develop」已占最大号 + 1、生成骨架、重建索引；
-> 不 fetch、不遍历其它分支）。并发分支撞号不用提前防：把 develop 合进来 / rebase 之后跑
-> `dart run tool/bug.dart settle`，每组同号文件里**最早进入 develop 首父链**的那份保留原号，develop 上没有的
-> 那一份改到下一个空号并重建索引；develop 收到 push 时 CI（`bug-number-settle.yml`）在最新的 develop 尖端上
-> 跑同一判据并提交（推送被拒就整轮重算），被取消 / 乱序的 run 留下的撞号由下一次一并收口。
-> 手动改号用 `dart run tool/bug.dart renumber <old> <new>`
-> （文件名 + 正文 H2 + 代码/测试引用一把改 + 自校验；别手改——只改文件名不改正文 H2 会让 `bugs_per_file_guard_test` 变红）。
-> 改完某条 bug 文件后：`dart run tool/bug.dart reindex` 重建下面的索引表。
->
-> 每条 bug 文件里：
-> - **是真 bug** → 记报告日期、根因 `file:line`，然后：
->   - **① 修复**（根因修，不补丁），完成后把 `[ ] ①` 改成 `[x] ①`，记提交哈希。
->   - **② 增加自动化测试**（最强可落地层：真 widget 行为 / CSS 生成器 / 源码扫描守卫；
->     纯视觉像素只能设备截图兜底并注明），完成后把 `[ ] ②` 改成 `[x] ②`，记测试文件。
-> - **不是真 bug / 无法复现** → 也建一条，标「未复现」并说明，不勾 ① ②。
-> - reader/WebView/导入/播放/布局类修复：代码正确 + 单测无回归后，仍需**设备肉眼复测原始失败路径**
->   （CLAUDE.md 验证纪律）；未做的在「备注」标注待补。
->
-> 分层测试选型见 [docs/specs/2026-06-03-test-flow-refactor-*.md] 与各守卫测试范式
-> （源码扫描：`test/pages/reader_paginate_lyrics_guard_static_test.dart` 的 `_functionSource`；
-> CSS 生成器：`test/reader/reader_content_styles_test.dart`；widget 行为：`test/settings/`）。
+> 本索引为历史记录，不再维护；当前 issue/spec 见 `.scratch/<feature>/`。
 
 ---
 
-<!-- BUGS-INDEX:BEGIN（自动生成，勿手改；改完跑 `dart run tool/bug.dart reindex`）-->
+<!-- BUGS-INDEX:BEGIN（历史归档，已停止维护）-->
 
-> 共 3148 条。点号进各自文件。
+> 共 3148 条历史条目；正文文件已随 `docs/bugs/` 一并删除，链接仅作来源记录。
 
 | BUG | 修复 | 测试 | 标题 |
 |---|:--:|:--:|---|

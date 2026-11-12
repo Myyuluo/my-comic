@@ -1435,6 +1435,7 @@ class _MyComicReaderAppState extends ConsumerState<MyComicReaderApp>
           // This is responsible for the initialising the global spacing across
           // the entire project, making use of the [spaces] package.
           builder: (context, child) {
+            _scheduleWindowsUpdateHandoffReconcile();
             final cs = Theme.of(context).colorScheme;
             // 推给原生窗口的颜色一律取**目标**主题，而不是 builder 所在
             // AnimatedTheme 里逐帧插值出来的过渡主题（BUG 见下方 setCaptionColors

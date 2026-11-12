@@ -311,9 +311,30 @@ SettingsDestination buildAppearanceDestination() {
           ),
         ],
       ),
-      // my-comic：字体/内容语言（EPUB/词典排版）、功能模块开关、首页 dashboard
-      // 面板都属于已移除的非漫画域，不再出现在设置里。外观分类只保留界面与
-      // 应用外壳导航。
+      // 字体库：界面字体仍是 MyComic 的现存能力（CustomFontsPage 的字体目录
+      // 含 appUi 用途）。EPUB / 词典排版与内容语言随非漫画域删除，因此这里只保留
+      // 字体库入口，不再有正文/词典字体分区。
+      SettingsSection(
+        id: 'appearance.section.typography',
+        presentation: SettingsSectionPresentation.alwaysExpanded,
+        title: t.section_typography,
+        items: <SettingsItem>[
+          SettingsNavigationItem(
+            id: 'appearance.font_catalog',
+            title: t.custom_fonts_catalog_title,
+            icon: MyComicIcons.font,
+            onTap: (SettingsContext settingsContext) async {
+              await pushSettingsPage(
+                settingsContext,
+                (_) => const CustomFontsPage(),
+              );
+              notifyReaderSettingsChanged(settingsContext);
+            },
+          ),
+        ],
+      ),
+      // my-comic：内容语言（EPUB/词典排版）、功能模块开关、首页 dashboard
+      // 面板都属于已移除的非漫画域，不再出现在设置里。
       SettingsSection(
         id: 'appearance.section.navigation',
         presentation: SettingsSectionPresentation.alwaysExpanded,

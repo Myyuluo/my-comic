@@ -139,14 +139,12 @@ void main() {
     );
     expect(inSystem, isTrue, reason: '快捷键入口应位于「系统」设置分组下');
 
-    final SettingsDestination reading = destinations.firstWhere(
-      (SettingsDestination d) => d.id == SettingsDestinationId.reading,
+    expect(
+      destinations.any((SettingsDestination d) =>
+          d.id == SettingsDestinationId.reading),
+      isFalse,
+      reason: '「阅读」（EPUB）设置分类已随非漫画域删除，快捷键入口只能在系统分组',
     );
-    final bool inReading = reading.sections.any(
-      (SettingsSection s) =>
-          s.items.any((SettingsItem i) => i.title == t.shortcut_settings_title),
-    );
-    expect(inReading, isFalse, reason: '快捷键入口不应继续位于「阅读」设置分组下');
   });
 
   test('shortcut settings entry is no longer commented out in schema source',

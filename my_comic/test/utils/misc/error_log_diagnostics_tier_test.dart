@@ -73,19 +73,6 @@ void main() {
   });
 
   group('TODO-1083 source guards (noise routed to logDiagnostic, not log)', () {
-    test('WGC 折入错误日志走 logDiagnostic', () {
-      final String src = _read(<String>[
-        'lib/src/utils/misc/wgc_capture_log.dart',
-        'my_comic/lib/src/utils/misc/wgc_capture_log.dart',
-      ], 'wgc_capture_log.dart');
-      expect(
-          RegExp(r"logDiagnostic\(\s*'WGC\.captureLog'").hasMatch(src), isTrue,
-          reason: 'WGC 取证必须走 logDiagnostic（诊断段），不刷进用户可见报错日志');
-      expect(
-          RegExp(r"instance\.log\(\s*'WGC\.captureLog'").hasMatch(src), isFalse,
-          reason: 'WGC 取证不得再走 log()（会计入用户可见错误）');
-    });
-
     test('UpdateChecker 预期网络失败三分支走 logDiagnostic', () {
       final String src = _read(<String>[
         'lib/src/utils/misc/update_checker_release.dart',

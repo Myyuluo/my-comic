@@ -150,6 +150,9 @@ void main() {
         'yomitan_api_key',
         'media_source_secret_42',
         'qb_connection_config',
+        // AI providers 也是凭据键（值是可序列化的 JSON 字符串），勾选敏感设置后
+        // 随备份带走；sync_*/ai 之外的设备本地键仍不导出。
+        'ai_providers',
       },
       reason: 'sensitive keys are included, device-local keys are still not',
     );

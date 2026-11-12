@@ -2,7 +2,9 @@
 //
 // ## 它替掉了什么
 //
-// `docs/agent/fast-workflow.md` 里原来挂着一份手写的「按触发条件加跑」清单，
+// `docs/agent/fast-workflow.md` 里原来挂着一份手写的「按触发条件加跑」清单
+// （该文档已随独立化清理删除，目录枚举批改由 `tool/test_flow/pre_push_selection.dart`
+// 的 `kEnumerationGuards` 承载），
 // 一共点名 9 个测试。那份表的分类维度是「资产种类」（workflow / 扩展 / 二进制 /
 // native），而真实触发面的维度是「哪棵源码树」。两者不对齐的后果是：
 // `my_comic/android/` 30+ 条守卫**一条触发规则都没有**、`packages/*/windows` 同样
@@ -30,6 +32,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import '../../tool/test_flow/pre_push_selection.dart';
 import '../../tool/tests_for_changes.dart';
 
 void main() {
@@ -85,15 +88,16 @@ void main() {
 
   group('tests_for_changes 推导规则', () {
     test('索引规模哨兵：扫描面不得塌掉', () {
-      expect(index.length, greaterThanOrEqualTo(1700),
-          reason: 'my_comic/test 下应有 2100+ 个 *_test.dart（实测 2180）；'
+      // 独立化清理删除了大量非漫画测试；实测基线见 reason。
+      expect(index.length, greaterThanOrEqualTo(800),
+          reason: 'my_comic/test 下应有 900+ 个 *_test.dart（实测 932）；'
               '数量塌掉说明 listAppTestFiles 的枚举坏了，'
               '而坏掉的表现是「推导结果变少」——不会有人自己发现');
       final int withFace =
           index.values.where((TestTriggerFace f) => !f.isEmpty).length;
-      expect(withFace, greaterThanOrEqualTo(780),
-          reason: '实测 970 个测试文件有可提取的触发面；'
-              '掉到 780 以下说明路径提取器少认了一大类写法');
+      expect(withFace, greaterThanOrEqualTo(250),
+          reason: '实测 310 个测试文件有可提取的触发面；'
+              '掉到 250 以下说明路径提取器少认了一大类写法');
     });
 
     test('三遍提取各自都必须活着（合成语料逐遍点名）', () {
@@ -141,30 +145,17 @@ void main() {
       );
     });
 
-    test('被替掉的 9 条手写规则，必须全部能被推导出来', () {
-      // 这张表是**被替掉的那份文档清单的原文**，一条不改地抄在这里。
-      // 推导规则可以比它多，绝不许比它少——少一条就是回到「名字表腐烂」的老路。
+    test('被替掉的手写规则（独立化后仍存在的部分）必须能被推导出来', () {
+      // 这张表是**被替掉的那份文档清单的原文**中仍然适用的条目，一条不改地抄在
+      // 这里。推导规则可以比它多，绝不许比它少——少一条就是回到「名字表腐烂」
+      // 的老路。非 Windows 平台 / 视频 / galgame / 推荐包相关条目已随对应树删除。
       const Map<String, List<String>> replacedHandWrittenRules =
           <String, List<String>>{
         '.github/workflows/build-multiplatform.yml': <String>[
-          'my_comic/test/build/workflow_sed_inplace_portability_guard_test.dart',
           'my_comic/test/tools/powershell_51_compat_guard_test.dart',
-          'my_comic/test/mining/magpie_bundled_install_test.dart',
         ],
         'tool/setup_worktree.ps1': <String>[
           'my_comic/test/tools/powershell_51_compat_guard_test.dart',
-        ],
-        'docs/bugs/BUG-9999-x.md': <String>[
-          'my_comic/test/tools/bugs_per_file_guard_test.dart',
-        ],
-        'third_party/ffmpeg-min/recipe.md': <String>[
-          'my_comic/test/tools/ffmpeg_min_vendored_self_contained_guard_test.dart',
-        ],
-        'third_party/ffmpeg_kit_flutter/ios/x.podspec': <String>[
-          'my_comic/test/tools/ffmpeg_kit_podspec_license_guard_test.dart',
-        ],
-        'my_comic/windows/runner/flutter_window.cpp': <String>[
-          'my_comic/test/mining/gal_ipc_contract_single_source_test.dart',
         ],
       };
 
@@ -184,12 +175,11 @@ void main() {
       // 表里每一项在替换前的手写清单里都是**零覆盖**（`my_comic/windows` 只有 1 条）。
       // 下界取实测值的约 80%，只在量级塌掉时才响。
       const Map<String, int> blindSpots = <String, int>{
-        'packages/gamepads_windows/windows/gamepad.cpp': 3,
-        'packages/flutter_inappwebview_windows/windows/CMakeLists.txt': 4,
-        'native/my_comicdicts/CMakeLists.txt': 9,
-        'native/galgame_hook/include/voice_hook_ipc.h': 8,
-        'third_party/desktop_drop/windows/desktop_drop_plugin.cpp': 4,
-        'my_comic/windows/runner/flutter_window.cpp': 55,
+        'packages/gamepads_windows/windows/gamepad.cpp': 1,
+        'packages/flutter_inappwebview_windows/windows/CMakeLists.txt': 1,
+        'native/galgame_hook/include/voice_hook_ipc.h': 4,
+        'third_party/desktop_drop/windows/desktop_drop_plugin.cpp': 3,
+        'my_comic/windows/runner/flutter_window.cpp': 25,
       };
       final List<String> tooThin = <String>[];
       blindSpots.forEach((String changed, int floor) {
@@ -207,9 +197,7 @@ void main() {
       // 一旦反过来，就是结构化侧的某一遍扫描坏了。
       const List<String> trees = <String>[
         'my_comic/windows',
-        'tools/browser-extension',
         '.github/workflows',
-        'native/my_comicdicts',
         'native/galgame_hook',
         'packages/flutter_inappwebview_windows',
       ];
@@ -228,12 +216,10 @@ void main() {
 
     test('逐树规模哨兵：绝对下界（实测值的约 80%）', () {
       const Map<String, int> floors = <String, int>{
-        'my_comic/windows': 58,
-        'tools/browser-extension': 38,
-        '.github/workflows': 15,
-        'packages/flutter_inappwebview_windows': 15,
-        'native/my_comicdicts': 9,
-        'native/galgame_hook': 5,
+        'my_comic/windows': 20,
+        '.github/workflows': 6,
+        'packages/flutter_inappwebview_windows': 8,
+        'native/galgame_hook': 3,
       };
       final List<String> thin = <String>[];
       floors.forEach((String tree, int floor) {
@@ -298,40 +284,7 @@ void main() {
               '${dead.join('\n')}');
     });
 
-    test('声明的 tests-for-changes-ignore 必须对得上本文件真被提取到的引用', () {
-      // 忽略声明同样是人写的：提取器改了口径、或 fixture 路径改名之后，一条对不上
-      // 任何引用的忽略就是哑的，而它哑掉的方向是「以后谁往这个路径加真依赖也被
-      // 静默吞掉」。
-      final List<String> declared = <String>[];
-      final List<String> dead = <String>[];
-      index.forEach((RepoPath test, TestTriggerFace face) {
-        for (final RepoPath p in face.ignoredPaths) {
-          declared.add('$test: $p');
-          if (!face.referencedPaths.contains(p)) dead.add('$test: $p');
-        }
-      });
-      expect(declared, isNotEmpty,
-          reason: '一条 `// tests-for-changes-ignore:` 声明都没有——机制被删了或'
-              '正则不认了，bug_tool_* 又会被每个 BUG 流程 PR 的 docs/BUGS.md 拉进来');
-      expect(dead, isEmpty,
-          reason: '这些忽略声明在本文件里提取不到对应引用，已经是死声明：\n'
-              '${dead.join('\n')}');
-    });
-
-    test('fixture 忽略只剔除声明者：改 docs/BUGS.md 仍触发索引守卫', () {
-      const String pool = 'my_comic/test/tools/bug_tool_number_pool_test.dart';
-      const String scope = 'my_comic/test/tools/bug_tool_renumber_scope_test.dart';
-      final Set<RepoPath> byIndex = derive('docs/BUGS.md');
-      expect(
-          byIndex, contains('my_comic/test/tools/bugs_per_file_guard_test.dart'),
-          reason: '真正校验索引的守卫必须照旧被 docs/BUGS.md 触发');
-      expect(byIndex, isNot(contains(pool)));
-      expect(byIndex, isNot(contains(scope)));
-      // 它们真正守的对象照旧触发。
-      expect(derive('tool/bug.dart'), containsAll(<String>[pool, scope]));
-    });
-
-    test('Dart 源码树的改动不由本工具输出（默认整批 35 条兜底）', () {
+    test('Dart 源码树的改动不由本工具输出（默认整批兜底）', () {
       expect(isDefaultBatchCoveredChange('my_comic/lib/src/models/app_model.dart'),
           isTrue);
       expect(
@@ -382,27 +335,27 @@ void main() {
 
     test('存在性判定必须逐段精确大小写（Windows NTFS 大小写不敏感）', () {
       // 直接用 existsSync 时，注释里的「Android/iOS/macOS/Windows/Linux」会让
-      // `my_comic/Linux` 在 Windows 上判为存在、在 Linux CI 上判为不存在——
+      // `my_comic/Lib` 在 Windows 上判为存在、在 Linux CI 上判为不存在——
       // 同一份索引两个平台两个样，本机全绿 CI 红。
-      expect(fs.exists('my_comic/linux'), isTrue,
+      expect(fs.exists('my_comic/lib'), isTrue,
           reason: '真实目录必须判存在，否则这条测试在守一个空契约');
-      expect(fs.exists('my_comic/Linux'), isFalse, reason: '大小写不匹配必须判不存在');
+      expect(fs.exists('my_comic/Lib'), isFalse, reason: '大小写不匹配必须判不存在');
       expect(fs.exists('my_comic/windows'), isTrue);
       expect(fs.exists('my_comic/Windows'), isFalse);
     });
 
-    test('fast-workflow.md 的「按触发条件加跑」必须指向本工具而不是名字表', () {
-      final File doc = File('${fs.root.path}/docs/agent/fast-workflow.md');
-      expect(doc.existsSync(), isTrue, reason: '文档没了，规则就没有入口');
-      final String text = doc.readAsStringSync();
-      expect(text.contains('tool/tests_for_changes.dart'), isTrue,
-          reason: 'fast-workflow.md 必须给出推导命令，否则规则再对也没人执行');
-      final int anchor = text.indexOf('按触发条件加跑');
-      expect(anchor, greaterThanOrEqualTo(0),
-          reason: '「按触发条件加跑」这一节的锚点不见了，本断言在守空气');
-      expect(text.substring(anchor).contains('tests_for_changes.dart'), isTrue,
-          reason: '「按触发条件加跑」一节里必须是推导命令，'
-              '不许退回手写测试名清单——名字表必然腐烂，这次就是');
+    test('目录枚举批清单随工具入库且不留死条目', () {
+      // 上游清单原挂在 docs/agent/fast-workflow.md；该文档已随独立化清理删除，
+      // 清单改为 test_flow/pre_push_selection.dart 的 kEnumerationGuards。这里
+      // 守住「清单还有人执行、且没有指向已删除测试的死条目」。
+      expect(kEnumerationGuards, isNotEmpty);
+      final String rootPath = fs.root.path.replaceAll('\\', '/');
+      final List<String> missing = <String>[
+        for (final String rel in kEnumerationGuards)
+          if (!File('$rootPath/my_comic/$rel').existsSync()) rel,
+      ];
+      expect(missing, isEmpty,
+          reason: 'kEnumerationGuards 里的测试已不存在：\n${missing.join('\n')}');
     });
   });
 }

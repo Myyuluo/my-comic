@@ -43,10 +43,11 @@ void main() {
         reason: 'scheduleCheck 须把 cacheWriter 透传给 _check');
   });
 
-  test('home_page auto-check passes a cacheWriter (background refresh)', () {
-    final String src = read('lib/src/pages/implementations/home_page.dart');
+  test('app_update_check passes a cacheWriter (background refresh)', () {
+    // 启动期自动检查与手动检查都收敛在 updates/app_update_check.dart。
+    final String src = read('lib/src/updates/app_update_check.dart');
     expect(src, contains('cacheWriter: appModel.setUpdateCheckCache,'),
-        reason: '启动期后台检查跑完写回缓存');
+        reason: '更新检查跑完写回缓存');
   });
 
   test('manual check reads cache optimistically before the network', () {

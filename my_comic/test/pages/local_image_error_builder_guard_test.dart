@@ -69,7 +69,7 @@ void main() {
       // 防守卫塌成空集：仓里至少有这些已知调用点。
       expect(
         hits,
-        greaterThanOrEqualTo(8),
+        greaterThanOrEqualTo(6),
         reason: '扫描面异常（命中太少），先核对 lib/ 路径与正则',
       );
       expect(
@@ -81,27 +81,6 @@ void main() {
       );
     },
   );
-
-  test('CropImageDialogPage 自己在 completer 上挂带 onError 的监听者', () {
-    final String src = File(
-      'lib/src/pages/implementations/crop_image_dialog_page.dart',
-    ).readAsStringSync().replaceAll('\r\n', '\n');
-    final String code = maskComments(src);
-    expect(
-      RegExp(
-        r'ImageStreamListener\([\s\S]*?onError:\s*_onDecodeError',
-      ).hasMatch(code),
-      isTrue,
-      reason: 'CropImage 不渲染传入的 Image，兜底只能靠对话框自己的 onError 监听者',
-    );
-    expect(code, contains('.addListener(_decodeListener)'));
-    expect(code, contains('removeListener(_decodeListener)'));
-    expect(
-      code,
-      contains("logDiagnostic(\n      'CropImageDialogPage.coverDecode'"),
-      reason: '坏文件仍要留诊断痕迹',
-    );
-  });
 
   test('main.dart 的 FlutterError.onError 把 silent 错误分流到 logDiagnostic', () {
     final String src = File(

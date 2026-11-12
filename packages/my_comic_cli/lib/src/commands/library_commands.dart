@@ -1,7 +1,6 @@
 import 'package:args/args.dart';
 
 import '../ctl_commands.dart';
-import 'shelf_commands.dart';
 
 /// library 域命令（app 侧路由见 `my_comic/lib/src/platform/desktop/ctl/ctl_library_routes.dart`）。
 ///
@@ -126,7 +125,6 @@ const List<CtlCommandGroup> libraryCommandGroups = <CtlCommandGroup>[
       ),
     ],
   ),
-  ...shelfCommandGroups,
 ];
 
 const String _root = '/api/admin/library';

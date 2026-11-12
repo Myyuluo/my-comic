@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:my_comic/src/media/drag_drop/drop_classification.dart';
 import 'package:my_comic_engine/media/media_extensions.dart';
-import 'package:path/path.dart' as p;
 
 void main() {
   group('classifyDroppedFiles', () {
@@ -11,19 +10,6 @@ void main() {
       expect(r.videos, isEmpty);
       expect(r.subtitles, isEmpty);
       expect(r.audios, isEmpty);
-    });
-
-    test('pdf goes to books（导入框认它，拖放也必须认）', () {
-      // 此前只有对话框的文件选择器白名单含 pdf，这份拖放白名单漏了，于是同一份
-      // PDF「按钮能导、拖进去说不支持」。
-      final r = classifyDroppedFiles([r'C:\x\scan.pdf']);
-      expect(r.books, [r'C:\x\scan.pdf']);
-      expect(r.unknown, isEmpty);
-      expect(r.mangas, isEmpty, reason: 'PDF 不是漫画载体，不得抢在 books 之前');
-    });
-
-    test('kDragBookExtensions 含 pdf', () {
-      expect(kDragBookExtensions, contains('pdf'));
     });
 
     test('text formats go to books', () {
@@ -192,78 +178,6 @@ void main() {
       reason:
           '视频扩展名漂移：更新 kDragVideoExtensions 与 kVideoExtensions（media_extensions.dart）保持一致',
     );
-  });
-
-  group('Blu-ray discs (drag a disc in, not a fragment)', () {
-    // 按宿主平台拼路径：盘根判据走 package:path，Linux CI 与 Windows 本机都要成立。
-    final String root = p.join('video', 'Kaguya');
-    final String bdmv = p.join(root, 'BDMV');
-    final String season = p.join('video', 'Season 1');
-
-    // 真实盘目录不在测试机上；目录判据由 widget 层注入，这里注入等价的假判据。
-    String? fakeDiscRoot(String dir) => dir == root || dir == bdmv ? root : null;
-
-    DroppedFiles classify(List<String> paths) => classifyDroppedFiles(
-          paths,
-          isDirectory: (String path) => p.extension(path).isEmpty,
-          blurayDiscRootForDirectory: fakeDiscRoot,
-        );
-
-    test('index.bdmv / MovieObject.bdmv resolve to the disc (was unknown)', () {
-      final DroppedFiles r = classify(<String>[
-        p.join(bdmv, 'index.bdmv'),
-        p.join(bdmv, 'MovieObject.bdmv'),
-      ]);
-      expect(r.blurayDiscs, <String>[root]);
-      expect(r.unknown, isEmpty);
-      expect(r.hasAny, isTrue);
-      expect(r.videoSourceFolders, <String>[root]);
-    });
-
-    test('mpls / m2ts / clpi inside the disc resolve to the disc', () {
-      final String m2ts = p.join(bdmv, 'STREAM', '00001.m2ts');
-      final DroppedFiles r = classify(<String>[
-        p.join(bdmv, 'PLAYLIST', '00001.mpls'),
-        m2ts,
-        p.join(bdmv, 'CLIPINF', '00001.clpi'),
-      ]);
-      expect(r.blurayDiscs, <String>[root]);
-      // 交叠而非互斥：m2ts 仍记在 videos 里，按盘处理是落点表面的决定。
-      expect(r.videos, <String>[m2ts]);
-      expect(r.unknown, isEmpty);
-    });
-
-    test('the BDMV folder maps to its disc root (never registered itself)', () {
-      final DroppedFiles r = classify(<String>[bdmv]);
-      expect(r.blurayDiscs, <String>[root]);
-      expect(r.directories, <String>[bdmv]);
-      expect(r.videoSourceFolders, <String>[root]);
-    });
-
-    test('disc root + ordinary folder: each registered once', () {
-      final DroppedFiles r = classify(<String>[
-        root,
-        p.join(bdmv, 'index.bdmv'),
-        season,
-      ]);
-      expect(r.videoSourceFolders, <String>[root, season]);
-    });
-
-    test('a loose m2ts outside any BDMV tree stays a plain video', () {
-      final String loose = p.join('rec', '00001.m2ts');
-      final DroppedFiles r = classify(<String>[loose]);
-      expect(r.blurayDiscs, isEmpty);
-      expect(r.videos, <String>[loose]);
-    });
-
-    test('without the directory predicate folders are not probed', () {
-      final DroppedFiles r = classifyDroppedFiles(
-        <String>[root],
-        isDirectory: (String path) => true,
-      );
-      expect(r.blurayDiscs, isEmpty);
-      expect(r.videoSourceFolders, <String>[root]);
-    });
   });
 
   group('audio in the video library (media_extensions.dart)', () {

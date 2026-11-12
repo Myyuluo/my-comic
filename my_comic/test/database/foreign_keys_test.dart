@@ -136,36 +136,21 @@ void main() {
             sourceId: Value(sourceId),
           ),
         );
-    const String bookUid = 'video/sourced';
-    await db.upsertVideoBook(
-      VideoBooksCompanion.insert(
-        bookUid: bookUid,
-        title: 'SourcedVideo',
-        videoPath: '/tmp/sv.mp4',
-        sourceId: Value(sourceId),
-      ),
-    );
-
-    // Precondition: both rows point at the source.
+    // Precondition: the row points at the source.
     final epubBefore = await (db.select(db.epubBooks)
           ..where((t) => t.bookKey.equals(bookKey)))
         .getSingle();
     expect(epubBefore.sourceId, sourceId);
-    final videoBefore = await db.getVideoBookByBookUid(bookUid);
-    expect(videoBefore!.sourceId, sourceId);
 
     final removed = await db.deleteMediaSource(sourceId);
     expect(removed, 1);
 
     // setNull: the media rows SURVIVE; only source_id is nulled.
     expect(await _count(db, 'epub_books'), 1);
-    expect(await _count(db, 'video_books'), 1);
     final epubAfter = await (db.select(db.epubBooks)
           ..where((t) => t.bookKey.equals(bookKey)))
         .getSingle();
     expect(epubAfter.sourceId, isNull);
-    final videoAfter = await db.getVideoBookByBookUid(bookUid);
-    expect(videoAfter!.sourceId, isNull);
   });
 
 }

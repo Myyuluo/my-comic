@@ -34,7 +34,7 @@ void main() {
     // 禁止型断言全绿 ≠ 它在工作：扫描根改名 / 过滤写反都长成「零违规」。
     expectScanScale(scanned,
         what: 'lib/ 下参与远端图片 provider 扫描的 dart 文件',
-        atLeast: 1050,
+        atLeast: 560,
         measured: 1318);
     expect(violations, isEmpty,
         reason:

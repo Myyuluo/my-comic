@@ -18,6 +18,7 @@ import 'package:my_comic/i18n/strings.g.dart';
 import 'package:my_comic/media.dart';
 import 'package:my_comic/models.dart';
 import 'package:my_comic/src/models/preferences_repository.dart';
+import 'package:my_comic/src/pages/implementations/media_library_shell.dart';
 import 'package:my_comic/src/pages/implementations/reader_my_comic_history_page.dart';
 import 'package:my_comic/src/utils/adaptive/adaptive_platform.dart';
 import 'package:material_ui/material_ui.dart';
@@ -55,6 +56,7 @@ void main() {
   late MyComicDatabase db;
   late PreferencesRepository prefs;
   late AppModel appModel;
+  late MediaLibrarySecondaryRowSlot secondaryRow;
 
   setUp(() async {
     LocaleSettings.setLocale(AppLocale.en);
@@ -68,9 +70,11 @@ void main() {
       ..wireDatabaseForTesting(db)
       ..wireLocalAudioForTesting(prefsRepo: prefs, databaseDirectory: storeDir);
     appModel.populateLanguages();
+    secondaryRow = MediaLibrarySecondaryRowSlot();
   });
 
   tearDown(() async {
+    secondaryRow.dispose();
     await db.close();
   });
 
@@ -85,8 +89,26 @@ void main() {
       child: MaterialApp(
         theme: theme,
         home: Scaffold(
-          body: ReaderMyComicHistoryPage(
-            mangaOnly: true,
+          body: MediaLibraryShellScope(
+            kinds: const <MediaLibraryViewKind>{MediaLibraryViewKind.library},
+            select: (MediaLibraryViewKind _) {},
+            secondaryRowSlot: secondaryRow,
+            // 模拟库页外壳的二级浮动行：页头把标签页签登记到槽里，壳负责画。
+            // 没有这一行，页面会走「无壳」回退把标签塞进排序菜单。
+            child: Column(
+              children: <Widget>[
+                ListenableBuilder(
+                  listenable: secondaryRow,
+                  builder: (BuildContext context, Widget? _) =>
+                      secondaryRow.content ?? const SizedBox.shrink(),
+                ),
+                Expanded(
+                  child: ReaderMyComicHistoryPage(
+                    mangaOnly: true,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

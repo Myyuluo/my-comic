@@ -359,10 +359,13 @@ void main() {
     final String downloads = File(
       'lib/src/settings/settings_schema_downloads.dart',
     ).readAsStringSync();
-    final String schema = File(
-      'lib/src/sync/sync_settings_schema.dart',
-    ).readAsStringSync();
-    for (final String source in <String>[locations, downloads, schema]) {
+    // 云同步 / 互联设置整目录已删除，迁移流程不再有任何接入面。
+    expect(
+      File('lib/src/sync/sync_settings_schema.dart').existsSync(),
+      isFalse,
+      reason: '同步设置 schema 已随非漫画域删除',
+    );
+    for (final String source in <String>[locations, downloads]) {
       for (final String forbidden in <String>[
         'DataRootMigrator',
         'runDataRootMigration',

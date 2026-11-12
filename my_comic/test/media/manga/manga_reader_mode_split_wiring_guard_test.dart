@@ -31,12 +31,11 @@ void main() {
       final int consumed = body.indexOf(
         'if (MangaWindowGeneration.parse(consumed) == 1) return;',
       );
-      final int panel = body.indexOf('await _tryPanelTurn(');
       final int advance = body.indexOf('_currentSpread = target;');
       expect(probe, greaterThanOrEqualTo(0));
       expect(consumed, greaterThan(probe));
-      expect(panel, greaterThan(consumed));
-      expect(advance, greaterThan(panel));
+      // AI 分镜导航已随死亡的分镜检测一起删除：半页消费后直接落到 spread 推进。
+      expect(advance, greaterThan(consumed));
       expect(body, contains('!identical(session, _pageSession)'));
       expect(body, contains('!identical(controller, _controller)'));
     },

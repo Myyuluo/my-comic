@@ -141,20 +141,6 @@ void main() {
           ),
         );
 
-    Future<void> insertVideo(
-      MyComicDatabase db,
-      String bookUid, {
-      int? sourceId,
-    }) =>
-        db.upsertVideoBook(
-          VideoBooksCompanion.insert(
-            bookUid: bookUid,
-            title: bookUid,
-            videoPath: '/tmp/$bookUid.mp4',
-            sourceId: Value(sourceId),
-          ),
-        );
-
     test('counts epub_books that point at the source (book kind)', () async {
       final db = await _openDb();
       final id = await db.insertMediaSource(_source(mediaKind: 'book'));
@@ -205,16 +191,6 @@ void main() {
       await insertEpub(db, 'B1', sourceId: id, format: 'epub');
 
       expect(await db.countMediaBySourceId(id, 'manga'), 1);
-    });
-
-    test('counts video_books for video kind', () async {
-      final db = await _openDb();
-      final id = await db.insertMediaSource(_source(mediaKind: 'video'));
-
-      await insertVideo(db, 'video/v1', sourceId: id);
-      await insertVideo(db, 'video/v2', sourceId: id);
-
-      expect(await db.countMediaBySourceId(id, 'video'), 2);
     });
 
     test('returns 0 for a source with no media', () async {

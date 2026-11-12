@@ -409,10 +409,6 @@ void main() {
       'lib/src/settings/settings_schema_widgets.dart',
     ).readAsStringSync();
     expect(schemaWidgets.contains('SettingsModifiedRow('), isFalse);
-    final String gameSchema = File(
-      'lib/src/settings/settings_schema_game.dart',
-    ).readAsStringSync();
-    expect(gameSchema.contains('SettingsModifiedRow('), isFalse);
     final String shortcutTile = File(
       'lib/src/pages/implementations/shortcut_settings/action_tile.part.dart',
     ).readAsStringSync();

@@ -59,7 +59,7 @@ void main() {
     }
 
     expectScanScale(scanned,
-        what: 'lib/ 下的 .dart', atLeast: 750, measured: 939);
+        what: 'lib/ 下的 .dart', atLeast: 560, measured: 633);
 
     expect(
       offenders,

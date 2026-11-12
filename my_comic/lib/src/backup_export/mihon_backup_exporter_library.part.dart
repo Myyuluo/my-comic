@@ -11,7 +11,7 @@ class _LibraryExportSection {
   List<_ExportableManga> exportableManga(List<EpubBookRow> rows) {
     final List<_ExportableManga> exportable = <_ExportableManga>[];
     for (final EpubBookRow row in rows) {
-      if (row.format != 'manga') continue;
+      if (row.format != BookFormat.manga.dbValue) continue;
       final OnlineMangaLibraryEntry? entry = OnlineMangaLibraryEntry.tryParse(
         row.sourceMetadata,
       );

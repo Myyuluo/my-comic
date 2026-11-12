@@ -89,7 +89,7 @@ void main() {
       expect(result, <String, bool>{'/a.zip': true, '/e.ZIP': true});
     });
 
-    test('漫画库落点（preferManga）连 .epub 也开包，其余照旧不问', () async {
+    test('漫画库落点（preferManga）仍只开包 .zip', () async {
       final List<String> probed = <String>[];
       await probeDroppedImageArchives(
         <String>['/a.zip', '/b.epub', '/c.pdf', '/d.mkv'],
@@ -100,8 +100,8 @@ void main() {
         },
       );
 
-      expect(probed, <String>['/a.zip', '/b.epub'],
-          reason: '漫画库里图片型 EPUB 要在落点就认出来；PDF 不开包（直接归漫画）');
+      expect(probed, <String>['/a.zip'],
+          reason: 'epub/pdf 导入已随非漫画域删除，漫画库落点只对 .zip 开包');
     });
 
     test('同一路径重复拖入只开一次包', () async {

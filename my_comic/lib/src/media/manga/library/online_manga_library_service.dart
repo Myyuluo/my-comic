@@ -210,10 +210,11 @@ class OnlineMangaLibraryService {
     required bool inLibrary,
   }) async {
     final String bookKey = bookKeyOf(entry);
+    final Directory downloadsRoot = await _downloadsRoot();
     final _DownloadMangaDirectoryResolution resolution =
         await _resolveDownloadMangaDirectory(
           entry,
-          downloadsRoot: await _downloadsRoot(),
+          downloadsRoot: downloadsRoot,
         );
     final Directory directory = resolution.directory;
 
@@ -755,7 +756,6 @@ class OnlineMangaLibraryService {
         );
       }
     }
-
     final String sourceFolderLabel = await _downloadSourceFolderLabel(entry);
     final int sourceBudget = downloadLibrarySegmentBudget(
       rootPath,

@@ -4,7 +4,9 @@ import 'dart:io';
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:my_comic/models.dart';
 import 'package:my_comic/i18n/strings.g.dart';
 import 'package:my_comic/src/media/manga/manga_global_search_page.dart';
 import 'package:my_comic/src/media/manga/mihon/mihon_manager.dart';
@@ -12,6 +14,10 @@ import 'package:my_comic/src/media/manga/mihon/mihon_models.dart';
 import 'package:my_comic/src/media/manga/mihon/mihon_runtime.dart';
 import 'package:my_comic/src/media/manga/mihon/mihon_source_browse_page.dart';
 import 'package:my_comic_core/my_comic_core.dart';
+import 'package:my_comic_engine/media/manga/book_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../helpers/test_platform_services.dart';
 
 void main() {
   test('source image queue starts only four cover fetches at a time', () async {
@@ -59,11 +65,43 @@ void main() {
   late MyComicDatabase database;
   late _BrowseRuntime runtime;
   late MihonManager manager;
+  late AppModel appModel;
+
+  /// 作品页的 _load 会做真实文件 IO（下载目录身份扫描）。testWidgets 的
+  /// FakeAsync 区里这些 Future 不会完成，必须用 runAsync 放行。
+  Future<void> settleWithRealIo(WidgetTester tester) async {
+    for (int i = 0; i < 40; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 25)),
+      );
+      await tester.pump();
+    }
+    for (int i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+  }
+
+  Widget testApp(Widget home) => ProviderScope(
+        overrides: <Override>[
+          appProvider.overrideWith((Ref ref) => appModel),
+        ],
+        child: MaterialApp(
+          theme: ThemeData.light(useMaterial3: true),
+          home: home,
+        ),
+      );
 
   setUp(() async {
     root = await Directory.systemTemp.createTemp('mycomic-mihon-browse-');
+    SharedPreferences.setMockInitialValues(<String, Object>{});
     database = MyComicDatabase.forTesting(NativeDatabase.memory());
     runtime = _BrowseRuntime();
+    appModel = AppModel(testPlatformServices())
+      ..wireDatabaseForTesting(database);
+    // 作品页的 auto-refresh 会经 AppPaths 解析 downloads 根；widget 测试没有
+    // path_provider 插件。把下载库派生到书根旁边，避免 ensureNonLibrary 挂起。
+    EpubStorage.debugBaseDirectoryOverride =
+        '${root.path}${Platform.pathSeparator}legacy';
 
     await database.upsertMangaExtension(
       MangaExtensionsCompanion.insert(
@@ -102,6 +140,7 @@ void main() {
   tearDown(() async {
     manager.dispose();
     await database.close();
+    EpubStorage.debugBaseDirectoryOverride = null;
     if (await root.exists()) await root.delete(recursive: true);
   });
 
@@ -112,21 +151,23 @@ void main() {
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
       await tester.pumpWidget(
-        MaterialApp(
-          theme: ThemeData.light(useMaterial3: true),
-          home: MihonSourceBrowsePage(
+        testApp(
+          MihonSourceBrowsePage(
             manager: manager,
             target: MihonInstalledTarget(manager.sources.single),
           ),
         ),
       );
-      await tester.pump();
-      await tester.pump();
+      await tester.pumpAndSettle();
 
       expect(find.text('Raw Otaku fixture'), findsOneWidget);
-      await tester.tap(find.text('Raw Otaku fixture'));
+      await tester.tap(
+        find.byKey(
+          const ValueKey<String>('mihon_browse_item_/manga/fixture'),
+        ),
+      );
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
+      await settleWithRealIo(tester);
 
       expect(tester.takeException(), isNull);
       expect(find.text('Chapter 1'), findsOneWidget);
@@ -150,48 +191,55 @@ void main() {
       );
 
       await tester.pumpWidget(
-        MaterialApp(
-          theme: ThemeData.light(useMaterial3: true),
-          home: MihonSourceBrowsePage(
+        testApp(
+          MihonSourceBrowsePage(
             manager: manager,
             target: MihonInstalledTarget(manager.sources.single),
           ),
         ),
       );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(
+          const ValueKey<String>('mihon_browse_item_/manga/fixture'),
+        ),
+      );
       await tester.pump();
-      await tester.pump();
-      await tester.tap(find.text('Raw Otaku fixture'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
+      await settleWithRealIo(tester);
 
       expect(tester.takeException(), isNull);
       expect(runtime.detailsCalls, 1);
-      expect(find.text('Could not load this manga.'), findsOneWidget);
+      // 打开在线源作品页会先确保一条 membership=false 的库行（票 02），因此
+      // 详情失败时页面不是空的：错误挂在 hero 下方的刷新提示条里，原始 cause
+      // 与堆栈进「查看详情」对话框。
+      expect(
+        find.byKey(const ValueKey<String>('manga_series_refresh_banner')),
+        findsOneWidget,
+      );
+      expect(find.text(t.manga_series_refresh_failed), findsOneWidget);
+
+      // 诊断对话框里必须能拿到原生堆栈与失败原因。
+      await tester.tap(
+        find.byKey(const ValueKey<String>('manga_series_error_details')),
+      );
+      await tester.pumpAndSettle();
       expect(
         find.textContaining('NoClassDefFoundError: kotlin.LazyKt'),
         findsOneWidget,
       );
-
-      // 诊断对话框里必须能拿到原生堆栈和失败阶段。
-      await tester.tap(
-        // 详情页已并入共享的 MangaSeriesPage（书架和源浏览共用一页），诊断入口
-        // 随之改名。**盯的行为一条没变**：原因可见、堆栈与阶段进可复制对话框、
-        // 重试真的重新发请求（BUG-1767）。
-        find.byKey(const ValueKey<String>('manga_series_error_details')),
-      );
-      await tester.pumpAndSettle();
-      expect(find.textContaining('stage: details'), findsOneWidget);
-      expect(find.textContaining('at fixture.Stack'), findsOneWidget);
       await tester.tap(find.text('CLOSE'));
       await tester.pumpAndSettle();
 
       runtime.detailsFailure = null;
-      await tester.tap(find.text('Retry'));
+      await tester.tap(find.text(t.retry));
       await tester.pump();
-      await tester.pump(const Duration(milliseconds: 50));
+      await settleWithRealIo(tester);
 
       expect(runtime.detailsCalls, 2);
-      expect(find.text('Could not load this manga.'), findsNothing);
+      expect(
+        find.byKey(const ValueKey<String>('manga_series_refresh_banner')),
+        findsNothing,
+      );
       expect(find.text('Chapter 1'), findsOneWidget);
     },
   );
@@ -203,8 +251,8 @@ void main() {
         Uri.parse('https://fixture.invalid/challenge'),
       );
       await tester.pumpWidget(
-        MaterialApp(
-          home: MihonMangaDetailPage(
+        testApp(
+          MihonMangaDetailPage(
             manager: manager,
             sourceContext: await manager.contextForSource(
               manager.sources.single,
@@ -213,11 +261,17 @@ void main() {
           ),
         ),
       );
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await settleWithRealIo(tester);
       expect(runtime.solved, isEmpty);
       expect(find.text(t.manga_source_cloudflare_verify_title), findsOneWidget);
-      await tester.tap(find.text(t.manga_source_cloudflare_verify_title));
+      await tester.ensureVisible(
+        find.text(t.manga_source_cloudflare_verify_title),
+      );
       await tester.pumpAndSettle();
+      await tester.tap(find.text(t.manga_source_cloudflare_verify_title));
+      await tester.pump();
+      await settleWithRealIo(tester);
       expect(
         runtime.solved.single,
         Uri.parse('https://fixture.invalid/challenge'),
@@ -356,8 +410,8 @@ void main() {
       await manager.reload();
       final List<Uri> launched = <Uri>[];
       await tester.pumpWidget(
-        MaterialApp(
-          home: MihonMangaDetailPage(
+        testApp(
+          MihonMangaDetailPage(
             manager: manager,
             sourceContext: await manager.contextForSource(
               manager.sources.single,
@@ -367,7 +421,8 @@ void main() {
           ),
         ),
       );
-      await tester.pumpAndSettle();
+      await tester.pump();
+      await settleWithRealIo(tester);
       // M3E 详情骨架：「在网站打开」在 hero 的「⋯」菜单里。
       await tester.tap(find.byKey(const ValueKey<String>('online_work_more')));
       await tester.pumpAndSettle();

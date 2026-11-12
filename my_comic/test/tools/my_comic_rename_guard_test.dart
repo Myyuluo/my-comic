@@ -404,8 +404,6 @@ final List<_ForbiddenPattern> _forbiddenPathForms = <_ForbiddenPattern>[
 /// 路径形态组的扫描根（相对 `my_comic/`；目录或单文件皆可）。
 const List<String> _pathFormScanRoots = <String>[
   '../.github/workflows',
-  '../docs/agent',
-  '../docs/readme',
   '../tool',
   '../tools',
   '../CLAUDE.md',
