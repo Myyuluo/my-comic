@@ -162,6 +162,10 @@ if (-not $Install) {
   if ($mutexPattern.Matches($text).Count -ne 1) { throw 'AppMutex 预览补丁必须命中一处' }
   $text = $mutexPattern.Replace($text, 'AppMutex=')
 
+  # Production installs per-machine (PrivilegesRequired=admin). An appearance
+  # preview must not raise UAC, so force the staged copy back to per-user mode.
+  $text = $text -replace '(?m)^PrivilegesRequired=admin\r?$', 'PrivilegesRequired=lowest'
+
   # 只接受精确的函数签名、可选的本地 var 声明以及该函数自己的 begin。
   # 保留 var 块，且不使用跨函数的 .*?，避免误把保护插进后续嵌套 begin。
   $previewGuards = @(

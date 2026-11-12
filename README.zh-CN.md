@@ -38,12 +38,12 @@ MyComic 是 **Mihon 兼容的桌面阅读器**，不是 Mihon 的官方产品，
 ## 在 Windows 上安装
 
 1. 从 [GitHub Releases](https://github.com/Myyuluo/my-comic/releases) 下载最新的 `mycomic-<版本>-windows-setup.exe`。
-2. 运行安装程序。它按用户安装（`%LOCALAPPDATA%\MyComic`），不需要管理员权限。
+2. 运行安装程序。它安装到 `C:\Program Files\MyComic`（64 位），需要管理员权限（UAC）。
 3. 从开始菜单或桌面快捷方式启动 **MyComic**。
 
 系统要求：**Windows 10 或 Windows 11（64 位）**。
 
-> 从旧版 Fushi 构建升级：MyComic 是一次干净切换。安装 MyComic 前请手动卸载旧应用；Program state root 中的用户数据不会迁移。旧 `fushi://` 深链与旧 `fushi-` 更新资产不再兼容，因此需要手动更新或重装一次。Content root（默认 `Documents\MyComic`）中的下载、本地漫画与备份保持原位。
+> 从旧版 Fushi 构建升级：MyComic 是一次干净切换。安装 MyComic 前请手动卸载旧应用；Program state root 中的用户数据不会迁移。旧 `fushi://` 深链与旧 `fushi-` 更新资产不再兼容，因此需要手动更新或重装一次。Content root（默认 `Documents\MyComic`）中的下载、本地漫画与备份保持原位。如果你安装过更早的按用户安装版本，卸载前请先备份 `%LOCALAPPDATA%\MyComic\userdata`；旧卸载器会删除该目录。
 
 ## 从源码构建
 
@@ -76,7 +76,7 @@ Melos workspace 包位于 `packages/my_comic_*`；vendored 的补丁依赖位于
 ## 数据与隐私
 
 - **Content root**：默认 `Documents\MyComic`，包含 `downloads`、`autobackup` 与 `local`。卸载应用不会删除它。
-- **Program state**：数据库、设置、扩展与缓存随安装目录存放；卸载应用会删除它们。
+- **Program state**：数据库、设置、扩展与缓存随安装目录存放；安装目录对当前用户不可写时（例如 `C:\Program Files`），回退到 `%LOCALAPPDATA%\MyComic\userdata`；卸载应用会删除它们。
 - **无遥测**：MyComic 不上报使用统计，也没有账户、云同步、反馈中心或排行榜。只有在你使用在线图源或扩展时才会访问网络；更新检查只查询本仓库的 GitHub Releases。
 
 ## 项目结构

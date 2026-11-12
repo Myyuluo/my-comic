@@ -82,6 +82,21 @@
       "reason": "M-Extension-Server 是预编译的固定 sidecar；FUSHI_MIHON_* 环境变量与 FUSHI_MIHON_READY 是冻结的二进制契约，宿主同时发送/接受新旧名字"
     },
     {
+      "path": "tool/mihon/verify_desktop_runtime.ps1",
+      "line_pattern": "FUSHI_MIHON_TOKEN|fushiMihonBridge",
+      "reason": "验证脚本必须按预编译 sidecar 的冻结契约同时发送旧 token 名并接受旧能力字段"
+    },
+    {
+      "path": "tool/mihon/verify_desktop_extension_e2e.ps1",
+      "line_pattern": "FUSHI_MIHON_TOKEN|fushiMihonBridge",
+      "reason": "验证脚本必须按预编译 sidecar 的冻结契约同时发送旧 token 名并接受旧能力字段"
+    },
+    {
+      "path": "tool/mihon/verify_desktop_runtime.sh",
+      "line_pattern": "FUSHI_MIHON_TOKEN|fushiMihonBridge",
+      "reason": "验证脚本必须按预编译 sidecar 的冻结契约同时发送旧 token 名并接受旧能力字段"
+    },
+    {
       "path": "my_comic/test/media/manga/desktop_mihon_sidecar_contract_test.dart",
       "line_pattern": "FUSHI_MIHON_(TOKEN|PROXY_POLICY_PORT|READY)|fushiMihonBridge",
       "reason": "sidecar 冻结契约的回归测试"

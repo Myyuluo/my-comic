@@ -38,12 +38,12 @@ MyComic is a **Mihon-compatible desktop reader**, not an official Mihon product 
 ## Install on Windows
 
 1. Download the latest `mycomic-<version>-windows-setup.exe` from [GitHub Releases](https://github.com/Myyuluo/my-comic/releases).
-2. Run the installer. It installs per user (`%LOCALAPPDATA%\MyComic`) and does not require administrator rights.
+2. Run the installer. It installs to `C:\Program Files\MyComic` (64-bit) and requires administrator rights (UAC).
 3. Start **MyComic** from the Start menu or the desktop shortcut.
 
 Requirements: **Windows 10 or Windows 11 (64-bit)**.
 
-> Upgrading from an older Fushi-based build: MyComic is a clean break. Uninstall the old application manually before installing MyComic; user data in the Program state root is not migrated. Old `fushi://` deep links and `fushi-` update assets are no longer compatible, so update or reinstall manually once. Downloads, local manga and backups under your Content root (`Documents\MyComic` by default) stay where they are.
+> Upgrading from an older Fushi-based build: MyComic is a clean break. Uninstall the old application manually before installing MyComic; user data in the Program state root is not migrated. Old `fushi://` deep links and `fushi-` update assets are no longer compatible, so update or reinstall manually once. Downloads, local manga and backups under your Content root (`Documents\MyComic` by default) stay where they are. If you installed an earlier per-user MyComic build, back up `%LOCALAPPDATA%\MyComic\userdata` before uninstalling it; the old uninstaller removes that directory.
 
 ## Build from source
 
@@ -76,7 +76,7 @@ The Melos workspace packages live in `packages/my_comic_*`; vendored patched dep
 ## Data and privacy
 
 - **Content root** — `Documents\MyComic` by default, containing `downloads`, `autobackup` and `local`. It is not removed when you uninstall the app.
-- **Program state** — the database, settings, extensions and caches live next to the installed application; uninstalling removes them.
+- **Program state** — the database, settings, extensions and caches live next to the installed application. If the install directory is not writable by the current user (for example `C:\Program Files`), MyComic falls back to `%LOCALAPPDATA%\MyComic\userdata`; uninstalling removes them.
 - **No telemetry** — MyComic does not send usage statistics, and it has no accounts, cloud sync, feedback center or leaderboard. Network access happens only when you use online sources or extensions, and update checks query this repository's GitHub Releases.
 
 ## Project layout

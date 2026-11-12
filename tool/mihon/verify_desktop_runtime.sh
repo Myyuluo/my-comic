@@ -90,7 +90,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-MYCOMIC_MIHON_TOKEN="$token" "$java" -Xmx256m -Djava.awt.headless=true \
+MYCOMIC_MIHON_TOKEN="$token" FUSHI_MIHON_TOKEN="$token" \
+  "$java" -Xmx256m -Djava.awt.headless=true \
   -Djava.util.prefs.userRoot="$data_directory/preferences" \
   -jar "$server" "$port" "$data_directory" >"$stdout_log" 2>"$stderr_log" &
 pid="$!"
@@ -124,14 +125,14 @@ python3 - "$capabilities" <<'PY'
 import json
 import sys
 value = json.loads(sys.argv[1])
+bridge = value.get("myComicMihonBridge", value.get("fushiMihonBridge"))
 required = {
-    "myComicMihonBridge": 1,
     "sourceFactory": True,
     "preferenceCallbacks": True,
     "imageProxy": True,
     "sourceUrls": True,
 }
-if any(value.get(key) != expected for key, expected in required.items()):
+if bridge != 1 or any(value.get(key) != expected for key, expected in required.items()):
     raise SystemExit(f"incompatible Mihon capabilities: {value!r}")
 PY
 

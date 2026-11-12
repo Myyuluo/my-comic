@@ -39,6 +39,9 @@ $startInfo.CreateNoWindow = $true
 $startInfo.RedirectStandardOutput = $true
 $startInfo.RedirectStandardError = $true
 $startInfo.Environment["MYCOMIC_MIHON_TOKEN"] = $token
+# The pinned M-Extension-Server binary still reads the legacy token name;
+# the app sends both, so the verifier must too.
+$startInfo.Environment["FUSHI_MIHON_TOKEN"] = $token
 $startInfo.ArgumentList.Add("-Xmx768m")
 $startInfo.ArgumentList.Add("-Djava.awt.headless=true")
 $startInfo.ArgumentList.Add(
@@ -58,6 +61,18 @@ $stdoutTask = $process.StandardOutput.ReadToEndAsync()
 $stderrTask = $process.StandardError.ReadToEndAsync()
 $baseUri = "http://127.0.0.1:$port"
 $authenticatedHeaders = @{ Authorization = "Bearer $token" }
+
+# The sidecar may report the capability under either name (the app accepts both).
+function Test-MihonBridgeCapability {
+    param($Capabilities)
+    foreach ($name in @('myComicMihonBridge', 'fushiMihonBridge')) {
+        $property = $Capabilities.PSObject.Properties[$name]
+        if ($null -ne $property -and $property.Value -eq 1) {
+            return $true
+        }
+    }
+    return $false
+}
 
 function Invoke-MihonJson {
     param(
@@ -101,7 +116,7 @@ try {
             Start-Sleep -Milliseconds 200
         }
     } while ([DateTime]::UtcNow -lt $deadline)
-    if ($null -eq $capabilities -or $capabilities.myComicMihonBridge -ne 1) {
+    if ($null -eq $capabilities -or -not (Test-MihonBridgeCapability $capabilities)) {
         throw "M-Extension-Server did not expose the required capability."
     }
 

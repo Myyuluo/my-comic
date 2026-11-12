@@ -17,7 +17,7 @@ AppId={{8F2C1A3E-7B4D-4E9A-9C21-0A1B2C3D4E5F}}
 AppName=MyComic
 AppVersion={#AppVersion}
 AppPublisher=MyComic
-DefaultDirName={localappdata}\MyComic
+DefaultDirName={autopf}\MyComic
 DefaultGroupName=MyComic
 DisableProgramGroupPage=yes
 ; MyComic 改名：Inno 默认 UsePreviousGroup=yes，升级时从卸载键里读回上一次的
@@ -30,10 +30,17 @@ DisableProgramGroupPage=yes
 ; 「覆盖用户选择」的风险。
 UsePreviousGroup=no
 ; ADR 0024 干净切换：同一个 AppId 升级时不要沿用旧版本的安装目录，否则
-; DefaultDirName=MyComic 在升级路径上失效。旧目录由用户按
+; DefaultDirName={autopf}\MyComic 在升级路径上失效。旧目录由用户按
 ; 文档手动卸载/清理；本安装器不迁移 userdata。
 UsePreviousAppDir=no
-PrivilegesRequired=lowest
+; Program Files 需要管理员权限；应用本身仍以普通用户运行（[Run]
+; runasoriginaluser），程序状态在安装目录不可写时回退到
+; %LOCALAPPDATA%\MyComic\userdata。
+PrivilegesRequired=admin
+; 应用是 64 位；显式 64 位安装模式让 {autopf} 解析到 native
+; C:\Program Files，而不是 32 位安装模式下的 C:\Program Files (x86)。
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
 OutputDir={#OutputDir}
 OutputBaseFilename=mycomic-{#AppVersion}-windows-setup
 Compression=lzma2
@@ -50,12 +57,12 @@ UninstallDisplayIcon={app}\MyComic.exe
 ; page layout live in md3_controls.iss / md3_layout.iss; older Inno keeps its UI.
 #if VER >= EncodeVer(6,7,0)
 WizardStyle=modern dynamic windows11 hidebevels
-WizardBackColor=#FEF7FF
+WizardBackColor=#FFFFFF
 WizardBackColorDynamicDark=#141218
-WizardImageBackColor=#FEF7FF
+WizardImageBackColor=#FFFFFF
 WizardImageBackColorDynamicDark=#141218
 ; 页眉标记是带 alpha 的 PNG：底色不跟背景一致就会在页眉右上角露出一个色块。
-WizardSmallImageBackColor=#FEF7FF
+WizardSmallImageBackColor=#FFFFFF
 WizardSmallImageBackColorDynamicDark=#141218
 WizardImageAlphaFormat=defined
 WizardImageFile=assets\wizard_hero_164x314.png,assets\wizard_hero_192x386.png,assets\wizard_hero_246x492.png,assets\wizard_hero_328x628.png
@@ -173,7 +180,7 @@ Type: filesandordirs; Name: "{app}\userdata"
 Type: filesandordirs; Name: "{localappdata}\MyComic\userdata"
 
 [Run]
-Filename: "{app}\MyComic.exe"; Description: "启动 MyComic"; Flags: nowait postinstall
+Filename: "{app}\MyComic.exe"; Description: "启动 MyComic"; Flags: nowait postinstall runasoriginaluser
 
 [Code]
 // -- TODO-549: app-internal self-update "AppMutex deadlock" root-cause layer --
@@ -363,8 +370,6 @@ begin
     KillProcessesUnderDir 与 launcher 让路。 }
 end;
 
-end;
-
 // BUG-1014: preserve the user's desktop icon position across updates.
 // Return False (skip creating the desktop shortcut) when {userdesktop}\MyComic.lnk
 // already exists, so an update never rewrites it -- Explorer keeps the remembered
@@ -390,13 +395,13 @@ function DwmSetWindowAttribute(Wnd: THandle; Attr: Integer; var Value: Integer;
   external 'DwmSetWindowAttribute@dwmapi.dll stdcall';
 
 { 按当前明暗取 MD3 色。两套都取自 app 同源的 MD3 baseline 色板，与 [Setup] 段的
-  WizardBackColor（#FEF7FF / #141218）同一族。 }
+  WizardBackColor（#FFFFFF / #141218）同一族。 }
 function Md3Primary(): TColor;
 begin
   if IsDarkInstallMode then
-    Result := StrToColor('#D0BCFF')
+    Result := StrToColor('#A8C7FA')
   else
-    Result := StrToColor('#6750A4');
+    Result := StrToColor('#0058A1');
 end;
 
 function Md3OnSurface(): TColor;
@@ -421,7 +426,7 @@ begin
   if IsDarkInstallMode then
     Result := StrToColor('#141218')
   else
-    Result := StrToColor('#FEF7FF');
+    Result := StrToColor('#FFFFFF');
 end;
 
 { 把标题栏也拉进 MD3：底色接上页面 surface，标题文字用 onSurface，边框用同色
@@ -587,12 +592,13 @@ begin
   end;
 end;
 
-{ BUG-1483: 选目录页写入预检。本安装器 PrivilegesRequired=lowest（不提权），
-  用户手选 Program Files 这类需要管理员权限的目录时，老行为是复制阶段才蹦
-  "Error 5: 拒绝访问" 中断安装；就算用户再手动提权装进去，运行期还有第二排雷：
-  应用以普通权限跑，WebView2 数据目录与应用内自动更新都写不进安装目录
-  （更新每次都得提权）。所以在用户点「下一步」时就实测一把可写性，拦下并给出
-  明确指引，而不是让错误在安装中途/运行期反复浮现。
+{ BUG-1483: 选目录页写入预检。安装器现在以管理员权限运行
+  （PrivilegesRequired=admin），默认可写 Program Files；但如果用户改选一个
+  管理员也写不了的目录（只读盘、受限网络位置等），复制阶段仍会在中途蹦
+  "Error 5: 拒绝访问" 中断安装。运行期还有第二排雷：应用以普通权限跑，
+  安装目录对当前用户不可写时，WebView2 数据目录、程序状态与应用内自动更新
+  都写不进去（更新每次都得提权）。所以在用户点「下一步」时就实测一把可写性，
+  拦下并给出明确指引，而不是让错误在安装中途/运行期反复浮现。
   探测方式：目录已存在→写探针文件再删掉；不存在→建目录链（建成后目录留给
   正式安装直接用，不回滚——马上就要装进去，且 RemoveDir 误删既有空目录的
   风险比留一个空目录大）。}
@@ -634,12 +640,11 @@ begin
     if not InstallDirWritable(WizardDirValue) then
     begin
       MsgBox('当前权限无法写入所选目录：' + #13#10 + WizardDirValue + #13#10#13#10
-        + '请改选用户可写的目录（推荐默认目录 '
-        + ExpandConstant('{localappdata}\MyComic') + '）。' + #13#10#13#10
-        + '不建议装进需要管理员权限的目录：即使以管理员身份重装到该目录，'
-        + '应用日常以普通权限运行，之后每次自动更新都需要再次提权。'
-        + #13#10#13#10
-        + '若仍装进不可写目录，程序状态会回退到用户目录，便携状态将不随安装目录走。',
+        + '请改选管理员可写的目录（默认是 '
+        + ExpandConstant('{autopf}\MyComic') + '）。' + #13#10#13#10
+        + '应用日常以普通权限运行：若安装目录对当前用户不可写，'
+        + '程序状态会回退到 %LOCALAPPDATA%\MyComic\userdata，'
+        + '应用内自动更新也需要再次提权。',
         mbError, MB_OK);
       Result := False;
     end;

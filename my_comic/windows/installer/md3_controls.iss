@@ -163,7 +163,7 @@ end;
 function Md3OnPrimary(): TColor;
 begin
   if IsDarkInstallMode then
-    Result := StrToColor('#381E72')
+    Result := StrToColor('#002E52')
   else
     Result := StrToColor('#FFFFFF');
 end;
@@ -171,17 +171,17 @@ end;
 function Md3PrimaryContainer(): TColor;
 begin
   if IsDarkInstallMode then
-    Result := StrToColor('#4F378B')
+    Result := StrToColor('#00497D')
   else
-    Result := StrToColor('#EADDFF');
+    Result := StrToColor('#D9E6F7');
 end;
 
 function Md3OnPrimaryContainer(): TColor;
 begin
   if IsDarkInstallMode then
-    Result := StrToColor('#EADDFF')
+    Result := StrToColor('#D9E6F7')
   else
-    Result := StrToColor('#21005D');
+    Result := StrToColor('#002E52');
 end;
 
 function Md3PillPath(const Bounds: TRect; Inset: Integer): TMd3NativeUInt;
