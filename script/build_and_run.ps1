@@ -111,16 +111,36 @@ function Resolve-Flutter {
 
     $bases = New-Object System.Collections.Generic.List[string]
     if ($HOME) { $bases.Add($HOME) }
+    if ($env:LOCALAPPDATA) { $bases.Add($env:LOCALAPPDATA) }
+    if ($env:ProgramData) { $bases.Add($env:ProgramData) }
     try {
         foreach ($drive in [IO.DriveInfo]::GetDrives()) {
             if ($drive.DriveType -eq [IO.DriveType]::Fixed) {
                 $bases.Add($drive.RootDirectory.FullName)
+                # ProgramData 可能被重定位到非系统盘（本机：D:\ProgramData）。
+                $bases.Add((Join-Path $drive.RootDirectory.FullName 'ProgramData'))
             }
         }
     } catch { }
     foreach ($base in $bases) {
         $candidates.Add((Join-Path $base "flutter_sdk\flutter_$version"))
         $candidates.Add((Join-Path $base "flutter_$version"))
+        $candidates.Add((Join-Path $base 'flutter'))
+        $candidates.Add((Join-Path $base "flutter_sdk\flutter"))
+    }
+    # 手动解压的 SDK 目录名不一定符合上面的约定（本机是
+    # D:\ProgramData\flutter_3.47.6），再扫一层以 flutter 开头的目录；SDK
+    # 自报的版本号仍由下面的循环校验，不会随便捡一个旧 SDK。
+    foreach ($base in $bases) {
+        try {
+            foreach ($dir in @(Get-ChildItem -LiteralPath $base -Directory -Force -ErrorAction SilentlyContinue)) {
+                if ($dir.Name -like 'flutter*') {
+                    $candidates.Add($dir.FullName)
+                }
+            }
+        } catch {
+            # 目录不可读时跳过，不要让某个候选目录影响启动。
+        }
     }
 
     foreach ($sdk in $candidates) {
@@ -233,6 +253,29 @@ function Resolve-NuGet {
         Select-Object -First 1
     if ($onPath) { return $onPath.Source }
     return $null
+}
+
+function Update-CMakeNuGetCache {
+    param([string] $NuGet)
+    # 构建树可能是在另一个工具目录下配置的（本机旧缓存指向 E:\tmp\mycomic-pack-tools）。
+    # CMake 把 find_program 的结果缓存在 NUGET:FILEPATH 里；路径失效后每次构建都会
+    # 失败。这里只修正这一个失效项，不为一个缓存路径重建整个构建树。
+    $cachePath = Join-Path $MyComicDir 'build\windows\x64\CMakeCache.txt'
+    if (-not (Test-Path -LiteralPath $cachePath -PathType Leaf)) { return }
+    $lines = [IO.File]::ReadAllLines($cachePath)
+    $updated = $false
+    for ($index = 0; $index -lt $lines.Length; $index++) {
+        if ($lines[$index] -notmatch '^NUGET:FILEPATH=(.+)$') { continue }
+        $cached = $Matches[1].Trim()
+        if (Test-Path -LiteralPath $cached -PathType Leaf) { continue }
+        Write-Host "[my-comic] CMake cache points at a missing NuGet ($cached); using $NuGet"
+        Write-LauncherLog "repairing stale CMake NuGet cache: $cached -> $NuGet"
+        $lines[$index] = "NUGET:FILEPATH=$NuGet"
+        $updated = $true
+    }
+    if ($updated) {
+        [IO.File]::WriteAllLines($cachePath, $lines, (New-Object Text.UTF8Encoding($false)))
+    }
 }
 
 function Invoke-Flutter {
@@ -427,6 +470,7 @@ if ($needsBuild) {
     if ($pathParts -notcontains $nugetDirectory) {
         $env:PATH = "$nugetDirectory;$env:PATH"
     }
+    Update-CMakeNuGetCache -NuGet $nuget
 
     $flutter = Resolve-Flutter
     $workspaceLock = Join-Path $RepositoryRoot 'pubspec.lock'
@@ -510,6 +554,11 @@ if (-not (Test-RuntimeDirectory $CacheDir)) {
         }
         [IO.Directory]::CreateDirectory((Split-Path -Parent $CacheDir)) | Out-Null
         Copy-Item -LiteralPath $RuntimeSource -Destination $CacheDir -Recurse -Force
+    } elseif (Test-RuntimeDirectory $BundleDir) {
+        # 干净重建 runtime 目前可能失败（Mihon 侧问题）；Release 目录里已经有
+        # 校验通过的官方 runtime 时直接复用它启动，而不是把启动流程判死。
+        Write-Host "[my-comic] runtime cache is missing; reusing the verified runtime already bundled in $BundleDir"
+        Write-LauncherLog "runtime cache missing; reusing existing release bundle"
     } else {
         $builder = Join-Path $RepositoryRoot 'tool\mihon\build_desktop_runtime.ps1'
         if (-not (Test-Path -LiteralPath $builder -PathType Leaf)) {
@@ -522,8 +571,8 @@ if (-not (Test-RuntimeDirectory $CacheDir)) {
         }
     }
 }
-if (-not (Test-RuntimeDirectory $CacheDir)) {
-    throw "Runtime cache is incomplete: $CacheDir"
+if (-not (Test-RuntimeDirectory $CacheDir) -and -not (Test-RuntimeDirectory $BundleDir)) {
+    throw "Runtime cache is incomplete and no verified runtime is bundled in $BundleDir"
 }
 
 if (Test-RuntimeDirectory $BundleDir) {
