@@ -145,11 +145,11 @@ void main() {
   });
 
   group('退出路径', () {
-    test('正在退出的首实例不得接管第二实例的文件（Windows 单实例）', () {
+    test('第二实例不得接管正在退出的首实例（Windows 单实例）', () {
       final String runner = File('windows/runner/main.cpp').readAsStringSync();
       // main.dart 的退出链第一步就 windowManager.hide()，此后进程最长还活约 6s，
-      // 互斥量一直被它持有、隐藏窗口也照样被 FindWindowW 找得到。转交给它 = 路径
-      // 整个丢掉；只前置一个看不见的窗口 = 用户双击视频「点了没反应」。
+      // 互斥量一直被它持有、隐藏窗口也照样被 FindWindowW 找得到。路径转交随
+      // 视频功能删除；这里只钉住「认出正在退出的首实例并等它释放互斥量」。
       expect(runner, contains('::IsWindowVisible(exiting)'),
           reason: '必须能把「正在退出」和「正常运行」区分开');
       final int probeAt = runner.indexOf('::IsWindowVisible(exiting)');
@@ -157,10 +157,8 @@ void main() {
           runner.indexOf('single_instance_mutex.Wait', probeAt);
       expect(waitAt, greaterThan(probeAt),
           reason: '认出它在退出之后要等它释放互斥量，然后本进程按首实例正常启动');
-      final int handoffAt =
-          runner.indexOf('SendExternalVideoPath', probeAt);
-      expect(handoffAt, greaterThan(waitAt),
-          reason: '转交分支必须排在这道判定之后，否则仍会把路径交给一个将死的进程');
+      expect(runner, isNot(contains('SendExternalVideoPath')),
+          reason: '外部视频路径转交已随视频功能删除');
     });
   });
 

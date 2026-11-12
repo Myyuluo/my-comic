@@ -407,9 +407,6 @@ void main([List<String> args = const <String>[]]) {
         );
       }
 
-      // galgame helper 与 Magpie 都只从 Windows 主包随附归档安装（BUG-1196 / BUG-1292）。
-      // 版本与 app 强绑定：要新组件就更新 MyComic。不要恢复后台静默下载或旧包联网兜底。
-
       /// Capture Flutter framework errors with full details.
       FlutterError.onError = (details) {
         // Suppress known Flutter framework bug: RawTooltipState creates
@@ -481,14 +478,6 @@ class _MyComicReaderAppState extends ConsumerState<MyComicReaderApp>
     run: _runAppShortcut,
   );
 
-  /// TODO-904 P0 回归：Windows 单实例守卫下，第二实例（文件关联 / 拖到 exe / CLI
-  /// `MyComic.exe "%1"`）不会自己起窗口，而是把视频路径经 WM_COPYDATA 转交首实例
-  /// （见 `windows/runner/external_video_handoff.*` + `flutter_window.cpp`）。首实例
-  /// 经此 MethodChannel 收到 `openExternalVideo`，复用现有 [_openExternalVideo]
-  /// 打开链路。Linux 同一条通道：GTK runner 以 GApplication 单实例注册到会话
-  /// D-Bus，第二次启动的 argv 经 `command-line` 信号落到首实例再推过来（见
-  /// `linux/runner/my_application.cc`）。macOS 走 `source_urls` 事件流与系统
-  /// open-file 事件，不注册本通道。
   /// TODO-1092: Windows 系统强调色/主题色实时变更通知 channel。runner 侧
   /// （`windows/runner/flutter_window.cpp` 的 MessageHandler）收到
   /// WM_DWMCOLORIZATIONCOLORCHANGED / WM_SETTINGCHANGE("ImmersiveColorSet") /
@@ -503,7 +492,7 @@ class _MyComicReaderAppState extends ConsumerState<MyComicReaderApp>
   /// 取色 + notifyListeners 抖动。
   Timer? _systemColorRefreshDebounce;
 
-  /// 守卫：退出清理（停 Bonsoir 事件源）只跑一次，避免 [onWindowClose] 与
+  /// 守卫：退出清理只跑一次，避免 [onWindowClose] 与
   /// [didChangeAppLifecycleState] 的 `detached` 兜底重复触发。
   bool _shutdownStarted = false;
 

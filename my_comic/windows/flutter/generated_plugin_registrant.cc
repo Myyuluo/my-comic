@@ -6,7 +6,6 @@
 
 #include "generated_plugin_registrant.h"
 
-#include <bonsoir_windows/bonsoir_windows_plugin_c_api.h>
 #include <desktop_drop/desktop_drop_plugin.h>
 #include <dynamic_color/dynamic_color_plugin_c_api.h>
 #include <file_selector_windows/file_selector_windows.h>
@@ -20,8 +19,6 @@
 #include <window_manager/window_manager_plugin.h>
 
 void RegisterPlugins(flutter::PluginRegistry* registry) {
-  BonsoirWindowsPluginCApiRegisterWithRegistrar(
-      registry->GetRegistrarForPlugin("BonsoirWindowsPluginCApi"));
   DesktopDropPluginRegisterWithRegistrar(
       registry->GetRegistrarForPlugin("DesktopDropPlugin"));
   DynamicColorPluginCApiRegisterWithRegistrar(

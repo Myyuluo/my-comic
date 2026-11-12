@@ -4,7 +4,6 @@
 /// my_comic_cli status            # app 是否在运行、是否初始化完成（不拉起 app）
 /// my_comic_cli start             # 确保 app 在运行并就绪
 /// my_comic_cli open <路径|URL>   # 打开视频 / mycomic:// 深链 / 卡片来源 URL
-/// my_comic_cli lookup <词>       # 弹出查词
 /// my_comic_cli quit              # 落库后退出 app
 /// ```
 ///
@@ -67,7 +66,6 @@ ArgParser _buildParser(List<CtlCommandGroup> groups) {
   parser.addCommand('status');
   parser.addCommand('start');
   parser.addCommand('open');
-  parser.addCommand('lookup');
   parser.addCommand('quit');
   for (final CtlCommandGroup group in groups) {
     final ArgParser groupParser = parser.addCommand(group.name)
@@ -116,8 +114,7 @@ void _usage(ArgParser parser, List<CtlCommandGroup> groups, StringSink sink) {
       '  status              app 是否在运行（不拉起 app；未运行退出码 $kCliExitUnavailable）',
     )
     ..writeln('  start               确保 app 在运行并就绪')
-    ..writeln('  open <路径|URL>     打开视频文件 / mycomic:// 深链 / 卡片来源 URL')
-    ..writeln('  lookup <词>         弹出查词')
+    ..writeln('  open <路径|URL>     打开 mycomic:// 深链 / 卡片来源 URL')
     ..writeln('  quit                落库后退出 app');
   if (groups.isNotEmpty) {
     sink
@@ -249,8 +246,6 @@ class _Cli {
           return kCliExitOk;
         case 'open':
           return await _open(command.rest);
-        case 'lookup':
-          return await _lookup(command.rest);
         case 'quit':
           return await _quit();
       }
@@ -334,16 +329,6 @@ class _Cli {
       'target': target,
       'kind': kind?.wireName,
     }, '已交给 MyComic 打开：$target');
-    return kCliExitOk;
-  }
-
-  Future<int> _lookup(List<String> rest) async {
-    final String word = rest.join(' ').trim();
-    if (word.isEmpty)
-      throw const _CliFailure(kCliExitUsage, '用法：my_comic_cli lookup <词>');
-    await _ensureReady();
-    await _client!.lookup(word);
-    _emit(<String, Object?>{'ok': true, 'word': word}, '已弹出查词：$word');
     return kCliExitOk;
   }
 

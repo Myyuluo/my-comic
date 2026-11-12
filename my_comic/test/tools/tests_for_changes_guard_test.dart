@@ -28,6 +28,8 @@
 //    repoScanPaths 就是这么瞎的），所以这里的朴素侧只用 `String.contains`，
 //    一行都不碰 normalizeRepoPath / extractRepoPathReferences。
 
+// tests-for-changes: my_comic/test/**
+
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -95,9 +97,9 @@ void main() {
               '而坏掉的表现是「推导结果变少」——不会有人自己发现');
       final int withFace =
           index.values.where((TestTriggerFace f) => !f.isEmpty).length;
-      expect(withFace, greaterThanOrEqualTo(250),
-          reason: '实测 310 个测试文件有可提取的触发面；'
-              '掉到 250 以下说明路径提取器少认了一大类写法');
+      expect(withFace, greaterThanOrEqualTo(200),
+          reason: '实测 235 个测试文件有可提取的触发面（独立化清理删掉大量上游测试）；'
+              '掉到 200 以下说明路径提取器少认了一大类写法');
     });
 
     test('三遍提取各自都必须活着（合成语料逐遍点名）', () {
@@ -108,10 +110,10 @@ void main() {
       expect(
         extractRepoPathReferences(
           'final File f = '
-          "File('../native/galgame_hook/include/voice_hook_ipc.h');",
+          "File('../my_comic/windows/runner/flutter_window.cpp');",
           fs,
         ),
-        contains('native/galgame_hook/include/voice_hook_ipc.h'),
+        contains('my_comic/windows/runner/flutter_window.cpp'),
         reason: '含斜杠字面量那一遍死了',
       );
       expect(
@@ -132,43 +134,14 @@ void main() {
         contains('packages/flutter_inappwebview_windows'),
         reason: '最近祖先回退死了：注释里的 `.../` 省略写法退不到那棵树',
       );
-      // 语料不能用真实构建产物名（如 dist/）：做 galgame 开发的 worktree 都会先构建
-      // helper，那时 dist/ 就在磁盘上，提取会如实返回它，这条断言随机器状态变红。
       expect(
         extractRepoPathReferences(
-          "expect(cmake.contains(r'native/galgame_hook/never_built_output'), "
-          'isTrue);',
+          "expect(listing.contains(r'my_comic/windows/never_built_output'), isTrue);",
           fs,
         ),
-        contains('native/galgame_hook'),
+        contains('my_comic/windows'),
         reason: '最近祖先回退死了：指向构建产物（磁盘上不存在）的路径整条被丢掉',
       );
-    });
-
-    test('被替掉的手写规则（独立化后仍存在的部分）必须能被推导出来', () {
-      // 这张表是**被替掉的那份文档清单的原文**中仍然适用的条目，一条不改地抄在
-      // 这里。推导规则可以比它多，绝不许比它少——少一条就是回到「名字表腐烂」
-      // 的老路。非 Windows 平台 / 视频 / galgame / 推荐包相关条目已随对应树删除。
-      const Map<String, List<String>> replacedHandWrittenRules =
-          <String, List<String>>{
-        '.github/workflows/build-multiplatform.yml': <String>[
-          'my_comic/test/tools/powershell_51_compat_guard_test.dart',
-        ],
-        'tool/setup_worktree.ps1': <String>[
-          'my_comic/test/tools/powershell_51_compat_guard_test.dart',
-        ],
-      };
-
-      final List<String> missing = <String>[];
-      replacedHandWrittenRules.forEach((String changed, List<String> expected) {
-        final Set<RepoPath> got = derive(changed);
-        for (final String want in expected) {
-          if (!got.contains(want)) missing.add('$changed → $want');
-        }
-      });
-      expect(missing, isEmpty,
-          reason: '推导规则漏掉了原手写清单里的条目：\n${missing.join('\n')}\n'
-              '推导规则必须是那份清单的超集，否则这次替换是净损失');
     });
 
     test('原先零触发规则的 native 树，现在每棵都推得出测试', () {
@@ -177,9 +150,8 @@ void main() {
       const Map<String, int> blindSpots = <String, int>{
         'packages/gamepads_windows/windows/gamepad.cpp': 1,
         'packages/flutter_inappwebview_windows/windows/CMakeLists.txt': 1,
-        'native/galgame_hook/include/voice_hook_ipc.h': 4,
         'third_party/desktop_drop/windows/desktop_drop_plugin.cpp': 3,
-        'my_comic/windows/runner/flutter_window.cpp': 25,
+        'my_comic/windows/runner/flutter_window.cpp': 15,
       };
       final List<String> tooThin = <String>[];
       blindSpots.forEach((String changed, int floor) {
@@ -198,7 +170,6 @@ void main() {
       const List<String> trees = <String>[
         'my_comic/windows',
         '.github/workflows',
-        'native/galgame_hook',
         'packages/flutter_inappwebview_windows',
       ];
       final List<String> regressions = <String>[];
@@ -219,7 +190,6 @@ void main() {
         'my_comic/windows': 20,
         '.github/workflows': 6,
         'packages/flutter_inappwebview_windows': 8,
-        'native/galgame_hook': 3,
       };
       final List<String> thin = <String>[];
       floors.forEach((String tree, int floor) {
@@ -263,8 +233,9 @@ void main() {
       }
 
       walk(fs.root);
-      expect(repoFiles.length, greaterThanOrEqualTo(5000),
-          reason: '仓库文件枚举塌了（实测上万），下面的 glob 校验会假绿');
+      expect(repoFiles.length, greaterThanOrEqualTo(4500),
+          reason: '仓库文件枚举塌了（独立化清理后实测 4984；清理前上万），'
+              '下面的 glob 校验会假绿');
 
       final List<String> declared = <String>[];
       final List<String> dead = <String>[];
@@ -278,7 +249,7 @@ void main() {
       expect(declared, isNotEmpty,
           reason: '一条 `// tests-for-changes:` 声明都没有——'
               '要么机制被删了，要么正则不认了；无论哪种，'
-              'powershell_51_compat_guard 这类运行时算扫描面的守卫就又没触发规则了');
+              '运行时自己扫仓库的守卫就又没触发规则了');
       expect(dead, isEmpty,
           reason: '这些声明的 glob 在仓库里匹配不到任何文件，已经是死规则：\n'
               '${dead.join('\n')}');

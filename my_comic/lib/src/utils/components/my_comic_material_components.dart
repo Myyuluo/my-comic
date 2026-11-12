@@ -22,8 +22,6 @@ import 'package:flutter/services.dart'
         SystemMouseCursors,
         TextInputAction,
         TextInputFormatter;
-import 'package:macos_ui/macos_ui.dart'
-    show MacosTextField, MacosIcon, OverlayVisibilityMode;
 import 'package:my_comic/src/shortcuts/context_menu_trigger.dart';
 import 'package:my_comic/i18n/strings.g.dart';
 import 'package:my_comic/src/utils/adaptive/adaptive_platform.dart';
@@ -1280,24 +1278,6 @@ class MyComicSearchField extends StatelessWidget {
             onSubmitted: onSubmitted,
           );
         },
-      );
-    } else if (isMacosPlatform(context)) {
-      // macOS-native: MacosTextField maps the search field faithfully —
-      // search-icon prefix, native clear button (clearButtonMode), and it keeps
-      // onSubmitted (MacosSearchField drops it, which would break enter-to-search).
-      searchBar = MacosTextField(
-        key: fieldKey,
-        controller: controller,
-        focusNode: focusNode,
-        autofocus: autofocus,
-        placeholder: hintText,
-        prefix: Padding(
-          padding: const EdgeInsets.only(left: 6, right: 2),
-          child: leading ?? const MacosIcon(CupertinoIcons.search),
-        ),
-        clearButtonMode: OverlayVisibilityMode.editing,
-        onChanged: onChanged,
-        onSubmitted: onSubmitted,
       );
     } else {
       searchBar = ValueListenableBuilder<TextEditingValue>(

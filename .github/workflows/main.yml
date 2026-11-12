@@ -14,7 +14,6 @@ on:
     paths:
       - 'my_comic/**'
       - 'packages/**'
-      - 'native/**'
       - 'ci/**'
       - 'third_party/**'
       - 'tool/**'
@@ -49,13 +48,8 @@ jobs:
       - name: Provide baked-in secret stubs
         uses: ./.github/actions/provide-baked-secrets
         with:
-          google-oauth-client-secret: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
           log-upload-endpoint: ${{ secrets.LOG_UPLOAD_ENDPOINT }}
           log-upload-token: ${{ secrets.LOG_UPLOAD_TOKEN }}
-          dandanplay-app-id: ${{ secrets.DANDANPLAY_APP_ID }}
-          dandanplay-app-secret: ${{ secrets.DANDANPLAY_APP_SECRET }}
-          tmdb-api-key: ${{ secrets.TMDB_API_KEY }}
-          opensubtitles-api-key: ${{ secrets.OPENSUBTITLES_API_KEY }}
       - name: Flutter pub get
         working-directory: my_comic
         run: flutter pub get --enforce-lockfile
@@ -76,10 +70,8 @@ jobs:
         shell: bash
         run: |
           # 扫描面按磁盘枚举，不写死包清单。
-          #   * vendored / fork / stub —— 上游产物，不归本仓测；
-          #   * my_comic_torrent —— 测试要 dlopen 真 DLL，由 build-multiplatform.yml
-          #     windows job 专门跑。
-          skip="flutter_inappwebview_windows gamepads_windows my_comic_torrent"
+          #   * vendored / fork / stub —— 上游产物，不归本仓测。
+          skip="flutter_inappwebview_windows gamepads_windows"
           ran=0
           for pkg in packages/*/; do
             name=$(basename "$pkg")
@@ -101,6 +93,21 @@ jobs:
             exit 1
           fi
 
+  audit-scanners:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.6'
+          cache: true
+      # 两个扫描器都是纯 Dart、只读；它们是残留门禁，不是报告工具。
+      - name: Fushi references (gate)
+        run: dart tool/audit/fushi_references.dart --fail-on-violations
+      - name: Unused l10n keys (gate)
+        run: dart tool/audit/unused_l10n_keys.dart --fail-if-unused
+
   unit-tests:
     runs-on: windows-latest
     timeout-minutes: 120
@@ -121,13 +128,8 @@ jobs:
       - name: Provide baked-in secret stubs
         uses: ./.github/actions/provide-baked-secrets
         with:
-          google-oauth-client-secret: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
           log-upload-endpoint: ${{ secrets.LOG_UPLOAD_ENDPOINT }}
           log-upload-token: ${{ secrets.LOG_UPLOAD_TOKEN }}
-          dandanplay-app-id: ${{ secrets.DANDANPLAY_APP_ID }}
-          dandanplay-app-secret: ${{ secrets.DANDANPLAY_APP_SECRET }}
-          tmdb-api-key: ${{ secrets.TMDB_API_KEY }}
-          opensubtitles-api-key: ${{ secrets.OPENSUBTITLES_API_KEY }}
       - name: Flutter pub get
         working-directory: my_comic
         run: flutter pub get --enforce-lockfile

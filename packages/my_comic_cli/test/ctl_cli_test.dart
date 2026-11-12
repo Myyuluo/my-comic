@@ -139,14 +139,14 @@ void main() {
 
   test('open：相对路径在 CLI 侧转成绝对路径', () async {
     final FakeHandler handler = await startApp();
-    expect(await run(<String>['open', 'clips/a.mkv']), kCliExitOk);
-    expect(handler.opened.single, p.normalize(p.absolute('clips/a.mkv')));
+    expect(await run(<String>['open', 'clips/a.cbz']), kCliExitOk);
+    expect(handler.opened.single, p.normalize(p.absolute('clips/a.cbz')));
   });
 
   test('open：URL 原样转交', () async {
     final FakeHandler handler = await startApp();
-    await run(<String>['open', 'mycomic://lookup?word=x']);
-    expect(handler.opened.single, 'mycomic://lookup?word=x');
+    await run(<String>['open', 'mycomic://source?url=x']);
+    expect(handler.opened.single, 'mycomic://source?url=x');
   });
 
   test('open：app 拒绝 → 退出码 1 并说明原因', () async {
@@ -155,18 +155,12 @@ void main() {
     expect(err.toString(), contains('unsupported'));
   });
 
-  test('lookup：多个参数拼成一个词', () async {
-    final FakeHandler handler = await startApp();
-    expect(await run(<String>['lookup', 'hello', 'world']), kCliExitOk);
-    expect(handler.lookups, <String>['hello world']);
-  });
-
   test('app 没在运行 → 自动拉起并等初始化完成再执行', () async {
     final String app = await fakeAppBinary();
     final List<String> launched = <String>[];
     FakeHandler? handler;
     final int code = await run(
-      <String>['lookup', '猫'],
+      <String>['open', 'mycomic://source?url=x'],
       starter: (String exe, List<String> args) async {
         launched.add(exe);
         // 模拟真实 app：先开控制通道（初始化中），过一会儿才就绪。
@@ -180,19 +174,19 @@ void main() {
     );
     expect(code, kCliExitOk, reason: err.toString());
     expect(launched, <String>[app]);
-    expect(handler!.lookups, <String>['猫']);
+    expect(handler!.opened, <String>['mycomic://source?url=x']);
   });
 
   test('--no-launch：没在运行就失败，不拉起', () async {
     await fakeAppBinary();
     expect(
-      await run(<String>['--no-launch', 'lookup', '猫']),
+      await run(<String>['--no-launch', 'open', 'mycomic://x']),
       kCliExitUnavailable,
     );
   });
 
   test('找不到 app → 69', () async {
-    expect(await run(<String>['lookup', '猫']), kCliExitUnavailable);
+    expect(await run(<String>['open', 'mycomic://x']), kCliExitUnavailable);
     expect(err.toString(), contains(kMyComicAppEnv));
   });
 

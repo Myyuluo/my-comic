@@ -1,23 +1,10 @@
-import 'package:my_comic/src/utils/components/glass/my_comic_icon.dart';
 import 'package:my_comic/src/utils/my_comic_icons.dart';
 import 'package:my_comic/src/utils/components/glass/my_comic_apple_scroll_chrome.dart';
 import 'dart:async';
-import 'dart:io';
 
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/rendering.dart' show BoxParentData, RenderShiftedBox;
 import 'package:flutter/scheduler.dart' show SchedulerBinding, SchedulerPhase;
-import 'package:macos_ui/macos_ui.dart'
-    show
-        MacosScaffold,
-        ToolBar,
-        ContentArea,
-        Sidebar,
-        SidebarItems,
-        SidebarItem,
-        MacosBackButton,
-        MacosIcon;
-import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/services.dart' hide ModifierKey;
 import 'package:my_comic/src/utils/components/my_comic_desktop_title_bar.dart';
 import 'package:my_comic/src/utils/components/my_comic_floating_chrome.dart'
@@ -31,12 +18,9 @@ import 'package:my_comic/src/utils/misc/build_version.dart';
 import 'package:my_comic/src/utils/window_caption_channel.dart';
 
 
-import 'package:my_comic_engine/media/external_provider.dart';
-
-import 'package:my_comic/src/media/import/real_path_directory_picker.dart';
 
 
-import 'package:my_comic/src/models/store_compliance.dart';
+
 
 import 'package:my_comic/src/media/drag_drop/drop_surface_scope.dart';
 
@@ -66,19 +50,7 @@ import 'package:my_comic/src/shortcuts/page_scroll_shortcuts.dart'
 import 'package:my_comic/src/shortcuts/shortcut_action.dart';
 import 'package:my_comic_core/my_comic_core.dart'
     show
-        MediaCollectionItemRow,
-        MediaCollectionRow,
-        MediaKind,
-        MediaSourceRow,
-        VideoBookRow,
-        VideoDownloadJobLifecycle,
-        VideoDownloadJobRow,
-        VideoDownloadJobStage,
-        VideoDownloadSubscriptionRow,
-        VideoMetadataProviderIdentityRow,
-        VideoMetadataWorkRow,
-        VideoSourceScrapeRunRow,
-        VideoSourceScrapeSettingRow;
+        VideoMetadataWorkRow;
 
 export 'package:my_comic/src/models/home_tab.dart';
 
@@ -252,58 +224,6 @@ AdaptiveNavItem homeNavItemFor(HomeTab tab) {
       );
   }
 }
-
-/// 为根 [MacosWindow] 构建 macOS 原生 [Sidebar]。住在根（不在 HomePage 内）才能让
-/// pushed 路由——阅读器、设置详情、对话框——继承 MacosWindowScope 用原生 ToolBar。
-/// 侧栏项由 [activeTabs] 动态生成（与底栏/rail 的 [homeActiveTabs] 同一真值，video /
-/// games 开关变化时自动增删），选中身份走 [homeShellTabNotifier]。
-Sidebar buildMyComicMacosSidebar({required List<HomeTab> activeTabs}) {
-  return Sidebar(
-    minWidth: 220,
-    builder: (BuildContext context, ScrollController scrollController) {
-      final List<AdaptiveNavItem> items = activeTabs
-          .map(homeNavItemFor)
-          .toList();
-      return ValueListenableBuilder<HomeTab>(
-        valueListenable: homeShellTabNotifier,
-        builder: (BuildContext context, HomeTab current, _) {
-          // 当前 tab 若已不在可见列表（刚关掉实验开关仍停在 video），回落到书架，
-          // 避免 SidebarItems.currentIndex 越界。
-          final int currentIndex = activeTabs.contains(current)
-              ? activeTabs.indexOf(current)
-              : 0;
-          return SidebarItems(
-            currentIndex: currentIndex,
-            onChanged: (int i) {
-              if (i >= 0 && i < activeTabs.length) {
-                // 只写共享真值；HomePage 监听它并走 _selectTab（保留 _previousTab /
-                // 焦点环复位语义），再写回，故三处入口同一条路径。
-                homeShellTabNotifier.value = activeTabs[i];
-              }
-            },
-            scrollController: scrollController,
-            items: <SidebarItem>[
-              for (final AdaptiveNavItem item in items)
-                SidebarItem(
-                  leading: MacosIcon(item.selectedIcon ?? item.icon),
-                  label: Text(item.label),
-                ),
-            ],
-          );
-        },
-      );
-    },
-  );
-}
-
-/// 纯函数：顶层同步态 [PopScope] 在收到系统返回时是否应弹「同步进行中」告警。
-///
-/// 仅当**正在同步**且**当前不在设置 tab**时才告警。设置 tab 的返回由它自己的内层
-/// [PopScope]（[HomeSettingsTabContent]）拦截切回来源 tab；但同 route 多 PopScope 的
-/// 回调会被**全部遍历**，故顶层必须按当前 tab 自我收窄，否则设置 tab + 同步同时进行
-/// 时按返回会误弹告警（即使返回已被内层消费、route 未真正 pop）。
-bool shouldWarnOnExit({required bool syncing, required bool isSettingsTab}) =>
-    syncing && !isSettingsTab;
 
 class HomePage extends BasePage {
   const HomePage({super.key});
@@ -835,9 +755,7 @@ class _HomePageState extends BasePageState<HomePage>
       return const SizedBox.shrink();
     }
 
-    final Widget home = HomeSyncExitScope(
-      isSettingsTab: () => _visibleTab == HomeTab.settings,
-      child: Actions(
+    final Widget home = Actions(
         // Desktop gamepad path: the GamepadService dispatches
         // GamepadButtonIntent here (no gameButton* key events on desktop).
         // Resolving it against home/global routes polled controller input
@@ -890,14 +808,6 @@ class _HomePageState extends BasePageState<HomePage>
                   // desktop locked to the nav-rail layout and the phone
                   // (bottom-bar) layout was unreachable however narrow the
                   // real window got dragged.
-                  // macOS-native shell: a real root MacosWindow + Sidebar
-                  // (built in main.dart, Approach B) replaces the self-drawn
-                  // rail/bottom-bar. MacosWindow manages its own breakpoints, so
-                  // HomePage only renders the tab body here — checked before the
-                  // size-class switch.
-                  if (isMacosPlatform(context)) {
-                    return _buildMacosLayout();
-                  }
                   final sizeClass = windowSizeClassReal(
                     constraints.maxWidth,
                     MyComicAppUiScale.of(context),
@@ -912,7 +822,6 @@ class _HomePageState extends BasePageState<HomePage>
             ),
           ),
         ),
-      ),
     );
     // 桌面剪贴板/热键查词不再叠加独立 overlay 页；监听生命周期收窄到查词 tab。
     // 系统窗口材质（Windows 11 Mica / macOS vibrancy）生效时首页外壳 scaffold
@@ -1163,57 +1072,6 @@ class _HomePageState extends BasePageState<HomePage>
   /// 可见 tab 列表对应的导航项（与 [_activeTabs] 顺序一致）。
   List<AdaptiveNavItem> _navItems(List<HomeTab> tabs) =>
       tabs.map(_navItemFor).toList();
-
-  /// macOS-native shell (Approach B): the MacosWindow + Sidebar live at the app
-  /// ROOT (main.dart builder, via [buildMyComicMacosSidebar]) so pushed routes
-  /// also inherit a MacosWindowScope. Here HomePage only renders the visible
-  /// tab's body in a [MacosScaffold] with a native ToolBar titled by the current
-  /// destination. Settings tab reuses the same full-screen two-pane content the
-  /// desktop layout uses (the sidebar IS the destination switcher, so no extra
-  /// back button). Tab identity is [HomeTab]-driven — the dynamic [_activeTabs]
-  /// list (video/games toggles) flows through the same enum, never int.
-  Widget _buildMacosLayout() {
-    _inMobileLayout = false;
-    _shellFabHostedByBar = false;
-    final AdaptiveNavItem currentItem = _navItemFor(_visibleTab);
-    // TODO-1375（症状③）：macOS ToolBar 的 automaticallyImplyLeading 只在
-    // route.canPop 时生成返回键；home（含 settings）是顶层 route、tab 是 IndexedStack
-    // 切换非 route push，故永远 canPop=false、无返回键。设计假设「设置靠根 sidebar 切
-    // 走」，可一旦 sidebar 因任何原因没了，设置 tab 就零出口困死。给设置 tab 一个**不
-    // 依赖 sidebar**的显式返回出口（切回来源 tab），与桌面 _buildDesktopLayout 的
-    // showBackButton:true 对齐——即便 sidebar 缺席也永不困死。
-    final bool showSettingsBack = _visibleTab == HomeTab.settings;
-    return KeyedSubtree(
-      key: myComicMacosNavKey,
-      child: MacosScaffold(
-        toolBar: ToolBar(
-          leading: showSettingsBack
-              ? MacosBackButton(
-                  fillColor: Colors.transparent,
-                  onPressed: () => _selectTab(_previousVisibleTab),
-                )
-              : null,
-          automaticallyImplyLeading: false,
-          title: Text(currentItem.label),
-          titleWidth: 240,
-        ),
-        children: <Widget>[
-          ContentArea(
-            builder: (BuildContext context, ScrollController _) {
-              // MacosWindow provides no Material ink surface, but the page bodies
-              // use Material widgets (InkWell chips, list tiles). A transparent
-              // Material gives them the required ancestor without painting over
-              // the native window background.
-              return Material(
-                type: MaterialType.transparency,
-                child: buildBody(),
-              );
-            },
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildDesktopLayout(WindowSizeClass sizeClass) {
     _inMobileLayout = false;
@@ -1599,16 +1457,6 @@ class _HomePageState extends BasePageState<HomePage>
   }
 }
 
-/// 设置 tab 的内容外壳：用 [PopScope] 拦截系统返回键（Android 硬件返回 / 手势返回），
-/// 消费后切回来源 tab（[onReturnToPreviousTab]）而不是让事件冒泡到 home 顶层
-/// [PopScope] 退出 app（BUG-236）。注意：同 route 多个 PopScope 的回调会被**全部
-/// 遍历**、popDisposition 按 OR 聚合（任一 canPop:false 即不真正 pop），没有「内层先收
-/// 到」的顺序保证；故顶层同步 PopScope 在设置 tab 上也会触发，需按当前 tab 自我收窄
-/// （见 [shouldWarnOnExit]，TODO-698）。非设置 tab 不构造此 widget，仍走顶层 PopScope
-/// 的正常退出/同步告警逻辑。
-///
-/// 设置内容默认是 [MyComicSettingsContent]；[child] 仅供 widget 测试注入轻量占位以独立
-/// 验证 PopScope 拦截行为（生产路径始终用默认值）。
 /// 玻璃设计系统下首页内容区的实色底。系统窗口材质（Windows 11 Mica / macOS
 /// vibrancy）生效时外壳 scaffold 是半透明的（见 [_HomePageState.build] 的
 /// Theme 包装）——Apple 26 只让导航层（侧栏 / 标签栏）透出背后，内容层永远
@@ -1751,120 +1599,6 @@ class HomeSettingsTabContent extends StatelessWidget {
   }
 }
 
-/// 首页顶层的「同步进行中」退出拦截：同步在跑时把系统返回拦下来，问用户要不要
-/// 丢下同步退出。
-///
-/// 同 route 上**所有** [PopScope] 的回调都会被遍历（didPop=false）——只要任何一个
-/// 内层 PopScope 拦了返回（设置 tab 切回来源 tab、查词页有查询时清查询、弹窗栈
-/// 逐层关），这里的回调也会被调用，与同步是否在跑**无关**。所以回调里必须再判一次
-/// [syncing] 的**当前值**（BUG-3305）：原实现只按设置 tab 收窄、没判 syncing，查词页
-/// 有查询时侧滑返回 → 查词页 PopScope 拦下清查询 → 这里照样弹「同步进行中」，
-/// 哪怕同步全关。判据收口在纯函数 [shouldWarnOnExit]。
-class HomeSyncExitScope extends StatelessWidget {
-  const HomeSyncExitScope({
-    required this.isSettingsTab,
-    required this.child,
-    this.syncing,
-    super.key,
-  });
-
-  /// 回调触发那一刻是否在设置 tab（读实时值，不是 build 时的快照）。
-  final bool Function() isSettingsTab;
-  final Widget child;
-
-  /// 在飞同步标志；生产恒为全局 [syncInProgress]，测试注入自己的 notifier。
-  final ValueListenable<bool>? syncing;
-
-  @override
-  Widget build(BuildContext context) {
-    final ValueListenable<bool> source =
-        syncing ?? const _FalseListenable();
-    return ValueListenableBuilder<bool>(
-      valueListenable: source,
-      child: child,
-      builder: (BuildContext context, bool active, Widget? child) => PopScope(
-        canPop: !active,
-        onPopInvokedWithResult: (bool didPop, Object? _) async {
-          if (didPop) return;
-          if (!shouldWarnOnExit(
-            syncing: source.value,
-            isSettingsTab: isSettingsTab(),
-          )) {
-            return;
-          }
-          final bool? confirmed = await showAppDialog<bool>(
-            context: context,
-            builder: (BuildContext ctx) => _SyncExitWarningDialog(
-              onCancel: () => Navigator.pop(ctx, false),
-              onExit: () => Navigator.pop(ctx, true),
-            ),
-          );
-          if (confirmed == true) {
-            SystemNavigator.pop();
-          }
-        },
-        child: child!,
-      ),
-    );
-  }
-}
-
-class _SyncExitWarningDialog extends StatelessWidget {
-  const _SyncExitWarningDialog({required this.onCancel, required this.onExit});
-
-  final VoidCallback onCancel;
-  final VoidCallback onExit;
-
-  @override
-  Widget build(BuildContext context) {
-    final MyComicDesignTokens tokens = MyComicDesignTokens.of(context);
-    final ColorScheme colors = Theme.of(context).colorScheme;
-    final TextTheme textTheme = Theme.of(context).textTheme;
-
-    return MyComicDialogFrame(
-      maxWidth: 380,
-      padding: EdgeInsets.all(tokens.spacing.card + 4),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Text(
-            t.sync_exit_warning_title,
-            style: textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          SizedBox(height: tokens.spacing.gap + 4),
-          Text(
-            t.sync_exit_warning,
-            style: textTheme.bodyMedium?.copyWith(
-              color: colors.onSurfaceVariant,
-            ),
-          ),
-          SizedBox(height: tokens.spacing.card + tokens.spacing.gap),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: <Widget>[
-              adaptiveDialogAction(
-                context: context,
-                onPressed: onCancel,
-                child: Text(t.dialog_cancel),
-              ),
-              SizedBox(width: tokens.spacing.gap),
-              adaptiveDialogAction(
-                context: context,
-                isDestructiveAction: true,
-                onPressed: onExit,
-                child: Text(t.dialog_exit),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 /// 发现条目在本地库里的落点：metadata work（若有）与可播的合集 id。
 ///
 /// 存在的理由是消掉「在库判据」与「播什么」两套解析 —— 见
@@ -1919,18 +1653,4 @@ class _HomeShellActionsSlot extends MyComicShellActionsSlot {
       ],
     );
   }
-}
-
-/// 恒为 false 的 [ValueListenable]：my-comic 已无同步功能，退出提示恒不触发。
-class _FalseListenable implements ValueListenable<bool> {
-  const _FalseListenable();
-
-  @override
-  bool get value => false;
-
-  @override
-  void addListener(VoidCallback listener) {}
-
-  @override
-  void removeListener(VoidCallback listener) {}
 }

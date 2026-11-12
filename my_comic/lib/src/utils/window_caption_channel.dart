@@ -2,8 +2,6 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-import 'package:macos_ui/macos_ui.dart'
-    show NSVisualEffectViewMaterial, WindowManipulator;
 
 /// 把标题栏配色推给 Windows 原生 runner（DWM caption / text color）。
 ///
@@ -16,12 +14,6 @@ class WindowCaptionChannel {
 
   static int? _lastCaption;
   static int? _lastText;
-
-  /// macOS 启动时先隐藏 nib 自动显示的主窗口，首帧就绪后再显示。
-  static Future<void> showStartupWindow() async {
-    if (!Platform.isMacOS) return;
-    await _channel.invokeMethod<void>('showStartupWindow');
-  }
 
   /// Windows 启动时暂缓向 Flutter 子窗口交付中间尺寸。
   /// 调用方必须在 finally 中结束准备，最终尺寸仍经过原生 resize gate。
@@ -61,9 +53,9 @@ class WindowCaptionChannel {
     }
   }
 
-  /// 系统窗口材质（Windows 11 Mica / macOS NSVisualEffectView vibrancy）是否
-  /// 已在窗口上生效。只有它为 true 时，首页外壳才把 scaffold 底色调成半透明让
-  /// 系统材质透出来；Win10 / 旧 runner / 其它平台恒 false，外壳保持实心。
+  /// 系统窗口材质（Windows 11 Mica）是否已在窗口上生效。只有它为 true 时，
+  /// 首页外壳才把 scaffold 底色调成半透明让系统材质透出来；Win10 / 旧 runner
+  /// 恒 false，外壳保持实心。
   static final ValueNotifier<bool> systemBackdropActive =
       ValueNotifier<bool>(false);
 
@@ -71,15 +63,12 @@ class WindowCaptionChannel {
   static bool? _lastDark;
 
   /// 玻璃材质开启时请求系统窗口材质（[mica]），[dark] 决定材质的明暗。
-  /// Windows 走 runner 的 DWM Mica；macOS 走 macos_window_utils 的
-  /// NSVisualEffectView（`underWindowBackground` 是 Apple 给整窗背景的
-  /// vibrancy 材质，关闭时回到不透明的 `windowBackground`）。
   /// 同值不重复下发；结果写进 [systemBackdropActive]。
   static Future<void> setSystemBackdrop({
     required bool mica,
     required bool dark,
   }) async {
-    if (!Platform.isWindows && !Platform.isMacOS) {
+    if (!Platform.isWindows) {
       return;
     }
     if (mica == _lastMica && dark == _lastDark) {
@@ -87,13 +76,6 @@ class WindowCaptionChannel {
     }
     _lastMica = mica;
     _lastDark = dark;
-    if (Platform.isMacOS) {
-      systemBackdropActive.value = await _setMacOSBackdrop(
-        vibrancy: mica,
-        dark: dark,
-      );
-      return;
-    }
     bool active = false;
     try {
       active = await _channel.invokeMethod<bool>(
@@ -107,27 +89,6 @@ class WindowCaptionChannel {
       active = false;
     }
     systemBackdropActive.value = active;
-  }
-
-  static Future<bool> _setMacOSBackdrop({
-    required bool vibrancy,
-    required bool dark,
-  }) async {
-    try {
-      // vibrancy 材质跟随窗口外观而不是 app 主题；app 钉了深 / 浅色时把窗口
-      // 外观对齐，否则深色 app 底下会透出浅色材质。
-      await WindowManipulator.overrideMacOSBrightness(dark: dark);
-      await WindowManipulator.setMaterial(
-        vibrancy
-            ? NSVisualEffectViewMaterial.underWindowBackground
-            : NSVisualEffectViewMaterial.windowBackground,
-      );
-      return vibrancy;
-    } on PlatformException {
-      return false;
-    } on MissingPluginException {
-      return false;
-    }
   }
 
   /// TODO-615：主动熄灭 Windows 任务栏的「请求注意」高亮（FlashWindowEx +
@@ -163,8 +124,7 @@ class WindowCaptionChannel {
   /// （主题 surface 色；浅色主题下就是用户看到的「全屏/取消全屏闪一帧白色」）。
   /// runner 侧改为保留边框、把窗口放大到客户区恰好盖满显示器（边框悬屏外）+
   /// TOPMOST 盖任务栏，与最大化同路径，实测不露表面；过渡瞬间还会把当前画面
-  /// 快照垫进表面兜底。仅 Windows 生效，其它平台 no-op（macOS 走
-  /// WindowManipulator、Linux 仍走 window_manager）。
+  /// 快照垫进表面兜底。仅 Windows 生效，其它平台 no-op。
   static Future<void> setFullscreen(bool fullscreen) async {
     if (!Platform.isWindows) {
       return;

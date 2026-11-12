@@ -5,7 +5,7 @@
 // `tool/test_flow/pre_push_selection.dart` 里的默认整批守卫，扫的是 Dart 源码树，
 // 目录枚举、自动纳入新文件，所以「整批跑」就够了。真正会漏的是另一半：
 // **读 native / 非 Dart 树的守卫**（`my_comic/windows`、`my_comic/android`、
-// `packages/*/windows`、`native/`、`tools/browser-extension`、`.github/workflows`、
+// `packages/*/windows`、`tools/browser-extension`、`.github/workflows`、
 // `third_party/` …）。它们的触发面不在 Dart 树里，整批清单抓不到，于是文档里
 // 长期挂着一份**手写的 9 个测试名**当「按触发条件加跑」清单。
 //
@@ -100,7 +100,7 @@ const List<String> kDefaultBatchCoveredGlobs = <String>[
 class RepoFs {
   RepoFs(this.root);
 
-  /// 仓库根目录（含 `my_comic/pubspec.yaml` 与 `native/`）。
+  /// 仓库根目录（含 `my_comic/pubspec.yaml` 与 `packages/`）。
   final Directory root;
 
   final Map<RepoPath, bool> _existsCache = <RepoPath, bool>{};
@@ -157,18 +157,18 @@ class RepoFs {
       .toSet();
 }
 
-/// 从 [start] 起向上找仓库根：以 `my_comic/pubspec.yaml` + `native/` 同时存在为准。
+/// 从 [start] 起向上找仓库根：以 `my_comic/pubspec.yaml` + `packages/` 同时存在为准。
 Directory locateRepoRoot(Directory start) {
   Directory dir = start.absolute;
   for (int depth = 0; depth < 12; depth++) {
     final bool hasApp = File('${dir.path}/my_comic/pubspec.yaml').existsSync();
-    final bool hasNative = Directory('${dir.path}/native').existsSync();
-    if (hasApp && hasNative) return dir;
+    final bool hasPackages = Directory('${dir.path}/packages').existsSync();
+    if (hasApp && hasPackages) return dir;
     final Directory parent = dir.parent;
     if (parent.path == dir.path) break;
     dir = parent;
   }
-  throw StateError('定位不到仓库根（找不到 my_comic/pubspec.yaml + native/）：'
+  throw StateError('定位不到仓库根（找不到 my_comic/pubspec.yaml + packages/）：'
       '${start.absolute.path}');
 }
 
@@ -181,7 +181,7 @@ Directory locateRepoRoot(Directory start) {
 /// 4. 都不成时，给各级后缀补 `my_comic/` 前缀再走一遍（测试 cwd 是 `my_comic/`）。
 ///
 /// 第 3 步不是可有可无的收尾，它兜住三类实测漏网：
-/// - 指向**构建产物**的路径（`native/galgame_hook/dist` 磁盘上不存在）；
+/// - 指向**构建产物**的路径（`my_comic/build/...` 磁盘上不存在）；
 /// - 注释里的**省略写法**（`packages/flutter_inappwebview_windows/.../x.cpp`）；
 /// - 被删/被改名的叶子文件。
 /// 三类都属于「这个测试确实关心那棵树」，退到最近祖先是正确的过度触发。

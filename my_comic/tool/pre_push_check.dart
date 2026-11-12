@@ -561,6 +561,27 @@ Future<void> main(List<String> args) async {
       ..addAll(await testLane())
       ..addAll(await analyzeLane());
   }
+
+  // CI gates (main.yml audit-scanners): run the same two scanners locally so a
+  // green pre-push cannot be followed by a red residual-scan job. Both are
+  // read-only and seconds-fast, so they run regardless of --skip-analyze.
+  steps.add(await _timed('Fushi reference scanner', () async {
+    final int code = await _stream(
+      dart,
+      <String>['tool/audit/fushi_references.dart', '--fail-on-violations'],
+      root,
+    );
+    return (code == 0, 'exit $code');
+  }));
+  steps.add(await _timed('unused l10n key scanner', () async {
+    final int code = await _stream(
+      dart,
+      <String>['tool/audit/unused_l10n_keys.dart', '--fail-if-unused'],
+      root,
+    );
+    return (code == 0, 'exit $code');
+  }));
+
   _report(steps, gateNotes: gate.notes);
 }
 

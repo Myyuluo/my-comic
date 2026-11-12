@@ -12,7 +12,7 @@
 # my-comic is Windows-only. The per-package native artifacts for the deleted
 # my_comic_p2p / my_comic_srs / my_comic_anki_sync / my_comicdicts / my_comic_aacs / my_comic_torrent
 # domains were removed together with those packages/engine subdomains; the only
-# remaining native artifacts are the Mihon desktop runtime and the galgame helper.
+# remaining native artifact is the Mihon desktop runtime.
 #
 # A name encodes every input of the build:
 #   * source: `git ls-tree -r HEAD` of the input paths (blob ids of COMMITTED content).
@@ -55,7 +55,6 @@ tree_hash() {
 }
 
 MIHON=(third_party/m_extension_server third_party/jogamp tool/mihon)
-GALGAME=(native/galgame_hook)
 
 names=()
 case "$platform" in
@@ -63,7 +62,6 @@ case "$platform" in
     names+=(
       # Mihon runtime: JDK and server commit are pinned inside tool/mihon; no image input.
       "mihon=win-x64-mihon-runtime-v2-$(tree_hash "" "${MIHON[@]}")"
-      "galgame=win-galgame-helper-dist-v2-$image-$(tree_hash "$toolchain_env" "${GALGAME[@]}")"
     )
     ;;
   *)

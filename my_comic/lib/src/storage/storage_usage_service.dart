@@ -32,7 +32,7 @@ final RegExp _backupArchiveNamePattern =
 /// 类目清单是 [kStorageCategoryContentRootChildren] 的**全覆盖分组**：Content root
 /// 下白名单顶层目录每一个都归属且只归属一个类目（守卫见
 /// `storage_usage_service_test.dart`），Program state root 整体归「数据库与内部
-/// 数据」，其中 OCR 模型子目录单独拆出（它是唯一可删可恢复的 state 子项）。
+/// 数据」。
 ///
 /// 每个类目都出明细：书籍/词典的条目来自 DB（有标题、接既有删除原语），其余
 /// 类目的条目就是类目根下的直接子项（`_childEntriesSync`，只读展示）。
@@ -77,9 +77,6 @@ enum StorageCategoryId {
   /// 数据库与内部数据：support 根的直接子项减去 OCR 模型子目录（主库
   /// `my_comic.db`、本地发音库副本 `local_audio_*.db` 等都在明细里）。
   database,
-
-  /// 漫画 OCR 模型：`<support>/ocr_models`（可删可恢复）。
-  ocrModels,
 
   /// BUG-1905：缓存与临时文件。
   ///
@@ -169,7 +166,6 @@ const Set<StorageCategoryId> kDeletableEntryCategories = <StorageCategoryId>{
   StorageCategoryId.covers,
   StorageCategoryId.web,
   StorageCategoryId.exports,
-  StorageCategoryId.ocrModels,
   StorageCategoryId.shaders,
   StorageCategoryId.cache,
   StorageCategoryId.backups,
@@ -502,7 +498,6 @@ const Map<StorageCategoryId, List<String>> kStorageCategoryContentRootChildren =
         // 每一份备份都恢复不全，清理只能走备份页的保留策略 / 逐份删除（会回收无引用媒体）。
         'srs_backups',
       ],
-      StorageCategoryId.ocrModels: <String>[],
     };
 
 /// [kStorageCategoryContentRootChildren] 的全部顶层目录名并集。
@@ -513,10 +508,6 @@ final Set<String> kStorageCategoryContentRootEntries = <String>{
   for (final List<String> children in kStorageCategoryContentRootChildren.values)
     ...children,
 };
-
-/// `<state>/ocr_models`（[StorageCategoryId.ocrModels] 的根；
-/// 各本机模型落在它下面的兄弟目录，见 `MangaOcrLocalModel.modelsDirectory`）。
-const String kOcrModelsStateChild = 'ocr_models';
 
 /// 同步递归求目录字节数（isolate 入口；每个 entry 单独容错——扫描中途被删/
 /// 无权限的文件跳过不炸整树）。
@@ -661,10 +652,6 @@ class StorageUsageService {
           );
         case StorageCategoryId.database:
           yield await _scanDatabase(support, docs);
-        case StorageCategoryId.ocrModels:
-          yield await _scanGeneric(id, <String>[
-            p.join(support.path, kOcrModelsStateChild),
-          ]);
         case StorageCategoryId.cache || StorageCategoryId.backups:
           // 两个类目住在**同一棵**缓存/临时树上，扫一次再按谓词分流。各扫各的就是
           // 起两个 isolate、把整棵树递归 stat 两遍——iOS 上 `Library/Caches` + 沙盒
@@ -917,8 +904,8 @@ class StorageUsageService {
     final Directory support,
     final Directory docs,
   ) async {
-    // support 根的直接子项，减去 OCR 模型子目录（后者单列一类）。明细里因此
-    // 能看到主库 `my_comic.db`、本地发音库副本 `local_audio_*.db` 等具体大件。
+    // support 根的直接子项。明细里能看到主库 `my_comic.db`、本地发音库副本
+    // `local_audio_*.db` 等具体大件。
     //
     // BUG-1870：主库快照残留（`my_comic.db.corrupt-bak-<stamp>.db*` 等）
     // 不再逐个按原始文件名铺开，
@@ -955,10 +942,7 @@ class StorageUsageService {
           ...localState.entries,
           ..._childEntries(
             raw,
-            excludePaths: <String>{
-              p.join(support.path, kOcrModelsStateChild),
-              ...snapshotPaths,
-            },
+            excludePaths: <String>{...snapshotPaths},
           ),
           if (snapshots.isNotEmpty)
             StorageEntryUsage(

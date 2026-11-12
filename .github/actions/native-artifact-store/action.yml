@@ -1,7 +1,7 @@
 name: Native artifact store
 description: >-
-  Durable, input-addressed store for native build outputs (libtorrent / my_comic_p2p DLLs,
-  galgame helper archives, Mihon runtime, mycomic-anki-sync). `mode: restore` looks for a
+  Durable, input-addressed store for native build outputs (currently the Mihon desktop
+  runtime). `mode: restore` looks for a
   non-expired workflow artifact whose name is exactly `name` and that a trusted run
   produced, verifies it, and unpacks it into `path` (output `hit`). `mode: save` uploads
   `path` (file or directory) under `name`. A miss never fails: the caller builds.
@@ -11,9 +11,8 @@ description: >-
 # turns over in about an hour (oldest entry 16:16, listing at 17:24; a Windows vcpkg
 # binary entry saved at 15:27 was already gone at 15:52). Linux-gradle entries of
 # 1.7 GB per PR ref dominate the churn. So the small, expensive Windows entries were
-# evicted before the next run could read them: libtorrent (vcpkg cold build, 20-27 min)
-# missed in 22 of 37 release-desktop windows jobs and 15 of 18 PR windows jobs; the
-# galgame helper (~7 min) and Mihon runtime (~3.3 min) missed in most of them too.
+# evicted before the next run could read them: the Mihon runtime (~3.3 min) missed in
+# most release-desktop and PR windows jobs.
 # Workflow artifacts are not part of that quota, have fixed retention, and are free on
 # a public repo, so an entry stays readable until it expires instead of until the next
 # burst of Gradle saves.
@@ -28,9 +27,8 @@ description: >-
 # toolchain pin); callers compute it once before anything is built. The payload ships
 # with a SHA256SUMS manifest that is verified before anything is copied into `path`.
 #
-# Not a TODO-416 repeat (ffmpeg fetched from another workflow's artifact, silently
-# missing once it expired): here an expired or absent artifact is just a miss and the
-# job rebuilds from source exactly as it did before the store existed.
+# An expired or absent artifact is just a miss and the job rebuilds from source exactly
+# as it did before the store existed.
 inputs:
   mode:
     description: restore | save

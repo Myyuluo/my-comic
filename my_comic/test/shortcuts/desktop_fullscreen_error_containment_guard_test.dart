@@ -6,7 +6,7 @@
 ///
 /// 但 async 函数里 `return <future>;` **不会**被外层 try/catch 收住：try 块在该
 /// future 完成之前就已经退出了，只有 `return await <future>;` 才会。历史上
-/// Linux / macOS 两个分支正是裸 return，于是：
+/// Linux 分支正是裸 return，于是：
 ///
 ///   - Windows（分支里有 await）：channel 缺失 → TypeError 被 catch → 返回 null，
 ///     漫画页照常渲染，本机测试恒绿；
@@ -43,10 +43,10 @@ void main() {
         reason: '锚点函数不见了——守卫失去判据，请跟着改名更新',
       );
       expect(
-        RegExp(r'return\s+await\s+(windowManager|WindowManipulator)\.')
+        RegExp(r'return\s+await\s+windowManager\.')
             .allMatches(source)
             .length,
-        greaterThanOrEqualTo(3),
+        greaterThanOrEqualTo(2),
         reason: '这些分支本来就该直接返回原生读数，一条都没有说明结构已经变了',
       );
 

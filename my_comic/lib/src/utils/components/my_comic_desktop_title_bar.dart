@@ -8,8 +8,6 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:my_comic/i18n/strings.g.dart';
 
-import 'package:my_comic/src/platform/desktop/macos_traffic_lights.dart';
-import 'package:my_comic/src/platform/macos_fullscreen_state.dart';
 import 'package:my_comic/src/utils/adaptive/adaptive_platform.dart'
     show isEinkTheme, isGlassDesign;
 import 'package:my_comic/src/utils/components/my_comic_design_tokens.dart';
@@ -58,11 +56,9 @@ class MyComicDesktopTitleBar extends StatefulWidget {
   /// reads it to decide whether the settings tab still needs its own
   /// full-screen shell with a back arrow.
   ///
-  /// Deliberately a startup latch and **not** a
-  /// `Platform.isWindows || Platform.isMacOS` expression: widget tests never run
-  /// `main()`, so a platform-derived value would make the Windows/macOS dev host
-  /// and the Linux CI host take different layout branches for the very same
-  /// test.
+  /// Deliberately a startup latch and **not** a platform expression: widget
+  /// tests never run `main()`, so a platform-derived value would make the Windows
+  /// dev host take a different layout branch than the test host.
   static bool get isEnabled => _isEnabled;
 
   /// Latched exactly once from `main()` after the hidden title bar is applied.
@@ -92,15 +88,6 @@ class MyComicDesktopTitleBar extends StatefulWidget {
         : _contentFullscreenOwners.remove(owner);
     if (!changed) return;
     _contentFullscreen.value = _contentFullscreenOwners.isNotEmpty;
-    reassertMacTrafficLights();
-  }
-
-  /// macOS 原生红绿灯的显隐真值：顶栏在时显示（任何设计系统都用系统红绿灯，
-  /// 用户 2026-10-04），内容全屏收起顶栏时隐藏（否则三个圆点浮在视频 / 阅读
-  /// 内容左上角，BUG-973）。AppKit 进出原生全屏会重建标题栏视图、复位
-  /// `isHidden`，所以退出全屏后调用方要再断言一次。非 macOS no-op。
-  static void reassertMacTrafficLights() {
-    unawaited(setMacOSTrafficLightsHidden(_contentFullscreen.value));
   }
 
   /// Keep the app frame in sync with the fullscreen state owned by
@@ -226,45 +213,14 @@ class _MyComicDesktopTitleBarState extends State<MyComicDesktopTitleBar>
   /// 同一语义），颜色仍全部取主题。
   bool _isFocused = true;
 
-  /// macOS 原生全屏的 chrome 所有者（与 window_manager 那个所有者并列，互不覆盖）。
-  final Object _macosNativeFullscreenOwner = Object();
-
   @override
   void initState() {
     super.initState();
     windowManager.addListener(this);
-    if (Platform.isMacOS) {
-      // macOS 上 window_manager 的 [WindowListener] 收不到全屏通知：
-      // macos_window_utils 持有 NSWindow.delegate 并把它的 delegate 覆盖掉。
-      // [MacosFullscreenState] 挂的是 NSWindowDelegate，AppKit 在**所有**入口
-      // （快捷键 / 「显示」菜单 / 系统全屏手势）上都发，是唯一能覆盖全部路径的信号。
-      MacosFullscreenState.instance.isFullscreen.addListener(
-        _onMacosFullscreenChanged,
-      );
-      unawaited(MacosFullscreenState.instance.ensureRegistered());
-      _onMacosFullscreenChanged();
-    }
     // Windows 11 贴靠布局：最大化按钮的点击可能由原生命中区回传
     // （caption_snap_button.h），与 Flutter 侧点击走同一个处理。
     WindowCaptionChannel.onCaptionMaxButtonClick = _toggleMaximize;
     unawaited(_readInitialWindowState());
-  }
-
-  /// macOS 原生全屏时收起自绘顶栏（全屏下窗口既不能拖也不能缩放，留着就是一条
-  /// 纯浪费的横带），退出全屏再把它挂回来。
-  ///
-  /// 顺带重申交通灯隐藏：`toggleFullScreen` 会重建标题栏视图，可能把
-  /// `standardWindowButton.isHidden` 复位——复位后三个圆点会浮在 Flutter 内容
-  /// 左上角，正好压住自绘顶栏的标题（BUG-973 同一根因）。
-  void _onMacosFullscreenChanged() {
-    final bool fullscreen = MacosFullscreenState.instance.isFullscreen.value;
-    MyComicDesktopTitleBar.setContentFullscreen(
-      owner: _macosNativeFullscreenOwner,
-      enabled: fullscreen,
-    );
-    if (!fullscreen) {
-      MyComicDesktopTitleBar.reassertMacTrafficLights();
-    }
   }
 
   Future<void> _readInitialWindowState() async {
@@ -290,15 +246,6 @@ class _MyComicDesktopTitleBarState extends State<MyComicDesktopTitleBar>
     windowManager.removeListener(this);
     if (WindowCaptionChannel.onCaptionMaxButtonClick == _toggleMaximize) {
       WindowCaptionChannel.onCaptionMaxButtonClick = null;
-    }
-    if (Platform.isMacOS) {
-      MacosFullscreenState.instance.isFullscreen.removeListener(
-        _onMacosFullscreenChanged,
-      );
-      MyComicDesktopTitleBar.setContentFullscreen(
-        owner: _macosNativeFullscreenOwner,
-        enabled: false,
-      );
     }
     super.dispose();
   }
@@ -484,9 +431,6 @@ class _MyComicDesktopTitleBarState extends State<MyComicDesktopTitleBar>
     final Color captionFill = page == null
         ? Colors.transparent
         : Color.alphaBlend(page.background, colors.surface);
-    // 窗口按钮按平台而不是按设计系统（用户 2026-10-04）：macOS 一律用系统原生
-    // 红绿灯（左上角，顶栏只给它们留位），Windows / Linux 一律是 MD3 那组按钮。
-    final bool trafficLights = Platform.isMacOS;
     return Container(
       height: MyComicDesktopTitleBar.height,
       color: captionFill,
@@ -498,13 +442,13 @@ class _MyComicDesktopTitleBarState extends State<MyComicDesktopTitleBar>
         children: <Widget>[
           // 透明标题行浮在页面背景（如详情页 fanart）上时，窗口按钮背后垫一团
           // 无硬边的柔光保证可读：右上角起的径向渐变，压扁成椭圆，边缘处
-          // 不透明度已降到 0。只给 Windows 那组按钮（macOS 红绿灯是系统画的）。
+          // 不透明度已降到 0。
           //
           // M3E 按钮组自己有一枚半透明 tonal 胶囊，柔光只负责让胶囊四周的
           // 背景过渡柔和、不出硬边：峰值比旧版低、渐隐半径更大，胶囊整枚落在
           // 最浓的那一段里。墨水屏不画（降级为胶囊描边，无填色）。
           // Apple 设计系统没有胶囊，柔光直接托住扁平字形的可读性。
-          if (page == null && !trafficLights && !isEinkTheme(context))
+          if (page == null && !isEinkTheme(context))
             Positioned(
               top: 0,
               right: 0,
@@ -543,17 +487,15 @@ class _MyComicDesktopTitleBarState extends State<MyComicDesktopTitleBar>
                 ? const SizedBox.shrink()
                 : MyComicTitleBarBackdropView(backdrop: backdrop),
           ),
-          _buildCaptionControls(trafficLights, page),
+          _buildCaptionControls(page),
         ],
       ),
     );
   }
 
-  Widget _buildCaptionControls(bool trafficLights, MyComicTitleBarColors? page) {
+  Widget _buildCaptionControls(MyComicTitleBarColors? page) {
     return Row(
       children: <Widget>[
-        // 系统红绿灯画在原生标题栏视图里，浮在这块留位之上。
-        if (trafficLights) const SizedBox(width: _kTrafficLightsReserve),
         Expanded(
           child: DragToMoveArea(
             // 拖动区必须撑满整条标题栏高度：去掉标题文字后 Row 里只剩无高度的
@@ -562,14 +504,7 @@ class _MyComicDesktopTitleBarState extends State<MyComicDesktopTitleBar>
             child: SizedBox.expand(
               child: Row(
                 children: <Widget>[
-                  SizedBox(
-                    width: trafficLights
-                        ? math.max(
-                            0,
-                            widget.leadingInset - _kTrafficLightsReserve,
-                          )
-                        : widget.leadingInset,
-                  ),
+                  SizedBox(width: widget.leadingInset),
                   // 顶部控制条只做拖动区 + 窗口按钮，不显示页面标题（用户
                   // 2026-10-04）；页面自己的大标题 / 顶栏负责标题。[title] 仍
                   // 保留在参数里，供无障碍窗口名等后续用途。
@@ -579,59 +514,53 @@ class _MyComicDesktopTitleBarState extends State<MyComicDesktopTitleBar>
             ),
           ),
         ),
-        if (!trafficLights) ...<Widget>[
-          // M3E 窗口按钮组：三枚小号 standard 图标按钮收进一枚 tonal 胶囊；
-          // 右缘与页面浮动页头的动作组同一条页边（[MyComicSpacingTokens.page]），
-          // 竖直方向在 32 高的标题行里居中。
-          _MyComicCaptionButtonGroup(
-            page: page,
-            active: _isFocused,
-            children: <Widget>[
-              _MyComicCaptionButton(
-                glyph: _CaptionGlyph.minimize,
-                page: page,
-                active: _isFocused,
-                onPressed: _minimize,
-              ),
-              _MyComicCaptionButton(
-                glyph: _CaptionGlyph.maximize,
-                maximized: _isMaximized,
-                // 只有 Windows runner 认 HTMAXBUTTON 命中区（贴靠布局）。
-                snapLayouts: Platform.isWindows,
-                page: page,
-                active: _isFocused,
-                onPressed: _toggleMaximize,
-              ),
-              _MyComicCaptionButton(
-                key: MyComicDesktopTitleBar.closeButtonKey,
-                glyph: _CaptionGlyph.close,
-                page: page,
-                active: _isFocused,
-                onPressed: _close,
-              ),
-            ],
-          ),
-          // 组右侧的页边留白仍是拖动区（右上角另有顶边 resize 把手）。
-          DragToMoveArea(
-            child: SizedBox(
-              width: MyComicDesignTokens.of(context).spacing.page,
-              height: MyComicDesktopTitleBar.height,
+        // M3E 窗口按钮组：三枚小号 standard 图标按钮收进一枚 tonal 胶囊；
+        // 右缘与页面浮动页头的动作组同一条页边（[MyComicSpacingTokens.page]），
+        // 竖直方向在 32 高的标题行里居中。
+        _MyComicCaptionButtonGroup(
+          page: page,
+          active: _isFocused,
+          children: <Widget>[
+            _MyComicCaptionButton(
+              glyph: _CaptionGlyph.minimize,
+              page: page,
+              active: _isFocused,
+              onPressed: _minimize,
             ),
+            _MyComicCaptionButton(
+              glyph: _CaptionGlyph.maximize,
+              maximized: _isMaximized,
+              // 只有 Windows runner 认 HTMAXBUTTON 命中区（贴靠布局）。
+              snapLayouts: Platform.isWindows,
+              page: page,
+              active: _isFocused,
+              onPressed: _toggleMaximize,
+            ),
+            _MyComicCaptionButton(
+              key: MyComicDesktopTitleBar.closeButtonKey,
+              glyph: _CaptionGlyph.close,
+              page: page,
+              active: _isFocused,
+              onPressed: _close,
+            ),
+          ],
+        ),
+        // 组右侧的页边留白仍是拖动区（右上角另有顶边 resize 把手）。
+        DragToMoveArea(
+          child: SizedBox(
+            width: MyComicDesignTokens.of(context).spacing.page,
+            height: MyComicDesktopTitleBar.height,
           ),
-        ],
+        ),
       ],
     );
   }
 
   /// 哪些边由 app 自己转发拖拽给原生「开始改变窗口大小」。
   ///
-  /// macOS 恒为空表：`window_manager` 的 macOS 插件根本没有 `startResizing`
-  /// （只有 Windows/Linux 实现），挂上去点一下就是 `MissingPluginException`；
-  /// 而 AppKit 在 full-size content view 下仍然自己拥有窗口四边的 resize 边框，
-  /// 本来就不需要 app 代劳。Windows 侧维持原状：全屏无命中区、最大化时禁用，
-  /// 其余只接管顶边三段（左右下三边由 runner 的非客户区命中测试处理）。
+  /// 全屏无命中区、最大化时禁用，其余只接管顶边三段（左右下三边由 runner 的
+  /// 非客户区命中测试处理）。
   List<ResizeEdge> _resizeEdges({required bool hideFrame}) {
-    if (Platform.isMacOS) return const <ResizeEdge>[];
     if (hideFrame || _isMaximized) return const <ResizeEdge>[];
     return const <ResizeEdge>[
       ResizeEdge.topLeft,
@@ -1376,6 +1305,3 @@ class _MyComicTitleBarColorScopeState extends State<MyComicTitleBarColorScope> {
 
 /// 透明标题行上窗口按钮背后柔光的半径（压扁前；见 [_buildCaptionRow]）。
 const double _kCaptionHaloExtent = 280;
-
-/// macOS 系统红绿灯占位宽度（三枚按钮 + 左右边距，与 AppKit 标准标题栏一致）。
-const double _kTrafficLightsReserve = 78;
