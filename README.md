@@ -2,9 +2,9 @@
 
 # MyComic
 
-**A Mihon-compatible manga reader for Windows.**
+**Mihon 兼容的 Windows 桌面漫画阅读器。**
 
-[English](README.md) | [简体中文](README.zh-CN.md)
+[English](README.md) | **简体中文**
 
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078D4)
 ![License](https://img.shields.io/badge/license-GPLv3-blue)
@@ -12,89 +12,89 @@
 
 </div>
 
-MyComic is an independent Windows desktop manga reader based on the frozen Fushi v3.0.0 snapshot (GPL-3.0); it is not affiliated with or endorsed by the Fushi or Mihon projects.
+MyComic 是一个独立的 Windows 桌面漫画阅读器，基于 Fushi v3.0.0（GPL-3.0）快照；它与 Fushi、Mihon 项目没有隶属关系，也未获得其背书。
 
-## Features
+## 功能
 
-- **Library** — keep manga on your shelf, organize them with tags, search and filter, and continue where you left off.
-- **Manga pages and global search** — browse details, chapter lists and source genres, and search every enabled online source from one place.
-- **Reader** — spread, vertical-page and webtoon reading modes with per-series preferences, reading progress and history.
-- **Online sources** — browse, search and read through Mihon extensions installed from extension stores.
-- **Downloads** — download chapters for offline reading, saved as CBZ archives by default (plain folders are also supported), with pause, resume, retry and cancel controls.
-- **Local source** — read manga folders and CBZ files in place from your Content root without importing or copying them.
-- **History** — one entry per series with the last-read chapter and cover.
-- **Backup** — import and export Mihon-compatible `.tachibk` backups.
-- **Four interface languages** — English, 简体中文, 繁體中文, 日本語; the interface follows the system language and falls back to English.
-- **Onboarding** — a three-step guide for language, theme and Content root, reopenable from Settings.
+- **书架**：把漫画加入书架，用标签整理，搜索与筛选，并从上次的位置继续阅读。
+- **作品页与全局搜索**：查看作品详情、章节列表与源分类，并在一个入口搜索所有已启用的在线图源。
+- **阅读器**：支持跨页、竖排分页与条漫（Webtoon）阅读模式，按作品保存阅读偏好、阅读进度与历史。
+- **在线图源**：通过从扩展仓库安装的 Mihon 扩展浏览、搜索和阅读。
+- **下载**：下载章节以供离线阅读，默认保存为 CBZ 压缩包（也支持文件夹），支持暂停、继续、重试与取消。
+- **本地图源**：直接原地读取 Content root 中的漫画文件夹与 CBZ 文件，不导入、不复制。
+- **历史**：每部作品一条记录，显示最近阅读的章节与封面。
+- **备份**：导入与导出 Mihon 兼容的 `.tachibk` 备份。
+- **四种界面语言**：English、简体中文、繁體中文、日本語；默认跟随系统语言，不支持时回退英语。
+- **新手引导**：三步引导设置界面语言、主题与 Content root，可从设置重新打开。
 
-## Mihon compatibility
+## Mihon 兼容
 
-MyComic is a **Mihon-compatible desktop reader**, not an official Mihon product or a port of the Mihon app:
+MyComic 是 **Mihon 兼容的桌面阅读器**，不是 Mihon 的官方产品，也不是 Mihon 应用的移植：
 
-- It runs **Mihon extensions** through a bundled extension runtime, so you do not need to install Java or run a separate server.
-- It imports and exports **Mihon v0.21.3 `.tachibk` backups**; backup categories map to MyComic tags.
-- Extension behavior is compatible with the frozen Fushi v3.0.0 baseline.
+- 通过随包分发的扩展运行时执行 **Mihon 扩展**，无需安装 Java 或运行独立服务器。
+- 导入与导出 **Mihon v0.21.3 `.tachibk` 备份**；备份中的分类会映射为 MyComic 标签。
+- 扩展行为以冻结的 Fushi v3.0.0 基线为兼容基准。
 
-## Install on Windows
+## 在 Windows 上安装
 
-1. Download the latest `mycomic-<version>-windows-setup.exe` from [GitHub Releases](https://github.com/Myyuluo/my-comic/releases).
-2. Run the installer. It installs to `C:\Program Files\MyComic` (64-bit) and requires administrator rights (UAC).
-3. Start **MyComic** from the Start menu or the desktop shortcut.
+1. 从 [GitHub Releases](https://github.com/Myyuluo/my-comic/releases) 下载最新的 `mycomic-<版本>-windows-setup.exe`。
+2. 运行安装程序。它安装到 `C:\Program Files\MyComic`（64 位），需要管理员权限（UAC）。
+3. 从开始菜单或桌面快捷方式启动 **MyComic**。
 
-Requirements: **Windows 10 or Windows 11 (64-bit)**.
+系统要求：**Windows 10 或 Windows 11（64 位）**。
 
-> Upgrading from an older Fushi-based build: MyComic is a clean break. Uninstall the old application manually before installing MyComic; user data in the Program state root is not migrated. Old `fushi://` deep links and `fushi-` update assets are no longer compatible, so update or reinstall manually once. Downloads, local manga and backups under your Content root (`Documents\MyComic` by default) stay where they are. If you installed an earlier per-user MyComic build, back up `%LOCALAPPDATA%\MyComic\userdata` before uninstalling it; the old uninstaller removes that directory.
+> 从旧版 Fushi 构建升级：MyComic 是一次干净切换。安装 MyComic 前请手动卸载旧应用；Program state root 中的用户数据不会迁移。旧 `fushi://` 深链与旧 `fushi-` 更新资产不再兼容，因此需要手动更新或重装一次。Content root（默认 `Documents\MyComic`）中的下载、本地漫画与备份保持原位。如果你安装过更早的按用户安装版本，卸载前请先备份 `%LOCALAPPDATA%\MyComic\userdata`；旧卸载器会删除该目录。
 
-## Build from source
+## 从源码构建
 
-Prerequisites: Windows 10/11 (64-bit), [Flutter](https://docs.flutter.dev/get-started/install/windows) **3.47.6**, Visual Studio 2022 with the **Desktop development with C++** workload, and Git Bash (used by the dependency patch script). Inno Setup 6 is only needed to compile the installer locally; CI builds the release installer.
+前置条件：Windows 10/11（64 位）、[Flutter](https://docs.flutter.dev/get-started/install/windows) **3.47.6**、带 **使用 C++ 的桌面开发** 工作负载的 Visual Studio 2022，以及 Git Bash（依赖补丁脚本需要）。Inno Setup 6 仅在本地编译安装包时需要；CI 会构建正式安装包。
 
 ```powershell
-# From the repository root: flutter pub get + apply third-party patches
+# 在仓库根目录：flutter pub get + 应用第三方补丁
 .\tool\bootstrap.ps1
 
-# Run the app
+# 运行应用
 cd my_comic
 flutter run -d windows
 
-# Build a release executable
+# 构建 release 可执行文件
 flutter build windows --release
-# Output: my_comic\build\windows\x64\runner\Release\MyComic.exe
+# 产物：my_comic\build\windows\x64\runner\Release\MyComic.exe
 ```
 
-Quality gates used by CI:
+CI 使用的质量门：
 
 ```powershell
 cd my_comic
-dart run slang                 # regenerate localization code
+dart run slang                 # 重新生成国际化代码
 flutter analyze --no-pub
 flutter test --no-pub
 ```
 
-The Melos workspace packages live in `packages/my_comic_*`; vendored patched dependencies live in `third_party/` and are applied by the bootstrap script. The Windows installer definition is `my_comic/windows/installer/mycomic.iss`.
+Melos workspace 包位于 `packages/my_comic_*`；vendored 的补丁依赖位于 `third_party/`，由 bootstrap 脚本应用。Windows 安装器定义在 `my_comic/windows/installer/mycomic.iss`。
 
-## Data and privacy
+## 数据与隐私
 
-- **Content root** — `Documents\MyComic` by default, containing `downloads`, `autobackup` and `local`. It is not removed when you uninstall the app.
-- **Program state** — the database, settings, extensions and caches live next to the installed application. If the install directory is not writable by the current user (for example `C:\Program Files`), MyComic falls back to `%LOCALAPPDATA%\MyComic\userdata`; uninstalling removes them.
-- **No telemetry** — MyComic does not send usage statistics, and it has no accounts, cloud sync, feedback center or leaderboard. Network access happens only when you use online sources or extensions, and update checks query this repository's GitHub Releases.
+- **Content root**：默认 `Documents\MyComic`，包含 `downloads`、`autobackup` 与 `local`。卸载应用不会删除它。
+- **Program state**：数据库、设置、扩展与缓存随安装目录存放；安装目录对当前用户不可写时（例如 `C:\Program Files`），回退到 `%LOCALAPPDATA%\MyComic\userdata`；卸载应用会删除它们。
+- **无遥测**：MyComic 不上报使用统计，也没有账户、云同步、反馈中心或排行榜。只有在你使用在线图源或扩展时才会访问网络；更新检查只查询本仓库的 GitHub Releases。
 
-## Project layout
+## 项目结构
 
 ```
-my_comic/           Flutter application (Dart package `my_comic`)
-packages/           Workspace packages (`my_comic_core`, `my_comic_engine`, ...)
-native/             Native components and Windows integration
-third_party/        Vendored/patch source for dependencies
-ci/                 Dependency patches and CI helpers
-tool/               Bootstrap, audit and developer scripts
-docs/adr/           Architecture decision records
+my_comic/           Flutter 应用（Dart 包名 `my_comic`）
+packages/           workspace 包（`my_comic_core`、`my_comic_engine` 等）
+native/             原生组件与 Windows 集成
+third_party/        依赖的 vendored/补丁源码
+ci/                 依赖补丁与 CI 辅助脚本
+tool/               bootstrap、审计与开发者脚本
+docs/adr/           架构决策记录
 ```
 
-Start with [CLAUDE.md](CLAUDE.md) for repository rules, [GLOSSARY.md](GLOSSARY.md) for domain terms, and [`docs/adr/0024-windows-only-independent-identity.md`](docs/adr/0024-windows-only-independent-identity.md) for the Windows-only, independent-identity decision. Upstream provenance is recorded in [UPSTREAM.md](UPSTREAM.md).
+仓库规则见 [CLAUDE.md](CLAUDE.md)，领域术语见 [GLOSSARY.md](GLOSSARY.md)，Windows-only 与独立身份决策见 [`docs/adr/0024-windows-only-independent-identity.md`](docs/adr/0024-windows-only-independent-identity.md)。上游来源记录见 [UPSTREAM.md](UPSTREAM.md)。
 
-## License
+## 许可证
 
-MyComic is distributed under the **GNU General Public License v3.0**; see [LICENSE](LICENSE) for the full text. Third-party licenses and notices are kept in `third_party/` (including `LICENSE`, `NOTICE` and `PATCHES.md`) and in [`my_comic/docs/licenses/`](my_comic/docs/licenses/).
+MyComic 基于 **GNU General Public License v3.0** 发布；完整文本见 [LICENSE](LICENSE)。第三方许可证与声明保留在 `third_party/`（含 `LICENSE`、`NOTICE` 与 `PATCHES.md`）以及 [`my_comic/docs/licenses/`](my_comic/docs/licenses/)。
 
-Copyright © 2026 Fushi contributors. Copyright © 2026 MyComic contributors.
+版权 © 2026 Fushi 贡献者；版权 © 2026 MyComic 贡献者。
