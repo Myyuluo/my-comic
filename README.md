@@ -30,9 +30,17 @@ MyComic 是一个独立的 Windows 桌面漫画阅读器，基于 Fushi v3.0.0�
 
 <p align="center"><img src="docs/assets/screenshots/03-extensions.png" alt="扩展仓库"></p>
 
-<p align="center"><img src="docs/assets/screenshots/04-reader.png" alt="阅读器"></p>
+<p align="center"><img src="docs/assets/screenshots/04-local-source.png" alt="本地图源"></p>
 
-<p align="center"><img src="docs/assets/screenshots/05-storage-download.png" alt="存储与下载"></p>
+<p align="center"><img src="docs/assets/screenshots/05-reader.png" alt="阅读器"></p>
+
+本应用不提供任何插件以及插件仓库，如有需求，可自行在 GitHub 搜索 [keiyoushi/extensions](https://github.com/keiyoushi/extensions)。
+
+**本地漫画导入方法：**
+
+1. 设置 - 存储与下载 - 存储位置 - 打开文件夹。
+2. 将你拥有的本地漫画存放在 `<local>` 文件夹中，漫画的存放路径为：`local / 漫画名 / 章节.cbz`（章节文件夹）。
+3. 之后通过：浏览 - 本地图源 - 选择你的漫画导入。
 
 ## 功能
 

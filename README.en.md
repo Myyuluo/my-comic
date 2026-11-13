@@ -30,9 +30,17 @@ MyComic is an independent Windows desktop manga reader based on the frozen Fushi
 
 <p align="center"><img src="docs/assets/screenshots/03-extensions.png" alt="Extension repository"></p>
 
-<p align="center"><img src="docs/assets/screenshots/04-reader.png" alt="Reader"></p>
+<p align="center"><img src="docs/assets/screenshots/04-local-source.png" alt="Local source"></p>
 
-<p align="center"><img src="docs/assets/screenshots/05-storage-download.png" alt="Storage and downloads"></p>
+<p align="center"><img src="docs/assets/screenshots/05-reader.png" alt="Reader"></p>
+
+This application does not bundle any extensions or extension repositories. If you need them, search for [keiyoushi/extensions](https://github.com/keiyoushi/extensions) on GitHub.
+
+**Importing local manga:**
+
+1. Go to Settings - Storage & downloads - Storage location - Open folder.
+2. Put your local manga in the `<local>` folder. The layout is `local / manga title / chapter.cbz` (or a chapter folder).
+3. Then go to Browse - Local source and select your manga to import it.
 
 ## Features
 
