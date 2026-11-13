@@ -12,7 +12,7 @@
 
 </div>
 
-## Origin
+## Background
 
 MyComic was born because I read manga with Mihon, and my downloaded manga filled up my phone's storage. I didn't want to delete those downloads, so I wondered whether I could install a PC version of Mihon, restore my backup there, and store the manga on my computer.
 
@@ -21,6 +21,18 @@ But I found that GitHub had no Mihon desktop client that looked good and was eas
 After a lot of thinking and learning, I decided to use AI to build a PC desktop manga reader that fully supports Mihon extensions and backups.
 
 MyComic is an independent Windows desktop manga reader based on the frozen Fushi v3.0.0 snapshot (GPL-3.0); it is not affiliated with or endorsed by the Fushi or Mihon projects.
+
+## Screenshots
+
+<p align="center"><img src="docs/assets/screenshots/01-library.png" alt="Library"></p>
+
+<p align="center"><img src="docs/assets/screenshots/02-browse.png" alt="Browse and discover"></p>
+
+<p align="center"><img src="docs/assets/screenshots/03-extensions.png" alt="Extension repository"></p>
+
+<p align="center"><img src="docs/assets/screenshots/04-reader.png" alt="Reader"></p>
+
+<p align="center"><img src="docs/assets/screenshots/05-storage-download.png" alt="Storage and downloads"></p>
 
 ## Features
 
